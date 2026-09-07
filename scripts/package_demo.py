@@ -9,7 +9,7 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_ROOT_FILES = {'README.md', 'pytest.ini', '.gitignore', '.dockerignore', 'Dockerfile', 'compose.yaml', 'config.example.env'}
 ALLOWED_DIRECTORIES = {'backend', 'frontend', 'scripts', 'docs', 'tests', '.github'}
-EXCLUDED_PARTS = {'node_modules', '__pycache__', '.pytest_cache', 'playwright-report', 'test-results', '.venv', '.data', '.git'}
+EXCLUDED_PARTS = {'node_modules', '__pycache__', '.pytest_cache', 'playwright-report', 'test-results', '.venv', '.data', '.git', 'library-blobs'}
 
 
 def build_archive(root: Path = ROOT) -> Path:

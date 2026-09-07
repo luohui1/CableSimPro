@@ -2,7 +2,9 @@ import type { Cable, Layer } from './types';
 
 export async function api<T>(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 30000);
+  // Provider tasks are bounded by the server; allow multiple tool/model turns.
+  const timeoutMs = path.startsWith('/api/design/') ? 300000 : 30000;
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(path, {method, signal: controller.signal,
       headers: body === undefined ? {} : {'Content-Type': 'application/json'},
