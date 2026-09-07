@@ -1,5 +1,3 @@
-import { createRoot } from 'react-dom/client';
-import App from './App';
-import './style.css';
-import './readability.css';
-createRoot(document.getElementById('root')!).render(<App />);
+import {createRoot} from 'react-dom/client';
+import Studio from './Studio';
+createRoot(document.getElementById('root')!).render(<Studio/>);
