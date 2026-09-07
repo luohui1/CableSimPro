@@ -1,0 +1,24 @@
+name: Assemble v0.4 feature sources
+on:
+  push:
+    branches: ['feat/design-ocr-v04']
+    paths: ['scripts/v04-edits.json']
+permissions:
+  contents: write
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/assemble_v04.py
+      - name: Commit verified sources to this feature branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend frontend scripts/package_demo.py scripts/third_party_notices.py README.md .gitignore
+          git commit -m 'feat: wire design center, provider settings and high-contrast workbench'
+          git push origin HEAD:feat/design-ocr-v04
