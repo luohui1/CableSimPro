@@ -31,14 +31,15 @@ const layerFields: {key: keyof Cable; label: string; min: number; max: number}[]
   {key: 'metallic_screen_mm', label: '等效金属屏蔽厚度', min: 0.05, max: 3},
   {key: 'jacket_mm', label: '外护套厚度', min: 1, max: 8},
 ];
-export function Parameters({scenario, onChange, presets, busy}: {scenario: Scenario; onChange: (s: Scenario) => void; presets: Preset[]; busy: boolean}) {
+export function Parameters({scenario, onChange, presets, busy, selectedTab, onTabChange}: {scenario: Scenario; onChange: (s: Scenario) => void; presets: Preset[]; busy: boolean; selectedTab?: 'cable' | 'installation' | 'load'; onTabChange?: (tab: 'cable' | 'installation' | 'load') => void}) {
   const [tab, setTab] = useState<'cable' | 'installation' | 'load'>('cable');
+  useEffect(() => { if (selectedTab) setTab(selectedTab); }, [selectedTab]);
   const c = scenario.cable, e = scenario.installation;
   function cable<K extends keyof Cable>(key: K, value: Cable[K]) { onChange({...scenario, cable: {...c, [key]: value}}); }
   function env<K extends keyof Installation>(key: K, value: Installation[K]) { onChange({...scenario, installation: {...e, [key]: value}}); }
   return <aside className="parameters">
-    <div className="panel-heading"><span className="eyebrow">MODEL DEFINITION</span><h2>模型与工况 <span>01</span></h2></div>
-    <div className="parameter-tabs">{(['cable', 'installation', 'load'] as const).map((t, i) => <button key={t} type="button" className={tab === t ? 'active' : ''} onClick={() => setTab(t)}>{['电缆', '敷设', '运行'][i]}</button>)}</div>
+    <div className="panel-heading"><h2>参数属性</h2></div>
+    <div className="parameter-tabs">{(['cable', 'installation', 'load'] as const).map((t, i) => <button key={t} type="button" className={tab === t ? 'active' : ''} onClick={() => { setTab(t); onTabChange?.(t); }}>{['电缆', '敷设', '运行'][i]}</button>)}</div>
     <form id="parameter-form" className="parameter-body" onSubmit={event => event.preventDefault()}><fieldset disabled={busy}>
       {tab === 'cable' && <>
         <label className="field"><span>电缆模板<small>演示参数</small></span><select aria-label="电缆模板" value="" onChange={event => { const p = presets.find(p => p.id === event.target.value); if (p) onChange({...scenario, cable: {...p.scenario.cable}}); }}><option value="" disabled>选择 Cu / Al 演示模板</option>{presets.map(p => <option value={p.id} key={p.id}>{p.label}</option>)}</select></label>

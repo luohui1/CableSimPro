@@ -3,7 +3,7 @@ import path from 'node:path';
 
 export default defineConfig({
   testDir: './e2e', timeout: 90000, expect: {timeout: 15000},
-  fullyParallel: false, workers: 1, retries: 0,
+  fullyParallel: false, workers: 1, retries: 0, maxFailures: process.env.CI ? 3 : 0,
   reporter: [['list'], ['html', {open: 'never'}], ['junit', {outputFile: 'test-results/browser-tests.xml'}]],
   use: {
     baseURL: 'http://127.0.0.1:8000', trace: 'retain-on-failure',
