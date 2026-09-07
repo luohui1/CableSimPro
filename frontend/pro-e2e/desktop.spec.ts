@@ -52,7 +52,8 @@ test('canvas drag updates constrained geometry, locks and validation',async({pag
  await expect(page.getByLabel('平均中心埋深',{exact:true})).toHaveValue('1.1');
  await page.getByRole('button',{name:'锁定平均中心埋深',exact:true}).click();await expect(page.getByLabel('平均中心埋深',{exact:true})).toBeDisabled();
  await page.getByRole('button',{name:'解锁平均中心埋深',exact:true}).click();await expect(page.getByLabel('平均中心埋深',{exact:true})).toBeEnabled();
- await page.getByLabel('相邻中心间距',{exact:true}).fill('0.02');await page.getByLabel('相邻中心间距',{exact:true}).press('Tab');await expect(page.getByRole('alert')).toContainText('重叠');
+ // Dockview also exposes an empty accessibility alert; assert the actual validation banner.
+ await page.getByLabel('相邻中心间距',{exact:true}).fill('0.02');await page.getByLabel('相邻中心间距',{exact:true}).press('Tab');await expect(page.locator('.error-banner[role="alert"]')).toContainText('重叠');
 });
 
 test('evidence extraction needs review and stores actual quotes',async({page})=>{
@@ -75,5 +76,5 @@ test('scan, section, WebGL and heat views render',async({page},info)=>{
 
 test('empty numeric input prevents accidental calculation',async({page})=>{
  let count=0;page.on('request',r=>{if(r.url().endsWith('/calculate'))count++});
- await page.getByLabel('平均中心埋深',{exact:true}).fill('');await page.getByRole('button',{name:'执行计算',exact:false}).click();await expect(page.getByRole('alert').last()).toContainText('输入');expect(count).toBe(0);
+ await page.getByLabel('平均中心埋深',{exact:true}).fill('');await page.getByRole('button',{name:'执行计算',exact:false}).click();await expect(page.locator('.error-banner[role="alert"]')).toContainText('输入');expect(count).toBe(0);
 });
