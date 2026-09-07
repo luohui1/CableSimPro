@@ -15,3 +15,15 @@ test('mobile domain navigation and readable integration settings',async({page},i
  expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)).toBe(false);
  await page.screenshot({path:info.outputPath('v04-mobile.png'),fullPage:true});
 });
+
+test('mobile vertical study has independent controls and results',async({page},info)=>{
+ await page.goto('/');await expect(page.getByTestId('revision')).toHaveText('rev.1');
+ await page.getByRole('button',{name:'场分析',exact:true}).click();
+ await page.getByRole('button',{name:'竖向电热',exact:true}).click();
+ await page.getByLabel('竖向轴向网格').selectOption('20');
+ await page.getByRole('button',{name:'运行竖向电热',exact:false}).click();
+ await expect(page.getByTestId('vertical-summary')).toContainText('734.5',{timeout:30000});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1)).toBe(false);
+ await page.getByTestId('vertical-summary').scrollIntoViewIfNeeded();
+ await page.screenshot({path:info.outputPath('v041-mobile-vertical.png'),fullPage:true});
+});

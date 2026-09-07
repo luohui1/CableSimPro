@@ -37,7 +37,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         designs.initialize()
         yield
 
-    app = FastAPI(title='CableSimPro · Engineering Workspace', version='0.4.0', lifespan=lifespan)
+    app = FastAPI(title='CableSimPro · Engineering Workspace', version='0.4.1', lifespan=lifespan)
     app.include_router(agent_router)
     app.include_router(make_router(workspace_store, providers))
     app.include_router(integrations_router(providers))

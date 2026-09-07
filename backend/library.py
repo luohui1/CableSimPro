@@ -29,10 +29,11 @@ def now():
 
 
 PATTERNS = [
-    ('cable.area_mm2', r'(?:导体截面积|截面积|conductor area|area)\s*[:：=|]?\s*(\d+(?:\.\d+)?)\s*(?:mm²|mm2|平方毫米)'),
-    ('cable.r20_ohm_km', r'(?:R20|R₂₀|20\s*°?C\s*DC resistance)\s*[:：=|]?\s*(\d+(?:\.\d+)?)\s*(?:Ω/km|ohm/km)'),
-    ('cable.insulation_mm', r'(?:绝缘厚度|insulation thickness)\s*[:：=|]?\s*(\d+(?:\.\d+)?)\s*mm'),
-    ('cable.jacket_mm', r'(?:护套厚度|jacket thickness)\s*[:：=|]?\s*(\d+(?:\.\d+)?)\s*mm'),
+    ('cable.u0_kv', r'(?:U₀|U0|相对地电压)\s*(?:\*\*)?\s*[:：=|]?\s*(?:\*\*)?\s*(\d+(?:\.\d+)?)\s*\|?\s*kV'),
+    ('cable.area_mm2', r'(?:导体截面积|截面积|conductor area|area)\s*(?:\*\*)?\s*[:：=|]?\s*(?:\*\*)?\s*(\d+(?:\.\d+)?)\s*\|?\s*(?:mm²|mm2|平方毫米)'),
+    ('cable.r20_ohm_km', r'(?:R20|R₂₀|20\s*°?C\s*DC resistance)\s*(?:\*\*)?\s*[:：=|]?\s*(?:\*\*)?\s*(\d+(?:\.\d+)?)\s*\|?\s*(?:Ω/km|ohm/km)'),
+    ('cable.insulation_mm', r'(?:绝缘厚度|insulation thickness)\s*(?:\*\*)?\s*[:：=|]?\s*(?:\*\*)?\s*(\d+(?:\.\d+)?)\s*\|?\s*mm'),
+    ('cable.jacket_mm', r'(?:护套厚度|jacket thickness)\s*(?:\*\*)?\s*[:：=|]?\s*(?:\*\*)?\s*(\d+(?:\.\d+)?)\s*\|?\s*mm'),
 ]
 
 
