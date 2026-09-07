@@ -15,25 +15,25 @@ export function CableScene({cable, exploded, resetKey}: {cable: Cable; exploded:
     try { renderer = new THREE.WebGLRenderer({antialias: true, alpha: true}); }
     catch { setStatus('unavailable'); return; }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
-    renderer.setClearColor(0x0d1b2c, 1);
+    renderer.setClearColor(0xfafaf7, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.25;
     renderer.domElement.setAttribute('aria-label', '三维电缆模型');
     container.appendChild(renderer.domElement);
     const scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x0d1b2c, 24, 45);
-    const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+    scene.fog = new THREE.Fog(0xfafaf7, 24, 45);
+    const camera = new THREE.OrthographicCamera(-7, 7, 5.4, -5.4, 0.1, 100);
     camera.position.set(11, 6.5, 14);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true; controls.dampingFactor = 0.07;
     controls.target.set(0.2, exploded ? 0.5 : 0, 0);
-    controls.minDistance = 7; controls.maxDistance = 35; controls.update();
-    scene.add(new THREE.HemisphereLight(0xdbefff, 0x152139, 2.3));
+    controls.minZoom = 0.45; controls.maxZoom = 3; controls.update();
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x999989, 2.1));
     const key = new THREE.DirectionalLight(0xffefd8, 4.5); key.position.set(5, 9, 8); scene.add(key);
-    const rim = new THREE.DirectionalLight(0x5ae7df, 2.8); rim.position.set(-7, 3, -6); scene.add(rim);
+    const rim = new THREE.DirectionalLight(0xffffff, 1.8); rim.position.set(-7, 3, -6); scene.add(rim);
     const fill = new THREE.DirectionalLight(0xffffff, 1.2); fill.position.set(1, -3, 6); scene.add(fill);
-    const grid = new THREE.GridHelper(40, 40, 0x314863, 0x1b2d43); grid.position.y = -2.1; scene.add(grid);
+    const grid = new THREE.GridHelper(40, 40, 0xdeddd4, 0xecebe4); grid.position.y = -2.1; scene.add(grid);
     const outer = geometry[5].radius_mm;
     geometry.forEach((layer, i) => {
       const ro = layer.radius_mm / outer, ri = i ? geometry[i - 1].radius_mm / outer : 0;
@@ -55,7 +55,7 @@ export function CableScene({cable, exploded, resetKey}: {cable: Cable; exploded:
     });
     const resize = () => {
       const width = Math.max(container.clientWidth, 1), height = Math.max(container.clientHeight, 1);
-      renderer.setSize(width, height); camera.aspect = width / height; camera.updateProjectionMatrix();
+      renderer.setSize(width, height); camera.left = -5.4 * width / height; camera.right = 5.4 * width / height; camera.updateProjectionMatrix();
     };
     const observer = new ResizeObserver(resize); observer.observe(container); resize();
     let frame = 0;
@@ -87,16 +87,16 @@ export function CrossSection({cable}: {cable: Cable}) {
     if (Math.hypot(x, y) <= rc - wire) strands.push(<circle key={`${row}-${col}`} cx={285 + x} cy={221 + y} r={wire * 0.92} fill={cable.conductor === 'copper' ? '#dcaa6e' : '#d3dde5'} stroke="#243144" strokeWidth="0.7"/>);
   }
   return <svg viewBox="0 0 800 440" className="section-svg" role="img" aria-label="电缆二维截面">
-    <defs><pattern id={id} width="24" height="24" patternUnits="userSpaceOnUse"><path d="M 24 0 L 0 0 0 24" fill="none" stroke="#23354b" strokeWidth="0.6"/></pattern></defs>
-    <rect width="800" height="440" fill="#0d1b2c"/><rect width="800" height="440" fill={`url(#${id})`} opacity="0.5"/>
-    <path d="M90 221H460 M285 35V407" stroke="#53617a" strokeDasharray="4 6"/>
+    <defs><pattern id={id} width="24" height="24" patternUnits="userSpaceOnUse"><path d="M 24 0 L 0 0 0 24" fill="none" stroke="#dfdfd7" strokeWidth="0.6"/></pattern></defs>
+    <rect width="800" height="440" fill="#fafaf7"/><rect width="800" height="440" fill={`url(#${id})`} opacity="0.5"/>
+    <path d="M90 221H460 M285 35V407" stroke="#b7b7a9" strokeDasharray="4 6"/>
     {[...ls].reverse().map(layer => <circle key={layer.name} cx="285" cy="221" r={layer.radius_mm * scale} fill={layer.color} stroke="#64758d" strokeWidth="0.5"/>)}{strands}
     {ls.map((layer, i) => {
       const angle = (-66 + i * 27) * Math.PI / 180;
       const x = 285 + Math.cos(angle) * layer.radius_mm * scale, y = 221 + Math.sin(angle) * layer.radius_mm * scale, target = 71 + i * 58;
-      return <g key={layer.name}><path d={`M${x} ${y} L520 ${target} H550`} stroke={layer.color} fill="none"/><circle cx={x} cy={y} r="2.5" fill="#fff"/><text x="565" y={target - 4} fill="#dce7f3" fontSize="13">{layer.name}</text><text x="565" y={target + 15} fill="#7f95ad" fontSize="12">r = {fmt(layer.radius_mm, 2)} mm</text></g>;
+      return <g key={layer.name}><path d={`M${x} ${y} L520 ${target} H550`} stroke={layer.color} fill="none"/><circle cx={x} cy={y} r="2.5" fill="#fff"/><text x="565" y={target - 4} fill="#5f5f50" fontSize="13">{layer.name}</text><text x="565" y={target + 15} fill="#8e8e7c" fontSize="12">r = {fmt(layer.radius_mm, 2)} mm</text></g>;
     })}
-    <path d="M120 79H104V363H120" fill="none" stroke="#5b8099"/><text x="92" y="235" transform="rotate(-90 92 235)" textAnchor="middle" fill="#6dd8c2" fontSize="12">Ø {fmt(outer * 2, 2)} mm</text>
+    <path d="M120 79H104V363H120" fill="none" stroke="#a7a790"/><text x="92" y="235" transform="rotate(-90 92 235)" textAnchor="middle" fill="#75755e" fontSize="12">Ø {fmt(outer * 2, 2)} mm</text>
   </svg>;
 }
 
@@ -106,11 +106,11 @@ export function InstallationView({scenario}: {scenario: Scenario}) {
   const radius = layers(scenario.cable)[5].radius_mm / 1000;
   const scale = Math.min(310 / (Math.max(...ps.map(p => p[1])) + 0.2), 300 / Math.max(0.8, s * 1.5));
   return <svg viewBox="0 0 800 440" className="section-svg" role="img" aria-label="直埋敷设截面">
-    <rect width="800" height="440" fill="#0d1b2c"/><rect y="70" width="800" height="370" fill="#172536"/>
-    <path d="M40 70H760" stroke="#40bfa5" strokeWidth="2"/><text x="42" y="50" fill="#9bdccf" fontSize="13">恒温地表 · {fmt(env.ambient_temperature_c)} °C</text><text x="552" y="50" fill="#829bb4" fontSize="12">ρsoil = {fmt(env.soil_rho_k_m_w, 2)} K·m/W</text>
-    {ps.map(([x, depth], i) => <g key={i}><line x1={400 + x * scale} y1="70" x2={400 + x * scale} y2={70 + depth * scale} stroke="#57728d" strokeDasharray="4 5"/><circle cx={400 + x * scale} cy={70 + depth * scale} r={radius * scale} fill="#243e58" stroke="#65d9c2" strokeWidth="1.5"/><circle cx={400 + x * scale} cy={70 + depth * scale} r={radius * scale * 0.44} fill="#ce9451"/><text x={400 + x * scale} y={70 + depth * scale + radius * scale + 24} textAnchor="middle" fill="#d7e2ef" fontSize="13">{'ABC'[i]}</text></g>)}
-    <path d={`M130 70H120V${70 + h * scale}H130`} stroke="#97a9ba" fill="none"/><text x="109" y={75 + h * scale / 2} textAnchor="end" fill="#b4c9dc" fontSize="12">{fmt(h, 2)} m</text>
-    <text x="400" y="416" textAnchor="middle" fill="#8a9eb4" fontSize="12">中心间距 {fmt(s * 1000, 0)} mm · 埋深为三相中心的平均深度 · 尺度一致</text>
+    <rect width="800" height="440" fill="#fafaf7"/><rect y="70" width="800" height="370" fill="#f0f0e7"/>
+    <path d="M40 70H760" stroke="#969880" strokeWidth="2"/><text x="42" y="50" fill="#6e705b" fontSize="13">恒温地表 · {fmt(env.ambient_temperature_c)} °C</text><text x="552" y="50" fill="#91927b" fontSize="12">ρsoil = {fmt(env.soil_rho_k_m_w, 2)} K·m/W</text>
+    {ps.map(([x, depth], i) => <g key={i}><line x1={400 + x * scale} y1="70" x2={400 + x * scale} y2={70 + depth * scale} stroke="#57728d" strokeDasharray="4 5"/><circle cx={400 + x * scale} cy={70 + depth * scale} r={radius * scale} fill="#243e58" stroke="#65d9c2" strokeWidth="1.5"/><circle cx={400 + x * scale} cy={70 + depth * scale} r={radius * scale * 0.44} fill="#ce9451"/><text x={400 + x * scale} y={70 + depth * scale + radius * scale + 24} textAnchor="middle" fill="#71735b" fontSize="13">{'ABC'[i]}</text></g>)}
+    <path d={`M130 70H120V${70 + h * scale}H130`} stroke="#b7b7a1" fill="none"/><text x="109" y={75 + h * scale / 2} textAnchor="end" fill="#88896f" fontSize="12">{fmt(h, 2)} m</text>
+    <text x="400" y="416" textAnchor="middle" fill="#93967b" fontSize="12">中心间距 {fmt(s * 1000, 0)} mm · 埋深为三相中心的平均深度 · 尺度一致</text>
   </svg>;
 }
 
@@ -127,7 +127,7 @@ export function HeatField({result}: {result: Result}) {
     const canvas = ref.current; if (!canvas) return;
     const ctx = canvas.getContext('2d'); if (!ctx) return;
     canvas.width = 1600; canvas.height = 800; ctx.scale(2, 2);
-    ctx.fillStyle = '#0d1b2c'; ctx.fillRect(0, 0, 800, 400);
+    ctx.fillStyle = '#fafaf7'; ctx.fillRect(0, 0, 800, 400);
     const cols = field.x_m.length, rows = field.depth_m.length;
     const xr = field.x_m[cols - 1] - field.x_m[0], yr = field.depth_m[rows - 1];
     const scale = Math.min(670 / xr, 290 / yr), w = xr * scale, h = yr * scale, left = (800 - w) / 2, top = 30;
@@ -135,8 +135,8 @@ export function HeatField({result}: {result: Result}) {
       ctx.fillStyle = v == null ? '#111e2d' : heatColor((v - low) / (high - low));
       ctx.fillRect(left + i * w / cols, top + j * h / rows, w / cols + 0.5, h / rows + 0.5);
     }));
-    ctx.strokeStyle = '#9db7cd'; ctx.strokeRect(left, top, w, h);
-    ctx.font = '12px system-ui'; ctx.fillStyle = '#a6b9ce'; ctx.textAlign = 'center';
+    ctx.strokeStyle = '#b8b9a4'; ctx.strokeRect(left, top, w, h);
+    ctx.font = '12px system-ui'; ctx.fillStyle = '#797b64'; ctx.textAlign = 'center';
     for (let i = 0; i <= 4; i++) ctx.fillText((field.x_m[0] + xr * i / 4).toFixed(2), left + w * i / 4, top + h + 24);
     ctx.fillText('水平距离 / m', 400, top + h + 47); ctx.textAlign = 'right';
     for (let i = 0; i <= 4; i++) ctx.fillText((yr * i / 4).toFixed(2), left - 12, top + h * i / 4 + 4);
@@ -157,11 +157,11 @@ export function LineChart({data, xLabel, yLabel, threshold, label}: {data: {x: n
   const Y = (y: number) => 191 - (y - yMin) / Math.max(yMax - yMin, 1e-9) * 156;
   const path = data.map((p, i) => `${i ? 'L' : 'M'}${X(p.x)},${Y(p.y)}`).join(' ');
   return <svg viewBox="0 0 580 240" className="line-chart" role="img" aria-label={label}>
-    <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#13a48f" stopOpacity="0.2"/><stop offset="1" stopColor="#13a48f" stopOpacity="0.01"/></linearGradient></defs>
-    {[0, 1, 2, 3, 4].map(i => <g key={i}><line x1="54" y1={35 + i * 39} x2="544" y2={35 + i * 39} stroke="#e3eaf0" strokeDasharray="3 4"/><text x="43" y={39 + i * 39} textAnchor="end" fill="#8494a5" fontSize="11">{fmt(yMax - (yMax - yMin) * i / 4, 0)}</text><text x={54 + i * 122.5} y="214" textAnchor="middle" fill="#8494a5" fontSize="11">{fmt(xMin + (xMax - xMin) * i / 4, xMax < 10 ? 1 : 0)}</text></g>)}
-    <path d={`${path} L${X(data[data.length - 1].x)},191 L${X(data[0].x)},191 Z`} fill={`url(#${id})`}/><path d={path} fill="none" stroke="#109f8b" strokeWidth="2.5"/>
-    {data.map((p, i) => <circle key={i} cx={X(p.x)} cy={Y(p.y)} r="3" fill="#fff" stroke="#109f8b" strokeWidth="1.4"><title>{fmt(p.x, 2)} / {fmt(p.y, 2)}</title></circle>)}
+    <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#565e47" stopOpacity="0.2"/><stop offset="1" stopColor="#565e47" stopOpacity="0.01"/></linearGradient></defs>
+    {[0, 1, 2, 3, 4].map(i => <g key={i}><line x1="54" y1={35 + i * 39} x2="544" y2={35 + i * 39} stroke="#e4e4d9" strokeDasharray="3 4"/><text x="43" y={39 + i * 39} textAnchor="end" fill="#8f9280" fontSize="11">{fmt(yMax - (yMax - yMin) * i / 4, 0)}</text><text x={54 + i * 122.5} y="214" textAnchor="middle" fill="#8f9280" fontSize="11">{fmt(xMin + (xMax - xMin) * i / 4, xMax < 10 ? 1 : 0)}</text></g>)}
+    <path d={`${path} L${X(data[data.length - 1].x)},191 L${X(data[0].x)},191 Z`} fill={`url(#${id})`}/><path d={path} fill="none" stroke="#565e47" strokeWidth="2.5"/>
+    {data.map((p, i) => <circle key={i} cx={X(p.x)} cy={Y(p.y)} r="3" fill="#fff" stroke="#565e47" strokeWidth="1.4"><title>{fmt(p.x, 2)} / {fmt(p.y, 2)}</title></circle>)}
     {threshold !== undefined && <g><line x1="54" x2="544" y1={Y(threshold)} y2={Y(threshold)} stroke="#d38d45" strokeDasharray="5 4"/><text x="540" y={Y(threshold) - 7} textAnchor="end" fill="#b67c3f" fontSize="10">温度上限 {threshold} °C</text></g>}
-    <text x="54" y="17" fill="#75889c" fontSize="11">{yLabel}</text><text x="544" y="235" textAnchor="end" fill="#75889c" fontSize="11">{xLabel}</text>
+    <text x="54" y="17" fill="#8f9280" fontSize="11">{yLabel}</text><text x="544" y="235" textAnchor="end" fill="#8f9280" fontSize="11">{xLabel}</text>
   </svg>;
 }

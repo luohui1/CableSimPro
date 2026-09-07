@@ -36,7 +36,7 @@ def build_archive(root: Path = ROOT) -> Path:
                 continue
             archive.write(path, "CableSimPro/" + relative.as_posix())
             count += 1
-        info = {"product": "CableSimPro", "version": "0.1.0", "git_checkout_sha": commit,
+        info = {"product": "CableSimPro", "version": "0.2.0", "git_checkout_sha": commit,
                 "github_run_id": os.environ.get("GITHUB_RUN_ID"), "includes_prebuilt_frontend": True,
                 "engineering_status": "demonstration; not IEC-certified"}
         archive.writestr("CableSimPro/BUILD_INFO.json", json.dumps(info, ensure_ascii=False, indent=2))

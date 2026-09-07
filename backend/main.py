@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 
+from .agent import router as agent_router
 from .catalog import presets
 from .engine import MODEL_VERSION, ModelError, calculate
 from .report import render_report
@@ -26,7 +27,8 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         store.initialize()
         yield
 
-    app = FastAPI(title="CableSimPro · MV Engineering Demo", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="CableSimPro · MV Engineering Demo", version="0.2.0", lifespan=lifespan)
+    app.include_router(agent_router)
 
     @app.get("/api/health")
     def health():
