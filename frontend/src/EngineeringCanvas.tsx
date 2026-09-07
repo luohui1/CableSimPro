@@ -33,21 +33,21 @@ export default function EngineeringCanvas(){
  <Layer><Rect width={width} height={height} fill="#f7f9fb"/>{grid}
  <Rect x={32} y={Y(0)} width={width-32} height={Math.max(0,height-Y(0))} fill="#e7eee9" opacity={.4}/>
  <Line points={[32,Y(0),width,Y(0)]} stroke="#7b9c87" strokeWidth={2}/><Text x={52} y={Y(0)-24} text={`恒温地表  θa = ${fmt(e.ambient_temperature_c)} °C`} fontSize={11} fill="#65816f"/>
- <Text x={width-232} y={height-60} text={`均匀土壤\nρth = ${fmt(e.soil_rho_k_m_w,2)} K·m/W`} lineHeight={1.7} fontSize={12} fill="#7d8a85"/>
+ <Text x={width-232} y={height-60} text={`均匀土壤\nρth = ${fmt(e.soil_rho_k_m_w,2)} K·m/W`} lineHeight={1.7} fontSize={13} fill="#42574c"/>
  <Rect width={32} height={height} fill="#eef2f5"/><Rect width={width} height={28} fill="#eef2f5"/>
- {Array.from({length:41},(_,i)=>(i-20)/10).map((v,i)=><Group key={i}>{X(v)>40&&X(v)<width&&<><Line points={[X(v),20,X(v),28]} stroke="#8798a9"/><Text x={X(v)-16} y={5} width={32} align="center" text={v.toFixed(1)} fontSize={9} fill="#70849a"/></>}{Y(v)>45&&Y(v)<height-20&&<><Line points={[23,Y(v),32,Y(v)]} stroke="#8798a9"/><Text x={2} y={Y(v)-5} text={v.toFixed(1)} fontSize={9} fill="#70849a"/></>}</Group>)}
- <Text x={8} y={8} text="m" fontSize={10} fill="#687d93"/>
+ {Array.from({length:41},(_,i)=>(i-20)/10).map((v,i)=><Group key={i}>{X(v)>40&&X(v)<width&&<><Line points={[X(v),20,X(v),28]} stroke="#8798a9"/><Text x={X(v)-16} y={5} width={32} align="center" text={v.toFixed(1)} fontSize={11} fill="#384d62"/></>}{Y(v)>45&&Y(v)<height-20&&<><Line points={[23,Y(v),32,Y(v)]} stroke="#8798a9"/><Text x={2} y={Y(v)-5} text={v.toFixed(1)} fontSize={11} fill="#384d62"/></>}</Group>)}
+ <Text x={8} y={8} text="m" fontSize={11} fill="#687d93"/>
  <Arrow points={[X(-Math.max(e.spacing_m+.14,.32)),Y(0)+4,X(-Math.max(e.spacing_m+.14,.32)),Y(e.depth_m)-4]} pointerAtBeginning pointerLength={5} pointerWidth={4} stroke="#7a8ca2" fill="#7a8ca2" strokeWidth={1}/>
- <Text x={X(-Math.max(e.spacing_m+.14,.32))-74} y={Y(e.depth_m/2)-7} text={`${fmt(e.depth_m,2)} m`} fontSize={12} fill="#576e88"/>
+ <Text x={X(-Math.max(e.spacing_m+.14,.32))-74} y={Y(e.depth_m/2)-7} text={`${fmt(e.depth_m,2)} m`} fontSize={13} fill="#576e88"/>
  {ps.map(([x,h],i)=><Group key={i} x={X(x)} y={Y(h)} draggable={!busy&&!pan&&!(depthLocked&&spacingLocked)} onClick={()=>{setPhase(i);select('installation')}} onTap={()=>{setPhase(i);select('installation')}} onDragStart={()=>setPhase(i)} onDragEnd={ev=>{const target=ev.target;const px=target.x(),py=target.y();target.position({x:X(x),y:Y(h)});drag(i,px,py)}}>
  <Circle radius={Math.max(14,ls[5].radius_mm/1000*scale+7)} fill={phase===i?'#e0ecff':'#f0f3f6'} stroke={phase===i?'#4d81cf':'#d4dce3'} strokeWidth={phase===i?1.5:1} dash={phase===i?[3,3]:undefined}/>
  {[...ls].reverse().map(l=><Circle key={l.name} radius={l.radius_mm/1000*scale} fill={l.color} listening={false}/>)}
- <Text x={-20} y={-42} width={40} text={'ABC'[i]} align="center" fontStyle="bold" fontSize={12} fill={phase===i?'#3466af':'#546579'}/>
+ <Text x={-20} y={-42} width={40} text={'ABC'[i]} align="center" fontStyle="bold" fontSize={13} fill={phase===i?'#3466af':'#546579'}/>
  </Group>)}
- {e.arrangement==='flat'&&<><Line points={[X(0),Y(e.depth_m)+52,X(0),Y(e.depth_m)+78,X(e.spacing_m),Y(e.depth_m)+78,X(e.spacing_m),Y(e.depth_m)+52]} stroke="#9faec0" strokeWidth={1}/><Text x={X(e.spacing_m/2)-50} y={Y(e.depth_m)+82} width={100} align="center" text={`${fmt(e.spacing_m*1000,0)} mm`} fontSize={10} fill="#526e8a"/></>}
+ {e.arrangement==='flat'&&<><Line points={[X(0),Y(e.depth_m)+52,X(0),Y(e.depth_m)+78,X(e.spacing_m),Y(e.depth_m)+78,X(e.spacing_m),Y(e.depth_m)+52]} stroke="#9faec0" strokeWidth={1}/><Text x={X(e.spacing_m/2)-50} y={Y(e.depth_m)+82} width={100} align="center" text={`${fmt(e.spacing_m*1000,0)} mm`} fontSize={11} fill="#526e8a"/></>}
  {pan&&<Rect x={32} y={28} width={width-32} height={height-28} fill="rgba(0,0,0,0.001)" draggable onDragEnd={ev=>{setOffset(o=>({x:o.x+ev.target.x()-32,y:o.y+ev.target.y()-28}));ev.target.position({x:32,y:28})}}/>}
- {width>560&&<Group x={width-252} y={100}><Rect width={222} height={144} fill="#fffffff5" stroke="#dce5ed" cornerRadius={4}/><Text x={14} y={14} text="回路局部放大 · 结构示意" fontSize={10} fill="#718ba5"/>{[0,1,2].map(i=><Group key={i} x={45+i*66} y={80}><Circle radius={23} fill="#edf3fb" stroke={phase===i?'#6799dc':'#d5e1ee'} dash={[3,3]}/>{[...ls].reverse().map(l=><Circle key={l.name} radius={l.radius_mm/ls[5].radius_mm*19} fill={l.color}/>)}<Text x={-20} y={31} width={40} text={'ABC'[i]} fontSize={11} align="center" fill="#627e9a"/></Group>)}<Text x={14} y={124} text="此框非敷设位置图 · 尺寸以主画布为准" fontSize={8} fill="#95a5b6"/></Group>}
- <Text x={48} y={height-22} text={`1 回路 / 3 × 单芯 · ${e.arrangement==='flat'?'水平排列':'等边三角排列'} · 尺度一致`} fontSize={10} fill="#73859a"/>
+ {width>560&&<Group x={width-252} y={100}><Rect width={222} height={144} fill="#fffffff5" stroke="#dce5ed" cornerRadius={4}/><Text x={14} y={14} text="回路局部放大 · 结构示意" fontSize={11} fill="#42566a"/>{[0,1,2].map(i=><Group key={i} x={45+i*66} y={80}><Circle radius={23} fill="#edf3fb" stroke={phase===i?'#6799dc':'#d5e1ee'} dash={[3,3]}/>{[...ls].reverse().map(l=><Circle key={l.name} radius={l.radius_mm/ls[5].radius_mm*19} fill={l.color}/>)}<Text x={-20} y={31} width={40} text={'ABC'[i]} fontSize={11} align="center" fill="#627e9a"/></Group>)}<Text x={14} y={124} text="此框非敷设位置图 · 尺寸以主画布为准" fontSize={11} fill="#516375"/></Group>}
+ <Text x={48} y={height-22} text={`1 回路 / 3 × 单芯 · ${e.arrangement==='flat'?'水平排列':'等边三角排列'} · 尺度一致`} fontSize={11} fill="#3f5268"/>
  </Layer></Stage>
  <div className="canvas-caption"><span className="live-dot"/> CKT-01 <b>{w.scenario.cable.area_mm2} mm²</b><small>外径 {fmt(ls[5].radius_mm*2,2)} mm</small></div>
  </div><div className="canvas-hint"><LockKeyhole size={12}/><span>拖动外相调整间距与埋深；中相 / 顶相调整埋深。仅支持规则排列，不是任意多回路 CAD。</span></div></div>;

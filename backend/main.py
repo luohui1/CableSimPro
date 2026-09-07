@@ -4,7 +4,8 @@ import os
 from pathlib import Path
 from uuid import UUID
 from fastapi import FastAPI, HTTPException, Response
-from fastapi.responses import HTMLResponse
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from .agent import router as agent_router
@@ -14,22 +15,59 @@ from .report import render_report
 from .schemas import Scenario, SweepRequest
 from .storage import ProjectStore
 from .workbench import WorkspaceStore, make_router
+from .providers import Providers, router as integrations_router
+from .library import Library, make_router as library_router
+from .selection import Designs, make_router as designs_router
+from urllib.parse import urlsplit
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def create_app(db_path: str | Path | None = None) -> FastAPI:
     store = ProjectStore(db_path or os.environ.get('CABLESIM_DB', str(ROOT / '.data' / 'cablesim.sqlite')))
     workspace_store = WorkspaceStore(store.path)
+    providers = Providers(Path(store.path).parent)
+    library = Library(workspace_store, Path(store.path).parent)
+    designs = Designs(workspace_store)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         store.initialize()
         workspace_store.initialize()
+        library.initialize()
+        designs.initialize()
         yield
 
-    app = FastAPI(title='CableSimPro · Engineering Workspace', version='0.3.0', lifespan=lifespan)
+    app = FastAPI(title='CableSimPro · Engineering Workspace', version='0.4.0', lifespan=lifespan)
     app.include_router(agent_router)
-    app.include_router(make_router(workspace_store))
+    app.include_router(make_router(workspace_store, providers))
+    app.include_router(integrations_router(providers))
+    app.include_router(library_router(library, providers))
+    app.include_router(designs_router(designs))
+    app.state.providers = providers
+    app.state.library = library
+    app.state.designs = designs
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request, exc):
+        return JSONResponse({'detail':[{'loc':e['loc'],'msg':e['msg'],'type':e['type']} for e in exc.errors()]},status_code=422)
+
+    @app.middleware('http')
+    async def local_boundary(request, call_next):
+        allowed = {'localhost', '127.0.0.1', '::1', 'testserver'} | {h.strip() for h in os.getenv('CABLESIM_TRUSTED_HOSTS', '').split(',') if h.strip()}
+        if request.url.hostname not in allowed:
+            return JSONResponse({'detail':'此预览版只接受受信任本机 Host。'}, status_code=403)
+        if request.method not in ('GET','HEAD','OPTIONS'):
+            origin = request.headers.get('origin')
+            if origin and urlsplit(origin).hostname not in allowed:
+                return JSONResponse({'detail':'拒绝不受信任的跨站写入。'}, status_code=403)
+            length = request.headers.get('content-length')
+            if length and (not length.isdigit() or int(length)>11*1024*1024):
+                return JSONResponse({'detail':'请求体超过 11 MiB 限制。'}, status_code=413)
+        response = await call_next(request)
+        if request.url.path.startswith('/api/'):
+            response.headers['Cache-Control'] = 'no-store'
+            response.headers['X-Content-Type-Options'] = 'nosniff'
+        return response
 
     @app.get('/api/health')
     def health():
