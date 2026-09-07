@@ -7,9 +7,9 @@ import subprocess
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-ALLOWED_ROOT_FILES = {'README.md', 'pytest.ini', '.gitignore', '.dockerignore', 'Dockerfile', 'compose.yaml'}
+ALLOWED_ROOT_FILES = {'README.md', 'pytest.ini', '.gitignore', '.dockerignore', 'Dockerfile', 'compose.yaml', 'config.example.env'}
 ALLOWED_DIRECTORIES = {'backend', 'frontend', 'scripts', 'docs', 'tests', '.github'}
-EXCLUDED_PARTS = {'node_modules', '__pycache__', '.pytest_cache', 'playwright-report', 'test-results', '.venv', '.data', '.git'}
+EXCLUDED_PARTS = {'node_modules', '__pycache__', '.pytest_cache', 'playwright-report', 'test-results', '.venv', '.data', '.git', 'library-blobs'}
 
 
 def build_archive(root: Path = ROOT) -> Path:
@@ -35,7 +35,7 @@ def build_archive(root: Path = ROOT) -> Path:
                 continue
             archive.write(path, 'CableSimPro/' + relative.as_posix())
             count += 1
-        info = {'product': 'CableSimPro', 'version': '0.3.0', 'git_checkout_sha': commit,
+        info = {'product': 'CableSimPro', 'version': '0.4.0', 'git_checkout_sha': commit,
                 'github_run_id': os.environ.get('GITHUB_RUN_ID'), 'includes_prebuilt_frontend': True,
                 'engineering_status': 'preview; not a complete IEC implementation or independently certified'}
         archive.writestr('CableSimPro/BUILD_INFO.json', json.dumps(info, ensure_ascii=False, indent=2))

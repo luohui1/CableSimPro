@@ -17,7 +17,7 @@ def collect():
         files = [p for p in manifest.parent.iterdir() if p.is_file() and p.name.lower().startswith(('license', 'licence', 'copying', 'notice'))]
         for file in files:
             sections.append(file.read_text(errors='replace'))
-    for name in ['fastapi','pydantic','numpy','uvicorn','httpx','langgraph','langchain-core','langgraph-checkpoint','langgraph-prebuilt','langgraph-sdk','langsmith']:
+    for name in ['pypdf','python-multipart','Pillow','python-dotenv','scipy','fastapi','pydantic','numpy','uvicorn','httpx','langgraph','langchain-core','langgraph-checkpoint','langgraph-prebuilt','langgraph-sdk','langsmith']:
         try:
             dist = metadata.distribution(name)
         except metadata.PackageNotFoundError:

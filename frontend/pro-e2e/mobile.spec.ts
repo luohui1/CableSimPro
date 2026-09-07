@@ -7,3 +7,11 @@ test('mobile model properties agent and results',async({page},info)=>{
  await page.screenshot({path:info.outputPath('mobile-agent.png'),fullPage:true});
  await page.getByRole('button',{name:'结果',exact:true}).click();await expect(page.locator('.results-toolbar')).toContainText('允许载流量');
 });
+
+test('mobile design hub, field chart and connection status',async({page},info)=>{
+ await page.goto('/');await expect(page.getByTestId('revision')).toHaveText('rev.1');await page.getByRole('button',{name:'设计中心 · OCR / 选型',exact:true}).click();
+ await page.getByRole('button',{name:'求解竖向热模型'}).click();await expect(page.locator('.convergence')).toBeAttached();
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
+ await page.screenshot({path:info.outputPath('mobile-design.png'),fullPage:true});
+ await page.getByRole('button',{name:'OCR / Agent 接入',exact:true}).click();await expect(page.locator('.connection-grid')).toContainText('未配置');
+});
