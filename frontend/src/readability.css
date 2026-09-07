@@ -1,0 +1,39 @@
+/* Readable neutral hierarchy: restrained does not mean low-contrast text. */
+:root{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif}
+.studio .model-tree button{color:#606058}
+.studio .model-tree>p,.studio .tree-label{color:#787870}
+.studio .document-title>span,.studio .sidebar-bottom>div{color:#78786e}
+.studio .message-text{font-size:13px;line-height:1.85;color:#55554b}
+.studio .message-author{font-size:12px;color:#32322d}
+.studio .chat-message.user .message-author{color:#74746c}
+.studio .proposal-title strong{font-size:12px}
+.studio .proposal-title>span{font-size:10px;color:#757568}
+.studio .proposal-diff>p,.studio .proposal>details p{color:#707064}
+.studio .proposal-diff>div>span{font-size:11px;color:#737366}
+.studio .proposal>details summary,.studio .execution-trace summary{font-size:11px;color:#727266}
+.studio .execution-trace>small,.studio .agent-bottom>small{font-size:10px;color:#7f7f72}
+.studio .compact .composer textarea{font-size:13px}
+.studio .composer-note{font-size:11px;color:#78786d}
+.studio .composer-tools select,.studio .quick-task button{font-size:11px;color:#6c6c61}
+.studio .start-kicker{color:#79796e}
+.studio .reference-model strong{font-size:13px;color:#4d4d45}
+.studio .reference-model span{font-size:12px;color:#7b7b70}
+.studio .suggestions button{font-size:13px;color:#64645b}
+.studio .start-boundary{font-size:11px;color:#818174}
+.studio .view-toolbar button{font-size:11px;color:#727266}
+.studio .material-legend>span{font-size:10px;color:#727263}
+.studio .result-strip span{font-size:11px;color:#707062}
+.studio .dock-tabs>span,.studio .dock-actions>span{font-size:10px;color:#7b7b6a}
+.studio .dock-actions button{font-size:11px;color:#646455}
+.studio .dock-tabs button{color:#77776b}
+.studio .statusbar,.studio .statusbar button{color:#7d7d6d}
+@media(max-width:540px){
+  .studio .reference-model strong{font-size:12px}
+  .studio .reference-model span,.studio .start-boundary{font-size:11px}
+  .studio .suggestions button{font-size:12px}
+  .studio .view-toolbar button{font-size:10px}
+  .studio .view-toolbar>div:last-child button{font-size:0}
+  .studio .result-strip span,.studio .dock-actions button{font-size:10px}
+  .studio .dock-tabs>span,.studio .dock-actions>span{font-size:9px}
+  .studio .material-legend>span{font-size:9px}
+}

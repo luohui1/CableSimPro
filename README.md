@@ -1,104 +1,68 @@
-# CableSimPro · 中压电缆工程工作台
+# CableSimPro · Agent-first 电缆工程工作空间
 
-面向单回路中压电缆的可运行工程辅助 Demo：参数化二维/三维建模、稳态载流量及温度计算、工程保存、计算书、参数扫描与方案对比。
+0.2 原型：从工程任务进入模型，检查参数变更，再执行可追溯的计算。工作区按模型树、属性、图形、研究与结果组织，不是 KPI 仪表盘。
 
-> **计算边界**：这不是经认证的工程设计软件，也不是完整 IEC 60287 实现。当前内核为同心圆筒径向热阻 + 均匀土壤半空间三相互热模型；交流附加系数、屏蔽损耗系数是显式输入。不得将演示默认值直接用于工程选型或保护整定。
+当前开发分支：`feat/agent-workspace`，审查见 [PR #2](https://github.com/luohui1/CableSimPro/pull/2)。基于 v0.1 的 PR #1 继续开发；两者均不代表已经合并 main。
 
-## 立即运行
+> **工程边界**：仍为单回路三根相同无铠装单芯电缆、均匀土壤直埋的稳态热网络。不是完整 IEC 60287、有限元求解器或经认证的工程设计软件。交流附加与屏蔽损耗系数是输入假设，模板不是厂家数据。
 
-当前 Demo 在分支 `feat/mv-engineering-demo`，代码审查见 [PR #1](https://github.com/luohui1/CableSimPro/pull/1)。
+## 运行
 
-### 方式一：源码启动
-
-准备 Python 3.11–3.13，以及 Node.js 22.12 或以上的 22.x 版本。首次安装依赖需要联网。
+预构建 ZIP 包：需要 Python 3.11–3.13，不需要 Node.js。解压后进入包含 backend、frontend、scripts 的目录：
 
 ```sh
-git clone --branch feat/mv-engineering-demo https://github.com/luohui1/CableSimPro.git
+python scripts/run_demo.py
+```
+
+启动器创建隔离的 `.venv`、安装依赖、启动服务并打开 `http://127.0.0.1:8000`。首次安装需要联网，按 Ctrl+C 结束。macOS/Linux 可以使用 `python3`，Windows 可以使用 `py -3.12`。
+
+源码构建另外需要 Node.js 22.12+（22.x）：
+
+```sh
+git clone --branch feat/agent-workspace https://github.com/luohui1/CableSimPro.git
 cd CableSimPro
 python scripts/run_demo.py
 ```
 
-macOS/Linux 的 Python 命令可能为 `python3`。Windows 可以使用 `py -3.12 scripts/run_demo.py`。
+修改前端源码后加 `--rebuild`。不要双击源码的 index.html，前端需要构建并通过同源 HTTP 服务访问计算 API。没有公网部署。
 
-启动器在仓库内创建 `.venv`，安装后端依赖，构建前端，然后启动服务并打开 `http://127.0.0.1:8000`。按 Ctrl+C 停止。更改前端源码后运行：
+## 体验任务流程
 
-```sh
-python scripts/run_demo.py --rebuild
+首页加载参考输入但不自动求解。默认使用明确标注的**本地命令解析器**，不是大模型。
+
+```text
+运行电流设为 350 A，计算载流量
+截面积改为 400 mm²，重新计算
+埋深设为 1.2 m，计算
+改为三角排列，计算
+比较土壤热阻率 0.8、1.2、1.6、2.0 下的载流量
+解释当前模型的假设
 ```
 
-### 方式二：使用已经构建的 Demo 包
+提交后先出现参数差异、完整输入和假设。点击确认才运行内核；未确认不计算、不修改、不保存。手动修改输入会使旧结果与旧操作方案失效。可以撤销最后一次 Agent 操作，但不能覆盖其后的手动编辑。
 
-打开 [GitHub Actions](https://github.com/luohui1/CableSimPro/actions)，选择本分支**成功**的 `CableSimPro CI` 运行，在 Artifacts 中获取 `CableSimPro-demo`，解压其中的 `CableSimPro-demo.zip`。进入包含 `backend`、`frontend`、`scripts` 的 `CableSimPro` 目录：
+从左侧模型树可以直接进入层结构、材料、敷设、稳态研究、扫描、明细和方案对比。三维结构、二维截面、敷设图、土壤解析温度图使用相同工程输入。土壤场不是 FEM，三维轴向剖切是结构示意。
+
+工程参数可保存、更新、重开、删除、JSON 导入导出。保留 HTML 计算书、运行 CSV、手动扫描和最多四个结果快照。计算书可用浏览器打印为 PDF；没有专门的服务端 PDF 引擎。
+
+## 可选大模型入口
+
+已实现服务端 OpenAI Responses API 严格函数调用适配器。没有密钥时不连接云端，不伪称有通用自然语言能力。设置两个服务端环境变量后重启：
 
 ```sh
+export OPENAI_API_KEY='your-key'
+export CABLESIM_AGENT_MODEL='your-supported-model-id'
 python scripts/run_demo.py
 ```
 
-此包包含 `frontend/dist`，**运行时不需要 Node.js**；仍需要 Python 及首次安装后端依赖的网络。GitHub 下载 Actions 工件可能要求登录。包内 `BUILD_INFO.json` 记录构建时检出的 Git 提交。
+在界面选择 OpenAI 并勾选数据发送同意。任务与当前完整工程参数（包括名称、说明）会发送到 OpenAI，调用可能计费。密钥不写入浏览器、工程文件或源码仓库。不要将真实密钥粘贴到聊天或提交到 Git。
 
-仅提供源码和本地启动流程，不代表已经部署到公网。不要直接双击源码中的 `frontend/index.html`；它需要构建，并通过同源 HTTP 服务访问计算 API。
+当前是单任务规划 + 人工确认 + 确定性工具执行，不是无限循环自主 Agent。模拟提供商测试只验证接口契约，**没有使用真实密钥验证大模型端到端成功率**。详见 [Agent 架构与接入说明](docs/AGENT_WORKSPACE.md)。
 
-## 功能
-
-| 模块 | 已实现行为 |
-|---|---|
-| 参数化建模 | 铜/铝单芯电缆、导体屏蔽、XLPE 绝缘、绝缘屏蔽、等效金属屏蔽、外护套；二维尺寸与三维结构联动 |
-| 三维交互 | 剖切结构、分层展开、旋转/缩放、重置视角；WebGL 不可用时退回二维 |
-| 敷设 | 均匀土壤直埋；单回路三根相同电缆；水平和等边三角排列；三相平均中心埋深与中心间距 |
-| 计算 | 温度修正电阻、导体/屏蔽/介质损耗、分层热阻、三相互热、允许载流量、给定运行电流的温度与裕量 |
-| 结果 | 三相明细、径向节点温度、热阻矩阵、电流温度曲线、外部土壤解析温度图 |
-| 工程管理 | SQLite 保存、重开、更新、删除；带版本的 JSON 导入/导出；导入前完整校验 |
-| 方案研究 | 四种敷设参数扫描；最多四个不可变结果快照对比（当前会话内） |
-| 交付 | 含输入快照、模型版本、SHA-256 和警告的 HTML 计算书；运行结果 CSV |
-| 防误读 | 参数改变立即隐藏旧结果；不能导出过期计算书；无稳定运行解时不伪造温度或损耗 |
-
-HTML 计算书下载后用浏览器打开，可通过浏览器打印功能另存为 PDF。当前不包含服务器端 PDF 排版引擎。
-
-## 推荐演示流程
-
-首次打开会加载 Cu / XLPE 12/20 kV、240 mm²、0.8 m 平均中心埋深、0.12 m 中心间距的演示工况并执行计算。所有模板为演示假设，不是厂家产品库。
-
-1. 在“二维截面”和“三维结构”间切换，尝试“分层展开”。
-2. 将导体截面积改为 400 mm²，观察模型联动和旧结果清空，然后点击“执行计算”。
-3. 在“敷设”页调整土壤热阻率、埋深或三相排列；查看“土壤温度”与敏感性曲线。
-4. 将不同工况加入“方案对比”，再保存工程并导出计算书。
-
-**相对地电压 U₀ 不是线电压 U**。默认模板为 12/20 kV 的参数演示。电压、绝缘厚度及材料的组合没有经过绝缘配合校核，不会因选择某个电压就自动成为对应电压等级的合格产品。
-
-## 计算方法与验收
-
-详见 [方法、方程与单位](docs/METHOD.md)、[验收与测试说明](docs/ACCEPTANCE.md)。
-
-自动测试验证软件逻辑、解析退化解、热平衡、单调性和浏览器功能。它们不能替代 IEC 正式算例、厂家数据、独立参考软件或实测工况校核。实际测试是否通过，以所选提交的 Actions 运行记录为准。
-
-CI 执行三个 Python 版本的后端测试，TypeScript 类型检查、Vite 生产构建，并通过真实 API 在 Chromium、桌面 WebKit 和移动 WebKit 中测试工作流。测试报告、界面截图与成功构建的 Demo 包保存在 Actions 工件中；移动 WebKit 是模拟测试，不等于实体 iPhone 真机验收。
-
-## 开发模式
-
-后端（从仓库根目录运行）：
+## 验证
 
 ```sh
-python -m venv .venv
-# macOS / Linux
-source .venv/bin/activate
-# Windows PowerShell 使用 .venv\Scripts\Activate.ps1
 python -m pip install -r backend/requirements-dev.txt
-python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-另一个终端启动前端：
-
-```sh
-cd frontend
-npm install
-npm run dev
-```
-
-前端开发地址由 Vite 输出，`/api` 自动代理到 8000 端口，无需放开跨域。生产构建则由 FastAPI 同源提供静态资源。**后端统一从仓库根目录启动，不再支持旧的 `cd backend && uvicorn main:app` 路径。**
-
-测试与打包：
-
-```sh
 python -m pytest
 cd frontend
 npm install
@@ -109,24 +73,14 @@ cd ..
 python scripts/package_demo.py
 ```
 
-依赖的主版本/精确版本见 requirements 与 package.json；前端完整解析锁文件随 CI 工件保存，源码尚未锁定全部传递依赖。应使用经过测试的同次构建工件，不能宣称日后重新安装必然得到相同依赖树。
+GitHub Actions 在 Python 3.11/3.12/3.13 下执行后端测试，并运行 TypeScript 检查、Vite 构建和连接真实 API 的 Chromium、桌面 WebKit、移动 WebKit 测试。实际结果以对应提交的 Actions 为准。测试截图、报告和成功构建 ZIP 保存在同次运行的 Artifacts；BUILD_INFO.json 记录检出提交。移动 WebKit 是模拟，不等于真机验收。
 
-## 数据与部署边界
+数学性质、热平衡、软件逻辑测试不替代正式标准算例、独立软件与厂家数据校核。方法见 [METHOD.md](docs/METHOD.md)。v0.1 验收范围见 [ACCEPTANCE.md](docs/ACCEPTANCE.md)，本轮新增 Agent 边界见 [AGENT_WORKSPACE.md](docs/AGENT_WORKSPACE.md)。
 
-SQLite 默认位于 `.data/cablesim.sqlite`，可通过 `CABLESIM_DB` 改变路径。关闭程序不会删除保存的工程；删除工程需界面确认。方案对比快照只保留在当前页面会话中，刷新会清除。重要工程应使用“导出工程”备份。
+## 数据与部署
 
-启动器默认仅监听本机。需要在同一局域网的手机浏览器访问时，可在受信任网络中使用 `--host 0.0.0.0`，浏览器打开电脑的局域网 IP 与端口；系统防火墙需允许访问。**没有登录、鉴权、权限隔离或公网请求限流，不应直接暴露到互联网**。正式多用户部署需要补充身份认证、访问控制、反向代理 TLS、请求限制、备份与数据迁移。
+默认仅监听本机。SQLite 位于 `.data/cablesim.sqlite`，可通过 `CABLESIM_DB` 改变路径。对话、操作日志和方案快照仅属于当前页面会话，没有持久化版本历史、多人协作或权限隔离。重要工程请导出备份。
 
-已有依赖时可使用 `python scripts/run_demo.py --skip-install --no-browser --port 8001`；此选项使用执行该命令的当前 Python 环境，不会自动切换到 `.venv`。
+不直接暴露公网。多用户上线前需要鉴权、请求来源保护、限流与费用控制、云端审计、备份、迁移和多进程票据存储。OpenAI 的 `store:false` 不等于绝无数据保留，需确认账户政策和工程数据权限。
 
-## 目录
-
-```text
-backend/              输入校验、计算内核、API、报告与持久化
-frontend/src/         React + TypeScript 工作台、Three.js 模型与二维图表
-frontend/e2e/         真实后端浏览器测试
-scripts/              启动与 Demo 打包脚本
-tests/                数学性质、API 和打包边界测试
-docs/                 计算方法、工程边界与验收清单
-.github/workflows/    自动测试、构建和工件保存
-```
+前端完整解析锁文件随 CI 工件保存，源码未锁定全部传递依赖；建议使用同次测试的构建包。已有依赖可使用 `python scripts/run_demo.py --skip-install --no-browser --port 8001`。
