@@ -11,19 +11,21 @@ test('all cable field maps preserve equal physical coordinate scale',async({page
   const ratio=await canvas.evaluate(el=>Number(el.dataset.scaleX)/Number(el.dataset.scaleY));
   expect(ratio).toBeCloseTo(1,10);
   if(name==='绝缘电场'){
-   // Validate the actual rendered color region, not just data attributes.
-   const shape=await canvas.evaluate(el=>{
+   // Measure saturated cyan in the raster, not blue-grey antialiased axis text.
+   // React draws after committing the title, so poll for the corresponding raster.
+   await expect.poll(async()=>canvas.evaluate(el=>{
     const c=el as HTMLCanvasElement,ctx=c.getContext('2d')!;
     const d=ctx.getImageData(0,0,c.width,c.height).data;
     let minX=c.width,maxX=-1,minY=c.height,maxY=-1;
     for(let y=0;y<c.height;y++)for(let x=0;x<c.width;x++){
      const i=(y*c.width+x)*4,r=d[i],g=d[i+1],b=d[i+2];
-     if(g>85 && g>r*1.25 && g>b*.8){minX=Math.min(x,minX);maxX=Math.max(x,maxX);minY=Math.min(y,minY);maxY=Math.max(y,maxY)}
+     if(g>120 && r<80 && b>100 && g-r>70){
+      minX=Math.min(x,minX);maxX=Math.max(x,maxX);minY=Math.min(y,minY);maxY=Math.max(y,maxY);
+     }
     }
-    return {width:maxX-minX,height:maxY-minY};
-   });
-   expect(shape.width).toBeGreaterThan(50);
-   expect(shape.width/shape.height).toBeCloseTo(1,1);
+    const width=maxX-minX,height=maxY-minY;
+    return width>50 && height>50 ? width/height : 0;
+   })).toBeCloseTo(1,1);
   }
  }
 });
