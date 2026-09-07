@@ -95,14 +95,14 @@ class Providers:
         if (name == 'agent') != (cfg.protocol in ('openai_responses', 'openai_chat')):
             raise HTTPException(422, '该协议不适用于此接入类型。')
         base = self.validate_url(cfg.base_url)
+        key = cfg.api_key.get_secret_value() if cfg.api_key else None
+        if key and ('\n' in key or '\r' in key):
+            raise HTTPException(422, '密钥不能包含换行。')
         with self.lock:
             self.settings[name] = {**cfg.model_dump(exclude={'api_key', 'clear_key'}), 'base_url': base}
             if cfg.clear_key:
                 self.keys.pop(name, None)
-            if cfg.api_key and cfg.api_key.get_secret_value():
-                key = cfg.api_key.get_secret_value()
-                if '\n' in key or '\r' in key:
-                    raise HTTPException(422, '密钥不能包含换行。')
+            if key:
                 self.keys[name] = key
             self.directory.mkdir(parents=True, exist_ok=True)
             temp = self.config_path.with_suffix('.tmp')
