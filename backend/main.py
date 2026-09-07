@@ -7,7 +7,10 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
+from dotenv import load_dotenv
+load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
 from .agent import router as agent_router
+from .design import make_router as make_design_router
 from .catalog import presets
 from .engine import MODEL_VERSION, ModelError, calculate
 from .report import render_report
@@ -20,16 +23,19 @@ ROOT = Path(__file__).resolve().parent.parent
 def create_app(db_path: str | Path | None = None) -> FastAPI:
     store = ProjectStore(db_path or os.environ.get('CABLESIM_DB', str(ROOT / '.data' / 'cablesim.sqlite')))
     workspace_store = WorkspaceStore(store.path)
+    design_router = make_design_router(workspace_store)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         store.initialize()
         workspace_store.initialize()
+        design_router.library.initialize()
         yield
 
-    app = FastAPI(title='CableSimPro · Engineering Workspace', version='0.3.0', lifespan=lifespan)
+    app = FastAPI(title='CableSimPro · Engineering Workspace', version='0.4.0', lifespan=lifespan)
     app.include_router(agent_router)
     app.include_router(make_router(workspace_store))
+    app.include_router(design_router)
 
     @app.get('/api/health')
     def health():

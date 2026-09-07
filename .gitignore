@@ -14,3 +14,7 @@ frontend/playwright-report/
 .env
 .DS_Store
 artifacts/
+
+.env
+.env.*
+.data/

@@ -36,13 +36,24 @@ export function StudioProvider({children}:{children:ReactNode}) {
  async function initialize(){await task(async()=>{setStatus(await api('/api/agent/status'));let id:string|null=null;try{id=localStorage.getItem('cablesim-studio-id')}catch{};if(id){try{remember(await api(`/api/workspaces/${id}`));return}catch(e){if(!errorText(e).includes('不存在'))throw e}}remember(await api('/api/workspaces',{}))})}
  useEffect(()=>{void initialize()},[]);
  useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(''),4000);return()=>clearTimeout(t)},[notice]);
+ function cleanInputs(){
+  for(const input of document.querySelectorAll<HTMLInputElement|HTMLSelectElement>('[data-model-path]')){
+   const key=input.dataset.modelPath!;
+   const saved=valueAt(currentW.current!.scenario,key);
+   const shown=input.value===''?null:typeof saved==='string'?input.value:Number(input.value);
+   if(saved!==shown||!input.checkValidity()){
+    setError('存在未保存或无效的输入，请修正参数，或按 Esc 恢复已保存值。');return false;
+   }
+  }
+  return true;
+ }
  const methods:Studio={w,busy,error,notice,output,current,proposal,notes,selected,select,phase,setPhase,status,tab,setTab,
  edit:async(changes,label='属性编辑')=>task(async()=>{remember(await api(route('edit'),{...rev(),changes,label}));setNotice('已校验并保存修改')}),
  lock:async(path,locked)=>task(async()=>{remember(await api(route('lock'),{...rev(),path,locked}))}),
  history:async d=>task(async()=>{remember(await api(route(`history/${d}`),rev()))}),
- run:async()=>{const invalid=document.querySelector<HTMLInputElement>('input:invalid');if(invalid){invalid.reportValidity();setError('有未完成或超出范围的数值输入，请先修正。');return}return task(async()=>{accept(await api(route('calculate'),rev()));setTab('results')})},
- plan:async(message,mode,consent)=>task(async()=>{add('user',message);setProposal(null);const p=await api<Proposal>(route('plan'),{...rev(),message,mode,consent});setProposal(p);if(!p.ready)add('assistant',p.questions.join('\n'))}),
- review:async action=>task(async()=>{if(!proposal?.id)return;accept(await api(route(`proposals/${proposal.id}/${action}`),rev()));setProposal(null);if(action==='approve')setTab('results');else add('assistant','已拒绝提案，工程未改变。')}),
+ run:async()=>{if(!cleanInputs())return;const invalid=document.querySelector<HTMLInputElement>('input:invalid');if(invalid){invalid.reportValidity();setError('有未完成或超出范围的数值输入，请先修正。');return}return task(async()=>{accept(await api(route('calculate'),rev()));setTab('results')})},
+ plan:async(message,mode,consent)=>task(async()=>{if(!cleanInputs())return;add('user',message);setProposal(null);const p=await api<Proposal>(route('plan'),{...rev(),message,mode,consent});setProposal(p);if(!p.ready)add('assistant',p.questions.join('\n'))}),
+ review:async action=>task(async()=>{if(!cleanInputs())return;if(!proposal?.id)return;accept(await api(route(`proposals/${proposal.id}/${action}`),rev()));setProposal(null);if(action==='approve')setTab('results');else add('assistant','已拒绝提案，工程未改变。')}),
  extract:async(title,text,page)=>task(async()=>{setProposal(await api(route('evidence'),{...rev(),title,text,page}));setNotice('资料参数已提取，等待在 Agent 面板中审查。')}),
  load:async id=>task(async()=>{remember(await api(`/api/workspaces/${id}`));setProposal(null);setOutput(null);setNotes([])}),
  create:async scenario=>task(async()=>{remember(await api('/api/workspaces',scenario?{scenario}:{}));setOutput(null);setProposal(null);setNotes([])}),

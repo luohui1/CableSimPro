@@ -158,11 +158,20 @@ There is no file, shell, web or database tool. All proposals require human confi
 
 
 async def cloud_intent(request: PlanRequest) -> Intent:
-    key, model = os.getenv('OPENAI_API_KEY'), os.getenv('CABLESIM_AGENT_MODEL')
+    key, model = os.getenv('CABLESIM_AGENT_API_KEY') or os.getenv('OPENAI_API_KEY'), os.getenv('CABLESIM_AGENT_MODEL')
     if not key or not model:
         raise HTTPException(503, '尚未配置 OpenAI。请在服务端设置 OPENAI_API_KEY 与 CABLESIM_AGENT_MODEL。')
     if not request.consent:
         raise HTTPException(403, '请先确认允许将当前工程参数与任务发送至 OpenAI。')
+    if os.getenv('CABLESIM_AGENT_BASE_URL') or os.getenv('CABLESIM_AGENT_PROTOCOL'):
+        from .integrations import model_turn
+        turn = await model_turn([{'role':'user','content':json.dumps({'task':request.message,'project':request.scenario.model_dump()},ensure_ascii=False)}],[TOOL],INSTRUCTIONS,request.consent)
+        if turn['tool'] != 'propose_study':
+            raise HTTPException(502, '模型未返回工程提案工具。')
+        try:
+            return Intent.model_validate(turn['arguments'])
+        except ValueError:
+            raise HTTPException(502, '模型提案未通过校验。') from None
     try:
         async with httpx.AsyncClient(timeout=22.0) as client:
             response = await client.post('https://api.openai.com/v1/responses', headers={'Authorization': f'Bearer {key}'}, json={
@@ -188,7 +197,7 @@ async def cloud_intent(request: PlanRequest) -> Intent:
 
 @router.get('/status')
 def status():
-    configured = bool(os.getenv('OPENAI_API_KEY') and os.getenv('CABLESIM_AGENT_MODEL'))
+    configured = bool((os.getenv('CABLESIM_AGENT_API_KEY') or os.getenv('OPENAI_API_KEY')) and os.getenv('CABLESIM_AGENT_MODEL'))
     return {'cloud_configured': configured, 'model': os.getenv('CABLESIM_AGENT_MODEL') if configured else None,
             'local_mode': 'explicit-command-parser', 'execution': 'signed-plan-confirmation', 'version': '0.2.0'}
 

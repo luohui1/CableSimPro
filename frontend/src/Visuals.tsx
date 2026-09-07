@@ -161,7 +161,7 @@ export function LineChart({data, xLabel, yLabel, threshold, label}: {data: {x: n
     {[0, 1, 2, 3, 4].map(i => <g key={i}><line x1="54" y1={35 + i * 39} x2="544" y2={35 + i * 39} stroke="#e4e4d9" strokeDasharray="3 4"/><text x="43" y={39 + i * 39} textAnchor="end" fill="#8f9280" fontSize="11">{fmt(yMax - (yMax - yMin) * i / 4, 0)}</text><text x={54 + i * 122.5} y="214" textAnchor="middle" fill="#8f9280" fontSize="11">{fmt(xMin + (xMax - xMin) * i / 4, xMax < 10 ? 1 : 0)}</text></g>)}
     <path d={`${path} L${X(data[data.length - 1].x)},191 L${X(data[0].x)},191 Z`} fill={`url(#${id})`}/><path d={path} fill="none" stroke="#565e47" strokeWidth="2.5"/>
     {data.map((p, i) => <circle key={i} cx={X(p.x)} cy={Y(p.y)} r="3" fill="#fff" stroke="#565e47" strokeWidth="1.4"><title>{fmt(p.x, 2)} / {fmt(p.y, 2)}</title></circle>)}
-    {threshold !== undefined && <g><line x1="54" x2="544" y1={Y(threshold)} y2={Y(threshold)} stroke="#d38d45" strokeDasharray="5 4"/><text x="540" y={Y(threshold) - 7} textAnchor="end" fill="#b67c3f" fontSize="10">温度上限 {threshold} °C</text></g>}
+    {threshold !== undefined && <g><line x1="54" x2="544" y1={Y(threshold)} y2={Y(threshold)} stroke="#d38d45" strokeDasharray="5 4"/><text x="540" y={Y(threshold) - 7} textAnchor="end" fill="#955927" fontSize="10">温度上限 {threshold} °C</text></g>}
     <text x="54" y="17" fill="#8f9280" fontSize="11">{yLabel}</text><text x="544" y="235" textAnchor="end" fill="#8f9280" fontSize="11">{xLabel}</text>
   </svg>;
 }

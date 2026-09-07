@@ -94,3 +94,29 @@ GitHub Actions 验证 Python 3.11/3.12/3.13、TypeScript/Vite、Chromium、WebKi
 默认仅本机使用，无认证、租户隔离、云端费用上限和公网请求防护，**不要直接暴露互联网**。审批记录是本机审计，不是防篡改合规日志。完整 IEC 方程与正式算例校核仍是独立工程任务，AI/UI 更新不代表求解器已获工程认证。
 
 开源组件：Dockview、Konva/react-konva、TanStack Table、Lucide、React、Three.js、LangGraph，以及 FastAPI/Pydantic/NumPy。构建时生成第三方许可证清单；未采用 Dockview Enterprise 或商业 CAD 内核。详见 `docs/PRO_WORKBENCH.md` 和原 `docs/METHOD.md`。
+
+---
+
+# 0.4 · OCR / Agent / 竖向研究与反向选型
+
+**当前开发分支为 `feat/design-ocr-v04`。上文为 v0.3 工作台历史说明；以下为本轮新增与覆盖。**
+
+新版强化深蓝/灰白工程主题的文字对比度、表头与输入控件，新增顶部 **“设计中心 · OCR / 选型”** 入口。主工作台继续做直埋建模；设计中心包含：竖向热研究、绝缘电场、反向选型、企业资料库、资料与选型 Agent、接入状态。
+
+新增真实计算：竖向单根隔离电缆的轴向有限体积/径向热网络、温度修正电阻、对流与辐射；同轴绝缘电势、RMS 与峰值场强、电容。未做磁场涡流、流场/烟囱效应、热应力或通用有限元。
+
+新增企业资料上传、数字 PDF 文字自动提取、扫描 PDF/图片 OCR 接口、页级核对、关键词检索、有引用的参数入库。反向选型逐项调用计算内核，并保留不满足约束的原因；默认不纳入演示条目。可接服务端 Responses/Chat Completions Agent，提供三种只读工具，保持旧工程修改审批流程。
+
+```sh
+git clone --branch feat/design-ocr-v04 https://github.com/luohui1/CableSimPro.git
+cd CableSimPro
+python scripts/run_demo.py
+```
+
+预构建包启动仍只需 Python 3.11–3.13；首次联网安装依赖，不需 Node.js。源码版另需 Node.js 22.12+（22.x）。
+
+**OCR key 后续配置**：复制 `config.example.env` 为 `.env`，在本机填写供应商、接口地址、key 和模型后重启。浏览器“接入”页显示状态，但不会把配置状态当作真实调用成功。OCR 内置 Mistral 和规范化 Gateway；其它供应商需按其协议映射，不能把 API key 当作跨厂商通用协议。无 key 时原生 PDF 文字提取、资料库、物理计算和选型仍可使用；扫描件留待识别，不生成假文字。不要在聊天里或 Git 中提交实际密钥。
+
+详细方程、边界条件、接口契约、资料来源、备份与验证见 [docs/DESIGN_V04.md](docs/DESIGN_V04.md)。新版浏览器测试包含 `design.spec.ts`。后端验证有限体积热平衡/解析退化解/网格对比、电场积分、OCR 页码映射与失败保护、资料证据、选型锁与无可行解、模型工具权限；真实云服务未使用 key 联调，相关自动测试为契约模拟。
+
+**仅供本机研究，尚无企业认证、SSO、多租户隔离、费用限额和公网防护。选型仅满足已建模的热/电压标签/外径约束，不包含机械、压降、短路等完整工程校核。**
