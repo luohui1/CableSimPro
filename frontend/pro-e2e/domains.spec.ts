@@ -12,11 +12,17 @@ test('high contrast property text and real field diagnostics',async({page},info)
  await expect(page.getByTestId('field-title')).toContainText('有限差分');
  await expect(page.locator('.field-diagnostics')).toContainText('热流守恒差');
  await expect(page.locator('.field-diagnostics')).toContainText('细网格');
- await page.screenshot({path:info.outputPath('v04-thermal.png'),fullPage:true});
+ await page.getByRole('button',{name:'专注工作区',exact:true}).click();
+ await expect(page.locator('.field-panel')).toBeVisible();
+ await page.locator('.field-map').screenshot({path:info.outputPath('v04-thermal.png')});
  await page.getByRole('button',{name:'绝缘电场',exact:false}).click();await page.getByRole('button',{name:'运行场分析',exact:false}).click();
  await expect(page.getByTestId('field-title')).toContainText('绝缘电场');await expect(page.locator('.field-diagnostics')).toContainText('电场积分');
+ await page.locator('.field-map').screenshot({path:info.outputPath('v04-electric.png')});
  await page.getByRole('button',{name:'三相外部磁场',exact:false}).click();await page.getByRole('button',{name:'运行场分析',exact:false}).click();
  await expect(page.getByTestId('field-title')).toContainText('磁感应强度');
+ await page.locator('.field-map').screenshot({path:info.outputPath('v04-magnetic.png')});
+ await page.getByRole('button',{name:'专注工作区',exact:true}).click();
+ await expect(page.getByLabel('工程任务')).toBeVisible();
  expect(errors).toEqual([]);
 });
 
@@ -54,7 +60,11 @@ test('inverse selection re-solves catalog and applies only by approval',async({p
  await page.getByRole('button',{name:'运行反向选型',exact:false}).click();
  await expect(page.getByTestId('selection-summary')).toContainText('满足当前筛选约束');
  await expect(page.locator('.design-table tr.feasible')).not.toHaveCount(0);
+ await page.getByRole('button',{name:'专注工作区',exact:true}).click();
+ await page.setViewportSize({width:1920,height:1400});
+ await page.getByTestId('selection-summary').scrollIntoViewIfNeeded();
  await page.screenshot({path:info.outputPath('v04-selection.png'),fullPage:true});
+ await page.getByRole('button',{name:'专注工作区',exact:true}).click();
  await page.getByRole('button',{name:'候选送审',exact:true}).first().click();
  await expect(page.locator('.proposal-card')).toBeVisible();await expect(page.getByTestId('revision')).toHaveText('rev.1');
  await page.getByRole('button',{name:'批准并执行'}).click();await expect(page.getByTestId('revision')).toHaveText('rev.2');
