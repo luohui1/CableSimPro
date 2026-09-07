@@ -1,0 +1,31 @@
+name: CableSimPro CI
+on:
+  push:
+    branches: [main, 'feat/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ['3.11', '3.12', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: pip install -r backend/requirements-dev.txt
+      - run: python -m pytest --junitxml=artifacts/backend-${{ matrix.python }}.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-tests-${{ matrix.python }}
+          path: artifacts/
