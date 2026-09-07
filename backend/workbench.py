@@ -1,7 +1,4 @@
-"""Versioned local engineering workspace; human and agent edits share server CAS.
-SQLite persists state; LangGraph orchestrates bounded planning and solver tools.
-No shell tools or arbitrary field paths. Not an authenticated cloud service.
-"""
+"""Versioned local engineering workspace; human and agent edits share server CAS."""
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from hashlib import sha256
@@ -59,6 +56,7 @@ class Evidence(Revision):
 
 class Flow(TypedDict, total=False):
     request: agent.PlanRequest
+    providers: object
     plan: dict
     events: list
     candidate: dict
@@ -69,7 +67,7 @@ class Flow(TypedDict, total=False):
 
 
 async def planning(state: Flow):
-    proposal = await agent.plan(state['request'])
+    proposal = await agent.make_plan(state['request'], state.get('providers'))
     proposal.pop('ticket', None)
     return {'plan': proposal, 'events': [{'tool': 'plan_task', 'status': 'completed', 'detail': '生成操作意图；尚未改变工程'}]}
 
@@ -197,7 +195,7 @@ class WorkspaceStore:
         return {**proposal, 'id': pid, 'base_revision': revision, 'status': 'pending'}
 
 
-def make_router(store: WorkspaceStore):
+def make_router(store: WorkspaceStore, providers=None):
     router = APIRouter(prefix='/api/workspaces')
 
     @router.get('')
@@ -255,7 +253,7 @@ def make_router(store: WorkspaceStore):
     async def plan(wid: str, body: Task):
         with store.db() as db:
             _, state = store.load(db, wid, body.expected_revision)
-        flow = await PLANNER.ainvoke({'request': agent.PlanRequest(scenario=state['scenario'], message=body.message, mode=body.mode, consent=body.consent)})
+        flow = await PLANNER.ainvoke({'request': agent.PlanRequest(scenario=state['scenario'], message=body.message, mode=body.mode, consent=body.consent), 'providers': providers})
         proposal = {**flow['plan'], 'message': body.message, 'events': flow['events']}
         if not proposal['ready']:
             return proposal

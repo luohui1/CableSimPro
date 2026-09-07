@@ -1,8 +1,8 @@
 import type { Cable, Layer } from './types';
 
-export async function api<T>(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST'): Promise<T> {
+export async function api<T>(path: string, body?: unknown, method = body === undefined ? 'GET' : 'POST', timeoutMs = 30000): Promise<T> {
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 30000);
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(path, {method, signal: controller.signal,
       headers: body === undefined ? {} : {'Content-Type': 'application/json'},
@@ -36,7 +36,6 @@ export function download(name: string, data: string, mime: string): void {
 }
 export const safe = (n: number, fallback: number) => Number.isFinite(n) && n > 0 ? n : fallback;
 export function layers(c: Cable): Layer[] {
-  // Only the preview has rendering fallbacks. Invalid inputs are never clamped by the API.
   let radius = Math.sqrt(safe(c.area_mm2, 240) / (Math.PI * safe(c.fill_factor, 0.92)));
   const result: Layer[] = [{name: '导体', radius_mm: radius, color: c.conductor === 'copper' ? '#ce9451' : '#b7c6d3'}];
   const thickness = [c.conductor_screen_mm, c.insulation_mm, c.insulation_screen_mm, c.metallic_screen_mm, c.jacket_mm];

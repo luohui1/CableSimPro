@@ -31,11 +31,11 @@ def build_archive(root: Path = ROOT) -> Path:
                 continue
             if any(part in EXCLUDED_PARTS for part in relative.parts):
                 continue
-            if path.suffix.lower() in ('.pyc', '.sqlite', '.db', '.ttf', '.otf', '.woff', '.woff2', '.eot') or path.name.startswith('.env'):
+            if path.name in {'providers.json','local-render.cjs'} or path.suffix.lower() in ('.pyc', '.sqlite', '.db', '.ttf', '.otf', '.woff', '.woff2', '.eot') or path.name.startswith('.env'):
                 continue
             archive.write(path, 'CableSimPro/' + relative.as_posix())
             count += 1
-        info = {'product': 'CableSimPro', 'version': '0.3.0', 'git_checkout_sha': commit,
+        info = {'product': 'CableSimPro', 'version': '0.4.0', 'git_checkout_sha': commit,
                 'github_run_id': os.environ.get('GITHUB_RUN_ID'), 'includes_prebuilt_frontend': True,
                 'engineering_status': 'preview; not a complete IEC implementation or independently certified'}
         archive.writestr('CableSimPro/BUILD_INFO.json', json.dumps(info, ensure_ascii=False, indent=2))
