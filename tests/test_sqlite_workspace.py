@@ -9,24 +9,27 @@ from backend.main import create_app
 
 def test_workspace_connection_is_closed_and_wal_anchor_lives_until_shutdown(tmp_path):
     app = create_app(tmp_path / "workspace.sqlite")
-    anchor = None
+    store = app.state.workspace_store
+    assert store._anchor is None
     with TestClient(app):
-        store = app.state.workspace_store
-        anchor = store._anchor
-        assert anchor is not None
+        # The anchor is owned by the application's lifespan thread. Do not execute
+        # SQL on it from the TestClient caller thread: Python sqlite3 intentionally
+        # rejects cross-thread connection use. Its presence is the lifecycle fact
+        # under test; request connections below verify the configured database.
+        assert store._anchor is not None
         with store.db() as db:
+            journal_mode = db.execute("PRAGMA journal_mode").fetchone()[0]
             checkpoint_pages = db.execute("PRAGMA wal_autocheckpoint").fetchone()[0]
         # Request connections are still closed deterministically.
         with pytest.raises(sqlite3.ProgrammingError):
             db.execute("SELECT 1")
+        assert journal_mode.lower() == "wal"
         # SQLite's normal 1000-page PASSIVE checkpoint threshold is retained; the
         # idle anchor prevents request teardown from becoming last-connection WAL
         # checkpoint/unlink work.
         assert checkpoint_pages == store.WAL_AUTOCHECKPOINT_PAGES == 1000
-        assert anchor.execute("SELECT 1").fetchone()[0] == 1
-    assert anchor is not None
-    with pytest.raises(sqlite3.ProgrammingError):
-        anchor.execute("SELECT 1")
+    # Lifespan shutdown releases the anchor; no process-global connection leaks.
+    assert store._anchor is None
 
 
 def invoke(client, workspace_id, capability, arguments=None):
