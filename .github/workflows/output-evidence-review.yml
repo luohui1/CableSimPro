@@ -10,7 +10,7 @@ concurrency:
 jobs:
   evidence:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -28,9 +28,17 @@ jobs:
       - run: node scripts/test_engineering_readiness.mjs
       - run: npm run build
         working-directory: frontend
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
         working-directory: frontend
-      - run: npx playwright test same-workspace.spec.ts agent-studio.spec.ts --project=chromium --grep='result evidence:|engineering readiness:'
+      - name: Desktop result evidence and readiness regression
+        run: |
+          npx playwright test same-workspace.spec.ts agent-studio.spec.ts --project=chromium --grep='result evidence:|engineering readiness:'
+          cp test-results/browser-tests.xml test-results/evidence-desktop-tests.xml
+        working-directory: frontend
+      - name: Mobile approval hit-area regression
+        run: |
+          npx playwright test agent-studio-mobile.spec.ts dual-mode-mobile.spec.ts --project=mobile-webkit --grep='mobile agent navigation review|mobile entry mode switch plan and current result'
+          cp test-results/browser-tests.xml test-results/evidence-mobile-tests.xml
         working-directory: frontend
       - uses: actions/upload-artifact@v4
         if: always()
