@@ -5,6 +5,7 @@ import {labelFor} from '../StudioPanels';
 import {ReviewedSelection} from '../EnterprisePanels';
 import {LibraryPanel} from '../LibraryDesignPanels';
 import {InlineResults} from '../WorkspaceInteraction';
+import {EngineeringPlate,EngineeringGuide} from '../visual-assets/EngineeringPlate';
 import {fmt} from '../utils';
 
 export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{active:boolean;draft:string;setDraft:(value:string)=>void;openWorkbench:(view?:string)=>void}){
@@ -22,7 +23,7 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
  function send(){if(blocked||pending||!draft.trim()||(provider==='openai'&&(!consent||!s.status.cloud_configured)))return;void s.plan(draft.trim(),provider,consent)}
  const latestRequirement=[...s.notes].reverse().find(n=>n.role==='user')?.text??p?.message;
  const status=s.error?'需要处理':s.busy?'工具执行中':pending?(stale||expired?'提案待更新':'等待审查'):p&&!p.ready?'请补充条件':validResult?'结果可复核':validOutput?'工具已完成':s.output?'输入已变化':'等待任务';
- return <main className="agent-workspace" aria-label="智能工程流工作区">
+ return <main className={`agent-workspace ${!p&&!s.output?'is-unstarted':'has-task'}`} aria-label="智能工程流工作区">
   <header className="flow-page-heading"><div><span className="mode-kicker">智能工程流 / 当前工程</span><h1>从工程目标，到可复核的结果</h1><p>任务、参数变更和计算记录都属于 <b>{w.scenario.name}</b>。</p></div><button className="flow-link" onClick={()=>openWorkbench()}><Layers3 size={17}/>在专业工作台打开<ArrowRight size={15}/></button></header>
   <nav className="flow-nav" aria-label="工程流内容"><button aria-current={section==='task'?'page':undefined} onClick={()=>setSection('task')}>设计任务{pending&&<span className="pending-dot"/>}</button><button aria-current={section==='selection'?'page':undefined} onClick={()=>setSection('selection')}>企业型号选型</button><button aria-current={section==='documents'?'page':undefined} onClick={()=>setSection('documents')}>资料与参数核对</button><span className="flow-status" role="status">{status}</span></nav>
   <div hidden={section!=='task'} className="flow-task-layout">
@@ -49,9 +50,9 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
      <details><summary>查看工具执行明细</summary>{s.output.events.map((event,i)=><p key={i}><code>{event.tool}</code> — {event.detail}</p>)}</details>
      <button className="flow-link" onClick={()=>openWorkbench()}>在模型中检查结果<ArrowRight size={15}/></button>
     </section>}
-    {!p&&!s.output&&<section className="flow-start"><Workflow size={28}/><h2>由你确认条件，由工程工具计算</h2><p>这里不是另一个项目。工作台中的电缆、负荷、参数锁和资料引用，会直接用于本次任务。</p><div><span>提出目标</span><ArrowRight size={14}/><span>检查变更</span><ArrowRight size={14}/><span>计算复核</span></div></section>}
+    {!p&&!s.output&&<section className="flow-start"><EngineeringPlate kind="documents"/><div className="flow-start-copy"><span className="entry-eyebrow">资料 → 模型 → 计算记录</span><h2>让每个结论，<br/>都能回到工程依据。</h2><p>描述任务后，先核对参数差异，再执行计算。缺失的关键条件不会被自动猜测。</p><small>本图为工作过程示意，不是已完成的识别结果。</small></div></section>}
    </section>
-   <aside className="flow-context" aria-label="任务工程依据"><section><header><h2>当前输入</h2><button onClick={()=>openWorkbench()}>检查</button></header><p className="flow-context-note">以下来自当前保存的工程，不是从本次描述中推测的参数。</p><dl><dt>电缆截面积</dt><dd>{w.scenario.cable.area_mm2} mm²</dd><dt>相对地电压 U₀</dt><dd>{w.scenario.cable.u0_kv} kV</dd><dt>运行电流</dt><dd>{w.scenario.operating_current_a} A</dd><dt>环境温度</dt><dd>{w.scenario.installation.ambient_temperature_c} °C</dd><dt>土壤热阻率</dt><dd>{w.scenario.installation.soil_rho_k_m_w} K·m/W</dd><dt>平均埋深</dt><dd>{w.scenario.installation.depth_m} m</dd></dl></section>
+   <aside className="flow-context" aria-label="任务工程依据"><div className="flow-context-plate"><EngineeringPlate kind="cable"/><span>结构示意 · 当前值以参数表为准</span></div><section><header><h2>当前输入</h2><button onClick={()=>openWorkbench()}>检查</button></header><p className="flow-context-note">以下来自当前保存的工程，不是从本次描述中推测的参数。</p><dl><dt>电缆截面积</dt><dd>{w.scenario.cable.area_mm2} mm²</dd><dt>相对地电压 U₀</dt><dd>{w.scenario.cable.u0_kv} kV</dd><dt>运行电流</dt><dd>{w.scenario.operating_current_a} A</dd><dt>环境温度</dt><dd>{w.scenario.installation.ambient_temperature_c} °C</dd><dt>土壤热阻率</dt><dd>{w.scenario.installation.soil_rho_k_m_w} K·m/W</dd><dt>平均埋深</dt><dd>{w.scenario.installation.depth_m} m</dd></dl></section>
     <section><h2><LockKeyhole size={16}/>锁定条件</h2>{w.locks.length?w.locks.map(path=><p key={path}>{labelFor(path)}</p>):<p>当前无锁定项，请检查设计边界。</p>}</section>
     <section><h2>计算方法与范围</h2><p>当前本地任务入口：单回路三相直埋稳态热网络。交流附加和屏蔽损耗系数为输入假设。</p><p>竖向研究、企业选型和资料核对使用独立的工程工具；不宣称自动完成全部多物理场任务。</p><button onClick={()=>openWorkbench('methods')}>检查设计依据<ArrowRight size={13}/></button></section>
     <section><h2>参数来源</h2>{w.sources.length?w.sources.slice(-4).map(source=><p key={source.id}><FileText size={14}/>{source.title} · p.{source.page}</p>):<p>尚未附加核对资料。演示默认值不等于厂家数据。</p>}</section>
@@ -59,6 +60,6 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
    </aside>
   </div>
   <section hidden={section!=='selection'} className="flow-domain"><ReviewedSelection onPropose={()=>setSection('task')} refreshKey={active?w.revision:0}/></section>
-  <section hidden={section!=='documents'} className="flow-domain existing-panel"><h2>资料解析与参数核对</h2><p>原文、提取值和变更审查共用企业资料库；云端识别需先配置服务并授权。</p><LibraryPanel/></section>
+  <section hidden={section!=='documents'} className="flow-domain existing-panel"><h2>资料解析与参数核对</h2><EngineeringGuide kind="documents" title="原文、参数与产品版本一起核对">有文字层的 PDF 优先提取文字；扫描件使用已配置的 OCR 服务。识别值进入审查，不直接覆盖型号数据。</EngineeringGuide><LibraryPanel/></section>
  </main>;
 }
