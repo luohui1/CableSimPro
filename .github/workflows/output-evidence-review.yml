@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: pip install -r backend/requirements.txt
+      - run: pip install -r backend/requirements-dev.txt
       - run: python -m pytest tests/test_sqlite_workspace.py
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
