@@ -50,41 +50,60 @@ export function fitCablePortrait(camera:THREE.PerspectiveCamera,object:THREE.Obj
 }
 export default function CableModelView({cable}:{cable:Cable}){
  const host=useRef<HTMLDivElement>(null),group=useRef<THREE.Group|null>(null),controls=useRef<OrbitControls|null>(null),cam=useRef<THREE.OrthographicCamera|null>(null);
+ const sceneRef=useRef<THREE.Scene|null>(null),modelRoot=useRef<THREE.Group|null>(null),renderCurrent=useRef<()=>void>(()=>{});
  const [mode,setMode]=useState<ViewMode>('cutaway'),[visible,setVisible]=useState([true,true,true,true,true,true]),[failed,setFailed]=useState(false),[error,setError]=useState(''),[view,setView]=useState('iso'),[viewRevision,setViewRevision]=useState(0);
  const fit=useRef<()=>void>(()=>{});
  const [annotations,setAnnotations]=useState<{x:number;y:number;labelX:number;name:string;value:string}[]>([]);
  const [grid,setGrid]=useState(false),[dimension,setDimension]=useState(true),[ready,setReady]=useState(false);
  const geometryKey=JSON.stringify(cable)+mode+visible.join(',')+grid;
+ const visualState=useRef({cable,mode,visible});visualState.current={cable,mode,visible};
+ // The WebGL context, PMREM environment and controls are expensive on software/high-DPI
+ // renderers. Keep them for the component lifetime; parameter edits only replace geometry.
  useEffect(()=>{
   const el=host.current;if(!el)return;let renderer:THREE.WebGLRenderer;
   try{renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,preserveDrawingBuffer:false})}catch{setFailed(true);return}
   setFailed(false);renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor('#f4f7fb');renderer.outputColorSpace=THREE.SRGBColorSpace;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;renderer.domElement.setAttribute('aria-label','参数化电缆三维模型');el.appendChild(renderer.domElement);
-  const scene=new THREE.Scene();
+  const scene=new THREE.Scene();sceneRef.current=scene;
   const room=new RoomEnvironment(),pmrem=new THREE.PMREMGenerator(renderer),environment=pmrem.fromScene(room,.04);scene.environment=environment.texture;room.dispose();pmrem.dispose();
   const camera=new THREE.OrthographicCamera(-.32,.32,.24,-.24,.001,10);cam.current=camera;
   const ctl=new OrbitControls(camera,renderer.domElement);controls.current=ctl;ctl.minZoom=.5;ctl.maxZoom=16;ctl.enableDamping=false;ctl.target.set(0,0,0);
   camera.position.set(.33,.14,.8);ctl.update();
   scene.add(new THREE.HemisphereLight(0xffffff,0x8394a5,1.7));const key=new THREE.DirectionalLight(0xffffff,2.4);key.position.set(.2,1,.7);scene.add(key);
   const rim=new THREE.DirectionalLight(0xffffff,2);rim.position.set(-.5,.2,-.7);scene.add(rim);
-  const cableGroup=buildCableGeometry(cable,mode,visible);group.current=cableGroup;const display=cableGroup.clone(true);if(visible[0])display.children[0].visible=false;scene.add(display);
-  scene.add(cableAppearance(cable,mode,visible));
-  if(grid){const floor=new THREE.GridHelper(1,20,0xb8c0b8,0xe1e5de);floor.position.y=mode==='exploded'?-.20:-layers(cable)[5].radius_mm/1000-.003;scene.add(floor)}
   const render=()=>{
    renderer.render(scene,camera);
-   const width=el.clientWidth,height=el.clientHeight;
-   camera.updateMatrixWorld();
-   const ls=layers(cable);
+   const width=el.clientWidth,height=el.clientHeight,{cable:shownCable,mode:shownMode,visible:shownVisible}=visualState.current;
+   camera.updateMatrixWorld();const ls=layers(shownCable);
    setAnnotations(ls.flatMap((l,i)=>{
-    if(!visible[i]||mode==='assembled')return [];
-    const point=new THREE.Vector3(.18-i*.042-.020,(mode==='exploded'?(i-2.5)*.055:0)+l.radius_mm/1000,0).project(camera);
-    return [{x:(point.x+1)*width/2,y:(1-point.y)*height/2,labelX:width*(.09+(5-i)*.159),name:l.name,value:i===0?`${fmt(cable.area_mm2,0)} mm²`:`${fmt(l.radius_mm-ls[i-1].radius_mm,2)} mm`}];
+    if(!shownVisible[i]||shownMode==='assembled')return [];
+    const point=new THREE.Vector3(.18-i*.042-.020,(shownMode==='exploded'?(i-2.5)*.055:0)+l.radius_mm/1000,0).project(camera);
+    return [{x:(point.x+1)*width/2,y:(1-point.y)*height/2,labelX:width*(.09+(5-i)*.159),name:l.name,value:i===0?`${fmt(shownCable.area_mm2,0)} mm²`:`${fmt(l.radius_mm-ls[i-1].radius_mm,2)} mm`}];
    }));
   };
+  renderCurrent.current=render;
   const resize=()=>{const w=Math.max(el.clientWidth,100),h=Math.max(el.clientHeight,100),aspect=w/h;el.dataset.compact=String(h<380);camera.left=-.25*aspect;camera.right=.25*aspect;camera.top=.25;camera.bottom=-.25;camera.updateProjectionMatrix();fit.current();renderer.setSize(w,h);render()};
   const ro=new ResizeObserver(resize);ro.observe(el);ctl.addEventListener('change',render);resize();setReady(true);
-  return()=>{ro.disconnect();ctl.dispose();disposeScene(scene);environment.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();group.current=null;cam.current=null;controls.current=null};
- },[geometryKey]);
+  return()=>{ro.disconnect();ctl.dispose();disposeScene(scene);environment.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();group.current=null;modelRoot.current=null;sceneRef.current=null;cam.current=null;controls.current=null;renderCurrent.current=()=>{}};
+ },[]);
+ useEffect(()=>{
+  const scene=sceneRef.current;if(!scene||failed)return;
+  let cancelled=false,firstFrame=0,secondFrame=0;
+  const rebuild=()=>{
+   if(cancelled||sceneRef.current!==scene)return;
+   try{
+    const cableGroup=buildCableGeometry(cable,mode,visible),nextRoot=new THREE.Group();nextRoot.name='当前电缆显示';
+    const display=cableGroup.clone(true);if(visible[0]&&display.children[0])display.children[0].visible=false;nextRoot.add(display,cableAppearance(cable,mode,visible));
+    if(grid){const floor=new THREE.GridHelper(1,20,0xb8c0b8,0xe1e5de);floor.position.y=mode==='exploded'?-.20:-layers(cable)[5].radius_mm/1000-.003;nextRoot.add(floor)}
+    const previous=modelRoot.current;if(previous){scene.remove(previous);disposeScene(previous)}
+    scene.add(nextRoot);modelRoot.current=nextRoot;group.current=cableGroup;fit.current();renderCurrent.current();setError('');
+   }catch(e){setError(e instanceof Error?`三维模型更新失败：${e.message}`:'三维模型更新失败')}
+  };
+  // Two frames allow the saved revision and stale-result state to paint before an
+  // intentionally detailed geometry refresh starts on slower engineering workstations.
+  firstFrame=requestAnimationFrame(()=>{secondFrame=requestAnimationFrame(rebuild)});
+  return()=>{cancelled=true;cancelAnimationFrame(firstFrame);cancelAnimationFrame(secondFrame)};
+ },[geometryKey,failed]);
  useEffect(()=>{const c=cam.current,ctl=controls.current;if(!c||!ctl)return;
   fit.current=()=>{
    c.position.set(...(view==='front'?[.001,0,.6]:view==='end'?[.6,.001,0]:view==='top'?[0,.6,.001]:[.33,.14,.8]) as [number,number,number]);
@@ -100,7 +119,7 @@ export default function CableModelView({cable}:{cable:Cable}){
  return <div className="model-view"><div className="model-toolbar"><div className="segmented">{[['cutaway','轴向剥切'],['assembled','完整结构'],['exploded','分层展开']].map(([id,label])=><button key={id} aria-pressed={mode===id} className={mode===id?'active':''} onClick={()=>setMode(id as ViewMode)}>{label}</button>)}</div><span className="tool-spacer"/><button title="显示或隐藏网格" aria-pressed={grid} onClick={()=>setGrid(!grid)}>网格</button><button title="显示或隐藏尺寸" aria-pressed={dimension} onClick={()=>setDimension(!dimension)}>尺寸</button><button onClick={()=>{setView('iso');setViewRevision(r=>r+1)}} title="恢复轴测视图"><RotateCcw size={15}/></button><button disabled={!ready||failed} onClick={()=>void exportModel()}><Download size={15}/>导出 GLB</button></div>
  <div className="model-render" ref={host} data-testid="cable-model-view" data-renderer={failed?'fallback':ready?'webgl':'loading'}>{failed&&<div className="model-fallback"><p>WebGL 不可用，显示二维截面；三维导出已停用。</p><CrossSection cable={cable}/></div>}
  <div className="model-caption"><Box size={16}/><div><strong>单芯电缆 · 结构模型</strong><span>{cable.conductor==='copper'?'铜':'铝'}导体 / XLPE 绝缘 / 无铠装</span></div></div>
- {dimension&&<svg className="model-callouts" aria-label="结构分层标注" width="100%" height="100%">{annotations.map((a,i)=><g key={a.name}><path d={`M ${a.labelX} 112 L ${a.labelX} 126 L ${a.x} ${a.y}`} fill="none"/><circle cx={a.x} cy={a.y} r="3"/><text x={a.labelX} y="82" textAnchor="middle">{a.name}</text><text x={a.labelX} y="101" className="callout-value" textAnchor="middle">{a.value}</text></g>)}</svg>}
+ {dimension&&<svg className="model-callouts" aria-label="结构分层标注" width="100%" height="100%">{annotations.map(a=><g key={a.name}><path d={`M ${a.labelX} 112 L ${a.labelX} 126 L ${a.x} ${a.y}`} fill="none"/><circle cx={a.x} cy={a.y} r="3"/><text x={a.labelX} y="82" textAnchor="middle">{a.name}</text><text x={a.labelX} y="101" className="callout-value" textAnchor="middle">{a.value}</text></g>)}</svg>}
  <div className="orientation">{[['iso','轴测'],['front','正视'],['end','端面'],['top','俯视']].map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>setView(id)}>{label}</button>)}</div>
  {dimension&&<div className="model-dimensions"><span>外径 <b>Ø {fmt(layers(cable)[5].radius_mm*2,2)} mm</b></span><span>导体 <b>{fmt(cable.area_mm2,0)} mm²</b></span><span>展示长度 <b>360 mm</b></span></div>}
  </div>{error&&<p role="alert">{error}</p>}<div className="model-footer"><span>左键旋转 · 右键平移 · 滚轮缩放</span><span>外观线股不参与求解 · GLB 导出等效六层几何</span></div>
