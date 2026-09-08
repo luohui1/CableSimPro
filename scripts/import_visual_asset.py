@@ -60,7 +60,7 @@ def prepare_asset(source: Path, *, slot: str, title: str, alt: str,
             clean = Image.new('RGB', normalized.size)
             clean.paste(normalized)
     catalog_path = root / 'frontend/src/engineering-visuals/catalog.json'
-    catalog = json.loads(catalog_path.read_text()) if catalog_path.exists() else {'version': 1, 'assets': {}}
+    catalog = json.loads(catalog_path.read_text(encoding='utf-8')) if catalog_path.exists() else {'version': 1, 'assets': {}}
     image_path = root / 'frontend/public/engineering' / (slot + '.webp')
     image_path.parent.mkdir(parents=True, exist_ok=True)
     from io import BytesIO
@@ -79,7 +79,7 @@ def prepare_asset(source: Path, *, slot: str, title: str, alt: str,
     catalog_path.parent.mkdir(parents=True, exist_ok=True)
     # Validate and encode fully before replacing the shipped asset or its record.
     image_path.write_bytes(data)
-    catalog_path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + '\n')
+    catalog_path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     return record
 
 

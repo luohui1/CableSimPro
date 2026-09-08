@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def check_assets(root: Path = ROOT) -> list[dict]:
-    catalog = json.loads((root / 'frontend/src/engineering-visuals/catalog.json').read_text())
+    catalog = json.loads((root / 'frontend/src/engineering-visuals/catalog.json').read_text(encoding='utf-8'))
     if catalog.get('version') != 1 or set(catalog.get('assets', {})) != {'cable', 'installation', 'documents'}:
         raise ValueError('Missing or unknown illustration slots.')
     checked = []

@@ -88,8 +88,28 @@ def test_remote_catalog_entry_is_rejected(tmp_path):
         args['slot'] = slot
         prepare_asset(**args)
     catalog_path = args['root'] / 'frontend/src/engineering-visuals/catalog.json'
-    catalog = json.loads(catalog_path.read_text())
+    catalog = json.loads(catalog_path.read_text(encoding='utf-8'))
     catalog['assets']['cable']['src'] = 'https://untrusted.example/image.webp'
-    catalog_path.write_text(json.dumps(catalog))
+    catalog_path.write_text(json.dumps(catalog), encoding='utf-8')
     with pytest.raises(ValueError, match='local WebP'):
         check_assets(args['root'])
+
+
+def test_chinese_catalog_does_not_depend_on_windows_default_encoding(tmp_path, monkeypatch):
+    original_read, original_write = Path.read_text, Path.write_text
+
+    def read_utf8(path, *args, **kwargs):
+        assert kwargs.get('encoding') == 'utf-8'
+        return original_read(path, *args, **kwargs)
+
+    def write_utf8(path, data, *args, **kwargs):
+        assert kwargs.get('encoding') == 'utf-8'
+        return original_write(path, data, *args, **kwargs)
+
+    args = options(tmp_path)
+    monkeypatch.setattr(Path, 'read_text', read_utf8)
+    monkeypatch.setattr(Path, 'write_text', write_utf8)
+    for slot in ['cable', 'installation', 'documents']:
+        args['slot'] = slot
+        prepare_asset(**args)
+    assert len(check_assets(args['root'])) == 3
