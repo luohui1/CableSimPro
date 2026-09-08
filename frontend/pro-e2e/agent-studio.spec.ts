@@ -14,7 +14,7 @@ test('light entry renders two engineering visuals without creating a project or 
 
 test('task studio has real engineering module navigation and readable accessible light layout',async({page},info)=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await enter(page);
- await expect(page.getByRole('heading',{name:'这次，需要解决什么电缆设计问题？'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:/这次，需要解决\s*什么电缆设计问题/})).toBeVisible();
  await expect(page.getByRole('complementary',{name:'任务工程依据'})).toBeVisible();
  await expect(page.locator('.cs-artifacts').getByTestId('cable-portrait')).toHaveAttribute('data-renderer',/ready|fallback/);
  await expect(page.getByRole('button',{name:'生成任务计划',exact:true})).toBeInViewport();
@@ -32,7 +32,7 @@ test('candidate preview and unit diff are real, approval computes and history st
  await page.getByRole('button',{name:'批准并执行',exact:true}).click();await expect(page.getByTestId('session-revision')).toHaveText('rev.2');await expect(page.locator('.flow-result-metrics')).toBeVisible();
  await page.screenshot({path:info.outputPath('agent-result-v072.png'),fullPage:true});
  let invokes=0;page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/invoke'))invokes++});
- await page.locator('.cs-rail-section>button').first().click();await expect(page.getByRole('region',{name:'执行记录详情'})).toContainText('不可变任务快照');await expect(page.locator('.cs-record-meta')).toContainText('输入版本 1');expect(invokes).toBe(0);expect(new URL(page.url()).searchParams.get('project')).toBe(workspace);
+ await page.locator('.cs-rail-section>button').first().click();await expect(page.getByRole('region',{name:'执行记录详情'})).toContainText('不可变任务快照');await expect(page.locator('.cs-record-meta')).toContainText('输入版本 1');await expect(page.getByTestId('archived-task-summary')).toContainText('当次工程输入');await expect(page.getByTestId('archived-task-summary').locator('pre').first()).toBeHidden();expect(invokes).toBe(0);expect(new URL(page.url()).searchParams.get('project')).toBe(workspace);
  await switcher(page).getByRole('button',{name:'专业工作台',exact:true}).click();await expect(page.locator('.enterprise-inspector').getByLabel('导体截面积',{exact:true})).toHaveValue('400');
  await page.screenshot({path:info.outputPath('workbench-v072.png'),fullPage:true});
 });
@@ -60,4 +60,12 @@ test('task module views open real selection, document and standards tools',async
  await nav.getByRole('button',{name:'资料与参数核对',exact:true}).click();await expect(page.locator('.cs-module-surface:not([hidden])')).toContainText('资料与工程参数');
  await nav.getByRole('button',{name:'计算依据',exact:true}).click();await expect(page.locator('.cs-module-surface:not([hidden])')).toContainText('IEC');
  await nav.getByRole('button',{name:'当前任务',exact:true}).click();await expect(page.getByLabel('描述本次工程任务',{exact:true})).toBeVisible();
+});
+
+
+test('review preserves manufacturer resistance precision and never calculates before approval',async({page,request},info)=>{
+ await enter(page);const wid=new URL(page.url()).searchParams.get('project');
+ const response=await request.post(`/api/workspaces/${wid}/evidence`,{data:{expected_revision:1,title:'R20 精度测试资料',page:1,text:'R20: 0.0601 Ω/km'}});expect(response.status()).toBe(200);
+ await page.reload();await expect(page.locator('.cs-diff-table')).toContainText('0.0601');await expect(page.getByTestId('session-revision')).toHaveText('rev.1');
+ await expect(page.locator('.cs-result')).toHaveCount(0);await page.screenshot({path:info.outputPath('resistance-precision-v072.png'),fullPage:true});
 });

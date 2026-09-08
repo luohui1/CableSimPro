@@ -8,14 +8,14 @@ import {StandardsPanel} from '../EngineeringPanels';
 import {InlineResults} from '../WorkspaceInteraction';
 import CablePortrait,{InstallationSketch} from '../engineering-visuals/CablePortrait';
 import {api,errorText,fmt,layers} from '../utils';
+import TaskRecordView,{type ArchivedTask} from './TaskRecordView';
 
 type Section='task'|'selection'|'documents'|'standards'|'history';
 type Artifact='model'|'installation'|'evidence';
 interface TaskRecord {id:string;capability:string;base_revision:number;status:string;created:string}
 interface Journal {tasks:TaskRecord[];nodes:{id:string;label:string}[];coverage:string}
-interface ArchivedTask {id:string;capability:string;base_revision:number;status:string;input_snapshot:unknown;output:unknown}
 const pathUnit:Record<string,string>={'cable.area_mm2':'mm²','cable.u0_kv':'kV','cable.r20_ohm_km':'Ω/km','cable.insulation_mm':'mm','cable.jacket_mm':'mm','installation.depth_m':'m','installation.spacing_m':'m','installation.ambient_temperature_c':'°C','installation.soil_rho_k_m_w':'K·m/W','operating_current_a':'A','cable.max_temperature_c':'°C','circuit_length_m':'m'};
-const displayValue=(v:unknown)=>v===null?'按模型估算':typeof v==='number'?fmt(v,Number.isInteger(v)?0:3):String(v??'—');
+const displayValue=(v:unknown)=>v===null?'按模型估算':typeof v==='number'?new Intl.NumberFormat('zh-CN',{maximumSignificantDigits:15}).format(v):String(v??'—');
 
 /** Task-first client. All modifications and calculations still use the shared engineering session. */
 export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{active:boolean;draft:string;setDraft:(value:string)=>void;openWorkbench:(view?:string)=>void}){
@@ -66,7 +66,7 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
        <div className="cs-task-starters"><button onClick={()=>focusTask('计算载流量')}><span className="cs-starter-icon"><Thermometer size={22}/></span><b>校核载流量</b><small>当前结构与敷设条件</small><ArrowRight size={16}/></button><button onClick={()=>focusTask('比较土壤热阻率 0.8、1.2、1.6 下的载流量')}><span className="cs-starter-icon"><Workflow size={22}/></span><b>比较敷设条件</b><small>逐工况计算，不更改原方案</small><ArrowRight size={16}/></button><button onClick={()=>navigate('selection')}><span className="cs-starter-icon"><Layers3 size={22}/></span><b>从企业型号选型</b><small>限定已核对的产品版本</small><ArrowRight size={16}/></button><button onClick={()=>navigate('documents')}><span className="cs-starter-icon"><FileText size={22}/></span><b>从资料核对参数</b><small>原文、提取值与来源同屏</small><ArrowRight size={16}/></button></div>
       </section>:<div className="cs-thread">
        {latest&&<article className="cs-user-request"><span>本次任务</span><p>{latest}</p></article>}
-       <div className="cs-tool-event"><CheckCircle2 size={15}/><span>工程输入已读取</span><small>版本 {p?.base_revision??w.revision} · {w.scenario.cable.area_mm2} mm² · {w.scenario.operating_current_a} A</small></div>
+       <div className="cs-tool-event"><FolderOpen size={15}/><span>当前工程上下文</span><small>版本 {w.revision} · {w.scenario.cable.area_mm2} mm² · {w.scenario.operating_current_a} A</small></div>
        {s.busy&&<div className="cs-running" role="status"><i/>工程工具处理中，参数锁与版本检查保持生效。</div>}
        {p&&!p.ready&&<section className="cs-question" aria-label="待补充条件"><h2><TriangleAlert size={18}/>请补充必要条件</h2>{p.questions.map((q,i)=><p key={i}>{q}</p>)}<small>未生成参数修改，也未进行计算。可在下方补充描述。</small></section>}
        {pending&&<section className="flow-review cs-review" aria-label="待审查工程变更"><header><div><span className="cs-eyebrow">拟用输入 · 尚未写入工程</span><h2>{p.action==='sweep'?'比较敷设条件':p.action==='import'?'导入资料参数':p.changes.length?'审查电缆参数变更':'确认本次计算计划'}</h2></div><span className="cs-change-count">{p.changes.length} 项修改</span></header>
@@ -78,7 +78,7 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
         {(stale||expired)&&<p className="cs-warning" role="status">{expired?'提案已过期':'工程输入已变化'}，不可批准旧提案。请拒绝后重新规划。</p>}
         <footer><span><LockKeyhole size={13}/>{w.locks.length} 项锁定条件保持不变</span><button disabled={blocked} onClick={()=>void s.review('reject')}>拒绝提案</button><button className="cs-primary" disabled={blocked||stale||expired} onClick={()=>void s.review('approve')}><Check size={16}/>批准并执行</button></footer>
        </section>}
-       {s.output&&!pending&&<section className="cs-result" aria-label="任务结果"><header><CheckCircle2 size={18}/><h2>{validOutput?'工程工具已完成':'历史计算记录'}</h2><small>{s.output.run_id?.slice(0,8)}</small></header><p className={!validOutput?'cs-warning':''}>{validOutput?s.output.statement:'输入或版本已变化，旧结果不再作为当前结论。请重新计算。'}</p>
+       {s.output&&!pending&&!s.busy&&!p&&<section className="cs-result" aria-label="任务结果"><header><CheckCircle2 size={18}/><h2>{validOutput?'当前工程结果':'历史计算记录'}</h2><small>{s.output.run_id?.slice(0,8)}</small></header><p className={!validOutput?'cs-warning':''}>{validOutput?s.output.statement:'输入或版本已变化，旧结果不再作为当前结论。请重新计算。'}</p>
         {s.current&&<div className="flow-result-metrics"><div><span>允许载流量</span><strong>{fmt(s.current.summary.ampacity_a)} <small>A</small></strong></div><div><span>最高导体温度</span><strong>{fmt(s.current.summary.operating_max_temperature_c)} <small>°C</small></strong></div><div><span>限制相</span><strong>{s.current.summary.limiting_phase}</strong></div></div>}
         {(s.output.result||s.output.sweep)&&<InlineResults open={resultsOpen} onOpenChange={setResultsOpen}/>}
         <details className="cs-tool-details"><summary>求解器执行记录</summary>{s.output.events.map((e,i)=><p key={i}><code>{e.tool}</code> — {e.detail}</p>)}</details>
@@ -89,7 +89,7 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
      {Composer}
     </div>
     <aside className="cs-artifacts flow-context" aria-label="任务工程依据">
-     <header><span>工程附件</span><b>{pending?'拟用结构':'当前工程'}</b></header>
+     <header><span>工程附件</span><b>{pending&&!stale&&!expired?'拟用结构':'当前工程'}</b></header>
      <nav aria-label="工程附件视图">{([['model','电缆结构'],['installation','敷设截面'],['evidence','参数依据']] as const).map(([id,label])=><button key={id} aria-pressed={artifact===id} onClick={()=>setArtifact(id)}>{label}</button>)}</nav>
      <div className="cs-artifact-content">
       {artifact==='model'&&<><div className="cs-model-title"><span>{candidate.cable.conductor==='copper'?'铜':'铝'}芯 / XLPE / 无铠装</span><h2>{candidate.cable.area_mm2} <small>mm²</small></h2><p>{pending&&!stale&&!expired?'候选结构 · 等待批准':'已保存结构 · 非制造图'}</p></div><CablePortrait cable={candidate.cable} interactive/><div className="cs-layer-key">{layers(candidate.cable).map((l,i)=><div key={l.name}><i style={{background:l.color}}/><span>{l.name}</span><b>{fmt((l.radius_mm-(i?layers(candidate.cable)[i-1].radius_mm:0)),2)} <small>mm {i===0?'半径':'厚度'}</small></b></div>)}</div><p className="cs-visual-note">绞线与屏蔽线为显示细节；计算采用等效层。</p></>}
@@ -102,7 +102,7 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
    <section className="cs-module-surface flow-domain" hidden={section!=='selection'}><ReviewedSelection onPropose={()=>navigate('task')} refreshKey={active?w.revision:0}/></section>
    <section className="cs-module-surface flow-domain existing-panel" hidden={section!=='documents'}><h2>资料与工程参数</h2><p>原件 → 文字／OCR → 核对引用 → 审查后应用。识别结果不会自动成为厂家保证值。</p><LibraryPanel/></section>
    <section className="cs-module-surface existing-panel" hidden={section!=='standards'}><StandardsPanel/></section>
-   <section className="cs-module-surface" hidden={section!=='history'} aria-label="执行记录详情"><h2>不可变任务快照</h2><p>只读查看，不会重新计算或改变当前工程。</p>{readError&&<p role="alert">{readError}</p>}{archive?<><div className="cs-record-meta"><b>{journal?.nodes.find(n=>n.id==='task:'+archive.id)?.label??archive.capability}</b><span>输入版本 {archive.base_revision}</span><span>{archive.status==='succeeded'?'执行完成':'未完成'}</span></div><details open><summary>执行输出</summary><pre>{JSON.stringify(archive.output,null,2)}</pre></details><details><summary>原始输入快照</summary><pre>{JSON.stringify(archive.input_snapshot,null,2)}</pre></details></>:<p>从左侧选择一条执行记录。</p>}</section>
+   <section className="cs-module-surface" hidden={section!=='history'} aria-label="执行记录详情"><h2>不可变任务快照</h2><p>只读查看，不会重新计算或改变当前工程。</p>{readError&&<p role="alert">{readError}</p>}{archive?<TaskRecordView task={archive} label={journal?.nodes.find(n=>n.id==='task:'+archive.id)?.label??archive.capability}/>:<p>从左侧选择一条执行记录。</p>}</section>
   </div>
  </main>;
 }
