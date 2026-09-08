@@ -42,7 +42,13 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         designs.initialize()
         enterprise.initialize()
         runtime.initialize()
-        yield
+        try:
+            yield
+        finally:
+            # The workspace store deliberately holds one idle SQLite connection so
+            # WAL cleanup/checkpointing is an application-shutdown concern instead
+            # of something an arbitrary UI request can inherit on connection close.
+            workspace_store.close()
 
     app = FastAPI(title='CableSimPro · Engineering Workspace', version='0.7.2', lifespan=lifespan)
     app.include_router(agent_router)
