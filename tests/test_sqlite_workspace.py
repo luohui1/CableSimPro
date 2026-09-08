@@ -126,6 +126,6 @@ def test_runtime_writer_wait_does_not_freeze_unrelated_api(tmp_path):
                     blocker.close()
                 response = await asyncio.wait_for(request, timeout=4.0)
                 assert response.status_code == 200
-                assert response.json()["result"]["result"]["ready"]
+                assert response.json()["result"]["ready"]
 
     asyncio.run(exercise())
