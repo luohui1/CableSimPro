@@ -70,3 +70,13 @@ test('review preserves manufacturer resistance precision and never calculates be
  await page.reload();await expect(page.locator('.cs-diff-table')).toContainText('0.0601');await expect(page.getByTestId('session-revision')).toHaveText('rev.1');
  await expect(page.locator('.cs-result')).toHaveCount(0);await page.screenshot({path:info.outputPath('resistance-precision-v072.png'),fullPage:true});
 });
+
+test('engineering readiness: approval shows real evidence and method limits before execution',async({page},info)=>{
+ await enter(page);await propose(page);const gate=page.getByTestId('engineering-readiness');
+ await expect(gate).toBeVisible();await expect(gate).toContainText('可执行研究计算');await expect(gate).toContainText('研究级可执行');
+ await expect(gate).toContainText('无已核对资料引用');await expect(gate).toContainText('R20 仍为估算');await expect(gate).toContainText('交流附加与屏蔽损耗系数');
+ await expect(gate).toContainText('不是完整标准计算或最终工程签审');await expect(page.getByRole('button',{name:'批准并执行',exact:true})).toBeEnabled();
+ await page.screenshot({path:info.outputPath('engineering-readiness-review.png'),fullPage:true});
+ await switcher(page).getByRole('button',{name:'专业工作台',exact:true}).click();const field=page.locator('.enterprise-inspector').getByLabel('导体截面积',{exact:true});await field.fill('300');await field.press('Tab');await expect(page.getByTestId('session-revision')).toHaveText('rev.2');
+ await switcher(page).getByRole('button',{name:'智能工程流',exact:true}).click();await expect(gate).toContainText('当前提案不可执行');await expect(gate).toContainText('提案基于 rev.1，当前工程为 rev.2');await expect(page.getByRole('button',{name:'批准并执行',exact:true})).toBeDisabled();
+});

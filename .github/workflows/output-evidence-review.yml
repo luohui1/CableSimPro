@@ -25,11 +25,12 @@ jobs:
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
       - run: node scripts/test_output_evidence.mjs
+      - run: node scripts/test_engineering_readiness.mjs
       - run: npm run build
         working-directory: frontend
       - run: npx playwright install --with-deps chromium
         working-directory: frontend
-      - run: npx playwright test same-workspace.spec.ts --project=chromium --grep='result evidence:'
+      - run: npx playwright test same-workspace.spec.ts agent-studio.spec.ts --project=chromium --grep='result evidence:|engineering readiness:'
         working-directory: frontend
       - uses: actions/upload-artifact@v4
         if: always()

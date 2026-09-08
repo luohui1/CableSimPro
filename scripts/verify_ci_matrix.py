@@ -6,10 +6,10 @@ from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
 
-# v075 adds two same-workspace result-evidence regressions to every desktop project.
-EXPECTED = {'chromium': 76, 'webkit': 76, 'mobile-webkit': 11,
-            'windows-chromium-1': 49, 'windows-chromium-1.25': 49,
-            'windows-chromium-1.5': 49, 'windows-edge-1.25': 49}
+# v075 adds two result-evidence regressions plus one engineering-readiness case to every desktop project.
+EXPECTED = {'chromium': 77, 'webkit': 77, 'mobile-webkit': 11,
+            'windows-chromium-1': 50, 'windows-chromium-1.25': 50,
+            'windows-chromium-1.5': 50, 'windows-edge-1.25': 50}
 
 
 def verify(root: Path) -> dict:
