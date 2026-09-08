@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "origin": "Original CableSimPro procedural Three.js scenes",
+  "source": "scripts/visuals/scene.ts",
+  "scope": "Illustrations only. Not manufacturer geometry, FEM mesh or simulation results.",
+  "images": [
+    "cable.png",
+    "installation.png",
+    "documents.png"
+  ]
+}
