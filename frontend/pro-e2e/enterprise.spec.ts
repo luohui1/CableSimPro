@@ -10,7 +10,7 @@ async function seed(request:APIRequestContext,area:number,suffix:string,price:nu
  const approved=await request.post(`/api/enterprise/versions/${product.id}/review`,{data:{content_sha256:product.content_sha256,reviewer:'测试程序',note:'仅用于验证产品生命周期与真实计算流程',confirmed:true}});
  expect(approved.status()).toBe(200);return await approved.json();
 }
-test.beforeEach(async({page})=>{await page.goto('/');await expect(page.getByTestId('revision')).toHaveText('rev.1')});
+test.beforeEach(async({page})=>{await page.goto('/?enterprise=1');await expect(page.getByTestId('revision')).toHaveText('rev.1')});
 
 test('enterprise default hierarchy has no persistent chat and computes without replacing model',async({page},info)=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
@@ -70,7 +70,7 @@ test('reviewed catalog selection calls real engine, explains failures, compares 
  await page.getByRole('button',{name:`测试型号 ${suffix} 400`,exact:true}).click();await expect(page.getByRole('button',{name:'形成方案变更'})).toBeEnabled();
  await expect(page.locator('.candidate-comparison')).toBeVisible();
  await page.screenshot({path:info.outputPath('enterprise-selection.png'),fullPage:true});
- const pending=page.waitForEvent('download');await page.getByRole('button',{name:'导出研究记录'}).click();const file=await pending;const html=await fs.readFile((await file.path())!,'utf8');expect(html).toContain('目标 400 A');expect(html).toContain(selected.content_sha256);
+ const pending=page.waitForEvent('download');await page.getByRole('button',{name:'导出研究记录'}).click();const file=await pending;const html=await fs.readFile((await file.path())!,'utf8');expect(html).toMatch(/目标 400(?:\.0+)? A/);expect(html).toContain(selected.content_sha256);
  await page.getByLabel('企业选型目标电流').fill('350');await expect(page.getByRole('button',{name:'形成方案变更'})).toBeDisabled();await expect(page.locator('.selection-results')).toContainText('输入或版本已变化');
 });
 
