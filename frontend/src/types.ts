@@ -25,6 +25,7 @@ export interface State {
   radial_profiles: {phase: string; points: {radius_mm: number; temperature_c: number; layer: string}[]}[];
 }
 export interface Result {
+  design_basis?: Record<string,unknown> | null;
   model_version: string; input_sha256: string; computed_at: string; input: Scenario;
   summary: {ampacity_a: number; operating_current_a: number; operating_max_temperature_c: number | null;
     thermal_margin_c: number | null; utilization_percent: number; limiting_phase: string; circuit_loss_kw: number | null};

@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-test.beforeEach(async({page})=>{await page.goto('/');await expect(page.getByTestId('revision')).toHaveText('rev.1')});
+test.beforeEach(async({page})=>{await page.goto('/?legacy=1');await expect(page.getByTestId('revision')).toHaveText('rev.1')});
 
 test('vertical heat profile, independent scope and stale boundary protection',async({page},info)=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));

@@ -1,3 +1,4 @@
+import {EngineeringChart} from './ScientificChart';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -148,20 +149,6 @@ export function HeatField({result}: {result: Result}) {
   return <div className="heat-field"><canvas ref={ref} aria-label="土壤解析温度分布"/><div className="heat-legend"><span>{fmt(low)} °C</span><i/><span>{fmt(high)} °C</span></div><p>{fmt(field.current_a)} A · {field.method}</p></div>;
 }
 
-export function LineChart({data, xLabel, yLabel, threshold, label}: {data: {x: number; y: number}[]; xLabel: string; yLabel: string; threshold?: number; label: string}) {
-  const id = useId();
-  if (data.length < 2) return <div className="chart-empty">暂无有效曲线数据</div>;
-  const xMin = Math.min(...data.map(p => p.x)), xMax = Math.max(...data.map(p => p.x)), yMin = Math.min(0, ...data.map(p => p.y));
-  const yMax = Math.max(...data.map(p => p.y), threshold ?? -Infinity) * 1.12;
-  const X = (x: number) => 54 + (x - xMin) / Math.max(xMax - xMin, 1e-9) * 490;
-  const Y = (y: number) => 191 - (y - yMin) / Math.max(yMax - yMin, 1e-9) * 156;
-  const path = data.map((p, i) => `${i ? 'L' : 'M'}${X(p.x)},${Y(p.y)}`).join(' ');
-  return <svg viewBox="0 0 580 240" className="line-chart" role="img" aria-label={label}>
-    <defs><linearGradient id={id} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#565e47" stopOpacity="0.2"/><stop offset="1" stopColor="#565e47" stopOpacity="0.01"/></linearGradient></defs>
-    {[0, 1, 2, 3, 4].map(i => <g key={i}><line x1="54" y1={35 + i * 39} x2="544" y2={35 + i * 39} stroke="#e4e4d9" strokeDasharray="3 4"/><text x="43" y={39 + i * 39} textAnchor="end" fill="#8f9280" fontSize="11">{fmt(yMax - (yMax - yMin) * i / 4, 0)}</text><text x={54 + i * 122.5} y="214" textAnchor="middle" fill="#8f9280" fontSize="11">{fmt(xMin + (xMax - xMin) * i / 4, xMax < 10 ? 1 : 0)}</text></g>)}
-    <path d={`${path} L${X(data[data.length - 1].x)},191 L${X(data[0].x)},191 Z`} fill={`url(#${id})`}/><path d={path} fill="none" stroke="#565e47" strokeWidth="2.5"/>
-    {data.map((p, i) => <circle key={i} cx={X(p.x)} cy={Y(p.y)} r="3" fill="#fff" stroke="#565e47" strokeWidth="1.4"><title>{fmt(p.x, 2)} / {fmt(p.y, 2)}</title></circle>)}
-    {threshold !== undefined && <g><line x1="54" x2="544" y1={Y(threshold)} y2={Y(threshold)} stroke="#d38d45" strokeDasharray="5 4"/><text x="540" y={Y(threshold) - 7} textAnchor="end" fill="#b67c3f" fontSize="10">温度上限 {threshold} °C</text></g>}
-    <text x="54" y="17" fill="#8f9280" fontSize="11">{yLabel}</text><text x="544" y="235" textAnchor="end" fill="#8f9280" fontSize="11">{xLabel}</text>
-  </svg>;
+export function LineChart({data,xLabel,yLabel,threshold,label}:{data:{x:number;y:number}[];xLabel:string;yLabel:string;threshold?:number;label:string}) {
+ return <EngineeringChart label={label} xLabel={xLabel} yLabel={yLabel} threshold={threshold} series={[{name:label,points:data.map(p=>[p.x,p.y])}]}/>;
 }

@@ -70,6 +70,49 @@ class Designs:
                     db.execute('INSERT OR IGNORE INTO catalog_entries VALUES (?,?,?,?)',
                         (f'demo-{conductor}-{area}',item.model_dump_json(),'demo',stamp()))
 
+    def vertical(self,wid:str,req:VerticalRequest):
+        store = self.store
+        with store.db() as db:
+            _,state=store.load(db,wid,req.expected_revision)
+        scenario=Scenario.model_validate(state['scenario'])
+        from .design_basis import require_basis
+        require_basis(state, 'vertical_air')
+        try:
+            result=vertical_study(scenario.cable,req.configuration,scenario.operating_current_a)
+            if req.compare_mesh:
+                coarse=req.configuration.model_copy(update={'cells':max(10,req.configuration.cells//2)})
+                comparison=vertical_study(scenario.cable,coarse,scenario.operating_current_a)
+                result['mesh_check']={'cells':req.configuration.cells,'coarse_cells':coarse.cells,
+                    'ampacity_difference_percent':100*abs(result['ampacity_a']-comparison['ampacity_a'])/result['ampacity_a'],
+                    'coarse_ampacity_a':comparison['ampacity_a']}
+        except (ModelError,ValueError) as exc:
+            raise HTTPException(422,str(exc)) from None
+        payload={'cable':scenario.cable.model_dump(),'configuration':req.configuration.model_dump(),
+                 'current_a':scenario.operating_current_a}
+        result.update({'id':str(uuid4()),'base_revision':req.expected_revision,'design_basis':state.get('design_basis'),'input':payload,
+            'input_sha256':fingerprint(payload),'domain':'vertical_air','created_at':stamp()})
+        with store.db(True) as db:
+            store.load(db,wid,req.expected_revision)
+            db.execute('INSERT INTO field_studies VALUES (?,?,?,?,?)',(result['id'],wid,req.expected_revision,json.dumps(result,ensure_ascii=False),stamp()))
+            store.audit(db,wid,req.expected_revision,'竖向电热研究',result['id'])
+        return result
+
+
+    def fields(self,wid:str,req:FieldRequest):
+        store = self.store
+        with store.db() as db:
+            _,state=store.load(db,wid,req.expected_revision)
+        from .design_basis import require_basis
+        if req.kind != 'electric': require_basis(state, 'buried')
+        try:result=compute_fields(Scenario.model_validate(state['scenario']),req.kind,req.resolution)
+        except (ModelError,ValueError) as exc:raise HTTPException(422,str(exc)) from None
+        result.update({'id':str(uuid4()),'base_revision':req.expected_revision,'design_basis':state.get('design_basis')})
+        with store.db(True) as db:
+            store.load(db,wid,req.expected_revision)
+            db.execute('INSERT INTO field_studies VALUES (?,?,?,?,?)',(result['id'],wid,req.expected_revision,json.dumps(result,ensure_ascii=False),stamp()))
+            store.audit(db,wid,req.expected_revision,'场分析 · '+req.kind,result['id'])
+        return result
+
     def entries(self):
         with self.store.db() as db:
             return [{'id':r['id'],'state':r['state'],'created_at':r['created'],**json.loads(r['payload'])}
@@ -78,6 +121,8 @@ class Designs:
     def design(self,wid:str,req:DesignRequest):
         with self.store.db() as db:
             _,state=self.store.load(db,wid,req.expected_revision)
+        from .design_basis import require_basis
+        require_basis(state, req.domain)
         baseline=Scenario.model_validate(state['scenario'])
         required=req.target_current_a*(1+req.reserve_percent/100)
         records=[]
@@ -236,28 +281,7 @@ def make_router(designs:Designs):
 
     @api.post('/{wid}/vertical')
     def vertical(wid:str,req:VerticalRequest):
-        with store.db() as db:
-            _,state=store.load(db,wid,req.expected_revision)
-        scenario=Scenario.model_validate(state['scenario'])
-        try:
-            result=vertical_study(scenario.cable,req.configuration,scenario.operating_current_a)
-            if req.compare_mesh:
-                coarse=req.configuration.model_copy(update={'cells':max(10,req.configuration.cells//2)})
-                comparison=vertical_study(scenario.cable,coarse,scenario.operating_current_a)
-                result['mesh_check']={'cells':req.configuration.cells,'coarse_cells':coarse.cells,
-                    'ampacity_difference_percent':100*abs(result['ampacity_a']-comparison['ampacity_a'])/result['ampacity_a'],
-                    'coarse_ampacity_a':comparison['ampacity_a']}
-        except (ModelError,ValueError) as exc:
-            raise HTTPException(422,str(exc)) from None
-        payload={'cable':scenario.cable.model_dump(),'configuration':req.configuration.model_dump(),
-                 'current_a':scenario.operating_current_a}
-        result.update({'id':str(uuid4()),'base_revision':req.expected_revision,'input':payload,
-            'input_sha256':fingerprint(payload),'domain':'vertical_air','created_at':stamp()})
-        with store.db(True) as db:
-            store.load(db,wid,req.expected_revision)
-            db.execute('INSERT INTO field_studies VALUES (?,?,?,?,?)',(result['id'],wid,req.expected_revision,json.dumps(result,ensure_ascii=False),stamp()))
-            store.audit(db,wid,req.expected_revision,'竖向电热研究',result['id'])
-        return result
+        return designs.vertical(wid,req)
 
     @api.get('/{wid}/fields/{sid}')
     def field_snapshot(wid:str,sid:str):
@@ -269,14 +293,6 @@ def make_router(designs:Designs):
 
     @api.post('/{wid}/fields')
     def fields(wid:str,req:FieldRequest):
-        with store.db() as db:
-            _,state=store.load(db,wid,req.expected_revision)
-        try:result=compute_fields(Scenario.model_validate(state['scenario']),req.kind,req.resolution)
-        except (ModelError,ValueError) as exc:raise HTTPException(422,str(exc)) from None
-        result.update({'id':str(uuid4()),'base_revision':req.expected_revision})
-        with store.db(True) as db:
-            store.load(db,wid,req.expected_revision)
-            db.execute('INSERT INTO field_studies VALUES (?,?,?,?,?)',(result['id'],wid,req.expected_revision,json.dumps(result,ensure_ascii=False),stamp()))
-            store.audit(db,wid,req.expected_revision,'场分析 · '+req.kind,result['id'])
-        return result
+        return designs.fields(wid,req)
+
     return api

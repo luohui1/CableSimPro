@@ -1,7 +1,7 @@
 import {test,expect} from '@playwright/test';
 
 test('all cable field maps preserve equal physical coordinate scale',async({page})=>{
- await page.goto('/');await expect(page.getByTestId('revision')).toHaveText('rev.1');
+ await page.goto('/?legacy=1');await expect(page.getByTestId('revision')).toHaveText('rev.1');
  await page.getByRole('button',{name:'场分析',exact:true}).click();
  for(const [name,title] of [['二维土壤热场','有限差分'],['绝缘电场','绝缘电场'],['三相外部磁场','磁感应强度']]){
   await page.getByRole('button',{name,exact:false}).click();
