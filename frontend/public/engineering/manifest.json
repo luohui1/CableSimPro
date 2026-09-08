@@ -1,8 +1,16 @@
 {
-  "version": 1,
+  "version": 2,
   "origin": "Original CableSimPro procedural Three.js scenes",
   "source": "scripts/visuals/scene.ts",
   "scope": "Illustrations only. Not manufacturer geometry, FEM mesh or simulation results.",
+  "generation_policy": {
+    "default_development_plugin": "Grok-image",
+    "latest_plugin_check": "2026-09-08: available",
+    "bundled_assets_are_grok_generated": false,
+    "remote_runtime_dependencies": false,
+    "human_review_required": true,
+    "sensitive_engineering_data_allowed": false
+  },
   "images": [
     "cable.png",
     "installation.png",
