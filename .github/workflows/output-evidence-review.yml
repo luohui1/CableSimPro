@@ -51,3 +51,46 @@ jobs:
             frontend/playwright-report/
             artifacts/targeted/
           retention-days: 7
+
+  windows-long-tail:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r backend/requirements.txt
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: npx playwright install chromium msedge
+        working-directory: frontend
+      - name: Edge 125% plan and IME latency path
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force ..\artifacts\targeted | Out-Null
+          npx playwright test same-workspace.spec.ts --config=playwright.windows.config.ts --project=windows-edge-1.25 --grep='IME composition and shift enter never accidentally submit a task'
+          Copy-Item test-results-windows\windows-tests.xml ..\artifacts\targeted\edge-125-plan-tests.xml
+        working-directory: frontend
+      - name: Chromium 150% edit latency path
+        shell: pwsh
+        run: |
+          npx playwright test same-workspace.spec.ts --config=playwright.windows.config.ts --project=windows-chromium-1.5 --grep='manual edit invalidates pending proposal and computed temperature together'
+          Copy-Item test-results-windows\windows-tests.xml ..\artifacts\targeted\win-150-edit-tests.xml
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-long-tail-review
+          path: |
+            frontend/test-results-windows/
+            frontend/playwright-report-windows/
+            artifacts/targeted/
+          retention-days: 7
