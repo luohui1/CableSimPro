@@ -56,7 +56,13 @@ test('expired candidate is never presented as the current applied model',async({
 });
 
 test('task module views open real selection, document and standards tools',async({page})=>{
- await enter(page);const nav=page.getByRole('navigation',{name:'工程流内容'});
+ const hiddenLoads:string[]=[];
+ page.on('request',r=>{const path=new URL(r.url()).pathname;if(['/api/enterprise/eligible','/api/enterprise/products','/api/library','/api/runtime/standards'].includes(path))hiddenLoads.push(path)});
+ const provenance=page.waitForResponse(r=>r.url().includes('/provenance')&&r.status()===200);
+ await enter(page);await provenance;
+ // Task-first startup must not eagerly start hidden product/library/standards modules.
+ expect(hiddenLoads).toEqual([]);
+ const nav=page.getByRole('navigation',{name:'工程流内容'});
  await nav.getByRole('button',{name:'企业型号选型',exact:true}).click();await expect(page.locator('.cs-module-surface:not([hidden])')).toContainText('目标电流');
  await nav.getByRole('button',{name:'资料与参数核对',exact:true}).click();await expect(page.locator('.cs-module-surface:not([hidden])')).toContainText('资料与工程参数');
  await nav.getByRole('button',{name:'计算依据',exact:true}).click();await expect(page.locator('.cs-module-surface:not([hidden])')).toContainText('IEC');
