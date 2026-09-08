@@ -21,13 +21,18 @@ from .workbench import PLANNER, fingerprint, stamp
 
 
 class EngineeringRuntime(BaseEngineeringRuntime):
-    async def plan(self, wid, revision, args):
+    async def _prepare_plan(self, wid, args):
+        """Build a proposal without writing it; caller decides the transaction boundary."""
         state = await run_in_threadpool(self.store.snapshot, wid)
         result = await PLANNER.ainvoke({
             'request': PlanRequest(scenario=state['scenario'], **args.model_dump()),
             'providers': self.providers,
         })
-        proposal = {**result['plan'], 'message': args.message, 'events': result['events']}
+        return {**result['plan'], 'message': args.message, 'events': result['events']}
+
+    async def plan(self, wid, revision, args):
+        # Preserve the public handler contract for callers outside invoke().
+        proposal = await self._prepare_plan(wid, args)
         if proposal['ready']:
             return await run_in_threadpool(self.store.stage, wid, revision, proposal)
         return proposal
@@ -84,8 +89,27 @@ class EngineeringRuntime(BaseEngineeringRuntime):
             return saved
         assert context is not None
 
+        envelope_base = {
+            'task_id': tid,
+            'capability': body.capability,
+            'base_revision': body.expected_revision,
+            'input_sha256': fingerprint(context),
+            'runtime_version': self.version,
+        }
+
         try:
-            if inspect.iscoroutinefunction(capability.handler):
+            if body.capability == 'task.plan':
+                # A ready plan used to stage the proposal in one write transaction
+                # and then open another transaction only to mark this task succeeded.
+                # Build first, then commit proposal + ledger atomically.
+                proposal = await self._prepare_plan(wid, args)
+                if proposal['ready']:
+                    return await run_in_threadpool(
+                        self.store.stage_and_finish_task,
+                        wid, body.expected_revision, proposal, tid, envelope_base,
+                    )
+                result = proposal
+            elif inspect.iscoroutinefunction(capability.handler):
                 result = await capability.handler(wid, body.expected_revision, args)
             else:
                 result = await run_in_threadpool(
@@ -97,14 +121,7 @@ class EngineeringRuntime(BaseEngineeringRuntime):
                     # Reads and studies still fail closed if the engineering revision
                     # changed while their handler was executing.
                     self.store.load(db, wid, body.expected_revision)
-                    envelope = {
-                        'task_id': tid,
-                        'capability': body.capability,
-                        'base_revision': body.expected_revision,
-                        'input_sha256': fingerprint(context),
-                        'runtime_version': self.version,
-                        'result': result,
-                    }
+                    envelope = {**envelope_base, 'result': result}
                     db.execute(
                         "UPDATE engineering_tasks SET status='succeeded',output=?,finished=? "
                         "WHERE workspace=? AND id=?",
