@@ -1,8 +1,9 @@
+// Migration regression: v0.5 workspace lives at ?classic=1; enterprise.spec.ts tests the new default.
 import {test,expect,type Page} from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import {readFile} from 'node:fs/promises';
 async function nav(p:Page,name:string){await p.locator('.eng-sidebar nav').getByRole('button',{name,exact:true}).click()}
-test.beforeEach(async({page})=>{await page.goto('/');await expect(page.getByTestId('revision')).toHaveText('rev.1');await expect(page.locator('h1')).toHaveText('电缆结构')});
+test.beforeEach(async({page})=>{await page.goto('/?classic=1');await expect(page.getByTestId('revision')).toHaveText('rev.1');await expect(page.locator('h1')).toHaveText('电缆结构')});
 
 test('professional hierarchy typography and default local-only fonts',async({page},info)=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));

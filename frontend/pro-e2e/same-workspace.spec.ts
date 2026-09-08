@@ -1,6 +1,7 @@
+// Migration regression: v0.5 workspace lives at ?classic=1; enterprise.spec.ts tests the new default.
 import {test,expect,type Page} from '@playwright/test';
 async function nav(p:Page,name:string){await p.locator('.eng-sidebar nav').getByRole('button',{name,exact:true}).click()}
-test.beforeEach(async({page})=>{await page.goto('/');await expect(page.getByTestId('revision')).toHaveText('rev.1')});
+test.beforeEach(async({page})=>{await page.goto('/?classic=1');await expect(page.getByTestId('revision')).toHaveText('rev.1')});
 
 test('direct bottom input expands without sidebar, canvas replacement or width loss',async({page},info)=>{
  const field=page.getByLabel('工程任务',{exact:true}),canvas=page.locator('.model-render canvas');

@@ -20,6 +20,7 @@ from .library import Library, make_router as library_router
 from .selection import Designs, make_router as designs_router
 from urllib.parse import urlsplit
 from .runtime import EngineeringRuntime, make_router as runtime_router
+from .enterprise import Enterprise, make_router as enterprise_router
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -29,7 +30,8 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     providers = Providers(Path(store.path).parent)
     library = Library(workspace_store, Path(store.path).parent)
     designs = Designs(workspace_store)
-    runtime = EngineeringRuntime(workspace_store, designs, library, providers)
+    enterprise = Enterprise(workspace_store, designs)
+    runtime = EngineeringRuntime(workspace_store, designs, library, providers, enterprise)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -37,16 +39,19 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         workspace_store.initialize()
         library.initialize()
         designs.initialize()
+        enterprise.initialize()
         runtime.initialize()
         yield
 
-    app = FastAPI(title='CableSimPro · Engineering Workspace', version='0.5.1', lifespan=lifespan)
+    app = FastAPI(title='CableSimPro · Engineering Workspace', version='0.6.0', lifespan=lifespan)
     app.include_router(agent_router)
     app.include_router(make_router(workspace_store, providers))
     app.include_router(integrations_router(providers))
     app.include_router(library_router(library, providers))
     app.include_router(designs_router(designs))
     app.include_router(runtime_router(runtime))
+    app.include_router(enterprise_router(enterprise))
+    app.state.enterprise = enterprise
     app.state.providers = providers
     app.state.library = library
     app.state.designs = designs

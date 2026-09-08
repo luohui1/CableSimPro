@@ -1,6 +1,9 @@
 import {createRoot} from 'react-dom/client';
 import {lazy,Suspense} from 'react';
 import EngineeringWorkspace from './EngineeringWorkspace';
+import EnterpriseWorkspace from './EnterpriseWorkspace';
 const LegacyStudio=lazy(()=>import('./Studio'));
-const legacy=new URLSearchParams(location.search).get('legacy')==='1';
-createRoot(document.getElementById('root')!).render(legacy?<Suspense fallback={<p>正在打开迁移界面…</p>}><LegacyStudio/></Suspense>:<EngineeringWorkspace/>);
+const params=new URLSearchParams(location.search);
+const legacy=params.get('legacy')==='1';
+const classic=params.get('classic')==='1';
+createRoot(document.getElementById('root')!).render(legacy?<Suspense fallback={<p>正在打开迁移界面…</p>}><LegacyStudio/></Suspense>:classic?<EngineeringWorkspace/>:<EnterpriseWorkspace/>);
