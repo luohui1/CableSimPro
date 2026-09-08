@@ -106,9 +106,11 @@ test('result evidence: undo to identical inputs does not revive an old result',a
  await page.getByRole('button',{name:'特性曲线',exact:true}).click();
  await expect(page.getByRole('img',{name:'电流温度曲线',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'计算载流量',exact:false}).click();
- await expect(results).toContainText('允许载流量');
  await expect(page.getByRole('img',{name:'电流温度曲线',exact:true})).toBeVisible();
  await expect(page.getByTestId('revision')).toHaveText('rev.3');
+ // The result toolbar is mounted only in the table view, not the curve view.
+ await page.getByRole('button',{name:'结果表',exact:true}).click();
+ await expect(results).toContainText('允许载流量');
 });
 
 test('result evidence: explicitly selected same-revision history stays read-only',async({page},info)=>{
