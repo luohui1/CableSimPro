@@ -14,7 +14,7 @@ export function AssistantDock({expanded,onExpandedChange,pageTitle}:{
  },[expanded,s.proposal,s.notes.length]);
  const pending=!!s.proposal?.ready;
  const status=s.busy?'正在执行工程任务':pending?'有待审查的工程变更':s.output?'工程工具已返回结果':'参数修改与计算，先审查再执行';
- return <section ref={host} className={`task-dock ${expanded?'is-expanded':''}`} aria-label="工程任务输入区" onKeyDown={e=>{
+ return <section ref={host} className={`task-dock ${expanded?'is-expanded':''}`} aria-label="助手输入区" onKeyDown={e=>{
   if(e.key==='Escape'&&!e.nativeEvent.isComposing&&expanded){e.preventDefault();onExpandedChange(false);host.current?.querySelector<HTMLTextAreaElement>('textarea')?.focus()}
  }}>
   <div className="task-dock-inner">
