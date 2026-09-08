@@ -6,6 +6,7 @@ import ModeSelection from './ModeSelection';
 import AgentWorkspace from './AgentWorkspace';
 import {navigateMode,readRoute,syncWorkspaceUrl,useModeRoute,type WorkMode} from './session';
 import './dual-mode.css';
+import './visual-refresh.css';
 
 const initialProject=readRoute().project;
 function Application(){
@@ -33,10 +34,10 @@ function Application(){
  async function openProject(id:string,mode:WorkMode){if(s.busy||dirty)return;await s.load(id);navigateMode(mode,id)}
  const mismatch=!!route.project&&route.project!==s.w?.id;
  const usable=!!s.w&&!mismatch;
- return <div className={`dual-app ${route.mode?'is-project':'is-home'}`}>
-  <header className="dual-header"><button className="dual-brand" onClick={home} aria-label="返回模式选择"><span className="dual-brand-symbol">C</span><b>CableSim<span>Pro</span></b><small>电缆设计与验证</small></button>
+ return <div className={`dual-app ${route.mode?'is-project':'is-home'}`} data-mode={route.mode??'home'}>
+  <header className="dual-header"><button className="dual-brand" onClick={home} aria-label="返回模式选择"><span className="dual-brand-symbol" aria-hidden="true"><i/><i/><i/></span><b>CableSim<span>Pro</span></b><small>电缆设计与验证</small></button>
    {route.mode&&<nav className="mode-switch" aria-label="工作模式"><button aria-pressed={route.mode==='workbench'} onClick={()=>choose('workbench')}><Box size={17}/>专业工作台</button><button aria-pressed={route.mode==='agent'} onClick={()=>choose('agent')}><Workflow size={17}/>智能工程流</button></nav>}
-   <div className="dual-header-end"><span>0.7.1 · 本机预览</span><button onClick={()=>openWorkbench('settings')} title="服务接入设置" aria-label="双模式服务设置"><Settings2 size={19}/></button></div>
+   <div className="dual-header-end"><span>0.7.2 · 本机预览</span><button onClick={()=>openWorkbench('settings')} title="服务接入设置" aria-label="双模式服务设置"><Settings2 size={19}/></button></div>
   </header>
   {route.mode&&usable&&<div className="dual-context"><button onClick={home}><ArrowLeft size={14}/>工作入口</button><span className="context-divider"/><b>{s.w!.scenario.name}</b><span className="dual-revision" data-testid="session-revision">rev.{s.w!.revision}</span><span className="dual-context-right"><Check size={13}/>共用工程数据</span></div>}
   {(s.error||routeWarning||route.invalidMode)&&<div className="dual-alert" role="alert"><span>{s.error||routeWarning||'无法识别此工作模式，请重新选择。'}</span><button aria-label="关闭双模式提示" onClick={()=>{s.dismiss();setRouteWarning('');if(route.invalidMode)home()}}><X size={16}/></button></div>}
