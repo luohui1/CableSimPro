@@ -1,5 +1,6 @@
 import {useEffect,useRef,useState} from 'react';
 import * as THREE from 'three';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {buildCableGeometry} from '../CableModelView';
 import {cableAppearance,disposeScene} from './cableAppearance';
@@ -18,11 +19,12 @@ export default function CablePortrait({cable,interactive=false}:{cable:Cable;int
   renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.12;
   renderer.domElement.setAttribute('aria-label','电缆剥切结构预览');el.appendChild(renderer.domElement);
   const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(32,1,.001,10);
-  const asset=new THREE.Group();asset.add(buildCableGeometry(cable,'cutaway',[true,true,true,true,true,true]));
-  asset.add(cableAppearance(cable,'cutaway',[true,true,true,true,true,true]));asset.rotation.z=.73;
+  const room=new RoomEnvironment(),pmrem=new THREE.PMREMGenerator(renderer),environment=pmrem.fromScene(room,.04);scene.environment=environment.texture;room.dispose();pmrem.dispose();
+  const asset=new THREE.Group();const model=buildCableGeometry(cable,'cutaway',[true,true,true,true,true,true]);model.children[0].visible=false;asset.add(model);
+  asset.add(cableAppearance(cable,'cutaway',[true,true,true,true,true,true]));asset.rotation.z=-.17;
   asset.traverse(o=>{if(o instanceof THREE.Mesh){o.castShadow=true;o.receiveShadow=true}});scene.add(asset);
-  scene.add(new THREE.HemisphereLight(0xffffff,0x81919a,2.6));
-  const key=new THREE.DirectionalLight(0xfff5e7,4.5);key.position.set(.3,.8,.7);scene.add(key);
+  scene.add(new THREE.HemisphereLight(0xffffff,0x81919a,1.5));
+  const key=new THREE.DirectionalLight(0xfff5e7,2.3);key.position.set(.3,.8,.7);scene.add(key);
   const fill=new THREE.DirectionalLight(0xffffff,2.7);fill.position.set(-.5,.1,-.3);scene.add(fill);
   const controls=new OrbitControls(camera,renderer.domElement);controls.enableDamping=false;controls.enablePan=false;controls.enableZoom=interactive;controls.enabled=interactive;
   controls.minDistance=.2;controls.maxDistance=1.5;controls.target.set(0,0,0);
@@ -32,12 +34,12 @@ export default function CablePortrait({cable,interactive=false}:{cable:Cable;int
    const w=el.clientWidth,h=el.clientHeight;if(w<2||h<2)return;
    renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();
    if(Math.abs(lastAspect-camera.aspect)>.05){
-    const distance=.49/Math.min(1,camera.aspect/1.05);camera.position.set(.22*distance,.15*distance,distance);controls.update();lastAspect=camera.aspect;
+    const distance=.50/Math.min(1.7,camera.aspect/1.05);camera.position.set(.42*distance,.25*distance,distance);controls.update();lastAspect=camera.aspect;
    }render();
   };
   const observer=new ResizeObserver(resize);observer.observe(el);controls.addEventListener('change',render);resize();setState('ready');
   const lost=(e:Event)=>{e.preventDefault();setState('fallback')};renderer.domElement.addEventListener('webglcontextlost',lost);
-  return()=>{observer.disconnect();controls.dispose();renderer.domElement.removeEventListener('webglcontextlost',lost);disposeScene(scene);renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove()};
+  return()=>{observer.disconnect();controls.dispose();renderer.domElement.removeEventListener('webglcontextlost',lost);disposeScene(scene);environment.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove()};
  },[JSON.stringify(cable),interactive]);
  return <div className="cable-portrait" ref={host} data-testid="cable-portrait" data-renderer={state} data-area={cable.area_mm2}>
   {state==='fallback'&&<div className="portrait-fallback" role="img" aria-label="电缆分层截面替代图">{[...layers(cable)].reverse().map(l=><span key={l.name} style={{width:`${l.radius_mm/layers(cable)[5].radius_mm*170}px`,height:`${l.radius_mm/layers(cable)[5].radius_mm*170}px`,background:l.color}}/>)}<b>二维截面 · WebGL 不可用</b></div>}

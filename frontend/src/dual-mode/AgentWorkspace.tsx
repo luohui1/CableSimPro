@@ -8,6 +8,7 @@ import {StandardsPanel} from '../EngineeringPanels';
 import {InlineResults} from '../WorkspaceInteraction';
 import CablePortrait,{InstallationSketch} from '../engineering-visuals/CablePortrait';
 import {api,errorText,fmt,layers} from '../utils';
+import {EngineeringPlate} from '../visual-assets/EngineeringPlate';
 import TaskRecordView,{type ArchivedTask} from './TaskRecordView';
 
 type Section='task'|'selection'|'documents'|'standards'|'history';
@@ -48,7 +49,7 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
   {provider==='openai'&&<label className="cs-consent"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>允许发送本次任务与完整工程参数到已配置服务，可能计费。</label>}
   <div className="cs-compose-foot"><span>{pending?'正式参数需人工批准；输入草稿继续保留。':'所有数值由工程工具计算；不以文本推测代替计算。'}</span><kbd>Ctrl K</kbd></div>
  </section>;
- return <main className="agent-workspace cs-agent" aria-label="智能工程流工作区">
+ return <main className={`agent-workspace cs-agent ${hasTask?'has-task':'is-idle'} ${pending?'has-review':''}`}  aria-label="智能工程流工作区">
   <aside className={`cs-task-rail ${navOpen?'is-open':''}`} aria-label="工程任务导航">
    <div className="cs-rail-title"><span className="cs-project-monogram">C</span><div><b>电缆设计</b><small>智能工程流</small></div><button aria-label="关闭任务导航" className="cs-rail-close" onClick={()=>setNavOpen(false)}><X size={17}/></button></div>
    <button className="cs-new-task" disabled={blocked||pending} onClick={()=>{setDraft('');setFresh(true);setArchive(null);focusTask()}}><Plus size={17}/>新任务</button>
@@ -62,8 +63,9 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
    <div className="cs-task-layout" hidden={section!=='task'}>
     <div className="cs-thread-column">
      <div className="cs-thread-scroll">
-      {!hasTask?<section className="cs-welcome"><span className="cs-eyebrow">电缆结构 / 敷设条件 / 载流量</span><h2>这次，需要解决<br/>什么电缆设计问题？</h2><p>从当前工程开始。描述目标，检查修改，再查看真实计算结果。</p>
-       <div className="cs-task-starters"><button onClick={()=>focusTask('计算载流量')}><span className="cs-starter-icon"><Thermometer size={22}/></span><b>校核载流量</b><small>当前结构与敷设条件</small><ArrowRight size={16}/></button><button onClick={()=>focusTask('比较土壤热阻率 0.8、1.2、1.6 下的载流量')}><span className="cs-starter-icon"><Workflow size={22}/></span><b>比较敷设条件</b><small>逐工况计算，不更改原方案</small><ArrowRight size={16}/></button><button onClick={()=>navigate('selection')}><span className="cs-starter-icon"><Layers3 size={22}/></span><b>从企业型号选型</b><small>限定已核对的产品版本</small><ArrowRight size={16}/></button><button onClick={()=>navigate('documents')}><span className="cs-starter-icon"><FileText size={22}/></span><b>从资料核对参数</b><small>原文、提取值与来源同屏</small><ArrowRight size={16}/></button></div>
+      <div className="engineering-task-stages" aria-label="任务阶段">{['描述任务','审查变更','复核结果'].map((label,i)=><span key={label} aria-current={(s.output&&!pending?2:pending?1:0)===i?'step':undefined}><i>{i+1}</i>{label}</span>)}</div>
+      {!hasTask?<section className="cs-welcome"><div className="cs-welcome-illustration" aria-label="载流量研究示意"><EngineeringPlate kind="installation"/><span>直埋截面 · 结构示意</span></div><span className="cs-eyebrow">电缆结构 / 敷设条件 / 载流量</span><h2>这次，需要解决<br/>什么电缆设计问题？</h2><p>从当前工程开始。描述目标，检查修改，再查看真实计算结果。</p>
+       <div className="cs-task-starters"><button onClick={()=>focusTask('计算载流量')}><span className="cs-starter-icon"><EngineeringPlate kind="cable"/></span><b>校核载流量</b><small>当前结构与敷设条件</small><ArrowRight size={16}/></button><button onClick={()=>focusTask('比较土壤热阻率 0.8、1.2、1.6 下的载流量')}><span className="cs-starter-icon"><EngineeringPlate kind="installation"/></span><b>比较敷设条件</b><small>逐工况计算，不更改原方案</small><ArrowRight size={16}/></button><button onClick={()=>navigate('selection')}><span className="cs-starter-icon"><Layers3 size={22}/></span><b>从企业型号选型</b><small>限定已核对的产品版本</small><ArrowRight size={16}/></button><button onClick={()=>navigate('documents')}><span className="cs-starter-icon"><EngineeringPlate kind="documents"/></span><b>从资料核对参数</b><small>原文、提取值与来源同屏</small><ArrowRight size={16}/></button></div>
       </section>:<div className="cs-thread">
        {latest&&<article className="cs-user-request"><span>本次任务</span><p>{latest}</p></article>}
        <div className="cs-tool-event"><FolderOpen size={15}/><span>当前工程上下文</span><small>版本 {w.revision} · {w.scenario.cable.area_mm2} mm² · {w.scenario.operating_current_a} A</small></div>
@@ -86,7 +88,7 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
        </section>}
       </div>}
      </div>
-     {Composer}
+     {pending?<details className="pending-composer"><summary>任务输入草稿 <span>批准或拒绝后可继续</span></summary>{Composer}</details>:Composer}
     </div>
     <aside className="cs-artifacts flow-context" aria-label="任务工程依据">
      <header><span>工程附件</span><b>{pending&&!stale&&!expired?'拟用结构':'当前工程'}</b></header>
