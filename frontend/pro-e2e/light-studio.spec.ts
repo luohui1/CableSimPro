@@ -25,7 +25,7 @@ test('model section field and curve share saved input and retain original WebGL 
  await page.screenshot({path:info.outputPath('workbench-initial-v074.png'),fullPage:true});
  let invokes=0;page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/invoke'))invokes++});
  await views(page).getByRole('button',{name:'二维截面',exact:true}).click();await expect(page.getByRole('img',{name:'电缆二维截面'})).toBeVisible();
- await views(page).getByRole('button',{name:'温度分布',exact:true}).click();await expect(page.locator('.viewport-empty')).toContainText('尚无当前工况结果');
+ await views(page).getByRole('button',{name:'温度分布',exact:true}).click();await expect(page.locator('.field-pane .viewport-empty')).toContainText('尚无当前工况结果');
  expect(invokes).toBe(0);
  await page.getByRole('button',{name:'计算载流量',exact:false}).click();await expect(page.locator('.enterprise-result-summary')).toBeVisible();
  await expect(page.locator('.field-pane').getByLabel('土壤解析温度分布')).toBeVisible();await expect(page.locator('.field-pane')).toContainText('非有限元');
