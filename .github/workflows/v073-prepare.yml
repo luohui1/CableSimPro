@@ -1,0 +1,38 @@
+name: Prepare integration verification sources
+on:
+  push:
+    branches: ['feat/unified-engineering-studio-v073']
+    paths: ['.github/workflows/v073-prepare.yml']
+permissions:
+  contents: read
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 56d180bf448d19d4c8e3a034a62eb5da14e81d88
+          path: studio
+      - uses: actions/checkout@v4
+        with:
+          ref: f0bb5cadb1fcc0a0639c14e2e8e4695a5fc2e223
+          path: visuals
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve exact existing frontend lock
+        working-directory: studio/frontend
+        run: npm ci --no-audit --no-fund
+      - name: Prepare public source and verification dependencies
+        run: |
+          mkdir verification
+          git -C visuals archive HEAD > verification/visual-source.tar
+          git -C studio archive HEAD > verification/studio-source.tar
+          tar -czf verification/frontend-dependencies.tgz -C studio/frontend node_modules
+          sha256sum verification/* > verification/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v073-integration-verification
+          path: verification/
+          retention-days: 1
