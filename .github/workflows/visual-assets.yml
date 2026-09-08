@@ -1,0 +1,33 @@
+name: Engineering asset integrity
+on:
+  push:
+    branches: ['feat/engineering-visual-assets-v072']
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  geometry:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: node scripts/test_visual_geometry.mjs
+      - name: Validate shipped engineering plates
+        run: |
+          python - <<'PY'
+          import pathlib,struct,json
+          root=pathlib.Path('frontend/public/engineering')
+          manifest=json.loads((root/'manifest.json').read_text())
+          assert len(manifest['images'])==3
+          for name in manifest['images']:
+              data=(root/name).read_bytes()
+              assert data[:8]==b'\x89PNG\r\n\x1a\n'
+              assert struct.unpack('>II',data[16:24])==(1200,760)
+              assert len(data)<1000000
+          print('Three local original PNG assets validated. No remote requests or font binaries.')
+          PY
