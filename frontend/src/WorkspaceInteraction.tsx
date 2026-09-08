@@ -1,4 +1,4 @@
-import {useEffect,useRef} from 'react';
+import {useEffect,useRef,useId} from 'react';
 import {ChevronDown,ChevronUp,MessageSquare,X} from 'lucide-react';
 import {AgentPanel,ResultsPanel} from './StudioPanels';
 import {useStudio} from './StudioState';
@@ -34,16 +34,17 @@ export function AssistantDock({expanded,onExpandedChange,pageTitle}:{
 /** Local result tabs preserve the mounted model, selection and camera. */
 export function InlineResults({open,onOpenChange}:{open:boolean;onOpenChange:(open:boolean)=>void}) {
  const {current,currentSweep,output,busy}=useStudio();
+ const contentId=useId();
  const hasOutput=!!output?.result||!!output?.sweep;
  return <section className={`inline-results ${open?'is-open':''}`} aria-label="当前工况结果">
   <header>
-   <button aria-expanded={open} aria-controls="current-result-content" onClick={()=>onOpenChange(!open)}>
+   <button aria-expanded={open} aria-controls={contentId} onClick={()=>onOpenChange(!open)}>
     {open?<ChevronDown size={16}/>:<ChevronUp size={16}/>}<b>当前计算结果</b>
     <span>{current?'三相直埋 · 与当前输入一致':currentSweep?'参数扫描 · 与当前版本一致':hasOutput?'输入已变化，结果待更新':busy?'正在计算':'尚未计算'}</span>
    </button>
    {open&&<button aria-label="收起当前结果" onClick={()=>onOpenChange(false)}><X size={16}/></button>}
   </header>
   {hasOutput&&!current&&!currentSweep&&<p className="inline-stale" role="status">当前参数、设计依据或未提交输入已变化。旧温度、曲线及报告不作为本工况结果。</p>}
-  <div id="current-result-content" className="inline-results-body" hidden={!open}><ResultsPanel embedded/></div>
+  <div id={contentId} className="inline-results-body" hidden={!open}><ResultsPanel embedded/></div>
  </section>;
 }

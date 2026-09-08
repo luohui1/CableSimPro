@@ -16,30 +16,33 @@ interface Assessment {revision:number;domain:string;product_reference:null|{name
 type Area='engineering'|'products'|'documents'|'methods'|'settings';
 type View='cable'|'installation'|'fields'|'selection'|'history'|'journal';
 const views:{id:View;name:string;icon:typeof Box}[]=[{id:'cable',name:'电缆结构',icon:Layers3},{id:'installation',name:'敷设与负荷',icon:Box},{id:'fields',name:'场计算',icon:Activity},{id:'selection',name:'候选选型',icon:ClipboardCheck},{id:'history',name:'计算记录',icon:FileText},{id:'journal',name:'任务与引用',icon:BookOpen}];
-function Workspace(){
+export function EnterpriseWorkbench({embedded=false,active=true,onAgent,requestedView}:{embedded?:boolean;active?:boolean;onAgent?:(text:string)=>void;requestedView?:{view:string;serial:number}}){
  const s=useStudio(),w=s.w;
  const [area,setArea]=useState<Area>('engineering'),[view,setView]=useState<View>('cable'),[properties,setProperties]=useState(true),[propertySection,setPropertySection]=useState('cable'),[installationView,setInstallationView]=useState('2d');
  const [taskOpen,setTaskOpen]=useState(false),[taskText,setTaskText]=useState(''),[resultsOpen,setResultsOpen]=useState(false),[generator,setGenerator]=useState(false),[navOpen,setNavOpen]=useState(false),[catalogRevision,setCatalogRevision]=useState(0);
  const [assessment,setAssessment]=useState<Assessment|null>(null),[error,setError]=useState(''),[projectOpen,setProjectOpen]=useState(false),[projects,setProjects]=useState<{id:string;name:string;revision:number}[]>([]),[forkOpen,setForkOpen]=useState(false),[forkName,setForkName]=useState(''),[localBusy,setLocalBusy]=useState(false);
  const changed=Object.keys(s.inputDrafts).length>0,blocked=s.busy||localBusy||changed;
  const taskRef=useRef<HTMLDivElement>(null);
+ const previousProposal=useRef(s.proposal?.id);
+ useEffect(()=>{if(embedded&&active&&s.proposal?.id&&s.proposal.id!==previousProposal.current)onAgent?.('');previousProposal.current=s.proposal?.id},[s.proposal?.id]);
  useEffect(()=>{if(w){let canceled=false;void api<Assessment>(`/api/enterprise/workspaces/${w.id}/assessment`).then(r=>{if(!canceled)setAssessment(r)}).catch(e=>{if(!canceled)setError(errorText(e))});return()=>{canceled=true}}},[w?.id,w?.revision,catalogRevision]);
  useEffect(()=>{s.select('cable')},[]);
  useEffect(()=>{if(s.proposal?.ready)setTaskOpen(true)},[s.proposal]);
  useEffect(()=>{if(s.current||s.currentSweep)setResultsOpen(true)},[s.current,s.currentSweep]);
  useEffect(()=>{setTaskOpen(false);setTaskText('');setResultsOpen(false);setAssessment(null)},[w?.id]);
  useEffect(()=>{if(s.tab==='results'){setArea('engineering');setView('history')}},[s.tab]);
- function openTask(text=''){setTaskText(text);setTaskOpen(true);requestAnimationFrame(()=>taskRef.current?.scrollIntoView({block:'nearest'}))}
+ function openTask(text=''){if(embedded&&onAgent){onAgent(text);return}setTaskText(text);setTaskOpen(true);requestAnimationFrame(()=>taskRef.current?.scrollIntoView({block:'nearest'}))}
  function navigate(next:View){setArea('engineering');setView(next);setNavOpen(false);if(next==='cable'){s.select('cable');setPropertySection('cable')}if(next==='installation'){s.select('installation');setPropertySection('installation')}if(next==='history')s.setTab('runs')}
  const isBuried=(w?.design_basis?.environment??'buried')==='buried';
- useEffect(()=>{function key(e:KeyboardEvent){const target=e.target as HTMLElement;if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openTask();return}if(e.key==='Escape'&&!e.isComposing){setTaskOpen(false);setNavOpen(false)}if(['INPUT','TEXTAREA','SELECT'].includes(target.tagName)||target.isContentEditable)return;if(e.key==='F9'&&area==='engineering'&&['cable','installation'].includes(view)&&isBuried&&!blocked){e.preventDefault();void s.run()}}window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[blocked,area,view,isBuried,s.run]);
+ useEffect(()=>{function key(e:KeyboardEvent){if(!active)return;const target=e.target as HTMLElement;if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();openTask();return}if(e.key==='Escape'&&!e.isComposing){setTaskOpen(false);setNavOpen(false)}if(['INPUT','TEXTAREA','SELECT'].includes(target.tagName)||target.isContentEditable)return;if(e.key==='F9'&&area==='engineering'&&['cable','installation'].includes(view)&&isBuried&&!blocked){e.preventDefault();void s.run()}}window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[blocked,area,view,isBuried,s.run,active]);
  async function openProjects(){setError('');try{setProjects(await api('/api/workspaces'));setProjectOpen(true)}catch(e){setError(errorText(e))}}
  async function fork(){if(!w||blocked)return;setLocalBusy(true);setError('');try{const r=await api<{id:string}>(`/api/enterprise/workspaces/${w.id}/fork`,{expected_revision:w.revision,name:forkName});await s.load(r.id);setForkOpen(false)}catch(e){setError(errorText(e))}finally{setLocalBusy(false)}}
- function proposalReady(){setArea('engineering');setTaskOpen(true);requestAnimationFrame(()=>taskRef.current?.scrollIntoView({block:'nearest'}))}
+ function proposalReady(){if(embedded&&onAgent){onAgent('');return}setArea('engineering');setTaskOpen(true);requestAnimationFrame(()=>taskRef.current?.scrollIntoView({block:'nearest'}))}
+ useEffect(()=>{if(requestedView){if(['settings','methods','documents','products'].includes(requestedView.view))setArea(requestedView.view as Area);else if(views.some(v=>v.id===requestedView.view))navigate(requestedView.view as View)}},[requestedView?.serial]);
  if(!w)return <div className="eng-loading"><span className="brand-symbol">C</span><h1>CableSimPro</h1><p>{s.error||'正在打开工程…'}</p>{s.error&&<button onClick={()=>location.reload()}>重新连接</button>}</div>;
  const name=views.find(v=>v.id===view)!.name,reference=assessment?.product_reference;
  const showProperties=properties&&area==='engineering'&&['cable','installation'].includes(view);
- return <div className="enterprise-shell">
+ return <div className={`enterprise-shell ${embedded?'dual-embedded':''}`}>
  <header className="enterprise-masthead"><a className="enterprise-brand" href="#" onClick={e=>{e.preventDefault();navigate('cable')}}><span>C</span><b>CableSimPro<small>电缆设计与验证</small></b></a><nav aria-label="应用导航">{([['engineering','工程设计'],['products','产品型号'],['documents','企业资料'],['methods','方法与验证']] as const).map(([id,label])=><button key={id} aria-current={area===id?'page':undefined} className={area===id?'active':''} onClick={()=>{setArea(id);setNavOpen(false)}}>{label}</button>)}</nav><div className="enterprise-masthead-end"><span>本机研究版 0.6</span><button aria-label="服务接入设置" onClick={()=>setArea('settings')}><Settings2 size={18}/></button></div></header>
  <div className="enterprise-projectbar"><button className="enterprise-mobile-menu" aria-label="显示工程目录" onClick={()=>setNavOpen(!navOpen)}><Menu size={18}/></button><button className="enterprise-project-name" disabled={blocked} onClick={()=>void openProjects()}><FolderOpen size={16}/><b>{w.scenario.name}</b><ChevronRight size={14}/></button><code data-testid="revision">rev.{w.revision}</code><span className="enterprise-saved"><Check size={13}/>本机已保存</span><div className="enterprise-project-actions"><button disabled={blocked||!w.can_undo} aria-label="撤销工程修改" onClick={()=>void s.history('undo')}><Undo2 size={16}/></button><button disabled={blocked} onClick={()=>{setForkName(w.scenario.name+' · 方案副本');setForkOpen(true)}}><Copy size={15}/>另存方案</button><button className={taskOpen?'selected':''} aria-expanded={taskOpen} onClick={()=>taskOpen?setTaskOpen(false):openTask()}><MessageSquare size={16}/>{s.proposal?.ready?'审查变更':'设计任务'}{s.proposal?.ready&&<i className="pending-dot"/>}</button></div></div>
  {(s.error||error)&&<div role="alert" className="enterprise-error top-error"><span>{s.error||error}</span><button aria-label="关闭操作错误" onClick={()=>{s.dismiss();setError('')}}><X size={16}/></button></div>}
@@ -63,7 +66,7 @@ function Workspace(){
  <div className="enterprise-page existing-panel" hidden={area!=='documents'}><header className="enterprise-section-heading"><div><span className="eyebrow">原件 / 识别 / 参数核对</span><h1>企业资料</h1><p>OCR 输出先核对，再形成工程输入；不会自动成为批准的产品数据。</p></div></header><LibraryPanel/></div>
  <div className="enterprise-page existing-panel" hidden={area!=='methods'}><header className="enterprise-section-heading"><div><span className="eyebrow">方法范围 / 版本 / 验证</span><h1>方法与验证</h1><p>登记标准题录不代表实现全部公式；明确查看适用范围和未实现条款。</p></div></header><StandardsPanel key={w.id+':'+w.revision}/></div>
  <div className="enterprise-page existing-panel" hidden={area!=='settings'}><header className="enterprise-section-heading"><div><span className="eyebrow">本机设置 / 明确授权</span><h1>服务接入</h1><p>密钥只留在服务端。云端资料与模型效果需使用实际服务另行验证。</p></div></header><IntegrationsPanel/></div>
- <div ref={taskRef}><EngineeringTask key={w.id} open={taskOpen} onClose={()=>setTaskOpen(false)} initialText={taskText}/></div>
+ <div ref={taskRef}><EngineeringTask key={w.id} open={!embedded&&taskOpen} onClose={()=>setTaskOpen(false)} initialText={taskText}/></div>
  <footer className="enterprise-footer"><span>载流量须与型号、工况及计算方法一同引用。</span><button onClick={s.exportJSON} disabled={blocked}>导出工程参数</button><button disabled={blocked} onClick={()=>void s.create()}>新建工程</button></footer>
  </main></div>
  <ModelGenerator open={generator} onClose={()=>setGenerator(false)}/>
@@ -71,4 +74,4 @@ function Workspace(){
  <Modal open={forkOpen} onOpenChange={b=>{if(!localBusy)setForkOpen(b)}} title="另存计算方案" description="复制电缆、工况、引用和锁定参数；计算结果不复制。原工程保持不变。"><form className="enterprise-fork-form" onSubmit={e=>{e.preventDefault();void fork()}}><label>方案名称<input aria-label="另存方案名称" required maxLength={100} value={forkName} onChange={e=>setForkName(e.target.value)}/></label><button className="primary" disabled={blocked}>建立独立方案</button></form></Modal>
  </div>;
 }
-export default function EnterpriseWorkspace(){return <StudioProvider stayInWorkspace><Workspace/></StudioProvider>}
+export default function EnterpriseWorkspace(){return <StudioProvider stayInWorkspace><EnterpriseWorkbench/></StudioProvider>}

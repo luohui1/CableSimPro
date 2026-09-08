@@ -1,5 +1,5 @@
 """Versioned local engineering workspace; human and agent edits share server CAS."""
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
@@ -160,8 +160,8 @@ class WorkspaceStore:
         self.audit(db, wid, rev, label)
         return rev
 
-    def snapshot(self, wid):
-        with self.db() as db:
+    def snapshot(self, wid, connection=None):
+        with (nullcontext(connection) if connection is not None else self.db()) as db:
             row, state = self.load(db, wid)
             maximum = db.execute('SELECT MAX(position) FROM workspace_history WHERE workspace=?', (wid,)).fetchone()[0]
             audit = [dict(r) for r in db.execute('SELECT * FROM workspace_audit WHERE workspace=? ORDER BY rowid DESC LIMIT 100', (wid,))]
@@ -221,9 +221,10 @@ class WorkspaceStore:
             if proposal.get('action') == 'sweep' and 'installation.' + proposal['parameter'] in state['locks']:
                 raise HTTPException(422, '扫描参数已锁定；不能在研究中改变它。')
             pid = str(uuid4())
-            db.execute('INSERT INTO workspace_proposals VALUES (?,?,?,?,?,?,?)', (pid, wid, revision, 'pending', json.dumps(proposal, ensure_ascii=False), stamp(), time.time() + 1800))
+            expires_at = time.time() + 1800
+            db.execute('INSERT INTO workspace_proposals VALUES (?,?,?,?,?,?,?)', (pid, wid, revision, 'pending', json.dumps(proposal, ensure_ascii=False), stamp(), expires_at))
             self.audit(db, wid, revision, '生成待审批提案', proposal.get('message', '')[:300])
-        return {**proposal, 'id': pid, 'base_revision': revision, 'status': 'pending'}
+        return {**proposal, 'id': pid, 'base_revision': revision, 'status': 'pending', 'expired': False, 'expires_at': expires_at}
 
 
 def make_router(store: WorkspaceStore, providers=None):
@@ -241,6 +242,35 @@ def make_router(store: WorkspaceStore, providers=None):
     @router.get('/{wid}')
     def get(wid: str):
         return store.snapshot(wid)
+
+    @router.get('/{wid}/session')
+    def restore_session(wid: str):
+        """Read-only, transaction-consistent projection for both interaction modes.
+
+        Reopening is not approval, execution, or a change of engineering revision.
+        Expired/stale proposals remain inspectable but cannot be approved.
+        """
+        with store.db() as db:
+            db.execute('BEGIN')
+            workspace = store.snapshot(wid, db)
+            record = db.execute(
+                "SELECT * FROM workspace_proposals WHERE workspace=? AND status='pending' ORDER BY rowid DESC LIMIT 1",
+                (wid,),
+            ).fetchone()
+            proposal = None
+            if record is not None:
+                proposal = {
+                    **json.loads(record['payload']), 'id': record['id'],
+                    'base_revision': record['base_revision'], 'status': record['status'],
+                    'expired': record['expires'] < time.time(),
+                    'expires_at': record['expires'],
+                }
+            run = db.execute('SELECT * FROM workspace_runs WHERE workspace=? ORDER BY rowid DESC LIMIT 1', (wid,)).fetchone()
+            output = None if run is None else {
+                **json.loads(run['output']), 'events': json.loads(run['events']), 'run_id': run['id'],
+            }
+            return {'workspace': workspace, 'proposal': proposal, 'output': output,
+                    'output_revision': None if run is None else run['revision']}
 
     @router.post('/{wid}/edit')
     def edit(wid: str, body: Edit):
