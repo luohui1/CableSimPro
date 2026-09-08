@@ -7,15 +7,26 @@ from fastapi.testclient import TestClient
 from backend.main import create_app
 
 
-def test_workspace_connection_is_closed_and_checkpoint_is_bounded(tmp_path):
+def test_workspace_connection_is_closed_and_wal_anchor_lives_until_shutdown(tmp_path):
     app = create_app(tmp_path / "workspace.sqlite")
+    anchor = None
     with TestClient(app):
         store = app.state.workspace_store
+        anchor = store._anchor
+        assert anchor is not None
         with store.db() as db:
             checkpoint_pages = db.execute("PRAGMA wal_autocheckpoint").fetchone()[0]
-        assert checkpoint_pages == store.WAL_AUTOCHECKPOINT_PAGES == 128
+        # Request connections are still closed deterministically.
         with pytest.raises(sqlite3.ProgrammingError):
             db.execute("SELECT 1")
+        # SQLite's normal 1000-page PASSIVE checkpoint threshold is retained; the
+        # idle anchor prevents request teardown from becoming last-connection WAL
+        # checkpoint/unlink work.
+        assert checkpoint_pages == store.WAL_AUTOCHECKPOINT_PAGES == 1000
+        assert anchor.execute("SELECT 1").fetchone()[0] == 1
+    assert anchor is not None
+    with pytest.raises(sqlite3.ProgrammingError):
+        anchor.execute("SELECT 1")
 
 
 def invoke(client, workspace_id, capability, arguments=None):
@@ -34,7 +45,8 @@ def test_calculate_plan_then_edit_remains_writable_across_checkpoints(tmp_path):
     app = create_app(tmp_path / "checkpoint.sqlite")
     with TestClient(app) as client:
         # A calculation is stored both as a run and a runtime task. Repeating the
-        # real desktop sequence crosses several 128-page WAL checkpoints.
+        # real desktop sequence crosses many request connection boundaries while
+        # the application-level WAL anchor remains open.
         for index in range(12):
             workspace = client.post("/api/workspaces", json={}).json()
             wid = workspace["id"]
