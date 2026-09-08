@@ -25,7 +25,7 @@ export function buildCableGeometry(cable:Cable,mode:ViewMode,visible:boolean[]){
 }
 export default function CableModelView({cable}:{cable:Cable}){
  const host=useRef<HTMLDivElement>(null),group=useRef<THREE.Group|null>(null),controls=useRef<OrbitControls|null>(null),cam=useRef<THREE.OrthographicCamera|null>(null);
- const [mode,setMode]=useState<ViewMode>('cutaway'),[visible,setVisible]=useState([true,true,true,true,true,true]),[failed,setFailed]=useState(false),[error,setError]=useState(''),[view,setView]=useState('iso');
+ const [mode,setMode]=useState<ViewMode>('cutaway'),[visible,setVisible]=useState([true,true,true,true,true,true]),[failed,setFailed]=useState(false),[error,setError]=useState(''),[view,setView]=useState('iso'),[viewRevision,setViewRevision]=useState(0);
  const [grid,setGrid]=useState(true),[dimension,setDimension]=useState(true),[ready,setReady]=useState(false);
  const geometryKey=JSON.stringify(cable)+mode+visible.join(',')+grid;
  useEffect(()=>{
@@ -46,13 +46,13 @@ export default function CableModelView({cable}:{cable:Cable}){
   return()=>{ro.disconnect();ctl.dispose();scene.traverse(o=>{if(o instanceof THREE.Mesh||o instanceof THREE.LineSegments){o.geometry.dispose();const ms=Array.isArray(o.material)?o.material:[o.material];ms.forEach(m=>m.dispose())}});renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();group.current=null;cam.current=null;controls.current=null};
  },[geometryKey]);
  useEffect(()=>{const c=cam.current,ctl=controls.current;if(!c||!ctl)return;
-  c.position.set(...(view==='front'?[.001,0,.6]:view==='end'?[.6,.001,0]:view==='top'?[0,.6,.001]:[.5,.25,.42]) as [number,number,number]);c.up.set(0,1,0);c.zoom=1;c.updateProjectionMatrix();ctl.target.set(0,0,0);ctl.update();
- },[view,geometryKey]);
+  c.position.set(...(view==='front'?[.001,0,.6]:view==='end'?[.6,.001,0]:view==='top'?[0,.6,.001]:[.5,.25,.42]) as [number,number,number]);c.up.set(0,1,0);c.zoom=view==='end'&&mode!=='exploded'?5:mode==='exploded'?1.2:1.8;c.updateProjectionMatrix();ctl.target.set(0,0,0);ctl.update();
+ },[view,geometryKey,viewRevision]);
  async function exportModel(){if(!group.current)return;setError('');try{
   const {GLTFExporter}=await import('three/addons/exporters/GLTFExporter.js');const data=await new GLTFExporter().parseAsync(group.current,{binary:true,onlyVisible:true});
   if(!(data instanceof ArrayBuffer))throw new Error('模型导出格式错误');const u=URL.createObjectURL(new Blob([data],{type:'model/gltf-binary'}));const a=document.createElement('a');a.href=u;a.download='CableSimPro-cable.glb';a.click();setTimeout(()=>URL.revokeObjectURL(u),10000);
  }catch(e){setError(e instanceof Error?e.message:'无法导出模型')}}
- return <div className="model-view"><div className="model-toolbar"><div className="segmented">{[['cutaway','轴向剥切'],['assembled','完整结构'],['exploded','分层展开']].map(([id,label])=><button key={id} aria-pressed={mode===id} className={mode===id?'active':''} onClick={()=>setMode(id as ViewMode)}>{label}</button>)}</div><span className="tool-spacer"/><button title="显示或隐藏网格" onClick={()=>setGrid(!grid)}>网格</button><button title="显示或隐藏尺寸" onClick={()=>setDimension(!dimension)}>尺寸</button><button onClick={()=>setView(view==='iso'?'front':'iso')} title="恢复轴测视图"><RotateCcw size={15}/></button><button disabled={!ready||failed} onClick={()=>void exportModel()}><Download size={15}/>导出 GLB</button></div>
+ return <div className="model-view"><div className="model-toolbar"><div className="segmented">{[['cutaway','轴向剥切'],['assembled','完整结构'],['exploded','分层展开']].map(([id,label])=><button key={id} aria-pressed={mode===id} className={mode===id?'active':''} onClick={()=>setMode(id as ViewMode)}>{label}</button>)}</div><span className="tool-spacer"/><button title="显示或隐藏网格" onClick={()=>setGrid(!grid)}>网格</button><button title="显示或隐藏尺寸" onClick={()=>setDimension(!dimension)}>尺寸</button><button onClick={()=>{setView('iso');setViewRevision(r=>r+1)}} title="恢复轴测视图"><RotateCcw size={15}/></button><button disabled={!ready||failed} onClick={()=>void exportModel()}><Download size={15}/>导出 GLB</button></div>
  <div className="model-render" ref={host} data-testid="cable-model-view" data-renderer={failed?'fallback':ready?'webgl':'loading'}>{failed&&<div className="model-fallback"><p>WebGL 不可用，显示二维截面；三维导出已停用。</p><CrossSection cable={cable}/></div>}
  <div className="model-caption"><Box size={16}/><div><strong>单芯电缆 · 结构模型</strong><span>{cable.conductor==='copper'?'铜':'铝'}导体 / XLPE 绝缘 / 无铠装</span></div></div>
  <div className="orientation">{[['iso','轴测'],['front','正视'],['end','端面'],['top','俯视']].map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>setView(id)}>{label}</button>)}</div>

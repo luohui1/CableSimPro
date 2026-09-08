@@ -31,7 +31,7 @@
 .eng-project small{display:block;font-size:10px;margin-top:3px}
 .eng-sidebar nav{flex:1}
 .eng-sidebar nav section{margin:0 0 22px}
-.eng-sidebar nav h2{font-size:11px;letter-spacing:1px;margin:0;padding:0 11px 6px;color:#6f706e;font-weight:500}
+.eng-sidebar nav h2{font-size:11px;letter-spacing:1px;margin:0;padding:0 11px 6px;color:#545553;font-weight:600}
 .eng-sidebar nav button,.eng-sidebar-bottom>button{width:100%;justify-content:flex-start;gap:11px;border-radius:6px;padding:9px 11px;min-height:39px;font-size:13px;color:#595a58}
 .eng-sidebar nav button.active,.eng-sidebar-bottom>button.active{background:#e2e2e1;color:#242524;font-weight:600}
 .eng-sidebar nav button i{height:5px;width:5px;border-radius:50%;background:#70736d;margin-left:auto}
@@ -62,7 +62,7 @@
 .eng-properties{width:272px;flex-shrink:0;border:1px solid var(--eng-line);border-radius:8px;background:white;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .eng-properties>header{display:flex;justify-content:space-between;align-items:center;padding:15px 16px 10px}
 .eng-properties>header h2{font-size:15px;margin:0}
-.eng-properties>header span{font-size:10px;color:#797978}
+.eng-properties>header span{font-size:11px;color:#555653}
 .property-sections{display:flex;gap:2px;padding:0 10px;border-bottom:1px solid var(--eng-line)}
 .property-sections button{font-size:11px;padding:9px 7px;border-radius:0;border-bottom:2px solid transparent;min-height:37px}
 .property-sections button.active{color:#313431;border-bottom-color:#6f726d;font-weight:600}
