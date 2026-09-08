@@ -22,6 +22,7 @@ const displayValue=(v:unknown)=>v===null?'按模型估算':typeof v==='number'?n
 export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{active:boolean;draft:string;setDraft:(value:string)=>void;openWorkbench:(view?:string)=>void}){
  const s=useStudio(),w=s.w!,p=s.proposal;
  const [section,setSection]=useState<Section>('task'),[artifact,setArtifact]=useState<Artifact>('model');
+ const [mounted,setMounted]=useState<Partial<Record<Section,true>>>({task:true});
  const [provider,setProvider]=useState<'local'|'openai'>('local'),[consent,setConsent]=useState(false);
  const [resultsOpen,setResultsOpen]=useState(true),[now,setNow]=useState(Date.now()),[fresh,setFresh]=useState(false),[navOpen,setNavOpen]=useState(false);
  const [journal,setJournal]=useState<Journal|null>(null),[archive,setArchive]=useState<ArchivedTask|null>(null),[readError,setReadError]=useState('');
@@ -42,7 +43,7 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
  function revealComposer(){const panel=input.current?.closest('details');if(panel instanceof HTMLDetailsElement)panel.open=true;requestAnimationFrame(()=>input.current?.focus())}
  function focusTask(text?:string){setSection('task');setNavOpen(false);if(text!==undefined){setDraft(text);setFresh(true)}revealComposer()}
  function send(){if(blocked||pending||!draft.trim()||(provider==='openai'&&(!consent||!s.status.cloud_configured)))return;setFresh(false);setArchive(null);void s.plan(draft.trim(),provider,consent)}
- function navigate(next:Section){setSection(next);setNavOpen(false)}
+ function navigate(next:Section){setMounted(current=>current[next]?current:{...current,[next]:true});setSection(next);setNavOpen(false)}
  async function readTask(id:string){const token=++archiveRequest.current;setArchive(null);setReadError('');navigate('history');try{const r=await api<ArchivedTask>(`/api/runtime/${w.id}/tasks/${id}`);if(token===archiveRequest.current)setArchive(r)}catch(e){if(token===archiveRequest.current)setReadError(errorText(e))}}
  const taskLabel=(t:TaskRecord)=>journal?.nodes.find(n=>n.id==='task:'+t.id)?.label??t.capability;
  const Composer=<section className="cs-composer" aria-label="工程任务输入">
@@ -60,7 +61,7 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
    <div className="cs-rail-section"><h2>最近执行记录 <span>{journal?.tasks.length??0}</span></h2>{readError&&<p className="cs-read-error" role="status">任务记录读取失败</p>}{!journal?.tasks.length&&<p className="cs-rail-empty">开始第一项研究后，执行记录会保存在这里。</p>}{journal?.tasks.slice(0,8).map(t=><button key={t.id} className={archive?.id===t.id?'selected':''} onClick={()=>void readTask(t.id)}><History size={13}/><span>{taskLabel(t)}<small>版本 {t.base_revision} · {t.status==='succeeded'?'已完成':t.status==='failed'?'失败':'执行中'}</small></span></button>)}</div>
    <div className="cs-rail-footer"><FolderOpen size={16}/><div><b title={w.scenario.name}>{w.scenario.name}</b><small>同一工程 · 版本 {w.revision}</small></div><button aria-label="Agent 服务接入" onClick={()=>openWorkbench('settings')}><Settings2 size={16}/></button></div>
   </aside>
-  {navOpen&&<button className="cs-nav-scrim" aria-label="收起任务导航" onClick={()=>setNavOpen(false)}/>}
+  {navOpen&&<button className="cs-nav-scrim" aria-label="收起任务导航" onClick={()=>setNavOpen(false)}/>} 
   <div className="cs-agent-main">
    <header className="cs-task-header"><button className="cs-rail-toggle" aria-label="显示任务导航" onClick={()=>setNavOpen(!navOpen)}><Menu size={19}/></button><div><span>智能工程流</span><h1>{section==='selection'?'企业型号选型':section==='documents'?'资料与参数核对':section==='standards'?'计算依据':section==='history'?'执行记录':'载流量设计研究'}</h1></div><span className="flow-status" role="status">{status}</span><button className="cs-open-workbench" onClick={()=>openWorkbench()}><Layers3 size={16}/><span>在专业工作台打开</span><ArrowRight size={15}/></button></header>
    <div className="cs-task-layout" hidden={section!=='task'}>
@@ -104,9 +105,9 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
      </div>
     </aside>
    </div>
-   <section className="cs-module-surface flow-domain" hidden={section!=='selection'}><ReviewedSelection onPropose={()=>navigate('task')} refreshKey={active?w.revision:0}/></section>
-   <section className="cs-module-surface flow-domain existing-panel" hidden={section!=='documents'}><h2>资料与工程参数</h2><p>原件 → 文字／OCR → 核对引用 → 审查后应用。识别结果不会自动成为厂家保证值。</p><LibraryPanel/></section>
-   <section className="cs-module-surface existing-panel" hidden={section!=='standards'}><StandardsPanel/></section>
+   {mounted.selection&&<section className="cs-module-surface flow-domain" hidden={section!=='selection'}><ReviewedSelection onPropose={()=>navigate('task')} refreshKey={active?w.revision:0}/></section>}
+   {mounted.documents&&<section className="cs-module-surface flow-domain existing-panel" hidden={section!=='documents'}><h2>资料与工程参数</h2><p>原件 → 文字／OCR → 核对引用 → 审查后应用。识别结果不会自动成为厂家保证值。</p><LibraryPanel/></section>}
+   {mounted.standards&&<section className="cs-module-surface existing-panel" hidden={section!=='standards'}><StandardsPanel/></section>}
    <section className="cs-module-surface" hidden={section!=='history'} aria-label="执行记录详情"><h2>不可变任务快照</h2><p>只读查看，不会重新计算或改变当前工程。</p>{readError&&<p role="alert">{readError}</p>}{archive?<TaskRecordView task={archive} label={journal?.nodes.find(n=>n.id==='task:'+archive.id)?.label??archive.capability}/>:<p>从左侧选择一条执行记录。</p>}</section>
   </div>
  </main>;
