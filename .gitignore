@@ -14,3 +14,6 @@ frontend/playwright-report/
 .env
 .DS_Store
 artifacts/
+
+# Include symlinked local verification dependencies.
+/frontend/node_modules
