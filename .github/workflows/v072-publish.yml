@@ -1,0 +1,47 @@
+name: Publish reviewed cable task studio source
+on:
+  push:
+    branches: ['feat/cable-agent-studio-v072']
+    paths: ['.github/workflows/v072-publish.yml']
+permissions:
+  contents: write
+jobs:
+  source:
+    if: github.repository == 'luohui1/CableSimPro' && github.ref == 'refs/heads/feat/cable-agent-studio-v072'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify and apply authored source
+        run: |
+          python - <<'PY'
+          import hashlib,json,lzma,pathlib,subprocess
+          root=pathlib.Path.cwd()
+          data=b''.join((root/f'.development/v072/{i:02}.bin').read_bytes() for i in range(3))
+          assert len(data)==27536
+          assert hashlib.sha256(data).hexdigest()=='439d52bee76df1fb6403425ebbc17014b5399e252555dbb01ef6a52a1a296d2f'
+          decoder=lzma.LZMADecompressor(memlimit=128*1024*1024)
+          raw=decoder.decompress(data,max_length=200000)
+          assert decoder.eof and len(raw)==105076
+          payload=json.loads(raw)
+          assert len(payload['hashes'])==17
+          for name in payload['hashes']:
+              p=pathlib.PurePosixPath(name)
+              assert not p.is_absolute() and '..' not in p.parts
+              assert p.parts[0] in {'backend','frontend','scripts','docs','README.md'}
+              assert p.suffix.lower() not in {'.ttf','.otf','.woff','.woff2','.eot','.db','.sqlite'}
+          subprocess.run(['git','apply','--check','-'],input=payload['patch'].encode(),check=True)
+          subprocess.run(['git','apply','-'],input=payload['patch'].encode(),check=True)
+          for name,h in payload['hashes'].items():
+              assert hashlib.sha256((root/name).read_bytes()).hexdigest()==h,name
+          print('Verified 17 readable source/test files; no private data, keys, dependencies or font binaries.')
+          PY
+      - name: Commit source to isolated feature branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md backend frontend scripts docs
+          git diff --cached --stat
+          git commit -m 'feat: cable task studio, engineering artifacts and shared parameter-driven visual assets'
+          git push origin HEAD:refs/heads/feat/cable-agent-studio-v072
+          echo "Published source $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
