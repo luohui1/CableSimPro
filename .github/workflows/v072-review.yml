@@ -1,0 +1,57 @@
+name: Apply verified task studio review
+on:
+  push:
+    branches: ['feat/cable-agent-studio-v072']
+    paths: ['.github/workflows/v072-review.yml']
+permissions:
+  contents: write
+jobs:
+  reviewed-source:
+    if: github.repository == 'luohui1/CableSimPro' && github.ref == 'refs/heads/feat/cable-agent-studio-v072'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify base files and apply exact text edits
+        run: |
+          python - <<'PY'
+          from pathlib import Path,PurePosixPath
+          import hashlib,json,lzma
+          data=Path('.development/v072-review.bin').read_bytes()
+          assert len(data)==4292
+          assert hashlib.sha256(data).hexdigest()=='26b056934db1fc18a80c496fda141dc865437c7700c3e84e36f02a43af7456f2'
+          decoder=lzma.LZMADecompressor(memlimit=64*1024*1024)
+          raw=decoder.decompress(data,max_length=20000)
+          assert decoder.eof and len(raw)==9149
+          files=json.loads(raw)['files']
+          assert len(files)==6
+          outputs=[]
+          for record in files:
+              name=record['path'];p=PurePosixPath(name)
+              assert not p.is_absolute() and '..' not in p.parts
+              assert p.parts[0] in {'frontend','docs'} and p.suffix in {'.tsx','.ts','.css','.md'}
+              path=Path(name)
+              if record['base'] is None:
+                  assert not path.exists();text=''
+              else:
+                  text=path.read_text()
+                  assert hashlib.sha256(text.encode()).hexdigest()==record['base'],name
+              edits=record['edits'];last=0
+              for start,end,replacement in edits:
+                  assert last<=start<=end<=len(text) and isinstance(replacement,str)
+                  last=end
+              for start,end,replacement in reversed(edits):
+                  text=text[:start]+replacement+text[end:]
+              assert hashlib.sha256(text.encode()).hexdigest()==record['sha256'],name
+              outputs.append((path,text))
+          for path,text in outputs:
+              path.parent.mkdir(parents=True,exist_ok=True);path.write_text(text)
+          print('Six reviewed source files verified; no test removals or private assets.')
+          PY
+      - name: Commit reviewed source only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/src/dual-mode/AgentWorkspace.tsx frontend/src/dual-mode/TaskRecordView.tsx frontend/src/dual-mode/agent-studio.css frontend/src/EnterpriseWorkspace.tsx frontend/pro-e2e/agent-studio.spec.ts docs/AGENT_STUDIO_V072.md
+          git commit -m 'fix: readable task graphics, exact engineering values and inspectable historical artifacts'
+          git push origin HEAD:refs/heads/feat/cable-agent-studio-v072
