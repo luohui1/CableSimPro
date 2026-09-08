@@ -22,6 +22,7 @@ jobs:
         with:
           node-version: '22'
       - run: pip install -r backend/requirements.txt
+      - run: python -m pytest tests/test_sqlite_workspace.py
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
       - run: node scripts/test_output_evidence.mjs
