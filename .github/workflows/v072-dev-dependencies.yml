@@ -1,0 +1,21 @@
+name: Prepare v072 verification dependencies
+on:
+  push:
+    branches: ['feat/cable-agent-studio-v072']
+    paths: ['.github/workflows/v072-dev-dependencies.yml']
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip download --only-binary=:all: --dest wheels langgraph==1.2.11 pypdf==6.17.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v072-verification-wheels
+          path: wheels/
+          retention-days: 1
