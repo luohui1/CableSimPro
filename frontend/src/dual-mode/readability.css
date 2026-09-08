@@ -1,0 +1,6 @@
+/* Supporting task instructions are content, not disabled UI. Keep them readable. */
+.agent-workspace .flow-start p,
+.agent-workspace .flow-start > div {
+  color: #40594f;
+  font-weight: 500;
+}
