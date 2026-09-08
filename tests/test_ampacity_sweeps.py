@@ -1,5 +1,6 @@
 """Bounded local ampacity sweep contract; every point is checked by the real solver."""
 from copy import deepcopy
+from uuid import uuid4
 
 from fastapi.testclient import TestClient
 import pytest
@@ -63,8 +64,60 @@ def test_local_agent_sweeps_every_supported_buried_parameter(client, message, pa
         assert point["ampacity_a"] == pytest.approx(reference.json()["summary"]["ampacity_a"])
         assert point["error"] is None
 
-    # Planning and executing a sweep never creates or mutates a saved project.
+    # Planning and executing through the stateless compatibility route never
+    # creates or mutates a saved project.
     assert client.get("/api/projects").json() == []
+
+
+def test_runtime_plan_approval_executes_depth_sweep_and_preserves_saved_inputs(client):
+    workspace = client.post("/api/workspaces", json={}).json()
+    baseline = deepcopy(workspace["scenario"])
+    planned = client.post(
+        f"/api/runtime/{workspace['id']}/invoke",
+        json={
+            "request_id": str(uuid4()),
+            "capability": "task.plan",
+            "expected_revision": workspace["revision"],
+            "arguments": {
+                "message": "比较埋深 0.4、0.8、1.2 m 下的载流量",
+                "mode": "local",
+                "consent": False,
+            },
+        },
+    )
+    assert planned.status_code == 200, planned.text
+    proposal = planned.json()["result"]
+    assert proposal["ready"] is True
+    assert proposal["action"] == "sweep"
+    assert proposal["parameter"] == "depth_m"
+    assert proposal["changes"] == []
+    assert proposal["scenario"] == baseline
+
+    approved = client.post(
+        f"/api/workspaces/{workspace['id']}/proposals/{proposal['id']}/approve",
+        json={"expected_revision": workspace["revision"]},
+    )
+    assert approved.status_code == 200, approved.text
+    payload = approved.json()
+    saved = payload["workspace"]
+    output = payload["output"]
+
+    # Approval is audited as a new engineering revision, but a study does not
+    # replace any saved installation input with one of its sweep points.
+    assert saved["revision"] == workspace["revision"] + 1
+    assert saved["scenario"] == baseline
+    assert output["result"] is None
+    assert output["sweep"]["parameter"] == "depth_m"
+    assert [point["value"] for point in output["sweep"]["points"]] == [0.4, 0.8, 1.2]
+    assert output["run_id"]
+    assert saved["runs"][0]["revision"] == saved["revision"]
+
+    for point in output["sweep"]["points"]:
+        candidate = deepcopy(baseline)
+        candidate["installation"]["depth_m"] = point["value"]
+        reference = client.post("/api/calculate", json=candidate)
+        assert reference.status_code == 200
+        assert point["ampacity_a"] == pytest.approx(reference.json()["summary"]["ampacity_a"])
 
 
 @pytest.mark.parametrize(
