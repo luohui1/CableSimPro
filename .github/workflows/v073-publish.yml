@@ -18,7 +18,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Apply 27 hash-verified authored source files
+      - name: Apply hash-verified authored source files excluding workflows
         run: |
           python - <<'PY'
           import hashlib,json,lzma,pathlib
@@ -36,7 +36,9 @@ jobs:
               rel=pathlib.PurePosixPath(item['path'])
               assert not rel.is_absolute() and '..' not in rel.parts
               assert rel.parts[0] in {'.github','.gitignore','README.md','docs','frontend','scripts','tests'}
-              if rel.parts[0]=='.github':assert str(rel)=='.github/workflows/ci.yml'
+              if rel.parts[0]=='.github':
+                  assert str(rel)=='.github/workflows/ci.yml'
+                  continue
               assert rel.suffix.lower() not in {'.ttf','.otf','.woff','.woff2','.eot','.db','.sqlite'}
               path=root/rel
               if 'new' in item:
@@ -54,7 +56,7 @@ jobs:
           for path,text in staged:
               path.parent.mkdir(parents=True,exist_ok=True)
               path.write_text(text,encoding='utf-8')
-          print('Verified authored source. No user data, credentials, dependencies or font binaries.')
+          print('Verified 26 source files. Workflow changes remain separate authorized commits.')
           PY
       - name: Prepare compact local illustrations with provenance
         run: |
@@ -67,11 +69,11 @@ jobs:
           npm ci --no-audit --no-fund
           node ../scripts/test_visual_geometry.mjs
           npm run build
-      - name: Commit readable source and derived assets on feature branch only
+      - name: Commit source and derived assets only
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add .github/workflows/ci.yml .gitignore README.md docs frontend/package.json frontend/package-lock.json frontend/playwright.config.ts frontend/playwright.windows.config.ts frontend/pro-e2e frontend/src frontend/public/engineering scripts tests
+          git add .gitignore README.md docs frontend/package.json frontend/package-lock.json frontend/playwright.config.ts frontend/playwright.windows.config.ts frontend/pro-e2e frontend/src frontend/public/engineering scripts tests
           git diff --cached --stat
           git commit -m 'feat: unify light engineering modes with local illustrations, asset review and fitted 3D'
           git push origin HEAD:refs/heads/feat/unified-engineering-studio-v073
