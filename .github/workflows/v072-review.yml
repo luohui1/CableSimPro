@@ -1,0 +1,58 @@
+name: Apply measured visual review corrections
+on:
+  push:
+    branches: ['feat/engineering-visual-assets-v072']
+    paths: ['.github/workflows/v072-review.yml']
+permissions:
+  contents: write
+jobs:
+  reviewed-source:
+    if: github.repository == 'luohui1/CableSimPro' && github.ref == 'refs/heads/feat/engineering-visual-assets-v072'
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify and apply three reviewed source edits
+        run: |
+          python - <<'PY'
+          import hashlib,json,lzma,pathlib
+          data=pathlib.Path('.development/v072-review.bin').read_bytes()
+          assert len(data)==1592 and hashlib.sha256(data).hexdigest()=='50e3d286290a720d8de9b5c0e61d8f40517631a4bae577c730224839b322eedc'
+          raw=lzma.decompress(data,memlimit=67108864)
+          assert len(raw)==3099
+          changes=json.loads(raw)
+          assert {x['path'] for x in changes}=={'frontend/src/CableModelView.tsx','frontend/src/dual-mode/visual-refresh.css','scripts/visuals/geometry.test.ts'}
+          for item in changes:
+              p=pathlib.Path(item['path']);text=p.read_text()
+              assert hashlib.sha256(text.encode()).hexdigest()==item['base_sha256'],str(p)
+              for start,end,replacement in reversed(item['edits']):text=text[:start]+replacement+text[end:]
+              assert hashlib.sha256(text.encode()).hexdigest()==item['sha256'],str(p)
+              p.write_text(text)
+          print('Applied measured contrast, typography, aluminium appearance and camera framing fixes. No weakened tests.')
+          PY
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: node scripts/test_visual_geometry.mjs
+      - run: npm run build
+        working-directory: frontend
+      - name: Commit reviewed source on feature branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/src/CableModelView.tsx frontend/src/dual-mode/visual-refresh.css scripts/visuals/geometry.test.ts
+          git commit -m 'fix: readable primary captions, aluminium finish and viewport-fitted model framing'
+          git push origin HEAD:refs/heads/feat/engineering-visual-assets-v072
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Resolve compatible dependencies for local archive smoke verification
+        run: |
+          python -m pip download --only-binary=:all: --dest verification-wheels langgraph==1.2.11 pypdf==6.17.0
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v072-python313-verification-wheels
+          path: verification-wheels/
+          retention-days: 1
