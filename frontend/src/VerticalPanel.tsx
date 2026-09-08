@@ -1,3 +1,5 @@
+import {EngineeringChart} from './ScientificChart';
+import {engineeringCall} from './runtimeClient';
 import {useRef,useState} from 'react';
 import {Activity,ArrowRight,Download,ShieldCheck,Thermometer} from 'lucide-react';
 import {useStudio} from './StudioState';
@@ -16,6 +18,7 @@ interface AxialState {
  balance_error_w:number;max_node_residual_w_m:number;iterations:number;
 }
 interface VerticalResult {
+ design_basis?:Record<string,unknown>;
  id:string;domain:'vertical_air';base_revision:number;model:string;ampacity_a:number;
  rating:AxialState;operating:AxialState|null;operating_error:string|null;
  configuration:VerticalConfig;input:{cable:Cable;configuration:VerticalConfig;current_a:number};
@@ -35,18 +38,11 @@ export function VerticalSettings({value,onChange,disabled=false}:{value:Vertical
 }
 
 function AxialProfile({state,height}:{state:AxialState;height:number}) {
- const series=[{name:'导体',key:'conductor_c',color:'#b44426'},{name:'屏蔽',key:'screen_c',color:'#244f87'},
-  {name:'外表面',key:'surface_c',color:'#217258'},{name:'空气',key:'ambient_c',color:'#4b5563'}] as const;
- const all=series.flatMap(s=>state[s.key]);
- const min=Math.floor(Math.min(...all)/5)*5-2,max=Math.ceil(Math.max(...all)/5)*5+2;
- const X=(t:number)=>75+(t-min)/(max-min)*455,Y=(z:number)=>305-z/height*265;
- return <div className="axial-profile"><svg viewBox="0 0 620 365" role="img" aria-label="竖向沿高温度曲线">
- <rect width="620" height="365" fill="#fff"/>
- {[0,1,2,3,4].map(i=><g key={i}><line x1="75" x2="530" y1={Y(height*i/4)} y2={Y(height*i/4)} stroke="#bdcbd7" strokeDasharray="3 4"/><text x="62" y={Y(height*i/4)+4} textAnchor="end" fontSize="12" fill="#294059">{fmt(height*i/4,1)}</text><line x1={75+i*455/4} x2={75+i*455/4} y1="40" y2="305" stroke="#e0e6ec"/><text x={75+i*455/4} y="327" textAnchor="middle" fontSize="12" fill="#294059">{fmt(min+(max-min)*i/4,1)}</text></g>)}
- <path d="M75 40V305H530" stroke="#304962" strokeWidth="1.5" fill="none"/>
- {series.map(s=><path key={s.key} d={state.z_m.map((z,i)=>`${i?'L':'M'} ${X(state[s.key][i])} ${Y(z)}`).join(' ')} stroke={s.color} fill="none" strokeWidth="2.5" strokeDasharray={s.key==='ambient_c'?'5 4':undefined}/>)}
- <text x="75" y="23" fontSize="13" fontWeight="600" fill="#233e58">高度 z / m</text><text x="530" y="353" textAnchor="end" fontSize="13" fontWeight="600" fill="#233e58">温度 / °C</text>
- </svg><div className="profile-legend">{series.map(s=><span key={s.key}><i style={{background:s.color}}/>{s.name}</span>)}</div></div>;
+ return <EngineeringChart label="竖向沿高温度曲线" xLabel="温度 / °C" yLabel="高度 / m" series={[
+ {name:'导体',points:state.z_m.map((z,i)=>[state.conductor_c[i],z])},
+ {name:'金属屏蔽',points:state.z_m.map((z,i)=>[state.screen_c[i],z])},
+ {name:'外护套表面',points:state.z_m.map((z,i)=>[state.surface_c[i],z])},
+ {name:'空气',points:state.z_m.map((z,i)=>[state.ambient_c[i],z])}]}/>;
 }
 
 export function VerticalPanel() {
@@ -56,12 +52,12 @@ export function VerticalPanel() {
  const [compare,setCompare]=useState(true),[out,setOut]=useState<VerticalResult|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[rating,setRating]=useState(false);
  const form=useRef<HTMLFormElement>(null);
  const input={cable:w.scenario.cable,configuration,current_a:w.scenario.operating_current_a};
- const stale=!!out&&canonical(out.input)!==canonical(input);
+ const stale=!!out&&(canonical(out.input)!==canonical(input)||canonical(out.design_basis??null)!==canonical(w.design_basis??null)||out.base_revision!==w.revision);
  const shown=out?(rating?out.rating:out.operating):null;
  async function run(){
   if(!form.current?.reportValidity())return;
   setBusy(true);setError('');
-  try {setOut(await api(`/api/design/${w.id}/vertical`,{expected_revision:w.revision,configuration,compare_mesh:compare},'POST',90000));await s.reload()}
+  try {if(Object.keys(s.inputDrafts).length)throw new Error('存在未提交输入，请先修正或撤销输入。');setOut(await engineeringCall<VerticalResult>(w.id,w.revision,'analysis.vertical',{configuration,compare_mesh:compare}));await s.reload()}
   catch(e){setError(errorText(e))}finally{setBusy(false)}
  }
  return <div className="vertical-panel">
@@ -71,7 +67,7 @@ export function VerticalPanel() {
  <VerticalSettings value={configuration} onChange={setConfiguration} disabled={busy}/>
  <div className="vertical-actions"><label className="checkline"><input aria-label="竖向网格对照" type="checkbox" checked={compare} onChange={e=>setCompare(e.target.checked)} disabled={busy}/>附加半数网格对照</label><span>当前工程运行电流 <b>{fmt(w.scenario.operating_current_a,0)} A</b></span><button className="primary" type="submit" disabled={busy||s.busy}><Activity size={16}/>{busy?'求解轴向电热…':'运行竖向电热'}</button></div>
  </form>
- <p className="domain-footnote">运行电流在工程“稳态载流研究”属性中设置。顶部 F9 始终标为直埋计算；本页按钮才求解竖向空气工况。</p>
+ <p className="domain-footnote">运行电流在“运行条件”属性中设置。本页只使用竖向空气求解按钮，不使用直埋快捷计算。</p>
  {out&&<>{stale&&<div className="domain-alert" role="alert">边界或电缆参数已变化：下面为历史竖向研究，需重新求解。</div>}
  <div className="vertical-summary" data-testid="vertical-summary"><div><small>允许载流量 · 单根</small><b>{fmt(out.ampacity_a)} <em>A</em></b></div><div><small>运行最高导体温度</small><b>{fmt(out.operating?.max_temperature_c)} <em>°C</em></b></div><div><small>运行热点控制体高度</small><b>{fmt(out.operating?.hotspot_height_m,2)} <em>m</em></b></div><div><small>运行损耗 · 单根全高</small><b>{fmt(out.operating?.single_cable_loss_w)} <em>W</em></b></div></div>
  <div className="vertical-actions"><button className={!rating?'chosen':''} onClick={()=>setRating(false)}>运行曲线</button><button className={rating?'chosen':''} onClick={()=>setRating(true)}>极限曲线</button><span className="tool-spacer"/><button disabled={stale} onClick={()=>download('CableSimPro-竖向电热.json',JSON.stringify(out,null,2),'application/json')}><Download size={14}/>导出研究快照</button></div>

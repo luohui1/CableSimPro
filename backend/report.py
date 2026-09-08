@@ -15,6 +15,9 @@ def render_report(result: dict) -> str:
     layers = "".join(f"<tr><td>{escape(layer['name'])}</td><td>{number(layer['radius_mm'])}</td></tr>" for layer in result["geometry"]["layers"])
     matrix = "".join("<tr>" + "".join(f"<td>{value:.6f}</td>" for value in row) + "</tr>" for row in result["thermal"]["soil_matrix_k_m_w"])
     inputs = escape(json.dumps(s, ensure_ascii=False, indent=2))
+    basis = result.get('design_basis')
+    reference_section = ('<h2>06 / 本次计算的设计依据快照</h2><p>仅记录所选标准与范围检查，不代表全部条款符合性。历史计算书不会采用后续修改的依据。</p><pre>'
+                         + escape(json.dumps(basis,ensure_ascii=False,indent=2)) + '</pre>') if basis else '<p>本次计算未登记独立的项目设计依据。</p>' 
     return f"""<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>CableSimPro · 计算书</title>
 <style>body{{font:15px/1.7 system-ui,sans-serif;color:#192a3d;max-width:960px;margin:40px auto;padding:0 28px}}h1{{font-size:30px}}h2{{font-size:19px;border-bottom:1px solid #ccd5df;padding-bottom:8px;margin-top:30px}}table{{border-collapse:collapse;width:100%;margin:15px 0}}td,th{{border:1px solid #ccd5df;padding:9px;text-align:left}}pre{{white-space:pre-wrap;word-break:break-word;background:#f3f5f7;padding:18px;font-size:12px}}.notice{{background:#fff6e7;border-left:4px solid #c18a23;padding:16px}}small{{color:#687889}}button{{padding:10px 18px;cursor:pointer}}@media print{{button{{display:none}}body{{margin:0;max-width:none;font-size:11px}}h2,table{{break-inside:avoid}}pre{{font-size:9px}}}}</style>
 <button onclick="window.print()">打印 / 保存为 PDF</button><p><small>CABLESIMPRO / ENGINEERING DEMO</small></p>
@@ -31,4 +34,4 @@ def render_report(result: dict) -> str:
 <h2>03 / 模型假设与限制</h2><ul>{warnings}</ul><p>方法：同心层圆柱热阻 + 半空间镜像热源互热 + 温度相关电阻。详细推导和验证边界见仓库 docs/METHOD.md。</p>
 <h2>04 / 可复算输入快照</h2><pre>{inputs}</pre>
 <h2>05 / 追溯信息</h2><p>模型版本：{escape(result['model_version'])}<br>计算时间（UTC）：{escape(result['computed_at'])}<br>输入 SHA-256：<code>{result['input_sha256']}</code></p>
-<p>标准范围参考：IEC 60287-1-1:2023；IEC 60287-2-1:2023。上述参考不代表本实现已获得标准符合性验证。</p></html>"""
+<p>标准范围参考：IEC 60287-1-1:2023；IEC 60287-2-1:2023。上述参考不代表本实现已获得标准符合性验证。</p>{reference_section}</html>"""

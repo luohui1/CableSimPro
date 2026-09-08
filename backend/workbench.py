@@ -183,6 +183,36 @@ class WorkspaceStore:
         if locked:
             raise HTTPException(422, '不能修改锁定参数：' + ', '.join(sorted(locked)))
 
+    def edit(self, wid: str, body: Edit):
+        with self.db(True) as db:
+            row, state = self.load(db, wid, body.expected_revision)
+            try:
+                scenario, diff = agent.patch(Scenario.model_validate(state['scenario']), body.changes)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from None
+            self.protect(state, diff)
+            if diff:
+                state['scenario'] = scenario.model_dump()
+                self.commit(db, row, state, body.label)
+        return self.snapshot(wid)
+
+
+    def calculate(self, wid: str, body: Revision):
+        with self.db(True) as db:
+            row, state = self.load(db, wid, body.expected_revision)
+            from .design_basis import require_basis
+            require_basis(state, 'buried')
+            try:
+                flow = SOLVER.invoke({'candidate': state['scenario'], 'action': 'calculate'})
+            except (ModelError, ValueError) as exc:
+                raise HTTPException(422, str(exc)) from None
+            flow['output']['result']['design_basis'] = state.get('design_basis')
+            rid = str(uuid4())
+            db.execute('INSERT INTO workspace_runs VALUES (?,?,?,?,?,?,?)', (rid, wid, row['revision'], fingerprint(state['scenario']), json.dumps(flow['output'], ensure_ascii=False), json.dumps(flow['events'], ensure_ascii=False), stamp()))
+            self.audit(db, wid, row['revision'], '计算完成', rid)
+        return {'workspace': self.snapshot(wid), 'output': {**flow['output'], 'run_id': rid, 'events': flow['events']}}
+
+
     def stage(self, wid, revision, proposal):
         with self.db(True) as db:
             _, state = self.load(db, wid, revision)
@@ -213,17 +243,7 @@ def make_router(store: WorkspaceStore, providers=None):
 
     @router.post('/{wid}/edit')
     def edit(wid: str, body: Edit):
-        with store.db(True) as db:
-            row, state = store.load(db, wid, body.expected_revision)
-            try:
-                scenario, diff = agent.patch(Scenario.model_validate(state['scenario']), body.changes)
-            except ValueError as exc:
-                raise HTTPException(422, str(exc)) from None
-            store.protect(state, diff)
-            if diff:
-                state['scenario'] = scenario.model_dump()
-                store.commit(db, row, state, body.label)
-        return store.snapshot(wid)
+        return store.edit(wid, body)
 
     @router.post('/{wid}/lock')
     def lock(wid: str, body: Lock):
@@ -305,12 +325,18 @@ def make_router(store: WorkspaceStore, providers=None):
                 store.protect(state, proposal['changes'])
                 candidate = Scenario.model_validate(proposal['scenario'])
                 if proposal['action'] != 'import':
+                    from .design_basis import require_basis
+                    if proposal['action'] in ('calculate','sweep'): require_basis(state, 'buried')
                     try:
                         flow = SOLVER.invoke({'candidate': candidate.model_dump(), 'action': proposal['action'], 'parameter': proposal.get('parameter'), 'values': proposal.get('values', [])})
                     except (ModelError, ValueError) as exc:
                         raise HTTPException(422, str(exc)) from None
                     output = flow['output']
+                    if output.get('result'):
+                        output['result']['design_basis'] = state.get('design_basis')
                 state['scenario'] = candidate.model_dump()
+                if proposal.get('design_basis') is not None:
+                    state['design_basis'] = proposal['design_basis']
                 if proposal.get('source'):
                     state['sources'].append(proposal['source'])
                 revision = store.commit(db, row, state, '批准提案 · ' + proposal['action'])
@@ -323,16 +349,7 @@ def make_router(store: WorkspaceStore, providers=None):
 
     @router.post('/{wid}/calculate')
     def calculate_now(wid: str, body: Revision):
-        with store.db(True) as db:
-            row, state = store.load(db, wid, body.expected_revision)
-            try:
-                flow = SOLVER.invoke({'candidate': state['scenario'], 'action': 'calculate'})
-            except (ModelError, ValueError) as exc:
-                raise HTTPException(422, str(exc)) from None
-            rid = str(uuid4())
-            db.execute('INSERT INTO workspace_runs VALUES (?,?,?,?,?,?,?)', (rid, wid, row['revision'], fingerprint(state['scenario']), json.dumps(flow['output'], ensure_ascii=False), json.dumps(flow['events'], ensure_ascii=False), stamp()))
-            store.audit(db, wid, row['revision'], '计算完成', rid)
-        return {'workspace': store.snapshot(wid), 'output': {**flow['output'], 'run_id': rid, 'events': flow['events']}}
+        return store.calculate(wid, body)
 
     @router.get('/{wid}/runs/{rid}')
     def get_run(wid: str, rid: str):
