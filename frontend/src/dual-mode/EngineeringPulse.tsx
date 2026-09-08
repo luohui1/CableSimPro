@@ -1,4 +1,5 @@
 import {Activity,ArrowRight,CheckCircle2,FileText,Layers3,LockKeyhole,Thermometer,TriangleAlert} from 'lucide-react';
+import {useEffect,useState} from 'react';
 import {useStudio} from '../StudioState';
 import {fmt} from '../utils';
 import type {WorkMode} from './session';
@@ -13,10 +14,12 @@ export default function EngineeringPulse({mode,openWorkbench,openAgent}:{
  openAgent:(text?:string)=>void;
 }){
  const s=useStudio(),w=s.w;
+ const [now,setNow]=useState(Date.now());
+ useEffect(()=>{if(!s.proposal?.expires_at)return;const timer=window.setInterval(()=>setNow(Date.now()),1000);return()=>window.clearInterval(timer)},[s.proposal?.expires_at]);
  if(!w)return null;
  const scenario=w.scenario,p=s.proposal;
  const dirtyCount=Object.keys(s.inputDrafts).length;
- const expired=!!p?.expired||!!(p?.expires_at&&p.expires_at*1000<Date.now());
+ const expired=!!p?.expired||!!(p?.expires_at&&p.expires_at*1000<now);
  const stale=!!p&&(p.base_revision!==w.revision||expired);
  const pending=!!p?.ready;
  const outputStale=!!s.output&&!s.current&&!s.currentSweep&&!s.outputCurrent;

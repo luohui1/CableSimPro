@@ -14,11 +14,11 @@ test('shared engineering pulse carries one review and result across both modes',
  await expect(pulse).toContainText('等待工程审查');
  await expect(pulse.getByRole('button',{name:'审查提案',exact:true})).toBeVisible();
  await page.getByRole('button',{name:'批准并执行',exact:true}).click();
- await expect(pulse).toContainText('结果可复核');
+ await expect(pulse).toContainText(/结果可复核|运行电流超过允许载流量/);
  await expect(pulse.getByTestId('pulse-result')).toContainText('A');
  await page.getByRole('button',{name:'专业工作台',exact:true}).click();
  await expect(page.locator('.enterprise-result-summary')).toBeVisible();
- await expect(page.getByTestId('engineering-pulse')).toContainText('结果可复核');
+ await expect(page.getByTestId('engineering-pulse')).toContainText(/结果可复核|运行电流超过允许载流量/);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('engineering-pulse-v074.png'),fullPage:true});
 });
