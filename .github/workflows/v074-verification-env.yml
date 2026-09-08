@@ -1,0 +1,23 @@
+name: Prepare v074 verification environment
+on:
+  push:
+    branches: ['feat/light-engineering-v074']
+    paths: ['.github/workflows/v074-verification-env.yml']
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: |
+          python -m pip download --only-binary=:all: --dest wheels -r backend/requirements-dev.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v074-python313-wheels
+          path: wheels/
+          retention-days: 1
