@@ -32,8 +32,10 @@ jobs:
               p=pathlib.Path(item['path'])
               assert not p.is_absolute() and '..' not in p.parts
               assert p.parts[0] in {'README.md','docs','frontend','scripts','.github'}
-              if p.parts[0]=='.github':assert str(p)=='.github/workflows/light-studio-review.yml'
-              assert p.suffix.lower() in {'.md','.json','.ts','.tsx','.css','.mjs','.py','.yml'}
+              if p.parts[0]=='.github':
+                  assert str(p)=='.github/workflows/light-studio-review.yml'
+                  continue
+              assert p.suffix.lower() in {'.md','.json','.ts','.tsx','.css','.mjs','.py'}
               if 'new' in item:
                   assert not p.exists(),str(p)
                   text=item['new']
@@ -47,7 +49,7 @@ jobs:
               staged.append((p,text))
           for p,text in staged:
               p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8')
-          print('26 reviewed source and test files verified; no user files, keys or font binaries.')
+          print('25 reviewed product source and test files verified; workflow creation excluded from this job.')
           PY
       - name: Install exact frontend dependencies
         working-directory: frontend
@@ -62,11 +64,11 @@ jobs:
       - name: Typecheck and production build
         working-directory: frontend
         run: npm run build
-      - name: Commit reviewed source and reproducible local assets
+      - name: Commit reviewed product source and local assets only
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add README.md docs frontend/package.json frontend/package-lock.json frontend/playwright.config.ts frontend/playwright.windows.config.ts frontend/pro-e2e/agent-studio.spec.ts frontend/pro-e2e/light-studio.spec.ts frontend/src frontend/public/engineering scripts .github/workflows/light-studio-review.yml
+          git add README.md docs frontend/package.json frontend/package-lock.json frontend/playwright.config.ts frontend/playwright.windows.config.ts frontend/pro-e2e/agent-studio.spec.ts frontend/pro-e2e/light-studio.spec.ts frontend/src frontend/public/engineering scripts
           git diff --cached --stat
           git commit -m 'feat: light engineering workspace with shared model-field canvas and illustrated task review'
           git push origin HEAD:refs/heads/feat/light-engineering-v074
