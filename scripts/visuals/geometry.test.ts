@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
-import {buildCableGeometry,fitCableCamera} from '../../frontend/src/CableModelView';
+import {buildCableGeometry,fitCableCamera,fitCablePortrait} from '../../frontend/src/CableModelView';
 import {cableAppearance,disposeScene} from '../../frontend/src/visual-assets/cableAppearance';
 import type {Cable} from '../../frontend/src/types';
 let count=0;
@@ -21,6 +21,16 @@ for(const conductor of ['copper','aluminium'] as const)for(const area_mm2 of [50
   for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){
    const point=new THREE.Vector3(x,y,z).project(camera);
    assert.ok(Math.abs(point.x)<=.821);assert.ok(Math.abs(point.y)<=.641);
+  }
+ }
+
+ // A rotated portrait must also fit narrow evidence panels and wide entry cards.
+ const portrait=new THREE.Group();portrait.add(base.clone(true));portrait.rotation.z=-.17;
+ for(const aspect of [1.1,1.25,2.9]){
+  const camera=new THREE.PerspectiveCamera(32,aspect,.001,10);fitCablePortrait(camera,portrait);
+  const bounds=new THREE.Box3().setFromObject(portrait);
+  for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){
+   const point=new THREE.Vector3(x,y,z).project(camera);assert.ok(Math.abs(point.x)<=.841);assert.ok(Math.abs(point.y)<=.701);
   }
  }
  disposeScene(base);disposeScene(visual);count++;

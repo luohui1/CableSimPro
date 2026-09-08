@@ -31,13 +31,15 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
  const validOutput=!!s.current||!!s.currentSweep||s.outputCurrent;
  const latest=[...s.notes].reverse().find(n=>n.role==='user')?.text??p?.message;
  const hasTask=!fresh&&!!(latest||p||s.output);
+ const taskStage=!hasTask?0:pending?1:validOutput?2:0;
  const candidate=pending&&p.scenario&&!stale&&!expired?p.scenario:w.scenario;
  const status=s.error?'需要处理':s.busy?'工具执行中':pending?(stale||expired?'提案待更新':'等待审查'):p&&!p.ready?'请补充条件':s.current||s.currentSweep?'结果可复核':s.outputCurrent?'工具已完成':s.output?'输入已变化':'等待任务';
  useEffect(()=>{if(p?.ready){setSection('task');setFresh(false);setArchive(null)}},[p]);
  useEffect(()=>{if(!active)return;const timer=window.setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer)},[active]);
  useEffect(()=>{if(!active||s.busy)return;let canceled=false;api<Journal>(`/api/runtime/${w.id}/provenance`).then(j=>{if(!canceled){setJournal(j);setReadError('')}}).catch(e=>{if(!canceled)setReadError(errorText(e))});return()=>{canceled=true}},[active,s.busy,w.id,w.revision]);
- useEffect(()=>{if(!active)return;const key=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setSection('task');setNavOpen(false);requestAnimationFrame(()=>input.current?.focus())}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[active]);
- function focusTask(text?:string){setSection('task');setNavOpen(false);if(text!==undefined){setDraft(text);setFresh(true)}requestAnimationFrame(()=>input.current?.focus())}
+ useEffect(()=>{if(!active)return;const key=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setSection('task');setNavOpen(false);revealComposer()}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[active]);
+ function revealComposer(){const panel=input.current?.closest('details');if(panel instanceof HTMLDetailsElement)panel.open=true;requestAnimationFrame(()=>input.current?.focus())}
+ function focusTask(text?:string){setSection('task');setNavOpen(false);if(text!==undefined){setDraft(text);setFresh(true)}revealComposer()}
  function send(){if(blocked||pending||!draft.trim()||(provider==='openai'&&(!consent||!s.status.cloud_configured)))return;setFresh(false);setArchive(null);void s.plan(draft.trim(),provider,consent)}
  function navigate(next:Section){setSection(next);setNavOpen(false)}
  async function readTask(id:string){const token=++archiveRequest.current;setArchive(null);setReadError('');navigate('history');try{const r=await api<ArchivedTask>(`/api/runtime/${w.id}/tasks/${id}`);if(token===archiveRequest.current)setArchive(r)}catch(e){if(token===archiveRequest.current)setReadError(errorText(e))}}
@@ -63,7 +65,7 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
    <div className="cs-task-layout" hidden={section!=='task'}>
     <div className="cs-thread-column">
      <div className="cs-thread-scroll">
-      <div className="engineering-task-stages" aria-label="任务阶段">{['描述任务','审查变更','复核结果'].map((label,i)=><span key={label} aria-current={(s.output&&!pending?2:pending?1:0)===i?'step':undefined}><i>{i+1}</i>{label}</span>)}</div>
+      <div className="engineering-task-stages" aria-label="任务阶段">{['描述任务','审查变更','复核结果'].map((label,i)=><span key={label} aria-current={taskStage===i?'step':undefined}><i>{i+1}</i>{label}</span>)}</div>
       {!hasTask?<section className="cs-welcome"><div className="cs-welcome-illustration" aria-label="载流量研究示意"><EngineeringPlate kind="installation"/><span>直埋截面 · 结构示意</span></div><span className="cs-eyebrow">电缆结构 / 敷设条件 / 载流量</span><h2>这次，需要解决<br/>什么电缆设计问题？</h2><p>从当前工程开始。描述目标，检查修改，再查看真实计算结果。</p>
        <div className="cs-task-starters"><button onClick={()=>focusTask('计算载流量')}><span className="cs-starter-icon"><EngineeringPlate kind="cable"/></span><b>校核载流量</b><small>当前结构与敷设条件</small><ArrowRight size={16}/></button><button onClick={()=>focusTask('比较土壤热阻率 0.8、1.2、1.6 下的载流量')}><span className="cs-starter-icon"><EngineeringPlate kind="installation"/></span><b>比较敷设条件</b><small>逐工况计算，不更改原方案</small><ArrowRight size={16}/></button><button onClick={()=>navigate('selection')}><span className="cs-starter-icon"><Layers3 size={22}/></span><b>从企业型号选型</b><small>限定已核对的产品版本</small><ArrowRight size={16}/></button><button onClick={()=>navigate('documents')}><span className="cs-starter-icon"><EngineeringPlate kind="documents"/></span><b>从资料核对参数</b><small>原文、提取值与来源同屏</small><ArrowRight size={16}/></button></div>
       </section>:<div className="cs-thread">

@@ -36,6 +36,18 @@ export function fitCableCamera(camera:THREE.OrthographicCamera,object:THREE.Obje
  camera.zoom=Math.min(16,Math.max(.5,Math.min(.82/Math.max(extentX,1e-6),.64/Math.max(extentY,1e-6))));
  camera.updateProjectionMatrix();
 }
+/** Fit all corners of the display envelope to a perspective portrait at any aspect. */
+export function fitCablePortrait(camera:THREE.PerspectiveCamera,object:THREE.Object3D){
+ const direction=new THREE.Vector3(.42,.25,1).normalize();camera.position.copy(direction);camera.lookAt(0,0,0);camera.updateMatrixWorld(true);object.updateMatrixWorld(true);
+ const bounds=new THREE.Box3().setFromObject(object);if(bounds.isEmpty())return;
+ const rotation=new THREE.Matrix4().extractRotation(camera.matrixWorld).invert();
+ const vertical=Math.tan(THREE.MathUtils.degToRad(camera.fov/2));let distance=.2;
+ for(const x of [bounds.min.x,bounds.max.x])for(const y of [bounds.min.y,bounds.max.y])for(const z of [bounds.min.z,bounds.max.z]){
+  const p=new THREE.Vector3(x,y,z).applyMatrix4(rotation);
+  distance=Math.max(distance,p.z+Math.abs(p.x)/(vertical*camera.aspect*.84),p.z+Math.abs(p.y)/(vertical*.70));
+ }
+ camera.position.copy(direction.multiplyScalar(distance));camera.lookAt(0,0,0);camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
+}
 export default function CableModelView({cable}:{cable:Cable}){
  const host=useRef<HTMLDivElement>(null),group=useRef<THREE.Group|null>(null),controls=useRef<OrbitControls|null>(null),cam=useRef<THREE.OrthographicCamera|null>(null);
  const [mode,setMode]=useState<ViewMode>('cutaway'),[visible,setVisible]=useState([true,true,true,true,true,true]),[failed,setFailed]=useState(false),[error,setError]=useState(''),[view,setView]=useState('iso'),[viewRevision,setViewRevision]=useState(0);
@@ -69,7 +81,7 @@ export default function CableModelView({cable}:{cable:Cable}){
     return [{x:(point.x+1)*width/2,y:(1-point.y)*height/2,labelX:width*(.09+(5-i)*.159),name:l.name,value:i===0?`${fmt(cable.area_mm2,0)} mm²`:`${fmt(l.radius_mm-ls[i-1].radius_mm,2)} mm`}];
    }));
   };
-  const resize=()=>{const w=Math.max(el.clientWidth,100),h=Math.max(el.clientHeight,100),aspect=w/h;camera.left=-.25*aspect;camera.right=.25*aspect;camera.top=.25;camera.bottom=-.25;camera.updateProjectionMatrix();fit.current();renderer.setSize(w,h);render()};
+  const resize=()=>{const w=Math.max(el.clientWidth,100),h=Math.max(el.clientHeight,100),aspect=w/h;el.dataset.compact=String(h<380);camera.left=-.25*aspect;camera.right=.25*aspect;camera.top=.25;camera.bottom=-.25;camera.updateProjectionMatrix();fit.current();renderer.setSize(w,h);render()};
   const ro=new ResizeObserver(resize);ro.observe(el);ctl.addEventListener('change',render);resize();setReady(true);
   return()=>{ro.disconnect();ctl.dispose();disposeScene(scene);environment.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();group.current=null;cam.current=null;controls.current=null};
  },[geometryKey]);

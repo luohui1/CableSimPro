@@ -32,7 +32,7 @@ test('model section field and curve share saved input and retain original WebGL 
  await page.screenshot({path:info.outputPath('thermal-same-canvas-v074.png'),fullPage:true});
  await views(page).getByRole('button',{name:'载流量曲线',exact:true}).click();await expect(page.locator('.curve-pane')).toContainText('最高导体温度');
  await views(page).getByRole('button',{name:'三维结构',exact:true}).click();await expect(canvas).toHaveAttribute('data-retained','v074');
- expect(invokes).toBe(1);await page.screenshot({path:info.outputPath('workbench-result-v074.png'),fullPage:true});
+ expect(invokes).toBe(1);await expect(page.locator('.model-render .model-callouts')).toBeHidden();await page.screenshot({path:info.outputPath('workbench-result-v074.png'),fullPage:true});
 });
 
 test('changed input removes current field and curve rather than showing stale colors',async({page})=>{
@@ -55,6 +55,7 @@ test('illustrated agent keeps real candidate review primary and draft recoverabl
  await page.locator('.pending-composer>summary').click();await expect(page.getByLabel('描述本次工程任务',{exact:true})).toHaveValue('截面积改为 400 mm²，重新计算');
  await page.getByRole('button',{name:'批准并执行',exact:true}).click();await expect(page.getByTestId('session-revision')).toHaveText('rev.2');
  await expect(page.locator('.flow-result-metrics')).toBeVisible();await expect(page.locator('.engineering-task-stages [aria-current=step]')).toContainText('复核结果');
+ await page.getByRole('button',{name:'新任务',exact:true}).click();await expect(page.locator('.engineering-task-stages [aria-current=step]')).toContainText('描述任务');
 });
 
 test('missing art degrades to accessible explanation while task entry still works',async({page})=>{
@@ -75,4 +76,13 @@ test('narrow screen remains operable through mode choice and review',async({page
  await page.setViewportSize({width:390,height:844});await enter(page,'agent');expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.getByLabel('描述本次工程任务',{exact:true}).fill('截面积改为 400 mm²，重新计算');await page.getByRole('button',{name:'生成任务计划',exact:true}).click();await expect(page.getByRole('button',{name:'批准并执行',exact:true})).toBeInViewport();
  await page.screenshot({path:info.outputPath('mobile-review-v074.png'),fullPage:true});
+});
+
+test('tablet navigation and keyboard review draft remain accessible',async({page})=>{
+ await page.setViewportSize({width:650,height:900});await enter(page,'agent');
+ await page.getByRole('button',{name:'显示任务导航',exact:true}).click();await expect(page.getByRole('button',{name:'企业型号选型',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'关闭任务导航',exact:true}).click();
+ const input=page.getByLabel('描述本次工程任务',{exact:true});await input.fill('截面积改为 400 mm²，重新计算');await page.getByRole('button',{name:'生成任务计划',exact:true}).click();
+ await expect(page.locator('.pending-composer')).toBeVisible();await page.keyboard.press('Control+k');await expect(input).toBeFocused();await expect(input).toHaveValue('截面积改为 400 mm²，重新计算');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
 });

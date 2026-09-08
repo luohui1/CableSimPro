@@ -2,7 +2,7 @@ import {useEffect,useRef,useState} from 'react';
 import * as THREE from 'three';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
-import {buildCableGeometry} from '../CableModelView';
+import {buildCableGeometry,fitCablePortrait} from '../CableModelView';
 import {cableAppearance,disposeScene} from './cableAppearance';
 import {layers,fmt} from '../utils';
 import type {Cable,Scenario} from '../types';
@@ -34,7 +34,7 @@ export default function CablePortrait({cable,interactive=false}:{cable:Cable;int
    const w=el.clientWidth,h=el.clientHeight;if(w<2||h<2)return;
    renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();
    if(Math.abs(lastAspect-camera.aspect)>.05){
-    const distance=.50/Math.min(1.7,camera.aspect/1.05);camera.position.set(.42*distance,.25*distance,distance);controls.update();lastAspect=camera.aspect;
+    fitCablePortrait(camera,asset);controls.update();lastAspect=camera.aspect;
    }render();
   };
   const observer=new ResizeObserver(resize);observer.observe(el);controls.addEventListener('change',render);resize();setState('ready');
