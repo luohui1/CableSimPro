@@ -1,3 +1,5 @@
+> **v0.5.1 界面修正**：工程任务输入移到画布下方；建模与敷设计算结果同屏展开，不再强制跳转结果页。运行边界不变。详见 [同屏交互与 Windows 验收](docs/SAME_WORKSPACE_V051.md)。
+
 # CableSimPro 0.5 · 电缆工程工作台
 
 当前开发分支 `feat/engineering-workspace-v05`，基于 v0.4.1，不代表已合并 main。

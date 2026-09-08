@@ -10,7 +10,7 @@ export interface Proposal {design_basis?:Record<string,unknown>;previous_design_
 export interface Note {id:number;role:'user'|'assistant';text:string}
 export interface Studio {
  inputDrafts:Record<string,string>;setInputDraft:(path:string,text:string|null)=>void;discardInputs:()=>void;
- w:Workspace|null;busy:boolean;error:string;notice:string;output:Output|null;current:Result|null;
+ w:Workspace|null;busy:boolean;error:string;notice:string;output:Output|null;current:Result|null;currentSweep:Sweep|null;
  proposal:Proposal|null;notes:Note[];selected:string;select:(s:string)=>void;phase:number;setPhase:(n:number)=>void;
  status:{cloud_configured:boolean;model:string|null};tab:string;setTab:(s:string)=>void;
  edit:(c:Change[],label?:string)=>Promise<void>;lock:(p:string,b:boolean)=>Promise<void>;
@@ -23,10 +23,11 @@ export interface Studio {
 const Context=createContext<Studio|null>(null);
 export const useStudio=()=>useContext(Context)!;
 export const valueAt=(s:Scenario,path:string):unknown=>path.split('.').reduce<unknown>((o,k)=>(o as Record<string,unknown>)[k],s);
-export function StudioProvider({children}:{children:ReactNode}) {
+export function StudioProvider({children,stayInWorkspace=false}:{children:ReactNode;stayInWorkspace?:boolean}) {
  const [w,setW]=useState<Workspace|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [output,setOutput]=useState<Output|null>(null),[proposal,setProposal]=useState<Proposal|null>(null),[notes,setNotes]=useState<Note[]>([]);
  const [selected,select]=useState('installation'),[phase,setPhase]=useState(1),[tab,setTab]=useState('installation');
+ const [outputRevision,setOutputRevision]=useState<number|null>(null);
  const [status,setStatus]=useState({cloud_configured:false,model:null as string|null});
  const ids=useRef(0),currentW=useRef(w);currentW.current=w;
  const queue=useRef<Promise<void>>(Promise.resolve()),pending=useRef(0);
@@ -36,28 +37,29 @@ export function StudioProvider({children}:{children:ReactNode}) {
  function requireCommitted(){if(Object.keys(draftRef.current).length)throw new Error('存在未提交或无效的参数输入，请修正输入或撤销输入后再操作。')}
 
  const current=output?.result && w && canonical(output.result.input)===canonical(w.scenario)&&!Object.keys(inputDrafts).length&&canonical(output.result.design_basis??null)===canonical(w.design_basis??null)?output.result:null;
+ const currentSweep=output?.sweep&&w&&outputRevision===w.revision&&!Object.keys(inputDrafts).length?output.sweep:null;
  async function task(fn:()=>Promise<void>){pending.current++;setBusy(true);const job=queue.current.then(async()=>{setError('');try{await fn()}catch(e){setError(errorText(e))}finally{pending.current--;setBusy(pending.current>0)}});queue.current=job;return job}
  function remember(next:Workspace){currentW.current=next;setW(next);try{localStorage.setItem('cablesim-studio-id',next.id)}catch{/* Server data remains saved if browser storage is unavailable. */}}
  const route=(suffix:string)=>`/api/workspaces/${currentW.current!.id}/${suffix}`;
  const rev=()=>({expected_revision:currentW.current!.revision});
  function add(role:Note['role'],text:string){setNotes(n=>[...n.slice(-49),{id:++ids.current,role,text}])}
- function accept(r:{workspace:Workspace;output:Output|null}){remember(r.workspace);setOutput(r.output);if(r.output)add('assistant',r.output.statement)}
+ function accept(r:{workspace:Workspace;output:Output|null}){remember(r.workspace);setOutputRevision(r.workspace.revision);setOutput(r.output);if(r.output)add('assistant',r.output.statement)}
  async function refreshProviders(){const r=await api<{providers:{agent:{configured:boolean;model:string}}}>('/api/integrations');setStatus({cloud_configured:r.providers.agent.configured,model:r.providers.agent.model||null})}
  async function initialize(){await task(async()=>{await refreshProviders();let id:string|null=null;try{id=localStorage.getItem('cablesim-studio-id')}catch{};if(id){try{remember(await api(`/api/workspaces/${id}`));return}catch(e){if(!errorText(e).includes('不存在'))throw e}}remember(await api('/api/workspaces',{}))})}
  useEffect(()=>{void initialize()},[]);
  useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(''),4000);return()=>clearTimeout(t)},[notice]);
- const methods:Studio={inputDrafts,setInputDraft,discardInputs,adoptProposal:p=>{setProposal(p);add('assistant','已生成工程变更；请检查参数差异、设计依据和完整输入后决定是否批准。')},refreshProviders,w,busy,error,notice,output,current,proposal,notes,selected,select,phase,setPhase,status,tab,setTab,
+ const methods:Studio={inputDrafts,setInputDraft,discardInputs,adoptProposal:p=>{setProposal(p);add('assistant','已生成工程变更；请检查参数差异、设计依据和完整输入后决定是否批准。')},refreshProviders,w,busy,error,notice,output,current,currentSweep,proposal,notes,selected,select,phase,setPhase,status,tab,setTab,
  edit:async(changes,label='属性编辑')=>task(async()=>{remember(await api(route('edit'),{...rev(),changes,label}));changes.forEach(c=>{const d=draftRef.current[c.path];if(d!==undefined&&(d===''?c.value===null:Number(d)===c.value))setInputDraft(c.path,null)});setNotice('已校验并保存修改')}),
  lock:async(path,locked)=>task(async()=>{remember(await api(route('lock'),{...rev(),path,locked}))}),
  history:async d=>task(async()=>{remember(await api(route(`history/${d}`),rev()))}),
- run:async()=>task(async()=>{requireCommitted();accept(await engineeringCall(currentW.current!.id,currentW.current!.revision,'analysis.buried'));setTab('results')}),
+ run:async()=>task(async()=>{requireCommitted();accept(await engineeringCall(currentW.current!.id,currentW.current!.revision,'analysis.buried'));if(!stayInWorkspace)setTab('results')}),
  plan:async(message,mode,consent)=>task(async()=>{requireCommitted();add('user',message);setProposal(null);const p=await engineeringCall<Proposal>(currentW.current!.id,currentW.current!.revision,'task.plan',{message,mode,consent});setProposal(p);if(!p.ready)add('assistant',p.questions.join('\n'))}),
- review:async action=>task(async()=>{requireCommitted();if(!proposal?.id)return;accept(await api(route(`proposals/${proposal.id}/${action}`),rev()));setProposal(null);if(action==='approve')setTab('results');else add('assistant','已拒绝提案，工程未改变。')}),
+ review:async action=>task(async()=>{requireCommitted();if(!proposal?.id)return;accept(await api(route(`proposals/${proposal.id}/${action}`),rev()));setProposal(null);if(action==='approve'){if(!stayInWorkspace)setTab('results')}else add('assistant','已拒绝提案，工程未改变。')}),
  extract:async(title,text,page)=>task(async()=>{setProposal(await api(route('evidence'),{...rev(),title,text,page}));setNotice('资料参数已提取，等待在 Agent 面板中审查。')}),
  load:async id=>task(async()=>{remember(await api(`/api/workspaces/${id}`));setProposal(null);setOutput(null);setNotes([]);discardInputs()}),
  create:async scenario=>task(async()=>{remember(await api('/api/workspaces',scenario?{scenario}:{}));setOutput(null);setProposal(null);setNotes([]);discardInputs()}),
  reload:async()=>task(async()=>{if(currentW.current)remember(await api(`/api/workspaces/${currentW.current.id}`))}),
- showRun:async id=>task(async()=>{const r=await api<{output:Output;events:Output['events']}>(route(`runs/${id}`));setOutput({...r.output,events:r.events,run_id:id});setTab('results')}),
+ showRun:async id=>task(async()=>{const r=await api<{output:Output;events:Output['events']}>(route(`runs/${id}`));setOutputRevision(null);setOutput({...r.output,events:r.events,run_id:id});setTab('results')}),
  report:async()=>task(async()=>{if(!current||!output?.run_id)return;requireCommitted();const r=await engineeringCall<{html:string}>(currentW.current!.id,currentW.current!.revision,'reports.render',{run_id:output.run_id});download('CableSimPro-计算书.html',r.html,'text/html;charset=utf-8')}),
  exportJSON:()=>{if(w)download('CableSimPro-工程.json',JSON.stringify(w.scenario,null,2),'application/json')},
  dismiss:()=>setError('')};

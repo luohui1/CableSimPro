@@ -9,8 +9,8 @@ test('professional hierarchy typography and default local-only fonts',async({pag
  await expect(page.locator('.eng-assistant')).toHaveCount(0);
  await expect(page.locator('.property.invalid')).toHaveCount(0);
  await expect(page.getByTestId('cable-model-view')).toHaveAttribute('data-renderer','webgl');
- const typography=await page.evaluate(()=>{const css=(s:string)=>getComputedStyle(document.querySelector(s)!);return {h:parseFloat(css('h1').fontSize),label:parseFloat(css('.property-title label').fontSize),input:parseFloat(css('input[type=number]').fontSize),family:css('input[type=number]').fontFamily}});
- expect(typography.h).toBeGreaterThanOrEqual(24);expect(typography.label).toBeGreaterThanOrEqual(13);expect(typography.h/typography.label).toBeGreaterThan(1.6);expect(typography.family).toContain('Mono');
+ const typography=await page.evaluate(()=>{const css=(s:string)=>getComputedStyle(document.querySelector(s)!);return {h:parseFloat(css('h1').fontSize),label:parseFloat(css('.property-title label').fontSize),input:parseFloat(css('input[type=number]').fontSize),numeric:css('input[type=number]').fontVariantNumeric,weight:css('input[type=number]').fontWeight}});
+ expect(typography.h).toBeGreaterThanOrEqual(24);expect(typography.label).toBeGreaterThanOrEqual(13);expect(typography.h/typography.label).toBeGreaterThan(1.6);expect(typography.numeric).toContain('tabular-nums');expect(Number(typography.weight)).toBeGreaterThanOrEqual(500);
  expect(await page.locator('#csp-optional-fonts').count()).toBe(0);
  await page.screenshot({path:info.outputPath('v05-model.png'),fullPage:true});
  expect(errors).toEqual([]);
@@ -40,7 +40,7 @@ test('parametric generation previews before human approval and updates geometry'
  await expect(page.getByTestId('revision')).toHaveText('rev.1');
  await page.screenshot({path:info.outputPath('v05-generator.png'),fullPage:true});
  await page.getByRole('button',{name:'生成变更并审查',exact:false}).click();
- await expect(dialog).toHaveCount(0);await expect(page.locator('.eng-assistant .diff-row').filter({hasText:'导体截面积'})).toContainText('400');
+ await expect(dialog).toHaveCount(0);await expect(page.locator('.task-dock .diff-row').filter({hasText:'导体截面积'})).toContainText('400');
  await expect(page.getByTestId('revision')).toHaveText('rev.1');
  await page.getByRole('button',{name:'批准并执行',exact:true}).click();await expect(page.getByTestId('revision')).toHaveText('rev.2');
  await page.getByRole('button',{name:'关闭工程助手',exact:true}).click();await nav(page,'电缆结构');
@@ -116,7 +116,7 @@ test('enterprise document review still feeds current engineering model',async({p
  await nav(page,'企业资料');
  await page.locator('.library-toolbar input[type=file]').setInputFiles({name:'v05-example.txt',mimeType:'text/plain',buffer:Buffer.from('截面积: 300 mm²\nR20: 0.0601 Ω/km\n绝缘厚度: 5.5 mm')});
  await page.getByRole('checkbox',{name:'我已对照原件检查文字和单位',exact:true}).check();await page.getByRole('button',{name:'确认页文字',exact:true}).click();
- await page.getByRole('button',{name:'从资料生成工程变更提案',exact:false}).click();await expect(page.locator('.eng-assistant .proposal-card')).toContainText('0.0601');
+ await page.getByRole('button',{name:'从资料生成工程变更提案',exact:false}).click();await expect(page.locator('.task-dock .proposal-card')).toContainText('0.0601');
  await page.screenshot({path:info.outputPath('v05-documents.png'),fullPage:true});
  await page.getByRole('button',{name:'批准并执行'}).click();await expect(page.getByTestId('revision')).toHaveText('rev.2');
  await nav(page,'任务记录');await expect(page.locator('.journal')).toContainText('当前数值引用');
