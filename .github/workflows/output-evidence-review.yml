@@ -1,0 +1,41 @@
+name: Output evidence regression
+on:
+  push:
+    branches: ['feat/session-evidence-v075']
+permissions:
+  contents: read
+concurrency:
+  group: evidence-review-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r backend/requirements.txt
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: node scripts/test_output_evidence.mjs
+      - run: npm run build
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npx playwright test same-workspace.spec.ts --project=chromium --grep='result evidence:'
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: output-evidence-review
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+          retention-days: 7
