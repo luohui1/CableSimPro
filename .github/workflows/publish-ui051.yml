@@ -1,0 +1,23 @@
+name: Publish same-workspace source
+on:
+  push:
+    branches: ['feat/same-workspace-v051']
+    paths: ['.github/workflows/publish-ui051.yml']
+permissions:
+  contents: write
+jobs:
+  source:
+    if: github.repository == 'luohui1/CableSimPro' && github.ref == 'refs/heads/feat/same-workspace-v051'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply and hash-check authored UI source
+        run: python scripts/_apply_ui051.py
+      - name: Commit corrected components on feature branch only
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md backend/main.py frontend/src/EngineeringWorkspace.tsx frontend/src/Studio.tsx frontend/src/StudioState.tsx frontend/src/StudioPanels.tsx frontend/playwright.config.ts frontend/pro-e2e/v05.spec.ts scripts/package_demo.py
+          git commit -m 'fix: permanent task input and reviewed results in the current engineering workspace'
+          git push origin HEAD:refs/heads/feat/same-workspace-v051
