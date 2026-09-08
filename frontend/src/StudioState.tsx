@@ -9,7 +9,7 @@ export interface Output {result:Result|null;sweep:Sweep|null;statement:string;ru
 export interface Proposal {expired?:boolean;expires_at?:number;design_basis?:Record<string,unknown>;previous_design_basis?:Record<string,unknown>;id?:string;ready:boolean;base_revision:number;mode:string;message:string;action:string;changes:{path:string;before:unknown;after:unknown}[];questions:string[];assumptions:string[];scenario:Scenario;source?:Source;events:Output['events']}
 export interface Note {id:number;role:'user'|'assistant';text:string}
 export interface Studio {
- initialized:boolean;
+ initialized:boolean;outputCurrent:boolean;
  inputDrafts:Record<string,string>;setInputDraft:(path:string,text:string|null)=>void;discardInputs:()=>void;
  w:Workspace|null;busy:boolean;error:string;notice:string;output:Output|null;current:Result|null;currentSweep:Sweep|null;
  proposal:Proposal|null;notes:Note[];selected:string;select:(s:string)=>void;phase:number;setPhase:(n:number)=>void;
@@ -41,6 +41,7 @@ export function StudioProvider({children,stayInWorkspace=false,deferCreate=false
  function discardInputs(){draftRef.current={};setInputDrafts({})}
  function requireCommitted(){if(Object.keys(draftRef.current).length)throw new Error('存在未提交或无效的参数输入，请修正输入或撤销输入后再操作。')}
 
+ const outputCurrent=!!output&&!!w&&outputRevision===w.revision&&!Object.keys(inputDrafts).length;
  const current=output?.result && w && canonical(output.result.input)===canonical(w.scenario)&&!Object.keys(inputDrafts).length&&canonical(output.result.design_basis??null)===canonical(w.design_basis??null)?output.result:null;
  const currentSweep=output?.sweep&&w&&outputRevision===w.revision&&!Object.keys(inputDrafts).length?output.sweep:null;
  async function task(fn:()=>Promise<void>){pending.current++;setBusy(true);const job=queue.current.then(async()=>{setError('');try{await fn()}catch(e){setError(errorText(e))}finally{pending.current--;setBusy(pending.current>0)}});queue.current=job;return job}
@@ -67,7 +68,7 @@ export function StudioProvider({children,stayInWorkspace=false,deferCreate=false
  }
  useEffect(()=>{void initialize()},[]);
  useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(''),4000);return()=>clearTimeout(t)},[notice]);
- const methods:Studio={initialized,inputDrafts,setInputDraft,discardInputs,adoptProposal:p=>{setProposal(p);add('assistant','已生成工程变更；请检查参数差异、设计依据和完整输入后决定是否批准。')},refreshProviders,w,busy,error,notice,output,current,currentSweep,proposal,notes,selected,select,phase,setPhase,status,tab,setTab,
+ const methods:Studio={initialized,outputCurrent,inputDrafts,setInputDraft,discardInputs,adoptProposal:p=>{setProposal(p);add('assistant','已生成工程变更；请检查参数差异、设计依据和完整输入后决定是否批准。')},refreshProviders,w,busy,error,notice,output,current,currentSweep,proposal,notes,selected,select,phase,setPhase,status,tab,setTab,
  edit:async(changes,label='属性编辑')=>task(async()=>{remember(await api(route('edit'),{...rev(),changes,label}));changes.forEach(c=>{const d=draftRef.current[c.path];if(d!==undefined&&(d===''?c.value===null:Number(d)===c.value))setInputDraft(c.path,null)});setNotice('已校验并保存修改')}),
  lock:async(path,locked)=>task(async()=>{remember(await api(route('lock'),{...rev(),path,locked}))}),
  history:async d=>task(async()=>{remember(await api(route(`history/${d}`),rev()))}),

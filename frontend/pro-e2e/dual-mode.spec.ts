@@ -34,6 +34,7 @@ test('calculation and model survive mode switch with one workspace',async({page}
 test('agent plan review applies real parameter change and restores after reload',async({page},info)=>{
  await enter(page,'agent');await page.getByLabel('描述本次工程任务',{exact:true}).fill('截面积改为 400 mm²，重新计算');await page.getByRole('button',{name:'生成任务计划',exact:true}).click();
  const proposal=page.getByRole('region',{name:'待审查工程变更'});await expect(proposal).toContainText('400');await expect(page.getByTestId('session-revision')).toHaveText('rev.1');
+ await expect(page.getByRole('button',{name:'批准并执行',exact:true})).toBeInViewport();
  await page.screenshot({path:info.outputPath('dual-mode-review.png'),fullPage:true});
  await page.reload();await expect(proposal).toContainText('400');await page.getByRole('button',{name:'批准并执行',exact:true}).click();await expect(page.getByTestId('session-revision')).toHaveText('rev.2');await expect(page.locator('.flow-result-metrics')).toBeVisible();
  await switcher(page).getByRole('button',{name:'专业工作台',exact:true}).click();await expect(page.locator('.enterprise-inspector').getByLabel('导体截面积',{exact:true})).toHaveValue('400');
@@ -83,7 +84,15 @@ test('Chinese composition and shift enter do not send, hidden workbench cannot s
 });
 
 test('cloud credentials are not invented and local mode is clearly marked',async({page},info)=>{
- await enter(page,'agent');await expect(page.getByLabel('工程流解析方式')).toHaveValue('local');await expect(page.getByLabel('工程流解析方式').locator('option[value=openai]')).toBeDisabled();
+ await enter(page,'agent');await expect(page.getByLabel('工程流解析方式')).toHaveValue('local');await expect(page.getByLabel('工程流解析方式').locator('option[value=openai]')).toHaveJSProperty('disabled',true);
  await expect(page.locator('.flow-context')).toContainText('演示默认值不等于厂家数据');
  const report=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa']).analyze();await info.attach('agent-axe.json',{body:JSON.stringify(report,null,2),contentType:'application/json'});expect(report.violations).toEqual([]);
+});
+
+
+test('inspection output remains a current tool result without fabricated numeric metrics',async({page})=>{
+ await enter(page,'agent');await page.getByLabel('描述本次工程任务',{exact:true}).fill('解释当前模型的假设');await page.getByRole('button',{name:'生成任务计划',exact:true}).click();
+ await page.getByRole('button',{name:'批准并执行',exact:true}).click();await expect(page.getByTestId('session-revision')).toHaveText('rev.2');
+ await expect(page.getByRole('region',{name:'任务结果'})).toContainText('不是完整 IEC 60287');await expect(page.locator('.flow-result-metrics')).toHaveCount(0);
+ await page.reload();await expect(page.getByRole('region',{name:'任务结果'})).toContainText('不是完整 IEC 60287');await expect(page.locator('.flow-status')).toHaveText('工具已完成');
 });
