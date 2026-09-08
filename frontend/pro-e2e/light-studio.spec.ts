@@ -37,7 +37,9 @@ test('model section field and curve share saved input and retain original WebGL 
 
 test('changed input removes current field and curve rather than showing stale colors',async({page})=>{
  await enter(page);await page.getByRole('button',{name:'计算载流量',exact:false}).click();await expect(page.locator('.enterprise-result-summary')).toBeVisible();
+ const canvas=page.getByTestId('cable-model-view').locator('canvas');await canvas.evaluate(el=>(el as HTMLElement).dataset.revisionPersistent='true');
  const field=page.locator('.enterprise-inspector').getByLabel('导体截面积',{exact:true});await field.fill('300');await field.press('Tab');await expect(page.getByTestId('session-revision')).toHaveText('rev.2');
+ await expect(canvas).toHaveAttribute('data-revision-persistent','true');await expect(page.locator('.model-dimensions')).toContainText('300 mm²');
  await views(page).getByRole('button',{name:'温度分布',exact:true}).click();await expect(page.locator('.field-pane')).toContainText('输入已变化，请重新计算');
  await expect(page.locator('.field-pane').getByLabel('土壤解析温度分布')).toHaveCount(0);
  await views(page).getByRole('button',{name:'载流量曲线',exact:true}).click();await expect(page.locator('.curve-pane')).toContainText('输入已变化，请重新计算');

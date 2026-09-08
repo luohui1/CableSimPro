@@ -54,7 +54,7 @@ export default function CableModelView({cable}:{cable:Cable}){
  const [mode,setMode]=useState<ViewMode>('cutaway'),[visible,setVisible]=useState([true,true,true,true,true,true]),[failed,setFailed]=useState(false),[error,setError]=useState(''),[view,setView]=useState('iso'),[viewRevision,setViewRevision]=useState(0);
  const fit=useRef<()=>void>(()=>{});
  const [annotations,setAnnotations]=useState<{x:number;y:number;labelX:number;name:string;value:string}[]>([]);
- const [grid,setGrid]=useState(false),[dimension,setDimension]=useState(true),[ready,setReady]=useState(false);
+ const [grid,setGrid]=useState(false),[dimension,setDimension]=useState(true),[ready,setReady]=useState(false),[builtKey,setBuiltKey]=useState('');
  const geometryKey=JSON.stringify(cable)+mode+visible.join(',')+grid;
  const visualState=useRef({cable,mode,visible});visualState.current={cable,mode,visible};
  // The WebGL context, PMREM environment and controls are expensive on software/high-DPI
@@ -96,11 +96,11 @@ export default function CableModelView({cable}:{cable:Cable}){
     const display=cableGroup.clone(true);if(visible[0]&&display.children[0])display.children[0].visible=false;nextRoot.add(display,cableAppearance(cable,mode,visible));
     if(grid){const floor=new THREE.GridHelper(1,20,0xb8c0b8,0xe1e5de);floor.position.y=mode==='exploded'?-.20:-layers(cable)[5].radius_mm/1000-.003;nextRoot.add(floor)}
     const previous=modelRoot.current;if(previous){scene.remove(previous);disposeScene(previous)}
-    scene.add(nextRoot);modelRoot.current=nextRoot;group.current=cableGroup;fit.current();renderCurrent.current();setError('');
+    scene.add(nextRoot);modelRoot.current=nextRoot;group.current=cableGroup;fit.current();renderCurrent.current();setBuiltKey(geometryKey);setError('');
    }catch(e){setError(e instanceof Error?`三维模型更新失败：${e.message}`:'三维模型更新失败')}
   };
-  // Two frames allow the saved revision and stale-result state to paint before an
-  // intentionally detailed geometry refresh starts on slower engineering workstations.
+  // Two frames let the saved revision and stale-result warning paint before a detailed
+  // geometry refresh. Export is disabled until this exact input has been rebuilt.
   firstFrame=requestAnimationFrame(()=>{secondFrame=requestAnimationFrame(rebuild)});
   return()=>{cancelled=true;cancelAnimationFrame(firstFrame);cancelAnimationFrame(secondFrame)};
  },[geometryKey,failed]);
@@ -112,12 +112,13 @@ export default function CableModelView({cable}:{cable:Cable}){
   };
   fit.current();return()=>{fit.current=()=>{}};
  },[view,geometryKey,viewRevision]);
- async function exportModel(){if(!group.current)return;setError('');try{
+ async function exportModel(){if(!group.current||builtKey!==geometryKey)return;setError('');try{
   const {GLTFExporter}=await import('three/addons/exporters/GLTFExporter.js');const data=await new GLTFExporter().parseAsync(group.current,{binary:true,onlyVisible:true});
   if(!(data instanceof ArrayBuffer))throw new Error('模型导出格式错误');const u=URL.createObjectURL(new Blob([data],{type:'model/gltf-binary'}));const a=document.createElement('a');a.href=u;a.download='CableSimPro-cable.glb';a.click();setTimeout(()=>URL.revokeObjectURL(u),10000);
  }catch(e){setError(e instanceof Error?e.message:'无法导出模型')}}
- return <div className="model-view"><div className="model-toolbar"><div className="segmented">{[['cutaway','轴向剥切'],['assembled','完整结构'],['exploded','分层展开']].map(([id,label])=><button key={id} aria-pressed={mode===id} className={mode===id?'active':''} onClick={()=>setMode(id as ViewMode)}>{label}</button>)}</div><span className="tool-spacer"/><button title="显示或隐藏网格" aria-pressed={grid} onClick={()=>setGrid(!grid)}>网格</button><button title="显示或隐藏尺寸" aria-pressed={dimension} onClick={()=>setDimension(!dimension)}>尺寸</button><button onClick={()=>{setView('iso');setViewRevision(r=>r+1)}} title="恢复轴测视图"><RotateCcw size={15}/></button><button disabled={!ready||failed} onClick={()=>void exportModel()}><Download size={15}/>导出 GLB</button></div>
- <div className="model-render" ref={host} data-testid="cable-model-view" data-renderer={failed?'fallback':ready?'webgl':'loading'}>{failed&&<div className="model-fallback"><p>WebGL 不可用，显示二维截面；三维导出已停用。</p><CrossSection cable={cable}/></div>}
+ return <div className="model-view"><div className="model-toolbar"><div className="segmented">{[['cutaway','轴向剥切'],['assembled','完整结构'],['exploded','分层展开']].map(([id,label])=><button key={id} aria-pressed={mode===id} className={mode===id?'active':''} onClick={()=>setMode(id as ViewMode)}>{label}</button>)}</div><span className="tool-spacer"/><button title="显示或隐藏网格" aria-pressed={grid} onClick={()=>setGrid(!grid)}>网格</button><button title="显示或隐藏尺寸" aria-pressed={dimension} onClick={()=>setDimension(!dimension)}>尺寸</button><button onClick={()=>{setView('iso');setViewRevision(r=>r+1)}} title="恢复轴测视图"><RotateCcw size={15}/></button><button disabled={!ready||failed||builtKey!==geometryKey} onClick={()=>void exportModel()}><Download size={15}/>导出 GLB</button></div>
+ <div className="model-render" ref={host} data-testid="cable-model-view" data-renderer={failed?'fallback':ready&&builtKey===geometryKey?'webgl':'loading'}>{failed&&<div className="model-fallback"><p>WebGL 不可用，显示二维截面；三维导出已停用。</p><CrossSection cable={cable}/></div>}
+ {ready&&!failed&&builtKey!==geometryKey&&<span role="status" style={{position:'absolute',bottom:12,left:16,zIndex:3,background:'#ffffff',padding:'6px 10px',color:'#23415d'}}>正在更新三维显示…</span>}
  <div className="model-caption"><Box size={16}/><div><strong>单芯电缆 · 结构模型</strong><span>{cable.conductor==='copper'?'铜':'铝'}导体 / XLPE 绝缘 / 无铠装</span></div></div>
  {dimension&&<svg className="model-callouts" aria-label="结构分层标注" width="100%" height="100%">{annotations.map(a=><g key={a.name}><path d={`M ${a.labelX} 112 L ${a.labelX} 126 L ${a.x} ${a.y}`} fill="none"/><circle cx={a.x} cy={a.y} r="3"/><text x={a.labelX} y="82" textAnchor="middle">{a.name}</text><text x={a.labelX} y="101" className="callout-value" textAnchor="middle">{a.value}</text></g>)}</svg>}
  <div className="orientation">{[['iso','轴测'],['front','正视'],['end','端面'],['top','俯视']].map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>setView(id)}>{label}</button>)}</div>
