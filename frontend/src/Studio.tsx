@@ -10,7 +10,7 @@ import 'dockview/dist/styles/dockview.css';
 import './studio.css';
 import './engineering.css';
 import './design-v041.css';
-const components={tree:Navigator,inspector:Inspector,viewport:Viewport,agent:AgentPanel,results:ResultsPanel};
+const components={tree:Navigator,inspector:Inspector,viewport:Viewport,agent:()=> <AgentPanel/>,results:()=> <ResultsPanel/>};
 function Workbench(){
  const s=useStudio(),{w,busy,run,history,create,load,reload,exportJSON,report,current}=s;
  const dock=useRef<DockviewApi|null>(null),input=useRef<HTMLInputElement>(null);
