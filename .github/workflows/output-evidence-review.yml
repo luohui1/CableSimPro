@@ -1,0 +1,96 @@
+name: Output evidence regression
+on:
+  push:
+    branches: ['feat/session-evidence-v075']
+permissions:
+  contents: read
+concurrency:
+  group: evidence-review-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r backend/requirements-dev.txt
+      - run: python -m pytest tests/test_sqlite_workspace.py
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: node scripts/test_output_evidence.mjs
+      - run: node scripts/test_engineering_readiness.mjs
+      - run: npm run build
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium webkit
+        working-directory: frontend
+      - name: Desktop result evidence, readiness and review-primary regression
+        run: |
+          mkdir -p ../artifacts/targeted
+          npx playwright test same-workspace.spec.ts agent-studio.spec.ts light-studio.spec.ts --project=chromium --grep='result evidence:|engineering readiness:|illustrated agent keeps real candidate review primary|narrow screen remains operable through mode choice and review'
+          cp test-results/browser-tests.xml ../artifacts/targeted/evidence-desktop-tests.xml
+        working-directory: frontend
+      - name: Mobile approval hit-area regression
+        run: |
+          npx playwright test agent-studio-mobile.spec.ts dual-mode-mobile.spec.ts --project=mobile-webkit --grep='mobile agent navigation review|mobile entry mode switch plan and current result'
+          cp test-results/browser-tests.xml ../artifacts/targeted/evidence-mobile-tests.xml
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: output-evidence-review
+          path: |
+            frontend/test-results/
+            frontend/playwright-report/
+            artifacts/targeted/
+          retention-days: 7
+
+  windows-long-tail:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python -m pip install -r backend/requirements.txt
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: npx playwright install chromium msedge
+        working-directory: frontend
+      - name: Edge 125% plan and IME latency path
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force ..\artifacts\targeted | Out-Null
+          npx playwright test same-workspace.spec.ts --config=playwright.windows.config.ts --project=windows-edge-1.25 --grep='IME composition and shift enter never accidentally submit a task'
+          Copy-Item test-results-windows\windows-tests.xml ..\artifacts\targeted\edge-125-plan-tests.xml
+        working-directory: frontend
+      - name: Chromium 150% edit latency path
+        shell: pwsh
+        run: |
+          npx playwright test same-workspace.spec.ts --config=playwright.windows.config.ts --project=windows-chromium-1.5 --grep='manual edit invalidates pending proposal and computed temperature together'
+          Copy-Item test-results-windows\windows-tests.xml ..\artifacts\targeted\win-150-edit-tests.xml
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-long-tail-review
+          path: |
+            frontend/test-results-windows/
+            frontend/playwright-report-windows/
+            artifacts/targeted/
+          retention-days: 7

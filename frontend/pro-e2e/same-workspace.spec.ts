@@ -90,3 +90,53 @@ test('edited input invalidates parameter scan rather than reusing stale curve',a
  await expect(page.getByTestId('revision')).toHaveText('rev.2');await page.getByRole('button',{name:'关闭工程助手',exact:true}).click();await page.getByRole('button',{name:'特性曲线',exact:true}).click();await expect(page.getByRole('img',{name:'参数扫描曲线',exact:true})).toBeVisible();
  await commitNumber(page,'绝缘厚度','6',3);await expect(page.getByRole('img',{name:'参数扫描曲线',exact:true})).toHaveCount(0);await expect(page.locator('.inline-stale')).toBeVisible();
 });
+
+// A restored numeric input is not the same engineering revision.
+test('result evidence: undo to identical inputs does not revive an old result',async({page})=>{
+ const results=page.locator('.inline-results .results-toolbar');
+ const thickness=page.getByLabel('绝缘厚度',{exact:true});
+ const original=await thickness.inputValue();
+ await page.getByRole('button',{name:'计算载流量',exact:false}).click();
+ await expect(results).toContainText('允许载流量');
+ await commitNumber(page,'绝缘厚度','6',2);
+ await page.getByRole('button',{name:'撤销修改',exact:true}).click();
+ await expect(page.getByTestId('revision')).toHaveText('rev.3');
+ await expect(thickness).toHaveValue(original);
+ await expect(results).toContainText('未计算');
+ await page.getByRole('button',{name:'特性曲线',exact:true}).click();
+ await expect(page.getByRole('img',{name:'电流温度曲线',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'计算载流量',exact:false}).click();
+ await expect(page.getByRole('img',{name:'电流温度曲线',exact:true})).toBeVisible();
+ await expect(page.getByTestId('revision')).toHaveText('rev.3');
+ // The result toolbar is mounted only in the table view, not the curve view.
+ await page.getByRole('button',{name:'结果表',exact:true}).click();
+ await expect(results).toContainText('允许载流量');
+});
+
+test('result evidence: explicitly selected same-revision history stays read-only',async({page},info)=>{
+ // The legacy surface also consumes the real shared StudioProvider.
+ await page.goto('/?legacy=1');
+ await expect(page.getByTestId('revision')).toHaveText('rev.1');
+ await page.getByRole('button',{name:'执行计算',exact:false}).click();
+ await expect(page.locator('.results-toolbar')).toContainText('允许载流量');
+ const report=page.getByRole('button',{name:'计算书',exact:true});
+ await expect(report).toBeEnabled();
+ let exports=0;
+ page.on('request',r=>{if(r.url().endsWith('/invoke')&&r.postDataJSON()?.capability==='reports.render')exports++});
+ await page.getByRole('button',{name:'运行记录',exact:true}).click();
+ await expect(page.locator('.run-list button')).toHaveCount(1);
+ await page.locator('.run-list button').first().click();
+ await expect(page.getByTestId('revision')).toHaveText('rev.1');
+ await expect(report).toBeDisabled();
+ await expect(page.locator('.results-toolbar')).toContainText('未计算');
+ await page.getByRole('button',{name:'特性曲线',exact:true}).click();
+ await expect(page.getByRole('img',{name:'电流温度曲线',exact:true})).toHaveCount(0);
+ expect(exports).toBe(0);
+ await page.screenshot({path:info.outputPath('same-revision-history-readonly.png'),fullPage:true});
+ // A new explicit solve restores a current result and permits a real report.
+ await page.getByRole('button',{name:'执行计算',exact:false}).click();
+ await expect(report).toBeEnabled();
+ const downloaded=page.waitForEvent('download');await report.click();
+ expect((await downloaded).suggestedFilename()).toContain('计算书');
+ expect(exports).toBe(1);
+});

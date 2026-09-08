@@ -63,7 +63,7 @@ class Capability:
     handler: object
 
 class EngineeringRuntime:
-    version = '0.6.0'
+    version = '0.6.1'
     def __init__(self,store,designs,library,providers,enterprise=None):
         self.store,self.designs,self.library,self.providers=store,designs,library,providers
         self.capabilities = {
@@ -113,10 +113,13 @@ class EngineeringRuntime:
         return self.store.stage(wid,revision,{'ready':True,'action':'import','scenario':scenario.model_dump(),
             'changes':diff,'mode':'engineering-command','message':'参数变更','questions':[],'assumptions':[], 'events':[]})
     async def plan(self,wid,revision,args):
-        state=self.store.snapshot(wid)
+        # This handler is async only because the planner can be async. Local SQLite
+        # reads/writes stay off the event loop so a Windows writer wait cannot stall
+        # unrelated /standards, /integrations or UI traffic.
+        state=await run_in_threadpool(self.store.snapshot,wid)
         result=await PLANNER.ainvoke({'request':PlanRequest(scenario=state['scenario'],**args.model_dump()),'providers':self.providers})
         proposal={**result['plan'],'message':args.message,'events':result['events']}
-        return self.store.stage(wid,revision,proposal) if proposal['ready'] else proposal
+        return await run_in_threadpool(self.store.stage,wid,revision,proposal) if proposal['ready'] else proposal
     def buried(self,wid,revision,args):
         return self.store.calculate(wid,Revision(expected_revision=revision))
     def vertical(self,wid,revision,args):
@@ -147,6 +150,39 @@ class EngineeringRuntime:
             'assumptions':[result['statement']]+[f['message'] for f in result['findings']],
             'design_basis':args.model_dump(),'previous_design_basis':state.get('design_basis'),'events':[]})
 
+    def _start_task(self,wid,body,capability,args,request_hash,tid):
+        """Persist/reuse task identity in a worker thread; never on the async loop."""
+        with self.store.db(True) as db:
+            existing=db.execute('SELECT * FROM engineering_tasks WHERE workspace=? AND id=?',(wid,tid)).fetchone()
+            if existing:
+                if existing['request_hash']!=request_hash: raise HTTPException(409,'同一请求标识不能用于不同参数。')
+                if existing['status']=='running': raise HTTPException(409,'请求仍在执行；不会重复启动。')
+                saved=json.loads(existing['output'])
+                if existing['status']=='failed': raise HTTPException(saved['status_code'],saved['detail'])
+                return None,saved
+            row,state=self.store.load(db,wid,body.expected_revision)
+            context={'scenario':state['scenario'],'design_basis':state.get('design_basis'),'product_binding':state.get('product_binding'),
+                     'source_ids':[s['id'] for s in state['sources']],'arguments':args.model_dump(mode='json')}
+            db.execute('INSERT INTO engineering_tasks VALUES (?,?,?,?,?,?,?,?,?,?)',
+                (tid,wid,body.capability,row['revision'],request_hash,'running',json.dumps(context,ensure_ascii=False),None,stamp(),None))
+        return context,None
+
+    def _finish_task(self,wid,body,tid,context,result):
+        """CAS-check and persist the successful envelope in a worker thread."""
+        with self.store.db(True) as db:
+            self.store.load(db,wid,body.expected_revision)
+            envelope={'task_id':tid,'capability':body.capability,'base_revision':body.expected_revision,
+                      'input_sha256':fingerprint(context),'runtime_version':self.version,'result':result}
+            db.execute("UPDATE engineering_tasks SET status='succeeded',output=?,finished=? WHERE workspace=? AND id=?",
+                (json.dumps(envelope,ensure_ascii=False),stamp(),wid,tid))
+        return envelope
+
+    def _fail_task(self,wid,tid,code,detail):
+        """Persist a structured failure without occupying the async event loop."""
+        with self.store.db(True) as db:
+            db.execute("UPDATE engineering_tasks SET status='failed',output=?,finished=? WHERE workspace=? AND id=?",
+                (json.dumps({'status_code':code,'detail':detail},ensure_ascii=False),stamp(),wid,tid))
+
     async def invoke(self,wid,body:Invocation):
         capability=self.capabilities.get(body.capability)
         if capability is None: raise HTTPException(422,'未注册的工程能力。')
@@ -155,38 +191,24 @@ class EngineeringRuntime:
             raise HTTPException(422,[{'loc':e['loc'],'msg':e['msg'],'type':e['type']} for e in exc.errors()]) from None
         request_hash=fingerprint({'capability':body.capability,'revision':body.expected_revision,'arguments':args.model_dump(mode='json')})
         tid=str(body.request_id)
-        with self.store.db(True) as db:
-            existing=db.execute('SELECT * FROM engineering_tasks WHERE workspace=? AND id=?',(wid,tid)).fetchone()
-            if existing:
-                if existing['request_hash']!=request_hash: raise HTTPException(409,'同一请求标识不能用于不同参数。')
-                if existing['status']=='running': raise HTTPException(409,'请求仍在执行；不会重复启动。')
-                saved=json.loads(existing['output'])
-                if existing['status']=='failed': raise HTTPException(saved['status_code'],saved['detail'])
-                return saved
-            row,state=self.store.load(db,wid,body.expected_revision)
-            context={'scenario':state['scenario'],'design_basis':state.get('design_basis'),'product_binding':state.get('product_binding'),
-                     'source_ids':[s['id'] for s in state['sources']],'arguments':args.model_dump(mode='json')}
-            db.execute('INSERT INTO engineering_tasks VALUES (?,?,?,?,?,?,?,?,?,?)',
-                (tid,wid,body.capability,row['revision'],request_hash,'running',json.dumps(context,ensure_ascii=False),None,stamp(),None))
+        context,saved=await run_in_threadpool(self._start_task,wid,body,capability,args,request_hash,tid)
+        if saved is not None:
+            return saved
         try:
             if inspect.iscoroutinefunction(capability.handler):
                 result=await capability.handler(wid,body.expected_revision,args)
             else:
                 result=await run_in_threadpool(capability.handler,wid,body.expected_revision,args)
-            # Reads and expensive studies must not be labelled as the new revision if edited meanwhile.
-            with self.store.db(True) as db:
-                self.store.load(db,wid,body.expected_revision)
-                envelope={'task_id':tid,'capability':body.capability,'base_revision':body.expected_revision,
-                          'input_sha256':fingerprint(context),'runtime_version':self.version,'result':result}
-                db.execute("UPDATE engineering_tasks SET status='succeeded',output=?,finished=? WHERE workspace=? AND id=?",
-                    (json.dumps(envelope,ensure_ascii=False),stamp(),wid,tid))
-            return envelope
+            return await run_in_threadpool(self._finish_task,wid,body,tid,context,result)
         except Exception as exc:
             code=exc.status_code if isinstance(exc,HTTPException) else 422 if isinstance(exc,ValueError) else 500
             detail=exc.detail if isinstance(exc,HTTPException) else '工程操作失败；输入未被自动放宽，请检查参数或重新规划。'
-            with self.store.db(True) as db:
-                db.execute("UPDATE engineering_tasks SET status='failed',output=?,finished=? WHERE workspace=? AND id=?",
-                    (json.dumps({'status_code':code,'detail':detail},ensure_ascii=False),stamp(),wid,tid))
+            try:
+                await run_in_threadpool(self._fail_task,wid,tid,code,detail)
+            except Exception:
+                # Preserve the engineering error even if task bookkeeping itself is
+                # temporarily unavailable. The request still fails closed.
+                pass
             raise HTTPException(code,detail) from None
 
     def provenance(self,wid):

@@ -6,9 +6,10 @@ from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
 
-EXPECTED = {'chromium': 74, 'webkit': 74, 'mobile-webkit': 11,
-            'windows-chromium-1': 47, 'windows-chromium-1.25': 47,
-            'windows-chromium-1.5': 47, 'windows-edge-1.25': 47}
+# v075 adds two result-evidence regressions plus one engineering-readiness case to every desktop project.
+EXPECTED = {'chromium': 77, 'webkit': 77, 'mobile-webkit': 11,
+            'windows-chromium-1': 50, 'windows-chromium-1.25': 50,
+            'windows-chromium-1.5': 50, 'windows-edge-1.25': 50}
 
 
 def verify(root: Path) -> dict:
@@ -37,7 +38,8 @@ def verify(root: Path) -> dict:
     if counts != EXPECTED:
         raise ValueError(f'Missing or unexpected tests: {counts}; expected {EXPECTED}')
     result = {'browser_reports': len(reports), 'projects': counts,
-              'linux_tests': 159, 'windows_tests': 188,
+              'linux_tests': sum(n for name, n in counts.items() if not name.startswith('windows-')),
+              'windows_tests': sum(n for name, n in counts.items() if name.startswith('windows-')),
               'failures': 0, 'errors': 0, 'skipped': 0}
     return result
 
