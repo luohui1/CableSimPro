@@ -83,6 +83,51 @@ def test_calculate_plan_then_edit_remains_writable_across_checkpoints(tmp_path):
             assert edit.json()["revision"] == 2
 
 
+def test_ready_plan_and_task_finish_share_one_atomic_commit(tmp_path):
+    app = create_app(tmp_path / "atomic-plan.sqlite")
+    with TestClient(app) as client:
+        workspace = client.post("/api/workspaces", json={}).json()
+        store = app.state.workspace_store
+        wid = workspace["id"]
+        proposal = {
+            "ready": True,
+            "questions": [],
+            "mode": "local",
+            "action": "calculate",
+            "changes": [],
+            "scenario": workspace["scenario"],
+            "parameter": None,
+            "values": [],
+            "message": "计算载流量",
+            "events": [],
+            "assumptions": [],
+        }
+        # No matching running task exists. The final ledger update must fail and
+        # roll back the proposal INSERT and audit row from the same transaction.
+        before_audit = len(workspace["audit"])
+        with pytest.raises(RuntimeError, match="task ledger changed"):
+            store.stage_and_finish_task(
+                wid,
+                1,
+                proposal,
+                str(uuid4()),
+                {
+                    "task_id": "missing",
+                    "capability": "task.plan",
+                    "base_revision": 1,
+                    "input_sha256": "0" * 64,
+                    "runtime_version": "test",
+                },
+            )
+        with store.db() as db:
+            proposals = db.execute(
+                "SELECT COUNT(*) FROM workspace_proposals WHERE workspace=?", (wid,)
+            ).fetchone()[0]
+        snapshot = store.snapshot(wid)
+        assert proposals == 0
+        assert len(snapshot["audit"]) == before_audit
+
+
 def test_runtime_writer_wait_does_not_freeze_unrelated_api(tmp_path):
     """A SQLite writer wait may delay that task, but must not freeze the ASGI loop."""
     db_path = tmp_path / "runtime-lock.sqlite"
