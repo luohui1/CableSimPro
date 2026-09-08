@@ -30,15 +30,16 @@ jobs:
         working-directory: frontend
       - run: npx playwright install --with-deps chromium webkit
         working-directory: frontend
-      - name: Desktop result evidence and readiness regression
+      - name: Desktop result evidence, readiness and review-primary regression
         run: |
-          npx playwright test same-workspace.spec.ts agent-studio.spec.ts --project=chromium --grep='result evidence:|engineering readiness:'
-          cp test-results/browser-tests.xml test-results/evidence-desktop-tests.xml
+          mkdir -p ../artifacts/targeted
+          npx playwright test same-workspace.spec.ts agent-studio.spec.ts light-studio.spec.ts --project=chromium --grep='result evidence:|engineering readiness:|illustrated agent keeps real candidate review primary|narrow screen remains operable through mode choice and review'
+          cp test-results/browser-tests.xml ../artifacts/targeted/evidence-desktop-tests.xml
         working-directory: frontend
       - name: Mobile approval hit-area regression
         run: |
           npx playwright test agent-studio-mobile.spec.ts dual-mode-mobile.spec.ts --project=mobile-webkit --grep='mobile agent navigation review|mobile entry mode switch plan and current result'
-          cp test-results/browser-tests.xml test-results/evidence-mobile-tests.xml
+          cp test-results/browser-tests.xml ../artifacts/targeted/evidence-mobile-tests.xml
         working-directory: frontend
       - uses: actions/upload-artifact@v4
         if: always()
@@ -47,4 +48,5 @@ jobs:
           path: |
             frontend/test-results/
             frontend/playwright-report/
+            artifacts/targeted/
           retention-days: 7
