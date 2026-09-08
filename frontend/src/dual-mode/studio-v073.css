@@ -1,0 +1,208 @@
+/* Integrated light engineering workspace. Geometry and result state are not styled as decoration. */
+.dual-app {
+  --studio-ink: #203343;
+  --studio-muted: #506574;
+  --studio-line: #d7e1e8;
+  --studio-blue: #245d82;
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', 'Noto Sans SC', sans-serif;
+  color: var(--studio-ink);
+  font-weight: 450;
+}
+.dual-app button {font-weight: 600;}
+.dual-app .dual-header {min-height: 62px; height: 62px;}
+.dual-app .dual-brand b {font-size: 23px;}
+.dual-app .dual-brand small, .dual-app .dual-header-end > span {font-size: 12px; color: var(--studio-muted);}
+.dual-app .mode-switch button {font-size: 14px; min-height: 36px;}
+.dual-app .dual-context {min-height: 34px; font-size: 12px;}
+.dual-app .dual-status {font-size: 12px; min-height: 28px;}
+.dual-app .dual-status button {font-size: 12px;}
+
+/* A reusable image component, always visibly distinguished from live engineering results. */
+.engineering-illustration {margin: 0; min-width: 0; position: relative; background: #edf3f8; overflow: hidden;}
+.engineering-illustration img {display: block; width: 100%; height: 100%; object-fit: contain;}
+.engineering-illustration figcaption {position: absolute; inset: auto 14px 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #364f62; font-size: 12px; font-weight: 600;}
+.engineering-illustration figcaption small {font-size: 11px; color: #415b6e; background: #edf3f8e8; padding: 3px 5px; border-radius: 3px;}
+.illustration-fallback {min-height: 160px; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; padding: 25px; text-align: center; color: #425a6c;}
+.illustration-fallback span {font-size: 12px;}
+
+/* Start with a mode, not an empty form or a second engineering database. */
+.dual-app .v073-home {max-width: 1280px; padding: 42px 32px 20px; margin: 0 auto;}
+.dual-app .v073-home .mode-intro {text-align: left; margin: 0 0 27px;}
+.dual-app .v073-home .mode-kicker {font-size: 12px; color: #4b6577; letter-spacing: 1px;}
+.dual-app .v073-home .mode-intro h1 {font-size: 34px; font-weight: 650; margin: 10px 0 12px; letter-spacing: -.5px;}
+.dual-app .v073-home .mode-intro p {font-size: 15px; line-height: 1.8; color: var(--studio-muted);}
+.dual-app .v073-home .mode-choice-grid {gap: 24px;}
+.dual-app .v073-home .mode-choice {padding: 0; display: flex; flex-direction: column; border: 1px solid #d1dde6; border-radius: 12px; box-shadow: 0 5px 20px #22374708; overflow: hidden; background: white;}
+.mode-card-copy {padding: 24px 27px 17px;}
+.dual-app .v073-home .mode-choice header {gap: 10px;}
+.dual-app .v073-home .mode-symbol {width: 39px; height: 39px; background: #eaf1f6; color: #315975; border-radius: 8px;}
+.dual-app .v073-home .mode-audience {font-size: 13px; color: #425b6b;}
+.dual-app .v073-home .last-mode {font-size: 11px; color: #335871; background: #edf3f7;}
+.dual-app .v073-home .mode-choice h2 {font-size: 27px; font-weight: 650; margin: 17px 0 9px;}
+.mode-card-copy > p {font-size: 15px; line-height: 1.8; margin: 0; color: #4f6574;}
+.dual-app .v073-home .mode-feature-row {font-size: 12px; margin-top: 16px; gap: 15px; color: #405d70;}
+.dual-app .v073-home .mode-choice > .engineering-illustration {height: 230px; border-block: 1px solid #e1e8ed;}
+.dual-app .v073-home .mode-choice > .engineering-illustration img {object-fit: cover;}
+.dual-app .v073-home .mode-choice > footer {padding: 18px 23px; display: flex; flex-direction: column; gap: 12px; margin-top: auto;}
+.dual-app .v073-home .mode-choice > footer > span {font-size: 12px; color: var(--studio-muted);}
+.dual-app .v073-home .mode-enter {margin: 0; min-height: 44px; border-radius: 6px; font-size: 14px; width: 100%;}
+.dual-app .v073-home .mode-data-note {font-size: 12px; padding-block: 20px; gap: 16px;}
+.dual-app .v073-home .mode-recent {padding-top: 18px; margin-top: 0;}
+.dual-app .v073-home .mode-recent h2 {font-size: 17px;}
+.dual-app .v073-home .recent-projects b {font-size: 14px;}
+.dual-app .v073-home .recent-projects small, .dual-app .v073-home .mode-recent header small {font-size: 12px;}
+.dual-app .v073-home .mode-home-footer {font-size: 12px;}
+
+/* Task first, with contextual illustration replaced by real artifacts once work begins. */
+.dual-app .cs-agent {grid-template-columns: 215px minmax(0, 1fr);}
+.dual-app .cs-agent .cs-task-layout {grid-template-columns: minmax(0, 1fr) 340px;}
+.dual-app .cs-task-rail {background: #f5f7f9; border-color: var(--studio-line);}
+.dual-app .cs-task-rail nav button {font-size: 14px; padding-block: 12px;}
+.dual-app .cs-rail-title b {font-size: 16px;}
+.dual-app .cs-rail-title small, .dual-app .cs-rail-empty, .dual-app .cs-rail-section h2, .dual-app .cs-rail-footer small {font-size: 12px; line-height: 1.7; color: #4c6170;}
+.dual-app .cs-rail-section > button {font-size: 13px;}
+.dual-app .cs-rail-section > button small {font-size: 12px;}
+.dual-app .cs-task-header h1 {font-size: 18px;}
+.dual-app .cs-task-header > div > span, .dual-app .cs-task-header .flow-status {font-size: 12px;}
+.dual-app .cs-open-workbench {font-size: 13px; min-height: 36px;}
+.dual-app .cs-thread-scroll {padding: 27px 30px 18px;}
+.dual-app .cs-welcome {max-width: 760px; margin: 0 auto;}
+.dual-app .cs-welcome .cs-eyebrow {font-size: 12px; color: #4b6373;}
+.dual-app .cs-welcome h2 {font-size: 29px; line-height: 1.45; font-weight: 650; margin: 14px 0 10px;}
+.dual-app .cs-welcome > p {font-size: 14px; line-height: 1.8; color: #536a78;}
+.cs-welcome-visual {display: grid; grid-template-columns: 43% minmax(0, 1fr); border: 1px solid #dbe4ec; border-radius: 8px; overflow: hidden; margin: 20px 0; background: #f4f7fa;}
+.cs-welcome-visual .engineering-illustration {height: 174px;}
+.cs-welcome-visual .engineering-illustration figcaption > span {display: none;}
+.cs-welcome-visual .engineering-illustration figcaption {inset-inline: 10px;}
+.cs-welcome-visual > div {padding: 20px 19px; align-self: center;}
+.cs-welcome-visual b {font-size: 15px; line-height: 1.6;}
+.cs-welcome-visual p {font-size: 13px; line-height: 1.7; margin-block: 8px; color: #4e6474;}
+.cs-welcome-visual > div > span {font-size: 12px; color: #385c75;}
+.dual-app .cs-task-starters {margin-top: 16px; gap: 11px;}
+.dual-app .cs-task-starters b {font-size: 14px;}
+.dual-app .cs-task-starters small {font-size: 12px; color: #526b7d;}
+.dual-app .cs-task-starters > button {padding: 13px 12px;}
+.dual-app .cs-composer {margin: 12px 30px 18px; border-color: #bbccd8; box-shadow: 0 4px 18px #28415808;}
+.dual-app .cs-composer textarea {font-size: 15px; height: 90px; min-height: 64px; line-height: 1.7;}
+.dual-app .cs-compose-toolbar button, .dual-app .cs-provider select {font-size: 12px;}
+.dual-app .cs-compose-foot {font-size: 12px; color: #4e6575; line-height: 1.6;}
+.dual-app .cs-artifacts {background: #f7f9fb; border-color: var(--studio-line);}
+.dual-app .cs-artifacts > header, .dual-app .cs-artifacts > nav button {font-size: 13px;}
+.dual-app .cs-artifact-content {padding: 22px 20px;}
+.dual-app .cs-model-title > span, .dual-app .cs-model-title > p {font-size: 12px; color: #4c6171;}
+.dual-app .cs-model-title h2 {font-size: 32px;}
+.dual-app .cs-layer-key > div {font-size: 12px; padding-block: 9px;}
+.dual-app .cs-layer-key b, .dual-app .cs-layer-key small {font-size: 12px;}
+.dual-app .cs-visual-note {font-size: 12px; line-height: 1.7; color: #506678;}
+.dual-app .cs-review h2 {font-size: 21px;}
+.dual-app .cs-review .cs-eyebrow, .dual-app .cs-change-count {font-size: 12px;}
+.dual-app .cs-review-intro {font-size: 14px; line-height: 1.7;}
+.dual-app .cs-diff-table th {font-size: 12px;}
+.dual-app .cs-diff-table td {font-size: 14px;}
+.dual-app .cs-assumptions, .dual-app .cs-tool-event, .dual-app .cs-unchanged {font-size: 13px;}
+.dual-app .cs-review > footer {flex-wrap: wrap; gap: 10px;}
+.dual-app .cs-review > footer > span {font-size: 12px;}
+.dual-app .cs-review > footer button {font-size: 13px; min-height: 39px;}
+.dual-app .has-review .cs-composer textarea {height: 58px;}
+.module-intro-visual {display: grid; grid-template-columns: 230px 1fr; gap: 24px; align-items: center; border-bottom: 1px solid var(--studio-line); padding-bottom: 20px; margin-bottom: 20px;}
+.module-intro-visual .engineering-illustration {height: 146px; border-radius: 7px;}
+.module-intro-visual .engineering-illustration figcaption > span {display: none;}
+.module-intro-visual p {font-size: 14px; line-height: 1.8;}
+
+/* The model, not interface chrome, owns the precision workspace. */
+.dual-app .dual-embedded .enterprise-outline {width: 198px;}
+.dual-app .dual-embedded .enterprise-outline nav > button {font-size: 14px;}
+.dual-app .dual-embedded .outline-heading, .dual-app .dual-embedded .outline-product small, .dual-app .dual-embedded .outline-boundary small {font-size: 12px; color: #506577;}
+.dual-app .dual-embedded .embedded-global-nav > button {font-size: 12px;}
+.dual-app .dual-embedded .enterprise-content {padding: 16px 20px;}
+.dual-app .dual-embedded .enterprise-model-layout.with-inspector {grid-template-columns: minmax(0, 1fr) 296px; gap: 17px;}
+.dual-app .dual-embedded .enterprise-model-stage {height: clamp(410px, 48vh, 600px); min-height: 410px;}
+.dual-app .dual-embedded .model-render {min-height: 290px;}
+.dual-app .dual-embedded .model-toolbar button {font-size: 12px; min-height: 32px;}
+.dual-app .dual-embedded .model-footer {font-size: 12px; line-height: 1.6; flex-wrap: wrap;}
+.dual-app .dual-embedded .model-dimensions {font-size: 12px;}
+.dual-app .dual-embedded .model-dimensions b {font-size: 14px;}
+.dual-app .dual-embedded .layer-strip {flex-wrap: wrap; gap: 3px 8px;}
+.dual-app .dual-embedded .layer-strip button, .dual-app .dual-embedded .layer-strip b {font-size: 11px;}
+.dual-app .dual-embedded .enterprise-property-tabs button {font-size: 13px;}
+.dual-app .dual-embedded .property-title label {font-size: 14px; font-weight: 600;}
+.dual-app .dual-embedded .property-value {height: 35px;}
+.dual-app .dual-embedded .property-value input, .dual-app .dual-embedded .property-value select {font-size: 16px; font-weight: 600; font-family: inherit;}
+.dual-app .dual-embedded .property-value > span {font-size: 12px; color: #456177;}
+.dual-app .dual-embedded .enterprise-model-summary {font-size: 12px;}
+.dual-app .dual-embedded .enterprise-result-summary > div > span {font-size: 12px; color: #466076;}
+.dual-app .dual-embedded .enterprise-result-summary b {font-size: 27px;}
+.dual-app .dual-embedded .enterprise-evidence-check p {font-size: 12px;}
+
+@media (min-width: 1031px) {
+  .dual-app .dual-embedded .enterprise-inspector {max-height: calc(100dvh - 232px); overflow: auto; overscroll-behavior: contain;}
+}
+@media (max-width: 1280px) {
+  .dual-app .cs-agent {grid-template-columns: 188px minmax(0, 1fr);}
+  .dual-app .cs-agent .cs-task-layout {grid-template-columns: minmax(0, 1fr) 290px;}
+  .dual-app .cs-thread-scroll {padding: 22px;}
+  .dual-app .cs-composer {margin-inline: 22px;}
+  .cs-welcome-visual {grid-template-columns: 40% 1fr;}
+  .cs-welcome-visual > div {padding: 14px;}
+  .dual-app .cs-task-starters {grid-template-columns: 1fr;}
+  .dual-app .cs-welcome h2 {font-size: 26px;}
+  .dual-app .dual-embedded .enterprise-outline {width: 174px;}
+}
+@media (max-width: 1030px) {
+  .dual-app .dual-embedded .enterprise-model-layout.with-inspector {grid-template-columns: 1fr;}
+}
+@media (max-width: 1000px) {
+  .dual-app .cs-agent .cs-task-layout {grid-template-columns: 1fr;}
+  .dual-app .cs-task-starters {grid-template-columns: 1fr 1fr;}
+  .dual-app .v073-home {padding: 30px 22px;}
+  .dual-app .v073-home .mode-choice > .engineering-illustration {height: 205px;}
+  .dual-app .v073-home .mode-data-note {flex-direction: column; align-items: flex-start; gap: 10px;}
+}
+@media (max-width: 620px) {
+  .dual-app .dual-header {height: auto; min-height: 60px; padding: 10px 12px;}
+  .dual-app .mode-switch button {font-size: 12px; min-height: 32px;}
+  .dual-app .dual-header-end > span, .dual-app .dual-context-right {display: none;}
+  .dual-app .dual-status {font-size: 10px; min-height: 30px; gap: 8px;}
+  .dual-app .dual-status button {font-size: 11px;}
+  .dual-app .dual-status > span:nth-child(2) {display: none;}
+  .dual-app .v073-home {padding: 24px 16px;}
+  .dual-app .v073-home .mode-intro h1 {font-size: 28px;}
+  .dual-app .v073-home .mode-intro p {font-size: 14px;}
+  .dual-app .v073-home .mode-choice-grid {grid-template-columns: 1fr; gap: 20px;}
+  .mode-card-copy {padding: 22px;}
+  .dual-app .v073-home .mode-choice > .engineering-illustration {height: 206px;}
+  .dual-app .cs-agent {display: block;}
+  .dual-app .cs-task-header {padding-inline: 12px;}
+  .dual-app .cs-task-header h1 {font-size: 15px;}
+  .dual-app .cs-thread-scroll {padding: 20px 16px;}
+  .dual-app .cs-welcome h2 {font-size: 25px;}
+  .cs-welcome-visual {grid-template-columns: 115px 1fr; margin: 16px 0;}
+  .cs-welcome-visual .engineering-illustration {height: 146px;}
+  .cs-welcome-visual .engineering-illustration figcaption {inset-inline: 4px;}
+  .cs-welcome-visual .engineering-illustration figcaption small {font-size: 10px;}
+  .cs-welcome-visual > div {padding: 12px;}
+  .cs-welcome-visual b {font-size: 13px;}
+  .cs-welcome-visual p {font-size: 12px; margin-block: 6px;}
+  .cs-welcome-visual > div > span {display: none;}
+  .dual-app .cs-task-starters {grid-template-columns: 1fr; gap: 8px;}
+  .dual-app .cs-task-starters > button {padding: 10px;}
+  .dual-app .cs-task-starters b {font-size: 13px;}
+  .dual-app .cs-task-starters small {font-size: 11px;}
+  .dual-app .cs-composer {margin: 9px 12px 12px;}
+  .dual-app .cs-composer textarea {height: 72px; font-size: 14px;}
+  .dual-app .cs-compose-foot {font-size: 11px;}
+  .dual-app .cs-review-intro {font-size: 12px;}
+  .dual-app .cs-diff-table th {font-size: 11px;}
+  .dual-app .cs-diff-table td {font-size: 12px; overflow-wrap: anywhere;}
+  .dual-app .cs-review > footer button {font-size: 12px;}
+  .module-intro-visual {grid-template-columns: 1fr; gap: 10px;}
+  .module-intro-visual .engineering-illustration {height: 180px;}
+  .dual-app .dual-embedded .enterprise-content {padding: 10px;}
+  .dual-app .dual-embedded .model-toolbar button {font-size: 10px;}
+  .dual-app .dual-embedded .model-dimensions {font-size: 10px;}
+  .dual-app .dual-embedded .model-dimensions b {font-size: 12px;}
+  .dual-app .dual-embedded .model-footer {font-size: 10px;}
+  .dual-app .dual-embedded .enterprise-model-stage {height: 395px; min-height: 395px;}
+  .dual-app .dual-embedded .enterprise-model-summary {font-size: 11px;}
+  .dual-app .dual-embedded .enterprise-result-summary > div > span {font-size: 11px;}
+}

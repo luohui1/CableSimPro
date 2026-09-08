@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "assets": {
+    "cable": {
+      "src": "/engineering/cable.webp",
+      "title": "单芯电缆分层结构",
+      "alt": "单芯电缆的导体、绝缘、屏蔽和护套剖切示意",
+      "width": 1200,
+      "height": 760,
+      "bytes": 8254,
+      "sha256": "6b2376c3d80aa21fc5577b78387b6981950d7b888fe8193e48ac96896da924b9",
+      "source_sha256": "f520847c40c6476c0044a294275ac0e9383f6b72d3518222b0e913e12b941cc3",
+      "provider": "procedural-threejs",
+      "source_id": "git:f0bb5cadb1fcc0a0639c14e2e8e4695a5fc2e223",
+      "rights_note": "CableSimPro original procedural scene; source in scripts/visuals/scene.ts",
+      "review_note": "Structural/flow illustration only. No numerical results, manufacturer mark or certification.",
+      "approved_for": "illustration-only",
+      "scope": "结构或流程示意，不代表当前工程、厂家产品或计算结果。"
+    },
+    "installation": {
+      "src": "/engineering/installation.webp",
+      "title": "单回路直埋敷设",
+      "alt": "三根单芯电缆与土壤剖开的三维敷设示意",
+      "width": 1200,
+      "height": 760,
+      "bytes": 20804,
+      "sha256": "98b21ec5a02476b035d8e1048eb64afcf7848853ddf193305b3badfad94d2f14",
+      "source_sha256": "c88e13288b0106fe775f32ce3a5b2b5cd62833de519d0305986d7adac2942244",
+      "provider": "procedural-threejs",
+      "source_id": "git:f0bb5cadb1fcc0a0639c14e2e8e4695a5fc2e223",
+      "rights_note": "CableSimPro original procedural scene; source in scripts/visuals/scene.ts",
+      "review_note": "Structural/flow illustration only. No numerical results, manufacturer mark or certification.",
+      "approved_for": "illustration-only",
+      "scope": "结构或流程示意，不代表当前工程、厂家产品或计算结果。"
+    },
+    "documents": {
+      "src": "/engineering/documents.webp",
+      "title": "企业资料参数核对",
+      "alt": "产品资料表、参数映射与电缆结构的核对流程示意",
+      "width": 1200,
+      "height": 760,
+      "bytes": 13972,
+      "sha256": "c43badae63c0476cc967258b91410061e6cd5c880267a6133cc0b1871511670a",
+      "source_sha256": "a17e52007ba0e5f5c6f61d831f964db2bfbcf651ce0e6e980e146b3f6131606d",
+      "provider": "procedural-threejs",
+      "source_id": "git:f0bb5cadb1fcc0a0639c14e2e8e4695a5fc2e223",
+      "rights_note": "CableSimPro original procedural scene; source in scripts/visuals/scene.ts",
+      "review_note": "Structural/flow illustration only. No numerical results, manufacturer mark or certification.",
+      "approved_for": "illustration-only",
+      "scope": "结构或流程示意，不代表当前工程、厂家产品或计算结果。"
+    }
+  }
+}

@@ -49,6 +49,10 @@ jobs:
       - name: Typecheck and production build
         working-directory: frontend
         run: npm run build
+      - name: Verify local illustration sources and engineering geometry
+        run: |
+          python scripts/check_visual_assets.py
+          node scripts/test_visual_geometry.mjs
       - name: Install browser engines
         working-directory: frontend
         run: npx playwright install --with-deps chromium webkit

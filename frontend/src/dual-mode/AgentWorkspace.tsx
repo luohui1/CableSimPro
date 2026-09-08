@@ -8,6 +8,7 @@ import {StandardsPanel} from '../EngineeringPanels';
 import {InlineResults} from '../WorkspaceInteraction';
 import CablePortrait,{InstallationSketch} from '../engineering-visuals/CablePortrait';
 import {api,errorText,fmt,layers} from '../utils';
+import EngineeringIllustration from '../engineering-visuals/EngineeringIllustration';
 import TaskRecordView,{type ArchivedTask} from './TaskRecordView';
 
 type Section='task'|'selection'|'documents'|'standards'|'history';
@@ -59,10 +60,11 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
   {navOpen&&<button className="cs-nav-scrim" aria-label="收起任务导航" onClick={()=>setNavOpen(false)}/>}
   <div className="cs-agent-main">
    <header className="cs-task-header"><button className="cs-rail-toggle" aria-label="显示任务导航" onClick={()=>setNavOpen(!navOpen)}><Menu size={19}/></button><div><span>智能工程流</span><h1>{section==='selection'?'企业型号选型':section==='documents'?'资料与参数核对':section==='standards'?'计算依据':section==='history'?'执行记录':'载流量设计研究'}</h1></div><span className="flow-status" role="status">{status}</span><button className="cs-open-workbench" onClick={()=>openWorkbench()}><Layers3 size={16}/><span>在专业工作台打开</span><ArrowRight size={15}/></button></header>
-   <div className="cs-task-layout" hidden={section!=='task'}>
+   <div className={`cs-task-layout ${pending?'has-review':''}`} hidden={section!=='task'}>
     <div className="cs-thread-column">
      <div className="cs-thread-scroll">
       {!hasTask?<section className="cs-welcome"><span className="cs-eyebrow">电缆结构 / 敷设条件 / 载流量</span><h2>这次，需要解决<br/>什么电缆设计问题？</h2><p>从当前工程开始。描述目标，检查修改，再查看真实计算结果。</p>
+       <div className="cs-welcome-visual"><EngineeringIllustration id="documents" compact eager/><div><b>把资料变成可核对的工程输入</b><p>型号、结构和参数出处保持关联；计算结论只来自工程工具。</p><span>描述目标 → 审查变更 → 复核结果</span></div></div>
        <div className="cs-task-starters"><button onClick={()=>focusTask('计算载流量')}><span className="cs-starter-icon"><Thermometer size={22}/></span><b>校核载流量</b><small>当前结构与敷设条件</small><ArrowRight size={16}/></button><button onClick={()=>focusTask('比较土壤热阻率 0.8、1.2、1.6 下的载流量')}><span className="cs-starter-icon"><Workflow size={22}/></span><b>比较敷设条件</b><small>逐工况计算，不更改原方案</small><ArrowRight size={16}/></button><button onClick={()=>navigate('selection')}><span className="cs-starter-icon"><Layers3 size={22}/></span><b>从企业型号选型</b><small>限定已核对的产品版本</small><ArrowRight size={16}/></button><button onClick={()=>navigate('documents')}><span className="cs-starter-icon"><FileText size={22}/></span><b>从资料核对参数</b><small>原文、提取值与来源同屏</small><ArrowRight size={16}/></button></div>
       </section>:<div className="cs-thread">
        {latest&&<article className="cs-user-request"><span>本次任务</span><p>{latest}</p></article>}
@@ -100,7 +102,7 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
     </aside>
    </div>
    <section className="cs-module-surface flow-domain" hidden={section!=='selection'}><ReviewedSelection onPropose={()=>navigate('task')} refreshKey={active?w.revision:0}/></section>
-   <section className="cs-module-surface flow-domain existing-panel" hidden={section!=='documents'}><h2>资料与工程参数</h2><p>原件 → 文字／OCR → 核对引用 → 审查后应用。识别结果不会自动成为厂家保证值。</p><LibraryPanel/></section>
+   <section className="cs-module-surface flow-domain existing-panel" hidden={section!=='documents'}><div className="module-intro-visual"><EngineeringIllustration id="documents" compact/><div><h2>资料与工程参数</h2><p>原件 → 文字／OCR → 核对引用 → 审查后应用。识别结果不会自动成为厂家保证值。</p></div></div><LibraryPanel/></section>
    <section className="cs-module-surface existing-panel" hidden={section!=='standards'}><StandardsPanel/></section>
    <section className="cs-module-surface" hidden={section!=='history'} aria-label="执行记录详情"><h2>不可变任务快照</h2><p>只读查看，不会重新计算或改变当前工程。</p>{readError&&<p role="alert">{readError}</p>}{archive?<TaskRecordView task={archive} label={journal?.nodes.find(n=>n.id==='task:'+archive.id)?.label??archive.capability}/>:<p>从左侧选择一条执行记录。</p>}</section>
   </div>
