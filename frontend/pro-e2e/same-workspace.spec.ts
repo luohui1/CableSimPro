@@ -1,6 +1,15 @@
 // Migration regression: v0.5 workspace lives at ?classic=1; enterprise.spec.ts tests the new default.
 import {test,expect,type Page} from '@playwright/test';
 async function nav(p:Page,name:string){await p.locator('.eng-sidebar nav').getByRole('button',{name,exact:true}).click()}
+async function commitNumber(p:Page,label:string,value:string,revision:number){
+ const field=p.getByLabel(label,{exact:true});
+ const saved=p.waitForResponse(r=>r.request().method()==='POST'&&r.url().endsWith('/edit'),{timeout:35000});
+ await field.fill(value);await field.press('Tab');
+ const response=await saved,payload=await response.json() as {revision?:number;detail?:unknown};
+ expect(response.status(),`edit response: ${JSON.stringify(payload)}`).toBe(200);
+ expect(payload.revision).toBe(revision);
+ await expect(p.getByTestId('revision')).toHaveText(`rev.${revision}`);
+}
 test.beforeEach(async({page})=>{await page.goto('/?classic=1');await expect(page.getByTestId('revision')).toHaveText('rev.1')});
 
 test('direct bottom input expands without sidebar, canvas replacement or width loss',async({page},info)=>{
@@ -71,7 +80,7 @@ test('collapsed proposal persists and approval updates model without a page jump
 test('manual edit invalidates pending proposal and computed temperature together',async({page})=>{
  await page.getByRole('button',{name:'计算载流量',exact:false}).click();await expect(page.locator('.inline-results .results-toolbar')).toContainText('允许载流量');
  await page.getByLabel('工程任务',{exact:true}).fill('截面积改为 400 mm²，重新计算');await page.getByRole('button',{name:'规划任务',exact:true}).click();await expect(page.locator('.proposal-card')).toBeVisible();
- await page.getByLabel('绝缘厚度',{exact:true}).fill('6');await page.getByLabel('绝缘厚度',{exact:true}).press('Tab');await expect(page.getByTestId('revision')).toHaveText('rev.2');
+ await commitNumber(page,'绝缘厚度','6',2);
  await expect(page.getByRole('button',{name:'批准并执行',exact:true})).toBeDisabled();await expect(page.locator('.inline-stale')).toBeVisible();await expect(page.locator('.inline-results .results-toolbar')).toContainText('未计算');
  await page.getByRole('button',{name:'特性曲线',exact:true}).click();await expect(page.getByRole('img',{name:'电流温度曲线',exact:true})).toHaveCount(0);
 });
@@ -79,7 +88,7 @@ test('manual edit invalidates pending proposal and computed temperature together
 test('edited input invalidates parameter scan rather than reusing stale curve',async({page})=>{
  await page.getByLabel('工程任务',{exact:true}).fill('比较土壤热阻率 0.8、1.2、1.6 下的载流量');await page.getByRole('button',{name:'规划任务',exact:true}).click();await page.getByRole('button',{name:'批准并执行',exact:true}).click();
  await expect(page.getByTestId('revision')).toHaveText('rev.2');await page.getByRole('button',{name:'关闭工程助手',exact:true}).click();await page.getByRole('button',{name:'特性曲线',exact:true}).click();await expect(page.getByRole('img',{name:'参数扫描曲线',exact:true})).toBeVisible();
- await page.getByLabel('绝缘厚度',{exact:true}).fill('6');await page.getByLabel('绝缘厚度',{exact:true}).press('Tab');await expect(page.getByTestId('revision')).toHaveText('rev.3');await expect(page.getByRole('img',{name:'参数扫描曲线',exact:true})).toHaveCount(0);await expect(page.locator('.inline-stale')).toBeVisible();
+ await commitNumber(page,'绝缘厚度','6',3);await expect(page.getByRole('img',{name:'参数扫描曲线',exact:true})).toHaveCount(0);await expect(page.locator('.inline-stale')).toBeVisible();
 });
 
 // A restored numeric input is not the same engineering revision.
@@ -89,8 +98,7 @@ test('result evidence: undo to identical inputs does not revive an old result',a
  const original=await thickness.inputValue();
  await page.getByRole('button',{name:'计算载流量',exact:false}).click();
  await expect(results).toContainText('允许载流量');
- await thickness.fill('6');await thickness.press('Tab');
- await expect(page.getByTestId('revision')).toHaveText('rev.2');
+ await commitNumber(page,'绝缘厚度','6',2);
  await page.getByRole('button',{name:'撤销修改',exact:true}).click();
  await expect(page.getByTestId('revision')).toHaveText('rev.3');
  await expect(thickness).toHaveValue(original);
