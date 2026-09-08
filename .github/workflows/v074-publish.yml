@@ -1,0 +1,78 @@
+name: Publish reviewed light engineering source
+on:
+  push:
+    branches: ['feat/light-engineering-v074']
+    paths: ['.github/workflows/v074-publish.yml']
+permissions:
+  contents: write
+jobs:
+  reviewed-source:
+    if: github.repository == 'luohui1/CableSimPro' && github.ref == 'refs/heads/feat/light-engineering-v074'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact reviewed source edits
+        run: |
+          python - <<'PY'
+          import hashlib,json,lzma,pathlib
+          data=b''.join(pathlib.Path(f'.development/v074/{i:02}.bin').read_bytes() for i in range(4))
+          assert len(data)==22356
+          assert hashlib.sha256(data).hexdigest()=='2c7b36b74c90e73ac5e5e094ca011aeff0b4208b418c606e4e8cfa03ad124212'
+          d=lzma.LZMADecompressor(memlimit=67108864)
+          raw=d.decompress(data,max_length=100000)
+          assert d.eof and len(raw)==79050
+          changes=json.loads(raw)
+          assert len(changes)==26
+          staged=[]
+          for item in changes:
+              p=pathlib.Path(item['path'])
+              assert not p.is_absolute() and '..' not in p.parts
+              assert p.parts[0] in {'README.md','docs','frontend','scripts','.github'}
+              if p.parts[0]=='.github':assert str(p)=='.github/workflows/light-studio-review.yml'
+              assert p.suffix.lower() in {'.md','.json','.ts','.tsx','.css','.mjs','.py','.yml'}
+              if 'new' in item:
+                  assert not p.exists(),str(p)
+                  text=item['new']
+              else:
+                  old=p.read_text(encoding='utf-8');text=old
+                  assert hashlib.sha256(old.encode()).hexdigest()==item['base_sha256'],str(p)
+                  for start,end,replacement in reversed(item['edits']):
+                      assert 0<=start<=end<=len(old)
+                      text=text[:start]+replacement+text[end:]
+              assert hashlib.sha256(text.encode()).hexdigest()==item['sha256'],str(p)
+              staged.append((p,text))
+          for p,text in staged:
+              p.parent.mkdir(parents=True,exist_ok=True);p.write_text(text,encoding='utf-8')
+          print('26 reviewed source and test files verified; no user files, keys or font binaries.')
+          PY
+      - name: Install exact frontend dependencies
+        working-directory: frontend
+        run: npm ci --no-audit --no-fund
+      - name: Verify engineering geometry isolation
+        run: node scripts/test_visual_geometry.mjs
+      - name: Install isolated browser renderer
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+      - name: Render original local engineering illustrations
+        run: node scripts/render_visual_assets.mjs
+      - name: Typecheck and production build
+        working-directory: frontend
+        run: npm run build
+      - name: Commit reviewed source and reproducible local assets
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add README.md docs frontend/package.json frontend/package-lock.json frontend/playwright.config.ts frontend/playwright.windows.config.ts frontend/pro-e2e/agent-studio.spec.ts frontend/pro-e2e/light-studio.spec.ts frontend/src frontend/public/engineering scripts .github/workflows/light-studio-review.yml
+          git diff --cached --stat
+          git commit -m 'feat: light engineering workspace with shared model-field canvas and illustrated task review'
+          git push origin HEAD:refs/heads/feat/light-engineering-v074
+          echo "Published source $(git rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: v074-original-engineering-plates
+          path: frontend/public/engineering/
+          retention-days: 7
