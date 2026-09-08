@@ -118,7 +118,7 @@ class Designs:
             return [{'id':r['id'],'state':r['state'],'created_at':r['created'],**json.loads(r['payload'])}
                     for r in db.execute('SELECT * FROM catalog_entries ORDER BY created,id')]
 
-    def design(self,wid:str,req:DesignRequest):
+    def design(self,wid:str,req:DesignRequest, products_override: list | None = None):
         with self.store.db() as db:
             _,state=self.store.load(db,wid,req.expected_revision)
         from .design_basis import require_basis
@@ -126,7 +126,7 @@ class Designs:
         baseline=Scenario.model_validate(state['scenario'])
         required=req.target_current_a*(1+req.reserve_percent/100)
         records=[]
-        products = [p for p in self.entries() if req.include_demo or p['state'] != 'demo']
+        products = products_override if products_override is not None else [p for p in self.entries() if req.include_demo or p['state'] != 'demo']
         if req.domain == 'vertical_air' and len(products) > 40:
             raise HTTPException(422, '竖向研究每次最多 40 个候选，请缩小型号库；未静默截断候选。')
         for product in products:
@@ -271,8 +271,16 @@ def make_router(designs:Designs):
         except ValueError:
             raise HTTPException(422,'候选与主工程的直埋底图不兼容，不能直接应用；竖向研究结果保留。请先调整底图或新建工程。') from None
         vertical=study.get('domain')=='vertical_air'
+        binding = None
+        if record['state'] == 'enterprise_reviewed':
+            from .enterprise import Enterprise
+            service = Enterprise(store, designs)
+            version = service.version(record['product_id'])
+            if not version['is_current_reviewed']:
+                raise HTTPException(409, '候选型号已更新或停用，请重新研究。')
+            binding = service.binding(version, candidate.cable.model_dump())
         return store.stage(wid,body.expected_revision,{'ready':True,'action':'import' if vertical else 'calculate','scenario':candidate.model_dump(),
-            'changes':diff,'mode':'vertical-catalog' if vertical else 'catalog-enumeration','questions':[],'message':'应用选型候选 '+record['name'],
+            'changes':diff,'product_binding':binding,'mode':'vertical-catalog' if vertical else 'catalog-enumeration','questions':[],'message':'应用选型候选 '+record['name'],
             'assumptions':study['notes']+['候选状态：'+record['state']], 'events':[],
             'source':{'id':str(uuid4()),'title':'选型库 / '+record['name'],'page':1,'text_sha256':fingerprint(record['catalog_snapshot']),
                 'excerpts':[],'catalog_snapshot':record['catalog_snapshot'],'design_study_id':sid,'status':record['state'],

@@ -207,6 +207,7 @@ class WorkspaceStore:
             except (ModelError, ValueError) as exc:
                 raise HTTPException(422, str(exc)) from None
             flow['output']['result']['design_basis'] = state.get('design_basis')
+            flow['output']['result']['product_reference'] = state.get('product_binding')
             rid = str(uuid4())
             db.execute('INSERT INTO workspace_runs VALUES (?,?,?,?,?,?,?)', (rid, wid, row['revision'], fingerprint(state['scenario']), json.dumps(flow['output'], ensure_ascii=False), json.dumps(flow['events'], ensure_ascii=False), stamp()))
             self.audit(db, wid, row['revision'], '计算完成', rid)
@@ -324,6 +325,9 @@ def make_router(store: WorkspaceStore, providers=None):
                 proposal = json.loads(record['payload'])
                 store.protect(state, proposal['changes'])
                 candidate = Scenario.model_validate(proposal['scenario'])
+                if proposal.get('product_binding'):
+                    from .enterprise import validate_product_binding
+                    validate_product_binding(db, proposal['product_binding'])
                 if proposal['action'] != 'import':
                     from .design_basis import require_basis
                     if proposal['action'] in ('calculate','sweep'): require_basis(state, 'buried')
@@ -335,10 +339,14 @@ def make_router(store: WorkspaceStore, providers=None):
                     if output.get('result'):
                         output['result']['design_basis'] = state.get('design_basis')
                 state['scenario'] = candidate.model_dump()
+                if proposal.get('product_binding'):
+                    state['product_binding'] = proposal['product_binding']
                 if proposal.get('design_basis') is not None:
                     state['design_basis'] = proposal['design_basis']
                 if proposal.get('source'):
                     state['sources'].append(proposal['source'])
+                if output and output.get('result'):
+                    output['result']['product_reference'] = state.get('product_binding')
                 revision = store.commit(db, row, state, '批准提案 · ' + proposal['action'])
                 if output:
                     rid = str(uuid4())

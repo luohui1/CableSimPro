@@ -63,8 +63,8 @@ class Capability:
     handler: object
 
 class EngineeringRuntime:
-    version = '0.5.0'
-    def __init__(self,store,designs,library,providers):
+    version = '0.6.0'
+    def __init__(self,store,designs,library,providers,enterprise=None):
         self.store,self.designs,self.library,self.providers=store,designs,library,providers
         self.capabilities = {
             'project.inspect':Capability('读取工程',NoArgs,'read',self.inspect_project),
@@ -80,6 +80,16 @@ class EngineeringRuntime:
             'standards.inspect':Capability('检查设计依据适用范围',DesignBasis,'read',self.basis_check),
             'standards.propose':Capability('提出设计依据变更',DesignBasis,'proposal',self.basis_propose),
         }
+
+        if enterprise is not None:
+            from .enterprise import ProductChoice, StudyReference
+            self.capabilities.update({
+                'products.list':Capability('读取企业型号版本',NoArgs,'read',lambda w,r,a: enterprise.list()),
+                'products.propose':Capability('引用企业型号快照',ProductChoice,'proposal',enterprise.propose),
+                'project.assessment':Capability('检查参数依据与型号状态',NoArgs,'read',lambda w,r,a: enterprise.assessment(w)),
+                'selection.reviewed':Capability('计算已核对型号候选',SelectionArgs,'study',enterprise.evaluate),
+                'selection.report':Capability('导出原始选型研究',StudyReference,'read',lambda w,r,a: enterprise.report(w,str(a.study_id))),
+            })
 
     def initialize(self):
         with self.store.db() as db:
@@ -154,7 +164,7 @@ class EngineeringRuntime:
                 if existing['status']=='failed': raise HTTPException(saved['status_code'],saved['detail'])
                 return saved
             row,state=self.store.load(db,wid,body.expected_revision)
-            context={'scenario':state['scenario'],'design_basis':state.get('design_basis'),
+            context={'scenario':state['scenario'],'design_basis':state.get('design_basis'),'product_binding':state.get('product_binding'),
                      'source_ids':[s['id'] for s in state['sources']],'arguments':args.model_dump(mode='json')}
             db.execute('INSERT INTO engineering_tasks VALUES (?,?,?,?,?,?,?,?,?,?)',
                 (tid,wid,body.capability,row['revision'],request_hash,'running',json.dumps(context,ensure_ascii=False),None,stamp(),None))

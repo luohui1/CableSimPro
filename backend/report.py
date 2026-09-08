@@ -18,6 +18,9 @@ def render_report(result: dict) -> str:
     basis = result.get('design_basis')
     reference_section = ('<h2>06 / 本次计算的设计依据快照</h2><p>仅记录所选标准与范围检查，不代表全部条款符合性。历史计算书不会采用后续修改的依据。</p><pre>'
                          + escape(json.dumps(basis,ensure_ascii=False,indent=2)) + '</pre>') if basis else '<p>本次计算未登记独立的项目设计依据。</p>' 
+    product = result.get('product_reference')
+    if product:
+        reference_section += '<h2>07 / 本次计算引用的型号版本</h2><p>仅记录产品引用。项目修改副本需核对其与原型号的差异；不表示自动符合产品标准。</p><pre>' + escape(json.dumps(product,ensure_ascii=False,indent=2)) + '</pre>'
     return f"""<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>CableSimPro · 计算书</title>
 <style>body{{font:15px/1.7 system-ui,sans-serif;color:#192a3d;max-width:960px;margin:40px auto;padding:0 28px}}h1{{font-size:30px}}h2{{font-size:19px;border-bottom:1px solid #ccd5df;padding-bottom:8px;margin-top:30px}}table{{border-collapse:collapse;width:100%;margin:15px 0}}td,th{{border:1px solid #ccd5df;padding:9px;text-align:left}}pre{{white-space:pre-wrap;word-break:break-word;background:#f3f5f7;padding:18px;font-size:12px}}.notice{{background:#fff6e7;border-left:4px solid #c18a23;padding:16px}}small{{color:#687889}}button{{padding:10px 18px;cursor:pointer}}@media print{{button{{display:none}}body{{margin:0;max-width:none;font-size:11px}}h2,table{{break-inside:avoid}}pre{{font-size:9px}}}}</style>
 <button onclick="window.print()">打印 / 保存为 PDF</button><p><small>CABLESIMPRO / ENGINEERING DEMO</small></p>

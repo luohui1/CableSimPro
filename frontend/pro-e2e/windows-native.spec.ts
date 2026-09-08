@@ -1,6 +1,7 @@
+// Migration regression: v0.5 workspace lives at ?classic=1; enterprise.spec.ts tests the new default.
 import {test,expect} from '@playwright/test';
 test('Windows renders Chinese with real sans fonts at configured device scale',async({page},info)=>{
- await page.goto('/');await expect(page.getByTestId('revision')).toHaveText('rev.1');
+ await page.goto('/?classic=1');await expect(page.getByTestId('revision')).toHaveText('rev.1');
  const cdp=await page.context().newCDPSession(page);await cdp.send('DOM.enable');await cdp.send('CSS.enable');const doc=await cdp.send('DOM.getDocument');
  const node=await cdp.send('DOM.querySelector',{nodeId:doc.root.nodeId,selector:'.property-title label'});
  const fonts=await cdp.send('CSS.getPlatformFontsForNode',{nodeId:node.nodeId});
