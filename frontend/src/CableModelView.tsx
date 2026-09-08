@@ -13,7 +13,7 @@ export function buildCableGeometry(cable:Cable,mode:ViewMode,visible:boolean[]){
  const group=new THREE.Group();group.name='单芯电缆';
  const ls=layers(cable);const length=.36;
  group.userData={units:'metres',display_length_m:length,not_route_length:true,cable_input:cable,model_purpose:'参数化结构模型；非制造图',mode};
- const colors=['#b5763c','#282d30','#e7e5de','#454c50','#b18861','#202c33'];
+ const colors=[cable.conductor==='aluminium'?'#bac5cf':'#b5763c','#282d30','#e7e5de','#454c50','#b18861','#202c33'];
  ls.forEach((layer,i)=>{
   const outer=layer.radius_mm/1000,inner=i?ls[i-1].radius_mm/1000:0;
   const len=mode==='assembled'?length:length-i*.042;
@@ -25,9 +25,21 @@ export function buildCableGeometry(cable:Cable,mode:ViewMode,visible:boolean[]){
   mesh.userData={inner_radius_m:inner,outer_radius_m:outer,axial_length_m:len};group.add(mesh);
  });return group;
 }
+/** Fit the engineering envelope rather than a fixed zoom; keep annotation clearance. */
+export function fitCableCamera(camera:THREE.OrthographicCamera,object:THREE.Object3D){
+ camera.zoom=1;camera.updateProjectionMatrix();camera.updateMatrixWorld(true);object.updateMatrixWorld(true);
+ const box=new THREE.Box3().setFromObject(object);if(box.isEmpty())return;
+ let extentX=0,extentY=0;
+ for(const x of [box.min.x,box.max.x])for(const y of [box.min.y,box.max.y])for(const z of [box.min.z,box.max.z]){
+  const p=new THREE.Vector3(x,y,z).project(camera);extentX=Math.max(extentX,Math.abs(p.x));extentY=Math.max(extentY,Math.abs(p.y));
+ }
+ camera.zoom=Math.min(16,Math.max(.5,Math.min(.82/Math.max(extentX,1e-6),.64/Math.max(extentY,1e-6))));
+ camera.updateProjectionMatrix();
+}
 export default function CableModelView({cable}:{cable:Cable}){
  const host=useRef<HTMLDivElement>(null),group=useRef<THREE.Group|null>(null),controls=useRef<OrbitControls|null>(null),cam=useRef<THREE.OrthographicCamera|null>(null);
  const [mode,setMode]=useState<ViewMode>('cutaway'),[visible,setVisible]=useState([true,true,true,true,true,true]),[failed,setFailed]=useState(false),[error,setError]=useState(''),[view,setView]=useState('iso'),[viewRevision,setViewRevision]=useState(0);
+ const fit=useRef<()=>void>(()=>{});
  const [grid,setGrid]=useState(false),[dimension,setDimension]=useState(true),[ready,setReady]=useState(false);
  const geometryKey=JSON.stringify(cable)+mode+visible.join(',')+grid;
  useEffect(()=>{
@@ -38,20 +50,25 @@ export default function CableModelView({cable}:{cable:Cable}){
   const scene=new THREE.Scene();
   const room=new RoomEnvironment(),pmrem=new THREE.PMREMGenerator(renderer),environment=pmrem.fromScene(room,.04);scene.environment=environment.texture;room.dispose();pmrem.dispose();
   const camera=new THREE.OrthographicCamera(-.32,.32,.24,-.24,.001,10);cam.current=camera;
-  const ctl=new OrbitControls(camera,renderer.domElement);controls.current=ctl;ctl.minZoom=.5;ctl.maxZoom=8;ctl.enableDamping=false;ctl.target.set(0,0,0);
-  camera.position.set(.5,.25,.42);ctl.update();
+  const ctl=new OrbitControls(camera,renderer.domElement);controls.current=ctl;ctl.minZoom=.5;ctl.maxZoom=16;ctl.enableDamping=false;ctl.target.set(0,0,0);
+  camera.position.set(.33,.14,.8);ctl.update();
   scene.add(new THREE.HemisphereLight(0xffffff,0x6a6f66,3));const key=new THREE.DirectionalLight(0xffffff,4);key.position.set(.2,1,.7);scene.add(key);
   const rim=new THREE.DirectionalLight(0xffffff,2);rim.position.set(-.5,.2,-.7);scene.add(rim);
   const cableGroup=buildCableGeometry(cable,mode,visible);group.current=cableGroup;scene.add(cableGroup);
   scene.add(cableAppearance(cable,mode,visible));
   if(grid){const floor=new THREE.GridHelper(1,20,0xb8c0b8,0xe1e5de);floor.position.y=mode==='exploded'?-.20:-layers(cable)[5].radius_mm/1000-.003;scene.add(floor)}
   const render=()=>renderer.render(scene,camera);
-  const resize=()=>{const w=Math.max(el.clientWidth,100),h=Math.max(el.clientHeight,100),aspect=w/h;camera.left=-.25*aspect;camera.right=.25*aspect;camera.top=.25;camera.bottom=-.25;camera.updateProjectionMatrix();renderer.setSize(w,h);render()};
+  const resize=()=>{const w=Math.max(el.clientWidth,100),h=Math.max(el.clientHeight,100),aspect=w/h;camera.left=-.25*aspect;camera.right=.25*aspect;camera.top=.25;camera.bottom=-.25;camera.updateProjectionMatrix();fit.current();renderer.setSize(w,h);render()};
   const ro=new ResizeObserver(resize);ro.observe(el);ctl.addEventListener('change',render);resize();setReady(true);
   return()=>{ro.disconnect();ctl.dispose();disposeScene(scene);environment.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();group.current=null;cam.current=null;controls.current=null};
  },[geometryKey]);
  useEffect(()=>{const c=cam.current,ctl=controls.current;if(!c||!ctl)return;
-  c.position.set(...(view==='front'?[.001,0,.6]:view==='end'?[.6,.001,0]:view==='top'?[0,.6,.001]:[.5,.25,.42]) as [number,number,number]);c.up.set(0,1,0);c.zoom=view==='end'&&mode!=='exploded'?5:mode==='exploded'?1.2:2.15;c.updateProjectionMatrix();ctl.target.set(0,0,0);ctl.update();
+  fit.current=()=>{
+   c.position.set(...(view==='front'?[.001,0,.6]:view==='end'?[.6,.001,0]:view==='top'?[0,.6,.001]:[.33,.14,.8]) as [number,number,number]);
+   c.up.set(0,1,0);ctl.target.set(0,0,0);c.lookAt(ctl.target);
+   if(group.current)fitCableCamera(c,group.current);ctl.update();
+  };
+  fit.current();return()=>{fit.current=()=>{}};
  },[view,geometryKey,viewRevision]);
  async function exportModel(){if(!group.current)return;setError('');try{
   const {GLTFExporter}=await import('three/addons/exporters/GLTFExporter.js');const data=await new GLTFExporter().parseAsync(group.current,{binary:true,onlyVisible:true});
