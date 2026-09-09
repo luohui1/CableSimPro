@@ -15,7 +15,7 @@ export default function EngineeringViewport(){
    {([{id:'model',label:'三维结构',Icon:Box},{id:'section',label:'二维截面',Icon:Layers3},{id:'temperature',label:'温度分布',Icon:Thermometer},{id:'curve',label:'载流量曲线',Icon:ChartNoAxesCombined}] as const).map(({id,label,Icon})=><button key={id} aria-pressed={view===id} onClick={()=>setView(id)}><Icon size={16}/>{label}</button>)}
    <span className="viewport-run-badge">{s.current?'当前输入 · 已计算':'工程输入 · 待计算'}</span>
   </nav>
-  <div className="viewport-pane wb-model-overview" hidden={view!=='model'}><div className="wb-model-primary"><CableModelView cable={s.w.scenario.cable} surface="#ffffff"/></div><LayerDiagram cable={s.w.scenario.cable}/></div>
+  <div className="viewport-pane wb-model-overview" hidden={view!=='model'}><div className="wb-model-primary"><CableModelView cable={s.w.scenario.cable} surface="#ffffff" studio/></div><LayerDiagram cable={s.w.scenario.cable}/></div>
   <div className="viewport-pane section-pane" hidden={view!=='section'}><div className="viewport-note">等比例截面 · 尺寸来自当前工程，不是厂家制造图</div><CrossSection cable={s.w.scenario.cable}/></div>
   <div className="viewport-pane field-pane" hidden={view!=='temperature'}>
    {s.current?<><div className="viewport-note">均匀土壤半空间解析温度 · 非有限元 · 不反向修正载流量</div><HeatField result={s.current}/></>:<MissingResult stale={!!s.output?.result}/>}

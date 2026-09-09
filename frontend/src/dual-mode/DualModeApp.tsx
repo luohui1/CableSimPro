@@ -14,6 +14,7 @@ import {WorkbenchBanner,WorkbenchContext} from '../professional/WorkbenchChrome'
 import '../design-system/tokens.css';
 import '../professional/white-workbench.css';
 import '../professional/workbench-layout.css';
+import '../professional/industrial-surfaces.css';
 
 const initialProject=readRoute().project;
 function Application(){
