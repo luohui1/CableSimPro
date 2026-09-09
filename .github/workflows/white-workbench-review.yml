@@ -1,0 +1,38 @@
+name: White workbench review
+on:
+  push:
+    branches: ['design/white-workbench-v077']
+permissions:
+  contents: read
+concurrency:
+  group: white-workbench-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - name: Reproducible local review inputs (no repository credentials or user data)
+        run: |
+          mkdir -p review-inputs/wheels
+          git archive --format=tar.gz HEAD > review-inputs/source.tar.gz
+          tar -czf review-inputs/frontend-dependencies.tar.gz frontend/node_modules
+          python -m pip download --only-binary=:all: -r backend/requirements-dev.txt -d review-inputs/wheels
+      - uses: actions/upload-artifact@v4
+        with:
+          name: white-workbench-review-inputs
+          path: review-inputs/
+          retention-days: 2
+      - run: npm run build
+        working-directory: frontend
