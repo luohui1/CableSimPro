@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+const original=read('frontend/src/StudioPanels.tsx');
+const replica=read('frontend/src/professional/ReferenceInspector.tsx');
+const fields=s=>s.slice(s.indexOf('const fields:'),s.indexOf('\n};',s.indexOf('const fields:'))+3).replace(/\s/g,'');
+assert.equal(fields(replica),fields(original),'All original paths, units, options, limits and nullability are retained');
+const property=s=>s.slice(s.indexOf('function Property('),s.indexOf('export',s.indexOf('function Property('))).replace(/\s/g,'');
+assert.equal(property(replica),property(original),'The real Property commit, draft and lock behavior is unchanged');
+assert.ok(!read('frontend/src/ReferenceWorkbench.tsx').includes('<StudioProvider'),'Shared provider is not recreated');
+assert.match(read('frontend/src/EnterpriseWorkspace.tsx'),/props.embedded\?<ReferenceWorkbench/);
+console.log('4 reference presenter contracts passed; not browser acceptance.');

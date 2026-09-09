@@ -1,0 +1,236 @@
+/* Layout contract: docs/REFERENCE_LAYOUT.json, approved 1586 × 992 image.
+ * This scope replaces the progressive layout only. Numeric state and legacy surfaces
+ * are not restyled into simulated results. Canvas is transparent over a CSS studio. */
+.reference-studio{--wb-color-ink:var(--wb-reference-ink);--wb-color-primary:var(--wb-reference-blue);--wb-color-muted:var(--wb-reference-muted);--wb-studio-command-height:var(--wb-reference-header-height);--wb-studio-rail-width:var(--wb-reference-rail-width);--wb-studio-inspector-width:var(--wb-reference-inspector-width)}
+.reference-studio .ps-workbench{background:#fff;isolation:isolate;position:relative}
+.reference-studio .ps-workbench :is(button,input,select){font-family:var(--wb-font-sans)}
+.reference-studio .ps-workbench button:focus-visible{outline:2px solid var(--wb-color-focus);outline-offset:3px}
+.reference-studio .ps-workbench button:disabled{cursor:not-allowed;opacity:.48}
+/* Global header: logo / project / workspace / actual saved state / commands / modes. */
+.reference-studio .ps-commandbar.dual-header{height:80px;min-height:80px;padding:0 24px;gap:15px;box-shadow:0 3px 16px #5483c313;border-bottom:1px solid #edf3fd;background:#fff}
+.reference-studio .ps-brand{gap:12px;width:253px;flex:0 0 253px;justify-content:flex-start;text-align:left;padding-right:18px;border-right:1px solid #e6eef9}
+.reference-studio .ps-brand>span{width:46px;height:46px;border-radius:11px;font-size:36px;font-weight:600;background:linear-gradient(145deg,#368ede 0%,#1558a1 37%,#102a50 80%);box-shadow:inset 0 2px 3px #ffffffa0,0 0 0 2px #b9dcff,0 4px 12px #1367c929}
+.reference-studio .ps-brand b{font-size:25px;line-height:1.1;letter-spacing:-1px;color:#0a2351}
+.reference-studio .ps-brand small{display:block;font-size:11px;letter-spacing:.75px;color:#536d9a;margin-top:6px}
+.reference-studio .ps-commandbar .ps-project.wb-project-card{width:225px;max-width:19vw;min-height:36px;height:36px;border-radius:5px;background:linear-gradient(120deg,#f4f8ff,#f9fbff)!important;color:#183b75;padding:0 12px!important;box-shadow:none;flex-shrink:1}
+.reference-studio .ps-project>span{min-width:0;flex:1}.reference-studio .ps-project b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.reference-studio .ref-workspace-select{display:flex;align-items:center;gap:10px;height:36px;border:0;border-radius:5px;padding:0 12px;background:#f4f8ff;color:#284578;font-size:13px;white-space:nowrap}
+.reference-studio .ps-context>summary{font-size:11px!important;gap:6px!important;white-space:nowrap;color:#4b648f}
+.reference-studio .ps-context>summary>span{max-width:none}.reference-studio .ps-context i{background:#08a773;width:7px;height:7px}
+.reference-studio .ps-context i.is-dirty{background:#bb620d}.reference-studio .ps-context i.is-busy{background:#005bea}
+.reference-studio .ps-revision{font-size:10px;display:inline;color:#4c6593}
+.reference-studio .ps-search-trigger{min-width:186px;max-width:225px;height:36px;border:1px solid #d8e6fa;background:linear-gradient(#fff,#f9fbff);color:#5b7199;border-radius:6px;padding:0 10px;gap:8px;flex:1}
+.reference-studio .ps-search-trigger kbd{display:inline;background:none;font-size:11px;padding:0;color:#526a94}
+.reference-studio .ps-commandbar .ps-modes{background:#f5f8fd;padding:0;border:0;flex-shrink:0}
+.reference-studio .ps-commandbar .ps-modes button{height:36px;padding:7px 9px;font-size:12px;color:#516b93;border-radius:5px;background:transparent}
+.reference-studio .ps-commandbar .ps-modes button[aria-pressed=true]{background:#fff;color:#005bea;box-shadow:inset 0 0 0 1px #337eff;outline:none}
+.reference-studio .ps-command-actions{gap:4px}.reference-studio .ps-command-actions button{color:#1b3d79}
+.reference-studio .ps-context-content{top:76px;border:1px solid #e1ebf8}
+/* The 84px rail is navigation, not a second hierarchy competing with the viewport. */
+.reference-studio .ps-workbench .enterprise-outline{flex:0 0 84px;width:84px;padding:16px 10px;border-right:1px solid #edf3fc;background:linear-gradient(90deg,#fcfdff,#fff);z-index:20}
+.reference-studio .ps-workbench .ps-rail{gap:14px}
+.reference-studio .ps-workbench .ps-rail-main{gap:12px}
+.reference-studio .ps-workbench .ps-rail button,.reference-studio .ps-rail summary{min-height:66px;font-size:12px;border-radius:6px;color:#536b93;gap:7px;line-height:1.2}
+.reference-studio .ps-workbench .ps-rail button svg{width:23px;height:23px;stroke-width:1.7}
+.reference-studio .ps-workbench .ps-rail button[aria-current=page]{background:linear-gradient(145deg,#eaf5ff,#f1f7ff);color:#005bea}
+.reference-studio .ps-workbench .ps-resource-menu>div button{min-height:40px;font-size:13px}
+.reference-studio .ps-workbench.is-focused .enterprise-outline{display:none!important}
+/* Inspector starts at the title's top edge, not below the canvas tabs. */
+.reference-studio .ps-workbench .enterprise-content{padding:24px 20px 16px;overflow:auto;min-width:0;background:linear-gradient(120deg,#fff,#fcfdff);background-color:#fff}
+.reference-studio .ps-workbench .enterprise-page:first-child{height:100%;min-height:0}
+.reference-studio .ps-workbench .enterprise-model-layout{height:100%;min-height:0;gap:18px;grid-template-columns:minmax(0,1fr)}
+.reference-studio .ps-workbench .enterprise-model-layout.with-inspector{grid-template-columns:minmax(0,1fr) var(--wb-reference-inspector-width);gap:18px}
+.reference-studio .ps-workbench .enterprise-model-column{display:flex;flex-direction:column;gap:0;min-height:0}
+.reference-studio .ps-workbench .ps-view-heading{height:64px;min-height:64px;padding:0 0 14px;position:relative;gap:8px;align-items:flex-start}
+.reference-studio .ps-view-heading>div:first-child{display:flex;gap:22px;align-items:center;min-width:0}
+.reference-studio .ps-view-heading h1{order:-1;font-size:30px;line-height:1.25;letter-spacing:.5px;font-weight:700;color:#0c2457;white-space:nowrap}
+.reference-studio .ps-view-heading>div:first-child>span{font-size:12px;color:#536b95;max-width:350px;line-height:1.6}
+.reference-studio .ps-view-heading>div:last-child{align-items:center;gap:0;flex-shrink:0}
+.reference-studio .ps-view-heading>div:last-child button{color:#5b7295;padding:6px;font-size:11px}
+.reference-studio .ps-view-heading>div:last-child button:has(.lucide-message-square){font-size:0;gap:0}
+.reference-studio .ps-workbench .enterprise-model-stage,.reference-studio .ps-workbench.has-current-results .enterprise-model-stage{flex:1;min-height:0;height:auto;border:0;border-radius:8px;box-shadow:none;background:transparent;overflow:visible}
+.reference-studio .ps-workbench .engineering-viewport{min-height:0}
+.reference-studio .ps-workbench .viewport-tabs,.reference-studio .ref-installation-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));flex:0 0 56px;height:56px;min-height:56px;padding:4px 4px 7px;gap:4px;background:#f9fbff;border:1px solid #e4edfa;border-radius:8px;box-shadow:none;overflow:visible}
+.reference-studio .ps-workbench .viewport-tabs button,.reference-studio .ref-installation-tabs button{display:flex;align-items:center;justify-content:center;gap:12px;position:relative;height:44px;min-height:44px;padding:4px 8px;background:linear-gradient(135deg,#f1f7fe,#eef5fc);border:0;border-radius:4px;color:#284577;font-size:15px;font-weight:600;box-shadow:none;flex:1}
+.reference-studio .ps-workbench .viewport-tabs button:hover,.reference-studio .ref-installation-tabs button:hover{color:#005bea;background:#eaf3ff}
+.reference-studio .ps-workbench .viewport-tabs button[aria-pressed=true],.reference-studio .ref-installation-tabs button[aria-pressed=true]{color:#005bea;background:linear-gradient(100deg,#edf6ff,#f5faff);box-shadow:none}
+.reference-studio .ps-workbench .viewport-tabs button[aria-pressed=true]::after{content:'';height:3px;position:absolute;left:6px;right:6px;bottom:-5px;background:#096bff;border-radius:2px}
+.reference-studio .ps-workbench .viewport-tabs button svg{width:23px;height:23px}
+.reference-studio .ps-workbench .viewport-pane{margin-top:6px;border-radius:8px;min-height:0;position:relative;overflow:hidden;background:var(--wb-reference-stage-background)}
+.reference-studio .ps-workbench .wb-model-overview{height:auto;min-height:0;border:1px solid #e3eefb;grid-template-columns:minmax(0,1fr) minmax(240px,28%);border-radius:8px}
+.reference-studio .ps-workbench .wb-model-overview.ps-single-stage{grid-template-columns:minmax(0,1fr)}
+.reference-studio .ps-workbench .wb-model-primary{height:100%;min-height:0;overflow:hidden}
+.reference-studio .ps-workbench .model-view{height:100%;min-height:0;border:0;background:transparent;overflow:hidden}
+.reference-studio .ps-workbench .model-render{flex:1;min-height:0;height:100%!important;background:var(--wb-reference-stage-background);overflow:hidden}
+.reference-studio .model-render::before{content:'';position:absolute;left:-10%;right:-5%;bottom:-34%;height:64%;background:linear-gradient(145deg,#ffffff00 15%,#ffffffa0 16%,#ffffff00 20%,#ffffff60 48%,#ffffff00 58%);transform:skewY(-8deg);pointer-events:none}
+.reference-studio .ps-workbench .model-render>canvas{position:absolute;inset:0;z-index:1}
+.reference-studio .ps-workbench .model-caption{top:24px;left:20px;max-width:42%;z-index:3;pointer-events:none}
+.reference-studio .ps-workbench .model-caption strong{font-size:21px;font-weight:650;line-height:1.5;color:#102a5d}
+.reference-studio .ps-workbench .model-caption span{font-size:13px;line-height:1.8;color:#536d97}
+.reference-studio .ps-workbench .model-callouts{display:block;position:absolute;inset:0;z-index:2;pointer-events:none}
+.reference-studio .ps-workbench .model-callouts path{stroke:#3382ed;stroke-width:1.15;stroke-opacity:.85}
+.reference-studio .ps-workbench .model-callouts circle{fill:#0067ef;stroke:#fff;stroke-width:1.8}
+.reference-studio .ps-workbench .model-callouts text{fill:#173979;font-size:13px;font-weight:650;paint-order:stroke;stroke:#f6faff;stroke-width:2.5px}
+.reference-studio .ps-workbench .model-callouts .callout-value{fill:#4d6d99;font-size:11px;font-weight:400;stroke-width:1.5px}
+/* The six actual tools occupy a floating island, not an extra horizontal toolbar. */
+.reference-studio .ref-tool-island{position:absolute;right:16px;top:14px;z-index:5;display:flex;gap:3px;padding:5px;background:#ffffffed;border:1px solid #fff;border-radius:8px;box-shadow:var(--wb-reference-tool-shadow)}
+.reference-studio .ref-tool-island button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;width:47px;height:51px;padding:3px;border:0;border-radius:6px;color:#214475;background:transparent;font-size:10px}
+.reference-studio .ref-tool-island button[aria-pressed=true],.reference-studio .ref-tool-island button:hover{background:linear-gradient(140deg,#e3f1ff,#f5faff);color:#005bea}
+.reference-studio .ref-view-selector,.reference-studio .ref-zoom-controls{position:absolute;bottom:14px;z-index:4;display:flex;align-items:center;gap:3px;background:#fffffff2;padding:4px;border:1px solid #e8f0fb;border-radius:7px;box-shadow:0 6px 18px #27589712}
+.reference-studio .ref-view-selector{left:50%;transform:translateX(-50%)}
+.reference-studio .ref-view-selector button,.reference-studio .ref-zoom-controls button{height:29px;min-height:29px;padding:0 12px;color:#446698;background:transparent;border:0;border-radius:4px;white-space:nowrap;font-size:12px}
+.reference-studio .ref-view-selector button[aria-pressed=true]{background:#0062f1;color:#fff;box-shadow:0 2px 5px #0758b72c}
+.reference-studio .ref-view-selector button:hover:not([aria-pressed=true]){background:#ebf4ff;color:#005bea}
+.reference-studio .ref-zoom-controls{right:12px;gap:4px}.reference-studio .ref-zoom-controls button{display:grid;place-items:center;padding:0;width:30px;background:#f5f9ff;color:#095ae3}
+.reference-studio .ref-zoom-controls>span{font-size:11px;padding:0 5px;color:#375b94}
+.reference-studio .ps-workbench .model-dimensions{position:absolute;left:18px;bottom:60px;padding:0;gap:15px;z-index:3;font-size:10px;color:#57709b;pointer-events:none}
+.reference-studio .ps-workbench .model-dimensions b{font-size:11px;color:#2b4c7e}
+.reference-studio .ps-workbench .orientation{display:none;z-index:15;right:18px;bottom:180px}
+.reference-studio .ps-workbench .model-view:has(.ps-layer-menu[open]) .orientation{display:flex}
+.reference-studio .ps-workbench :is(.model-footer,.studio-caption){display:none}
+.reference-studio .ps-layer-menu{position:absolute;left:18px;bottom:14px;padding:0;background:transparent;z-index:10;max-width:calc(100% - 36px);color:#3d5d8c}
+.reference-studio .ps-layer-menu>summary{display:flex;align-items:center;gap:6px;height:31px;font-size:11px;list-style:none;cursor:pointer;padding:0 4px;color:#3b5a88}
+.reference-studio .ps-layer-menu>summary::-webkit-details-marker{display:none}
+.reference-studio .ps-layer-menu[open]{width:min(650px,calc(100% - 36px));bottom:56px;left:18px;right:auto;padding:12px 16px;background:#fff;box-shadow:var(--wb-studio-overlay-shadow);border-radius:10px}
+.reference-studio .ref-model-more{display:flex;align-items:center;flex-wrap:wrap;gap:10px;padding:8px 0}
+.reference-studio .ref-model-more button{display:flex;gap:6px;align-items:center;padding:7px 10px;border:0;border-radius:5px;background:#eef6ff;color:#125ec4;font-size:12px}
+.reference-studio .ref-model-more>span{font-size:10px;color:#586e8f}
+.reference-studio .ref-return-model{position:absolute;right:12px;top:12px;z-index:5;border:0;background:#fff;color:#005bea;padding:8px 12px;border-radius:6px}
+/* The single boundary belongs to the input group, never to both group and inner input. */
+.reference-studio .ps-workbench .enterprise-inspector{height:100%;max-height:none;min-height:0;border:1px solid #e4edfa;border-radius:8px;padding:0 12px 12px;margin:0;background:linear-gradient(155deg,#fff,#fcfdff);box-shadow:0 4px 16px #4777a908;overflow:auto;scrollbar-width:thin}
+.reference-studio .ps-workbench .enterprise-inspector>header{position:sticky;top:0;z-index:3;min-height:50px;height:50px;padding:0 0 0 2px;background:#fffffffa;align-items:center;border-bottom:1px solid #e6eef9}
+.reference-studio .ps-workbench .ref-inspector-tabs{height:100%;display:flex;align-items:stretch;gap:20px;margin:0}
+.reference-studio .ps-workbench .ref-inspector-tabs button{display:flex;align-items:center;justify-content:center;gap:7px;border:0;padding:0 3px;background:none;border-bottom:3px solid transparent;color:#526e98;font-size:14px;font-weight:500;border-radius:0}
+.reference-studio .ps-workbench .ref-inspector-tabs button[aria-pressed=true]{color:#005bea;border-bottom-color:#0065f4}
+.reference-studio .ref-model-kind{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:66px;font-size:13px;color:#536d97;padding:12px 0}
+.reference-studio .ref-model-kind>span:last-child{display:flex;align-items:center;gap:10px;flex:0 1 68%;padding:10px 12px;border:1px solid #deE8f6;border-radius:5px;color:#25487b;background:linear-gradient(#fff,#fbfdff)}
+.reference-studio .ref-model-kind svg{color:#0062ef}
+.reference-studio .ref-parameter-body>.enterprise-property-tabs{display:none}
+.reference-studio .ps-workbench .inspector{padding:0;background:transparent}
+.reference-studio .ps-workbench .wb-property-group{border:0;box-shadow:none;padding:0;margin:0 0 8px;background:#fff;border-radius:5px;overflow:hidden}
+.reference-studio .ps-workbench .wb-property-group h3{margin:0;padding:0}
+.reference-studio .ps-workbench .wb-property-group h3>button{height:40px;min-height:40px;padding:8px 10px;gap:8px;background:linear-gradient(110deg,#edf5fe,#f7faff);color:#173a77;font-size:13px;font-weight:600;border:0;border-radius:4px;width:100%}
+.reference-studio .ps-workbench .wb-property-group h3>button::before{width:15px;height:15px;background:repeating-linear-gradient(135deg,transparent 0 3px,#5375a8 3px 4px);border:1px solid #5375a8;border-radius:50%;box-shadow:none}
+.reference-studio .ps-workbench .wb-group-count{font-size:10px;color:#647ca2;opacity:.8}
+.reference-studio .ps-workbench .wb-property-group h3>button[aria-expanded=true]{background:linear-gradient(110deg,#ebf4ff,#f7fbff)}
+.reference-studio .ps-workbench .wb-property-group>div{padding:7px 1px 5px}
+.reference-studio .ps-workbench .property{display:grid;grid-template-columns:minmax(108px,.85fr) minmax(0,1.15fr);gap:8px;min-height:40px;padding:3px 0;border:0}
+.reference-studio .ps-workbench .property-title{display:flex;gap:4px;min-width:0;align-items:center}
+.reference-studio .ps-workbench .property-title label{font-size:12px;line-height:1.35;color:#4d6893}
+.reference-studio .ps-workbench .property-title button{padding:3px;min-width:20px;color:#6e83a4;background:transparent;border:0;flex-shrink:0}
+.reference-studio .ps-workbench .property-value{display:flex;align-items:center;min-width:0;min-height:32px;height:32px;border:1px solid #d3e0f2!important;border-radius:4px;background:linear-gradient(#fff,#f9fbff);box-shadow:none;margin:0;padding:0}
+.reference-studio .ps-workbench .property-value input,.reference-studio .ps-workbench .property-value select{border:0!important;box-shadow:none!important;outline:none;min-width:0;width:100%;height:30px;min-height:30px;font-size:14px;background:transparent!important;color:#16376a;border-radius:4px;padding:3px 9px;line-height:1.4}
+.reference-studio .ps-workbench .property-value>span{flex-shrink:0;padding:0 7px 0 0;font-size:11px;color:#566f9b;background:transparent;border:0}
+.reference-studio .ps-workbench .property-value:focus-within{border-color:#296fea!important;box-shadow:0 0 0 2px #3986ee25}
+.reference-studio .ps-workbench .property.invalid .property-value{border-color:#b42318!important}
+.reference-studio .ps-workbench .inspector-note{font-size:10px;line-height:1.6;margin-top:10px;padding:9px;background:#fffaf0;color:#895224;box-shadow:inset 2px 0 #d5a354}
+.reference-studio .ps-workbench .enterprise-evidence-check{font-size:11px;margin:8px 0 0}
+.reference-studio .ref-model-tree p{font-size:12px;color:#536c94}.reference-studio .ref-model-tree>button{width:100%;display:flex;align-items:center;gap:10px;border:0;border-radius:6px;background:#f2f7fe;color:#254a80;margin:7px 0;padding:12px 9px;text-align:left}
+.reference-studio .ref-model-tree>button>span:first-of-type{flex:1}.reference-studio .ref-model-tree small{display:block;font-size:11px;color:#536c94;line-height:1.6}
+/* Result ribbon matches the reference's one-piece frame and illustrated readouts. */
+.reference-studio .ps-result-ribbon{height:150px;min-height:150px;margin:0 20px 16px 104px;padding:12px;display:grid;grid-template-columns:160px minmax(0,1fr) 185px;gap:10px;border:1px solid #e7effb;border-radius:9px;background:linear-gradient(145deg,#fbfdff,#f3f8ff);box-shadow:0 5px 20px #467db90b}
+.reference-studio .ref-result-title{padding:8px 12px;color:#153777}.reference-studio .ref-result-title h2{font-size:17px;line-height:1.5;margin:0 0 8px;font-weight:600;white-space:nowrap}.reference-studio .ref-result-title p{font-size:12px;line-height:1.7;color:#536e98;margin:0}
+.reference-studio .ps-result-ribbon .wb-results-overview{display:block;margin:0;padding:0;border:0;box-shadow:none;background:none;min-width:0}
+.reference-studio .ps-result-ribbon .wb-metric-grid{gap:6px;padding:0;grid-template-columns:repeat(4,minmax(0,1fr));border:0;background:transparent;box-shadow:none}
+.reference-studio .ps-result-ribbon .wb-metric{display:flex;flex-direction:row;align-items:center;gap:12px;min-height:119px;height:119px;padding:12px 8px;border:0;border-radius:7px;background:linear-gradient(120deg,#fff,#fafdff);box-shadow:none;overflow:hidden}
+.reference-studio .ps-result-ribbon .wb-metric>div{min-width:0}
+.reference-studio .ps-result-ribbon .wb-metric-icon{width:48px;height:48px;min-width:48px;border-radius:50%;color:#0067f4;background:radial-gradient(circle at 32% 20%,#fff,#e8f3ff 58%,#beddfa);box-shadow:0 0 0 4px #f3f9ff,inset 1px 2px 4px #fff;display:grid;place-items:center}
+.reference-studio .ps-result-ribbon .wb-metric-icon svg{width:28px;height:28px;stroke-width:1.8}
+.reference-studio .ps-result-ribbon .wb-metric:nth-child(1) .wb-metric-icon,.reference-studio .ps-result-ribbon .wb-metric:nth-child(3) .wb-metric-icon{background:radial-gradient(circle at 28% 18%,#abedc4,#29bd78 50%,#0b9764);color:#fff;box-shadow:0 0 0 5px #e7f8ef,inset 1px 1px 4px #e5ffed}
+.reference-studio .ps-result-ribbon .wb-metric:nth-child(4) .wb-metric-icon{background:linear-gradient(135deg,#98ceff,#0576fb);color:#fff;box-shadow:0 0 0 5px #edf6ff}
+.reference-studio .ps-result-ribbon .wb-metric-label{font-size:12px;line-height:1.6;color:#446394;white-space:nowrap}
+.reference-studio .ps-result-ribbon .wb-metric strong{font-size:25px;letter-spacing:-.5px;line-height:1.6;color:#0b285c;white-space:nowrap;font-weight:650}
+.reference-studio .ps-result-ribbon .wb-metric strong small{font-size:13px;font-weight:500;color:#345589}
+.reference-studio .ps-result-ribbon .wb-metric-detail{font-size:10px;line-height:1.7;color:#536c92;white-space:normal}
+.reference-studio .ps-result-actions{display:flex;flex-direction:column;align-items:stretch;gap:10px;padding:0 7px}
+.reference-studio .ps-result-actions button{justify-content:center;gap:12px;height:40px;min-height:40px;font-size:13px;border-radius:5px}
+.reference-studio .ps-result-actions .ps-analysis-toggle{background:#0060f3;color:#fff;box-shadow:0 4px 12px #0760e326}
+.reference-studio .ps-result-actions .ps-report{color:#005bea;border:1px solid #d7e5fb;background:#fff}.reference-studio .ps-report span{display:inline}
+.reference-studio .ref-status-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;height:56px;min-height:56px;margin-left:84px;padding:0 20px;border-top:1px solid #eef4fc;box-shadow:0 -3px 16px #547ec707;background:#fff;flex:0 0 56px}
+.reference-studio .ref-status-context{display:flex;align-items:center;gap:15px;min-width:0;color:#526c96;font-size:10px;white-space:nowrap}
+.reference-studio .ref-status-context>span+span{padding-left:15px;border-left:1px solid #e3edf9}
+.reference-studio .ref-status-context button{font-size:10px;border:0;background:none;color:#345b92;padding:0}
+.reference-studio .ref-runtime-actions{display:flex;align-items:center;gap:20px;flex-shrink:0}
+.reference-studio .ref-runtime-actions>span{display:flex;align-items:center;gap:6px;font-size:11px;color:#526a94}.reference-studio .ref-runtime-actions i{width:8px;height:8px;background:#119e73;border-radius:50%}.reference-studio .ref-state-warning i{background:#b76617}
+.reference-studio .ref-runtime-actions .ps-primary{height:43px;min-width:126px;justify-content:center;border-radius:5px;font-size:14px;background:#0060f3;color:#fff}
+/* Optional analysis stays tied to current evidence. It does not become a second result row. */
+.reference-studio .ps-analysis-drawer{height:34vh;max-height:350px;min-height:210px;flex-shrink:0;margin:0 20px 0 104px;padding:0 14px 10px;border:1px solid #e2edfb;border-radius:8px 8px 0 0;box-shadow:0 -4px 18px #3769a10c}
+.reference-studio .ps-analysis-drawer>header{height:49px;min-height:49px;gap:20px}
+.reference-studio .ps-analysis-drawer h2{font-size:21px;color:#12346d}.reference-studio .ps-analysis-drawer nav button{font-size:12px;color:#506b95}
+.reference-studio .ps-analysis-drawer nav button[aria-pressed=true]{border-radius:0;border-bottom:2px solid #0067ff;background:#f0f7ff;color:#005bea}
+.reference-studio .ps-analysis-scroll .wb-panel{border:1px solid #e5eefb;background:#fff;box-shadow:none;border-radius:6px}
+.reference-studio .ps-analysis-scroll .wb-panel-heading{background:#fff;padding:11px 14px}
+.reference-studio .ps-workbench:has(.ps-analysis-drawer:not([hidden])) .ps-result-ribbon{min-height:98px;height:98px;margin-bottom:8px}
+.reference-studio .ps-workbench:has(.ps-analysis-drawer:not([hidden])) .wb-metric{height:72px;min-height:72px}
+.reference-studio .ps-workbench:has(.ps-analysis-drawer:not([hidden])) .model-callouts{display:none}
+.reference-studio .ps-workbench:has(.ps-analysis-drawer:not([hidden])) .enterprise-model-stage{min-height:160px}
+.reference-studio .ps-workbench:has(.ps-analysis-drawer:not([hidden])) .model-render{min-height:150px}
+.reference-studio .ps-workbench:has(.ps-analysis-drawer:not([hidden])) .ref-tool-island{transform:scale(.8);transform-origin:top right}
+.reference-studio .ps-workbench:has(.ps-analysis-drawer:not([hidden])) .ref-result-title p{font-size:10px}
+@media(max-width:1450px){
+ .reference-studio .ps-commandbar.dual-header{gap:10px;padding:0 18px}.reference-studio .ps-brand{width:220px;flex-basis:220px}.reference-studio .ps-brand b{font-size:22px}.reference-studio .ps-brand small{font-size:10px}
+ .reference-studio .ref-workspace-select{display:none}.reference-studio .ps-view-heading>div:first-child>span{max-width:240px;font-size:11px}.reference-studio .ps-view-heading h1{font-size:28px}
+ .reference-studio .ps-workbench .enterprise-content{padding:22px 18px 14px}.reference-studio .ps-workbench .enterprise-model-layout.with-inspector{grid-template-columns:minmax(0,1fr) 320px}
+ .reference-studio .ps-result-ribbon{grid-template-columns:140px minmax(0,1fr) 150px;margin-left:102px;margin-right:18px;gap:8px}
+ .reference-studio .ps-result-ribbon .wb-metric{gap:9px;padding:10px 7px}.reference-studio .ps-result-ribbon .wb-metric-icon{width:39px;height:39px;min-width:39px}.reference-studio .ps-result-ribbon .wb-metric-icon svg{width:24px;height:24px}
+ .reference-studio .ps-result-ribbon .wb-metric strong{font-size:22px}.reference-studio .ps-result-ribbon .wb-metric-label{font-size:11px}.reference-studio .ps-result-ribbon .wb-metric-detail{font-size:9px}
+ .reference-studio .ref-status-context{gap:10px}.reference-studio .ref-runtime-actions{gap:12px}.reference-studio .ps-workbench .ref-view-selector button{padding:0 7px;font-size:11px}.reference-studio .ref-zoom-controls>span{display:none}
+ .reference-studio .ref-tool-island{gap:1px}.reference-studio .ref-tool-island button{width:39px;height:48px}.reference-studio .ps-workbench .property{grid-template-columns:minmax(105px,.85fr) minmax(0,1.15fr);gap:6px}
+}
+@media(max-height:850px) and (min-width:901px){
+ .reference-studio .ps-commandbar.dual-header{height:66px;min-height:66px}.reference-studio .ps-workbench .enterprise-content{padding-top:16px;padding-bottom:12px}.reference-studio .ps-workbench .ps-view-heading{height:54px;min-height:54px}
+ .reference-studio .ps-result-ribbon{min-height:120px;height:120px;margin-bottom:12px;padding:10px}.reference-studio .ps-result-ribbon .wb-metric{min-height:94px;height:94px}
+ .reference-studio .ref-status-footer{height:48px;min-height:48px;flex-basis:48px}.reference-studio .ps-workbench .model-callouts{display:none}
+ .reference-studio .ps-workbench .enterprise-inspector{overflow:auto}.reference-studio .ps-analysis-drawer{height:29vh;min-height:185px}
+}
+@media(max-width:1100px){
+ .reference-studio .ps-brand{width:auto;flex:0 0 auto;border:0;padding:0}.reference-studio .ps-brand>div{display:none}.reference-studio .ps-brand>span{height:37px;width:37px;font-size:29px}
+ .reference-studio .ps-context>summary>span:not(.ps-revision){display:none}.reference-studio .ps-search-trigger{min-width:135px}.reference-studio .ps-commandbar .ps-project.wb-project-card{width:190px;max-width:22vw}
+ .reference-studio .ps-workbench .enterprise-outline{flex-basis:68px;width:68px;padding:10px 6px}.reference-studio .ps-workbench .enterprise-content{padding:16px 12px}
+ .reference-studio .ps-view-heading>div:first-child>span{display:none}.reference-studio .ps-workbench .enterprise-model-layout.with-inspector{grid-template-columns:minmax(0,1fr) 290px;gap:12px}
+ .reference-studio .ps-result-ribbon{margin-left:80px;margin-right:12px;grid-template-columns:minmax(0,1fr) 130px;height:125px;min-height:125px}.reference-studio .ref-result-title{display:none}
+ .reference-studio .ps-result-ribbon .wb-metric{height:98px;min-height:98px}.reference-studio .ps-result-ribbon .wb-metric-icon{display:none}
+ .reference-studio .ref-status-footer{margin-left:68px;padding:0 12px}.reference-studio .ref-status-context>span:first-child{max-width:170px;overflow:hidden;text-overflow:ellipsis}.reference-studio .ref-status-context>span:nth-child(3){display:none}
+ .reference-studio .ref-status-context{font-size:9px}.reference-studio .ref-tool-island{right:8px;top:8px;padding:3px}.reference-studio .ref-tool-island button{width:34px;height:44px;font-size:9px}
+ .reference-studio .ps-workbench .model-caption{top:72px;font-size:12px;max-width:80%}.reference-studio .ps-workbench .model-caption strong{font-size:17px}.reference-studio .ps-workbench .model-callouts{display:none}
+ .reference-studio .ps-workbench .ref-view-selector{left:50%;bottom:52px}.reference-studio .ps-workbench .model-dimensions{bottom:93px}
+ .reference-studio .ps-analysis-drawer{margin-left:80px;margin-right:12px}
+}
+@media(max-width:720px){
+ .reference-studio .ps-workbench{height:auto;min-height:100%;overflow:auto}.reference-studio .ps-commandbar.dual-header{position:sticky;top:0;height:auto;min-height:110px;padding:12px;gap:8px;flex-wrap:wrap;z-index:35}
+ .reference-studio .ps-brand{flex-shrink:0}.reference-studio .ps-brand>span{width:32px;height:32px;font-size:26px}.reference-studio .ps-commandbar .ps-project.wb-project-card{max-width:none;width:auto;flex:1;min-width:0}
+ .reference-studio .ps-commandbar .ps-search-trigger{min-width:35px;max-width:35px;flex:0 0 35px;padding:8px;height:35px;margin:0}.reference-studio .ps-search-trigger span,.reference-studio .ps-search-trigger kbd{display:none}
+ .reference-studio .ps-command-actions{order:8;margin-left:auto}.reference-studio .ps-command-actions>button:first-child{display:inline-flex}.reference-studio .ps-command-actions>button:nth-child(2){display:none}
+ .reference-studio .ps-commandbar .ps-context{order:7}.reference-studio .ps-context>summary>span:not(.ps-revision){display:none}.reference-studio .ps-context-content{top:100%;left:8px;right:8px}
+ .reference-studio .ps-commandbar .ps-modes{order:6;margin:0}.reference-studio .ps-commandbar .ps-modes span{display:inline}.reference-studio .ps-commandbar .ps-modes button{font-size:11px;height:32px;padding:4px 7px}
+ .reference-studio .ps-revision{display:inline;font-size:10px}.reference-studio .ps-workbench .enterprise-outline{display:none}
+ .reference-studio .ps-workbench .enterprise-outline.open{display:flex;position:fixed;top:110px;bottom:0;left:0;width:78px;z-index:75}
+ .reference-studio .ps-workbench .enterprise-body{overflow:visible;flex:initial}.reference-studio .ps-workbench .enterprise-content{padding:14px 10px;overflow:visible;min-width:0}
+ .reference-studio .ps-workbench .enterprise-page:first-child{height:auto}.reference-studio .ps-workbench .enterprise-model-layout,.reference-studio .ps-workbench .enterprise-model-layout.with-inspector{display:flex;flex-direction:column;gap:14px;height:auto}
+ .reference-studio .ps-workbench .ps-view-heading{height:54px;min-height:54px}.reference-studio .ps-view-heading h1{font-size:24px}.reference-studio .ps-view-heading>div:last-child button{padding:4px}
+ .reference-studio .ps-view-heading>div:last-child .enterprise-mobile-menu{font-size:0!important}.reference-studio .ps-view-heading>div:last-child .enterprise-mobile-menu svg{width:19px;height:19px}
+ .reference-studio .ps-workbench .enterprise-model-stage,.reference-studio .ps-workbench.has-current-results .enterprise-model-stage{height:490px;min-height:490px;flex:initial}
+ .reference-studio .ps-workbench .viewport-tabs,.reference-studio .ref-installation-tabs{height:48px;min-height:48px;flex-basis:48px;gap:2px;padding:3px}
+ .reference-studio .ps-workbench .viewport-tabs button,.reference-studio .ref-installation-tabs button{height:39px;min-height:39px;padding:4px;gap:4px;font-size:12px}.reference-studio .ps-workbench .viewport-tabs button svg{width:17px;height:17px}
+ .reference-studio .ps-workbench .wb-model-overview{grid-template-columns:1fr}.reference-studio .ps-workbench .ps-layer-compare{position:absolute;inset:55px 5px 5px;width:auto;height:auto;z-index:12;border:1px solid #e2eafa}
+ .reference-studio .ps-workbench .model-caption{left:12px;top:70px}.reference-studio .ps-workbench .model-caption strong{font-size:17px}.reference-studio .ps-workbench .model-caption span{font-size:11px}
+ .reference-studio .ps-workbench .model-render{min-height:290px}.reference-studio .ps-workbench .model-dimensions{bottom:100px;left:12px}.reference-studio .ref-tool-island{right:8px;top:8px;padding:4px;gap:3px}.reference-studio .ref-tool-island button{width:37px}
+ .reference-studio .ref-view-selector{bottom:57px;max-width:calc(100% - 20px);padding:3px}.reference-studio .ref-view-selector button{font-size:10px!important;padding:0 6px!important}.reference-studio .ref-zoom-controls{bottom:12px;right:9px}
+ .reference-studio .ps-layer-menu{left:10px;bottom:12px;max-width:calc(100% - 20px)}.reference-studio .ps-layer-menu>summary{font-size:10px}
+ .reference-studio .ps-layer-menu[open]{left:8px;bottom:55px;width:calc(100% - 16px);padding:10px}.reference-studio .ps-layer-inspect{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .reference-studio .ps-workbench .enterprise-inspector{height:auto;max-height:none;margin:0;padding:0 12px 12px}.reference-studio .ps-workbench .enterprise-inspector>header{position:static}
+ .reference-studio .ps-workbench .property{min-height:52px;grid-template-columns:minmax(114px,.85fr) minmax(0,1.15fr)}.reference-studio .ps-workbench .property-value{height:44px;min-height:44px}.reference-studio .ps-workbench .property-value input,.reference-studio .ps-workbench .property-value select{height:42px;min-height:42px;font-size:16px}
+ .reference-studio .ps-workbench .wb-property-group h3>button{min-height:44px;height:44px}
+ .reference-studio .ps-result-ribbon{display:block;height:auto;min-height:0;margin:0 10px 12px;padding:12px}.reference-studio .ref-result-title{display:flex;padding:0 0 12px;align-items:center;gap:14px}.reference-studio .ref-result-title h2{font-size:16px;margin:0}.reference-studio .ref-result-title p{font-size:10px;line-height:1.5}
+ .reference-studio .ps-result-ribbon .wb-metric-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.reference-studio .ps-result-ribbon .wb-metric{height:92px;min-height:92px;padding:9px;background:#fff}.reference-studio .ps-result-ribbon .wb-metric strong{font-size:23px}
+ .reference-studio .ps-result-actions{flex-direction:row;padding:12px 0 0;gap:10px}.reference-studio .ps-result-actions button{flex:1;min-height:44px}
+ .reference-studio .ref-status-footer{position:sticky;bottom:0;margin:0;padding:7px 12px;height:auto;min-height:56px;z-index:25;box-shadow:0 -4px 14px #38537617}.reference-studio .ref-status-context{max-width:50%;flex-wrap:wrap;gap:4px;white-space:normal;line-height:1.5}.reference-studio .ref-status-context>span:not(:first-child){display:none}.reference-studio .ref-status-context>span:first-child{max-width:none}
+ .reference-studio .ref-runtime-actions>span{display:none}.reference-studio .ref-runtime-actions .ps-primary{min-height:44px;height:44px;min-width:120px}
+ .reference-studio .ps-analysis-drawer{margin:0 10px 12px;padding:0 10px 10px;height:440px;min-height:440px;max-height:none}.reference-studio .ps-analysis-drawer>header{flex-wrap:wrap;height:auto;min-height:84px;padding:8px 0;gap:6px}.reference-studio .ps-analysis-drawer h2{font-size:20px}
+ .reference-studio .ps-analysis-drawer header nav{order:3;width:100%;flex-basis:100%;gap:2px;overflow:auto}.reference-studio .ps-analysis-drawer nav button{font-size:11px;padding:7px 8px}
+ .reference-studio .ps-workbench:has(.ps-analysis-drawer:not([hidden])) .ps-result-ribbon{height:auto}.reference-studio .ps-workbench:has(.ps-analysis-drawer:not([hidden])) .wb-metric{height:92px}
+ .reference-studio .ps-workbench .enterprise-installation-stage{height:550px;min-height:550px}
+ .reference-studio .ps-workbench .enterprise-canvas-holder{height:calc(100% - 96px);min-height:350px}.reference-studio .ps-workbench .enterprise-canvas-holder .engineering-canvas-panel{min-height:350px}
+}
+@media(prefers-reduced-motion:reduce){.reference-studio *{transition:none!important;scroll-behavior:auto!important}}
+@media(forced-colors:active){.reference-studio .ps-workbench button,.reference-studio .ps-workbench .property-value{border:1px solid ButtonText!important}.reference-studio .ps-workbench .viewport-tabs button[aria-pressed=true]{outline:2px solid Highlight}.reference-studio .ref-runtime-actions i{border:2px solid CanvasText}.reference-studio .model-render::before{display:none}}

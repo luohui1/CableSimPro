@@ -7,8 +7,10 @@ test('industrial: elevated surfaces and material toggle keep the same live canva
  await enter(page);
  const surface=page.getByTestId('professional-mode');
  const stage=surface.locator('.enterprise-model-stage'),inspector=surface.locator('.enterprise-inspector');
- await expect(stage).toHaveCSS('border-top-width','0px');await expect(inspector).toHaveCSS('border-top-width','0px');
- expect(await stage.evaluate(e=>getComputedStyle(e).boxShadow)).not.toBe('none');
+ await expect(stage).toHaveCSS('border-top-width','0px');
+ // Approved image has one pale inspector boundary, not repeated row outlines.
+ expect(await inspector.evaluate(e=>parseFloat(getComputedStyle(e).borderTopWidth))).toBeLessThanOrEqual(1);
+ await expect(stage).toHaveCSS('box-shadow','none');
  const project=surface.locator('.wb-project-card'),hint=project.locator('b');
  const cardBox=(await project.boundingBox())!,hintBox=(await hint.boundingBox())!;
  expect(hintBox.y+hintBox.height).toBeLessThanOrEqual(cardBox.y+cardBox.height);
@@ -30,7 +32,9 @@ test('industrial: elevated surfaces and material toggle keep the same live canva
 test('industrial: material preview exports only six equivalent layers and edits stay live',async({page},info)=>{
  await enter(page);
  const canvas=page.getByTestId('cable-model-view').locator('canvas');await canvas.evaluate(e=>e.setAttribute('data-retained','material-edit'));
+ await page.locator('.ps-layer-menu>summary').click();
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'导出 GLB',exact:true}).click();
+ await page.locator('.ps-layer-menu>summary').click();
  const file=await download,bytes=await readFile((await file.path())!);
  expect(bytes.readUInt32LE(0)).toBe(0x46546c67);expect(bytes.readUInt32LE(4)).toBe(2);
  expect(bytes.readUInt32LE(16)).toBe(0x4e4f534a);

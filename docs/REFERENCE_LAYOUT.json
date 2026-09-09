@@ -1,0 +1,67 @@
+{
+  "reference": "Approved professional workbench concept (first of five user images)",
+  "sha256": "6ff48ca23905f7005fe29c942ee8acc0097a436a6e54348aa1c7fb5e2595860f",
+  "source_size": [
+    1586,
+    992
+  ],
+  "ui_only": true,
+  "do_not_copy": [
+    "220kV sea-cable scope",
+    "armour geometry",
+    "sample result values",
+    "compliance badges",
+    "fictional account identity"
+  ],
+  "landmarks_at_source_size": {
+    "header": [
+      0,
+      0,
+      1586,
+      82
+    ],
+    "rail": [
+      0,
+      82,
+      85,
+      910
+    ],
+    "title": [
+      104,
+      105,
+      1074,
+      62
+    ],
+    "view_tabs": [
+      104,
+      169,
+      1074,
+      56
+    ],
+    "canvas": [
+      104,
+      229,
+      1074,
+      528
+    ],
+    "inspector": [
+      1196,
+      110,
+      371,
+      648
+    ],
+    "result_ribbon": [
+      104,
+      775,
+      1464,
+      144
+    ],
+    "footer": [
+      85,
+      935,
+      1501,
+      57
+    ]
+  },
+  "acceptance": "Compare unmodified Playwright PNGs at matching viewport; numeric/state differences expected. No generative repaint of screenshots."
+}

@@ -1,5 +1,5 @@
 import {useEffect,useId,useState,type ReactNode} from 'react';
-import {Activity,ArrowRight,BookOpen,Box,ChartNoAxesCombined,ChevronDown,ChevronUp,Copy,FileText,FolderOpen,Layers3,Search,Settings2,ShieldCheck,Workflow,X} from 'lucide-react';
+import {Activity,ArrowRight,BookOpen,Box,ChartNoAxesCombined,ChevronDown,ChevronUp,Copy,FileText,FolderOpen,Layers3,Search,Settings2,ShieldCheck,Workflow,X,Play,CircleHelp,ChevronRight} from 'lucide-react';
 import {useStudio} from '../StudioState';
 import {WorkbenchAnalysis,WorkbenchEvidence,WorkbenchMetrics} from './WorkbenchChrome';
 import {ResultsPanel} from '../StudioPanels';
@@ -8,18 +8,22 @@ import type {WorkbenchCommandId} from './workbenchCommands';
 
 export function WorkbenchCommandBar({onHome,onAgent,onCommand,onSearch,statusContent}:{onHome:()=>void;onAgent:()=>void;onCommand:(id:WorkbenchCommandId)=>void;onSearch:()=>void;statusContent?:ReactNode}){
  const s=useStudio(),dirty=Object.keys(s.inputDrafts).length,busy=s.busy,w=s.w!;
- const blocked=dirty>0||busy;
- const buried=(w.design_basis?.environment??'buried')==='buried';
  const state=dirty?'输入待提交':busy?'工程操作进行中':'当前输入已保存';
  return <header className="ps-commandbar dual-header" aria-label="工程命令栏">
-  <button className="ps-brand" onClick={onHome} aria-label="返回模式选择"><span>C</span><b>CableSim<strong>Pro</strong></b></button>
+  <button className="ps-brand" onClick={onHome} aria-label="返回模式选择"><span>C</span><div><b>CableSim<strong>Pro</strong></b><small>电缆工程分析与设计平台</small></div></button>
   <button className="wb-project-card ps-project" onClick={()=>onCommand('projects')} aria-label="打开工程中心"><FolderOpen size={17}/><span><b>{w.scenario.name}</b><small>当前工程 · 打开其他方案</small></span><ChevronDown size={14}/></button>
-  <span className="ps-revision" data-testid="session-revision"><code data-testid="revision">rev.{w.revision}</code></span>
-  <details className="wb-context-disclosure ps-context"><summary><i className={dirty?'is-dirty':busy?'is-busy':''}/><span data-testid="workbench-save-state">{state}</span><ChevronDown size={12}/></summary><div className="ps-context-content"><h2>输入与计算状态</h2>{statusContent}</div></details>
-  <button className="ps-search-trigger" onClick={onSearch} aria-label="搜索命令"><Search size={17}/><span>搜索命令</span><kbd>Ctrl K</kbd></button>
-  <nav className="mode-switch ps-modes" aria-label="工作模式"><button aria-pressed={true}><Box size={16}/><span>专业工作台</span></button><button aria-pressed={false} onClick={onAgent}><Workflow size={16}/><span>智能工程流</span></button></nav>
-  <div className="ps-command-actions"><button className="ps-icon-button" aria-label="另存方案" title="另存方案" disabled={blocked} onClick={()=>onCommand('fork')}><Copy size={16}/></button><button className="ps-primary" aria-label={buried?'计算载流量':'配置竖向研究'} disabled={blocked} onClick={()=>onCommand(buried?'run':'fields')}><span aria-hidden="true">▷</span>{busy?'正在计算':'运行计算'}</button><button className="ps-icon-button" aria-label="双模式服务设置" title="服务接入设置" onClick={()=>onCommand('settings')}><Settings2 size={17}/></button></div>
+  <button className="ref-workspace-select" onClick={onSearch} aria-label="选择工作区"><Layers3 size={17}/>专业工作台<ChevronDown size={13}/></button>
+  <details className="wb-context-disclosure ps-context"><summary><i className={dirty?'is-dirty':busy?'is-busy':''}/><span data-testid="workbench-save-state">{state}</span><span className="ps-revision" data-testid="session-revision"><code data-testid="revision">rev.{w.revision}</code></span><ChevronDown size={12}/></summary><div className="ps-context-content"><h2>输入与计算状态</h2>{statusContent}</div></details>
+  <button className="ps-search-trigger" onClick={onSearch} aria-label="搜索命令"><Search size={18}/><span>搜索命令</span><kbd>Ctrl+K</kbd></button>
+  <nav className="mode-switch ps-modes" aria-label="工作模式"><button aria-pressed={true}><Box size={17}/><span>专业工作台</span></button><button aria-pressed={false} onClick={onAgent}><Workflow size={17}/><span>智能工程流</span></button></nav>
+  <div className="ps-command-actions"><button className="ps-icon-button" aria-label="另存方案" title="另存方案" disabled={dirty>0||busy} onClick={()=>onCommand('fork')}><Copy size={18}/></button><button className="ps-icon-button" aria-label="方法与适用范围" title="方法与适用范围" onClick={()=>onCommand('methods')}><CircleHelp size={20}/></button><button className="ps-icon-button" aria-label="双模式服务设置" title="服务接入设置" onClick={()=>onCommand('settings')}><Settings2 size={19}/></button></div>
  </header>;
+}
+/** One primary solve action, in the same bottom command position as the approved image. */
+export function WorkbenchStatusBar({onCommand}:{onCommand:(id:WorkbenchCommandId)=>void}){
+ const s=useStudio(),w=s.w!;const dirty=Object.keys(s.inputDrafts).length>0;
+ const buried=(w.design_basis?.environment??'buried')==='buried';
+ return <footer className="ref-status-footer" aria-label="工程运行状态"><div className="ref-status-context"><span>当前模型：{w.scenario.cable.conductor==='copper'?'铜':'铝'} {w.scenario.cable.area_mm2} mm² · 单芯电缆</span><span>工况：{buried?'单回路直埋':'竖向空气'}</span><span>环境温度：{w.scenario.installation.ambient_temperature_c} °C</span><button onClick={()=>onCommand('methods')}>方法与适用范围</button></div><div className="ref-runtime-actions"><span className={dirty?'ref-state-warning':''}><i/>{dirty?'输入待提交':s.busy?'工程操作进行中':s.current?'当前结果有效':'输入已保存'}</span><button className="ps-primary" aria-label={buried?'计算载流量':'配置竖向研究'} disabled={s.busy||dirty} onClick={()=>onCommand(buried?'run':'fields')}><Play size={17}/>{s.busy?'正在计算':buried?'运行计算':'竖向研究'}</button></div></footer>;
 }
 const railItems=[
  {id:'model',match:'cable',label:'结构',name:'电缆结构',Icon:Layers3},
@@ -36,7 +40,7 @@ export function WorkspaceRail({area,view,onCommand}:{area:string;view:string;onC
  </nav>;
 }
 export function ResultRibbon({open,onOpenChange}:{open:boolean;onOpenChange:(open:boolean)=>void}){
- const s=useStudio();return <div className="ps-result-ribbon" aria-label="当前结果摘要"><WorkbenchMetrics/><div className="ps-result-actions"><button className="ps-analysis-toggle" aria-expanded={open} aria-controls="workbench-analysis-drawer" onClick={()=>onOpenChange(!open)}>{open?'收起分析':'查看分析'}{open?<ChevronDown size={16}/>:<ChevronUp size={16}/>}</button><button className="ps-report" aria-label="导出计算书" title="导出当前计算书" disabled={s.busy||!s.current} onClick={()=>void s.report()}><FileText size={16}/><span>计算书</span></button></div></div>;
+ const s=useStudio();return <section className="ps-result-ribbon" aria-label="当前结果摘要"><div className="ref-result-title"><h2>计算结果概览</h2><p>{s.current?'当前模型与工况的计算结果':s.currentSweep?'当前为离散参数研究':s.output?'输入已变化，需重新计算':'执行计算后显示真实结果'}</p></div><WorkbenchMetrics/><div className="ps-result-actions"><button className="ps-analysis-toggle" aria-expanded={open} aria-controls="workbench-analysis-drawer" onClick={()=>onOpenChange(!open)}>{open?'收起分析':'查看分析'}{open?<ChevronDown size={17}/>:<ArrowRight size={17}/>}</button><button className="ps-report" aria-label="导出计算书" title="导出当前计算书" disabled={s.busy||!s.current} onClick={()=>void s.report()}><FileText size={17}/><span>下载计算书</span></button></div></section>;
 }
 export function AnalysisDrawer({open,onClose,onCommand}:{open:boolean;onClose:()=>void;onCommand:(id:WorkbenchCommandId)=>void}){
  const s=useStudio();const [tab,setTab]=useState('overview');const heading=useId();

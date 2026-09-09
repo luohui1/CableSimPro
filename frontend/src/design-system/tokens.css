@@ -85,4 +85,18 @@
   --wb-studio-command-height: 64px;
   --wb-studio-inspector-width: 320px;
   --wb-studio-overlay-shadow: 0 24px 80px rgb(20 36 59 / 20%), 0 2px 8px rgb(20 36 59 / 8%);
+  --wb-reference-header-height: 80px;
+  --wb-reference-rail-width: 84px;
+  --wb-reference-inspector-width: min(370px, 25vw);
+  --wb-reference-result-height: 150px;
+  --wb-reference-footer-height: 56px;
+  --wb-reference-title-height: 64px;
+  --wb-reference-view-tabs-height: 56px;
+  --wb-reference-gap: 18px;
+  --wb-reference-ink: #102953;
+  --wb-reference-muted: #526a94;
+  --wb-reference-blue: #005bea;
+  --wb-reference-surface: #f5f9ff;
+  --wb-reference-stage-background: radial-gradient(ellipse at 50% 38%,#ffffff 0%,#f2f7fd 48%,#e3edf8 100%);
+  --wb-reference-tool-shadow: 0 10px 30px rgb(50 88 138 / 14%), 0 2px 5px rgb(50 88 138 / 5%);
 }

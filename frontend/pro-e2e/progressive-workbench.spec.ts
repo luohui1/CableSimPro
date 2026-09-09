@@ -11,7 +11,7 @@ test('progressive: a single command bar, large canvas and collapsed analysis use
  await expect(page.getByRole('region',{name:'当前电缆分层预览'})).toBeHidden();
  const model=(await page.getByTestId('cable-model-view').boundingBox())!;
  const rail=(await page.locator('.enterprise-outline').boundingBox())!;
- expect(rail.width).toBeLessThanOrEqual(80);expect(model.width).toBeGreaterThan(800);expect(model.height).toBeGreaterThan(440);
+ expect(rail.width).toBeLessThanOrEqual(84);expect(model.width).toBeGreaterThan(800);expect(model.height).toBeGreaterThan(440);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await expect(page.getByRole('button',{name:'绝缘与护套',exact:true})).toHaveAttribute('aria-expanded','false');
  await page.screenshot({path:info.outputPath('progressive-default.png'),fullPage:true});
@@ -71,8 +71,8 @@ test('progressive: object inspection, comparison and result drawer retain canvas
 });
 
 test('progressive: project center exposes real saved workspaces and remains bounded on narrow screens',async({page},info)=>{
- await enter(page);await page.getByRole('banner',{name:'工程命令栏'}).getByRole('button',{name:'打开工程中心',exact:true}).click();
- const hub=page.getByRole('dialog',{name:'工程中心',exact:true});await expect(hub.locator('.eng-project-list button')).toHaveCount(1);await expect(hub).toContainText('240 mm²');await page.screenshot({path:info.outputPath('progressive-project-center.png'),fullPage:true});
+ await enter(page);const stored=await(await page.request.get('/api/workspaces')).json();await page.getByRole('banner',{name:'工程命令栏'}).getByRole('button',{name:'打开工程中心',exact:true}).click();
+ const hub=page.getByRole('dialog',{name:'工程中心',exact:true});await expect(hub.locator('.eng-project-list button')).toHaveCount(stored.length);await expect(hub).toContainText('240 mm²');await page.screenshot({path:info.outputPath('progressive-project-center.png'),fullPage:true});
  await page.getByRole('button',{name:'关闭对话框',exact:true}).click();await page.setViewportSize({width:390,height:844});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  const input=await palette(page);await input.fill('参数');await expect(input).toBeInViewport();expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);

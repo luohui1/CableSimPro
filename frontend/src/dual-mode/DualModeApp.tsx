@@ -15,6 +15,7 @@ import '../professional/white-workbench.css';
 import '../professional/workbench-layout.css';
 import '../professional/industrial-surfaces.css';
 import '../professional/progressive-workbench.css';
+import '../professional/reference-workbench.css';
 
 const initialProject=readRoute().project;
 function Application(){
@@ -42,7 +43,7 @@ function Application(){
  async function openProject(id:string,mode:WorkMode){if(s.busy||dirty)return;await s.load(id);navigateMode(mode,id)}
  const mismatch=!!route.project&&route.project!==s.w?.id;
  const usable=!!s.w&&!mismatch;
- return <div className={`dual-app light-studio ${route.mode==='workbench'?'white-workbench progressive-studio':''} ${route.mode?'is-project':'is-home'}`}>
+ return <div className={`dual-app light-studio ${route.mode==='workbench'?'white-workbench progressive-studio reference-studio':''} ${route.mode?'is-project':'is-home'}`}>
   {(route.mode!=='workbench'||!usable)&&<header className="dual-header"><button className="dual-brand" onClick={home} aria-label="返回模式选择"><span className="dual-brand-symbol">C</span><b>CableSim<span>Pro</span></b><small>电缆设计与验证</small></button>
    {route.mode&&<nav className="mode-switch" aria-label="工作模式"><button aria-pressed={route.mode==='workbench'} onClick={()=>choose('workbench')}><Box size={17}/>专业工作台</button><button aria-pressed={route.mode==='agent'} onClick={()=>choose('agent')}><Workflow size={17}/>智能工程流</button></nav>}
    <div className="dual-header-end"><span>0.7.4 · 工程预览</span><button onClick={()=>openWorkbench('settings')} title="服务接入设置" aria-label="双模式服务设置"><Settings2 size={19}/></button></div>
