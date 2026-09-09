@@ -10,7 +10,7 @@ async function capture(page:Page,file:string){await page.screenshot({path:file,f
 test('reference layout: approved image landmarks and native controls',async({page},info)=>{
  await page.setViewportSize({width:1586,height:992});await enter(page);
  await capture(page,info.outputPath('reference-default.png'));
- const selectors={header:'.ps-commandbar',rail:'.enterprise-outline',title:'.ps-view-heading',tabs:'.viewport-tabs',canvas:'.engineering-viewport .viewport-pane',inspector:'.enterprise-inspector',results:'.ps-result-ribbon',footer:'.ref-status-footer'};
+ const selectors={header:'.ps-commandbar',rail:'.enterprise-outline',title:'.ps-view-heading',tabs:'.viewport-tabs',canvas:'.engineering-viewport .viewport-pane:not([hidden])',inspector:'.enterprise-inspector',results:'.ps-result-ribbon',footer:'.ref-status-footer'};
  const boxes:Record<string,{x:number;y:number;width:number;height:number}>= {};
  for(const [key,selector] of Object.entries(selectors)){const box=await page.locator(selector).boundingBox();expect(box,key).not.toBeNull();boxes[key]=box!;}
  await writeFile(info.outputPath('reference-landmarks.json'),JSON.stringify(boxes,null,2));
