@@ -15,9 +15,11 @@
 .white-workbench .wb-project-card {
  border:0!important;background:var(--wb-surface-raised)!important;
  box-shadow:var(--wb-shadow-raised);padding:15px 12px!important;
+ height:auto;min-height:72px;flex-shrink:0;align-items:center;
 }
 .white-workbench .wb-project-card svg {color:var(--wb-color-primary)}
 .white-workbench .wb-project-card b {font-size:13px}
+.white-workbench .wb-project-card small {white-space:normal;line-height:1.5}
 .white-workbench .wb-nav-section {font-size:11px;letter-spacing:.12em;padding-top:18px}
 .white-workbench .enterprise-outline .wb-navigation button {min-height:42px;margin:4px 0;transition:background var(--wb-motion-fast),box-shadow var(--wb-motion-fast)}
 .white-workbench .enterprise-outline .wb-navigation button[aria-current=page] {
@@ -138,6 +140,11 @@
 .white-workbench .wb-evidence>div {border:0}
 .white-workbench .inline-results {border:0;box-shadow:var(--wb-shadow-raised);border-radius:12px;margin-top:16px}
 .white-workbench .inline-results>header {border:0;background:var(--wb-surface-tool)}
+.white-workbench .dual-embedded.is-focused .enterprise-model-stage {height:var(--wb-model-focus-height)}
+.white-workbench .enterprise-installation-stage {border:0;border-radius:var(--wb-radius-stage);box-shadow:var(--wb-shadow-stage)}
+.white-workbench .enterprise-canvas-holder {min-height:400px}
+.white-workbench .canvas-toolbar {border:0;background:var(--wb-surface-tool)}
+.white-workbench .canvas-caption {top:34px;right:14px;left:auto;max-width:calc(100% - 52px);padding:7px 10px;border:0;border-radius:7px;box-shadow:var(--wb-shadow-control);font-size:11px;pointer-events:none}
 @media(max-width:1500px) {
  .white-workbench {--wb-inspector-width:var(--wb-industrial-inspector-laptop);--wb-rail-width:190px;--wb-model-height:var(--wb-industrial-model-laptop)}
  .white-workbench .dual-embedded .enterprise-content {padding:18px 20px 24px}
@@ -167,6 +174,8 @@
  .white-workbench .wb-property-group h3>button {min-height:44px}
  .white-workbench .orientation {bottom:12px;right:9px}
  .white-workbench .model-dimensions {left:10px}
+ .white-workbench .canvas-caption {font-size:10px;padding:5px 7px;top:96px;right:8px;gap:5px}
+ .white-workbench .canvas-caption small {display:none}
 }
 @media(prefers-reduced-motion:reduce) {.white-workbench * {transition:none!important;scroll-behavior:auto!important}}
 @media(forced-colors:active) {

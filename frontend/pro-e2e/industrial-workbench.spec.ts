@@ -9,6 +9,9 @@ test('industrial: elevated surfaces and material toggle keep the same live canva
  const stage=surface.locator('.enterprise-model-stage'),inspector=surface.locator('.enterprise-inspector');
  await expect(stage).toHaveCSS('border-top-width','0px');await expect(inspector).toHaveCSS('border-top-width','0px');
  expect(await stage.evaluate(e=>getComputedStyle(e).boxShadow)).not.toBe('none');
+ const project=surface.locator('.wb-project-card'),hint=project.locator('small');
+ const cardBox=(await project.boundingBox())!,hintBox=(await hint.boundingBox())!;
+ expect(hintBox.y+hintBox.height).toBeLessThanOrEqual(cardBox.y+cardBox.height);
  await expect(inspector.locator('.property').first()).toHaveCSS('border-bottom-width','0px');
  const model=page.getByTestId('cable-model-view'),canvas=model.locator('canvas');
  await expect(model).toHaveAttribute('data-material-preset','studio-1');

@@ -81,3 +81,19 @@ let shadowLights=0;scene.traverse(o=>{if(o instanceof THREE.Light&&o.castShadow)
 assert.equal(rig.floor.userData.exclude_from_export,true);assert.equal(rig.floor.userData.exclude_from_fit,true);
 rig.key.shadow.dispose();disposeScene(scene);optical++;
 console.log(`${optical} optical contracts checked: deterministic maps, physical presets, radius bounds, resource disposal and one shadow caster. No image-quality or solver certification is implied.`);
+
+// Zoom/responsive display ticks must remain legible and bounded; input remains meters.
+import {meterStep,meterTicks,meterLabel,rulerSteps} from '../../frontend/src/visual-assets/engineeringTicks';
+for(const scale of [8,15,25,80,200,600,1000]){
+ const {major,minor}=rulerSteps(scale);
+ assert.ok(major*scale>=56-1e-8);assert.ok(minor*scale>=14-1e-8);
+ for(const origin of [-200,190,960]){
+  const ticks=meterTicks(origin,scale,32,390,minor);
+  assert.ok(ticks.length<=27);
+  for(const t of ticks)assert.ok(origin+t*scale>=32-1e-8&&origin+t*scale<=390+1e-8);
+ }
+}
+assert.deepEqual(meterTicks(0,0,0,390,1),[]);
+assert.deepEqual(meterTicks(0,1,0,1e9,1),[]);
+assert.equal(meterStep(.28),.5);assert.equal(meterLabel(-0,.1),'0.0');
+console.log('7 responsive/zoom tick scales checked; ruler spacing >=56px and grid spacing >=14px without changing snapping.');
