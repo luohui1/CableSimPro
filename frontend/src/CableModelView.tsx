@@ -157,13 +157,13 @@ export default function CableModelView({cable,surface='#f4f7fb',studio=false,com
  useEffect(()=>{renderCurrent.current()},[materialPreview]);
  useEffect(()=>{const c=cam.current,ctl=controls.current;if(!c||!ctl)return;
   fit.current=()=>{
-   c.position.set(...(view==='front'?[.001,0,.6]:view==='end'?[.6,.001,0]:view==='top'?[0,.6,.001]:compactTools?[1.10,.32,.85]:[.33,.14,.8]) as [number,number,number]);
+   c.position.set(...(view==='front'?[.001,0,.6]:view==='end'?[.6,.001,0]:view==='top'?[0,.6,.001]:compactTools?[1.10,.12,.85]:[.33,.14,.8]) as [number,number,number]);
    c.up.set(0,1,0);ctl.target.set(0,0,0);c.lookAt(ctl.target);
    if(group.current){
     fitCableCamera(c,group.current);
     const hero=compactTools&&mode==='cutaway'&&view==='iso'&&(host.current?.clientWidth??0)>720&&(host.current?.clientHeight??0)>360;
-    if(studio)c.zoom=Math.min(16,c.zoom*(hero?1.40:1.06));
-    c.updateProjectionMatrix();if(hero){c.position.x+=.04;ctl.target.x+=.04;c.lookAt(ctl.target)}
+    if(studio)c.zoom=Math.min(16,c.zoom*(hero?1.60:1.06));
+    c.updateProjectionMatrix();if(hero){c.position.x+=.055;ctl.target.x+=.055;c.lookAt(ctl.target)}
    }ctl.update();
   };
   fit.current();return()=>{fit.current=()=>{}};

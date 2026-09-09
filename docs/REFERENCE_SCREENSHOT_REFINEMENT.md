@@ -26,3 +26,11 @@ The local source tree built successfully with the repository's pinned frontend d
 The four reference browser cases retain all original assertions and additionally check exact inspector placement, no inherited border, title weight, camera triad, response-derived indicator values, and indicator invalidation after editing. No case is skipped or removed; timeouts, retries and full-matrix test counts are unchanged.
 
 Local browser navigation is blocked by the environment administrator; no bypass is attempted. Current-commit Actions and their unmodified PNG/JUnit artifacts are required for browser acceptance. Previous-commit passes are not reused as current-commit certification. PR remains draft; no main merge or release is performed.
+
+## Follow-up after current-run screenshots
+
+The `c2f8f38` reference artifact `10098496796` (run `34337451117`) was downloaded and verified: source-commit matches, 243 backend and 8 browser cases passed, including accessibility and exact layout anchors. Raw screenshots still showed two visual issues, so passing tests were not treated as complete visual equivalence.
+
+This follow-up reduces the default camera pitch so the cable no longer crosses the title area, while preserving the actual geometry and export. The analysis drawer is placed after the result ribbon in DOM order, as in the approved analysis image. Compact 200px plots now use height-appropriate chart margins instead of losing most of the plot to the full-size 340px chart padding. Series, labels, units, thresholds, exports and axes data are unchanged. Browser checks retain all cases and additionally assert ribbon-before-analysis order and the compact chart mode; settled computed screenshots wait for the calculation action to re-enable.
+
+Latest follow-up acceptance must use its own Actions artifacts, not the `c2f8f38` pass.

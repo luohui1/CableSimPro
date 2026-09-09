@@ -43,8 +43,13 @@ test('reference layout: real solved result ribbon and analysis keep evidence and
  const tracks=page.getByTestId('workbench-metrics').locator('progress');
  await expect(tracks).toHaveCount(2);
  expect(Number(await tracks.first().getAttribute('value'))).toBeCloseTo(temperature-inputs.installation.ambient_temperature_c,5);
+ await expect(page.getByRole('button',{name:'计算载流量',exact:true})).toBeEnabled();
  await capture(page,info.outputPath('reference-computed.png'));
  await page.getByRole('button',{name:'查看分析',exact:true}).click();await expect(page.getByRole('img',{name:'当前运行径向温度曲线',exact:true})).toBeVisible();
+ const ribbon=(await page.getByRole('region',{name:'当前结果摘要',exact:true}).boundingBox())!;
+ const drawer=(await page.getByRole('region',{name:'结果分析',exact:true}).boundingBox())!;
+ expect(ribbon.y+ribbon.height).toBeLessThanOrEqual(drawer.y+1);
+ await expect(page.locator('.ps-analysis-drawer .scientific-chart')).toHaveAttribute('data-layout','compact');
  await capture(page,info.outputPath('reference-analysis.png'));
  await expect(canvas).toHaveAttribute('data-retained','reference');
  const download=page.waitForEvent('download');await page.getByRole('button',{name:'导出计算书',exact:true}).click();
