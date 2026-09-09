@@ -23,7 +23,7 @@ test('calculation and model survive mode switch with one workspace',async({page}
  const id=await page.evaluate(()=>localStorage.getItem('cablesim-studio-id'));
  const canvas=page.getByTestId('professional-mode').getByTestId('cable-model-view').locator('canvas');await expect(canvas).toBeVisible();await canvas.evaluate((e:any)=>e.dataset.testIdentity='preserved');
  await page.getByRole('button',{name:'计算载流量',exact:false}).click();await expect(page.locator('.enterprise-result-summary')).toBeVisible();
- const value=await page.locator('.enterprise-result-summary>div').first().locator('b').innerText();
+ const value=await page.getByTestId('workbench-metrics').locator('.wb-metric').first().locator('strong').innerText();
  await switcher(page).getByRole('button',{name:'智能工程流',exact:true}).click();await expect(page.locator('.flow-result-metrics')).toContainText(value.replace(/\s+/g,' ').trim());
  await expect(page.getByTestId('session-revision')).toHaveText('rev.1');expect(await page.evaluate(()=>localStorage.getItem('cablesim-studio-id'))).toBe(id);
  await page.screenshot({path:info.outputPath('dual-mode-agent-result.png'),fullPage:true});

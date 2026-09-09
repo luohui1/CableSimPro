@@ -48,7 +48,7 @@ export function fitCablePortrait(camera:THREE.PerspectiveCamera,object:THREE.Obj
  }
  camera.position.copy(direction.multiplyScalar(distance));camera.lookAt(0,0,0);camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
 }
-export default function CableModelView({cable}:{cable:Cable}){
+export default function CableModelView({cable,surface='#f4f7fb'}:{cable:Cable;surface?:string}){
  const host=useRef<HTMLDivElement>(null),group=useRef<THREE.Group|null>(null),controls=useRef<OrbitControls|null>(null),cam=useRef<THREE.OrthographicCamera|null>(null);
  const sceneRef=useRef<THREE.Scene|null>(null),modelRoot=useRef<THREE.Group|null>(null),renderCurrent=useRef<()=>void>(()=>{});
  const [mode,setMode]=useState<ViewMode>('cutaway'),[visible,setVisible]=useState([true,true,true,true,true,true]),[failed,setFailed]=useState(false),[error,setError]=useState(''),[view,setView]=useState('iso'),[viewRevision,setViewRevision]=useState(0);
@@ -62,7 +62,7 @@ export default function CableModelView({cable}:{cable:Cable}){
  useEffect(()=>{
   const el=host.current;if(!el)return;let renderer:THREE.WebGLRenderer;
   try{renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,preserveDrawingBuffer:false})}catch{setFailed(true);return}
-  setFailed(false);renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor('#f4f7fb');renderer.outputColorSpace=THREE.SRGBColorSpace;
+  setFailed(false);renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(surface);renderer.outputColorSpace=THREE.SRGBColorSpace;
   renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;renderer.domElement.setAttribute('aria-label','参数化电缆三维模型');el.appendChild(renderer.domElement);
   const scene=new THREE.Scene();sceneRef.current=scene;
   const room=new RoomEnvironment(),pmrem=new THREE.PMREMGenerator(renderer),environment=pmrem.fromScene(room,.04);scene.environment=environment.texture;room.dispose();pmrem.dispose();

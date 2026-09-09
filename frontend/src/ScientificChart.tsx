@@ -8,7 +8,7 @@ import {csvCell, SWEEP_PARAMETERS, sweepParameter} from './sweepStudy';
 echarts.use([LineChart,GridComponent,TooltipComponent,LegendComponent,DataZoomComponent,MarkLineComponent,AriaComponent,CanvasRenderer]);
 export interface Series {name:string;points:[number,number|null][]}
 export const engineeringAxisLabel=(value:string)=>{const key=sweepParameter(value);return key?`${SWEEP_PARAMETERS[key].label} / ${SWEEP_PARAMETERS[key].unit}`:value};
-export function EngineeringChart({series,xLabel,yLabel,label,threshold}:{series:Series[];xLabel:string;yLabel:string;label:string;threshold?:number}){
+export function EngineeringChart({series,xLabel,yLabel,label,threshold,height=340}:{series:Series[];xLabel:string;yLabel:string;label:string;threshold?:number;height?:number}){
  const host=useRef<HTMLDivElement>(null),chart=useRef<echarts.EChartsType|null>(null);
  const displayXLabel=engineeringAxisLabel(xLabel),displayYLabel=engineeringAxisLabel(yLabel);
  useEffect(()=>{
@@ -23,6 +23,6 @@ export function EngineeringChart({series,xLabel,yLabel,label,threshold}:{series:
   const ro=new ResizeObserver(()=>c.resize());ro.observe(host.current);return()=>{ro.disconnect();c.dispose();chart.current=null};
  },[series,displayXLabel,displayYLabel,label,threshold]);
  const csv=()=>download(label+'.csv','series,x,y\n'+series.flatMap(s=>s.points.map(p=>[s.name,p[0],p[1]].map(csvCell).join(','))).join('\n'),'text/csv;charset=utf-8');
- return <div className="scientific-chart" data-x-label={displayXLabel} data-y-label={displayYLabel} data-missing-points={series.reduce((n,s)=>n+s.points.filter(p=>p[1]===null).length,0)}><div className="chart-actions"><span>{label}</span><button onClick={()=>chart.current?.dispatchAction({type:'dataZoom',start:0,end:100})}>恢复范围</button><button onClick={csv}>导出数据</button></div><div ref={host} role="img" aria-label={label} style={{width:'100%',height:340}}/>
+ return <div className="scientific-chart" data-x-label={displayXLabel} data-y-label={displayYLabel} data-missing-points={series.reduce((n,s)=>n+s.points.filter(p=>p[1]===null).length,0)}><div className="chart-actions"><span>{label}</span><button onClick={()=>chart.current?.dispatchAction({type:'dataZoom',start:0,end:100})}>恢复范围</button><button onClick={csv}>导出数据</button></div><div ref={host} role="img" aria-label={label} style={{width:'100%',height}}/>
  <details className="chart-data"><summary>查看曲线数据表</summary><table><thead><tr><th>曲线</th><th>{displayXLabel}</th><th>{displayYLabel}</th></tr></thead><tbody>{series.flatMap(s=>s.points.map((p,i)=><tr key={s.name+i}><td>{s.name}</td><td>{p[0].toPrecision(6)}</td><td>{p[1]===null?'—':p[1].toPrecision(6)}</td></tr>))}</tbody></table></details></div>;
 }
