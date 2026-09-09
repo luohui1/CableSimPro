@@ -3,18 +3,19 @@ on:
   push:
     branches: ['design/white-workbench-v077']
 permissions:
-  contents: read
+  contents: write
 concurrency:
   group: white-workbench-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   review:
+    if: github.ref == 'refs/heads/design/white-workbench-v077'
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: false
+          persist-credentials: true
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -23,16 +24,39 @@ jobs:
           python-version: '3.13'
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
-      - name: Reproducible local review inputs (no repository credentials or user data)
+      - run: pip install -r backend/requirements-dev.txt
+      - name: Integrate reviewed components with exact source guards
+        run: python scripts/integrate_white_workbench.py
+      - name: Validate and commit the one-time integration, never force another branch
         run: |
-          mkdir -p review-inputs/wheels
-          git archive --format=tar.gz HEAD > review-inputs/source.tar.gz
-          tar -czf review-inputs/frontend-dependencies.tar.gz frontend/node_modules
-          python -m pip download --only-binary=:all: -r backend/requirements-dev.txt -d review-inputs/wheels
-      - uses: actions/upload-artifact@v4
-        with:
-          name: white-workbench-review-inputs
-          path: review-inputs/
-          retention-days: 2
+          node scripts/test_design_tokens.mjs
+          npm --prefix frontend run build
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend scripts .github/workflows/white-workbench-review.yml
+          git commit -m 'feat: integrate pure-white professional workbench with live results and grouped controls'
+          git push origin HEAD:refs/heads/design/white-workbench-v077
+      - run: npx playwright install --with-deps chromium webkit
+        working-directory: frontend
+      - run: node scripts/test_design_tokens.mjs
+      - run: python -m pytest --junitxml=artifacts/backend.xml
       - run: npm run build
         working-directory: frontend
+      - name: Real workbench, mode switch and accessibility regressions
+        run: npx playwright test --config=playwright.white.config.ts
+        working-directory: frontend
+      - name: Fixed-source review bundle
+        if: always()
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/source-commit.txt
+          git archive --format=tar.gz HEAD > artifacts/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: white-workbench-review
+          path: |
+            artifacts/
+            frontend/test-results-white/
+            frontend/playwright-report-white/
+          retention-days: 7
