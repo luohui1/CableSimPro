@@ -33,7 +33,10 @@ test('white workbench: calculation, live metrics, radial chart, export and canva
  await expect(cards.nth(2)).toContainText(summary.thermal_margin_c.toFixed(1));
  await expect(cards.nth(3)).toContainText(summary.circuit_loss_kw.toFixed(2));
  await expect(page.getByRole('img',{name:'当前运行径向温度曲线',exact:true})).toBeVisible();
- const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'导出计算书',exact:true}).click();const file=await downloaded;expect(file.suggestedFilename()).toContain('计算书');expect(await readFile((await file.path())!,'utf8')).toContain(summary.ampacity_a.toFixed(1));
+ const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'导出计算书',exact:true}).click();const file=await downloaded;expect(file.suggestedFilename()).toContain('计算书');const report=await readFile((await file.path())!,'utf8');
+ expect(report).toContain(`${summary.ampacity_a.toFixed(2)} A`);
+ expect(report).toContain(payload.result.output.result.input_sha256);
+ expect(report).toContain(`${summary.operating_max_temperature_c.toFixed(2)} °C`);
  await page.screenshot({path:info.outputPath('white-workbench-computed.png'),fullPage:true});
  await switcher(page).getByRole('button',{name:'智能工程流',exact:true}).click();await expect(page.locator('.white-workbench')).toHaveCount(0);await expect(page.locator('.flow-result-metrics')).toContainText(summary.ampacity_a.toFixed(1));
  await switcher(page).getByRole('button',{name:'专业工作台',exact:true}).click();await expect(canvas).toHaveAttribute('data-retained','white');
@@ -55,4 +58,46 @@ for(const width of [1366,390])test(`white workbench: ${width}px layout keeps con
  const field=page.getByLabel('导体截面积',{exact:true});await field.scrollIntoViewIfNeeded();await expect(field).toBeVisible();await field.fill('300');await field.press('Tab');await expect(page.getByTestId('session-revision')).toHaveText('rev.2');
  if(width===390){await page.getByRole('button',{name:'显示工程目录',exact:true}).click();await page.getByRole('button',{name:'敷设与负荷',exact:true}).click();await expect(page.getByRole('heading',{name:'敷设与负荷',exact:true})).toBeVisible()}
  await page.screenshot({path:info.outputPath(`white-workbench-${width}.png`),fullPage:true});
+});
+
+
+test('white workbench: collapsed parameter groups retain drafts, locks and keyboard access',async({page})=>{
+ await enter(page);
+ const group=page.getByRole('button',{name:'导体与电压',exact:true});
+ const field=page.getByLabel('导体截面积',{exact:true});
+ await field.fill('');await group.click();
+ await expect(group).toHaveAttribute('aria-expanded','false');
+ await expect(group).toContainText('1 项未提交');
+ await expect(field).toBeHidden();
+ await expect(page.getByRole('button',{name:'计算载流量',exact:false})).toBeDisabled();
+ await expect(page.getByTestId('workbench-save-state')).toHaveText('输入待提交');
+ await group.focus();await page.keyboard.press('Space');
+ await expect(group).toHaveAttribute('aria-expanded','true');await expect(field).toHaveValue('');
+ await page.getByRole('button',{name:'撤销未提交输入',exact:true}).click();
+ await page.getByRole('button',{name:'锁定导体截面积',exact:true}).click();
+ await expect(page.getByTestId('session-revision')).toHaveText('rev.2');
+ await group.click();await expect(page.getByRole('region',{name:'导体与电压',exact:true})).toContainText('1 项参数已锁定');
+ await group.press('Enter');await expect(field).toBeDisabled();
+ await expect(page.getByTestId('session-revision')).toHaveText('rev.2');
+});
+
+test('white workbench: focus canvas preserves model, draft and original side panels',async({page},info)=>{
+ await enter(page);
+ const model=page.getByTestId('cable-model-view'),canvas=model.locator('canvas');
+ await canvas.evaluate(e=>e.setAttribute('data-retained','focus'));
+ const before=(await model.boundingBox())!.width;
+ const field=page.getByLabel('导体截面积',{exact:true});await field.fill('');
+ let writes=0;page.on('request',r=>{if(r.method()==='POST')writes++});
+ await page.getByRole('button',{name:'专注画布',exact:true}).click();
+ await expect(page.locator('.enterprise-outline')).toBeHidden();await expect(page.locator('.enterprise-inspector')).toBeHidden();
+ expect((await model.boundingBox())!.width).toBeGreaterThan(before);
+ await expect(page.getByRole('button',{name:'计算载流量',exact:false})).toBeDisabled();
+ await expect(canvas).toHaveAttribute('data-retained','focus');
+ await page.screenshot({path:info.outputPath('white-workbench-focus.png'),fullPage:true});
+ await page.keyboard.press('Escape');
+ await expect(page.getByRole('button',{name:'专注画布',exact:true})).toHaveAttribute('aria-pressed','false');
+ await expect(page.locator('.enterprise-outline')).toBeVisible();await expect(field).toBeVisible();await expect(field).toHaveValue('');
+ await expect(canvas).toHaveAttribute('data-retained','focus');expect(writes).toBe(0);
+ await page.getByRole('button',{name:'撤销未提交输入',exact:true}).click();
+ await expect(page.getByTestId('session-revision')).toHaveText('rev.1');
 });

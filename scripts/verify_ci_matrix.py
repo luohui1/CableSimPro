@@ -6,10 +6,10 @@ from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
 
-# Five white-workbench real-backend cases added to each desktop project; legacy coverage retained.
-EXPECTED = {'chromium': 84, 'webkit': 84, 'mobile-webkit': 11,
-            'windows-chromium-1': 57, 'windows-chromium-1.25': 57,
-            'windows-chromium-1.5': 57, 'windows-edge-1.25': 57}
+# Seven white-workbench real-backend cases per desktop project; legacy coverage retained.
+EXPECTED = {'chromium': 86, 'webkit': 86, 'mobile-webkit': 11,
+            'windows-chromium-1': 59, 'windows-chromium-1.25': 59,
+            'windows-chromium-1.5': 59, 'windows-edge-1.25': 59}
 
 
 def verify(root: Path) -> dict:

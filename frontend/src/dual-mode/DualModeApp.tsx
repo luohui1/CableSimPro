@@ -13,6 +13,7 @@ import './light-studio.css';
 import {WorkbenchBanner,WorkbenchContext} from '../professional/WorkbenchChrome';
 import '../design-system/tokens.css';
 import '../professional/white-workbench.css';
+import '../professional/workbench-layout.css';
 
 const initialProject=readRoute().project;
 function Application(){
@@ -46,7 +47,7 @@ function Application(){
    {route.mode&&<nav className="mode-switch" aria-label="工作模式"><button aria-pressed={route.mode==='workbench'} onClick={()=>choose('workbench')}><Box size={17}/>专业工作台</button><button aria-pressed={route.mode==='agent'} onClick={()=>choose('agent')}><Workflow size={17}/>智能工程流</button></nav>}
    <div className="dual-header-end"><span>0.7.4 · 工程预览</span><button onClick={()=>openWorkbench('settings')} title="服务接入设置" aria-label="双模式服务设置"><Settings2 size={19}/></button></div>
   </header>
-  {route.mode&&usable&&<div className="dual-context"><button onClick={home}><ArrowLeft size={14}/>工作入口</button><span className="context-divider"/><b>{s.w!.scenario.name}</b><span className="dual-revision" data-testid="session-revision">rev.{s.w!.revision}</span><span className="dual-context-right"><Check size={13}/>共用工程数据</span></div>}
+  {route.mode&&usable&&<div className="dual-context"><button onClick={home}><ArrowLeft size={14}/><span>工作入口</span></button><span className="context-divider"/><b>{s.w!.scenario.name}</b><span className="dual-revision" data-testid="session-revision">rev.{s.w!.revision}</span><span className="dual-context-right"><Check size={13}/>共用工程数据</span></div>}
   {(s.error||routeWarning||route.invalidMode)&&<div className="dual-alert" role="alert"><span>{s.error||routeWarning||'无法识别此工作模式，请重新选择。'}</span><button aria-label="关闭双模式提示" onClick={()=>{s.dismiss();setRouteWarning('');if(route.invalidMode)home()}}><X size={16}/></button></div>}
   {dirty&&route.mode==='agent'&&<div className="dual-draft-warning" role="status"><span>有 {Object.keys(s.inputDrafts).length} 项未提交输入，任务规划和批准已暂停。</span><button onClick={()=>openWorkbench()}>返回检查参数</button><button onClick={s.discardInputs}>撤销未提交输入</button></div>}
   {route.mode&&usable&&(route.mode==='workbench'?<WorkbenchContext><EngineeringPulse mode={route.mode} openWorkbench={openWorkbench} openAgent={openAgent}/></WorkbenchContext>:<EngineeringPulse mode={route.mode} openWorkbench={openWorkbench} openAgent={openAgent}/>)}

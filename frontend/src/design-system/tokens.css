@@ -51,12 +51,19 @@
   --wb-shadow-popover: 0 8px 24px rgb(16 24 40 / 12%);
   --wb-header-height: 72px;
   --wb-rail-width: 208px;
-  --wb-inspector-width: 292px;
-  --wb-control-height: 34px;
+  --wb-inspector-width: 320px;
+  --wb-control-height: 36px;
   --wb-row-height: 42px;
   --wb-z-base: 0;
   --wb-z-sticky: 10;
   --wb-z-overlay: 30;
   --wb-z-dialog: 50;
   --wb-motion-fast: 120ms;
+  --wb-text-control: 14px;
+  --wb-text-control-touch: 16px;
+  --wb-control-touch-height: 44px;
+  --wb-field-label-width: 108px;
+  --wb-inspector-width-laptop: 300px;
+  --wb-model-height: 408px;
+  --wb-model-focus-height: clamp(430px, calc(100dvh - 300px), 800px);
 }

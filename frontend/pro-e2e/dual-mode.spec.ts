@@ -51,7 +51,11 @@ test('manual edit makes old agent proposal stale instead of overwriting engineer
  await enter(page,'agent');await page.getByLabel('描述本次工程任务',{exact:true}).fill('截面积改为 400 mm²，重新计算');await page.getByRole('button',{name:'生成任务计划',exact:true}).click();await expect(page.getByRole('region',{name:'待审查工程变更'})).toBeVisible();
  await switcher(page).getByRole('button',{name:'专业工作台',exact:true}).click();const field=page.locator('.enterprise-inspector').getByLabel('导体截面积',{exact:true});await field.fill('300');await field.press('Tab');await expect(page.getByTestId('session-revision')).toHaveText('rev.2');
  await switcher(page).getByRole('button',{name:'智能工程流',exact:true}).click();await expect(page.getByRole('button',{name:'批准并执行',exact:true})).toBeDisabled();await expect(page.locator('.flow-review')).toContainText('不可批准旧提案');
- await page.getByRole('button',{name:'拒绝提案',exact:true}).click();await page.reload();await expect(page.getByRole('region',{name:'待审查工程变更'})).toHaveCount(0);
+ const rejected=page.waitForResponse(r=>r.request().method()==='POST'&&r.url().endsWith('/reject'));
+ await page.getByRole('button',{name:'拒绝提案',exact:true}).click();expect((await rejected).status()).toBe(200);
+ await expect(page.getByRole('region',{name:'待审查工程变更'})).toHaveCount(0);
+ await page.reload();await expect(page.getByTestId('session-revision')).toHaveText('rev.2');
+ await expect(page.getByRole('region',{name:'待审查工程变更'})).toHaveCount(0);
 });
 
 test('uncommitted property survives mode switch and blocks plan and approval',async({page})=>{
