@@ -27,3 +27,12 @@
 .study-preparation-error {color:#9a3434;}
 .study-preparation-hash {display:block; margin-top:8px;}
 .study-preparation summary {cursor:pointer; font-size:12px;}
+/* The dialog header/close action must remain visible after scrolling or export. */
+.modal:has(>.study-preparation) {display:flex; flex-direction:column; width:min(900px,calc(100vw - 48px)); max-width:900px; max-height:calc(100dvh - 56px); padding:0; overflow:hidden; background:#fff; color:#183246; font-family:"Noto Sans CJK SC","Microsoft YaHei",system-ui,sans-serif;}
+.modal:has(>.study-preparation)>header {flex:0 0 auto; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 22px 14px; background:#fff; box-shadow:0 2px 9px #1832460a; z-index:1;}
+.modal:has(>.study-preparation)>header h2 {font-size:19px; font-weight:650; line-height:1.4; margin:0 0 5px;}
+.modal:has(>.study-preparation)>header p {margin:0; font-size:12px; line-height:1.6; color:#526874;}
+.modal:has(>.study-preparation)>header>button {width:32px; height:32px; flex:0 0 32px; border-radius:6px; background:#f0f5f7; color:#183246; display:grid; place-items:center;}
+.modal>.study-preparation {flex:1 1 auto; min-height:0; overflow:auto; padding:16px 22px 20px; overscroll-behavior:contain;}
+.study-preparation:has([data-severity=error]) .study-preparation-status {background:#fcf0ee;}
+.study-preparation:has([data-severity=error]) .study-preparation-status>strong {color:#9a3434;}
