@@ -37,7 +37,7 @@ export function InlineResults({open,onOpenChange}:{open:boolean;onOpenChange:(op
  const {current,currentSweep,output,busy}=useStudio();
  const contentId=useId();
  const hasOutput=!!output?.result||!!output?.sweep;
- return <section className={`inline-results ${open?'is-open':''}`} aria-label="当前工况结果">
+ return <section className={`inline-results ${open?'is-open':''} ${currentSweep?'is-sweep':''}`} aria-label="当前工况结果">
   <header>
    <button aria-expanded={open} aria-controls={contentId} onClick={()=>onOpenChange(!open)}>
     {open?<ChevronDown size={16}/>:<ChevronUp size={16}/>}<b>当前计算结果</b>

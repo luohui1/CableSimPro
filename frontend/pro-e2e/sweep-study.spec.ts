@@ -23,6 +23,22 @@ async function approve(page: Page) {
  return payload;
 }
 const numeric = (text: string) => Number(text.replaceAll(',', '').trim());
+async function assertStudyNotClipped(page: Page) {
+ const body = page.getByTestId('agent-mode').locator('.inline-results.is-sweep > .inline-results-body');
+ await expect(body).toHaveCSS('overflow-y', 'visible');
+ const sizes = await body.evaluate(e => ({client: e.clientHeight, scroll: e.scrollHeight}));
+ expect(sizes.client).toBeGreaterThanOrEqual(sizes.scroll - 1);
+}
+async function revealChart(page: Page) {
+ const chart = page.getByTestId('sweep-study').getByRole('img', {name: '参数扫描曲线', exact: true});
+ await chart.scrollIntoViewIfNeeded();
+ await expect(chart).toBeInViewport({ratio: .99});
+ const bounds = (await chart.boundingBox())!;
+ const thread = (await page.getByTestId('agent-mode').locator('.cs-thread-scroll').boundingBox())!;
+ const composer = (await page.getByTestId('agent-mode').getByRole('region', {name: '工程任务输入', exact: true}).boundingBox())!;
+ expect(bounds.y).toBeGreaterThanOrEqual(thread.y - 1);
+ expect(bounds.y + bounds.height).toBeLessThanOrEqual(Math.min(thread.y + thread.height, composer.y) + 1);
+}
 
 test('sweep study: reviewed temperature points show real headroom, CSV and version invalidation', async ({page, request}, info) => {
  const wid = await enter(page);
@@ -46,6 +62,9 @@ test('sweep study: reviewed temperature points show real headroom, CSV and versi
  expect(numeric(await first.nth(1).innerText())).toBeCloseTo(points[0].ampacity_a, 1);
  expect(numeric(await first.nth(3).innerText())).toBeCloseTo(points[0].ampacity_a - baseline.operating_current_a, 1);
  await expect(panel.locator('tr[data-point-index="1"] td').nth(2)).toHaveText('0.00');
+ await assertStudyNotClipped(page);
+ await panel.locator('.sweep-table').scrollIntoViewIfNeeded();
+ await page.screenshot({path: info.outputPath('sweep-temperature-table.png'), fullPage: true});
  const downloaded = page.waitForEvent('download');
  await panel.getByRole('button', {name: '导出扫描 CSV', exact: true}).click();
  const artifact = await downloaded;
@@ -57,6 +76,7 @@ test('sweep study: reviewed temperature points show real headroom, CSV and versi
  await panel.getByRole('button', {name: '特性曲线', exact: true}).click();
  await expect(panel.getByRole('img', {name: '参数扫描曲线', exact: true})).toBeVisible();
  await expect(panel.locator('.scientific-chart')).toHaveAttribute('data-x-label', '环境温度 / °C');
+ await revealChart(page);
  await page.screenshot({path: info.outputPath('sweep-temperature-study.png'), fullPage: true});
  await page.getByRole('navigation', {name: '工作模式'}).getByRole('button', {name: '专业工作台', exact: true}).click();
  const field = page.getByTestId('professional-mode').getByLabel('导体截面积', {exact: true});
@@ -92,6 +112,8 @@ test('sweep study: absent original case stays blank until a solved reference is 
  expect(exported.sweep.points).toEqual(points);
  await panel.getByRole('button', {name: '特性曲线', exact: true}).click();
  await expect(panel.getByRole('img', {name: '参数扫描曲线', exact: true})).toBeVisible();
+ await assertStudyNotClipped(page);
+ await revealChart(page);
  await page.screenshot({path: info.outputPath('sweep-depth-reference.png'), fullPage: true});
  expect(writes).toBe(0);
  await expect(page.getByTestId('session-revision')).toHaveText('rev.2');
