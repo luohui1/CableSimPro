@@ -3,19 +3,27 @@ on:
   push:
     branches: ['design/white-workbench-v077']
 permissions:
-  contents: write
+  contents: read
 concurrency:
-  group: white-workbench-${{ github.ref }}
+  # Preserve evidence from distinct source revisions; duplicate runs of one SHA cancel.
+  group: white-workbench-${{ github.ref }}-${{ github.sha }}
   cancel-in-progress: true
 jobs:
   review:
-    if: github.ref == 'refs/heads/design/white-workbench-v077'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - suite: design
+            files: white-workbench.spec.ts
+          - suite: compatibility
+            files: light-studio.spec.ts dual-mode.spec.ts engineering-pulse.spec.ts
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: true
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -25,33 +33,15 @@ jobs:
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
       - run: pip install -r backend/requirements-dev.txt
-      - name: Integrate reviewed components with exact source guards
-        run: |
-          if test -f scripts/integrate_white_workbench.py; then
-            python scripts/integrate_white_workbench.py
-            # Workflow cleanup is performed separately through the authorized
-            # repository connector. This job only commits ordinary source files.
-            git restore --source=HEAD --worktree .github/workflows/white-workbench-review.yml
-          fi
-      - name: Validate and commit source integration without workflow changes
-        run: |
-          node scripts/test_design_tokens.mjs
-          npm --prefix frontend run build
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add frontend scripts
-          if ! git diff --cached --quiet; then
-            git commit -m 'feat: integrate pure-white professional workbench with live results and grouped controls'
-            git push origin HEAD:refs/heads/design/white-workbench-v077
-          fi
-      - run: npx playwright install --with-deps chromium webkit
-        working-directory: frontend
       - run: node scripts/test_design_tokens.mjs
       - run: python -m pytest --junitxml=artifacts/backend.xml
+        if: matrix.suite == 'design'
       - run: npm run build
         working-directory: frontend
+      - run: npx playwright install --with-deps chromium webkit
+        working-directory: frontend
       - name: Real workbench, mode switch and accessibility regressions
-        run: npx playwright test --config=playwright.white.config.ts
+        run: npx playwright test ${{ matrix.files }} --config=playwright.white.config.ts
         working-directory: frontend
       - name: Fixed-source review bundle
         if: always()
@@ -62,7 +52,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: white-workbench-review
+          name: white-workbench-${{ matrix.suite }}
           path: |
             artifacts/
             frontend/test-results-white/
