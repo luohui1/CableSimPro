@@ -1,0 +1,84 @@
+/* Layout refinements for the white professional theme; loaded after its base skin. */
+.white-workbench .dual-embedded .enterprise-model-stage,
+.white-workbench .dual-embedded.has-current-results .enterprise-model-stage {height:var(--wb-model-height)}
+.white-workbench .wb-secondary-actions {padding:0;border:0}
+@media(max-width:1500px) {.white-workbench {--wb-inspector-width:var(--wb-inspector-width-laptop)}}
+@media(max-width:1200px) {.white-workbench {--wb-inspector-width:280px}}
+
+/* Form density is controlled by tokens, not by shrinking editable values. */
+.white-workbench .dual-embedded .wb-property-group h3 {
+ margin:var(--wb-space-3) 0 0;padding:0;background:transparent;
+}
+.white-workbench .wb-property-group h3>button {
+ display:flex;align-items:center;gap:var(--wb-space-2);width:100%;min-height:40px;
+ border:0;padding:var(--wb-space-2);border-radius:var(--wb-radius-control);
+ background:var(--wb-color-subtle);color:var(--wb-color-ink);
+ font-size:var(--wb-text-caption);font-weight:var(--wb-weight-strong);text-align:left;
+}
+.white-workbench .wb-property-group h3>button>svg {margin-left:auto;flex-shrink:0}
+.white-workbench .wb-property-group h3>button[aria-expanded=false]>svg {transform:rotate(-90deg)}
+.white-workbench .wb-group-count {font-size:var(--wb-text-caption);color:var(--wb-color-muted);font-weight:400}
+.white-workbench .wb-group-draft {color:var(--wb-color-warning);font-size:var(--wb-text-caption)}
+.white-workbench .wb-group-note {font-size:var(--wb-text-caption);color:var(--wb-color-muted);margin:var(--wb-space-2)}
+.white-workbench .dual-embedded .wb-property-group .property {
+ display:grid;grid-template-columns:var(--wb-field-label-width) minmax(0,1fr);
+ align-items:center;column-gap:var(--wb-space-2);padding:var(--wb-space-2) 0;
+ min-height:var(--wb-row-height);
+}
+.white-workbench .dual-embedded .wb-property-group .property-title {gap:2px;min-width:0}
+.white-workbench .dual-embedded .wb-property-group .property-title label {
+ font-size:var(--wb-text-caption);font-weight:var(--wb-weight-regular);line-height:1.5;
+}
+.white-workbench .dual-embedded .wb-property-group .property-title button {
+ min-width:24px;min-height:24px;padding:4px;flex-shrink:0;
+}
+.white-workbench .dual-embedded .wb-property-group .property-value {
+ margin:0;min-width:0;height:var(--wb-control-height);
+}
+.white-workbench .dual-embedded .property-value input,
+.white-workbench .dual-embedded .property-value select {
+ font-size:var(--wb-text-control);min-width:0;font-variant-numeric:tabular-nums;
+}
+.white-workbench .dual-embedded .wb-property-group .property-value>span {font-size:11px;min-width:0;padding:0 6px}
+.white-workbench .wb-property-group .property>small {grid-column:1/-1;font-size:var(--wb-text-caption)}
+.white-workbench .dual-embedded .enterprise-evidence-check {display:block}
+.white-workbench .dual-embedded .enterprise-section-heading .eyebrow {display:block}
+.white-workbench .dual-embedded .enterprise-section-heading p {display:block;line-height:1.5}
+.white-workbench .wb-metric-label {font-size:var(--wb-text-caption)}
+.white-workbench .wb-metric-detail {font-size:11px}
+.white-workbench .wb-result-table {font-size:var(--wb-text-caption)}
+/* A local viewing option, never a new engineering mode or a different workspace. */
+.white-workbench .dual-embedded.is-focused .enterprise-outline,
+.white-workbench .dual-embedded.is-focused .wb-results-overview,
+.white-workbench .dual-embedded.is-focused .wb-analysis-grid,
+.white-workbench .dual-embedded.is-focused .inline-results,
+.white-workbench .dual-embedded.is-focused .wb-evidence {display:none}
+.white-workbench .dual-embedded.is-focused .enterprise-model-stage {height:var(--wb-model-focus-height)}
+.white-workbench .dual-embedded.is-focused .wb-model-overview {grid-template-columns:minmax(0,1.7fr) minmax(280px,1fr)}
+@media(max-width:1200px) {
+ .white-workbench .dual-embedded .wb-property-group .property {grid-template-columns:minmax(0,1fr);gap:4px}
+ .white-workbench .dual-embedded.is-focused .wb-model-overview {grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:680px) {
+ .white-workbench .dual-embedded .wb-property-group .property {grid-template-columns:var(--wb-field-label-width) minmax(0,1fr);gap:8px}
+ .white-workbench .dual-embedded .property-value input,
+ .white-workbench .dual-embedded .property-value select {font-size:var(--wb-text-control-touch)}
+ .white-workbench .dual-embedded .wb-property-group .property-value {height:var(--wb-control-touch-height)}
+ .white-workbench .wb-property-group h3>button {min-height:var(--wb-control-touch-height)}
+ .white-workbench .dual-embedded.is-focused .wb-model-overview {grid-template-columns:minmax(0,1fr)}
+ .white-workbench .dual-embedded .enterprise-evidence-check {padding:12px}
+}
+
+/* Legacy result summaries apply flex-column to every immediate div. The new
+   heading and metric grid must retain their own layout, including after solve. */
+.white-workbench .wb-results-overview>.wb-results-heading {
+ display:flex;flex-direction:row;align-items:center;justify-content:space-between;
+}
+.white-workbench .wb-results-overview>.wb-metric-grid {
+ display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--wb-space-2);
+}
+@media(max-width:1000px) {
+ .white-workbench .wb-results-overview>.wb-metric-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+/* Focus applies to the model page only; other pages keep their navigation. */
+.white-workbench .dual-embedded.is-focused:not(:has(.enterprise-page:not([hidden]) .enterprise-page-actions)) .enterprise-outline {display:flex}

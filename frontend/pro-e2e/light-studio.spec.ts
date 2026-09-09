@@ -24,7 +24,8 @@ test('model section field and curve share saved input and retain original WebGL 
  await canvas.evaluate(el=>(el as HTMLElement).dataset.retained='v074');
  await page.screenshot({path:info.outputPath('workbench-initial-v074.png'),fullPage:true});
  let invokes=0;page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/invoke'))invokes++});
- await views(page).getByRole('button',{name:'二维截面',exact:true}).click();await expect(page.getByRole('img',{name:'电缆二维截面'})).toBeVisible();
+ // The approved presenter puts section selection in the canvas view switcher.
+ await page.getByRole('button',{name:'二维截面',exact:true}).click();await expect(page.getByRole('img',{name:'电缆二维截面'})).toBeVisible();
  await views(page).getByRole('button',{name:'温度分布',exact:true}).click();await expect(page.locator('.field-pane .viewport-empty')).toContainText('尚无当前工况结果');
  expect(invokes).toBe(0);
  await page.getByRole('button',{name:'计算载流量',exact:false}).click();await expect(page.locator('.enterprise-result-summary')).toBeVisible();
@@ -32,7 +33,13 @@ test('model section field and curve share saved input and retain original WebGL 
  await page.screenshot({path:info.outputPath('thermal-same-canvas-v074.png'),fullPage:true});
  await views(page).getByRole('button',{name:'载流量曲线',exact:true}).click();await expect(page.locator('.curve-pane')).toContainText('最高导体温度');
  await views(page).getByRole('button',{name:'三维结构',exact:true}).click();await expect(canvas).toHaveAttribute('data-retained','v074');
- expect(invokes).toBe(1);await expect(page.locator('.model-render .model-callouts')).toBeHidden();await page.screenshot({path:info.outputPath('workbench-result-v074.png'),fullPage:true});
+ expect(invokes).toBe(1);
+ // The approved drawing shows dimensions by default; they remain user-switchable.
+ const dimensions=page.getByRole('button',{name:'尺寸',exact:true});
+ await expect(page.locator('.model-render .model-callouts')).toBeVisible();
+ await dimensions.click();await expect(page.locator('.model-render .model-callouts')).toBeHidden();
+ await dimensions.click();await expect(page.locator('.model-render .model-callouts')).toBeVisible();
+ await expect(canvas).toHaveAttribute('data-retained','v074');expect(invokes).toBe(1);await page.screenshot({path:info.outputPath('workbench-result-v074.png'),fullPage:true});
 });
 
 test('changed input removes current field and curve rather than showing stale colors',async({page})=>{

@@ -4,6 +4,8 @@ test('shared engineering pulse carries one review and result across both modes',
  await page.goto('/');
  await page.getByRole('button',{name:'进入专业工作台',exact:true}).click();
  const pulse=page.getByTestId('engineering-pulse');
+ const disclosure=page.locator('.wb-context-disclosure');
+ if(await disclosure.count())await disclosure.locator('summary').click();
  await expect(pulse).toBeVisible();
  await expect(pulse.getByTestId('pulse-cable')).toContainText('240 mm²');
  await expect(pulse.getByTestId('pulse-result')).toContainText('待计算');
@@ -28,6 +30,8 @@ test('engineering pulse keeps narrow layouts inside the application viewport',as
  await page.goto('/');
  await page.getByRole('button',{name:'进入智能工程流',exact:true}).click();
  const pulse=page.getByTestId('engineering-pulse');
+ const disclosure=page.locator('.wb-context-disclosure');
+ if(await disclosure.count())await disclosure.locator('summary').click();
  await expect(pulse).toBeVisible();
  expect(await pulse.evaluate(el=>el.scrollWidth>el.clientWidth)).toBe(true);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);

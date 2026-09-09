@@ -1,0 +1,57 @@
+name: Approved image layout review
+on:
+  push:
+    branches: ['design/white-workbench-v077']
+permissions:
+  contents: read
+concurrency:
+  group: reference-layout-${{ github.sha }}
+  cancel-in-progress: true
+jobs:
+  reference:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - run: pip install -r backend/requirements-dev.txt
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - name: Preserved input and command contracts
+        run: |
+          node scripts/test_reference_contracts.mjs
+          node scripts/test_workbench_commands.mjs
+          node scripts/test_output_evidence.mjs
+          node scripts/test_sweep_study.mjs
+          node scripts/test_design_tokens.mjs
+          node scripts/test_visual_geometry.mjs
+      - run: python -m pytest --junitxml=artifacts/backend.xml
+      - run: npm run build
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium webkit
+        working-directory: frontend
+      - name: Actual layout, controls, calculation, reports and raw screenshots
+        run: npx playwright test reference-layout.spec.ts --config=playwright.white.config.ts
+        working-directory: frontend
+      - name: Fixed source record
+        if: always()
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/source-commit.txt
+          git archive --format=tar.gz HEAD > artifacts/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: approved-image-layout
+          path: |
+            artifacts/
+            frontend/test-results-white/
+            frontend/playwright-report-white/
+          retention-days: 7

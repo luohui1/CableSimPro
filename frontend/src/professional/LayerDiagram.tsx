@@ -1,0 +1,14 @@
+import {useId} from 'react';
+import type {Cable} from '../types';
+import {layers,fmt} from '../utils';
+/** Same live six-layer radii as the solver input, not a generated cable picture. */
+export default function LayerDiagram({cable}:{cable:Cable}){
+ const id=useId(),ls=layers(cable),outer=ls[5].radius_mm,scale=96/outer;
+ const colors=[cable.conductor==='copper'?'#c38b56':'#aab8c9','#344054','#e7edf2','#526070','#b88655','#182535'];
+ const wires=[];const strand=ls[0].radius_mm*scale/7.1;
+ for(let row=-3;row<=3;row++)for(let col=-3;col<=3;col++){
+  const x=col*strand*2+(row%2)*strand,y=row*strand*Math.sqrt(3);
+  if(Math.hypot(x,y)<=ls[0].radius_mm*scale-strand)wires.push(<circle key={`${row}:${col}`} cx={126+x} cy={159+y} r={strand*.85} fill={`url(#${id}-wire)`} stroke="#895e3a" strokeWidth=".4"/>);
+ }
+ return <section className="wb-section-preview" aria-label="当前电缆分层预览"><header><h2>电缆横截面</h2><span>六层等效结构</span></header><svg viewBox="0 0 420 320" role="img" aria-labelledby={id}><title id={id}>当前输入分层截面，外径 {fmt(outer*2,2)} 毫米</title><defs><radialGradient id={`${id}-wire`} cx="30%" cy="25%"><stop stopColor={cable.conductor==='copper'?'#f3cba1':'#e4edf4'}/><stop offset=".58" stopColor={colors[0]}/><stop offset="1" stopColor={cable.conductor==='copper'?'#885129':'#758693'}/></radialGradient><linearGradient id={`${id}-jacket`} x2=".6" y2="1"><stop stopColor="#101820"/><stop offset=".3" stopColor="#405163"/><stop offset=".5" stopColor="#202c3a"/><stop offset="1" stopColor="#131e2b"/></linearGradient><radialGradient id={`${id}-xlpe`} cx="35%" cy="30%"><stop stopColor="#fffdf3"/><stop offset="1" stopColor="#d2dae0"/></radialGradient><filter id={`${id}-depth`} x="-25%" y="-25%" width="160%" height="160%"><feDropShadow dx="2" dy="5" stdDeviation="4" floodColor="#1e354f" floodOpacity=".22"/></filter></defs><circle cx="126" cy="159" r="96" fill="#1b2b40" filter={`url(#${id}-depth)`}/><path d="M15 159H231 M126 48V274" stroke="#dce5ef" strokeDasharray="3 5"/>{[...ls].reverse().map((l,j)=>{const i=5-j;return <circle key={l.name} cx="126" cy="159" r={l.radius_mm*scale} fill={i===5?`url(#${id}-jacket)`:i===2?`url(#${id}-xlpe)`:colors[i]} stroke={i===4?'#d9b28a':'#617386'} strokeWidth=".45"/>})}{wires}{ls.map((l,i)=>{const angle=(-66+i*27)*Math.PI/180;const x=126+Math.cos(angle)*l.radius_mm*scale,y=159+Math.sin(angle)*l.radius_mm*scale,ty=46+i*43;return <g key={l.name}><path d={`M${x} ${y} L250 ${ty} H263`} stroke="#7087a3" fill="none" strokeWidth=".8"/><circle cx={x} cy={y} r="2" fill="#155eef"/><text x="269" y={ty-3} className="wb-layer-label">{l.name}</text><text x="269" y={ty+13} className="wb-layer-value">{i===0?`${fmt(cable.area_mm2,0)} mm²`:`${fmt(l.radius_mm-ls[i-1].radius_mm,2)} mm`}</text></g>})}<text x="126" y="296" textAnchor="middle" className="wb-diameter">Ø {fmt(outer*2,2)} mm</text></svg><p>尺寸随工程更新 · 示意股线不参与求解</p></section>;
+}
