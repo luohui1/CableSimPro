@@ -3,6 +3,7 @@ import {ArrowRight,CheckCircle2,ShieldCheck,TriangleAlert} from 'lucide-react';
 import {useStudio} from '../StudioState';
 import {api} from '../utils';
 import {buildEngineeringReadiness,type EngineeringAssessment,type ReadinessItem} from '../engineeringReadiness';
+import SweepPlanSummary from '../SweepPlanSummary';
 import './engineering-readiness.css';
 
 type LoadState='loading'|'ready'|'error';
@@ -38,6 +39,7 @@ export default function EngineeringReadinessPanel({openWorkbench}:{openWorkbench
    <div><span>批准前工程审查</span><strong>{readiness.title}</strong><small>{readiness.summary}</small></div>
    <b className="readiness-badge">{readiness.level==='blocked'?'暂停执行':readiness.level==='review'?'研究级可执行':'检查完成'}</b>
   </header>
+  <SweepPlanSummary plan={p}/>
   <div className="readiness-items">{readiness.items.map(item=><button type="button" key={item.id} className={`readiness-item state-${item.state}`} onClick={()=>openWorkbench(item.target)} aria-label={`检查：${item.label}`}>
    <span>{item.state==='pass'?<CheckCircle2 size={15}/>:<TriangleAlert size={15}/>}</span><div><b>{item.label}</b><small>{item.detail}</small></div><ArrowRight size={14}/>
   </button>)}</div>

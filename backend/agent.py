@@ -22,6 +22,14 @@ PATHS = (['name', 'operating_current_a', 'circuit_length_m'] +
          [f'cable.{k}' for k in Cable.model_fields] +
          [f'installation.{k}' for k in Installation.model_fields])
 PARAMETERS = ['soil_rho_k_m_w', 'ambient_temperature_c', 'depth_m', 'spacing_m']
+# Explicit local grammar only. Labels and units are user-facing; parameter ids remain
+# stable internal schema keys used by the deterministic solver and saved task record.
+SWEEP_COMMANDS = (
+    (r'土壤热阻率', 'soil_rho_k_m_w', r'K(?:·|⋅|\*)?m/W'),
+    (r'环境温度', 'ambient_temperature_c', r'(?:°C|℃|摄氏度)'),
+    (r'(?:平均中心埋深|中心埋深|埋深)', 'depth_m', r'(?:m|米)'),
+    (r'(?:相邻中心间距|中心间距|间距)', 'spacing_m', r'(?:m|米)'),
+)
 
 
 class PlanRequest(StrictModel):
@@ -99,10 +107,16 @@ def local_intent(message: str) -> Intent:
         edits = [e for e in edits if e.path not in ('name', 'cable.name')]
         edits = [e for e in edits if e.path in ('cable.conductor', 'cable.area_mm2', 'cable.u0_kv', 'cable.insulation_mm', 'cable.r20_ohm_km', 'installation.arrangement', 'installation.depth_m', 'installation.spacing_m', 'installation.ambient_temperature_c', 'installation.soil_rho_k_m_w', 'operating_current_a')]
         return Intent(**{**base, 'changes': edits})
-    sweep = re.fullmatch(r'比较土壤热阻率\s*([0-9.、,，\s]+)\s*下的载流量', text)
-    if sweep:
-        values = [float(v) for v in re.split(r'[、,，\s]+', sweep[1].strip()) if v]
-        return Intent(**{**base, 'action': 'sweep', 'parameter': 'soil_rho_k_m_w', 'values': values})
+    for label, parameter, unit in SWEEP_COMMANDS:
+        sweep = re.fullmatch(
+            rf'比较(?:{label})\s*([-0-9.、,，\s]+?)\s*(?:{unit})?\s*下的载流量',
+            text, re.I,
+        )
+        if sweep:
+            # Only explicit decimal values separated by Chinese/ASCII punctuation or
+            # whitespace are accepted. Range syntax and inferred steps stay unsupported.
+            values = [float(v) for v in re.split(r'[、,，\s]+', sweep[1].strip()) if v]
+            return Intent(**{**base, 'action': 'sweep', 'parameter': parameter, 'values': values})
     patterns = [
         ('导体截面积|截面积', 'cable.area_mm2', r'mm²|mm2|平方毫米'),
         ('平均中心埋深|埋深', 'installation.depth_m', r'm|米'),
@@ -126,7 +140,7 @@ def local_intent(message: str) -> Intent:
             changes.append(Change(path=path, value=value)); rest = rest.replace(label, '')
     rest = re.sub(r'重新计算|计算载流量|执行计算|计算|[，,；;。\s]', '', rest)
     if rest or (not changes and not re.fullmatch(r'(?:重新计算|计算载流量|执行计算|计算)', text)):
-        return Intent(**{**base, 'questions': ['本地模式只支持明确的参数命令，未解释的内容不会执行。请使用“截面积改为 400 mm²，重新计算”，或配置 OpenAI 后使用自然语言。']})
+        return Intent(**{**base, 'questions': ['本地模式只支持明确的参数命令或直埋参数扫描，未解释的内容不会执行。可使用“截面积改为 400 mm²，重新计算”或“比较埋深 0.6、0.8、1.0 m 下的载流量”，也可配置 OpenAI 后使用自然语言。']})
     return Intent(**{**base, 'changes': changes})
 
 
@@ -220,7 +234,7 @@ async def cloud_intent(request: PlanRequest, providers=None) -> Intent:
 def status():
     configured = bool(os.getenv('OPENAI_API_KEY') and os.getenv('CABLESIM_AGENT_MODEL'))
     return {'cloud_configured': configured, 'model': os.getenv('CABLESIM_AGENT_MODEL') if configured else None,
-            'local_mode': 'explicit-command-parser', 'execution': 'signed-plan-confirmation', 'version': '0.2.0'}
+            'local_mode': 'explicit-command-parser', 'execution': 'signed-plan-confirmation', 'version': '0.2.1'}
 
 
 async def make_plan(request: PlanRequest, providers=None):

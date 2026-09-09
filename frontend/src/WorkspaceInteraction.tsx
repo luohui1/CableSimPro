@@ -2,6 +2,7 @@ import {useEffect,useRef,useId} from 'react';
 import {ChevronDown,ChevronUp,MessageSquare,X} from 'lucide-react';
 import {AgentPanel,ResultsPanel} from './StudioPanels';
 import {useStudio} from './StudioState';
+import SweepStudyPanel from './SweepStudyPanel';
 
 /** Always-mounted input. Transcript takes vertical space, never model width. */
 export function AssistantDock({expanded,onExpandedChange,pageTitle}:{
@@ -36,7 +37,7 @@ export function InlineResults({open,onOpenChange}:{open:boolean;onOpenChange:(op
  const {current,currentSweep,output,busy}=useStudio();
  const contentId=useId();
  const hasOutput=!!output?.result||!!output?.sweep;
- return <section className={`inline-results ${open?'is-open':''}`} aria-label="当前工况结果">
+ return <section className={`inline-results ${open?'is-open':''} ${currentSweep?'is-sweep':''}`} aria-label="当前工况结果">
   <header>
    <button aria-expanded={open} aria-controls={contentId} onClick={()=>onOpenChange(!open)}>
     {open?<ChevronDown size={16}/>:<ChevronUp size={16}/>}<b>当前计算结果</b>
@@ -45,6 +46,6 @@ export function InlineResults({open,onOpenChange}:{open:boolean;onOpenChange:(op
    {open&&<button aria-label="收起当前结果" onClick={()=>onOpenChange(false)}><X size={16}/></button>}
   </header>
   {hasOutput&&!current&&!currentSweep&&<p className="inline-stale" role="status">当前参数、设计依据或未提交输入已变化。旧温度、曲线及报告不作为本工况结果。</p>}
-  <div id={contentId} className="inline-results-body" hidden={!open}><ResultsPanel embedded/></div>
+  <div id={contentId} className="inline-results-body" hidden={!open}><>{currentSweep?<SweepStudyPanel key={output?.run_id}/>:<ResultsPanel embedded/>}</></div>
  </section>;
 }

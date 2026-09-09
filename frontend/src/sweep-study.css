@@ -1,0 +1,27 @@
+.sweep-study,.sweep-plan{color:#263e50;font-size:13px;line-height:1.6;min-width:0}
+.sweep-study{padding:16px;background:#fff;border:1px solid #d8e2e9;border-radius:10px}
+.sweep-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.sweep-heading h3,.sweep-plan h3{font-size:17px;margin:3px 0;font-weight:650;color:#16384d}
+.sweep-heading small,.sweep-heading>span{color:#4f6372;font-size:12px}
+.sweep-metrics{display:grid;grid-template-columns:1fr 1.5fr 1.5fr;gap:8px;margin:10px 0 16px}
+.sweep-metrics>div{padding:10px;background:#f4f7fa;border-radius:6px;min-width:0}
+.sweep-metrics span{display:block;font-size:11px;color:#4a6171}.sweep-metrics b{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}.sweep-metrics small{font-size:12px}
+.sweep-reference{display:flex;gap:10px;align-items:flex-end;justify-content:space-between;flex-wrap:wrap}
+.sweep-reference label{display:flex;flex-direction:column;gap:5px;max-width:100%}.sweep-reference select{max-width:100%;padding:7px;border:1px solid #bacbd6;border-radius:5px;background:#fff;color:inherit;font-size:12px}
+.sweep-export{display:flex;gap:6px;flex-wrap:wrap}.sweep-study button{padding:7px 10px;border:1px solid #bacbd6;border-radius:5px;background:#fff;color:#23455a;cursor:pointer;font-size:12px}.sweep-study button:disabled{opacity:.5;cursor:not-allowed}
+.sweep-note{font-size:12px;color:#4e6372;overflow-wrap:anywhere}.sweep-warning{padding:9px;background:#fff4e5;color:#784407;border:1px solid #ead5b6;border-radius:5px;overflow-wrap:anywhere}
+.sweep-tabs{display:flex;gap:6px;padding:8px 0}.sweep-tabs button[aria-pressed=true]{background:#e8f1f7;color:#153e5a;border-color:#7f9fb5}
+.sweep-table-scroll{max-width:100%;overflow-x:auto;border:1px solid #dce5eb;border-radius:5px}
+.sweep-table{width:100%;min-width:650px;border-collapse:collapse;font-size:12px;font-variant-numeric:tabular-nums}
+.sweep-table caption{padding:8px;text-align:left;color:#526675;caption-side:bottom;font-size:11px}
+.sweep-table th,.sweep-table td{padding:9px 10px;border-bottom:1px solid #e3eaf0;text-align:right;white-space:nowrap}
+.sweep-table th{background:#f4f7fa;color:#3c5466;font-weight:600}.sweep-table th:first-child,.sweep-table td:first-child,.sweep-table th:last-child,.sweep-table td:last-child{text-align:left}
+.sweep-table td:last-child{white-space:normal;min-width:85px;max-width:230px;overflow-wrap:anywhere}.sweep-table small{font-size:10px;color:#436982}.sweep-negative{color:#a0352f;font-weight:650}
+.sweep-method{padding-top:12px;font-size:12px;color:#4d6171}.sweep-method summary{cursor:pointer;color:#304e62}.sweep-method code{font-size:11px;overflow-wrap:anywhere}
+.sweep-plan{margin:10px 0;padding:10px 14px;border:1px solid #c8dce9;background:#f3f8fc;border-radius:7px}.sweep-plan h3{font-size:14px}.sweep-plan p{margin:5px 0;font-size:12px}.sweep-plan-values{font-variant-numeric:tabular-nums;overflow-wrap:anywhere;font-weight:600}
+@media(max-width:720px){.sweep-study{padding:10px}.sweep-heading{align-items:flex-start;flex-direction:column;gap:3px}.sweep-metrics{grid-template-columns:1fr}.sweep-metrics>div{display:flex;align-items:center;justify-content:space-between;gap:8px}.sweep-reference{display:block}.sweep-export{margin-top:10px}}
+
+/* Primary light surfaces already have one outer content scroller. A 265px nested
+   result scroller hides the study header and clips the chart after tab changes. */
+.light-studio .inline-results.is-sweep>.inline-results-body{height:auto;min-height:0;max-height:none;overflow:visible}
+.light-studio .inline-results.is-sweep .sweep-study{border:0;border-radius:0}
