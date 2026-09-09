@@ -23,6 +23,7 @@ from urllib.parse import urlsplit
 from .nonblocking_runtime import EngineeringRuntime
 from .runtime import make_router as runtime_router
 from .enterprise import Enterprise, make_router as enterprise_router
+from .foundation.router import make_router as foundation_router
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -59,6 +60,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(designs_router(designs))
     app.include_router(runtime_router(runtime))
     app.include_router(enterprise_router(enterprise))
+    app.include_router(foundation_router(workspace_store))
     app.state.workspace_store = workspace_store
     app.state.enterprise = enterprise
     app.state.providers = providers

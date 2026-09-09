@@ -17,6 +17,7 @@ import {WorkbenchCommandBar,WorkspaceRail,ResultRibbon,AnalysisDrawer,WorkbenchS
 import CommandPalette from './professional/CommandPalette';
 import {ModelTree} from './professional/ModelTree';
 import ReferenceInspector from './professional/ReferenceInspector';
+import StudyPreparation from './professional/StudyPreparation';
 import {WORKBENCH_COMMANDS,commandBlockReason,type WorkbenchCommandId} from './professional/workbenchCommands';
 import {Button} from './design-system/primitives';
 import {DisclosureSettings} from './design-system/DisclosureGroup';
@@ -28,6 +29,7 @@ export function ReferenceWorkbench({embedded=true,active=true,onAgent,requestedV
  const s=useStudio(),w=s.w;
  const [area,setArea]=useState<Area>('engineering'),[view,setView]=useState<View>('cable'),[properties,setProperties]=useState(true),[propertySection,setPropertySection]=useState('cable'),[installationView,setInstallationView]=useState('2d');
  const [inspectorTree,setInspectorTree]=useState(false);
+ const [studyOpen,setStudyOpen]=useState(false);
  const [focused,setFocused]=useState(false),[commandOpen,setCommandOpen]=useState(false);
  const [canvasRequest,setCanvasRequest]=useState({view:'model' as 'model'|'section'|'temperature'|'curve',serial:0});
  const [inspectedLayer,setInspectedLayer]=useState<number|null>(null),[inspectionSerial,setInspectionSerial]=useState(0);
@@ -79,6 +81,7 @@ export function ReferenceWorkbench({embedded=true,active=true,onAgent,requestedV
   if(id==='json'){s.exportJSON();return}
   if(id==='fork'){setForkName(w!.scenario.name+' · 方案副本');setForkOpen(true);return}
   if(id==='projects'){void openProjects();return}
+  if(id==='study-preflight'){setStudyOpen(true);return}
   if(id==='generator'){setGenerator(true);return}
   if(id==='analysis'){setResultsOpen(true);return}
   if(id==='parameters'){setFocused(false);setProperties(true);return}
@@ -125,6 +128,7 @@ export function ReferenceWorkbench({embedded=true,active=true,onAgent,requestedV
  <div ref={taskRef}><EngineeringTask key={w.id} open={!embedded&&taskOpen} onClose={()=>setTaskOpen(false)} initialText={taskText}/></div>
  </main></div>
  {embedded&&<><div hidden={focused}><ResultRibbon open={resultsOpen} onOpenChange={setResultsOpen}/></div><AnalysisDrawer open={resultsOpen&&!focused} onClose={()=>setResultsOpen(false)} onCommand={executeCommand}/><WorkbenchStatusBar onCommand={executeCommand}/><CommandPalette open={commandOpen&&active} onOpenChange={setCommandOpen} state={commandState} onExecute={chooseCommand} returnFocus={()=>commandOpener.current}/></>}
+ <StudyPreparation open={studyOpen&&active} onClose={()=>setStudyOpen(false)}/>
  <ModelGenerator open={generator} onClose={()=>setGenerator(false)}/>
  <Modal open={projectOpen} onOpenChange={setProjectOpen} title="工程中心" description="打开独立保存的方案；未提交输入必须先处理。"><div className="ps-hub-current"><FolderOpen size={24}/><div><b>{w.scenario.name}</b><p>rev.{w.revision} · {w.scenario.cable.conductor==='copper'?'铜':'铝'} {w.scenario.cable.area_mm2} mm² · {w.runs.length} 次运行</p></div></div><div className="ps-hub-resources">{([ ['products','产品型号'],['documents','企业资料'],['methods','设计依据'],['history','运行记录'] ] as const).map(([id,label])=><button key={id} onClick={()=>{setProjectOpen(false);executeCommand(id)}}>{label}<ArrowRight size={15}/></button>)}</div><h3>已保存工程</h3><div className="eng-project-list">{projects.map(p=><button key={p.id} disabled={blocked} onClick={()=>{void s.load(p.id);setProjectOpen(false)}}><FolderOpen size={18}/><span><b>{p.name}</b><small>rev.{p.revision}</small></span><ArrowRight size={16}/></button>)}</div></Modal>
  <Modal open={forkOpen} onOpenChange={b=>{if(!localBusy)setForkOpen(b)}} title="另存计算方案" description="复制电缆、工况、引用和锁定参数；计算结果不复制。原工程保持不变。"><form className="enterprise-fork-form" onSubmit={e=>{e.preventDefault();void fork()}}><label>方案名称<input aria-label="另存方案名称" required maxLength={100} value={forkName} onChange={e=>setForkName(e.target.value)}/></label><button className="primary" disabled={blocked}>建立独立方案</button></form></Modal>

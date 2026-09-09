@@ -1,5 +1,6 @@
 /** A catalog of implemented actions, not a catalog of aspirational solver features. */
 export const WORKBENCH_COMMANDS = [
+ {id:'study-preflight',title:'研究准备与求解器预检',group:'工程资源',keywords:'研究 准备 预检 yanjiu yujian study preflight comsol aedt',hint:'只读检查当前快照、结构配方与后端缺项；不运行仿真',guard:'snapshot'},
  {id:'run',title:'运行载流量计算',group:'计算分析',keywords:'计算 载流量 jisuan zailiuliang ampacity solve',hint:'当前输入 · 单回路直埋',shortcut:'F9',guard:'solve'},
  {id:'model',title:'显示三维结构',group:'建模与视图',keywords:'结构 三维 jiegou sanwei model 3d',hint:'返回同一电缆模型'},
  {id:'section',title:'显示二维截面',group:'建模与视图',keywords:'截面 jiemian section 2d',hint:'当前尺寸的等比例截面'},

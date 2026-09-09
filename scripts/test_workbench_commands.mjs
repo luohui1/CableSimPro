@@ -12,7 +12,9 @@ try{
  const state={busy:false,dirty:false,buried:true,current:true,canUndo:true};
  const get=id=>catalog.find(c=>c.id===id);
  check('only unique stable IDs',()=>assert.equal(new Set(catalog.map(c=>c.id)).size,catalog.length));
- check('all implemented commands discoverable',()=>assert.equal(search('').length,27));
+ check('all implemented commands discoverable',()=>assert.equal(search('').length,28));
+ check('study preflight discoverable',()=>assert.equal(search('preflight')[0].id,'study-preflight'));
+ check('preflight does not require a solved result',()=>assert.equal(reason(get('study-preflight'),{...state,current:false,buried:false}),null));
  check('Chinese label search',()=>assert.equal(search('二维截面')[0].id,'section'));
  check('pinyin alias',()=>assert.equal(search('jiemian')[0].id,'section'));
  check('English alias',()=>assert.equal(search('report')[0].id,'report'));
