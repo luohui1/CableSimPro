@@ -142,7 +142,8 @@
 .white-workbench .inline-results>header {border:0;background:var(--wb-surface-tool)}
 .white-workbench .dual-embedded.is-focused .enterprise-model-stage {height:var(--wb-model-focus-height)}
 .white-workbench .enterprise-installation-stage {border:0;border-radius:var(--wb-radius-stage);box-shadow:var(--wb-shadow-stage)}
-.white-workbench .enterprise-canvas-holder {min-height:400px}
+.white-workbench .enterprise-canvas-holder {height:500px;min-height:500px}
+.white-workbench .enterprise-canvas-holder>.canvas-panel {height:100%}
 .white-workbench .canvas-toolbar {border:0;background:var(--wb-surface-tool)}
 .white-workbench .canvas-caption {top:34px;right:14px;left:auto;max-width:calc(100% - 52px);padding:7px 10px;border:0;border-radius:7px;box-shadow:var(--wb-shadow-control);font-size:11px;pointer-events:none}
 @media(max-width:1500px) {

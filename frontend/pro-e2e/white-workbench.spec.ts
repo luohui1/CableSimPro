@@ -67,6 +67,7 @@ for(const width of [1366,390])test(`white workbench: ${width}px layout keeps con
  const field=page.getByLabel('导体截面积',{exact:true});await field.scrollIntoViewIfNeeded();await expect(field).toBeVisible();await field.fill('300');await field.press('Tab');await expect(page.getByTestId('session-revision')).toHaveText('rev.2');
  if(width===390){await page.getByRole('button',{name:'显示工程目录',exact:true}).click();await page.getByRole('button',{name:'敷设与负荷',exact:true}).click();await expect(page.getByRole('heading',{name:'敷设与负荷',exact:true})).toBeVisible();
   const plot=page.getByTestId('engineering-canvas');
+  await expect.poll(async()=>(await plot.boundingBox())!.height).toBeGreaterThanOrEqual(300);
   await expect.poll(async()=>Number(await plot.getAttribute('data-scale'))*Number(await plot.getAttribute('data-ruler-step'))).toBeGreaterThanOrEqual(56-1e-6);
   expect(Number(await plot.getAttribute('data-scale'))*Number(await plot.getAttribute('data-grid-step'))).toBeGreaterThanOrEqual(14-1e-6);
  }
