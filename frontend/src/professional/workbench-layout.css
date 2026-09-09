@@ -68,3 +68,17 @@
  .white-workbench .dual-embedded.is-focused .wb-model-overview {grid-template-columns:minmax(0,1fr)}
  .white-workbench .dual-embedded .enterprise-evidence-check {padding:12px}
 }
+
+/* Legacy result summaries apply flex-column to every immediate div. The new
+   heading and metric grid must retain their own layout, including after solve. */
+.white-workbench .wb-results-overview>.wb-results-heading {
+ display:flex;flex-direction:row;align-items:center;justify-content:space-between;
+}
+.white-workbench .wb-results-overview>.wb-metric-grid {
+ display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--wb-space-2);
+}
+@media(max-width:1000px) {
+ .white-workbench .wb-results-overview>.wb-metric-grid {grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+/* Focus applies to the model page only; other pages keep their navigation. */
+.white-workbench .dual-embedded.is-focused:not(:has(.enterprise-page:not([hidden]) .enterprise-page-actions)) .enterprise-outline {display:flex}

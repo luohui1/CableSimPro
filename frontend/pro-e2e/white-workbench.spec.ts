@@ -32,12 +32,21 @@ test('white workbench: calculation, live metrics, radial chart, export and canva
  await expect(cards.nth(1)).toContainText(summary.operating_max_temperature_c.toFixed(1));
  await expect(cards.nth(2)).toContainText(summary.thermal_margin_c.toFixed(1));
  await expect(cards.nth(3)).toContainText(summary.circuit_loss_kw.toFixed(2));
+ const boxes=await Promise.all([0,1,2,3].map(i=>cards.nth(i).boundingBox()));
+ for(let i=1;i<boxes.length;i++){
+  expect(boxes[i]!.y).toBeCloseTo(boxes[0]!.y,0);
+  expect(boxes[i]!.x).toBeGreaterThan(boxes[i-1]!.x+boxes[i-1]!.width);
+ }
+ const overview=page.getByTestId('workbench-metrics');
+ expect((await overview.boundingBox())!.height).toBeLessThan(180);
  await expect(page.getByRole('img',{name:'当前运行径向温度曲线',exact:true})).toBeVisible();
  const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'导出计算书',exact:true}).click();const file=await downloaded;expect(file.suggestedFilename()).toContain('计算书');const report=await readFile((await file.path())!,'utf8');
  expect(report).toContain(`${summary.ampacity_a.toFixed(2)} A`);
  expect(report).toContain(payload.result.output.result.input_sha256);
  expect(report).toContain(`${summary.operating_max_temperature_c.toFixed(2)} °C`);
  await page.screenshot({path:info.outputPath('white-workbench-computed.png'),fullPage:true});
+ await page.getByRole('region',{name:'运行结果分析',exact:true}).scrollIntoViewIfNeeded();
+ await page.screenshot({path:info.outputPath('white-workbench-analysis.png'),fullPage:true});
  await switcher(page).getByRole('button',{name:'智能工程流',exact:true}).click();await expect(page.locator('.white-workbench')).toHaveCount(0);await expect(page.locator('.flow-result-metrics')).toContainText(summary.ampacity_a.toFixed(1));
  await switcher(page).getByRole('button',{name:'专业工作台',exact:true}).click();await expect(canvas).toHaveAttribute('data-retained','white');
 });
@@ -100,4 +109,9 @@ test('white workbench: focus canvas preserves model, draft and original side pan
  await expect(canvas).toHaveAttribute('data-retained','focus');expect(writes).toBe(0);
  await page.getByRole('button',{name:'撤销未提交输入',exact:true}).click();
  await expect(page.getByTestId('session-revision')).toHaveText('rev.1');
+ // A global navigation action must not leave the user trapped in focus layout.
+ await page.getByRole('button',{name:'专注画布',exact:true}).click();
+ await page.getByRole('button',{name:'双模式服务设置',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'服务接入',exact:true})).toBeVisible();
+ await expect(page.locator('.enterprise-outline')).toBeVisible();
 });
