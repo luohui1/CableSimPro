@@ -9,13 +9,14 @@ test('study preflight reads committed inputs, exports matching evidence and neve
  const response=page.waitForResponse(r=>r.url().includes('/api/foundation/workspaces/')&&r.url().includes('/preflight'));
  const dialog=await openStudy(page);const data=await(await response).json();
  await expect(dialog).toContainText('输入契约可打包');await expect(dialog.locator('tbody tr')).toHaveCount(6);
+ await expect(dialog).toHaveClass(/eng-dialog/);await expect(dialog).toHaveCSS('display','flex');await expect(dialog.locator(':scope > .study-preparation')).toHaveCSS('overflow-y','auto');
  await expect(dialog).toContainText('未构建原生模型');await expect(dialog).toContainText('未求解');
  const download=page.waitForEvent('download');await dialog.getByRole('button',{name:'导出预检记录',exact:true}).click();
  const file=await(await download).path();const exported=JSON.parse(await readFile(file!,'utf8'));
  expect(exported.package_sha256).toBe(data.package_sha256);expect(exported.solver_executed).toBe(false);
  const axe=await new AxeBuilder({page}).include('[role="dialog"]').withTags(['wcag2a','wcag2aa']).analyze();expect(axe.violations).toEqual([]);
  await expect(dialog.getByRole('heading',{name:'研究准备',exact:true})).toBeInViewport();
- await expect(dialog.getByRole('button',{name:'关闭弹窗',exact:true})).toBeInViewport();
+ await expect(dialog.getByRole('button',{name:'关闭对话框',exact:true})).toBeInViewport();
  const bounds=(await dialog.boundingBox())!;expect(bounds.y).toBeGreaterThanOrEqual(0);expect(bounds.y+bounds.height).toBeLessThanOrEqual(768);expect(bounds.width).toBeLessThanOrEqual(900);
  await page.screenshot({path:info.outputPath('study-preflight.png'),fullPage:true});
  expect(writes).toBe(0);await expect(page.getByTestId('session-revision')).toHaveText('rev.1');
