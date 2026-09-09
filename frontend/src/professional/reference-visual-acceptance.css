@@ -10,6 +10,7 @@
  .reference-studio .ps-workbench .ps-view-heading{height:62px;min-height:62px}
  .reference-studio .ps-workbench .viewport-tabs,.reference-studio .ref-installation-tabs{margin-top:2px}
  .reference-studio .ps-workbench .viewport-pane{margin-top:4px}
+ .reference-studio .ps-workbench .engineering-viewport>.viewport-pane:not([hidden]){height:528px;min-height:528px;flex:0 0 528px}
  .reference-studio .ps-workbench .enterprise-inspector{height:648px;max-height:648px;margin-top:5px}
  .reference-studio .ps-result-ribbon{height:144px;min-height:144px;margin:0 18px 16px 104px}
  .reference-studio .ps-result-ribbon .wb-metric{height:113px;min-height:113px}
