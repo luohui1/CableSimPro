@@ -1,0 +1,64 @@
+/** Arithmetic/serialization fixtures, not solver validation or browser acceptance. */
+import assert from 'node:assert/strict';
+import {execFileSync} from 'node:child_process';
+import {mkdtempSync, rmSync} from 'node:fs';
+import {createRequire} from 'node:module';
+import {tmpdir} from 'node:os';
+import {dirname, join, resolve} from 'node:path';
+import {fileURLToPath} from 'node:url';
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const require = createRequire(join(root, 'frontend/package.json'));
+const temp = mkdtempSync(join(tmpdir(), 'cablesim-sweep-'));
+let passed = 0;
+try {
+ if (process.env.CABLESIM_LOCAL_TSC) execFileSync(process.env.CABLESIM_LOCAL_TSC,
+  ['--strict', '--target', 'ES2022', '--module', 'commonjs', '--outDir', temp, join(root, 'frontend/src/sweepStudy.ts')], {stdio: 'inherit'});
+ else execFileSync(process.execPath, [require.resolve('typescript/bin/tsc'), '--strict', '--target', 'ES2022', '--module', 'commonjs', '--outDir', temp, join(root, 'frontend/src/sweepStudy.ts')], {stdio: 'inherit'});
+ const {buildSweepStudy: build, csvCell, sweepStudyCSV, sweepParameter} = require(join(temp, 'sweepStudy.js'));
+ const scenario = {operating_current_a: 110, installation: {soil_rho_k_m_w: 1.2, ambient_temperature_c: 0, depth_m: .8, spacing_m: .12}};
+ const sweep = (values, currents, parameter = 'depth_m') => ({parameter,
+  points: values.map((value, i) => ({value, ampacity_a: currents[i], error: currents[i] === null ? '无稳态解' : null}))});
+ const check = (name, fn) => {fn(); passed++;};
+ const input = sweep([.4, .8, 1.2], [130, 110, 90]);
+ check('original point is the automatic reference', () => assert.equal(build(input, scenario).reference.index, 1));
+ check('raw ampacity changes', () => assert.deepEqual(build(input, scenario).rows.map(r => r.deltaA), [20, 0, -20]));
+ check('percent denominator is reference ampacity', () => assert.equal(build(input, scenario).rows[0].deltaPercent, 20 / 110 * 100));
+ check('headroom is capacity minus operating demand', () => assert.deepEqual(build(input, scenario).rows.map(r => r.headroomA), [20, 0, -20]));
+ check('points below demand do not include exactly equal point', () => assert.equal(build(input, scenario).belowDemand, 1));
+ check('scanned minimum/maximum', () => assert.deepEqual([build(input, scenario).minimumA, build(input, scenario).maximumA], [90, 130]));
+ check('one explicit comparison never edits input', () => {const before = JSON.stringify([input, scenario]); build(input, scenario, 0); assert.equal(JSON.stringify([input, scenario]), before);});
+ check('explicit non-original reference labelled as such', () => assert.equal(build(input, scenario, 0).referenceIsInput, false));
+ check('explicit reference changes only differences', () => assert.equal(build(input, scenario, 0).rows[2].deltaA, -40));
+ check('no implicit first-point reference when original absent', () => assert.equal(build(sweep([.4, 1.2], [130, 90]), scenario).reference, null));
+ check('missing original leaves percent blank', () => assert.equal(build(sweep([.4, 1.2], [130, 90]), scenario).rows[0].deltaPercent, null));
+ check('user can explicitly clear reference', () => assert.equal(build(input, scenario, null).reference, null));
+ check('invalid selection cannot fall back to first point', () => assert.equal(build(input, scenario, 99).reference, null));
+ check('fractional reference index rejected', () => assert.equal(build(input, scenario, .5).reference, null));
+ check('failed original is not a reference', () => assert.equal(build(sweep([.4, .8, 1.2], [130, null, 90]), scenario).reference, null));
+ check('failed row kept with its reason and null metrics', () => {const r = build(sweep([.4, .8, 1.2], [130, null, 90]), scenario).rows[1]; assert.equal(r.error, '无稳态解'); assert.deepEqual([r.headroomA, r.secant, r.deltaA], [null, null, null]);});
+ check('chart keeps failed x rather than bridging across it', () => assert.deepEqual(build(sweep([.4, .8, 1.2], [130, null, 90]), scenario).chartPoints, [[.4, 130], [.8, null], [1.2, 90]]));
+ check('secants never jump across missing result', () => assert.ok(build(sweep([.4, .8, 1.2], [130, null, 90]), scenario).rows.every(r => r.secant === null)));
+ check('all-failed dataset has no min/max/reference', () => {const s = build(sweep([.4, .8], [null, null]), scenario); assert.deepEqual([s.minimumA, s.maximumA, s.reference, s.succeeded, s.failed], [null, null, null, 0, 2]);});
+ check('unsorted table preserves request order', () => assert.deepEqual(build(sweep([1.2, .4, .8], [90, 130, 110]), scenario).rows.map(r => r.value), [1.2, .4, .8]));
+ check('chart uses increasing parameter coordinates', () => assert.deepEqual(build(sweep([1.2, .4, .8], [90, 130, 110]), scenario).chartPoints, [[.4,130],[.8,110],[1.2,90]]));
+ check('secant uses true nonuniform spacing', () => assert.ok(Math.abs(build(input, scenario).rows[2].secant + 50) < 1e-10));
+ check('duplicate original cannot be picked automatically', () => assert.equal(build(sweep([.8, .8], [110, 110]), scenario).reference, null));
+ check('duplicate samples are retained and marked', () => {const s = build(sweep([.4, .8, .8, 1.2], [130, 110, 110, 90]), scenario); assert.equal(s.rows.length, 4); assert.equal(s.duplicates, true); assert.ok(s.rows.every(r => r.secant === null));});
+ check('Celsius zero baseline produces finite A/degree not division by zero', () => {const s = build(sweep([-10, 0, 20], [140, 130, 110], 'ambient_temperature_c'), scenario); assert.equal(s.slopeUnit, 'A / °C'); assert.deepEqual(s.rows.map(r => r.secant), [null, -1, -1]);});
+ check('zero operating demand does not divide by zero', () => assert.equal(build(input, {...scenario, operating_current_a: 0}).rows[0].headroomA, 130));
+ check('unknown parameter fails closed', () => assert.equal(build({...input, parameter: 'humidity'}, scenario), null));
+ check('prototype property is not a registered parameter', () => assert.equal(sweepParameter('toString'), null));
+ check('nonfinite x fails closed', () => assert.equal(build(sweep([NaN, .8], [130, 110]), scenario), null));
+ check('nonfinite demand fails closed', () => assert.equal(build(input, {...scenario, operating_current_a: Infinity}), null));
+ check('negative demand fails closed', () => assert.equal(build(input, {...scenario, operating_current_a: -1}), null));
+ check('single-point comparison fails closed', () => assert.equal(build(sweep([.8], [110]), scenario), null));
+ check('empty points fails closed', () => assert.equal(build(sweep([], []), scenario), null));
+ check('nonfinite or nonpositive result remains unavailable', () => {const s = build(sweep([.4, .6, .8], [Infinity, -1, 0]), scenario); assert.equal(s.failed, 3);});
+ check('contradictory result/error is not solved', () => {const f = structuredClone(input); f.points[0].error = '失败'; assert.equal(build(f, scenario).rows[0].ampacityA, null);});
+ check('arithmetic overflow not exported as infinity', () => assert.equal(build(sweep([.4, .8], [Number.MAX_VALUE, Number.MIN_VALUE]), scenario).rows[0].deltaPercent, null));
+ check('CSV negative numbers remain numeric', () => assert.equal(csvCell(-2.5), '-2.5'));
+ check('CSV formulas in text are neutralized', () => {for (const s of ['=1+1', '@SUM(A1)', ' +SUM(A1)', '\t-cmd']) assert.ok(csvCell(s).startsWith('"\''));});
+ check('CSV quotes/newlines preserved', () => assert.equal(csvCell('a"b\nc'), '"a""b\nc"'));
+ check('CSV retains failures, units and provenance', () => {const s = build(sweep([.4, .8], [130, null]), scenario); const text = sweepStudyCSV(s, {workspaceId: 'w', revision: 2, runId: 'r', runInputHash: 'a'.repeat(64)}); assert.match(text, /ampacity_headroom_a/); assert.match(text, /"failed","无稳态解"/); assert.match(text, /"A \/ m"/); assert.match(text, /a{64}/); assert.ok(!text.includes('NaN') && !text.includes('Infinity'));});
+ console.log(`${passed} sweep-study arithmetic/CSV checks passed. No solver or browser acceptance is implied.`);
+} finally {rmSync(temp, {recursive: true, force: true});}
