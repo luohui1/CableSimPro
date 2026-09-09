@@ -1,0 +1,17 @@
+/* Pixel-level shell calibration for the approved 1586 × 992 workbench reference.
+ * This layer is desktop-reference only. Laptop/mobile rules keep their own responsive sizing. */
+@media (min-width:1451px) and (min-height:851px){
+ .reference-studio{--wb-reference-header-height:82px;--wb-reference-rail-width:85px;--wb-reference-inspector-width:371px;--wb-reference-result-height:144px;--wb-reference-footer-height:57px;--wb-reference-title-height:62px}
+ .reference-studio .ps-workbench::before{content:'';position:absolute;left:0;top:82px;bottom:0;width:85px;background:linear-gradient(90deg,#fcfdff,#fff);border-right:1px solid #edf3fc;pointer-events:none;z-index:0}
+ .reference-studio .ps-commandbar.dual-header{height:82px;min-height:82px}
+ .reference-studio .ps-workbench .enterprise-outline{flex-basis:85px;width:85px}
+ .reference-studio .ps-workbench .enterprise-content{padding:23px 19px 16px;overflow:hidden}
+ .reference-studio .ps-workbench .enterprise-model-layout.with-inspector{grid-template-columns:minmax(0,1fr) 371px}
+ .reference-studio .ps-workbench .ps-view-heading{height:62px;min-height:62px}
+ .reference-studio .ps-workbench .viewport-tabs,.reference-studio .ref-installation-tabs{margin-top:2px}
+ .reference-studio .ps-workbench .viewport-pane{margin-top:4px}
+ .reference-studio .ps-workbench .enterprise-inspector{height:648px;max-height:648px;margin-top:5px}
+ .reference-studio .ps-result-ribbon{height:144px;min-height:144px;margin:0 18px 16px 104px}
+ .reference-studio .ps-result-ribbon .wb-metric{height:113px;min-height:113px}
+ .reference-studio .ref-status-footer{height:57px;min-height:57px;flex-basis:57px;margin-left:85px}
+}
