@@ -17,7 +17,7 @@ jobs:
       matrix:
         include:
           - suite: design
-            files: white-workbench.spec.ts industrial-workbench.spec.ts
+            files: white-workbench.spec.ts industrial-workbench.spec.ts progressive-workbench.spec.ts
           - suite: compatibility
             files: light-studio.spec.ts dual-mode.spec.ts engineering-pulse.spec.ts
     steps:
@@ -33,6 +33,7 @@ jobs:
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
       - run: pip install -r backend/requirements-dev.txt
+      - run: node scripts/test_workbench_commands.mjs
       - run: node scripts/test_design_tokens.mjs
       - run: node scripts/test_visual_geometry.mjs
       - run: python -m pytest --junitxml=artifacts/backend.xml

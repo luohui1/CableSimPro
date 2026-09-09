@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect,useState} from 'react';
 import {Box,ChartNoAxesCombined,Layers3,Thermometer,TriangleAlert} from 'lucide-react';
 import {useStudio} from '../StudioState';
 import CableModelView from '../CableModelView';
@@ -7,15 +7,16 @@ import LayerDiagram from '../professional/LayerDiagram';
 
 type View='model'|'section'|'temperature'|'curve';
 /** Views of the same saved input/run; changing view never invokes a calculation. */
-export default function EngineeringViewport(){
- const s=useStudio(),[view,setView]=useState<View>('model');
+export default function EngineeringViewport({progressive=false,request,onInspectLayer}:{progressive?:boolean;request?:{view:View;serial:number};onInspectLayer?:(index:number)=>void}={}){
+ const s=useStudio(),[view,setView]=useState<View>('model'),[compare,setCompare]=useState(false);
+ useEffect(()=>{if(request)setView(request.view)},[request?.serial]);
  if(!s.w)return null;
  return <section className="engineering-viewport" aria-label="工程模型与结果画布" data-view={view}>
   <nav className="viewport-tabs" aria-label="画布视图">
    {([{id:'model',label:'三维结构',Icon:Box},{id:'section',label:'二维截面',Icon:Layers3},{id:'temperature',label:'温度分布',Icon:Thermometer},{id:'curve',label:'载流量曲线',Icon:ChartNoAxesCombined}] as const).map(({id,label,Icon})=><button key={id} aria-pressed={view===id} onClick={()=>setView(id)}><Icon size={16}/>{label}</button>)}
-   <span className="viewport-run-badge">{s.current?'当前输入 · 已计算':'工程输入 · 待计算'}</span>
+   {progressive&&<button aria-pressed={compare} onClick={()=>setCompare(v=>!v)} aria-label="截面对照"><Layers3 size={16}/>截面对照</button>}<span className="viewport-run-badge">{s.current?'当前输入 · 已计算':'工程输入 · 待计算'}</span>
   </nav>
-  <div className="viewport-pane wb-model-overview" hidden={view!=='model'}><div className="wb-model-primary"><CableModelView cable={s.w.scenario.cable} surface="#ffffff" studio/></div><LayerDiagram cable={s.w.scenario.cable}/></div>
+  <div className={`viewport-pane wb-model-overview ${progressive&&!compare?'ps-single-stage':''}`}  hidden={view!=='model'}><div className="wb-model-primary"><CableModelView cable={s.w.scenario.cable} surface="#ffffff" studio compactTools={progressive} onInspectLayer={onInspectLayer}/></div><div hidden={progressive&&!compare} className="ps-layer-compare"><LayerDiagram cable={s.w.scenario.cable}/></div></div>
   <div className="viewport-pane section-pane" hidden={view!=='section'}><div className="viewport-note">等比例截面 · 尺寸来自当前工程，不是厂家制造图</div><CrossSection cable={s.w.scenario.cable}/></div>
   <div className="viewport-pane field-pane" hidden={view!=='temperature'}>
    {s.current?<><div className="viewport-note">均匀土壤半空间解析温度 · 非有限元 · 不反向修正载流量</div><HeatField result={s.current}/></>:<MissingResult stale={!!s.output?.result}/>}

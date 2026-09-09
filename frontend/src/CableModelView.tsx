@@ -49,7 +49,9 @@ export function fitCablePortrait(camera:THREE.PerspectiveCamera,object:THREE.Obj
  }
  camera.position.copy(direction.multiplyScalar(distance));camera.lookAt(0,0,0);camera.updateMatrixWorld(true);camera.updateProjectionMatrix();
 }
-export default function CableModelView({cable,surface='#f4f7fb',studio=false}:{cable:Cable;surface?:string;studio?:boolean}){
+export default function CableModelView({cable,surface='#f4f7fb',studio=false,compactTools=false,onInspectLayer}:{cable:Cable;surface?:string;studio?:boolean;compactTools?:boolean;onInspectLayer?:(index:number)=>void}){
+ const inspectRef=useRef(onInspectLayer);inspectRef.current=onInspectLayer;
+ const [selectedLayer,setSelectedLayer]=useState<number|null>(null);
  const [materialPreview,setMaterialPreview]=useState(studio);
  const finishRef=useRef(materialPreview);finishRef.current=materialPreview;
  const studioRig=useRef<ReturnType<typeof addStudioLighting>|null>(null);
@@ -97,8 +99,23 @@ export default function CableModelView({cable,surface='#f4f7fb',studio=false}:{c
   };
   renderCurrent.current=render;
   const resize=()=>{const w=Math.max(el.clientWidth,100),h=Math.max(el.clientHeight,100),aspect=w/h;el.dataset.compact=String(h<380);camera.left=-.25*aspect;camera.right=.25*aspect;camera.top=.25;camera.bottom=-.25;camera.updateProjectionMatrix();fit.current();renderer.setSize(w,h);render()};
+  // A stationary click inspects a real visible display mesh. Drags remain OrbitControls gestures.
+  const ray=new THREE.Raycaster(),point=new THREE.Vector2();let down:{x:number;y:number}|null=null;
+  const pointerDown=(e:PointerEvent)=>{down=e.button===0?{x:e.clientX,y:e.clientY}:null};
+  const pointerUp=(e:PointerEvent)=>{
+   const start=down;down=null;if(!start||!inspectRef.current||Math.hypot(e.clientX-start.x,e.clientY-start.y)>5||!modelRoot.current)return;
+   const rect=renderer.domElement.getBoundingClientRect();if(!rect.width||!rect.height)return;
+   point.set((e.clientX-rect.left)/rect.width*2-1,-(e.clientY-rect.top)/rect.height*2+1);ray.setFromCamera(point,camera);
+   const hit=ray.intersectObject(modelRoot.current,true).find(h=>{
+    if(!Number.isInteger(h.object.userData.cableLayer))return false;
+    for(let o:THREE.Object3D|null=h.object;o;o=o.parent)if(!o.visible)return false;
+    return true;
+   });
+   if(hit){const index=hit.object.userData.cableLayer as number;setSelectedLayer(index);inspectRef.current(index)}
+  };
+  renderer.domElement.addEventListener('pointerdown',pointerDown);renderer.domElement.addEventListener('pointerup',pointerUp);
   const ro=new ResizeObserver(resize);ro.observe(el);ctl.addEventListener('change',render);resize();setReady(true);
-  return()=>{ro.disconnect();ctl.dispose();disposeScene(scene,...(group.current?[group.current]:[]));studioRig.current?.key.shadow.dispose();studioRig.current=null;technicalRig.current=null;rendererRef.current=null;appearanceRoot.current=null;technicalRoot.current=null;environment.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();group.current=null;modelRoot.current=null;sceneRef.current=null;cam.current=null;controls.current=null;renderCurrent.current=()=>{}};
+  return()=>{renderer.domElement.removeEventListener('pointerdown',pointerDown);renderer.domElement.removeEventListener('pointerup',pointerUp);ro.disconnect();ctl.dispose();disposeScene(scene,...(group.current?[group.current]:[]));studioRig.current?.key.shadow.dispose();studioRig.current=null;technicalRig.current=null;rendererRef.current=null;appearanceRoot.current=null;technicalRoot.current=null;environment.dispose();renderer.dispose();renderer.forceContextLoss();renderer.domElement.remove();group.current=null;modelRoot.current=null;sceneRef.current=null;cam.current=null;controls.current=null;renderCurrent.current=()=>{}};
  },[]);
  useEffect(()=>{
   const scene=sceneRef.current;if(!scene||failed)return;
@@ -107,17 +124,18 @@ export default function CableModelView({cable,surface='#f4f7fb',studio=false}:{c
    if(cancelled||sceneRef.current!==scene)return;
    try{
     const cableGroup=buildCableGeometry(cable,mode,visible),nextRoot=new THREE.Group();nextRoot.name='当前电缆显示';
-    const display=cableGroup.clone(true);if(visible[0]&&display.children[0])display.children[0].visible=false;
+    const display=cableGroup.clone(true);display.children.forEach((mesh,i)=>{mesh.userData={...mesh.userData,cableLayer:i}});if(visible[0]&&display.children[0])display.children[0].visible=false;
     const technical=new THREE.Group();technical.add(display,cableAppearance(cable,mode,visible));nextRoot.add(technical);technicalRoot.current=technical;
     if(studio){
      const materials=studioMaterials(cable.conductor),polished=new THREE.Group();polished.name='Material preview (display only)';
      cableGroup.children.forEach((child,i)=>{
       const base=child as THREE.Mesh;const mesh=new THREE.Mesh(i===0?base.geometry:roundedShell(base.userData.inner_radius_m,base.userData.outer_radius_m,base.userData.axial_length_m),materials[i]);
-      mesh.name=base.name;mesh.rotation.copy(base.rotation);mesh.position.copy(base.position);mesh.visible=i!==0&&base.visible;mesh.castShadow=true;mesh.receiveShadow=true;polished.add(mesh);
+      mesh.name=base.name;mesh.userData.cableLayer=i;mesh.rotation.copy(base.rotation);mesh.position.copy(base.position);mesh.visible=i!==0&&base.visible;mesh.castShadow=true;mesh.receiveShadow=true;polished.add(mesh);
      });
      const detail=cableAppearance(cable,mode,visible,materials);detail.traverse(o=>{if(o instanceof THREE.Mesh){o.castShadow=true;o.receiveShadow=true}});polished.add(detail);nextRoot.add(polished);appearanceRoot.current=polished;
      if(studioRig.current)studioRig.current.floor.position.y=mode==='exploded'?-.17:-layers(cable)[5].radius_mm/1000-.001;
     }
+    nextRoot.traverse(o=>{if(o instanceof THREE.Mesh){if(o.userData.strand_instances)o.userData.cableLayer=0;else if(o.userData.wire_instances)o.userData.cableLayer=4}});
     if(grid){const floor=new THREE.GridHelper(1,20,0xb8c0b8,0xe1e5de);floor.position.y=mode==='exploded'?-.20:-layers(cable)[5].radius_mm/1000-.003;nextRoot.add(floor)}
     const previous=modelRoot.current,previousExport=group.current;if(previous){scene.remove(previous);disposeScene(previous,...(previousExport?[previousExport]:[]))}
     scene.add(nextRoot);modelRoot.current=nextRoot;group.current=cableGroup;fit.current();renderCurrent.current();setBuiltKey(geometryKey);setError('');
@@ -141,7 +159,7 @@ export default function CableModelView({cable,surface='#f4f7fb',studio=false}:{c
   const {GLTFExporter}=await import('three/addons/exporters/GLTFExporter.js');const data=await new GLTFExporter().parseAsync(group.current,{binary:true,onlyVisible:true});
   if(!(data instanceof ArrayBuffer))throw new Error('模型导出格式错误');const u=URL.createObjectURL(new Blob([data],{type:'model/gltf-binary'}));const a=document.createElement('a');a.href=u;a.download='CableSimPro-cable.glb';a.click();setTimeout(()=>URL.revokeObjectURL(u),10000);
  }catch(e){setError(e instanceof Error?e.message:'无法导出模型')}}
- return <div className={`model-view ${studio?'studio-model':''}`} data-finish={materialPreview?'material':'technical'}><div className="model-toolbar"><div className="segmented">{[['cutaway','轴向剥切'],['assembled','完整结构'],['exploded','分层展开']].map(([id,label])=><button key={id} aria-pressed={mode===id} className={mode===id?'active':''} onClick={()=>setMode(id as ViewMode)}>{label}</button>)}</div><span className="tool-spacer"/>{studio&&<button aria-label="材质预览" aria-pressed={materialPreview} onClick={()=>setMaterialPreview(v=>!v)}>材质</button>}<button title="显示或隐藏网格" aria-pressed={grid} onClick={()=>setGrid(!grid)}>网格</button><button title="显示或隐藏尺寸" aria-pressed={dimension} onClick={()=>setDimension(!dimension)}>尺寸</button><button onClick={()=>{setView('iso');setViewRevision(r=>r+1)}} title="恢复轴测视图"><RotateCcw size={15}/></button><button disabled={!ready||failed||builtKey!==geometryKey} onClick={()=>void exportModel()}><Download size={15}/>导出 GLB</button></div>
+ return <div className={`model-view ${studio?'studio-model':''} ${compactTools?'ps-model-tools':''}`} data-selected-layer={selectedLayer??undefined} data-finish={materialPreview?'material':'technical'}><div className="model-toolbar"><div className="segmented">{[['cutaway','轴向剥切'],['assembled','完整结构'],['exploded','分层展开']].map(([id,label])=><button key={id} aria-pressed={mode===id} className={mode===id?'active':''} onClick={()=>setMode(id as ViewMode)}>{label}</button>)}</div><span className="tool-spacer"/>{studio&&<button aria-label="材质预览" aria-pressed={materialPreview} onClick={()=>setMaterialPreview(v=>!v)}>材质</button>}<button title="显示或隐藏网格" aria-pressed={grid} onClick={()=>setGrid(!grid)}>网格</button><button title="显示或隐藏尺寸" aria-pressed={dimension} onClick={()=>setDimension(!dimension)}>尺寸</button><button onClick={()=>{setView('iso');setViewRevision(r=>r+1)}} title="恢复轴测视图"><RotateCcw size={15}/></button><button disabled={!ready||failed||builtKey!==geometryKey} onClick={()=>void exportModel()}><Download size={15}/>导出 GLB</button></div>
  <div className="model-render" ref={host} data-testid="cable-model-view" data-material-preset={studio?CABLE_STUDIO.version:undefined} data-renderer={failed?'fallback':ready&&builtKey===geometryKey?'webgl':'loading'}>{failed&&<div className="model-fallback"><p>WebGL 不可用，显示二维截面；三维导出已停用。</p><CrossSection cable={cable}/></div>}
  {ready&&!failed&&builtKey!==geometryKey&&<span role="status" style={{position:'absolute',bottom:12,left:16,zIndex:3,background:'#ffffff',padding:'6px 10px',color:'#23415d'}}>正在更新三维显示…</span>}
  <div className="model-caption"><Box size={16}/><div><strong>{studio?'单芯电缆 · 工程样件':'单芯电缆 · 结构模型'}</strong><span>{cable.conductor==='copper'?'铜':'铝'}导体 / XLPE 绝缘 / 无铠装</span></div></div>
@@ -149,5 +167,5 @@ export default function CableModelView({cable,surface='#f4f7fb',studio=false}:{c
  <div className="orientation">{[['iso','轴测'],['front','正视'],['end','端面'],['top','俯视']].map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>setView(id)}>{label}</button>)}</div>
  {dimension&&<div className="model-dimensions"><span>外径 <b>Ø {fmt(layers(cable)[5].radius_mm*2,2)} mm</b></span><span>导体 <b>{fmt(cable.area_mm2,0)} mm²</b></span><span>展示长度 <b>360 mm</b></span></div>}
  </div>{studio&&<div className="studio-caption"><span><i/>{materialPreview?'材质预览':'简化着色'}</span><span>外观材质为示意 · 尺寸来自工程输入</span></div>}{error&&<p role="alert">{error}</p>}<div className="model-footer"><span>左键旋转 · 右键平移 · 滚轮缩放</span><span>外观线股不参与求解 · GLB 导出等效六层几何</span></div>
- <div className="layer-strip">{layers(cable).map((l,i)=><button key={l.name} className={visible[i]?'':'hidden-layer'} aria-pressed={visible[i]} onClick={()=>setVisible(v=>v.map((x,j)=>i===j?!x:x))}>{visible[i]?<Eye size={12}/>:<EyeOff size={12}/>}<span>{l.name}</span><b>{fmt(l.radius_mm*2,2)} mm</b></button>)}</div></div>;
+ {compactTools?<details className="ps-layer-menu"><summary>结构层与可见性</summary><div className="ps-layer-inspect" aria-label="检查结构层">{layers(cable).map((layer,i)=><button key={layer.name} aria-label={`检查${layer.name}参数`} onClick={()=>{setSelectedLayer(i);onInspectLayer?.(i)}}>{layer.name}<span>检查参数 ↗</span></button>)}</div> <div className="layer-strip">{layers(cable).map((l,i)=><button key={l.name} className={visible[i]?'':'hidden-layer'} aria-pressed={visible[i]} onClick={()=>setVisible(v=>v.map((x,j)=>i===j?!x:x))}>{visible[i]?<Eye size={12}/>:<EyeOff size={12}/>}<span>{l.name}</span><b>{fmt(l.radius_mm*2,2)} mm</b></button>)}</div></details>:<> <div className="layer-strip">{layers(cable).map((l,i)=><button key={l.name} className={visible[i]?'':'hidden-layer'} aria-pressed={visible[i]} onClick={()=>setVisible(v=>v.map((x,j)=>i===j?!x:x))}>{visible[i]?<Eye size={12}/>:<EyeOff size={12}/>}<span>{l.name}</span><b>{fmt(l.radius_mm*2,2)} mm</b></button>)}</div></>}</div>;
 }

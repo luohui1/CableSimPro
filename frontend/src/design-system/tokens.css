@@ -81,4 +81,8 @@
   --wb-industrial-model-height: 490px;
   --wb-industrial-model-laptop: 480px;
   --wb-industrial-model-touch: 450px;
+  --wb-studio-rail-width: 72px;
+  --wb-studio-command-height: 64px;
+  --wb-studio-inspector-width: 320px;
+  --wb-studio-overlay-shadow: 0 24px 80px rgb(20 36 59 / 20%), 0 2px 8px rgb(20 36 59 / 8%);
 }

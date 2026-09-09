@@ -7,9 +7,9 @@ import sys
 import xml.etree.ElementTree as ET
 
 # Nine white-workbench real-backend cases per desktop project; legacy coverage retained.
-EXPECTED = {'chromium': 88, 'webkit': 88, 'mobile-webkit': 11,
-            'windows-chromium-1': 61, 'windows-chromium-1.25': 61,
-            'windows-chromium-1.5': 61, 'windows-edge-1.25': 61}
+EXPECTED = {'chromium': 94, 'webkit': 94, 'mobile-webkit': 11,
+            'windows-chromium-1': 67, 'windows-chromium-1.25': 67,
+            'windows-chromium-1.5': 67, 'windows-edge-1.25': 67}
 
 
 def verify(root: Path) -> dict:

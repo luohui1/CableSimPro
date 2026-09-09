@@ -9,7 +9,7 @@ test('industrial: elevated surfaces and material toggle keep the same live canva
  const stage=surface.locator('.enterprise-model-stage'),inspector=surface.locator('.enterprise-inspector');
  await expect(stage).toHaveCSS('border-top-width','0px');await expect(inspector).toHaveCSS('border-top-width','0px');
  expect(await stage.evaluate(e=>getComputedStyle(e).boxShadow)).not.toBe('none');
- const project=surface.locator('.wb-project-card'),hint=project.locator('small');
+ const project=surface.locator('.wb-project-card'),hint=project.locator('b');
  const cardBox=(await project.boundingBox())!,hintBox=(await hint.boundingBox())!;
  expect(hintBox.y+hintBox.height).toBeLessThanOrEqual(cardBox.y+cardBox.height);
  await expect(inspector.locator('.property').first()).toHaveCSS('border-bottom-width','0px');
@@ -41,7 +41,7 @@ test('industrial: material preview exports only six equivalent layers and edits 
  await expect(page.getByTestId('session-revision')).toHaveText('rev.2');
  await expect(page.getByTestId('cable-model-view')).toHaveAttribute('data-renderer','webgl');
  await expect(canvas).toHaveAttribute('data-retained','material-edit');
- await expect(page.getByRole('region',{name:'当前电缆分层预览',exact:true})).toContainText('300 mm²');
+ await page.getByRole('button',{name:'截面对照',exact:true}).click();await expect(page.getByRole('region',{name:'当前电缆分层预览',exact:true})).toContainText('300 mm²');
  await expect(page.getByRole('button',{name:'导出计算书',exact:true})).toBeDisabled();
  await page.getByRole('button',{name:'分层展开',exact:true}).click();
  await expect(page.getByTestId('cable-model-view')).toHaveAttribute('data-renderer','webgl');

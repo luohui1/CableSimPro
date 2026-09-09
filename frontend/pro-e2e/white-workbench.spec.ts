@@ -11,9 +11,14 @@ test('white workbench: real white shell, grouped controls, local backdrop and no
  await expect(page.getByTestId('professional-mode').locator('.enterprise-content')).toHaveCSS('background-color','rgb(255, 255, 255)');
  await expect(page.locator('.wb-context-disclosure')).not.toHaveAttribute('open');
  await expect(page.locator('.wb-navigation')).toHaveCount(1);
+ await expect(page.getByRole('region',{name:'当前电缆分层预览'})).toBeHidden();
+ await page.getByRole('button',{name:'截面对照',exact:true}).click();
  await expect(page.getByRole('region',{name:'当前电缆分层预览'})).toBeVisible();
+ await page.getByRole('button',{name:'截面对照',exact:true}).click();
  await expect(page.locator('.wb-property-group').first()).toContainText('导体与电压');
- await expect(page.locator('.wb-brand-scene img')).toHaveJSProperty('naturalWidth',348);
+ // A second brand banner no longer consumes the command bar. Assets remain local.
+ await expect(page.getByRole('banner',{name:'工程命令栏'})).toHaveCount(1);
+ await expect(page.locator('.wb-brand-scene')).toHaveCount(0);
  await expect(page.getByTestId('workbench-metrics').locator('.wb-metric')).toHaveCount(4);
  for(const v of await page.getByTestId('workbench-metrics').locator('strong').allTextContents())expect(v).toContain('—');
  await expect(page.getByRole('button',{name:'导出计算书',exact:true})).toBeDisabled();
@@ -39,6 +44,8 @@ test('white workbench: calculation, live metrics, radial chart, export and canva
  }
  const overview=page.getByTestId('workbench-metrics');
  expect((await overview.boundingBox())!.height).toBeLessThan(180);
+ await expect(page.getByRole('region',{name:'结果分析',exact:true})).toBeHidden();
+ await page.getByRole('button',{name:'查看分析',exact:true}).click();
  await expect(page.getByRole('img',{name:'当前运行径向温度曲线',exact:true})).toBeVisible();
  const downloaded=page.waitForEvent('download');await page.getByRole('button',{name:'导出计算书',exact:true}).click();const file=await downloaded;expect(file.suggestedFilename()).toContain('计算书');const report=await readFile((await file.path())!,'utf8');
  expect(report).toContain(`${summary.ampacity_a.toFixed(2)} A`);
@@ -56,7 +63,7 @@ test('white workbench: drafts, locked inputs and stale output stay guarded',asyn
  const field=page.getByLabel('导体截面积',{exact:true});await field.fill('');await field.press('Tab');await expect(page.getByRole('button',{name:'计算载流量',exact:false})).toBeDisabled();await expect(page.getByRole('button',{name:'导出计算书',exact:true})).toBeDisabled();
  await expect(page.getByTestId('workbench-metrics').locator('.wb-metric strong').first()).toContainText('—');
  await page.getByRole('button',{name:'撤销未提交输入',exact:true}).click();await field.fill('300');await field.press('Tab');await expect(page.getByTestId('session-revision')).toHaveText('rev.2');
- await expect(page.getByRole('region',{name:'当前电缆分层预览'})).toContainText('300 mm²');await expect(page.getByRole('img',{name:'当前运行径向温度曲线',exact:true})).toHaveCount(0);
+ await page.getByRole('button',{name:'截面对照',exact:true}).click();await expect(page.getByRole('region',{name:'当前电缆分层预览'})).toContainText('300 mm²');await expect(page.getByRole('img',{name:'当前运行径向温度曲线',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'锁定导体截面积',exact:true}).click();await expect(field).toBeDisabled();await expect(page.getByTestId('session-revision')).toHaveText('rev.3');
 });
 
