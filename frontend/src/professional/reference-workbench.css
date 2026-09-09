@@ -7,7 +7,7 @@
 .reference-studio .ps-workbench button:focus-visible{outline:2px solid var(--wb-color-focus);outline-offset:3px}
 .reference-studio .ps-workbench button:disabled{cursor:not-allowed;opacity:.48}
 /* Global header: logo / project / workspace / actual saved state / commands / modes. */
-.reference-studio .ps-commandbar.dual-header{height:80px;min-height:80px;padding:0 24px;gap:15px;box-shadow:0 3px 16px #5483c313;border-bottom:1px solid #edf3fd;background:#fff}
+.reference-studio .ps-commandbar.dual-header{height:var(--wb-reference-header-height);min-height:var(--wb-reference-header-height);padding:0 24px;gap:15px;box-shadow:0 3px 16px #5483c313;border-bottom:1px solid #edf3fd;background:#fff}
 .reference-studio .ps-brand{gap:12px;width:253px;flex:0 0 253px;justify-content:flex-start;text-align:left;padding-right:18px;border-right:1px solid #e6eef9}
 .reference-studio .ps-brand>span{width:46px;height:46px;border-radius:11px;font-size:36px;font-weight:600;background:linear-gradient(145deg,#368ede 0%,#1558a1 37%,#102a50 80%);box-shadow:inset 0 2px 3px #ffffffa0,0 0 0 2px #b9dcff,0 4px 12px #1367c929}
 .reference-studio .ps-brand b{font-size:25px;line-height:1.1;letter-spacing:-1px;color:#0a2351}
@@ -27,7 +27,7 @@
 .reference-studio .ps-command-actions{gap:4px}.reference-studio .ps-command-actions button{color:#1b3d79}
 .reference-studio .ps-context-content{top:76px;border:1px solid #e1ebf8}
 /* The 84px rail is navigation, not a second hierarchy competing with the viewport. */
-.reference-studio .ps-workbench .enterprise-outline{flex:0 0 84px;width:84px;padding:16px 10px;border-right:1px solid #edf3fc;background:linear-gradient(90deg,#fcfdff,#fff);z-index:20}
+.reference-studio .ps-workbench .enterprise-outline{flex:0 0 var(--wb-reference-rail-width);width:var(--wb-reference-rail-width);padding:16px 10px;border-right:1px solid #edf3fc;background:linear-gradient(90deg,#fcfdff,#fff);z-index:20}
 .reference-studio .ps-workbench .ps-rail{gap:14px}
 .reference-studio .ps-workbench .ps-rail-main{gap:12px}
 .reference-studio .ps-workbench .ps-rail button,.reference-studio .ps-rail summary{min-height:66px;font-size:12px;border-radius:6px;color:#536b93;gap:7px;line-height:1.2}
@@ -36,14 +36,14 @@
 .reference-studio .ps-workbench .ps-resource-menu>div button{min-height:40px;font-size:13px}
 .reference-studio .ps-workbench.is-focused .enterprise-outline{display:none!important}
 /* Inspector starts at the title's top edge, not below the canvas tabs. */
-.reference-studio .ps-workbench .enterprise-content{padding:24px 20px 16px;overflow:auto;min-width:0;background:linear-gradient(120deg,#fff,#fcfdff);background-color:#fff}
+.reference-studio .ps-workbench .enterprise-content{padding:24px 20px 16px;overflow:auto;scrollbar-gutter:auto;min-width:0;background:linear-gradient(120deg,#fff,#fcfdff);background-color:#fff}
 .reference-studio .ps-workbench .enterprise-page:first-child{height:100%;min-height:0}
 .reference-studio .ps-workbench .enterprise-model-layout{height:100%;min-height:0;gap:18px;grid-template-columns:minmax(0,1fr)}
 .reference-studio .ps-workbench .enterprise-model-layout.with-inspector{grid-template-columns:minmax(0,1fr) var(--wb-reference-inspector-width);gap:18px}
-.reference-studio .ps-workbench .enterprise-model-column{display:flex;flex-direction:column;gap:0;min-height:0}
-.reference-studio .ps-workbench .ps-view-heading{height:64px;min-height:64px;padding:0 0 14px;position:relative;gap:8px;align-items:flex-start}
+.reference-studio .ps-workbench .enterprise-model-column{display:flex;flex-direction:column;gap:0;min-height:0;border:0;padding:0;box-shadow:none;background:transparent;overflow:visible}
+.reference-studio .ps-workbench .ps-view-heading{height:var(--wb-reference-title-height);min-height:var(--wb-reference-title-height);padding:0 0 14px;position:relative;gap:8px;align-items:flex-start}
 .reference-studio .ps-view-heading>div:first-child{display:flex;gap:22px;align-items:center;min-width:0}
-.reference-studio .ps-view-heading h1{order:-1;font-size:30px;line-height:1.25;letter-spacing:.5px;font-weight:700;color:#0c2457;white-space:nowrap}
+.reference-studio .ps-workbench .ps-view-heading h1{order:-1;font-size:30px;line-height:1.25;letter-spacing:.5px;font-weight:750;color:#0c2457;white-space:nowrap}
 .reference-studio .ps-view-heading>div:first-child>span{font-size:12px;color:#536b95;max-width:350px;line-height:1.6}
 .reference-studio .ps-view-heading>div:last-child{align-items:center;gap:0;flex-shrink:0}
 .reference-studio .ps-view-heading>div:last-child button{color:#5b7295;padding:6px;font-size:11px}
@@ -75,7 +75,7 @@
 /* The six actual tools occupy a floating island, not an extra horizontal toolbar. */
 .reference-studio .ref-tool-island{position:absolute;right:16px;top:14px;z-index:5;display:flex;gap:3px;padding:5px;background:#ffffffed;border:1px solid #fff;border-radius:8px;box-shadow:var(--wb-reference-tool-shadow)}
 .reference-studio .ref-tool-island button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;width:47px;height:51px;padding:3px;border:0;border-radius:6px;color:#214475;background:transparent;font-size:10px}
-.reference-studio .ref-tool-island button[aria-pressed=true],.reference-studio .ref-tool-island button:hover{background:linear-gradient(140deg,#e3f1ff,#f5faff);color:#005bea}
+.reference-studio .ref-tool-island button[aria-pressed=true]:not([data-setting]),.reference-studio .ref-tool-island button:hover{background:linear-gradient(140deg,#e3f1ff,#f5faff);color:#005bea}
 .reference-studio .ref-view-selector,.reference-studio .ref-zoom-controls{position:absolute;bottom:14px;z-index:4;display:flex;align-items:center;gap:3px;background:#fffffff2;padding:4px;border:1px solid #e8f0fb;border-radius:7px;box-shadow:0 6px 18px #27589712}
 .reference-studio .ref-view-selector{left:50%;transform:translateX(-50%)}
 .reference-studio .ref-view-selector button,.reference-studio .ref-zoom-controls button{height:29px;min-height:29px;padding:0 12px;color:#446698;background:transparent;border:0;border-radius:4px;white-space:nowrap;font-size:12px}
@@ -114,7 +114,7 @@
 .reference-studio .ps-workbench .wb-group-count{font-size:10px;color:#647ca2;opacity:.8}
 .reference-studio .ps-workbench .wb-property-group h3>button[aria-expanded=true]{background:linear-gradient(110deg,#ebf4ff,#f7fbff)}
 .reference-studio .ps-workbench .wb-property-group>div{padding:7px 1px 5px}
-.reference-studio .ps-workbench .property{display:grid;grid-template-columns:minmax(108px,.85fr) minmax(0,1.15fr);gap:8px;min-height:40px;padding:3px 0;border:0}
+.reference-studio .ps-workbench .property{display:grid;grid-template-columns:minmax(108px,.85fr) minmax(0,1.15fr);gap:8px;min-height:40px;padding:3px 0;border:0;box-shadow:none;background:transparent}
 .reference-studio .ps-workbench .property-title{display:flex;gap:4px;min-width:0;align-items:center}
 .reference-studio .ps-workbench .property-title label{font-size:12px;line-height:1.35;color:#4d6893}
 .reference-studio .ps-workbench .property-title button{padding:3px;min-width:20px;color:#6e83a4;background:transparent;border:0;flex-shrink:0}
@@ -128,7 +128,7 @@
 .reference-studio .ref-model-tree p{font-size:12px;color:#536c94}.reference-studio .ref-model-tree>button{width:100%;display:flex;align-items:center;gap:10px;border:0;border-radius:6px;background:#f2f7fe;color:#254a80;margin:7px 0;padding:12px 9px;text-align:left}
 .reference-studio .ref-model-tree>button>span:first-of-type{flex:1}.reference-studio .ref-model-tree small{display:block;font-size:11px;color:#536c94;line-height:1.6}
 /* Result ribbon matches the reference's one-piece frame and illustrated readouts. */
-.reference-studio .ps-result-ribbon{height:150px;min-height:150px;margin:0 20px 16px 104px;padding:12px;display:grid;grid-template-columns:160px minmax(0,1fr) 185px;gap:10px;border:1px solid #e7effb;border-radius:9px;background:linear-gradient(145deg,#fbfdff,#f3f8ff);box-shadow:0 5px 20px #467db90b}
+.reference-studio .ps-result-ribbon{height:var(--wb-reference-result-height);min-height:var(--wb-reference-result-height);margin:0 20px 16px 104px;padding:12px;display:grid;grid-template-columns:160px minmax(0,1fr) 185px;gap:10px;border:1px solid #e7effb;border-radius:9px;background:linear-gradient(145deg,#fbfdff,#f3f8ff);box-shadow:0 5px 20px #467db90b}
 .reference-studio .ref-result-title{padding:8px 12px;color:#153777}.reference-studio .ref-result-title h2{font-size:17px;line-height:1.5;margin:0 0 8px;font-weight:600;white-space:nowrap}.reference-studio .ref-result-title p{font-size:12px;line-height:1.7;color:#536e98;margin:0}
 .reference-studio .ps-result-ribbon .wb-results-overview{display:block;margin:0;padding:0;border:0;box-shadow:none;background:none;min-width:0}
 .reference-studio .ps-result-ribbon .wb-metric-grid{gap:6px;padding:0;grid-template-columns:repeat(4,minmax(0,1fr));border:0;background:transparent;box-shadow:none}
@@ -169,7 +169,7 @@
 .reference-studio .ps-workbench:has(.ps-analysis-drawer:not([hidden])) .ref-result-title p{font-size:10px}
 @media(max-width:1450px){
  .reference-studio .ps-commandbar.dual-header{gap:10px;padding:0 18px}.reference-studio .ps-brand{width:220px;flex-basis:220px}.reference-studio .ps-brand b{font-size:22px}.reference-studio .ps-brand small{font-size:10px}
- .reference-studio .ref-workspace-select{display:none}.reference-studio .ps-view-heading>div:first-child>span{max-width:240px;font-size:11px}.reference-studio .ps-view-heading h1{font-size:28px}
+ .reference-studio .ref-workspace-select{display:none}.reference-studio .ps-view-heading>div:first-child>span{max-width:240px;font-size:11px}.reference-studio .ps-workbench .ps-view-heading h1{font-size:28px}
  .reference-studio .ps-workbench .enterprise-content{padding:22px 18px 14px}.reference-studio .ps-workbench .enterprise-model-layout.with-inspector{grid-template-columns:minmax(0,1fr) 320px}
  .reference-studio .ps-result-ribbon{grid-template-columns:140px minmax(0,1fr) 150px;margin-left:102px;margin-right:18px;gap:8px}
  .reference-studio .ps-result-ribbon .wb-metric{gap:9px;padding:10px 7px}.reference-studio .ps-result-ribbon .wb-metric-icon{width:39px;height:39px;min-width:39px}.reference-studio .ps-result-ribbon .wb-metric-icon svg{width:24px;height:24px}
@@ -207,7 +207,7 @@
  .reference-studio .ps-workbench .enterprise-outline.open{display:flex;position:fixed;top:110px;bottom:0;left:0;width:78px;z-index:75}
  .reference-studio .ps-workbench .enterprise-body{overflow:visible;flex:initial}.reference-studio .ps-workbench .enterprise-content{padding:14px 10px;overflow:visible;min-width:0}
  .reference-studio .ps-workbench .enterprise-page:first-child{height:auto}.reference-studio .ps-workbench .enterprise-model-layout,.reference-studio .ps-workbench .enterprise-model-layout.with-inspector{display:flex;flex-direction:column;gap:14px;height:auto}
- .reference-studio .ps-workbench .ps-view-heading{height:54px;min-height:54px}.reference-studio .ps-view-heading h1{font-size:24px}.reference-studio .ps-view-heading>div:last-child button{padding:4px}
+ .reference-studio .ps-workbench .ps-view-heading{height:54px;min-height:54px}.reference-studio .ps-workbench .ps-view-heading h1{font-size:24px}.reference-studio .ps-view-heading>div:last-child button{padding:4px}
  .reference-studio .ps-view-heading>div:last-child .enterprise-mobile-menu{font-size:0!important}.reference-studio .ps-view-heading>div:last-child .enterprise-mobile-menu svg{width:19px;height:19px}
  .reference-studio .ps-workbench .enterprise-model-stage,.reference-studio .ps-workbench.has-current-results .enterprise-model-stage{height:490px;min-height:490px;flex:initial}
  .reference-studio .ps-workbench .viewport-tabs,.reference-studio .ref-installation-tabs{height:48px;min-height:48px;flex-basis:48px;gap:2px;padding:3px}
@@ -234,3 +234,30 @@
 }
 @media(prefers-reduced-motion:reduce){.reference-studio *{transition:none!important;scroll-behavior:auto!important}}
 @media(forced-colors:active){.reference-studio .ps-workbench button,.reference-studio .ps-workbench .property-value{border:1px solid ButtonText!important}.reference-studio .ps-workbench .viewport-tabs button[aria-pressed=true]{outline:2px solid Highlight}.reference-studio .ref-runtime-actions i{border:2px solid CanvasText}.reference-studio .model-render::before{display:none}}
+
+/* Reference finishing: a camera-driven orientation widget, not a static decorative axis. */
+.reference-studio .ref-axis-triad{position:absolute;left:18px;bottom:52px;width:90px;height:82px;z-index:3;pointer-events:none;overflow:visible}
+.reference-studio .ref-axis-triad text{font:11px var(--wb-font-sans);fill:#264a84}
+.reference-studio .ref-axis-triad line{stroke-width:2.2;stroke-linecap:round}
+.reference-studio .ref-tool-island button[data-setting]{position:relative}
+.reference-studio .ref-tool-island button[data-setting][aria-pressed=true]::after{content:'';position:absolute;bottom:2px;width:14px;height:2px;background:#0570fa;border-radius:2px}
+.reference-studio .ps-workbench .model-dimensions{left:112px;bottom:60px;gap:12px}
+.reference-studio .wb-reading-track{display:block;width:100%;height:5px;margin-top:7px;border:0;border-radius:8px;overflow:hidden;background:#e5effd;accent-color:#2584ff}
+.reference-studio .wb-reading-track::-webkit-progress-bar{background:#e5effd;border-radius:8px}
+.reference-studio .wb-reading-track::-webkit-progress-value{background:linear-gradient(90deg,#85c1ff,#1779f8);border-radius:8px}
+.reference-studio .wb-reading-track::-moz-progress-bar{background:#1779f8;border-radius:8px}
+.reference-studio .wb-reading-track.is-margin{accent-color:#09a96e}
+.reference-studio .wb-reading-track.is-margin::-webkit-progress-value{background:linear-gradient(90deg,#7de0b1,#04a56d)}
+.reference-studio .wb-reading-track.is-margin::-moz-progress-bar{background:#04a56d}
+.reference-studio .ps-result-ribbon .wb-tone-danger .wb-metric-icon{background:#b42318;color:#fff;box-shadow:0 0 0 4px #fef3f2}
+.reference-studio .ps-result-ribbon .wb-tone-danger strong{color:#b42318}
+@media(min-width:901px){
+ .reference-studio .ps-workbench .enterprise-content:has(>.enterprise-page:first-child:not([hidden])){overflow:hidden}
+ .reference-studio .ps-workbench .ps-view-heading{align-items:center}
+ .reference-studio .ps-workbench .ps-view-heading>div:last-child{opacity:.8}
+}
+@media(max-width:720px){
+ .reference-studio .ref-axis-triad{width:68px;height:62px;left:8px;bottom:112px}
+ .reference-studio .ps-workbench .model-dimensions{left:88px;bottom:125px}
+ .reference-studio .wb-reading-track{max-width:110px}
+}

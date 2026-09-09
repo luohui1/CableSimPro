@@ -15,8 +15,11 @@ test('reference layout: approved image landmarks and native controls',async({pag
  for(const [key,selector] of Object.entries(selectors)){const box=await page.locator(selector).boundingBox();expect(box,key).not.toBeNull();boxes[key]=box!;}
  await writeFile(info.outputPath('reference-landmarks.json'),JSON.stringify(boxes,null,2));
  expect(boxes.header.height).toBe(80);expect(boxes.rail.width).toBe(84);
- expect(boxes.title.x).toBeCloseTo(104,0);expect(boxes.inspector.x).toBeGreaterThan(1180);
+ expect(boxes.title.x).toBeCloseTo(104,0);expect(boxes.inspector.x).toBeCloseTo(1196,0);
  expect(boxes.inspector.y).toBeCloseTo(boxes.title.y,0);
+ await expect(page.locator('.enterprise-model-column')).toHaveCSS('border-top-width','0px');
+ await expect(page.locator('.ps-view-heading h1')).toHaveCSS('font-weight','750');
+ await expect(page.getByRole('img',{name:'当前三维坐标方向',exact:true})).toBeVisible();
  expect(boxes.tabs.y).toBeGreaterThanOrEqual(boxes.title.y+boxes.title.height-1);
  expect(boxes.canvas.width).toBeGreaterThan(1000);expect(boxes.canvas.height).toBeGreaterThan(475);
  expect(boxes.results.height).toBe(150);expect(boxes.results.y).toBeGreaterThanOrEqual(boxes.canvas.y+boxes.canvas.height-1);
@@ -35,6 +38,11 @@ test('reference layout: real solved result ribbon and analysis keep evidence and
  const response=page.waitForResponse(r=>r.url().endsWith('/invoke')&&r.request().postDataJSON()?.capability==='analysis.buried');
  await page.getByRole('button',{name:'计算载流量',exact:true}).click();const data=await(await response).json();
  await expect(page.getByTestId('workbench-metrics')).toContainText(data.result.output.result.summary.ampacity_a.toFixed(1));
+ const temperature=data.result.output.result.summary.operating_max_temperature_c;
+ const inputs=data.result.output.result.input;
+ const tracks=page.getByTestId('workbench-metrics').locator('progress');
+ await expect(tracks).toHaveCount(2);
+ expect(Number(await tracks.first().getAttribute('value'))).toBeCloseTo(temperature-inputs.installation.ambient_temperature_c,5);
  await capture(page,info.outputPath('reference-computed.png'));
  await page.getByRole('button',{name:'查看分析',exact:true}).click();await expect(page.getByRole('img',{name:'当前运行径向温度曲线',exact:true})).toBeVisible();
  await capture(page,info.outputPath('reference-analysis.png'));
@@ -45,6 +53,7 @@ test('reference layout: real solved result ribbon and analysis keep evidence and
  const field=page.getByLabel('导体截面积',{exact:true});await field.fill('300');await field.press('Tab');
  await expect(page.getByTestId('session-revision')).toHaveText('rev.2');await expect(page.getByRole('button',{name:'导出计算书',exact:true})).toBeDisabled();
  await expect(page.getByTestId('workbench-metrics').locator('.wb-metric strong').first()).toContainText('—');
+ await expect(page.getByTestId('workbench-metrics').locator('progress')).toHaveCount(0);
  await expect(canvas).toHaveAttribute('data-retained','reference');
 });
 test('reference layout: model tree, tool island, commands and GLB remain interactive',async({page},info)=>{

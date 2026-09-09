@@ -29,7 +29,7 @@ export function microSurface(kind: 'metal' | 'polymer'): THREE.DataTexture {
 }
 
 /** Owned by one display group. Dispose with that group, never reuse in GLB export. */
-export function studioMaterials(conductor: string): THREE.MeshStandardMaterial[] {
+export function studioMaterials(conductor: string, reference = false): THREE.MeshStandardMaterial[] {
  const metal = microSurface('metal'), polymer = microSurface('polymer');
  const copper = new THREE.MeshStandardMaterial({color: conductor === 'copper' ? '#c47c46' : '#bcc7d2', metalness: 1, roughness: .25, roughnessMap: metal, envMapIntensity: 1.2});
  const semiconductor = () => new THREE.MeshStandardMaterial({color: '#25272a', metalness: 0, roughness: .7, roughnessMap: polymer, bumpMap: polymer, bumpScale: .000014, envMapIntensity: .55, side: THREE.DoubleSide});
@@ -37,6 +37,13 @@ export function studioMaterials(conductor: string): THREE.MeshStandardMaterial[]
  const screen = new THREE.MeshStandardMaterial({color: '#be8456', metalness: 1, roughness: .3, roughnessMap: metal, envMapIntensity: 1.1, side: THREE.DoubleSide});
  const jacket = new THREE.MeshPhysicalMaterial({color: '#101720', metalness: 0, roughness: .48, roughnessMap: polymer, bumpMap: polymer, bumpScale: .000022, ior: 1.48, clearcoat: .22, clearcoatRoughness: .36, envMapIntensity: .65, side: THREE.DoubleSide});
  const materials = [copper, semiconductor(), insulation, semiconductor(), screen, jacket];
+ if(reference){
+  // Studio macro photography: do not turn micrometre relief into visible corrugations.
+  copper.color.set(conductor==='copper'?'#cf8552':'#c3cdd6');copper.roughness=.24;
+  for(const i of [1,3]){materials[i].roughness=.72;materials[i].bumpScale=.000003;materials[i].envMapIntensity=.35;}
+  jacket.color.set('#151b22');jacket.roughness=.39;jacket.bumpScale=.000004;jacket.clearcoat=.3;jacket.clearcoatRoughness=.27;
+  insulation.roughness=.34;insulation.clearcoat=.18;screen.roughness=.32;
+ }
  materials.forEach((m, i) => {m.name = `optical-preset-${i}`; m.userData = {display_only: true, measured_material: false};});
  return materials;
 }
@@ -54,7 +61,7 @@ export function roundedShell(inner: number, outer: number, length: number): THRE
 }
 
 /** One shadow-casting source, not post-processing AO or a simulated thermal field. */
-export function addStudioLighting(scene: THREE.Scene) {
+export function addStudioLighting(scene: THREE.Scene, reference = false) {
  const rig = new THREE.Group(); rig.name = 'Display studio lighting';
  rig.add(new THREE.HemisphereLight('#ffffff', '#67758a', .75));
  const key = new THREE.DirectionalLight('#fff3e5', 3.0); key.position.set(-.22, .6, .4);
@@ -66,6 +73,7 @@ export function addStudioLighting(scene: THREE.Scene) {
  const floor = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShadowMaterial({color: '#283c54', opacity: .19}));
  floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; floor.name = 'Display shadow catcher';
  floor.userData = {display_only: true, exclude_from_fit: true, exclude_from_export: true};
+ if(reference){key.position.set(-.12,.9,.24);fill.intensity=1.1;floor.material.opacity=.11;}
  rig.add(key, fill, rim, floor); scene.add(rig);
  return {rig, floor, key};
 }

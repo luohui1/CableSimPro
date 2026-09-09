@@ -30,11 +30,16 @@ export function WorkbenchNavigation({area,view,blocked,onNavigate,onProjects}:{a
 export function WorkbenchMetrics(){
  const s=useStudio(),r=s.current,w=s.w!;
  const loss=r?.summary.circuit_loss_kw??null,temp=r?.summary.operating_max_temperature_c??null,margin=r?.summary.thermal_margin_c??null;
+ const rise=w.scenario.cable.max_temperature_c-w.scenario.installation.ambient_temperature_c;
+ const track=(remaining:boolean)=>temp!==null&&margin!==null&&Number.isFinite(temp)&&Number.isFinite(margin)&&rise>0?
+  <progress className={`wb-reading-track ${remaining?'is-margin':''}`} max={rise} value={Math.max(0,Math.min(rise,remaining?margin:temp-w.scenario.installation.ambient_temperature_c))}
+   aria-label={remaining?'剩余温升空间（相对于环境温度至导体限温区间）':'已用温升空间（相对于环境温度至导体限温区间）'}
+   title={`环境 ${w.scenario.installation.ambient_temperature_c} °C → 限温 ${w.scenario.cable.max_temperature_c} °C；仅显示当前运行点，不是合规判定。`}/>:null;
  // These four tiles use current-run output, never design mockup example values.
  return <section className={`wb-results-overview ${r?'enterprise-result-summary':''}`} aria-label="计算结果概览" data-testid="workbench-metrics"><div className="wb-results-heading"><h2>计算结果与分析</h2><Badge tone={r?'info':'neutral'}>{r?'当前版本 · 研究结果':s.currentSweep?'扫描结果见下方':s.output?'输入已变化 · 需重新计算':'待运行计算'}</Badge></div><div className="wb-metric-grid">
   <MetricTile label="允许载流量" value={fmt(r?.summary.ampacity_a)} unit="A" icon={<Zap size={21}/>} detail={r?`限制相 ${r.summary.limiting_phase}`:'由当前工况求解'}/>
-  <MetricTile label="最高导体温度" value={fmt(temp)} unit="°C" icon={<Thermometer size={21}/>} detail={r?`运行电流 ${fmt(w.scenario.operating_current_a,0)} A`:'尚无有效运行结果'}/>
-  <MetricTile label="导体温度余量" value={fmt(margin)} unit="K" icon={<ShieldCheck size={21}/>} tone={margin!==null&&margin<0?'danger':'neutral'} detail={`限温 ${w.scenario.cable.max_temperature_c} °C − 运行温度`}/>
+  <MetricTile label="最高导体温度" value={fmt(temp)} unit="°C" icon={<Thermometer size={21}/>} indicator={track(false)} detail={r?`运行电流 ${fmt(w.scenario.operating_current_a,0)} A`:'尚无有效运行结果'}/>
+  <MetricTile label="导体温度余量" value={fmt(margin)} unit="K" icon={<ShieldCheck size={21}/>} indicator={track(true)} tone={margin!==null&&margin<0?'danger':'neutral'} detail={`限温 ${w.scenario.cable.max_temperature_c} °C − 运行温度`}/>
   <MetricTile label="线路总损耗" value={fmt(loss,2)} unit="kW" icon={<Activity size={21}/>} detail={`三相合计 · 线路 ${fmt(w.scenario.circuit_length_m,0)} m`}/>
  </div>{r?.operating_error&&<p className="wb-operating-error" role="status">当前运行电流无有效运行解，温度、余量与损耗留空；载流量额定值独立保留。</p>}</section>;
 }
