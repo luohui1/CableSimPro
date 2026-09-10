@@ -1,4 +1,5 @@
 import {test,expect,type Page} from '@playwright/test';
+import referenceLayout from '../../docs/REFERENCE_LAYOUT.json';
 import AxeBuilder from '@axe-core/playwright';
 async function enter(page:Page){await page.goto('/');await page.getByRole('button',{name:'进入专业工作台',exact:true}).click();await expect(page.getByTestId('session-revision')).toHaveText('rev.1');await expect(page.getByTestId('cable-model-view')).toHaveAttribute('data-renderer','webgl');}
 async function palette(page:Page){await page.getByRole('button',{name:'搜索命令',exact:true}).click();const input=page.getByRole('combobox',{name:'搜索工程命令'});await expect(input).toBeFocused();return input;}
@@ -11,7 +12,7 @@ test('progressive: a single command bar, large canvas and collapsed analysis use
  await expect(page.getByRole('region',{name:'当前电缆分层预览'})).toBeHidden();
  const model=(await page.getByTestId('cable-model-view').boundingBox())!;
  const rail=(await page.locator('.enterprise-outline').boundingBox())!;
- expect(rail.width).toBeLessThanOrEqual(84);expect(model.width).toBeGreaterThan(800);expect(model.height).toBeGreaterThan(440);
+ expect(rail.width).toBe(referenceLayout.landmarks_at_source_size.rail[2]);expect(model.width).toBeGreaterThan(800);expect(model.height).toBeGreaterThan(440);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await expect(page.getByRole('button',{name:'绝缘与护套',exact:true})).toHaveAttribute('aria-expanded','false');
  await page.screenshot({path:info.outputPath('progressive-default.png'),fullPage:true});

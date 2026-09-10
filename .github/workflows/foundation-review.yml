@@ -1,0 +1,52 @@
+name: Engineering foundation review
+on:
+  push:
+    branches: ['feat/architecture-foundation-r2']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: foundation-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts-and-workflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r backend/requirements-dev.txt
+      - run: python -m pytest --junitxml=artifacts/backend.xml
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: node scripts/test_workbench_commands.mjs
+      - run: npm run build
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium webkit
+        working-directory: frontend
+      - run: npx playwright test --config=playwright.foundation.config.ts
+        working-directory: frontend
+      - name: Approved desktop baseline (existing regression)
+        run: npx playwright test --project=chromium progressive-workbench.spec.ts --grep "single command bar"
+        working-directory: frontend
+      - name: Capture exact source identity
+        if: always()
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/source-commit.txt
+          git archive --format=tar.gz HEAD > artifacts/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: engineering-foundation-review
+          path: |
+            artifacts/
+            frontend/test-results-foundation/
+            frontend/test-results/
+            frontend/dist/
+          retention-days: 7

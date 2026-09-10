@@ -99,4 +99,6 @@
   --wb-reference-surface: #f5f9ff;
   --wb-reference-stage-background: radial-gradient(ellipse at 50% 38%,#ffffff 0%,#f2f7fd 48%,#e3edf8 100%);
   --wb-reference-tool-shadow: 0 10px 30px rgb(50 88 138 / 14%), 0 2px 5px rgb(50 88 138 / 5%);
+  --wb-library-taxonomy-width: 158px;
+  --wb-library-detail-width: 332px;
 }

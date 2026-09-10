@@ -1,0 +1,38 @@
+/* One scoped, on-demand study surface. Does not override workbench layout. */
+.study-preparation {color:#183246; font-size:14px; line-height:1.6; min-width:0;}
+.study-preparation h3 {font-size:15px; margin:20px 0 6px;}
+.study-preparation-tools {display:flex; gap:12px; align-items:end; flex-wrap:wrap;}
+.study-preparation-tools label {display:grid; gap:5px; flex:1; min-width:220px; font-size:13px;}
+.study-preparation select {width:100%; height:36px; padding:4px 10px; border:1px solid #b7c8d2; border-radius:6px; background:#fff; color:#183246; font-size:14px;}
+.study-preparation button {display:inline-flex; align-items:center; justify-content:center; gap:7px; padding:7px 12px; min-height:36px; border:0; border-radius:6px; background:#eaf2f5; color:#183246; font-size:13px; cursor:pointer;}
+.study-preparation button:hover {background:#dae9ef;}
+.study-preparation button:focus-visible,.study-preparation select:focus-visible {outline:2px solid #166487; outline-offset:3px;}
+.study-preparation button:disabled {opacity:.55; cursor:not-allowed;}
+.study-preparation-status {display:flex; flex-direction:column; gap:3px; padding:12px 14px; margin-top:16px; background:#edf5f1; border-radius:8px;}
+.study-preparation-status span,.study-preparation-note {color:#526874; font-size:13px;}
+.study-preparation-table {overflow:auto;}
+.study-preparation table {width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; font-size:13px;}
+.study-preparation th,.study-preparation td {padding:7px 10px; border-bottom:1px solid #e3ebef; text-align:right;}
+.study-preparation th:first-child {text-align:left;}
+.study-preparation tbody th {font-weight:500;}
+.study-preparation thead {background:#f3f7f8;}
+.study-preparation-issues {display:grid; gap:10px;}
+.study-preparation-issues>div {background:#f5f7f8; padding:10px 12px; border-radius:7px;}
+.study-preparation-issues>div[data-severity=error] {background:#fcf0ee;}
+.study-preparation-issues strong {font-size:13px; font-weight:600;}
+.study-preparation-issues p {margin:4px 0; font-size:13px; color:#526874;}
+.study-preparation code {font-size:12px; color:#526874; overflow-wrap:anywhere;}
+.study-preparation footer {display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:16px 0 10px; font-size:12px; color:#526874;}
+.study-preparation footer button {margin-left:auto; flex-shrink:0;}
+.study-preparation-error {color:#9a3434;}
+.study-preparation-hash {display:block; margin-top:8px;}
+.study-preparation summary {cursor:pointer; font-size:12px;}
+/* The dialog header/close action must remain visible after scrolling or export. */
+.eng-dialog:has(>.study-preparation) {display:flex; flex-direction:column; width:min(900px,calc(100vw - 48px)); max-width:900px; max-height:calc(100dvh - 56px); padding:0; overflow:hidden; background:#fff; color:#183246; font-family:"Noto Sans CJK SC","Microsoft YaHei",system-ui,sans-serif;}
+.eng-dialog:has(>.study-preparation)>header {flex:0 0 auto; display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 22px 14px; background:#fff; box-shadow:0 2px 9px #1832460a; z-index:1;}
+.eng-dialog:has(>.study-preparation)>header h2 {font-size:19px; font-weight:650; line-height:1.4; margin:0 0 5px;}
+.eng-dialog:has(>.study-preparation)>header p {margin:0; font-size:12px; line-height:1.6; color:#526874;}
+.eng-dialog:has(>.study-preparation)>header>button {width:32px; height:32px; flex:0 0 32px; border-radius:6px; background:#f0f5f7; color:#183246; display:grid; place-items:center;}
+.eng-dialog>.study-preparation {flex:1 1 auto; min-height:0; overflow:auto; padding:16px 22px 20px; overscroll-behavior:contain;}
+.study-preparation:has([data-severity=error]) .study-preparation-status {background:#fcf0ee;}
+.study-preparation:has([data-severity=error]) .study-preparation-status>strong {color:#9a3434;}

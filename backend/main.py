@@ -23,12 +23,16 @@ from urllib.parse import urlsplit
 from .nonblocking_runtime import EngineeringRuntime
 from .runtime import make_router as runtime_router
 from .enterprise import Enterprise, make_router as enterprise_router
+from .foundation.router import make_router as foundation_router
+from .foundation.assets import AssetRepository, AssetError
+from .foundation.asset_router import make_router as asset_router
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def create_app(db_path: str | Path | None = None) -> FastAPI:
     store = ProjectStore(db_path or os.environ.get('CABLESIM_DB', str(ROOT / '.data' / 'cablesim.sqlite')))
     workspace_store = WorkspaceStore(store.path)
+    assets = AssetRepository(store.path)
     providers = Providers(Path(store.path).parent)
     library = Library(workspace_store, Path(store.path).parent)
     designs = Designs(workspace_store)
@@ -39,6 +43,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     async def lifespan(_app: FastAPI):
         store.initialize()
         workspace_store.initialize()
+        assets.initialize()
         library.initialize()
         designs.initialize()
         enterprise.initialize()
@@ -59,11 +64,17 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(designs_router(designs))
     app.include_router(runtime_router(runtime))
     app.include_router(enterprise_router(enterprise))
+    app.include_router(foundation_router(workspace_store))
+    app.include_router(asset_router(assets, workspace_store))
     app.state.workspace_store = workspace_store
     app.state.enterprise = enterprise
     app.state.providers = providers
     app.state.library = library
     app.state.designs = designs
+
+    @app.exception_handler(AssetError)
+    async def asset_error(request, exc):
+        return JSONResponse({"detail": {"code": exc.code, "message": exc.message}}, status_code=exc.status)
 
     @app.exception_handler(RequestValidationError)
     async def invalid_request(request, exc):
