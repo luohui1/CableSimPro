@@ -20,9 +20,10 @@ export function WorkbenchCommandBar({onHome,onAgent,onCommand,onSearch,statusCon
  </header>;
 }
 /** One primary solve action, in the same bottom command position as the approved image. */
-export function WorkbenchStatusBar({onCommand}:{onCommand:(id:WorkbenchCommandId)=>void}){
+export function WorkbenchStatusBar({onCommand,library=false}:{onCommand:(id:WorkbenchCommandId)=>void;library?:boolean}){
  const s=useStudio(),w=s.w!;const dirty=Object.keys(s.inputDrafts).length>0;
  const buried=(w.design_basis?.environment??'buried')==='buried';
+ if(library)return <footer className="ref-status-footer" aria-label="工程运行状态"><span className="asset-library-footer-note">资产库与当前工况独立 · 原工程输入保持不变</span><button disabled={s.busy||dirty} onClick={()=>onCommand('study-preflight')}>检查当前研究输入<ArrowRight size={15}/></button></footer>;
  return <footer className="ref-status-footer" aria-label="工程运行状态"><div className="ref-status-context"><span>当前模型：{w.scenario.cable.conductor==='copper'?'铜':'铝'} {w.scenario.cable.area_mm2} mm² · 单芯电缆</span><span>工况：{buried?'单回路直埋':'竖向空气'}</span><span>环境温度：{w.scenario.installation.ambient_temperature_c} °C</span><button onClick={()=>onCommand('methods')}>方法与适用范围</button></div><div className="ref-runtime-actions"><span className={dirty?'ref-state-warning':''}><i/>{dirty?'输入待提交':s.busy?'工程操作进行中':s.current?'当前结果有效':'输入已保存'}</span><button className="ps-primary" aria-label={buried?'计算载流量':'配置竖向研究'} disabled={s.busy||dirty} onClick={()=>onCommand(buried?'run':'fields')}><Play size={17}/>{s.busy?'正在计算':buried?'运行计算':'竖向研究'}</button></div></footer>;
 }
 const railItems=[
@@ -35,7 +36,7 @@ const railItems=[
 export function WorkspaceRail({area,view,onCommand}:{area:string;view:string;onCommand:(id:WorkbenchCommandId)=>void}){
  return <nav className="wb-navigation ps-rail" aria-label="应用导航"><button aria-label="打开工程中心" title="工程中心" onClick={()=>onCommand('projects')}><FolderOpen size={21}/><span>工程</span></button>
   <div className="ps-rail-main">{railItems.map(({id,match,label,name,Icon})=><button key={id} aria-label={name} title={name} aria-current={area==='engineering'&&view===match?'page':undefined} onClick={()=>onCommand(id)}><Icon size={21}/><span>{label}</span></button>)}</div>
-  <details className="ps-resource-menu"><summary aria-label="工程资源"><BookOpen size={20}/><span>资源</span></summary><div><b>工程资源</b>{([['products','产品型号'],['documents','企业资料'],['methods','方法验证'],['journal','任务与引用'],['json','导出工程参数']] as const).map(([id,label])=><button key={id} onClick={e=>{e.currentTarget.closest('details')?.removeAttribute('open');onCommand(id)}}>{label}<ArrowRight size={13}/></button>)}</div></details>
+  <details className="ps-resource-menu"><summary aria-label="工程资源"><BookOpen size={20}/><span>资源</span></summary><div><b>工程资源</b>{([['assets','工程资产库'],['products','产品型号'],['documents','企业资料'],['methods','方法验证'],['journal','任务与引用'],['json','导出工程参数']] as const).map(([id,label])=><button key={id} onClick={e=>{e.currentTarget.closest('details')?.removeAttribute('open');onCommand(id)}}>{label}<ArrowRight size={13}/></button>)}</div></details>
   <button className="ps-rail-settings" aria-label="服务接入设置" title="服务接入设置" onClick={()=>onCommand('settings')}><Settings2 size={20}/><span>设置</span></button>
  </nav>;
 }

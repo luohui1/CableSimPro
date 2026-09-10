@@ -126,6 +126,39 @@ class PayloadFile(Contract):
         return self
 
 
+class CircularLayer(Contract):
+    uid: Identifier
+    role: Literal["conductor", "conductor_screen", "insulation", "insulation_screen", "metallic_screen", "jacket"]
+    inner_radius_m: float = Field(ge=0, strict=True)
+    outer_radius_m: float = Field(gt=0, strict=True)
+
+    @model_validator(mode="after")
+    def ordered_radii(self) -> CircularLayer:
+        if self.outer_radius_m <= self.inner_radius_m:
+            raise ValueError("NONPOSITIVE_LAYER_THICKNESS")
+        return self
+
+
+class CircularRecipe(Contract):
+    family: Literal["single_core_circular"] = "single_core_circular"
+    representation: Literal["declarative_recipe"] = "declarative_recipe"
+    length_m: float = Field(gt=0, le=10, strict=True)
+    layers: tuple[CircularLayer, ...] = Field(min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def continuous_nonoverlapping_layers(self) -> CircularRecipe:
+        if len({layer.uid for layer in self.layers}) != len(self.layers):
+            raise ValueError("DUPLICATE_LAYER_UID")
+        if self.layers[0].role != "conductor" or self.layers[0].inner_radius_m != 0:
+            raise ValueError("CONDUCTOR_MUST_START_AT_AXIS")
+        previous = 0.0
+        for layer in self.layers:
+            if not math.isclose(layer.inner_radius_m, previous, rel_tol=0, abs_tol=1e-12):
+                raise ValueError("LAYER_GAP_OR_OVERLAP")
+            previous = layer.outer_radius_m
+        return self
+
+
 class AssetRelease(Contract):
     asset_id: Identifier
     version: Version
@@ -135,9 +168,14 @@ class AssetRelease(Contract):
     dependencies: tuple[AssetRef, ...] = Field(default=(), max_length=128)
     files: tuple[PayloadFile, ...] = Field(default=(), max_length=256)
     sources: tuple[SourceReference, ...] = Field(min_length=1, max_length=64)
+    geometry_recipe: CircularRecipe | None = None
 
     @model_validator(mode="after")
     def unique_members(self) -> AssetRelease:
+        if not self.name.strip() or any(not s.reference.strip() for s in self.sources):
+            raise ValueError("EMPTY_ASSET_TEXT")
+        if self.geometry_recipe is not None and self.kind not in ("component", "assembly"):
+            raise ValueError("GEOMETRY_REQUIRES_COMPONENT_OR_ASSEMBLY")
         groups = [tuple(p.name for p in self.parameters),
                   tuple(f.path.casefold() for f in self.files),
                   tuple((d.asset_id, d.version) for d in self.dependencies)]
@@ -218,36 +256,3 @@ def apply_instance_overrides(release: AssetRelease,
         parameters[replacement.name] = AssetParameter(
             name=original.name, quantity=replacement.quantity.si(), overridable=True)
     return tuple(parameters[p.name] for p in release.parameters)
-
-
-class CircularLayer(Contract):
-    uid: Identifier
-    role: Literal["conductor", "conductor_screen", "insulation", "insulation_screen", "metallic_screen", "jacket"]
-    inner_radius_m: float = Field(ge=0, strict=True)
-    outer_radius_m: float = Field(gt=0, strict=True)
-
-    @model_validator(mode="after")
-    def ordered_radii(self) -> CircularLayer:
-        if self.outer_radius_m <= self.inner_radius_m:
-            raise ValueError("NONPOSITIVE_LAYER_THICKNESS")
-        return self
-
-
-class CircularRecipe(Contract):
-    family: Literal["single_core_circular"] = "single_core_circular"
-    representation: Literal["declarative_recipe"] = "declarative_recipe"
-    length_m: float = Field(gt=0, le=10, strict=True)
-    layers: tuple[CircularLayer, ...] = Field(min_length=1, max_length=64)
-
-    @model_validator(mode="after")
-    def continuous_nonoverlapping_layers(self) -> CircularRecipe:
-        if len({layer.uid for layer in self.layers}) != len(self.layers):
-            raise ValueError("DUPLICATE_LAYER_UID")
-        if self.layers[0].role != "conductor" or self.layers[0].inner_radius_m != 0:
-            raise ValueError("CONDUCTOR_MUST_START_AT_AXIS")
-        previous = 0.0
-        for layer in self.layers:
-            if not math.isclose(layer.inner_radius_m, previous, rel_tol=0, abs_tol=1e-12):
-                raise ValueError("LAYER_GAP_OR_OVERLAP")
-            previous = layer.outer_radius_m
-        return self

@@ -7,9 +7,9 @@ import {api,errorText,fmt} from './utils';
 import {engineeringCall} from './runtimeClient';
 import CableModelView from './CableModelView';
 
-export function Modal({open,onOpenChange,title,description,children}:{open:boolean;onOpenChange:(b:boolean)=>void;title:string;description:string;children:React.ReactNode}){
+export function Modal({open,onOpenChange,title,description,children,className=''}:{open:boolean;onOpenChange:(b:boolean)=>void;title:string;description:string;children:React.ReactNode;className?:string}){
  const returnFocus=useRef<HTMLElement|null>(null);
- return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="eng-overlay"/><Dialog.Content className="eng-dialog" onOpenAutoFocus={()=>{returnFocus.current=document.activeElement instanceof HTMLElement?document.activeElement:null}} onCloseAutoFocus={event=>{event.preventDefault();returnFocus.current?.focus()}}><header><div><Dialog.Title>{title}</Dialog.Title><Dialog.Description>{description}</Dialog.Description></div><Dialog.Close asChild><button aria-label="关闭对话框"><X size={20}/></button></Dialog.Close></header>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>;
+ return <Dialog.Root open={open} onOpenChange={onOpenChange}><Dialog.Portal><Dialog.Overlay className="eng-overlay"/><Dialog.Content className={`eng-dialog ${className}`} onOpenAutoFocus={()=>{returnFocus.current=document.activeElement instanceof HTMLElement?document.activeElement:null}} onCloseAutoFocus={event=>{event.preventDefault();returnFocus.current?.focus()}}><header><div><Dialog.Title>{title}</Dialog.Title><Dialog.Description>{description}</Dialog.Description></div><Dialog.Close asChild><button aria-label="关闭对话框"><X size={20}/></button></Dialog.Close></header>{children}</Dialog.Content></Dialog.Portal></Dialog.Root>;
 }
 export function ModelGenerator({open,onClose}:{open:boolean;onClose:()=>void}){
  const s=useStudio(),[draft,setDraft]=useState<Cable>(s.w!.scenario.cable),[busy,setBusy]=useState(false),[error,setError]=useState('');
