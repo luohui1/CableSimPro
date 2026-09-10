@@ -12,7 +12,7 @@ import {assetKinds,statusLabels,actionLabels,assetRequest,type AssetKind,type As
 import './asset-library.css';
 const statusTones:Record<AssetStatus,Tone>={draft:'neutral',reviewed:'info',published:'success',deprecated:'warning'};
 const eventLabels:Record<string,string>={created:'创建草稿',edited:'编辑定义',...actionLabels};
-type Editor={kind:'capture';workspaceId:string;workspaceRevision:number}|{kind:'import'}|{kind:'edit'|'derive';record:AssetDetail}|{kind:'transition';record:AssetDetail;action:AssetAction};
+type Editor={kind:'capture';workspaceId:string;workspaceRevision:number}|{kind:'import'}|{kind:'edit';record:AssetDetail}|{kind:'derive';record:AssetDetail}|{kind:'transition';record:AssetDetail;action:AssetAction};
 const PAGE_SIZE=30;
 function AssetStatusBadge({status}:{status:AssetStatus}){return <Badge tone={statusTones[status]}>{statusLabels[status]}</Badge>}
 
