@@ -3,8 +3,6 @@ import {lazy,Suspense} from 'react';
 import EngineeringWorkspace from './EngineeringWorkspace';
 import EnterpriseWorkspace from './EnterpriseWorkspace';
 import DualModeApp from './dual-mode/DualModeApp';
-import './dual-mode/readability.css';
-import './professional/reference-visual-acceptance.css';
 const LegacyStudio=lazy(()=>import('./Studio'));
 const params=new URLSearchParams(location.search);
 const legacy=params.get('legacy')==='1';

@@ -19,28 +19,17 @@ function Property({field}:{field:typeof fields[string][number]}){
  return <div className={`property ${invalid?'invalid':''}`}><div className="property-title"><label htmlFor={'f-'+field.path}>{field.name}</label><button title={locked?'解锁参数':'锁定参数'} aria-label={`${locked?'解锁':'锁定'}${field.name}`} disabled={busy} onClick={()=>void lock(field.path,!locked)}>{locked?<LockKeyhole size={12}/>:<LockKeyholeOpen size={12}/>}</button></div><div className="property-value">{field.options?<select id={'f-'+field.path} aria-label={field.name} value={String(value)} disabled={busy||locked} onChange={e=>void edit([{path:field.path,value:field.path==='cable.frequency_hz'?Number(e.target.value):e.target.value}],field.name)}>{field.options.map(([v,l])=><option value={v} key={v}>{l}</option>)}</select>:<input id={'f-'+field.path} aria-label={field.name} aria-invalid={invalid} type="number" required={!field.nullable} value={text} placeholder={field.nullable?'按材料估算':''} step="any" min={field.min} max={field.max} disabled={busy||locked} onChange={e=>setInputDraft(field.path,e.target.value)} onBlur={commit} onKeyDown={e=>{if(e.key==='Enter')e.currentTarget.blur();if(e.key==='Escape')setInputDraft(field.path,null)}}/>}<span>{field.unit}</span></div>{invalid&&<small role="alert">请输入 {field.min}～{field.max} 范围内的数值</small>}</div>;
 }
 export default function ReferenceInspector() {
- const grouped=true,allGroups=true;
+ const grouped=true,allGroups=false;
  const {w,selected,phase,inputDrafts}=useStudio();
  if(!w)return null;
  const group=fields[selected]??fields.installation;
  const p=positions(w.scenario.installation)[phase];
- let groups=group.reduce<Record<string,typeof group>>((groups,field)=>{
+ const groups=group.reduce<Record<string,typeof group>>((groups,field)=>{
   const title=selected==='installation'?(field.path.includes('temperature')||field.path.includes('rho')?'环境参数':'敷设参数'):
    selected==='materials'?(field.path.includes('rho')?'热物性参数':'电气与屏蔽'):
    selected==='study'?'运行与限制':field.path.includes('insulation')||field.path.includes('jacket')?'绝缘与护套':'导体与电压';
   (groups[title]??=[]).push(field);return groups;
  },{});
- if(allGroups){
-  groups={
-   '导体与电压':fields.cable.filter(field=>!['cable.insulation_mm','cable.jacket_mm'].includes(field.path)),
-   '绝缘与护套':fields.cable.filter(field=>['cable.insulation_mm','cable.jacket_mm'].includes(field.path)),
-   '电气与屏蔽':fields.materials.filter(field=>!field.path.includes('rho')),
-   '热物性参数':fields.materials.filter(field=>field.path.includes('rho')),
-   '敷设参数':fields.installation.filter(field=>!field.path.includes('temperature')&&!field.path.includes('rho')),
-   '环境参数':fields.installation.filter(field=>field.path.includes('temperature')||field.path.includes('rho')),
-   '运行与限制':fields.study,
-  };
- }
  return <div className="inspector">
   <div className="inspector-title"><Box size={17}/><div><b>{selected==='installation'?`CKT-01 / ${'ABC'[phase]} 相`:selected==='study'?'稳态载流研究':selected==='materials'?'材料定义':'单芯电缆定义'}</b><small>{selected==='installation'?`x ${p[0].toFixed(3)} m  /  h ${p[1].toFixed(3)} m`:'编辑后校验并自动保存'}</small></div></div>
   {grouped?Object.entries(groups).map(([title,items])=><DisclosureGroup

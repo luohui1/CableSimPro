@@ -1,5 +1,6 @@
 /** A catalog of implemented actions, not a catalog of aspirational solver features. */
 export const WORKBENCH_COMMANDS = [
+ {id:'components',title:'组件参考与设计系统',group:'工程资源',keywords:'组件 设计 系统 components design system tokens',hint:'只读组件样板；与工作台共用控件和密度'},
  {id:'assets',title:'打开工程资产库',group:'工程资源',keywords:'资产 库 zican zichan library asset material assembly',hint:'版本化结构、材料定义与本机发布；不改变当前工程'},
  {id:'study-preflight',title:'研究准备与求解器预检',group:'工程资源',keywords:'研究 准备 预检 yanjiu yujian study preflight comsol aedt',hint:'只读检查当前快照、结构配方与后端缺项；不运行仿真',guard:'snapshot'},
  {id:'run',title:'运行载流量计算',group:'计算分析',keywords:'计算 载流量 jisuan zailiuliang ampacity solve',hint:'当前输入 · 单回路直埋',shortcut:'F9',guard:'solve'},
