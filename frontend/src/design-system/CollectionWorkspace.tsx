@@ -1,3 +1,4 @@
+import {WorkspaceHeader} from './WorkspacePage';
 import {useId,type ReactNode} from 'react';
 import {ArrowLeft,Search,X} from 'lucide-react';
 import {Button} from './primitives';
@@ -6,8 +7,8 @@ import './collection-workspace.css';
 /** Collection pages share chrome, density and states; domain data stays with the caller. */
 export function CollectionWorkspace({title,subtitle,actions,filters,children,onBack}:{title:string;subtitle:string;actions:ReactNode;filters:ReactNode;children:ReactNode;onBack:()=>void}){
  const id=useId();
- return <section className="collection-workspace white-components" aria-labelledby={id}>
-  <header className="collection-heading"><div><Button variant="quiet" onClick={onBack} aria-label="返回电缆结构"><ArrowLeft size={17}/></Button><div><span className="collection-eyebrow">ENGINEERING LIBRARY</span><h1 id={id}>{title}</h1><p>{subtitle}</p></div></div><div className="collection-actions">{actions}</div></header>
+ return <section className="collection-workspace white-components" aria-label={title}>
+  <WorkspaceHeader title={title} context="工程资源" description={subtitle} actions={<><Button variant="quiet" onClick={onBack} aria-label="返回电缆结构"><ArrowLeft size={16}/>返回模型</Button>{actions}</>}/>
   <div className="collection-toolbar">{filters}</div>{children}
  </section>;
 }

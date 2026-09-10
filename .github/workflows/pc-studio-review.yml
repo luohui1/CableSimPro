@@ -1,0 +1,76 @@
+name: PC Studio R3 review
+on:
+  push:
+    branches: ['design/pc-studio-r3']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: pc-studio-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r backend/requirements-dev.txt
+      - run: python -m pytest --junitxml=artifacts/backend.xml
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: node scripts/build_design_tokens.mjs --check && node scripts/test_workbench_commands.mjs && node scripts/test_pc_layout.mjs && node scripts/test_visual_geometry.mjs
+      - run: npm run build
+        working-directory: frontend
+      - run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/source-commit.txt
+          git archive --format=tar.gz HEAD > artifacts/source.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pc-source-build
+          path: |
+            artifacts/
+            frontend/dist/
+          retention-days: 7
+  browser:
+    needs: validate
+    strategy:
+      fail-fast: false
+      matrix:
+        engine: [chromium, webkit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r backend/requirements.txt
+      - run: npm ci --no-audit --no-fund && npm run build
+        working-directory: frontend
+      - run: npx playwright install --with-deps ${{ matrix.engine }}
+        working-directory: frontend
+      - run: npx playwright test --config=playwright.pc.config.ts --project=${{ matrix.engine }}
+        working-directory: frontend
+      - run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/source-commit.txt
+        if: always()
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pc-review-${{ matrix.engine }}
+          path: |
+            artifacts/source-commit.txt
+            frontend/test-results-pc/
+          retention-days: 7

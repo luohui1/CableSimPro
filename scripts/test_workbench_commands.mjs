@@ -12,7 +12,7 @@ try{
  const state={busy:false,dirty:false,buried:true,current:true,canUndo:true};
  const get=id=>catalog.find(c=>c.id===id);
  check('only unique stable IDs',()=>assert.equal(new Set(catalog.map(c=>c.id)).size,catalog.length));
- check('all implemented commands discoverable',()=>assert.equal(search('').length,29));
+ check('all implemented commands discoverable',()=>assert.equal(search('').length,30));
  check('asset library discoverable',()=>assert.equal(search('asset')[0].id,'assets'));
  check('asset browsing does not drop engineering drafts',()=>assert.equal(reason(get('assets'),{...state,dirty:true}),null));
  check('study preflight discoverable',()=>assert.equal(search('preflight')[0].id,'study-preflight'));

@@ -1,3 +1,4 @@
+import {ScrollRegion} from '../design-system/WorkspacePage';
 import {useEffect,useMemo,useState} from 'react';
 import {useLegacyTable,getCoreRowModel,type LegacyColumnDef} from '@tanstack/react-table/legacy';
 import {flexRender} from '@tanstack/react-table';
@@ -97,13 +98,13 @@ export default function AssetLibrary({active,onBack}:{active:boolean;onBack:()=>
      {detailError?<div role="alert" className="asset-error">{detailError}</div>:!record?<p role="status" className="asset-loading">读取定义与核对记录…</p>:<>
       <DetailHeading title={record.name} meta={<><AssetStatusBadge status={record.status}/><code className="asset-version">v{record.version}</code></>} onClose={()=>setSelected('')}/>
       <nav className="asset-detail-tabs" aria-label="资产详情视图">{([['definition','定义'],['dependencies','来源与依赖'],['history','变更记录']] as const).map(([id,label])=><button key={id} aria-pressed={tab===id} onClick={()=>setTab(id)}>{label}</button>)}</nav>
-      <div className="asset-detail-scroll">
+      <ScrollRegion label="资产详情内容" className="asset-detail-scroll">
        {tab==='definition'&&<><AssetPreview release={record.release}/><dl className="asset-meta"><dt>分类</dt><dd>{assetKinds[record.kind]}</dd><dt>修订</dt><dd>r{record.revision}</dd><dt>参数</dt><dd>{record.release.parameters.length} 项</dd><dt>几何配方</dt><dd>{record.release.geometry_recipe?`${record.release.geometry_recipe.layers.length} 层 · 单芯同心`:'未提供'}</dd></dl>
         <h3>参数摘要</h3><div className="asset-parameters">{record.release.parameters.map(p=><div key={p.name}><span>{({conductor_area:'导体面积',conductor_limit:'导体限温'} as Record<string,string>)[p.name]??p.name}</span><b>{p.quantity.value.toLocaleString('en-US',{maximumSignificantDigits:8})}<small>{p.quantity.unit}</small></b></div>)}</div><p className="asset-scope-note">结构草稿不是完整计算模型。材料、敷设和适用范围须在研究阶段单独核对。</p></>}
        {tab==='dependencies'&&<><h3>来源记录</h3>{record.release.sources.map((source,i)=><div className="asset-source" key={i}><b>{source.kind==='project_input'?'工程输入快照':source.kind}</b><span>{source.reviewed?'来源声明：已核对':'原始来源：未外部审核'}</span><code>{source.reference}</code></div>)}<h3>精确版本依赖</h3>{record.release.dependencies.length?record.release.dependencies.map(d=><div className="asset-source" key={d.asset_id+d.version}><b>{d.asset_id}@{d.version}</b><code>{d.content_sha256}</code></div>):<p>未声明依赖。不会自动连接相似名称的材料。</p>}<h3>内容摘要</h3><code className="asset-digest">{record.content_sha256}</code></>}
        {tab==='history'&&<ol className="asset-events">{record.events.map(event=><li key={event.revision}><span className="asset-event-dot"/><div><b>{eventLabels[event.action]??event.action}<small>r{event.revision}</small></b><p>{event.note}</p><time dateTime={event.created}>{new Date(event.created).toLocaleString()}</time></div></li>)}</ol>}
        {record.issues.length>0&&<div className="asset-preflight-issues" role="status"><b>发布前需处理</b>{record.issues.map((issue,i)=><p key={i}>{issue.message}</p>)}</div>}
-      </div>
+      </ScrollRegion>
       <footer className="asset-detail-actions">
        <div><Button aria-label="导出资产定义" onClick={()=>download(`${record.asset_id.replace(/[^A-Za-z0-9_.-]/g,'_')}-${record.version}.json`,JSON.stringify({schema_version:'csp-asset/0.1',release:record.release},null,2),'application/json')}><Download size={15}/>导出</Button>
         {record.status==='draft'&&<Button onClick={()=>edit({kind:'edit',record})}>编辑定义</Button>}
