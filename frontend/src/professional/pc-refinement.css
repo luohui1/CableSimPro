@@ -1,0 +1,155 @@
+/* PC Studio R3 screenshot refinement.
+   This layer only adjusts presentation density/fit; it does not alter engineering data. */
+.pc-studio{
+  --wb-pc-page-heading-height:36px;
+}
+
+/* Recover useful model height without changing the fixed command/result/status bars. */
+.pc-studio .ps-workbench .enterprise-content{
+  gap:8px;
+  padding:8px 16px;
+}
+.pc-studio .pc-page-heading{
+  padding-bottom:4px;
+}
+.pc-studio .pc-page-heading h1{
+  font-size:18px;
+}
+.pc-studio .ps-workbench .model-caption{
+  top:14px;
+  left:16px;
+}
+
+/* Split mode is an analysis companion, not a second full-height page. */
+.pc-studio .ps-analysis-drawer{
+  flex-basis:270px;
+}
+
+/* Collection filters must remain a single compact control despite legacy label rules. */
+.pc-studio .ps-workbench.has-asset-workspace .enterprise-content{
+  padding:8px 16px;
+}
+.pc-studio .collection-toolbar>label.collection-search{
+  display:flex!important;
+  flex-direction:row!important;
+  align-items:center!important;
+  height:36px;
+  min-height:36px;
+  margin:0!important;
+  padding:0 10px!important;
+  background:#fff;
+}
+.pc-studio .collection-search>svg{
+  flex:0 0 16px;
+}
+.pc-studio .collection-search input{
+  height:34px!important;
+  min-height:34px!important;
+  margin:0!important;
+  padding:0!important;
+  line-height:34px!important;
+}
+.eng-dialog.asset-editor .wb-button--primary{
+  background:var(--wb-color-primary)!important;
+  color:#fff!important;
+}
+.eng-dialog.asset-editor .wb-button--primary:hover{
+  background:var(--wb-color-primary-hover)!important;
+  color:#fff!important;
+}
+
+/* The approval gate stays explicit but should not consume a second dashboard row. */
+.pc-studio .engineering-readiness{
+  margin:0 16px 8px;
+  padding:8px 12px;
+  gap:7px 12px;
+  border-radius:10px;
+  grid-template-columns:250px minmax(0,1fr);
+  align-items:center;
+  box-shadow:0 3px 12px rgba(15,23,42,.035);
+}
+.pc-studio .engineering-readiness .readiness-header{
+  grid-column:1;
+  grid-row:1;
+  grid-template-columns:26px minmax(0,1fr) auto;
+  gap:7px;
+}
+.pc-studio .engineering-readiness .readiness-icon{
+  width:26px;
+  height:26px;
+  border-radius:7px;
+}
+.pc-studio .engineering-readiness .readiness-header>div>span{
+  font-size:9px;
+  letter-spacing:.06em;
+}
+.pc-studio .engineering-readiness .readiness-header strong{
+  font-size:13px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.pc-studio .engineering-readiness .readiness-header small{
+  display:none;
+}
+.pc-studio .engineering-readiness .readiness-badge{
+  font-size:9px;
+  padding:3px 6px;
+}
+.pc-studio .engineering-readiness .readiness-items{
+  grid-column:2;
+  grid-row:1;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  gap:5px;
+}
+.pc-studio .engineering-readiness .readiness-item{
+  min-height:42px;
+  padding:6px 7px;
+  border-radius:7px;
+  grid-template-columns:15px minmax(0,1fr) 12px;
+  gap:5px;
+  align-items:center;
+}
+.pc-studio .engineering-readiness .readiness-item b{
+  font-size:10px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.pc-studio .engineering-readiness .readiness-item small{
+  display:none;
+}
+.pc-studio .engineering-readiness footer{
+  grid-column:1/-1;
+  padding-top:5px;
+  align-items:center;
+  font-size:9.5px;
+  line-height:1.35;
+}
+.pc-studio .engineering-readiness footer span{
+  max-width:none;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.pc-studio .engineering-readiness footer small{
+  display:none;
+}
+
+@media(max-width:1180px){
+  .pc-studio .engineering-readiness{
+    grid-template-columns:220px minmax(0,1fr);
+  }
+  .pc-studio .engineering-readiness .readiness-items{
+    grid-template-columns:repeat(5,minmax(92px,1fr));
+    overflow-x:auto;
+  }
+}
+@media(max-width:800px){
+  .pc-studio{--wb-pc-page-heading-height:44px}
+  .pc-studio .ps-workbench .enterprise-content{padding:10px;gap:12px}
+  .pc-studio .engineering-readiness{display:block;margin:0 10px 8px;padding:9px 10px}
+  .pc-studio .engineering-readiness .readiness-items{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(205px,78vw);margin-top:7px}
+  .pc-studio .engineering-readiness .readiness-item small{display:block}
+  .pc-studio .engineering-readiness footer span{white-space:normal}
+}
