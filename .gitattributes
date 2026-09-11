@@ -1,0 +1,6 @@
+# Sealed source payloads must have identical bytes on every checkout platform.
+/backend/*.py text eol=lf
+/backend/plugins/*.py text eol=lf
+/backend/foundation/*.py text eol=lf
+/plugins/*.json text eol=lf
+/plugin-spec/*.json text eol=lf

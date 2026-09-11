@@ -1,0 +1,84 @@
+name: Plugin ecosystem evidence
+on:
+  push:
+    branches: ['feat/plugin-ecosystem-v01']
+permissions:
+  contents: read
+concurrency:
+  group: plugin-ecosystem-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/source-commit.txt
+          git archive --format=zip --output=artifacts/source.zip HEAD
+          sha256sum artifacts/source.zip > artifacts/source.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-ecosystem-source
+          retention-days: 7
+          path: artifacts/
+  host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r backend/requirements-dev.txt
+      - run: python scripts/plugin_sdk.py verify
+      - run: python -m pytest --junitxml=artifacts/host-tests.xml
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npx playwright test --config=playwright.plugins.config.ts
+        working-directory: frontend
+      - if: always()
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/source-commit.txt
+          pip freeze > artifacts/host-environment.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: plugin-host-evidence
+          retention-days: 7
+          path: |
+            artifacts/
+            frontend/test-results-plugins/
+            frontend/dist/
+  native:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: sudo apt-get update && sudo apt-get install -y libglu1-mesa libgl1
+      - run: pip install -r backend/requirements-dev.txt -r plugins/requirements-native.txt
+      - run: python scripts/plugin_sdk.py verify
+      - run: python -m pytest plugin-tests/test_native.py -v --junitxml=artifacts/native-tests.xml
+      - if: always()
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/source-commit.txt
+          pip freeze > artifacts/native-environment.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: plugin-native-evidence
+          retention-days: 7
+          path: artifacts/

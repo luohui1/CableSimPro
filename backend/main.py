@@ -26,6 +26,9 @@ from .enterprise import Enterprise, make_router as enterprise_router
 from .foundation.router import make_router as foundation_router
 from .foundation.assets import AssetRepository, AssetError
 from .foundation.asset_router import make_router as asset_router
+from .plugins.service import PluginService
+from .plugins.catalog import PluginError
+from .plugins.router import make_router as plugin_router
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -38,6 +41,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     designs = Designs(workspace_store)
     enterprise = Enterprise(workspace_store, designs)
     runtime = EngineeringRuntime(workspace_store, designs, library, providers, enterprise)
+    plugins = PluginService(workspace_store, runtime)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -48,6 +52,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
         designs.initialize()
         enterprise.initialize()
         runtime.initialize()
+        plugins.initialize()
         try:
             yield
         finally:
@@ -66,11 +71,17 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(enterprise_router(enterprise))
     app.include_router(foundation_router(workspace_store))
     app.include_router(asset_router(assets, workspace_store))
+    app.include_router(plugin_router(plugins))
+    app.state.plugins = plugins
     app.state.workspace_store = workspace_store
     app.state.enterprise = enterprise
     app.state.providers = providers
     app.state.library = library
     app.state.designs = designs
+
+    @app.exception_handler(PluginError)
+    async def plugin_error(request, exc):
+        return JSONResponse({'detail': {'code': exc.code, 'message': exc.message}}, status_code=exc.status)
 
     @app.exception_handler(AssetError)
     async def asset_error(request, exc):
