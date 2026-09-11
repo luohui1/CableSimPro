@@ -1,6 +1,6 @@
 import {test,expect} from '@playwright/test';
 
-test('shared engineering pulse carries one review and result across both modes',async({page},info)=>{
+test('shared engineering pulse carries one review, diagnosis and sensitivity handoff across both modes',async({page},info)=>{
  await page.goto('/');
  await page.getByRole('button',{name:'进入专业工作台',exact:true}).click();
  const pulse=page.getByTestId('engineering-pulse');
@@ -34,12 +34,16 @@ test('shared engineering pulse carries one review and result across both modes',
  await expect(diagnosis).toContainText('XLPE 绝缘');
  await expect(diagnosis).toContainText('土壤自热系数');
  await expect(diagnosis).toContainText('热平衡残差');
+ await expect(diagnosis).toContainText('诊断 → 验证');
  await expect(diagnosis).toContainText('证据链');
  await expect(diagnosis).toContainText('MV-THERMAL-0.1.0');
  await expect(diagnosis).toContainText(/R20 来自工程输入|R20 按理想电阻率\/截面积估算/);
  await page.screenshot({path:info.outputPath('ampacity-diagnosis-v074.png'),fullPage:true});
- await page.getByRole('button',{name:'关闭载流量诊断',exact:true}).click();
+ await page.getByRole('button',{name:'创建土壤敏感性扫描任务',exact:true}).click();
  await expect(diagnosis).toBeHidden();
+ await expect(objective).toHaveValue('比较土壤热阻率 0.8、1.2、1.6、2 下的载流量');
+ await expect(page.getByRole('button',{name:'生成任务计划',exact:true})).toBeEnabled();
+ await expect(page.getByRole('button',{name:'批准并执行',exact:true})).toHaveCount(0);
  await page.getByRole('button',{name:'专业工作台',exact:true}).click();
  await expect(page.locator('.enterprise-result-summary')).toBeVisible();
  await expect(page.getByTestId('engineering-pulse')).toContainText(/结果可复核|运行电流超过允许载流量/);
