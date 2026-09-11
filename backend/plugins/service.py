@@ -78,7 +78,7 @@ OUTPUTS = {
     'cadquery.cable-step': {'cable.step', 'geometry.json'},
     'gmsh.cable-section': {'section.msh', 'mesh.json'},
     'meshio.to-vtu': {'section.vtu'},
-    'skfem.radial-thermal': {'temperature.vtu', 'thermal.json'},
+    'skfem.radial-thermal': {'temperature.vtu', 'thermal.json', 'field.json'},
     'pyvista.field-summary': {'isotherm.vtp', 'field-summary.json'},
 }
 
@@ -261,6 +261,9 @@ class PluginService:
                         raise PluginError('NOT_INSTALLED', '请先审查并安装准确的插件依赖版本。', 409)
                     if sorted(json.loads(installed['grants'])) != sorted(item.permissions):
                         raise PluginError('GRANT_CHANGED', '权限不完整，请重新审查。', 403)
+                    previous = db.execute('SELECT pin FROM plugin_project_pins WHERE workspace=? AND plugin_id=?', (wid,item.plugin_id)).fetchone()
+                    if previous and PluginPin.model_validate_json(previous['pin']) != self._pin(item):
+                        raise PluginError('PIN_MIGRATION_REQUIRED', '项目仍锁定旧发行版；先核对并显式停用，再启用新版本。', 409)
                     db.execute('INSERT OR REPLACE INTO plugin_project_pins VALUES (?,?,?)',
                                (wid, item.plugin_id, self._pin(item).model_dump_json()))
             else:
@@ -380,6 +383,12 @@ class PluginService:
                 raise PluginError('OUTPUT_LIMIT', '插件工件缺失、越界或过大。')
             item = PayloadFile(path=name, sha256=sha256(path.read_bytes()).hexdigest(), size_bytes=path.stat().st_size)
             artifacts.append(item.model_dump(mode='json'))
+        if context['command'] == 'skfem.radial-thermal':
+            from .field_contract import validate_thermal_projection
+            try:
+                validate_thermal_projection(json.loads((directory/'field.json').read_text('utf-8')), result['summary'])
+            except (ValueError, KeyError, TypeError):
+                raise PluginError('FIELD_CONTRACT', '温度场的网格、单位、节点数量或摘要不一致。') from None
         result['artifacts'] = artifacts
         return result
 

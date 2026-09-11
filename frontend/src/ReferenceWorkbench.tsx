@@ -73,6 +73,7 @@ export function ReferenceWorkbench({embedded=true,active=true,onAgent,requestedV
  useEffect(()=>{if(requestedView){if(['settings','methods','documents','products','assets'].includes(requestedView.view))setArea(requestedView.view as Area);else if(views.some(v=>v.id===requestedView.view))navigate(requestedView.view as View)}},[requestedView?.serial]);
  const commandState={busy:s.busy||localBusy,dirty:changed,buried:isBuried,current:!!s.current,canUndo:!!w?.can_undo};
  function executeCommand(id:WorkbenchCommandId){
+  if(id==='plugins'){window.dispatchEvent(new Event('csp:open-plugins'));return}
   const command=WORKBENCH_COMMANDS.find(c=>c.id===id);
   if(!command)return;
   const reason=commandBlockReason(command,commandState);if(reason){setError(reason);return}

@@ -13,7 +13,7 @@ from backend.main import create_app
 
 
 def prepare(c,w,p):
-    plan=c.post('/api/plugins/install-plan',json={'plugin_id':p,'version':'0.1.0'}).json()
+    plan=c.post('/api/plugins/install-plan',json={'plugin_id':p,'version':'0.1.1'}).json()
     approval={k:plan[k] for k in ('plugin_id','version','state_revision','plan_sha256')}|{'approved':True,'license_acknowledged':True,'grants':{i['plugin_id']:i['permissions'] for i in plan['plugins']}}
     r=c.post('/api/plugins/install',json=approval);assert r.status_code==200,r.text
     lock=c.get(f'/api/plugins/workspaces/{w["id"]}/lock').json()
@@ -52,7 +52,14 @@ def test_gmsh_skfem_meshio_pyvista_chain_and_refinement(tmp_path):
             converted=run(c,w,'cablesim.meshio','meshio.to-vtu',{'source_job_id':mesh['job_id']})
             assert download(c,w,converted,'section.vtu').status_code==200
             thermal=run(c,w,'cablesim.thermal2d','skfem.radial-thermal',{'source_job_id':mesh['job_id'],'heat_w_m':20,'surface_temperature_c':30,'conductor_k_w_m_k':380,'metal_screen_k_w_m_k':380})
-            s=thermal['result']['summary'];errors.append(s['analytic_temperature_rise_relative_error']);sizes.append(s['elements'])
+            from backend.plugins.field_contract import validate_thermal_projection
+            import meshio
+            field=download(c,w,thermal,'field.json').json()
+            s=thermal['result']['summary'];validate_thermal_projection(field,s)
+            path=tmp_path/f'temperature-{resolution}.vtu';path.write_bytes(download(c,w,thermal,'temperature.vtu').content)
+            vtk=meshio.read(path)
+            assert field['values']==pytest.approx((vtk.point_data['temperature_c']+273.15).tolist(),abs=1e-9)
+            errors.append(s['analytic_temperature_rise_relative_error']);sizes.append(s['elements'])
             assert s['ampacity_a'] is None and s['energy_relative_residual']<1e-6
             assert s['maximum_temperature_c']>30 and errors[-1]<.03
             assert len(json.loads(download(c,w,mesh,'mesh.json').content)['domains'])==6

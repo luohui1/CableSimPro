@@ -160,7 +160,11 @@ def radial_thermal(recipe, scenario, args):
     meshio.Mesh(points, [('triangle', triangles)], point_data={'temperature_c': temperature},
                 cell_data={'domain_id': [ids]}).write('temperature.vtu')
     write_json('thermal.json', dict(summary, schema_version='cablesim.thermal-reference/1'))
-    return {'files': ['temperature.vtu', 'thermal.json'], 'summary': summary,
+    from backend.plugins.field_contract import ThermalField
+    field = ThermalField(points=points.tolist(), triangles=triangles.tolist(),
+                         domain_ids=ids.tolist(), values=(temperature+273.15).tolist())
+    write_json('field.json', field.model_dump(mode='json'))
+    return {'files': ['temperature.vtu', 'thermal.json', 'field.json'], 'summary': summary,
             'warnings': ['这是定缆表温度和显式导体发热的数值基准，不是直埋载流量；不使用运行电流推测损耗。',
                          '各材料热导率取常数；不含屏蔽/介质分布发热、土壤、电磁耦合或认证。']}
 
