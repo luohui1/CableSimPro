@@ -49,6 +49,8 @@ test('unit controls and native diagnostic instruments stay connected to the solv
  const opener=page.getByTestId('pulse-loss');await opener.click();
  const dialog=page.getByRole('dialog',{name:'载流量工况诊断'});
  await expect(dialog).toHaveJSProperty('open',true);
+ await page.keyboard.press('F9');await page.keyboard.press('Control+k');
+ await expect(dialog).toHaveJSProperty('open',true);
  const projected=buildAmpacityDiagnostics(result);
  for(const loss of projected.losses) {
   const arc=dialog.locator(`[data-loss-key=${loss.key}]`);
@@ -71,8 +73,9 @@ test('native modal holds keyboard focus and remains within 390 px',async({page},
  await page.setViewportSize({width:390,height:844});await enter(page);await calculate(page);
  await page.getByTestId('pulse-loss').click();
  const dialog=page.getByRole('dialog',{name:'载流量工况诊断'});
- for(let i=0;i<12;i++) {
-  await page.keyboard.press('Tab');
+ await expect(dialog).toHaveJSProperty('open',true);
+ for(let i=0;i<16;i++) {
+  await page.keyboard.press(i<8?'Tab':'Shift+Tab');
   expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true);
  }
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);

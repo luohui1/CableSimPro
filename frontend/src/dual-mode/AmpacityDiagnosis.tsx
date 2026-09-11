@@ -1,4 +1,4 @@
-import {useEffect,useRef} from 'react';
+import {useLayoutEffect,useRef,type KeyboardEvent} from 'react';
 import {ArrowRight,X} from 'lucide-react';
 import {useStudio} from '../StudioState';
 import {fmt} from '../utils';
@@ -25,11 +25,16 @@ export default function AmpacityDiagnosis({open,onClose,openWorkbench,openAgent}
  const s=useStudio(),result=s.current,w=s.w;
  const dialogRef=useRef<HTMLDialogElement>(null);
  const visible=open&&!!result&&!!w;
- useEffect(()=>{
+ useLayoutEffect(()=>{
   const dialog=dialogRef.current;
   if(!visible||!dialog)return;
+  // Capture before opening; React autoFocus would otherwise replace the opener.
+  const opener=document.activeElement;
   if(!dialog.open)dialog.showModal();
-  return()=>{if(dialog.open)dialog.close()};
+  return()=>{
+   if(dialog.open)dialog.close();
+   if(opener instanceof HTMLElement&&opener.isConnected)opener.focus({preventScroll:true});
+  };
  },[visible,w?.id]);
  if(!visible||!result||!w)return null;
  const d=buildAmpacityDiagnostics(result);
@@ -39,15 +44,30 @@ export default function AmpacityDiagnosis({open,onClose,openWorkbench,openAgent}
  const residualText=d.residualK<1e-6?d.residualK.toExponential(2):fmt(d.residualK,6);
  const sweepTask=soilSweepTask(result.input.installation.soil_rho_k_m_w);
  function jump(view:string){onClose();openWorkbench(view)}
+ function modalKeys(event:KeyboardEvent<HTMLDialogElement>) {
+  // Native modality blocks pointer access, not the workspace's window shortcuts.
+  event.stopPropagation();
+  if(event.key==='F9'||((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==='k')) {
+   event.preventDefault();return;
+  }
+  if(event.key!=='Tab')return;
+  const controls=Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+   'button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary,[tabindex]:not([tabindex="-1"])'
+  )).filter(element=>element.getClientRects().length>0&&getComputedStyle(element).visibility!=='hidden');
+  const first=controls[0],last=controls[controls.length-1];
+  if(!first){event.preventDefault();event.currentTarget.focus();return}
+  if(event.shiftKey&&document.activeElement===first){event.preventDefault();last.focus()}
+  else if(!event.shiftKey&&document.activeElement===last){event.preventDefault();first.focus()}
+ }
  return <dialog ref={dialogRef} className="ampacity-diagnosis-layer kit-diagnosis-shell" data-testid="ampacity-diagnosis"
   aria-labelledby="ampacity-diagnosis-title" aria-describedby="kit-diagnosis-description"
-  onCancel={event=>{event.preventDefault();onClose()}}
+  onKeyDown={modalKeys} onCancel={event=>{event.preventDefault();onClose()}}
   onMouseDown={event=>{if(event.target===event.currentTarget)onClose()}}>
   <div className="ampacity-diagnosis kit-diagnosis">
    <header className="diagnosis-header">
     <EngineeringIcon name={unavailable?'error':d.overloaded?'warning':'check'} size={40}/>
     <div><span>工程结果 / 只读诊断</span><h2 id="ampacity-diagnosis-title">载流量工况诊断</h2><p id="kit-diagnosis-description">同一计算快照 · 图表由求解数据绘制 · 打开面板不会重新计算</p></div>
-    <button autoFocus type="button" className="diagnosis-close" aria-label="关闭载流量诊断" onClick={onClose}><X size={19}/></button>
+    <button type="button" className="diagnosis-close" aria-label="关闭载流量诊断" onClick={onClose}><X size={19}/></button>
    </header>
    <div className="diagnosis-provenance"><KitStatus tone={unavailable||d.overloaded?'warning':'blue'}>{unavailable?'运行解不可用':d.overloaded?'超出当前限值':'当前结果可复核'}</KitStatus><span>{result.model_version}</span><span>{runLabel}{run?` · rev.${run.revision}`:''}</span><code>#{d.inputHashShort}</code></div>
    {unavailable&&<div className="kit-operating-warning" role="alert" data-testid="kit-operating-unavailable"><EngineeringIcon name="error" size={27}/><div><b>运行电流未取得稳态解</b><p>{d.operatingError||'运行温度及温度裕量不可用。'} 下方损耗与温升图仅显示允许载流量点，不代表运行工况。</p></div></div>}
