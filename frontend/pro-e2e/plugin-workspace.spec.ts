@@ -54,7 +54,11 @@ test('real mesh and FEM artifact render with verified hashes without creating am
  const panel=dialog.getByRole('region',{name:'插件研究结果'});const field=dialog.getByRole('img',{name:'已求解的有限元截面温度场'});
  await expect(field).toBeVisible();await expect(panel).toContainText(execution.result.summary.maximum_temperature_c.toFixed(4));
  expect(execution.result.summary.ampacity_a).toBeNull();
- await field.scrollIntoViewIfNeeded();await page.screenshot({path:info.outputPath('project-plugin-fem.png')});
+ await panel.scrollIntoViewIfNeeded();
+ const fieldBox=await field.boundingBox(),topBox=await dialog.locator('.plugin-top').boundingBox();
+ expect(fieldBox!.y).toBeGreaterThanOrEqual(topBox!.y+topBox!.height);
+ expect(fieldBox!.y+fieldBox!.height).toBeLessThanOrEqual((await page.viewportSize())!.height);
+ await page.screenshot({path:info.outputPath('project-plugin-fem.png')});
  await panel.screenshot({path:info.outputPath('plugin-fem-detail.png')});
  const requests:string[]=[];page.on('request',r=>{if(r.method()==='POST')requests.push(r.url())});
  await panel.getByRole('button',{name:'显示网格',exact:true}).click();expect(requests).toEqual([]);

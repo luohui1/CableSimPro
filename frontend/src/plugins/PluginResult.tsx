@@ -1,3 +1,4 @@
+import './plugin-workspace-layout.css';
 import {useEffect,useRef,useState} from 'react';
 
 export interface PluginExecution {
@@ -28,7 +29,7 @@ function FieldCanvas({field}:{field:Field}){
   const scale=(canvas.width-40)/Math.max(maxX-minX,maxY-minY),cx=(minX+maxX)/2,cy=(minY+maxY)/2;
   ctx.clearRect(0,0,canvas.width,canvas.height);
   for(const tri of field.triangles){const avg=tri.reduce((s,i)=>s+field.values[i],0)/3,t=high>low?(avg-low)/(high-low):0;
-   ctx.fillStyle=`hsl(${225-215*t} 65% 46%)`;ctx.beginPath();tri.forEach((i,j)=>{const p=points[i],x=canvas.width/2+(p[0]-cx)*scale,y=canvas.height/2-(p[1]-cy)*scale;j?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.closePath();ctx.fill();
+   ctx.fillStyle=`hsl(${225-215*t} 65% 46%)`;ctx.beginPath();tri.forEach((i,j)=>{const p=points[i],x=canvas.width/2+(p[0]-cx)*scale,y=canvas.height/2-(p[1]-cy)*scale;j?ctx.lineTo(x,y):ctx.moveTo(x,y)});ctx.closePath();ctx.fill();ctx.strokeStyle=ctx.fillStyle;ctx.lineWidth=.6;ctx.stroke();
    if(mesh){ctx.strokeStyle='#19314b66';ctx.lineWidth=.45;ctx.stroke()}
   }
  },[field,mesh,low,high]);

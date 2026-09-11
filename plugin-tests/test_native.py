@@ -22,9 +22,41 @@ def prepare(c,w,p):
 def run(c,w,p,command,args={}):
     lock=c.get(f'/api/plugins/workspaces/{w["id"]}/lock').json()
     response=c.post(f'/api/plugins/workspaces/{w["id"]}/invoke',json={'plugin_id':p,'command':command,'request_id':str(uuid4()),'expected_revision':w['revision'],'lock_sha256':lock['lock_sha256'],'arguments':args,'confirmed':True})
+    if response.status_code!=200:
+        diagnose_worker_failure(c,w,command)
     assert response.status_code==200,response.text
     assert response.json()['status']=='succeeded',response.text
     return response.json()
+
+def diagnose_worker_failure(c,w,command):
+    """Test-only repro in an independent scratch dir; the original assertion still fails.
+
+    Uses this test's generated fixture, never production projects, and does not
+    change the service's policy of hiding native tracebacks from API responses.
+    """
+    import subprocess,sys,tempfile
+    from backend.plugins.service import safe_environment
+    service=c.app.state.plugins
+    with service.store.db() as db:
+        row=db.execute('SELECT context FROM plugin_jobs WHERE workspace=? ORDER BY rowid DESC LIMIT 1',(w['id'],)).fetchone()
+    if row is None:return
+    context=json.loads(row['context'])
+    payload={key:context[key] for key in ('command','recipe','scenario','arguments')}
+    payload['distributions']=[r.distribution for r in service.catalog.get(context['plugin']['plugin_id']).requirements]
+    try:
+        with tempfile.TemporaryDirectory(prefix='csp-native-diagnostic-') as temporary:
+            directory=Path(temporary)
+            if 'source_artifact' in context:
+                item=context['source_artifact'];source=service._artifact_path(w['id'],item['job_id'],item)
+                (directory/'input').mkdir();(directory/'input'/item['path']).write_bytes(source.read_bytes())
+            run=subprocess.run([sys.executable,'-I',str(service.catalog.root/'backend/plugins/worker.py')],
+                input=json.dumps(payload).encode(),cwd=directory,env=safe_environment(directory),
+                stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=30,check=False)
+            text=f'command={command} returncode={run.returncode}\n'+run.stderr.decode('utf-8',errors='replace')[-16000:]
+    except Exception as error:
+        text=f'Diagnostic could not finish: {type(error).__name__}'
+    out=Path('artifacts');out.mkdir(exist_ok=True)
+    (out/f'worker-diagnostic-{command.replace(".","-")}.txt').write_text(text,encoding='utf-8')
 
 def download(c,w,out,name):return c.get(f'/api/plugins/workspaces/{w["id"]}/jobs/{out["job_id"]}/artifacts/{name}')
 
