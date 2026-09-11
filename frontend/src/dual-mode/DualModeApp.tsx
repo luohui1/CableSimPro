@@ -1,3 +1,5 @@
+import {BrandLogo,EngineeringIcon} from '../visual-kit/EngineeringIcon';
+import {KitStatus} from '../visual-kit/KitControls';
 import {useEffect,useRef,useState} from 'react';
 import {ArrowLeft,ArrowRight,Box,Check,Home,Settings2,Workflow,X} from 'lucide-react';
 import {StudioProvider,useStudio} from '../StudioState';
@@ -10,6 +12,7 @@ import {navigateMode,readRoute,syncWorkspaceUrl,useModeRoute,type WorkMode} from
 import './dual-mode.css';
 import './agent-studio.css';
 import './light-studio.css';
+import '../visual-kit/metal-studio.css';
 
 const initialProject=readRoute().project;
 function Application(){
@@ -39,12 +42,12 @@ function Application(){
  async function openProject(id:string,mode:WorkMode){if(s.busy||dirty)return;await s.load(id);navigateMode(mode,id)}
  const mismatch=!!route.project&&route.project!==s.w?.id;
  const usable=!!s.w&&!mismatch;
- return <div className={`dual-app light-studio ${route.mode?'is-project':'is-home'}`}>
-  <header className="dual-header"><button className="dual-brand" onClick={home} aria-label="返回模式选择"><span className="dual-brand-symbol">C</span><b>CableSim<span>Pro</span></b><small>电缆设计与验证</small></button>
-   {route.mode&&<nav className="mode-switch" aria-label="工作模式"><button aria-pressed={route.mode==='workbench'} onClick={()=>choose('workbench')}><Box size={17}/>专业工作台</button><button aria-pressed={route.mode==='agent'} onClick={()=>choose('agent')}><Workflow size={17}/>智能工程流</button></nav>}
-   <div className="dual-header-end"><span>0.7.4 · 工程预览</span><button onClick={()=>openWorkbench('settings')} title="服务接入设置" aria-label="双模式服务设置"><Settings2 size={19}/></button></div>
+ return <div className={`dual-app light-studio metal-studio ${route.mode?'is-project':'is-home'}`}>
+  <header className="dual-header"><button className="dual-brand" onClick={home} aria-label="返回模式选择"><BrandLogo/><small>电缆设计与验证</small></button>
+   {route.mode&&<nav className="mode-switch" aria-label="工作模式"><button aria-pressed={route.mode==='workbench'} onClick={()=>choose('workbench')}><EngineeringIcon name="cable" size={26}/>专业工作台</button><button aria-pressed={route.mode==='agent'} onClick={()=>choose('agent')}><EngineeringIcon name="workflow" size={24}/>智能工程流</button></nav>}
+   <div className="dual-header-end"><span>0.7.4 · 工程预览</span><button onClick={()=>openWorkbench('settings')} title="服务接入设置" aria-label="双模式服务设置"><EngineeringIcon name="settings" size={26}/></button></div>
   </header>
-  {route.mode&&usable&&<div className="dual-context"><button onClick={home}><ArrowLeft size={14}/>工作入口</button><span className="context-divider"/><b>{s.w!.scenario.name}</b><span className="dual-revision" data-testid="session-revision">rev.{s.w!.revision}</span><span className="dual-context-right"><Check size={13}/>共用工程数据</span></div>}
+  {route.mode&&usable&&<div className="dual-context"><button onClick={home}><ArrowLeft size={14}/>工作入口</button><span className="context-divider"/><b>{s.w!.scenario.name}</b><span className="dual-revision" data-testid="session-revision">rev.{s.w!.revision}</span><span className="dual-context-right"><KitStatus>共用工程数据</KitStatus></span></div>}
   {(s.error||routeWarning||route.invalidMode)&&<div className="dual-alert" role="alert"><span>{s.error||routeWarning||'无法识别此工作模式，请重新选择。'}</span><button aria-label="关闭双模式提示" onClick={()=>{s.dismiss();setRouteWarning('');if(route.invalidMode)home()}}><X size={16}/></button></div>}
   {dirty&&route.mode==='agent'&&<div className="dual-draft-warning" role="status"><span>有 {Object.keys(s.inputDrafts).length} 项未提交输入，任务规划和批准已暂停。</span><button onClick={()=>openWorkbench()}>返回检查参数</button><button onClick={s.discardInputs}>撤销未提交输入</button></div>}
   {route.mode&&usable&&<EngineeringPulse mode={route.mode} openWorkbench={openWorkbench} openAgent={openAgent} openDiagnostics={openDiagnostics}/>}

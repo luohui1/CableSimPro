@@ -1,3 +1,4 @@
+import {EngineeringIcon} from '../visual-kit/EngineeringIcon';
 import {useEffect,useState} from 'react';
 import {ArrowRight,Box,Check,Clock3,FileText,FolderOpen,Layers3,Workflow,ShieldCheck} from 'lucide-react';
 import {api,errorText} from '../utils';
@@ -18,7 +19,7 @@ export default function ModeSelection({choose,openProject}:{choose:(mode:WorkMod
   <section className="mode-intro"><span className="mode-kicker"><span/>中压电缆 · 设计与载流量研究</span><h1>选择你的工作方式</h1><p>从精确建模到目标驱动，让每一项设计都有依据。</p><div className="entry-assurance"><ShieldCheck size={16}/>同一个工程，随时切换。模型、参数和计算记录保持一致。</div></section>
   <div className="mode-choice-grid">
    <article className="mode-choice professional-choice">
-    <header><span className="mode-symbol"><Box size={23}/></span><span className="mode-audience">对象驱动 · 精确控制</span>{last==='workbench'&&<span className="last-mode">上次使用</span>}<span className="mode-number">01</span></header>
+    <header><span className="mode-symbol"><EngineeringIcon name="cable" size={35}/></span><span className="mode-audience">对象驱动 · 精确控制</span>{last==='workbench'&&<span className="last-mode">上次使用</span>}<span className="mode-number">01</span></header>
     <h2>专业工作台</h2><p>编辑电缆结构与敷设条件，在同一画布中完成计算与复核。</p>
     <div className="entry-asset" aria-label="专业工作台结构预览">
      <div className="entry-visual-label"><span>单芯电缆 / 分层结构</span><b>结构建模</b></div>
@@ -30,7 +31,7 @@ export default function ModeSelection({choose,openProject}:{choose:(mode:WorkMod
     <button className="mode-enter" disabled={!s.initialized||s.busy} onClick={()=>choose('workbench')}>进入专业工作台 <ArrowRight size={18}/></button>
    </article>
    <article className="mode-choice agent-choice">
-    <header><span className="mode-symbol"><Workflow size={23}/></span><span className="mode-audience">目标驱动 · 审查后执行</span>{last==='agent'&&<span className="last-mode">上次使用</span>}<span className="mode-number">02</span></header>
+    <header><span className="mode-symbol"><EngineeringIcon name="workflow" size={33}/></span><span className="mode-audience">目标驱动 · 审查后执行</span>{last==='agent'&&<span className="last-mode">上次使用</span>}<span className="mode-number">02</span></header>
     <h2>智能工程流</h2><p>描述工程目标，核对计划与参数差异，由工程工具完成计算。</p>
     <div className="entry-asset entry-task-asset" aria-label="智能工程流任务示意">
      <EngineeringPlate kind="documents" priority/>
@@ -44,7 +45,7 @@ export default function ModeSelection({choose,openProject}:{choose:(mode:WorkMod
   <div className="mode-data-note"><span><Layers3 size={16}/>共享产品版本、资料来源与求解工具</span><span>{s.status.cloud_configured?'云端模型已配置 · 发送前需授权':'未配置云端模型 · 可使用本地明确命令'}</span></div>
   <section className="mode-recent" aria-label="最近工程"><header><h2><Clock3 size={18}/>最近工程</h2><small>{s.w?'当前：'+s.w.scenario.name:'选择模式后才创建工程'}</small></header>
    {error&&<p role="alert">{error}</p>}
-   {recent.length?<div className="recent-projects">{recent.map(p=><article key={p.id}><FolderOpen size={23}/><div><b>{p.name}</b><small>版本 {p.revision} · {new Date(p.updated_at).toLocaleDateString('zh-CN')}</small></div><div className="recent-actions"><button disabled={locked} onClick={()=>openProject(p.id,'workbench')}>工作台</button><button disabled={locked} onClick={()=>openProject(p.id,'agent')}>工程流</button></div></article>)}</div>:<div className="mode-empty"><FolderOpen size={24}/><p>还没有保存的工程。选择一种方式，从可核对的演示参数开始。</p></div>}
+   {recent.length?<div className="recent-projects">{recent.map(p=><article key={p.id}><EngineeringIcon name="folder" size={29}/><div><b>{p.name}</b><small>版本 {p.revision} · {new Date(p.updated_at).toLocaleDateString('zh-CN')}</small></div><div className="recent-actions"><button disabled={locked} onClick={()=>openProject(p.id,'workbench')}>工作台</button><button disabled={locked} onClick={()=>openProject(p.id,'agent')}>工程流</button></div></article>)}</div>:<div className="mode-empty"><FolderOpen size={24}/><p>还没有保存的工程。选择一种方式，从可核对的演示参数开始。</p></div>}
   </section>
   <footer className="mode-home-footer"><FileText size={14}/>本机研究预览 · 配图为说明性资产，计算以工程输入与方法适用范围为准。</footer>
  </main>;

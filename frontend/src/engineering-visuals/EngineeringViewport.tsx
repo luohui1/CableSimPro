@@ -1,3 +1,4 @@
+import {EngineeringIcon} from '../visual-kit/EngineeringIcon';
 import {useState} from 'react';
 import {Box,ChartNoAxesCombined,Layers3,Thermometer,TriangleAlert} from 'lucide-react';
 import {useStudio} from '../StudioState';
@@ -11,7 +12,7 @@ export default function EngineeringViewport(){
  if(!s.w)return null;
  return <section className="engineering-viewport" aria-label="工程模型与结果画布" data-view={view}>
   <nav className="viewport-tabs" aria-label="画布视图">
-   {([{id:'model',label:'三维结构',Icon:Box},{id:'section',label:'二维截面',Icon:Layers3},{id:'temperature',label:'温度分布',Icon:Thermometer},{id:'curve',label:'载流量曲线',Icon:ChartNoAxesCombined}] as const).map(({id,label,Icon})=><button key={id} aria-pressed={view===id} onClick={()=>setView(id)}><Icon size={16}/>{label}</button>)}
+   {([{id:'model',label:'三维结构',Icon:'cable'},{id:'section',label:'二维截面',Icon:'layers'},{id:'temperature',label:'温度分布',Icon:'temperature'},{id:'curve',label:'载流量曲线',Icon:'chart'}] as const).map(({id,label,Icon})=><button key={id} aria-pressed={view===id} onClick={()=>setView(id)}><EngineeringIcon name={Icon} size={24}/>{label}</button>)}
    <span className="viewport-run-badge">{s.current?'当前输入 · 已计算':'工程输入 · 待计算'}</span>
   </nav>
   <div className="viewport-pane" hidden={view!=='model'}><CableModelView cable={s.w.scenario.cable}/></div>

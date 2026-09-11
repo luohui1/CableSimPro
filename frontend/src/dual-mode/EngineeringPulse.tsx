@@ -1,3 +1,4 @@
+import {EngineeringIcon} from '../visual-kit/EngineeringIcon';
 import {Activity,ArrowRight,CheckCircle2,FileText,Layers3,LockKeyhole,Thermometer,TriangleAlert} from 'lucide-react';
 import {useEffect,useState} from 'react';
 import {useStudio} from '../StudioState';
@@ -65,29 +66,29 @@ export default function EngineeringPulse({mode,openWorkbench,openAgent,openDiagn
  const thermalDetail=diagnosis?`外部 ΔT ${fmt(diagnosis.externalRiseC,1)} / 缆体 ${fmt(diagnosis.internalRiseC,1)} °C`:'求解后比较缆体与土壤温升路径';
  return <section className={`engineering-pulse tone-${tone}`} data-testid="engineering-pulse" aria-label="共享工程状态">
   <div className="engineering-pulse-state" aria-live="polite">
-   <span className="pulse-state-icon"><StateIcon size={18}/></span>
+   <span className="pulse-state-icon"><EngineeringIcon name={tone==='ready'?'check':tone==='warning'||tone==='review'?'warning':'info'} size={29}/></span>
    <div><span>共享工程状态</span><strong>{headline}</strong><small>{detail}</small></div>
   </div>
   <button type="button" className="engineering-pulse-metric" data-testid="pulse-cable" aria-label="打开电缆结构" onClick={()=>openWorkbench('cable')}>
-   <span className="pulse-metric-icon"><Layers3 size={16}/></span><span><small>电缆结构</small><b>{material} {fmt(scenario.cable.area_mm2,0)} mm²</b><em>U₀ {fmt(scenario.cable.u0_kv,1)} kV</em></span>
+   <span className="pulse-metric-icon"><EngineeringIcon name="cable" size={32}/></span><span><small>电缆结构</small><b>{material} {fmt(scenario.cable.area_mm2,0)} mm²</b><em>U₀ {fmt(scenario.cable.u0_kv,1)} kV</em></span>
   </button>
   <button type="button" className="engineering-pulse-metric" data-testid="pulse-installation" aria-label="打开敷设条件" onClick={()=>openWorkbench('installation')}>
-   <span className="pulse-metric-icon"><Activity size={16}/></span><span><small>敷设条件</small><b>{arrangement} · {fmt(scenario.installation.depth_m,2)} m</b><em>土壤热阻率 {fmt(scenario.installation.soil_rho_k_m_w,2)}</em></span>
+   <span className="pulse-metric-icon"><EngineeringIcon name="wave" size={30}/></span><span><small>敷设条件</small><b>{arrangement} · {fmt(scenario.installation.depth_m,2)} m</b><em>土壤热阻率 {fmt(scenario.installation.soil_rho_k_m_w,2)}</em></span>
   </button>
   <button type="button" className="engineering-pulse-metric" data-testid="pulse-operating" aria-label="打开运行条件" onClick={()=>openWorkbench('cable')}>
-   <span className="pulse-metric-icon"><Thermometer size={16}/></span><span><small>运行条件</small><b>{fmt(scenario.operating_current_a,0)} A</b><em>导体限温 {fmt(scenario.cable.max_temperature_c,0)} °C</em></span>
+   <span className="pulse-metric-icon"><EngineeringIcon name="temperature" size={31}/></span><span><small>运行条件</small><b>{fmt(scenario.operating_current_a,0)} A</b><em>导体限温 {fmt(scenario.cable.max_temperature_c,0)} °C</em></span>
   </button>
   <button type="button" className="engineering-pulse-metric pulse-diagnostic" data-testid="pulse-loss" aria-label="打开损耗诊断" onClick={openDiagnostics}>
-   <span className="pulse-metric-icon"><Activity size={16}/></span><span><small>损耗诊断</small><b>{lossValue}</b><em>{lossDetail}</em></span>
+   <span className="pulse-metric-icon"><EngineeringIcon name="wave" size={30}/></span><span><small>损耗诊断</small><b>{lossValue}</b><em>{lossDetail}</em></span>
   </button>
   <button type="button" className="engineering-pulse-metric pulse-diagnostic" data-testid="pulse-thermal" aria-label="打开热路径诊断" onClick={openDiagnostics}>
-   <span className="pulse-metric-icon"><Thermometer size={16}/></span><span><small>热路径诊断</small><b>{thermalValue}</b><em>{thermalDetail}</em></span>
+   <span className="pulse-metric-icon"><EngineeringIcon name="temperature" size={31}/></span><span><small>热路径诊断</small><b>{thermalValue}</b><em>{thermalDetail}</em></span>
   </button>
   <button type="button" className="engineering-pulse-metric" data-testid="pulse-evidence" aria-label="打开参数依据" onClick={()=>openWorkbench('documents')}>
-   <span className="pulse-metric-icon"><FileText size={16}/></span><span><small>参数依据</small><b>{result?`${w.sources.length} 份资料 · ${result.model_version}`:`${w.sources.length} 份资料`}</b><em><LockKeyhole size={11}/>{result?`#${evidenceHash} · ${r20Basis}`:`${w.locks.length} 项锁定`}</em></span>
+   <span className="pulse-metric-icon"><EngineeringIcon name="book" size={30}/></span><span><small>参数依据</small><b>{result?`${w.sources.length} 份资料 · ${result.model_version}`:`${w.sources.length} 份资料`}</b><em><LockKeyhole size={11}/>{result?`#${evidenceHash} · ${r20Basis}`:`${w.locks.length} 项锁定`}</em></span>
   </button>
   <button type="button" className="engineering-pulse-metric pulse-result" data-testid="pulse-result" aria-label={s.current||s.currentSweep?'打开当前结果':'创建载流量计算任务'} onClick={()=>s.current||s.currentSweep?openWorkbench('history'):openAgent('计算载流量')}>
-   <span className="pulse-metric-icon"><CheckCircle2 size={16}/></span><span><small>当前结果</small><b>{resultValue}</b><em>{resultDetail}</em></span>
+   <span className="pulse-metric-icon"><EngineeringIcon name="power" size={31}/></span><span><small>当前结果</small><b>{resultValue}</b><em>{resultDetail}</em></span>
   </button>
   <button type="button" className="engineering-pulse-action" disabled={actionDisabled} onClick={onAction} aria-label={action}><span>{action}</span>{!actionDisabled&&<ArrowRight size={15}/>}</button>
   <span className="pulse-mode-tag" aria-hidden="true">{mode==='agent'?'工程流':'工作台'}</span>

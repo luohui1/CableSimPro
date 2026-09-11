@@ -1,0 +1,43 @@
+name: Approved engineering kit review
+on:
+  push:
+    branches: ['feat/light-engineering-v074']
+    paths: ['frontend/**', 'scripts/extract_engineering_kit.py', 'scripts/verify_engineering_kit.py', '.github/workflows/metal-kit-review.yml']
+permissions:
+  contents: read
+concurrency:
+  group: metal-kit-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  kit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r backend/requirements.txt
+      - run: python scripts/verify_engineering_kit.py
+      - run: npm ci --no-audit --no-fund
+        working-directory: frontend
+      - run: npm run build
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npx playwright test --config=playwright.kit.config.ts
+        working-directory: frontend
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: approved-kit-review
+          retention-days: 7
+          path: |
+            frontend/test-results-kit/
+            frontend/playwright-report-kit/
+            frontend/dist/
