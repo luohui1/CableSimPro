@@ -40,7 +40,11 @@ class Catalog:
         return m
 
     def closure(self, plugin_id: str, version: str) -> tuple[PluginManifest, ...]:
-        return resolve_plugins((Dependency(plugin_id=plugin_id, version=version),), self.manifests)
+        self.get(plugin_id, version)  # Unknown root/version is a normal 404, not a server error.
+        try:
+            return resolve_plugins((Dependency(plugin_id=plugin_id, version=version),), self.manifests)
+        except ValueError as exc:
+            raise PluginError('DEPENDENCY_INVALID', '插件依赖图无效，不能生成安装计划。', 409) from exc
 
     def verify(self, manifest: PluginManifest) -> None:
         if manifest.distribution == 'roadmap':
