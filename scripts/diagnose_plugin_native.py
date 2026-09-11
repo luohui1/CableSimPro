@@ -19,6 +19,10 @@ import sys
 print('process-start', flush=True)
 ROOT=Path(sys.argv[1]);sys.path.insert(0,str(ROOT))
 variant=sys.argv[2]
+if variant=='import-only':
+    import cadquery as cq
+    print('native-import-only-complete',flush=True)
+    sys.exit(0)
 if variant=='native-first':
     import cadquery as cq
     print('cadquery-first-imported', flush=True)
@@ -49,6 +53,10 @@ if variant=='shape-only':
 else:
     cq.exporters.export(compound,'cable.step',exportType='STEP')
     print('step-written',Path('cable.step').stat().st_size,flush=True)
+if variant=='collect-before-exit':
+    del compound, solids, solid, sketch
+    import gc
+    print('gc-collected',gc.collect(),flush=True)
 print('normal-script-end',flush=True)
 '''
 
@@ -56,7 +64,7 @@ print('normal-script-end',flush=True)
 def main():
     artifacts=ROOT/'artifacts';artifacts.mkdir(exist_ok=True)
     rows=[]
-    for variant in ['standard','native-first','shape-only','windows-environment']:
+    for variant in ['import-only','standard','collect-before-exit']:
         with tempfile.TemporaryDirectory(prefix='csp-native-') as tmp:
             folder=Path(tmp);script=folder/'probe.py';script.write_text(SCRIPT,encoding='utf-8')
             env=safe_environment(folder)
