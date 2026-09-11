@@ -6,7 +6,8 @@ async function propose(page:Page){await page.getByLabel('描述本次工程任�
 
 test('light entry renders two engineering visuals without creating a project or calling outside services',async({page},info)=>{
  const creates:string[]=[],outside:string[]=[];page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/api/workspaces'))creates.push(r.url());if(r.url().startsWith('http')&&!r.url().startsWith('http://127.0.0.1:8000'))outside.push(r.url())});
- await page.goto('/');await expect(page.getByRole('heading',{name:'选择你的工作方式'})).toBeVisible();await expect(page.getByTestId('cable-portrait')).toHaveCount(2);
+ await page.goto('/');await expect(page.getByRole('heading',{name:'选择你的工作方式'})).toBeVisible();await expect(page.getByTestId('cable-portrait')).toHaveCount(1);
+ await expect(page.locator('.entry-task-asset img')).toHaveJSProperty('naturalWidth',1200);
  await expect(page.getByTestId('cable-portrait').first()).toHaveAttribute('data-renderer',/ready|fallback/);
  expect(creates).toEqual([]);expect(outside).toEqual([]);
  await page.screenshot({path:info.outputPath('entry-v072.png'),fullPage:true});

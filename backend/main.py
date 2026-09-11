@@ -14,7 +14,8 @@ from .engine import MODEL_VERSION, ModelError, calculate
 from .report import render_report
 from .schemas import Scenario, SweepRequest
 from .storage import ProjectStore
-from .workbench import WorkspaceStore, make_router
+from .workbench import make_router
+from .sqlite_workspace import WorkspaceStore
 from .providers import Providers, router as integrations_router
 from .library import Library, make_router as library_router
 from .selection import Designs, make_router as designs_router
@@ -51,6 +52,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(designs_router(designs))
     app.include_router(runtime_router(runtime))
     app.include_router(enterprise_router(enterprise))
+    app.state.workspace_store = workspace_store
     app.state.enterprise = enterprise
     app.state.providers = providers
     app.state.library = library

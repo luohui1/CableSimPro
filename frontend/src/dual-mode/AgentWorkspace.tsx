@@ -1,3 +1,4 @@
+import {EngineeringIcon} from '../visual-kit/EngineeringIcon';
 import {useEffect,useRef,useState} from 'react';
 import {ArrowRight,ArrowUp,Check,CheckCircle2,ChevronDown,FileText,FolderOpen,History,Layers3,LockKeyhole,Menu,Plus,Settings2,Thermometer,TriangleAlert,Workflow,X} from 'lucide-react';
 import {useStudio,valueAt} from '../StudioState';
@@ -8,6 +9,7 @@ import {StandardsPanel} from '../EngineeringPanels';
 import {InlineResults} from '../WorkspaceInteraction';
 import CablePortrait,{InstallationSketch} from '../engineering-visuals/CablePortrait';
 import {api,errorText,fmt,layers} from '../utils';
+import {EngineeringPlate} from '../visual-assets/EngineeringPlate';
 import TaskRecordView,{type ArchivedTask} from './TaskRecordView';
 
 type Section='task'|'selection'|'documents'|'standards'|'history';
@@ -30,13 +32,15 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
  const validOutput=!!s.current||!!s.currentSweep||s.outputCurrent;
  const latest=[...s.notes].reverse().find(n=>n.role==='user')?.text??p?.message;
  const hasTask=!fresh&&!!(latest||p||s.output);
+ const taskStage=!hasTask?0:pending?1:validOutput?2:0;
  const candidate=pending&&p.scenario&&!stale&&!expired?p.scenario:w.scenario;
  const status=s.error?'需要处理':s.busy?'工具执行中':pending?(stale||expired?'提案待更新':'等待审查'):p&&!p.ready?'请补充条件':s.current||s.currentSweep?'结果可复核':s.outputCurrent?'工具已完成':s.output?'输入已变化':'等待任务';
  useEffect(()=>{if(p?.ready){setSection('task');setFresh(false);setArchive(null)}},[p]);
  useEffect(()=>{if(!active)return;const timer=window.setInterval(()=>setNow(Date.now()),1000);return()=>clearInterval(timer)},[active]);
  useEffect(()=>{if(!active||s.busy)return;let canceled=false;api<Journal>(`/api/runtime/${w.id}/provenance`).then(j=>{if(!canceled){setJournal(j);setReadError('')}}).catch(e=>{if(!canceled)setReadError(errorText(e))});return()=>{canceled=true}},[active,s.busy,w.id,w.revision]);
- useEffect(()=>{if(!active)return;const key=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setSection('task');setNavOpen(false);requestAnimationFrame(()=>input.current?.focus())}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[active]);
- function focusTask(text?:string){setSection('task');setNavOpen(false);if(text!==undefined){setDraft(text);setFresh(true)}requestAnimationFrame(()=>input.current?.focus())}
+ useEffect(()=>{if(!active)return;const key=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setSection('task');setNavOpen(false);revealComposer()}};window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key)},[active]);
+ function revealComposer(){const panel=input.current?.closest('details');if(panel instanceof HTMLDetailsElement)panel.open=true;requestAnimationFrame(()=>input.current?.focus())}
+ function focusTask(text?:string){setSection('task');setNavOpen(false);if(text!==undefined){setDraft(text);setFresh(true)}revealComposer()}
  function send(){if(blocked||pending||!draft.trim()||(provider==='openai'&&(!consent||!s.status.cloud_configured)))return;setFresh(false);setArchive(null);void s.plan(draft.trim(),provider,consent)}
  function navigate(next:Section){setSection(next);setNavOpen(false)}
  async function readTask(id:string){const token=++archiveRequest.current;setArchive(null);setReadError('');navigate('history');try{const r=await api<ArchivedTask>(`/api/runtime/${w.id}/tasks/${id}`);if(token===archiveRequest.current)setArchive(r)}catch(e){if(token===archiveRequest.current)setReadError(errorText(e))}}
@@ -48,11 +52,11 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
   {provider==='openai'&&<label className="cs-consent"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>允许发送本次任务与完整工程参数到已配置服务，可能计费。</label>}
   <div className="cs-compose-foot"><span>{pending?'正式参数需人工批准；输入草稿继续保留。':'所有数值由工程工具计算；不以文本推测代替计算。'}</span><kbd>Ctrl K</kbd></div>
  </section>;
- return <main className="agent-workspace cs-agent" aria-label="智能工程流工作区">
+ return <main className={`agent-workspace cs-agent ${hasTask?'has-task':'is-idle'} ${pending?'has-review':''}`}  aria-label="智能工程流工作区">
   <aside className={`cs-task-rail ${navOpen?'is-open':''}`} aria-label="工程任务导航">
-   <div className="cs-rail-title"><span className="cs-project-monogram">C</span><div><b>电缆设计</b><small>智能工程流</small></div><button aria-label="关闭任务导航" className="cs-rail-close" onClick={()=>setNavOpen(false)}><X size={17}/></button></div>
+   <div className="cs-rail-title"><span className="cs-project-monogram"><EngineeringIcon name="brand" size={40}/></span><div><b>电缆设计</b><small>智能工程流</small></div><button aria-label="关闭任务导航" className="cs-rail-close" onClick={()=>setNavOpen(false)}><X size={17}/></button></div>
    <button className="cs-new-task" disabled={blocked||pending} onClick={()=>{setDraft('');setFresh(true);setArchive(null);focusTask()}}><Plus size={17}/>新任务</button>
-   <nav aria-label="工程流内容">{([['task','当前任务',Workflow],['selection','企业型号选型',Layers3],['documents','资料与参数核对',FileText],['standards','计算依据',CheckCircle2]] as const).map(([id,label,Icon])=><button key={id} className={section===id?'active':''} aria-current={section===id?'page':undefined} onClick={()=>navigate(id)}><Icon size={16}/><span>{label}</span>{id==='task'&&pending&&<i className="cs-pending-dot"/>}</button>)}</nav>
+   <nav aria-label="工程流内容">{([['task','当前任务','workflow'],['selection','企业型号选型','layers'],['documents','资料与参数核对','document'],['standards','计算依据','book']] as const).map(([id,label,Icon])=><button key={id} className={section===id?'active':''} aria-current={section===id?'page':undefined} onClick={()=>navigate(id)}><EngineeringIcon name={Icon} size={26}/><span>{label}</span>{id==='task'&&pending&&<i className="cs-pending-dot"/>}</button>)}</nav>
    <div className="cs-rail-section"><h2>最近执行记录 <span>{journal?.tasks.length??0}</span></h2>{readError&&<p className="cs-read-error" role="status">任务记录读取失败</p>}{!journal?.tasks.length&&<p className="cs-rail-empty">开始第一项研究后，执行记录会保存在这里。</p>}{journal?.tasks.slice(0,8).map(t=><button key={t.id} className={archive?.id===t.id?'selected':''} onClick={()=>void readTask(t.id)}><History size={13}/><span>{taskLabel(t)}<small>版本 {t.base_revision} · {t.status==='succeeded'?'已完成':t.status==='failed'?'失败':'执行中'}</small></span></button>)}</div>
    <div className="cs-rail-footer"><FolderOpen size={16}/><div><b title={w.scenario.name}>{w.scenario.name}</b><small>同一工程 · 版本 {w.revision}</small></div><button aria-label="Agent 服务接入" onClick={()=>openWorkbench('settings')}><Settings2 size={16}/></button></div>
   </aside>
@@ -62,8 +66,9 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
    <div className="cs-task-layout" hidden={section!=='task'}>
     <div className="cs-thread-column">
      <div className="cs-thread-scroll">
-      {!hasTask?<section className="cs-welcome"><span className="cs-eyebrow">电缆结构 / 敷设条件 / 载流量</span><h2>这次，需要解决<br/>什么电缆设计问题？</h2><p>从当前工程开始。描述目标，检查修改，再查看真实计算结果。</p>
-       <div className="cs-task-starters"><button onClick={()=>focusTask('计算载流量')}><span className="cs-starter-icon"><Thermometer size={22}/></span><b>校核载流量</b><small>当前结构与敷设条件</small><ArrowRight size={16}/></button><button onClick={()=>focusTask('比较土壤热阻率 0.8、1.2、1.6 下的载流量')}><span className="cs-starter-icon"><Workflow size={22}/></span><b>比较敷设条件</b><small>逐工况计算，不更改原方案</small><ArrowRight size={16}/></button><button onClick={()=>navigate('selection')}><span className="cs-starter-icon"><Layers3 size={22}/></span><b>从企业型号选型</b><small>限定已核对的产品版本</small><ArrowRight size={16}/></button><button onClick={()=>navigate('documents')}><span className="cs-starter-icon"><FileText size={22}/></span><b>从资料核对参数</b><small>原文、提取值与来源同屏</small><ArrowRight size={16}/></button></div>
+      <div className="engineering-task-stages" aria-label="任务阶段">{['描述任务','审查变更','复核结果'].map((label,i)=><span key={label} aria-current={taskStage===i?'step':undefined}><i>{i+1}</i>{label}</span>)}</div>
+      {!hasTask?<section className="cs-welcome"><div className="cs-welcome-illustration" aria-label="载流量研究示意"><EngineeringPlate kind="installation"/><span>直埋截面 · 结构示意</span></div><span className="cs-eyebrow">电缆结构 / 敷设条件 / 载流量</span><h2>这次，需要解决<br/>什么电缆设计问题？</h2><p>从当前工程开始。描述目标，检查修改，再查看真实计算结果。</p>
+       <div className="cs-task-starters"><button onClick={()=>focusTask('计算载流量')}><span className="cs-starter-icon"><EngineeringIcon name="cable" size={48}/></span><b>校核载流量</b><small>当前结构与敷设条件</small><ArrowRight size={16}/></button><button onClick={()=>focusTask('比较土壤热阻率 0.8、1.2、1.6 下的载流量')}><span className="cs-starter-icon"><EngineeringIcon name="workflow" size={38}/></span><b>比较敷设条件</b><small>逐工况计算，不更改原方案</small><ArrowRight size={16}/></button><button onClick={()=>navigate('selection')}><span className="cs-starter-icon"><EngineeringIcon name="copper" size={42}/></span><b>从企业型号选型</b><small>限定已核对的产品版本</small><ArrowRight size={16}/></button><button onClick={()=>navigate('documents')}><span className="cs-starter-icon"><EngineeringIcon name="book" size={40}/></span><b>从资料核对参数</b><small>原文、提取值与来源同屏</small><ArrowRight size={16}/></button></div>
       </section>:<div className="cs-thread">
        {latest&&<article className="cs-user-request"><span>本次任务</span><p>{latest}</p></article>}
        <div className="cs-tool-event"><FolderOpen size={15}/><span>当前工程上下文</span><small>版本 {w.revision} · {w.scenario.cable.area_mm2} mm² · {w.scenario.operating_current_a} A</small></div>
@@ -86,7 +91,7 @@ export default function AgentWorkspace({active,draft,setDraft,openWorkbench}:{ac
        </section>}
       </div>}
      </div>
-     {Composer}
+     {pending?<details className="pending-composer"><summary>任务输入草稿 <span>批准或拒绝后可继续</span></summary>{Composer}</details>:Composer}
     </div>
     <aside className="cs-artifacts flow-context" aria-label="任务工程依据">
      <header><span>工程附件</span><b>{pending&&!stale&&!expired?'拟用结构':'当前工程'}</b></header>

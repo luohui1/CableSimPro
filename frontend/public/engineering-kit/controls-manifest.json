@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "batch": 2,
+  "icon_size_px": 64,
+  "provenance": "Additional crops from the user-approved CableSimPro UI Kit.",
+  "purpose": "Decorative controls only; numbers, units and diagrams remain native.",
+  "sheets": {
+    "data": {
+      "filename": "065319C6-A053-4DE5-BF4F-99B4659AA36E.jpeg",
+      "sha256": "fadaaace7fa3b16431f48f1d79d82a7037a203b927ed292a647070c05932b7a6"
+    }
+  },
+  "assets": {
+    "locked": {
+      "sheet": "data",
+      "crop_px": [1074, 48, 1148, 130],
+      "decorative_only": true,
+      "file": "locked.webp",
+      "sha256": "4559605eb694091683f9d6a044bf8988b57e751585a1fe913e03b3089def7cb2"
+    },
+    "edit": {
+      "sheet": "data",
+      "crop_px": [1244, 47, 1319, 130],
+      "decorative_only": true,
+      "file": "edit.webp",
+      "sha256": "17e2fe1689c35adbf765eb2bae6e29a8f76cafa7fd3f81ae0a4d68e30bf6f96f"
+    },
+    "database": {
+      "sheet": "data",
+      "crop_px": [1332, 47, 1409, 130],
+      "decorative_only": true,
+      "file": "database.webp",
+      "sha256": "83fe30787662f1565efd855f06ff6ce7ab13d275a8ea13a4a382485905bf35b3"
+    },
+    "resistance": {
+      "sheet": "data",
+      "crop_px": [335, 59, 379, 113],
+      "decorative_only": true,
+      "file": "resistance.webp",
+      "sha256": "aa3e2bcac0809df2331c31ce33be728ed4fb88e8248ad5dacc1905e0340fbd2c"
+    },
+    "error": {
+      "sheet": "data",
+      "crop_px": [755, 171, 792, 209],
+      "decorative_only": true,
+      "file": "error.webp",
+      "sha256": "2a670e7754b76457258ee7cf65801f205556dbe5354a70574207ae77cc602c2a"
+    },
+    "lab": {
+      "sheet": "data",
+      "crop_px": [754, 437, 794, 483],
+      "decorative_only": true,
+      "file": "lab.webp",
+      "sha256": "3491f937caaf8d7ced18da65a9301c0b14ff067f7cc9021445f770f52a2f6816"
+    }
+  }
+}

@@ -1,0 +1,190 @@
+/* User-approved engineering kit: silver surfaces, electric blue, copper subjects.
+   Native controls stay native. No rasterized text, fake values, or chart screenshots. */
+.metal-studio {
+ --kit-paper:#fff; --kit-bg:#f2f4f7; --kit-silver:#e5e9ee;
+ --kit-line:#bfc8d3; --kit-ink:#242d38; --kit-muted:#536273;
+ --kit-blue:#0065cf; --kit-copper:#9b562e;
+ --kit-surface:linear-gradient(165deg,#fff 0%,#f5f7fa 48%,#e8ecf1 100%);
+ --kit-raised:inset 0 1px 0 #fff,0 2px 3px #263c5120,0 6px 13px #263c5110;
+ --studio-ink:var(--kit-ink); --studio-muted:var(--kit-muted);
+ --studio-blue:var(--kit-blue); --studio-line:var(--kit-line); --studio-surface:var(--kit-bg);
+ background:radial-gradient(ellipse at 45% 0,#fff 0%,#f4f6f8 55%,#e9edf2 100%);
+ color:var(--kit-ink);
+}
+.kit-icon{position:relative;display:inline-block;flex:none;overflow:hidden;vertical-align:middle;isolation:isolate;line-height:0;pointer-events:none}
+.kit-icon>img{position:absolute;max-width:none!important;max-height:none!important;object-fit:fill;user-select:none}
+.kit-icon>svg{width:100%;height:100%}
+.kit-brand{display:inline-flex;align-items:center;gap:10px;white-space:nowrap}
+.metal-studio .kit-brand>b{font-size:25px;letter-spacing:-.8px;color:#202630;font-weight:750}
+.metal-studio .kit-brand>b>span{color:#006aca}
+.metal-studio .kit-button{display:inline-flex;align-items:center;justify-content:center;gap:7px}
+.metal-studio .kit-button>span:not(.kit-icon){display:inline-flex;align-items:center;gap:7px}
+.metal-studio .kit-badge{display:inline-flex;align-items:center;justify-content:center;min-width:35px;padding:5px 10px;border:1px solid #c5cdd6;border-radius:13px;background:linear-gradient(#fafbfc,#e0e5eb);box-shadow:inset 0 1px 0 #fff;font-size:11px;font-weight:600;color:#394958;white-space:nowrap}
+.metal-studio .kit-badge.kit-copper{background:linear-gradient(#fff3e5,#f0c9a8);border-color:#d6a27a;color:#703d21}
+.metal-studio .kit-badge.kit-blue{background:linear-gradient(#e6f3ff,#bbdfff);border-color:#8cbfe5;color:#124d80}
+.metal-studio .kit-status{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:#246341;white-space:nowrap}
+.metal-studio .kit-status>i{width:10px;height:10px;flex:none;border-radius:50%;background:linear-gradient(#78cf96,#26834c);border:1px solid #3b965e;box-shadow:inset 0 1px 1px #fff8,0 1px 2px #0002}
+.metal-studio .kit-status.kit-warning{color:#875510}.metal-studio .kit-status.kit-warning>i{background:linear-gradient(#ffd87a,#e4a62b);border-color:#c18a1e}
+.metal-studio .kit-status.kit-danger{color:#a0342a}.metal-studio .kit-status.kit-danger>i{background:linear-gradient(#ff8e7e,#d84030);border-color:#b73225}
+.metal-studio .kit-status.kit-blue{color:#215c91}.metal-studio .kit-status.kit-blue>i{background:linear-gradient(#70bdff,#0874d9);border-color:#0969c3}
+/* Shell, toolbar, and the actual reusable brand extracted from sheet 4. */
+.metal-studio .dual-header{height:70px;min-height:70px;padding:0 23px;gap:24px;background:var(--kit-surface);border-bottom:1px solid var(--kit-line);box-shadow:0 3px 10px #273b5012;z-index:12}
+.metal-studio .dual-brand{background:transparent;border:0;box-shadow:none;gap:15px;padding:0}
+.metal-studio .dual-brand>small{font-size:11px;color:#526171;border-color:#cad1d9}
+.metal-studio .dual-header-end{color:#526171;font-size:11px}
+.metal-studio .mode-switch{background:linear-gradient(#dce3eb,#f4f6f9);padding:3px;border:1px solid #bdc8d5;border-radius:10px;box-shadow:inset 0 1px 3px #233f5f14}
+.metal-studio .mode-switch button{border-radius:7px;min-height:37px;padding:5px 15px;font-size:13px;color:#3f5062;gap:7px}
+.metal-studio .mode-switch button[aria-pressed=true]{background:linear-gradient(#2795f4,#0064ca);color:#fff;box-shadow:inset 0 1px 0 #a5d8ff,0 2px 4px #004a8e40}
+.metal-studio .dual-context{height:31px;min-height:31px;background:#f9fafc;border-color:#d6dce4;color:#4c5c6b}
+.metal-studio .dual-context-right{color:#345e4b}.metal-studio .dual-revision{border:1px solid #c8d4e2;background:linear-gradient(#eff7ff,#d1e5fa);color:#1e507f;border-radius:5px}
+.metal-studio .enterprise-shell{background:transparent}
+.metal-studio .dual-embedded .enterprise-projectbar{background:linear-gradient(#fcfdfe,#edf0f4);border-color:#cbd2dc;min-height:39px}
+.metal-studio .dual-status{background:linear-gradient(#fafbfd,#e8edf2);border-color:#c8d1dc;color:#526171}
+/* Real silver controls: typing, focus, keyboard, disabled and error states retained. */
+.metal-studio :is(.kit-button,.enterprise-page-actions>button,.enterprise-project-actions>button,.enterprise-task-options>button,.diagnosis-actions button,.diagnosis-study>button,.recent-actions button,.cs-new-task,.enterprise-footer button){
+ background:var(--kit-surface)!important;border:1px solid var(--kit-line)!important;border-radius:8px!important;box-shadow:var(--kit-raised);color:#35465a!important;min-height:34px;font-weight:600;
+}
+.metal-studio :is(.kit-button,.enterprise-page-actions>button,.enterprise-project-actions>button,.enterprise-task-options>button,.diagnosis-actions button,.recent-actions button,.cs-new-task):hover:not(:disabled){border-color:#6b9bcc!important;background:linear-gradient(#fff,#e5f1fd)!important;color:#0959a4!important}
+.metal-studio :is(button.primary,.kit-button.kit-blue,.mode-enter,.agent-choice .mode-enter,.cs-compose-toolbar .cs-send){
+ background:linear-gradient(#2698ff 0%,#0072e6 50%,#005dc2 100%)!important;border:1px solid #0067ce!important;box-shadow:inset 0 1px 0 #b4e0ff,0 2px 4px #004e9633,0 5px 10px #06549b17;color:#fff!important;border-radius:8px!important;
+}
+.metal-studio :is(button.primary,.kit-button.kit-blue,.mode-enter,.cs-compose-toolbar .cs-send):hover:not(:disabled){background:linear-gradient(#148df7,#005ab9)!important;color:#fff!important}
+.metal-studio button:disabled{box-shadow:none!important;opacity:.56;cursor:not-allowed;filter:none}
+.metal-studio button:focus-visible,.metal-studio input:focus-visible,.metal-studio select:focus-visible,.metal-studio textarea:focus-visible{outline:3px solid #2478c9!important;outline-offset:3px!important}
+.metal-studio :is(input:not([type=checkbox]):not([type=radio]):not([type=range]),select,textarea){background:linear-gradient(#fff,#fcfdff)!important;border-color:#b9c5d3!important;border-radius:6px;box-shadow:inset 0 1px 3px #1936500d;color:#202e3d!important}
+.metal-studio :is(input,textarea)::placeholder{color:#647487;opacity:1}
+.metal-studio input[type=checkbox],.metal-studio input[type=radio],.metal-studio input[type=range]{accent-color:#0576da}
+.metal-studio [aria-invalid=true],.metal-studio .property.invalid input{border-color:#b94535!important;box-shadow:inset 0 0 0 1px #b94535}
+/* The previous flat line of readouts becomes individual, data-backed instrument tiles. */
+.metal-studio .engineering-pulse{min-height:88px;gap:8px;grid-template-columns:218px repeat(7,minmax(137px,1fr)) 112px;padding:10px 14px;background:#edf0f4;border-bottom:1px solid #cbd3dd;box-shadow:inset 0 1px 0 #fff;scroll-padding-inline:14px}
+.metal-studio .engineering-pulse-state{position:relative;left:auto;padding:10px;gap:9px;border:1px solid #c7d0db;border-radius:9px;background:var(--kit-surface);box-shadow:var(--kit-raised)}
+.metal-studio .engineering-pulse-state:before{top:12px;bottom:12px;left:0;background:#1379d1}
+.metal-studio .engineering-pulse-state strong{font-size:12px;color:#273b50;line-height:1.6}
+.metal-studio .engineering-pulse-state small{font-size:10px;color:#54687b}
+.metal-studio .pulse-state-icon{background:none!important;width:29px;height:32px;box-shadow:none;border-radius:0}
+.metal-studio .engineering-pulse-metric{min-height:70px!important;grid-template-columns:32px minmax(0,1fr);gap:7px!important;padding:8px!important;border:1px solid #c0cbd6!important;border-radius:8px!important;background:var(--kit-surface)!important;box-shadow:var(--kit-raised)}
+.metal-studio .engineering-pulse-metric:hover{border-color:#75a9d9!important;background:linear-gradient(#fff,#eaf3fc)!important}
+.metal-studio .pulse-metric-icon{height:32px;width:32px;background:transparent!important;border-right:1px solid #d6dde5;border-radius:0;padding-right:3px}
+.metal-studio .engineering-pulse-metric small{font-size:10px;color:#526171}
+.metal-studio .engineering-pulse-metric b{font-size:15px;color:#26374a;font-weight:700;line-height:1.45}
+.metal-studio .engineering-pulse-metric em{font-size:10px;color:#526171;margin-top:2px}
+.metal-studio .pulse-diagnostic b{font-size:12px;color:#305365}
+.metal-studio .pulse-result b{font-size:20px;color:#005bb8;line-height:1.2}
+.metal-studio .engineering-pulse-action{min-height:70px!important;border:1px solid #80b1db!important;border-radius:8px!important;background:linear-gradient(#fafdff,#d9eafb)!important;box-shadow:var(--kit-raised);color:#155788!important;padding:8px!important}
+.metal-studio .pulse-mode-tag{display:none}
+/* Navigation subjects are the actual selected kit crops, not a new icon style. */
+.metal-studio .dual-embedded .enterprise-outline{width:205px;min-width:205px;background:linear-gradient(100deg,#f9fbfd,#e5eaf0);border-color:#c4cdd8;padding-top:13px}
+.metal-studio .outline-heading{color:#526171;font-size:11px}
+.metal-studio .outline-product{position:relative;background:var(--kit-surface);border:1px solid #c0cbd7;border-radius:9px;box-shadow:var(--kit-raised);padding:12px 10px;display:grid;grid-template-columns:38px 1fr;column-gap:8px}
+.metal-studio .outline-product>.kit-icon{grid-column:1;grid-row:1/4;align-self:center}
+.metal-studio .outline-product :is(b,span:not(.kit-icon),small){grid-column:2;min-width:0}
+.metal-studio .outline-product b{font-size:12px;color:#304355}.metal-studio .outline-product :is(small,span:not(.kit-icon)){font-size:10px;color:#526171}
+.metal-studio .enterprise-outline>nav{padding:0 10px}
+.metal-studio .enterprise-outline>nav>button{min-height:48px;margin:0 0 7px;padding:7px 10px;gap:9px;border:1px solid transparent;border-radius:8px;font-size:13px;color:#3b4d60}
+.metal-studio .enterprise-outline>nav>button.active{background:linear-gradient(#238eef,#0068cc);border-color:#0964ba;color:#fff;box-shadow:inset 0 1px 0 #a9d9ff,0 3px 6px #00509233}
+.metal-studio .enterprise-outline>nav>button.active>.kit-icon{background:#eef5fd;border:1px solid #bfdfff;border-radius:6px;padding:0}
+.metal-studio .enterprise-outline>nav>button.active>i{display:none}
+.metal-studio .enterprise-outline>nav>button:hover:not(.active){background:#fafdff;border-color:#c0cedc;box-shadow:0 1px 4px #243e5710}
+.metal-studio .dual-embedded .embedded-global-nav{padding:0 0 12px;gap:5px;margin:0 12px 13px;border-color:#cbd3dd}
+.metal-studio .dual-embedded .embedded-global-nav>button{min-height:29px;padding:5px 3px;margin:0;border:1px solid #c5cfda;background:var(--kit-surface);border-radius:5px;font-size:11px}
+.metal-studio .dual-embedded .embedded-global-nav>button.active{background:linear-gradient(#e7f2ff,#c7def6);color:#1c5385;border-color:#9cbcdc;box-shadow:inset 0 1px 0 #fff}
+.metal-studio .outline-boundary{border-color:#c9d1db;background:#f5f8fb;color:#526171}.metal-studio .outline-boundary button{color:#175f9b}
+/* Keep the model canvas and all result renderers; reskin their surrounding chrome. */
+.metal-studio .enterprise-content{background:linear-gradient(145deg,#f7f9fb,#edf1f5);padding:18px 22px 24px}
+.metal-studio .enterprise-section-heading{margin-bottom:12px}.metal-studio .enterprise-section-heading h1{color:#25354a;font-size:25px;font-weight:700}
+.metal-studio .enterprise-section-heading p{color:#526579;font-size:12px}.metal-studio .eyebrow{color:#526579}
+.metal-studio .enterprise-task-options{gap:10px;margin-bottom:12px}.metal-studio .enterprise-task-options>button{padding:9px 11px;gap:8px;min-height:43px;font-size:12px}
+.metal-studio .enterprise-model-stage,.metal-studio .enterprise-installation-stage,.metal-studio .enterprise-inspector{border:1px solid #bfcbd7;border-radius:10px;overflow:hidden;background:#fff;box-shadow:var(--kit-raised)}
+.metal-studio .viewport-tabs{min-height:43px;background:var(--kit-surface);border-bottom:1px solid #c4d0dd;padding:4px 7px;gap:4px}
+.metal-studio .viewport-tabs>button{font-size:12px;border-radius:6px;gap:5px;padding:5px 9px;color:#43576c}
+.metal-studio .viewport-tabs>button[aria-pressed=true]{background:linear-gradient(#fff,#e2edfa);color:#155e9f;border:1px solid #adbfda;box-shadow:inset 0 1px 0 #fff,0 1px 2px #1b43631a}
+.metal-studio .viewport-run-badge{font-size:10px;color:#536579}.metal-studio .viewport-note{background:#f9fbfd;color:#526579;border-color:#d1dae5}
+.metal-studio .enterprise-inspector>header{background:var(--kit-surface);border-bottom:1px solid #c7d1dd;padding:12px 13px}
+.metal-studio .enterprise-inspector>header h2{font-size:14px;color:#31465c}.metal-studio .enterprise-inspector>header span{font-size:10px;color:#526579}
+.metal-studio .enterprise-property-tabs{background:#edf1f5;padding:5px 8px;gap:3px}
+.metal-studio .enterprise-property-tabs>button.active{background:linear-gradient(#fff,#e4ecf5);border:1px solid #b9c8d9;border-radius:6px;color:#1a5e9d;box-shadow:inset 0 1px 0 #fff}
+.metal-studio .inspector-title{background:#fbfcfd;color:#30485e}.metal-studio .property{border-bottom:1px solid #e4e8ee;padding:9px 12px}
+.metal-studio .property-title label{font-size:12px;color:#3d5267}.metal-studio .property-value{border:1px solid #becbd9;border-radius:6px;overflow:visible;background:linear-gradient(#fff,#edf2f7);box-shadow:inset 0 1px 2px #223e5610}
+.metal-studio .property-value input,.metal-studio .property-value select{font-size:14px;min-height:33px;border:0!important;min-width:0}
+.metal-studio .property-value>span{color:#50667b;font-size:11px;border-left:1px solid #d2dce6;padding:6px 7px;white-space:nowrap}
+.metal-studio .enterprise-evidence-check{background:#f7f9fc;border-top:1px solid #cfd8e2}.metal-studio .enterprise-evidence-check p{font-size:11px;line-height:1.65;color:#546577}
+.metal-studio .kit-materials{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0}
+.metal-studio .kit-material{display:flex;align-items:center;gap:7px;min-width:0;padding:9px 10px;background:var(--kit-surface);border:1px solid #c3ccd6;border-radius:8px;box-shadow:var(--kit-raised)}
+.metal-studio .kit-material>span:not(.kit-icon):not(.kit-badge){display:grid;gap:3px;min-width:0}
+.metal-studio .kit-material b{font-size:12px;color:#2d4054;white-space:nowrap}.metal-studio .kit-material small{font-size:10px;color:#526579;line-height:1.5}
+.metal-studio .kit-material em{font-size:11px;font-style:normal;color:#526579}.metal-studio .kit-material>.kit-badge,.metal-studio .kit-material>small{margin-left:auto}
+.metal-studio .kit-material>small{max-width:94px;text-align:right}
+.metal-studio .enterprise-model-summary{background:linear-gradient(#f8fafc,#e6ecf3);border-color:#c5d0dd;color:#465c72;border-radius:7px;gap:16px}
+.metal-studio .enterprise-result-summary{padding:0;gap:8px;border:0;background:none;box-shadow:none;display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) auto;align-items:stretch}
+.metal-studio .enterprise-result-summary>div{padding:11px;display:flex;flex-direction:column;gap:5px;border:1px solid #bacad9;border-radius:8px;background:var(--kit-surface);box-shadow:var(--kit-raised)}
+.metal-studio .enterprise-result-summary b{font-size:25px;color:#174e87;font-weight:700}.metal-studio .enterprise-result-summary>div>span{font-size:11px;color:#526579;display:flex;align-items:center;gap:6px}
+.metal-studio .enterprise-result-summary>button{align-self:center;color:#1c619d;font-size:11px;max-width:103px;text-align:left}
+.metal-studio .inline-results{border:1px solid #bfcbd9;border-radius:8px;box-shadow:var(--kit-raised)}
+.metal-studio .inline-results>header,.metal-studio .bottom-tabs{background:var(--kit-surface);border-color:#c7d2df}
+.metal-studio .data-table th,.metal-studio .cs-diff-table th{background:linear-gradient(#fbfcfd,#e2e8ef);color:#374f66;font-size:11px;border-bottom:1px solid #bfcddc;border-right:1px solid #d0d9e3}
+.metal-studio .data-table td,.metal-studio .cs-diff-table td{font-size:12px;color:#30465b;border-bottom:1px solid #dce4ed}
+.metal-studio .data-table tbody tr:nth-child(even){background:#f6f8fb}.metal-studio .data-table tbody tr.selected{background:linear-gradient(#e1efff,#cbe2fb)}
+/* Entry and Agent use the same silver controls, without changing task semantics. */
+.metal-studio .mode-home{padding-top:29px}.metal-studio .mode-intro h1{color:#23354b}.metal-studio .mode-intro>p{color:#53677c}
+.metal-studio .mode-choice{border:1px solid #becbd8;background:var(--kit-surface);box-shadow:var(--kit-raised);border-radius:12px;padding:24px}
+.metal-studio .mode-symbol{width:43px;height:43px;background:linear-gradient(#fff,#e1e7ee);border:1px solid #bfcbd7;box-shadow:var(--kit-raised);border-radius:10px}
+.metal-studio .mode-choice h2{color:#24384e}.metal-studio .mode-choice>p{color:#52667a}
+.metal-studio .entry-asset{border-color:#becbda;background:linear-gradient(#fff,#edf2f7);box-shadow:inset 0 1px 4px #2940580d}
+.metal-studio .recent-projects article{background:var(--kit-surface);border-color:#c2cedc;box-shadow:var(--kit-raised)}
+.metal-studio .cs-task-rail{background:linear-gradient(105deg,#fafcfd,#e7edf3);border-color:#c3cfdc}
+.metal-studio .cs-project-monogram{background:none;border:0;box-shadow:none;width:40px;height:40px}
+.metal-studio .cs-task-rail nav>button{gap:8px;color:#3f5367;font-size:12px;min-height:43px}
+.metal-studio .cs-task-rail nav>button.active{background:linear-gradient(#eaf5ff,#cbdff6);border:1px solid #a9c3de;box-shadow:inset 0 1px 0 #fff;color:#174f81}
+.metal-studio .cs-task-header{background:var(--kit-surface);border-color:#c6d1de}
+.metal-studio .cs-task-header h1{color:#273d54}.metal-studio .cs-thread-column{background:#fdfefe}
+.metal-studio .cs-task-starters>button{background:var(--kit-surface);border:1px solid #c1cedd;box-shadow:var(--kit-raised);border-radius:9px}
+.metal-studio .cs-composer{border:1px solid #aebfd2;border-radius:9px;box-shadow:var(--kit-raised);background:#fff}
+.metal-studio .cs-compose-toolbar{background:linear-gradient(#fff,#f3f6fa)}
+.metal-studio .engineering-task-stages i{background:linear-gradient(#fff,#e1e7ee);border:1px solid #afbdcd;box-shadow:inset 0 1px 0 #fff,0 2px 3px #223e5715;color:#496075}
+.metal-studio .engineering-task-stages [aria-current=step] i{background:linear-gradient(#269bff,#086aca);border-color:#0871d1;color:#fff;box-shadow:inset 0 1px 0 #c4e5ff,0 2px 5px #0866b935}
+.metal-studio .cs-review,.metal-studio .cs-result{border-color:#bfccda;box-shadow:var(--kit-raised);border-radius:10px}
+/* Diagnosis tiles inherit the kit, but warnings/residuals remain real solver output. */
+.metal-studio .ampacity-diagnosis{background:#f1f4f7;border-color:#aebdce}
+.metal-studio .diagnosis-header,.metal-studio .diagnosis-actions{background:var(--kit-surface);border-color:#bac8d8}
+.metal-studio .diagnosis-kpis article,.metal-studio .diagnosis-card,.metal-studio .diagnosis-resistance,.metal-studio .diagnosis-evidence{background:var(--kit-surface);border-color:#bfccda;box-shadow:var(--kit-raised)}
+.metal-studio .diagnosis-kpis small,.metal-studio .diagnosis-card>header small,.metal-studio .diagnosis-resistance>header small,.metal-studio .diagnosis-evidence>header small{color:#526579}
+.metal-studio .loss-track,.metal-studio .resistance-track{background:linear-gradient(#bac4cf,#d8dfe6);box-shadow:inset 0 1px 2px #233d5721}
+.metal-studio .loss-track i,.metal-studio .resistance-track i{background:linear-gradient(#49adff,#0872d0);box-shadow:inset 0 1px 0 #b1ddff}
+.metal-studio .loss-row:nth-child(2) .loss-track i{background:linear-gradient(#c8d0da,#7c8997)}
+.metal-studio .loss-row:nth-child(3) .loss-track i{background:linear-gradient(#e7ad7e,#b47342)}
+.metal-studio .diagnosis-study{background:linear-gradient(#f9fcff,#e0edf9);border-color:#b2c8dd}
+@media(max-width:1380px){
+ .metal-studio .engineering-pulse{grid-template-columns:208px repeat(7,136px) 109px}
+ .metal-studio .kit-material{flex-wrap:wrap;padding:8px}.metal-studio .kit-material>small{max-width:none;font-size:9px}
+ .metal-studio .enterprise-content{padding:14px 16px}
+ .metal-studio .viewport-tabs>button{padding:4px 6px;font-size:11px}
+}
+@media(max-width:1180px){
+ .metal-studio .dual-brand>small{display:none}.metal-studio .dual-header{gap:14px;padding-inline:16px}
+ .metal-studio .engineering-pulse-state small,.metal-studio .engineering-pulse-metric em{display:none}
+ .metal-studio .kit-materials{grid-template-columns:1fr}.metal-studio .kit-material{flex-wrap:nowrap}
+ .metal-studio .kit-material>small{font-size:10px}.metal-studio .enterprise-result-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .metal-studio .enterprise-result-summary>button{grid-column:1/-1;max-width:none;justify-self:end}
+}
+@media(max-width:700px){
+ .metal-studio .dual-header{height:auto;min-height:62px;padding:7px 12px;gap:8px;flex-wrap:wrap}
+ .metal-studio .kit-brand{gap:4px}.metal-studio .kit-brand>b{font-size:20px}.metal-studio .kit-brand>.kit-icon{transform:scale(.86);margin:-3px}
+ .metal-studio .mode-switch{order:3;width:100%;display:flex}.metal-studio .mode-switch button{flex:1;justify-content:center;min-height:34px}
+ .metal-studio .dual-header-end{margin-left:auto}.metal-studio .dual-header-end>span{display:none}
+ .metal-studio .engineering-pulse{min-height:68px;padding:7px 10px;gap:7px;grid-template-columns:195px repeat(7,130px) 105px}
+ .metal-studio .engineering-pulse-state{padding:6px 8px}.metal-studio .engineering-pulse-metric,.metal-studio .engineering-pulse-action{min-height:53px!important}
+ .metal-studio .engineering-pulse-metric b{font-size:14px}.metal-studio .pulse-diagnostic b{font-size:11px}
+ .metal-studio .enterprise-content{padding:12px}.metal-studio .enterprise-section-heading h1{font-size:22px}
+ .metal-studio .enterprise-task-options{gap:6px}.metal-studio .enterprise-task-options>button{font-size:11px;padding:7px;gap:4px}
+ .metal-studio .kit-materials{grid-template-columns:1fr;margin:8px 0}
+ .metal-studio .enterprise-result-summary b{font-size:20px}.metal-studio .enterprise-result-summary>div{padding:9px 7px}
+ .metal-studio .enterprise-result-summary>div>span{font-size:10px;gap:3px}
+ .metal-studio .viewport-tabs{overflow-x:auto}.metal-studio .viewport-tabs>button{white-space:nowrap;flex-shrink:0}
+ .metal-studio .mode-home{padding:22px 16px}.metal-studio .mode-choice{padding:19px}
+ .metal-studio .cs-task-header{padding-inline:14px}
+}
+@media(prefers-reduced-motion:reduce){.metal-studio *{scroll-behavior:auto!important}}
+@media(forced-colors:active){
+ .metal-studio :is(button,input,textarea,select,.kit-badge){border:1px solid ButtonText!important;box-shadow:none!important}
+ .metal-studio button[aria-pressed=true],.metal-studio .enterprise-outline nav>button.active{outline:2px solid Highlight!important}
+}
