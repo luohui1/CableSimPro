@@ -46,6 +46,6 @@ export default function ModeSelection({choose,openProject}:{choose:(mode:WorkMod
    {error&&<p role="alert">{error}</p>}
    {recent.length?<div className="recent-projects">{recent.map(p=><article key={p.id}><FolderOpen size={23}/><div><b>{p.name}</b><small>版本 {p.revision} · {new Date(p.updated_at).toLocaleDateString('zh-CN')}</small></div><div className="recent-actions"><button disabled={locked} onClick={()=>openProject(p.id,'workbench')}>工作台</button><button disabled={locked} onClick={()=>openProject(p.id,'agent')}>工程流</button></div></article>)}</div>:<div className="mode-empty"><FolderOpen size={24}/><p>还没有保存的工程。选择一种方式，从可核对的演示参数开始。</p></div>}
   </section>
-  <footer className="mode-home-footer"><FileText size={14}/>本机研究预览 · 配图为说明性资产，计算以工程输入与方法适用范围为准。</footer>
+  <footer className="mode-home-footer"><a href="/?plugins=1">插件中心</a> · <FileText size={14}/>本机研究预览 · 配图为说明性资产，计算以工程输入与方法适用范围为准。</footer>
  </main>;
 }

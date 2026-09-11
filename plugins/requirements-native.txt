@@ -1,0 +1,7 @@
+# Optional first-party adapter environment. Not installed by browsing the market.
+# Dependency closure is recorded by CI pip freeze, not claimed fully locked here.
+cadquery==2.8.0
+gmsh==4.15.2
+meshio==5.3.5
+scikit-fem==12.0.2
+pyvista==0.49.0
