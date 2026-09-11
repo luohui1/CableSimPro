@@ -7,6 +7,8 @@ test('shared engineering pulse carries one review and result across both modes',
  await expect(pulse).toBeVisible();
  await expect(pulse.getByTestId('pulse-cable')).toContainText('240 mm²');
  await expect(pulse.getByTestId('pulse-result')).toContainText('待计算');
+ await expect(pulse.getByTestId('pulse-loss')).toContainText('待计算');
+ await expect(pulse.getByTestId('pulse-thermal')).toContainText('待计算');
  await pulse.getByRole('button',{name:'开始计算',exact:true}).click();
  const objective=page.getByLabel('描述本次工程任务',{exact:true});
  await expect(objective).toHaveValue('计算载流量');
@@ -16,6 +18,12 @@ test('shared engineering pulse carries one review and result across both modes',
  await page.getByRole('button',{name:'批准并执行',exact:true}).click();
  await expect(pulse).toContainText(/结果可复核|运行电流超过允许载流量/);
  await expect(pulse.getByTestId('pulse-result')).toContainText('A');
+ await expect(pulse.getByTestId('pulse-loss')).toContainText(/导体|屏蔽|介质/);
+ await expect(pulse.getByTestId('pulse-loss')).toContainText('线路');
+ await expect(pulse.getByTestId('pulse-thermal')).toContainText(/土壤|缆体/);
+ await expect(pulse.getByTestId('pulse-thermal')).toContainText('ΔT');
+ await expect(pulse.getByTestId('pulse-evidence')).toContainText('MV-THERMAL-0.1.0');
+ await expect(pulse.getByTestId('pulse-evidence')).toContainText(/R20 已输入|R20 估算/);
  await page.getByRole('button',{name:'专业工作台',exact:true}).click();
  await expect(page.locator('.enterprise-result-summary')).toBeVisible();
  await expect(page.getByTestId('engineering-pulse')).toContainText(/结果可复核|运行电流超过允许载流量/);

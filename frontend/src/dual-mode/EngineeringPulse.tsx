@@ -27,6 +27,25 @@ export default function EngineeringPulse({mode,openWorkbench,openAgent}:{
  const completedSweep=s.currentSweep?.points.filter(point=>point.ampacity_a!==null&&!point.error).length??0;
  const material=scenario.cable.conductor==='copper'?'Cu':'Al';
  const arrangement=scenario.installation.arrangement==='flat'?'水平直埋':'三角直埋';
+ const result=s.current;
+ const analysisState=result?(result.operating??result.rating):null;
+ const phaseIndex=result?Math.max(0,['A','B','C'].indexOf(result.summary.limiting_phase)):0;
+ const conductorLoss=analysisState?.conductor_losses_w_m.reduce((sum,value)=>sum+value,0)??0;
+ const screenLoss=analysisState?.screen_losses_w_m.reduce((sum,value)=>sum+value,0)??0;
+ const dielectricLoss=(analysisState?.dielectric_loss_w_m??0)*3;
+ const lossTotal=conductorLoss+screenLoss+dielectricLoss;
+ const lossParts=[{label:'导体',value:conductorLoss},{label:'屏蔽',value:screenLoss},{label:'介质',value:dielectricLoss}];
+ const dominantLoss=lossParts.reduce((best,item)=>item.value>best.value?item:best,lossParts[0]);
+ const dominantLossShare=lossTotal>0?dominantLoss.value/lossTotal*100:0;
+ const ambient=scenario.installation.ambient_temperature_c;
+ const conductorTemperature=analysisState?.temperatures_c[phaseIndex]??ambient;
+ const surfaceTemperature=analysisState?.surface_temperatures_c[phaseIndex]??ambient;
+ const externalRise=Math.max(0,surfaceTemperature-ambient);
+ const internalRise=Math.max(0,conductorTemperature-surfaceTemperature);
+ const thermalPath=externalRise>=internalRise?'外部土壤温升主导':'缆体径向温升主导';
+ const stateLabel=result&&analysisState===result.operating?'运行':'额定';
+ const evidenceHash=result?.input_sha256.slice(0,8);
+ const r20Basis=scenario.cable.r20_ohm_km===null?'R20 估算':'R20 已输入';
  let tone:Tone='idle',headline='准备当前工况计算',detail='模型、敷设与运行输入已保存',action='开始计算';
  let onAction=()=>openAgent('计算载流量');
  let actionDisabled=false;
@@ -54,6 +73,10 @@ export default function EngineeringPulse({mode,openWorkbench,openAgent}:{
  const StateIcon=tone==='ready'?CheckCircle2:tone==='warning'||tone==='review'?TriangleAlert:Activity;
  const resultValue=s.current?`${fmt(s.current.summary.ampacity_a)} A`:s.currentSweep?`${completedSweep} 工况`:outputStale?'待重新计算':'待计算';
  const resultDetail=s.current&&currentMargin!==null?`电流裕量 ${currentMargin>=0?'+':''}${fmt(currentMargin)} A`:s.currentSweep?'独立工况结果':outputStale?'旧输出不作为当前结论':'无当前有效结果';
+ const lossValue=result&&analysisState?`${dominantLoss.label} ${fmt(dominantLossShare,0)}%`:'待计算';
+ const lossDetail=result&&analysisState?`${stateLabel}线路 ${fmt(analysisState.circuit_loss_kw,2)} kW`:'求解后分解导体/屏蔽/介质损耗';
+ const thermalValue=result&&analysisState?thermalPath:'待计算';
+ const thermalDetail=result&&analysisState?`外部 ΔT ${fmt(externalRise,1)} / 缆体 ${fmt(internalRise,1)} °C`:'求解后比较缆体与土壤温升路径';
  return <section className={`engineering-pulse tone-${tone}`} data-testid="engineering-pulse" aria-label="共享工程状态">
   <div className="engineering-pulse-state" aria-live="polite">
    <span className="pulse-state-icon"><StateIcon size={18}/></span>
@@ -68,8 +91,14 @@ export default function EngineeringPulse({mode,openWorkbench,openAgent}:{
   <button type="button" className="engineering-pulse-metric" data-testid="pulse-operating" aria-label="打开运行条件" onClick={()=>openWorkbench('cable')}>
    <span className="pulse-metric-icon"><Thermometer size={16}/></span><span><small>运行条件</small><b>{fmt(scenario.operating_current_a,0)} A</b><em>导体限温 {fmt(scenario.cable.max_temperature_c,0)} °C</em></span>
   </button>
+  <button type="button" className="engineering-pulse-metric pulse-diagnostic" data-testid="pulse-loss" aria-label="打开损耗诊断" onClick={()=>result?openWorkbench('history'):openAgent('计算载流量')}>
+   <span className="pulse-metric-icon"><Activity size={16}/></span><span><small>损耗诊断</small><b>{lossValue}</b><em>{lossDetail}</em></span>
+  </button>
+  <button type="button" className="engineering-pulse-metric pulse-diagnostic" data-testid="pulse-thermal" aria-label="打开热路径诊断" onClick={()=>result?openWorkbench('history'):openAgent('计算载流量')}>
+   <span className="pulse-metric-icon"><Thermometer size={16}/></span><span><small>热路径诊断</small><b>{thermalValue}</b><em>{thermalDetail}</em></span>
+  </button>
   <button type="button" className="engineering-pulse-metric" data-testid="pulse-evidence" aria-label="打开参数依据" onClick={()=>openWorkbench('documents')}>
-   <span className="pulse-metric-icon"><FileText size={16}/></span><span><small>参数依据</small><b>{w.sources.length} 份资料</b><em><LockKeyhole size={11}/>{w.locks.length} 项锁定</em></span>
+   <span className="pulse-metric-icon"><FileText size={16}/></span><span><small>参数依据</small><b>{result?`${w.sources.length} 份资料 · ${result.model_version}`:`${w.sources.length} 份资料`}</b><em><LockKeyhole size={11}/>{result?`#${evidenceHash} · ${r20Basis}`:`${w.locks.length} 项锁定`}</em></span>
   </button>
   <button type="button" className="engineering-pulse-metric pulse-result" data-testid="pulse-result" aria-label={s.current||s.currentSweep?'打开当前结果':'创建载流量计算任务'} onClick={()=>s.current||s.currentSweep?openWorkbench('history'):openAgent('计算载流量')}>
    <span className="pulse-metric-icon"><CheckCircle2 size={16}/></span><span><small>当前结果</small><b>{resultValue}</b><em>{resultDetail}</em></span>
