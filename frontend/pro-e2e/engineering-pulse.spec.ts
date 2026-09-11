@@ -30,9 +30,14 @@ test('shared engineering pulse carries one review and result across both modes',
  await expect(page.getByRole('dialog',{name:'载流量工况诊断'})).toBeVisible();
  await expect(diagnosis).toContainText('损耗预算');
  await expect(diagnosis).toContainText('温升路径');
+ await expect(diagnosis).toContainText('热阻链');
+ await expect(diagnosis).toContainText('XLPE 绝缘');
+ await expect(diagnosis).toContainText('土壤自热系数');
+ await expect(diagnosis).toContainText('热平衡残差');
  await expect(diagnosis).toContainText('证据链');
  await expect(diagnosis).toContainText('MV-THERMAL-0.1.0');
  await expect(diagnosis).toContainText(/R20 来自工程输入|R20 按理想电阻率\/截面积估算/);
+ await page.screenshot({path:info.outputPath('ampacity-diagnosis-v074.png'),fullPage:true});
  await page.getByRole('button',{name:'关闭载流量诊断',exact:true}).click();
  await expect(diagnosis).toBeHidden();
  await page.getByRole('button',{name:'专业工作台',exact:true}).click();
