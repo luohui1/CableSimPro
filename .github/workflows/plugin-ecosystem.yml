@@ -1,0 +1,26 @@
+name: Plugin ecosystem evidence
+on:
+  push:
+    branches: ['feat/plugin-ecosystem-v01']
+permissions:
+  contents: read
+concurrency:
+  group: plugin-ecosystem-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive tracked source only for reproducible integration review
+        run: |
+          mkdir -p artifacts
+          git rev-parse HEAD > artifacts/source-commit.txt
+          git archive --format=zip --output=artifacts/source.zip HEAD
+          sha256sum artifacts/source.zip > artifacts/source.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-ecosystem-source
+          retention-days: 7
+          path: artifacts/
