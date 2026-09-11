@@ -24,6 +24,17 @@ test('shared engineering pulse carries one review and result across both modes',
  await expect(pulse.getByTestId('pulse-thermal')).toContainText('ΔT');
  await expect(pulse.getByTestId('pulse-evidence')).toContainText('MV-THERMAL-0.1.0');
  await expect(pulse.getByTestId('pulse-evidence')).toContainText(/R20 已输入|R20 估算/);
+ await pulse.getByTestId('pulse-loss').click();
+ const diagnosis=page.getByTestId('ampacity-diagnosis');
+ await expect(diagnosis).toBeVisible();
+ await expect(page.getByRole('dialog',{name:'载流量工况诊断'})).toBeVisible();
+ await expect(diagnosis).toContainText('损耗预算');
+ await expect(diagnosis).toContainText('温升路径');
+ await expect(diagnosis).toContainText('证据链');
+ await expect(diagnosis).toContainText('MV-THERMAL-0.1.0');
+ await expect(diagnosis).toContainText(/R20 来自工程输入|R20 按理想电阻率\/截面积估算/);
+ await page.getByRole('button',{name:'关闭载流量诊断',exact:true}).click();
+ await expect(diagnosis).toBeHidden();
  await page.getByRole('button',{name:'专业工作台',exact:true}).click();
  await expect(page.locator('.enterprise-result-summary')).toBeVisible();
  await expect(page.getByTestId('engineering-pulse')).toContainText(/结果可复核|运行电流超过允许载流量/);
