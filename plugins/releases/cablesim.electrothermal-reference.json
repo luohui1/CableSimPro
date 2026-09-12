@@ -1,0 +1,97 @@
+{
+  "schema_version": "cablesim.plugin/1",
+  "plugin_id": "cablesim.electrothermal-reference",
+  "version": "0.1.0",
+  "api_major": 1,
+  "name": "电热反馈与允许电流 · 系数损耗模型",
+  "publisher": "CableSimPro · first-party adapter",
+  "category": "analysis",
+  "runtime": "python-worker",
+  "distribution": "bundled-adapter",
+  "adapter_license": "LicenseRef-Project-Undeclared",
+  "upstream": "https://scikit-fem.readthedocs.io/; https://gmsh.info/",
+  "upstream_license": "Gmsh: GPL-2.0-or-later with upstream exception; scikit-fem: BSD-3-Clause; meshio: MIT",
+  "license_review_required": true,
+  "platforms": [
+    "linux",
+    "windows"
+  ],
+  "permissions": [
+    "project.read",
+    "study.run",
+    "artifact.write"
+  ],
+  "dependencies": [],
+  "requirements": [
+    {
+      "distribution": "gmsh",
+      "version": "4.15.2"
+    },
+    {
+      "distribution": "scikit-fem",
+      "version": "12.0.2"
+    },
+    {
+      "distribution": "meshio",
+      "version": "5.3.5"
+    }
+  ],
+  "commands": [
+    {
+      "id": "skfem.electrothermal-reference",
+      "title": "运行电热反馈研究",
+      "effect": "study",
+      "input_contract": "ElectrothermalArgs",
+      "output_contract": "cablesim.electrothermal-reference/1",
+      "ui_slot": "results"
+    }
+  ],
+  "scope": {
+    "description": "复用三相电缆与土壤19域FEM，联立R(T)、显式交流/屏蔽系数与介质热源；按最热导体节点反求允许电流，支持较大土壤域比较。",
+    "limitations": [
+      "必须提供已保存R20、温度系数及系数依据；不按截面积估计电阻。",
+      "交流附加和屏蔽损耗系数是输入，不求解电磁场、接地方式或完整IEC条款。",
+      "R(T)采用导体面积平均温度；边界全恒温、材料热导率恒定，无土壤干燥/排管/暂态。",
+      "允许电流只对应已声明参考模型；区间收敛和双域差异不证明工程精度或网格无关。"
+    ],
+    "validation": "unverified",
+    "evidence": []
+  },
+  "files": [
+    {
+      "path": "backend/plugins/electrothermal.py",
+      "sha256": "641e7c91782ad6543b4dcc46118c44cef2a2c6cb5f760f391552e55ce19bfac3",
+      "size_bytes": 14840
+    },
+    {
+      "path": "backend/plugins/electrothermal_contract.py",
+      "sha256": "2933d768a81b82439a8f10d3bd5fd83127bae17b019aafcb0e9e037e5180e866",
+      "size_bytes": 12090
+    },
+    {
+      "path": "backend/plugins/electrothermal_worker.py",
+      "sha256": "e96c68ce752e321fdc1aafadaf9a84093a128e611a25633a7e6678d05d0d2644",
+      "size_bytes": 1322
+    },
+    {
+      "path": "backend/plugins/buried.py",
+      "sha256": "063b89fd2e2a5088338b9ff91d6ad5a8040ccbce0a310037c63095616cffc817",
+      "size_bytes": 10287
+    },
+    {
+      "path": "backend/plugins/buried_contract.py",
+      "sha256": "5553ff5983658e097337590d11a560f3cdaa01f6c93afffa963572c728478e32",
+      "size_bytes": 7644
+    },
+    {
+      "path": "backend/foundation/contracts.py",
+      "sha256": "1a7b517538e7cc62fac25d3262a2627c811c6b28af2c8f58f12d7631f5dc74dd",
+      "size_bytes": 11115
+    },
+    {
+      "path": "backend/schemas.py",
+      "sha256": "1fb54ed271f1f858c7b6bdf002e99378e962cb7ba5dfe68cdae7668ef4983dbc",
+      "size_bytes": 4030
+    }
+  ]
+}

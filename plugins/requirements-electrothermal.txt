@@ -1,0 +1,5 @@
+# Optional numerical worker only. Install explicitly beside backend requirements.
+# Not a complete wheel/hash or transitive dependency lock.
+gmsh==4.15.2
+scikit-fem==12.0.2
+meshio==5.3.5

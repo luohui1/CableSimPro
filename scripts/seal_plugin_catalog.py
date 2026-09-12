@@ -12,8 +12,9 @@ import json
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend.plugins.contracts import PluginManifest, ProjectPluginLock
-from backend.plugins.arguments import ARGUMENTS
+from backend.plugins.managed_commands import COMMAND_ARGUMENTS
 from backend.plugins.buried_contract import BuriedField, BuriedSummary
+from backend.plugins.electrothermal_contract import ElectrothermalSummary
 from backend.plugins.catalog import Catalog
 
 
@@ -35,12 +36,17 @@ def main():
             if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root):
                 raise ValueError('UNSAFE_RELEASE_PATH')
             item.update(sha256=sha256(path.read_bytes()).hexdigest(), size_bytes=path.stat().st_size)
-        releases.append(PluginManifest.model_validate(data).model_dump(mode='json'))
+        sealed = PluginManifest.model_validate(data).model_dump(mode='json')
+        if manifest.plugin_id in catalog.release_paths:
+            catalog.release_paths[manifest.plugin_id].write_text(json.dumps(sealed,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+        else:
+            releases.append(sealed)
     schemas = {'manifest': PluginManifest.model_json_schema(),
                'project-lock': ProjectPluginLock.model_json_schema(),
-               'commands': {k: v.model_json_schema() for k, v in ARGUMENTS.items()},
+               'commands': {k: v.model_json_schema() for k, v in COMMAND_ARGUMENTS.items()},
                'buried-field': BuriedField.model_json_schema(),
-               'buried-summary': BuriedSummary.model_json_schema()}
+               'buried-summary': BuriedSummary.model_json_schema(),
+               'electrothermal-summary': ElectrothermalSummary.model_json_schema()}
     for name, schema in schemas.items():
         path = root / f'plugin-spec/{name}.schema.json'
         if args.write_draft:

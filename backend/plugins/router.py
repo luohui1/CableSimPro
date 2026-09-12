@@ -4,8 +4,9 @@ from fastapi import APIRouter
 from fastapi.responses import FileResponse
 from .contracts import PluginManifest, ProjectPluginLock
 from .service import InstallRequest, InstallApproval, ProjectApproval, UninstallRequest, PluginInvocation
-from .arguments import ARGUMENTS
+from .managed_commands import COMMAND_ARGUMENTS
 from .buried_contract import BuriedField, BuriedSummary
+from .electrothermal_contract import ElectrothermalSummary
 
 
 def make_router(service):
@@ -17,9 +18,10 @@ def make_router(service):
     @router.get('/spec')
     def spec():
         return {'manifest': PluginManifest.model_json_schema(), 'lock': ProjectPluginLock.model_json_schema(),
-                'commands': {k: v.model_json_schema() for k, v in ARGUMENTS.items()},
+                'commands': {k: v.model_json_schema() for k, v in COMMAND_ARGUMENTS.items()},
                 'artifacts': {'buried-field': BuriedField.model_json_schema(),
-                              'buried-summary': BuriedSummary.model_json_schema()}}
+                              'buried-summary': BuriedSummary.model_json_schema(),
+                              'electrothermal-summary': ElectrothermalSummary.model_json_schema()}}
 
     @router.post('/install-plan')
     def plan(body: InstallRequest): return service.plan(body)

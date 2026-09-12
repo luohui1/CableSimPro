@@ -23,7 +23,8 @@ from ..foundation.contracts import Contract, Digest, PayloadFile, content_hash
 from ..foundation.study import prepare_study
 from ..runtime import Invocation
 from ..workbench import stamp
-from .arguments import ARGUMENTS, SOURCE_FILES
+from .arguments import SOURCE_FILES
+from .managed_commands import COMMAND_ARGUMENTS, WORKER_ENTRIES
 from .catalog import Catalog, PluginError
 from .contracts import PluginId, ReleaseVersion, PluginPin, ProjectPluginLock, Permission
 
@@ -75,6 +76,7 @@ class PluginInvocation(ApprovalContract):
 
 
 OUTPUTS = {
+    'skfem.electrothermal-reference': {'buried.msh', 'temperature.vtu', 'thermal.json', 'field.json', 'iteration.json'},
     'skfem.buried-reference': {'buried.msh', 'temperature.vtu', 'thermal.json', 'field.json'},
     'cadquery.cable-step': {'cable.step', 'geometry.json'},
     'gmsh.cable-section': {'section.msh', 'mesh.json'},
@@ -306,8 +308,14 @@ class PluginService:
             environment = self.catalog.environment(m)
             if not environment['metadata_ready']:
                 raise PluginError('RUNTIME_MISSING', '缺少准确运行环境：' + ', '.join(environment['missing']), 409)
-            if request.command == 'skfem.buried-reference' and (state.get('design_basis') or {}).get('environment', 'buried') != 'buried':
+            if request.command in ('skfem.buried-reference', 'skfem.electrothermal-reference') and (state.get('design_basis') or {}).get('environment', 'buried') != 'buried':
                 raise PluginError('METHOD_SCOPE', '当前设计依据不是直埋工况，不能运行直埋热研究。', 409)
+            if request.command == 'skfem.electrothermal-reference':
+                from .electrothermal_contract import preflight
+                try:
+                    preflight(state['scenario'], args)
+                except ValueError as exc:
+                    raise PluginError('ELECTROTHERMAL_INPUT', '请先保存明确的20°C电阻R20并核对系数损耗研究参数；不按截面积猜测电阻。') from exc
             snapshot = dict(state, id=wid, revision=row['revision'])
             package = prepare_study(snapshot).package
             context = {'plugin': self._pin(m).model_dump(mode='json'), 'command': request.command,
@@ -365,7 +373,7 @@ class PluginService:
         try:
             # Logs are discarded here: provider credentials never reach this process,
             # and raw native tracebacks are not reflected into the browser.
-            run = subprocess.run([sys.executable, '-I', str(self.catalog.root / 'backend/plugins/worker.py')],
+            run = subprocess.run([sys.executable, '-I', str(self.catalog.root / WORKER_ENTRIES.get(context['command'], 'backend/plugins/worker.py'))],
                                  input=raw, cwd=directory, env=safe_environment(directory),
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=self.worker_timeout,
                                  check=False)
@@ -377,7 +385,10 @@ class PluginService:
         result = json.loads(response.read_text('utf-8'))
         json.dumps(result, allow_nan=False)
         names = result.pop('files')
-        if len(names) != len(set(names)) or set(names) != OUTPUTS[context['command']]:
+        expected_outputs = OUTPUTS[context['command']]
+        if context['command'] == 'skfem.electrothermal-reference' and context['arguments']['compare_domain_scale'] is not None:
+            expected_outputs = expected_outputs | {'comparison.msh','comparison.json','comparison-field.json'}
+        if len(names) != len(set(names)) or set(names) != expected_outputs:
             raise PluginError('OUTPUT_CONTRACT', '插件输出与声明不符。')
         artifacts = []
         for name in names:
@@ -412,6 +423,19 @@ class PluginService:
                     raise ValueError('FIELD_GEOMETRY_BINDING')
             except (ValueError, KeyError, TypeError):
                 raise PluginError('FIELD_CONTRACT', '直埋场工件的分域、边界、热量或温度摘要不一致。') from None
+        if context['command'] == 'skfem.electrothermal-reference':
+            from .electrothermal_contract import validate_electrothermal
+            try:
+                validate_electrothermal(json.loads((directory/'field.json').read_text('utf-8')), result['summary'], context['scenario'], context['arguments'])
+                comparison = result['summary'].get('domain_comparison')
+                if comparison is not None:
+                    other = json.loads((directory/'comparison.json').read_text('utf-8'))
+                    other_args = dict(context['arguments'], domain_scale=comparison['domain_scale'], compare_domain_scale=None)
+                    validate_electrothermal(json.loads((directory/'comparison-field.json').read_text('utf-8')), other['summary'], context['scenario'], other_args)
+                    if other['summary']['ampacity_a'] != comparison['ampacity_a']:
+                        raise ValueError('COMPARISON_CURRENT_MISMATCH')
+            except (ValueError, KeyError, TypeError):
+                raise PluginError('FIELD_CONTRACT', '电热反馈、损耗、输入、场温度或允许电流区间不一致。') from None
         result['artifacts'] = artifacts
         return result
 
@@ -439,7 +463,7 @@ class PluginService:
                     raise PluginError('UNKNOWN_COMMAND', '未注册的宿主命令。')
                 args = cap.schema.model_validate(request.arguments).model_dump(mode='json')
             else:
-                cls = ARGUMENTS.get(request.command)
+                cls = COMMAND_ARGUMENTS.get(request.command)
                 if cls is None:
                     raise PluginError('UNKNOWN_COMMAND', '不允许执行未审核入口。')
                 args = cls.model_validate(request.arguments).model_dump(mode='json')

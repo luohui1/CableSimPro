@@ -45,7 +45,8 @@ def test_dependency_closure_order_and_cycle_missing_and_versions():
 
 def test_catalog_is_inert_and_real_files_are_sealed():
     before=set(sys.modules);c=Catalog()
-    assert len(c.manifests)==17
+    assert len(c.manifests)==18
+    assert c.get('cablesim.electrothermal-reference').version=='0.1.0'
     for m in c.manifests:
         c.environment(m)
         if m.distribution=='roadmap':
@@ -63,8 +64,8 @@ def test_release_corruption_and_duplicate_rejected(tmp_path):
 
 def test_checked_in_schemas_match_runtime_contract():
     from backend.plugins.contracts import ProjectPluginLock
-    from backend.plugins.arguments import ARGUMENTS
+    from backend.plugins.managed_commands import COMMAND_ARGUMENTS
     c=Catalog()
     assert json.loads((c.root/'plugin-spec/manifest.schema.json').read_text())==PluginManifest.model_json_schema()
     assert json.loads((c.root/'plugin-spec/project-lock.schema.json').read_text())==ProjectPluginLock.model_json_schema()
-    assert json.loads((c.root/'plugin-spec/commands.schema.json').read_text())=={k:v.model_json_schema() for k,v in ARGUMENTS.items()}
+    assert json.loads((c.root/'plugin-spec/commands.schema.json').read_text())=={k:v.model_json_schema() for k,v in COMMAND_ARGUMENTS.items()}

@@ -61,5 +61,6 @@ function SectionResult({project,result}:{project:string;result:PluginExecution})
 }
 
 export default function PluginResult(props:{project:string;result:PluginExecution}){
+ if(props.result.command==='skfem.electrothermal-reference')return <BuriedResult {...props} electrothermal/>;
  return props.result.command==='skfem.buried-reference'?<BuriedResult {...props}/>:<SectionResult {...props}/>;
 }
