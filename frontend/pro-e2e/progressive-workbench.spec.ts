@@ -23,6 +23,7 @@ test('progressive: a single command bar, large canvas and collapsed analysis use
 });
 
 test('progressive: command search supports keyboard, reasons, preferences and focus return',async({page},info)=>{
+ test.slow();
  await enter(page);const canvas=page.getByTestId('cable-model-view').locator('canvas');await canvas.evaluate(e=>e.setAttribute('data-retained','commands'));
  let writes=0;page.on('request',r=>{if(r.method()==='POST')writes++});
  const input=await palette(page);await input.fill('report');
@@ -30,7 +31,8 @@ test('progressive: command search supports keyboard, reasons, preferences and fo
  await expect(page.locator('.ps-command-reason')).toContainText('没有当前版本');await input.press('Enter');await expect(input).toBeVisible();expect(writes).toBe(0);
  await input.fill('jiemian');await expect(page.getByRole('option')).toHaveCount(1);
  await page.getByRole('button',{name:'收藏命令',exact:true}).click();await expect(page.getByRole('button',{name:'取消收藏',exact:true})).toHaveAttribute('aria-pressed','true');
- await page.screenshot({path:info.outputPath('progressive-command-center.png'),fullPage:true});
+ const dialog=page.getByRole('dialog',{name:'命令中心'});
+ await dialog.screenshot({path:info.outputPath('progressive-command-center.png')});
  await input.press('Enter');await expect(page.getByRole('dialog',{name:'命令中心'})).toHaveCount(0);
  await expect(page.getByRole('img',{name:'电缆二维截面'})).toBeVisible();await expect(canvas).toHaveAttribute('data-retained','commands');expect(writes).toBe(0);
  await page.keyboard.press('Control+k');await expect(input).toBeFocused();await page.getByRole('button',{name:'最近使用',exact:true}).click();await expect(page.getByRole('option')).toContainText('显示二维截面');

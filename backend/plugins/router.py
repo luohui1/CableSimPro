@@ -7,6 +7,10 @@ from .service import InstallRequest, InstallApproval, ProjectApproval, Uninstall
 from .managed_commands import COMMAND_ARGUMENTS
 from .buried_contract import BuriedField, BuriedSummary
 from .electrothermal_contract import ElectrothermalSummary
+from .line_source_contract import LineSourceComparison
+from .line_source_extension import install_line_source_extension
+
+install_line_source_extension()
 
 
 def make_router(service):
@@ -21,7 +25,8 @@ def make_router(service):
                 'commands': {k: v.model_json_schema() for k, v in COMMAND_ARGUMENTS.items()},
                 'artifacts': {'buried-field': BuriedField.model_json_schema(),
                               'buried-summary': BuriedSummary.model_json_schema(),
-                              'electrothermal-summary': ElectrothermalSummary.model_json_schema()}}
+                              'electrothermal-summary': ElectrothermalSummary.model_json_schema(),
+                              'line-source-crosscheck': LineSourceComparison.model_json_schema()}}
 
     @router.post('/install-plan')
     def plan(body: InstallRequest): return service.plan(body)
