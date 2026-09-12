@@ -21,6 +21,7 @@ jobs:
           ref: feat/plugin-line-source-crosscheck-v01
       - name: Verify and extract reviewed payload
         run: |
+          # Exact digests bind these temporary chunks to the reviewed local source tree.
           cat .line-source-bootstrap/part* | tr -d '\r\n ' > /tmp/line-source.b64
           echo 'd2dc9ceb03afd759f3fcb004f4a8ad19cee6e61fd4fd3d95584867640028f07f  /tmp/line-source.b64' | sha256sum -c -
           base64 -d /tmp/line-source.b64 > /tmp/line-source-files.tar.gz
