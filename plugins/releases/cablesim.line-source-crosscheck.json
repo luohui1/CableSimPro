@@ -1,0 +1,93 @@
+{
+  "schema_version": "cablesim.plugin/1",
+  "plugin_id": "cablesim.line-source-crosscheck",
+  "version": "0.1.0",
+  "api_major": 1,
+  "name": "半空间线热源 · 直埋结果交叉核对",
+  "publisher": "CableSimPro · first-party adapter",
+  "category": "validation",
+  "runtime": "python-worker",
+  "distribution": "bundled-adapter",
+  "adapter_license": "LicenseRef-Project-Undeclared",
+  "upstream": "",
+  "upstream_license": "No additional third-party runtime; host Python/Pydantic only",
+  "license_review_required": false,
+  "platforms": [
+    "linux",
+    "windows",
+    "darwin"
+  ],
+  "permissions": [
+    "project.read",
+    "artifact.read",
+    "artifact.write"
+  ],
+  "dependencies": [
+    {
+      "plugin_id": "cablesim.buried-reference",
+      "version": "0.1.0"
+    }
+  ],
+  "requirements": [],
+  "commands": [
+    {
+      "id": "validation.line-source-buried",
+      "title": "核对半空间线热源解析温升",
+      "effect": "artifact",
+      "input_contract": "LineSourceArgs",
+      "output_contract": "cablesim.line-source-crosscheck/1",
+      "ui_slot": "results"
+    }
+  ],
+  "scope": {
+    "description": "自动绑定本项目当前版本最新成功的三相定功率直埋 FEM 摘要，用恒温地表半空间线热源 Green 函数和六层同心圆柱热阻独立计算导体中心温度并报告差异。",
+    "limitations": [
+      "只接受当前工程版本最新成功的 cablesim.buried-reference 工件；结果中记录准确来源任务，不比较电热反馈或允许电流。",
+      "解析模型没有 FEM 的有限侧面/底部边界，也不表示电缆有限半径的完整外场解。",
+      "差异混合了计算域截断、线源近似、网格与多边形几何误差；没有预设通过阈值。",
+      "不是试验验证、完整 IEC 60287 实现、认证或工程验收。"
+    ],
+    "validation": "contract-tests",
+    "evidence": [
+      "tests/plugins/test_line_source_contract.py",
+      "plugin-tests/test_line_source.py"
+    ]
+  },
+  "files": [
+    {
+      "path": "backend/plugins/line_source.py",
+      "sha256": "862d3278dc6f045820a0d8fa2c806fe9c99492cd68cbd1af18223e2f08625776",
+      "size_bytes": 6243
+    },
+    {
+      "path": "backend/plugins/line_source_contract.py",
+      "sha256": "248736160c53ad5c0892db29aae646b6295c1d687df4543cbdfe26d5c0eb2b8d",
+      "size_bytes": 5230
+    },
+    {
+      "path": "backend/plugins/line_source_worker.py",
+      "sha256": "0dee586f707a28f46d38ce2518a0569a07ef664347ce2096ea29377e74504403",
+      "size_bytes": 1186
+    },
+    {
+      "path": "backend/plugins/line_source_extension.py",
+      "sha256": "bfc7494c02e135cc4f796303cfefc0c76a40493cb7d563787b3c21f0017e3dba",
+      "size_bytes": 4830
+    },
+    {
+      "path": "backend/plugins/buried_contract.py",
+      "sha256": "5553ff5983658e097337590d11a560f3cdaa01f6c93afffa963572c728478e32",
+      "size_bytes": 7644
+    },
+    {
+      "path": "backend/foundation/contracts.py",
+      "sha256": "1a7b517538e7cc62fac25d3262a2627c811c6b28af2c8f58f12d7631f5dc74dd",
+      "size_bytes": 11115
+    },
+    {
+      "path": "backend/schemas.py",
+      "sha256": "1fb54ed271f1f858c7b6bdf002e99378e962cb7ba5dfe68cdae7668ef4983dbc",
+      "size_bytes": 4030
+    }
+  ]
+}

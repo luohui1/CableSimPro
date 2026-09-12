@@ -15,6 +15,7 @@ from backend.plugins.contracts import PluginManifest, ProjectPluginLock
 from backend.plugins.managed_commands import COMMAND_ARGUMENTS
 from backend.plugins.buried_contract import BuriedField, BuriedSummary
 from backend.plugins.electrothermal_contract import ElectrothermalSummary
+from backend.plugins.line_source_contract import LineSourceComparison
 from backend.plugins.catalog import Catalog
 
 
@@ -46,7 +47,8 @@ def main():
                'commands': {k: v.model_json_schema() for k, v in COMMAND_ARGUMENTS.items()},
                'buried-field': BuriedField.model_json_schema(),
                'buried-summary': BuriedSummary.model_json_schema(),
-               'electrothermal-summary': ElectrothermalSummary.model_json_schema()}
+               'electrothermal-summary': ElectrothermalSummary.model_json_schema(),
+               'line-source-crosscheck': LineSourceComparison.model_json_schema()}
     for name, schema in schemas.items():
         path = root / f'plugin-spec/{name}.schema.json'
         if args.write_draft:

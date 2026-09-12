@@ -1,5 +1,6 @@
 import './plugin-workspace-layout.css';
 import BuriedResult from './BuriedResult';
+import LineSourceResult from './LineSourceResult';
 import {useEffect,useRef,useState} from 'react';
 
 export interface PluginExecution {
@@ -61,6 +62,7 @@ function SectionResult({project,result}:{project:string;result:PluginExecution})
 }
 
 export default function PluginResult(props:{project:string;result:PluginExecution}){
+ if(props.result.command==='validation.line-source-buried')return <LineSourceResult {...props}/>;
  if(props.result.command==='skfem.electrothermal-reference')return <BuriedResult {...props} electrothermal/>;
  return props.result.command==='skfem.buried-reference'?<BuriedResult {...props}/>:<SectionResult {...props}/>;
 }

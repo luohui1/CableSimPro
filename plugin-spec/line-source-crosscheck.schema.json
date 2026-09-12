@@ -1,0 +1,343 @@
+{
+  "$defs": {
+    "PhaseComparison": {
+      "additionalProperties": false,
+      "properties": {
+        "phase": {
+          "enum": [
+            "A",
+            "B",
+            "C"
+          ],
+          "title": "Phase",
+          "type": "string"
+        },
+        "source_power_w_m": {
+          "minimum": 0,
+          "title": "Source Power W M",
+          "type": "number"
+        },
+        "fem_peak_temperature_c": {
+          "title": "Fem Peak Temperature C",
+          "type": "number"
+        },
+        "half_space_center_temperature_c": {
+          "title": "Half Space Center Temperature C",
+          "type": "number"
+        },
+        "difference_fem_minus_half_space_k": {
+          "title": "Difference Fem Minus Half Space K",
+          "type": "number"
+        },
+        "relative_rise_difference_percent": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Relative Rise Difference Percent"
+        }
+      },
+      "required": [
+        "phase",
+        "source_power_w_m",
+        "fem_peak_temperature_c",
+        "half_space_center_temperature_c",
+        "difference_fem_minus_half_space_k",
+        "relative_rise_difference_percent"
+      ],
+      "title": "PhaseComparison",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "cablesim.line-source-crosscheck/1",
+      "default": "cablesim.line-source-crosscheck/1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "method": {
+      "const": "Dirichlet half-space line sources + concentric radial cable resistance",
+      "default": "Dirichlet half-space line sources + concentric radial cable resistance",
+      "title": "Method",
+      "type": "string"
+    },
+    "source_job_id": {
+      "pattern": "^[0-9a-f-]{36}$",
+      "title": "Source Job Id",
+      "type": "string"
+    },
+    "source_plugin_id": {
+      "const": "cablesim.buried-reference",
+      "title": "Source Plugin Id",
+      "type": "string"
+    },
+    "source_plugin_version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Source Plugin Version",
+      "type": "string"
+    },
+    "source_release_sha256": {
+      "pattern": "^[a-f0-9]{64}$",
+      "title": "Source Release Sha256",
+      "type": "string"
+    },
+    "source_project_revision": {
+      "minimum": 1,
+      "title": "Source Project Revision",
+      "type": "integer"
+    },
+    "source_model": {
+      "const": "three-cable fixed-power P1 FEM",
+      "default": "three-cable fixed-power P1 FEM",
+      "title": "Source Model",
+      "type": "string"
+    },
+    "analytical_geometry": {
+      "const": "semi-infinite homogeneous soil; isothermal ground; line-source cables",
+      "default": "semi-infinite homogeneous soil; isothermal ground; line-source cables",
+      "title": "Analytical Geometry",
+      "type": "string"
+    },
+    "finite_element_boundary": {
+      "const": "ambient temperature on ground, sides and bottom",
+      "title": "Finite Element Boundary",
+      "type": "string"
+    },
+    "ambient_temperature_c": {
+      "title": "Ambient Temperature C",
+      "type": "number"
+    },
+    "soil_k_w_m_k": {
+      "exclusiveMinimum": 0,
+      "title": "Soil K W M K",
+      "type": "number"
+    },
+    "conductor_to_jacket_surface_k_m_w": {
+      "exclusiveMinimum": 0,
+      "title": "Conductor To Jacket Surface K M W",
+      "type": "number"
+    },
+    "soil_resistance_matrix_k_m_w": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "maxItems": 3,
+          "minItems": 3,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        }
+      ],
+      "title": "Soil Resistance Matrix K M W",
+      "type": "array"
+    },
+    "cable_centers_m": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        },
+        {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "type": "array"
+        }
+      ],
+      "title": "Cable Centers M",
+      "type": "array"
+    },
+    "cable_outer_radius_m": {
+      "exclusiveMinimum": 0,
+      "title": "Cable Outer Radius M",
+      "type": "number"
+    },
+    "phases": {
+      "maxItems": 3,
+      "minItems": 3,
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/PhaseComparison"
+        },
+        {
+          "$ref": "#/$defs/PhaseComparison"
+        },
+        {
+          "$ref": "#/$defs/PhaseComparison"
+        }
+      ],
+      "title": "Phases",
+      "type": "array"
+    },
+    "maximum_absolute_difference_k": {
+      "minimum": 0,
+      "title": "Maximum Absolute Difference K",
+      "type": "number"
+    },
+    "rms_difference_k": {
+      "minimum": 0,
+      "title": "Rms Difference K",
+      "type": "number"
+    },
+    "domain_scale": {
+      "enum": [
+        4,
+        8,
+        16
+      ],
+      "title": "Domain Scale",
+      "type": "integer"
+    },
+    "resolution": {
+      "enum": [
+        16,
+        24,
+        32
+      ],
+      "title": "Resolution",
+      "type": "integer"
+    },
+    "finite_domain_half_width_m": {
+      "exclusiveMinimum": 0,
+      "title": "Finite Domain Half Width M",
+      "type": "number"
+    },
+    "finite_domain_bottom_depth_m": {
+      "exclusiveMinimum": 0,
+      "title": "Finite Domain Bottom Depth M",
+      "type": "number"
+    },
+    "independent_equation_family": {
+      "const": true,
+      "default": true,
+      "title": "Independent Equation Family",
+      "type": "boolean"
+    },
+    "experimental_validation": {
+      "const": false,
+      "default": false,
+      "title": "Experimental Validation",
+      "type": "boolean"
+    },
+    "infinite_domain_accuracy_certified": {
+      "const": false,
+      "default": false,
+      "title": "Infinite Domain Accuracy Certified",
+      "type": "boolean"
+    },
+    "mesh_independence_certified": {
+      "const": false,
+      "default": false,
+      "title": "Mesh Independence Certified",
+      "type": "boolean"
+    },
+    "engineering_acceptance": {
+      "const": false,
+      "default": false,
+      "title": "Engineering Acceptance",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "source_job_id",
+    "source_plugin_id",
+    "source_plugin_version",
+    "source_release_sha256",
+    "source_project_revision",
+    "finite_element_boundary",
+    "ambient_temperature_c",
+    "soil_k_w_m_k",
+    "conductor_to_jacket_surface_k_m_w",
+    "soil_resistance_matrix_k_m_w",
+    "cable_centers_m",
+    "cable_outer_radius_m",
+    "phases",
+    "maximum_absolute_difference_k",
+    "rms_difference_k",
+    "domain_scale",
+    "resolution",
+    "finite_domain_half_width_m",
+    "finite_domain_bottom_depth_m"
+  ],
+  "title": "LineSourceComparison",
+  "type": "object"
+}
