@@ -58,3 +58,13 @@ argument invalidation, keyboard isolation, accessibility and 390px layout.
 Local environment permits only pure contract checks and source inspection. Full
 application, build and native numerical claims must cite the exact Actions commit,
 JUnit and actual screenshots. Added tests do not replace the old full UI matrix.
+
+## Follow-on increment
+
+The same branch now adds the 19-domain cable/soil **fixed-power** reference and a
+verified Windows CAD dependency combination. Existing native adapters move to0.1.2
+because their shared command/worker payload changed. The new independent study is
+`cablesim.buried-reference@0.1.0`. See `BURIED_REFERENCE.md` for the exact boundary
+conditions and unresolved ampacity work; see `CAD_RUNTIME_COMPATIBILITY.md` for
+controlled dependency probes and clean-exit regression. No old scope is silently
+expanded into a complete IEC or electrothermal implementation.

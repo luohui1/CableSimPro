@@ -35,17 +35,17 @@ def test_unverified_and_roadmap_do_not_claim_validated_installation():
 
 
 def test_dependency_closure_order_and_cycle_missing_and_versions():
-    c=Catalog();roots=(Dependency(plugin_id='cablesim.pyvista',version='0.1.1'),)
+    c=Catalog();roots=(Dependency(plugin_id='cablesim.pyvista',version='0.1.2'),)
     assert [m.plugin_id for m in resolve_plugins(roots,c.manifests)]==['cablesim.gmsh','cablesim.meshio','cablesim.thermal2d','cablesim.pyvista']
     a=raw();b=copy.deepcopy(a);a['plugin_id']='test.one';b['plugin_id']='test.two'
-    a['dependencies']=[{'plugin_id':'test.two','version':'0.1.1'}];b['dependencies']=[{'plugin_id':'test.one','version':'0.1.1'}]
-    with pytest.raises(ValueError,match='CYCLE'):resolve_plugins((Dependency(plugin_id='test.one',version='0.1.1'),),tuple(PluginManifest.model_validate(m) for m in [a,b]))
+    a['dependencies']=[{'plugin_id':'test.two','version':'0.1.2'}];b['dependencies']=[{'plugin_id':'test.one','version':'0.1.2'}]
+    with pytest.raises(ValueError,match='CYCLE'):resolve_plugins((Dependency(plugin_id='test.one',version='0.1.2'),),tuple(PluginManifest.model_validate(m) for m in [a,b]))
     with pytest.raises(ValueError,match='MISSING'):resolve_plugins((Dependency(plugin_id='test.missing',version='1.0.0'),),c.manifests)
 
 
 def test_catalog_is_inert_and_real_files_are_sealed():
     before=set(sys.modules);c=Catalog()
-    assert len(c.manifests)==16
+    assert len(c.manifests)==17
     for m in c.manifests:
         c.environment(m)
         if m.distribution=='roadmap':

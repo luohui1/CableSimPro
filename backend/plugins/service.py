@@ -75,6 +75,7 @@ class PluginInvocation(ApprovalContract):
 
 
 OUTPUTS = {
+    'skfem.buried-reference': {'buried.msh', 'temperature.vtu', 'thermal.json', 'field.json'},
     'cadquery.cable-step': {'cable.step', 'geometry.json'},
     'gmsh.cable-section': {'section.msh', 'mesh.json'},
     'meshio.to-vtu': {'section.vtu'},
@@ -305,6 +306,8 @@ class PluginService:
             environment = self.catalog.environment(m)
             if not environment['metadata_ready']:
                 raise PluginError('RUNTIME_MISSING', '缺少准确运行环境：' + ', '.join(environment['missing']), 409)
+            if request.command == 'skfem.buried-reference' and (state.get('design_basis') or {}).get('environment', 'buried') != 'buried':
+                raise PluginError('METHOD_SCOPE', '当前设计依据不是直埋工况，不能运行直埋热研究。', 409)
             snapshot = dict(state, id=wid, revision=row['revision'])
             package = prepare_study(snapshot).package
             context = {'plugin': self._pin(m).model_dump(mode='json'), 'command': request.command,
@@ -389,6 +392,26 @@ class PluginService:
                 validate_thermal_projection(json.loads((directory/'field.json').read_text('utf-8')), result['summary'])
             except (ValueError, KeyError, TypeError):
                 raise PluginError('FIELD_CONTRACT', '温度场的网格、单位、节点数量或摘要不一致。') from None
+        if context['command'] == 'skfem.buried-reference':
+            from .buried_contract import validate_buried_projection
+            try:
+                field = validate_buried_projection(json.loads((directory/'field.json').read_text('utf-8')), result['summary'])
+                expected = context['arguments']
+                saved = context['scenario']['installation']
+                summary = result['summary']
+                if (summary['source_powers_w_m'] != expected['conductor_powers_w_m'] or
+                    summary['domain_scale'] != expected['domain_scale'] or
+                    summary['resolution'] != expected['resolution'] or
+                    summary['ambient_temperature_c'] != saved['ambient_temperature_c'] or
+                    abs(summary['soil_k_w_m_k']-1/saved['soil_rho_k_m_w']) > 1e-12):
+                    raise ValueError('FIELD_INPUT_BINDING')
+                from ..schemas import Scenario
+                original = Scenario.model_validate(context['scenario'])
+                if (field.cable_centers_m != tuple(tuple(p) for p in original.installation.positions_m()) or
+                    abs(field.cable_outer_radius_m-original.cable.radii_mm()[-1]/1000) > 1e-12):
+                    raise ValueError('FIELD_GEOMETRY_BINDING')
+            except (ValueError, KeyError, TypeError):
+                raise PluginError('FIELD_CONTRACT', '直埋场工件的分域、边界、热量或温度摘要不一致。') from None
         result['artifacts'] = artifacts
         return result
 

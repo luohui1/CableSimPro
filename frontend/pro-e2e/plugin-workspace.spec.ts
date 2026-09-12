@@ -12,7 +12,7 @@ async function open(page:Page){
  const dialog=page.getByRole('dialog',{name:'当前工程插件中心'});await expect(dialog).toBeVisible();return dialog;
 }
 async function install(request:APIRequestContext,w:any){
- const r=await request.post('/api/plugins/install-plan',{data:{plugin_id:'cablesim.thermal2d',version:'0.1.1'}});expect(r.ok()).toBe(true);const p=await r.json();
+ const r=await request.post('/api/plugins/install-plan',{data:{plugin_id:'cablesim.thermal2d',version:'0.1.2'}});expect(r.ok()).toBe(true);const p=await r.json();
  const installed=await request.post('/api/plugins/install',{data:{plugin_id:p.plugin_id,version:p.version,state_revision:p.state_revision,plan_sha256:p.plan_sha256,approved:true,license_acknowledged:true,grants:Object.fromEntries(p.plugins.map((i:any)=>[i.plugin_id,i.permissions]))}});expect(installed.ok()).toBe(true);
  const lock=await (await request.get(`/api/plugins/workspaces/${w.id}/lock`)).json();
  const enabled=await request.post(`/api/plugins/workspaces/${w.id}/enable`,{data:{plugin_id:'cablesim.thermal2d',expected_revision:w.revision,lock_revision:lock.lock.lock_revision,enabled:true,approved:true}});expect(enabled.ok()).toBe(true);
@@ -80,4 +80,28 @@ test('mobile project plugin dialog remains within viewport',async({page},info)=>
  const box=await dialog.boundingBox();expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.x+box!.width).toBeLessThanOrEqual(391);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath('project-plugin-mobile.png')});await page.keyboard.press('Escape');await expect(dialog).toBeHidden();
+});
+
+test('buried study uses three real cables and soil, with a read-only full-domain view',async({page,request},info)=>{
+ const w=await (await request.post('/api/workspaces',{data:{}})).json();
+ const p=await (await request.post('/api/plugins/install-plan',{data:{plugin_id:'cablesim.buried-reference',version:'0.1.0'}})).json();
+ const installed=await request.post('/api/plugins/install',{data:{plugin_id:p.plugin_id,version:p.version,state_revision:p.state_revision,plan_sha256:p.plan_sha256,approved:true,license_acknowledged:true,grants:Object.fromEntries(p.plugins.map((i:any)=>[i.plugin_id,i.permissions]))}});expect(installed.ok()).toBe(true);
+ const lock=await (await request.get(`/api/plugins/workspaces/${w.id}/lock`)).json();
+ expect((await request.post(`/api/plugins/workspaces/${w.id}/enable`,{data:{plugin_id:p.plugin_id,expected_revision:1,lock_revision:lock.lock.lock_revision,enabled:true,approved:true}})).ok()).toBe(true);
+ await enter(page,w.id);const dialog=await open(page);await dialog.getByTestId('cablesim.buried-reference').click();await dialog.locator('.plugin-run>summary').click();
+ for(const [label,value] of [['每相导体发热功率 W/m','20'],['导体热导率 W/(m·K)','380'],['金属屏蔽热导率 W/(m·K)','380']])await dialog.getByLabel(label,{exact:true}).fill(value);
+ await dialog.getByLabel('土壤计算域尺度',{exact:true}).selectOption('8');
+ const response=page.waitForResponse(r=>r.url().endsWith('/invoke')&&r.url().includes('/api/plugins/'));
+ await dialog.getByRole('button',{name:'执行：运行电缆与土壤热研究',exact:true}).click();
+ const result=await (await response).json();expect(result.status).toBe('succeeded');expect(result.result.summary.ampacity_a).toBeNull();
+ const panel=dialog.getByRole('region',{name:'直埋热研究结果'}),field=panel.getByRole('img',{name:'三相电缆与土壤有限元温度场'});
+ await expect(field).toBeVisible();await expect(panel).toContainText(result.result.summary.conductor_max_temperatures_c[1].toFixed(3));
+ const posts:string[]=[];page.on('request',r=>{if(r.method()==='POST')posts.push(r.url())});
+ await field.scrollIntoViewIfNeeded();await field.screenshot({path:info.outputPath('buried-cable-neighborhood.png')});await page.screenshot({path:info.outputPath('buried-project-result.png')});
+ await panel.getByRole('button',{name:'查看完整土壤域',exact:true}).click();await expect(panel).toContainText('完整土壤计算域');
+ await field.screenshot({path:info.outputPath('buried-full-soil-domain.png')});expect(posts).toEqual([]);
+ await info.attach('buried-run.json',{body:JSON.stringify(result),contentType:'application/json'});
+ const after=await (await request.get(`/api/workspaces/${w.id}`)).json();expect(after.scenario).toEqual(w.scenario);expect(after.revision).toBe(1);expect(after.runs).toEqual([]);
+ const accessibility=await new AxeBuilder({page}).include('.project-plugin-dialog').withTags(['wcag2a','wcag2aa']).analyze();expect(accessibility.violations).toEqual([]);
+ await dialog.getByLabel('土壤计算域尺度',{exact:true}).selectOption('16');await expect(panel).toBeHidden();
 });

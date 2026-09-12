@@ -18,6 +18,7 @@ jobs:
           python-version: '3.11'
       - run: pip install -r backend/requirements-dev.txt
       - run: python scripts/plugin_sdk.py verify
+      - run: python scripts/seal_plugin_catalog.py
       - run: python -m pytest --junitxml=artifacts/host-tests.xml
       - if: always()
         run: |
@@ -45,7 +46,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libglu1-mesa libgl1
       - run: pip install -r backend/requirements-dev.txt -r plugins/requirements-native.txt
       - run: python scripts/plugin_sdk.py verify
-      - run: python -m pytest plugin-tests/test_native.py -v --junitxml=artifacts/native-tests.xml
+      - run: python scripts/seal_plugin_catalog.py
+      - run: python -m pytest plugin-tests/test_native.py plugin-tests/test_cad_runtime.py plugin-tests/test_buried.py -v --junitxml=artifacts/native-tests.xml
       - if: always()
         shell: bash
         run: |

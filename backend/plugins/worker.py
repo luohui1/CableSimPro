@@ -10,7 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import importlib.metadata
 import json
 from backend.plugins.arguments import ARGUMENTS
-from backend.plugins.adapters import HANDLERS
+from backend.plugins.adapters import HANDLERS as REFERENCE_HANDLERS
+from backend.plugins.buried import buried_reference
+HANDLERS = dict(REFERENCE_HANDLERS, **{'skfem.buried-reference': buried_reference})
 from backend.foundation.contracts import CircularRecipe
 from backend.schemas import Scenario
 

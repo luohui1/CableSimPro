@@ -15,7 +15,7 @@ def client(tmp_path):
 def project(c):return c.post('/api/workspaces',json={}).json()
 
 def plan(c,p='cablesim.gmsh'):
-    r=c.post('/api/plugins/install-plan',json={'plugin_id':p,'version':'0.1.1'});assert r.status_code==200,r.text;return r.json()
+    r=c.post('/api/plugins/install-plan',json={'plugin_id':p,'version':'0.1.2'});assert r.status_code==200,r.text;return r.json()
 
 def approval(p):return {k:p[k] for k in ('plugin_id','version','state_revision','plan_sha256')}|{'approved':True,'license_acknowledged':True,'grants':{m['plugin_id']:m['permissions'] for m in p['plugins']}}
 
@@ -35,7 +35,7 @@ def test_browse_and_plan_have_no_side_effects(client):
     with s.db() as db:before=db.total_changes
     baseline=client.get(f'/api/workspaces/{w["id"]}').json()
     a=client.get('/api/plugins/catalog').json();plan(client)
-    assert len(a['items'])==16 and a['security']['remote_installation'] is False
+    assert len(a['items'])==17 and a['security']['remote_installation'] is False
     assert client.get('/api/plugins/catalog').json()['state_revision']==0
     assert client.get(f'/api/workspaces/{w["id"]}').json()==baseline
     with s.db() as db:
@@ -65,7 +65,7 @@ def test_plan_cas_and_exact_closure(client):
 
 def test_roadmap_unknown_and_origin_rejected(client):
     for p in ['cablesim.dolfinx','cablesim.missing']:
-        assert client.post('/api/plugins/install-plan',json={'plugin_id':p,'version':'0.1.1'}).status_code in (404,409)
+        assert client.post('/api/plugins/install-plan',json={'plugin_id':p,'version':'0.1.2'}).status_code in (404,409)
     assert client.post('/api/plugins/install-plan',json={},headers={'origin':'https://attacker.invalid'}).status_code==403
 
 

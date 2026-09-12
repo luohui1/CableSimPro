@@ -3,6 +3,7 @@ from typing import Literal
 from uuid import UUID
 from pydantic import Field
 from ..schemas import StrictModel
+from .buried_contract import BuriedArgs
 
 
 class CadArgs(StrictModel):
@@ -25,6 +26,7 @@ class ThermalArgs(SourceArgs):
 
 
 ARGUMENTS = {
+    'skfem.buried-reference': BuriedArgs,
     'cadquery.cable-step': CadArgs,
     'gmsh.cable-section': MeshArgs,
     'meshio.to-vtu': SourceArgs,

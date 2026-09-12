@@ -28,11 +28,12 @@ export default function PluginCenter({context,onBack,onBusyChange}:{context?:Pro
  const [plan,setPlan]=useState<Plan|null>(null),[consent,setConsent]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
  const [lock,setLock]=useState<Lock|null>(null),[jobs,setJobs]=useState<Job[]>([]),[source,setSource]=useState('');
  const [heat,setHeat]=useState(''),[surface,setSurface]=useState(''),[metalK,setMetalK]=useState(''),[conductorK,setConductorK]=useState('');
+ const [domainScale,setDomainScale]=useState('8');
  const [result,setResult]=useState<PluginExecution|null>(null);
  const liveContext=useRef(context);liveContext.current=context;
  useEffect(()=>{onBusyChange?.(busy)},[busy,onBusyChange]);
  useEffect(()=>{if(context)setProject(context.id);setResult(null)},[context?.id,context?.revision,context?.blocked]);
- useEffect(()=>{setResult(null)},[heat,surface,metalK,conductorK,source]);
+ useEffect(()=>{setResult(null)},[heat,surface,metalK,conductorK,source,domainScale]);
  useEffect(()=>{let live=true;Promise.all([request<Catalog>('/api/plugins/catalog'),request<Project[]>('/api/workspaces')]).then(([c,p])=>{if(live){setCatalog(c);setProjects(p)}}).catch(e=>{if(live)setError(String(e.message))});return()=>{live=false}},[]);
  useEffect(()=>{setPlan(null);setConsent(false);setSource('');setResult(null)},[selected]);
  useEffect(()=>{let live=true;setLock(null);setJobs([]);setSource('');setPlan(null);setResult(null);if(project)Promise.all([request<Lock>(`/api/plugins/workspaces/${project}/lock`),request<{items:Job[]}>(`/api/plugins/workspaces/${project}/jobs`)]).then(([l,j])=>{if(live){setLock(l);setJobs(j.items)}}).catch(e=>{if(live)setError(e.message)});return()=>{live=false}},[project,context?.revision]);
@@ -46,14 +47,15 @@ export default function PluginCenter({context,onBack,onBusyChange}:{context?:Pro
  const needsSource=!!command&&['meshio.to-vtu','skfem.radial-thermal','pyvista.field-summary'].includes(command.id);
  const producer=command?.id==='pyvista.field-summary'?'skfem.radial-thermal':'gmsh.cable-section';
  const sources=jobs.filter(j=>j.command===producer&&j.status==='succeeded');
- const thermal=command?.id==='skfem.radial-thermal';
- const numbersValid=[heat,surface,metalK,conductorK].every(x=>x.trim()!==''&&Number.isFinite(Number(x)))&&Number(heat)>0&&Number(heat)<=1000&&Number(surface)>=-20&&Number(surface)<=110&&Number(metalK)>1&&Number(metalK)<=500&&Number(conductorK)>1&&Number(conductorK)<=500;
+ const thermal=command?.id==='skfem.radial-thermal',buried=command?.id==='skfem.buried-reference';
+ const numbersValid=(buried?[heat,metalK,conductorK]:[heat,surface,metalK,conductorK]).every(x=>x.trim()!==''&&Number.isFinite(Number(x)))&&Number(heat)>=(buried?0:Number.MIN_VALUE)&&Number(heat)<=1000&&(buried||(Number(surface)>=-20&&Number(surface)<=110))&&Number(metalK)>1&&Number(metalK)<=500&&Number(conductorK)>1&&Number(conductorK)<=500;
  function status(e:Entry){return e.status==='roadmap'?'规划中':e.status==='host-builtin'?'内建能力':e.status==='integrity-error'?'完整性异常':e.installed?(e.runtime.metadata_ready?'已安装 · 待运行验证':'已安装 · 缺运行环境'):'可登记安装'}
  async function execute(){if(!m||!command||!lock||context?.blocked)return;setResult(null);const revision=lock.lock.project_revision,projectId=project;const arguments_:Record<string,unknown>={};
   if(command.id==='cadquery.cable-step')arguments_.preview_length_m=.25;
   if(command.id==='gmsh.cable-section')arguments_.resolution=16;
   if(needsSource)arguments_.source_job_id=source;
   if(thermal)Object.assign(arguments_,{heat_w_m:Number(heat),surface_temperature_c:Number(surface),conductor_k_w_m_k:Number(conductorK),metal_screen_k_w_m_k:Number(metalK)});
+  if(buried)Object.assign(arguments_,{conductor_powers_w_m:[Number(heat),Number(heat),Number(heat)],conductor_k_w_m_k:Number(conductorK),metal_screen_k_w_m_k:Number(metalK),domain_scale:Number(domainScale),resolution:16});
   const r=await request<PluginExecution>(`/api/plugins/workspaces/${project}/invoke`,{plugin_id:m.plugin_id,command:command.id,request_id:crypto.randomUUID(),expected_revision:lock.lock.project_revision,lock_sha256:lock.lock_sha256,arguments:arguments_,confirmed:true});if(!liveContext.current||(liveContext.current.id===projectId&&liveContext.current.revision===revision&&!liveContext.current.blocked))setResult(r);await refresh();
  }
  return <main className="plugin-center">
@@ -80,10 +82,12 @@ export default function PluginCenter({context,onBack,onBusyChange}:{context?:Pro
    </div>}
    {plan&&<section className="plugin-plan" aria-label="安装审查"><h3>确认依赖与权限</h3>{plan.plugins.map(p=><p key={p.plugin_id}><b>{p.plugin_id}</b> @ {p.version}<br/>{p.permissions.map(x=>permissionLabels[x]).join('、')}</p>)}<p>本次只登记随源码提供的适配器，不下载上游包，不修改工程。</p>{plan.license_review_required&&<p>包含许可审查项：进程分离不免除上游许可证义务。</p>}<label><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>我已核对以上权限、依赖和许可限制</label><button className="plugin-primary" disabled={busy||!consent} onClick={()=>void act(async()=>{await request('/api/plugins/install',{plugin_id:plan.plugin_id,version:plan.version,plan_sha256:plan.plan_sha256,state_revision:plan.state_revision,approved:true,license_acknowledged:consent,grants:Object.fromEntries(plan.plugins.map(p=>[p.plugin_id,p.permissions]))});setPlan(null);await refresh()})}><Check size={16}/>确认登记安装</button></section>}
    {m.distribution==='bundled-adapter'&&<section><h3>运行环境</h3>{item.runtime.missing.length?<><p>尚不能运行。请在独立测试环境准备以下准确版本，勿覆盖生产环境：</p><code>{item.runtime.missing.join('\n')}</code></>:<p>包版本已匹配；原生导入与实际执行仍须通过任务验证。</p>}</section>}
-   {m.distribution==='bundled-adapter'&&<details className="plugin-run"><summary>适配器验证台</summary><p>读取当前项目已保存快照。生成独立工件，不覆盖当前载流量结果。CAD 默认展示段长 0.25 m；网格为本体六层。</p>
-    {needsSource&&<label>来源任务<select aria-label="来源任务" value={source} onChange={e=>setSource(e.target.value)}><option value="">选择本项目对应工件</option>{sources.map(j=><option key={j.id} value={j.id}>{j.command} · {j.id.slice(0,8)}</option>)}</select></label>}
-    {thermal&&<div className="plugin-form">{[['导体发热功率 W/m',heat,setHeat],['缆表温度 °C',surface,setSurface],['导体热导率 W/(m·K)',conductorK,setConductorK],['金属屏蔽热导率 W/(m·K)',metalK,setMetalK]].map(([label,value,setter])=><label key={label as string}>{label as string}<input type="number" step="any" value={value as string} onChange={e=>(setter as (s:string)=>void)(e.target.value)} required/></label>)}</div>}
-    <button className="plugin-primary" disabled={busy||context?.blocked||!enabled||!item.runtime.metadata_ready||!project||(needsSource&&!source)||(thermal&&!numbersValid)} onClick={()=>void act(execute)}>{busy?'正在执行…':`执行：${command?.title}`}</button>
+   {m.distribution==='bundled-adapter'&&<details className="plugin-run"><summary>适配器验证台</summary><p>{buried?'读取当前工程的三相布置、埋深、材料热阻率与环境温度。网格包含三根六层电缆和均匀土壤，不从运行电流推算发热。':'读取当前项目已保存快照。生成独立工件，不覆盖当前载流量结果。CAD 默认展示段长 0.25 m；网格为本体六层。'}</p>
+    {needsSource&&<label>来源任务<select aria-label="来源任务" disabled={busy} value={source} onChange={e=>setSource(e.target.value)}><option value="">选择本项目对应工件</option>{sources.map(j=><option key={j.id} value={j.id}>{j.command} · {j.id.slice(0,8)}</option>)}</select></label>}
+    {(thermal||buried)&&<div className="plugin-form">{[[buried?'每相导体发热功率 W/m':'导体发热功率 W/m',heat,setHeat],...(!buried?[['缆表温度 °C',surface,setSurface]]:[]),['导体热导率 W/(m·K)',conductorK,setConductorK],['金属屏蔽热导率 W/(m·K)',metalK,setMetalK]].map(([label,value,setter])=><label key={label as string}>{label as string}<input disabled={busy} type="number" step="any" value={value as string} onChange={e=>(setter as (s:string)=>void)(e.target.value)} required/></label>)}</div>}
+    {buried&&<><label>土壤计算域尺度<select aria-label="土壤计算域尺度" disabled={busy} value={domainScale} onChange={e=>setDomainScale(e.target.value)}>{['4','8','16'].map(v=><option value={v} key={v}>{v} 倍布置尺度</option>)}</select></label><p>界面设置三相等发热；API 可分别给定三相功率。地表、侧面和底部固定环境温度；扩大计算域检查截断影响，不把单次结果标为网格无关。</p></>}
+
+    <button className="plugin-primary" disabled={busy||context?.blocked||!enabled||!item.runtime.metadata_ready||!project||(needsSource&&!source)||((thermal||buried)&&!numbersValid)} onClick={()=>void act(execute)}>{busy?'正在执行…':`执行：${command?.title}`}</button>
     {result!=null&&!context?.blocked&&result.project_revision===lock?.lock.project_revision&&<PluginResult project={project} result={result}/>}
    </details>}
    {project&&jobs.length>0&&<details><summary>项目插件工件（{jobs.length}）</summary>{jobs.map(j=><div className="plugin-job" key={j.id}><b>{j.command}</b><small>{j.status} · {j.id.slice(0,8)}</small>{j.output?.artifacts?.map(a=><a key={a.path} href={`/api/plugins/workspaces/${project}/jobs/${j.id}/artifacts/${encodeURIComponent(a.path)}`} download>{a.path}</a>)}</div>)}</details>}

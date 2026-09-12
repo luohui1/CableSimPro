@@ -1,4 +1,5 @@
 import './plugin-workspace-layout.css';
+import BuriedResult from './BuriedResult';
 import {useEffect,useRef,useState} from 'react';
 
 export interface PluginExecution {
@@ -35,7 +36,7 @@ function FieldCanvas({field}:{field:Field}){
  },[field,mesh,low,high]);
  return <figure className="plugin-field-figure"><canvas ref={ref} width={500} height={500} role="img" aria-label="已求解的有限元截面温度场"/><div className="plugin-field-scale"><span>{(low-273.15).toFixed(2)} °C</span><i aria-hidden="true"/><span>{(high-273.15).toFixed(2)} °C</span></div><figcaption>同一网格上的节点温度 · 单元按节点平均温度着色 · 坐标等比例</figcaption><button type="button" aria-pressed={mesh} onClick={()=>setMesh(v=>!v)}>{mesh?'隐藏网格':'显示网格'}</button></figure>;
 }
-export default function PluginResult({project,result}:{project:string;result:PluginExecution}){
+function SectionResult({project,result}:{project:string;result:PluginExecution}){
  const [field,setField]=useState<Field|null>(null),[error,setError]=useState('');
  const item=result.artifacts.find(a=>a.path==='field.json');
  useEffect(()=>{setField(null);setError('');if(!item)return;const controller=new AbortController();
@@ -57,4 +58,8 @@ export default function PluginResult({project,result}:{project:string;result:Plu
   <div className="plugin-result-files" aria-label="运行工件">{result.artifacts.map(a=><a key={a.path} href={`/api/plugins/workspaces/${project}/jobs/${result.job_id}/artifacts/${encodeURIComponent(a.path)}`} download>{a.path}</a>)}</div>
   <details><summary>版本、原始数据与适用边界</summary><p>{result.plugin.plugin_id} @ {result.plugin.version}</p><code>{result.plugin.release_sha256}</code>{result.result.warnings?.map(w=><p key={w}>{w}</p>)}<pre>{JSON.stringify(result,null,2)}</pre></details>
  </section>;
+}
+
+export default function PluginResult(props:{project:string;result:PluginExecution}){
+ return props.result.command==='skfem.buried-reference'?<BuriedResult {...props}/>:<SectionResult {...props}/>;
 }

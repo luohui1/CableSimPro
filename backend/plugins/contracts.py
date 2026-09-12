@@ -19,9 +19,14 @@ class Dependency(Contract):
     version: ReleaseVersion
 
 
+# Runtime distributions can use multi-component releases (e.g. OCP 7.9.3.1.1).
+# Keep these exact numeric pins distinct from the plugin's x.y.z release version.
+RuntimeVersion = Annotated[str, Field(pattern=r'^(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*)){1,5}$', max_length=64)]
+
+
 class RuntimeRequirement(Contract):
     distribution: str = Field(pattern=r'^[A-Za-z][A-Za-z0-9_.-]{0,63}$')
-    version: ReleaseVersion
+    version: RuntimeVersion
 
 
 class Command(Contract):

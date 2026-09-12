@@ -13,7 +13,7 @@ from backend.main import create_app
 
 
 def prepare(c,w,p):
-    plan=c.post('/api/plugins/install-plan',json={'plugin_id':p,'version':'0.1.1'}).json()
+    plan=c.post('/api/plugins/install-plan',json={'plugin_id':p,'version':'0.1.2'}).json()
     approval={k:plan[k] for k in ('plugin_id','version','state_revision','plan_sha256')}|{'approved':True,'license_acknowledged':True,'grants':{i['plugin_id']:i['permissions'] for i in plan['plugins']}}
     r=c.post('/api/plugins/install',json=approval);assert r.status_code==200,r.text
     lock=c.get(f'/api/plugins/workspaces/{w["id"]}/lock').json()
