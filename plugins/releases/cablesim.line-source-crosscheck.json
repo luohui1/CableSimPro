@@ -71,8 +71,8 @@
     },
     {
       "path": "backend/plugins/line_source_extension.py",
-      "sha256": "bfc7494c02e135cc4f796303cfefc0c76a40493cb7d563787b3c21f0017e3dba",
-      "size_bytes": 4830
+      "sha256": "6ffe1b4e62001ac987709205080f643cf531da13a0b11ac3eddc0abc09ebc70b",
+      "size_bytes": 5127
     },
     {
       "path": "backend/plugins/buried_contract.py",
