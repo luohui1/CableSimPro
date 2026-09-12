@@ -29,6 +29,7 @@ def install_line_source_extension() -> None:
 
     def register(self, wid, request, args):
         source = source_context = item = None
+        had_successful_source = False
         if request.command == COMMAND:
             expected = self._pin(self.catalog.get(SOURCE_PLUGIN)).model_dump(mode='json')
             with self.store.db() as db:
@@ -37,6 +38,7 @@ def install_line_source_extension() -> None:
                     "SELECT rowid,* FROM plugin_jobs WHERE workspace=? AND command=? AND status='succeeded' ORDER BY rowid DESC",
                     (wid, SOURCE_COMMAND))
                 for candidate in rows:
+                    had_successful_source = True
                     candidate_context = json.loads(candidate['context'])
                     if (candidate_context.get('project_revision') != request.expected_revision or
                         candidate_context.get('plugin') != expected):
@@ -50,6 +52,8 @@ def install_line_source_extension() -> None:
                     source, source_context, item = candidate, candidate_context, artifact
                     break
             if source is None:
+                if had_successful_source:
+                    raise PluginError('STALE_SOURCE', '已有直埋热研究不属于当前工程版本或当前锁定发行版，请重新运行来源任务。', 409)
                 raise PluginError('SOURCE_JOB', '请先在当前工程版本成功运行一次三相定功率直埋热研究。', 409)
         context, saved = original_register(self, wid, request, args)
         if context is None or request.command != COMMAND:
