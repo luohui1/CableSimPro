@@ -1,0 +1,40 @@
+name: Apply line-source development payload
+on:
+  push:
+    branches: ['feat/plugin-line-source-crosscheck-v01']
+    paths:
+      - '.line-source-bootstrap/**'
+      - '.github/workflows/bootstrap-line-source.yml'
+permissions:
+  contents: write
+concurrency:
+  group: bootstrap-line-source-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feat/plugin-line-source-crosscheck-v01
+      - name: Verify and extract reviewed payload
+        run: |
+          cat .line-source-bootstrap/part* | tr -d '\r\n ' > /tmp/line-source.b64
+          echo 'd2dc1a56061fad4a77116fc0bc7d004ce83dbc2bd6305403707c8819952b1dc6  /tmp/line-source.b64' | sha256sum -c -
+          base64 -d /tmp/line-source.b64 > /tmp/line-source-files.tar.gz
+          echo 'ef8d555e107fe5d6f92b176368501480209a9d58edfc9eb2211fb03d9742faf5  /tmp/line-source-files.tar.gz' | sha256sum -c -
+          if tar -tzf /tmp/line-source-files.tar.gz | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+            echo 'Unsafe archive path' >&2
+            exit 1
+          fi
+          tar -xzf /tmp/line-source-files.tar.gz -C .
+          rm -rf .line-source-bootstrap
+      - name: Commit exact source payload
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'feat: add independent half-space line-source validation plugin'
+          git push origin HEAD:feat/plugin-line-source-crosscheck-v01
