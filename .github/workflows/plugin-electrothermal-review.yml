@@ -1,22 +1,22 @@
-name: Electrothermal reference evidence
+name: Electrothermal plugin evidence
 on:
   push:
     branches: ['feat/plugin-electrothermal-v01']
 permissions:
   contents: read
 concurrency:
-  group: electrothermal-${{ github.ref }}
+  group: plugin-electrothermal-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   host:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install -r backend/requirements-dev.txt
+      - run: python -m pip install -r backend/requirements-dev.txt
       - run: python scripts/plugin_sdk.py verify
       - run: python scripts/seal_plugin_catalog.py
       - run: python -m pytest --junitxml=artifacts/host-tests.xml
@@ -24,6 +24,7 @@ jobs:
         run: |
           mkdir -p artifacts
           git rev-parse HEAD > artifacts/source-commit.txt
+          git diff --exit-code > artifacts/source-diff.txt || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -32,7 +33,7 @@ jobs:
           path: artifacts/
   native:
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -44,7 +45,7 @@ jobs:
           python-version: '3.11'
       - if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libglu1-mesa libgl1
-      - run: pip install -r backend/requirements-dev.txt -r plugins/requirements-native.txt
+      - run: python -m pip install -r backend/requirements-dev.txt -r plugins/requirements-native.txt -r plugins/requirements-electrothermal.txt
       - run: python scripts/plugin_sdk.py verify
       - run: python scripts/seal_plugin_catalog.py
       - run: python -m pytest plugin-tests/test_native.py plugin-tests/test_cad_runtime.py plugin-tests/test_buried.py plugin-tests/test_electrothermal.py -v --junitxml=artifacts/native-tests.xml
@@ -53,7 +54,7 @@ jobs:
         run: |
           mkdir -p artifacts
           git rev-parse HEAD > artifacts/source-commit.txt
-          pip freeze > artifacts/environment.txt
+          python -m pip freeze > artifacts/environment.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -62,7 +63,7 @@ jobs:
           path: artifacts/
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -72,7 +73,7 @@ jobs:
         with:
           node-version: '22'
       - run: sudo apt-get update && sudo apt-get install -y libglu1-mesa libgl1
-      - run: pip install -r backend/requirements-dev.txt -r plugins/requirements-native.txt
+      - run: python -m pip install -r backend/requirements-dev.txt -r plugins/requirements-native.txt -r plugins/requirements-electrothermal.txt
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
       - run: npm run build

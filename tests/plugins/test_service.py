@@ -32,10 +32,10 @@ def invocation(c,w,p='cablesim.ampacity-core',command='analysis.buried',args=Non
 
 def test_browse_and_plan_have_no_side_effects(client):
     w=project(client);s=client.app.state.workspace_store
-    with s.db() as db:before=db.total_changes
     baseline=client.get(f'/api/workspaces/{w["id"]}').json()
     a=client.get('/api/plugins/catalog').json();plan(client)
     assert len(a['items'])==18 and a['security']['remote_installation'] is False
+    assert any(i['manifest']['plugin_id']=='cablesim.electrothermal-reference' for i in a['items'])
     assert client.get('/api/plugins/catalog').json()['state_revision']==0
     assert client.get(f'/api/workspaces/{w["id"]}').json()==baseline
     with s.db() as db:
