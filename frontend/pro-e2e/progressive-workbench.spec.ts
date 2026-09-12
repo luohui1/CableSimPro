@@ -1,6 +1,8 @@
 import {test,expect,type Page} from '@playwright/test';
-import referenceLayout from '../../docs/REFERENCE_LAYOUT.json';
 import AxeBuilder from '@axe-core/playwright';
+import {readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+const referenceLayout=JSON.parse(readFileSync(fileURLToPath(new URL('../../docs/REFERENCE_LAYOUT.json',import.meta.url)),'utf8')) as {landmarks_at_source_size:{rail:[number,number,number,number]}};
 async function enter(page:Page){await page.goto('/');await page.getByRole('button',{name:'进入专业工作台',exact:true}).click();await expect(page.getByTestId('session-revision')).toHaveText('rev.1');await expect(page.getByTestId('cable-model-view')).toHaveAttribute('data-renderer','webgl');}
 async function palette(page:Page){await page.getByRole('button',{name:'搜索命令',exact:true}).click();const input=page.getByRole('combobox',{name:'搜索工程命令'});await expect(input).toBeFocused();return input;}
 
