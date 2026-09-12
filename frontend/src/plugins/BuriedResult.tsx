@@ -1,3 +1,4 @@
+import ElectrothermalMetrics from './ElectrothermalMetrics';
 import {useEffect,useRef,useState} from 'react';
 import type {PluginExecution} from './PluginResult';
 
@@ -45,7 +46,7 @@ function Field({field}:{field:BuriedField}){
  },[field,whole,mesh,lo,hi]);
  return <figure className="plugin-field-figure"><canvas ref={ref} width={500} height={whole?295:500} style={{aspectRatio:whole?'500 / 295':'1'}} role="img" aria-label="三相电缆与土壤有限元温度场"/><div className="plugin-field-scale"><span>{(lo-273.15).toFixed(2)} °C</span><i aria-hidden="true"/><span>{(hi-273.15).toFixed(2)} °C</span></div><figcaption>{whole?'完整土壤计算域；地表在深度 0 m':'电缆邻域局部视窗，图框不是计算边界'}<br/>节点温度按单元平均显示 · 两轴等比例</figcaption><div className="plugin-view-actions"><button aria-pressed={whole} onClick={()=>setWhole(v=>!v)}>{whole?'查看电缆邻域':'查看完整土壤域'}</button><button aria-pressed={mesh} onClick={()=>setMesh(v=>!v)}>{mesh?'隐藏网格':'显示网格'}</button></div></figure>;
 }
-export default function BuriedResult({project,result}:{project:string;result:PluginExecution}){
+export default function BuriedResult({project,result,electrothermal=false}:{project:string;result:PluginExecution;electrothermal?:boolean}){
  const [field,setField]=useState<BuriedField|null>(null),[error,setError]=useState('');
  const item=result.artifacts.find(a=>a.path==='field.json'),summary=result.result.summary??{};
  useEffect(()=>{setField(null);setError('');const abort=new AbortController();
@@ -58,10 +59,11 @@ export default function BuriedResult({project,result}:{project:string;result:Plu
  },[project,result.job_id,item?.sha256]);
  const number=(key:string,digits=3)=>finite(summary[key])?(summary[key] as number).toFixed(digits):'—';
  const phases=Array.isArray(summary.conductor_max_temperatures_c)?summary.conductor_max_temperatures_c:[];
- return <section className="plugin-result-panel" aria-label="直埋热研究结果"><header><h3>电缆与土壤温度场</h3><span>rev.{result.project_revision} · {result.status==='stale'?'历史快照':'独立定功率研究'}</span></header><p>19 个材料域 · 不是允许电流结果 · 地表、侧面和底部固定为环境温度。</p>
+ return <section className="plugin-result-panel" aria-label={electrothermal?"电热反馈研究结果":"直埋热研究结果"}><header><h3>{electrothermal?"电流—损耗—温度研究":"电缆与土壤温度场"}</h3><span>rev.{result.project_revision} · {result.status==='stale'?'历史快照':electrothermal?'系数损耗模型':'独立定功率研究'}</span></header><p>{electrothermal?"19 个材料域 · 导体、屏蔽与介质损耗 · 非完整 IEC 60287 实现。":"19 个材料域 · 不是允许电流结果 · 地表、侧面和底部固定为环境温度。"}</p>
+  {electrothermal&&<ElectrothermalMetrics summary={summary}/>}
   {error?<p role="alert">{error}</p>:field?<Field field={field}/>:<p role="status">正在校验直埋温度场…</p>}
   <dl className="buried-summary"><dt>三相导体最高温度</dt><dd>{phases.map((v,i)=>`${'ABC'[i]}: ${finite(v)?v.toFixed(3):'—'} °C`).join(' / ')}</dd><dt>总发热 / 边界散热</dt><dd>{number('source_heat_w_m')} / {number('boundary_heat_w_m')} W/m</dd><dt>环境温度 / 土壤热导率</dt><dd>{number('ambient_temperature_c',1)} °C / {number('soil_k_w_m_k')} W/(m·K)</dd><dt>土壤域半宽 / 深度</dt><dd>{number('half_width_m',2)} / {number('bottom_depth_m',2)} m</dd><dt>节点 / 单元</dt><dd>{number('nodes',0)} / {number('elements',0)}</dd><dt>离散能量相对残差</dt><dd>{finite(summary.energy_relative_residual)?summary.energy_relative_residual.toExponential(3):'零发热时不定义'}</dd></dl>
-  <p>单次计算不代表网格或远边界无关。改变土壤域尺度后需重新运行并比较；不据此给出载流量或合格结论。</p>
+  <p>{electrothermal?"此场绑定上述电流和工程快照。有限计算域边界全部恒温；允许电流受材料、损耗系数与边界假设限制，不是生产额定值或合格结论。":"单次计算不代表网格或远边界无关。改变土壤域尺度后需重新运行并比较；不据此给出载流量或合格结论。"}</p>
   <div className="plugin-result-files">{result.artifacts.map(a=><a key={a.path} href={`/api/plugins/workspaces/${project}/jobs/${result.job_id}/artifacts/${encodeURIComponent(a.path)}`} download>{a.path}</a>)}</div>
   <details><summary>原始结果与适用边界</summary>{result.result.warnings?.map(w=><p key={w}>{w}</p>)}<pre>{JSON.stringify(result,null,2)}</pre></details>
  </section>;

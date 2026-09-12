@@ -35,7 +35,7 @@ def test_browse_and_plan_have_no_side_effects(client):
     with s.db() as db:before=db.total_changes
     baseline=client.get(f'/api/workspaces/{w["id"]}').json()
     a=client.get('/api/plugins/catalog').json();plan(client)
-    assert len(a['items'])==17 and a['security']['remote_installation'] is False
+    assert len(a['items'])==18 and a['security']['remote_installation'] is False
     assert client.get('/api/plugins/catalog').json()['state_revision']==0
     assert client.get(f'/api/workspaces/{w["id"]}').json()==baseline
     with s.db() as db:

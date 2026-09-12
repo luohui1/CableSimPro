@@ -22,7 +22,18 @@ class Catalog:
     def __init__(self, root: Path = ROOT):
         self.root = root.resolve()
         payload = json.loads((self.root / 'plugins/registry.json').read_text('utf-8'))
-        self.manifests = tuple(PluginManifest.model_validate(m) for m in payload['plugins'])
+        # Additive first-party release records; one catalog, one global ownership check.
+        additional = []
+        self.release_paths = {}
+        for path in sorted((self.root/'plugins/releases').glob('*.json')):
+            if path.is_symlink() or path.stat().st_size > 128*1024:
+                raise ValueError('UNSAFE_RELEASE_DESCRIPTOR')
+            m = PluginManifest.model_validate_json(path.read_bytes())
+            if m.plugin_id in self.release_paths:
+                raise ValueError('DUPLICATE_CATALOG_PLUGIN')
+            self.release_paths[m.plugin_id] = path
+            additional.append(m)
+        self.manifests = tuple(PluginManifest.model_validate(m) for m in payload['plugins']) + tuple(additional)
         if len({m.plugin_id for m in self.manifests}) != len(self.manifests):
             raise ValueError('DUPLICATE_CATALOG_PLUGIN')
         commands = [c.id for m in self.manifests for c in m.commands]
