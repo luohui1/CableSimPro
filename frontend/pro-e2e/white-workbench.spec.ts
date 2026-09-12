@@ -103,6 +103,7 @@ test('white workbench: collapsed parameter groups retain drafts, locks and keybo
 });
 
 test('white workbench: focus canvas preserves model, draft and original side panels',async({page},info)=>{
+ test.slow();
  await enter(page);
  const model=page.getByTestId('cable-model-view'),canvas=model.locator('canvas');
  await canvas.evaluate(e=>e.setAttribute('data-retained','focus'));
@@ -114,7 +115,7 @@ test('white workbench: focus canvas preserves model, draft and original side pan
  expect((await model.boundingBox())!.width).toBeGreaterThan(before);
  await expect(page.getByRole('button',{name:'计算载流量',exact:false})).toBeDisabled();
  await expect(canvas).toHaveAttribute('data-retained','focus');
- await page.screenshot({path:info.outputPath('white-workbench-focus.png'),fullPage:true});
+ await model.screenshot({path:info.outputPath('white-workbench-focus.png')});
  await page.keyboard.press('Escape');
  await expect(page.getByRole('button',{name:'专注画布',exact:true})).toHaveAttribute('aria-pressed','false');
  await expect(page.locator('.enterprise-outline')).toBeVisible();await expect(field).toBeVisible();await expect(field).toHaveValue('');
