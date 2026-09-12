@@ -22,9 +22,9 @@ jobs:
       - name: Verify and extract reviewed payload
         run: |
           cat .line-source-bootstrap/part* | tr -d '\r\n ' > /tmp/line-source.b64
-          echo 'd2dc1a56061fad4a77116fc0bc7d004ce83dbc2bd6305403707c8819952b1dc6  /tmp/line-source.b64' | sha256sum -c -
+          echo 'd2dc9ceb03afd759f3fcb004f4a8ad19cee6e61fd4fd3d95584867640028f07f  /tmp/line-source.b64' | sha256sum -c -
           base64 -d /tmp/line-source.b64 > /tmp/line-source-files.tar.gz
-          echo 'ef8d555e107fe5d6f92b176368501480209a9d58edfc9eb2211fb03d9742faf5  /tmp/line-source-files.tar.gz' | sha256sum -c -
+          echo '930a626a0c8146b33c5a5193afe35cef9315582b906fee18c020a68b3142a89c  /tmp/line-source-files.tar.gz' | sha256sum -c -
           if tar -tzf /tmp/line-source-files.tar.gz | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
             echo 'Unsafe archive path' >&2
             exit 1
