@@ -13,7 +13,7 @@ from backend.main import create_app
 
 
 def prepare(c,w,p):
-    plan=c.post('/api/plugins/install-plan',json={'plugin_id':p,'version':'0.1.0'}).json()
+    plan=c.post('/api/plugins/install-plan',json={'plugin_id':p,'version':'0.1.2'}).json()
     approval={k:plan[k] for k in ('plugin_id','version','state_revision','plan_sha256')}|{'approved':True,'license_acknowledged':True,'grants':{i['plugin_id']:i['permissions'] for i in plan['plugins']}}
     r=c.post('/api/plugins/install',json=approval);assert r.status_code==200,r.text
     lock=c.get(f'/api/plugins/workspaces/{w["id"]}/lock').json()
@@ -22,9 +22,41 @@ def prepare(c,w,p):
 def run(c,w,p,command,args={}):
     lock=c.get(f'/api/plugins/workspaces/{w["id"]}/lock').json()
     response=c.post(f'/api/plugins/workspaces/{w["id"]}/invoke',json={'plugin_id':p,'command':command,'request_id':str(uuid4()),'expected_revision':w['revision'],'lock_sha256':lock['lock_sha256'],'arguments':args,'confirmed':True})
+    if response.status_code!=200:
+        diagnose_worker_failure(c,w,command)
     assert response.status_code==200,response.text
     assert response.json()['status']=='succeeded',response.text
     return response.json()
+
+def diagnose_worker_failure(c,w,command):
+    """Test-only repro in an independent scratch dir; the original assertion still fails.
+
+    Uses this test's generated fixture, never production projects, and does not
+    change the service's policy of hiding native tracebacks from API responses.
+    """
+    import subprocess,sys,tempfile
+    from backend.plugins.service import safe_environment
+    service=c.app.state.plugins
+    with service.store.db() as db:
+        row=db.execute('SELECT context FROM plugin_jobs WHERE workspace=? ORDER BY rowid DESC LIMIT 1',(w['id'],)).fetchone()
+    if row is None:return
+    context=json.loads(row['context'])
+    payload={key:context[key] for key in ('command','recipe','scenario','arguments')}
+    payload['distributions']=[r.distribution for r in service.catalog.get(context['plugin']['plugin_id']).requirements]
+    try:
+        with tempfile.TemporaryDirectory(prefix='csp-native-diagnostic-') as temporary:
+            directory=Path(temporary)
+            if 'source_artifact' in context:
+                item=context['source_artifact'];source=service._artifact_path(w['id'],item['job_id'],item)
+                (directory/'input').mkdir();(directory/'input'/item['path']).write_bytes(source.read_bytes())
+            run=subprocess.run([sys.executable,'-I',str(service.catalog.root/'backend/plugins/worker.py')],
+                input=json.dumps(payload).encode(),cwd=directory,env=safe_environment(directory),
+                stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=30,check=False)
+            text=f'command={command} returncode={run.returncode}\n'+run.stderr.decode('utf-8',errors='replace')[-16000:]
+    except Exception as error:
+        text=f'Diagnostic could not finish: {type(error).__name__}'
+    out=Path('artifacts');out.mkdir(exist_ok=True)
+    (out/f'worker-diagnostic-{command.replace(".","-")}.txt').write_text(text,encoding='utf-8')
 
 def download(c,w,out,name):return c.get(f'/api/plugins/workspaces/{w["id"]}/jobs/{out["job_id"]}/artifacts/{name}')
 
@@ -52,7 +84,14 @@ def test_gmsh_skfem_meshio_pyvista_chain_and_refinement(tmp_path):
             converted=run(c,w,'cablesim.meshio','meshio.to-vtu',{'source_job_id':mesh['job_id']})
             assert download(c,w,converted,'section.vtu').status_code==200
             thermal=run(c,w,'cablesim.thermal2d','skfem.radial-thermal',{'source_job_id':mesh['job_id'],'heat_w_m':20,'surface_temperature_c':30,'conductor_k_w_m_k':380,'metal_screen_k_w_m_k':380})
-            s=thermal['result']['summary'];errors.append(s['analytic_temperature_rise_relative_error']);sizes.append(s['elements'])
+            from backend.plugins.field_contract import validate_thermal_projection
+            import meshio
+            field=download(c,w,thermal,'field.json').json()
+            s=thermal['result']['summary'];validate_thermal_projection(field,s)
+            path=tmp_path/f'temperature-{resolution}.vtu';path.write_bytes(download(c,w,thermal,'temperature.vtu').content)
+            vtk=meshio.read(path)
+            assert field['values']==pytest.approx((vtk.point_data['temperature_c']+273.15).tolist(),abs=1e-9)
+            errors.append(s['analytic_temperature_rise_relative_error']);sizes.append(s['elements'])
             assert s['ampacity_a'] is None and s['energy_relative_residual']<1e-6
             assert s['maximum_temperature_c']>30 and errors[-1]<.03
             assert len(json.loads(download(c,w,mesh,'mesh.json').content)['domains'])==6

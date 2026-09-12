@@ -1,0 +1,13 @@
+/* Independent pane scrolling keeps the command header from covering field results. */
+.project-plugin-dialog[role=dialog]{overflow:hidden}
+.project-plugin-dialog[role=dialog] .plugin-center{height:100%;min-height:0;display:flex;flex-direction:column}
+.project-plugin-dialog[role=dialog] .plugin-top{flex-shrink:0;position:static}
+.project-plugin-dialog[role=dialog] .plugin-layout{flex:1;min-height:0;width:100%;overflow:hidden}
+.project-plugin-dialog[role=dialog] :is(.plugin-categories,.plugin-discovery,.plugin-detail){min-height:0;overflow:auto}
+.plugin-field-layout{display:grid;grid-template-columns:minmax(0,1.65fr) minmax(135px,1fr);gap:20px;align-items:start}
+.plugin-field-layout .plugin-field-figure{min-width:0}.plugin-field-layout dl{margin:22px 0 0}
+.plugin-result-panel>header{margin-bottom:10px}.plugin-result-panel>header h3{margin:0}
+@media(max-width:1000px){.project-plugin-dialog[role=dialog] .plugin-layout{overflow:auto}.project-plugin-dialog[role=dialog] :is(.plugin-categories,.plugin-discovery,.plugin-detail){overflow:visible}}
+@media(max-width:560px){.plugin-field-layout{grid-template-columns:1fr}.plugin-field-layout dl{display:grid;grid-template-columns:1fr 1fr;gap:5px 12px;margin:0}.plugin-field-layout dd{font-size:14px;margin:0 0 7px}.plugin-result-panel>header{align-items:flex-start;flex-direction:column}}
+
+.plugin-view-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.plugin-center .buried-summary{display:grid;grid-template-columns:minmax(120px,1fr) minmax(0,2fr);gap:7px 12px}.plugin-center .buried-summary dd{font-size:13px;margin:0;overflow-wrap:anywhere}

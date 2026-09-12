@@ -1,3 +1,5 @@
+import {lazy,Suspense} from 'react';
+const ProjectPluginDialog=lazy(()=>import('../plugins/ProjectPluginDialog'));
 import {useEffect,useRef,useState} from 'react';
 import {ArrowLeft,ArrowRight,Box,Check,Home,Settings2,Workflow,X} from 'lucide-react';
 import {StudioProvider,useStudio} from '../StudioState';
@@ -20,6 +22,8 @@ import '../professional/reference-workbench.css';
 const initialProject=readRoute().project;
 function Application(){
  const s=useStudio(),route=useModeRoute();
+ const [pluginsOpen,setPluginsOpen]=useState(false);
+ useEffect(()=>{const open=()=>setPluginsOpen(true);window.addEventListener('csp:open-plugins',open);return()=>window.removeEventListener('csp:open-plugins',open)},[]);
  const [draft,setDraft]=useState(''),[visited,setVisited]=useState({workbench:false,agent:false});
  const [viewRequest,setViewRequest]=useState({view:'cable',serial:0}),[routeWarning,setRouteWarning]=useState('');
  const attempted=useRef<string|null>(null),creating=useRef(false),sessionId=useRef<string|null>(null);
@@ -60,6 +64,7 @@ function Application(){
    <div hidden={route.mode!=='agent'} className="dual-mode-surface" data-testid="agent-mode">{visited.agent&&<AgentWorkspace key={s.w!.id} active={route.mode==='agent'} draft={draft} setDraft={setDraft} openWorkbench={openWorkbench}/>}</div>
   </>}
   {route.mode==='agent'&&usable&&<footer className="dual-status"><span>{s.busy?'正在执行工程操作':'已连接本机工程服务'}</span><span>{s.proposal?.ready?'有待审查提案':s.current?'当前载流量结果有效':'参数与适用范围须核对'}</span><button onClick={()=>openWorkbench()}>切换到专业工作台<ArrowRight size={13}/></button></footer>}
+  {pluginsOpen&&<Suspense fallback={null}><ProjectPluginDialog onClose={()=>setPluginsOpen(false)}/></Suspense>}
  </div>;
 }
 export default function DualModeApp(){return <StudioProvider stayInWorkspace deferCreate restoreSession initialWorkspaceId={initialProject} onWorkspaceChange={syncWorkspaceUrl}><Application/></StudioProvider>}

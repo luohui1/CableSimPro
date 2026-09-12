@@ -36,7 +36,7 @@ const railItems=[
 export function WorkspaceRail({area,view,onCommand}:{area:string;view:string;onCommand:(id:WorkbenchCommandId)=>void}){
  return <nav className="wb-navigation ps-rail" aria-label="应用导航"><button aria-label="打开工程中心" title="工程中心" onClick={()=>onCommand('projects')}><FolderOpen size={21}/><span>工程</span></button>
   <div className="ps-rail-main">{railItems.map(({id,match,label,name,Icon})=><button key={id} aria-label={name} title={name} aria-current={area==='engineering'&&view===match?'page':undefined} onClick={()=>onCommand(id)}><Icon size={21}/><span>{label}</span></button>)}</div>
-  <details className="ps-resource-menu"><summary aria-label="工程资源"><BookOpen size={20}/><span>资源</span></summary><div><b>工程资源</b>{([['assets','工程资产库'],['products','产品型号'],['documents','企业资料'],['methods','方法验证'],['journal','任务与引用'],['json','导出工程参数']] as const).map(([id,label])=><button key={id} onClick={e=>{e.currentTarget.closest('details')?.removeAttribute('open');onCommand(id)}}>{label}<ArrowRight size={13}/></button>)}</div></details>
+  <details className="ps-resource-menu"><summary aria-label="工程资源"><BookOpen size={20}/><span>资源</span></summary><div><b>工程资源</b>{([['plugins','插件中心'],['assets','工程资产库'],['products','产品型号'],['documents','企业资料'],['methods','方法验证'],['journal','任务与引用'],['json','导出工程参数']] as const).map(([id,label])=><button key={id} onClick={e=>{e.currentTarget.closest('details')?.removeAttribute('open');onCommand(id)}}>{label}<ArrowRight size={13}/></button>)}</div></details>
   <button className="ps-rail-settings" aria-label="服务接入设置" title="服务接入设置" onClick={()=>onCommand('settings')}><Settings2 size={20}/><span>设置</span></button>
  </nav>;
 }

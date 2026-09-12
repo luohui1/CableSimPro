@@ -1,0 +1,28 @@
+name: Native plugin crash diagnosis
+on:
+  push:
+    branches: ['feat/plugin-workspace-integration-v01']
+    paths: ['scripts/diagnose_plugin_native.py', '.github/workflows/plugin-native-diagnostic.yml']
+permissions:
+  contents: read
+jobs:
+  windows-probe:
+    runs-on: windows-latest
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ['3.11', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -r backend/requirements-dev.txt -r plugins/requirements-native.txt
+      - run: python scripts/diagnose_plugin_native.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: plugin-native-crash-probes-${{ matrix.python }}
+          retention-days: 7
+          path: artifacts/

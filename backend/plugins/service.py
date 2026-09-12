@@ -75,10 +75,11 @@ class PluginInvocation(ApprovalContract):
 
 
 OUTPUTS = {
+    'skfem.buried-reference': {'buried.msh', 'temperature.vtu', 'thermal.json', 'field.json'},
     'cadquery.cable-step': {'cable.step', 'geometry.json'},
     'gmsh.cable-section': {'section.msh', 'mesh.json'},
     'meshio.to-vtu': {'section.vtu'},
-    'skfem.radial-thermal': {'temperature.vtu', 'thermal.json'},
+    'skfem.radial-thermal': {'temperature.vtu', 'thermal.json', 'field.json'},
     'pyvista.field-summary': {'isotherm.vtp', 'field-summary.json'},
 }
 
@@ -261,6 +262,9 @@ class PluginService:
                         raise PluginError('NOT_INSTALLED', '请先审查并安装准确的插件依赖版本。', 409)
                     if sorted(json.loads(installed['grants'])) != sorted(item.permissions):
                         raise PluginError('GRANT_CHANGED', '权限不完整，请重新审查。', 403)
+                    previous = db.execute('SELECT pin FROM plugin_project_pins WHERE workspace=? AND plugin_id=?', (wid,item.plugin_id)).fetchone()
+                    if previous and PluginPin.model_validate_json(previous['pin']) != self._pin(item):
+                        raise PluginError('PIN_MIGRATION_REQUIRED', '项目仍锁定旧发行版；先核对并显式停用，再启用新版本。', 409)
                     db.execute('INSERT OR REPLACE INTO plugin_project_pins VALUES (?,?,?)',
                                (wid, item.plugin_id, self._pin(item).model_dump_json()))
             else:
@@ -302,6 +306,8 @@ class PluginService:
             environment = self.catalog.environment(m)
             if not environment['metadata_ready']:
                 raise PluginError('RUNTIME_MISSING', '缺少准确运行环境：' + ', '.join(environment['missing']), 409)
+            if request.command == 'skfem.buried-reference' and (state.get('design_basis') or {}).get('environment', 'buried') != 'buried':
+                raise PluginError('METHOD_SCOPE', '当前设计依据不是直埋工况，不能运行直埋热研究。', 409)
             snapshot = dict(state, id=wid, revision=row['revision'])
             package = prepare_study(snapshot).package
             context = {'plugin': self._pin(m).model_dump(mode='json'), 'command': request.command,
@@ -380,6 +386,32 @@ class PluginService:
                 raise PluginError('OUTPUT_LIMIT', '插件工件缺失、越界或过大。')
             item = PayloadFile(path=name, sha256=sha256(path.read_bytes()).hexdigest(), size_bytes=path.stat().st_size)
             artifacts.append(item.model_dump(mode='json'))
+        if context['command'] == 'skfem.radial-thermal':
+            from .field_contract import validate_thermal_projection
+            try:
+                validate_thermal_projection(json.loads((directory/'field.json').read_text('utf-8')), result['summary'])
+            except (ValueError, KeyError, TypeError):
+                raise PluginError('FIELD_CONTRACT', '温度场的网格、单位、节点数量或摘要不一致。') from None
+        if context['command'] == 'skfem.buried-reference':
+            from .buried_contract import validate_buried_projection
+            try:
+                field = validate_buried_projection(json.loads((directory/'field.json').read_text('utf-8')), result['summary'])
+                expected = context['arguments']
+                saved = context['scenario']['installation']
+                summary = result['summary']
+                if (summary['source_powers_w_m'] != expected['conductor_powers_w_m'] or
+                    summary['domain_scale'] != expected['domain_scale'] or
+                    summary['resolution'] != expected['resolution'] or
+                    summary['ambient_temperature_c'] != saved['ambient_temperature_c'] or
+                    abs(summary['soil_k_w_m_k']-1/saved['soil_rho_k_m_w']) > 1e-12):
+                    raise ValueError('FIELD_INPUT_BINDING')
+                from ..schemas import Scenario
+                original = Scenario.model_validate(context['scenario'])
+                if (field.cable_centers_m != tuple(tuple(p) for p in original.installation.positions_m()) or
+                    abs(field.cable_outer_radius_m-original.cable.radii_mm()[-1]/1000) > 1e-12):
+                    raise ValueError('FIELD_GEOMETRY_BINDING')
+            except (ValueError, KeyError, TypeError):
+                raise PluginError('FIELD_CONTRACT', '直埋场工件的分域、边界、热量或温度摘要不一致。') from None
         result['artifacts'] = artifacts
         return result
 

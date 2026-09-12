@@ -13,6 +13,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend.plugins.contracts import PluginManifest, ProjectPluginLock
 from backend.plugins.arguments import ARGUMENTS
+from backend.plugins.buried_contract import BuriedField, BuriedSummary
 from backend.plugins.catalog import Catalog
 
 
@@ -37,7 +38,9 @@ def main():
         releases.append(PluginManifest.model_validate(data).model_dump(mode='json'))
     schemas = {'manifest': PluginManifest.model_json_schema(),
                'project-lock': ProjectPluginLock.model_json_schema(),
-               'commands': {k: v.model_json_schema() for k, v in ARGUMENTS.items()}}
+               'commands': {k: v.model_json_schema() for k, v in ARGUMENTS.items()},
+               'buried-field': BuriedField.model_json_schema(),
+               'buried-summary': BuriedSummary.model_json_schema()}
     for name, schema in schemas.items():
         path = root / f'plugin-spec/{name}.schema.json'
         if args.write_draft:
