@@ -1,109 +1,141 @@
-# Electrothermal coefficient-loss reference and temperature-limit current
+# Electrothermal reference — explicit losses, temperature feedback, current bracket
 
-This increment adds `cablesim.electrothermal-reference@0.1.0` on top of the existing
-19-domain cable/soil FEM. It reuses the same project snapshot, `CircularRecipe`,
-plugin lock, worker boundary and immutable artifacts. It does **not** replace the
-host ampacity result, and it does not claim a complete IEC 60287 or electromagnetic
-field implementation.
+Incremental branch from c699992 (PR #23). One PluginService, project store, catalog,
+permission/lock model and artifact API. The new first-party adapter has a fixed
+host-owned worker entry; unrelated adapters retain their existing bytes, versions
+and digests. The new inert JSON record under plugins/releases is combined with
+the legacy registry by the same Catalog, including global duplicate-ID/command
+checks. It is not another runtime or an external package installer. Nothing is installed or imported from an arbitrary manifest path.
 
-## Required inputs and declared equations
+## Inputs and physical scope
 
-The saved project must contain an explicit conductor resistance at 20 °C, `R20`, in
-Ω/km. Missing `R20` is a hard error; area/material fallback is deliberately disabled.
-The study also requires a temperature coefficient `alpha20`, conductor and metallic
-screen thermal conductivities, and a human-readable source/assumption note. The user
-must explicitly acknowledge that the AC and screen-loss coefficients are a specified
-coefficient model rather than a solved electromagnetic/bonding model.
+Three identical single-core six-layer cables and homogeneous soil. The existing
+Gmsh 19-domain mesh and scikit-fem P1 thermal assembly are reused. Each material's
+thermal conductivity is constant. Ground, sides and bottom are all at the saved
+ambient temperature, with the same finite-domain S=4/8/16 and mesh16/24/32 options.
 
-For phase `j`, using the **area-average conductor temperature** `Tmean,j`:
+The project **must contain an explicit R20 in ohm/km**. Unlike the legacy demo,
+this plugin never estimates R20 from area or material resistivity. The saved
+Scenario supplies RMS conductor-to-screen U0 (kV), frequency, relative permittivity,
+tan-delta, AC-extra factor, screen-loss factor, temperature limit and operating
+current. Arguments supply alpha20 (/K), the two metal conductivities and a mandatory
+human-written coefficient-basis note. A separate acknowledgement is required.
+These are user declarations, not authenticated approval or manufacturer certification.
 
-```
-Rac,j(T) = R20 * (1 + ac_extra_factor) * (1 + alpha20 * (Tmean,j - 20))
-Pc,j     = I² * Rac,j(T) / 1000
-Ps,j     = screen_loss_factor * Pc,j
-```
+With mean conductor temperature Tc,j, define:
 
-The engineering limit is checked against the **maximum conductor node temperature**,
-not the mean. The distinction is stored in the result and evidence.
+- Rac,j [ohm/m] = R20 [ohm/km]/1000 * (1 + ac_extra) * (1 + alpha20*(Tc,j - 20)).
+- Pc,j [W/m] = I² * Rac,j, uniform over the equivalent conductor domain.
+- Ps,j [W/m] = screen_loss_factor * Pc,j, uniform over the metal-screen domain.
+- C [F/m] = 2*pi*epsilon0*epsilon_r / log(r_insulation_outer/r_insulation_inner).
+- Pd,j [W/m] = 2*pi*f*C*(1000*U0)²*tan_delta, distributed proportionally to 1/r²
+  in that phase's insulation, normalized to the declared total on the polygon mesh.
 
-The dielectric heat per phase is:
+U0 is already phase-to-screen RMS voltage: do **not** divide by sqrt(3). All three
+loss components enter their own physical layers. The fixed screen ratio does NOT
+model induced screen current or its resistance/temperature feedback; skin/proximity
+and bonding-dependent loss factors are NOT calculated. No armouring, soil drying,
+backfill, ducts, contact resistance, axial conduction, load history or thermal
+property nonlinearity is included. This is not complete IEC60287 or EM FEM.
 
-```
-C  = 2*pi*eps0*epsr / ln(r_insulation_outer / r_insulation_inner)
-Wd = 2*pi*f*C*U0²*tan_delta
-```
+Resistance uses the **area-average** conductor temperature. The temperature limit
+uses the **maximum conductor nodal temperature**. This distinction is included in
+results and verified from the field. Individual strands and current redistribution
+inside a nonisothermal conductor are not resolved.
 
-`U0` is the saved conductor-to-screen RMS voltage. Dielectric source density is
-proportional to `1/r²` in each insulation domain and normalized so its integral is
-exactly `Wd`. Conductor and screen sources are each normalized over their own domains.
+## Computation and why the reduced feedback is exact for this model
 
-## Thermal solve and feedback
+Let A be the thermal FEM matrix, B the nine normalized source vectors, and U=A⁻¹B
+on free DOFs. These nine real FEM solutions are not an imported thermal-network
+approximation. Define Ueff=Uconductor + lambda*Uscreen and u0=Pd*sum(Udielectric).
+With conductor averaging weights Bc, H=Bcᵀ Ueff and t0=Bcᵀ u0. For balanced current,
+g=I²*R20ac and the three conductor powers satisfy:
 
-Thermal conductivities and boundary conditions are constant. Nine unit-source FEM
-responses are therefore solved once on the selected Gmsh mesh: three conductors,
-three metallic screens and three insulation domains. Linear superposition then gives
-the full field for any source vector in this declared model.
+    (identity - g*alpha20*H) p = g * (1 + alpha20*(Ta + t0 - 20)).
 
-The three conductor losses are coupled through conductor mean temperatures. The
-implementation solves the resulting three-by-three linear feedback system exactly,
-then independently checks the accepted point with full fixed-point iterations. A
-spectral-radius check rejects an unstable feedback state; a converged result stores
-both the exact residual and the independent iteration trace.
+For constant thermal conductivities and the stated linear mean-temperature
+resistance law, this is an exact elimination of the full discrete thermal problem,
+not a surrogate fit. Every accepted final state also runs a bounded Picard feedback
+iteration and cross-checks its power with the small-system solution. The native
+suite independently iterates the **full sparse thermal system**, without using H,
+and compares all nodal temperatures.
 
-Operating-point mode evaluates the saved project current. Ampacity mode brackets the
-current at which the hottest conductor node reaches the saved temperature limit. The
-reported current is the feasible lower endpoint; an over-limit upper witness is also
-stored. The final bracket width is at most 0.01 A and the lower endpoint is within
-0.005 K of the limit. Those numerical tolerances are root-finding tolerances, not a
-claim of engineering accuracy.
+Reject negative/nonfinite solutions and feedback spectral radius >=1-1e-8. A
+failed final Picard check never becomes success. The residual from A*u-B*p is
+reported at free DOFs and summed at Dirichlet boundaries. This is a discrete
+reaction-based energy check, not independently measured heat flux.
 
-## Finite soil domain and comparison
+## Two explicit operations
 
-The thermal domain remains a finite rectangle with ground, sides and bottom fixed at
-the project ambient temperature. The user may request a second ampacity solve on a
-larger domain. The result reports both currents, the larger-domain temperature at the
-primary current and their percentage difference.
+**operating-point:** uses Scenario.operating_current_a. It may report an over-limit
+state up to150°C, but `ampacity_a` is null. Higher accepted-point temperatures
+are rejected as outside this reference model's declared range. Zero current still includes dielectric heating
+when voltage and tan-delta are nonzero. No fabricated all-zero loss assumption.
 
-A pairwise difference inside a user-set tolerance does **not** certify an infinite
-soil boundary or mesh independence. Both certification flags are hard-coded false.
-A real release decision requires a separate mesh/domain study and an acceptance
-criterion appropriate to that decision.
+**ampacity:** finds the common phase current at which the hottest conductor reaches
+the saved limit. Bracket between zero current and a stable high trial, bounded by
+maximum_search_current_a (default3000A). Reject a zero-current over-limit state,
+unbracketed interval, unstable feedback or nonconvergence. Bisection returns the
+*feasible lower endpoint*, not an arbitrary last iterate. Both endpoints, trial
+history, <=0.01A bracket width and <=0.005K lower-end temperature shortfall are saved.
+These tolerances describe the numerical root, NOT the accuracy of the physical model.
 
-## Scope exclusions
+## Domain comparison is not an error certificate
 
-The adapter does not solve skin/proximity effects, bonding or circulating currents,
-metallic-screen electromagnetic fields, soil drying, contact resistance, ducts,
-backfill zones, transient loading or a complete standard clause set. `ac_extra_factor`
-and `screen_loss_factor` come from the saved project input. The study result is never
-promoted into the host's current ampacity result automatically.
+An optional strictly larger domain is remeshed and independently solved at the same
+mesh setting and electrical inputs. It has its own inverse current, bracket, field,
+mesh and iteration evidence. Report the pairwise current change and the larger-domain
+peak at the original current. Both remain bound to the same saved Scenario.
 
-## Artifacts and verification
+`within_pairwise_tolerance` only compares two numbers against a user-selected drift
+threshold (default0.5%). `mesh_independence_certified` and
+`infinite_domain_accuracy_certified` are always false. The primary ampacity is NOT
+silently replaced with the comparison result. A small pairwise change alone is
+not a bound on remaining truncation error. Nor does this run establish mesh
+independence, experimental accuracy, regulatory compliance or a production rating.
 
-Primary outputs are `buried.msh`, `temperature.vtu`, `field.json`, `thermal.json` and
-`iteration.json`. A requested larger-domain comparison adds its mesh, field and JSON
-record. Before success, the host verifies:
+## Artifacts and failure boundaries
 
-- plugin/project lock, exact input snapshot and explicit `R20`;
-- field topology, 19 semantic domains, boundary nodes, units and finite values;
-- conductor mean/peak temperatures against the field;
-- resistance, conductor/screen/dielectric loss equations;
-- source sum, Dirichlet reaction heat and free-equation residual;
-- root bracket, feedback residual, input binding and optional domain comparison.
+Primary: buried.msh, field.json (existing buried-field/1), temperature.vtu,
+thermal.json (new electrothermal-reference/1), iteration.json. Optional:
+comparison.msh, comparison-field.json, comparison.json. VTU/JSON nodal values agree.
+File length/SHA-256 are checked by host and field viewer. Before persisting success,
+the host verifies R(T), I²R, screen/dielectric losses, total heat, electrical input
+binding, field means/peaks, boundary temperature, domain extents, root bracket and
+comparison binding. Missing or incorrect evidence fails rather than silently
+falling back to the previous solver.
 
-The browser rechecks file length and SHA-256 before rendering the field. View changes
-and mesh overlays do not call the solver.
+The host does not modify project parameters or automatically promote this result
+to its existing ampacity run. No separate project DB, global navigation or third-party
+remote-code loader is introduced. A fixed process is fault isolation, not OS sandboxing.
 
-## Reproduce
+## Reproduction
 
-```sh
-python -m pip install -r backend/requirements-dev.txt \
-  -r plugins/requirements-native.txt \
-  -r plugins/requirements-electrothermal.txt
-python scripts/plugin_sdk.py verify
-python scripts/seal_plugin_catalog.py
-python -m pytest plugin-tests/test_electrothermal.py
-```
+Use a separate environment. Install backend requirements and optionally only
+`plugins/requirements-electrothermal.txt` (full CAD environment not required for this
+new plugin). The full regression workflow still tests Windows CAD clean exits.
 
-All numerical claims must be tied to an exact commit, environment record, JUnit and
-artifacts from the dedicated Linux/Windows CI. Synthetic regression coefficients are
-not manufacturer data or an approved product rating.
+    python scripts/plugin_sdk.py verify
+    python scripts/seal_plugin_catalog.py
+    python -m pytest plugin-tests/test_electrothermal.py
+    cd frontend
+    npx playwright test --config=playwright.electrothermal.config.ts
+
+Numerical examples use explicitly labelled synthetic test inputs, not manufacturer
+records. Exact source SHA, platform environment, JUnit and browser screenshots
+accompany CI evidence. Local Python3.13 numerical tests do not replace Windows or
+pinned-host acceptance.
+
+## Primary technical references (checked during this increment)
+
+- COMSOL, Submarine Cable6—Thermal Effects: distinguishes temperature-dependent
+  phase resistance from fully coupled electromagnetic heating and screen behavior.
+  https://doc.comsol.com/6.4/doc/com.comsol.help.models.acdc.submarine_cable_06_thermal_effects/submarine_cable_06_thermal_effects.html
+- scikit-fem how-to/assembly: https://scikit-fem.readthedocs.io/en/latest/howto.html
+- IEC60287-1-1:2023 scope (not a license or implemented-formula certification):
+  https://webstore.iec.ch/en/publication/68118
+- QuickField dielectric-loss example, voltage RMS/amplitude distinction:
+  https://quickfield.com/advanced/cable_dielectric_losses.htm
+
+The reduction, validation rules and solver acceptance thresholds above are our
+implementation choices. None of these upstream projects certifies this adapter.
