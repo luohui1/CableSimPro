@@ -17,8 +17,8 @@ jobs:
       - name: Resolve current stable packages in a separate temporary project
         shell: bash
         run: |
-          mkdir -p .cds-development artifacts
-          cd .cds-development
+          mkdir -p cds-development artifacts
+          cd cds-development
           npm init -y
           npm install --save-exact --ignore-scripts --no-audit --no-fund motion@latest react@latest react-dom@latest @types/react@latest @types/react-dom@latest esbuild@latest @playwright/test@latest @axe-core/playwright@latest typescript@5.9.3
           npm ls --json > ../artifacts/dependency-tree.json
