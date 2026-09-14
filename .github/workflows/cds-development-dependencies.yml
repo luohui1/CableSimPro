@@ -1,0 +1,34 @@
+name: CableDesignSystem development dependencies
+on:
+  push:
+    branches: ['dev/cds-alpha2-dependencies']
+    paths: ['.github/workflows/cds-development-dependencies.yml']
+permissions:
+  contents: read
+jobs:
+  dependencies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve current stable packages in a separate temporary project
+        shell: bash
+        run: |
+          mkdir -p .cds-development artifacts
+          cd .cds-development
+          npm init -y
+          npm install --save-exact --ignore-scripts --no-audit --no-fund motion@latest react@latest react-dom@latest @types/react@latest @types/react-dom@latest esbuild@latest @playwright/test@latest @axe-core/playwright@latest typescript@5.9.3
+          npm ls --json > ../artifacts/dependency-tree.json
+          node -e 'const fs=require("fs");const p=require("./package.json");fs.writeFileSync("../artifacts/resolved-versions.json",JSON.stringify({resolvedAt:new Date().toISOString(),node:process.version,dependencies:p.dependencies},null,2))'
+          tar -czf ../artifacts/cds-development-dependencies.tgz package.json package-lock.json node_modules
+          cd ..
+          sha256sum artifacts/cds-development-dependencies.tgz > artifacts/dependencies.sha256
+          git rev-parse HEAD > artifacts/source-commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cds-development-dependencies
+          path: artifacts/
+          retention-days: 7
