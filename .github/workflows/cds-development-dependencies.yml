@@ -14,18 +14,21 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Resolve current stable packages in a separate temporary project
+      - name: Capture animation dependencies without executing installation scripts
         shell: bash
         run: |
-          mkdir -p cds-development artifacts
+          mkdir -p cds-development artifacts/upstream
           cd cds-development
           npm init -y
-          npm install --save-exact --ignore-scripts --no-audit --no-fund motion@latest react@latest react-dom@latest @types/react@latest @types/react-dom@latest esbuild@latest @playwright/test@latest @axe-core/playwright@latest typescript@5.9.3
+          npm install --save-exact --ignore-scripts --no-audit --no-fund motion@13.2.0 react@19.3.0 react-dom@19.3.0 @types/react@19.3.0 @types/react-dom@19.3.0 esbuild@0.28.2 @playwright/test@1.63.0 @axe-core/playwright@4.13.0 typescript@5.9.3 animejs@latest lottie-web@latest
           npm ls --json > ../artifacts/dependency-tree.json
           node -e 'const fs=require("fs");const p=require("./package.json");fs.writeFileSync("../artifacts/resolved-versions.json",JSON.stringify({resolvedAt:new Date().toISOString(),node:process.version,dependencies:p.dependencies},null,2))'
           tar -czf ../artifacts/cds-development-dependencies.tgz package.json package-lock.json node_modules
           cd ..
-          sha256sum artifacts/cds-development-dependencies.tgz > artifacts/dependencies.sha256
+          git clone --depth 1 https://github.com/n3r4zzurr0/svg-spinners.git /tmp/cds-svg-spinners
+          git -C /tmp/cds-svg-spinners rev-parse HEAD > artifacts/upstream/svg-spinners-commit.txt
+          git -C /tmp/cds-svg-spinners archive --format=tar HEAD | gzip > artifacts/upstream/svg-spinners-source.tar.gz
+          sha256sum artifacts/cds-development-dependencies.tgz artifacts/upstream/* > artifacts/dependencies.sha256
           git rev-parse HEAD > artifacts/source-commit.txt
       - uses: actions/upload-artifact@v4
         with:
