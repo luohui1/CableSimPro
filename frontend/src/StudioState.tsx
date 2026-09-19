@@ -15,6 +15,7 @@ export interface Studio {
  w:Workspace|null;busy:boolean;error:string;notice:string;output:Output|null;current:Result|null;currentSweep:Sweep|null;
  proposal:Proposal|null;notes:Note[];selected:string;select:(s:string)=>void;phase:number;setPhase:(n:number)=>void;
  status:{cloud_configured:boolean;model:string|null};tab:string;setTab:(s:string)=>void;
+ commitDraft:(changes:Change[],expectedRevision:number)=>Promise<boolean>;exportSavedRun:(id:string)=>Promise<void>;
  edit:(c:Change[],label?:string)=>Promise<void>;lock:(p:string,b:boolean)=>Promise<void>;
  history:(d:'undo'|'redo')=>Promise<void>;run:()=>Promise<void>;plan:(m:string,mode:'local'|'openai',consent:boolean)=>Promise<void>;
  review:(a:'approve'|'reject')=>Promise<void>;extract:(title:string,text:string,page:number)=>Promise<void>;
@@ -73,6 +74,27 @@ export function StudioProvider({children,stayInWorkspace=false,deferCreate=false
  useEffect(()=>{void initialize()},[]);
  useEffect(()=>{if(!notice)return;const t=setTimeout(()=>setNotice(''),4000);return()=>clearTimeout(t)},[notice]);
  const methods:Studio={initialized,outputCurrent,inputDrafts,setInputDraft,discardInputs,adoptProposal:p=>{setProposal(p);add('assistant','已生成工程变更；请检查参数差异、设计依据和完整输入后决定是否批准。')},refreshProviders,w,busy,error,notice,output,current,currentSweep,proposal,notes,selected,select,phase,setPhase,status,tab,setTab,
+ commitDraft:async(changes,expectedRevision)=>{
+  const expected=currentW.current, submitted={...draftRef.current};let saved=false;
+  await task(async()=>{
+   if(!expected||currentW.current?.id!==expected.id||currentW.current.revision!==expectedRevision)
+    throw new Error('草稿基于旧工程版本。请读取最新版本并核对差异；不会自动覆盖。');
+   const next=await api<Workspace>(`/api/workspaces/${expected.id}/edit`,{expected_revision:expectedRevision,changes,label:'工程工作流 · 保存草稿'});
+   remember(next);
+   changes.forEach(c=>{if(draftRef.current[c.path]===submitted[c.path])setInputDraft(c.path,null)});
+   saved=true;setNotice('已校验并保存修改');
+  });return saved;
+ },
+ exportSavedRun:async id=>{
+  const expected=currentW.current;
+  return task(async()=>{
+   if(!expected||currentW.current?.id!==expected.id||currentW.current.revision!==expected.revision||!expected.runs.some(r=>r.id===id))
+    throw new Error('工程或所选运行已变化，请重新选择要导出的历史运行。');
+   const r=await engineeringCall<{html:string;run_id:string;source_revision:number}>(expected.id,expected.revision,'reports.render',{run_id:id});
+   if(r.run_id!==id)throw new Error('报告来源运行不一致，已停止导出。');
+   download(`CableSimPro-rev${r.source_revision}-${id.slice(0,8)}.html`,r.html,'text/html;charset=utf-8');
+  });
+ },
  edit:async(changes,label='属性编辑')=>task(async()=>{remember(await api(route('edit'),{...rev(),changes,label}));changes.forEach(c=>{const d=draftRef.current[c.path];if(d!==undefined&&(d===''?c.value===null:Number(d)===c.value))setInputDraft(c.path,null)});setNotice('已校验并保存修改')}),
  lock:async(path,locked)=>task(async()=>{remember(await api(route('lock'),{...rev(),path,locked}))}),
  history:async d=>task(async()=>{remember(await api(route(`history/${d}`),rev()))}),

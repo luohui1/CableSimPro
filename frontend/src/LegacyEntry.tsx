@@ -1,0 +1,13 @@
+import {lazy,Suspense} from 'react';
+import EngineeringWorkspace from './EngineeringWorkspace';
+import EnterpriseWorkspace from './EnterpriseWorkspace';
+import DualModeApp from './dual-mode/DualModeApp';
+import './dual-mode/readability.css';
+import './professional/reference-visual-acceptance.css';
+const PluginCenter=lazy(()=>import('./plugins/PluginCenter'));
+const LegacyStudio=lazy(()=>import('./Studio'));
+const params=new URLSearchParams(location.search);
+const legacy=params.get('legacy')==='1';
+const classic=params.get('classic')==='1';
+const enterprise=params.get('enterprise')==='1';
+export default function LegacyEntry(){return params.get('plugins')==='1'?<Suspense fallback={<div>正在打开插件中心…</div>}><PluginCenter/></Suspense>:legacy?<Suspense fallback={<p>正在打开迁移界面…</p>}><LegacyStudio/></Suspense>:classic?<EngineeringWorkspace/>:enterprise?<EnterpriseWorkspace/>:<DualModeApp/>;}
