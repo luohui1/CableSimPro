@@ -72,7 +72,7 @@ test('real solve, stale result, two-run comparison and exact historical HTML exp
  expect(file.suggestedFilename()).toContain(`rev2-${first.run_id.slice(0,8)}`);await file.saveAs(info.outputPath('historical-report.html'));
  expect(invoked).toEqual(['reports.render']);
  const second=await run(page);expect(second.run_id).not.toBe(first.run_id);expect(second.result.input.cable.insulation_mm).toBe(7);expect(first.result.input.cable.insulation_mm).toBe(5.5);
- await page.getByLabel('比较运行',{exact:true}).selectOption(first.run_id);await expect(page.getByRole('table',{name:'两次运行比较'})).toContainText('5.500');
+ await page.getByRole('region',{name:'所选运行结果'}).getByLabel('比较运行',{exact:true}).selectOption(first.run_id);await expect(page.getByRole('table',{name:'两次运行比较'})).toContainText('5.500');
  await page.screenshot({path:info.outputPath('result-comparison.png')});
  const final=await (await request.get(`/api/workspaces/${w.id}`)).json();expect(final.runs).toHaveLength(2);expect(final.revision).toBe(3);
  const history=await (await request.get(`/api/workspaces/${w.id}/runs/${first.run_id}`)).json();expect(history.output.result).toEqual(first.result);
