@@ -31,13 +31,12 @@ jobs:
       - name: Browser workflow and visual review
         run: npx playwright test --config=playwright.workflow.config.ts
         working-directory: frontend
-      - name: Capture review artifacts and standalone test runtime
+      - name: Capture source and review artifacts
         if: always()
         run: |
           mkdir -p artifacts
           git rev-parse HEAD > artifacts/source-commit.txt
           git archive --format=zip -o artifacts/source.zip HEAD
-          if [ -d "$HOME/.cache/ms-playwright" ]; then tar -czf artifacts/test-browser.tgz -C "$HOME/.cache/ms-playwright" .; fi
       - uses: actions/upload-artifact@v4
         if: always()
         with:

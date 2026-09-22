@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "brand": {
+    "file": "brand.webp",
+    "source": "approved-kit-baseline.zip/dist/engineering-kit/brand.webp",
+    "unchanged": true,
+    "kind": "existing user-approved AI asset"
+  },
+  "swatches": {
+    "files": [
+      "material-copper.svg",
+      "material-semicon.svg",
+      "material-xlpe.svg",
+      "material-screen.svg",
+      "material-metal.svg",
+      "material-jacket.svg"
+    ],
+    "source": "CableDesignSystem-v0.1.0-alpha.5.zip/CableDesignSystem/build/studio-assets/",
+    "change": "Removed repeated fine-grain strokes only; kept gradients, silhouette and shadow",
+    "engineering_values": false
+  },
+  "generated_page_images_in_product": false
+}

@@ -1,0 +1,106 @@
+/* Optical refinement is limited to the real engineering workspace, not the legacy shell. */
+.wf-material-workspace{--wf-canvas:#edf1f5;--wf-blue:#176cc0;--wf-selected:#e5f0fc;--wf-line:#d9e2eb;--wf-muted:#53677d}
+.wf-material-workspace .wf-top{height:48px;padding:0 20px;box-shadow:0 1px 0 #ffffff20 inset}
+.wf-material-workspace .wf-top .wf-brand{font-size:18px;letter-spacing:-.5px;gap:10px}
+.wf-material-workspace .wf-brand-asset{width:32px;height:32px;object-fit:contain}
+.wf-material-workspace .wf-project-name{font-size:12px;letter-spacing:.1px}
+.wf-material-workspace .wf-ribbon{height:44px;padding-inline:15px;background:linear-gradient(#fff,#f2f5f9);border-bottom-color:#cad7e4}
+.wf-material-workspace .wf-ribbon button{font-size:12px;padding:6px 12px;border-radius:5px}
+.wf-material-workspace .wf-workspace-label{color:#195f9f;border-right:1px solid #d7e0e9;height:24px;padding-right:20px;margin-right:4px}
+.wf-material-workspace .wf-ribbon-divider:first-of-type{display:none}
+.wf-material-workspace .wf-body{grid-template-columns:244px minmax(0,1fr) 326px}
+.wf-material-workspace .wf-outline{background:linear-gradient(90deg,#f8fafc,#fff)}
+.wf-material-workspace .wf-pane-heading{height:39px;background:linear-gradient(#fafcff,#eef3f8);padding:0 17px}
+.wf-material-workspace .wf-pane-heading h2{font-size:13px;color:#28405a}
+.wf-material-workspace .wf-pane-heading>span{font-size:10px;color:#586e82}
+.wf-material-workspace .wf-object-search{margin:15px 15px 4px;box-shadow:0 1px 2px #18375406;border-radius:5px}
+.wf-material-workspace .wf-object-search input:not([type=checkbox]){height:32px;font-size:12px}
+.wf-material-workspace .wf-tree-group{padding-top:20px}
+.wf-material-workspace .wf-group-label,.wf-material-workspace .wf-tree-group h2{font-size:11px;margin-bottom:9px;letter-spacing:0;color:#61748a}
+.wf-material-workspace .wf-outline nav{padding:0 12px 20px}
+.wf-material-workspace .wf-outline nav button{min-height:35px;font-size:12px;border-radius:5px;gap:9px}
+.wf-material-workspace .wf-outline nav button.is-selected{background:linear-gradient(90deg,#d9ebff,#edf5ff);box-shadow:inset 3px 0 #217cd0;color:#155e9f}
+.wf-material-workspace .wf-layer-list{margin-left:14px;padding-left:8px;border-color:#e1e8ef}
+.wf-material-workspace .wf-object-icon{width:25px;height:25px;object-fit:contain;flex-shrink:0;margin:-2px -3px}
+.wf-material-workspace .wf-layer-list button small{color:#60758c}
+.wf-material-workspace .wf-outline-bottom{background:#f6f9fc;font-size:11px}
+.wf-material-workspace .wf-outline-bottom p{font-size:11px}
+.wf-material-workspace .wf-document-strip{min-height:39px;background:#eef3f8}
+.wf-material-workspace .wf-documents>button{min-height:38px;padding:7px 18px;font-size:12px}
+.wf-material-workspace .wf-documents>button.active{background:#fff;color:#213f5e;border-top-color:#237ad0}
+.wf-material-workspace .wf-document-toolbar{height:43px;padding:0 15px;background:#fff;gap:6px}
+.wf-material-workspace .wf-document-toolbar .wf-view-tabs{gap:3px;flex-shrink:0}
+.wf-material-workspace .wf-view-tabs button{font-size:12px;min-height:29px;gap:7px;padding:4px 11px;border-radius:4px}
+.wf-material-workspace .wf-view-tabs button[aria-pressed=true]{background:linear-gradient(#f3f9ff,#e3effd);box-shadow:inset 0 0 0 1px #c9dff7;color:#195f9f}
+.wf-material-workspace .wf-toolbar-object{margin-left:auto;color:#56718b}
+.wf-material-workspace .wf-model-toolbar-host{margin-left:auto;min-width:0}
+.wf-model-toolbar{display:flex;align-items:center;gap:7px}
+.wf-material-workspace .wf-model-toolbar label{display:flex;align-items:center;gap:4px;color:#42617d}
+.wf-material-workspace .wf-model-toolbar select{border:0;background:transparent;padding:3px;font-size:12px;height:30px;max-width:108px;outline-offset:0}
+.wf-material-workspace .wf-model-toolbar button{min-height:29px;font-size:12px;background:transparent;border:0;padding:4px 7px;color:#42617d}
+.wf-display-menu{position:relative;font-size:12px;color:#42617d}
+.wf-display-menu summary{list-style:none;display:flex;align-items:center;gap:6px;padding:5px 7px;border-radius:4px}
+.wf-display-menu>div{position:absolute;right:0;top:32px;z-index:8;display:grid;padding:6px;min-width:132px;border:1px solid #cad9e7;border-radius:6px;background:#fff;box-shadow:0 6px 22px #23486b24}
+.wf-material-workspace .wf-display-menu button{justify-content:flex-start;padding:7px 10px}
+.wf-material-workspace .wf-display-menu button[aria-pressed=true]{background:#e8f2ff;color:#155e9f}
+.wf-material-workspace .wf-canvas{background:radial-gradient(ellipse at 52% 30%,#fcfdff 0,#f0f4f8 65%,#e6edf4 100%)}
+.wf-material-workspace .wf-three-host{padding-bottom:31px}
+.wf-material-workspace .wf-refined-model{background:transparent}
+.wf-material-workspace .wf-refined-model .model-render{background:#edf1f5}
+.wf-material-workspace .wf-refined-model .model-caption{left:24px;top:20px;color:#3f5c76}
+.wf-material-workspace .wf-refined-model .model-caption strong{font-size:12px;font-weight:500}
+.wf-material-workspace .wf-refined-model .model-caption span{font-size:11px;color:#566c80}
+.wf-material-workspace .wf-refined-model .model-callouts{display:block;z-index:2;width:100%;height:100%;pointer-events:none}
+.wf-material-workspace .wf-refined-model .model-callouts path{stroke:#819bb4;stroke-width:.8}
+.wf-material-workspace .wf-refined-model .model-callouts circle{fill:#287ac7;stroke:#fff;stroke-width:2;r:3.5}
+.wf-material-workspace .wf-refined-model .model-callouts text{fill:#284864;font-size:12px;font-weight:600;paint-order:stroke;stroke:#edf1f5;stroke-width:3px;stroke-linejoin:round}
+.wf-material-workspace .wf-refined-model .model-callouts .callout-value{font-size:11px;font-weight:400;fill:#526b81}
+.wf-portrait-controls{position:absolute;left:50%;bottom:22px;transform:translateX(-50%);display:flex;align-items:center;padding:5px;gap:4px;background:#ffffffee;border:1px solid #cddce9;border-radius:7px;box-shadow:0 5px 18px #1c43651a}
+.wf-material-workspace .wf-portrait-controls button{min-height:29px;padding:5px 8px;border:0;background:transparent;border-radius:4px;color:#365a7b}
+.wf-portrait-controls i{height:19px;width:1px;background:#dbe5ee;margin-inline:3px}
+.wf-material-workspace .wf-refined-model .orientation{left:21px;bottom:24px;right:auto;background:#ffffffb8;border-color:#d3dfe9;border-radius:5px;padding:3px}
+.wf-material-workspace .wf-refined-model .orientation button{padding:4px 7px;min-height:25px;font-size:11px}
+.wf-material-workspace .wf-canvas-caption{background:#f7fafd;font-size:11px;color:#526b82}
+.wf-material-workspace .wf-view-ident{top:21px;left:25px}
+.wf-material-workspace .wf-section{max-width:920px}
+.wf-material-workspace .wf-view-controls{border-radius:6px;box-shadow:0 3px 12px #32516e13}
+/* Parameter groups remain mounted when folded. One authoritative draft state. */
+.wf-material-workspace .wf-inspector{background:#fff}
+.wf-material-workspace .wf-object-heading{display:flex;align-items:center;justify-content:space-between;gap:6px;padding:23px 19px 18px;border-bottom:0;background:linear-gradient(110deg,#fff,#f6f9fd)}
+.wf-material-workspace .wf-object-heading>div{min-width:0;flex:1}
+.wf-material-workspace .wf-object-heading small{color:#59718b;font:10px ui-monospace,monospace;letter-spacing:1px}
+.wf-material-workspace .wf-object-heading h2{font-size:21px;line-height:1.4;margin-top:8px;color:#213c58;letter-spacing:-.5px}
+.wf-material-workspace .wf-object-heading p{font-size:11px;margin-top:8px;line-height:1.6;color:#576e83}
+.wf-material-workspace .wf-material-preview{width:76px;height:76px;flex-shrink:0;object-fit:contain}
+.wf-object-measures{display:grid;grid-template-columns:1fr 1fr;position:relative;padding:13px 20px 28px;gap:18px;border-block:1px solid #e1e9f1;background:#f7fafd;flex-shrink:0}
+.wf-object-measures>div{display:grid;gap:4px}.wf-object-measures span{font-size:11px;color:#58708a}.wf-object-measures b{font-size:16px;font-weight:500;color:#234666;font-variant-numeric:tabular-nums}.wf-object-measures b small{font-size:11px}.wf-object-measures .wf-measure-origin{position:absolute;bottom:7px;right:20px;font-size:9px;color:#5c748c}
+.wf-material-workspace .wf-properties{padding:8px 16px 18px}
+.wf-property-group{border-bottom:1px solid #e1e9f1;padding-bottom:7px;margin:0}
+.wf-property-group>summary,.wf-material-workspace .wf-source>summary{display:flex;align-items:center;gap:8px;list-style:none;min-height:42px;color:#2b4c6b;font-weight:600;font-size:12px;user-select:none}
+.wf-property-group>summary::-webkit-details-marker,.wf-material-workspace .wf-source>summary::-webkit-details-marker{display:none}
+.wf-property-group>summary>svg:first-child{color:#2778be}.wf-property-group>summary>svg:last-child,.wf-material-workspace .wf-source>summary>svg:last-child{margin-left:auto;color:#64819b;transition:transform .14s}
+.wf-property-group:not([open])>summary>svg:last-child{transform:rotate(-90deg)}
+.wf-material-workspace .wf-property-group>div{padding:3px 2px 6px}
+.wf-material-workspace .wf-property{display:grid;grid-template-columns:minmax(96px,1fr) minmax(136px,1.35fr);align-items:center;column-gap:10px;row-gap:4px;margin:0 0 13px}
+.wf-material-workspace .wf-property>label{display:flex;align-items:center;gap:5px;margin:0;font-size:12px;line-height:1.5;color:#4e667d}
+.wf-material-workspace .wf-property .wf-input-unit{gap:6px;min-width:0}
+.wf-material-workspace .wf-property :is(input,select){font-size:13px;height:31px;border-color:#c6d6e5;border-radius:4px;box-shadow:0 1px 2px #153e6010 inset;background:linear-gradient(#fff,#fdfefe)}
+.wf-material-workspace .wf-property input[aria-invalid=true]{border-color:#b9463d;background:#fff6f3}
+.wf-material-workspace .wf-input-unit>span{min-width:29px;font-size:10px;color:#566e85;max-width:42px}
+.wf-material-workspace .wf-property>small,.wf-material-workspace .wf-property>.wf-inline-error{grid-column:1/-1;margin:0;text-align:right;font-size:10px}
+.wf-material-workspace .wf-property[data-draft=true]>label{color:#79511c}
+.wf-material-workspace .wf-source{margin:0;padding:0;border:0}.wf-material-workspace .wf-source>summary{color:#47637e;font-weight:500}
+.wf-material-workspace .wf-source p{margin:4px 2px 12px;font-size:11px;color:#546b80}
+.wf-material-workspace .wf-save{background:linear-gradient(#f8fbfe,#eef4fa);padding:13px 18px 16px}
+.wf-material-workspace .wf-save p{display:flex;align-items:center;gap:7px;color:#4f6b82;font-size:11px;margin-bottom:11px}
+.wf-material-workspace .wf-save p i{width:5px;height:5px;border-radius:50%;background:#4e8b73}.wf-material-workspace .wf-save p i[data-dirty=true]{background:#b28235}
+.wf-material-workspace .wf-save kbd{margin-left:auto;color:#5b738a;font:10px ui-monospace,monospace}
+.wf-material-workspace .wf-save .wf-primary{background:linear-gradient(#2382d8,#1764b5);border-color:#176ac0;box-shadow:inset 0 1px 0 #ffffff35,0 2px 4px #17457914;border-radius:5px;min-height:35px;font-size:12px}
+.wf-material-workspace .wf-save .wf-primary:disabled{background:#e1e9f2;color:#5a7390;border-color:#d1dce7;opacity:1;box-shadow:none}
+.wf-material-workspace .wf-status{font-size:11px;background:#f4f8fc;border-top-color:#cbd9e6;min-height:28px}
+.wf-readonly-result h3{font-size:13px;margin:8px 0}.wf-readonly-result code{display:block;margin:12px 0}
+@media(max-width:1280px){.wf-material-workspace .wf-body{grid-template-columns:218px minmax(0,1fr) 300px}.wf-material-workspace .wf-object-heading{padding:17px}.wf-material-workspace .wf-material-preview{width:65px;height:65px}.wf-material-workspace .wf-model-toolbar{gap:3px}.wf-material-workspace .wf-view-tabs button{font-size:11px;padding:4px 8px}.wf-material-workspace .wf-model-toolbar button span{display:none}.wf-material-workspace .wf-refined-model .orientation{left:12px;bottom:63px}}
+@media(max-width:1000px){.wf-material-workspace .wf-body{grid-template-columns:175px minmax(0,1fr) 267px}.wf-material-workspace .wf-top{padding-inline:12px}.wf-material-workspace .wf-top .wf-brand{font-size:16px}.wf-material-workspace .wf-ribbon button{padding:5px 7px}.wf-material-workspace .wf-workspace-label{padding-right:8px;font-size:11px}.wf-material-workspace .wf-property{grid-template-columns:1fr;gap:5px;margin-bottom:13px}.wf-material-workspace .wf-property>label{font-size:12px}.wf-material-workspace .wf-property .wf-input-unit{max-width:100%}.wf-material-workspace .wf-material-preview{width:54px;height:54px}.wf-material-workspace .wf-object-heading h2{font-size:18px}.wf-material-workspace .wf-outline nav{padding-inline:7px}.wf-material-workspace .wf-layer-list{margin-left:4px}.wf-material-workspace .wf-outline nav button{font-size:11px;gap:5px}.wf-material-workspace .wf-document-toolbar{padding-inline:7px;height:auto;min-height:43px;flex-wrap:wrap}.wf-material-workspace .wf-model-toolbar-host{margin-left:0}.wf-material-workspace .wf-view-tabs button{font-size:11px}.wf-material-workspace .wf-model-toolbar{font-size:11px}.wf-material-workspace .wf-display-menu{font-size:11px}.wf-material-workspace .wf-model-toolbar select{font-size:11px}.wf-material-workspace .wf-object-heading{padding:13px 16px}.wf-material-workspace .wf-object-heading p{display:none}.wf-material-workspace .wf-canvas-caption>span:last-child{display:none}}
+@media(max-height:700px){.wf-material-workspace .wf-object-heading{padding-block:12px}.wf-object-measures{padding-block:8px 23px}.wf-material-workspace .wf-property{margin-bottom:10px}.wf-material-workspace .wf-save{padding-block:9px 11px}.wf-material-workspace .wf-top{height:43px}.wf-material-workspace .wf-properties{padding-top:2px}.wf-material-workspace .wf-property-group>summary{min-height:37px}}
+.wf-material-workspace.wf-focus-mode .wf-body{grid-template-columns:minmax(0,1fr)}
+@media(prefers-reduced-motion:reduce){.wf-material-workspace .wf-property-group>summary>svg{transition:none}}

@@ -5,9 +5,11 @@ import type {Result} from '../types';
 import {api,fmt,canonical} from '../utils';
 import {objects,layerKeys,parseDraft,type ObjectKey} from './fields';
 import DocumentTabs from './DocumentTabs';
+import ObjectInspector,{LayerSwatch} from './ObjectInspector';
 import CommandSearch from './CommandSearch';
 import {CableSection,InstallationDiagram,SavedCurve,type GeometryLayer} from './EngineeringGraphics';
 import './workflow.css';
+import './workspace-finish.css';
 const CableModelView=lazy(()=>import('../CableModelView'));
 const PluginDialog=lazy(()=>import('../plugins/ProjectPluginDialog'));
 interface Prepared {status:string;package:{project_id:string;scenario_revision:number;geometry_recipe:{layers:GeometryLayer[]}};issues:{code:string;severity:string;message:string}[]}
@@ -47,6 +49,7 @@ function Workbench({onHome}:{onHome:()=>void}){
  const s=useStudio(),w=s.w!;
  const [selection,setSelection]=useState<ObjectKey>('cable'),[doc,setDoc]=useState<DocumentId>('cable'),[docs,setDocs]=useState<DocumentId[]>(['cable']);
  const [threeMounted,setThreeMounted]=useState(false);
+ const [modelToolbarHost,setModelToolbarHost]=useState<HTMLDivElement|null>(null);
  const [focused,setFocused]=useState(false),[commandOpen,setCommandOpen]=useState(false),[objectQuery,setObjectQuery]=useState('');
  const [zoom,setZoom]=useState(100),[dimensions,setDimensions]=useState(true);
  const [layersOpen,setLayersOpen]=useState(true);
@@ -81,8 +84,8 @@ function Workbench({onHome}:{onHome:()=>void}){
  const object=objects[selection];
  const resultMeta=doc.startsWith('run:')?w.runs.find(r=>r.id===doc.slice(4)):null;
  const title=(id:DocumentId)=>id==='cable'?'C-001 · 电缆':id==='study'?'R-001 · 稳态研究':`运行 ${id.slice(4,12)}`;
- return <div className={`wf-shell ${focused?'wf-focus-mode':''}`}>
-  <header className="wf-top"><button className="wf-brand" disabled={dirty||s.busy} onClick={onHome} aria-label="返回工程首页"><span className="wf-mark">C</span><span>CableSim<span className="wf-brand-pro">Pro</span></span></button>
+ return <div className={`wf-shell wf-material-workspace ${focused?'wf-focus-mode':''}`}>
+  <header className="wf-top"><button className="wf-brand" disabled={dirty||s.busy} onClick={onHome} aria-label="返回工程首页"><img className="wf-brand-asset" src="/workbench-assets/brand.webp" alt=""/><span>CableSim<span className="wf-brand-pro">Pro</span></span></button>
    <span className="wf-project-name" title={w.scenario.name}>{w.scenario.name}</span><span className="wf-revision" data-testid="workflow-revision">rev.{w.revision}</span><span className="wf-top-spacer"/>
    <button id="wf-command-trigger" className="wf-command-trigger" onClick={()=>setCommandOpen(true)}><Search size={15}/><span>查找命令</span><kbd>Ctrl K</kbd></button>
    <details className="wf-more"><summary aria-label="更多工程操作">更多 <ChevronDown size={13}/></summary><div><button onClick={()=>{setPlugins(true);document.querySelector('.wf-more')?.removeAttribute('open')}}>插件管理</button><button disabled={dirty||s.busy} onClick={()=>{const u=new URL(location.href);u.searchParams.delete('workflow');u.searchParams.set('mode','workbench');location.assign(u.href)}}>返回原工作台</button></div></details>
@@ -101,18 +104,18 @@ function Workbench({onHome}:{onHome:()=>void}){
    <aside className="wf-outline"><header className="wf-pane-heading"><h2>模型构建器</h2><span>C-001</span></header>
     <label className="wf-object-search"><Search size={14}/><input aria-label="筛选工程对象" placeholder="筛选对象…" value={objectQuery} onChange={e=>{setObjectQuery(e.target.value);setLayersOpen(true)}}/>{objectQuery&&<button aria-label="清除对象筛选" onClick={()=>setObjectQuery('')}><X size={13}/></button>}</label>
     <nav aria-label="工程对象"><div className="wf-tree-group"><span className="wf-group-label">电缆定义</span><div className="wf-cable-node"><button className="wf-expand" aria-expanded={layersOpen} aria-label="展开或折叠电缆层" onClick={()=>setLayersOpen(v=>!v)}>{layersOpen?<ChevronDown size={13}/>:<ChevronRight size={13}/>}</button><button className={selection==='cable'&&doc==='cable'?'is-selected':''} onClick={()=>pick('cable')}><Box size={16}/><b>C-001 · 电缆</b></button></div>
-    <div className="wf-layer-list" hidden={!layersOpen}>{visibleLayerKeys.map(key=>{const i=layerKeys.indexOf(key);return <button key={key} className={selection===key&&doc==='cable'?'is-selected':''} aria-pressed={selection===key} aria-label={objects[key].name} onClick={()=>pick(key)}><i className={`wf-layer-dot wf-dot-${i}`}/><span>{objects[key].name}</span><small>{String(i+1).padStart(2,'0')}</small></button>})}{!visibleLayerKeys.length&&<p className="wf-empty-inline">没有匹配的结构层</p>}</div></div>
+    <div className="wf-layer-list" hidden={!layersOpen}>{visibleLayerKeys.map(key=>{const i=layerKeys.indexOf(key);return <button key={key} className={selection===key&&doc==='cable'?'is-selected':''} aria-pressed={selection===key} aria-label={objects[key].name} onClick={()=>pick(key)}><LayerSwatch object={key} conductor={w.scenario.cable.conductor}/><span>{objects[key].name}</span><small>{String(i+1).padStart(2,'0')}</small></button>})}{!visibleLayerKeys.length&&<p className="wf-empty-inline">没有匹配的结构层</p>}</div></div>
     <div className="wf-tree-group"><span className="wf-group-label">分析定义</span><button className={selection==='installation'&&doc==='study'?'is-selected':''} onClick={()=>pick('installation')}><Layers3 size={16}/>敷设方案 A</button><button className={doc==='study'&&selection==='study'?'is-selected':''} onClick={()=>pick('study')}><Settings2 size={16}/>R-001 · 稳态研究</button></div>
     <div className="wf-tree-group"><h2>保存的运行 <span>{w.runs.length}</span></h2>{!w.runs.length&&<p className="wf-empty-inline">尚未生成计算记录</p>}{w.runs.map(r=><button key={r.id} aria-pressed={doc===`run:${r.id}`} className={doc===`run:${r.id}`?'is-selected':''} onClick={()=>open(`run:${r.id}`)}><FileText size={15}/><span>rev.{r.revision} <small>{r.id.slice(0,8)}</small></span></button>)}</div>
    </nav><div className="wf-outline-bottom"><ShieldCheck size={15}/><div><b>工程输入与来源</b><p>{w.sources.length} 项关联资料 · 待人工核对</p></div></div></aside>
    <main className="wf-editor">
     <DocumentTabs ids={docs} active={doc} title={id=>title(id as DocumentId)} dirty={dirty} onSelect={id=>activate(id as DocumentId)} onClose={id=>close(id as DocumentId)}/>
     <section id="wf-panel-cable" role="tabpanel" aria-labelledby="wf-tab-cable" className="wf-cable-document" hidden={doc!=='cable'} aria-label="电缆设计文档">
-     <div className="wf-document-toolbar"><span>C-001 <ChevronRight size={14}/> {object.name}</span><div><button aria-pressed={view==='section'} onClick={()=>setView('section')}>二维截面</button><button aria-pressed={view==='3d'} onClick={()=>{setThreeMounted(true);setView('3d')}}>三维结构</button></div></div>
+     <div className="wf-document-toolbar"><div className="wf-view-tabs"><button aria-pressed={view==='section'} onClick={()=>setView('section')}><Ruler size={15}/>二维截面</button><button aria-pressed={view==='3d'} onClick={()=>{setThreeMounted(true);setView('3d')}}><Box size={15}/>三维结构</button></div><span className="wf-toolbar-object" hidden={view==='3d'}>{object.name}</span><div ref={setModelToolbarHost} className="wf-model-toolbar-host" hidden={view!=='3d'}/></div>
      <div className="wf-canvas" data-testid="workflow-canvas">
       {view==='section'&&<><div className="wf-view-ident"><span>横截面 / XY</span><small>参数化几何</small></div><div className="wf-view-axis"><svg viewBox="0 0 52 50" role="img" aria-label="截面坐标方向"><path d="M13 34H43M13 34V7"/><text x="43" y="47">X</text><text x="3" y="9">Y</text></svg></div></>}
       <div hidden={view!=='section'} className="wf-section-host">{prepared.error?<div className="wf-center-message" role="alert">{prepared.error}<button onClick={()=>setPreflightNonce(n=>n+1)}>重试读取几何</button></div>:!data?<p className="wf-center-message" role="status">正在读取工程几何…</p>:<CableSection layers={data.package.geometry_recipe.layers} selection={selection} onSelect={pick} zoom={zoom} dimensions={dimensions} conductor={w.scenario.cable.conductor}/>}</div>
-      {threeMounted&&<div hidden={view!=='3d'} className="wf-three-host"><Suspense fallback={<p>正在加载三维显示…</p>}><CableModelView cable={w.scenario.cable} studio onInspectLayer={i=>pick(layerKeys[i])}/></Suspense></div>}
+      {threeMounted&&<div hidden={view!=='3d'} className="wf-three-host"><Suspense fallback={<p>正在加载三维显示…</p>}><CableModelView cable={w.scenario.cable} studio refined toolbarTarget={modelToolbarHost} activeLayer={layerKeys.includes(selection)?layerKeys.indexOf(selection):null} onInspectLayer={i=>pick(layerKeys[i])}/></Suspense></div>}
       {view==='section'&&<div className="wf-view-controls" role="toolbar" aria-label="截面显示控制"><button aria-label="缩小截面" disabled={zoom<=50} onClick={()=>setZoom(v=>Math.max(50,v-10))}><Minus size={15}/></button><span aria-label="显示缩放">{zoom}%</span><button aria-label="放大截面" disabled={zoom>=130} onClick={()=>setZoom(v=>Math.min(130,v+10))}><Plus size={15}/></button><i/><button aria-label="截面适合画布" onClick={()=>setZoom(100)}><Maximize2 size={15}/></button><button aria-label="显示截面尺寸" aria-pressed={dimensions} onClick={()=>setDimensions(v=>!v)}><Ruler size={15}/></button></div>}
       <div className="wf-canvas-caption"><span>已保存模型 · rev.{w.revision}{dirty?' · 草稿尚未应用':''}</span><span>等效结构；外观不参与求解</span></div>
      </div>
@@ -129,12 +132,7 @@ function Workbench({onHome}:{onHome:()=>void}){
     </section>
     {docs.filter(id=>id.startsWith('run:')).map(id=><section key={id} id={`wf-panel-${id}`} role="tabpanel" aria-labelledby={`wf-tab-${id}`} hidden={doc!==id} className="wf-run-document"><ResultView runId={id.slice(4)}/></section>)}
    </main>
-   <aside className="wf-inspector" aria-label="上下文属性检查器"><div className="wf-pane-heading"><h2><Settings2 size={14}/>属性</h2><span>{dirty?'未保存':'已同步'}</span></div><header><small>{resultMeta?'RESULT / READ ONLY':`C-001 / ${layerKeys.includes(selection)?String(layerKeys.indexOf(selection)+1).padStart(2,'0'):'ENGINEERING'}`}</small><h2>{resultMeta?`运行 rev.${resultMeta.revision}`:object.name}</h2><p>{resultMeta?'只读运行快照；不随当前输入变化':object.caption}</p>{data&&layerKeys.includes(selection)&&<div className="wf-layer-measures"><span>外径 <b>{fmt(data.package.geometry_recipe.layers[layerKeys.indexOf(selection)].outer_radius_m*2000,3)} mm</b></span><span>已保存几何</span></div>}</header>
-    <div className="wf-properties">{resultMeta?<div><p>来源工程版本 rev.{resultMeta.revision}</p><p className="wf-muted">当前工程版本 rev.{w.revision}</p><p><code>{resultMeta.input_hash}</code></p><button onClick={()=>pick('cable')}>返回电缆参数</button></div>:object.fields.map(spec=>{const text=s.inputDrafts[spec.path]??String(valueAt(w.scenario,spec.path)??''),err=spec.path in s.inputDrafts?parseDraft(spec.path,text).error:null,locked=w.locks.includes(spec.path);return <div className="wf-property" key={spec.path}><label htmlFor={`wf-${spec.path}`}>{spec.label}{locked&&<span> · 已锁定</span>}</label><div className="wf-input-unit">{spec.options?<select id={`wf-${spec.path}`} value={text} disabled={s.busy||locked} onChange={e=>edit(spec.path,e.target.value)}>{spec.options.map(([v,n])=><option key={v} value={v}>{n}</option>)}</select>:<input id={`wf-${spec.path}`} inputMode="decimal" value={text} disabled={s.busy||locked} aria-invalid={!!err} aria-describedby={err?`wf-error-${spec.path}`:undefined} onChange={e=>edit(spec.path,e.target.value)} onKeyDown={e=>{if(e.key==='Escape'){s.setInputDraft(spec.path,null);e.stopPropagation()}}}/>}<span>{spec.unit}</span></div>{err&&<p id={`wf-error-${spec.path}`} className="wf-inline-error">{err}</p>}{spec.path in s.inputDrafts&&<small>已保存：{String(valueAt(w.scenario,spec.path)??'未提供')}</small>}</div>})}
-     <details className="wf-source"><summary>来源与编辑约束</summary><p>上述值来自已保存工程。全组由后端校验尺寸、布置及锁定；成功后才更新模型。半导电层热阻率为共享属性。</p>{w.sources.map(src=><p key={src.id}>{src.title} · 第 {src.page} 页</p>)}</details>
-    </div>
-    <footer className="wf-save"><p>{dirty?`${Object.keys(s.inputDrafts).length} 项草稿 · 基于 rev.${base.current??w.revision}`:`已保存 · rev.${w.revision}`}</p><button className="wf-primary" disabled={!dirty||s.busy||invalid||conflict} onClick={()=>void save()}><Save size={15}/>保存全部修改</button>{dirty&&<button disabled={s.busy} onClick={()=>{s.discardInputs();s.dismiss()}}>撤销未保存输入</button>}</footer>
-   </aside>
+   <ObjectInspector selection={selection} layers={data?.package.geometry_recipe.layers} result={resultMeta} baseRevision={base.current} conflict={conflict} invalid={invalid} onEdit={edit} onSave={()=>void save()} onPick={pick}/>
   </div>
   <footer className="wf-status"><span className={dirty?'wf-dirty':''}>{s.busy?'正在执行工程操作':dirty?'有未保存输入':'工程输入已保存'}</span><span>{s.notice||'数据来自本机工程服务'}<span className="wf-status-separator">·</span>专业工作区 · 工程预览</span></footer>
   <CommandSearch open={commandOpen} onClose={()=>setCommandOpen(false)} commands={[

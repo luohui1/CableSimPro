@@ -5,9 +5,10 @@ import {layers} from '../utils';
 
 /** Display-only strands. Neither strand count nor lay is manufacturing input.
  * All centerlines fit the nominal envelope. Never pass this group to a solver/exporter. */
-export function cableAppearance(cable:Cable,mode:string,visible:boolean[],materials?:THREE.MeshStandardMaterial[]){
+export function cableAppearance(cable:Cable,mode:string,visible:boolean[],materials?:THREE.MeshStandardMaterial[],displayLength=.36){
  const group=new THREE.Group();group.name='显示细节（不参与计算）';
  group.userData={purpose:'illustration-only',not_solver_geometry:true,not_manufacturing_lay:true};
+ const axialScale=displayLength/.36;
  const radii=layers(cable).map(l=>l.radius_mm/1000),r=radii[0];
  if(visible[0]){
   const wire=r/7.3,yOffset=mode==='exploded'?-2.5*.055:0;
@@ -15,7 +16,7 @@ export function cableAppearance(cable:Cable,mode:string,visible:boolean[],materi
   for(let ring=0;ring<=3;ring++){
    const count=ring===0?1:6*ring;
    const points=Array.from({length:65},(_,j)=>{
-    const x=-.18+j*.36/64,a=(ring?x/.17*2*Math.PI:0);
+    const x=(-.18+j*.36/64)*axialScale,a=(ring?x/.17*2*Math.PI:0);
     return new THREE.Vector3(x,2*wire*ring*Math.cos(a),2*wire*ring*Math.sin(a));
    });
    const tube=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),64,wire*.96,10,false);
@@ -32,7 +33,7 @@ export function cableAppearance(cable:Cable,mode:string,visible:boolean[],materi
  if(visible[4]&&mode!=='assembled'){
   const ro=radii[4],inner=radii[3],relief=Math.min((ro-inner)*.45,.00018),y0=mode==='exploded'?1.5*.055:0;
   const points=Array.from({length:21},(_,j)=>{
-   const x=-.030+j*.042/20,a=j/20*.85;
+   const x=(-.030+j*.042/20)*axialScale,a=j/20*.85;
    return new THREE.Vector3(x,(ro-relief)*Math.cos(a),(ro-relief)*Math.sin(a));
   });
   const geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),20,relief,6,false);
