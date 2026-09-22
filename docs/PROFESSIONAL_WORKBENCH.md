@@ -68,7 +68,7 @@ npx playwright test --config=playwright.workflow.config.ts
 ```
 
 The review workflow retains all 29 existing workflow/legacy browser cases and adds
-five professional-design cases. Checks cover real parameter saves, invalid drafts,
+six professional-design cases. Checks cover real parameter saves, invalid drafts,
 concurrent edits, run staleness, two-run comparison, historical HTML export, retained
 WebGL canvases, keyboard focus, command safety, read-only display controls and layout
 at 1920x1080, 1366x768, 1093x615 and 911x512 CSS pixels. The smaller sizes approximate
