@@ -6,18 +6,19 @@ from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
 
-# Nine white-workbench real-backend cases per desktop project; legacy coverage retained.
-EXPECTED = {'chromium': 98, 'webkit': 98, 'mobile-webkit': 11,
+# Update together with the browser matrix in .github/workflows/ci.yml (npx playwright test --list).
+EXPECTED = {'chromium': 98, 'webkit': 98, 'mobile-webkit': 11, 'workflow-plugins': 35,
             'windows-chromium-1': 71, 'windows-chromium-1.25': 71,
             'windows-chromium-1.5': 71, 'windows-edge-1.25': 71}
+SHARDS = 15  # one JUnit report per browser matrix entry
 
 
 def verify(root: Path) -> dict:
     counts = {name: 0 for name in EXPECTED}
     seen: set[tuple[str, str, str]] = set()
     reports = sorted(root.rglob('*tests.xml'))
-    if len(reports) != 12:
-        raise ValueError(f'Expected 12 browser shard reports, received {len(reports)}')
+    if len(reports) != SHARDS:
+        raise ValueError(f'Expected {SHARDS} browser shard reports, received {len(reports)}')
     for path in reports:
         document = ET.parse(path).getroot()
         cases = list(document.iter('testcase'))

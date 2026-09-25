@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1680" height="1450" viewBox="0 0 1680 1450" role="img" aria-labelledby="title description">
+  <title id="title">CableSimPro 系统架构设计草案</title>
+  <desc id="description">工程工作台和工程助手共用应用协调层；六组领域模块通过统一能力与插件服务调用计算、建模和报告适配器。CableModelKit 保持独立。SQLite 保存元数据，工件存储保存不可变输入输出。</desc>
+  <rect width="1680" height="1450" fill="#ffffff"/>
+  <g fill="#64716d">
+    <path d="M693 318 L699 330 L705 318 Z M1377 318 L1383 330 L1389 318 Z"/>
+    <path d="M377 510 L383 522 L389 510 Z M603 510 L609 522 L615 510 Z M829 510 L835 522 L841 510 Z M1055 510 L1061 522 L1067 510 Z M1281 510 L1287 522 L1293 510 Z M1507 510 L1513 522 L1519 510 Z"/>
+    <path d="M712 750 L718 762 L724 750 Z"/>
+    <path d="M1169 821 L1157 827 L1169 833 Z"/>
+    <path d="M431 946 L437 958 L443 946 Z M763 946 L769 958 L775 946 Z M1095 946 L1101 958 L1107 946 Z M1437 946 L1443 958 L1449 946 Z"/>
+    <path d="M942 1110 L948 1122 L954 1110 Z"/>
+    <path d="M592 1210 L598 1222 L604 1210 Z M1254 1210 L1260 1222 L1266 1210 Z"/>
+  </g>
+  <g font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" fill="#202a28" letter-spacing="0">
+    <text x="64" y="75" font-size="36" font-weight="700">CableSimPro</text>
+    <text x="326" y="75" font-size="32" font-weight="500">系统架构与模块设计</text>
+    <text x="64" y="116" font-size="18" fill="#62716b">模块化单体宿主 + 原生计算进程 · 一份工程状态 · 可追溯研究与交付</text>
+    <text x="1616" y="70" text-anchor="end" font-size="17" fill="#62716b">V0.3 / 2026-09-22</text>
+    <text x="1616" y="102" text-anchor="end" font-size="17" fill="#946020">目标设计 · 待评审</text>
+    <path d="M64 140 H1616" stroke="#ced7d3" stroke-width="1"/>
+
+    <text x="64" y="199" font-size="16" fill="#26746b">01</text>
+    <text x="64" y="232" font-size="23" font-weight="700">交互入口</text>
+    <text x="64" y="261" font-size="16" fill="#62716b">共用状态与命令</text>
+    <rect x="280" y="178" width="838" height="104" rx="6" fill="#f8fbfa" stroke="#80a69d" stroke-width="1.5"/>
+    <text x="306" y="218" font-size="24" font-weight="700">工程工作台</text>
+    <text x="306" y="252" font-size="18" fill="#54635d">对象树 · 属性编辑 · 二维 / 三维 · 研究配置 · 运行结果</text>
+    <rect x="1150" y="178" width="466" height="104" rx="6" fill="#ffffff" stroke="#8d9da7" stroke-width="1.5"/>
+    <text x="1176" y="218" font-size="24" font-weight="700">工程助手 Agent</text>
+    <text x="1176" y="252" font-size="18" fill="#54635d">查询 / 提案 / 授权工具；不自动批准</text>
+    <path d="M699 282 V326 M1383 282 V326" stroke="#64716d" stroke-width="1.8" fill="none"/>
+
+    <text x="64" y="360" font-size="16" fill="#26746b">02</text>
+    <text x="64" y="393" font-size="23" font-weight="700">应用协调</text>
+    <text x="64" y="422" font-size="16" fill="#62716b">唯一变更与执行入口</text>
+    <rect x="280" y="338" width="1336" height="116" rx="6" fill="#f4f8f6" stroke="#26746b" stroke-width="1.8"/>
+    <text x="306" y="375" font-size="23" font-weight="700">宿主应用服务</text>
+    <text x="1588" y="375" text-anchor="end" font-size="16" fill="#54635d">人工操作与 Agent 共用</text>
+    <path d="M306 393 H1590" stroke="#c5d6cf"/>
+    <text x="306" y="428" font-size="19">输入与几何校验</text>
+    <text x="556" y="428" font-size="19">版本 / 锁 / 冲突</text>
+    <text x="811" y="428" font-size="19">提案与人工审查</text>
+    <text x="1065" y="428" font-size="19">方法适用性预检</text>
+    <text x="1320" y="428" font-size="19">命令幂等与编排</text>
+
+    <path d="M948 454 V488 M383 488 H1513" stroke="#64716d" stroke-width="1.8" fill="none"/>
+    <path d="M383 488 V518 M609 488 V518 M835 488 V518 M1061 488 V518 M1287 488 V518 M1513 488 V518" stroke="#64716d" stroke-width="1.6" fill="none"/>
+
+    <text x="64" y="559" font-size="16" fill="#26746b">03</text>
+    <text x="64" y="592" font-size="23" font-weight="700">领域模块</text>
+    <text x="64" y="621" font-size="16" fill="#62716b">明确数据归属</text>
+    <text x="64" y="648" font-size="16" fill="#62716b">不各建一套工程</text>
+
+    <rect x="280" y="530" width="206" height="154" rx="5" fill="#ffffff" stroke="#90a69b" stroke-width="1.5"/>
+    <path d="M280 530 H486" stroke="#26746b" stroke-width="4"/>
+    <text x="298" y="568" font-size="22" font-weight="700">工程与方案</text>
+    <text x="298" y="605" font-size="17" fill="#54635d">Workspace / Revision</text>
+    <text x="298" y="636" font-size="17" fill="#54635d">保存 · 锁 · 历史</text>
+    <text x="298" y="665" font-size="16" fill="#26746b">工程写入的所有者</text>
+
+    <rect x="506" y="530" width="206" height="154" rx="5" fill="#ffffff" stroke="#90a69b" stroke-width="1.5"/>
+    <path d="M506 530 H712" stroke="#26746b" stroke-width="4"/>
+    <text x="524" y="568" font-size="22" font-weight="700">电缆结构</text>
+    <text x="524" y="605" font-size="17" fill="#54635d">分层 · 尺寸 · 材料</text>
+    <text x="524" y="636" font-size="17" fill="#54635d">语义 UID · 几何配方</text>
+    <text x="524" y="665" font-size="16" fill="#26746b">展示 / 分析分开</text>
+
+    <rect x="732" y="530" width="206" height="154" rx="5" fill="#ffffff" stroke="#90a69b" stroke-width="1.5"/>
+    <path d="M732 530 H938" stroke="#26746b" stroke-width="4"/>
+    <text x="750" y="568" font-size="22" font-weight="700">敷设与环境</text>
+    <text x="750" y="605" font-size="17" fill="#54635d">位置 · 排列 · 埋深</text>
+    <text x="750" y="636" font-size="17" fill="#54635d">土壤 · 空气 · 边界</text>
+    <text x="750" y="665" font-size="16" fill="#26746b">按方法检查范围</text>
+
+    <rect x="958" y="530" width="206" height="154" rx="5" fill="#ffffff" stroke="#a99b80" stroke-width="1.5"/>
+    <path d="M958 530 H1164" stroke="#9b7835" stroke-width="4"/>
+    <text x="976" y="568" font-size="22" font-weight="700">资料与资产</text>
+    <text x="976" y="605" font-size="17" fill="#54635d">材料 · 型号 · 文档</text>
+    <text x="976" y="636" font-size="17" fill="#54635d">来源 · 核对 · 版本</text>
+    <text x="976" y="665" font-size="16" fill="#8b692f">引用不自动升级</text>
+
+    <rect x="1184" y="530" width="206" height="154" rx="5" fill="#ffffff" stroke="#8d9da7" stroke-width="1.5"/>
+    <path d="M1184 530 H1390" stroke="#4d7891" stroke-width="4"/>
+    <text x="1202" y="568" font-size="22" font-weight="700">研究与运行</text>
+    <text x="1202" y="605" font-size="17" fill="#54635d">Method / Study / Run</text>
+    <text x="1202" y="636" font-size="17" fill="#54635d">快照 · 诊断 · 依赖</text>
+    <text x="1202" y="665" font-size="16" fill="#456d83">成功不等于当前</text>
+
+    <rect x="1410" y="530" width="206" height="154" rx="5" fill="#ffffff" stroke="#8d9da7" stroke-width="1.5"/>
+    <path d="M1410 530 H1616" stroke="#4d7891" stroke-width="4"/>
+    <text x="1428" y="568" font-size="22" font-weight="700">结果与交付</text>
+    <text x="1428" y="605" font-size="17" fill="#54635d">数值 · 场量 · 对比</text>
+    <text x="1428" y="636" font-size="17" fill="#54635d">报告 · 工件 · 证据</text>
+    <text x="1428" y="665" font-size="16" fill="#456d83">指定运行，不重算</text>
+
+    <path d="M383 684 V720 M609 684 V720 M835 684 V720 M1061 684 V720 M1287 684 V720 M1513 684 V720 M383 720 H1513 M718 720 V758" stroke="#64716d" stroke-width="1.6" fill="none"/>
+    <path d="M718 750 V758" stroke="#64716d" stroke-width="1.6"/>
+
+    <text x="64" y="807" font-size="16" fill="#26746b">04</text>
+    <text x="64" y="840" font-size="23" font-weight="700">能力与扩展</text>
+    <text x="64" y="869" font-size="16" fill="#62716b">复用现有插件契约</text>
+    <rect x="280" y="770" width="876" height="120" rx="6" fill="#f7faf9" stroke="#26746b" stroke-width="1.8"/>
+    <text x="306" y="809" font-size="23" font-weight="700">能力注册 / 插件服务 / 运行调度</text>
+    <text x="306" y="846" font-size="18" fill="#54635d">精确版本与权限 · 项目插件锁 · 输入快照 · 工件契约</text>
+    <text x="306" y="875" font-size="16" fill="#62716b">内建方法复用宿主实现；原生能力经审核的 Worker 执行</text>
+    <rect x="1210" y="770" width="406" height="120" rx="6" fill="#ffffff" stroke="#9b7835" stroke-width="1.8" stroke-dasharray="7 5"/>
+    <text x="1234" y="809" font-size="23" font-weight="700">CableModelKit</text>
+    <text x="1234" y="844" font-size="18" fill="#54635d">独立仓库 / 独立版本 / 适配器接入</text>
+    <text x="1234" y="873" font-size="16" fill="#8b692f">先单向导入提案；不共享工程数据库</text>
+    <path d="M1210 827 H1163" stroke="#9b7835" stroke-width="1.8" stroke-dasharray="5 4" fill="none"/>
+
+    <path d="M718 890 V922 M437 922 H1443" stroke="#64716d" stroke-width="1.6" fill="none"/>
+    <path d="M437 922 V954 M769 922 V954 M1101 922 V954 M1443 922 V954" stroke="#64716d" stroke-width="1.6" fill="none"/>
+    <text x="64" y="1000" font-size="16" fill="#26746b">05</text>
+    <text x="64" y="1033" font-size="23" font-weight="700">方法与适配器</text>
+    <text x="64" y="1062" font-size="16" fill="#62716b">能力分层，不混用结论</text>
+    <rect x="280" y="966" width="314" height="112" rx="5" fill="#ffffff" stroke="#8d9da7" stroke-width="1.5"/>
+    <text x="302" y="1002" font-size="22" font-weight="700">工程快速计算</text>
+    <text x="302" y="1034" font-size="17" fill="#54635d">热网络 / 运行温度 / 参数扫描</text>
+    <text x="302" y="1062" font-size="16" fill="#62716b">明确范围；非完整 IEC 实现</text>
+    <rect x="612" y="966" width="314" height="112" rx="5" fill="#ffffff" stroke="#8d9da7" stroke-width="1.5"/>
+    <text x="634" y="1002" font-size="22" font-weight="700">几何与网格</text>
+    <text x="634" y="1034" font-size="17" fill="#54635d">建模映射 / CAD / 网格交换</text>
+    <text x="634" y="1062" font-size="16" fill="#62716b">单位、域与语义对象可追溯</text>
+    <rect x="944" y="966" width="314" height="112" rx="5" fill="#ffffff" stroke="#8d9da7" stroke-width="1.5"/>
+    <text x="966" y="1002" font-size="22" font-weight="700">数值研究与校核</text>
+    <text x="966" y="1034" font-size="17" fill="#54635d">传热 FEM / 电热 / 解析对照</text>
+    <text x="966" y="1062" font-size="16" fill="#62716b">计算、网格与验证证据分开</text>
+    <rect x="1276" y="966" width="340" height="112" rx="5" fill="#ffffff" stroke="#8d9da7" stroke-width="1.5"/>
+    <text x="1298" y="1002" font-size="22" font-weight="700">交付适配器</text>
+    <text x="1298" y="1034" font-size="17" fill="#54635d">HTML 快照 / 后续 PDF renderer</text>
+    <text x="1298" y="1062" font-size="16" fill="#62716b">只消费确定结果，不修改输入</text>
+
+    <path d="M437 1078 V1100 M769 1078 V1100 M1101 1078 V1100 M1443 1078 V1100 M437 1100 H1443 M948 1100 V1118" stroke="#64716d" stroke-width="1.6" fill="none"/>
+    <rect x="280" y="1126" width="1336" height="52" rx="5" fill="#f4f8f6" stroke="#26746b" stroke-width="1.4"/>
+    <text x="304" y="1159" font-size="20" font-weight="700">宿主结果接收与封存</text>
+    <text x="575" y="1159" font-size="18" fill="#54635d">输出校验 → 文件归位 → 元数据登记；插件不直接写工程数据库</text>
+    <path d="M598 1178 V1218 M1260 1178 V1218" stroke="#64716d" stroke-width="1.6" fill="none"/>
+    <g transform="translate(0 74)">
+    <text x="64" y="1190" font-size="16" fill="#26746b">06</text>
+    <text x="64" y="1223" font-size="23" font-weight="700">持久化与证据</text>
+    <rect x="280" y="1156" width="636" height="91" rx="5" fill="#fafbfa" stroke="#90a69b" stroke-width="1.5"/>
+    <text x="304" y="1192" font-size="22" font-weight="700">SQLite / 宿主元数据</text>
+    <text x="304" y="1225" font-size="17" fill="#54635d">工程版本 · 研究 · 运行 · 来源 · 锁 · 工件清单</text>
+    <rect x="944" y="1156" width="672" height="91" rx="5" fill="#fafbfa" stroke="#90a69b" stroke-width="1.5"/>
+    <text x="968" y="1192" font-size="22" font-weight="700">文件工件 / 不可变快照</text>
+    <text x="968" y="1225" font-size="17" fill="#54635d">输入 · 几何 · 网格 · 场量 · 报告 · SHA-256</text>
+    <path d="M64 1282 H1616" stroke="#ced7d3"/>
+    <text x="64" y="1316" font-size="17" fill="#54635d">工程参数改变 ≠ 覆盖历史运行　　执行成功 ≠ 当前结果 ≠ 工程认证</text>
+    <text x="64" y="1344" font-size="15" fill="#62716b">箭头为主要调用与存储流；原生进程不直连数据库。图中包含待实现能力，详见配套设计文档。</text>
+    <text x="1616" y="1330" font-size="16" text-anchor="end" fill="#62716b">CableSimPro / Architecture Review</text>
+    </g>
+  </g>
+</svg>

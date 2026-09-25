@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1760" height="1270" viewBox="0 0 1760 1270" role="img" aria-labelledby="title desc">
+  <title id="title">CableSimPro 产品规划全景</title>
+  <desc id="desc">围绕结构、敷设、依据、研究、结果和交付组织用户能力，分工程闭环、资料增强、高级研究和企业扩展四阶段交付。此图为产品需求规划，不是已上线能力声明。</desc>
+  <rect width="1760" height="1270" fill="#ffffff"/>
+  <g font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" fill="#202a28" letter-spacing="0">
+    <text x="64" y="75" font-size="36" font-weight="700">CableSimPro</text>
+    <text x="338" y="75" font-size="32" font-weight="500">产品规划全景</text>
+    <text x="64" y="115" font-size="19" fill="#62716b">以一份可追溯工程，连接设计、分析、复核与交付。</text>
+    <text x="1696" y="73" text-anchor="end" font-size="17" fill="#8b692f">PRD 0.1 / 待评审规划</text>
+    <text x="1696" y="111" text-anchor="end" font-size="17" fill="#62716b">2026-09-22</text>
+    <path d="M64 143 H1696" stroke="#ccd6d1"/>
+
+    <text x="64" y="195" font-size="24" font-weight="700">01  一条工程主流程</text>
+    <text x="1696" y="195" text-anchor="end" font-size="17" fill="#62716b">各步骤共享工程，不建立平行状态</text>
+    <g fill="#f8fbfa" stroke="#90a69b" stroke-width="1.5">
+      <rect x="64" y="225" width="252" height="106" rx="6"/>
+      <rect x="340" y="225" width="252" height="106" rx="6"/>
+      <rect x="616" y="225" width="252" height="106" rx="6"/>
+      <rect x="892" y="225" width="252" height="106" rx="6"/>
+      <rect x="1168" y="225" width="252" height="106" rx="6"/>
+      <rect x="1444" y="225" width="252" height="106" rx="6"/>
+    </g>
+    <text x="190" y="267" text-anchor="middle" font-size="24" font-weight="700">定义结构</text>
+    <text x="190" y="304" text-anchor="middle" font-size="18" fill="#54635d">分层 / 尺寸 / 来源</text>
+    <text x="466" y="267" text-anchor="middle" font-size="24" font-weight="700">设置敷设</text>
+    <text x="466" y="304" text-anchor="middle" font-size="18" fill="#54635d">排列 / 环境 / 边界</text>
+    <text x="742" y="267" text-anchor="middle" font-size="24" font-weight="700">明确依据</text>
+    <text x="742" y="304" text-anchor="middle" font-size="18" fill="#54635d">核对 / 引用 / 范围</text>
+    <text x="1018" y="267" text-anchor="middle" font-size="24" font-weight="700">配置研究</text>
+    <text x="1018" y="304" text-anchor="middle" font-size="18" fill="#54635d">方法 / 条件 / 预检</text>
+    <text x="1294" y="267" text-anchor="middle" font-size="24" font-weight="700">运行复核</text>
+    <text x="1294" y="304" text-anchor="middle" font-size="18" fill="#54635d">真实计算 / 诊断</text>
+    <text x="1570" y="267" text-anchor="middle" font-size="24" font-weight="700">比较交付</text>
+    <text x="1570" y="304" text-anchor="middle" font-size="18" fill="#54635d">历史 / 对比 / 报告</text>
+    <g fill="#64716d" stroke="#64716d" stroke-width="1.4">
+      <path d="M317 278 H335 M326 273 L336 278 L326 283 Z"/>
+      <path d="M593 278 H611 M602 273 L612 278 L602 283 Z"/>
+      <path d="M869 278 H887 M878 273 L888 278 L878 283 Z"/>
+      <path d="M1145 278 H1163 M1154 273 L1164 278 L1154 283 Z"/>
+      <path d="M1421 278 H1439 M1430 273 L1440 278 L1430 283 Z"/>
+    </g>
+
+    <text x="64" y="400" font-size="24" font-weight="700">02  四组用户能力</text>
+    <text x="1696" y="400" text-anchor="end" font-size="17" fill="#62716b">映射九个技术模块，不是四套独立应用</text>
+    <rect x="64" y="430" width="390" height="218" rx="6" fill="#ffffff" stroke="#90a69b" stroke-width="1.5"/>
+    <path d="M64 430 H454" stroke="#26746b" stroke-width="4"/>
+    <text x="88" y="470" font-size="25" font-weight="700">工程设计</text>
+    <text x="88" y="512" font-size="20">工程 / 版本 / 草稿</text>
+    <text x="88" y="548" font-size="20">分层结构 / 二维与三维</text>
+    <text x="88" y="584" font-size="20">敷设环境 / 参数约束</text>
+    <text x="88" y="625" font-size="16" fill="#62716b">M01 工程 · M02 模型 · M03 敷设</text>
+    <rect x="478" y="430" width="390" height="218" rx="6" fill="#ffffff" stroke="#b2a084" stroke-width="1.5"/>
+    <path d="M478 430 H868" stroke="#9b7835" stroke-width="4"/>
+    <text x="502" y="470" font-size="25" font-weight="700">资料与依据</text>
+    <text x="502" y="512" font-size="20">材料 / 资产 / 型号</text>
+    <text x="502" y="548" font-size="20">原件 / OCR / 参数核对</text>
+    <text x="502" y="584" font-size="20">设计依据 / 原文引用</text>
+    <text x="502" y="625" font-size="16" fill="#62716b">M04 资产 · M05 资料与依据</text>
+    <rect x="892" y="430" width="390" height="218" rx="6" fill="#ffffff" stroke="#8d9da7" stroke-width="1.5"/>
+    <path d="M892 430 H1282" stroke="#4d7891" stroke-width="4"/>
+    <text x="916" y="470" font-size="25" font-weight="700">研究与成果</text>
+    <text x="916" y="512" font-size="20">方法 / 预检 / 真实执行</text>
+    <text x="916" y="548" font-size="20">数值 / 场图 / 历史比较</text>
+    <text x="916" y="584" font-size="20">HTML / 后续 PDF / 工件</text>
+    <text x="916" y="625" font-size="16" fill="#62716b">M06 研究 · M07 结果与交付</text>
+    <rect x="1306" y="430" width="390" height="218" rx="6" fill="#ffffff" stroke="#9da69d" stroke-width="1.5"/>
+    <path d="M1306 430 H1696" stroke="#6c7f68" stroke-width="4"/>
+    <text x="1330" y="470" font-size="25" font-weight="700">扩展与维护</text>
+    <text x="1330" y="512" font-size="20">精选插件 / 准确版本锁</text>
+    <text x="1330" y="548" font-size="20">工程助手 / 可选 Jev</text>
+    <text x="1330" y="584" font-size="20">诊断 / 备份 / 恢复</text>
+    <text x="1330" y="625" font-size="16" fill="#62716b">M08 插件 · M09 助手 · 跨模块运维</text>
+
+    <text x="64" y="714" font-size="24" font-weight="700">03  分阶段交付</text>
+    <text x="1696" y="714" text-anchor="end" font-size="17" fill="#62716b">按范围和验收推进，不作未经评估的日历承诺</text>
+    <rect x="64" y="744" width="390" height="258" rx="6" fill="#f8fbfa" stroke="#90a69b" stroke-width="1.5"/>
+    <text x="88" y="786" font-size="25" font-weight="700" fill="#26746b">A / 工程闭环</text>
+    <text x="88" y="833" font-size="19">保存 → 研究 → 对比 → 报告</text>
+    <text x="88" y="870" font-size="19">热网络与受控固定功率 FEM</text>
+    <text x="88" y="907" font-size="19">冲突 / 来源 / 中断恢复</text>
+    <path d="M88 936 H430" stroke="#d0dcd6"/>
+    <text x="88" y="970" font-size="17" fill="#54635d">完整 A：核心与原生专项均通过</text>
+    <rect x="478" y="744" width="390" height="258" rx="6" fill="#fffdf8" stroke="#b2a084" stroke-width="1.5"/>
+    <text x="502" y="786" font-size="25" font-weight="700" fill="#8b692f">B / 资料与设计增强</text>
+    <text x="502" y="833" font-size="19">资料核对 / 型号复用与选型</text>
+    <text x="502" y="870" font-size="19">模型预览 / 参数提案 / 云服务</text>
+    <text x="502" y="907" font-size="19">独立 PDF / Jev 建议试点</text>
+    <path d="M502 936 H844" stroke="#ddd6c8"/>
+    <text x="502" y="970" font-size="17" fill="#54635d">减少重复录入，保留人工核对</text>
+    <rect x="892" y="744" width="390" height="258" rx="6" fill="#f8fafc" stroke="#8d9da7" stroke-width="1.5"/>
+    <text x="916" y="786" font-size="25" font-weight="700" fill="#456d83">C / 高级研究</text>
+    <text x="916" y="833" font-size="19">电热 / 温限电流 / 独立校核</text>
+    <text x="916" y="870" font-size="19">分析工件与方法逐项验证</text>
+    <text x="916" y="907" font-size="19">复杂工况按需求和证据扩展</text>
+    <path d="M916 936 H1258" stroke="#cdd7de"/>
+    <text x="916" y="970" font-size="17" fill="#54635d">不从单个基准推导通用适用性</text>
+    <rect x="1306" y="744" width="390" height="258" rx="6" fill="#fafbf9" stroke="#9da69d" stroke-width="1.5"/>
+    <text x="1330" y="786" font-size="25" font-weight="700" fill="#607257">D / 企业扩展</text>
+    <text x="1330" y="833" font-size="19">身份权限 / 共享服务</text>
+    <text x="1330" y="870" font-size="19">远程运行 / 可信分发</text>
+    <text x="1330" y="907" font-size="19">隔离 / 运维 / 成本治理</text>
+    <path d="M1330 936 H1672" stroke="#d2d9cd"/>
+    <text x="1330" y="970" font-size="17" fill="#54635d">单独评审，不直接暴露本机预览</text>
+
+    <path d="M64 1048 H1696" stroke="#ccd6d1"/>
+    <text x="64" y="1087" font-size="23" font-weight="700">贯穿各阶段的底线</text>
+    <text x="64" y="1133" font-size="19" fill="#54635d">工程修改受校验、版本和批准规则约束</text>
+    <text x="644" y="1133" font-size="19" fill="#54635d">旧结果不冒充当前结果</text>
+    <text x="1190" y="1133" font-size="19" fill="#54635d">模型显示 ≠ 方法可用</text>
+    <text x="64" y="1170" font-size="19" fill="#54635d">AI 不替代审批与数值求解</text>
+    <text x="644" y="1170" font-size="19" fill="#54635d">插件卸载 ≠ 删除历史</text>
+    <text x="1190" y="1170" font-size="19" fill="#54635d">报告按运行引用，不重算</text>
+    <path d="M64 1202 H1696" stroke="#ccd6d1"/>
+    <text x="64" y="1237" font-size="16" fill="#62716b">这是目标规划，不是当前功能完成清单；已有能力需核对和保留，不因分期安排而删除。</text>
+    <text x="1696" y="1237" text-anchor="end" font-size="16" fill="#62716b">需求、优先级与验收以 PRD 正文为准</text>
+  </g>
+</svg>

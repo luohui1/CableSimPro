@@ -25,3 +25,5 @@
 .collection-workspace :is(input,select,button):focus-visible{outline:2px solid var(--wb-color-focus);outline-offset:3px}
 .collection-workspace button:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:1100px){.collection-heading{align-items:start}.collection-actions{max-width:260px}.collection-heading p{max-width:320px}}
+/* Dialogs render outside .collection-workspace; outrank legacy element rules such as `.eng-dialog button{color:#353534}`. Remove with those shells. */
+.wb-button.wb-button--primary{color:#fff}

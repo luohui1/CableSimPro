@@ -1,4 +1,4 @@
-/* Layout contract: docs/REFERENCE_LAYOUT.json, approved 1586 × 992 image.
+/* Layout contract: docs/design/reference-layout.json, approved 1586 × 992 image.
  * This scope replaces the progressive layout only. Numeric state and legacy surfaces
  * are not restyled into simulated results. Canvas is transparent over a CSS studio. */
 .reference-studio{--wb-color-ink:var(--wb-reference-ink);--wb-color-primary:var(--wb-reference-blue);--wb-color-muted:var(--wb-reference-muted);--wb-studio-command-height:var(--wb-reference-header-height);--wb-studio-rail-width:var(--wb-reference-rail-width);--wb-studio-inspector-width:var(--wb-reference-inspector-width)}

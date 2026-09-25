@@ -1,144 +1,54 @@
-# CableSimPro 0.7.4 · 浅色工程工作区
+# CableSimPro
 
-专业工作台和智能工程流共享同一工程。新增同画布三维/截面/解析温度/曲线，工程配图本地加载，输入改变后旧场失效。
+电缆行业垂直的设计 / 计算平台。以工程项目为中心，在同一份可追溯的数据上完成电缆结构定义、敷设配置、研究计算、结果复核和计算书交付。
 
-运行：`python scripts/run_demo.py`。预构建包无需Node；首次安装Python依赖需联网。实施、图形来源和工程边界见 [本轮说明](docs/LIGHT_STUDIO_V074.md)。
+**核心理念是插件式**：宿主提供工程底座（工程与版本、研究 / 运行快照、来源追溯、结果工件、报告、审批），计算方法以插件形式接入。目标是宿主不内置任何算法；目前热网络等核心计算仍在宿主内，正按插件契约 v2 迁出。
 
----
+- 产品需求与分期：[docs/product/PRD.md](docs/product/PRD.md)
+- 系统架构：[docs/design/SYSTEM_ARCHITECTURE.md](docs/design/SYSTEM_ARCHITECTURE.md) · [模块实施细则](docs/design/MODULE_DESIGN.md)
+- 插件规范：[plugin-spec/README.md](plugin-spec/README.md) · [插件说明](docs/plugins/)
+- 计算方法与适用边界：[docs/METHOD.md](docs/METHOD.md)
+- 开发约定与仓库卫生规则：[AGENTS.md](AGENTS.md)
 
-# CableSimPro 0.7.2 · 电缆工程任务工作区
+## 当前能力
 
-本轮重构智能工程流、启动入口及结构显示。以 Codex 的任务/成果/变更审查组织方式为参考，把工程参数、模型、资料与计算记录带入同一任务；不是接入 Codex 求解或复制其界面品牌。
-
-运行：`python scripts/run_demo.py`。预构建包无需Node；首次安装后端依赖需联网。源码前端使用已锁定依赖。
-
-新入口仍先选择“专业工作台 / 智能工程流”。工程流左侧为真实执行记录与工程模块，中间审查任务及计算结果，右侧显示候选/当前电缆、敷设截面与来源。无密钥时为明确命令解析器，并非通用模型。所有工程边界、锁和版本检查沿用。详见 [本轮实现和边界](docs/AGENT_STUDIO_V072.md)。
-
----
-
-# CableSimPro 0.7.1 · 双模式工程工作入口
-
-启动后先选择 **专业工作台** 或 **智能工程流**。进入项目后，顶部切换操作方式，电缆参数、版本、待审查提案和结果共用同一工程；不会建立第二份状态。
-
-```sh
-python scripts/run_demo.py
-```
-
-预构建包需要 Python 3.11–3.13，首次安装依赖需要联网，不需要 Node.js。源码首次构建需 Node.js 22.12+（22.x）。
-
-默认首页为模式选择。专业工作台保留精确建模和同屏结果；智能工程流以目标、待确认条件、变更审批、真实工具结果和引用为主体。未配置云端 Key 时使用明确标注的本地命令演示，不冒充通用 AI。新会话恢复 API 读出最近提案与计算记录，不重算或改版本。
-
-详细范围、路由、持久化边界和验收说明见 `docs/DUAL_MODE_V071.md`。企业版 v0.6 回归入口为 `/?enterprise=1`，v0.5 为 `/?classic=1`，更早工作台为 `/?legacy=1`。旧功能继续保留，不扩展原求解器的工程适用范围。
-
----
-
-## 企业流程与既有方法说明
-
-# CableSimPro 0.6 · 企业型号与设计任务
-
-当前开发分支 `feat/enterprise-design-v06`，默认入口为企业设计工作区。
-
-- 产品型号：不可变内容版本、显式核对/停用、厂家保证值与试样实测值区分。
-- 工程设计：项目引用型号快照，修改不回写产品；另存方案独立保留参数与依据。
-- 候选研究：已核对型号逐项复算、淘汰原因、最多4项对比、原始快照报告。
-- 按需工程任务，不再常驻大聊天框；保留同屏建模和结果。
-- 参数化3D直埋场景及GLB导出，真实截面坐标、明确轴向代表长度。
-
-预构建包解压进入 CableSimPro 根目录，使用 Python 3.11–3.13：
-
-```sh
-python scripts/run_demo.py
-```
-
-预构建包不需要Node.js，首次安装Python依赖需要联网。源码另需Node22.12+（22.x）；完整前端锁文件用于npm ci。新版不会自动把旧演示/自建catalog表迁为已核对企业型号。旧数据表保留，核对后在新产品库建版本。
-
-**研究模型，不是完整IEC算法或经认证工程设计系统；不直接用于最终工程签审。** 新核对状态是本机声明，不是身份认证或产品合规结论。没有新增COMSOL/FEM/井道CFD，云端OCR/LLM未用真实Key验收。详见 [v0.6范围与验收](docs/ENTERPRISE_V06.md)。
-
-旧 v0.5 界面 `/?classic=1`，早期停靠工作台 `/?legacy=1`，保留独立回归。以下为历史版本说明，不代表新企业型号功能的全部边界。
-
----
-
-> **v0.5.1 界面修正**：工程任务输入移到画布下方；建模与敷设计算结果同屏展开，不再强制跳转结果页。运行边界不变。详见 [同屏交互与 Windows 验收](docs/SAME_WORKSPACE_V051.md)。
-
-# CableSimPro 0.5 · 电缆工程工作台
-
-当前开发分支 `feat/engineering-workspace-v05`，基于 v0.4.1，不代表已合并 main。
-
-**按工程任务组织的界面、参数化三维建模、共用能力执行层、可追溯任务记录和设计依据范围检查。** 保留 OCR / Agent 接入、企业资料、直埋/竖向计算、专项场研究和双域选型。
-
-> 本机工程研究版。不是完整 IEC/GB 载流量引擎、通用有限元软件或经外部认证的设计工具。标准目录不等于完整条款实现，选择标准不会凭空获得新求解能力。
-
-## 运行
-
-成功 CI 的 `CableSimPro-demo` 工件包含已构建前端。解压内部 ZIP，进入包含 backend/frontend/scripts 的 CableSimPro 目录：
-
-```sh
-python scripts/run_demo.py
-```
-
-需要 Python 3.11–3.13；首次安装依赖需要联网；预构建包不需要 Node.js。Windows 可用 `py -3.12 scripts/run_demo.py`。默认 `http://127.0.0.1:8000`，Ctrl+C 停止。不要双击源码 index.html。
-
-源码方式另需 Node.js 22.12+（22.x）：
-
-```sh
-git clone --branch feat/engineering-workspace-v05 https://github.com/luohui1/CableSimPro.git
-cd CableSimPro
-python scripts/run_demo.py
-```
-
-前端源依赖锁文件已随源码提交。修改前端后 `python scripts/run_demo.py --rebuild`。
-
-## 新界面
-
-- 电缆结构：三维结构/二维截面，参数化生成、分层剥切/展开/隐藏、正交方向视图、真实尺寸 GLB 导出。
-- 敷设布置：米制画板、标尺、吸附、约束拖动与精确录入；当前单回路水平/等边三角排列。
-- 计算分析：土壤数值热场、同轴绝缘电场、三相外部磁场、单根隔离竖向电热。
-- 电缆选型：真实候选求解与失败理由，明确埋地/空气边界；需审批后应用。
-- 设计依据：8 项 IEC/GB 题录与范围检查、依据修订及环境匹配；未实现的条款明确标识。
-- 企业资料：PDF文字层/扫描件入口、OCR接入、页级核对、引用与型号关联。
-- 计算结果：交互曲线、数值表、不可变运行记录与 HTML 计算书。
-- 任务记录：统一能力调用、输入快照、执行状态与来源关系。
-
-属性面板只在建模时显示；工程助手可以关闭，产生提案时自动打开。默认不再把所有模块并排挤在同一屏。旧停靠界面暂保留在 `?legacy=1` 供迁移回归。
-
-## 字体与开源组件
-
-使用分级字号、对齐数值、正文和数值不同字族。默认优先匹配本机 IBM Plex Sans/Mono、思源黑体，缺失时回退系统字体。显示设置可选择联网加载 IBM Plex 与 Noto Sans SC，需要明确同意访问外部 Google Fonts；默认无字体网络请求，包中无字体文件。
-
-新集成 Radix Dialog（焦点/键盘交互）、Apache ECharts（Canvas交互图表）与 axe-core（自动可访问性检查），继续使用 React、Three.js、Konva、TanStack Table、Dockview 及 LangGraph。第三方许可证随构建附带。
-
-## AI 共用工程接口
-
-12 项能力统一登记于 `/api/runtime/capabilities`，界面和受限 Agent 共用结构化输入、版本与锁校验、确定性计算服务。模型生成与设计依据只产生待审变更，不能自动批准。
-
-每次调用保留请求ID、输入版本、输入/依据快照、状态与输出；相同请求重试不会重复计算。来源关系目前覆盖已登记任务和参数引用，不是已经完成的全企业知识图谱；原有接口为兼容保留。没有无限自主 Agent、shell 工具或自动解锁。
-
-无云端 Key 时是明确标注的本地命令解析器。OCR / Agent 在服务接入页配置；不同厂商协议不保证只换 Key 即兼容。Key 只留服务端内存或环境变量，禁止写 Git。外发原件、片段或完整工程参数需同意，可能计费。本轮真实 Key 未提供，提供商测试为模拟协议，不能代表识别准确率或模型成功率。
+- **工程与版本**：本机 SQLite 工作区，参数锁、版本冲突检测、撤销 / 重做，提案需人工批准。
+- **电缆与敷设**：参数化分层结构、二维截面 / 三维模型、直埋水平 / 等边三角排列。
+- **计算**：稳态直埋热网络（允许电流、运行温度）、敷设参数扫描、竖向空气电热、截面电场 / 磁场解析、反向选型。
+- **插件**（`plugins/registry.json`，19 个清单）：CAD（cadquery STEP）、gmsh 截面网格、scikit-fem 传热、meshio / pyvista 后处理、三根直埋电缆土壤 FEM 参考、电热耦合 R(T) 参考、半空间线源解析校核；安装需预览计划并批准，按项目锁定准确版本，原生计算在独立子进程运行。
+- **资料与型号**：PDF 文字层 / OCR 入口、页级核对与引用、企业型号版本与候选复算。
+- **结果与交付**：运行记录只读保存，历史比较，HTML 计算书。
 
 ## 工程边界
 
-稳态直埋仍是单回路三根相同无铠装单芯电缆、均匀土壤热网络；土壤数值热场不反算更新载流量。竖向是给定 h、空气温度与辐射率的单根轴向有限体积模型，不求解井道气流、烟囱效应、成束互热或机械自重。电场/磁场是范围明确的解析模型，不是全耦合电磁热有限元。
+研究工具，**不是**完整 IEC 60287 / GB 实现、通用有限元软件或经认证的设计系统，不应直接用于最终设计签审。
 
-标准支持详见 `docs/ENGINEERING_V05.md`：IEC60287部分方法参考，IEC60502/GB12706产品范围检查，IEC60228/GB3956导体标准题录，IEC60364低压与IEC60853暂态明确未实现。没有全部电阻限值表、标准公差、产品试验与正式算例认证。不应直接用于最终设计签审。
+稳态直埋限于单回路、三根相同无铠装单芯电缆、均匀土壤。竖向为给定换热系数的单根轴向模型，不求解井道气流。电场 / 磁场为范围明确的解析模型，不是全耦合电磁热 FEM。FEM 插件只在声明的基准工况上验证过。标准目录只做范围检查，不代表条款已实现。
+
+## 运行
+
+需要 Python 3.11–3.13；源码构建前端需要 Node.js 22.12+。
+
+```sh
+python scripts/run_demo.py            # 首次会安装后端依赖；默认 http://127.0.0.1:8000
+python scripts/run_demo.py --rebuild  # 修改前端后重新构建
+```
+
+原生插件（CAD / 网格 / FEM）为可选环境：`pip install -r plugins/requirements-native.txt`。未安装时核心流程照常使用，插件中心会显示缺少的运行环境。
+
+默认只监听本机，没有身份认证与多租户权限，不要暴露到公网。数据在 `.data/`（可用 `CABLESIM_DB` 调整），完整备份请停服后复制整个 `.data` 目录。云端 OCR / 模型的 Key 只保存在服务端内存或环境变量中，外发数据需明确同意。
 
 ## 测试
 
 ```sh
 python -m pip install -r backend/requirements-dev.txt
-python -m pytest
-cd frontend
-npm ci
-npm run build
-npx playwright install --with-deps chromium webkit
-npm run test:e2e
-cd ..
-python scripts/package_demo.py
+python -m pytest                                  # 后端 + 仓库卫生检查
+python -m pytest plugin-tests                     # 原生插件（需原生环境）
+cd frontend && npm ci && npm run build
+npx playwright install chromium webkit
+npx playwright test --project=chromium --project=workflow-plugins
 ```
 
-CI 使用 Python3.11/3.12/3.13、TypeScript/Vite、新界面与旧迁移界面的 Chromium/WebKit/移动WebKit。新旧测试数量分开列示，截图与报告保存在同次运行工件。以所选提交实际成功的 Actions 为准，不把旧版本通过率代表新版。
+CI（`.github/workflows/ci.yml`）在 main 和每个 PR 上运行：卫生与插件目录检查、后端 Python 3.11–3.13、Linux / Windows 原生插件、Chromium / WebKit / 移动 WebKit / Windows 100–150% 缩放与 Edge 浏览器矩阵，全部通过后才打包演示版。
 
-## 数据与部署
-
-默认只监听本机；无用户身份认证、多租户权限、费用预算、防篡改合规审计，不应公网暴露。完整备份请停服后复制整个 `.data` 目录（数据库、原件与服务非秘密配置）；可通过 CABLESIM_DB 调整路径。
-
-工程 JSON 仅含计算 Scenario，不含设计依据、文档、型号、审批与任务历史。完整工程状态保存在数据库。未提交输入跨页保留并阻止误算；刷新丢弃未提交输入但不影响已保存工程。
+本地中间文件用 `python scripts/clean.py` 清理。

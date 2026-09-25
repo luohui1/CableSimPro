@@ -1,16 +1,39 @@
+# Environments and secrets
 .venv/
+.env
+node_modules/
+
+# Python caches
 __pycache__/
 *.py[cod]
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Local engineering data (backup by copying the whole .data directory)
 .data/
 data/
 *.sqlite*
-node_modules/
+
+# Build and test output - regenerate, never commit (python scripts/clean.py removes them)
 frontend/dist/
-frontend/test-results/
-frontend/playwright-report/
-.env
-.DS_Store
+frontend/.vite/
+frontend/test-results*/
+frontend/playwright-report*/
 artifacts/
+*.log
+
+# Scratch: one-off scripts, payloads and probes live here and are deleted in the same task
+.tmp/
+
+# Editor / OS / tool noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*~
+*.orig
+*.rej
+*.bak
+.codex*/

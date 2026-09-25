@@ -1,0 +1,8 @@
+# Legacy violations still pending removal. This list may only shrink:
+# delete a line as soon as its violation is fixed (check_hygiene.py fails on stale lines).
+# Remaining items belong to the legacy frontend shells retired when the UI converges on WorkflowApp.
+version-or-scratch name: frontend/pro-e2e/v05-mobile.spec.ts
+version-or-scratch name: frontend/pro-e2e/v05.spec.ts
+version-or-scratch name: frontend/src/LegacyEnterpriseWorkspace.tsx
+version-or-scratch name: frontend/src/LegacyEntry.tsx
+version-or-scratch name: frontend/src/design-v041.css

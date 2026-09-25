@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1760" height="1610" viewBox="0 0 1760 1610" role="img" aria-labelledby="title desc">
+  <title id="title">CableSimPro 保存、研究与交付执行时序</title>
+  <desc id="desc">界面先保存工程，再只读预检，明确发起研究。准入事务冻结输入，Worker在事务外计算。宿主验证文件后以短事务登记结果。报告按指定运行读取，不重新求解。</desc>
+  <rect width="1760" height="1610" fill="#ffffff"/>
+  <g font-family="Microsoft YaHei, Noto Sans CJK SC, sans-serif" fill="#202a28" letter-spacing="0">
+    <text x="64" y="73" font-size="34" font-weight="700">CableSimPro · 保存、研究与交付时序</text>
+    <text x="64" y="113" font-size="18" fill="#62716b">目标新研究通道：准入检查准确版本，执行使用固定快照，完成后按来源归档。</text>
+    <text x="1696" y="73" text-anchor="end" font-size="17" fill="#8b692f">V0.3 / 开发指导草案</text>
+    <path d="M64 145 H1696" stroke="#ccd6d1"/>
+
+    <g stroke="#d8e0dc" stroke-width="1.2" stroke-dasharray="5 8" fill="none">
+      <path d="M170 229 V1452 M510 229 V1452 M850 229 V1452 M1190 229 V1452 M1530 229 V1452"/>
+    </g>
+    <g fill="#f8fbfa" stroke="#90a69b" stroke-width="1.4">
+      <rect x="64" y="181" width="242" height="60" rx="5"/>
+      <rect x="390" y="181" width="242" height="60" rx="5"/>
+      <rect x="730" y="181" width="242" height="60" rx="5"/>
+      <rect x="1070" y="181" width="242" height="60" rx="5"/>
+      <rect x="1410" y="181" width="242" height="60" rx="5"/>
+    </g>
+    <text x="185" y="220" text-anchor="middle" font-size="23" font-weight="700">界面 / 用户</text>
+    <text x="511" y="220" text-anchor="middle" font-size="23" font-weight="700">工程服务 M01</text>
+    <text x="851" y="220" text-anchor="middle" font-size="22" font-weight="700">研究 / 交付协调</text>
+    <text x="1191" y="220" text-anchor="middle" font-size="23" font-weight="700">方法 / Worker</text>
+    <text x="1531" y="220" text-anchor="middle" font-size="23" font-weight="700">数据库 / 工件存储</text>
+
+    <rect x="64" y="258" width="242" height="56" rx="4" fill="#ffffff" stroke="#c6d3cd"/>
+    <text x="82" y="292" font-size="18">本地草稿：5.5 → 6.0 mm</text>
+    <rect x="211" y="317" width="320" height="31" fill="#ffffff"/>
+    <text x="222" y="338" font-size="19">1  保存草稿：expected r12</text>
+    <path d="M170 355 H504" stroke="#26746b" stroke-width="1.8"/>
+    <path d="M497 349 L510 355 L497 361 Z" fill="#26746b"/>
+    <rect x="559" y="374" width="806" height="32" fill="#ffffff"/>
+    <text x="573" y="397" font-size="19">完整校验 → 保存 r13 + 版本档案 + 审计（短事务）</text>
+    <path d="M510 415 H1524" stroke="#26746b" stroke-width="1.8"/>
+    <path d="M1517 409 L1530 415 L1517 421 Z" fill="#26746b"/>
+    <rect x="551" y="441" width="842" height="32" fill="#ffffff"/>
+    <text x="565" y="464" font-size="19" fill="#54635d">返回 r13；冲突则 409，不覆盖工程，也不清空草稿</text>
+    <path d="M1530 481 H176" stroke="#8b9b94" stroke-width="1.5"/>
+    <path d="M183 475 L170 481 L183 487 Z" fill="#8b9b94"/>
+
+    <rect x="211" y="530" width="671" height="32" fill="#ffffff"/>
+    <text x="224" y="553" font-size="19">2  预检：r13 + Study s3 + Lock L2</text>
+    <path d="M170 571 H844" stroke="#26746b" stroke-width="1.8"/>
+    <path d="M837 565 L850 571 L837 577 Z" fill="#26746b"/>
+    <rect x="875" y="578" width="732" height="42" fill="#f8fbfa"/>
+    <text x="891" y="605" font-size="18" fill="#54635d">只读检查范围 / 参数 / 环境，不创建 Run，不等于发起授权</text>
+    <rect x="211" y="646" width="671" height="32" fill="#ffffff"/>
+    <text x="224" y="669" font-size="19">3  明确发起：固定版本 + request_id</text>
+    <path d="M170 687 H844" stroke="#26746b" stroke-width="1.8"/>
+    <path d="M837 681 L850 687 L837 693 Z" fill="#26746b"/>
+
+    <rect x="744" y="720" width="908" height="170" rx="5" fill="#f3f8f5" stroke="#8aa99c" stroke-width="1.3"/>
+    <text x="766" y="752" font-size="19" font-weight="700" fill="#26746b">T1 准入登记 / 短事务</text>
+    <text x="898" y="789" font-size="18">再核版本与锁 → 固定输入 → 登记 Run 与执行引用</text>
+    <path d="M850 805 H1524" stroke="#26746b" stroke-width="1.8"/>
+    <path d="M1517 799 L1530 805 L1517 811 Z" fill="#26746b"/>
+    <text x="919" y="847" font-size="18" fill="#54635d">run_id + InputSnapshot；重复请求返回原身份</text>
+    <path d="M1530 865 H856" stroke="#8b9b94" stroke-width="1.5"/>
+    <path d="M863 859 L850 865 L863 871 Z" fill="#8b9b94"/>
+
+    <rect x="861" y="919" width="383" height="32" fill="#ffffff"/>
+    <text x="875" y="942" font-size="19">4  仅传固定快照执行</text>
+    <path d="M850 961 H1184" stroke="#4d7891" stroke-width="1.8"/>
+    <path d="M1177 955 L1190 961 L1177 967 Z" fill="#4d7891"/>
+    <rect x="1241" y="926" width="411" height="59" fill="#f8fafc"/>
+    <text x="1258" y="952" font-size="17" fill="#456d83">事务外计算；记录实际环境</text>
+    <text x="1258" y="977" font-size="16" fill="#62716b">原生 Worker 不获得数据库连接</text>
+    <rect x="866" y="995" width="381" height="31" fill="#ffffff"/>
+    <text x="880" y="1018" font-size="19">5  返回输出与诊断</text>
+    <path d="M1190 1034 H856" stroke="#4d7891" stroke-width="1.8"/>
+    <path d="M863 1028 L850 1034 L863 1040 Z" fill="#4d7891"/>
+    <rect x="744" y="1054" width="908" height="40" rx="4" fill="#f8fafc" stroke="#c4d1d8"/>
+    <text x="766" y="1081" font-size="18" fill="#456d83">事务外：校验结果与文件，记录封存准备信息，完成文件目录归位</text>
+    <rect x="744" y="1111" width="908" height="88" rx="5" fill="#f3f8f5" stroke="#8aa99c" stroke-width="1.3"/>
+    <text x="766" y="1139" font-size="18" font-weight="700" fill="#26746b">T2 完成登记 / 短事务</text>
+    <text x="1029" y="1167" font-size="18">6  登记最终清单与成功状态</text>
+    <path d="M850 1184 H1524" stroke="#26746b" stroke-width="1.8"/>
+    <path d="M1517 1178 L1530 1184 L1517 1190 Z" fill="#26746b"/>
+
+    <rect x="211" y="1230" width="682" height="32" fill="#ffffff"/>
+    <text x="224" y="1253" font-size="19">7  显示 Run、来源版本、与当前输入是否匹配</text>
+    <path d="M850 1270 H176" stroke="#8b9b94" stroke-width="1.7"/>
+    <path d="M183 1264 L170 1270 L183 1276 Z" fill="#8b9b94"/>
+    <rect x="211" y="1328" width="670" height="32" fill="#ffffff"/>
+    <text x="224" y="1351" font-size="19">8  导出指定 run_id，不重新求解</text>
+    <path d="M170 1368 H844" stroke="#9b7835" stroke-width="1.8"/>
+    <path d="M837 1362 L850 1368 L837 1374 Z" fill="#9b7835"/>
+    <rect x="891" y="1390" width="723" height="32" fill="#ffffff"/>
+    <text x="905" y="1413" font-size="18" fill="#8b692f">读取原快照与工件 → 独立 Delivery → 报告文件</text>
+    <path d="M850 1430 H1524" stroke="#9b7835" stroke-width="1.8"/>
+    <path d="M1517 1424 L1530 1430 L1517 1436 Z" fill="#9b7835"/>
+
+    <path d="M64 1472 H1696" stroke="#ccd6d1"/>
+    <text x="64" y="1509" font-size="18" fill="#54635d">发起前版本变更：拒绝启动。发起后版本变更：结果仍属于原快照，按历史结果展示。</text>
+    <text x="64" y="1543" font-size="18" fill="#54635d">断网不等于取消；服务重启不自动重算；文件与数据库分阶段封存，崩溃时必须核对。</text>
+    <text x="64" y="1578" font-size="16" fill="#62716b">示意说明目标调用责任；兼容层旧完成策略尚需迁移。新持久化队列、异步 202 与通用取消不属于首期实现。</text>
+  </g>
+</svg>
