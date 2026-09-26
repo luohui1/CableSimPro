@@ -10,6 +10,8 @@ import CommandSearch from './CommandSearch';
 import {CableSection,InstallationDiagram,SavedCurve,type GeometryLayer} from './EngineeringGraphics';
 import './workflow.css';
 import './workspace-finish.css';
+import './mac-tokens.css';
+import './mac-workspace.css';
 const CableModelView=lazy(()=>import('../CableModelView'));
 const PluginDialog=lazy(()=>import('../plugins/ProjectPluginDialog'));
 interface Prepared {status:string;package:{project_id:string;scenario_revision:number;geometry_recipe:{layers:GeometryLayer[]}};issues:{code:string;severity:string;message:string}[]}
