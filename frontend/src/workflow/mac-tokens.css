@@ -1,0 +1,41 @@
+/* macOS-inspired professional desktop tokens.
+ * Uses only system font fallbacks; no Apple fonts or proprietary assets are bundled.
+ */
+.wf-root,
+.wf-command-dialog,
+.project-plugin-dialog {
+  --mac-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, "Noto Sans CJK SC", sans-serif;
+  --wf-ink: #202124;
+  --wf-muted: #5f6670;
+  --wf-line: #e0e3e7;
+  --wf-soft: #f6f7f9;
+  --wf-blue: #0868d8;
+  --wf-selected: #e9f2ff;
+  --wf-warning: #805414;
+  --wf-error: #a92b26;
+  --wf-canvas: #ffffff;
+  --mac-sidebar: #f4f5f7;
+  --mac-inspector: #fafafa;
+  --mac-chrome: #fafafb;
+  --mac-segment: #eceef1;
+  --mac-control-border: #cbd0d7;
+  --mac-focus: #78aaff;
+  --mac-radius-control: 7px;
+  --mac-radius-group: 10px;
+  --mac-radius-overlay: 14px;
+  --mac-row: 32px;
+  --mac-field: 31px;
+  --mac-shadow-control: 0 1px 2px rgba(23,30,40,.08), inset 0 1px 0 rgba(255,255,255,.9);
+  --mac-shadow-popover: 0 18px 45px rgba(30,38,51,.18), 0 3px 8px rgba(30,38,51,.08);
+  color: var(--wf-ink);
+  font-family: var(--mac-font);
+  -webkit-font-smoothing: antialiased;
+}
+@media (prefers-contrast: more) {
+  .wf-root,.wf-command-dialog,.project-plugin-dialog {
+    --wf-ink:#111;
+    --wf-muted:#34383d;
+    --wf-line:#a7acb3;
+    --mac-control-border:#7b818a;
+  }
+}
