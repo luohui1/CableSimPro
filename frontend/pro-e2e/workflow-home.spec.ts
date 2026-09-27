@@ -3,7 +3,7 @@ import {test,expect} from '@playwright/test';
 test('home browse is read-only, explicit create and saved project reopen share one workspace',async({page,request},info)=>{
  const created:string[]=[];
  page.on('request',r=>{if(r.method()==='POST'&&r.url().endsWith('/api/workspaces'))created.push(r.url())});
- await page.goto('/?workflow=1');await expect(page.getByRole('heading',{name:'从一个工程开始。'})).toBeVisible();
+ await page.goto('/');await expect(page.getByRole('heading',{name:'从一个工程开始。'})).toBeVisible();
  expect(created).toEqual([]);
  await page.screenshot({path:info.outputPath('project-home.png')});
  const response=page.waitForResponse(r=>r.request().method()==='POST'&&r.url().endsWith('/api/workspaces'));

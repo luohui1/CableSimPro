@@ -9,8 +9,8 @@ test('successful buried FEM job is independently compared without changing the p
  let lock=await (await request.get(`/api/plugins/workspaces/${w.id}/lock`)).json();
  const enabled=await request.post(`/api/plugins/workspaces/${w.id}/enable`,{data:{plugin_id:plan.plugin_id,expected_revision:1,lock_revision:lock.lock.lock_revision,enabled:true,approved:true}});expect(enabled.ok()).toBe(true);lock=await enabled.json();
  const source=await request.post(`/api/plugins/workspaces/${w.id}/invoke`,{data:{plugin_id:'cablesim.buried-reference',command:'skfem.buried-reference',request_id:crypto.randomUUID(),expected_revision:1,lock_sha256:lock.lock_sha256,arguments:{conductor_powers_w_m:[20,20,20],conductor_k_w_m_k:380,metal_screen_k_w_m_k:380,domain_scale:8,resolution:16},confirmed:true}});expect(source.ok()).toBe(true);const buried=await source.json();
- await page.goto(`/?mode=workbench&project=${w.id}`);await expect(page.getByTestId('session-revision')).toHaveText('rev.1');
- await page.getByRole('button',{name:'搜索命令',exact:true}).click();await page.getByRole('combobox',{name:'搜索工程命令'}).fill('plugin');await page.getByRole('option',{name:/打开插件中心/}).click();
+ await page.goto(`/?project=${w.id}`);await expect(page.getByTestId('workflow-revision')).toHaveText('rev.1');
+ await page.keyboard.press('Control+k');await page.getByRole('dialog',{name:'工程命令',exact:true}).getByLabel('搜索工程命令').fill('plugin');await page.getByRole('button',{name:'打开插件管理'}).click();
  const dialog=page.getByRole('dialog',{name:'当前工程插件中心'});await dialog.getByTestId('cablesim.line-source-crosscheck').click();await dialog.locator('.plugin-run>summary').click();
  const response=page.waitForResponse(r=>r.url().endsWith('/invoke')&&r.request().postDataJSON()?.command==='validation.line-source-buried');
  await dialog.getByRole('button',{name:'执行：核对半空间线热源解析温升',exact:true}).click();const compared=await (await response).json();

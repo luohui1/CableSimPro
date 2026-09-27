@@ -14,23 +14,19 @@
   },
   "dependencies": {
     "@radix-ui/react-dialog": "1.1.20",
-    "@tanstack/react-table": "9.2.4",
-    "dockview-react": "8.2.0",
     "echarts": "6.0.0",
-    "konva": "10.3.3",
     "lucide-react": "1.42.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "react-konva": "19.2.6",
     "three": "0.185.1"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.10.2",
     "@playwright/test": "1.63.0",
     "@types/react": "19.2.2",
     "@types/react-dom": "19.2.2",
     "@types/three": "0.185.4",
     "typescript": "5.9.3",
-    "vite": "7.3.2",
-    "@axe-core/playwright": "4.10.2"
+    "vite": "7.3.2"
   }
 }

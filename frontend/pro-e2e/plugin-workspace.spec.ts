@@ -1,14 +1,15 @@
 import {test,expect,type APIRequestContext,type Page} from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 async function enter(page:Page,wid?:string){
- if(wid)await page.goto(`/?mode=workbench&project=${wid}`);
- else{await page.goto('/');await page.getByRole('button',{name:'进入专业工作台',exact:true}).click()}
- await expect(page.getByTestId('session-revision')).toHaveText('rev.1');
+ if(wid)await page.goto(`/?project=${wid}`);
+ else{await page.goto('/');await page.getByRole('button',{name:'新建研究工程',exact:false}).click()}
+ await expect(page.getByTestId('workflow-revision')).toHaveText('rev.1');
+ await expect(page.getByRole('img',{name:'已保存工程的等比例电缆截面'})).toBeVisible();
 }
 async function open(page:Page){
- await page.getByRole('button',{name:'搜索命令',exact:true}).click();
- await page.getByRole('combobox',{name:'搜索工程命令'}).fill('plugin');
- await page.getByRole('option',{name:/打开插件中心/}).click();
+ await page.keyboard.press('Control+k');
+ await page.getByRole('dialog',{name:'工程命令',exact:true}).getByLabel('搜索工程命令').fill('plugin');
+ await page.getByRole('button',{name:'打开插件管理'}).click();
  const dialog=page.getByRole('dialog',{name:'当前工程插件中心'});await expect(dialog).toBeVisible();return dialog;
 }
 async function install(request:APIRequestContext,w:any){
@@ -19,7 +20,8 @@ async function install(request:APIRequestContext,w:any){
 }
 
 test('project plugin center preserves the same canvas and does not run hidden commands',async({page},info)=>{
- await enter(page);const canvas=page.getByTestId('cable-model-view').locator('canvas');await expect(canvas).toBeVisible();
+ await enter(page);await page.getByRole('button',{name:'三维结构',exact:true}).click();
+ const canvas=page.getByTestId('cable-model-view').locator('canvas');await expect(canvas).toBeVisible();
  await canvas.evaluate(el=>(el as HTMLElement).dataset.beforePlugins='retained');
  const writes:string[]=[];page.on('request',r=>{if(r.method()==='POST')writes.push(r.url())});
  const dialog=await open(page);await expect(dialog.getByLabel('当前项目',{exact:true})).toBeDisabled();
@@ -28,12 +30,13 @@ test('project plugin center preserves the same canvas and does not run hidden co
  await page.keyboard.press('F9');await page.keyboard.press('Control+k');expect(writes).toEqual([]);
  for(let i=0;i<12;i++){await page.keyboard.press('Tab');expect(await dialog.evaluate(el=>el.contains(document.activeElement))).toBe(true)}
  await page.keyboard.press('Escape');await expect(dialog).toBeHidden();await expect(canvas).toHaveAttribute('data-before-plugins','retained');
- await expect(page.getByTestId('session-revision')).toHaveText('rev.1');
+ await expect(page.getByTestId('workflow-revision')).toHaveText('rev.1');
 });
 
 test('unsaved project input blocks plugin execution instead of using the old snapshot',async({page})=>{
  await enter(page);
- const input=page.locator('.enterprise-inspector').getByLabel('导体截面积',{exact:true});await input.fill('999999');await input.press('Tab');
+ await page.getByRole('navigation',{name:'工程对象'}).getByRole('button',{name:'导体',exact:true}).click();
+ const input=page.getByLabel('导体截面积',{exact:true});await input.fill('999999');await input.press('Tab');
  await expect(input).toHaveAttribute('aria-invalid','true');
  const dialog=await open(page);await expect(dialog).toContainText('未提交参数');
  await dialog.getByTestId('cablesim.thermal2d').click();await dialog.locator('.plugin-run>summary').click();
@@ -71,15 +74,13 @@ test('real mesh and FEM artifact render with verified hashes without creating am
  await dialog.getByLabel('导体发热功率 W/m',{exact:true}).fill('40');await expect(panel).toBeHidden();
 });
 
-test('mobile project plugin dialog remains within viewport',async({page},info)=>{
- await page.setViewportSize({width:390,height:844});await page.goto('/');await page.getByRole('button',{name:'进入智能工程流',exact:true}).click();
- await expect(page.getByTestId('session-revision')).toHaveText('rev.1');
- // Same host event dispatched by the command menu; tests the dialog on the agent shell too.
- await page.evaluate(()=>window.dispatchEvent(new Event('csp:open-plugins')));
- const dialog=page.getByRole('dialog',{name:'当前工程插件中心'});await expect(dialog).toBeVisible();
- const box=await dialog.boundingBox();expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.x+box!.width).toBeLessThanOrEqual(391);
+test('compact viewport keeps the project plugin dialog within bounds',async({page,request},info)=>{
+ const w=await (await request.post('/api/workspaces',{data:{}})).json();
+ await page.setViewportSize({width:911,height:512});await enter(page,w.id);
+ const dialog=await open(page);
+ const box=await dialog.boundingBox();expect(box!.x).toBeGreaterThanOrEqual(0);expect(box!.x+box!.width).toBeLessThanOrEqual(912);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1)).toBe(true);
- await page.screenshot({path:info.outputPath('project-plugin-mobile.png')});await page.keyboard.press('Escape');await expect(dialog).toBeHidden();
+ await page.screenshot({path:info.outputPath('project-plugin-compact.png')});await page.keyboard.press('Escape');await expect(dialog).toBeHidden();
 });
 
 test('buried study uses three real cables and soil, with a read-only full-domain view',async({page,request},info)=>{

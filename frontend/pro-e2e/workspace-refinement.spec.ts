@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 
 async function enter(page:Page,request:APIRequestContext){
  const r=await request.post('/api/workspaces',{data:{}});expect(r.status()).toBe(201);const w=await r.json();
- await page.goto(`/?workflow=1&project=${w.id}`);
+ await page.goto(`/?project=${w.id}`);
  await expect(page.getByRole('img',{name:'已保存工程的等比例电缆截面'})).toBeVisible();return w;
 }
 

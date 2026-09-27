@@ -12,12 +12,16 @@
 
 ## 当前能力
 
-- **工程与版本**：本机 SQLite 工作区，参数锁、版本冲突检测、撤销 / 重做，提案需人工批准。
+前端只有一个工作台（`WorkflowApp`）。以下为界面可用的能力：
+
+- **工程与版本**：本机 SQLite 工作区，参数锁、版本冲突检测、撤销 / 重做，工程输入 JSON 导入 / 导出。
 - **电缆与敷设**：参数化分层结构、二维截面 / 三维模型、直埋水平 / 等边三角排列。
-- **计算**：稳态直埋热网络（允许电流、运行温度）、敷设参数扫描、竖向空气电热、截面电场 / 磁场解析、反向选型。
+- **设计依据**：标准题录与适用范围检查，依据变更需人工批准；不代表条款已实现。
+- **计算**：稳态直埋热网络（允许电流、运行温度）。
 - **插件**（`plugins/registry.json`，19 个清单）：CAD（cadquery STEP）、gmsh 截面网格、scikit-fem 传热、meshio / pyvista 后处理、三根直埋电缆土壤 FEM 参考、电热耦合 R(T) 参考、半空间线源解析校核；安装需预览计划并批准，按项目锁定准确版本，原生计算在独立子进程运行。
-- **资料与型号**：PDF 文字层 / OCR 入口、页级核对与引用、企业型号版本与候选复算。
 - **结果与交付**：运行记录只读保存，历史比较，HTML 计算书。
+
+后端另有参数扫描、反向选型、竖向空气电热、截面电场 / 磁场、资料库 / OCR、企业型号版本、资产库和工程助手接口，数据与测试保留，界面暂停（见 [PRD §4.4.1](docs/product/PRD.md)）。
 
 ## 工程边界
 
@@ -49,6 +53,6 @@ npx playwright install chromium webkit
 npx playwright test --project=chromium --project=workflow-plugins
 ```
 
-CI（`.github/workflows/ci.yml`）在 main 和每个 PR 上运行：卫生与插件目录检查、后端 Python 3.11–3.13、Linux / Windows 原生插件、Chromium / WebKit / 移动 WebKit / Windows 100–150% 缩放与 Edge 浏览器矩阵，全部通过后才打包演示版。
+CI（`.github/workflows/ci.yml`）在 main 和每个 PR 上运行：卫生与插件目录检查、后端 Python 3.11–3.13、Linux / Windows 原生插件、Chromium / WebKit / Windows 100–150% 缩放与 Edge 浏览器矩阵，全部通过后才打包演示版。
 
 本地中间文件用 `python scripts/clean.py` 清理。

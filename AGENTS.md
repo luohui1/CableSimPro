@@ -38,7 +38,7 @@ cd frontend && npm run build && npx playwright test --project=chromium
 ## 仓库卫生规则（CI 强制，`scripts/check_hygiene.py`）
 
 1. **文件名不带版本号或临时字样。** 禁止 `_v04`、`V073`、`_r3`、`20260908`、`legacy/old/new/final/tmp/backup` 等。版本只写在 git tag 和提交记录里。
-2. **生成物不入库。** `dist`、`test-results`、截图、`artifacts`、日志、数据库、`*.bin`、分片/base64 包、`__pycache__` 一律不提交。必须入库的生成物（如 `tokens.css`）要能用脚本重新生成，并由检查脚本校验一致。
+2. **生成物不入库。** `dist`、`test-results`、截图、`artifacts`、日志、数据库、`*.bin`、分片/base64 包、`__pycache__` 一律不提交。必须入库的生成物（如 `plugins/releases/` 里的插件封签）要能用脚本重新生成，并由检查脚本校验一致。
 3. **临时文件当场清理。** 一次性脚本、payload、调试探针只放 `.tmp/`（已忽略）或仓库外，产生它的同一个任务 / PR 内删除。不允许"一次性 bootstrap"提交。
 4. **每个主题只保留一份在用文档。** 不提交会话交接、同步记录、截图验收、版本快照文档；文档过时就更新或删除，历史留在 git。
 5. **CI 只在 main 和 PR 上运行。** 不写绑定某个特性分支名的工作流；新测试加进 `.github/workflows/ci.yml` 已有任务或 Playwright 项目。

@@ -3,7 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 async function project(request:APIRequestContext){
  const r=await request.post('/api/workspaces',{data:{}});expect(r.status()).toBe(201);return r.json();
 }
-async function enter(page:Page,w:any){await page.goto(`/?workflow=1&project=${w.id}`);await expect(page.getByRole('img',{name:'已保存工程的等比例电缆截面'})).toBeVisible()}
+async function enter(page:Page,w:any){await page.goto(`/?project=${w.id}`);await expect(page.getByRole('img',{name:'已保存工程的等比例电缆截面'})).toBeVisible()}
 const layer=(page:Page,name:string)=>page.getByRole('navigation',{name:'工程对象'}).getByRole('button',{name,exact:true});
 
 test('professional layout has real geometry, restrained chrome and read-only view controls',async({page,request},info)=>{

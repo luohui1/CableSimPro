@@ -39,7 +39,7 @@ BINARY_DIRS = ['frontend/public/*', 'docs/*']
 FRONTEND_EXT = ('', '.ts', '.tsx', '.js', '.mjs', '.css', '.json', '/index.ts', '/index.tsx')
 IMPORT = re.compile(r"""(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)|import\s*['"]([^'"]+)['"]|@import\s+(?:url\()?['"]([^'"]+)['"]""")
 # Frontend files consumed by tooling rather than imported from main.tsx.
-FRONTEND_TOOLING = {'frontend/src/design-system/tokens.json', 'frontend/src/vite-env.d.ts'}
+FRONTEND_TOOLING = {'frontend/src/vite-env.d.ts'}
 
 
 def tracked() -> list[str]:

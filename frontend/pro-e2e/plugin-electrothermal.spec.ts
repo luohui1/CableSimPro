@@ -19,8 +19,8 @@ async function prepare(request:APIRequestContext,r20:boolean){
  return w;
 }
 async function open(page:Page,w:any){
- await page.goto(`/?mode=workbench&project=${w.id}`);await expect(page.getByTestId('session-revision')).toHaveText(`rev.${w.revision}`);
- await page.getByRole('button',{name:'搜索命令',exact:true}).click();await page.getByRole('combobox',{name:'搜索工程命令'}).fill('plugin');await page.getByRole('option',{name:/打开插件中心/}).click();
+ await page.goto(`/?project=${w.id}`);await expect(page.getByTestId('workflow-revision')).toHaveText(`rev.${w.revision}`);
+ await page.keyboard.press('Control+k');await page.getByRole('dialog',{name:'工程命令',exact:true}).getByLabel('搜索工程命令').fill('plugin');await page.getByRole('button',{name:'打开插件管理'}).click();
  const dialog=page.getByRole('dialog',{name:'当前工程插件中心'});await dialog.getByTestId(pid).click();await dialog.locator('.plugin-run>summary').click();return dialog;
 }
 async function fill(page:Page){

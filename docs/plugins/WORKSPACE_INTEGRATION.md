@@ -8,9 +8,9 @@ or cable schema is introduced.
 
 ## Implemented additions
 
-- The project command center and Resources menu open the same plugin center in an
-  on-demand dialog. It stays inside the existing StudioProvider and preserves its
-  canvas, selection and input drafts. The standalone `/?plugins=1` entry still works.
+- The workflow ribbon and command search open the plugin center in an on-demand
+  dialog. It stays inside the existing StudioProvider and preserves its canvas,
+  selection and input drafts. There is no standalone plugin page.
 - Project ID is locked to the active project in the dialog. Unsubmitted/invalid
   parameters and host operations block plugin execution and project enable/disable.
   Opening, searching or closing does not generate a run or approve anything.

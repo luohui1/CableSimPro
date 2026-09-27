@@ -7,10 +7,10 @@ import sys
 import xml.etree.ElementTree as ET
 
 # Update together with the browser matrix in .github/workflows/ci.yml (npx playwright test --list).
-EXPECTED = {'chromium': 98, 'webkit': 98, 'mobile-webkit': 11, 'workflow-plugins': 35,
-            'windows-chromium-1': 71, 'windows-chromium-1.25': 71,
-            'windows-chromium-1.5': 71, 'windows-edge-1.25': 71}
-SHARDS = 15  # one JUnit report per browser matrix entry
+EXPECTED = {'chromium': 21, 'webkit': 21, 'workflow-plugins': 12,
+            'windows-chromium-1': 18, 'windows-chromium-1.25': 18,
+            'windows-chromium-1.5': 18, 'windows-edge-1.25': 18}
+SHARDS = 7  # one JUnit report per browser matrix entry
 
 
 def verify(root: Path) -> dict:

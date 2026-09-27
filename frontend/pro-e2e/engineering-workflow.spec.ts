@@ -6,7 +6,7 @@ async function makeProject(request:APIRequestContext,r20=false){
  if(r20){const edit=await request.post(`/api/workspaces/${w.id}/edit`,{data:{expected_revision:w.revision,changes:[{path:'cable.r20_ohm_km',value:.0754}]}});expect(edit.ok()).toBe(true);w=await edit.json()}
  return w;
 }
-async function enter(page:Page,w:any){await page.goto(`/?workflow=1&project=${w.id}`);await expect(page.getByTestId('workflow-revision')).toHaveText(`rev.${w.revision}`);await expect(page.getByRole('img',{name:'已保存工程的等比例电缆截面'})).toBeVisible()}
+async function enter(page:Page,w:any){await page.goto(`/?project=${w.id}`);await expect(page.getByTestId('workflow-revision')).toHaveText(`rev.${w.revision}`);await expect(page.getByRole('img',{name:'已保存工程的等比例电缆截面'})).toBeVisible()}
 async function select(page:Page,name:string){await page.getByRole('navigation',{name:'工程对象'}).getByRole('button',{name,exact:true}).click()}
 async function run(page:Page){
  await select(page,'R-001 · 稳态研究');

@@ -1,8 +1,9 @@
 import {lazy,Suspense,useEffect,useRef,useState} from 'react';
-import {ArrowRight,Box,Check,ChevronDown,ChevronRight,FileText,FolderOpen,Layers3,Maximize2,Minimize2,Minus,Package,Play,Plus,RotateCcw,Ruler,Save,Search,Settings2,ShieldCheck,X} from 'lucide-react';
+import {ArrowRight,Box,ChevronDown,ChevronRight,FileText,FolderOpen,Layers3,Maximize2,Minimize2,Minus,Package,Play,Plus,RotateCcw,RotateCw,Ruler,Search,Settings2,ShieldCheck,Upload,X} from 'lucide-react';
 import {StudioProvider,useStudio,valueAt} from '../StudioState';
-import type {Result} from '../types';
-import {api,fmt,canonical} from '../utils';
+import type {Result,Scenario} from '../types';
+import {api,fmt,canonical,errorText} from '../utils';
+import DesignBasisSection from './DesignBasisSection';
 import {objects,layerKeys,parseDraft,type ObjectKey} from './fields';
 import DocumentTabs from './DocumentTabs';
 import ObjectInspector,{LayerSwatch} from './ObjectInspector';
@@ -30,7 +31,7 @@ function ResultView({runId}:{runId:string}){
  if(error)return <p role="alert">{error}</p>;
  if(!run)return <p role="status">正在读取保存的运行…</p>;
  const r=run.output.result;
- if(!r)return <p>此记录不是单工况稳态结果，请在原工作台查看。</p>;
+ if(!r)return <p>此记录不是单工况稳态结果，当前工作台暂不提供该类记录的查看。</p>;
  const same=run.revision===w.revision&&canonical(r.input)===canonical(w.scenario)&&canonical(r.design_basis??null)===canonical(w.design_basis??null);
  const dirty=Object.keys(s.inputDrafts).length>0;
  const diff=other?.output.result;
@@ -88,11 +89,12 @@ function Workbench({onHome}:{onHome:()=>void}){
   <header className="wf-top"><button className="wf-brand" disabled={dirty||s.busy} onClick={onHome} aria-label="返回工程首页"><img className="wf-brand-asset" src="/workbench-assets/brand.webp" alt=""/><span>CableSim<span className="wf-brand-pro">Pro</span></span></button>
    <span className="wf-project-name" title={w.scenario.name}>{w.scenario.name}</span><span className="wf-revision" data-testid="workflow-revision">rev.{w.revision}</span><span className="wf-top-spacer"/>
    <button id="wf-command-trigger" className="wf-command-trigger" onClick={()=>setCommandOpen(true)}><Search size={15}/><span>查找命令</span><kbd>Ctrl K</kbd></button>
-   <details className="wf-more"><summary aria-label="更多工程操作">更多 <ChevronDown size={13}/></summary><div><button onClick={()=>{setPlugins(true);document.querySelector('.wf-more')?.removeAttribute('open')}}>插件管理</button><button disabled={dirty||s.busy} onClick={()=>{const u=new URL(location.href);u.searchParams.delete('workflow');u.searchParams.set('mode','workbench');location.assign(u.href)}}>返回原工作台</button></div></details>
+   <details className="wf-more"><summary aria-label="更多工程操作">更多 <ChevronDown size={13}/></summary><div><button onClick={()=>{setPlugins(true);document.querySelector('.wf-more')?.removeAttribute('open')}}>插件管理</button><button disabled={dirty||s.busy} onClick={()=>{s.exportJSON();document.querySelector('.wf-more')?.removeAttribute('open')}}>导出已保存输入 JSON</button></div></details>
   </header>
   <div className="wf-ribbon" role="toolbar" aria-label="工程操作">
    <span className="wf-workspace-label"><Box size={17}/>工程工作区</span><span className="wf-ribbon-divider"/>
    <button disabled={s.busy||dirty||!w.can_undo} onClick={()=>void s.history('undo')} title="撤销已保存的工程修改"><RotateCcw size={16}/><span>撤销修改</span></button>
+   <button disabled={s.busy||dirty||!w.can_redo} onClick={()=>void s.history('redo')} title="重做已撤销的工程修改"><RotateCw size={16}/><span>重做修改</span></button>
    <button disabled={s.busy} onClick={()=>{void s.reload();setPreflightNonce(n=>n+1)}} title="重新读取服务端版本，不丢弃草稿"><FolderOpen size={16}/><span>读取最新版本</span></button>
    <span className="wf-ribbon-divider"/><button onClick={()=>pick('study')}><Play size={16}/><span>研究设置</span></button><button onClick={()=>setPlugins(true)}><Package size={16}/><span>插件中心</span></button>
    <span className="wf-top-spacer"/><span className="wf-save-indicator" data-state={dirty?'draft':'saved'}><i/>{dirty?'草稿待保存':'已保存'}</span>
@@ -122,9 +124,10 @@ function Workbench({onHome}:{onHome:()=>void}){
     </section>
     <section id="wf-panel-study" role="tabpanel" aria-labelledby="wf-tab-study" className="wf-study-document" hidden={doc!=='study'} aria-label="稳态研究文档">
      <div className="wf-reading"><small>研究 / R-001</small><h1>稳态载流量</h1><p className="wf-lead">电缆 C-001 · 敷设方案 A · 当前工程 rev.{w.revision}</p>
-      <section><h2>01　方法与适用范围</h2><p>现有单回路直埋热网络。三根相同单芯电缆、均匀土壤、稳态平衡电流。</p><p className="wf-muted">不等于完整 IEC 60287 实现；交流附加和屏蔽损耗系数仍是输入。本轮不调用有限元插件。</p><details><summary>查看当前登记的设计依据</summary><pre>{JSON.stringify(w.design_basis??{},null,2)}</pre></details></section>
-      <section><h2>02　工况与输入检查</h2><InstallationDiagram scenario={w.scenario} diameterMm={data?data.package.geometry_recipe.layers.at(-1)!.outer_radius_m*2000:undefined}/><dl className="wf-key-values"><dt>排列 / 平均中心埋深</dt><dd>{w.scenario.installation.arrangement==='flat'?'平行':'三角形'} / {w.scenario.installation.depth_m} m <button className="wf-text" onClick={()=>setSelection('installation')}>编辑敷设</button></dd><dt>环境温度 / 土壤热阻率</dt><dd>{w.scenario.installation.ambient_temperature_c} °C / {w.scenario.installation.soil_rho_k_m_w} K·m/W</dd><dt>运行电流</dt><dd>{w.scenario.operating_current_a} A <button className="wf-text" onClick={()=>setSelection('study')}>编辑研究</button></dd><dt>20°C 导体电阻</dt><dd>{w.scenario.cable.r20_ohm_km??'未提供'} Ω/km <button className="wf-text" onClick={()=>pick('conductor')}>核对导体</button></dd></dl>
-       {!buried&&<p className="wf-inline-error">设计依据不属于直埋域，请在原工作台调整并批准方法范围。</p>}{dirty&&<p className="wf-inline-error">还有未保存输入，不能使用旧值运行。</p>}{w.scenario.cable.r20_ohm_km===null&&<p className="wf-inline-error">本流程要求明确保存 R20，避免沿用理想电阻估计。</p>}{prepared.error&&<p role="alert">{prepared.error}</p>}
+      <section><h2>01　方法与适用范围</h2><p>现有单回路直埋热网络。三根相同单芯电缆、均匀土壤、稳态平衡电流。</p><p className="wf-muted">不等于完整 IEC 60287 实现；交流附加和屏蔽损耗系数仍是输入。本轮不调用有限元插件。</p></section>
+      <section><h2>02　设计依据</h2><DesignBasisSection/></section>
+      <section><h2>03　工况与输入检查</h2><InstallationDiagram scenario={w.scenario} diameterMm={data?data.package.geometry_recipe.layers.at(-1)!.outer_radius_m*2000:undefined}/><dl className="wf-key-values"><dt>排列 / 平均中心埋深</dt><dd>{w.scenario.installation.arrangement==='flat'?'平行':'三角形'} / {w.scenario.installation.depth_m} m <button className="wf-text" onClick={()=>setSelection('installation')}>编辑敷设</button></dd><dt>环境温度 / 土壤热阻率</dt><dd>{w.scenario.installation.ambient_temperature_c} °C / {w.scenario.installation.soil_rho_k_m_w} K·m/W</dd><dt>运行电流</dt><dd>{w.scenario.operating_current_a} A <button className="wf-text" onClick={()=>setSelection('study')}>编辑研究</button></dd><dt>20°C 导体电阻</dt><dd>{w.scenario.cable.r20_ohm_km??'未提供'} Ω/km <button className="wf-text" onClick={()=>pick('conductor')}>核对导体</button></dd></dl>
+       {!buried&&<p className="wf-inline-error">设计依据不属于直埋域，请在上方“设计依据”中修改并批准。</p>}{dirty&&<p className="wf-inline-error">还有未保存输入，不能使用旧值运行。</p>}{w.scenario.cable.r20_ohm_km===null&&<p className="wf-inline-error">本流程要求明确保存 R20，避免沿用理想电阻估计。</p>}{prepared.error&&<p role="alert">{prepared.error}</p>}
        <p className="wf-muted">几何预检只确认输入配方，不代表数值精度或标准合规。</p>
       </section>
       <section className="wf-run-action"><label><input type="checkbox" checked={ack===w.revision} disabled={s.busy} onChange={e=>setAck(e.target.checked?w.revision:null)}/>已核对本版本参数来源、损耗系数与方法范围</label><button className="wf-primary" disabled={!ready||ack!==w.revision} onClick={()=>{pendingRun.current=s.output?.run_id??null;void s.run()}}><Play size={15}/>{s.busy?'任务执行中…':'运行当前版本'}</button></section>
@@ -143,6 +146,10 @@ function Workbench({onHome}:{onHome:()=>void}){
    {id:'plugins',name:'打开插件管理',keywords:'plugin',action:()=>setPlugins(true)},
    {id:'focus',name:focused?'恢复完整工作区':'专注画布',keywords:'focus',action:()=>setFocused(v=>!v)},
    {id:'conductor',name:'核对导体电阻 R20',keywords:'conductor resistance',action:()=>pick('conductor')},
+   {id:'undo',name:'撤销已保存修改',keywords:'undo',disabled:s.busy||dirty||!w.can_undo,action:()=>void s.history('undo')},
+   {id:'redo',name:'重做已撤销修改',keywords:'redo',disabled:s.busy||dirty||!w.can_redo,action:()=>void s.history('redo')},
+   {id:'basis',name:'查看或修改设计依据',keywords:'design basis standard',action:()=>pick('study')},
+   {id:'export-json',name:'导出已保存输入 JSON',keywords:'export json',disabled:s.busy||dirty,action:()=>s.exportJSON()},
   ]}/>
   {plugins&&<Suspense fallback={<p role="status">正在打开插件管理…</p>}><PluginDialog onClose={()=>setPlugins(false)}/></Suspense>}
  </div>;
@@ -151,6 +158,16 @@ function Application(){
  const s=useStudio(),[home,setHome]=useState(!projectFromUrl);
  const [target,setTarget]=useState<{id:string;previous:string|null}|null>(null);
  const [recent,setRecent]=useState<{id:string;name:string;revision:number}[]>([]),[error,setError]=useState('');
+ const fileInput=useRef<HTMLInputElement>(null);
+ async function importFile(file:File){
+  setError('');
+  try{
+   if(file.size>120000)throw new Error('工程 JSON 不能超过 120 KB。');
+   let raw:unknown;try{raw=JSON.parse(await file.text())}catch{throw new Error('所选文件不是有效的 JSON。')}
+   const valid=await api<Scenario>('/api/validate',raw);
+   setTarget({id:'new',previous:s.w?.id??null});await s.create(valid);
+  }catch(e){setError(errorText(e))}
+ }
  useEffect(()=>{if(home)void api<typeof recent>('/api/workspaces').then(setRecent).catch(e=>setError(e.message))},[home,s.w?.id,s.w?.revision]);
  useEffect(()=>{if(target&&!s.busy){if(s.error)setTarget(null);else if(s.w&&(target.id==='new'?s.w.id!==target.previous:s.w.id===target.id)){setHome(false);setTarget(null)}}},[target,s.busy,s.w?.id,s.error]);
  if(!s.initialized)return <div className="wf-home" role="status">正在连接本机工程服务…</div>;
@@ -160,6 +177,7 @@ function Application(){
    <section><div className="wf-home-heading"><div><small>CABLE ENGINEERING</small><h1>从一个工程开始。</h1><p>定义电缆，核对工况，让计算与每个工程版本保持一致。</p></div><Box size={40} strokeWidth={1}/></div>
     {(s.error||error)&&<p role="alert">{s.error||error}</p>}
     <div className="wf-new-project"><div><span className="wf-new-symbol"><Plus size={23}/></span><div><h2>新建研究工程</h2><p>从现有单芯电缆与直埋工况开始。</p></div></div><button className="wf-primary" disabled={s.busy} onClick={()=>{setTarget({id:'new',previous:s.w?.id??null});void s.create()}}>新建研究工程 <ArrowRight size={16}/></button></div>
+    <div className="wf-import-project"><p>已有工程输入 JSON？导入会先经服务端整体校验，再新建一个独立工程；不会合并或覆盖已有工程，也不包含历史与运行记录。</p><button disabled={s.busy} onClick={()=>fileInput.current?.click()}><Upload size={15}/>导入工程 JSON</button><input ref={fileInput} type="file" accept=".json,application/json" aria-label="选择工程 JSON 文件" hidden onChange={e=>{const f=e.target.files?.[0];if(f)void importFile(f);e.target.value=''}}/></div>
     <div className="wf-recent-heading"><h2>最近工程</h2><span>{recent.length} 个工程</span></div><div className="wf-recent">{recent.map(r=><button disabled={s.busy} key={r.id} onClick={()=>{setTarget({id:r.id,previous:s.w?.id??null});void s.load(r.id)}}><FolderOpen size={20}/><span><strong>{r.name}</strong><small>本机工程</small></span><span className="wf-recent-revision">rev.{r.revision}</span><ArrowRight size={15}/></button>)}</div>{!recent.length&&<div className="wf-home-empty"><FolderOpen size={28}/><p>还没有保存的工程。</p><small>新建后，电缆、研究和计算记录会保留在同一个工程中。</small></div>}
     <footer className="wf-home-note"><ShieldCheck size={16}/><p>新工程包含演示输入，不代表厂家数据。运行前请核对来源和方法适用范围。</p></footer>
    </section>

@@ -1,27 +1,14 @@
-# R2.1 — local engineering asset library and reusable PC collection workspace
+# R2.1 — local engineering asset library
 
-## Design decisions
+## Status
 
-The model canvas remains a modeling workspace. Asset browsing occupies a separate,
-lazy-loaded collection page, reached from Resources or the command center. While
-browsing, simulation metrics and the result drawer are hidden; the existing canvas
-and engineering drafts remain mounted. The page uses category / list / detail
-regions. Detail tabs separate definition, provenance/dependencies and lifecycle.
-The only overlay is the task-specific editor/review dialog.
-
-Reuse the installed Radix Dialog, TanStack Table legacy adapter and Lucide icons,
-plus the existing Button, Badge and generated design tokens. No new dependency,
-remote font, dashboard template or vendor asset pack is introduced. The reusable
-`CollectionWorkspace`, `CollectionSearch`, `CollectionEmpty`, `DetailHeading`
-components own presentation, not engineering data. Library widths are tokenized.
-
-Primary component references (reviewed 2026-09-10):
-- https://www.radix-ui.com/primitives/docs/components/dialog — focus, titles, close behavior.
-- https://tanstack.com/table/latest/docs/introduction — headless table architecture.
+The backend contract below is implemented and tested (`tests/foundation/test_assets.py`,
+`test_asset_router.py`). The asset library UI was retired with the old shells (architecture
+D1, PRD §4.4) and is paused; `WorkflowApp` does not expose it yet. When it returns it must
+reuse the workflow shell's controls rather than a separate collection page.
 
 An asset section preview is generated from saved layer radii, not an image file,
-thermal result, B-Rep or manufacturer rendering. Materials use semantic glyphs if
-no geometry is supplied. No decorative image is required for this workflow.
+thermal result, B-Rep or manufacturer rendering.
 
 ## Domain and persistence
 
@@ -68,24 +55,12 @@ verification/storage is implemented. This is not archive ingestion, a CAD import
 or script execution. Instance-to-project application and project asset-lock binding
 remain subsequent slices; merely publishing a definition never changes a study.
 
-## Regression and test evidence
+## Test evidence
 
-The older progressive smoke test asserted rail width <=84px while the approved
-reference fixes it at 85px. It now uses the exact value from
-`docs/design/reference-layout.json`. No test is removed, no retry added, and model dimensions,
-canvas persistence, accessibility and engineering-state assertions stay in place.
-This resolves one evidenced contract conflict, not every historical UI failure.
-
-Local offline checks use the installed environment; their versions are recorded
-separately. Full dependency-pinned backend tests, the production build, Chromium
-and WebKit workflows and the existing desktop baseline execute in the exact-source
-`Engineering foundation review` lane. Until those artifacts are checked, local unit
-success must not be described as complete browser/native-solver acceptance.
-
-Tests cover immutable releases, source trust preservation, stale review, atomic CAS,
+Backend tests cover immutable releases, source trust preservation, stale review, atomic CAS,
 concurrent reviewers, changed/deprecated transitive dependencies, corrupt content,
 JSON version conflicts, unsafe payload declarations, project immutability, capture,
-export, derive, UI draft protection and 1366px list/detail/dialog accessibility.
+export and derive. There is currently no browser test because there is no UI.
 
 ## Next boundaries
 
