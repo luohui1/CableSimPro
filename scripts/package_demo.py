@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import zipfile
@@ -11,6 +12,11 @@ ALLOWED_ROOT_FILES = {'README.md', 'pytest.ini', '.gitignore', '.dockerignore', 
 # plugins/ holds every calculation method; without it the demo cannot calculate.
 ALLOWED_DIRECTORIES = {'backend', 'frontend', 'plugins', 'plugin-spec', 'scripts', 'docs', 'tests', '.github'}
 EXCLUDED_PARTS = {'node_modules', '__pycache__', '.pytest_cache', 'playwright-report', 'test-results', 'test-results-windows', 'playwright-report-windows', '.venv', '.data', '.git'}
+
+
+def product_version(root: Path) -> str:
+    match = re.search(r"__version__ = '([^']+)'", (root / 'backend/__init__.py').read_text('utf-8'))
+    return match.group(1) if match else 'unversioned'
 
 
 def build_archive(root: Path = ROOT) -> Path:
@@ -36,7 +42,7 @@ def build_archive(root: Path = ROOT) -> Path:
                 continue
             archive.write(path, 'CableSimPro/' + relative.as_posix())
             count += 1
-        info = {'product': 'CableSimPro', 'version': '0.7.4', 'git_checkout_sha': commit,
+        info = {'product': 'CableSimPro', 'version': product_version(root), 'git_checkout_sha': commit,
                 'github_run_id': os.environ.get('GITHUB_RUN_ID'), 'includes_prebuilt_frontend': True,
                 'engineering_status': 'preview; not a complete IEC implementation or independently certified'}
         archive.writestr('CableSimPro/BUILD_INFO.json', json.dumps(info, ensure_ascii=False, indent=2))

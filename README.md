@@ -10,6 +10,9 @@
 - 计算方法与适用边界：[docs/METHOD.md](docs/METHOD.md)
 - 开发约定与仓库卫生规则：[AGENTS.md](AGENTS.md)
 
+## 版本
+当前版本 **0.1.0**（首个版本，git 标签 `v0.1.0`；版本号唯一来源为 `backend/__init__.py`）。旧界面与旧版本资料已从主线移除，历史只保留在 git 记录与 `archive/*` 标签中。前端正按[前端设计系统](docs/design/FRONTEND_DESIGN_SYSTEM.md)重建，本版本界面为过渡用的单一工作台。
+
 ## 当前能力
 
 前端只有一个工作台（`WorkflowApp`）。以下为界面可用的能力：

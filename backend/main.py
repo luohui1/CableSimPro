@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from .agent import router as agent_router
 from .catalog import presets
+from . import __version__
 from .methods import MODEL_VERSION, ModelError, calculate, calculate_many
 from .report import render_report
 from .schemas import Scenario, SweepRequest
@@ -61,7 +62,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             # of something an arbitrary UI request can inherit on connection close.
             workspace_store.close()
 
-    app = FastAPI(title='CableSimPro · Engineering Workspace', version='0.7.2', lifespan=lifespan)
+    app = FastAPI(title='CableSimPro · Engineering Workspace', version=__version__, lifespan=lifespan)
     app.include_router(agent_router)
     app.include_router(make_router(workspace_store, providers))
     app.include_router(integrations_router(providers))
@@ -111,7 +112,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
 
     @app.get('/api/health')
     def health():
-        return {'status': 'ok', 'model_version': MODEL_VERSION, 'scope': 'single-circuit-direct-buried-demo'}
+        return {'status': 'ok', 'version': __version__, 'model_version': MODEL_VERSION, 'scope': 'single-circuit-direct-buried-demo'}
 
     @app.get('/api/presets')
     def get_presets():

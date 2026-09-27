@@ -1,6 +1,6 @@
 # Electrothermal reference — explicit losses, temperature feedback, current bracket
 
-Incremental branch from c699992 (PR #23). One PluginService, project store, catalog,
+One PluginService, project store, catalog,
 permission/lock model and artifact API. The new first-party adapter has a fixed
 host-owned worker entry; unrelated adapters retain their existing bytes, versions
 and digests. The new inert JSON record under plugins/releases is combined with

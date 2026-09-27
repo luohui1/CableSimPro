@@ -14,7 +14,10 @@ def client(tmp_path):
 
 
 def test_health_and_presets(client):
-    assert client.get("/api/health").json()["status"] == "ok"
+    health = client.get("/api/health").json()
+    assert health["status"] == "ok"
+    from backend import __version__
+    assert health["version"] == __version__
     presets = client.get("/api/presets").json()
     assert len(presets) == 6
     for preset in presets:

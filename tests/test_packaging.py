@@ -24,6 +24,7 @@ def test_bundle_includes_app_but_excludes_private_runtime_files(tmp_path):
     put(tmp_path, "frontend/dist/index.html", "<h1>demo</h1>")
     put(tmp_path, "frontend/src/App.tsx")
     put(tmp_path, "backend/main.py")
+    put(tmp_path, "backend/__init__.py", "__version__ = '9.8.7'\n")
     put(tmp_path, "scripts/run_demo.py")
     put(tmp_path, "plugins/registry.json")
     put(tmp_path, "plugins/cablesim.thermal-network/src/cablesim_thermal_network/main.py")
@@ -45,6 +46,7 @@ def test_bundle_includes_app_but_excludes_private_runtime_files(tmp_path):
         assert not any(".sqlite" in name or ".env" in name or "node_modules" in name or "__pycache__" in name or "test-results" in name for name in names)
         info = json.loads(archive.read("CableSimPro/BUILD_INFO.json"))
         assert info["includes_prebuilt_frontend"] is True
+        assert info["version"] == "9.8.7"
 
 
 def test_launcher_help_is_available_without_installation():
