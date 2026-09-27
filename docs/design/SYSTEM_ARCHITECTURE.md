@@ -169,7 +169,7 @@ COMSOL/AEDT 等需许可的软件以 `executable` 插件 + `tools` 声明接入�
 | D0 固定集成基线 | 已完成：main 为唯一主线（含插件电热 / 线源校核链），CI 统一在 main/PR 运行，仓库卫生规则生效 | — |
 | D1 界面收敛 | 默认入口改为 `WorkflowApp`；删除 `LegacyEntry`、双模式、旧 Studio / Enterprise 外壳及其 e2e；迁入工程 JSON 导入 / 导出、重做、设计依据；其余旧界面能力按 PRD §4.4.1 暂停 | 卫生遗留清单清空；CI 只测在用界面 |
 | D2 可信度基线 | 现有热网络黄金值回归（`tests/test_engine_golden.py`）；IEC 60287 单芯品字形直埋 / 排管方法（`plugins/cablesim.iec60287`，[说明](../plugins/IEC60287_SINGLE_CORE.md)），TB 880 六个算例逐项验证；直埋 FEM、电热、线源校核的黄金值随 D5 插件迁移补齐 | 选定算例的各中间量与最终载流量在登记容差内；不符项明确列出，不调参凑数 |
-| D3 热网络插件化 | 仓库内 v2 最小协议：`plugin.json`、`request.json` / `result.json`、通用执行器、结果契约校验；热网络迁出为第一个插件 | 宿主中不再有 `engine.py`；结果与 D2 基准一致 |
+| D3 热网络插件化 | 仓库内 v2 最小协议（`backend/plugin_host/`，实施状态见[插件契约](./PLUGIN_CONTRACT.md)开头）；热网络迁出为 `cablesim.thermal-network`，`engine.py` 删除，宿主经 `backend/methods.py` 调用；`cablesim.iec60287` 以同一协议可执行，尚未接入研究流程与界面（D4） | 宿主中不再有 `engine.py`；结果与 D2 基准一致 |
 | D4 首条闭环 | 统一 Study / Run、固定快照执行、工程版本档案、只读运行视图、历史比较、HTML 计算书 | PRD J1、J2、J6 走通；报告输入与图表同源、导出不重算 |
 | D5 领域模型与其余插件 | `cablesim.domain/1`、v0 工程迁移；迁移其余 worker 插件；结果类型渲染器替换前端特判；新工况按需接入（优先多回路、排管） | 旧工程可转换且原数据不变；宿主无按插件 ID 的分支 |
 | D6 研究驱动器 | 参数扫描、反向选型、方案比较、交叉校核驱动器 | 每个采样点 / 候选独立成败，不外推 |

@@ -3,5 +3,7 @@
 /backend/plugins/*.py text eol=lf
 /backend/foundation/*.py text eol=lf
 /plugins/*.json text eol=lf
+/plugins/*/plugin.json text eol=lf
+/plugins/*/src/** text eol=lf
 /plugin-spec/*.json text eol=lf
 /plugins/releases/*.json text eol=lf

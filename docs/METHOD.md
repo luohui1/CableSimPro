@@ -138,6 +138,6 @@ qtotal,i = qc,i + qs,i + wd
 
 ## 9. 工程应用之前
 
-宿主内置的本热网络仍是简化演示方法。按 IEC 60287 拆分计算并经 CIGRE TB 880 算例逐项核对的单芯方法见 [IEC60287_SINGLE_CORE.md](plugins/IEC60287_SINGLE_CORE.md)（尚未接入界面，架构 D3 接入）；本热网络的现有输出由 `tests/test_engine_golden.py` 锁定，用于重构回归，不是正确性证据。
+宿主默认使用的本热网络仍是简化演示方法，实现位于插件 `plugins/cablesim.thermal-network`（原 `backend/engine.py`，公式与数值不变，由 `tests/test_engine_golden.py` 经插件执行复现）。按 IEC 60287 拆分计算并经 CIGRE TB 880 算例逐项核对的单芯方法见 [IEC60287_SINGLE_CORE.md](plugins/IEC60287_SINGLE_CORE.md)，已可经插件协议执行，尚未接入研究流程与界面（架构 D4）；黄金值用于重构回归，不是正确性证据。
 
 必须针对目标电缆和敷设方式，用有使用授权的正式标准文本、厂家结构材料数据、独立实现或参考软件以及可用实测结果，分别验证电阻、损耗、热阻、温度与最终载流量。本仓库尚未完成此级别的外部验证；自动测试通过不能据此升级为设计用额定值。

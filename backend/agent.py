@@ -13,7 +13,7 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import Field, ValidationError
 
-from .engine import calculate, ModelError
+from .methods import calculate, calculate_many, ModelError
 from .schemas import Cable, Installation, Scenario, StrictModel
 
 router = APIRouter(prefix="/api/agent")
@@ -291,10 +291,11 @@ def execute(request: ExecuteRequest):
                 statement += ' 当前运行电流无稳定解，不输出运行温度。'
             statement += ' 以上是当前热网络模型的结果，未经过外部工程认证。'
         elif intent.action == 'sweep':
+            candidates = [patch(scenario, [Change(path=f'installation.{intent.parameter}', value=value)])[0] for value in intent.values]
             points = []
-            for value in intent.values:
-                candidate, _ = patch(scenario, [Change(path=f'installation.{intent.parameter}', value=value)])
-                computed = calculate(candidate, include_field=False)
+            for value, computed in zip(intent.values, calculate_many(candidates)):
+                if isinstance(computed, ModelError):
+                    raise computed
                 points.append({'value': value, 'ampacity_a': computed['summary']['ampacity_a'], 'error': None})
             sweep = {'parameter': intent.parameter, 'points': points}
             events.append({'tool': 'run_parameter_sweep', 'status': 'completed', 'detail': f'{len(points)} 个独立工况已求解。'})

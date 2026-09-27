@@ -16,9 +16,9 @@
 
 | 目录 | 内容 |
 | --- | --- |
-| `backend/` | FastAPI 宿主；`foundation/` 契约与研究，`plugins/` 插件宿主 |
+| `backend/` | FastAPI 宿主；`foundation/` 契约与研究，`plugins/` v1 插件宿主，`plugin_host/` v2 插件执行器，`methods.py` 宿主调用计算方法的唯一入口 |
 | `frontend/` | React + Vite 工作台；e2e 在 `frontend/pro-e2e/` |
-| `plugins/` | 插件清单与原生依赖锁 |
+| `plugins/` | v2 第一方插件（每个插件一个目录 `plugins/<id>/`）、v1 插件清单与原生依赖锁 |
 | `plugin-spec/` | 插件清单 / 命令 / 结果的 JSON Schema |
 | `tests/` | 默认 pytest；`plugin-tests/` 需要原生环境 |
 | `scripts/` | 仍在使用的工具脚本（每个都必须被 CI、代码或本文件引用） |
@@ -51,7 +51,7 @@ cd frontend && npm run build && npx playwright test --project=chromium
 1. 删除本任务产生的临时文件、调试输出、临时 worktree / 分支。
 2. `python scripts/clean.py` 清掉本地中间文件（不会动 `.data/` 里的工程数据）。
 3. `python -m pytest` 通过（含卫生检查）；动了插件跑 `plugin-tests`；动了前端跑 `npm run build` 和相关 Playwright 项目。
-4. 改了插件或宿主被封签的文件：`python scripts/seal_plugin_catalog.py`（默认只检查）会报不一致；未发布版本用 `--write-draft` 重新封签，已发布版本先升插件版本号。最后确认 `python scripts/plugin_sdk.py verify` 通过。
+4. 改了插件或宿主被封签的文件：`python scripts/plugin_sdk.py seal` 会报出不一致（v2 插件 `plugins/<id>/src/` 与 v1 目录 `plugins/registry.json` 登记的文件）；未发布版本用 `seal --write` 重新封签，已发布版本先升插件版本号。改了 v1 清单结构或 `plugin-spec/` 模型时才用 `python scripts/seal_plugin_catalog.py --write-draft`（会整体重排格式）。最后确认 `python scripts/plugin_sdk.py verify` 与 `python scripts/seal_plugin_catalog.py` 通过。
 
 ## 分支
 

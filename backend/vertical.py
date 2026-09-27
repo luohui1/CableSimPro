@@ -10,7 +10,7 @@ from pydantic import Field
 from scipy.sparse import lil_matrix
 from scipy.sparse.linalg import spsolve
 from .schemas import Cable, Scenario, StrictModel
-from .engine import ThermalNetwork, ModelError
+from .methods import ModelError, NetworkProperties, network_properties
 
 
 class Vertical(StrictModel):
@@ -23,9 +23,9 @@ class Vertical(StrictModel):
 
 
 class VerticalNetwork:
-    def __init__(self, cable: Cable, config: Vertical):
+    def __init__(self, cable: Cable, config: Vertical, properties: NetworkProperties | None = None):
         # Geometry/material definitions are shared with the buried engine, not soil physics.
-        net = ThermalNetwork(Scenario(cable=cable))
+        net = properties if properties is not None else network_properties(Scenario(cable=cable))
         self.c, self.v = cable, config
         self.t = np.array([net.t[0] + net.t[1] / 2, net.t[1] / 2 + net.t[2] + net.t[3], net.t[4]])
         self.r, self.alpha, self.wd = net.r20ac, net.alpha, net.wd
@@ -120,8 +120,8 @@ class VerticalNetwork:
         return lo,state
 
 
-def vertical_study(cable:Cable,config:Vertical,current:float):
-    net=VerticalNetwork(cable,config)
+def vertical_study(cable:Cable,config:Vertical,current:float,properties:NetworkProperties|None=None):
+    net=VerticalNetwork(cable,config,properties)
     rating,rated=net.rating()
     try: operating=net.state(current); error=None
     except ModelError as exc: operating=None;error=str(exc)

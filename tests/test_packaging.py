@@ -25,6 +25,8 @@ def test_bundle_includes_app_but_excludes_private_runtime_files(tmp_path):
     put(tmp_path, "frontend/src/App.tsx")
     put(tmp_path, "backend/main.py")
     put(tmp_path, "scripts/run_demo.py")
+    put(tmp_path, "plugins/registry.json")
+    put(tmp_path, "plugins/cablesim.thermal-network/src/cablesim_thermal_network/main.py")
     put(tmp_path, "README.md")
     put(tmp_path, ".data/cablesim.sqlite", "private")
     put(tmp_path, "backend/.env", "secret")
@@ -38,6 +40,8 @@ def test_bundle_includes_app_but_excludes_private_runtime_files(tmp_path):
         assert "CableSimPro/frontend/dist/index.html" in names
         assert "CableSimPro/backend/main.py" in names
         assert "CableSimPro/scripts/run_demo.py" in names
+        assert "CableSimPro/plugins/cablesim.thermal-network/src/cablesim_thermal_network/main.py" in names
+        assert "CableSimPro/plugins/registry.json" in names
         assert not any(".sqlite" in name or ".env" in name or "node_modules" in name or "__pycache__" in name or "test-results" in name for name in names)
         info = json.loads(archive.read("CableSimPro/BUILD_INFO.json"))
         assert info["includes_prebuilt_frontend"] is True

@@ -1,0 +1,135 @@
+{
+  "schema": "cablesim.plugin/2",
+  "id": "cablesim.thermal-network",
+  "version": "1.0.0",
+  "name": "直埋稳态热网络（简化方法）",
+  "publisher": {
+    "id": "cablesim",
+    "name": "CableSimPro"
+  },
+  "host_api": {
+    "major": 2,
+    "min_minor": 0
+  },
+  "license": {
+    "spdx": "LicenseRef-Project-Undeclared",
+    "review_required": false
+  },
+  "platforms": [
+    "windows-x64",
+    "linux-x64",
+    "darwin-arm64",
+    "darwin-x64"
+  ],
+  "runtime": {
+    "kind": "python",
+    "python": ">=3.11,<3.14",
+    "entry": "src/cablesim_thermal_network/main.py"
+  },
+  "permissions": [
+    "study.run",
+    "artifact.write"
+  ],
+  "dependencies": [],
+  "resources": {
+    "timeout_s": 60,
+    "memory_mb": 512,
+    "network": "none"
+  },
+  "capabilities": [
+    {
+      "kind": "method",
+      "id": "steady-rating",
+      "title": "直埋稳态载流量与运行温度（简化热网络）",
+      "method_version": "MV-THERMAL-0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.scenario/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        },
+        {
+          "key": "conductor_temperature",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "losses.dielectric",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.thermal-network-rating",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "单回路三根相同无铠装单芯电缆，均匀土壤、恒温地表。",
+        "交流附加系数与屏蔽损耗系数为输入假设，不自动计算集肤、邻近或护套环流。",
+        "不是完整 IEC 60287 实现；经 TB 880 验证的方法见 cablesim.iec60287。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "network-properties",
+      "title": "热网络几何、热阻与损耗属性",
+      "method_version": "MV-THERMAL-0.1.0",
+      "analysis": "properties",
+      "input_schema": "cablesim.scenario/1",
+      "outputs": [
+        {
+          "key": "losses.dielectric",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.thermal-network-properties",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "供宿主内尚未插件化的场分析与竖向模型读取同一套热网络属性，不是独立方法。"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "src/cablesim_thermal_network/__init__.py",
+      "sha256": "493d4fe40ff9fa9d7302d624dcd6ab764d7e4f3674b8fe4f2e1fa9b2a04d9968",
+      "size_bytes": 86
+    },
+    {
+      "path": "src/cablesim_thermal_network/inputs.py",
+      "sha256": "c068f99edeb70ae866921b420037d70842f54ffb128e4e737d25019fe24f5cbf",
+      "size_bytes": 4082
+    },
+    {
+      "path": "src/cablesim_thermal_network/main.py",
+      "sha256": "ce912dfafcd921daaedd472d27d2ab5de691e31444257b3cc11f4a4bc09aa8ec",
+      "size_bytes": 4945
+    },
+    {
+      "path": "src/cablesim_thermal_network/network.py",
+      "sha256": "b16725efe804b7eee7e649678abd963eb6e7cb6715b6c322478a2397c9c359ca",
+      "size_bytes": 11097
+    }
+  ]
+}

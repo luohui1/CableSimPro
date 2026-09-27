@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from .agent import router as agent_router
 from .catalog import presets
-from .engine import MODEL_VERSION, ModelError, calculate
+from .methods import MODEL_VERSION, ModelError, calculate, calculate_many
 from .report import render_report
 from .schemas import Scenario, SweepRequest
 from .storage import ProjectStore
@@ -130,15 +130,21 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
 
     @app.post('/api/sweep')
     def sweep(request: SweepRequest):
-        points = []
+        points, scenarios, slots = [], [], []
         for value in request.values:
             payload = request.scenario.model_dump()
             payload['installation'][request.parameter] = value
             try:
-                result = calculate(Scenario.model_validate(payload), include_field=False)
-                points.append({'value': value, 'ampacity_a': result['summary']['ampacity_a'], 'error': None})
-            except (ValidationError, ModelError) as exc:
+                scenarios.append(Scenario.model_validate(payload))
+                slots.append(len(points))
+                points.append({'value': value, 'ampacity_a': None, 'error': None})
+            except ValidationError as exc:
                 points.append({'value': value, 'ampacity_a': None, 'error': str(exc)})
+        for slot, result in zip(slots, calculate_many(scenarios)):
+            if isinstance(result, ModelError):
+                points[slot]['error'] = str(result)
+            else:
+                points[slot]['ampacity_a'] = result['summary']['ampacity_a']
         return {'parameter': request.parameter, 'points': points}
 
     @app.post('/api/report', response_class=HTMLResponse)

@@ -13,6 +13,21 @@
 
 最小协议阶段，第一方插件共用仓库的 Python 环境，以 `python -I` 独立子进程运行；§7.3 的进程隔离与资源限制照常适用。
 
+**实施状态（D3，2026-09-26）**：`backend/plugin_host/`（清单、注册表、执行器）已实现并用于全部载流量计算；第一方插件 `cablesim.thermal-network`、`cablesim.iec60287`。与本文设计的差异如下，均为有意的缩减，不是遗漏：
+
+| 项 | 本文设计 | 已实现 |
+| --- | --- | --- |
+| 入口 | `python -I -m cablesim_sdk.run <module>` | `python -I <包内 .py 路径>`；尚无 SDK 包 |
+| 阶段 | `check` / `run` / `selftest` | 仅 `run` |
+| 输入 | 领域快照 + 按 JSON Schema 校验的参数 | 每个 case 带 `input`（插件自有契约：热网络为 v0 Scenario，IEC 为 `cablesim.iec60287.single-core/1`）和 `parameters`；领域快照随 D5 |
+| 结果类型 | §5.4 全部类型 | 仅 `quantity`；键与 SI 单位按 `backend/plugin_host/manifest.py` 的词表校验 |
+| 工件 | 任意声明类型文件，宿主计算摘要 | JSON 工件，宿主校验路径、类型并计算 SHA-256，随结果返回 |
+| 资源 | 内存、CPU 上限 | 仅超时终止；内存上限声明但未强制 |
+| 进度事件 | stdout 逐行 JSON | 未实现；stdout 丢弃，stderr 截断后放入错误信息 |
+| 依赖、`domain.supports` 预检 | 有 | 未实现（清单要求 `dependencies: []`） |
+
+每个插件只对自己 `src/` 下的文件封签：`python scripts/plugin_sdk.py seal`（检查）/ `seal --write`（未发布版本重封签），`verify` 同时校验 v1 目录和全部 v2 插件。宿主调用入口是 `backend/methods.py`；需要多个工况时必须用批量接口，一个进程算完所有工况（单次调用约 1 s 进程开销，20 个工况约 1.4 s）。
+
 相关文档：[系统架构](./SYSTEM_ARCHITECTURE.md) · [模块实施细则](./MODULE_DESIGN.md) · [领域模型](./DOMAIN_MODEL.md) · [结果类型](./RESULT_TYPES.md)
 
 ## 0. 一页结论

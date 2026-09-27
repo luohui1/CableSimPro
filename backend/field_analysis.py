@@ -10,7 +10,7 @@ from scipy.sparse import diags, eye, kron
 from scipy.sparse.linalg import spsolve
 from pydantic import Field
 from .schemas import Scenario, StrictModel
-from .engine import ThermalNetwork, MODEL_VERSION
+from .methods import MODEL_VERSION, NetworkProperties, network_properties
 
 
 class FieldRequest(StrictModel):
@@ -41,28 +41,28 @@ def poisson(boundary: np.ndarray, source: np.ndarray, dx: float, dy: float, cond
                     'energy_error_w_m':float(abs(flux-power))}
 
 
-def soil_reference(net: ThermalNetwork, xx, yy, losses):
-    temperature = np.full_like(xx,net.s.installation.ambient_temperature_c)
+def soil_reference(net: NetworkProperties, xx, yy, losses):
+    temperature = np.full_like(xx,net.scenario.installation.ambient_temperature_c)
     for (x,h),q in zip(net.positions,losses):
         d2=(xx-x)**2+(yy-h)**2
         image2=(xx-x)**2+(yy+h)**2
-        temperature += net.s.installation.soil_rho_k_m_w*q/(4*pi)*np.log(image2/np.maximum(d2,net.radii[-1]**2))
+        temperature += net.scenario.installation.soil_rho_k_m_w*q/(4*pi)*np.log(image2/np.maximum(d2,net.radii[-1]**2))
     return temperature
 
 
-def soil_fd(net: ThermalNetwork, current: float, n: int):
-    state=net.state(current)
-    margin=max(1.2,net.s.installation.depth_m)
+def soil_fd(net: NetworkProperties, n: int):
+    losses=net.total_losses_w_m
+    margin=max(1.2,net.scenario.installation.depth_m)
     xmax=float(max(abs(net.positions[:,0])))+margin
     bottom=float(max(net.positions[:,1]))+margin
     xs,ys=np.linspace(-xmax,xmax,n),np.linspace(0,bottom,n)
     xx,yy=np.meshgrid(xs,ys)
     dx,dy=xs[1]-xs[0],ys[1]-ys[0]
-    reference=soil_reference(net,xx,yy,state['total_losses_w_m'])
+    reference=soil_reference(net,xx,yy,losses)
     boundary=reference.copy()
     source=np.zeros((n,n))
     mask=np.zeros((n,n),dtype=bool)
-    for (x,h),q in zip(net.positions,state['total_losses_w_m']):
+    for (x,h),q in zip(net.positions,losses):
         fx,fy=(x-xs[0])/dx,h/dy
         i,j=int(np.floor(fx)),int(np.floor(fy))
         if not (1<=i<n-2 and 1<=j<n-2):
@@ -71,7 +71,7 @@ def soil_fd(net: ThermalNetwork, current: float, n: int):
         for di,dj,weight in [(0,0,(1-tx)*(1-ty)),(1,0,tx*(1-ty)),(0,1,(1-tx)*ty),(1,1,tx*ty)]:
             source[j+dj,i+di] += q*weight/(dx*dy)
         mask |= (xx-x)**2+(yy-h)**2 <= max(net.radii[-1],2.5*max(dx,dy))**2
-    values,diagnostics=poisson(boundary,source,dx,dy,1/net.s.installation.soil_rho_k_m_w)
+    values,diagnostics=poisson(boundary,source,dx,dy,1/net.scenario.installation.soil_rho_k_m_w)
     compare=np.ones_like(mask)
     for x,h in net.positions:
         compare &= ((xx-x)**2+(yy-h)**2 > .3**2)
@@ -81,12 +81,12 @@ def soil_fd(net: ThermalNetwork, current: float, n: int):
 
 
 def compute_fields(s:Scenario,kind:str,n=65):
-    net=ThermalNetwork(s)
+    net=network_properties(s,s.operating_current_a if kind=='thermal_fd' else None)
     diagnostics={}
     if kind=='thermal_fd':
-        xs,ys,values,mask,diagnostics=soil_fd(net,s.operating_current_a,n)
+        xs,ys,values,mask,diagnostics=soil_fd(net,n)
         if n==129:
-            *_,coarse=soil_fd(net,s.operating_current_a,65)
+            *_,coarse=soil_fd(net,65)
             diagnostics['coarse_reference_rmse_k']=coarse['reference_rmse_k']
             diagnostics['refinement_rmse_ratio']=diagnostics['reference_rmse_k']/max(coarse['reference_rmse_k'],1e-15)
         title,unit='外部土壤温度 · 二维有限差分','°C'

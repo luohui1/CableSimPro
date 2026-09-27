@@ -1,8 +1,9 @@
 """Golden-value regression for the existing thermal network (MV-THERMAL-0.1.0).
 
-These numbers were produced by the current implementation on synthetic inputs. They
-prove *unchanged* behaviour across refactors (architecture D3 moves this method into a
-plugin); they are NOT evidence that the method is correct. Correctness evidence for the
+These numbers were produced by the pre-plugin host implementation (backend/engine.py) on
+synthetic inputs and are now reproduced through the plugin host: the method runs in the
+cablesim.thermal-network plugin process and returns through the generic executor. They
+prove *unchanged* behaviour across refactors; they are NOT evidence that the method is correct. Correctness evidence for the
 IEC 60287 method lives in plugins/cablesim.iec60287/tests.
 
 If the method is intentionally changed, bump MODEL_VERSION and regenerate these values
@@ -10,7 +11,7 @@ in the same change; never edit the numbers to make a failing refactor pass.
 """
 import pytest
 
-from backend.engine import MODEL_VERSION, calculate
+from backend.methods import MODEL_VERSION, calculate_many
 from backend.schemas import Scenario
 
 GOLDEN = {
@@ -59,10 +60,17 @@ def test_golden_values_belong_to_this_method_version():
     assert MODEL_VERSION == 'MV-THERMAL-0.1.0'
 
 
+@pytest.fixture(scope='module')
+def results():
+    names = sorted(GOLDEN)
+    # One plugin process for all cases; also exercises the batch path.
+    return dict(zip(names, calculate_many([scenario(GOLDEN[n][0]) for n in names])))
+
+
 @pytest.mark.parametrize('name', sorted(GOLDEN))
-def test_thermal_network_reproduces_golden_values(name):
+def test_thermal_network_reproduces_golden_values(name, results):
     patch, expected = GOLDEN[name]
-    result = calculate(scenario(patch), include_field=False)
+    result = results[name]
     thermal = result['thermal']
     actual = {
         'ampacity_a': result['summary']['ampacity_a'],

@@ -1,0 +1,180 @@
+{
+  "schema": "cablesim.plugin/2",
+  "id": "cablesim.iec60287",
+  "version": "0.1.0",
+  "name": "IEC 60287 单芯品字形直埋 / 排管稳态载流量",
+  "publisher": {
+    "id": "cablesim",
+    "name": "CableSimPro"
+  },
+  "host_api": {
+    "major": 2,
+    "min_minor": 0
+  },
+  "license": {
+    "spdx": "LicenseRef-Project-Undeclared",
+    "review_required": false
+  },
+  "platforms": [
+    "windows-x64",
+    "linux-x64",
+    "darwin-arm64",
+    "darwin-x64"
+  ],
+  "runtime": {
+    "kind": "python",
+    "python": ">=3.11,<3.14",
+    "entry": "src/cablesim_iec60287/main.py"
+  },
+  "permissions": [
+    "study.run",
+    "artifact.write"
+  ],
+  "dependencies": [],
+  "resources": {
+    "timeout_s": 60,
+    "memory_mb": 256,
+    "network": "none"
+  },
+  "capabilities": [
+    {
+      "kind": "method",
+      "id": "steady-rating",
+      "title": "稳态载流量（IEC 60287-1-1 / 2-1:2023，单芯接触品字形）",
+      "method_version": "cablesim.iec60287.single-core-trefoil-buried/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.iec60287.single-core/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        },
+        {
+          "key": "conductor_temperature",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "sheath_temperature",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "surface_temperature",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "losses.conductor",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "losses.sheath",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "losses.dielectric",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "losses.total",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "loss_factor.sheath",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "ac_resistance",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "capacitance",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "thermal_resistance.insulation",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "thermal_resistance.oversheath",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "thermal_resistance.external",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.iec60287-trace",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "CIGRE TB 880 Case 0-1",
+          "CIGRE TB 880 Case 0-1 exact radical T4",
+          "CIGRE TB 880 Case 0-1 single-point bonding",
+          "CIGRE TB 880 Case 0-1 GP31 eddy",
+          "CIGRE TB 880 Case 0-2",
+          "CIGRE TB 880 Case 0-2 GP31 eddy"
+        ]
+      },
+      "limitations": [
+        "仅三根等负荷单芯电缆接触品字形排列；均匀土壤、恒温地表、100 % 负荷率。",
+        "无铠装、不计土壤干燥与外部热源；仅光滑管状金属护套；不支持交叉互联。",
+        "ks、kp 及管道常数 U、V、Y 由使用者按标准表给定；本插件不内置标准表。",
+        "验证夹具来自受控资料，不随公开仓库分发；验证只覆盖所列算例与分支，不构成合规认证。"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "src/cablesim_iec60287/__init__.py",
+      "sha256": "84390f2e1363f74a79fc27d7e7f4630c0de8f47176578c65e44f1d82ca2bf2bf",
+      "size_bytes": 277
+    },
+    {
+      "path": "src/cablesim_iec60287/inputs.py",
+      "sha256": "2ce18ff0af9a849b76163956127445a1d9597fb6ee1118f69a669f6032a69e64",
+      "size_bytes": 5680
+    },
+    {
+      "path": "src/cablesim_iec60287/main.py",
+      "sha256": "d6a497abd4f87b498e570e04195c5f0063013e77a17449aaf2a88d851485d652",
+      "size_bytes": 3769
+    },
+    {
+      "path": "src/cablesim_iec60287/method.py",
+      "sha256": "9ee3cdc07bd985413a9eec3eab13bd49584a9fd2e85bf018b3a0538ad74fb4be",
+      "size_bytes": 12482
+    }
+  ]
+}

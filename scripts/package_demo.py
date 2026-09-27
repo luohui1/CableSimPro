@@ -8,7 +8,8 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_ROOT_FILES = {'README.md', 'pytest.ini', '.gitignore', '.dockerignore', 'Dockerfile', 'compose.yaml'}
-ALLOWED_DIRECTORIES = {'backend', 'frontend', 'scripts', 'docs', 'tests', '.github'}
+# plugins/ holds every calculation method; without it the demo cannot calculate.
+ALLOWED_DIRECTORIES = {'backend', 'frontend', 'plugins', 'plugin-spec', 'scripts', 'docs', 'tests', '.github'}
 EXCLUDED_PARTS = {'node_modules', '__pycache__', '.pytest_cache', 'playwright-report', 'test-results', 'test-results-windows', 'playwright-report-windows', '.venv', '.data', '.git'}
 
 

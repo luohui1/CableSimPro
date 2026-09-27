@@ -1,6 +1,6 @@
 # IEC 60287 单芯直埋稳态载流量（cablesim.iec60287）
 
-方法 ID `cablesim.iec60287.single-core-trefoil-buried`，版本 0.1.0。代码在 `plugins/cablesim.iec60287/`，是一个仓库内第一方方法包（架构 D2）。目前**只作为计算库和测试存在，尚未接入宿主研究流程或界面**，接入在 D3 插件化时完成；宿主现有的 `MV-THERMAL-0.1.0` 热网络不受影响。
+方法 ID `cablesim.iec60287.single-core-trefoil-buried`，版本 0.1.0。代码在 `plugins/cablesim.iec60287/`，是一个仓库内第一方插件（清单 `plugin.json`，能力 `steady-rating`），可经宿主插件执行器运行并返回类型化结果与完整计算轨迹工件（架构 D3）。**尚未接入宿主研究流程或界面**，接入在 D4 完成；界面上的计算仍使用 `cablesim.thermal-network` 简化热网络。
 
 ## 适用范围
 

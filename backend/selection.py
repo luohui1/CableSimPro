@@ -7,7 +7,7 @@ from pydantic import Field, model_validator
 from .schemas import Cable,Scenario,StrictModel
 from .workbench import WorkspaceStore,Revision,fingerprint,stamp
 from . import agent
-from .engine import calculate,ModelError
+from .methods import calculate_many,network_properties_many,ModelError
 from .field_analysis import FieldRequest,compute_fields
 from .vertical import Vertical, vertical_study
 
@@ -78,10 +78,12 @@ class Designs:
         from .design_basis import require_basis
         require_basis(state, 'vertical_air')
         try:
-            result=vertical_study(scenario.cable,req.configuration,scenario.operating_current_a)
+            properties=network_properties_many([Scenario(cable=scenario.cable)])[0]
+            if isinstance(properties,ModelError):raise properties
+            result=vertical_study(scenario.cable,req.configuration,scenario.operating_current_a,properties)
             if req.compare_mesh:
                 coarse=req.configuration.model_copy(update={'cells':max(10,req.configuration.cells//2)})
-                comparison=vertical_study(scenario.cable,coarse,scenario.operating_current_a)
+                comparison=vertical_study(scenario.cable,coarse,scenario.operating_current_a,properties)
                 result['mesh_check']={'cells':req.configuration.cells,'coarse_cells':coarse.cells,
                     'ampacity_difference_percent':100*abs(result['ampacity_a']-comparison['ampacity_a'])/result['ampacity_a'],
                     'coarse_ampacity_a':comparison['ampacity_a']}
@@ -129,6 +131,7 @@ class Designs:
         products = products_override if products_override is not None else [p for p in self.entries() if req.include_demo or p['state'] != 'demo']
         if req.domain == 'vertical_air' and len(products) > 40:
             raise HTTPException(422, '竖向研究每次最多 40 个候选，请缩小型号库；未静默截断候选。')
+        prepared=[]
         for product in products:
             reasons=[]
             if product['state']=='demo' and not req.include_demo:continue
@@ -141,7 +144,6 @@ class Designs:
             c.u0_kv=baseline.cable.u0_kv
             c.frequency_hz=baseline.cable.frequency_hz
             candidate=baseline.model_dump();candidate['cable']=c.model_dump();candidate['operating_current_a']=req.target_current_a
-            output=None; vertical_output=None
             try:
                 if req.domain == 'buried':
                     model=Scenario.model_validate(candidate)
@@ -156,16 +158,28 @@ class Designs:
                 if {d['path'] for d in diff}&set(state['locks']):reasons.append('将改变锁定参数')
             except ValueError:
                 model=None;reasons.append('几何/敷设不满足模型边界')
+            prepared.append((product,c,diameter,model,reasons))
+        # All buried candidates that reach the solver run in one plugin process.
+        solve=[i for i,(_,_,_,model,reasons) in enumerate(prepared) if req.domain=='buried' and not reasons and model is not None]
+        solved=dict(zip(solve,calculate_many([prepared[i][3] for i in solve])))
+        # Vertical candidates: fetch the cable network properties of all of them in one plugin process.
+        ask=[i for i,(_,_,_,model,reasons) in enumerate(prepared) if req.domain=='vertical_air' and not reasons and model is not None]
+        props=dict(zip(ask,network_properties_many([Scenario(cable=prepared[i][1]) for i in ask])))
+        for index,(product,c,diameter,model,reasons) in enumerate(prepared):
+            output=None; vertical_output=None
             if not reasons and model is not None:
                 try:
                     if req.domain == 'vertical_air':
-                        vertical_output=vertical_study(c,req.vertical,req.target_current_a)
+                        if isinstance(props[index],ModelError):raise props[index]
+                        vertical_output=vertical_study(c,req.vertical,req.target_current_a,props[index])
                         ampacity=vertical_output['ampacity_a']
                         op=vertical_output['operating']
                         hot=op['max_temperature_c'] if op else None
                         loss=op['single_cable_loss_w']/1000 if op else None
                     else:
-                        output=calculate(model,include_field=False)
+                        output=solved[index]
+                        if isinstance(output,ModelError):
+                            output=None;raise ModelError()
                         ampacity=output['summary']['ampacity_a']
                         hot=output['summary']['operating_max_temperature_c']
                         loss=output['summary']['circuit_loss_kw']

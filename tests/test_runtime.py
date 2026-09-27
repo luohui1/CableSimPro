@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from backend.main import create_app
 from backend.design_basis import DesignBasis, inspect_basis, STANDARDS
 from backend.schemas import Scenario
-from backend.engine import calculate
+from backend.methods import calculate
 from backend.vertical import Vertical
 
 @pytest.fixture

@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 from langgraph.graph import StateGraph, START, END
 from pydantic import Field
 from . import agent
-from .engine import calculate, ModelError
+from .methods import calculate, calculate_many, ModelError
 from .schemas import Scenario, StrictModel
 
 
@@ -98,10 +98,12 @@ def solve(state: Flow):
             statement += '运行电流无稳定解，不输出运行温度。'
         output = {'result': result, 'statement': statement, 'sweep': None}
     elif action == 'sweep':
+        candidates = [agent.patch(scenario, [agent.Change(path=f"installation.{state['parameter']}", value=value)])[0] for value in state['values']]
         points = []
-        for value in state['values']:
-            candidate, _ = agent.patch(scenario, [agent.Change(path=f"installation.{state['parameter']}", value=value)])
-            points.append({'value': value, 'ampacity_a': calculate(candidate, include_field=False)['summary']['ampacity_a'], 'error': None})
+        for value, computed in zip(state['values'], calculate_many(candidates)):
+            if isinstance(computed, ModelError):
+                raise computed
+            points.append({'value': value, 'ampacity_a': computed['summary']['ampacity_a'], 'error': None})
         output = {'result': None, 'sweep': {'parameter': state['parameter'], 'points': points}, 'statement': f'已求解 {len(points)} 个独立工况；不改变当前敷设条件。'}
     else:
         output = {'result': None, 'sweep': None, 'statement': '模型范围：单回路三根相同无铠装单芯电缆，均匀土壤直埋、稳态平衡负荷。交流附加与屏蔽损耗系数为输入假设。不是完整 IEC 60287 或有限元；模板与理想电阻需厂家数据校核。'}
