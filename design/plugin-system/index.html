@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>工程插件 · CableSimPro</title>
+<style>
+
+:root{color-scheme:light;--ink:#252525;--muted:#707070;--quiet:#929292;--line:#e8e8e8;--paper:#fff;--canvas:#fff;--accent:#606060;--wash:#fafafa;--selected:#f4f4f4;--font:"Segoe UI","Microsoft YaHei UI","PingFang SC",sans-serif;--mono:"Cascadia Code","Consolas",monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--canvas);color:var(--ink);font:13px/1.65 var(--font)}
+button,input,a{font:inherit}
+button,a{-webkit-tap-highlight-color:transparent}
+button{cursor:pointer}a{color:inherit;text-decoration:none}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:2px solid var(--ink);outline-offset:4px}
+[hidden]{display:none!important}
+h1,h2,h3,p,figure{margin:0}svg{display:block;flex-shrink:0}
+button{color:inherit}::selection{background:var(--selected)}
+.topbar{height:68px;background:var(--paper);border-bottom:1px solid var(--line)}
+.top-inner{max-width:1480px;margin:auto;padding:0 44px;height:100%;display:flex;align-items:center;justify-content:space-between}
+.brand{display:flex;gap:11px;align-items:center;font-size:17px;font-weight:600;letter-spacing:-.4px}
+.brand-mark{color:var(--ink)}
+.top-context{font-size:12px;font-weight:400;letter-spacing:0;margin-left:18px;padding-left:25px;border-left:1px solid var(--line);color:var(--muted)}
+.preview{font-size:11px;display:flex;align-items:center;gap:9px;color:var(--muted)}
+.preview:before{content:"";width:5px;height:5px;background:var(--muted);border-radius:50%}
+.layout{max-width:1480px;margin:auto;padding:36px 44px 28px;display:grid;grid-template-columns:176px minmax(0,1fr);gap:40px}
+.sidebar{position:sticky;top:30px;align-self:start}
+.eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:1.5px;font-weight:400;color:var(--muted)}
+.side-heading{font-size:12px;color:var(--muted);margin:5px 0 15px}
+.search-box{display:flex;align-items:center;gap:8px;padding:8px 9px;border:1px solid var(--line);border-radius:4px;background:var(--paper);margin-bottom:26px}
+.search-box svg{color:var(--muted)}.search-box input{width:100%;min-width:0;border:0;outline:0;background:none;font-size:12px;color:var(--ink)}
+.search-box:focus-within{border-color:var(--ink);outline:1px solid var(--ink)}
+.filter{display:flex;align-items:center;justify-content:space-between;width:100%;padding:10px 11px;margin:4px 0;border:0;border-left:2px solid transparent;background:none;text-align:left;font-size:13px}
+.filter[aria-pressed=true]{border-left-color:var(--ink);background:var(--selected);color:var(--ink)}
+.filter .num{color:var(--muted);font:10px var(--mono)}
+.side-guide{margin-top:46px;padding-top:20px;border-top:1px solid var(--line)}
+.side-guide h2{font-size:11px;font-weight:500;color:var(--muted);margin-bottom:19px}
+.guide-step{display:flex;gap:11px;position:relative;padding-bottom:24px}
+.guide-step:not(:last-child):after{content:"";position:absolute;left:8px;top:23px;bottom:4px;width:1px;background:var(--line)}
+.guide-dot{font:9px var(--mono);width:17px;height:17px;border:1px solid var(--line);border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--muted);margin-top:2px}
+.guide-step strong{font-size:12px;font-weight:500}.guide-step small{display:block;margin-top:3px;font-size:10px;color:var(--muted)}
+.side-note{font-size:10px;color:var(--muted);line-height:1.9;margin-top:20px}
+.back{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px;padding:5px 0 22px}
+.back svg{transform:rotate(180deg)}
+.side-plugin{display:flex;align-items:center;gap:9px;padding:11px 8px;margin:4px 0;font-size:13px;border-left:2px solid transparent}
+.side-plugin svg{color:var(--accent)}
+.side-plugin[aria-current=page]{background:var(--selected);border-left-color:var(--ink)}
+.side-plugin .side-number{font:9px var(--mono);color:var(--muted);margin-left:auto}
+.side-plugin:hover{background:var(--selected)}
+.main-head{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:1px 0 25px}
+h1{font-size:29px;letter-spacing:-1px;font-weight:600;line-height:1.5;margin:6px 0}
+.subtitle{color:var(--muted);font-size:12px;margin-top:8px}
+.totals{display:flex;gap:24px;padding-bottom:4px;white-space:nowrap}
+.totals b{display:block;font:25px var(--mono);letter-spacing:-1px;font-weight:400;color:var(--muted)}
+.totals span{display:block;font-size:10px;color:var(--muted);margin-top:6px}
+.collection-line{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-top:1px solid var(--line);font-size:11px;color:var(--muted)}
+.collection-line span:last-child{font:10px var(--mono);letter-spacing:1px;color:var(--muted)}
+.plugin-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.plugin{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:0;display:block;position:relative}
+.plugin:hover{border-color:var(--accent);box-shadow:0 3px 10px #00000008}
+.module-art{height:166px;position:relative;background:var(--wash);color:var(--accent);overflow:hidden}
+.module-meta{position:absolute;left:15px;right:15px;top:12px;display:flex;justify-content:space-between;align-items:center;z-index:1}
+.module-code{font:9px var(--mono);letter-spacing:1px;opacity:.8}
+.module-mode{font-size:10px;padding:2px 7px;background:var(--paper);border:1px solid var(--line);border-radius:4px;line-height:1.5;color:var(--muted)}
+.module-art>.diagram{width:100%;height:168px;margin-top:11px}
+.module-info{padding:17px 18px 14px}
+.module-title{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.module-title h2{font-size:16px;font-weight:600;letter-spacing:-.2px}
+.module-title>svg{color:var(--muted)}
+.module-info p{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.8;min-height:22px}
+.module-foot{margin-top:15px;padding-top:10px;display:flex;align-items:center;justify-content:space-between}
+.module-stage{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.module-en{display:none}
+.catalog-footer{display:flex;align-items:center;justify-content:space-between;gap:24px;margin-top:23px;padding-top:17px;border-top:1px solid var(--line);font-size:10px;color:var(--muted)}
+.empty{padding:76px 30px;text-align:center;border:1px solid var(--line);background:var(--paper);grid-column:1/-1}
+.empty h2{font-size:17px;font-weight:500}.empty p{margin:10px 0 20px;color:var(--muted)}.text-button{border:0;background:none;padding:0;color:var(--ink);text-decoration:underline;text-underline-offset:5px}
+.breadcrumb{display:flex;gap:9px;align-items:center;color:var(--muted);font-size:10px;margin:3px 0 19px}
+.breadcrumb a:hover{text-decoration:underline}.breadcrumb span{color:var(--muted)}
+.detail-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:28px}
+.detail-heading h1{font-size:30px;margin:4px 0 7px}
+.detail-heading .eyebrow{color:var(--accent)}
+.detail-heading .subtitle{margin-top:0;font-size:13px}
+.delivery{display:flex;gap:8px;align-items:center;font-size:11px;color:var(--muted);white-space:nowrap;margin-top:27px}
+.delivery i{width:6px;height:6px;border:1px solid var(--quiet);border-radius:50%;background:var(--line)}
+.detail-tabs{display:flex;gap:30px;border-bottom:1px solid var(--line);margin:27px 0 23px}
+.detail-tabs button{padding:11px 0 12px;border:0;background:none;color:var(--muted);position:relative;font-size:13px}
+.detail-tabs button[aria-selected=true]{color:var(--ink);font-weight:600}
+.detail-tabs button[aria-selected=true]:after{content:"";position:absolute;height:2px;left:0;right:0;bottom:-1px;background:var(--accent)}
+.panel{min-height:410px}
+.overview{display:grid;grid-template-columns:1.08fr 1fr;gap:32px}
+.technical-figure{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow:hidden;color:var(--accent);position:relative}
+.figure-top{display:flex;align-items:center;justify-content:space-between;padding:14px 18px 0;font-size:10px;gap:12px}
+.figure-top span:last-child{font:9px var(--mono);letter-spacing:1px;opacity:.6}
+.technical-figure .diagram{width:100%;height:252px}
+.diagram [data-part]{transition:opacity .16s ease}
+.diagram[data-active="0"] [data-part]:not([data-part="0"]),.diagram[data-active="1"] [data-part]:not([data-part="1"]),.diagram[data-active="2"] [data-part]:not([data-part="2"]){opacity:.23}
+.diagram .leader{stroke-width:.75;opacity:.7}
+.layer-buttons{display:flex;padding:0 18px;gap:16px;flex-wrap:wrap}
+.layer-button{padding:8px 0;border:0;border-bottom:1px solid transparent;background:none;font-size:11px;color:var(--accent);opacity:.75}
+.layer-button[aria-pressed=true]{opacity:1;border-bottom-color:currentColor}
+.layer-note{font-size:12px;line-height:1.9;min-height:68px;padding:13px 18px 16px;color:var(--muted)}
+.feature-intro{font-size:13px;color:var(--muted);line-height:1.95;padding:1px 0 19px;border-bottom:1px solid var(--line)}
+.feature-row{display:grid;grid-template-columns:24px 1fr;gap:12px;padding-top:19px}
+.feature-number{font:10px var(--mono);color:var(--quiet);padding-top:4px}
+.feature-row h3{font-size:14px;font-weight:600;margin-bottom:4px}
+.feature-row p{font-size:12px;color:var(--muted);line-height:1.85}
+.position{margin-top:29px}
+.section-label{display:flex;align-items:center;gap:9px;font-size:11px;font-weight:500;margin-bottom:13px;color:var(--muted)}
+.section-label span{font:9px var(--mono);color:var(--quiet)}
+.position-flow{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:center;gap:13px;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:15px 0}
+.position-flow>a,.position-current{display:flex;align-items:center;gap:10px;font-size:11px}
+.position-flow>a:hover{text-decoration:underline;text-underline-offset:4px}
+.position-current{color:var(--accent);font-weight:600}
+.position-flow>svg{color:var(--quiet);width:14px}
+.position-flow small{display:block;font-size:9px;color:var(--muted);font-weight:400}
+.detail-bottom{display:flex;justify-content:space-between;gap:25px;color:var(--muted);font-size:10px;margin-top:23px;padding-bottom:15px}
+.detail-bottom a{text-decoration:underline;text-underline-offset:4px}
+.workflow{display:grid;grid-template-columns:228px 1fr;gap:32px}
+.steps{display:flex;flex-direction:column}
+.step-button{padding:17px 12px;display:flex;align-items:flex-start;gap:13px;text-align:left;background:none;border:0;border-left:2px solid var(--line)}
+.step-button[aria-pressed=true]{border-left-color:var(--accent);background:var(--wash)}
+.step-index{font:12px var(--mono);color:var(--muted);margin-top:2px}
+.step-button strong{display:block;font-size:13px;font-weight:500}
+.step-button small{display:block;font-size:10px;color:var(--muted);margin-top:4px}
+.step-display{border:1px solid var(--line);background:var(--paper);border-radius:10px;padding:27px 30px;min-height:330px}
+.step-display h2{font-size:22px;font-weight:500;margin:10px 0 14px}
+.step-display>p{font-size:12px;color:var(--muted);line-height:1.95}
+.step-exchange{display:flex;align-items:center;justify-content:center;gap:28px;background:var(--wash);padding:23px;margin:24px 0;color:var(--accent)}
+.step-exchange span{display:flex;flex-direction:column;align-items:center;gap:10px;font-size:10px}
+.step-exchange>svg{width:28px}
+.step-outcome{padding-top:15px;border-top:1px solid var(--line);display:flex;gap:20px;align-items:baseline}
+.step-outcome strong{font-size:10px;font-weight:400;color:var(--muted)}
+.step-outcome span{font-size:12px;color:var(--ink)}
+.contract-grid{display:grid;grid-template-columns:1.25fr .85fr;gap:32px}
+.contract-grid h2,.scope-layout h2{font-size:16px;font-weight:500;margin:0 0 10px}
+.section-summary{font-size:11px;color:var(--muted);margin-bottom:21px}
+.input-table{border-collapse:collapse;width:100%;font-size:11px;table-layout:fixed}
+.input-table th{text-align:left;font-size:10px;font-weight:400;color:var(--muted);background:var(--selected);padding:10px}
+.input-table th:first-child{width:27%}.input-table th:nth-child(2){width:28%}
+.input-table td{padding:15px 10px;border-bottom:1px solid var(--line);vertical-align:top;color:var(--muted);line-height:1.85}
+.input-table td:first-child{color:var(--ink);font-weight:500}
+.input-table tbody th{background:none;border-bottom:1px solid var(--line);vertical-align:top;padding:15px 10px;color:var(--ink);font-size:11px;font-weight:500}
+.paper-preview{border:1px solid var(--line);background:#fff;padding:24px 25px;position:relative;min-height:340px}
+.paper-preview:after{content:"";position:absolute;left:8px;right:8px;bottom:-7px;height:5px;border:1px solid var(--line);border-top:0;background:var(--paper)}
+.paper-preview .eyebrow{font-size:9px;color:var(--muted)}
+.paper-preview h3{font-size:17px;font-weight:500;padding:13px 0 18px;border-bottom:2px solid var(--quiet)}
+.artifact-item{display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--line);padding:16px 0;font-size:11px}
+.artifact-item span{font:9px var(--mono);color:var(--muted)}
+.paper-note{font-size:10px;line-height:1.9;margin-top:18px;color:var(--muted)}
+.input-note{margin-top:20px;font-size:11px;line-height:1.9;color:var(--muted)}
+.scope-layout{display:grid;grid-template-columns:1fr 1fr;gap:30px}
+.scope-section{border-top:2px solid var(--quiet);padding-top:19px}
+.scope-section.boundary{border-top-color:var(--quiet)}
+.scope-list{list-style:none;padding:0;margin:20px 0 0}
+.scope-list li{display:flex;gap:10px;margin:15px 0;font-size:12px;color:var(--muted);line-height:1.9}
+.scope-list li:before{content:"";flex-shrink:0;width:5px;height:5px;border:1px solid var(--quiet);margin-top:8px;border-radius:50%}
+.boundary .scope-list li:before{border-radius:0;border-color:var(--quiet)}
+.scope-callout{margin-top:25px;padding:19px 22px;background:var(--selected);font-size:11px;line-height:1.9;color:var(--muted);border-left:2px solid var(--quiet)}
+.scope-callout strong{font-weight:500;display:block;margin-bottom:4px;color:var(--ink)}
+@media(min-width:1600px){.layout{padding-top:45px}.module-art{height:184px}.module-art>.diagram{height:182px}.module-info{padding:21px}.technical-figure .diagram{height:280px}}
+@media(max-width:1250px){.layout{padding:28px;grid-template-columns:155px minmax(0,1fr);gap:26px}.top-inner{padding:0 28px}.plugin-grid{gap:13px}.module-info{padding:15px 13px}.module-en{font-size:7px}.module-title h2{font-size:14px}.module-foot{gap:5px}.overview,.contract-grid{gap:22px}.workflow{grid-template-columns:190px 1fr;gap:22px}.detail-heading h1{font-size:27px}.layer-buttons{gap:11px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+</style>
+</head>
+<body>
+
+<header class="topbar"><div class="top-inner">
+<a class="brand" href="#catalog" aria-label="CableSimPro 插件目录"><svg class="brand-mark" width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><circle cx="14" cy="14" r="12"/><circle cx="14" cy="9" r="4"/><circle cx="9.5" cy="17" r="4"/><circle cx="18.5" cy="17" r="4"/></svg>CableSimPro<span class="top-context">能力中心</span></a>
+<span class="preview">交互设计预览</span>
+</div></header>
+<div class="layout">
+<aside class="sidebar" aria-label="插件导航">
+<div id="catalog-controls">
+<p class="side-heading">查找工程能力</p>
+<label class="search-box"><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><circle cx="8" cy="8" r="5"/><path d="m12 12 5 5"/></svg><input id="search" type="search" placeholder="搜索插件" aria-label="搜索插件"></label>
+<div role="group" aria-label="交付方式">
+<button class="filter" data-filter="all" aria-pressed="true">全部插件<span class="num">06</span></button>
+<button class="filter" data-filter="core" aria-pressed="false">核心内置<span class="num">04</span></button>
+<button class="filter" data-filter="optional" aria-pressed="false">可选扩展<span class="num">02</span></button>
+</div>
+<div class="side-guide"><h2>沿工程流程组织</h2>
+<div class="guide-step"><span class="guide-dot">1</span><div><strong>定义电缆</strong><small>结构 · 材料 · 来源</small></div></div>
+<div class="guide-step"><span class="guide-dot">2</span><div><strong>分析与复核</strong><small>方法 · 边界 · 结果</small></div></div>
+<div class="guide-step"><span class="guide-dot">3</span><div><strong>形成交付</strong><small>依据 · 运行 · 计算书</small></div></div>
+</div>
+<p class="side-note">核心能力随软件提供。<br>扩展能力按研究需要选择。</p>
+</div>
+<div id="detail-nav" hidden></div>
+</aside>
+<main id="app"></main>
+</div>
+
+<script>
+"use strict";
+const plugins=[
+  {
+    "key": "model",
+    "name": "电缆建模",
+    "short": "电缆建模",
+    "en": "CABLE MODEL",
+    "mode": "内置",
+    "color": "#42695F",
+    "soft": "#EDF2ED",
+    "shape": "M2.3 10a6.7 6.7 0 1 0 13.4 0a6.7 6.7 0 1 0 -13.4 0M5.6 10a3.4 3.4 0 1 0 6.8 0a3.4 3.4 0 1 0 -6.8 0M7.9 10a1.1 1.1 0 1 0 2.2 0a1.1 1.1 0 1 0 -2.2 0 M16.5 3.3h2 M17.5 3.3v13.4 M16.5 16.7h2",
+    "desc": "建立有来源、可追溯的分层结构。",
+    "cap": "分层结构 / 参数配方 / 修改提案",
+    "input": "结构尺寸 · 材料 · 参数来源",
+    "output": "电缆模型与待审核变更",
+    "scope": "基础建模内置；STEP 需 CAD 扩展。",
+    "symbol": "同心电缆截面与尺寸标尺",
+    "route": "工程 → 电缆",
+    "detail": "参数变更先展示差异，确认后保存工程版本；CAD 输出按能力扩展。",
+    "source": "model-core · CadQuery（可选能力）",
+    "candidates": [
+      "参数与分层模型",
+      "变更提案",
+      "STEP 几何（可选）"
+    ],
+    "intro": "建立电缆的分层结构和参数配方，把尺寸、材料与参数来源组织成一份可追溯的工程模型。",
+    "features": [
+      "维护导体、绝缘、护套等结构参数。",
+      "查看分层截面与模型。",
+      "把修改整理为提案，确认后保存工程版本。"
+    ],
+    "stage": "定义结构",
+    "caption": "一份模型，贯穿整个工程。",
+    "layers": [
+      "导体",
+      "绝缘层",
+      "外护套"
+    ],
+    "layerNotes": [
+      "从导体尺寸与材料开始，保留参数来源。",
+      "逐层描述绝缘结构，为计算提供明确物性。",
+      "护套与外部尺寸一起构成完整电缆边界。"
+    ],
+    "featureTitles": [
+      "结构有层次",
+      "截面可查看",
+      "修改有记录"
+    ],
+    "steps": [
+      [
+        "定义结构",
+        "从导体到外护套，逐层填写尺寸与材料。",
+        "分层尺寸、材料引用"
+      ],
+      [
+        "补齐来源",
+        "为关键参数关联产品资料或人工确认记录。",
+        "参数值、单位、资料来源"
+      ],
+      [
+        "检查差异",
+        "把结构调整与当前工程版本进行比较。",
+        "修改前后差异"
+      ],
+      [
+        "确认保存",
+        "人工确认提案后，保存新的工程版本。",
+        "可追溯的模型版本"
+      ]
+    ],
+    "inputs": [
+      [
+        "结构尺寸",
+        "工程模型",
+        "导体、绝缘与护套的分层尺寸"
+      ],
+      [
+        "材料参数",
+        "材料与来源",
+        "每层材料及所用参数来源"
+      ],
+      [
+        "修改基准",
+        "当前工程",
+        "比较所依赖的工程版本"
+      ]
+    ],
+    "artifacts": [
+      "分层模型",
+      "参数来源",
+      "变更提案"
+    ],
+    "supported": [
+      "基础分层结构与材料参数管理。",
+      "模型修改形成提案，确认后保存。"
+    ],
+    "limits": [
+      "STEP 几何输出需要额外 CAD 能力。",
+      "参数建模本身不产生计算结果。"
+    ],
+    "related": [
+      "iec",
+      "thermal"
+    ],
+    "number": "01"
+  },
+  {
+    "key": "iec",
+    "name": "IEC 标准计算",
+    "short": "IEC 载流量",
+    "en": "IEC 60287",
+    "mode": "内置",
+    "color": "#42638C",
+    "soft": "#EDF1F6",
+    "shape": "M3 4c2.3-.9 4.7-.5 7 1.1 2.3-1.6 4.7-2 7-1.1v11.5c-2.3-.9-4.7-.5-7 1.1-2.3-1.6-4.7-2-7-1.1z M10 5.1v11.5 M5.3 7.3l2.5.5 M5.3 10.3l2.5.5 M12.2 7.8l2.5-.5 M12.2 10.8l2.5-.5",
+    "desc": "按明确标准方法计算稳态载流量。",
+    "cap": "载流量 / 损耗 / 热阻分解",
+    "input": "电缆物性 · 敷设 · 接地方式",
+    "output": "载流量、损耗与逐步计算依据",
+    "scope": "当前仅支持声明的单芯品字形工况。",
+    "symbol": "展开的标准书页与计算条目",
+    "route": "研究 → 选择方法",
+    "detail": "输入保持 SI 单位，并显示来源；先检查适用范围，再确认运行。",
+    "source": "cablesim.iec60287",
+    "candidates": [
+      "IEC 60287 稳态载流量"
+    ],
+    "intro": "用于有明确物性和敷设条件的稳态载流量核算。计算过程保留热阻、损耗和方法依据，便于逐项检查。",
+    "features": [
+      "计算载流量及相应温度、损耗。",
+      "展示中间量与迭代过程。",
+      "将方法、输入与结果关联到同一次运行。"
+    ],
+    "stage": "标准核算",
+    "caption": "让每个结果，都能沿依据回溯。",
+    "layers": [
+      "电缆回路",
+      "损耗",
+      "热阻路径"
+    ],
+    "layerNotes": [
+      "先核对支持的电缆结构、排列和敷设条件。",
+      "保留导体与其他适用损耗的分项结果。",
+      "沿电缆到环境的散热路径查看中间量。"
+    ],
+    "featureTitles": [
+      "核算稳态载流量",
+      "展开计算依据",
+      "关联固定运行"
+    ],
+    "steps": [
+      [
+        "核对工况",
+        "确认电缆排列、敷设与接地方式在方法支持范围内。",
+        "工况与方法适用性"
+      ],
+      [
+        "填写参数",
+        "从当前模型读取参数，补齐热物性和环境条件。",
+        "物性、边界条件与来源"
+      ],
+      [
+        "预检并求解",
+        "先检查缺项与适用范围，通过后调用求解器。",
+        "通过预检的固定输入"
+      ],
+      [
+        "复核结果",
+        "查看损耗、热阻与迭代信息，关联到本次运行。",
+        "载流量与分项依据"
+      ]
+    ],
+    "inputs": [
+      [
+        "电缆物性",
+        "电缆模型",
+        "尺寸、电气参数与热参数"
+      ],
+      [
+        "敷设条件",
+        "敷设模型",
+        "排列、埋深与回路关系"
+      ],
+      [
+        "环境边界",
+        "当前研究",
+        "环境温度、土壤热阻率"
+      ],
+      [
+        "接地方式",
+        "当前研究",
+        "与方法声明一致的护层条件"
+      ]
+    ],
+    "artifacts": [
+      "载流量",
+      "损耗分解",
+      "热阻与迭代依据"
+    ],
+    "supported": [
+      "当前已声明的单芯品字形直埋工况。",
+      "保留输入、方法版本和逐步计算依据。"
+    ],
+    "limits": [
+      "不把已验证子集扩展为全部 IEC 工况。",
+      "缺参数或超出支持范围时明确停止。"
+    ],
+    "related": [
+      "model",
+      "report"
+    ],
+    "number": "02"
+  },
+  {
+    "key": "thermal",
+    "name": "简化热分析",
+    "short": "热分析",
+    "en": "THERMAL NETWORK",
+    "mode": "内置",
+    "color": "#9B7144",
+    "soft": "#F6F0E6",
+    "shape": "M4.5 3.5c-2 1.7 2 2.3 0 4 M10 3.5c-2 1.7 2 2.3 0 4 M15.5 3.5c-2 1.7 2 2.3 0 4 M3 9.5h14 M5 12l-1.5 2L5 16 M10 12l-1.5 2L10 16 M15 12l-1.5 2L15 16 M3 18h14",
+    "desc": "快速评估温升，理解主要热阻。",
+    "cap": "简化载流量 / 竖向 / 解析场",
+    "input": "几何 · 热参数 · 环境边界",
+    "output": "参考温度、热阻与损耗分布",
+    "scope": "结果明确标为简化参考方法。",
+    "symbol": "向外传热与分层热阻",
+    "route": "研究 → 简化参考",
+    "detail": "把模型假设和边界条件放在输入旁；参考结果保留方法标识。",
+    "source": "cablesim.thermal-network · ampacity-core",
+    "candidates": [
+      "简化热网络",
+      "单根竖向参考",
+      "截面场参考"
+    ],
+    "intro": "用简化模型快速分析电缆的发热与散热，帮助理解环境条件和主要热阻对结果的影响。",
+    "features": [
+      "估算稳态载流量与运行温度。",
+      "查看热阻和损耗的组成。",
+      "提供范围明确的竖向与解析场参考。"
+    ],
+    "stage": "参考分析",
+    "caption": "看清热从哪里来，又往哪里去。",
+    "layers": [
+      "热源",
+      "分层热阻",
+      "环境边界"
+    ],
+    "layerNotes": [
+      "从电缆发热出发，理解热量的输入。",
+      "逐层查看传热阻力，识别主要影响环节。",
+      "结合环境温度和散热条件解释结果。"
+    ],
+    "featureTitles": [
+      "快速评估",
+      "理解热阻组成",
+      "保留参考边界"
+    ],
+    "steps": [
+      [
+        "准备模型",
+        "选取要分析的电缆结构与几何条件。",
+        "几何与简化假设"
+      ],
+      [
+        "定义边界",
+        "补齐各层热参数及外部环境条件。",
+        "热参数、环境边界"
+      ],
+      [
+        "执行参考分析",
+        "按已声明的简化方法运行求解。",
+        "固定输入与参考方法"
+      ],
+      [
+        "解释影响",
+        "查看温度与热阻组成，保留参考方法标记。",
+        "参考温度、热阻与损耗"
+      ]
+    ],
+    "inputs": [
+      [
+        "几何尺寸",
+        "电缆模型",
+        "分层结构与计算几何"
+      ],
+      [
+        "热参数",
+        "材料与来源",
+        "导热或热阻参数及单位"
+      ],
+      [
+        "环境条件",
+        "当前研究",
+        "温度与适用的边界假设"
+      ]
+    ],
+    "artifacts": [
+      "参考温度",
+      "热阻组成",
+      "方法假设"
+    ],
+    "supported": [
+      "简化热网络下的稳态参考分析。",
+      "各原生参考能力声明范围内的研究。"
+    ],
+    "limits": [
+      "所有结果保留简化参考方法标识。",
+      "不能自动替代标准方法或工程认证。"
+    ],
+    "related": [
+      "iec",
+      "simulation"
+    ],
+    "number": "03"
+  },
+  {
+    "key": "mesh",
+    "name": "网格与后处理",
+    "short": "网格与场",
+    "en": "MESH & FIELD",
+    "mode": "可选扩展",
+    "color": "#527C87",
+    "soft": "#EDF3F4",
+    "shape": "M3 3h14v14H3z M3 3l5.5 6L17 3 M8.5 9L3 17 M8.5 9l4.5 8 M8.5 9l8.5 2 M13 17l4-6 M3 10l5.5-1",
+    "desc": "准备计算网格，检查和交换场数据。",
+    "cap": "分域网格 / 数据交换 / 场后处理",
+    "input": "几何域 · 材料映射 · 场工件",
+    "output": "网格、VTU 与场数据摘要",
+    "scope": "生成网格不代表完成物理求解。",
+    "symbol": "有边界的三角形分域网格",
+    "route": "工程 → 网格与工件",
+    "detail": "同一页串联网格生成、域检查和结果查看；原生依赖按需启用。",
+    "source": "Gmsh · meshio · PyVista",
+    "candidates": [
+      "二维网格",
+      "网格交换",
+      "场数据后处理"
+    ],
+    "intro": "把工程几何转换为可检查的网格，并整理计算产生的场数据，为数值研究和结果查看提供工件。",
+    "features": [
+      "生成带材料域标记的二维网格。",
+      "交换网格格式并保留单位与域信息。",
+      "读取场数据并生成后处理摘要。"
+    ],
+    "stage": "离散与后处理",
+    "caption": "从连续几何，到可检查的计算域。",
+    "layers": [
+      "几何边界",
+      "网格单元",
+      "材料分区"
+    ],
+    "layerNotes": [
+      "保留几何轮廓，明确内外部计算边界。",
+      "把连续计算域划分为数值方法使用的单元。",
+      "让每个材料域保持可识别的编号与映射。"
+    ],
+    "featureTitles": [
+      "离散工程几何",
+      "保留域与单位",
+      "整理场数据"
+    ],
+    "steps": [
+      [
+        "准备几何",
+        "确定计算区域，检查封闭边界与材料域。",
+        "几何边界与材料映射"
+      ],
+      [
+        "生成网格",
+        "设置网格参数，执行网格生成。",
+        "分区后的计算网格"
+      ],
+      [
+        "检查工件",
+        "核对域编号、单位和几何对应关系。",
+        "网格与材料域摘要"
+      ],
+      [
+        "传递或后处理",
+        "将网格交给研究方法，或读取已有场工件。",
+        "网格文件与场摘要"
+      ]
+    ],
+    "inputs": [
+      [
+        "计算几何",
+        "几何工件",
+        "计算区域、内外边界"
+      ],
+      [
+        "材料映射",
+        "电缆模型",
+        "几何域对应的材料信息"
+      ],
+      [
+        "网格设置",
+        "当前研究",
+        "网格尺寸与适用参数"
+      ],
+      [
+        "场数据",
+        "运行工件",
+        "后处理所需的已生成场文件"
+      ]
+    ],
+    "artifacts": [
+      "计算网格",
+      "VTU 场文件",
+      "域与单位摘要"
+    ],
+    "supported": [
+      "受支持的二维网格生成与格式交换。",
+      "已有场工件的读取和后处理摘要。"
+    ],
+    "limits": [
+      "生成网格不代表已完成物理求解。",
+      "需要相应原生扩展与运行环境。"
+    ],
+    "related": [
+      "model",
+      "simulation"
+    ],
+    "number": "04"
+  },
+  {
+    "key": "simulation",
+    "name": "数值仿真与校核",
+    "short": "仿真校核",
+    "en": "SIMULATION",
+    "mode": "可选扩展",
+    "color": "#77678B",
+    "soft": "#F1EEF5",
+    "shape": "M2.5 4h15 M2.5 16h15 M4 6.5c2-3.5 4 10.5 6 7s4-10.5 6-7 M4 13.5c2 3.5 4-10.5 6-7s4 10.5 6 7",
+    "desc": "运行数值研究，并与独立方法对照。",
+    "cap": "FEM / 电热耦合 / 线源校核",
+    "input": "模型 · 热源 · 网格与边界",
+    "output": "温度场、收敛信息与方法差异",
+    "scope": "固定功率温度场不等于载流量。",
+    "symbol": "共同边界内的两条对照曲线",
+    "route": "研究 → 数值方法",
+    "detail": "方法分开选，结果并排比较；收敛与验证范围始终随运行保留。",
+    "source": "native-reference · thermal2d · buried / electrothermal / line-source",
+    "candidates": [
+      "固定功率 FEM",
+      "电热耦合",
+      "线源解析校核"
+    ],
+    "intro": "在明确的热源和边界条件下开展数值研究，并用其他方法进行对照。每种方法保留自己的适用范围和验证记录。",
+    "features": [
+      "固定功率条件下的直埋 FEM 热研究。",
+      "温度相关电阻参与的电热耦合研究。",
+      "用线源解析方法对照温度结果。"
+    ],
+    "stage": "数值研究",
+    "caption": "在明确边界内，观察场的变化。",
+    "layers": [
+      "热源",
+      "等温线",
+      "外部边界"
+    ],
+    "layerNotes": [
+      "明确给定热源或电热耦合研究条件。",
+      "查看温度场分布；此处轮廓仅为视觉示意。",
+      "边界条件与计算域共同限定结果适用性。"
+    ],
+    "featureTitles": [
+      "研究温度场",
+      "耦合电热条件",
+      "进行独立对照"
+    ],
+    "steps": [
+      [
+        "选择研究",
+        "区分固定功率、耦合研究与解析对照。",
+        "研究类型与适用范围"
+      ],
+      [
+        "定义计算域",
+        "检查网格、材料映射、热源和边界。",
+        "完整的研究输入"
+      ],
+      [
+        "运行与检查",
+        "调用对应方法，检查收敛与运行诊断。",
+        "求解状态与诊断"
+      ],
+      [
+        "查看与对照",
+        "查看温度场，并比较独立方法下的结果。",
+        "场工件与方法差异"
+      ]
+    ],
+    "inputs": [
+      [
+        "模型与网格",
+        "模型 / 网格工件",
+        "计算域、单元与材料映射"
+      ],
+      [
+        "热源条件",
+        "当前研究",
+        "给定功率或耦合输入"
+      ],
+      [
+        "边界条件",
+        "当前研究",
+        "外边界与环境假设"
+      ],
+      [
+        "对照方法",
+        "研究配置",
+        "适用的独立校核方法"
+      ]
+    ],
+    "artifacts": [
+      "温度场",
+      "收敛诊断",
+      "方法对照"
+    ],
+    "supported": [
+      "已声明的直埋固定功率 FEM 热研究。",
+      "受支持的电热耦合与线源解析对照。"
+    ],
+    "limits": [
+      "固定功率温度场不能直接视为载流量。",
+      "收敛与数值验证需要分别检查。"
+    ],
+    "related": [
+      "mesh",
+      "report"
+    ],
+    "number": "05"
+  },
+  {
+    "key": "report",
+    "name": "计算书",
+    "short": "计算书",
+    "en": "ENGINEERING REPORT",
+    "mode": "内置",
+    "color": "#637181",
+    "soft": "#EEF1F4",
+    "shape": "M4 2.5h8l4 4v11H4z M12 2.5v4h4 M6.7 8.5H10 M6.7 11.5h6.6 M6.7 14.5h6.6 M11.8 8.5h1.5",
+    "desc": "把指定运行整理为可追溯的交付物。",
+    "cap": "输入依据 / 运行结果 / HTML 导出",
+    "input": "已保存运行 · 方法版本 · 来源",
+    "output": "引用固定运行的 HTML 计算书",
+    "scope": "导出读取历史快照，不重新求解。",
+    "symbol": "带页折与结果明细的计算书",
+    "route": "工程 → 计算书",
+    "detail": "选定运行后预览与导出；当前实现提供 HTML，其他格式保留扩展位。",
+    "source": "cablesim.report-core",
+    "candidates": [
+      "输入与依据",
+      "结果与追溯",
+      "HTML 计算书"
+    ],
+    "intro": "从已经保存的运行生成计算书，集中呈现输入、依据、方法和结果，方便复核与交付。",
+    "features": [
+      "整理工程输入和参数来源。",
+      "引用指定运行及其准确方法版本。",
+      "预览并导出 HTML 计算书。"
+    ],
+    "stage": "整理与交付",
+    "caption": "把一次计算，整理成完整证据。",
+    "layers": [
+      "输入与依据",
+      "计算过程",
+      "结果与追溯"
+    ],
+    "layerNotes": [
+      "汇集工程参数及其来源，明确本次计算的前提。",
+      "引用实际使用的方法和对应计算过程。",
+      "结果始终指向指定运行，避免混入后续修改。"
+    ],
+    "featureTitles": [
+      "整理输入与来源",
+      "准确引用方法",
+      "交付固定运行"
+    ],
+    "steps": [
+      [
+        "选择运行",
+        "从已保存的运行中确定本次计算书引用对象。",
+        "固定运行及方法版本"
+      ],
+      [
+        "整理依据",
+        "读取输入、参数来源与运行工件。",
+        "完整的输入与方法记录"
+      ],
+      [
+        "预览复核",
+        "检查报告章节与引用内容的一致性。",
+        "可复核的报告预览"
+      ],
+      [
+        "导出交付",
+        "导出引用指定运行的 HTML 计算书。",
+        "HTML 计算书"
+      ]
+    ],
+    "inputs": [
+      [
+        "指定运行",
+        "历史运行",
+        "已封存的结果与运行身份"
+      ],
+      [
+        "方法信息",
+        "运行记录",
+        "准确方法版本与发行信息"
+      ],
+      [
+        "输入与来源",
+        "固定快照",
+        "本次运行使用的参数和依据"
+      ]
+    ],
+    "artifacts": [
+      "输入与依据",
+      "方法与结果",
+      "HTML 计算书"
+    ],
+    "supported": [
+      "读取指定历史运行的输入和结果。",
+      "生成可追溯的 HTML 计算书。"
+    ],
+    "limits": [
+      "导出读取历史快照，不重新求解。",
+      "本方案不把 Word 导出标成已实现能力。"
+    ],
+    "related": [
+      "iec",
+      "simulation"
+    ],
+    "number": "06"
+  }
+];
+
+function glyph(p,size=20){
+  return '<svg width="'+size+'" height="'+size+'" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+p.shape+'"/></svg>';
+}
+const arrow='<svg width="18" height="18" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M4 10h12m-5-5 5 5-5 5"/></svg>';
+function drawing(p,active=-1){
+  const circle=(x,y,r,fill="none")=>'<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="'+fill+'"/>';
+  const core=(x,y,r=22)=>'<circle cx="'+x+'" cy="'+y+'" r="'+r+'" fill="var(--paper)"/><circle cx="'+x+'" cy="'+y+'" r="'+(r*.59)+'" fill="var(--wash)"/><circle cx="'+x+'" cy="'+y+'" r="'+(r*.25)+'" fill="currentColor" stroke="none"/>';
+  let content="";
+  if(p.key==="model"){
+    content='<path d="M69 124h260" stroke-dasharray="3 5" opacity=".28"/>'+
+    '<g data-part="2"><path d="M111 62h70a30 62 0 0 1 0 124h-70" fill="var(--wash)"/><ellipse cx="111" cy="124" rx="30" ry="62" fill="var(--paper)"/><ellipse cx="111" cy="124" rx="23" ry="49"/><path d="M114 58V39h-48" class="leader"/></g>'+
+    '<g data-part="1"><path d="M176 78h70a23 46 0 0 1 0 92h-70" fill="var(--wash)"/><ellipse cx="176" cy="124" rx="23" ry="46" fill="var(--paper)"/><ellipse cx="176" cy="124" rx="14" ry="29"/><path d="M185 74V52h49" class="leader"/></g>'+
+    '<g data-part="0"><path d="M232 98h53a14 26 0 0 1 0 52h-53" fill="var(--wash)"/><ellipse cx="232" cy="124" rx="14" ry="26" fill="var(--paper)"/>'+[[-5,-9],[4,-12],[-6,5],[5,4],[0,16]].map(([x,y])=>'<ellipse cx="'+(232+x)+'" cy="'+(124+y)+'" rx="3" ry="6" fill="currentColor" stroke="none"/>').join('')+'<path d="M285 151v33h38" class="leader"/></g>'+
+    '<path d="M79 208h215m-215-5v10m215-10v10" stroke-width=".8" opacity=".45"/>';
+  }else if(p.key==="iec"){
+    content='<g data-part="0">'+core(122,89,29)+core(91,143,29)+core(153,143,29)+'<path d="M58 189h128m-128-4v8m128-8v8" class="leader"/></g>'+
+    '<g data-part="1"><path d="M191 123h34m-5-4 5 4-5 4"/><circle cx="246" cy="123" r="12" fill="var(--wash)"/><path d="m243 116-4 8h8l-4 8" stroke-width="1.5"/></g>'+
+    '<g data-part="2"><path d="M258 123h23v-31m0-31v-8h33m-33 39-5-4 10-5-10-5 10-5-5-7m0 59v31m0 31v8h33m-33-39-5 4 10 5-10 5 10 5-5 7"/><path d="M316 44v18m5-15v12m-5 126v18m5-15v12"/></g>';
+  }else if(p.key==="thermal"){
+    content='<g data-part="2">'+circle(158,125,83)+'<path d="M56 214h224m-224-4v8m224-8v8" class="leader"/><path d="M246 82h42m-5-4 5 4-5 4M249 126h39m-5-4 5 4-5 4M243 171h45m-5-4 5 4-5 4"/></g>'+
+    '<g data-part="1">'+circle(158,125,61,"var(--wash)")+circle(158,125,43,"var(--paper)")+'<path d="M192 65h33v-29h36M194 164h31v27h31" class="leader"/></g>'+
+    '<g data-part="0">'+circle(158,125,23,"var(--wash)")+'<path d="m152 135 8-20m-15 12h23M134 125h-20m5-4-5 4 5 4M158 99V81m-4 5 4-5 4 5" stroke-width="1.5"/></g>';
+  }else if(p.key==="mesh"){
+    const pts=[[62,45],[109,45],[164,45],[217,45],[292,45],[62,92],[109,87],[160,99],[222,87],[292,98],[62,144],[113,147],[166,146],[222,139],[292,145],[62,198],[116,198],[171,198],[230,198],[292,198]];
+    let lines="";
+    for(let row=0;row<3;row++)for(let col=0;col<4;col++){
+      const a=pts[row*5+col],b=pts[row*5+col+1],c=pts[(row+1)*5+col],d=pts[(row+1)*5+col+1];
+      lines+='<path d="M'+a+'L'+b+'L'+d+'L'+c+'Z M'+(col%2?a:c)+'L'+(col%2?d:b)+'"/>';
+    }
+    content='<g data-part="2"><path d="M109 87 160 99 166 146 113 147Z" fill="currentColor" opacity=".18"/><path d="M222 87 292 98 292 145 222 139Z" fill="currentColor" opacity=".09"/></g><g data-part="1" stroke-width=".8">'+lines+pts.map(([x,y])=>circle(x,y,2,"var(--paper)")).join('')+'</g><g data-part="0"><path d="M62 45h230v153H62z" stroke-width="1.8"/><path d="M47 45h-9v153h9" class="leader"/></g>';
+  }else if(p.key==="simulation"){
+    content='<g data-part="2"><path d="M48 47h268v159H48z" stroke-dasharray="3 4"/><path d="M48 34h268M48 29v10m268-10v10" class="leader"/></g><g data-part="1">'+[1,.78,.56].map((s,i)=>'<ellipse cx="173" cy="133" rx="'+(119*s)+'" ry="'+(64*s)+'" fill="'+(i===0?'var(--wash)':'none')+'" transform="rotate(-9 173 133)" opacity="'+(.5+i*.2)+'"/>').join('')+'<path d="M71 176c36 27 95 23 135 9" stroke-dasharray="3 4"/></g><g data-part="0">'+core(150,134,17)+core(186,120,17)+'<path d="M170 91V65h68" class="leader"/></g>';
+  }else{
+    content='<path d="M103 50H91v158h169v-13" opacity=".32"/><path d="M105 37h160l22 22v138H105z" fill="var(--paper)"/><path d="M265 37v22h22"/><g data-part="0"><path d="M124 61h68M124 78h104" stroke-width="2"/><path d="M124 91h139M124 100h105" opacity=".65"/></g><g data-part="1"><path d="M124 120h139m-139 14h139m-139 14h139m-95-36v45m51-45v45" opacity=".7"/><rect x="124" y="112" width="139" height="45" fill="none"/></g><g data-part="2"><circle cx="243" cy="177" r="12" fill="var(--wash)"/><path d="m237 177 4 4 8-9M124 174h61M124 183h85"/></g>';
+  }
+  return '<svg class="diagram" data-active="'+active+'" viewBox="0 0 360 250" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 33V21h12m294 0h12v12M21 217v12h12m294 0h12v-12" opacity=".28" stroke-width=".8"/>'+content+'</svg>';
+}
+
+
+const $=s=>document.querySelector(s);
+const app=$("#app");
+const tabs=[["overview","功能概览"],["workflow","使用流程"],["contract","输入与交付"],["scope","适用边界"]];
+const state={filter:"all",query:"",parts:{},steps:{},focus:null,lastKey:null,scroll:0};
+const theme=()=>"--accent:#606060;--wash:#fafafa;";
+const byKey=key=>plugins.find(p=>p.key===key);
+const esc=value=>String(value).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function route(){
+  const bits=location.hash.slice(1).split("/");
+  const plugin=bits[0]==="plugin"?byKey(bits[1]):null;
+  return {plugin,tab:tabs.some(t=>t[0]===bits[2])?bits[2]:"overview"};
+}
+function card(p){
+  return '<a class="plugin" href="#plugin/'+p.key+'" data-key="'+p.key+'" style="'+theme(p)+'" aria-label="'+p.name+'，查看详情">'+
+  '<div class="module-art"><div class="module-meta"><span class="module-code">CSP / '+p.number+'</span><span class="module-mode">'+p.mode+'</span></div>'+drawing(p)+'</div>'+
+  '<div class="module-info"><div class="module-title"><h2>'+p.name+'</h2>'+arrow+'</div><p>'+p.desc+'</p>'+
+  '<div class="module-foot"><span class="module-stage">'+glyph(p,12)+p.stage+'</span><span class="module-en">'+p.en+'</span></div></div></a>';
+}
+function renderCatalog(){
+  const items=plugins.filter(p=>(state.filter==="all"||(state.filter==="core"?p.mode==="内置":p.mode!=="内置"))&&
+    (p.name+" "+p.en+" "+p.desc+" "+p.cap+" "+p.stage).toLowerCase().includes(state.query.toLowerCase().trim()));
+  const filterName=state.filter==="all"?"全部工程能力":state.filter==="core"?"随软件提供的核心能力":"按需选用的扩展能力";
+  app.innerHTML='<div class="main-head"><div><div class="eyebrow">CABLESIM / MODULE LIBRARY</div><h1 id="page-title" tabindex="-1">工程插件</h1><p class="subtitle">从定义一根电缆，到交付一份有据可查的计算书。</p></div>'+
+    '<div class="totals" aria-label="4 项内置，2 项扩展"><div><b>04</b><span>核心内置</span></div><div><b>02</b><span>可选扩展</span></div></div></div>'+
+    '<div class="collection-line"><span id="result-count" role="status">'+filterName+' · '+items.length+' 项'+(state.query?' / “'+esc(state.query)+'”':'')+'</span><span>EXPLORE THE MODULES</span></div>'+
+    '<div class="plugin-grid">'+(items.length?items.map(card).join(""):'<div class="empty"><h2>没有找到对应插件</h2><p>试试“热分析”“建模”或“IEC”。</p><button type="button" class="text-button" id="clear-search">清除搜索与筛选</button></div>')+'</div>'+
+    '<footer class="catalog-footer"><span>点击插件，了解它在工程中承担的工作。</span><span>功能归并设计 · 非已安装状态</span></footer>';
+}
+function overview(p){
+  const active=state.parts[p.key]??-1;
+  const parts=['<button type="button" class="layer-button" data-part-button="-1" aria-pressed="'+(active===-1)+'">整体</button>'].concat(p.layers.map((name,i)=>'<button type="button" class="layer-button" data-part-button="'+i+'" aria-pressed="'+(active===i)+'">'+name+'</button>')).join("");
+  const related=p.related.map(byKey);
+  return '<div class="overview"><figure class="technical-figure"><div class="figure-top"><span>结构与方法示意</span><span>FIG. '+p.number+' / NOT TO SCALE</span></div><div id="figure-art">'+drawing(p,active)+'</div><div class="layer-buttons" role="group" aria-label="查看示意图组成">'+parts+'</div><figcaption class="layer-note" id="layer-note" aria-live="polite">'+(active===-1?'点击上方标签，查看各部分的作用。图形仅作介绍，不表示实际计算结果。':p.layerNotes[active])+'</figcaption></figure>'+
+    '<div><p class="feature-intro">'+p.intro+'</p>'+p.features.map((text,i)=>'<section class="feature-row"><span class="feature-number">0'+(i+1)+'</span><div><h3>'+p.featureTitles[i]+'</h3><p>'+text+'</p></div></section>').join('')+'</div></div>'+
+    '<section class="position"><h2 class="section-label"><span>CONNECTIONS</span>可搭配的工程能力</h2><div class="position-flow">'+
+    '<a href="#plugin/'+related[0].key+'">'+glyph(related[0],22)+'<div><small>相关插件</small>'+related[0].name+'</div></a><svg width="20" height="10" viewBox="0 0 20 10" aria-hidden="true"><path d="M0 5h20" stroke="currentColor"/></svg>'+
+    '<div class="position-current">'+glyph(p,22)+'<div><small>当前插件</small>'+p.name+'</div></div><svg width="20" height="10" viewBox="0 0 20 10" aria-hidden="true"><path d="M0 5h20" stroke="currentColor"/></svg>'+
+    '<a href="#plugin/'+related[1].key+'">'+glyph(related[1],22)+'<div><small>相关插件</small>'+related[1].name+'</div></a></div></section>';
+}
+function stepDisplay(p,index){
+  const step=p.steps[index];
+  return '<div class="eyebrow">STEP 0'+(index+1)+' / 04</div><h2>'+step[0]+'</h2><p>'+step[1]+'</p>'+
+    '<div class="step-exchange"><span>'+glyph(p,30)+'当前工程上下文</span>'+arrow+'<span><svg width="29" height="32" viewBox="0 0 24 28" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><path d="M4 2h11l5 5v19H4zM15 2v5h5M7 12h10M7 16h10M7 20h6"/></svg>'+step[0]+'</span></div>'+
+    '<div class="step-outcome"><strong>此步形成</strong><span>'+step[2]+'</span></div>';
+}
+function workflow(p){
+  const current=state.steps[p.key]??0;
+  return '<div class="workflow"><div class="steps" role="group" aria-label="使用步骤">'+p.steps.map((step,i)=>
+    '<button class="step-button" type="button" data-step="'+i+'" aria-controls="step-display" aria-pressed="'+(current===i)+'"><span class="step-index">0'+(i+1)+'</span><span><strong>'+step[0]+'</strong><small>'+step[2]+'</small></span></button>').join('')+
+    '</div><section class="step-display" id="step-display" aria-live="polite">'+stepDisplay(p,current)+'</section></div>'+
+    '<div class="input-note">流程介绍仅展示操作与交付关系；实际执行在工程工作台内完成。</div>';
+}
+function contract(p){
+  return '<div class="contract-grid"><section><h2>从工程中读取什么</h2><p class="section-summary">输入绑定明确来源；数值参数需带单位。</p><table class="input-table"><thead><tr><th scope="col">输入项</th><th scope="col">来源</th><th scope="col">用途</th></tr></thead><tbody>'+
+    p.inputs.map(row=>'<tr>'+row.map((text,i)=>'<'+(i===0?'th scope="row"':'td')+'>'+text+'</'+(i===0?'th':'td')+'>').join('')+'</tr>').join('')+
+    '</tbody></table><p class="input-note">'+p.detail+'</p></section>'+
+    '<figure class="paper-preview"><div class="eyebrow">OUTPUT / '+p.en+'</div><h3>这项能力的交付内容</h3>'+p.artifacts.map((item,i)=>'<div class="artifact-item"><span>0'+(i+1)+'</span>'+item+'</div>').join('')+
+    '<figcaption class="paper-note">交付结构示意。实际工件由执行结果决定，并关联相应输入与方法版本。</figcaption></figure></div>';
+}
+function scope(p){
+  return '<div class="scope-layout"><section class="scope-section"><h2>适用范围</h2><p class="section-summary">'+p.scope+'</p><ul class="scope-list">'+p.supported.map(t=>'<li>'+t+'</li>').join('')+'</ul></section>'+
+    '<section class="scope-section boundary"><h2>使用前需要知道</h2><p class="section-summary">方法能力与交付方式分别确认。</p><ul class="scope-list">'+p.limits.map(t=>'<li>'+t+'</li>').join('')+'</ul></section></div>'+
+    '<div class="scope-callout"><strong>'+p.mode+' · '+(p.mode==="内置"?'随软件交付':'按研究需要选择')+'</strong>'+
+    (p.mode==="内置"?'核心能力的适用范围仍由具体方法决定，使用前需要完成参数与工况检查。':'启用前需要核对依赖和运行环境；扩展工件与核心研究共享同一份工程上下文。')+'</div>';
+}
+function renderDetail(p,tab){
+  app.style.cssText=theme(p);
+  const next=plugins[(plugins.indexOf(p)+1)%plugins.length];
+  app.innerHTML='<nav class="breadcrumb" aria-label="当前位置"><a href="#catalog">插件目录</a><span>/</span>'+p.name+'</nav>'+
+    '<header class="detail-heading"><div><div class="eyebrow">MODULE '+p.number+' / '+p.en+'</div><h1 id="page-title" tabindex="-1">'+p.name+'</h1><p class="subtitle">'+p.caption+'</p></div><div class="delivery"><i></i>'+p.mode+' · '+(p.mode==="内置"?'随软件提供':'按需选择')+'</div></header>'+
+    '<div class="detail-tabs" role="tablist" aria-label="插件介绍章节">'+tabs.map(([key,label])=>'<button type="button" role="tab" id="tab-'+key+'" data-tab="'+key+'" aria-controls="detail-panel" aria-selected="'+(key===tab)+'" tabindex="'+(key===tab?'0':'-1')+'">'+label+'</button>').join('')+'</div>'+
+    '<section class="panel" id="detail-panel" role="tabpanel" aria-labelledby="tab-'+tab+'" tabindex="0">'+({overview,workflow,contract,scope}[tab](p))+'</section>'+
+    '<footer class="detail-bottom"><span>功能归并设计 · 介绍中的图形与流程均为示意</span><a href="#plugin/'+next.key+'">下一项：'+next.name+' →</a></footer>';
+}
+function render(){
+  const {plugin,tab}=route();
+  $("#catalog-controls").hidden=!!plugin;
+  $("#detail-nav").hidden=!plugin;
+  if(plugin){
+    $("#detail-nav").innerHTML='<a class="back" href="#catalog">'+arrow+'返回插件目录</a><div class="side-heading">工程能力 / MODULES</div>'+plugins.map(p=>'<a class="side-plugin" href="#plugin/'+p.key+'" '+(p.key===plugin.key?'aria-current="page"':'')+' style="'+theme(p)+'">'+glyph(p,17)+'<span>'+p.name+'</span><span class="side-number">'+p.number+'</span></a>').join('')+
+      '<div class="side-guide"><div class="eyebrow">ONE ENGINEERING CONTEXT</div><p class="side-note">所有能力围绕同一份工程。<br>输入有来源，结果可追溯。</p></div>';
+    renderDetail(plugin,tab);
+    document.title=plugin.name+' · CableSimPro';
+    if(state.focus==="tab")$('#tab-'+tab).focus({preventScroll:true});
+    else if(state.focus)$("#page-title").focus({preventScroll:true});
+  }else{
+    app.removeAttribute("style");
+    renderCatalog();
+    document.title="工程插件 · CableSimPro";
+    if(state.lastKey){
+      const card=document.querySelector('.plugin[data-key="'+state.lastKey+'"]');
+      if(card)card.focus({preventScroll:true});
+    }
+  }
+  if(state.focus==="page")window.scrollTo(0,plugin?0:state.scroll);
+  state.focus=null;
+}
+document.addEventListener("click",event=>{
+  const card=event.target.closest(".plugin[data-key]");
+  if(card){state.lastKey=card.dataset.key;state.scroll=scrollY;}
+  const nav=event.target.closest('a[href^="#"]');
+  if(nav)state.focus="page";
+  const filter=event.target.closest("[data-filter]");
+  if(filter){
+    state.filter=filter.dataset.filter;
+    document.querySelectorAll("[data-filter]").forEach(b=>b.setAttribute("aria-pressed",String(b===filter)));
+    renderCatalog();
+  }
+  if(event.target.closest("#clear-search")){
+    state.filter="all";state.query="";$("#search").value="";
+    document.querySelectorAll("[data-filter]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.filter==="all")));
+    renderCatalog();$("#search").focus();
+  }
+  const tab=event.target.closest("[data-tab]");
+  if(tab){
+    state.focus="tab";
+    location.hash="plugin/"+route().plugin.key+"/"+tab.dataset.tab;
+  }
+  const part=event.target.closest("[data-part-button]");
+  if(part){
+    const p=route().plugin,index=Number(part.dataset.partButton);state.parts[p.key]=index;
+    $("#figure-art").innerHTML=drawing(p,index);
+    document.querySelectorAll("[data-part-button]").forEach(b=>b.setAttribute("aria-pressed",String(b===part)));
+    $("#layer-note").textContent=index===-1?"点击上方标签，查看各部分的作用。图形仅作介绍，不表示实际计算结果。":p.layerNotes[index];
+  }
+  const step=event.target.closest("[data-step]");
+  if(step){
+    const p=route().plugin,index=Number(step.dataset.step);state.steps[p.key]=index;
+    document.querySelectorAll("[data-step]").forEach(b=>b.setAttribute("aria-pressed",String(b===step)));
+    $("#step-display").innerHTML=stepDisplay(p,index);
+  }
+});
+document.addEventListener("keydown",event=>{
+  if(!event.target.matches("[data-tab]"))return;
+  const index=tabs.findIndex(t=>t[0]===event.target.dataset.tab);
+  const direction={ArrowRight:1,ArrowLeft:-1}[event.key];
+  let next=direction===undefined?null:(index+direction+tabs.length)%tabs.length;
+  if(event.key==="Home")next=0;
+  if(event.key==="End")next=tabs.length-1;
+  if(next!==null){event.preventDefault();document.querySelector('[data-tab="'+tabs[next][0]+'"]').click();}
+});
+$("#search").addEventListener("input",event=>{state.query=event.target.value;renderCatalog();});
+window.addEventListener("hashchange",render);
+render();
+
+</script>
+</body>
+</html>

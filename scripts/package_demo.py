@@ -1,4 +1,4 @@
-"""Package source and built UI, excluding runtime data, environments and fonts."""
+"""Package the host, plugins and docs, excluding runtime data, environments and fonts. The UI is being rebuilt."""
 from __future__ import annotations
 import json
 import os
@@ -10,8 +10,8 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 ALLOWED_ROOT_FILES = {'README.md', 'pytest.ini', '.gitignore', '.dockerignore', 'Dockerfile', 'compose.yaml'}
 # plugins/ holds every calculation method; without it the demo cannot calculate.
-ALLOWED_DIRECTORIES = {'backend', 'frontend', 'plugins', 'plugin-spec', 'scripts', 'docs', 'tests', '.github'}
-EXCLUDED_PARTS = {'node_modules', '__pycache__', '.pytest_cache', 'playwright-report', 'test-results', 'test-results-windows', 'playwright-report-windows', '.venv', '.data', '.git'}
+ALLOWED_DIRECTORIES = {'backend', 'plugins', 'plugin-spec', 'scripts', 'docs', 'tests', '.github'}
+EXCLUDED_PARTS = {'node_modules', '__pycache__', '.pytest_cache', '.venv', '.data', '.git'}
 
 
 def product_version(root: Path) -> str:
@@ -20,8 +20,6 @@ def product_version(root: Path) -> str:
 
 
 def build_archive(root: Path = ROOT) -> Path:
-    if not (root / 'frontend/dist/index.html').is_file():
-        raise RuntimeError('Build frontend/dist before packaging; the demo must not ship an unbuilt UI.')
     output = root / 'artifacts/CableSimPro-demo.zip'
     output.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -43,7 +41,7 @@ def build_archive(root: Path = ROOT) -> Path:
             archive.write(path, 'CableSimPro/' + relative.as_posix())
             count += 1
         info = {'product': 'CableSimPro', 'version': product_version(root), 'git_checkout_sha': commit,
-                'github_run_id': os.environ.get('GITHUB_RUN_ID'), 'includes_prebuilt_frontend': True,
+                'github_run_id': os.environ.get('GITHUB_RUN_ID'), 'includes_ui': False,
                 'engineering_status': 'preview; not a complete IEC implementation or independently certified'}
         archive.writestr('CableSimPro/BUILD_INFO.json', json.dumps(info, ensure_ascii=False, indent=2))
     print(f'Packaged {count} files: {output} ({output.stat().st_size:,} bytes)')

@@ -118,8 +118,6 @@ new plugin). The full regression workflow still tests Windows CAD clean exits.
     python scripts/plugin_sdk.py verify
     python scripts/seal_plugin_catalog.py
     python -m pytest plugin-tests/test_electrothermal.py
-    cd frontend
-    npx playwright test --config=playwright.electrothermal.config.ts
 
 Numerical examples use explicitly labelled synthetic test inputs, not manufacturer
 records. Exact source SHA, platform environment, JUnit and browser screenshots

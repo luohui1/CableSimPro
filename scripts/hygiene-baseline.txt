@@ -1,3 +1,3 @@
 # Legacy violations still pending removal. This list may only shrink:
 # delete a line as soon as its violation is fixed (check_hygiene.py fails on stale lines).
-# Empty since the UI converged on WorkflowApp. Do not add entries; fix new violations instead.
+# Empty. Do not add entries; fix new violations instead.

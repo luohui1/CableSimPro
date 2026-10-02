@@ -9,7 +9,6 @@ Usage: python scripts/check_hygiene.py        (exit 1 on any violation)
 from __future__ import annotations
 
 import fnmatch
-import posixpath
 import re
 import subprocess
 import sys
@@ -21,7 +20,7 @@ BASELINE = ROOT / 'scripts/hygiene-baseline.txt'
 # Generated output, caches, scratch and bundles never belong in git.
 FORBIDDEN = [
     '*/__pycache__/*', '*.pyc', '*.pyo', '.pytest_cache/*', 'node_modules/*', '*/node_modules/*',
-    'frontend/dist/*', 'frontend/test-results*', 'frontend/playwright-report*', 'artifacts/*',
+    'artifacts/*',
     '.data/*', 'data/*', '*.sqlite', '*.sqlite-*', '*.db', '*.log', '*.bin', '*.part[0-9]*',
     '.bootstrap/*', '*chunk-[0-9]*', '.tmp/*', '*/.tmp/*', '*.orig', '*.rej', '*.bak', '*~',
     '.DS_Store', '*/.DS_Store', 'Thumbs.db', '.env', '*/.env', '.codex*', '.development/*',
@@ -35,11 +34,7 @@ VERSION_NAME = re.compile(
 )
 MAX_BYTES = 1_000_000
 BINARY_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.glb', '.step', '.stp', '.brep', '.pdf', '.zip', '.woff', '.woff2'}
-BINARY_DIRS = ['frontend/public/*', 'docs/*']
-FRONTEND_EXT = ('', '.ts', '.tsx', '.js', '.mjs', '.css', '.json', '/index.ts', '/index.tsx')
-IMPORT = re.compile(r"""(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)|import\s*['"]([^'"]+)['"]|@import\s+(?:url\()?['"]([^'"]+)['"]""")
-# Frontend files consumed by tooling rather than imported from main.tsx.
-FRONTEND_TOOLING = {'frontend/src/vite-env.d.ts'}
+BINARY_DIRS = ['design/*', 'docs/*']
 
 
 def tracked() -> list[str]:
@@ -66,7 +61,7 @@ def large_or_misplaced_binaries(files: list[str]) -> list[str]:
         if size > MAX_BYTES:
             issues.append(f'too large ({size // 1024} KB > {MAX_BYTES // 1024} KB): {f}')
         if PurePosixPath(f).suffix.lower() in BINARY_EXT and not match(f, BINARY_DIRS):
-            issues.append(f'binary outside frontend/public or docs: {f}')
+            issues.append(f'binary outside design or docs: {f}')
     return issues
 
 
@@ -83,28 +78,6 @@ def branch_bound_workflows(files: list[str]) -> list[str]:
         if 'pull_request' not in on_block and not re.search(r'branches:\s*\[[^\]]*\bmain\b', on_block):
             issues.append(f'workflow runs neither on main nor on pull_request: {f}')
     return issues
-
-
-def dead_frontend(files: list[str]) -> list[str]:
-    src = [f for f in files if f.startswith('frontend/src/')]
-    seen: set[str] = set()
-    stack = ['frontend/src/main.tsx']
-    while stack:
-        cur = stack.pop()
-        if cur in seen or not (ROOT / cur).is_file():
-            continue
-        seen.add(cur)
-        for m in IMPORT.finditer((ROOT / cur).read_text(encoding='utf-8')):
-            spec = next(g for g in m.groups() if g)
-            if not spec.startswith('.'):
-                continue
-            base = posixpath.join(posixpath.dirname(cur), spec)
-            for ext in FRONTEND_EXT:
-                cand = posixpath.normpath(base + ext)
-                if (ROOT / cand).is_file():
-                    stack.append(cand)
-                    break
-    return [f'unreachable from frontend/src/main.tsx: {f}' for f in src if f not in seen and f not in FRONTEND_TOOLING]
 
 
 def dead_scripts(files: list[str]) -> list[str]:
@@ -126,7 +99,7 @@ def main() -> int:
     files = tracked()
     issues = sorted(set(
         forbidden_files(files) + version_names(files) + large_or_misplaced_binaries(files)
-        + branch_bound_workflows(files) + dead_frontend(files) + dead_scripts(files)
+        + branch_bound_workflows(files) + dead_scripts(files)
     ))
     baseline = {line.strip() for line in BASELINE.read_text(encoding='utf-8').splitlines()
                 if line.strip() and not line.startswith('#')} if BASELINE.exists() else set()

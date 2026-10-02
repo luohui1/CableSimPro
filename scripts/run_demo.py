@@ -1,11 +1,10 @@
-"""Cross-platform local launcher. Python 3.11+; Node is only needed to build source."""
+"""Cross-platform local launcher for the host API. Python 3.11+. The UI is being rebuilt; the API docs open at /docs."""
 from __future__ import annotations
 
 import argparse
 import json
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import time
@@ -26,7 +25,6 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Start the CableSimPro local demo.")
     parser.add_argument("--host", default="127.0.0.1", help="Default: loopback only; no authentication is provided.")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--rebuild", action="store_true", help="Rebuild the frontend even if a dist bundle exists.")
     parser.add_argument("--skip-install", action="store_true", help="Use the current Python environment without installing dependencies.")
     parser.add_argument("--no-browser", action="store_true", help="Do not open a browser automatically.")
     args = parser.parse_args()
@@ -46,14 +44,6 @@ def main() -> int:
             venv.EnvBuilder(with_pip=True).create(env)
         python = str(python_path)
         run([python, "-m", "pip", "install", "-r", str(ROOT / "backend/requirements.txt")])
-
-    frontend = ROOT / "frontend"
-    if args.rebuild or not (frontend / "dist/index.html").is_file():
-        npm = shutil.which("npm.cmd" if os.name == "nt" else "npm")
-        if npm is None:
-            raise RuntimeError("Node.js 22.12+ and npm are required to build source. Alternatively use the CI demo ZIP with its prebuilt frontend/dist.")
-        run([npm, "ci" if (frontend / "package-lock.json").is_file() else "install", "--no-audit", "--no-fund"], cwd=frontend)
-        run([npm, "run", "build"], cwd=frontend)
 
     browser_host = "127.0.0.1" if args.host == "0.0.0.0" else "[::1]" if args.host in ("::", "::1") else args.host
     url = f"http://{browser_host}:{args.port}"
@@ -82,7 +72,7 @@ def main() -> int:
         if not ready:
             raise RuntimeError("The server did not become ready. Inspect the Uvicorn messages above.")
         if not args.no_browser:
-            webbrowser.open(url)
+            webbrowser.open(url + "/docs")
         return process.wait()
     except KeyboardInterrupt:
         return 0

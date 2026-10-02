@@ -2,7 +2,7 @@
 
 版本：0.5 指导方案草案  
 日期：2026-09-26  
-变更：0.4 确立“宿主不内置算法”，新增 [插件契约](./PLUGIN_CONTRACT.md)、[领域模型](./DOMAIN_MODEL.md)、[结果类型](./RESULT_TYPES.md) 三份设计。0.5 按方向决策（§7.1）重排开发顺序：先收敛界面、用 IEC 60287 / TB 880 建立可信度，再插件化；插件分发与双模式暂缓。  
+变更：0.4 确立“宿主不内置算法”，新增 [插件规范](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md)、[领域模型](./DOMAIN_MODEL.md)、[结果类型](./RESULT_TYPES.md) 三份设计。0.5 按方向决策（§7.1）重排开发顺序：先收敛界面、用 IEC 60287 / TB 880 建立可信度，再插件化；插件分发与双模式暂缓。
 用途：作为后续模块设计、接口实现和迁移评审的共同依据。不代表所有功能已经实现，也不授权直接合并分支、迁移数据库或删除历史数据。
 
 ![CableSimPro 系统架构](./system-architecture.svg)
@@ -14,6 +14,8 @@
 ## 1. 产品和仓库边界
 
 **CableSimPro 是工程宿主；CableModelKit 是独立建模产品；Jev 是可替换的候选判断服务。宿主不内置算法，所有计算方法都是插件。**
+
+“宿主不内置算法”约束代码职责；产品必须内置交付核心插件，用户安装软件后即可使用。内置范围、版本和可选扩展规则统一见[插件规范：内置范围](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md#boundaries)。
 
 主流程：定义电缆 → 设置敷设 → 配置研究 → 真实计算 → 复核结果 → 交付。界面、Agent、插件都服务于这条流程，不各自建立一套工程数据。
 
@@ -41,7 +43,7 @@
 | 输入身份与实际环境分别记录 | 输入一致不代表环境或文件字节一致 | §4.3 |
 | 工程写入收敛到已有服务 | 保留参数锁、审批和整体校验 | §10.3 |
 | AI 是建议层，不是安全边界 | 模型错误不能扩大工程权限 | §13 |
-| 宿主不内置算法（方法即插件） | 平台能力靠插件扩展；新增方法不改宿主 | [插件契约](./PLUGIN_CONTRACT.md) |
+| 宿主不内置算法（方法即插件） | 平台能力靠插件扩展；新增方法不改宿主 | [插件规范](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md) |
 | 先闭环，再扩展工况 | 先证明一条真实流程，再增加复杂度 | §12 |
 
 “可读取历史”“可重新运行”“数值可复现”“文件字节完全一致”是不同承诺，不能互相替代。
@@ -57,7 +59,7 @@
 | M05 资料与依据 | 平台服务 | 原始资料到可核对证据与参数候选 | 文档库、OCR/provider、设计依据 |
 | M06 研究与运行 | 内核 | 固定快照、研究驱动器（单次、扫描、选型、比较、多步流程）、运行封存 | runtime、插件任务；新增统一 Study/Run |
 | M07 结果与交付 | 平台服务 | 按结果类型读取、比较并交付指定结果（[结果类型](./RESULT_TYPES.md)） | 结果组件、工件接口、快照报告 |
-| M08 插件与环境 | 插件宿主 | 插件包、签名、独立环境、项目锁、通用执行器（[插件契约](./PLUGIN_CONTRACT.md)） | 唯一 backend/plugins 与 Plugin Spec |
+| M08 插件与环境 | 插件宿主 | 插件包、签名、独立环境、项目锁、通用执行器（[插件规范](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md)） | 唯一 backend/plugins 与 Plugin Spec |
 | M09 工程助手 | 平台服务 | 理解任务、查询和提出变更；工具清单来自插件注册表 | 现有 Agent/runtime；后续可选语义判断 |
 
 这些是代码职责，不是九个微服务、九套首页或九份数据库。读写权和具体接口只维护在 [详细设计 §3](./MODULE_DESIGN.md#3-模块与写入权)。
@@ -66,7 +68,7 @@
 
 ```text
 ┌────────────────────────────────────────────────────────────┐
-│ 工作台外壳（前端）：单一外壳；参数表单由 schema 生成，结果按类型渲染 │
+│ 工作台外壳（前端，待重建）：参数表单由 schema 生成，结果按类型渲染 │
 ├────────────────────────────────────────────────────────────┤
 │ 平台服务：资产与型号 · 资料与依据 · 结果与交付 · 工程助手           │
 ├────────────────────────────────────────────────────────────┤
@@ -91,7 +93,7 @@
 | `backend/services/` | 资产、资料、结果与交付、工程助手 |
 | `sdk/` | `cablesim-plugin-sdk`：协议、领域类型、单位、命令行工具 |
 | `plugins/<plugin-id>/` | 第一方插件，每个插件一个目录 |
-| `frontend/` | 单一工作台外壳（`WorkflowApp`）与结果类型渲染器 |
+| `frontend/` | 待重建；需求见[前端需求](./FRONTEND_REQUIREMENTS.md) |
 
 ## 4. 数据与执行主线
 
@@ -128,11 +130,11 @@ AI / 资料 / 建模输入 → 提案 → 人工确认 ────────�
 | 数值研究 | method | 固定功率传热、电热运行点、温限电流、暂态 | 固定功率温度场不能标成载流量 |
 | 独立验证 | method（`analysis: crosscheck`） | 解析对照、守恒、网格/域敏感性、外部证据 | 验证只对声明工况、版本和方法有效 |
 
-参数扫描、反向选型、方案比较、交叉校核由宿主的研究驱动器提供（[插件契约 §8](./PLUGIN_CONTRACT.md)），对任何声明了相应输出的方法通用。
+参数扫描、反向选型、方案比较、交叉校核由宿主的研究驱动器提供（[插件规范：后续能力边界](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md#deferred)），对任何声明了相应输出的方法通用。
 
 新增物理方法至少需要：输入契约、适用范围、单位和坐标、材料/边界要求、失败条件、结果契约、验证夹具、来源关联。方法选择不是“换一个求解器名字”。
 
-研究链按能力声明的输入 / 输出工件类型连接成固定步骤（[插件契约 §4.3](./PLUGIN_CONTRACT.md)），不建设用户任意拖拽和执行脚本的通用工作流引擎。中间工件必须关联同一确定输入或明确的上游运行。
+研究链按能力声明的输入 / 输出工件类型连接成固定步骤（[插件规范：后续能力边界](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md#deferred)），不建设用户任意拖拽和执行脚本的通用工作流引擎。中间工件必须关联同一确定输入或明确的上游运行。
 
 ## 6. 外部集成策略
 
@@ -148,7 +150,7 @@ AI / 资料 / 建模输入 → 提案 → 人工确认 ────────�
 
 ### 其他求解器与报告
 
-COMSOL/AEDT 等需许可的软件以 `executable` 插件 + `tools` 声明接入（暂缓，见 §7.1），软件位置和许可由用户配置（[插件契约 §5.1](./PLUGIN_CONTRACT.md)）；其他 FEM 同样作为方法插件；PDF renderer 作为 `export` 插件。许可证、可用环境和方法验证独立处理。已有 HTML 报告继续消费保存的运行输出，不因接口统一而重新求解。
+COMSOL/AEDT 等需许可的软件以 `executable` 插件 + `tools` 声明接入（暂缓，见 §7.1），软件位置和许可由用户配置（[插件规范：后续能力边界](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md#deferred)）；其他 FEM 同样作为方法插件；PDF renderer 作为 `export` 插件。许可证、可用环境和方法验证独立处理。已有 HTML 报告继续消费保存的运行输出，不因接口统一而重新求解。
 
 ## 7. 开发顺序
 
@@ -158,9 +160,9 @@ COMSOL/AEDT 等需许可的软件以 `executable` 插件 + `tools` 声明接入�
 | --- | --- |
 | 先跑通，再做平台 | 首要目标是一条可信的工程闭环：单回路直埋稳态载流量，从建模到计算书。首批用户和工况不预设，闭环跑通后再选 |
 | 插件化，但不做插件分发 | 代码按“宿主不内置算法”组织，插件在仓库内以第一方形式存在。合作方插件目前只是设想，签名、`.cspkg` 发行包、每插件独立环境、SDK 独立发布、COMSOL 等外部软件接入全部暂缓 |
-| 放弃双模式 | 不再维护“专业工作台 + 智能工程流”两个正式模式；前端只保留 `WorkflowApp` 一个外壳，工程助手是工作台内的辅助功能 |
+| 统一工作台 | 前端使用一个应用外壳；工程助手是同一工程内的辅助视图，共享工程修订和人工审批，不维护独立工程副本 |
 | 可信度以标准为依据 | 热网络按 IEC 60287-1-1 / 2-1（2023，Ed.3.0）拆分计算，用 CIGRE TB 880 参考算例逐项比对中间量和最终量。“与旧代码一致”的黄金值只作重构回归，不作正确性证据 |
-| 界面重建 | 前端按“风格 → Token → 组件 → 模板 → 页面”在 Pencil 中重新设计后重建，由[前端设计系统](./FRONTEND_DESIGN_SYSTEM.md)负责；此前不对现有界面做换肤或布局重做 |
+| 界面重建 | 2026-10 删除全部旧前端，按[前端需求](./FRONTEND_REQUIREMENTS.md)重建；重建前宿主只提供 API |
 
 ### 7.2 开发顺序
 
@@ -169,12 +171,20 @@ COMSOL/AEDT 等需许可的软件以 `executable` 插件 + `tools` 声明接入�
 | D0 固定集成基线 | 已完成：main 为唯一主线（含插件电热 / 线源校核链），CI 统一在 main/PR 运行，仓库卫生规则生效 | — |
 | D1 界面收敛 | 默认入口改为 `WorkflowApp`；删除 `LegacyEntry`、双模式、旧 Studio / Enterprise 外壳及其 e2e；迁入工程 JSON 导入 / 导出、重做、设计依据；其余旧界面能力按 PRD §4.4.1 暂停 | 卫生遗留清单清空；CI 只测在用界面 |
 | D2 可信度基线 | 现有热网络黄金值回归（`tests/test_engine_golden.py`）；IEC 60287 单芯品字形直埋 / 排管方法（`plugins/cablesim.iec60287`，[说明](../plugins/IEC60287_SINGLE_CORE.md)），TB 880 六个算例逐项验证；直埋 FEM、电热、线源校核的黄金值随 D5 插件迁移补齐 | 选定算例的各中间量与最终载流量在登记容差内；不符项明确列出，不调参凑数 |
-| D3 热网络插件化 | 仓库内 v2 最小协议（`backend/plugin_host/`，实施状态见[插件契约](./PLUGIN_CONTRACT.md)开头）；热网络迁出为 `cablesim.thermal-network`，`engine.py` 删除，宿主经 `backend/methods.py` 调用；`cablesim.iec60287` 以同一协议可执行，尚未接入研究流程与界面（D4） | 宿主中不再有 `engine.py`；结果与 D2 基准一致 |
-| D4 首条闭环 | 统一 Study / Run、固定快照执行、工程版本档案、只读运行视图、历史比较、HTML 计算书 | PRD J1、J2、J6 走通；报告输入与图表同源、导出不重算 |
-| D5 领域模型与其余插件 | `cablesim.domain/1`、v0 工程迁移；迁移其余 worker 插件；结果类型渲染器替换前端特判；新工况按需接入（优先多回路、排管） | 旧工程可转换且原数据不变；宿主无按插件 ID 的分支 |
-| D6 研究驱动器 | 参数扫描、反向选型、方案比较、交叉校核驱动器 | 每个采样点 / 候选独立成败，不外推 |
+| D3 热网络插件化 | `backend/plugin_host/` 通用执行器；热网络和 IEC 方法在插件子进程执行 | 宿主中不再有 `engine.py`；结果与 D2 基准一致 |
+| D4 首条闭环 | `kernel/` 保存 Study / Run、不可变工程版本档案、事务外执行、请求幂等、历史比较、只读 HTML 计算书；桌面研究页接入简化参考与 IEC 直埋子集 | API 与桌面流程分别验证；IEC 明确输入，不把等效屏蔽自动映射为管状护套；导出不重算 |
+| D5 领域模型与其余插件 | 后端已实现领域模型子集和显式 v0 转换；竖向、场分析、原生算法迁至插件目录；原生 FEM / 电热 / 线源通过 v2 接受范围内的 SI 领域输入，电热载流量与损耗进入通用量值结果；v1 兼容保留 | 原数据不变；缺失或不支持的领域事实拒算；多回路可以表达，现有方法仍拒算。通用前端渲染器暂缓，详见领域模型实施范围 |
+| D6 研究驱动器 | 后端已实现有界数值扫描、阈值 / 型号候选选型、保存运行比较、同源多方法交叉校核 | 每个采样点 / 候选独立成败，不插值外推；候选不自动写回；比较区分物理量、实体、单位和工况，不自动认证 |
+
+前端已删除、待按[前端需求](./FRONTEND_REQUIREMENTS.md)重建；D4–D6 只完成后端，不能据此宣布产品全部范围验收完成。型号库候选仍为 v0 数据，只能用于 v0 研究；领域研究可使用显式数值候选。v1 安装与工程助手兼容端点继续存在，其命令映射不属于新的通用研究执行器。当前不进行手机端专项优化。
 
 **暂缓**（需要时单独立项，不作为以上各步的前置条件）：插件签名与分发、合作方 SDK、每插件独立环境、COMSOL / 外部软件、工程助手独立模式、Jev、持久化队列与通用取消、多用户与公共市场。
+
+本地 v2 执行器在启动前检查平台、包文件和宿主依赖封签。原生插件仍复用宿主只读契约，其静态 `backend.*` 导入闭包写入包内 `src/host-dependencies.json`，该文件本身进入插件封签；契约字节改变即拒绝旧封签执行，维护者通过 `plugin_sdk.py seal --write` 更新未发布版本。此闭包检查服务于可追溯性，不是任意 Python 代码的安全隔离。执行器强制超时，内存上限和无网络仅为声明，方法目录及运行环境明确标记未强制执行；当前只接纳仓库内经审查的第一方插件。
+
+v1 兼容目录与 v2 方法目录的插件 ID 不得重叠，加载时交叉检查。已实现的 IEC 方法只在 `/api/methods` 中声明，v1 的重复路线图条目删除；`/api/plugins/catalog` 返回 `method_catalog` 指向方法目录。v1 线源来源绑定和输出验证由服务显式调用，来源选择与任务登记同一事务完成，无导入期方法替换。
+
+Windows 10+ 的 v2 研究工作进程在创建时纳入宿主持有的 Job Object，强退或超时后终止进程树；恢复和完成写回核对执行身份与状态。历史读取不以当前 v2 插件能够加载为前提，发行不可用原因通过 `method_availability` 单独返回。该状态不验证原生库，v1 / Linux 进程生命周期仍按[实施细则 §6.5](./MODULE_DESIGN.md#65-单机所有者与启动恢复)的范围处理。
 
 **标准资料边界**：标准正文和 TB 880 位于仓库外的受控目录，按其目录说明只可作受控 staging 与验证。本仓库是公开仓库，正文、截图和逐值抽取的算例数据都不提交；验证夹具从仓库外路径读取，路径缺失时相关测试明确跳过并报告，不以替代数据冒充通过。
 
@@ -205,7 +215,7 @@ COMSOL/AEDT 等需许可的软件以 `executable` 插件 + `tools` 声明接入�
 - [CableSimPro 工作流说明](https://github.com/luohui1/CableSimPro/blob/a047f84e225a75e784f26a03b932147f066c9825/docs/integration/ENGINEERING_WORKFLOW.md)
 - [R2 契约源码](https://github.com/luohui1/CableSimPro/blob/a047f84e225a75e784f26a03b932147f066c9825/backend/foundation/contracts.py)
 - [既有声明式预检包](https://github.com/luohui1/CableSimPro/blob/a047f84e225a75e784f26a03b932147f066c9825/backend/foundation/study.py)
-- [Plugin Spec](https://github.com/luohui1/CableSimPro/blob/a047f84e225a75e784f26a03b932147f066c9825/plugin-spec/README.md)
+- [唯一插件规范](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md)
 - [CableModelKit schema](https://github.com/luohui1/CableModelKit/blob/a4eb1e869d7a3a78e949da5ac757be22a3c7633a/src/cable_modelkit/schema.py)
 - [CableModelKit exporter](https://github.com/luohui1/CableModelKit/blob/a4eb1e869d7a3a78e949da5ac757be22a3c7633a/src/cable_modelkit/exporters.py)
 - [SQLite WAL](https://sqlite.org/wal.html)

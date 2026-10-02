@@ -16,10 +16,6 @@ data/
 *.sqlite*
 
 # Build and test output - regenerate, never commit (python scripts/clean.py removes them)
-frontend/dist/
-frontend/.vite/
-frontend/test-results*/
-frontend/playwright-report*/
 artifacts/
 *.log
 

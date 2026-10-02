@@ -1,6 +1,5 @@
 """Collect installed dependency license texts for the distributable (never fonts)."""
 from importlib import metadata
-import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -8,15 +7,6 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def collect():
     sections = ['CableSimPro third-party notices. Licenses apply to their respective components, not an automatic license grant for the whole application.\n']
-    modules = ROOT / 'frontend/node_modules'
-    candidates = list(modules.glob('*/package.json')) + list(modules.glob('@*/*/package.json'))
-    for manifest in sorted(candidates):
-        data = json.loads(manifest.read_text())
-        heading = f"{data.get('name')} {data.get('version')} | declared license: {data.get('license', 'see package')}"
-        sections.append('\n' + '=' * 72 + '\n' + heading)
-        files = [p for p in manifest.parent.iterdir() if p.is_file() and p.name.lower().startswith(('license', 'licence', 'copying', 'notice'))]
-        for file in files:
-            sections.append(file.read_text(errors='replace'))
     for name in ['scipy','pypdf','Pillow','python-multipart','fastapi','pydantic','numpy','uvicorn','httpx','langgraph','langchain-core','langgraph-checkpoint','langgraph-prebuilt','langgraph-sdk','langsmith']:
         try:
             dist = metadata.distribution(name)

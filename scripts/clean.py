@@ -13,8 +13,8 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DIRS = ['.pytest_cache', 'artifacts', '.tmp', 'frontend/dist', 'frontend/.vite']
-DIR_GLOBS = ['**/__pycache__', 'frontend/test-results*', 'frontend/playwright-report*']
+DIRS = ['.pytest_cache', 'artifacts', '.tmp']
+DIR_GLOBS = ['**/__pycache__']
 FILE_GLOBS = ['**/*.pyc', '**/*.pyo', '**/*.log', '.data/pro-e2e.sqlite*', '.data/*-test.sqlite*']
 SKIP = {'.git', '.venv', 'node_modules'}
 

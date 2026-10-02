@@ -71,9 +71,7 @@ engineering acceptance threshold.
 - real Gmsh/scikit-fem buried sources at domain scales 4, 8 and 16 on Linux and
   Windows, checking that this fixture approaches the unchanged half-space result;
 - the actual install/enable/source/invoke/download chain, cross-project and stale
-  source rejection, and no engineering revision change;
-- a production frontend build and Chromium interaction/screenshot/accessibility
-  test using a real source job.
+  source rejection, and no engineering revision change.
 
 The default synthetic fixture is not manufacturer data or a published cable rating.
 Exact numerical claims must cite an exact commit and its workflow artifacts.

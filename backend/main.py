@@ -6,7 +6,6 @@ from uuid import UUID
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
-from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 from .agent import router as agent_router
 from .catalog import presets
@@ -30,6 +29,11 @@ from .foundation.asset_router import make_router as asset_router
 from .plugins.service import PluginService
 from .plugins.catalog import PluginError
 from .plugins.router import make_router as plugin_router
+from .kernel.research import Research
+from .kernel.router import make_router as research_router
+from .kernel.ownership import OwnerLock
+from .plugin_host import PluginHostError
+from .domain.router import make_router as domain_router
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -43,24 +47,30 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     enterprise = Enterprise(workspace_store, designs)
     runtime = EngineeringRuntime(workspace_store, designs, library, providers, enterprise)
     plugins = PluginService(workspace_store, runtime)
+    research = Research(workspace_store, plugins)
+    runtime.research = research
+    owner = OwnerLock(store.path)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        store.initialize()
-        workspace_store.initialize()
-        assets.initialize()
-        library.initialize()
-        designs.initialize()
-        enterprise.initialize()
-        runtime.initialize()
-        plugins.initialize()
+        owner.acquire()
         try:
+            store.initialize()
+            workspace_store.initialize()
+            assets.initialize()
+            library.initialize()
+            designs.initialize()
+            enterprise.initialize()
+            runtime.initialize()
+            plugins.initialize()
+            research.initialize()
             yield
         finally:
             # The workspace store deliberately holds one idle SQLite connection so
             # WAL cleanup/checkpointing is an application-shutdown concern instead
             # of something an arbitrary UI request can inherit on connection close.
             workspace_store.close()
+            owner.close()
 
     app = FastAPI(title='CableSimPro · Engineering Workspace', version=__version__, lifespan=lifespan)
     app.include_router(agent_router)
@@ -73,6 +83,9 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(foundation_router(workspace_store))
     app.include_router(asset_router(assets, workspace_store))
     app.include_router(plugin_router(plugins))
+    app.include_router(research_router(research))
+    app.include_router(domain_router(workspace_store))
+    app.state.research = research
     app.state.plugins = plugins
     app.state.workspace_store = workspace_store
     app.state.enterprise = enterprise
@@ -82,6 +95,10 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
 
     @app.exception_handler(PluginError)
     async def plugin_error(request, exc):
+        return JSONResponse({'detail': {'code': exc.code, 'message': exc.message}}, status_code=exc.status)
+
+    @app.exception_handler(PluginHostError)
+    async def method_error(request, exc):
         return JSONResponse({'detail': {'code': exc.code, 'message': exc.message}}, status_code=exc.status)
 
     @app.exception_handler(AssetError)
@@ -187,13 +204,10 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     def unknown_api(path: str):
         raise HTTPException(404, 'API endpoint not found')
 
-    dist = ROOT / 'frontend' / 'dist'
-    if (dist / 'index.html').exists():
-        app.mount('/', StaticFiles(directory=dist, html=True), name='frontend')
-    else:
-        @app.get('/', response_class=HTMLResponse)
-        def home():
-            return "<h1>CableSimPro API 已启动</h1><p>请构建 frontend 或运行 python scripts/run_demo.py。</p><a href='/docs'>API 文档</a>"
+    # The user interface is being rebuilt (docs/design/FRONTEND_REQUIREMENTS.md); until then only the API is served.
+    @app.get('/', response_class=HTMLResponse)
+    def home():
+        return "<h1>CableSimPro API 已启动</h1><p>界面正在重建。</p><a href='/docs'>API 文档</a>"
     return app
 
 
