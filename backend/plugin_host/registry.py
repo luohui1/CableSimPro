@@ -2,7 +2,7 @@
 
 A plugin is only runnable when every file listed in its manifest exists inside its own
 package directory with the recorded SHA-256 and size, and no unlisted file is present
-under src/. Digests prove consistency with the reviewed manifest, not safety or
+under src/ or assets/. Digests prove consistency with the reviewed manifest, not safety or
 correctness. Changing one plugin never invalidates another plugin's seal.
 """
 from __future__ import annotations
@@ -10,8 +10,10 @@ from __future__ import annotations
 from hashlib import sha256
 import json
 from pathlib import Path
+import re
 
-from .manifest import Manifest
+from .manifest import ID, Manifest
+from .dependencies import verify_host_dependencies
 
 ROOT = Path(__file__).resolve().parents[2]
 PLUGINS = ROOT / 'plugins'
@@ -25,15 +27,13 @@ class PluginHostError(Exception):
 
 
 def package_files(directory: Path) -> list[Path]:
-    src = directory / 'src'
-    if not src.is_dir():
-        return []
-    return sorted(p for p in src.rglob('*') if p.is_file() and not IGNORED & set(p.relative_to(directory).parts)
+    return sorted(p for folder in ('src', 'assets') for p in (directory / folder).rglob('*')
+                  if p.is_file() and not IGNORED & set(p.relative_to(directory).parts)
                   and p.suffix != '.pyc')
 
 
 def seal(directory: Path) -> list[dict]:
-    """Digest records for every package source file (maintainer tool; see scripts/plugin_sdk.py)."""
+    """Digest records for package sources and assets (see scripts/plugin_sdk.py)."""
     records = []
     for path in package_files(directory):
         if path.is_symlink():
@@ -65,13 +65,22 @@ class Plugin:
             data = file.read_bytes()
             if len(data) != record.size_bytes or sha256(data).hexdigest() != record.sha256:
                 raise PluginHostError('PACKAGE_DIGEST_MISMATCH', f'{self.manifest.id}: {path} 与清单摘要不一致', 409)
+        try:
+            verify_host_dependencies(self.directory)
+        except (ValueError, OSError) as exc:
+            raise PluginHostError('HOST_DEPENDENCIES_MISMATCH', f'{self.manifest.id}: {exc}', 409) from None
 
 
 class Registry:
-    def __init__(self, root: Path = PLUGINS):
+    def __init__(self, root: Path = PLUGINS, *, discover: bool = True, plugin_id: str | None = None):
         self.root = root
         self.plugins: dict[str, Plugin] = {}
-        for manifest_path in sorted(root.glob('*/plugin.json')):
+        if not discover:
+            return
+        if plugin_id is not None and not re.fullmatch(ID, plugin_id):
+            raise PluginHostError('PLUGIN_UNKNOWN', f'非法插件 ID：{plugin_id}', 404)
+        manifests = root.glob('*/plugin.json') if plugin_id is None else (root / plugin_id).glob('plugin.json')
+        for manifest_path in sorted(manifests):
             manifest = Manifest.model_validate(json.loads(manifest_path.read_text('utf-8')))
             if manifest.id != manifest_path.parent.name:
                 raise PluginHostError('PLUGIN_DIRECTORY_MISMATCH', f'{manifest_path.parent.name} 目录中的清单 ID 为 {manifest.id}')

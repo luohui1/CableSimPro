@@ -11,10 +11,10 @@ from __future__ import annotations
 import json
 from math import hypot, isclose, log, pi, sqrt
 from pathlib import Path
-from ..foundation.contracts import CircularRecipe
-from ..schemas import Scenario
-from .buried_contract import BuriedArgs, BuriedSummary
-from .line_source_contract import LineSourceComparison, PhaseComparison
+from backend.foundation.contracts import CircularRecipe
+from backend.schemas import Scenario
+from backend.plugins.buried_contract import BuriedArgs, BuriedSummary
+from backend.plugins.line_source_contract import LineSourceComparison, PhaseComparison
 
 
 def internal_resistance(recipe, scenario, arguments):

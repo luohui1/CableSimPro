@@ -5,7 +5,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 import json
 from backend.foundation.contracts import CircularRecipe
 from backend.schemas import Scenario
-from backend.plugins.line_source import run_line_source
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'plugins/cablesim.native-reference/src'))
+from cablesim_native.line_source import run_line_source
 
 
 def main():

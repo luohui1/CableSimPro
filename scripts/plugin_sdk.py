@@ -16,45 +16,51 @@ from backend.plugins.catalog import Catalog
 from backend.plugins.contracts import PluginManifest
 from backend.plugin_host.manifest import Manifest
 from backend.plugin_host.registry import PLUGINS, Registry, seal
+from backend.plugin_host.dependencies import LOCK_PATH, host_dependencies
 
 
 def seal_v2(write: bool) -> list[str]:
     drifted = []
     for path in sorted(PLUGINS.glob('*/plugin.json')):
         data = json.loads(path.read_text('utf-8'))
+        dependencies = host_dependencies(path.parent)
+        dependency_path = path.parent / LOCK_PATH
+        if dependencies or dependency_path.exists():
+            current = json.loads(dependency_path.read_text('utf-8')) if dependency_path.exists() else None
+            if current != dependencies:
+                drifted.append(data['id'])
+                if write:
+                    dependency_path.write_text(json.dumps(dependencies, ensure_ascii=False, indent=2) + '\n',
+                                               encoding='utf-8', newline='\n')
         files = seal(path.parent)
-        if data.get('files') != files:
-            drifted.append(data.get('id', path.parent.name))
+        if data.get('files') != files or b'\r\n' in path.read_bytes():
+            if data['id'] not in drifted:
+                drifted.append(data['id'])
             if write:
                 data['files'] = files
                 Manifest.model_validate(data)
-                path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+                path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n', encoding='utf-8', newline='\n')
     return drifted
 
 
 def seal_v1_registry(write: bool) -> list[str]:
-    """Refresh only sha256/size of files listed in plugins/registry.json, keeping its compact layout.
-
-    seal_plugin_catalog.py --write-draft regenerates everything (and reformats); this narrow path
-    exists for the common case of a sealed host file changing in an unreleased version.
-    """
+    """Refresh source seals structurally, including shared file lists in the v1 catalog."""
     root = PLUGINS.parent
-    path = PLUGINS / 'registry.json'
-    text = path.read_bytes().decode('utf-8')
     drifted = []
-    for entry in json.loads(text)['plugins']:
-        old = json.dumps(entry['files'], ensure_ascii=False, separators=(',', ':'))
-        files = []
-        for f in entry['files']:
-            data = (root / f['path']).read_bytes()
-            files.append({'path': f['path'], 'sha256': sha256(data).hexdigest(), 'size_bytes': len(data)})
-        if files != entry['files']:
-            drifted.append(entry['plugin_id'])
-            if text.count(old) != 1:
-                raise ValueError(f'REGISTRY_LAYOUT_UNEXPECTED: {entry["plugin_id"]}')
-            text = text.replace(old, json.dumps(files, ensure_ascii=False, separators=(',', ':')))
-    if write and drifted:
-        path.write_bytes(text.encode('utf-8'))
+    for path in [PLUGINS / 'registry.json', *sorted((PLUGINS / 'releases').glob('*.json'))]:
+        catalog = json.loads(path.read_text('utf-8'))
+        changed = False
+        for entry in catalog.get('plugins', [catalog]):
+            files = []
+            for f in entry['files']:
+                data = (root / f['path']).read_bytes()
+                files.append({'path': f['path'], 'sha256': sha256(data).hexdigest(), 'size_bytes': len(data)})
+            if files != entry['files']:
+                drifted.append(entry['plugin_id'])
+                entry['files'] = files
+                changed = True
+        if write and changed:
+            path.write_text(json.dumps(catalog, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
     return drifted
 
 

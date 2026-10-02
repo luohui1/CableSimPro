@@ -1,15 +1,17 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.thermal-network",
-  "version": "1.0.0",
-  "name": "直埋稳态热网络（简化方法）",
+  "version": "1.1.1",
+  "name": "热网络参考",
+  "description": "用简化热网络估算载流量与运行温度，提供竖向和场分析参考；不替代 IEC 60287 方法。",
+  "icon": "assets/icon.svg",
   "publisher": {
     "id": "cablesim",
     "name": "CableSimPro"
   },
   "host_api": {
     "major": 2,
-    "min_minor": 0
+    "min_minor": 1
   },
   "license": {
     "spdx": "LicenseRef-Project-Undeclared",
@@ -106,15 +108,94 @@
         "cases": []
       },
       "limitations": [
-        "供宿主内尚未插件化的场分析与竖向模型读取同一套热网络属性，不是独立方法。"
+        "热网络属性兼容接口，不是独立的工程验证方法。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "vertical-rating",
+      "title": "单根竖向空气参考",
+      "method_version": "VERTICAL-FV-0.4.1",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.scenario/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.vertical",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "analytic-benchmark",
+        "cases": [
+          "uniform-air-closed-form",
+          "axial-energy-balance"
+        ]
+      },
+      "limitations": [
+        "单根隔离电缆、给定换热系数，不求解井道气流或成束互热。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "field-analysis",
+      "title": "截面场参考",
+      "method_version": "CABLE-FIELDS-0.4.0",
+      "analysis": "field",
+      "input_schema": "cablesim.scenario/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.field-maximum",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.field",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "analytic-benchmark",
+        "cases": [
+          "poisson-manufactured-solution",
+          "coaxial-voltage-integral"
+        ]
+      },
+      "limitations": [
+        "限定范围的外部土壤有限差分与同轴电场、无限长导体磁场，不是全耦合 FEM。"
       ]
     }
   ],
   "files": [
     {
+      "path": "assets/icon.svg",
+      "sha256": "464c57fed25f9308cf4755f408c58222206db84d107c5dfca6044fb767358eab",
+      "size_bytes": 469
+    },
+    {
       "path": "src/cablesim_thermal_network/__init__.py",
       "sha256": "493d4fe40ff9fa9d7302d624dcd6ab764d7e4f3674b8fe4f2e1fa9b2a04d9968",
       "size_bytes": 86
+    },
+    {
+      "path": "src/cablesim_thermal_network/domain.py",
+      "sha256": "5ba92cedf84fcf38f1dd458eb9139f57d583a95437e15d9b4b51787f10ea9220",
+      "size_bytes": 5254
+    },
+    {
+      "path": "src/cablesim_thermal_network/fields.py",
+      "sha256": "23b12bdda3453e64541a3e01331845cba54a022dfc67fa986e21b3870544d8dc",
+      "size_bytes": 8229
     },
     {
       "path": "src/cablesim_thermal_network/inputs.py",
@@ -123,13 +204,23 @@
     },
     {
       "path": "src/cablesim_thermal_network/main.py",
-      "sha256": "ce912dfafcd921daaedd472d27d2ab5de691e31444257b3cc11f4a4bc09aa8ec",
-      "size_bytes": 4945
+      "sha256": "789ac5949b04af152a2b5f40bb8bc7f27e37a6b9eefb19643aefd56f5b9fe66d",
+      "size_bytes": 8218
     },
     {
       "path": "src/cablesim_thermal_network/network.py",
       "sha256": "b16725efe804b7eee7e649678abd963eb6e7cb6715b6c322478a2397c9c359ca",
       "size_bytes": 11097
+    },
+    {
+      "path": "src/cablesim_thermal_network/properties.py",
+      "sha256": "584609168d043d406b8014bf6494ce3a07415c3195c72b4ab818f29287db9e6a",
+      "size_bytes": 382
+    },
+    {
+      "path": "src/cablesim_thermal_network/vertical.py",
+      "sha256": "52f34ec6d03d952abbc76606660c9a6d80396c136b896789478681411d93dc75",
+      "size_bytes": 7686
     }
   ]
 }

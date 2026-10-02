@@ -4,6 +4,8 @@
 日期：2026-09-26（0.3.1：§5.4、§5.5 按“宿主不内置算法”更新）  
 适用范围：承接 [系统总览](./SYSTEM_ARCHITECTURE.md)，作为模块接口和迁移评审依据；本文件不是已实现 API 文档。本轮根据宿主和 CableModelKit 的固定源码契约补充，不自动升级现有协议。
 
+**当前后端落点**：`backend/kernel/` 实现保存研究版本、工程档案、固定快照准入与事务外执行、幂等 Run、重启中断、完整性检查、比较与计算书；`backend/domain/` 实现领域子集和显式转换。实际请求模型见 `backend/kernel/contracts.py`，接口见 `router.py`，回归见 `tests/test_research.py`。§2 的固定提交观察保留为设计依据，不能当作当前实现状态；D4–D6 的范围与已接入界面的子集统一见[系统架构 §7.2](./SYSTEM_ARCHITECTURE.md)。
+
 ## 1. 先用一个例子说明
 
 下面是合成流程示例，只解释软件行为，没有计算或声称任何工程数值。
@@ -172,15 +174,17 @@ Delivery 初期可以复用已有任务账本登记其独立输入与工件，�
 | `POST /api/workspaces/{wid}/proposals/{pid}/{decision}` | 已有 | 人工批准/拒绝提案 |
 | `POST /api/runtime/{wid}/invoke` | 已有 | 宿主已登记能力调用 |
 | `POST /api/plugins/workspaces/{wid}/invoke` | 已有 | 插件已登记能力调用 |
-| `GET/POST /api/workspaces/{wid}/studies` | 拟新增 | 列出或新建研究 |
-| `PUT /api/workspaces/{wid}/studies/{sid}` | 拟新增 | 带 expected_study_revision 更新研究配置 |
-| `GET /api/workspaces/{wid}/studies/{sid}/preflight` | 拟新增 | 核对指定工程/研究/锁的只读预检 |
-| `GET /api/workspaces/{wid}/studies/{sid}/runs` | 拟新增 | 统一运行视图；游标分页 |
-| `GET /api/workspaces/{wid}/studies/{sid}/runs/{rid}` | 拟新增 | 读取确切运行及其类型化来源 |
-| `studies.run` 能力 | 拟新增到既有 runtime | 通过研究协调服务发起已保存研究 |
-| `reports.render-study` 能力 | 拟新增到既有 runtime | 导出统一 Run；旧 `reports.render` 的 run_id 语义不变 |
+| `GET/POST /api/workspaces/{wid}/studies` | 已实现 | 列出或新建研究 |
+| `PUT /api/workspaces/{wid}/studies/{sid}` | 已实现 | 带 expected_study_revision 更新研究配置 |
+| `GET /api/workspaces/{wid}/studies/{sid}/preflight` | 已实现 | 核对指定工程/研究/锁的只读预检 |
+| `GET/POST /api/workspaces/{wid}/studies/{sid}/runs` | 已实现 | 查询或执行保存研究；查询使用游标分页 |
+| `GET /api/workspaces/{wid}/studies/{sid}/runs/{rid}` | 已实现 | 读取确切运行及其类型化来源 |
+| `GET/POST /api/workspaces/{wid}/domain/conversion` | 已实现 | 只读转换预览或带版本确认的显式转换 |
+| `GET/PUT /api/workspaces/{wid}/domain` | 已实现 | 读取领域文档及锁，或带版本保存 |
+| `studies.run` 能力 | 已接入 runtime | 通过研究协调服务发起已保存研究 |
+| `reports.render-study` 能力 | 已接入 runtime | 导出统一 Run；旧 `reports.render` 的 run_id 语义不变 |
 
-这些是评审用接口，不可当作现在可调用的 API。暂不增加任意脚本、任意 URL、任意文件路径或通用 SQL 接口。
+上表已实现部分以 `backend/kernel/router.py` 和 `backend/domain/router.py` 为准；下文长期设计不表示全部已交付。暂不增加任意脚本、任意 URL、任意文件路径或通用 SQL 接口。
 
 ### 5.2 保存工程：沿用现有请求形状
 
@@ -229,7 +233,7 @@ Delivery 初期可以复用已有任务账本登记其独立输入与工件，�
 - **完成**：允许保存来源已变旧但确实完成的结果；仅新研究通道采用此行为。
 - **旧能力**：在完成各自回归前保持现有语义，不全局关闭 CAS。
 
-目标适配接口只有三段职责：宿主生成领域快照 → 插件在自己的进程内准备方法输入并执行（`check` / `run`，见[插件契约 §5](./PLUGIN_CONTRACT.md)）→ 宿主按声明校验输出并封存。执行入口来自已签名插件包的清单，不是调用方可传入的可执行字符串。现有热网络迁出为插件时复用 `engine.calculate()` 的实现并以黄金值回归验证，不是重写公式。
+目标适配接口只有三段职责：宿主生成领域快照 → 插件在自己的进程内准备方法输入并执行（`check` / `run`，见[插件规范：执行协议](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md#execution)）→ 宿主按声明校验输出并封存。执行入口来自已签名插件包的清单，不是调用方可传入的可执行字符串。现有热网络迁出为插件时复用 `engine.calculate()` 的实现并以黄金值回归验证，不是重写公式。
 
 ### 5.5 领域模型到分析输入
 
@@ -325,7 +329,9 @@ running → cancel_requested → cancelled（确认进程结束后）
 - validating 且有完整准备记录、文件和环境证据的，按恢复规则完成封存；证据不足则保留隔离目录并标明待恢复，不补猜成功。
 - 恢复动作自身需幂等：多次启动核对不能生成第二条运行或重复应用工程修改。
 
-原生进程的父子生命周期约束和强制终止需在目标 Windows/Linux 环境验收。未完成前，不提供“可靠后台运行”或“通用取消”承诺；不为此先引入分布式 lease/heartbeat 系统。
+当前 v2 研究执行器在 Windows 10+ 使用匿名 Job Object，通过 `PROC_THREAD_ATTRIBUTE_JOB_LIST` 在创建进程时绑定，宿主不向子进程继承作业句柄。宿主强退后由系统结束该进程树；超时及正常退出时也终止残留子孙进程并核对作业中已无活动进程。终止不能确认时保留作业目录并报错。实现见 `backend/plugin_host/process.py`；[Windows 官方生命周期说明](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)及[创建时绑定接口](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute)解释对应系统保证。真实宿主强退与超时测试见 `tests/test_plugin_host.py`。
+
+启动恢复只将其他 owner_epoch 的未完成研究标记为 interrupted，重复初始化不影响当前所有者；发起、成功封存和失败写回均核对 owner_epoch、execution_nonce 及预期状态，迟到结果不能覆盖恢复状态。v2 JSON 工件与量值在同一 SQLite 事务封存，未提交的进程暂存结果不恢复成成功、不自动重算。Linux 与 v1 兼容工作进程尚未具有上述 Windows 进程树保证，运行环境分别标记 `parent_death_enforced`、`process_tree_cleanup_enforced`；不提供“可靠后台运行”或“通用取消”承诺。
 
 ## 7. 结果怎样算“当前”
 
@@ -492,7 +498,7 @@ Core 导出标识 coincident-unmerged，不能直接当共形 FEM 网格。simul
 | 工程保存与版本档案 | `workbench.py` / `sqlite_workspace.py` | Scenario 校验、参数锁、人工审批语义 |
 | 研究配置与规范 Run | 拟新增小型 `backend/studies/` | 不另建通用 workflow 引擎 |
 | 新能力路由与完成策略 | `runtime.py` / `nonblocking_runtime.py` | 原能力默认完成规则，逐项迁移 |
-| 快照计算适配 | 研究服务调用 `engine.py` / 已有插件 adapter | 数值公式和已验证的场契约 |
+| 快照计算适配 | `kernel/research.py` 调用 `plugin_host/` 的 v2 子进程执行器；`methods.py` 保留 v0 适配 | 插件数值公式和已有场契约 |
 | 原生任务与发行校验 | `backend/plugins/` | 不新增第二套 PluginService |
 | 研究文档与运行详情 | 现有 workflow 工作区内增量组件 | StudioProvider、原模型视图、共享草稿 |
 | 交付 | `report.py` 与登记的 renderer adapter | 旧 HTML 快照报告语义 |
@@ -568,9 +574,11 @@ SQLite WAL 官方约束是同一宿主访问，且同一时刻只有一个 write
 6. 导出较早运行，确认报告没有 r15 参数且没有新增数值计算。
 7. 篡改测试工件，查询/下游/报告明确失败；未受影响的工程和历史仍可打开。
 
-这些是目标验收用例，本轮未修改业务代码、未执行上述应用测试。
+这些是目标验收用例。后端研究闭环现由 `tests/test_research.py`、领域转换由 `tests/test_domain.py`、原生方法由 `plugin-tests/test_research_native.py` 覆盖；前端验收独立于后端测试。
 
-发布前再补三组跨模块用例：所有旧 Workspace 写入口的档案覆盖；服务崩溃的“未启动/执行中/已归位未登记”恢复；插件环境移除或资产来源不可用后的历史查看与重算限制。每组保留明确输入和故障点，不以全局绿色状态代替实际断言。
+当前预检对每个工况和交叉校核方法执行 `check`。没有通过全部已选方法的工况时拒绝启动；扫描或选型部分通过时保留失败项及预检原因，只将通过的工况送入求解。运行输出保存预检记录。历史列表和比较在单次读取请求内复用方法解析与封签检查；新请求和执行重新校验磁盘字节，不用跨请求缓存隐藏插件变化。
+
+当前已覆盖 accepted / running / validating 研究的重启中断、当前所有者保护、迟到成功/失败写回、Windows v2 工作进程树退出，以及 v2 发行缺失、清单损坏或文件被改后的历史读取、重放与导出。工程另存路径也在创建事务中归档初始版本。历史运行返回 `method_availability`，它仅表示对应发行文件和封签的可用性，不表示原生库已加载或可重算；历史查看与计算书仍取原保存结果。实际依赖库不可用的重算限制、v1 / Linux 进程生命周期及外部资产来源故障继续单独验收。
 
 ## 13. 可选语义判断服务（Jev）
 

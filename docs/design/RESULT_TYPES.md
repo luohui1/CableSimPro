@@ -2,9 +2,9 @@
 
 版本：0.1 设计草案，待评审
 日期：2026-09-26
-适用：插件输出（`result.json`，见[插件契约](./PLUGIN_CONTRACT.md) §5.4）的类型体系，以及前端、报告、比较、研究驱动器和工程助手对结果的统一处理方式。
+适用：插件输出（`result.json`，见[插件规范：结果与工件](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md#results)）的类型体系，以及前端、报告、比较、研究驱动器和工程助手对结果的统一处理方式。
 
-相关文档：[插件契约](./PLUGIN_CONTRACT.md) · [领域模型](./DOMAIN_MODEL.md) · [模块实施细则](./MODULE_DESIGN.md)
+相关文档：[插件规范](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md) · [领域模型](./DOMAIN_MODEL.md) · [模块实施细则](./MODULE_DESIGN.md)
 
 ## 0. 一页结论
 
@@ -90,12 +90,14 @@
 | --- | --- |
 | `key` / `type` | 语义键与结果类型 |
 | `entity` | 领域快照中的语义 ID；场结果为截面 ID |
-| `case` | 对应的负荷工况或批量 case |
+| `case` | 结果自身的计算 / 负荷工况，如 `rating`、`operating`；外层 `case_id` 单独标识扫描采样点 |
 | `status` | `available`、`unavailable`（带 `reason` 代码和说明）、`not_computed`（本次未请求） |
 | `unit` | 必须是该物理量的 SI 单位；宿主校验 |
 | `uncertainty` | 可选：`{"kind": "bracket", "low": …, "high": …}`（区间夹逼得到的值）或 `{"kind": "estimate", "value": …, "basis": "网格收敛 GCI"}` |
 
 宿主在封存时为每个结果补充来源信息：运行 ID、插件 ID 与版本、能力 ID、输入摘要。插件不需要也不能自己填写。
+
+当前 quantity 接收入口校验对象/数组结构、实体、工况、单位及状态。`unavailable` 仍须保留 SI 单位和原因代码、说明，才能在选型中匹配目标并说明不可用原因；不能因缺单位被误判为目标缺失。格式错误统一返回 `OUTPUT_CONTRACT_VIOLATION`，预检及失败工况的有效警告、证据也保留。
 
 ### 3.1 类型一览
 
@@ -148,13 +150,15 @@
 | 方案比较 | 所有同键、同实体的结果 | 先显示输入差异、方法差异，再显示结果差异 |
 | 交叉校核 | 两个方法的同键结果 | 显示绝对差和相对差，并列出两个方法的局限说明；不自动判断哪个正确 |
 
+当前选型按 `target_key`、`target_entity`、`target_unit` 和可选 `target_condition` 匹配量值，再判断是否达到 `minimum`。省略工况时仍须唯一匹配；结果缺失、不可用或存在多个工况时返回 `meets_target: null` 及明确原因，不能取第一条或当成零。保存运行的比较同时核对主方法与全部交叉校核方法的身份、参数；计算书表格保留采样点 ID 和结果工况，区分 `rating` 与 `operating`。
+
 ## 7. 工程助手
 
 工程助手解释结果时只能引用具体结果条目（运行 ID + 键 + 实体），不能自行生成数值。回答"为什么超温"时，引用 `thermal_resistance.*`、`losses.*` 等已有结果；这些结果不存在时，回答"本次方法没有输出这项信息"。
 
 ## 8. 从现有热网络输出迁移
 
-现有 `backend/engine.py` 的 `calculate()` 输出与新结果的对应关系：
+热网络实现位于 `plugins/cablesim.thermal-network/src/cablesim_thermal_network/network.py`；`backend/methods.py` 只提供 v0 调用适配。下表为其输出到结果词表的目标映射；当前 v2 通用输出实现 quantity，其余曲线、矩阵和场仍以方法工件承载，不能据此宣称已实现全部通用类型。
 
 | 现有字段 | 新结果 |
 | --- | --- |
@@ -172,6 +176,8 @@
 | `field` | `field.section2d`：`temperature_field` |
 | `warnings`、`sources` | 运行的警告列表；方法局限与标准引用来自插件清单 |
 | `geometry` | 不是计算结果，由领域快照推导显示 |
+
+原生参考的电热能力现输出回路级 `ampacity`（A）及每根电缆的 `conductor_temperature`（K）、`losses.conductor` / `losses.sheath` / `losses.dielectric`（W/m）。反求模式的 `case` 为 `rating`，运行点模式为 `operating`，后者的 `ampacity` 明确标记 `unavailable / OPERATING_POINT_ONLY`，不能当作零值或额定电流。定功率 FEM 与线源仅输出 `fixed-power` 温度。领域输入的结果引用原对象 ID；网格和场文件仍通过 `x-cablesim.native-bundle` 工件承载。这些通用量值可直接用于保存研究、比较及不重算的计算书，不提升方法的验证等级。
 
 ## 9. 版本
 

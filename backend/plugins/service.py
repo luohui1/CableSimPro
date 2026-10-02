@@ -27,6 +27,7 @@ from .arguments import SOURCE_FILES
 from .managed_commands import COMMAND_ARGUMENTS, WORKER_ENTRIES
 from .catalog import Catalog, PluginError
 from .contracts import PluginId, ReleaseVersion, PluginPin, ProjectPluginLock, Permission
+from . import line_source_extension
 
 
 class ApprovalContract(Contract):
@@ -76,6 +77,7 @@ class PluginInvocation(ApprovalContract):
 
 
 OUTPUTS = {
+    line_source_extension.COMMAND: {'line-source.json'},
     'skfem.electrothermal-reference': {'buried.msh', 'temperature.vtu', 'thermal.json', 'field.json', 'iteration.json'},
     'skfem.buried-reference': {'buried.msh', 'temperature.vtu', 'thermal.json', 'field.json'},
     'cadquery.cable-step': {'cable.step', 'geometry.json'},
@@ -181,6 +183,7 @@ class PluginService:
                           else 'host-builtin' if m.distribution == 'core' else 'installed' if exact else 'available'})
         return {'schema_version': 'cablesim.catalog/1', 'catalog_sha256': self.catalog.digest,
                 'state_revision': revision, 'mode': 'curated-local', 'items': items,
+                'method_catalog': '/api/methods',
                 'security': {'remote_installation': False, 'untrusted_execution': False, 'os_sandbox': False,
                              'publisher_signature_verified': False, 'public_market_deployed': False}}
 
@@ -338,6 +341,8 @@ class PluginService:
                 if item is None:
                     raise PluginError('SOURCE_ARTIFACT', '来源缺少必要工件。', 409)
                 context['source_artifact'] = dict(item, job_id=source['id'])
+            if request.command == line_source_extension.COMMAND:
+                line_source_extension.bind_source(self, db, wid, context)
             db.execute('INSERT INTO plugin_jobs VALUES (?,?,?,?,?,?,?,?,?,?)',
                        (wid, tid, m.plugin_id, request.command, request_hash, 'running',
                         json.dumps(context, ensure_ascii=False), None, stamp(), None))
@@ -436,6 +441,8 @@ class PluginService:
                         raise ValueError('COMPARISON_CURRENT_MISMATCH')
             except (ValueError, KeyError, TypeError):
                 raise PluginError('FIELD_CONTRACT', '电热反馈、损耗、输入、场温度或允许电流区间不一致。') from None
+        if context['command'] == line_source_extension.COMMAND:
+            line_source_extension.validate_output(directory, context, result)
         result['artifacts'] = artifacts
         return result
 

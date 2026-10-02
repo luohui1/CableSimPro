@@ -1,4 +1,4 @@
-"""cablesim.plugin/2 manifest, minimal-protocol subset (docs/design/PLUGIN_CONTRACT.md).
+"""cablesim.plugin/2 manifest (CableSimPro-Plugins/SPEC.md, host API 2.1).
 
 Distribution fields (signature, package archive, per-plugin environment, external tools)
 are deferred; a manifest that asks for them is rejected rather than half-honoured.
@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-HOST_API = (2, 0)
+HOST_API = (2, 1)
 ID = r'^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$'
 SEMVER = r'^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$'
 CUSTOM = re.compile(r'^x-[a-z0-9-]+\.[a-z0-9._-]+$')
@@ -109,7 +109,7 @@ class Capability(Strict):
 
 
 class PackageFile(Strict):
-    path: str = Field(pattern=r'^src/[A-Za-z0-9_./-]+$')
+    path: str = Field(pattern=r'^(src/[A-Za-z0-9_./-]+|assets/icon\.svg)$')
     sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
     size_bytes: int = Field(ge=0, le=20 * 1024 * 1024)
 
@@ -125,6 +125,8 @@ class Manifest(Strict):
     id: str = Field(pattern=ID)
     version: str = Field(pattern=SEMVER)
     name: str = Field(min_length=1, max_length=100)
+    description: str | None = Field(default=None, min_length=1, max_length=120)
+    icon: Literal['assets/icon.svg'] | None = None
     publisher: Publisher
     host_api: HostApi
     license: License
@@ -154,6 +156,16 @@ class Manifest(Strict):
             raise ValueError('文件清单重复')
         if self.runtime.entry not in paths:
             raise ValueError('入口程序必须在文件清单中')
+        if self.host_api.min_minor >= 1 or self.description is not None or self.icon is not None:
+            if self.host_api.min_minor < 1:
+                raise ValueError('展示信息需要宿主插件 API 2.1')
+            if self.description is None or self.icon is None:
+                raise ValueError('插件必须声明简介与图标')
+            for label, value, maximum in [('名称', self.name, 40), ('简介', self.description, 120)]:
+                if not value.strip() or value != value.strip() or len(value) > maximum or any(ord(c) < 32 for c in value):
+                    raise ValueError(f'插件{label}必须是无首尾空白的单行文本，最多 {maximum} 字符')
+            if self.icon not in paths:
+                raise ValueError('图标必须在文件清单中')
         return self
 
     def capability(self, capability_id: str) -> Capability:

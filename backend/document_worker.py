@@ -34,6 +34,8 @@ def parse(path):
 
 
 if __name__ == '__main__':
+    # The parent decodes JSON bytes as UTF-8, independent of the Windows locale.
+    sys.stdout.reconfigure(encoding='utf-8')
     try:
         print(json.dumps({'pages': parse(Path(sys.argv[1]))}, ensure_ascii=False))
     except Exception as exc:

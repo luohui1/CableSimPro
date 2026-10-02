@@ -9,7 +9,7 @@ import numpy as np
 import pytest
 from backend.schemas import Scenario
 from backend.foundation.contracts import CircularLayer, CircularRecipe
-from backend.plugins.buried import buried_mesh, solve_buried, assemble_conduction
+from cablesim_native.buried import buried_mesh, solve_buried, assemble_conduction
 from backend.plugins.buried_contract import validate_buried_projection
 
 
@@ -119,7 +119,7 @@ def test_real_buried_plugin_api_preserves_project_and_vtu(tmp_path):
     with TestClient(create_app(tmp_path/'buried.sqlite')) as c:
         w = c.post('/api/workspaces', json={}).json()
         baseline = c.get(f'/api/workspaces/{w["id"]}').json()
-        p = c.post('/api/plugins/install-plan', json={'plugin_id': 'cablesim.buried-reference', 'version': '0.1.0'}).json()
+        p = c.post('/api/plugins/install-plan', json={'plugin_id': 'cablesim.buried-reference', 'version': '0.2.0'}).json()
         r = c.post('/api/plugins/install', json={k: p[k] for k in ('plugin_id', 'version', 'plan_sha256', 'state_revision')} |
                    {'approved': True, 'license_acknowledged': True, 'grants': {i['plugin_id']: i['permissions'] for i in p['plugins']}})
         assert r.status_code == 200, r.text

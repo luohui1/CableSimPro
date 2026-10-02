@@ -4,8 +4,8 @@ import numpy as np
 import pytest
 from fastapi.testclient import TestClient
 from backend.main import create_app
-from backend.schemas import Cable
-from backend.vertical import Vertical,VerticalNetwork,vertical_study
+from cablesim_thermal_network.inputs import Cable
+from cablesim_thermal_network.vertical import Vertical,VerticalNetwork,vertical_study
 from backend.library import extract_parameters
 
 @pytest.fixture

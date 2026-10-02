@@ -5,7 +5,7 @@ import json
 import pytest
 from backend.schemas import Scenario
 from backend.foundation.contracts import CircularLayer, CircularRecipe
-from backend.plugins.line_source import compare_line_source, internal_resistance, soil_matrix
+from cablesim_native.line_source import compare_line_source, internal_resistance, soil_matrix
 from backend.plugins.line_source_contract import LineSourceArgs, LineSourceComparison
 
 

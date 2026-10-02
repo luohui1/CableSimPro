@@ -17,6 +17,7 @@ from .modeling import ModelSpecification, model_proposal
 from .design_basis import DesignBasis, STANDARDS, VERIFIED_DATE, inspect_basis
 from .selection import DesignRequest, VerticalRequest
 from .field_analysis import FieldRequest
+from .kernel.contracts import RunArguments, DeliveryRequest, RunStudy
 
 class NoArgs(StrictModel):
     pass
@@ -67,6 +68,8 @@ class EngineeringRuntime:
     def __init__(self,store,designs,library,providers,enterprise=None):
         self.store,self.designs,self.library,self.providers=store,designs,library,providers
         self.capabilities = {
+            'studies.run':Capability('运行保存的研究',RunArguments,'study',None),
+            'reports.render-study':Capability('导出保存的研究结果',DeliveryRequest,'study',None),
             'project.inspect':Capability('读取工程',NoArgs,'read',self.inspect_project),
             'model.generate':Capability('生成电缆模型变更',ModelSpecification,'proposal',self.generate),
             'parameters.propose':Capability('提出参数变更',ProposedChanges,'proposal',self.propose),
@@ -150,6 +153,21 @@ class EngineeringRuntime:
             'assumptions':[result['statement']]+[f['message'] for f in result['findings']],
             'design_basis':args.model_dump(),'previous_design_basis':state.get('design_basis'),'events':[]})
 
+    async def invoke_research(self, wid, body):
+        try:
+            if body.capability == 'studies.run':
+                args = RunArguments.model_validate(body.arguments)
+                request = RunStudy(request_id=body.request_id, expected_revision=body.expected_revision,
+                                   **args.model_dump(exclude={'study_id'}))
+                result = await run_in_threadpool(self.research.execute, wid, str(args.study_id), request)
+            else:
+                args = DeliveryRequest.model_validate(body.arguments)
+                result = await run_in_threadpool(self.research.deliver, wid, args.run_ids, body.request_id)
+            return {'task_id': str(body.request_id), 'capability': body.capability,
+                    'base_revision': body.expected_revision, 'runtime_version': self.version, 'result': result}
+        except ValidationError as exc:
+            raise HTTPException(422, str(exc)) from None
+
     def _start_task(self,wid,body,capability,args,request_hash,tid):
         """Persist/reuse task identity in a worker thread; never on the async loop."""
         with self.store.db(True) as db:
@@ -184,6 +202,8 @@ class EngineeringRuntime:
                 (json.dumps({'status_code':code,'detail':detail},ensure_ascii=False),stamp(),wid,tid))
 
     async def invoke(self,wid,body:Invocation):
+        if body.capability in ('studies.run', 'reports.render-study'):
+            return await self.invoke_research(wid, body)
         capability=self.capabilities.get(body.capability)
         if capability is None: raise HTTPException(422,'未注册的工程能力。')
         try: args=capability.schema.model_validate(body.arguments)

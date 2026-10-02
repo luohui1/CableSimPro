@@ -7,11 +7,12 @@ from pathlib import Path
 import sys
 # -I removes CWD/PYTHONPATH. Only the trusted source package is added here.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'plugins/cablesim.native-reference/src'))
 import importlib.metadata
 import json
 from backend.plugins.arguments import ARGUMENTS
-from backend.plugins.adapters import HANDLERS as REFERENCE_HANDLERS
-from backend.plugins.buried import buried_reference
+from cablesim_native.adapters import HANDLERS as REFERENCE_HANDLERS
+from cablesim_native.buried import buried_reference
 HANDLERS = dict(REFERENCE_HANDLERS, **{'skfem.buried-reference': buried_reference})
 from backend.foundation.contracts import CircularRecipe
 from backend.schemas import Scenario

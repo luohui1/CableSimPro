@@ -6,8 +6,8 @@ import os
 import pytest
 from backend.schemas import Scenario
 from backend.foundation.contracts import CircularLayer, CircularRecipe
-from backend.plugins.buried import buried_mesh, solve_buried
-from backend.plugins.line_source import compare_line_source
+from cablesim_native.buried import buried_mesh, solve_buried
+from cablesim_native.line_source import compare_line_source
 from backend.plugins.line_source_contract import validate_line_source
 
 
@@ -23,7 +23,7 @@ def arguments(scale):
 
 def context(args,scale):
     return {'job_id':f'00000000-0000-0000-0000-0000000000{scale:02d}',
-        'plugin':{'plugin_id':'cablesim.buried-reference','version':'0.1.0','release_sha256':'0'*64},
+        'plugin':{'plugin_id':'cablesim.buried-reference','version':'0.2.0','release_sha256':'0'*64},
         'command':'skfem.buried-reference','arguments':args,'source_sha256':'1'*64,'project_revision':1}
 
 
@@ -49,7 +49,7 @@ def test_real_plugin_chain_persists_an_independent_report_without_editing_projec
     from backend.main import create_app
     with TestClient(create_app(tmp_path/'crosscheck.sqlite')) as c:
         w=c.post('/api/workspaces',json={}).json();baseline=c.get(f'/api/workspaces/{w["id"]}').json()
-        p=c.post('/api/plugins/install-plan',json={'plugin_id':'cablesim.line-source-crosscheck','version':'0.1.0'}).json()
+        p=c.post('/api/plugins/install-plan',json={'plugin_id':'cablesim.line-source-crosscheck','version':'0.2.0'}).json()
         assert [x['plugin_id'] for x in p['plugins']]==['cablesim.buried-reference','cablesim.line-source-crosscheck']
         approval={k:p[k] for k in ('plugin_id','version','state_revision','plan_sha256')}|{'approved':True,'license_acknowledged':True,'grants':{x['plugin_id']:x['permissions'] for x in p['plugins']}}
         installed=c.post('/api/plugins/install',json=approval);assert installed.status_code==200,installed.text
@@ -76,6 +76,9 @@ def test_real_plugin_chain_persists_an_independent_report_without_editing_projec
         assert c.get(f'/api/plugins/workspaces/{other["id"]}/jobs/{out["job_id"]}/artifacts/line-source.json').status_code==404
         changed=c.post(f'/api/workspaces/{w["id"]}/edit',json={'expected_revision':1,'changes':[{'path':'installation.spacing_m','value':.2}]})
         assert changed.status_code==200
+        replay=c.post(f'/api/plugins/workspaces/{w["id"]}/invoke',json=body)
+        assert replay.status_code==200 and replay.json()['replayed'] is True
+        assert replay.json()['job_id']==out['job_id']
         new_lock=c.get(f'/api/plugins/workspaces/{w["id"]}/lock').json()
         body.update(request_id=str(uuid4()),expected_revision=2,lock_sha256=new_lock['lock_sha256'])
         stale=c.post(f'/api/plugins/workspaces/{w["id"]}/invoke',json=body)

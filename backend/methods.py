@@ -62,6 +62,13 @@ def calculate(scenario: Scenario, include_field: bool = True) -> dict:
     return result
 
 
+def execute_reference(capability, scenario, parameters, artifact):
+    case = executor().run(THERMAL_NETWORK, capability, _cases([scenario], parameters)).cases[0]
+    if case.status != 'succeeded':
+        raise ModelError(case.error['message'])
+    return case.artifacts[artifact]
+
+
 @dataclass(frozen=True)
 class NetworkProperties:
     """Read-only thermal-network properties consumed by host features not yet migrated (fields, vertical)."""

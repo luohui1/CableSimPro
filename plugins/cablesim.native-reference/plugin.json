@@ -1,0 +1,203 @@
+{
+  "schema": "cablesim.plugin/2",
+  "id": "cablesim.native-reference",
+  "version": "0.2.0",
+  "name": "有限元与线源参考",
+  "description": "支持单回路直埋领域文档的有限元、电热耦合与线源校核，需要明确材料参数和原生环境。",
+  "icon": "assets/icon.svg",
+  "publisher": {
+    "id": "cablesim",
+    "name": "CableSimPro"
+  },
+  "host_api": {
+    "major": 2,
+    "min_minor": 1
+  },
+  "license": {
+    "spdx": "LicenseRef-Project-Undeclared",
+    "review_required": true
+  },
+  "platforms": [
+    "windows-x64",
+    "linux-x64"
+  ],
+  "runtime": {
+    "kind": "python",
+    "python": ">=3.11,<3.14",
+    "entry": "src/cablesim_native/main.py"
+  },
+  "permissions": [
+    "project.read",
+    "study.run",
+    "artifact.write"
+  ],
+  "dependencies": [],
+  "resources": {
+    "timeout_s": 300,
+    "memory_mb": 4096,
+    "network": "none"
+  },
+  "capabilities": [
+    {
+      "kind": "method",
+      "id": "fixed-power",
+      "title": "直埋有限元温度",
+      "method_version": "native-reference/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.native-input/1",
+      "outputs": [
+        {
+          "key": "conductor_temperature",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.native-bundle",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "固定功率温度参考研究，不反求载流量；有限元网格要求电缆之间存在间隙。",
+        "接受 v0 或 SI 领域输入；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "electrothermal",
+      "title": "直埋电热耦合",
+      "method_version": "native-reference/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.native-input/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        },
+        {
+          "key": "losses.conductor",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "losses.sheath",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "losses.dielectric",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "conductor_temperature",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.native-bundle",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "显式系数损耗与线性电阻温变的有限元参考；支持运行温度和载流量反求，不等于完整 IEC 或电磁场求解。电缆之间须存在间隙。",
+        "接受 v0 或 SI 领域输入；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "line-source",
+      "title": "线源交叉校核",
+      "method_version": "native-reference/0.1.0",
+      "analysis": "crosscheck",
+      "input_schema": "cablesim.native-input/1",
+      "outputs": [
+        {
+          "key": "conductor_temperature",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.native-bundle",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "范围限定的参考研究；固定功率温度不等于载流量。",
+        "接受 v0 或 SI 领域输入；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "assets/icon.svg",
+      "sha256": "e52dedfd6570cb19c7993a869ac3a3d13aa68909d252ed907f7cc4bee1871a26",
+      "size_bytes": 342
+    },
+    {
+      "path": "src/cablesim_native/__init__.py",
+      "sha256": "fa023d0b7f036301de9dca81eb908865c5cb001102518a5e6e157211ee0ee954",
+      "size_bytes": 83
+    },
+    {
+      "path": "src/cablesim_native/adapters.py",
+      "sha256": "785fff6d9a766fd2b54e8896fb446e15b0d211c7ca5355abbe8e580923902321",
+      "size_bytes": 10070
+    },
+    {
+      "path": "src/cablesim_native/buried.py",
+      "sha256": "3ad8d7d641b7653dd42384bdfd6473f3d929a35c78396d18708ecd4e3b4e2584",
+      "size_bytes": 10536
+    },
+    {
+      "path": "src/cablesim_native/domain.py",
+      "sha256": "98c53a22c47577b946d5402fda07273e6075e28d23c25bb8f1c64a95412aba95",
+      "size_bytes": 7375
+    },
+    {
+      "path": "src/cablesim_native/electrothermal.py",
+      "sha256": "f7a55406b1c6a1a470f3d3f9114e7d86ec77df53534ad61f2b557ee681e20b32",
+      "size_bytes": 14870
+    },
+    {
+      "path": "src/cablesim_native/line_source.py",
+      "sha256": "137827b5cffa57f2ee2aa842cd8dcf5e6e8bcfe1e0bcd1ec6c0a54209a416e36",
+      "size_bytes": 6285
+    },
+    {
+      "path": "src/cablesim_native/main.py",
+      "sha256": "ab25d9652f5ab9678ed94af822d57384b971576d76fb123bbb62ec1c75a4ac8d",
+      "size_bytes": 6354
+    },
+    {
+      "path": "src/host-dependencies.json",
+      "sha256": "c548845db5135957bf9714a7d043f885a0e5aa374bb1cbd54d2ed307fe16f0d1",
+      "size_bytes": 1910
+    }
+  ]
+}

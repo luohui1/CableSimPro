@@ -1,7 +1,7 @@
 {
   "schema_version": "cablesim.plugin/1",
   "plugin_id": "cablesim.electrothermal-reference",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "api_major": 1,
   "name": "电热反馈与允许电流 · 系数损耗模型",
   "publisher": "CableSimPro · first-party adapter",
@@ -59,9 +59,9 @@
   },
   "files": [
     {
-      "path": "backend/plugins/electrothermal.py",
-      "sha256": "641e7c91782ad6543b4dcc46118c44cef2a2c6cb5f760f391552e55ce19bfac3",
-      "size_bytes": 14840
+      "path": "plugins/cablesim.native-reference/src/cablesim_native/electrothermal.py",
+      "sha256": "f7a55406b1c6a1a470f3d3f9114e7d86ec77df53534ad61f2b557ee681e20b32",
+      "size_bytes": 14870
     },
     {
       "path": "backend/plugins/electrothermal_contract.py",
@@ -70,13 +70,13 @@
     },
     {
       "path": "backend/plugins/electrothermal_worker.py",
-      "sha256": "e96c68ce752e321fdc1aafadaf9a84093a128e611a25633a7e6678d05d0d2644",
-      "size_bytes": 1322
+      "sha256": "54d2bf62dbc72fa0bf579504beaae7ec53ade44770b11aa7370d2daca45f5067",
+      "size_bytes": 1425
     },
     {
-      "path": "backend/plugins/buried.py",
-      "sha256": "063b89fd2e2a5088338b9ff91d6ad5a8040ccbce0a310037c63095616cffc817",
-      "size_bytes": 10287
+      "path": "plugins/cablesim.native-reference/src/cablesim_native/buried.py",
+      "sha256": "3ad8d7d641b7653dd42384bdfd6473f3d929a35c78396d18708ecd4e3b4e2584",
+      "size_bytes": 10536
     },
     {
       "path": "backend/plugins/buried_contract.py",

@@ -8,9 +8,6 @@ from .managed_commands import COMMAND_ARGUMENTS
 from .buried_contract import BuriedField, BuriedSummary
 from .electrothermal_contract import ElectrothermalSummary
 from .line_source_contract import LineSourceComparison
-from .line_source_extension import install_line_source_extension
-
-install_line_source_extension()
 
 
 def make_router(service):

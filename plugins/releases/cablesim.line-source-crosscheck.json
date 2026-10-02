@@ -1,7 +1,7 @@
 {
   "schema_version": "cablesim.plugin/1",
   "plugin_id": "cablesim.line-source-crosscheck",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "api_major": 1,
   "name": "半空间线热源 · 直埋结果交叉核对",
   "publisher": "CableSimPro · first-party adapter",
@@ -25,7 +25,7 @@
   "dependencies": [
     {
       "plugin_id": "cablesim.buried-reference",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   ],
   "requirements": [],
@@ -55,9 +55,9 @@
   },
   "files": [
     {
-      "path": "backend/plugins/line_source.py",
-      "sha256": "862d3278dc6f045820a0d8fa2c806fe9c99492cd68cbd1af18223e2f08625776",
-      "size_bytes": 6243
+      "path": "plugins/cablesim.native-reference/src/cablesim_native/line_source.py",
+      "sha256": "137827b5cffa57f2ee2aa842cd8dcf5e6e8bcfe1e0bcd1ec6c0a54209a416e36",
+      "size_bytes": 6285
     },
     {
       "path": "backend/plugins/line_source_contract.py",
@@ -66,13 +66,13 @@
     },
     {
       "path": "backend/plugins/line_source_worker.py",
-      "sha256": "0dee586f707a28f46d38ce2518a0569a07ef664347ce2096ea29377e74504403",
-      "size_bytes": 1186
+      "sha256": "e5ad6b0768521fcb67bd0718dfc710abf0c03706741019b01d82978b572c2d60",
+      "size_bytes": 1289
     },
     {
       "path": "backend/plugins/line_source_extension.py",
-      "sha256": "6ffe1b4e62001ac987709205080f643cf531da13a0b11ac3eddc0abc09ebc70b",
-      "size_bytes": 5127
+      "sha256": "e078c394e33f958d44d8c60d278a2563ed901e6bd7807b28dbeab7a270cb70d4",
+      "size_bytes": 3233
     },
     {
       "path": "backend/plugins/buried_contract.py",

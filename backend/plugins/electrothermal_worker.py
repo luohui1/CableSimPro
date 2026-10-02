@@ -9,7 +9,8 @@ import json
 from importlib import metadata
 from backend.foundation.contracts import CircularRecipe
 from backend.plugins.electrothermal_contract import preflight
-from backend.plugins.electrothermal import electrothermal_reference
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'plugins/cablesim.native-reference/src'))
+from cablesim_native.electrothermal import electrothermal_reference
 
 
 def main():

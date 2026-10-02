@@ -11,8 +11,8 @@ import numpy as np
 import pytest
 from backend.schemas import Scenario
 from backend.foundation.contracts import CircularRecipe,CircularLayer
-from backend.plugins.buried import buried_mesh
-from backend.plugins.electrothermal import ResponseModel, ElectrothermalError, electrothermal_reference, mesh_arguments
+from cablesim_native.buried import buried_mesh
+from cablesim_native.electrothermal import ResponseModel, ElectrothermalError, electrothermal_reference, mesh_arguments
 from backend.plugins.electrothermal_contract import ElectrothermalArgs, validate_electrothermal
 
 
@@ -155,7 +155,7 @@ def test_actual_plugin_rejects_missing_r20_then_runs_saved_snapshot(tmp_path):
     pid='cablesim.electrothermal-reference'
     with TestClient(create_app(tmp_path/'study.sqlite')) as c:
         w=c.post('/api/workspaces',json={}).json()
-        p=c.post('/api/plugins/install-plan',json={'plugin_id':pid,'version':'0.1.0'}).json()
+        p=c.post('/api/plugins/install-plan',json={'plugin_id':pid,'version':'0.2.0'}).json()
         approval={k:p[k] for k in ('plugin_id','version','plan_sha256','state_revision')} | {'approved':True,'license_acknowledged':True,'grants':{i['plugin_id']:i['permissions'] for i in p['plugins']}}
         assert c.post('/api/plugins/install',json=approval).status_code==200
         lock=c.get(f'/api/plugins/workspaces/{w["id"]}/lock').json()

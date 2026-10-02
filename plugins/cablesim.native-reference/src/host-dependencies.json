@@ -1,0 +1,62 @@
+[
+  {
+    "path": "backend/__init__.py",
+    "sha256": "83886d7841f43649b5a21609d4fcb64a2cde0dee7ba26cec27240a824b5e4d55",
+    "size_bytes": 127
+  },
+  {
+    "path": "backend/domain/__init__.py",
+    "sha256": "642f57baa696810691637270bf55fb3f70ba893e241147f3e230c301b8f95ad6",
+    "size_bytes": 129
+  },
+  {
+    "path": "backend/domain/models.py",
+    "sha256": "f1218295319182ac2b3c6f3f8c9a71224ef2f59c3af95282f40b601f67c63c43",
+    "size_bytes": 12948
+  },
+  {
+    "path": "backend/foundation/__init__.py",
+    "sha256": "bfed2ceb28d8fb6c456942fe46798de8f4845b9ae994ca8c1a10991290227f48",
+    "size_bytes": 82
+  },
+  {
+    "path": "backend/foundation/contracts.py",
+    "sha256": "1a7b517538e7cc62fac25d3262a2627c811c6b28af2c8f58f12d7631f5dc74dd",
+    "size_bytes": 11115
+  },
+  {
+    "path": "backend/foundation/study.py",
+    "sha256": "b63a4bfc970ce14fc9ebc0b34749956f3b03020ef0e78e2a71a390729b76b3ba",
+    "size_bytes": 4978
+  },
+  {
+    "path": "backend/plugins/__init__.py",
+    "sha256": "e35f3c7236eb3937fcae75d0eb09dd971af6efcc2a004029f3a8c6bfa1347a4e",
+    "size_bytes": 82
+  },
+  {
+    "path": "backend/plugins/buried_contract.py",
+    "sha256": "5553ff5983658e097337590d11a560f3cdaa01f6c93afffa963572c728478e32",
+    "size_bytes": 7644
+  },
+  {
+    "path": "backend/plugins/electrothermal_contract.py",
+    "sha256": "2933d768a81b82439a8f10d3bd5fd83127bae17b019aafcb0e9e037e5180e866",
+    "size_bytes": 12090
+  },
+  {
+    "path": "backend/plugins/field_contract.py",
+    "sha256": "3b7405d947229f1703b1f7fc1238d1f7888b944acd517ee35ca9e5dca2801ffd",
+    "size_bytes": 2294
+  },
+  {
+    "path": "backend/plugins/line_source_contract.py",
+    "sha256": "248736160c53ad5c0892db29aae646b6295c1d687df4543cbdfe26d5c0eb2b8d",
+    "size_bytes": 5230
+  },
+  {
+    "path": "backend/schemas.py",
+    "sha256": "1fb54ed271f1f858c7b6bdf002e99378e962cb7ba5dfe68cdae7668ef4983dbc",
+    "size_bytes": 4030
+  }
+]

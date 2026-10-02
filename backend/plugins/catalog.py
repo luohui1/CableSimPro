@@ -40,6 +40,11 @@ class Catalog:
         if len(commands) != len(set(commands)):
             raise ValueError('DUPLICATE_CATALOG_COMMAND')
         self.index = {m.plugin_id: m for m in self.manifests}
+        # Protocol ownership is checked from package IDs; damaged v2 metadata must
+        # not prevent the host from opening saved v1 or research results.
+        overlap = set(self.index) & {p.parent.name for p in (self.root / 'plugins').glob('*/plugin.json')}
+        if overlap:
+            raise ValueError('DUPLICATE_CATALOG_PROTOCOL: ' + ', '.join(sorted(overlap)))
         for manifest in self.manifests:
             resolve_plugins((Dependency(plugin_id=manifest.plugin_id, version=manifest.version),), self.manifests)
         self.digest = content_hash([m.model_dump(mode='json') for m in self.manifests])

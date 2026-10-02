@@ -6,9 +6,17 @@ The outer rectangle is a truncation of a half-space, NOT an infinite boundary.
 from pathlib import Path
 import json
 from math import hypot
-from ..schemas import Scenario
-from ..foundation.contracts import CircularRecipe
-from .buried_contract import BuriedArgs, BuriedField, BuriedSummary, validate_buried_projection
+from backend.schemas import Scenario
+from backend.foundation.contracts import CircularRecipe
+from backend.plugins.buried_contract import BuriedArgs, BuriedField, BuriedSummary, validate_buried_projection
+
+
+def check_mesh_geometry(scenario):
+    scenario = Scenario.model_validate(scenario)
+    positions = scenario.installation.positions_m()
+    radius = scenario.cable.radii_mm()[-1] / 1000
+    if min(hypot(x-x2, y-y2) for i, (x, y) in enumerate(positions) for x2, y2 in positions[i+1:]) <= 2*radius+1e-8:
+        raise ValueError('TOUCHING_CABLES_REQUIRE_DIFFERENT_TOPOLOGY')
 
 
 def buried_mesh(recipe, scenario, args):
@@ -23,8 +31,7 @@ def buried_mesh(recipe, scenario, args):
         raise ValueError('BURIED_REQUIRES_SIX_LAYERS')
     if any(abs(layer.outer_radius_m-r/1000) > 1e-12 for layer, r in zip(recipe.layers, scenario.cable.radii_mm())):
         raise ValueError('BURIED_RECIPE_SNAPSHOT_MISMATCH')
-    if min(hypot(x-x2, y-y2) for i, (x, y) in enumerate(positions) for x2, y2 in positions[i+1:]) <= 2*radius+1e-8:
-        raise ValueError('TOUCHING_CABLES_REQUIRE_DIFFERENT_TOPOLOGY')
+    check_mesh_geometry(scenario)
     scale = max(max(y for x, y in positions), max(abs(x) for x, y in positions)+radius)
     width = bottom = args.domain_scale*scale
     gmsh.initialize()

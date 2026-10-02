@@ -147,6 +147,10 @@ def test_fork_preserves_sources_locks_basis_but_not_results_and_is_independent(c
     response=client.post(f"/api/enterprise/workspaces/{w['id']}/fork",json={'expected_revision':w['revision'],'name':'另一方案'})
     assert response.status_code==201,response.text
     child=response.json();assert child['id']!=w['id'] and child['revision']==1 and not child['runs']
+    archived=client.get(f"/api/workspaces/{child['id']}/revisions/1")
+    assert archived.status_code==200,archived.text
+    assert archived.json()['state']['scenario']==child['scenario']
+    assert archived.json()['state']['origin']==child['origin']
     assert child['product_binding']==w['product_binding'] and child['locks']==w['locks']
     assert child['origin']['workspace']==w['id']
     client.post(f"/api/workspaces/{child['id']}/edit",json={'expected_revision':1,'changes':[{'path':'installation.depth_m','value':1.5}]})

@@ -4,7 +4,7 @@
 
 The backend contract below is implemented and tested (`tests/foundation/test_assets.py`,
 `test_asset_router.py`). The asset library UI was retired with the old shells (architecture
-D1, PRD §4.4) and is paused; `WorkflowApp` does not expose it yet. When it returns it must
+D1, PRD §4.4) and is paused; `app/App.tsx` does not expose it yet. When it returns it must
 reuse the workflow shell's controls rather than a separate collection page.
 
 An asset section preview is generated from saved layer radii, not an image file,

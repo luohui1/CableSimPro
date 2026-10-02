@@ -139,15 +139,29 @@ class WorkspaceStore:
             CREATE TABLE IF NOT EXISTS workspace_audit (id TEXT PRIMARY KEY, workspace TEXT, revision INTEGER, event TEXT, details TEXT, created TEXT);
             CREATE TABLE IF NOT EXISTS workspace_proposals (id TEXT PRIMARY KEY, workspace TEXT, base_revision INTEGER, status TEXT, payload TEXT, created TEXT, expires REAL);
             CREATE TABLE IF NOT EXISTS workspace_runs (id TEXT PRIMARY KEY, workspace TEXT, revision INTEGER, input_hash TEXT, output TEXT, events TEXT, created TEXT);
+            CREATE TABLE IF NOT EXISTS workspace_revisions (
+              workspace TEXT NOT NULL, revision INTEGER NOT NULL, state TEXT NOT NULL,
+              digest TEXT NOT NULL, created TEXT NOT NULL, PRIMARY KEY(workspace,revision));
             ''')
+            # Only current states are knowable at upgrade time. Never invent old revisions.
+            for row in db.execute('SELECT id,revision,state FROM workspaces').fetchall():
+                self.archive(db, row['id'], row['revision'], json.loads(row['state']))
 
-    def load(self, db, wid, expected=None):
+    @staticmethod
+    def archive(db, wid, revision, state):
+        db.execute('INSERT OR IGNORE INTO workspace_revisions VALUES (?,?,?,?,?)',
+                   (wid, revision, json.dumps(state, ensure_ascii=False, allow_nan=False), fingerprint(state), stamp()))
+
+    def load(self, db, wid, expected=None, *, allow_domain=False):
         row = db.execute('SELECT * FROM workspaces WHERE id=?', (wid,)).fetchone()
         if row is None:
             raise HTTPException(404, '工程不存在。')
         if expected is not None and row['revision'] != expected:
             raise HTTPException(409, '工程版本已变化；请刷新后重试，未覆盖任何修改。')
-        return dict(row), json.loads(row['state'])
+        state = json.loads(row['state'])
+        if expected is not None and 'domain' in state and not allow_domain:
+            raise HTTPException(409, '工程已转换为领域文档；v0 写入和计算入口只读。请使用领域与研究接口。')
+        return dict(row), state
 
     def audit(self, db, wid, revision, event, details=''):
         db.execute('INSERT INTO workspace_audit VALUES (?,?,?,?,?,?)', (str(uuid4()), wid, revision, event, details, stamp()))
@@ -160,6 +174,7 @@ class WorkspaceStore:
         db.execute('INSERT INTO workspace_history VALUES (?,?,?,?)', (wid, pos, encoded, label))
         db.execute('UPDATE workspaces SET revision=?,cursor=?,state=?,updated=? WHERE id=?', (rev, pos, encoded, stamp(), wid))
         self.audit(db, wid, rev, label)
+        self.archive(db, wid, rev, state)
         return rev
 
     def snapshot(self, wid, connection=None):
@@ -168,7 +183,9 @@ class WorkspaceStore:
             maximum = db.execute('SELECT MAX(position) FROM workspace_history WHERE workspace=?', (wid,)).fetchone()[0]
             audit = [dict(r) for r in db.execute('SELECT * FROM workspace_audit WHERE workspace=? ORDER BY rowid DESC LIMIT 100', (wid,))]
             runs = [dict(r) for r in db.execute('SELECT id,revision,input_hash,created FROM workspace_runs WHERE workspace=? ORDER BY rowid DESC LIMIT 30', (wid,))]
-        return {'id': wid, 'revision': row['revision'], **state, 'can_undo': row['cursor'] > 0, 'can_redo': row['cursor'] < maximum, 'audit': audit, 'runs': runs, 'updated_at': row['updated']}
+            previous = db.execute('SELECT state FROM workspace_history WHERE workspace=? AND position=?', (wid, row['cursor'] - 1)).fetchone()
+            can_undo = previous is not None and ('domain' not in state or 'domain' in json.loads(previous['state']))
+        return {'id': wid, 'revision': row['revision'], **state, 'can_undo': can_undo, 'can_redo': row['cursor'] < maximum, 'audit': audit, 'runs': runs, 'updated_at': row['updated']}
 
     def create(self, scenario):
         wid, now = str(uuid4()), stamp()
@@ -177,6 +194,7 @@ class WorkspaceStore:
             db.execute('INSERT INTO workspaces VALUES (?,?,?,?,?,?)', (wid, 1, 0, state, now, now))
             db.execute('INSERT INTO workspace_history VALUES (?,?,?,?)', (wid, 0, state, '建立工程'))
             self.audit(db, wid, 1, '建立工程', '演示参数；温度上限默认锁定')
+            self.archive(db, wid, 1, json.loads(state))
         return self.snapshot(wid)
 
     @staticmethod
@@ -235,7 +253,8 @@ def make_router(store: WorkspaceStore, providers=None):
     @router.get('')
     def listing():
         with store.db() as db:
-            return [{'id': r['id'], 'revision': r['revision'], 'name': json.loads(r['state'])['scenario']['name'], 'updated_at': r['updated']} for r in db.execute('SELECT * FROM workspaces ORDER BY updated DESC')]
+            return [{'id': r['id'], 'revision': r['revision'], 'name': (state.get('domain') or state['scenario'])['name'], 'updated_at': r['updated']}
+                    for r in db.execute('SELECT * FROM workspaces ORDER BY updated DESC') for state in [json.loads(r['state'])]]
 
     @router.post('', status_code=201)
     def create(body: Create):
@@ -280,11 +299,15 @@ def make_router(store: WorkspaceStore, providers=None):
 
     @router.post('/{wid}/lock')
     def lock(wid: str, body: Lock):
-        if body.path not in agent.PATHS:
-            raise HTTPException(422, '不支持的参数路径。')
         with store.db(True) as db:
-            row, state = store.load(db, wid, body.expected_revision)
+            row, state = store.load(db, wid, body.expected_revision, allow_domain=True)
             paths = set(state['locks'])
+            if 'domain' in state:
+                from .domain.guards import validate_lock
+                if body.locked or body.path not in paths:
+                    validate_lock(state, body.path)
+            elif body.path not in agent.PATHS:
+                raise HTTPException(422, '不支持的参数路径。')
             paths.add(body.path) if body.locked else paths.discard(body.path)
             state['locks'] = sorted(paths)
             store.commit(db, row, state, ('锁定 ' if body.locked else '解锁 ') + body.path)
@@ -293,13 +316,16 @@ def make_router(store: WorkspaceStore, providers=None):
     @router.post('/{wid}/history/{direction}')
     def history(wid: str, direction: Literal['undo', 'redo'], body: Revision):
         with store.db(True) as db:
-            row, _ = store.load(db, wid, body.expected_revision)
+            row, current = store.load(db, wid, body.expected_revision, allow_domain=True)
             pos = row['cursor'] + (-1 if direction == 'undo' else 1)
             target = db.execute('SELECT * FROM workspace_history WHERE workspace=? AND position=?', (wid, pos)).fetchone()
             if target is None:
                 raise HTTPException(409, '没有可恢复的历史版本。')
+            if 'domain' in current and 'domain' not in json.loads(target['state']):
+                raise HTTPException(409, '不能通过撤销退回 v0 工程；转换前版本仍可只读查看。')
             db.execute('UPDATE workspaces SET revision=?,cursor=?,state=?,updated=? WHERE id=?', (row['revision'] + 1, pos, target['state'], stamp(), wid))
             store.audit(db, wid, row['revision'] + 1, '撤销' if direction == 'undo' else '重做', target['label'])
+            store.archive(db, wid, row['revision'] + 1, json.loads(target['state']))
         return store.snapshot(wid)
 
     @router.post('/{wid}/plan')

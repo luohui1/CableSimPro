@@ -5,11 +5,13 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # -I drops cwd/PYTHONPATH; add our own src only
 
 import json
+from hashlib import sha256
 import platform
 
 from pydantic import ValidationError
 
 from cablesim_iec60287.inputs import Rating
+from cablesim_iec60287.domain import prepare
 from cablesim_iec60287.method import METHOD_VERSION, RatingRefused, rate
 
 PROTOCOL = 'cablesim.run/2'
@@ -17,7 +19,7 @@ PHASES = ('A', 'B', 'C')
 
 
 def steady_rating(case: dict, out: Path) -> dict:
-    rating = Rating.model_validate(case['input'])
+    rating = prepare(case['input'], case.get('parameters', {}))
     result = rate(rating)
     last = result.history[-1]
     wd = result.electrical.dielectric_loss_w_m
@@ -56,19 +58,35 @@ CAPABILITIES = {'steady-rating': steady_rating}
 def run_case(handler, case: dict, out: Path) -> dict:
     base = {'case_id': case['case_id']}
     try:
-        return {**base, 'status': 'succeeded', **handler(case, out)}
+        result = handler(case, out)
+        for r in result.get('results', []):
+            r['case'] = 'rating'
+        if case['input'].get('schema_version') == 'cablesim.domain/1':
+            circuit = case['input']['circuits'][0]
+            entities = {'circuit/c1': circuit['id'], **{f'cable/c1-{p}': c['id'] for p,c in zip('ABC',circuit['cables'])}}
+            for r in result.get('results', []):
+                r['entity'] = entities.get(r['entity'], r['entity'])
+        prepared = prepare(case['input'], case.get('parameters', {})).model_dump(mode='json')
+        result.setdefault('evidence', {})['prepared_input_sha256'] = sha256(json.dumps(prepared, sort_keys=True, ensure_ascii=False, allow_nan=False).encode('utf-8')).hexdigest()
+        return {**base, 'status': 'succeeded', **result}
     except ValidationError as exc:
         return {**base, 'status': 'failed', 'error': {'code': 'INPUT_INVALID', 'message': '；'.join(e['msg'] for e in exc.errors())}}
     except RatingRefused as exc:
         return {**base, 'status': 'failed', 'error': {'code': exc.code, 'message': str(exc)}}
+    except (ValueError, KeyError, TypeError, StopIteration) as exc:
+        return {**base, 'status': 'not_applicable', 'error': {'code': 'DOMAIN_NOT_SUPPORTED', 'message': str(exc)}}
 
 
 def main() -> int:
     job = Path.cwd()
     request = json.loads((job / 'input/request.json').read_text('utf-8'))
-    if request.get('protocol') != PROTOCOL or request.get('phase') != 'run':
+    if request.get('protocol') != PROTOCOL or request.get('phase') not in ('run', 'check'):
         raise SystemExit('unsupported protocol or phase')
     handler = CAPABILITIES[request['capability']]
+    if request['phase'] == 'check':
+        def handler(case, out):
+            prepare(case['input'], case.get('parameters', {}))
+            return {'results': [], 'artifacts': []}
     out = job / 'output'
     cases = [run_case(handler, case, out) for case in request['cases']]
     result = {'protocol': PROTOCOL, 'cases': cases,

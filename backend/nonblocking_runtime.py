@@ -38,6 +38,8 @@ class EngineeringRuntime(BaseEngineeringRuntime):
         return proposal
 
     async def invoke(self, wid, body: Invocation):
+        if body.capability in ('studies.run', 'reports.render-study'):
+            return await self.invoke_research(wid, body)
         capability = self.capabilities.get(body.capability)
         if capability is None:
             raise HTTPException(422, '未注册的工程能力。')

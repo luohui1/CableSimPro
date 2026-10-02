@@ -328,6 +328,7 @@ class Enterprise:
             db.execute('INSERT INTO workspaces VALUES (?,?,?,?,?,?)', (child, 1, 0, encoded, now, now))
             db.execute('INSERT INTO workspace_history VALUES (?,?,?,?)', (child, 0, encoded, '另存方案'))
             self.store.audit(db, child, 1, '另存方案', f'{wid} / rev.{row["revision"]}')
+            self.store.archive(db, child, 1, state)
         return self.store.snapshot(child)
 
 

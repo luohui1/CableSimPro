@@ -36,7 +36,7 @@ def test_capability_catalog_explicit_schema_and_no_privileged_tools(client):
     manifest=client.get('/api/runtime/capabilities').json()
     names={t['name'] for t in manifest['tools']}
     assert {'products.list','products.propose','project.assessment','selection.reviewed','selection.report'} <= names
-    assert len(names)==17 and {'model.generate','selection.evaluate','analysis.buried','task.plan'}<=names
+    assert len(names)==19 and {'model.generate','selection.evaluate','analysis.buried','task.plan','studies.run','reports.render-study'}<=names
     assert not names&{'shell','sql','unlock','approve','set_key','http.fetch'}
     for t in manifest['tools']:
         assert t['requires_revision'] and t['input_schema']['additionalProperties'] is False

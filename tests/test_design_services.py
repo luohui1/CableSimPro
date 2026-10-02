@@ -10,7 +10,8 @@ from pypdf import PdfWriter
 
 from backend.main import create_app
 from backend.providers import ProviderConfig, Providers
-from backend.field_analysis import poisson,compute_fields
+from backend.field_analysis import compute_fields
+from cablesim_thermal_network.fields import poisson
 from backend.schemas import Scenario
 
 
