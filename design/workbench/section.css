@@ -1,0 +1,29 @@
+.section-tree{margin-bottom:8px}.section-tree [data-section-select]{padding-left:44px}
+#section-stage{position:relative;width:100%;height:calc(100% - 52px);min-height:280px;overflow:hidden}
+.section-template-bar{height:52px;display:flex;align-items:center;gap:12px;padding:8px 16px;border-bottom:1px solid var(--line);font-size:13px;min-width:0;overflow-x:auto;white-space:nowrap}.section-template-bar label{display:flex;align-items:center;gap:8px}.section-template-bar select{height:32px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:0 8px;color:var(--text)}
+#section-canvas{display:block;width:100%;height:100%;outline:0;touch-action:none;user-select:none}
+#section-canvas text{font:var(--text-note) var(--font-ui);fill:var(--text-secondary);pointer-events:none}
+#section-canvas g[role=button]{cursor:pointer}#section-canvas g[role=button]:focus-visible{outline:none}#section-canvas g[role=button]:focus-visible>rect{stroke-width:2}
+.section-selection{fill:none;stroke:var(--text);stroke-width:1}
+.section-dimension{fill:none;stroke:var(--text-secondary);stroke-width:1;pointer-events:none}
+#section-canvas .section-dim-chip{cursor:text}#section-canvas .section-dim-chip rect{fill:var(--panel);stroke:var(--text);stroke-width:1}
+#section-canvas .section-dim-chip text{font-family:var(--font-number);fill:var(--text)}
+#section-canvas .section-dim-caption{font-size:var(--text-note);fill:var(--text-secondary)}
+.section-dim-edit{display:flex;flex-direction:column;gap:4px;font:13px var(--font-ui)}
+.section-dim-edit label{display:flex;align-items:center;background:var(--panel);border:1px solid var(--text);border-radius:8px;padding:0 8px;gap:4px;height:36px}
+.section-dim-edit input{width:100%;min-width:0;border:0;background:transparent;outline:0;font-family:var(--font-number);height:32px;padding:0}
+.section-dim-edit:focus-within label{outline:2px solid var(--text);outline-offset:2px}.section-dim-edit label>span{color:var(--text-secondary);font-size:13px}
+.section-dim-error{background:var(--panel);color:var(--text-secondary);font-size:13px;text-align:center;line-height:1.5}
+#section-stage[data-tool=pan],#section-stage[data-tool=pan] g{cursor:grab}
+.section-overview{position:absolute;left:16px;bottom:24px;width:152px;height:136px;padding:8px;border:1px solid var(--border);background:var(--panel);border-radius:12px;display:flex;flex-direction:column;gap:4px;align-items:stretch}
+.section-overview>span{text-align:left;font-size:13px;color:var(--text-secondary)}.section-overview svg{width:100%;min-height:0;flex:1;pointer-events:none}
+.section-object-tools{position:absolute;display:flex;align-items:center;gap:4px;padding:4px;background:var(--panel);box-shadow:var(--shadow-float);border-radius:var(--radius-pill)}
+.section-object-tools[hidden]{display:none}.section-object-tools button{min-width:32px;min-height:32px;padding:0 8px;border:0;background:transparent;font-size:13px}
+.section-object-tools button:hover{background:var(--hover)}#section-stage .tool-float{bottom:20px}
+.section-table-note{margin-top:16px}.section-coordinate-table input{width:116px!important;min-width:88px;text-align:right}
+.section-context-menu{position:fixed;inset:auto;margin:0;min-width:188px;padding:4px;border:1px solid var(--border);border-radius:12px;background:var(--panel);color:var(--text);box-shadow:var(--shadow-float)}
+.section-context-menu:popover-open{display:flex;flex-direction:column;gap:4px}.section-context-menu button{justify-content:flex-start;border:0;border-radius:8px;background:transparent;font-size:13px}
+@media(max-width:1200px){.section-overview{width:120px;height:112px;left:12px;bottom:20px}.section-object-tools{gap:0}.section-object-tools button{padding:0 6px}}
+
+.region-resize-handle{fill:var(--panel);stroke:var(--text);stroke-width:1;cursor:ew-resize}.region-resize-handle[data-section-region-resize=height]{cursor:ns-resize}.section-region-options{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-6);margin-bottom:var(--space-6)}.section-region-options label{display:flex;align-items:center;gap:var(--space-2)}.section-layer-fields{display:flex;gap:var(--space-6)}.section-layer-fields label{display:flex;flex-direction:column;gap:var(--space-2)}.section-layer-fields input{height:var(--control-standard);width:160px;border:1px solid var(--border);border-radius:var(--radius-input);padding:0 var(--space-3);background:var(--panel)}.section-next-action{margin-left:auto}.section-detail [data-section-detail-select]{cursor:pointer}
+#section-canvas text{font-variant-numeric:tabular-nums}
