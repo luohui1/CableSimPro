@@ -51,7 +51,10 @@ def forbidden_files(files: list[str]) -> list[str]:
 
 
 def version_names(files: list[str]) -> list[str]:
-    return [f'version-or-scratch name: {f}' for f in files if VERSION_NAME.search(PurePosixPath(f).stem)]
+    # "copy" is the functional action icon mandated by VISUAL_ASSETS.md,
+    # not a duplicate-file suffix. Keep the exception confined to that asset.
+    return [f'version-or-scratch name: {f}' for f in files
+            if f != 'design/icons/action/copy.svg' and VERSION_NAME.search(PurePosixPath(f).stem)]
 
 
 def large_or_misplaced_binaries(files: list[str]) -> list[str]:

@@ -1,0 +1,957 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>型号与研究工作区</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;600&display=swap">
+<style>
+/* Project workspace: model tree | model canvas (+ docked criteria) | inspector.
+   Calm rules: one toolbar row (views only), drawing tools float inside the canvas, sources are icons,
+   the tree expands only the group of the current view, criteria table has four columns. */
+:root {
+  --ground: #F9F9F9; --surface: #FFFFFF; --fill: #F4F4F4; --hover: #ECECEC; --current: #ECECEC;
+  --line: #ECECEC; --line-2: #D9D9D9; --text: #0D0D0D; --text-2: #5D5D5D; --text-3: #8F8F8F; --inverse: #FFFFFF;
+  --run: #B4612A; --on-run: #FFF8F2; --agent: #0F7C8A;
+  --ok: #2F7A4F; --warn: #A4560B; --warn-soft: #FBF1E4; --bad: #B8352B;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.06);
+  --m-cu: #C47A3D; --m-semi: #2B2E33; --m-xlpe: #ECEAE4; --m-screen: #AEB5BD; --m-jacket: #24272B; --soil: #EFEBE4; --sand: #F7F3EC;
+  --pa: #B38F00; --pb: #2E8B57; --pc: #C0392B;
+  --sans: "Noto Sans SC", "Microsoft YaHei UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --ground: #181818; --surface: #212121; --fill: #2A2A2A; --hover: #2F2F2F; --current: #303030;
+  --line: #2F2F2F; --line-2: #424242; --text: #ECECEC; --text-2: #B4B4B4; --text-3: #8F8F8F; --inverse: #0D0D0D;
+  --run: #E08A4C; --on-run: #1A0F08; --agent: #4FC3CF; --ok: #4CC184; --warn: #EDA246; --warn-soft: #33281A; --bad: #F07468;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  --m-xlpe: #3A3934; --m-semi: #0B0C0E; --m-jacket: #08090A; --soil: #2C2A26; --sand: #2E2B26; --pa: #E3C02E; --pb: #52B37A; --pc: #F07468; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --ground: #181818; --surface: #212121; --fill: #2A2A2A; --hover: #2F2F2F; --current: #303030;
+  --line: #2F2F2F; --line-2: #424242; --text: #ECECEC; --text-2: #B4B4B4; --text-3: #8F8F8F; --inverse: #0D0D0D;
+  --run: #E08A4C; --on-run: #1A0F08; --agent: #4FC3CF; --ok: #4CC184; --warn: #EDA246; --warn-soft: #33281A; --bad: #F07468;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35);
+  --m-xlpe: #3A3934; --m-semi: #0B0C0E; --m-jacket: #08090A; --soil: #2C2A26; --sand: #2E2B26; --pa: #E3C02E; --pb: #52B37A; --pc: #F07468; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--text); font: 14px/1.5 var(--sans); font-variant-numeric: tabular-nums; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.wrap { padding: 16px 16px 40px; display: flex; flex-direction: column; gap: 12px; max-width: 1480px; margin: 0 auto; }
+.bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 0 4px; }
+.bar h1 { font-size: 16px; font-weight: 600; margin: 0; }
+.bar span { color: var(--text-2); font-size: 13px; }
+.seg { display: inline-flex; padding: 3px; background: var(--fill); border-radius: 999px; gap: 2px; }
+.seg button { height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--text-2); cursor: pointer; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+.scroll, .scrollx { overflow-x: auto; }
+
+.app { width: 1400px; height: 900px; display: grid; grid-template-columns: 56px minmax(0, 1fr); background: var(--ground); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+.rail { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 12px 0; }
+.rail .r { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; color: var(--text-2); }
+.rail .r.cur { background: var(--current); color: var(--text); }
+.rail .sp { flex: 1; }
+.ic { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.ic.s { width: 16px; height: 16px; }
+.win { margin: 8px 8px 8px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; display: grid; grid-template-rows: 52px minmax(0, 1fr) 30px; min-width: 0; overflow: hidden; }
+.head { display: flex; align-items: center; gap: 12px; padding: 0 12px 0 18px; border-bottom: 1px solid var(--line); }
+.head .name { font-weight: 600; font-size: 15px; white-space: nowrap; }
+.head .task { color: var(--text-2); white-space: nowrap; }
+.head .sp { flex: 1; }
+.vsep { width: 1px; height: 20px; background: var(--line); }
+.btn { height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; }
+.btn:hover { background: var(--hover); }
+.btn--pri { background: var(--text); border-color: var(--text); color: var(--inverse); font-weight: 600; }
+.btn--run { background: var(--run); border-color: var(--run); color: var(--on-run); font-weight: 600; }
+.btn--run::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 30%, transparent); }
+.btn--ag { border-color: var(--agent); color: var(--agent); }
+.main { display: grid; grid-template-columns: 240px minmax(0, 1fr) 288px; min-height: 0; }
+
+.tree { border-right: 1px solid var(--line); overflow: auto; padding: 12px 8px; display: flex; flex-direction: column; gap: 1px; }
+.tg { display: flex; align-items: center; height: 30px; padding: 0 8px; font-size: 13px; color: var(--text-3); margin-top: 10px; }
+.tg:first-child { margin-top: 0; }
+.tn { display: flex; align-items: center; gap: 8px; min-height: 32px; padding: 0 8px; border-radius: 8px; white-space: nowrap; overflow: hidden; cursor: pointer; }
+.tn:hover { background: var(--hover); }
+.tn.cur { background: var(--current); font-weight: 600; }
+.tn .lbl { overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1; }
+.tn .meta { color: var(--text-3); font-size: 13px; }
+.tn.l2 { padding-left: 34px; }
+.caret { width: 14px; height: 14px; color: var(--text-3); flex: none; }
+.caret.closed { transform: rotate(-90deg); }
+.d { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; position: relative; }
+.d--now { background: var(--text); box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--text); }
+.d--old { box-shadow: inset 0 0 0 1.5px var(--text-2); }
+.d--draft { border: 1.5px dashed var(--warn); }
+.d--bad { box-shadow: inset 0 0 0 1.5px var(--bad); }
+.d--bad::after { content: ""; position: absolute; left: 4.25px; top: -1px; width: 1.5px; height: 12px; background: var(--bad); transform: rotate(45deg); }
+.c { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
+.c--ok { background: var(--ok); } .c--warn { background: var(--warn); } .c--bad { background: var(--bad); } .c--na { box-shadow: inset 0 0 0 1.5px var(--text-2); }
+.si { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+
+.center { display: grid; grid-template-rows: 48px minmax(0, 1fr) 196px; min-width: 0; min-height: 0; }
+.vbar { display: flex; align-items: center; gap: 10px; padding: 0 12px; border-bottom: 1px solid var(--line); }
+.vbar .sp { flex: 1; }
+.overlay { height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--line-2); display: inline-flex; align-items: center; gap: 8px; color: var(--text-2); white-space: nowrap; }
+.overlay b { color: var(--text); font-weight: 600; }
+.canvas { position: relative; background: var(--surface); min-height: 0; overflow: hidden; }
+.canvas > svg { display: block; width: 100%; height: 100%; }
+.canvas svg text { font-family: var(--mono); }
+.float { position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow-1); }
+.tool { height: 32px; min-width: 32px; padding: 0 8px; border-radius: 999px; border: 0; background: transparent; color: var(--text-2); display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.tool.on { background: var(--current); color: var(--text); }
+.float .vsep { margin: 0 4px; height: 18px; }
+.ro { position: absolute; left: 14px; top: 14px; font-size: 13px; color: var(--text-2); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; }
+.bottom { border-top: 1px solid var(--line); display: grid; grid-template-rows: 44px minmax(0, 1fr); min-height: 0; }
+.btabs { display: flex; align-items: center; gap: 12px; padding: 0 16px; }
+.btabs b { font-size: 14px; }
+.btabs .sp { flex: 1; }
+.btabs .more { color: var(--text-2); font-size: 13px; }
+.bpane { overflow: auto; padding: 0 4px; }
+.crit { width: 100%; border-collapse: collapse; }
+.crit td { height: 36px; padding: 0 12px; border-top: 1px solid var(--line); white-space: nowrap; }
+.crit .n { text-align: right; font-family: var(--mono); }
+.crit .m { color: var(--text-2); font-size: 13px; margin-left: 8px; font-family: var(--mono); }
+.crit tr.pick td { background: var(--fill); }
+.cu { color: var(--run); font-weight: 600; }
+.badv { color: var(--bad); font-weight: 600; }
+
+.insp { border-left: 1px solid var(--line); overflow: auto; display: flex; flex-direction: column; }
+.insp__h { padding: 16px 16px 12px; display: flex; flex-direction: column; gap: 2px; }
+.insp__h b { font-size: 16px; } .insp__h span { color: var(--text-2); font-size: 13px; }
+.grp { padding: 12px 16px 14px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.grp__t { font-size: 13px; color: var(--text-3); }
+.prop { display: grid; grid-template-columns: 84px minmax(0, 1fr) 18px; gap: 8px; align-items: center; min-height: 32px; }
+.prop > span:first-child { color: var(--text-2); font-size: 13px; }
+.inp { height: 32px; border: 1px solid var(--line-2); border-radius: 8px; display: flex; align-items: center; padding: 0 10px; gap: 6px; font-family: var(--mono); min-width: 0; }
+.inp small { margin-left: auto; color: var(--text-2); font-size: 12px; }
+.inp--lock { border-color: transparent; background: var(--fill); color: var(--text-2); }
+.val { font-family: var(--mono); }
+.srcic { color: var(--text-3); display: inline-flex; }
+.srcic svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.link { text-decoration: underline; text-decoration-color: var(--line-2); text-underline-offset: 3px; }
+.sw { width: 32px; height: 18px; border-radius: 999px; background: var(--line-2); position: relative; display: inline-block; }
+.sw::after { content: ""; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.sw.on { background: var(--text); } .sw.on::after { left: 16px; background: var(--inverse); }
+.hint { color: var(--text-2); font-size: 13px; }
+.srckey { padding: 12px 16px 16px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 6px 14px; color: var(--text-3); font-size: 13px; margin-top: auto; }
+.srckey span { display: inline-flex; align-items: center; gap: 4px; }
+/* variants: every candidate re-checked against every criterion */
+.varwrap { height: 100%; overflow: auto; padding: 18px 20px 24px; display: flex; flex-direction: column; gap: 14px; }
+.varhead { display: flex; align-items: baseline; gap: 12px; }
+.varhead b { font-size: 16px; } .varhead span { color: var(--text-2); font-size: 13px; }
+.vm { width: 100%; border-collapse: separate; border-spacing: 0; }
+.vm th, .vm td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: center; white-space: nowrap; font-size: 13px; }
+.vm th:first-child, .vm td:first-child { text-align: left; color: var(--text-2); position: sticky; left: 0; background: var(--surface); }
+.vm thead th { vertical-align: top; font-weight: 400; border-bottom: 1px solid var(--line-2); }
+.vm .vt { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.vm .vt b { font-size: 13px; color: var(--text); }
+.vm .vt span { color: var(--text-2); font-size: 12px; white-space: normal; max-width: 120px; line-height: 1.35; }
+.vm td .v { font-family: var(--mono); }
+.vm .cur { background: var(--fill); }
+.vm .okcol { box-shadow: inset 0 2px 0 var(--ok); }
+.vm .ag { color: var(--agent); font-size: 12px; }
+.vm tfoot td { border-bottom: 0; padding-top: 12px; }
+.cell { display: inline-flex; align-items: center; gap: 6px; justify-content: center; }
+.bar2 { display: flex; height: 22px; border-radius: 6px; overflow: hidden; border: 1px solid var(--line-2); }
+.bar2 i { display: block; height: 100%; }
+.bar2 i.lk { background-image: repeating-linear-gradient(135deg, rgba(0,0,0,.18) 0 2px, transparent 2px 6px); }
+.legend2 { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 8px; font-size: 13px; align-items: center; }
+.legend2 i { width: 10px; height: 10px; border-radius: 2px; box-shadow: 0 0 0 1px var(--line-2); }
+.legend2 em { font-style: normal; font-family: var(--mono); color: var(--text-2); }
+.btn--sm { height: 28px; padding: 0 10px; font-size: 13px; }
+.status { display: flex; align-items: center; gap: 18px; padding: 0 16px; border-top: 1px solid var(--line); color: var(--text-2); font-size: 13px; font-family: var(--mono); white-space: nowrap; }
+.status .sp { flex: 1; }
+
+.head .kind { font-size: 13px; color: var(--text-2); border: 1px solid var(--line-2); border-radius: 999px; padding: 1px 10px; white-space: nowrap; }
+.mtitle { font-size: 15px; font-weight: 600; margin-right: 6px; white-space: nowrap; }
+.tn .cur2, .tn.cur2 { font-weight: 600; color: var(--text); }
+.tn.l2 { color: var(--text-2); }
+.tn.l2.cur2 { color: var(--text); }
+.addm { color: var(--text-2); margin-top: 6px; }
+.pagewrap { height: 100%; overflow: auto; padding: 20px 24px 28px; display: flex; flex-direction: column; gap: 14px; }
+.phead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.phead b { font-size: 16px; } .phead span { color: var(--text-2); font-size: 13px; }
+.phead .vr { margin-left: auto; }
+.tbl2 { width: 100%; border-collapse: collapse; }
+.tbl2 th, .tbl2 td { height: 40px; padding: 0 12px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.tbl2 th { font-size: 13px; font-weight: 400; color: var(--text-2); height: 34px; }
+.tbl2 .n { text-align: right; font-family: var(--mono); }
+.inp { white-space: nowrap; overflow: hidden; }
+.vm .vt span { max-width: 96px; }
+.vm th, .vm td { padding: 8px 8px; }
+.tbl2 .mut, .mut { color: var(--text-2); }
+.tbl2 tr.pick td { background: var(--fill); }
+.tbl2.stale td.n { color: var(--text-3); }
+.note-old { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 10px; background: var(--fill); color: var(--text-2); }
+.empty2 { margin: auto; max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; color: var(--text-2); }
+.empty2 b { color: var(--text); font-size: 16px; }
+.row2 { display: flex; gap: 8px; }
+.concl2 { display: flex; align-items: flex-end; gap: 24px; padding: 14px 0 6px; border-top: 1px solid var(--text); }
+.concl2 > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+.concl2 b { font: 600 28px/1.1 var(--mono); color: var(--run); }
+.concl2 b small { font: 500 14px var(--mono); color: var(--text-2); margin-left: 4px; }
+.mut2 { display: flex; flex-direction: column; gap: 4px; color: var(--text-2); }
+.meta2 { display: grid; grid-template-columns: max-content 1fr; gap: 6px 20px; margin: 0; }
+.meta2 dt { color: var(--text-2); } .meta2 dd { margin: 0; }
+.vr { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; color: var(--text-2); font-size: 13px; }
+.heatwrap2 { display: grid; grid-template-columns: minmax(0, 1fr) 70px; gap: 16px; max-width: 760px; }
+.heatwrap2 canvas { width: 100%; aspect-ratio: 560 / 380; border-radius: 10px; border: 1px solid var(--line); display: block; }
+.cbar2 { display: grid; grid-template-columns: 14px auto; gap: 8px; }
+.cbar2 i { border-radius: 3px; background: linear-gradient(0deg, #FBF3E4, #F2C98A 25%, #E58B47 50%, #C2452F 72%, #6E1F35 90%, #2A0F1E); }
+.cbar2 div { display: flex; flex-direction: column; justify-content: space-between; font: 13px var(--mono); color: var(--text-2); }
+.form2 { display: flex; flex-direction: column; gap: 8px; max-width: 420px; }
+.homewrap { overflow: auto; padding: 56px 72px; display: flex; flex-direction: column; gap: 22px; max-width: 1040px; width: 100%; margin: 0 auto; }
+.homewrap h1 { font-size: 28px; font-weight: 600; margin: 0 0 6px; text-align: center; }
+.choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.choice { text-align: left; border: 1px solid var(--line-2); border-radius: 16px; padding: 22px; background: var(--surface); cursor: pointer; display: flex; flex-direction: column; gap: 10px; }
+.choice:hover { background: var(--fill); }
+.choice b { font-size: 18px; } .choice > span:not(.choice__ic) { color: var(--text-2); }
+.choice em { font-style: normal; font-size: 13px; color: var(--text-3); }
+.choice__ic { width: 40px; height: 40px; border-radius: 12px; background: var(--fill); display: flex; align-items: center; justify-content: center; }
+.h2r { display: flex; align-items: baseline; gap: 12px; margin-top: 12px; } .h2r b { font-size: 16px; } .h2r .mut { font-size: 13px; }
+
+.tabbar { display: flex; align-items: center; gap: 14px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+.tabs2 { display: flex; gap: 2px; align-self: stretch; }
+.tabs2 button { border: 0; background: none; padding: 0 12px; color: var(--text-2); cursor: pointer; border-bottom: 2px solid transparent; height: 100%; white-space: nowrap; }
+.tabs2 button:hover { color: var(--text); }
+.tabs2 button[aria-selected="true"] { color: var(--text); font-weight: 600; border-bottom-color: var(--text); }
+.checks { border-top: 1px solid var(--line); }
+.checks.open .bpane { max-height: 190px; overflow: auto; }
+.checkbar { height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 16px; white-space: nowrap; }
+.lnk { border: 0; background: none; color: var(--text-2); cursor: pointer; }
+.lnk:hover { color: var(--text); }
+.insp--min { display: flex; flex-direction: column; align-items: center; padding-top: 16px; gap: 12px; }
+.vlabel { writing-mode: vertical-rl; color: var(--text-2); font-size: 13px; }
+.hint2 { writing-mode: vertical-rl; color: var(--text-3); font-size: 12px; }
+.canvas.plain { background: var(--surface); }
+.dimedit { display: flex; align-items: center; gap: 4px; height: 34px; padding: 0 10px; border: 2px solid var(--text); border-radius: 17px; background: var(--surface); font: 13px var(--mono); color: var(--text-2); }
+.dimedit input { width: 56px; border: 0; outline: 0; font: inherit; background: transparent; color: var(--text); }
+.dimchip:hover rect { fill: var(--hover); }
+.minitb { display: flex; gap: 2px; padding: 3px; background: var(--surface); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--shadow-1); width: max-content; margin: 0 auto; }
+.minitb button { width: 32px; height: 32px; border: 0; border-radius: 999px; background: transparent; color: var(--text-2); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.minitb button:hover { background: var(--hover); color: var(--text); }
+.cellin { display: inline-block; min-width: 72px; padding: 2px 8px; border: 1px solid var(--line-2); border-radius: 6px; text-align: right; font-family: var(--mono); }
+.thumbs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.thumb { border: 1px solid var(--line); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.thumb span { color: var(--text-2); font-size: 13px; } .thumb .mono { font-family: var(--mono); color: var(--text); }
+.formgrid { display: flex; flex-direction: column; gap: 8px; max-width: 460px; }
+.prop2 { border: 1px dashed var(--agent); background: color-mix(in srgb, var(--agent) 8%, var(--surface)); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; max-width: 640px; }
+.prop2 b { color: var(--agent); display: inline-flex; align-items: center; gap: 8px; }
+.a4mini { width: 420px; aspect-ratio: 210 / 297; background: #FFFFFF; color: #1A1C1F; border: 1px solid var(--line); margin: 0 auto; padding: 24px; display: flex; flex-direction: column; gap: 8px; }
+.a4mini span { color: #5D5D5D; font-size: 13px; }
+.a4lines { flex: 1; background: repeating-linear-gradient(#FFFFFF 0 14px, #ECECEC 14px 15px); }
+.demo { font-size: 12px; color: var(--text-3); border: 1px solid var(--line-2); border-radius: 999px; padding: 0 8px; margin-left: 6px; }
+.rail .r[data-goto] { cursor: pointer; }
+</style>
+
+<div class="wrap">
+  <div class="bar"><h1>型号与研究工作区</h1><div class="seg" id="tabs"><button data-t="home" aria-pressed="false">首页</button><button data-t="type" aria-pressed="false">型号工作区</button><button data-t="study" aria-pressed="true">研究工作区</button></div><span>布局参考：左侧选模块，上方选页签，一次只看一件事；校核项默认收起。敷设截面里双击尺寸可直接修改。所有数值均为演示。</span></div>
+  <div class="scroll"><div class="app" id="app"></div></div>
+</div>
+
+<script>
+const P = {
+  proj: '<path d="M6 3h8l4 4v14H6z M14 3v4h4 M9 12h6 M9 16h6"/>', lib: '<rect x="4" y="4" width="16" height="4.5" rx="1.5"/><rect x="4" y="10" width="16" height="4.5" rx="1.5"/><rect x="4" y="16" width="16" height="4" rx="1.5"/>',
+  plug: '<path d="M9 3v4M15 3v4M6 7h12v4a6 6 0 0 1-12 0z M12 17v4"/>', set: '<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>',
+  agent: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3" stroke-dasharray="1.8 1.8"/>', report: '<path d="M6 3h8l4 4v14H6z M14 3v4h4"/><path d="m9 14 2 2 4-4"/>',
+  sel: '<path d="M5 3l14 8-6 2-2 6z"/>', pan: '<path d="M12 3v18M3 12h18M12 3 9.5 5.5M12 3l2.5 2.5M12 21l-2.5-2.5M12 21l2.5-2.5M3 12l2.5-2.5M3 12l2.5 2.5M21 12l-2.5-2.5M21 12l-2.5 2.5"/>',
+  place: '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/>', dim: '<path d="M4 7v10M20 7v10M4 12h16M7 9l-3 3 3 3M17 9l3 3-3 3"/>', meas: '<path d="M4 17 17 4l3 3L7 20z M8 13l2 2M11 10l2 2M14 7l2 2"/>',
+  snap: '<path d="M7 4v6a5 5 0 0 0 10 0V4M7 4h3v6M14 4h3"/>', fit: '<path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/>', zin: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5M8 11h6M11 8v6"/>', zout: '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5M8 11h6"/>',
+  orbit: '<ellipse cx="12" cy="12" rx="9" ry="4"/><path d="M12 3v18"/>', cut: '<path d="M4 20 20 4M9 4h11v11"/>', seg: '<path d="M3 12h18M7 8v8M17 8v8"/>', obj: '<circle cx="12" cy="12" r="3"/><path d="M12 3v6M12 15v6"/>', layer: '<path d="m12 4 8 4-8 4-8-4z M4 12l8 4 8-4 M4 16l8 4 8-4"/>',
+  cable: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="2.2"/>', sec: '<path d="M3 6h18 M4 6l-1.5-2M8 6 6.5 4M12 6l-1.5-2M16 6l-1.5-2M20 6l-1.5-2"/><circle cx="9.5" cy="16" r="2.2"/><circle cx="14.5" cy="16" r="2.2"/><circle cx="12" cy="12" r="2.2"/>',
+  route: '<path d="M3 17c3 0 4-8 9-8s6 6 9 6"/><circle cx="3" cy="17" r="1.3"/><circle cx="21" cy="15" r="1.3"/>', cond: '<path d="M4 7h10M4 12h16M4 17h7"/><circle cx="17" cy="7" r="2"/><circle cx="14" cy="17" r="2"/>',
+  study: '<rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8h8 M8 13h2 M14 13h2 M8 17h2 M14 17h2"/>', std: '<path d="M6 3h12v18l-6-4-6 4z"/>', req: '<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>',
+  s_lib: '<rect x="4" y="4" width="16" height="4.5" rx="1.5"/><rect x="4" y="10" width="16" height="4.5" rx="1.5"/>', s_std: '<path d="M6 3h12v18l-6-4-6 4z"/>', s_der: '<path d="M5 12h14M13 6l6 6-6 6"/>', s_lock: '<rect x="5" y="11" width="14" height="9.5" rx="2.5"/><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"/>', s_doc: '<path d="M6 3h8l4 4v14H6z M14 3v4h4"/>',
+};
+const ic = (k, s) => `<svg class="ic ${s ? 's' : ''}" viewBox="0 0 24 24" aria-hidden="true">${P[k]}</svg>`;
+const SRC = { lib: ['s_lib', '库'], std: ['s_std', '标准值'], der: ['s_der', '推导'], lock: ['s_lock', '锁定'], doc: ['s_doc', '资料'] };
+const src = k => k ? `<span class="srcic" title="来源：${SRC[k][1]}"><svg viewBox="0 0 24 24">${P[SRC[k][0]]}</svg></span>` : '<span></span>';
+const dot = s => `<i class="d d--${s}"></i>`;
+const crit = (c, t) => `<span class="si"><i class="c c--${c}"></i>${t}</span>`;
+const caretSvg = open => `<svg class="caret ${open ? '' : 'closed'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="m7 9 5 5 5-5"/></svg>`;
+const prop = (k, v, s) => `<div class="prop"><span>${k}</span>${v}${src(s)}</div>`;
+const inp = (v, u, lock) => `<span class="inp ${lock ? 'inp--lock' : ''}">${v}${u ? `<small>${u}</small>` : ''}</span>`;
+const logo = `<svg viewBox="-12 -12 24 24" width="24" height="24" aria-hidden="true"><circle r="11" fill="var(--m-jacket)"/><circle r="8" fill="var(--m-xlpe)"/><circle r="4.2" fill="var(--m-cu)"/></svg>`;
+const km = y => `K${Math.floor(y / 1000)}+${String(y % 1000).padStart(3, '0')}`;
+const srckey = `<div class="srckey">${['lib', 'std', 'der', 'lock'].map(k => `<span>${src(k)}${SRC[k][1]}</span>`).join('')}<span>无图标 = 用户录入</span></div>`;
+
+const leaf = (label, meta, state, cur, go) => `<div class="tn l2 ${cur ? 'cur' : ''}" ${go ? `data-go="${go}"` : ''}><span class="lbl">${label}</span>${meta ? `<span class="meta">${meta}</span>` : ''}${state && state !== 'now' ? dot(state) : ''}</div>`;
+const group = (icon, label, meta, open, kids, go) => `<div class="tn" ${go ? `data-go="${go}"` : ''}>${caretSvg(open)}${ic(icon, 1)}<span class="lbl">${label}</span>${meta ? `<span class="meta">${meta}</span>` : ''}</div>${open ? kids.join('') : ''}`;
+const item = (icon, label, state) => `<div class="tn"><span style="width:14px"></span>${ic(icon, 1)}<span class="lbl">${label}</span>${state && state !== 'now' ? dot(state) : ''}</div>`;
+
+function frame(d) {
+  return `<nav class="rail"><div class="r" style="margin-bottom:8px">${logo}</div><div class="r cur" title="工程">${ic('proj')}</div><div class="r" title="库">${ic('lib')}</div><div class="r" title="插件">${ic('plug')}</div><span class="sp"></span><div class="r" title="设置">${ic('set')}</div></nav>
+  <div class="win">
+    <header class="head"><span class="name">${d.name}</span><span class="task">${d.task}</span><span class="sp"></span>
+      <span class="si" style="color:var(--text-2)">${dot('now')}已保存 · 版本 12</span><span class="vsep"></span>
+      <button class="btn btn--ag">${ic('agent', 1)}Agent</button><button class="btn">${ic('report', 1)}${d.report}</button>${d.run}</header>
+    <div class="main">
+      <aside class="tree" aria-label="模型树">${d.tree}</aside>
+      <section class="center">
+        <div class="vbar"><div class="seg">${d.views.map(([k, t]) => `<button data-view="${k}" aria-pressed="${k === d.view}">${t}</button>`).join('')}</div><span class="sp"></span>${d.overlay}</div>
+        <div class="canvas">${d.canvas}${d.ro ? `<span class="ro">${d.ro}</span>` : ''}${d.tools ? `<div class="float">${d.tools}</div>` : ''}</div>
+        <div class="bottom"><div class="btabs"><b>判据</b>${d.verdict}<span class="sp"></span><span class="more">运行记录 · 消息 1</span></div>
+          <div class="bpane"><table class="crit"><tbody>${d.rows.join('')}</tbody></table></div></div>
+      </section>
+      <aside class="insp" aria-label="属性">${d.insp}${srckey}</aside>
+    </div>
+    <footer class="status">${d.status}</footer>
+  </div>`;
+}
+const zoom = `<span class="vsep"></span><button class="tool on" title="捕捉">${ic('snap', 1)}0.01</button><button class="tool" title="缩小">${ic('zout', 1)}</button><button class="tool" title="适应窗口">${ic('fit', 1)}</button><button class="tool" title="放大">${ic('zin', 1)}</button>`;
+const row = (name, req, cur, margin, st, pick) => `<tr class="${pick ? 'pick' : ''}" ${pick ? 'data-go="v:var" style="cursor:pointer"' : ''}><td>${name}</td><td class="n">${req}</td><td class="n">${cur}${margin ? `<span class="m">${margin}</span>` : ''}</td><td>${st}</td></tr>`;
+
+/* ================= ampacity project ================= */
+const CAB3 = [['A', -0.12, 88.6, 'pa'], ['B', 0, 89.4, 'pb'], ['C', 0.12, 88.6, 'pc']];
+const W = 860, H = 540;
+const svgOpen = label => `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="${label}"><rect width="${W}" height="${H}" fill="var(--surface)"/>`;
+const cableDisk = (cx, cy, rr) => `<circle cx="${cx}" cy="${cy}" r="${rr}" fill="var(--m-jacket)"/><circle cx="${cx}" cy="${cy}" r="${rr * .9}" fill="var(--m-screen)"/><circle cx="${cx}" cy="${cy}" r="${rr * .85}" fill="var(--m-semi)"/><circle cx="${cx}" cy="${cy}" r="${rr * .82}" fill="var(--m-xlpe)"/><circle cx="${cx}" cy="${cy}" r="${rr * .53}" fill="var(--m-cu)"/>`;
+function ampSection(noDims) {
+  const L = 44, T = 26, sc = 660, X = x => L + (W - L) / 2 + x * sc, Z = z => T + (-0.42 - z) * sc;
+  let o = svgOpen('敷设截面 A');
+  for (let i = -16; i <= 16; i++) { const p = X(i * .05); if (p > L && p < W) o += `<line x1="${p}" y1="${T}" x2="${p}" y2="${H}" stroke="var(--line)" stroke-width="${i % 2 ? .4 : .8}"/>`; }
+  for (let i = 9; i <= 24; i++) { const p = Z(-i * .05); if (p > T && p < H) o += `<line x1="${L}" y1="${p}" x2="${W}" y2="${p}" stroke="var(--line)" stroke-width="${i % 2 ? .4 : .8}"/>`; }
+  o += `<rect x="${X(-.35)}" y="${Z(-.55)}" width="${.7 * sc}" height="${.5 * sc}" rx="4" fill="var(--sand)" stroke="var(--text-2)" stroke-width=".75" stroke-dasharray="5 4"/><text x="${X(-.35) + 12}" y="${Z(-.55) + 22}" font-size="12" font-family="Noto Sans SC, sans-serif" fill="var(--text-2)">回填 · 砂</text>`;
+  const rr = 0.0283 * sc;
+  CAB3.forEach(([p, x, t, ph], i) => {
+    const cx = X(x), cy = Z(-.8);
+    o += cableDisk(cx, cy, rr);
+    if (i === 1) o += `<rect x="${cx - rr - 6}" y="${cy - rr - 6}" width="${2 * rr + 12}" height="${2 * rr + 12}" rx="3" fill="none" stroke="var(--text)" stroke-width="1.2"/>`;
+  });
+  if (!noDims) {
+  const ya = Z(-.8) + rr + 30;
+  o += `<g stroke="var(--text)" stroke-width=".75"><line x1="${X(-.12)}" y1="${Z(-.8) + rr + 8}" x2="${X(-.12)}" y2="${ya + 5}"/><line x1="${X(0)}" y1="${Z(-.8) + rr + 8}" x2="${X(0)}" y2="${ya + 5}"/><line x1="${X(-.12)}" y1="${ya}" x2="${X(0)}" y2="${ya}"/></g><text x="${X(-.06)}" y="${ya + 17}" text-anchor="middle" font-size="12" fill="var(--text)">0.120</text>`;
+  const xd = X(.46);
+  o += `<g stroke="var(--text)" stroke-width=".75" fill="none"><line x1="${X(.16)}" y1="${Z(-.8)}" x2="${xd + 5}" y2="${Z(-.8)}" stroke-dasharray="3 3"/><line x1="${xd}" y1="${T + 4}" x2="${xd}" y2="${Z(-.8)}"/><line x1="${xd - 5}" y1="${Z(-.8)}" x2="${xd + 5}" y2="${Z(-.8)}"/><path d="M${xd - 4} ${T + 12} L${xd} ${T + 4} L${xd + 4} ${T + 12}"/></g><text x="${xd + 10}" y="${(T + Z(-.8)) / 2}" font-size="12" fill="var(--text)">0.800</text><text x="${xd + 10}" y="${(T + Z(-.8)) / 2 + 17}" font-size="12" font-family="Noto Sans SC, sans-serif" fill="var(--text-2)">至地表</text>`;
+  }
+  o += `<rect width="${W}" height="${T}" fill="var(--surface)"/><rect width="${L}" height="${H}" fill="var(--surface)"/><line x1="${L}" y1="${T}" x2="${W}" y2="${T}" stroke="var(--line-2)"/><line x1="${L}" y1="${T}" x2="${L}" y2="${H}" stroke="var(--line-2)"/>`;
+  for (let i = -16; i <= 16; i++) { const p = X(i * .05); if (p <= L || p >= W) continue; o += `<line x1="${p}" y1="${T}" x2="${p}" y2="${T - (i % 2 ? 4 : 8)}" stroke="var(--text-3)" stroke-width=".75"/>`; if (i % 4 === 0) o += `<text x="${p + 3}" y="12" font-size="11" fill="var(--text-3)">${(i * .05).toFixed(1)}</text>`; }
+  for (let i = 9; i <= 24; i++) { const p = Z(-i * .05); if (p <= T || p >= H) continue; o += `<line x1="${L}" y1="${p}" x2="${L - (i % 2 ? 4 : 8)}" y2="${p}" stroke="var(--text-3)" stroke-width=".75"/>`; if (i % 2 === 0) o += `<text x="4" y="${p - 3}" font-size="11" fill="var(--text-3)">${(-i * .05).toFixed(1)}</text>`; }
+  const mx = L + 12, my = H - 112, mw = 150, mh = 96, ms = 68, MX = x => mx + mw / 2 + x * ms, MZ = z => my + 12 - z * ms * .85;
+  o += `<g><rect x="${mx}" y="${my}" width="${mw}" height="${mh}" rx="10" fill="var(--surface)" stroke="var(--line-2)"/><line x1="${mx + 8}" y1="${MZ(0)}" x2="${mx + mw - 8}" y2="${MZ(0)}" stroke="var(--text-2)"/><rect x="${MX(-.35)}" y="${MZ(-.55)}" width="${.7 * ms}" height="${.5 * ms * .85}" fill="var(--sand)"/>${CAB3.map(([, x]) => `<circle cx="${MX(x)}" cy="${MZ(-.8)}" r="1.8" fill="var(--m-cu)"/>`).join('')}<rect x="${MX(-.6)}" y="${MZ(-.42)}" width="${1.2 * ms}" height="${.78 * ms * .85}" fill="none" stroke="var(--text)"/></g>`;
+  return o + '</svg>';
+}
+const SEGS = [[0, 1200, 'S1', '直埋', 648, 'ok'], [1200, 1500, 'S2', '排管', 612, 'warn'], [1500, 3200, 'S3', '直埋', 648, 'ok']];
+function ampRoute() {
+  const L = 28, R = 28, len = 3200, px = y => L + y / len * (W - L - R), cn = 'font-family="Noto Sans SC, sans-serif"';
+  let o = svgOpen('线路平纵断面');
+  o += `<text x="${L}" y="34" font-size="13" ${cn} fill="var(--text-2)">平面 · 分段与允许载流量</text>`;
+  o += `<line x1="${L}" y1="72" x2="${W - R}" y2="72" stroke="var(--text)" stroke-width="1.5"/>`;
+  for (let y = 0; y <= len; y += 50) { const big = y % 500 === 0; o += `<line x1="${px(y)}" y1="72" x2="${px(y)}" y2="${72 - (big ? 10 : y % 100 === 0 ? 6 : 3)}" stroke="var(--text)" stroke-width="${big ? 1 : .6}"/>`; if (big && y < len - 300) o += `<text x="${px(y)}" y="56" text-anchor="${y ? 'middle' : 'start'}" font-size="12" fill="var(--text-2)">${km(y)}</text>`; }
+  o += `<text x="${W - R}" y="56" text-anchor="end" font-size="12" fill="var(--text-2)">K3+200</text>`;
+  SEGS.forEach(([a, b, n, t, amp, st]) => {
+    const sel = n === 'S2';
+    o += `<rect x="${px(a) + 1}" y="86" width="${px(b) - px(a) - 2}" height="44" rx="8" fill="${st === 'warn' ? 'var(--warn-soft)' : 'var(--fill)'}" stroke="${sel ? 'var(--text)' : 'var(--line-2)'}" stroke-width="${sel ? 1.4 : .75}"/>`;
+    o += `<text x="${px(a) + 10}" y="104" font-size="13" font-weight="600" ${cn} fill="var(--text)">${n} ${t}</text><text x="${px(a) + 10}" y="122" font-size="12" fill="${st === 'warn' ? 'var(--warn)' : 'var(--text-2)'}">${amp} A</text>`;
+  });
+  [[0, 533], [533, 1066], [1066, 1600], [1600, 2133], [2133, 2666], [2666, 3200]].forEach(([a, b]) => { o += `<line x1="${px(a) + 3}" y1="146" x2="${px(b) - 3}" y2="146" stroke="var(--text-3)" stroke-width="2.5" stroke-linecap="round"/>`; });
+  o += `<text x="${L}" y="168" font-size="12" ${cn} fill="var(--text-3)">接地 · 交叉互联 2 个单元</text>`;
+  const top = 250, zy = d => top + d * 110, prof = [[0, 1.0], [1150, .8], [1200, 1.4], [1500, 1.4], [1550, .8], [1800, .8], [1860, 1.5], [1920, .8], [3200, .8]];
+  o += `<text x="${L}" y="${top - 30}" font-size="13" ${cn} fill="var(--text-2)">纵断面 · 埋深 m</text>`;
+  o += `<line x1="${L}" y1="${top}" x2="${W - R}" y2="${top}" stroke="var(--text)" stroke-width="1.5"/>`;
+  for (let x = L + 6; x < W - R; x += 10) o += `<line x1="${x}" y1="${top}" x2="${x - 6}" y2="${top - 6}" stroke="var(--text-3)" stroke-width=".6"/>`;
+  [0.5, 1.0, 1.5].forEach(d => { o += `<line x1="${L}" y1="${zy(d)}" x2="${W - R}" y2="${zy(d)}" stroke="var(--line)" stroke-width=".6"/><text x="${W - R}" y="${zy(d) - 4}" text-anchor="end" font-size="11" fill="var(--text-3)">−${d.toFixed(1)}</text>`; });
+  o += `<polyline points="${prof.map(([y, d]) => `${px(y)},${zy(d)}`).join(' ')}" fill="none" stroke="var(--text)" stroke-width="2" stroke-linejoin="round"/>`;
+  [[1050, 'J1 接头井', 0], [1860, 'X1 交叉 · 热力管 · 未计算', 1], [2133, 'J2 接头井', 0]].forEach(([y, t, warn], i) => {
+    o += `<line x1="${px(y)}" y1="72" x2="${px(y)}" y2="${zy(1.75)}" stroke="var(--text-3)" stroke-width=".75" stroke-dasharray="${warn ? '4 3' : 'none'}"/><circle cx="${px(y)}" cy="72" r="5" fill="var(--surface)" stroke="var(--text)" stroke-width="1.5"/><text x="${px(y) + 8}" y="${zy(1.75) + 16 + (i === 2 ? 18 : 0)}" font-size="12" ${cn} fill="${warn ? 'var(--warn)' : 'var(--text-2)'}">${t} · ${km(y)}</text>`;
+  });
+  return o + '</svg>';
+}
+function ampIso() {
+  // isometric, x across the trench, y along the route, z up. Visible faces: x = X1 and y = Y1 (the cut).
+  const s = 130, ox = 470, oy = 178, c = Math.cos(Math.PI / 6), sn = Math.sin(Math.PI / 6);
+  const p = (x, y, z) => [ox + (x - y) * c * s, oy + (x + y) * sn * s - z * s];
+  const P2 = (x, y, z) => { const [u, v] = p(x, y, z); return `${u.toFixed(1)},${v.toFixed(1)}`; };
+  const poly = (pts, fill, stroke, extra = '') => `<polygon points="${pts.map(q => P2(...q)).join(' ')}" fill="${fill}" stroke="${stroke}" stroke-width=".8" stroke-linejoin="round" ${extra}/>`;
+  const X0 = -0.55, X1 = 0.55, Y0 = -1.5, Y1 = 1.5, Zb = -1.15;
+  let o = svgOpen('三维视图');
+  // hidden faces first (left-back, right-back, bottom)
+  o += poly([[X0, Y0, 0], [X0, Y1, 0], [X0, Y1, Zb], [X0, Y0, Zb]], 'var(--soil)', 'var(--line-2)');
+  o += poly([[X0, Y0, 0], [X1, Y0, 0], [X1, Y0, Zb], [X0, Y0, Zb]], 'var(--soil)', 'var(--line-2)');
+  o += poly([[X0, Y0, Zb], [X1, Y0, Zb], [X1, Y1, Zb], [X0, Y1, Zb]], 'var(--soil)', 'var(--line-2)');
+  // backfill top surface inside the block
+  o += poly([[-.35, Y0, -.55], [.35, Y0, -.55], [.35, Y1, -.55], [-.35, Y1, -.55]], 'var(--sand)', 'var(--text-3)', 'stroke-dasharray="4 3" fill-opacity=".8"');
+  // cables along y
+  CAB3.forEach(([, x]) => { const [u0, v0] = p(x, Y0, -.8), [u1, v1] = p(x, Y1, -.8); o += `<line x1="${u0}" y1="${v0}" x2="${u1}" y2="${v1}" stroke="var(--m-jacket)" stroke-width="9" stroke-linecap="round"/><line x1="${u0}" y1="${v0 - 2.5}" x2="${u1}" y2="${v1 - 2.5}" stroke="#FFFFFF" stroke-opacity=".2" stroke-width="2"/>`; });
+  // heat pipe crossing along x, above the cables
+  const [a1, b1] = p(X0 - .15, .3, -.3), [a2, b2] = p(X1 + .15, .3, -.3);
+  o += `<line x1="${a1}" y1="${b1}" x2="${a2}" y2="${b2}" stroke="var(--warn)" stroke-opacity=".8" stroke-width="34" stroke-linecap="round"/><line x1="${a1}" y1="${b1 - 9}" x2="${a2}" y2="${b2 - 9}" stroke="#FFFFFF" stroke-opacity=".3" stroke-width="5" stroke-linecap="round"/>`;
+  // visible faces: right side (x = X1) and ground surface are see-through, the cut face (y = Y1) is solid
+  o += poly([[X1, Y0, 0], [X1, Y1, 0], [X1, Y1, Zb], [X1, Y0, Zb]], 'var(--soil)', 'var(--text-3)', 'fill-opacity=".35"');
+  o += poly([[X0, Y0, 0], [X1, Y0, 0], [X1, Y1, 0], [X0, Y1, 0]], 'var(--surface)', 'var(--text-2)', 'fill-opacity=".25"');
+  o += poly([[X0, Y1, 0], [X1, Y1, 0], [X1, Y1, Zb], [X0, Y1, Zb]], 'var(--soil)', 'var(--text-2)');
+  o += poly([[-.35, Y1, -.55], [.35, Y1, -.55], [.35, Y1, -1.05], [-.35, Y1, -1.05]], 'var(--sand)', 'var(--text-3)', 'stroke-dasharray="4 3"');
+  CAB3.forEach(([, x]) => { const [u, v] = p(x, Y1, -.8); o += cableDisk(u, v, 7); });
+  const lab = (q, t, color = 'var(--text-2)', anchor = 'start', dy = 0) => { const [u, v] = p(...q); return `<text x="${u}" y="${v + dy}" font-size="12" font-family="Noto Sans SC, sans-serif" fill="${color}" text-anchor="${anchor}">${t}</text>`; };
+  o += lab([X1 + .3, .3, -.3], '外部热源 · 热力管', 'var(--warn)', 'start', 4);
+  o += lab([X0, Y1, 0], '剖切面 · 截面 A', 'var(--text)', 'end', -6);
+  const gx = W - 80, gy = H - 90;
+  o += `<g transform="translate(${gx} ${gy})" font-size="11" fill="var(--text-2)"><line x1="0" y1="0" x2="${c * 30}" y2="${sn * 30}" stroke="var(--text-2)"/><text x="${c * 30 + 4}" y="${sn * 30 + 4}">x</text><line x1="0" y1="0" x2="${-c * 30}" y2="${sn * 30}" stroke="var(--text-2)"/><text x="${-c * 30 - 12}" y="${sn * 30 + 4}">y</text><line x1="0" y1="0" x2="0" y2="-30" stroke="var(--text-2)"/><text x="4" y="-30">z</text></g>`;
+  return o + '</svg>';
+}
+function amp(view) {
+  const secOpen = view === 'sec', routeOpen = view === 'route';
+  const tree = `<div class="tg">对象</div>
+    ${group('cable', '电缆', '1×630 · 库', false, [])}
+    ${group('sec', '敷设截面', '2', secOpen, [leaf('A · 直埋水平', '', 'now', secOpen, 'v:sec'), leaf('B · 排管 4 孔', '', 'now', false)], 'v:sec')}
+    ${group('route', '线路', '3.2 km', routeOpen, [leaf('S1 直埋', '1200 m', 'now', false), leaf('S2 排管', '300 m', 'now', routeOpen), leaf('S3 直埋', '1700 m', 'now', false), leaf('J1 接头井', 'K1+050', 'now'), leaf('X1 交叉 · 热力管', 'K1+860', 'now', view === 'iso')], 'v:route')}
+    ${group('cond', '工况与判据', '夏季 · 600 A', false, [])}
+    <div class="tg">计算</div>${item('study', '载流量 · 各段', 'now')}${item('study', '交叉段载流量', 'old')}${item('study', '屏蔽短路热稳定', 'bad')}
+    <div class="tg">交付</div>${item('report', '计算书', 'draft')}`;
+  const rows = [row('直埋段允许载流量', '≥ 600 A', '<span class="cu">648 A</span>', '+8.0 %', crit('ok', '满足')),
+    row('最不利段 S2 排管', '≥ 600 A', '<span class="cu">612 A</span>', '+2.0 %', crit('warn', '余量小'), true),
+    row('X1 热力管交叉段', '≥ 600 A', '—', '', crit('na', '未计算')),
+    row('金属屏蔽短路热稳定', '≥ 10 kA · 1 s', '—', '', crit('na', '缺屏蔽截面')),
+    row('护层感应电压', '≤ 50 V', '—', '', crit('na', '未接入'))];
+  const common = { name: '临港变 35 kV 出线', task: '载流量校核', report: '计算书', tree, view, rows,
+    views: [['sec', '截面 A'], ['route', '线路'], ['iso', '三维']],
+    verdict: crit('warn', '能带 600 A，S2 余量 2 %，还有 2 项未完成'), run: `<button class="btn btn--run">运行交叉段</button>` };
+  if (view === 'sec') return frame({ ...common, canvas: ampSection(),
+    overlay: `<span class="overlay">叠加 <b>导体温度 °C</b> · 运行 #31</span>`,
+    tools: `<button class="tool on" title="选择">${ic('sel', 1)}</button><button class="tool" title="平移">${ic('pan', 1)}</button><button class="tool" title="放置电缆">${ic('place', 1)}</button><button class="tool" title="标注">${ic('dim', 1)}</button><button class="tool" title="测量">${ic('meas', 1)}</button>${zoom}`,
+    insp: `<div class="insp__h"><b>相 B 电缆</b><span>敷设截面 A · 回路 1</span></div>
+      <div class="grp"><span class="grp__t">位置 · m</span>${prop('x', inp('0.000'))}${prop('z', inp('−0.800'))}</div>
+      <div class="grp"><span class="grp__t">电缆</span>${prop('型号', '<span class="link">26/35 kV 1×630 铜</span>', 'lib')}${prop('外径', inp('56.6', 'mm', 1), 'der')}${prop('相', `<span class="si"><i class="c" style="background:var(--pb)"></i>B 相</span>`)}</div>
+      <div class="grp"><span class="grp__t">结果 · 运行 #31</span>${prop('导体', '<span class="val">89.4 °C</span>')}${prop('外护套', '<span class="val">63.2 °C</span>')}${prop('损耗', '<span class="val">31.4 W/m</span>')}</div>`,
+    status: `<span>x 0.000  z −0.800 m</span><span>1 : 6</span><span class="sp"></span><span>cablesim.iec60287 0.1.0</span>` });
+  if (view === 'route') return frame({ ...common, canvas: ampRoute(),
+    overlay: `<span class="overlay">叠加 <b>各段允许载流量</b> · 运行 #31</span>`,
+    tools: `<button class="tool on" title="选择">${ic('sel', 1)}</button><button class="tool" title="平移">${ic('pan', 1)}</button><button class="tool" title="插入分段">${ic('seg', 1)}</button><button class="tool" title="添加局部对象">${ic('obj', 1)}</button><button class="tool" title="测量">${ic('meas', 1)}</button>${zoom}`,
+    insp: `<div class="insp__h"><b>分段 S2 · 排管</b><span>线路 · 第 2 段 / 共 3 段</span></div>
+      <div class="grp"><span class="grp__t">里程</span>${prop('起点', inp('K1+200'))}${prop('终点', inp('K1+500'))}${prop('长度', inp('300', 'm', 1), 'der')}</div>
+      <div class="grp"><span class="grp__t">敷设</span>${prop('方式', inp('排管'))}${prop('截面', '<span class="link">B · 排管 4 孔</span>')}${prop('埋深', inp('1.40', 'm'))}${prop('接地', inp('交叉互联 · 1'))}</div>
+      <div class="grp"><span class="grp__t">结果 · 运行 #31</span>${prop('允许', '<span class="val cu">612 A</span>')}${prop('余量', `<span class="si"><i class="c c--warn"></i><span class="val">+2.0 %</span></span>`)}<span class="hint">全线最不利段，决定整条线路的载流量。</span></div>`,
+    status: `<span>K1+350</span><span>水平 1 : 4000 · 竖向 1 : 50</span><span class="sp"></span><span>cablesim.iec60287 0.1.0</span>` });
+  return frame({ ...common, canvas: ampIso(), ro: '三维 · 只读 · 修改请回到截面或线路',
+    overlay: `<span class="overlay">剖切 <b>K1+861.5</b> · 交叉段</span>`,
+    tools: `<button class="tool on" title="旋转">${ic('orbit', 1)}</button><button class="tool" title="平移">${ic('pan', 1)}</button><button class="tool" title="剖切">${ic('cut', 1)}</button><button class="tool" title="测量">${ic('meas', 1)}</button><span class="vsep"></span><button class="tool" title="适应窗口">${ic('fit', 1)}</button>`,
+    insp: `<div class="insp__h"><b>X1 交叉 · 热力管</b><span>线路局部对象 · K1+860</span></div>
+      <div class="grp"><span class="grp__t">几何</span>${prop('管径', inp('0.30', 'm'), 'doc')}${prop('净距', inp('0.50', 'm'), 'doc')}${prop('交角', inp('90', '°'))}</div>
+      <div class="grp"><span class="grp__t">热源</span>${prop('表面温度', '<span class="inp" style="border-color:var(--bad)"><span style="color:var(--text-3)">必填</span><small>°C</small></span>')}<span class="hint" style="color:var(--bad)">交叉段计算需要热力管表面温度。</span></div>
+      <div class="grp"><span class="grp__t">显示</span>${prop('土体', '<span class="sw on"></span>')}${prop('回填', '<span class="sw on"></span>')}${prop('温度场', '<span class="sw"></span>')}</div>`,
+    status: `<span>方位 45° · 俯仰 30°</span><span>范围 K1+858.5 – K1+861.5</span><span class="sp"></span><span>只读</span>` });
+}
+
+/* ================= cable design project ================= */
+const LAY = [['导体', '铜 · 紧压', null, 30.0, 'var(--m-cu)'], ['导体屏蔽', '半导电', 0.8, 31.6, 'var(--m-semi)'], ['绝缘', 'XLPE', 10.5, 52.6, 'var(--m-xlpe)'], ['绝缘屏蔽', '半导电', 0.8, 54.2, 'var(--m-semi)'], ['金属屏蔽', '铜丝 + 铜带', 0.8, 55.8, 'var(--m-screen)'], ['外护套', 'PE', 3.0, 61.8, 'var(--m-jacket)']];
+function desSection() {
+  const cx = 260, cy = 250, k = 5.8, R = 61.8 / 2 * k;
+  let o = svgOpen('电缆结构截面');
+  [...LAY].reverse().forEach(([, , , d, c]) => { o += `<circle cx="${cx}" cy="${cy}" r="${d / 2 * k}" fill="${c}" ${c.includes('xlpe') ? 'stroke="var(--line-2)" stroke-width=".6"' : ''}/>`; });
+  o += `<circle cx="${cx}" cy="${cy}" r="${60 / 2 * k}" fill="none" stroke="var(--bad)" stroke-width="1.6" stroke-dasharray="7 5"/>`;
+  const ang = [-62, -38, -14, 10, 34, 58];
+  LAY.forEach(([n, , , d], i) => {
+    const prev = i ? LAY[i - 1][3] : 0, rm = i ? (prev + d) / 4 * k : d / 4 * k, a = ang[i] * Math.PI / 180, sel = n === '绝缘';
+    const px = cx + rm * Math.cos(a), py = cy + rm * Math.sin(a), bx = cx + (R + 34) * Math.cos(a), by = cy + (R + 34) * Math.sin(a);
+    o += `<line x1="${px}" y1="${py}" x2="${bx - 12 * Math.cos(a)}" y2="${by - 12 * Math.sin(a)}" stroke="var(--text)" stroke-width=".75"/><circle cx="${px}" cy="${py}" r="2.5" fill="var(--text)"/><circle cx="${bx}" cy="${by}" r="12" fill="${sel ? 'var(--text)' : 'var(--surface)'}" stroke="var(--text)"/><text x="${bx}" y="${by + 4.5}" text-anchor="middle" font-size="12" font-weight="600" fill="${sel ? 'var(--inverse)' : 'var(--text)'}">${i + 1}</text>`;
+  });
+  const tx = 520, ty = 110;
+  o += `<text x="${tx}" y="${ty}" font-size="13" font-weight="600" font-family="Noto Sans SC, sans-serif" fill="var(--text)">结构层</text>`;
+  LAY.forEach(([n, m, t, d], i) => {
+    const y = ty + 34 + i * 40, sel = n === '绝缘';
+    if (sel) o += `<rect x="${tx - 8}" y="${y - 22}" width="326" height="36" rx="8" fill="none" stroke="var(--text)" stroke-width="1.2"/>`;
+    else o += `<line x1="${tx}" y1="${y + 18}" x2="${tx + 310}" y2="${y + 18}" stroke="var(--line)"/>`;
+    o += `<circle cx="${tx + 10}" cy="${y - 4}" r="10" fill="${sel ? 'var(--text)' : 'var(--surface)'}" stroke="var(--text)"/><text x="${tx + 10}" y="${y}" text-anchor="middle" font-size="11" font-weight="600" fill="${sel ? 'var(--inverse)' : 'var(--text)'}">${i + 1}</text><text x="${tx + 30}" y="${y}" font-size="13" font-weight="${sel ? 600 : 400}" font-family="Noto Sans SC, sans-serif" fill="var(--text)">${n} · ${m}</text>`;
+  });
+  const y = cy + R + 26;
+  o += `<g stroke="var(--text)" stroke-width=".75"><line x1="${cx - R}" y1="${y}" x2="${cx + R}" y2="${y}"/><line x1="${cx - R}" y1="${y - 6}" x2="${cx - R}" y2="${y + 6}"/><line x1="${cx + R}" y1="${y - 6}" x2="${cx + R}" y2="${y + 6}"/></g><text x="${cx}" y="${y + 18}" text-anchor="middle" font-size="13" fill="var(--text)">Ø 61.8</text>`;
+  o += `<text x="24" y="${cy - R - 10}" font-size="12" font-family="Noto Sans SC, sans-serif" fill="var(--bad)">红色虚线 · 客户上限 Ø 60.0</text>`;
+  return o + '</svg>';
+}
+function desIso() {
+  // stepped cut-back: each outer layer stops earlier so every layer is visible; diameters to scale
+  const cy = 260, k = 4.2, x0 = 70, step = 82, ex = 0.32, n = LAY.length;
+  const ends = LAY.map((_, i) => x0 + 150 + (n - 1 - i) * step);
+  let o = svgOpen('电缆三维剥切');
+  o += `<defs><linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFFFFF" stop-opacity=".3"/><stop offset=".45" stop-color="#FFFFFF" stop-opacity="0"/><stop offset="1" stop-color="#000000" stop-opacity=".22"/></linearGradient><linearGradient id="fade" x1="0" x2="1"><stop offset="0" stop-color="var(--surface)" stop-opacity="1"/><stop offset="1" stop-color="var(--surface)" stop-opacity="0"/></linearGradient></defs>`;
+  for (let j = n - 1; j >= 0; j--) {
+    const [nm, , , d, c] = LAY[j], r = d / 2 * k, start = j === n - 1 ? x0 : ends[j + 1];
+    if (j < n - 1) { const ro = LAY[j + 1][3] / 2 * k; o += `<ellipse cx="${start}" cy="${cy}" rx="${ro * ex}" ry="${ro}" fill="${LAY[j + 1][4]}" stroke="var(--text-2)" stroke-width=".6"/>`; }
+    o += `<ellipse cx="${start}" cy="${cy}" rx="${r * ex}" ry="${r}" fill="${c}"/><rect x="${start}" y="${cy - r}" width="${ends[j] - start}" height="${2 * r}" fill="${c}"/><rect x="${start}" y="${cy - r}" width="${ends[j] - start}" height="${2 * r}" fill="url(#shade)"/>`;
+    if (j === 0) o += `<ellipse cx="${ends[0]}" cy="${cy}" rx="${r * ex}" ry="${r}" fill="${c}" stroke="var(--text-2)" stroke-width=".6"/>`;
+    const sel = nm === '绝缘', lx = (start + ends[j]) / 2, top = cy - LAY[n - 1][3] / 2 * k - 34 - (j % 2) * 28;
+    if (sel) o += `<rect x="${start - 3}" y="${cy - r - 4}" width="${ends[j] - start + 6}" height="${2 * r + 8}" rx="4" fill="none" stroke="var(--text)" stroke-width="1.2"/>`;
+    o += `<line x1="${lx}" y1="${cy - r - (sel ? 4 : 0)}" x2="${lx}" y2="${top + 6}" stroke="var(--text-3)" stroke-width=".75"/><text x="${lx}" y="${top}" text-anchor="middle" font-size="13" font-family="Noto Sans SC, sans-serif" font-weight="${sel ? 600 : 400}" fill="var(--text)">${nm}</text>`;
+  }
+  o += `<rect x="${x0 - 30}" y="${cy - 150}" width="60" height="300" fill="url(#fade)"/>`;
+  o += `<text x="${x0}" y="${cy + 170}" font-size="12" font-family="Noto Sans SC, sans-serif" fill="var(--text-2)">直径按真实比例；剥切长度仅为示意</text>`;
+  return o + '</svg>';
+}
+/* variants for the failing outer-diameter criterion */
+const VARS = [
+  { k: '当前', d: 'v11', od: 61.8, area: true, note: '' },
+  { k: '方案 1', d: '型线导体 Ø 29.0', od: 60.8, area: true, note: '需新模具' },
+  { k: '方案 2', d: '1 + 细铜丝屏蔽', od: 60.4, area: true, note: '' },
+  { k: '方案 3', d: '2 + 半导电减薄', od: 60.0, area: true, note: '需局放复核', ok: true },
+  { k: '方案 4', d: '改 1×500', od: 57.8, area: false, note: '载流量 −10 %' },
+  { k: '偏离', d: '客户放宽 ≤ 62', od: 61.8, area: true, note: '需客户确认', dev: true },
+];
+const mark = (ok, txt) => `<span class="cell">${ok === null ? '<i class="c c--na"></i>' : `<i class="c c--${ok ? 'ok' : 'bad'}"></i>`}${txt ? `<span class="v">${txt}</span>` : ''}</span>`;
+function thumb(od) {
+  const k = 1.15, r = od / 2 * k, lim = 30 * k;
+  return `<svg viewBox="-40 -40 80 80" width="46" height="46" aria-hidden="true"><circle r="${r}" fill="var(--m-jacket)"/><circle r="${r - 3.4}" fill="var(--m-screen)"/><circle r="${r - 4.3}" fill="var(--m-xlpe)"/><circle r="${od < 59 ? 12.8 : 15 * k * (od > 61 ? 1 : .97)}" fill="var(--m-cu)"/><circle r="${lim}" fill="none" stroke="var(--bad)" stroke-width="1.2" stroke-dasharray="4 3"/></svg>`;
+}
+function variantsView() {
+  const rows = [
+    ['外径 ≤ 60.0', v => v.dev ? mark(true, v.od.toFixed(1) + ' *') : mark(v.od <= 60.0, v.od.toFixed(1))],
+    ['绝缘 ≥ 10.5', () => mark(true, '10.5')],
+    ['护套 ≥ 2.95', v => mark(true, '3.0')],
+    ['导体 630 mm²', v => mark(v.area, v.area ? '630' : '500')],
+    ['屏蔽短路 ≥ 20 kA', () => mark(true, '24')],
+    ['载流量 · 参考', v => v.k === '当前' ? mark(true, '715') : mark(null, v.area ? '待重算' : '≈ 640')],
+  ];
+  const head = VARS.map((v, i) => `<th class="${i === 0 ? 'cur' : ''} ${v.ok ? 'okcol' : ''}"><div class="vt">${thumb(v.od)}<b>${v.k}</b><span>${v.d}</span></div></th>`).join('');
+  const body = rows.map(([n, f]) => `<tr><td>${n}</td>${VARS.map((v, i) => `<td class="${i === 0 ? 'cur' : ''}">${f(v)}</td>`).join('')}</tr>`).join('');
+  const notes = `<tr><td>说明</td>${VARS.map((v, i) => `<td class="${i === 0 ? 'cur' : ''}" style="white-space:normal;color:var(--text-2)">${v.note || '—'}</td>`).join('')}</tr>`;
+  const foot = `<tfoot><tr><td></td>${VARS.map((v, i) => `<td class="${i === 0 ? 'cur' : ''}">${i === 0 ? '<span class="hint">v11</span>' : v.dev ? '<button class="btn btn--sm">记录偏离</button>' : `<button class="btn btn--sm ${v.ok ? 'btn--pri' : ''}">采纳为草稿</button>`}</td>`).join('')}</tr></tfoot>`;
+  return `<div class="varwrap"><div class="varhead"><b>方案对比 · 成品外径</b><span>方案 1–4 由 Agent 提出、待确认；每个方案都按全部核对项重查；* 按客户确认后的要求判定</span></div>
+    <div class="scrollx"><table class="vm"><thead><tr><th></th>${head}</tr></thead><tbody>${body}${notes}</tbody>${foot}</table></div>
+    <span class="hint">满足全部已查判据：方案 3、偏离。采纳后成为新版本草稿，审核后发布；载流量表与短路容量需随后重算。</span></div>`;
+}
+function odInspector() {
+  const parts = [['导体', 30.0, 'var(--m-cu)', false], ['半导电 ×2 层 ×2 侧', 3.2, 'var(--m-semi)', false], ['绝缘 ×2', 21.0, 'var(--m-xlpe)', true], ['金属屏蔽 ×2', 1.6, 'var(--m-screen)', false], ['外护套 ×2', 6.0, 'var(--m-jacket)', true]];
+  return `<div class="insp__h"><b>核对项 · 成品外径</b><span>不满足 · 超出 1.8 mm</span></div>
+    <div class="grp"><span class="grp__t">要求</span>${prop('上限', inp('60.0', 'mm', 1), 'doc')}<span class="hint">客户技术规范书 第 7 页 §4.2</span>${prop('当前', '<span class="val badv">61.8 mm</span>')}</div>
+    <div class="grp"><span class="grp__t">外径由什么组成 · mm</span>
+      <div class="bar2">${parts.map(([, v, c, lk]) => `<i class="${lk ? 'lk' : ''}" style="width:${v / 61.8 * 100}%;background-color:${c}"></i>`).join('')}</div>
+      <div class="legend2">${parts.map(([n, v, c, lk]) => `<i style="background:${c}"></i><span>${n}${lk ? ' · 已是标准最小' : ''}</span><em>${v.toFixed(1)}</em>`).join('')}</div>
+      <span class="hint">斜线部分由标准锁定，不能再减。</span></div>
+    <div class="grp"><span class="grp__t">反算</span>${prop('需减少', '<span class="val">1.8 mm</span>')}${prop('可调上限', '<span class="val">≈ 1.8 mm</span>')}<span class="hint">可调项：导体结构 1.0、金属屏蔽 0.4、半导电层 0.4。正好够，余量为 0。</span></div>
+    <div class="grp"><span class="grp__t">方案</span><span class="hint">方案由 Agent 按可调项生成，每个方案都已对全部核对项重新检查；采纳前需人工确认。</span><button class="btn btn--sm btn--ag" style="align-self:flex-start">${ic('agent', 1)}再生成方案</button></div>`;
+}
+function des(view) {
+  const tree = `<div class="tg">对象</div>
+    ${group('cable', '结构层', '6 层', view !== 'var', LAY.map(([n, , t]) => leaf(n, t == null ? '630 mm²' : t.toFixed(2), 'now', n === '绝缘')))}
+    ${group('std', '执行标准', 'GB/T 12706.3', false, [])}
+    ${group('req', '客户要求', '技术规范书', view === 'var', [leaf('外径 ≤ 60.0 mm', 'p.7', 'bad', view === 'var', 'v:var'), leaf('导体截面 630 mm²', 'p.5', 'now'), leaf('屏蔽短路 ≥ 20 kA', 'p.8', 'now')], 'v:var')}
+    ${group('layer', '方案', '4 + 偏离', view === 'var', [leaf('方案 1 · 型线导体', '', 'draft'), leaf('方案 2 · 细铜丝屏蔽', '', 'draft'), leaf('方案 3 · 半导电减薄', '', 'draft'), leaf('方案 4 · 改 1×500', '', 'draft')], 'v:var')}
+    <div class="tg">计算</div>${item('study', '结构核对', 'now')}${item('study', '载流量表 · 6 工况', 'old')}${item('study', '短路容量', 'old')}
+    <div class="tg">交付</div>${item('report', '规格书', 'draft')}`;
+  const rows = [row('成品外径 · 查看方案 →', '≤ 60.0 mm', '<span class="badv">61.8 mm</span>', '−3.0 %', crit('bad', '不满足'), true),
+    row('绝缘标称厚度 · GB/T 12706.3', '≥ 10.5 mm', '10.5 mm', '0', crit('ok', '满足')),
+    row('外护套标称厚度 · 0.035 D + 1.0', '≥ 2.95 mm', '3.0 mm', '+0.05', crit('ok', '满足')),
+    row('导体 20 °C 直流电阻 · GB/T 3956', '≤ 0.0283 Ω/km', '0.0283', '0', crit('ok', '满足')),
+    row('载流量表 · 6 工况', '完成', '—', '', crit('na', '未计算')),
+    row('导体短路容量', '≥ 40 kA · 1 s', '—', '', crit('na', '未计算'))];
+  const insp = `<div class="insp__h"><b>绝缘 · 第 3 层</b><span>XLPE · 35 kV 级</span></div>
+    <div class="grp"><span class="grp__t">厚度 · mm</span>${prop('标称', inp('10.50'))}${prop('标准最小', inp('10.50', '', 1), 'std')}${prop('最薄点', inp('≥ 9.35', '', 1), 'der')}</div>
+    <div class="grp"><span class="grp__t">材料</span>${prop('材料', '<span class="link">XLPE · 35 kV 级 v2</span>', 'lib')}${prop('热阻率', inp('3.50', 'K·m/W', 1), 'lock')}${prop('εr · tanδ', inp('2.5 · 0.001', '', 1), 'lock')}</div>
+    <div class="grp"><span class="grp__t">尺寸 · mm</span>${prop('内径', inp('31.6', '', 1), 'der')}${prop('外径', inp('52.6', '', 1), 'der')}<span class="hint">已是标准最小厚度，减薄会使绝缘判据不满足。</span></div>`;
+  return frame({ name: '26/35 kV 1×630 型号设计', task: '电缆型号设计', report: '规格书', tree, view, rows, insp: view === 'var' ? odInspector() : insp,
+    views: [['sec', '截面'], ['iso', '三维剥切'], ['var', '方案对比']],
+    verdict: crit('bad', '外径超出 1.8 mm，其余已查项满足，2 项未计算'), run: `<button class="btn btn--pri">编辑结构</button>`,
+    canvas: view === 'sec' ? desSection() : view === 'iso' ? desIso() : variantsView(), ro: view === 'iso' ? '三维 · 只读' : '',
+    overlay: view === 'sec' ? `<span class="overlay">对照 <b>客户外径上限</b></span>` : view === 'iso' ? `<span class="overlay">显示 <b>阶梯剥切</b></span>` : `<span class="overlay">按 <b>全部判据</b> 检查</span>`,
+    tools: view === 'var' ? '' : view === 'sec' ? `<button class="tool on" title="选择">${ic('sel', 1)}</button><button class="tool" title="插入层">${ic('layer', 1)}</button><button class="tool" title="标注">${ic('dim', 1)}</button><button class="tool" title="测量">${ic('meas', 1)}</button>${zoom}` : `<button class="tool on" title="旋转">${ic('orbit', 1)}</button><button class="tool" title="平移">${ic('pan', 1)}</button><button class="tool" title="剖切">${ic('cut', 1)}</button><span class="vsep"></span><button class="tool" title="适应窗口">${ic('fit', 1)}</button>`,
+    status: view === 'var' ? `<span>5 个候选 · 2 个满足全部已查判据</span><span class="sp"></span><span>结构核对 · 当前</span>` : view === 'sec' ? `<span>选中 绝缘 · r 15.80–26.30 mm</span><span>1 : 1.2</span><span class="sp"></span><span>结构核对 · 当前</span>` : `<span>侧视 · 15°</span><span class="sp"></span><span>只读</span>` });
+}
+
+
+
+/* ======== module layer: 型号 / 研究 workspaces where the engineer picks modules ======== */
+Object.assign(P, {
+  home: '<path d="M4 11 12 4l8 7v9H4z M10 20v-5h4v5"/>',
+  ctype: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="2.2"/>',
+  stdy: '<path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4A2 2 0 0 0 19 18l-5-9V3"/><path d="M7.5 15h9"/>',
+  check: '<path d="M6 3h12v18l-6-4-6 4z"/><path d="m9 10 2 2 4-4"/>', elec: '<path d="M13 3 5 13h6l-1 8 8-10h-6z"/>',
+  tbl: '<rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M4 10h16M4 15h16M10 4v16"/>', bolt: '<path d="M12 3v5M12 16v5M5 12h3M16 12h3"/><circle cx="12" cy="12" r="4"/>',
+  sheet: '<path d="M6 3h8l4 4v14H6z M14 3v4h4"/><path d="M9 12h6M9 16h6"/>', heat: '<path d="M10 14V5a2 2 0 0 1 4 0v9a4 4 0 1 1-4 0z"/><path d="M12 9v6"/>',
+  sweep: '<path d="M4 20V4M4 20h16"/><path d="M6 16c3-1 4-7 7-8s4 2 6 1"/>', cmp: '<path d="M12 3v18M5 7h14M5 7l-2 6a3 3 0 0 0 4 0zM19 7l-2 6a3 3 0 0 0 4 0z"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>', lockk: '<rect x="5" y="11" width="14" height="9.5" rx="2.5"/><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"/>',
+});
+const vr = (n, label) => `<span class="vr"><svg viewBox="-10 -10 20 20" width="18" height="18" aria-hidden="true">${[9, 7, 5, 3, 1.4].map((r, i) => `<circle r="${r}" fill="${i >= 5 - n ? 'var(--text)' : 'var(--surface)'}" stroke="var(--text)" stroke-width=".9"/>`).join('')}</svg>${label}</span>`;
+const mod = (k, icon, name, meta, state, active, kids = []) => `<div class="tn ${active ? 'cur' : ''}" data-mod="${k}"><span style="width:2px"></span>${ic(icon, 1)}<span class="lbl">${name}</span>${meta ? `<span class="meta">${meta}</span>` : ''}${state && state !== 'now' ? dot(state) : ''}</div>${active ? kids.join('') : ''}`;
+const sub2 = (label, meta, cur) => `<div class="tn l2 ${cur ? 'cur2' : ''}"><span class="lbl">${label}</span>${meta ? `<span class="meta">${meta}</span>` : ''}</div>`;
+const addMod = `<div class="tn addm">${ic('plus', 1)}<span class="lbl">添加模块</span></div>`;
+
+function frame2(d) {
+  return `<nav class="rail"><div class="r" style="margin-bottom:8px">${logo}</div><div class="r" title="首页">${ic('home')}</div><div class="r ${d.kind === '型号' ? 'cur' : ''}" title="型号">${ic('ctype')}</div><div class="r ${d.kind === '研究' ? 'cur' : ''}" title="研究">${ic('stdy')}</div><div class="r" title="库">${ic('lib')}</div><div class="r" title="插件">${ic('plug')}</div><span class="sp"></span><div class="r" title="设置">${ic('set')}</div></nav>
+  <div class="win">
+    <header class="head"><span class="kind">${d.kind}</span><span class="name">${d.name}</span><span class="task">${d.sub}</span><span class="sp"></span>
+      <span class="si" style="color:var(--text-2)">${dot(d.saved || 'now')}${d.savedText || '已保存 · 版本 12'}</span><span class="vsep"></span>
+      <button class="btn btn--ag">${ic('agent', 1)}Agent</button>${d.run || ''}</header>
+    <div class="main">
+      <aside class="tree" aria-label="模块"><div class="tg">模块</div>${d.mods}${addMod}</aside>
+      <section class="center" style="${d.noBottom ? 'grid-template-rows:48px minmax(0,1fr)' : ''}">
+        <div class="vbar"><b class="mtitle">${d.title}</b>${d.views ? `<div class="seg">${d.views.map(([k, t]) => `<button data-view="${k}" aria-pressed="${k === d.view}">${t}</button>`).join('')}</div>` : ''}<span class="sp"></span>${d.overlay || ''}</div>
+        <div class="canvas">${d.canvas}${d.ro ? `<span class="ro">${d.ro}</span>` : ''}${d.tools ? `<div class="float">${d.tools}</div>` : ''}</div>
+        ${d.noBottom ? '' : `<div class="bottom"><div class="btabs"><b>校核项</b>${d.verdict}<span class="sp"></span><span class="more">计算记录 · 消息 1</span></div><div class="bpane"><table class="crit"><tbody>${d.rows.join('')}</tbody></table></div></div>`}
+      </section>
+      <aside class="insp" aria-label="属性">${d.insp}${d.srckey === false ? '' : srckey}</aside>
+    </div>
+    <footer class="status">${d.status || ''}</footer>
+  </div>`;
+}
+const page = (html) => `<div class="pagewrap">${html}</div>`;
+const selTools = `<button class="tool on" title="选择">${ic('sel', 1)}</button><button class="tool" title="平移">${ic('pan', 1)}</button>`;
+
+/* ---------------- 型号 ---------------- */
+const TYPE_ROWS = [row('成品外径 · 查看方案 →', '≤ 60.0 mm', '<span class="badv">61.8 mm</span>', '−3.0 %', crit('bad', '不满足'), true),
+  row('绝缘标称厚度 · GB/T 12706.3', '≥ 10.5 mm', '10.5 mm', '0', crit('ok', '满足')),
+  row('外护套标称厚度 · 0.035 D + 1.0', '≥ 2.95 mm', '3.0 mm', '+0.05', crit('ok', '满足')),
+  row('导体 20 °C 直流电阻 · GB/T 3956', '≤ 0.0283 Ω/km', '0.0283', '0', crit('ok', '满足')),
+  row('载流量表', '6 工况', '—', '', crit('na', '历史 · 需重算'))];
+function typeWs(m, v) {
+  const mods = [
+    mod('structure', 'ctype', '结构设计', '6 层', null, m === 'structure', LAY.map(([n, , t]) => sub2(n, t == null ? '630 mm²' : t.toFixed(2), n === '绝缘'))),
+    mod('check', 'check', '标准核对', '1 项不满足', 'bad', m === 'check', [sub2('GB/T 12706.3-2020'), sub2('客户技术规范书', 'p.5–8')]),
+    mod('elec', 'elec', '电气参数', '版本 12', null, m === 'elec'),
+    mod('table', 'tbl', '载流量表', '6 工况', 'old', m === 'table'),
+    mod('sc', 'bolt', '短路容量', '未接入', null, m === 'sc'),
+    mod('sheet', 'sheet', '规格书', '', 'draft', m === 'sheet')].join('');
+  const base = { kind: '型号', name: 'YJV 26/35 kV 1×630', sub: '铜芯 · 交联聚乙烯 · GB/T 12706.3', mods, rows: TYPE_ROWS, verdict: crit('bad', '外径超出 1.8 mm；载流量表需随结构重算') };
+  if (m === 'structure') {
+    const insp = `<div class="insp__h"><b>绝缘 · 第 3 层</b><span>XLPE · 35 kV 级</span></div>
+      <div class="grp"><span class="grp__t">厚度 · mm</span>${prop('标称', inp('10.50'))}${prop('标准最小', inp('10.50', '', 1), 'std')}${prop('最薄点', inp('≥ 9.35', '', 1), 'der')}</div>
+      <div class="grp"><span class="grp__t">材料</span>${prop('材料', '<span class="link">XLPE · 35 kV 级 v2</span>', 'lib')}${prop('热阻率', inp('3.50', 'K·m/W', 1), 'lock')}</div>
+      <div class="grp"><span class="grp__t">尺寸 · mm</span>${prop('内径', inp('31.6', '', 1), 'der')}${prop('外径', inp('52.6', '', 1), 'der')}</div>`;
+    return frame2({ ...base, title: '结构设计', views: [['sec', '截面'], ['iso', '三维剥切']], view: v, insp, canvas: v === 'iso' ? desIso() : desSection(), ro: v === 'iso' ? '三维 · 只读' : '',
+      tools: v === 'iso' ? `<button class="tool on" title="旋转">${ic('orbit', 1)}</button><button class="tool" title="平移">${ic('pan', 1)}</button>` : `${selTools}<button class="tool" title="插入层">${ic('layer', 1)}</button><button class="tool" title="标注">${ic('dim', 1)}</button>${zoom}`,
+      run: `<button class="btn btn--pri">保存版本</button>`, status: `<span>选中 绝缘 · r 15.80–26.30 mm</span><span class="sp"></span><span>结构 · 版本 12 草稿</span>` });
+  }
+  if (m === 'check') {
+    const checkList = page(`<div class="phead"><b>标准核对</b><span>执行标准 GB/T 12706.3-2020 · 客户技术规范书（资料，5–8 页）</span></div>
+      <table class="tbl2"><thead><tr><th>核对项</th><th>依据</th><th class="n">要求</th><th class="n">当前</th><th>状态</th></tr></thead><tbody>
+      <tr class="pick" data-view="var" style="cursor:pointer"><td>成品外径</td><td class="mut">客户 · p.7 §4.2</td><td class="n">≤ 60.0 mm</td><td class="n badv">61.8</td><td>${crit('bad', '不满足 · 查看方案 →')}</td></tr>
+      <tr><td>绝缘标称厚度</td><td class="mut">GB/T 12706.3 表 7</td><td class="n">≥ 10.5 mm</td><td class="n">10.5</td><td>${crit('ok', '满足')}</td></tr>
+      <tr><td>绝缘最薄点</td><td class="mut">90 % − 0.1</td><td class="n">≥ 9.35 mm</td><td class="n">9.35</td><td>${crit('ok', '满足')}</td></tr>
+      <tr><td>外护套标称厚度</td><td class="mut">0.035 D + 1.0</td><td class="n">≥ 2.95 mm</td><td class="n">3.0</td><td>${crit('ok', '满足')}</td></tr>
+      <tr><td>导体 20 °C 直流电阻</td><td class="mut">GB/T 3956</td><td class="n">≤ 0.0283 Ω/km</td><td class="n">0.0283</td><td>${crit('ok', '满足')}</td></tr>
+      <tr><td>导体截面</td><td class="mut">客户 · p.5</td><td class="n">630 mm²</td><td class="n">630</td><td>${crit('ok', '满足')}</td></tr>
+      <tr><td>金属屏蔽短路容量</td><td class="mut">客户 · p.8</td><td class="n">≥ 20 kA · 1 s</td><td class="n">—</td><td>${crit('na', '未接入')}</td></tr></tbody></table>
+      <span class="hint">核对规则来自执行标准与客户要求；客户要求由资料导入，经人工批准。</span>`);
+    return frame2({ ...base, title: '标准核对', views: [['list', '核对清单'], ['var', '方案对比']], view: v, noBottom: true,
+      canvas: v === 'var' ? variantsView() : checkList, insp: odInspector(), run: `<button class="btn btn--run">重新核对</button>`,
+      status: v === 'var' ? `<span>5 个候选 · 2 个满足全部核对项</span>` : `<span>7 项 · 1 项不满足 · 1 项未接入</span>` });
+  }
+  if (m === 'table') {
+    const RT = [['直埋', '品字形', 'IEC 60287', 715, 640], ['直埋', '平行 · 间距 1D', 'IEC 60287', 748, 668], ['排管', '品字形', 'IEC 60287', 652, 584], ['空气', '品字形 · 无日照', 'IEC 60287', 905, 781], ['空气', '平行 · 间距 1D', 'IEC 60287', 958, 826], ['隧道', '支架 · 品字形', '热网络', 860, 742]];
+    const t = page(`<div class="phead"><b>载流量表</b><span>工况模板：组织库 · 标准载流量工况 v2 · 导体 90 °C</span></div>
+      <div class="note-old">${dot('old')}<span>历史：按版本 11 结构计算。结构已改为版本 12，表中数值不再代表当前结构。</span></div>
+      <table class="tbl2 stale"><thead><tr><th>敷设</th><th>排列</th><th>方法</th><th class="n">环境 25 °C / 土壤 1.0</th><th class="n">环境 40 °C / 土壤 1.5</th></tr></thead><tbody>
+      ${RT.map(([a, b, c, x, y]) => `<tr><td>${a}</td><td>${b}</td><td class="mut">${c}</td><td class="n">${x} A</td><td class="n">${y} A</td></tr>`).join('')}</tbody></table>`);
+    const insp = `<div class="insp__h"><b>工况模板</b><span>组织库 · 标准载流量工况 v2</span></div>
+      <div class="grp"><span class="grp__t">直埋</span>${prop('埋深', inp('1.00', 'm', 1), 'lib')}${prop('土壤', inp('1.0/1.5', 'K·m/W', 1), 'lib')}${prop('地温', inp('25/40', '°C', 1), 'lib')}</div>
+      <div class="grp"><span class="grp__t">空气</span>${prop('环境', inp('40', '°C', 1), 'lib')}${prop('日照', inp('无', '', 1), 'lib')}</div>
+      <div class="grp"><span class="grp__t">计算</span>${prop('方法', 'IEC 60287 · 热网络')}${prop('驱动', '参数扫描 · 6 × 2')}</div>`;
+    return frame2({ ...base, title: '载流量表', insp, canvas: t, run: `<button class="btn btn--run">重新计算 12 个工况</button>`, status: `<span>6 敷设 × 2 环境</span><span class="sp"></span><span>cablesim.iec60287 0.1.0 · cablesim.thermal-network 0.2.0</span>` });
+  }
+  if (m === 'sc') {
+    const e = page(`<div class="empty2">${ic('bolt')}<b>短路容量还没有可用的方法</b><p>目前没有插件提供“导体 / 金属屏蔽短路容量”能力，所以不能计算，也不提供手填表单。</p><div class="row2"><button class="btn">查看插件</button><button class="btn">从资料导入已知值</button></div></div>`);
+    return frame2({ ...base, title: '短路容量', insp: `<div class="insp__h"><b>短路容量</b><span>未接入</span></div><div class="grp"><span class="hint">安装提供该能力的插件后，这里会出现输入与结果；资料导入的已知值会以“资料”来源标出。</span></div>`, canvas: e, srckey: false, status: '' });
+  }
+  if (m === 'elec') {
+    const EP = [['导体交流电阻 · 90 °C', '0.0367', 'Ω/km'], ['电感 · 品字形', '0.381', 'mH/km'], ['电容', '0.247', 'μF/km'], ['介质损耗', '0.42', 'W/m'], ['金属屏蔽损耗因数 · 品字形', '0.046', '—']];
+    const t = page(`<div class="phead"><b>电气参数</b><span>按版本 12 结构 · 50 Hz · 演示数据</span></div><table class="tbl2"><thead><tr><th>参数</th><th class="n">值</th><th>单位</th></tr></thead><tbody>${EP.map(([a, b, c]) => `<tr><td>${a}</td><td class="n">${b}</td><td class="mut">${c}</td></tr>`).join('')}</tbody></table>`);
+    return frame2({ ...base, title: '电气参数', insp: `<div class="insp__h"><b>计算</b><span>cablesim.thermal-network · 网络参数</span></div><div class="grp">${prop('频率', inp('50', 'Hz'))}${prop('排列', inp('品字形'))}</div><div class="grp"><span class="grp__t">验证</span>${vr(3, '解析基准')}</div>`, canvas: t, run: `<button class="btn btn--run">重新计算</button>`, status: '' });
+  }
+  const sheet = page(`<div class="phead"><b>规格书</b><span>交付模板：组织库 · 企业规格书 v3</span></div>
+    <table class="tbl2"><thead><tr><th></th><th>纳入的内容</th><th>状态</th></tr></thead><tbody>
+    <tr><td>☑</td><td>结构与尺寸 · 版本 12</td><td>${crit('bad', '外径不满足客户要求')}</td></tr>
+    <tr><td>☑</td><td>电气参数 · 版本 12</td><td>${crit('ok', '当前')}</td></tr>
+    <tr><td class="mut">☐</td><td class="mut">载流量表 · 版本 11</td><td>${crit('na', '历史 · 不能纳入')}</td></tr>
+    <tr><td>☑</td><td>偏离表</td><td>${crit('na', '无偏离记录')}</td></tr></tbody></table>
+    <span class="hint">规格书只从当前结果生成，不重新计算；存在不满足项时需先处理或记录偏离。</span>`);
+  return frame2({ ...base, title: '规格书', insp: `<div class="insp__h"><b>规格书</b><span>草稿</span></div><div class="grp">${prop('模板', '<span class="link">企业规格书 v3</span>', 'lib')}${prop('语言', inp('中文'))}</div>`, canvas: sheet, run: `<button class="btn btn--pri" disabled style="opacity:.45">生成规格书</button>`, status: '' });
+}
+
+/* ---------------- 研究 ---------------- */
+const STUDY_ROWS = [row('允许载流量', '≥ 600 A', '<span class="cu">648 A</span>', '+8.0 %', crit('ok', '满足')),
+  row('导体温度 · 600 A', '≤ 90 °C', '83.1 °C', '−6.9 K', crit('ok', '满足')),
+  row('方法差异（对 IEC 60287）', '≤ 3 %', '1.1 %', '', crit('ok', '满足')),
+  row('热力管交叉段', '≥ 600 A', '—', '', crit('na', '未计算'))];
+function heatCanvas() { return `<div class="heatwrap2"><canvas id="heat" width="560" height="380" aria-label="温度场"></canvas><div class="cbar2"><i></i><div><span>90 °C</span><span>70</span><span>50</span><span>25 °C</span></div></div></div>`; }
+function heatField() {
+  const cv = document.getElementById('heat'); if (!cv) return;
+  const ctx = cv.getContext('2d'), w = cv.width, h = cv.height, img = ctx.createImageData(w, h);
+  const stops = [[251, 243, 228], [242, 201, 138], [229, 139, 71], [194, 69, 47], [110, 31, 53], [42, 15, 30]], pos = [0, .25, .5, .72, .9, 1];
+  const cmap = t => { t = Math.max(0, Math.min(1, t)); let i = 0; while (i < pos.length - 2 && t > pos[i + 1]) i++; const k = (t - pos[i]) / (pos[i + 1] - pos[i]); return stops[i].map((c, j) => c + (stops[i + 1][j] - c) * k); };
+  const q = 1.2 * 31.4 / (2 * Math.PI), rc = 0.0283, C = [-0.12, 0, 0.12];
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const x = -1.2 + 2.4 * i / w, z = -1.6 * j / h; let T = 25;
+    for (const cx of C) T += q * Math.log(Math.hypot(x - cx, z - 0.8) / Math.max(rc, Math.hypot(x - cx, z + 0.8)));
+    const o = 4 * (j * w + i), [r, g, b] = cmap((T - 25) / 65); img.data[o] = r; img.data[o + 1] = g; img.data[o + 2] = b; img.data[o + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const X = x => (x + 1.2) / 2.4 * w, Z = z => -z / 1.6 * h;
+  for (const cx of C) { ctx.beginPath(); ctx.arc(X(cx), Z(-.8), rc / 2.4 * w, 0, 7); ctx.fillStyle = '#24272B'; ctx.fill(); ctx.beginPath(); ctx.arc(X(cx), Z(-.8), rc / 2.4 * w * .5, 0, 7); ctx.fillStyle = '#C47A3D'; ctx.fill(); }
+  ctx.fillStyle = '#1A1C1F'; ctx.fillRect(0, 0, w, 1.5);
+}
+function sweepChart() {
+  const W2 = 760, H2 = 420, L = 70, R = 30, T = 30, B = 56, x0 = .6, x1 = 2.0, y0 = 520, y1 = 780;
+  const f = r => 648 * Math.sqrt(1.09 / (0.55 + 0.45 * r));
+  const X = r => L + (r - x0) / (x1 - x0) * (W2 - L - R), Y = a => T + (y1 - a) / (y1 - y0) * (H2 - T - B);
+  let o = `<svg viewBox="0 0 ${W2} ${H2}" role="img" aria-label="参数扫描"><rect width="${W2}" height="${H2}" fill="var(--surface)"/>`;
+  for (let a = 520; a <= 780; a += 40) o += `<line x1="${L}" y1="${Y(a)}" x2="${W2 - R}" y2="${Y(a)}" stroke="var(--line)"/><text x="${L - 10}" y="${Y(a) + 4}" text-anchor="end" font-size="12" fill="var(--text-2)">${a}</text>`;
+  for (let r = .6; r <= 2.001; r += .2) o += `<line x1="${X(r)}" y1="${H2 - B}" x2="${X(r)}" y2="${H2 - B + 5}" stroke="var(--text-2)"/><text x="${X(r)}" y="${H2 - B + 20}" text-anchor="middle" font-size="12" fill="var(--text-2)">${r.toFixed(1)}</text>`;
+  o += `<line x1="${L}" y1="${H2 - B}" x2="${W2 - R}" y2="${H2 - B}" stroke="var(--text)"/><text x="${(L + W2 - R) / 2}" y="${H2 - 10}" text-anchor="middle" font-size="12" font-family="Noto Sans SC, sans-serif" fill="var(--text-2)">土壤热阻率 K·m/W</text><text x="18" y="${T + 6}" font-size="12" font-family="Noto Sans SC, sans-serif" fill="var(--text-2)">允许载流量 A</text>`;
+  o += `<line x1="${L}" y1="${Y(600)}" x2="${W2 - R}" y2="${Y(600)}" stroke="var(--bad)" stroke-dasharray="6 4"/><text x="${W2 - R}" y="${Y(600) - 6}" text-anchor="end" font-size="12" font-family="Noto Sans SC, sans-serif" fill="var(--bad)">负荷 600 A</text>`;
+  const pts = []; for (let r = .6; r <= 2.0001; r += .1) pts.push(`${X(r).toFixed(1)},${Y(f(r)).toFixed(1)}`);
+  o += `<polyline points="${pts.join(' ')}" fill="none" stroke="var(--text)" stroke-width="2"/>`;
+  for (let r = .6; r <= 2.0001; r += .1) o += `<circle cx="${X(r)}" cy="${Y(f(r))}" r="3" fill="var(--surface)" stroke="var(--text)" stroke-width="1.2"/>`;
+  o += `<circle cx="${X(1.2)}" cy="${Y(648)}" r="6" fill="var(--run)"/><text x="${X(1.2) + 10}" y="${Y(648) - 10}" font-size="13" fill="var(--run)">当前 1.2 → 648 A</text>`;
+  o += `<line x1="${X(1.603)}" y1="${Y(600)}" x2="${X(1.603)}" y2="${H2 - B}" stroke="var(--text-2)" stroke-dasharray="3 3"/><text x="${X(1.603) + 6}" y="${H2 - B - 8}" font-size="12" font-family="Noto Sans SC, sans-serif" fill="var(--text)">ρ ≤ 1.60 时满足</text>`;
+  return o + '</svg>';
+}
+function studyWs(m, v) {
+  const mods = [
+    mod('cable', 'ctype', '电缆', '引用 v11', null, m === 'cable'),
+    mod('section', 'sec', '敷设截面', '2', null, m === 'section', [sub2('A · 直埋水平', '', true), sub2('B · 排管 4 孔')]),
+    mod('cond', 'cond', '工况', '夏季 · 600 A', null, m === 'cond'),
+    mod('amp', 'study', '载流量', 'IEC 60287', null, m === 'amp'),
+    mod('heat', 'heat', '温度场', '热网络', null, m === 'heat'),
+    mod('sweep', 'sweep', '参数扫描', '土壤热阻率', null, m === 'sweep'),
+    mod('cmp', 'cmp', '方法对比', '3 种', null, m === 'cmp'),
+    mod('report', 'sheet', '计算书', '', 'draft', m === 'report')].join('');
+  const base = { savedText: '已保存 · 修订 4', kind: '研究', name: '临港变出线 · 直埋载流量', sub: '客户问询 · 引用 YJV 26/35 kV 1×630 @ v11', mods, rows: STUDY_ROWS, verdict: crit('ok', '能带 600 A，余量 8 %；交叉段尚未计算'), run: `<button class="btn btn--run">运行</button>` };
+  if (m === 'section') {
+    const iso = v === 'iso';
+    return frame2({ ...base, title: '敷设截面 A', views: [['sec', '截面'], ['iso', '三维']], view: v,
+      canvas: iso ? ampIso() : ampSection(), ro: iso ? '三维 · 只读 · 修改请回到截面' : '',
+      overlay: iso ? '' : `<span class="overlay">图上显示 <b>无</b> ▾</span>`,
+      tools: iso ? `<button class="tool on" title="旋转">${ic('orbit', 1)}</button><button class="tool" title="剖切">${ic('cut', 1)}</button>` : `${selTools}<button class="tool" title="放置电缆">${ic('place', 1)}</button><button class="tool" title="标注">${ic('dim', 1)}</button>${zoom}`,
+      insp: `<div class="insp__h"><b>相 B 电缆</b><span>敷设截面 A · 回路 1</span></div>
+        <div class="grp"><span class="grp__t">位置 · m</span>${prop('x', inp('0.000'))}${prop('z', inp('−0.800'))}</div>
+        <div class="grp"><span class="grp__t">电缆</span>${prop('型号', '<span class="link">YJV 26/35 kV 1×630 @ v11</span>', 'lock')}${prop('外径', inp('56.6', 'mm', 1), 'der')}</div>
+        <div class="grp"><span class="grp__t">结果 · 计算 #31</span>${prop('导体', '<span class="val">89.4 °C</span>')}${prop('损耗', '<span class="val">31.4 W/m</span>')}</div>`,
+      status: `<span>x 0.000  z −0.800 m</span><span>1 : 6</span>` });
+  }
+  if (m === 'amp') {
+    const res = page(`<div class="phead"><b>载流量 · IEC 60287</b><span>cablesim.iec60287 0.1.0 · 单芯直埋</span>${vr(4, '参考基准')}</div>
+      <div class="concl2"><div><span class="mut">允许载流量</span><b>648<small>A</small></b></div><div class="mut2"><span>${crit('ok', '满足 · 负荷 600 A，余量 +8.0 %')}</span><span>${dot('now')} 当前 · 计算 #31 · 今天 14:22</span></div></div>
+      <table class="tbl2"><thead><tr><th>相</th><th class="n">导体 °C（648 A）</th><th class="n">导体 °C（600 A）</th><th class="n">损耗 W/m</th></tr></thead><tbody>
+      <tr><td><span class="si"><i class="c" style="background:var(--pa)"></i>A 相</span></td><td class="n">88.6</td><td class="n">82.4</td><td class="n">31.2</td></tr>
+      <tr><td><span class="si"><i class="c" style="background:var(--pb)"></i>B 相</span></td><td class="n">90.0</td><td class="n">83.1</td><td class="n">31.4</td></tr>
+      <tr><td><span class="si"><i class="c" style="background:var(--pc)"></i>C 相</span></td><td class="n">88.6</td><td class="n">82.4</td><td class="n">31.2</td></tr></tbody></table>
+      <div class="phead" style="margin-top:8px"><b style="font-size:14px">依据</b></div><dl class="meta2"><dt>输入</dt><dd>研究修订 4 · 电缆 v11（锁定） · 截面 A · 工况 夏季</dd><dt>预检</dt><dd>${crit('ok', '5 项通过')} · 已确认适用范围：均匀土壤、稳态</dd><dt>环境</dt><dd>python 3.12 · 发布摘要 sha256:9c41…e07a</dd></dl>`);
+    return frame2({ ...base, title: '载流量', insp: `<div class="insp__h"><b>计算设置</b><span>IEC 60287 · 单芯直埋</span></div>
+      <div class="grp"><span class="grp__t">专用输入</span>${prop('R₂₀', inp('0.0283', 'Ω/km'), 'lib')}${prop('频率', inp('50', 'Hz'))}${prop('温度限值', inp('90', '°C'))}</div>
+      <div class="grp"><span class="grp__t">驱动</span>${prop('方式', inp('单次'))}</div>`, canvas: res, status: `<span>计算 #31 · 用时 0.4 s</span>` });
+  }
+  if (m === 'heat') {
+    return frame2({ ...base, title: '温度场 · 热网络场分析', canvas: page(`<div class="phead"><b>温度场</b><span>负荷 600 A · 网格 129 × 129 · 截面 A · 演示</span>${vr(3, '解析基准')}</div>${heatCanvas()}`), overlay: `<span class="overlay">色图 <b>温度 °C</b></span>`,
+      insp: `<div class="insp__h"><b>计算设置</b><span>cablesim.thermal-network · field-analysis</span></div><div class="grp">${prop('场', inp('温度场'))}${prop('网格', inp('129'))}${prop('负荷', inp('600', 'A'))}</div><div class="grp"><span class="grp__t">结果 · 计算 #32</span>${prop('最高', '<span class="val">83.4 °C</span>')}${prop('地表最高', '<span class="val">31.2 °C</span>')}</div>`, status: `<span>x −1.2…1.2 m · z −1.6…0 m</span>` });
+  }
+  if (m === 'sweep') {
+    return frame2({ ...base, title: '参数扫描', canvas: page(`<div class="phead"><b>允许载流量 vs 土壤热阻率</b><span>15 个点 · IEC 60287 · 演示</span></div>${sweepChart()}`),
+      insp: `<div class="insp__h"><b>扫描设置</b><span>驱动 · 参数扫描</span></div><div class="grp">${prop('参数', inp('土壤热阻率'))}${prop('范围', inp('0.6–2.0', 'K·m/W'))}${prop('步长', inp('0.1'))}${prop('方法', inp('IEC 60287'))}</div><div class="grp"><span class="grp__t">读数</span>${prop('临界值', '<span class="val">ρ ≤ 1.60 K·m/W</span>')}<span class="hint">土壤热阻率超过 1.60 时，600 A 负荷不满足。</span></div>`,
+      run: `<button class="btn btn--run">运行扫描</button>`, status: `<span>15 / 15 点完成</span><span class="sp"></span><span>导出 CSV · 导出图片</span>` });
+  }
+  if (m === 'cmp') {
+    const t = page(`<div class="phead"><b>方法对比 · 允许载流量</b><span>基准：IEC 60287 · 容差 ±3 %</span></div>
+      <table class="tbl2"><thead><tr><th>方法</th><th>插件</th><th class="n">允许载流量</th><th class="n">与基准差</th><th>验证等级</th><th>状态</th></tr></thead><tbody>
+      <tr><td>IEC 60287 解析</td><td class="mut">cablesim.iec60287 0.1.0</td><td class="n cu">648 A</td><td class="n">基准</td><td>${vr(4, '参考基准')}</td><td>${dot('now')} 当前</td></tr>
+      <tr><td>热网络</td><td class="mut">cablesim.thermal-network 0.2.0</td><td class="n">641 A</td><td class="n">−1.1 %</td><td>${vr(3, '解析基准')}</td><td>${dot('now')} 当前</td></tr>
+      <tr><td>有限元 · 定功率反算</td><td class="mut">cablesim.native-reference 0.1.0</td><td class="n">652 A</td><td class="n">+0.6 %</td><td>${vr(2, '接口测试')}</td><td>${dot('now')} 当前</td></tr></tbody></table>
+      <span class="hint">三种方法差异在容差内。差异来自土壤边界处理与损耗迭代方式，详见各计算的依据。</span>`);
+    return frame2({ ...base, title: '方法对比', canvas: t, insp: `<div class="insp__h"><b>对比设置</b><span>同一输入 · 研究修订 4</span></div><div class="grp">${prop('物理量', inp('允许载流量'))}${prop('基准', inp('IEC 60287'))}${prop('容差', inp('3', '%'))}</div>`, run: `<button class="btn btn--run">全部重算</button>`, status: `<span>3 个方法 · 均为当前</span>` });
+  }
+  if (m === 'cable') {
+    return frame2({ ...base, title: '电缆', canvas: desSection(), insp: `<div class="insp__h"><b>引用的型号</b><span>型号库 · 已发布</span></div><div class="grp">${prop('型号', '<span class="link">YJV 26/35 kV 1×630</span>', 'lock')}${prop('版本', inp('v11', '', 1), 'lock')}${prop('外径', inp('61.8', 'mm', 1), 'der')}</div><div class="grp"><span class="grp__t">版本</span><span class="hint">型号库有 v12 草稿（未发布），不影响本研究。</span><button class="btn btn--sm" style="align-self:flex-start">脱离引用并复制</button></div>`, status: `<span>引用 · 只读</span>` });
+  }
+  if (m === 'cond') {
+    return frame2({ ...base, title: '工况', canvas: page(`<div class="phead"><b>工况</b><span>研究本地 · 修订 4</span></div><div class="form2">${prop('负荷电流', inp('600', 'A'))}${prop('负荷率', inp('1.00'))}${prop('地温', inp('25.0', '°C'))}${prop('土壤热阻率', inp('1.20', 'K·m/W'), 'doc')}${prop('导体限值', inp('90', '°C'), 'std')}</div><span class="hint">土壤热阻率来自客户问询资料第 2 页。</span>`),
+      insp: `<div class="insp__h"><b>工况</b><span>夏季</span></div><div class="grp"><span class="hint">修改工况后，用到它的计算会变为历史。</span></div>`, status: '' });
+  }
+  return frame2({ ...base, title: '计算书', canvas: page(`<div class="phead"><b>计算书</b><span>交付模板：企业计算书 · 载流量 v5</span></div><table class="tbl2"><thead><tr><th></th><th>纳入的计算</th><th>状态</th></tr></thead><tbody><tr><td>☑</td><td>载流量 · IEC 60287 · #31</td><td>${dot('now')} 当前</td></tr><tr><td>☑</td><td>温度场 · #32</td><td>${dot('now')} 当前</td></tr><tr><td>☑</td><td>参数扫描 · 土壤热阻率</td><td>${dot('now')} 当前</td></tr><tr><td class="mut">☐</td><td>方法对比</td><td class="mut">可选</td></tr></tbody></table>`),
+    insp: `<div class="insp__h"><b>计算书</b><span>草稿</span></div><div class="grp">${prop('模板', '<span class="link">企业计算书 v5</span>', 'lib')}${prop('收件', inp('临港变 · 设计方'))}</div>`, run: `<button class="btn btn--pri">生成计算书</button>`, status: '' });
+}
+
+/* ---------------- home ---------------- */
+function homeWs() {
+  const recent = [['型号', 'YJV 26/35 kV 1×630', '版本 12 草稿 · 外径不满足', 'bad', '今天 10:05'], ['研究', '临港变出线 · 直埋载流量', '能带 600 A · 交叉段未算', 'now', '今天 14:22'], ['型号', 'YJV22 8.7/15 kV 3×95…3×400', '已发布 v6', 'now', '9 月 28 日'], ['研究', '排管与直埋载流量对比（论文）', '参数扫描 3 组', 'old', '9 月 25 日'], ['研究', '交叉热源对温度场的影响', '有限元 · 2 个运行', 'now', '9 月 20 日']];
+  return `<nav class="rail"><div class="r" style="margin-bottom:8px">${logo}</div><div class="r cur" title="首页">${ic('home')}</div><div class="r" title="型号">${ic('ctype')}</div><div class="r" title="研究">${ic('stdy')}</div><div class="r" title="库">${ic('lib')}</div><div class="r" title="插件">${ic('plug')}</div><span class="sp"></span><div class="r" title="设置">${ic('set')}</div></nav>
+  <div class="win" style="grid-template-rows:minmax(0,1fr)"><div class="homewrap">
+    <h1>今天做型号，还是做研究？</h1>
+    <div class="choices">
+      <button class="choice" data-goto="type"><span class="choice__ic">${ic('ctype')}</span><b>做型号</b><span>设计或修改一根电缆产品：结构、标准核对、电气参数、载流量表、短路容量，最后出规格书并发布到型号库。</span><em>电缆厂 · 新型号开发、客户定制</em></button>
+      <button class="choice" data-goto="study"><span class="choice__ic">${ic('stdy')}</span><b>做研究</b><span>回答一个问题：某根电缆在某种敷设和工况下会怎样。载流量、温度场、电磁场、参数扫描、方法对比，出计算书或数据。</span><em>科研 · 电缆厂回答客户问询</em></button>
+    </div>
+    <div class="h2r"><b>最近</b><span class="mut">5 项 · 演示数据</span></div>
+    <table class="tbl2"><thead><tr><th>类型</th><th>名称</th><th>状态</th><th class="n">更新</th></tr></thead><tbody>${recent.map(([k, n, st, d, t]) => `<tr><td class="mut">${k}</td><td><b style="font-weight:600">${n}</b></td><td><span class="si">${d === 'now' ? crit('ok', '') : d === 'bad' ? crit('bad', '') : dot('old')}${st}</span></td><td class="n mut">${t}</td></tr>`).join('')}</tbody></table>
+  </div></div>`;
+}
+
+
+
+/* ======== tab layer: one module = a few tabs, one tab on screen at a time ======== */
+Object.assign(P, {
+  req: '<path d="M8 4h11M8 9h11M8 14h11M8 19h11"/><path d="m3 4 1 1 2-2M3 9l1 1 2-2"/><circle cx="4.5" cy="14" r="1.2"/><circle cx="4.5" cy="19" r="1.2"/>',
+  var: '<rect x="3" y="4" width="7" height="16" rx="2"/><rect x="14" y="4" width="7" height="16" rx="2"/>',
+  log: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7v5l3 2"/>', copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/>',
+  tri: '<circle cx="12" cy="7" r="3"/><circle cx="7" cy="16" r="3"/><circle cx="17" cy="16" r="3"/>', align: '<path d="M4 4v16M8 7h12M8 12h8M8 17h10"/>', trash: '<path d="M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13"/>',
+});
+const T = (k, t) => [k, t];
+const tbl = (head, rows, cls = '') => `<table class="tbl2 ${cls}"><thead><tr>${head.map(h => `<th class="${h.startsWith('#') ? 'n' : ''}">${h.replace(/^#/, '')}</th>`).join('')}</tr></thead><tbody>${rows.map(r => `<tr class="${r.pick ? 'pick' : ''}">${r.map((c, i) => `<td class="${head[i]?.startsWith('#') ? 'n' : ''}">${c}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+const pick = r => Object.assign(r, { pick: true });
+const demo = '<span class="demo">演示</span>';
+
+function frame3(d) {
+  const inspCol = !d.insp ? '0px' : d.inspOpen ? '288px' : '44px';
+  const checks = d.rows ? (S.checks
+    ? `<div class="checks open"><div class="checkbar"><b>校核项</b>${d.verdict}<span class="sp"></span><button class="lnk" data-checks>收起 ▾</button></div><div class="bpane"><table class="crit"><tbody>${d.rows.join('')}</tbody></table></div></div>`
+    : `<div class="checks"><div class="checkbar"><b>校核项</b>${d.verdict}<span class="sp"></span><span class="mut">${d.rows.length} 项</span><button class="lnk" data-checks>展开 ▴</button></div></div>`) : '';
+  const insp = !d.insp ? '' : d.inspOpen ? `<aside class="insp" aria-label="属性">${d.insp}${srckey}</aside>`
+    : `<aside class="insp insp--min" aria-label="属性（收起）"><span class="vlabel">属性</span><span class="hint2">选中一行后展开</span></aside>`;
+  return `<nav class="rail"><div class="r" style="margin-bottom:8px">${logo}</div><div class="r" title="首页" data-goto="home">${ic('home')}</div><div class="r ${d.kind === '型号' ? 'cur' : ''}" title="型号" data-goto="type">${ic('ctype')}</div><div class="r ${d.kind === '研究' ? 'cur' : ''}" title="研究" data-goto="study">${ic('stdy')}</div><div class="r" title="库">${ic('lib')}</div><div class="r" title="插件">${ic('plug')}</div><span class="sp"></span><div class="r" title="设置">${ic('set')}</div></nav>
+  <div class="win">
+    <header class="head"><span class="kind">${d.kind}</span><span class="name">${d.name}</span><span class="task">${d.sub}</span><span class="sp"></span>
+      <span class="si" style="color:var(--text-2)">${dot('now')}${d.saved}</span><span class="vsep"></span>
+      <button class="btn">${ic('log', 1)}运行记录</button><button class="btn btn--ag">${ic('agent', 1)}Agent</button><button class="btn">${ic('sheet', 1)}交付</button>${d.run || ''}</header>
+    <div class="main" style="grid-template-columns:240px minmax(0,1fr) ${inspCol}">
+      <aside class="tree" aria-label="模块"><div class="tg">模块</div>${d.mods}${addMod}</aside>
+      <section class="center" style="grid-template-rows:52px minmax(0,1fr) auto">
+        <div class="tabbar"><b class="mtitle">${d.title}</b>${d.tabs && d.tabs.length > 1 ? `<div class="tabs2" role="tablist">${d.tabs.map(([k, t]) => `<button role="tab" data-tab="${k}" aria-selected="${k === d.tab}">${t}</button>`).join('')}</div>` : ''}<span class="sp"></span>${d.overlay || ''}</div>
+        <div class="canvas ${d.canvas ? '' : 'plain'}">${d.content}${d.ro ? `<span class="ro">${d.ro}</span>` : ''}${d.tools ? `<div class="float">${d.tools}</div>` : ''}</div>
+        ${checks}
+      </section>
+      ${insp}
+    </div>
+    <footer class="status">${d.status || ''}</footer>
+  </div>`;
+}
+
+/* on-canvas editing of the selected cable: driving dimensions + a mini toolbar */
+function ampSection2() {
+  let o = ampSection(true).replace('</svg>', '');
+  const L = 44, T0 = 26, sc = 660, X = x => L + (W - L) / 2 + x * sc, Z = z => T0 + (-0.42 - z) * sc, rr = 0.0283 * sc;
+  const chip = (key, x, y, val, label) => S.edit === key
+    ? `<foreignObject x="${x - 50}" y="${y - 17}" width="100" height="34"><div xmlns="http://www.w3.org/1999/xhtml" class="dimedit"><input value="${val}" data-dimin="${key}" autofocus/><span>m</span></div></foreignObject>`
+    : `<g class="dimchip" data-dim="${key}" style="cursor:text"><rect x="${x - 34}" y="${y - 13}" width="68" height="26" rx="13" fill="var(--surface)" stroke="var(--text)" stroke-width="1"/><text x="${x}" y="${y + 4.5}" text-anchor="middle" font-size="13" fill="var(--text)">${val}</text></g><text x="${x}" y="${y + 28}" text-anchor="middle" font-size="11" font-family="Noto Sans SC, sans-serif" fill="var(--text-3)">${label}</text>`;
+  // spacing B–C and depth of B, shown only because B is selected
+  const ys = Z(-.8) + rr + 30;
+  o += `<g stroke="var(--text)" stroke-width=".9"><line x1="${X(0)}" y1="${Z(-.8) + rr + 8}" x2="${X(0)}" y2="${ys + 5}"/><line x1="${X(.12)}" y1="${Z(-.8) + rr + 8}" x2="${X(.12)}" y2="${ys + 5}"/><line x1="${X(0)}" y1="${ys}" x2="${X(.12)}" y2="${ys}"/></g>`;
+  o += chip('spacing', X(.06), ys + 26, '0.120', '间距 · 双击修改');
+  const xd = X(-.45);
+  o += `<g stroke="var(--text)" stroke-width=".9" fill="none"><line x1="${xd}" y1="${T0 + 4}" x2="${xd}" y2="${Z(-.8)}"/><line x1="${xd}" y1="${Z(-.8)}" x2="${X(0) - rr - 8}" y2="${Z(-.8)}" stroke-dasharray="3 3"/><path d="M${xd - 4} ${T0 + 12} L${xd} ${T0 + 4} L${xd + 4} ${T0 + 12}"/></g>`;
+  o += chip('depth', xd, (T0 + Z(-.8)) / 2, '0.800', '埋深 · 双击修改');
+  // mini toolbar next to the selection
+  o += `<foreignObject x="${X(0) - 92}" y="${Z(-.8) - rr - 58}" width="184" height="40"><div xmlns="http://www.w3.org/1999/xhtml" class="minitb"><button title="复制">${ic('copy', 1)}</button><button title="排成品字形">${ic('tri', 1)}</button><button title="对齐">${ic('align', 1)}</button><button title="删除">${ic('trash', 1)}</button></div></foreignObject>`;
+  return o + '</svg>';
+}
+function thumbs() {
+  return `<div class="thumbs">${VARS.map(v => `<div class="thumb"><div>${thumb(v.od).replace('width="46" height="46"', 'width="150" height="150"')}</div><b>${v.k}</b><span>${v.d}</span><span class="mono">Ø ${v.od.toFixed(1)} mm</span></div>`).join('')}</div><span class="hint">红色虚线为客户外径上限 Ø 60.0；只显示几何差异，数值见“结果矩阵”。</span>`;
+}
+
+/* ---------------- 型号 ---------------- */
+const TMODS = [['structure', 'ctype', '结构设计', '6 层'], ['req', 'req', '要求与标准', '6 条'], ['check', 'check', '标准核对', '1 项不满足', 'bad'], ['elec', 'elec', '电气参数', ''], ['table', 'tbl', '载流量表', '历史', 'old'], ['sc', 'bolt', '短路容量', '未接入'], ['var', 'var', '方案对比', '4 个方案'], ['sheet', 'sheet', '规格书 / 校核报告', '', 'draft']];
+const TTABS = { structure: [T('sec', '截面'), T('iso', '三维剥切'), T('layers', '分层表'), T('od', '外径与用料')], req: [T('list', '要求清单'), T('std', '执行标准'), T('pending', '待批准导入')], check: [], elec: [T('result', '结果'), T('params', '方法参数')], table: [T('result', '结果表'), T('params', '方法参数')], sc: [], var: [T('matrix', '结果矩阵'), T('diff', '参数差异'), T('sections', '截面对比')], sheet: [T('content', '内容'), T('dev', '偏离表'), T('preview', '预览')] };
+function typeWs3(m, t) {
+  const mods = TMODS.map(([k, icn, n, meta, st]) => mod(k, icn, n, meta, st, k === m, k === 'structure' && t === 'sec' ? LAY.map(([nn, , th]) => sub2(nn, th == null ? '630 mm²' : th.toFixed(2), nn === '绝缘')) : [])).join('');
+  const base = { kind: '型号', name: 'YJV 26/35 kV 1×630', sub: '基于 v11 · 方案 3 · 未发布', saved: '已保存', mods, title: TMODS.find(x => x[0] === m)[2], tabs: TTABS[m], tab: t, rows: TYPE_ROWS, verdict: crit('bad', '外径超出 1.8 mm；载流量表需随结构重算'), run: '' };
+  const layerInsp = `<div class="insp__h"><b>绝缘 · 第 3 层</b><span>XLPE · 35 kV 级</span></div>
+      <div class="grp"><span class="grp__t">厚度 · mm</span>${prop('标称', inp('10.50'))}${prop('公差', inp('−0.25 / +0.50'))}${prop('标准最小', inp('10.50', '', 1), 'std')}</div>
+      <div class="grp"><span class="grp__t">材料</span>${prop('材料', '<span class="link">XLPE · 35 kV 级 v2</span>', 'lib')}${prop('热阻率', inp('3.50', 'K·m/W', 1), 'lock')}</div>
+      <div class="grp"><span class="grp__t">尺寸 · mm</span>${prop('内径', inp('31.6', '', 1), 'der')}${prop('外径', inp('52.6', '', 1), 'der')}</div>`;
+  if (m === 'structure') {
+    if (t === 'sec') return frame3({ ...base, canvas: 1, content: desSection(), insp: layerInsp, inspOpen: true, run: `<button class="btn btn--pri">保存</button>`,
+      tools: `${selTools}<button class="tool" title="插入层">${ic('layer', 1)}</button><button class="tool" title="标注">${ic('dim', 1)}</button>${zoom}`, status: `<span>选中 绝缘 · r 15.80–26.30 mm</span><span>双击层可直接改厚度</span>` });
+    if (t === 'iso') return frame3({ ...base, canvas: 1, content: desIso(), ro: '三维 · 只读', insp: `<div class="insp__h"><b>显示</b><span>三维剥切</span></div><div class="grp">${prop('剥切', '<span class="sw on"></span>')}${prop('剖面', '<span class="sw"></span>')}</div>`, inspOpen: true,
+      tools: `<button class="tool on" title="旋转">${ic('orbit', 1)}</button><button class="tool" title="平移">${ic('pan', 1)}</button>`, status: '<span>只读 · 修改请回到截面或分层表</span>' });
+    if (t === 'layers') return frame3({ ...base, content: page(tbl(['#', '层', '材料', '#标称 mm', '#公差 mm', '#外径 mm', '来源'], LAY.map(([n, mm, th, d], i) => { const r = [String(i + 1), n, mm, th == null ? '630 mm²' : `<span class="cellin">${th.toFixed(2)}</span>`, th == null ? '—' : '−0.10 / +0.20', d.toFixed(1), i === 4 ? '资料 p.12' : '库 · v2']; return n === '绝缘' ? pick(r) : r; })) + `<span class="hint">单元格可直接编辑，支持从 Excel 粘贴整列；外径为推导值。</span>`), insp: layerInsp, inspOpen: false, run: `<button class="btn btn--pri">保存</button>`, status: '<span>6 层 · 选中绝缘</span>' });
+    return frame3({ ...base, content: page(`<div class="phead"><span>结构 / 几何插件推导 · 标“推导” · ${demo}</span></div>` + tbl(['层', '材料', '#外径 mm', '#截面积 mm²', '#密度 g/cm³', '#用料 kg/km'], [['导体', '铜', '30.0', '630', '8.89', '5 600'], ['导体屏蔽', '半导电', '31.6', '77', '1.15', '89'], ['绝缘', 'XLPE', '52.6', '1 389', '0.92', '1 278'], ['绝缘屏蔽', '半导电', '54.2', '134', '1.15', '154'], ['金属屏蔽', '铜丝 + 铜带', '55.8', '35', '8.89', '311'], ['外护套', 'PE', '61.8', '553', '0.95', '525']]) + `<div class="concl2"><div><span class="mut">成品外径</span><b style="color:var(--bad)">61.8<small>mm</small></b></div><div class="mut2"><span>理论单位长度用料合计 7 957 kg/km（不含绞合与绕包系数）</span><span>${dot('old')} 推导 · 结构修订 7</span></div></div>`), insp: null, run: `<button class="btn">更新推导</button>`, status: '' });
+  }
+  if (m === 'req') {
+    if (t === 'list') return frame3({ ...base, content: page(tbl(['编号', '要求', '适用', '来源', '批准', '判定方式'], [pick(['R-01', '成品外径 ≤ 60.0 mm', '成品', '客户技术规范书 p.7 §4.2', crit('ok', '已批准'), '结构插件推导 + 比较']), ['R-02', '导体截面 630 mm²', '导体', '客户 p.5', crit('ok', '已批准'), '结构核对'], ['R-03', '绝缘标称厚度 ≥ 10.5 mm', '绝缘', 'GB/T 12706.3 表 7', crit('ok', '标准'), '标准插件 · 未接入'], ['R-04', '外护套 ≥ 0.035 D + 1.0', '外护套', 'GB/T 12706.3 §x', crit('ok', '标准'), '标准插件 · 未接入'], ['R-05', '导体电阻 ≤ 0.0283 Ω/km', '导体', 'GB/T 3956', crit('ok', '标准'), '标准插件 · 未接入'], ['R-06', '屏蔽短路 ≥ 20 kA · 1 s', '金属屏蔽', '客户 p.8', crit('na', '待批准'), '人工确认']]) + `<span class="hint">标准条款号与限值为演示，正式数据由标准插件提供。</span>`), insp: null, run: `<button class="btn btn--pri">批准所选要求</button>`, status: '<span>6 条 · 1 条待批准</span>' });
+    if (t === 'std') return frame3({ ...base, content: page(tbl(['标准', '版本', '范围', '插件'], [['GB/T 12706.3', '2020', '26/35 kV 挤包绝缘电缆', '未接入'], ['GB/T 3956', '2008', '导体', '未接入']])), insp: null, status: '' });
+    return frame3({ ...base, content: page(`<div class="prop2"><b>${dot('draft')}提案 · 来自《客户技术规范书》第 8 页</b><span>金属屏蔽短路电流 ≥ 20 kA，持续 1 s</span><div class="row2"><button class="btn btn--sm">查看原文</button><button class="btn btn--sm">拒绝</button><button class="btn btn--sm btn--pri">批准</button></div></div>`), insp: null, status: '' });
+  }
+  if (m === 'check') return frame3({ ...base, content: page(tbl(['要求', '实际值', '#余量', '判定', '依据'], [pick(['R-01 成品外径 ≤ 60.0 mm', '61.8 mm', '−1.8', crit('bad', '不满足'), '推导 · 结构修订 7']), ['R-02 导体截面 630 mm²', '630', '—', crit('ok', '满足'), '结构核对'], ['R-03 绝缘 ≥ 10.5 mm', '10.5', '0', crit('na', '无法判断 · 未接入'), '—'], ['R-04 外护套 ≥ 2.95 mm', '3.0', '+0.05', crit('na', '无法判断 · 未接入'), '—'], ['R-06 屏蔽短路 ≥ 20 kA', '—', '—', crit('na', '待人工确认'), '—']]) + `<span class="hint">不满足项去“方案对比”看改法；未接入的要求保留，不计入“全部满足”。</span>`), insp: odInspector(), inspOpen: false, run: `<button class="btn btn--run">执行核对</button>`, status: '<span>6 项 · 1 不满足 · 3 无法判断</span>' });
+  if (m === 'elec') {
+    if (t === 'result') return frame3({ ...base, content: page(`<div class="phead"><span>按方案 3 结构 · 50 Hz · ${demo}</span></div>` + tbl(['参数', '#值', '单位', '来源'], [['导体交流电阻 · 90 °C', '0.0367', 'Ω/km', '热网络 · 网络参数'], ['电感 · 品字形', '0.381', 'mH/km', '热网络'], ['电容', '0.247', 'μF/km', '热网络'], ['介质损耗', '0.42', 'W/m', '热网络']])), insp: null, run: `<button class="btn btn--run">计算电气参数</button>`, status: '' });
+    return frame3({ ...base, content: page(tbl(['参数', '#值', '单位'], [['频率', '50', 'Hz'], ['排列', '品字形', '—'], ['金属屏蔽接地', '两端', '—']])), insp: null, status: '' });
+  }
+  if (m === 'table') {
+    if (t === 'result') return frame3({ ...base, content: page(`<div class="note-old">${dot('old')}<span>历史：按 v11 结构计算；当前是方案 3，需重算。</span></div>` + tbl(['敷设', '排列', '#25 °C / 1.0 K·m/W', '#40 °C / 1.5 K·m/W'], [['直埋', '品字形', '715 A', '640 A'], ['直埋', '平行 1D', '748 A', '668 A'], ['排管', '品字形', '652 A', '584 A'], ['空气', '品字形', '905 A', '781 A']], 'stale')), insp: null, run: `<button class="btn btn--run">计算全部工况</button>`, status: '' });
+    return frame3({ ...base, content: page(tbl(['参数', '#值', '来源'], [['工况模板', '标准载流量工况 v2', '组织库'], ['导体温度', '90 °C', '标准'], ['方法', 'IEC 60287 · 热网络', '—']])), insp: null, status: '' });
+  }
+  if (m === 'sc') return frame3({ ...base, content: page(`<div class="empty2">${ic('bolt')}<b>短路容量：未接入</b><p>没有插件提供“导体 / 金属屏蔽短路容量”能力，因此不能计算，也不提供手填表单。</p><div class="row2"><button class="btn">查看插件</button></div></div>`), insp: null, status: '' });
+  if (m === 'var') {
+    if (t === 'matrix') return frame3({ ...base, content: variantsView(), insp: odInspector(), inspOpen: true, run: `<button class="btn btn--pri">采纳为新版本草稿</button>`, status: '<span>5 个候选 · 2 个满足全部已查项</span>' });
+    if (t === 'diff') return frame3({ ...base, content: page(tbl(['参数', '#v11', '#方案 1', '#方案 2', '#方案 3', '#方案 4'], [['导体结构', '紧压圆形', '型线', '型线', '型线', '紧压圆形'], ['导体截面 mm²', '630', '630', '630', '630', '500'], ['金属屏蔽', '铜丝 Ø0.8', '铜丝 Ø0.8', '铜丝 Ø0.6', '铜丝 Ø0.6', '铜丝 Ø0.8'], ['半导电层 mm', '0.80', '0.80', '0.80', '0.70', '0.80']])), insp: null, status: '' });
+    return frame3({ ...base, canvas: 1, content: page(thumbs()), insp: null, status: '' });
+  }
+  if (t === 'content') return frame3({ ...base, content: page(tbl(['', '章节', '引用', '状态'], [['☑', '结构与尺寸', '方案 3', crit('bad', '外径不满足 · 需处理或记录偏离')], ['☑', '电气参数', '方案 3', crit('ok', '当前')], ['☐', '载流量表', 'v11', crit('na', '历史 · 不可纳入')], ['☑', '偏离表', '—', crit('na', '无记录')]])), insp: null, run: `<button class="btn btn--pri" disabled style="opacity:.45">生成</button>`, status: '' });
+  if (t === 'dev') return frame3({ ...base, content: page(`<div class="empty2"><b>还没有偏离记录</b><p>在“方案对比”中选择“记录偏离”，并附客户确认后出现在这里。</p></div>`), insp: null, status: '' });
+  return frame3({ ...base, content: page(`<div class="a4mini"><b>YJV 26/35 kV 1×630 规格书</b><span>预览 · ${demo}</span><div class="a4lines"></div></div>`), insp: null, status: '' });
+}
+
+/* ---------------- 研究 ---------------- */
+const SMODS = [['cable', 'ctype', '电缆', '引用 v11'], ['section', 'sec', '敷设截面', '2'], ['cond', 'cond', '工况', '夏季'], ['amp', 'study', '载流量', 'IEC 60287'], ['heat', 'heat', '温度场', '热网络'], ['sweep', 'sweep', '参数扫描', '土壤'], ['cmp', 'cmp', '方法对比', '3 种'], ['report', 'sheet', '计算书', '', 'draft']];
+const STABS = { cable: [T('sec', '截面'), T('layers', '分层表'), T('ref', '引用')], section: [T('sec', '截面'), T('iso', '三维'), T('coords', '坐标表'), T('media', '介质')], cond: [], amp: [T('result', '结果'), T('params', '任务与参数'), T('loss', '损耗与热阻'), T('diag', '诊断')], heat: [T('field', '场图'), T('samples', '取样表'), T('params', '方法参数'), T('diag', '诊断')], sweep: [T('curve', '曲线'), T('points', '逐点表'), T('settings', '扫描设置')], cmp: [T('result', '结果差异'), T('inputs', '输入差异'), T('evidence', '验证证据')], report: [T('content', '内容'), T('sources', '来源清单'), T('preview', '预览')] };
+function studyWs3(m, t) {
+  const mods = SMODS.map(([k, icn, n, meta, st]) => mod(k, icn, n, meta, st, k === m, k === 'section' && t === 'sec' ? [sub2('A · 直埋水平', '', true), sub2('B · 排管 4 孔')] : [])).join('');
+  const base = { kind: '研究', name: '临港变出线 · 直埋载流量', sub: '目标电流校核 · 引用 YJV 26/35 kV 1×630 @ v11', saved: '已保存 · 修订 4', mods, title: SMODS.find(x => x[0] === m)[2], tabs: STABS[m], tab: t, rows: STUDY_ROWS, verdict: crit('ok', '能带 600 A，余量 8 %；交叉段未计算'), run: `<button class="btn btn--run">运行</button>` };
+  const cableInsp = `<div class="insp__h"><b>相 B 电缆</b><span>敷设截面 A · 回路 1</span></div>
+    <div class="grp"><span class="grp__t">位置 · m</span>${prop('x', inp('0.000'))}${prop('z', inp('−0.800'))}${prop('埋深', inp('0.800', 'm'), 'der')}</div>
+    <div class="grp"><span class="grp__t">电缆</span>${prop('型号', '<span class="link">YJV 26/35 kV 1×630 @ v11</span>', 'lock')}${prop('外径', inp('56.6', 'mm', 1), 'der')}${prop('相', `<span class="si"><i class="c" style="background:var(--pb)"></i>B 相</span>`)}</div>`;
+  if (m === 'section') {
+    if (t === 'sec') return frame3({ ...base, canvas: 1, content: ampSection2(), insp: cableInsp, inspOpen: true, overlay: `<span class="overlay">图上显示 <b>无</b> ▾</span>`,
+      tools: `${selTools}<button class="tool" title="放置电缆">${ic('place', 1)}</button><button class="tool" title="标注">${ic('dim', 1)}</button>${zoom}`, status: '<span>x 0.000  z −0.800 m</span><span>拖动按 0.01 m 捕捉</span><span>双击尺寸可直接输入</span>' });
+    if (t === 'iso') return frame3({ ...base, canvas: 1, content: ampIso(), ro: '三维 · 只读', insp: `<div class="insp__h"><b>显示</b><span>三维</span></div><div class="grp">${prop('土体', '<span class="sw on"></span>')}${prop('回填', '<span class="sw on"></span>')}${prop('外部热源', '<span class="sw on"></span>')}</div>`, inspOpen: true,
+      tools: `<button class="tool on" title="旋转">${ic('orbit', 1)}</button><button class="tool" title="剖切">${ic('cut', 1)}</button>`, status: '<span>只读 · 修改请回到截面或坐标表</span>' });
+    if (t === 'coords') return frame3({ ...base, content: page(tbl(['对象', '相', '#x m', '#z m', '型号', '来源'], [['电缆 A', 'A', '<span class="cellin">−0.120</span>', '<span class="cellin">−0.800</span>', 'v11', '用户'], pick(['电缆 B', 'B', '<span class="cellin">0.000</span>', '<span class="cellin">−0.800</span>', 'v11', '用户']), ['电缆 C', 'C', '<span class="cellin">0.120</span>', '<span class="cellin">−0.800</span>', 'v11', '用户']]) + '<span class="hint">表格与画布是同一份数据；可从 Excel 粘贴整列。</span>'), insp: cableInsp, inspOpen: false, status: '' });
+    return frame3({ ...base, content: page(tbl(['介质区', '材料', '#热阻率 K·m/W', '来源'], [['土壤', '黏土', '1.20', '资料 p.2'], ['回填区', '砂', '0.70', '用户 · 后端几何契约未接入']])), insp: null, status: '' });
+  }
+  if (m === 'amp') {
+    if (t === 'result') return frame3({ ...base, content: page(`<div class="phead"><span>IEC 60287 · cablesim.iec60287 0.1.0 · 计算 #31 · ${demo}</span>${vr(4, '参考基准')}</div>
+      <div class="concl2"><div><span class="mut">允许载流量</span><b>648<small>A</small></b></div><div class="mut2"><span>${crit('ok', '目标 600 A · 满足 · 余量 +8.0 %')}</span><span>${crit('ok', '600 A 时导体 83.1 °C · 温限 90 °C')}</span></div></div>`
+      + tbl(['相', '#允许电流时导体 °C', '#600 A 时导体 °C', '#600 A 时损耗 W/m'], [['A 相', '88.6', '82.4', '27.2'], ['B 相', '90.0', '83.1', '27.4'], ['C 相', '88.6', '82.4', '27.2']]) + `<span class="hint">限制对象：B 相（中间相，互热最强）。</span>`), insp: null, status: '<span>计算 #31 · 用时 0.4 s</span>' });
+    if (t === 'params') return frame3({ ...base, content: page(`<div class="formgrid">${prop('任务', inp('目标电流校核'))}${prop('目标电流', inp('600', 'A'))}${prop('方法', inp('IEC 60287 · 单芯直埋'))}${prop('导体 R₂₀', inp('0.0283', 'Ω/km'), 'lib')}${prop('频率', inp('50', 'Hz'))}${prop('温度限值', inp('90', '°C'), 'std')}</div><span class="hint">电缆、敷设与工况参数只读引用，去对应模块修改。</span>`), insp: null, status: '' });
+    if (t === 'loss') return frame3({ ...base, content: page(`<div class="phead"><span>600 A 运行工况 · W/m</span></div>` + tbl(['分项', '#A 相', '#B 相', '#C 相'], [['导体', '25.4', '25.6', '25.4'], ['介质', '0.01', '0.01', '0.01'], ['金属屏蔽', '1.8', '1.8', '1.8'], ['合计', '27.2', '27.4', '27.2']]) + `<div class="phead"><span>热阻 · K·m/W</span></div>` + tbl(['热路', '#值'], [['绝缘 T₁', '0.290'], ['外护套 T₃', '0.123'], ['外部 T₄（含互热）', '1.81']])), insp: null, status: '' });
+    return frame3({ ...base, content: page(tbl(['轮次', '#电流 A', '#屏蔽温度 °C', '#损耗因数'], [['1', '551.0', '70.0', '0.070'], ['2', '551.5', '81.4', '0.068'], ['3', '551.5', '81.4', '0.068']]) + `<span class="hint">已收敛（3 轮）；数值按物理量精度显示，完整精度在运行记录里。</span>`), insp: null, status: '' });
+  }
+  if (m === 'cable') {
+    if (t === 'sec') return frame3({ ...base, canvas: 1, content: desSection(), insp: `<div class="insp__h"><b>引用的型号</b><span>型号库 · 已发布</span></div><div class="grp">${prop('型号', '<span class="link">YJV 26/35 kV 1×630</span>', 'lock')}${prop('版本', inp('v11', '', 1), 'lock')}</div>`, inspOpen: true, status: '<span>引用 · 只读</span>' });
+    if (t === 'layers') return frame3({ ...base, content: page(tbl(['层', '材料', '#标称 mm', '#外径 mm'], LAY.map(([n, mm, th, d]) => [n, mm, th == null ? '630 mm²' : th.toFixed(2), d.toFixed(1)]))), insp: null, status: '' });
+    return frame3({ ...base, content: page(tbl(['型号', '#版本', '状态', '说明'], [['YJV 26/35 kV 1×630', 'v11', crit('ok', '已发布 · 锁定'), '型号库有 v12 草稿，不影响本研究']])), insp: null, status: '' });
+  }
+  if (m === 'cond') return frame3({ ...base, content: page(`<div class="formgrid">${prop('负荷电流', inp('600', 'A'))}${prop('负荷率', inp('1.00'))}${prop('地温', inp('25.0', '°C'))}${prop('土壤热阻率', inp('1.20', 'K·m/W'), 'doc')}${prop('导体限值', inp('90', '°C'), 'std')}</div>`), insp: null, status: '' });
+  if (m === 'heat') {
+    if (t === 'field') return frame3({ ...base, canvas: 1, content: page(`<div class="phead"><span>600 A · 网格 129 × 129 · ${demo}</span>${vr(3, '解析基准')}</div>${heatCanvas()}`), insp: null, overlay: `<span class="overlay">色图 <b>温度 °C</b></span>`, status: '' });
+    return frame3({ ...base, content: page(`<div class="empty2"><b>${STABS.heat.find(x => x[0] === t)[1]}</b><p>样张只演示“场图”页签；其余页签按 §3.2 模板实现。</p></div>`), insp: null, status: '' });
+  }
+  if (m === 'sweep') {
+    if (t === 'curve') return frame3({ ...base, content: page(sweepChart()), insp: null, run: `<button class="btn btn--run">运行扫描</button>`, status: '<span>15 / 15 点完成</span>' });
+    return frame3({ ...base, content: page(`<div class="empty2"><b>${STABS.sweep.find(x => x[0] === t)[1]}</b><p>样张只演示“曲线”页签。</p></div>`), insp: null, status: '' });
+  }
+  if (m === 'cmp') {
+    if (t === 'result') return frame3({ ...base, content: page(tbl(['方法', '#允许电流', '#与基准差', '验证'], [['IEC 60287', '648 A', '基准', vr(4, '参考基准')], ['热网络', '641 A', '−1.1 %', vr(3, '解析基准')], ['有限元 · 定功率', '652 A', '+0.6 %', vr(2, '接口测试')]]) + '<span class="hint">差异仅作比较信息，不作为满足要求的判定。</span>'), insp: null, status: '' });
+    return frame3({ ...base, content: page(`<div class="empty2"><b>${STABS.cmp.find(x => x[0] === t)[1]}</b><p>样张只演示“结果差异”页签。</p></div>`), insp: null, status: '' });
+  }
+  if (t === 'content') return frame3({ ...base, content: page(tbl(['', '章节', '计算', '状态'], [['☑', '载流量', '#31', `${dot('now')} 当前`], ['☑', '温度场', '#32', `${dot('now')} 当前`], ['☐', '方法对比', '—', '可选']])), insp: null, run: `<button class="btn btn--pri">生成计算书</button>`, status: '' });
+  return frame3({ ...base, content: page(`<div class="empty2"><b>${STABS.report.find(x => x[0] === t)[1]}</b><p>样张只演示“内容”页签。</p></div>`), insp: null, status: '' });
+}
+
+
+const S = { tab: 'study', type: { m: 'structure', t: 'sec' }, study: { m: 'section', t: 'sec' }, checks: false, edit: null };
+const TABSOF = (tab, m) => (tab === 'type' ? TTABS : STABS)[m] || [];
+const keyOf = () => S.tab === 'home' ? 'home' : `${S.tab}-${S[S.tab].m}-${S[S.tab].t || 'main'}`;
+function parse(h) {
+  const [tab, m, t] = h.split('-');
+  if (tab === 'home') { S.tab = 'home'; return; }
+  if ((tab === 'type' || tab === 'study') && m && (tab === 'type' ? TTABS : STABS)[m]) { S.tab = tab; S[tab].m = m; S[tab].t = t === 'main' ? '' : t; }
+}
+const app = document.getElementById('app');
+function mount() {
+  app.innerHTML = S.tab === 'home' ? homeWs() : S.tab === 'type' ? typeWs3(S.type.m, S.type.t) : studyWs3(S.study.m, S.study.t);
+  document.querySelectorAll('#tabs button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.t === S.tab)));
+  heatField();
+  const ed = app.querySelector('[data-dimin]'); if (ed) { ed.focus(); ed.select(); }
+}
+function go() { S.edit = null; const k = keyOf(); if (location.hash.slice(1) !== k) location.hash = k; else mount(); }
+window.addEventListener('hashchange', () => { parse(location.hash.slice(1)); S.edit = null; mount(); });
+document.getElementById('tabs').addEventListener('click', e => { const b = e.target.closest('[data-t]'); if (b) { S.tab = b.dataset.t; go(); } });
+app.addEventListener('click', e => {
+  const st = S[S.tab];
+  const g0 = e.target.closest('[data-goto]'); if (g0) { S.tab = g0.dataset.goto; go(); return; }
+  const m = e.target.closest('[data-mod]'); if (m && st) { st.m = m.dataset.mod; st.t = (TABSOF(S.tab, st.m)[0] || [''])[0]; go(); return; }
+  const t = e.target.closest('[data-tab]'); if (t && st) { st.t = t.dataset.tab; go(); return; }
+  if (e.target.closest('[data-checks]')) { S.checks = !S.checks; mount(); return; }
+  const g = e.target.closest('[data-go]'); if (g && g.dataset.go === 'v:var') { S.tab = 'type'; S.type.m = 'var'; S.type.t = 'matrix'; go(); }
+});
+app.addEventListener('dblclick', e => { const d = e.target.closest('[data-dim]'); if (d) { S.edit = d.dataset.dim; mount(); } });
+app.addEventListener('keydown', e => { if (e.target.matches('[data-dimin]') && (e.key === 'Enter' || e.key === 'Escape')) { S.edit = null; mount(); } });
+if (location.hash.length > 1) parse(location.hash.slice(1));
+mount();
+</script>

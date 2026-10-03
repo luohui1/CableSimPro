@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+  <title>CableSimPro 电缆截面标记</title>
+  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+  <circle cx="12" cy="12" r="5.75" stroke="var(--text-secondary, currentColor)" stroke-width="1.5"/>
+  <circle cx="12" cy="12" r="3" fill="var(--conductor, currentColor)"/>
+</svg>

@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>CableSimPro · 图标与品牌</title><link rel="icon" href="../brand/app.ico"><link rel="stylesheet" href="../preview.css"><link rel="stylesheet" href="selection.css"><script src="../node_modules/motion/dist/motion.js" defer></script><script src="selection.js" defer></script><script src="catalog.js" defer></script></head>
+<body>
+  <header class="topbar"><div class="identity"><span id="identity-mark"></span><span>CableSimPro · 视觉素材</span></div><nav aria-label="素材导航"><a href="index.html" aria-current="page">图标与品牌</a><a href="../motion/index.html">动效</a></nav></header>
+  <main>
+    <div class="intro"><div><h1>图标体系</h1><p id="catalog-summary">正在加载图标与交互示例。</p></div><button id="theme" aria-pressed="false">页面：浅色</button></div>
+    <section id="selection-preview" aria-labelledby="selection-title"><div class="section-heading"><h2 id="selection-title">图标选中动画</h2><label class="note"><input id="reduce" type="checkbox"> 减少动态效果</label></div><p class="note">点击下方任意图标，查看笔画逐段显现与选中灰底移动。也可用方向键、Home / End 切换。</p><div class="controls"><button id="replay-selection">重播选中</button><label class="note"><input id="slow-selection" type="checkbox">慢放 3×（仅预览）</label><span id="selection-motion-state" class="note" role="status"></span></div><div id="selection-examples" class="selection-examples"></div><p id="example-readout" class="selection-readout" role="status">点击“重播选中”查看电缆图标，或直接选择其他图标。</p></section>
+    <section aria-labelledby="brand-title"><div class="section-heading"><h2 id="brand-title">品牌标记</h2><span class="note">外护套 · 绝缘 · 导体</span></div><div id="brand-pair" class="brand-pair"></div><p class="note" style="margin-top:var(--space-3)">Windows 图标：<img src="../brand/app.ico" width="16" height="16" alt="16 px 应用图标"> <img src="../brand/app.ico" width="24" height="24" alt="24 px 应用图标">　16 / 24 px 预览 · ICO 内含 16 / 24 / 32 / 48 / 256</p></section>
+    <section class="section" aria-labelledby="symbol-title"><div class="section-heading"><h2 id="symbol-title">状态与判据</h2><span class="note">状态点 10 · 判据 8 · 验证等级环 18 px</span></div><div id="symbol-pair" class="symbol-pair"></div></section>
+    <div class="section controls catalog-controls"><label for="search">查找图标</label><input id="search" type="search" placeholder="名称、分组或英文名" autocomplete="off"><label for="group-filter" class="note">分组</label><select id="group-filter"></select><span id="count" class="note mono" role="status"></span><nav id="group-links" class="catalog-groups" aria-label="图标分组"></nav></div>
+    <p id="selection-readout" class="selection-readout" role="status">点击图标可同时比较浅色、深色及三种尺寸下的选中反馈。</p>
+    <div id="catalog" role="group" aria-label="图标选中预览"></div><p id="empty" class="catalog-empty" hidden>没有匹配的图标，请调整关键词或分组。</p>
+    <footer class="footer">24 × 24 画板 · 1.5 描边 · currentColor · 圆头圆角。来源、计算、建模、线路、资源与结果使用各自的功能符号；状态点、判据与验证等级保持独立。</footer>
+  </main>
+</body></html>

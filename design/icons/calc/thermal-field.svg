@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <title>温度场</title>
+  <circle cx="12" cy="12" r="2.25"/><path d="M5.25 9c-2.25 3 .75 9 6 10.5 M9 4.5c5.25-2.25 12 3.75 11.25 9 M5.25 16.5c-3-3.75-2.25-8.25.75-11.25 M9 7.5c3.75-3 9 2.25 7.5 6 M9 16.5c3.75 3 9 0 10.5-1.5"/>
+</svg>

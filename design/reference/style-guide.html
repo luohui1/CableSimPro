@@ -1,0 +1,647 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CableSimPro 审美看板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Noto+Sans+SC:wght@400;600&display=swap">
+<style>
+/* Style guide, not pages. The board is itself built in the style: grey ground, one white 16 px panel, hairlines,
+   zero-chroma greys, colour only for meaning. Tokens below are the proposal. */
+:root {
+  --ground: #F9F9F9; --surface: #FFFFFF; --fill: #F4F4F4; --hover: #ECECEC; --current: #ECECEC;
+  --line: #ECECEC; --line-2: #D9D9D9; --text: #0D0D0D; --text-2: #5D5D5D; --text-3: #8F8F8F; --inverse: #FFFFFF;
+  --run: #B4612A; --run-soft: #F6E9DF; --on-run: #FFF8F2; --agent: #0F7C8A; --agent-soft: #E6F3F5;
+  --ok: #2F7A4F; --warn: #A4560B; --warn-soft: #FBF1E4; --bad: #B8352B; --bad-soft: #FBEAE8;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.06);
+  --shadow-2: 0 2px 8px rgba(0,0,0,.08), 0 16px 48px rgba(0,0,0,.12);
+  --m-cu: #C47A3D; --m-semi: #2B2E33; --m-xlpe: #ECEAE4; --m-screen: #AEB5BD; --m-jacket: #24272B;
+  --pa: #B38F00; --pb: #2E8B57; --pc: #C0392B;
+  --sans: "Noto Sans SC", "Microsoft YaHei UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", "Cascadia Mono", Consolas, monospace;
+  --ease: cubic-bezier(.2, 0, 0, 1);
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --ground: #181818; --surface: #212121; --fill: #2A2A2A; --hover: #2F2F2F; --current: #303030;
+  --line: #2F2F2F; --line-2: #424242; --text: #ECECEC; --text-2: #B4B4B4; --text-3: #8F8F8F; --inverse: #0D0D0D;
+  --run: #E08A4C; --run-soft: #33241A; --on-run: #1A0F08; --agent: #4FC3CF; --agent-soft: #12302F;
+  --ok: #4CC184; --warn: #EDA246; --warn-soft: #33281A; --bad: #F07468; --bad-soft: #3A1F1E;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); --shadow-2: 0 4px 12px rgba(0,0,0,.5), 0 24px 64px rgba(0,0,0,.5);
+  --m-xlpe: #3A3934; --m-semi: #0B0C0E; --m-jacket: #08090A; --pa: #E3C02E; --pb: #52B37A; --pc: #F07468; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --ground: #181818; --surface: #212121; --fill: #2A2A2A; --hover: #2F2F2F; --current: #303030;
+  --line: #2F2F2F; --line-2: #424242; --text: #ECECEC; --text-2: #B4B4B4; --text-3: #8F8F8F; --inverse: #0D0D0D;
+  --run: #E08A4C; --run-soft: #33241A; --on-run: #1A0F08; --agent: #4FC3CF; --agent-soft: #12302F;
+  --ok: #4CC184; --warn: #EDA246; --warn-soft: #33281A; --bad: #F07468; --bad-soft: #3A1F1E;
+  --shadow-1: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); --shadow-2: 0 4px 12px rgba(0,0,0,.5), 0 24px 64px rgba(0,0,0,.5);
+  --m-xlpe: #3A3934; --m-semi: #0B0C0E; --m-jacket: #08090A; --pa: #E3C02E; --pb: #52B37A; --pc: #F07468; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+body { background: var(--ground); color: var(--text); font: 14px/1.6 var(--sans); font-variant-numeric: tabular-nums; }
+h1, h2, h3, p { margin: 0; } h1, h2, h3 { font-weight: 600; text-wrap: balance; }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+.top { max-width: 1240px; margin: 0 auto; padding: 20px 8px 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.top b { font-size: 15px; } .top span { color: var(--text-2); }
+.top .sp { flex: 1; }
+.wrapgut { padding-inline: 16px; }
+.panel { max-width: 1240px; margin: 0 auto 32px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+.sec { padding: 40px 48px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 24px; }
+.sec__h { display: flex; flex-direction: column; gap: 6px; max-width: 46em; }
+.sec__h small { font: 500 13px var(--mono); color: var(--text-3); }
+.sec__h h2 { font-size: 20px; }
+.sec__h p { color: var(--text-2); }
+.sub { font-size: 16px; font-weight: 600; }
+.cap { font-size: 13px; color: var(--text-2); }
+.mono { font-family: var(--mono); }
+.row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
+.blk { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.hero { padding: 56px 48px 48px; display: flex; flex-direction: column; gap: 20px; }
+.hero h1 { font-size: 28px; line-height: 1.35; max-width: 34em; }
+.hero p { color: var(--text-2); max-width: 46em; font-size: 15px; }
+.kw { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.kw div { padding: 16px 18px; border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.kw div:first-child { border-left: 0; }
+.kw b { font-size: 16px; } .kw span { color: var(--text-2); font-size: 13px; }
+
+.scale { display: grid; grid-template-columns: repeat(15, minmax(0, 1fr)); border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+.scale div { height: 64px; display: flex; flex-direction: column; justify-content: flex-end; padding: 6px; font: 11px var(--mono); }
+.scale b { font-weight: 500; }
+.scrollx { overflow-x: auto; }
+.roles { width: 100%; border-collapse: collapse; min-width: 620px; }
+.roles th, .roles td { text-align: left; padding: 0 12px; height: 44px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.roles th { font-size: 13px; font-weight: 400; color: var(--text-2); height: 36px; }
+.roles td:last-child { white-space: normal; color: var(--text-2); }
+.pair { display: inline-flex; align-items: center; gap: 8px; font: 12px var(--mono); color: var(--text-2); }
+.pair i { width: 22px; height: 22px; border-radius: 6px; box-shadow: inset 0 0 0 1px rgba(127,127,127,.3); }
+.meaning { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+.mc { display: flex; flex-direction: column; gap: 6px; }
+.mc i { height: 48px; border-radius: 10px; margin-bottom: 4px; }
+.mc b { font-size: 14px; } .mc span { font-size: 13px; color: var(--text-2); }
+.domain { display: grid; grid-template-columns: auto auto minmax(0, 1fr); gap: 32px; align-items: center; padding: 20px; border: 1px dashed var(--line-2); border-radius: 12px; }
+.ramp { height: 14px; border-radius: 4px; background: linear-gradient(90deg, #FBF3E4, #F2C98A 25%, #E58B47 50%, #C2452F 72%, #6E1F35 90%, #2A0F1E); }
+.ph { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; margin-right: 14px; }
+.ph i { width: 10px; height: 10px; border-radius: 2px; }
+
+.ty { display: grid; grid-template-columns: 110px minmax(0, 1fr) 200px; gap: 16px; align-items: baseline; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.ty:last-child { border-bottom: 0; }
+.ty .cap:first-child { font-family: var(--mono); }
+.nums { display: flex; flex-wrap: wrap; gap: 32px; align-items: baseline; }
+.num { font-family: var(--mono); }
+.num small { font-size: .55em; color: var(--text-2); margin-left: 3px; }
+
+.radii { display: flex; flex-wrap: wrap; gap: 16px 20px; align-items: flex-end; }
+.rad { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.rad i { display: block; background: var(--fill); border: 1px solid var(--line-2); }
+.space { display: flex; flex-direction: column; gap: 8px; }
+.space div { display: flex; align-items: center; gap: 12px; }
+.space i { height: 12px; background: var(--text); border-radius: 2px; }
+.space span { font: 12px var(--mono); color: var(--text-2); width: 28px; }
+.heights { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.heights div { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.heights i { width: 96px; border: 1px solid var(--line-2); border-radius: 8px; display: block; }
+
+.elev { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 20px; }
+.el { height: 120px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); padding: 14px; display: flex; flex-direction: column; justify-content: space-between; }
+.el b { font-size: 14px; } .el span { font-size: 13px; color: var(--text-2); }
+.mini { height: 120px; border-radius: 12px; background: var(--ground); border: 1px solid var(--line); padding: 8px 8px 8px 44px; position: relative; }
+.mini::before { content: ""; position: absolute; left: 10px; top: 14px; width: 24px; height: 6px; border-radius: 3px; background: var(--line-2); box-shadow: 0 14px 0 var(--line-2), 0 28px 0 var(--line-2); }
+.mini div { height: 100%; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+
+.icons { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.ic { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 8px 14px; border-left: 1px solid var(--line); border-top: 1px solid var(--line); }
+.ic:nth-child(8n+1) { border-left: 0; } .ic:nth-child(-n+8) { border-top: 0; }
+.ic div { display: flex; gap: 14px; align-items: center; }
+.ic svg { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.ic span { font-size: 13px; color: var(--text-2); }
+
+.motion { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.mo { border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; text-align: left; background: var(--surface); cursor: pointer; }
+.mo:hover { border-color: var(--line-2); }
+.mo__stage { height: 72px; border-radius: 10px; background: var(--fill); display: flex; align-items: center; justify-content: center; gap: 12px; overflow: hidden; }
+.mo__h { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mo__h b { font-size: 14px; } .mo__h span { font: 12px var(--mono); color: var(--text-3); }
+.mo__p { font-size: 13px; color: var(--text-2); }
+
+/* ===== components ===== */
+.btn { height: 36px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--surface); cursor: pointer; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; transition: background-color 120ms var(--ease), opacity 120ms; }
+.btn--sm { height: 32px; padding: 0 12px; }
+.btn:hover, .btn.is-hover { background: var(--hover); }
+.btn:active, .btn.is-press { background: var(--line-2); }
+.btn.is-focus { outline: 2px solid var(--text); outline-offset: 2px; }
+.btn:disabled { opacity: .45; cursor: default; background: var(--surface); }
+.btn--pri { background: var(--text); border-color: var(--text); color: var(--inverse); font-weight: 600; }
+.btn--pri:hover, .btn--pri.is-hover { background: var(--text); opacity: .86; }
+.btn--pri:active, .btn--pri.is-press { background: var(--text); opacity: .72; }
+.btn--pri:disabled { background: var(--text); }
+.btn--run { background: var(--run); border-color: var(--run); color: var(--on-run); font-weight: 600; }
+.btn--run:hover, .btn--run.is-hover { background: var(--run); opacity: .88; }
+.btn--run:active, .btn--run.is-press { background: var(--run); opacity: .75; }
+.btn--run:disabled { background: var(--run); }
+.btn--run::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 30%, transparent); }
+.btn--ag { border-color: var(--agent); color: var(--agent); }
+.btn--ag:hover, .btn--ag.is-hover { background: var(--agent-soft); }
+.btn--ag:active, .btn--ag.is-press { background: color-mix(in srgb, var(--agent) 22%, var(--surface)); }
+.btn--ag:disabled { background: var(--surface); }
+.btn--txt { border-color: transparent; background: transparent; color: var(--text-2); }
+.btn--txt:disabled { background: transparent; }
+.btn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.mat { width: 100%; border-collapse: collapse; min-width: 720px; }
+.mat th, .mat td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.mat th { font-size: 13px; font-weight: 400; color: var(--text-2); }
+.mat tr:last-child td { border-bottom: 0; }
+.mat td:first-child b { font-weight: 600; }
+
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field label { font-size: 13px; color: var(--text-2); }
+.inp { height: 36px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface); display: flex; align-items: center; padding: 0 12px; gap: 8px; font-family: var(--mono); transition: border-color 120ms, background-color 120ms; }
+.inp small { margin-left: auto; color: var(--text-2); font-size: 12px; }
+.inp--focus { border-color: var(--text); box-shadow: 0 0 0 3px color-mix(in srgb, var(--text) 10%, transparent); }
+.inp--draft { border-style: dashed; border-color: var(--warn); background: var(--warn-soft); }
+.inp--err { border-color: var(--bad); }
+.inp--lock { border-color: transparent; background: var(--fill); color: var(--text-2); }
+.inp--off { opacity: .45; }
+.msg { font-size: 13px; color: var(--text-2); }
+.msg--bad { color: var(--bad); }
+.inputs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px 24px; }
+
+.seg { display: inline-flex; padding: 3px; background: var(--fill); border-radius: 999px; gap: 2px; }
+.seg button { height: 30px; padding: 0 14px; border: 0; border-radius: 999px; background: transparent; color: var(--text-2); cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.1); }
+.chk { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; flex-direction: row-reverse; }
+.chk i { width: 18px; height: 18px; border-radius: 5px; border: 1.5px solid var(--line-2); display: inline-flex; align-items: center; justify-content: center; }
+.chk.on i { background: var(--text); border-color: var(--text); }
+.chk.on i::after { content: ""; width: 9px; height: 5px; border: 2px solid var(--inverse); border-top: 0; border-right: 0; transform: translateY(-1px) rotate(-45deg); }
+.sw { width: 36px; height: 20px; border-radius: 999px; background: var(--line-2); position: relative; display: inline-block; cursor: pointer; transition: background-color 200ms var(--ease); }
+.sw::after { content: ""; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px; border-radius: 50%; background: #FFFFFF; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: transform 200ms var(--ease); }
+.sw.on { background: var(--text); } .sw.on::after { transform: translateX(16px); }
+.app-dark .sw.on::after { background: var(--inverse); }
+.select { height: 36px; min-width: 200px; border: 1px solid var(--line-2); border-radius: 8px; display: inline-flex; align-items: center; justify-content: space-between; padding: 0 12px; gap: 12px; background: var(--surface); }
+.menu { width: 240px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-1); padding: 6px; display: flex; flex-direction: column; gap: 2px; }
+.menu div { height: 32px; display: flex; align-items: center; justify-content: space-between; padding: 0 10px; border-radius: 8px; }
+.menu div.hl { background: var(--hover); }
+.menu div span { color: var(--text-3); font-size: 13px; }
+.menu hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+
+.navdemo { background: var(--ground); border-radius: 12px; padding: 10px; width: 240px; display: flex; flex-direction: column; gap: 2px; }
+.nv { height: 36px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-radius: 10px; color: var(--text-2); }
+.nv svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.nv.h { background: var(--hover); color: var(--text); }
+.nv.cur { background: var(--current); color: var(--text); font-weight: 600; }
+.nv em { margin-left: auto; font-style: normal; font-size: 13px; color: var(--text-3); }
+
+.tbl { width: 100%; border-collapse: collapse; min-width: 560px; }
+.tbl th, .tbl td { height: 40px; padding: 0 12px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.tbl th { font-size: 13px; font-weight: 400; color: var(--text-2); height: 36px; }
+.tbl .n { text-align: right; font-family: var(--mono); }
+.tbl tr.h td { background: var(--fill); }
+.tbl tr.sel td { box-shadow: inset 0 1px var(--text), inset 0 -1px var(--text); }
+.tbl tr.sel td:first-child { box-shadow: inset 1px 1px var(--text), inset 0 -1px var(--text); }
+.tbl tr.sel td:last-child { box-shadow: inset -1px 1px var(--text), inset 0 -1px var(--text); }
+.tbl .mut { color: var(--text-2); }
+
+.d { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex: none; position: relative; }
+.d--now { background: var(--text); box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--text); }
+.d--old { box-shadow: inset 0 0 0 1.5px var(--text-2); }
+.d--draft { border: 1.5px dashed var(--warn); }
+.d--bad { box-shadow: inset 0 0 0 1.5px var(--bad); }
+.d--bad::after { content: ""; position: absolute; left: 4.25px; top: -1px; width: 1.5px; height: 12px; background: var(--bad); transform: rotate(45deg); }
+.d--run { border: 1.5px dashed var(--run); animation: spin 1.2s linear infinite; }
+.d--queue { box-shadow: inset 0 0 0 1.5px var(--text-2); background: radial-gradient(circle, var(--text-2) 0 1.5px, transparent 2px); }
+.d--prop { border: 1.5px dashed var(--agent); }
+.c { width: 8px; height: 8px; border-radius: 2px; display: inline-block; flex: none; }
+.c--ok { background: var(--ok); } .c--bad { background: var(--bad); } .c--na { box-shadow: inset 0 0 0 1.5px var(--text-2); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.si { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.states { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px 24px; }
+.vr { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.vr svg { width: 18px; height: 18px; }
+.src { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 13px; }
+.src svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+.tip { display: inline-block; background: var(--text); color: var(--inverse); font-size: 13px; padding: 6px 10px; border-radius: 8px; position: relative; }
+.tip::after { content: ""; position: absolute; left: 16px; bottom: -4px; width: 8px; height: 8px; background: var(--text); transform: rotate(45deg); }
+.toast { display: inline-flex; align-items: center; gap: 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow-1); padding: 6px 6px 6px 16px; }
+.note { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 10px; }
+.note b { white-space: nowrap; }
+.note--warn { background: var(--warn-soft); } .note--warn b { color: var(--warn); }
+.note--bad { background: var(--bad-soft); } .note--bad b { color: var(--bad); }
+.prop { border: 1px dashed var(--agent); background: var(--agent-soft); border-radius: 12px; padding: 14px 16px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; align-items: center; }
+.prop b { color: var(--agent); display: inline-flex; align-items: center; gap: 8px; }
+.prop .row { grid-row: 1 / span 2; grid-column: 2; gap: 8px; }
+.concl { display: flex; align-items: flex-end; gap: 24px; padding-top: 14px; border-top: 1px solid var(--text); flex-wrap: wrap; }
+.concl__v { display: flex; flex-direction: column; gap: 2px; }
+.concl__v span { font-size: 13px; color: var(--text-2); }
+.concl__v b { font: 600 28px/1.1 var(--mono); letter-spacing: -.02em; color: var(--run); }
+.concl__v b small { font: 500 14px var(--mono); color: var(--text-2); margin-left: 4px; }
+.concl__m { display: flex; flex-direction: column; gap: 4px; color: var(--text-2); }
+.dialog { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-2); width: 100%; max-width: 460px; padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.dialog h3 { font-size: 16px; } .dialog p { color: var(--text-2); }
+.dialog .row { justify-content: flex-end; gap: 8px; }
+.composer { height: 48px; border-radius: 999px; background: var(--fill); border: 1px solid var(--line); display: flex; align-items: center; gap: 10px; padding: 0 6px 0 18px; color: var(--text-3); box-shadow: var(--shadow-1); min-width: 0; }
+.composer span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; flex: none; }
+.empty { border: 1px dashed var(--line-2); border-radius: 12px; padding: 28px; display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.empty p { color: var(--text-2); }
+.compgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 40px; }
+
+.dont { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 32px; }
+.dont div { display: flex; gap: 10px; align-items: baseline; }
+.dont i { font-style: normal; color: var(--bad); font-weight: 600; }
+
+/* drawing style (cable content only) */
+.dwg { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--surface); }
+.dwg__h { height: 44px; display: flex; align-items: center; gap: 12px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+.dwg__h b { font-size: 14px; } .dwg__h span { font-size: 13px; color: var(--text-2); }
+.dwg svg { display: block; width: 100%; height: auto; }
+.dwg svg text { font-family: var(--mono); }
+.dwgrid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.rules { width: 100%; border-collapse: collapse; }
+.rules td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.rules td:first-child { white-space: nowrap; font-weight: 600; width: 120px; }
+.rules td:last-child { color: var(--text-2); }
+.rules tr:last-child td { border-bottom: 0; }
+/* agent drawer */
+.agwrap { display: grid; grid-template-columns: 460px minmax(0, 1fr); gap: 40px; align-items: start; }
+.drawer { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow-2); display: flex; flex-direction: column; overflow: hidden; }
+.drawer__h { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 8px 0 18px; border-bottom: 1px solid var(--line); }
+.drawer__h b { font-size: 15px; } .drawer__h span { color: var(--text-2); font-size: 13px; }
+.drawer__h .sp { flex: 1; }
+.thread { padding: 18px; display: flex; flex-direction: column; gap: 16px; }
+.bubble { align-self: flex-end; max-width: 85%; background: var(--fill); border-radius: 16px; padding: 10px 14px; }
+.steps { display: flex; flex-direction: column; gap: 6px; color: var(--text-2); }
+.steps div { display: flex; align-items: center; gap: 10px; min-height: 26px; }
+.steps svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.steps em { font-style: normal; color: var(--text-3); font-family: var(--mono); font-size: 12px; }
+.agtext p + p { margin-top: 8px; }
+.cmp { width: 100%; border-collapse: collapse; font-size: 13px; }
+.cmp th, .cmp td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: left; }
+.cmp th { font-weight: 400; color: var(--text-2); } .cmp .n { text-align: right; font-family: var(--mono); }
+.drawer__c { padding: 12px; border-top: 1px solid var(--line); }
+.drawer__c .composer { box-shadow: none; padding-left: 6px; }
+.iconbtn { width: 36px; height: 36px; border-radius: 999px; border: 0; background: transparent; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-2); flex: none; }
+.iconbtn:hover { background: var(--hover); }
+.iconbtn--send { background: var(--text); color: var(--inverse); }
+.iconbtn--send:hover { background: var(--text); opacity: .86; }
+.iconbtn svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.aglist { display: flex; flex-direction: column; }
+.aglist div { padding: 14px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+.aglist div:first-child { padding-top: 0; } .aglist div:last-child { border-bottom: 0; }
+.aglist b { font-size: 14px; } .aglist span { color: var(--text-2); }
+@media (max-width: 1000px) { .dwgrid, .agwrap { grid-template-columns: 1fr; } .drawer { max-width: 460px; } }
+
+@media (max-width: 1000px) {
+  .kw, .meaning, .grid3, .compgrid, .motion, .elev, .dont, .inputs, .states { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kw div { border-left: 0; border-top: 1px solid var(--line); } .kw div:nth-child(-n+2) { border-top: 0; } .kw div:nth-child(even) { border-left: 1px solid var(--line); }
+  .icons { grid-template-columns: repeat(4, minmax(0, 1fr)); } .ic:nth-child(8n+1) { border-left: 1px solid var(--line); } .ic:nth-child(4n+1) { border-left: 0; } .ic:nth-child(-n+8) { border-top: 1px solid var(--line); } .ic:nth-child(-n+4) { border-top: 0; }
+  .scale { grid-template-columns: repeat(5, minmax(0, 1fr)); } .domain { grid-template-columns: 1fr; }
+  .ty { grid-template-columns: 90px minmax(0, 1fr); } .ty .cap:last-child { grid-column: 2; }
+}
+@media (max-width: 640px) {
+  .sec, .hero { padding-inline: 20px; }
+  .kw, .meaning, .grid3, .compgrid, .motion, .elev, .dont, .inputs, .states { grid-template-columns: 1fr; }
+  .kw div { border-left: 0 !important; border-top: 1px solid var(--line) !important; } .kw div:first-child { border-top: 0 !important; }
+  .prop { grid-template-columns: 1fr; } .prop .row { grid-row: auto; grid-column: 1; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrapgut">
+<header class="top"><b>CableSimPro 风格规范</b><span>草案 4 · 只定风格，不定页面</span><span class="sp"></span><div class="seg" role="group" aria-label="主题"><button data-th="light">浅色</button><button data-th="dark">深色</button></div></header>
+<main class="panel">
+
+<section class="hero">
+  <h1>白纸、灰阶、柔和的圆角；数字精确，颜色只表达含义。</h1>
+  <p>界面本身几乎没有颜色：灰色的底，一整块白色的工作面板，细线分隔。柔和的圆角让长时间使用不累；等宽数字和细线让工程数据看起来可信。只有含义需要时才出现颜色——运行是铜色，Agent 是青色，判据是红绿。电缆特有的表达（材料色、截面、温度色）只出现在电缆内容里。</p>
+  <div class="kw">
+    <div><b>白纸</b><span>工作区是纯白面板，内容像写在纸上</span></div>
+    <div><b>灰阶</b><span>零色偏的灰，靠底色深浅分层，少用线</span></div>
+    <div><b>圆润</b><span>8 / 10 / 12 / 16 的圆角，按钮与搜索全圆</span></div>
+    <div><b>精确</b><span>等宽数字、单位紧随、1 px 细线</span></div>
+    <div><b>克制</b><span>颜色只表达含义，装饰为零</span></div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s1">
+  <div class="sec__h"><small>01</small><h2 id="s1">颜色</h2><p>界面由一组零色偏的灰构成。浅色与深色用同一套角色名，页面只引用角色，不写色值。</p></div>
+  <div class="blk"><span class="sub">灰阶</span><div class="scale" id="scale"></div></div>
+  <div class="blk"><span class="sub">界面角色</span><div class="scrollx"><table class="roles" id="roles"></table></div></div>
+  <div class="blk"><span class="sub">含义色 · 只在有这个含义时出现</span><div class="meaning" id="meaning"></div></div>
+  <div class="blk"><span class="sub">电缆内容专用 · 不进入常规界面</span>
+    <div class="domain">
+      <svg viewBox="-20 -20 40 40" width="88" role="img" aria-label="材料色截面"><circle r="19" fill="var(--m-jacket)"/><circle r="16.5" fill="var(--m-screen)"/><circle r="15.4" fill="var(--m-semi)"/><circle r="14.6" fill="var(--m-xlpe)" stroke="var(--line-2)" stroke-width=".3"/><circle r="8.8" fill="var(--m-semi)"/><circle r="8" fill="var(--m-cu)"/></svg>
+      <div class="blk" style="gap:8px"><span class="cap">三相（国标黄绿红，必须带相别文字）</span><div><span class="ph"><i style="background:var(--pa)"></i>A 相</span><span class="ph"><i style="background:var(--pb)"></i>B 相</span><span class="ph"><i style="background:var(--pc)"></i>C 相</span></div></div>
+      <div class="blk" style="gap:8px"><span class="cap">温度色图（冷浅热深，明度单调，两种主题相同）</span><div class="ramp"></div><div class="row cap mono" style="justify-content:space-between"><span>25 °C</span><span>90 °C</span></div></div>
+    </div></div>
+</section>
+
+<section class="sec" aria-labelledby="s2">
+  <div class="sec__h"><small>02</small><h2 id="s2">字体</h2><p>界面用 Noto Sans SC，只用 400 与 600 两种字重；数值、坐标、版本号用等宽的 IBM Plex Mono。两者都随安装包本地分发。</p></div>
+  <div>
+    <div class="ty"><span class="cap">28 · 600</span><span style="font-size:28px;font-weight:600">关键数值与首页标题</span><span class="cap">每屏最多一处</span></div>
+    <div class="ty"><span class="cap">20 · 600</span><span style="font-size:20px;font-weight:600">节标题 · 敷设截面</span><span class="cap">工程文档的每一节</span></div>
+    <div class="ty"><span class="cap">16 · 600</span><span style="font-size:16px;font-weight:600">小节标题 · 各相结果</span><span class="cap">节内分组、对话框标题</span></div>
+    <div class="ty"><span class="cap">14 · 400</span><span style="font-size:14px">正文与表格：工程师长时间阅读的主要字号，行高 1.6。</span><span class="cap">默认</span></div>
+    <div class="ty"><span class="cap">13 · 400</span><span style="font-size:13px;color:var(--text-2)">说明、表头、来源与时间。不再更小。</span><span class="cap">最小字号</span></div>
+  </div>
+  <div class="blk"><span class="sub">数值</span>
+    <div class="nums"><span class="num" style="font-size:28px;font-weight:600">1386<small>A</small></span><span class="num" style="font-size:20px">89.6<small>°C</small></span><span class="num" style="font-size:16px">0.0151<small>Ω/km</small></span><span class="num">105.40<small>mm</small></span><span class="num">K1+860</span><span class="num" style="color:var(--text-2)">v3 · sha256:9c41…e07a</span></div>
+    <p class="cap">等宽；五位及以上用空格分组（12 500）；单位紧随且较小；按物理量规则显示精度，不显示虚假精度；温度显示 °C，存储 SI。</p></div>
+</section>
+
+<section class="sec" aria-labelledby="s3">
+  <div class="sec__h"><small>03</small><h2 id="s3">形状与间距</h2><p>圆角按“东西有多大”选五档之一；间距是 4 的倍数。</p></div>
+  <div class="grid3">
+    <div class="blk"><span class="sub">圆角</span><div class="radii">
+      <div class="rad"><i style="width:56px;height:36px;border-radius:8px"></i><span class="cap">8 · 输入、表格内控件</span></div>
+      <div class="rad"><i style="width:56px;height:36px;border-radius:10px"></i><span class="cap">10 · 导航项、菜单项</span></div>
+      <div class="rad"><i style="width:72px;height:56px;border-radius:12px"></i><span class="cap">12 · 卡片、浮层、画布框</span></div>
+      <div class="rad"><i style="width:88px;height:64px;border-radius:16px"></i><span class="cap">16 · 工作面板、对话框</span></div>
+      <div class="rad"><i style="width:88px;height:36px;border-radius:999px"></i><span class="cap">全圆 · 按钮、搜索、分段、状态点</span></div>
+    </div></div>
+    <div class="blk"><span class="sub">间距</span><div class="space" id="space"></div></div>
+    <div class="blk"><span class="sub">控件高度</span><div class="heights">
+      <div><i style="height:32px"></i><span class="cap">32 · 紧凑</span></div><div><i style="height:36px"></i><span class="cap">36 · 标准</span></div><div><i style="height:48px;border-radius:999px"></i><span class="cap">48 · 首页搜索</span></div></div>
+      <p class="cap">工具栏、表格内用 32；表单与主要操作用 36；48 只给首页搜索一处。</p></div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s4">
+  <div class="sec__h"><small>04</small><h2 id="s4">层级</h2><p>平时不用阴影：灰底上放一块白色工作面板，面板内只用细线。只有浮在内容之上的东西才有阴影，且只有两级。</p></div>
+  <div class="elev">
+    <div class="mini" role="img" aria-label="灰底上的白色工作面板"><div></div></div>
+    <div class="el"><b>平面</b><span>面板、表格、卡片：1 px 细线，无阴影</span></div>
+    <div class="el" style="box-shadow:var(--shadow-1)"><b>浮层 · 1 级</b><span>菜单、下拉、提示、通知、首页搜索</span></div>
+    <div class="el" style="box-shadow:var(--shadow-2)"><b>对话框 · 2 级</b><span>对话框与抽屉，背后加 40 % 遮罩</span></div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s5">
+  <div class="sec__h"><small>05</small><h2 id="s5">图标方向</h2><p>线性图标：24 画板、1.5 描边、圆头圆角、只用当前文字色；在 16 px 下仍然清晰。以下为方向示意，正式图标由素材方按《视觉素材》绘制。</p></div>
+  <div class="icons" id="icons"></div>
+</section>
+
+<section class="sec" aria-labelledby="s6">
+  <div class="sec__h"><small>06</small><h2 id="s6">动效</h2><p>动效只表达因果：运行、变化、保存、失败。快而短，不弹跳、不滑入；系统开启“减少动态效果”时全部直接切换。点击每张卡片播放。</p></div>
+  <div class="motion" id="motion"></div>
+</section>
+
+<section class="sec" aria-labelledby="s7">
+  <div class="sec__h"><small>07</small><h2 id="s7">组件</h2><p>所有页面只用这些组件。每种交互状态只有一种表现：悬停 = 浅灰底，当前位置 = 灰底，选中对象 = 墨线框，焦点 = 2 px 文字色外框，不可用 = 45 % 透明度。</p></div>
+
+  <div class="blk"><span class="sub">按钮</span><div class="scrollx"><table class="mat" id="btns"></table></div>
+    <p class="cap">每屏最多一个“主要”；“运行”只用于开始计算；Agent 只用于 Agent 入口与提案操作。</p></div>
+
+  <div class="blk"><span class="sub">数值输入</span><div class="inputs">
+    <div class="field"><label>绝缘厚度</label><div class="inp">16.00<small>mm</small></div><span class="msg">默认</span></div>
+    <div class="field"><label>绝缘厚度</label><div class="inp inp--focus">16.0|<small>mm</small></div><span class="msg">聚焦</span></div>
+    <div class="field"><label>绝缘厚度</label><div class="inp inp--draft">17.00<small>mm</small></div><span class="msg">草稿 · 未保存，原值 16.00</span></div>
+    <div class="field"><label>导体 R₂₀</label><div class="inp inp--err"><span style="color:var(--text-3)">必填</span><small>Ω/km</small></div><span class="msg msg--bad">缺少导体直流电阻，计算不能运行</span></div>
+    <div class="field"><label>外径</label><div class="inp inp--lock">105.40<small>mm</small></div><span class="msg">推导值 · 由分层累加，不可直接编辑</span></div>
+    <div class="field"><label>回填热阻率</label><div class="inp inp--off">0.70<small>K·m/W</small></div><span class="msg">不可用</span></div>
+  </div></div>
+
+  <div class="compgrid">
+    <div class="blk"><span class="sub">选择</span>
+      <div class="row"><div class="seg" id="segdemo"><button aria-pressed="true">全部</button><button aria-pressed="false">我参与的</button><button aria-pressed="false">型号设计</button></div></div>
+      <div class="row" style="gap:24px"><span class="chk on" data-toggle>纳入计算书<i></i></span><span class="chk" data-toggle>显示历史运行<i></i></span><span class="si"><span class="sw on" data-sw></span>跟随系统主题</span></div>
+      <div class="row" style="align-items:flex-start;gap:16px"><span class="select">直埋 · 品字形<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="m4 6 4 4 4-4"/></svg></span>
+        <div class="menu"><div>直埋 · 品字形<span>当前</span></div><div class="hl">直埋 · 水平排列</div><div>排管 · 4 孔</div><hr><div>从库选用…</div></div></div></div>
+    <div class="blk"><span class="sub">导航</span>
+      <div class="row" style="align-items:flex-start;gap:24px"><div class="navdemo" id="navdemo"></div>
+        <p class="cap" style="max-width:16em">导航直接放在灰底上，没有边框。当前位置用灰底而不是墨线框——“你在哪”与“你选中了什么”是两件事。</p></div></div>
+  </div>
+
+  <div class="blk"><span class="sub">表格</span><div class="scrollx">
+    <table class="tbl"><thead><tr><th>层</th><th>材料</th><th class="n">厚度 mm</th><th class="n">外径 mm</th><th>来源</th></tr></thead><tbody>
+      <tr><td>导体</td><td>铜 · 分割导体</td><td class="n">1200 mm²</td><td class="n">41.20</td><td class="mut">库 · v3</td></tr>
+      <tr class="h"><td>导体屏蔽</td><td>半导电</td><td class="n">1.50</td><td class="n">44.20</td><td class="mut">库 · v3　← 悬停</td></tr>
+      <tr class="sel"><td>绝缘</td><td>XLPE</td><td class="n">16.00</td><td class="n">76.20</td><td class="mut">库 · v3　← 选中</td></tr>
+      <tr><td>金属套</td><td>皱纹铝</td><td class="n">2.20</td><td class="n">96.40</td><td class="mut">资料 p.12</td></tr></tbody></table></div>
+    <p class="cap">只有行间细线，没有竖线和斑马纹；数值列右对齐、等宽；来源单独一列。</p></div>
+
+  <div class="blk"><span class="sub">状态</span>
+    <div class="states">
+      <span class="si"><i class="d d--now"></i>当前 / 已保存</span><span class="si"><i class="d d--old"></i>历史 · 输入已变化</span><span class="si"><i class="d d--draft"></i>草稿 · 未保存</span><span class="si"><i class="d d--bad"></i>失败</span>
+      <span class="si"><i class="d d--run"></i>执行中</span><span class="si"><i class="d d--queue"></i>排队</span><span class="si"><i class="d d--prop"></i>提案待审核</span><span class="si"><i class="c c--ok"></i>满足</span>
+      <span class="si"><i class="c c--bad"></i>不满足</span><span class="si"><i class="c c--na"></i>无法判断</span><span id="vr1"></span><span id="vr2"></span>
+    </div>
+    <div class="row" style="gap:20px" id="sources"></div>
+    <p class="cap">状态 = 形状 + 文字，不用彩色胶囊和徽章；不靠颜色也能分辨。来源是参数旁的一行小字，不是标签。</p></div>
+
+  <div class="compgrid">
+    <div class="blk"><span class="sub">结论行</span>
+      <div class="concl"><div class="concl__v"><span>允许载流量</span><b>1386<small>A</small></b></div><div class="concl__m"><span class="si"><i class="c c--ok"></i>满足 · 导体 89.6 °C ≤ 90 °C</span><span class="si"><i class="d d--now"></i>当前 · 研究修订 4</span></div></div>
+      <p class="cap">一项计算只有一个铜色数值。输入变化后变灰成历史，见动效“结果变为历史”。</p></div>
+    <div class="blk"><span class="sub">提案</span>
+      <div class="prop"><b><i class="d d--prop"></i>提案 · 来自《厂家资料》第 12 页</b><span>导体 R₂₀ = <span class="mono">0.0151</span> Ω/km，当前为空。</span><div class="row"><button class="btn btn--sm">拒绝</button><button class="btn btn--sm btn--pri">批准</button></div></div>
+      <p class="cap">Agent 与资料导入只产出提案：青色虚线框，必须由人批准。</p></div>
+    <div class="blk"><span class="sub">提示与通知</span>
+      <div class="row" style="gap:20px;align-items:flex-start"><span class="tip">外径由分层厚度累加</span><span class="toast"><i class="d d--now"></i>已保存 · 修订 13<button class="btn btn--sm btn--txt">撤销</button></span></div>
+      <div class="note note--warn"><b>需注意</b><span>库中有新版本 v4；替换后，引用它的运行会变为历史。</span></div>
+      <div class="note note--bad"><b>无法保存</b><span>修订 12 已被他人更新。你的草稿已保留，请先查看差异。</span></div></div>
+    <div class="blk"><span class="sub">对话框</span>
+      <div class="dialog"><h3>运行前确认适用范围</h3><p>IEC 60287 单芯直埋：均匀土壤、稳态、无外部热源。当前截面含回填区，将按等效热阻率处理。</p><div class="row"><button class="btn">取消</button><button class="btn btn--run">确认并运行</button></div></div></div>
+    <div class="blk"><span class="sub">搜索</span>
+      <div class="composer"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3.5 3.5"/></svg><span>搜索工程、型号、线路，或输入新工程名称</span><button class="btn btn--pri">新建工程</button></div></div>
+    <div class="blk"><span class="sub">空状态</span>
+      <div class="empty"><b>还没有计算</b><p>从已录入的对象添加一项计算，例如载流量或温度场。</p><button class="btn">添加计算</button></div></div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s9">
+  <div class="sec__h"><small>08</small><h2 id="s9">图纸风格 · 只在电缆内容里</h2><p>电缆线路设计历来用图纸表达：路径平面图、纵断面图（用里程桩号 K0+000 标注）、敷设断面图、接头与工井布置图、接地（交叉互联）系统图。界面里的电缆内容沿用这些读图习惯，但只出现在图框内；图框外仍是上面的常规界面。</p></div>
+  <div class="dwgrid">
+    <div class="dwg"><div class="dwg__h"><b>线路平纵断面</b><span>里程 m · 埋深 m · 演示</span></div><div id="dw-route"></div></div>
+    <div class="dwg"><div class="dwg__h"><b>敷设断面</b><span>单位 m · 演示</span></div><div id="dw-sec"></div></div>
+  </div>
+  <table class="rules"><tbody>
+    <tr><td>图框</td><td>12 圆角画布框，白底；图内可有网格、坐标标尺、比例；图框外不出现标尺与网格。</td></tr>
+    <tr><td>线型</td><td>轮廓与地表线 1.5；尺寸线、引线 0.75；网格 0.5；规划 / 待定对象虚线；地表线上方加 45° 短斜线。</td></tr>
+    <tr><td>尺寸标注</td><td>尺寸界线 + 尺寸线 + 等宽数字；单位写在图名里，不在每个数字后重复。</td></tr>
+    <tr><td>线路</td><td>自上而下：里程轴（50 m 小刻度、500 m 标桩号）→ 分段带（敷设方式用灰阶层次）→ 接地小段 → 纵断面；局部对象用竖向引线 + 圆点 + 标签。</td></tr>
+    <tr><td>敷设断面</td><td>电缆按真实比例与材料色；三相写相别；介质分区用浅灰与虚线边界。</td></tr>
+    <tr><td>颜色</td><td>图内也不用铜色装饰；Agent 提出的对象用青色虚线；温度只用温度色图。</td></tr>
+    <tr><td>交互</td><td>图中选中与表格选中同步，表现相同（墨线框）。</td></tr>
+  </tbody></table>
+</section>
+
+<section class="sec" aria-labelledby="s10">
+  <div class="sec__h"><small>09</small><h2 id="s10">Agent 界面</h2><p>基于 assistant-ui 改装：结构与交互用它的，外观全部换成本规范——颜色、圆角、字号、自研图标。Agent 只出现在工程与资源详情的右侧抽屉里，只产出提案。</p></div>
+  <div class="agwrap">
+    <div class="drawer" aria-label="Agent 抽屉样式">
+      <div class="drawer__h"><b>Agent</b><span>本机模型 · 只提提案</span><span class="sp"></span><button class="iconbtn" aria-label="关闭"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></svg></button></div>
+      <div class="thread">
+        <div class="bubble">K1+860 那里和热力管交叉了，会不会影响载流量？</div>
+        <div class="steps">
+          <div><svg viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z M14 3v4h4"/></svg>已读取 线路 · 局部对象<em>3 项</em></div>
+          <div><svg viewBox="0 0 24 24"><path d="M3 6h18 M4 6l-1.5-2M8 6 6.5 4M12 6l-1.5-2M16 6l-1.5-2M20 6l-1.5-2"/><circle cx="9.5" cy="16" r="2.2"/><circle cx="14.5" cy="16" r="2.2"/><circle cx="12" cy="12" r="2.2"/></svg>已读取 敷设截面 A</div>
+          <div><i class="d d--run" style="margin:0 3px"></i>正在生成提案…</div>
+        </div>
+        <div class="agtext"><p>会。交叉点净距 0.50 m，外部热源会抬高 S3 段的电缆温度；目前工程里没有这个局部对象，所以现有载流量没有考虑它。</p><p>两种处理方式（预估，需运行确认）：</p></div>
+        <table class="cmp"><thead><tr><th>方案</th><th class="n">预估载流量</th><th>代价</th></tr></thead><tbody><tr><td>按现状计入热源</td><td class="n">≈ 1290 A</td><td>需热力管表面温度</td></tr><tr><td>交叉处加隔热</td><td class="n">≈ 1370 A</td><td>改设计，加一项计算</td></tr></tbody></table>
+        <div class="prop"><b><i class="d d--prop"></i>提案 · 增加局部对象</b><span>K1+860 外部热源（热力管，净距 0.50 m），并为 S3 加一项最不利段载流量。</span><div class="row"><button class="btn btn--sm">拒绝</button><button class="btn btn--sm btn--pri">采纳为草稿</button></div></div>
+      </div>
+      <div class="drawer__c"><div class="composer"><button class="iconbtn" aria-label="附加资料"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button><span>问 Agent，或拖入资料</span><button class="iconbtn iconbtn--send" aria-label="发送"><svg viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button></div></div>
+    </div>
+    <div class="aglist">
+      <div><b>用户消息</b><span>填充色、16 圆角的气泡，右对齐。</span></div>
+      <div><b>Agent 消息</b><span>无气泡，正文 14，和文档一样读。</span></div>
+      <div><b>工具调用</b><span>一行次要文字加图标：“已读取 …”“已运行 …”，进行中用“执行中”状态点；可展开看输入输出。参考 Codex 的步骤列表。</span></div>
+      <div><b>生成内容</b><span>只能是已有组件：参数表、方案对比表、提案块。不生成任意界面。</span></div>
+      <div><b>提案</b><span>所有修改都以青色虚线提案出现，人批准后才生效；同一提案也出现在对应的工程节里。</span></div>
+      <div><b>输入框</b><span>与首页搜索同为 48 高胶囊；左侧附加资料，右侧圆形发送按钮。</span></div>
+      <div><b>用到的开源库</b><span>assistant-ui（消息、输入、工具调用、重试与分支）；Motion（流式出现、数值过渡）。CopilotKit 的直接写入应用状态不采用——和“只提提案”冲突。</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec" aria-labelledby="s8">
+  <div class="sec__h"><small>10</small><h2 id="s8">不要</h2></div>
+  <div class="dont">
+    <div><i>×</i><span>彩色渐变、装饰插画、营销式大标题</span></div>
+    <div><i>×</i><span>每块内容都套卡片和阴影</span></div>
+    <div><i>×</i><span>彩色胶囊徽章、带底色的结论框堆叠</span></div>
+    <div><i>×</i><span>蓝色或紫色作通用强调色</span></div>
+    <div><i>×</i><span>小于 13 px 的字、零散的小字说明</span></div>
+    <div><i>×</i><span>在常规界面上加标尺、材料色等主题装饰</span></div>
+    <div><i>×</i><span>多窗格挤在一屏、属性栏停靠</span></div>
+    <div><i>×</i><span>弹跳、滑入、骨架屏闪光、加载遮罩</span></div>
+    <div><i>×</i><span>同一含义在不同页面写法不同</span></div>
+  </div>
+</section>
+
+</main>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const root = document.documentElement;
+const curTheme = () => root.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+const paintTheme = () => document.querySelectorAll('[data-th]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.th === curTheme())));
+document.querySelectorAll('[data-th]').forEach(b => b.addEventListener('click', () => { root.dataset.theme = b.dataset.th; try { localStorage.setItem('style-theme', b.dataset.th); } catch {} paintTheme(); }));
+try { const t = localStorage.getItem('style-theme'); if (t === 'light' || t === 'dark') root.dataset.theme = t; } catch {}
+paintTheme();
+
+const GREYS = [['0', '#FFFFFF'], ['50', '#F9F9F9'], ['100', '#F4F4F4'], ['150', '#ECECEC'], ['200', '#E3E3E3'], ['300', '#D9D9D9'], ['400', '#B4B4B4'], ['500', '#8F8F8F'], ['600', '#5D5D5D'], ['700', '#424242'], ['800', '#303030'], ['850', '#2A2A2A'], ['900', '#212121'], ['950', '#181818'], ['1000', '#0D0D0D']];
+$('#scale').innerHTML = GREYS.map(([n, h], i) => `<div style="background:${h};color:${i < 8 ? '#0D0D0D' : '#ECECEC'}"><b>${n}</b>${h}</div>`).join('');
+const ROLES = [
+  ['底色', '#F9F9F9', '#181818', '页面底，导航直接放在上面'], ['工作面板', '#FFFFFF', '#212121', '主工作区、表格、对话框'],
+  ['填充', '#F4F4F4', '#2A2A2A', '输入框底、分段选择底、表格悬停行'], ['悬停', '#ECECEC', '#2F2F2F', '按钮与导航悬停'],
+  ['当前位置', '#ECECEC', '#303030', '侧栏与目录的当前项'], ['细线', '#ECECEC', '#2F2F2F', '分隔线、面板边'],
+  ['控件边框', '#D9D9D9', '#424242', '输入框、线框按钮'], ['文字', '#0D0D0D', '#ECECEC', '正文、主要按钮、选中墨线框、焦点框'],
+  ['次要文字', '#5D5D5D', '#B4B4B4', '说明、表头、来源'], ['弱文字', '#8F8F8F', '#8F8F8F', '只用于占位符与不可用，不用于正文'],
+];
+$('#roles').innerHTML = `<thead><tr><th>角色</th><th>浅色</th><th>深色</th><th>用途</th></tr></thead><tbody>${ROLES.map(([r, l, d, u]) => `<tr><td>${r}</td><td><span class="pair"><i style="background:${l}"></i>${l}</span></td><td><span class="pair"><i style="background:${d}"></i>${d}</span></td><td>${u}</td></tr>`).join('')}</tbody>`;
+const MEAN = [['--run', '铜 · 运行', '运行按钮与当前结论数值；导体的颜色', '#B4612A / #E08A4C'], ['--agent', '青 · Agent', 'Agent 入口、提案、待审核', '#0F7C8A / #4FC3CF'], ['--ok', '绿 · 满足', '判据满足', '#2F7A4F / #4CC184'], ['--warn', '琥珀 · 需注意', '草稿、需注意的提示', '#A4560B / #EDA246'], ['--bad', '红 · 错误', '失败、不满足、校验错误', '#B8352B / #F07468']];
+$('#meaning').innerHTML = MEAN.map(([v, n, u, h]) => `<div class="mc"><i style="background:var(${v})"></i><b>${n}</b><span>${u}</span><span class="mono" style="font-size:12px">${h}</span></div>`).join('');
+$('#space').innerHTML = [4, 8, 12, 16, 24, 32, 48].map(n => `<div><span>${n}</span><i style="width:${n * 2}px"></i></div>`).join('');
+
+const ICONS = [
+  ['工程', '<path d="M6 3h8l4 4v14H6z M14 3v4h4 M9 12h6 M9 16h6"/>'], ['库', '<rect x="4" y="4" width="16" height="4.5" rx="1.5"/><rect x="4" y="10" width="16" height="4.5" rx="1.5"/><rect x="4" y="16" width="16" height="4" rx="1.5"/>'],
+  ['插件', '<path d="M9 3v4M15 3v4M6 7h12v4a6 6 0 0 1-12 0z M12 17v4"/>'], ['设置', '<circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M5.6 18.4l1.8-1.8M16.6 7.4l1.8-1.8"/>'],
+  ['电缆', '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5.5"/><circle cx="12" cy="12" r="2.2"/>'], ['敷设截面', '<path d="M3 6h18 M4 6l-1.5-2M8 6 6.5 4M12 6l-1.5-2M16 6l-1.5-2M20 6l-1.5-2"/><circle cx="9.5" cy="16" r="2.2"/><circle cx="14.5" cy="16" r="2.2"/><circle cx="12" cy="12" r="2.2"/>'],
+  ['线路', '<path d="M3 17c3 0 4-8 9-8s6 6 9 6"/><circle cx="3" cy="17" r="1.3"/><circle cx="21" cy="15" r="1.3"/><path d="M12 6v6"/>'], ['计算', '<rect x="4" y="3" width="16" height="18" rx="2.5"/><path d="M8 8h8 M8 13h2 M14 13h2 M8 17h2 M14 17h2"/>'],
+  ['交付', '<path d="M6 3h8l4 4v14H6z M14 3v4h4"/><path d="m9 14 2 2 4-4"/>'], ['运行', '<circle cx="12" cy="12" r="8.5"/><path d="M10 8.5v7l5.5-3.5z"/>'],
+  ['Agent', '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3" stroke-dasharray="1.8 1.8"/>'], ['提案', '<rect x="4" y="4" width="16" height="16" rx="3" stroke-dasharray="2.4 2"/><path d="M8.5 12h7M12 8.5v7"/>'],
+  ['搜索', '<circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/>'], ['撤销', '<path d="M8 6 4 10l4 4M4 10h10a5 5 0 0 1 0 10h-2"/>'],
+  ['锁定', '<rect x="5" y="11" width="14" height="9.5" rx="2.5"/><path d="M8.5 11V8a3.5 3.5 0 0 1 7 0v3"/>'], ['导出', '<path d="M12 15V4M8 8l4-4 4 4M5 14v5.5h14V14"/>'],
+];
+$('#icons').innerHTML = ICONS.map(([n, d]) => `<div class="ic"><div><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">${d}</svg><svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">${d}</svg></div><span>${n}</span></div>`).join('');
+const navI = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS.find(x => x[0] === k)[1]}</svg>`;
+$('#navdemo').innerHTML = `<div class="nv cur">${navI('工程')}工程</div><div class="nv h">${navI('库')}库<em>悬停</em></div><div class="nv">${navI('插件')}插件</div><div class="nv">${navI('设置')}设置</div>`;
+
+const BV = [['普通', '', '保存'], ['主要', 'btn--pri', '新建工程'], ['运行', 'btn--run', '运行'], ['Agent', 'btn--ag', 'Agent'], ['文字', 'btn--txt', '取消']];
+const BS = [['默认', ''], ['悬停', 'is-hover'], ['按下', 'is-press'], ['焦点', 'is-focus'], ['不可用', 'off']];
+const agIc = `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[10][1]}</svg>`;
+$('#btns').innerHTML = `<thead><tr><th></th>${BS.map(s => `<th>${s[0]}</th>`).join('')}</tr></thead><tbody>${BV.map(([n, c, t]) => `<tr><td><b>${n}</b></td>${BS.map(([, st]) => `<td><button class="btn ${c} ${st === 'off' ? '' : st}" ${st === 'off' ? 'disabled' : ''} tabindex="-1">${c === 'btn--ag' ? agIc : ''}${t}</button></td>`).join('')}</tr>`).join('')}</tbody>`;
+
+const vr = (n, l) => `<span class="vr"><svg viewBox="-10 -10 20 20" aria-hidden="true">${[9, 7, 5, 3, 1.4].map((r, i) => `<circle r="${r}" fill="${i >= 5 - n ? 'var(--text)' : 'var(--surface)'}" stroke="var(--text)" stroke-width=".9"/>`).join('')}</svg>${l}</span>`;
+$('#vr1').innerHTML = vr(2, '验证 · 接口测试'); $('#vr2').innerHTML = vr(4, '验证 · 参考基准');
+const SRC = [['库 · v3', ICONS[1][1]], ['标准值', '<path d="M6 3h12v18l-6-4-6 4z"/>'], ['资料 p.12', '<path d="M6 3h8l4 4v14H6z M14 3v4h4"/>'], ['用户', '<circle cx="12" cy="8" r="3.5"/><path d="M5 20a7 7 0 0 1 14 0"/>'], ['推导', '<path d="M5 12h14M13 6l6 6-6 6"/>'], ['锁定', ICONS[14][1]]];
+$('#sources').innerHTML = '<span class="cap">来源：</span>' + SRC.map(([t, d]) => `<span class="src"><svg viewBox="0 0 24 24" aria-hidden="true">${d}</svg>${t}</span>`).join('');
+
+$('#segdemo').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; $('#segdemo').querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); });
+document.querySelectorAll('[data-toggle]').forEach(c => c.addEventListener('click', () => c.classList.toggle('on')));
+document.querySelectorAll('[data-sw]').forEach(c => c.addEventListener('click', () => c.classList.toggle('on')));
+
+/* drawings (demo geometry: 3.2 km route; trefoil Ø105.4 mm at 1.0 m) */
+const km = y => `K${Math.floor(y / 1000)}+${String(y % 1000).padStart(3, '0')}`;
+(() => {
+  const W = 760, H = 300, L = 20, R = 20, len = 3200, px = y => L + y / len * (W - L - R), cn = 'font-family="Noto Sans SC, sans-serif"';
+  let o = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="线路平纵断面"><rect width="${W}" height="${H}" fill="var(--surface)"/>`;
+  o += `<line x1="${L}" y1="40" x2="${W - R}" y2="40" stroke="var(--text)" stroke-width="1.5"/>`;
+  for (let y = 0; y <= len; y += 50) {
+    const big = y % 500 === 0;
+    o += `<line x1="${px(y)}" y1="40" x2="${px(y)}" y2="${40 - (big ? 10 : y % 100 === 0 ? 6 : 3)}" stroke="var(--text)" stroke-width="${big ? 1 : .6}"/>`;
+    if (big && y < len - 300) o += `<text x="${px(y)}" y="20" text-anchor="${y === 0 ? 'start' : 'middle'}" font-size="12" fill="var(--text-2)">${km(y)}</text>`;
+  }
+  o += `<text x="${W - R}" y="20" text-anchor="end" font-size="12" fill="var(--text-2)">K3+200</text>`;
+  [[0, 1200, 'S1 · 直埋', 'var(--fill)'], [1200, 1500, 'S2 排管', 'var(--line-2)'], [1500, 3200, 'S3 · 直埋', 'var(--fill)']].forEach(([a, b, t, f], i) => {
+    o += `<rect x="${px(a)}" y="52" width="${px(b) - px(a)}" height="28" rx="4" fill="${f}" stroke="${i === 1 ? 'var(--text)' : 'var(--line-2)'}" stroke-width="${i === 1 ? 1 : .75}"/><text x="${px(a) + 8}" y="70" font-size="12" ${cn} fill="var(--text)">${t}</text>`;
+  });
+  [[0, 533], [533, 1066], [1066, 1600], [1600, 2133], [2133, 2666], [2666, 3200]].forEach(([a, b]) => { o += `<line x1="${px(a) + 2}" y1="92" x2="${px(b) - 2}" y2="92" stroke="var(--text-2)" stroke-width="2" stroke-linecap="round"/>`; });
+  o += `<text x="${L}" y="112" font-size="12" ${cn} fill="var(--text-2)">接地 · 交叉互联 2 个单元 · 6 个小段</text>`;
+  const zy = d => 140 + d * 60, prof = [[0, 1.0], [1150, 1.0], [1200, 1.4], [1500, 1.4], [1550, 1.0], [1800, 1.0], [1860, 1.6], [1920, 1.0], [3200, 1.0]];
+  o += `<line x1="${L}" y1="140" x2="${W - R}" y2="140" stroke="var(--text)" stroke-width="1.5"/>${Array.from({length: 72}, (_, i) => `<line x1="${L + i * 10 + 6}" y1="140" x2="${L + i * 10 + 1}" y2="134" stroke="var(--text-2)" stroke-width=".6"/>`).join('')}`;
+  o += [0.5, 1.0, 1.5].map(d => `<line x1="${L}" y1="${zy(d)}" x2="${W - R}" y2="${zy(d)}" stroke="var(--line)" stroke-width=".5"/><text x="${W - R}" y="${zy(d) - 4}" text-anchor="end" font-size="11" fill="var(--text-2)">−${d.toFixed(1)}</text>`).join('');
+  o += `<polyline points="${prof.map(([y, d]) => `${px(y)},${zy(d)}`).join(' ')}" fill="none" stroke="var(--text)" stroke-width="1.5" stroke-linejoin="round"/>`;
+  [[1050, '接头井 J1'], [1860, '交叉 · 热力管（提案）'], [2133, '接头井 J2']].forEach(([y, t], i) => {
+    const c = i === 1 ? 'var(--agent)' : 'var(--text)';
+    o += `<line x1="${px(y)}" y1="40" x2="${px(y)}" y2="${zy(1.75)}" stroke="${c}" stroke-width=".75" stroke-dasharray="${i === 1 ? '4 3' : 'none'}"/><circle cx="${px(y)}" cy="40" r="4.5" fill="var(--surface)" stroke="${c}" stroke-width="1.5"/><text x="${px(y) + 8}" y="${zy(1.75) + (i === 1 ? 32 : 14)}" font-size="12" ${cn} fill="${c}">${t} · ${km(y)}</text>`;
+  });
+  document.getElementById('dw-route').innerHTML = o + '</svg>';
+})();
+(() => {
+  const W = 560, H = 380, L = 36, T = 26, sc = 240, X = x => L + (W - L) / 2 + x * sc, Z = z => T + (0.12 - z) * sc, mono = 'font-family="IBM Plex Mono, monospace"';
+  const LAY = [[105.4, 'var(--m-jacket)'], [96.4, 'var(--m-screen)'], [82.2, 'var(--m-semi)'], [78.2, 'var(--m-semi)'], [76.2, 'var(--m-xlpe)'], [44.2, 'var(--m-semi)'], [41.2, 'var(--m-cu)']];
+  const CAB = [['A', -0.0527, -1.0], ['B', 0.0527, -1.0], ['C', 0, -0.9087]];
+  let o = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="敷设断面"><rect width="${W}" height="${H}" fill="var(--surface)"/>`;
+  for (let i = -20; i <= 20; i++) { const p = X(i * .1); if (p > L && p < W) o += `<line x1="${p}" y1="${T}" x2="${p}" y2="${H}" stroke="var(--line)" stroke-width=".5"/>`; }
+  for (let i = -1; i <= 13; i++) { const p = Z(-i * .1); if (p > T && p < H) o += `<line x1="${L}" y1="${p}" x2="${W}" y2="${p}" stroke="var(--line)" stroke-width=".5"/>`; }
+  o += `<line x1="${L}" y1="${Z(0)}" x2="${W}" y2="${Z(0)}" stroke="var(--text)" stroke-width="1.5"/>`;
+  for (let x = L + 6; x < W; x += 9) o += `<line x1="${x}" y1="${Z(0)}" x2="${x - 6}" y2="${Z(0) - 6}" stroke="var(--text-2)" stroke-width=".6"/>`;
+  o += `<rect x="${X(-.4)}" y="${Z(-.65)}" width="${.8 * sc}" height="${.6 * sc}" fill="var(--fill)" stroke="var(--text-2)" stroke-width=".75" stroke-dasharray="5 4"/><text x="${X(-.4) + 8}" y="${Z(-.65) + 18}" font-size="12" font-family="Noto Sans SC, sans-serif" fill="var(--text-2)">回填 · 砂 · ρ 0.70</text>`;
+  CAB.forEach(([p, x, z]) => {
+    const cx = X(x), cy = Z(z);
+    o += LAY.map(([d, f]) => `<circle cx="${cx}" cy="${cy}" r="${(d / 2000 * sc).toFixed(2)}" fill="${f}"/>`).join('') + `<text x="${cx}" y="${cy + 3.5}" text-anchor="middle" font-size="9" font-weight="600" ${mono} fill="#FFF8F2">${p}</text>`;
+  });
+  const r = 0.0527 * sc, ya = Z(-1) + r + 22;
+  o += `<g stroke="var(--text)" stroke-width=".75"><line x1="${X(-.0527)}" y1="${Z(-1) + r + 4}" x2="${X(-.0527)}" y2="${ya + 4}"/><line x1="${X(.0527)}" y1="${Z(-1) + r + 4}" x2="${X(.0527)}" y2="${ya + 4}"/><line x1="${X(-.0527)}" y1="${ya}" x2="${X(.0527)}" y2="${ya}"/></g><text x="${X(0)}" y="${ya + 16}" text-anchor="middle" font-size="12" ${mono} fill="var(--text)">0.105</text>`;
+  const xd = X(.6);
+  o += `<g stroke="var(--text)" stroke-width=".75"><line x1="${X(.08)}" y1="${Z(-1)}" x2="${xd + 5}" y2="${Z(-1)}" stroke-dasharray="3 3"/><line x1="${xd}" y1="${Z(0)}" x2="${xd}" y2="${Z(-1)}"/><line x1="${xd - 4}" y1="${Z(0)}" x2="${xd + 4}" y2="${Z(0)}"/><line x1="${xd - 4}" y1="${Z(-1)}" x2="${xd + 4}" y2="${Z(-1)}"/></g><text x="${xd + 8}" y="${(Z(0) + Z(-1)) / 2 + 4}" font-size="12" ${mono} fill="var(--text)">1.000</text>`;
+  o += `<rect width="${W}" height="${T}" fill="var(--surface)"/><rect width="${L}" height="${H}" fill="var(--surface)"/><line x1="${L}" y1="${T}" x2="${W}" y2="${T}" stroke="var(--text)" stroke-width=".75"/><line x1="${L}" y1="${T}" x2="${L}" y2="${H}" stroke="var(--text)" stroke-width=".75"/>`;
+  for (let i = -20; i <= 20; i++) { const p = X(i * .1); if (p <= L || p >= W) continue; o += `<line x1="${p}" y1="${T}" x2="${p}" y2="${T - (i % 5 ? 4 : 8)}" stroke="var(--text)" stroke-width=".75"/>`; if (i % 5 === 0) o += `<text x="${p + 3}" y="12" font-size="11" ${mono} fill="var(--text-2)">${(i * .1).toFixed(1)}</text>`; }
+  for (let i = -1; i <= 13; i++) { const p = Z(-i * .1); if (p <= T || p >= H) continue; o += `<line x1="${L}" y1="${p}" x2="${L - (i % 5 ? 4 : 8)}" y2="${p}" stroke="var(--text)" stroke-width=".75"/>`; if (i % 5 === 0) o += `<text x="2" y="${p - 3}" font-size="11" ${mono} fill="var(--text-2)">${(-i * .1).toFixed(1)}</text>`; }
+  const D = { x: X(-1.06), y: Z(-0.1), w: 150, h: 160 }, s2 = 480, dcx = D.x + D.w / 2, dcy = D.y + D.h / 2 + 6;
+  o += `<circle cx="${X(0)}" cy="${Z(-0.97)}" r="${0.14 * sc}" fill="none" stroke="var(--text)" stroke-width=".75" stroke-dasharray="3 2"/><line x1="${X(0) - 0.14 * sc}" y1="${Z(-0.97)}" x2="${D.x + D.w}" y2="${D.y + D.h - 20}" stroke="var(--text)" stroke-width=".75"/>`;
+  o += `<rect x="${D.x}" y="${D.y}" width="${D.w}" height="${D.h}" rx="8" fill="var(--surface)" stroke="var(--text)" stroke-width=".75"/><text x="${D.x + 10}" y="${D.y + 18}" font-size="12" font-family="Noto Sans SC, sans-serif" fill="var(--text)">详图 A · 放大 2 倍</text>`;
+  CAB.forEach(([p, x, z], i) => {
+    const cx = dcx + x * s2, cy = dcy - (z + 0.97) * s2;
+    o += LAY.map(([d, f]) => `<circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="${(d / 2000 * s2).toFixed(2)}" fill="${f}"/>`).join('');
+    o += `<text x="${cx.toFixed(1)}" y="${(cy + 4).toFixed(1)}" text-anchor="middle" font-size="11" font-weight="600" ${mono} fill="#FFF8F2">${p}</text>`;
+  });
+  o += `<g stroke="var(--text)" stroke-width=".75"><line x1="${dcx - 0.0527 * s2}" y1="${dcy + 0.03 * s2 + 34}" x2="${dcx + 0.0527 * s2}" y2="${dcy + 0.03 * s2 + 34}"/><line x1="${dcx - 0.0527 * s2}" y1="${dcy + 0.03 * s2 + 28}" x2="${dcx - 0.0527 * s2}" y2="${dcy + 0.03 * s2 + 38}"/><line x1="${dcx + 0.0527 * s2}" y1="${dcy + 0.03 * s2 + 28}" x2="${dcx + 0.0527 * s2}" y2="${dcy + 0.03 * s2 + 38}"/></g><text x="${dcx}" y="${dcy + 0.03 * s2 + 50}" text-anchor="middle" font-size="11" ${mono} fill="var(--text)">0.105</text>`;
+  o += `<g transform="translate(${L + 12} ${H - 14})" font-size="12" font-family="Noto Sans SC, sans-serif" fill="var(--text)">${[['A', 'var(--pa)'], ['B', 'var(--pb)'], ['C', 'var(--pc)']].map(([p, c], i) => `<rect x="${i * 58}" y="-9" width="10" height="10" rx="2" fill="${c}"/><text x="${i * 58 + 15}" y="0">${p} 相</text>`).join('')}</g>`;
+  document.getElementById('dw-sec').innerHTML = o + '</svg>';
+})();
+
+const reduce = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+const MOTION = [
+  ['运行传导', '800 ms', '点“运行”：铜色从导体向外扩散两圈。', `<svg viewBox="-30 -30 60 60" width="64" height="64" aria-hidden="true"><circle r="26" fill="var(--m-xlpe)" stroke="var(--line-2)" stroke-width=".6"/><circle r="10" fill="var(--m-cu)"/><circle class="w" r="10" fill="none" stroke="var(--run)" stroke-width="1.2" opacity="0"/><circle class="w" r="10" fill="none" stroke="var(--run)" stroke-width="1.2" opacity="0"/></svg>`,
+    st => st.querySelectorAll('.w').forEach((c, i) => c.animate([{ r: '10px', opacity: .9 }, { r: '30px', opacity: 0 }], { duration: reduce() ? 0 : 800, delay: i * 120, easing: 'cubic-bezier(.2,0,0,1)' }))],
+  ['执行中', '1200 ms 循环', '状态点为铜色虚线环，匀速转动。', `<span class="si"><i class="d d--run"></i>执行中</span>`, () => {}],
+  ['结果到达', '420 ms', '数值从旧值过渡到新值，状态变为当前。', `<span class="num" style="font-size:24px;font-weight:600;color:var(--run)" data-n>1361</span><span class="cap">A</span>`,
+    st => { const el = st.querySelector('[data-n]'), a = 1361, b = 1386, t0 = performance.now(), d = reduce() ? 0 : 420; const f = n => { const k = d ? Math.min(1, (n - t0) / d) : 1, v = Math.round(a + (b - a) * (1 - Math.pow(1 - k, 3))); el.textContent = String(v); if (k < 1) requestAnimationFrame(f); }; requestAnimationFrame(f); }],
+  ['结果变为历史', '320 ms', '输入改动并保存后，铜色数值变灰，状态点变空心。再点恢复。', `<span class="num" style="font-size:24px;font-weight:600;color:var(--run);transition:color 320ms var(--ease),opacity 320ms var(--ease)" data-s>1386</span><i class="d d--now" data-dot></i>`,
+    st => { const n = st.querySelector('[data-s]'), d = st.querySelector('[data-dot]'), old = d.classList.contains('d--old'); n.style.color = old ? 'var(--run)' : 'var(--text-2)'; n.style.opacity = old ? '1' : '.6'; d.className = old ? 'd d--now' : 'd d--old'; }],
+  ['草稿与保存', '120 / 200 ms', '改值时边框变虚线；再点“保存”，草稿点变为实心带环。', `<span class="inp" style="width:140px" data-i>16.00<small>mm</small></span><i class="d d--now" data-dot></i>`,
+    st => { const i = st.querySelector('[data-i]'), d = st.querySelector('[data-dot]'); if (!i.classList.contains('inp--draft')) { i.classList.add('inp--draft'); i.firstChild.nodeValue = '17.00'; d.className = 'd d--draft'; } else { i.classList.remove('inp--draft'); d.className = 'd d--now'; d.animate([{ transform: 'scale(.6)' }, { transform: 'scale(1)' }], { duration: reduce() ? 0 : 200, easing: 'cubic-bezier(.2,0,0,1)' }); } }],
+  ['提案出现', '320 ms', 'Agent 产生提案时，青色虚线框沿边描出。', `<svg width="180" height="48" viewBox="0 0 180 48" aria-hidden="true"><rect x="1" y="1" width="178" height="46" rx="11" fill="var(--agent-soft)" stroke="var(--agent)" stroke-dasharray="5 4" data-r/><text x="90" y="29" text-anchor="middle" font-size="13" fill="var(--agent)" font-family="Noto Sans SC, sans-serif">提案 · R₂₀ = 0.0151</text></svg>`,
+    st => st.querySelector('[data-r]').animate([{ strokeDasharray: '0 460', opacity: .3 }, { strokeDasharray: '460 0', opacity: 1 }], { duration: reduce() ? 0 : 320, easing: 'cubic-bezier(.2,0,0,1)' })],
+];
+$('#motion').innerHTML = MOTION.map(([n, t, p, stage], i) => `<button class="mo" data-mo="${i}"><span class="mo__h"><b>${n}</b><span>${t}</span></span><span class="mo__stage">${stage}</span><span class="mo__p">${p}</span></button>`).join('');
+$('#motion').addEventListener('click', e => { const b = e.target.closest('[data-mo]'); if (b) MOTION[b.dataset.mo][4](b.querySelector('.mo__stage')); });
+</script>

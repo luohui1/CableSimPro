@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 32" fill="none">
+  <title>CableSimPro 品牌字标</title>
+  <g transform="translate(0 4)">
+    <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2"/>
+    <circle cx="12" cy="12" r="5.75" stroke="var(--text-secondary, currentColor)" stroke-width="1.5"/>
+    <circle cx="12" cy="12" r="3" fill="var(--conductor, currentColor)"/>
+  </g>
+  <text x="32" y="23" fill="currentColor" font-family="Noto Sans SC, sans-serif" font-weight="600" font-size="20">CableSimPro</text>
+</svg>
