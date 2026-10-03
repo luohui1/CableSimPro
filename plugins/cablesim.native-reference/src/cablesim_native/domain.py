@@ -20,6 +20,8 @@ def prepare(value, parameters):
     if len(d.circuits) != 1 or len(d.sections) != 1 or len(d.load_cases) != 1:
         raise ValueError('原生参考仅支持单回路、单截面、单个稳态负荷')
     circuit, section, load = d.circuits[0], d.sections[0], d.load_cases[0]
+    if section.backfill is not None or section.soil_layers:
+        raise ValueError('原生参考仅支持均匀土壤；回填区或土壤分层计算尚未接入，不能忽略介质分区。')
     if circuit.system.kind != 'ac_three_phase' or [c.phase for c in circuit.cables] not in (['A', 'B', 'C'], ['L1', 'L2', 'L3']):
         raise ValueError('原生参考仅支持三相、每相一根电缆，并按相序排列')
     if section.kind != 'ground' or section.enclosures or load.kind != 'steady' or load.profile:

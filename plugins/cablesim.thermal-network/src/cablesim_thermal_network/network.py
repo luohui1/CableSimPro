@@ -190,6 +190,25 @@ def calculate(scenario: Scenario, include_field: bool = True) -> dict:
                     "dielectric_loss_w_m": net.wd},
         "curve": curves, "warnings": warnings, "sources": SOURCES,
     }
+    # Resolve the limiting phase to an equivalent final-coefficient balance.
+    # T4 includes mutual heating, weighted by the saved phase resistances.
+    # This is evidence for comparison, not another rating solver.
+    k = int(np.argmax(rating['temperatures_c']))
+    resistances = np.array(rating['resistances_ohm_km']) / 1000
+    result['rating_components'] = {
+        'schema': 'cablesim.rating-components/1', 'phase': PHASES[k],
+        'ampacity_a': ampacity,
+        'temperature_headroom_k': scenario.cable.max_temperature_c - scenario.installation.ambient_temperature_c,
+        'ac_resistance_ohm_m': float(resistances[k]),
+        'lambda1': scenario.cable.screen_loss_factor, 'lambda2': 0.0,
+        't1_k_m_w': float(sum(net.t[:3])), 't2_k_m_w': 0.0,
+        'metal_k_m_w': float(net.t[3]), 't3_k_m_w': float(net.t[4]),
+        't4_k_m_w': float(net.g[k] @ resistances / resistances[k]),
+        'dielectric_rise_k': float(net.d[k]),
+        'dielectric_loss_w_m': net.wd,
+        'temperature_c': float(rating['temperatures_c'][k]),
+        'notes': 'T4 为限制相互热等效值；λ1 为输入的屏蔽等效损耗因子；T2/λ2 无铠装，取零。',
+    }
     if include_field:
         result["field"] = net.field(selected_state)
     return result

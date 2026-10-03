@@ -8,17 +8,21 @@ def replace_number(value, pointer, replacement):
         raise ValueError('扫描路径必须是 JSON Pointer')
     parts = [p.replace('~1', '/').replace('~0', '~') for p in pointer[1:].split('/')]
     target = value
+    stable = []
     for index, part in enumerate(parts):
         if isinstance(target, list) and not re.fullmatch(r'0|[1-9][0-9]*', part):
             raise ValueError('数组索引必须是无前导零的非负整数')
         key = int(part) if isinstance(target, list) else part
         current = target[key]
+        stable.append((current.get('id') or current.get('cable') or current.get('role') or part)
+                      if isinstance(target, list) and isinstance(current, dict) else part)
         if index < len(parts) - 1:
             target = current
         else:
             if isinstance(current, bool) or not isinstance(current, (int, float)):
                 raise ValueError('仅允许扫描已有数值字段，不添加字段或修改对象身份')
             target[key] = replacement
+    return '/' + '/'.join(str(p).replace('~', '~0').replace('/', '~1') for p in stable)
 
 
 def cases_for(definition, source):
@@ -28,7 +32,13 @@ def cases_for(definition, source):
         case = {'case_id': f'case-{i}', 'input': deepcopy(source),
                 'parameters': deepcopy(definition['parameters'])}
         for pointer, value in sample['changes'].items():
-            replace_number(case, pointer, value)
+            stable = replace_number(case, pointer, value)
+            if stable.startswith('/input/') and case['input'].get('schema_version') == 'cablesim.domain/1':
+                sample_source = deepcopy(definition.get('input_sources', {}).get('/driver/samples') or
+                                  {'kind': 'user', 'reference': '研究显式采样值', 'reviewed': False})
+                sample_source['reference'] = '研究采样 · '+sample['label']+'；'+(sample_source.get('reference') or '显式数值变更')
+                sample_source['reviewed'] = False
+                case['input']['provenance'][stable[len('/input'):]] = sample_source
         cases.append(case)
     return cases
 

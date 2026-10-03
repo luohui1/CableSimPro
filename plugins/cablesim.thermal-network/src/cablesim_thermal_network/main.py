@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # -I drops cwd/PYT
 import json
 from hashlib import sha256
 import platform
+from math import isfinite
 
 import numpy as np
 from pydantic import ValidationError
@@ -27,10 +28,38 @@ def kelvin(celsius: float) -> float:
     return celsius + 273.15
 
 
+def goal_checks(case, scenario, result):
+    """Evaluate the saved research goals, not product-standard compliance."""
+    target = case.get('parameters', {}).get('target_current_a', scenario.operating_current_a)
+    if isinstance(target, bool) or not isinstance(target, (int, float)) or not isfinite(target) or target < 0:
+        raise ValueError('目标电流必须是非负有限数值。')
+    limit = kelvin(scenario.cable.max_temperature_c)
+    operating = result['operating']
+    circuit = case['input'].get('circuits', [{}])[0]
+    phases = [c['phase'] for c in circuit.get('cables', [])] or list(PHASES)
+    hottest = None if operating is None else int(np.argmax(operating['temperatures_c']))
+    actual = None if hottest is None else kelvin(operating['temperatures_c'][hottest])
+    ampacity = result['summary']['ampacity_a']
+    return [
+        {'id': 'research.current', 'rule_version': 'thermal-network-goals/1', 'key': 'ampacity',
+         'condition': 'rating', 'actual': ampacity, 'target': float(target), 'unit': 'A',
+         'margin': ampacity-target, 'verdict': 'satisfied' if ampacity >= target else 'not_satisfied',
+         'margin_percent': None if target == 0 else (ampacity-target)/target*100,
+         'source': '研究目标电流' if 'target_current_a' in case.get('parameters', {}) else '共享负荷工况'},
+        {'id': 'research.temperature', 'rule_version': 'thermal-network-goals/1', 'key': 'conductor_temperature',
+         'condition': 'operating', 'actual': actual, 'target': limit, 'unit': 'K',
+         'margin': None if actual is None else limit-actual,
+         'verdict': 'unavailable' if actual is None else 'satisfied' if actual <= limit else 'not_satisfied',
+         'phase': None if hottest is None else phases[hottest], 'current_a': scenario.operating_current_a,
+         'source': '共享负荷与导体温限', 'reason': result.get('operating_error') if actual is None else None},
+    ]
+
+
 def steady_rating(case: dict, out: Path) -> dict:
     scenario = prepare(case['input'], case.get('parameters', {}))
     include_field = bool(case.get('parameters', {}).get('include_field', False))
     result = calculate(scenario, include_field=include_field)
+    result['goal_checks'] = goal_checks(case, scenario, result)
     artifact = f"output/{case['case_id']}.rating.json"
     (out / Path(artifact).name).write_text(json.dumps(result, ensure_ascii=False, allow_nan=False), 'utf-8')
     results = [{'key': 'ampacity', 'type': 'quantity', 'entity': 'circuit/c1', 'status': 'available',

@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from ..schemas import StrictModel
+from .environment import Backfill, SoilLayer
 
 
 class Source(StrictModel):
@@ -42,6 +43,7 @@ class Material(StrictModel):
     solar_absorptivity: float | None = Field(default=None, ge=0, le=1)
     dry_thermal_resistivity: float | None = Field(default=None, gt=0)
     critical_temperature_rise: float | None = Field(default=None, gt=0)
+    density: float | None = Field(default=None, gt=0, description='质量密度 / kg/m³；未知时为空')
 
 
 class Conductor(StrictModel):
@@ -54,6 +56,10 @@ class Conductor(StrictModel):
     segments: int | None = Field(default=None, ge=1)
     wire_count: int | None = Field(default=None, ge=1)
     insulated_wires: bool | None = None
+    wire_diameter: float | None = Field(default=None, gt=0)
+    lay_length: float | None = Field(default=None, gt=0)
+    lay_direction: Literal['left', 'right'] | None = None
+    lay_factor: float | None = Field(default=None, ge=1, description='导体用料绞入系数；明确制造输入，未知时为空')
 
 
 class Layer(StrictModel):
@@ -65,6 +71,8 @@ class Layer(StrictModel):
     wire_diameter: float | None = Field(default=None, gt=0)
     lay_length: float | None = Field(default=None, gt=0)
     overlap: float | None = Field(default=None, ge=0, lt=1)
+    tape_width: float | None = Field(default=None, gt=0)
+    lay_direction: Literal['left', 'right'] | None = None
 
 
 class Core(StrictModel):
@@ -176,6 +184,8 @@ class Section(StrictModel):
     enclosures: list[Enclosure] = Field(default_factory=list)
     placements: list[Placement] = Field(min_length=1)
     layout_template: dict = Field(default_factory=dict)
+    backfill: Backfill | None = None
+    soil_layers: list[SoilLayer] = Field(default_factory=list)
 
 
 class Load(StrictModel):
@@ -228,6 +238,14 @@ class DomainDocument(StrictModel):
         for s in self.sections:
             if s.medium.material and s.medium.material not in materials:
                 raise ValueError('环境材料引用不存在')
+            regions = ([s.backfill] if s.backfill else []) + s.soil_layers
+            if regions and s.kind != 'ground':
+                raise ValueError('回填与土壤分层仅适用于地下截面')
+            if len({r.id for r in regions}) != len(regions) or any(r.material not in materials for r in regions):
+                raise ValueError('介质分区标识重复或材料引用不存在')
+            for a, b in zip(s.soil_layers, s.soil_layers[1:]):
+                if abs(a.bottom_z - b.top_z) > 1e-12:
+                    raise ValueError('土壤层应从上到下连续排列')
             if len({p.cable for p in s.placements}) != len(s.placements):
                 raise ValueError('截面中电缆位置重复')
             enclosures = {e.id: e for e in s.enclosures}

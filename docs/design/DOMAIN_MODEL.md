@@ -4,7 +4,7 @@
 日期：2026-09-26
 适用：逐步取代 `backend/schemas.py` 中的 `Scenario`（下称 v0），作为工程数据与插件输入的共同语言。以下主体为完整设计，当前实现范围见下。
 
-**实施范围（D5 后端）**：`backend/domain/models.py` 实现材料、分层电缆 / 多芯、回路、截面、容纳结构、负荷时间序列、准则及来源的 SI 契约，校验引用、重叠、地下边界与管内边界。材料温变表、分层土壤 / 外部热源、递归容纳结构尚未实现；能保存某种结构不等于有方法能计算它。通用领域编辑器尚未接入，转换后的 v0 参数在界面中只读；当前结果页支持保存研究的量值、告警、计算轨迹及已有热场和曲线工件。
+**实施范围（D5 后端）**：`backend/domain/models.py` 实现材料、分层电缆 / 多芯、回路、截面、容纳结构、负荷时间序列、准则及来源的 SI 契约，校验引用、重叠、地下边界与管内边界。地下截面已增加 `backfill`（中心 x/z、宽、高、材料）及 `soil_layers`（top_z、bottom_z、材料），校验地表边界、材料引用与相邻层连续；它们位于 Section 根对象，本文后续 `medium.zones/layers` 是完整设计目标，尚未作为现行接口。材料温变表、外部热源、递归容纳结构尚未实现；能保存某种结构不等于有方法能计算它。研究界面可引用锁定的演示型号版本，编辑敷设模板、坐标、回填和分层边界、负荷与环境；当前热网络和 IEC 稳态适配器仍仅接受均匀土壤，存在回填或土壤分层时明确拒算。
 
 `GET domain/conversion` 只预览；`POST domain/conversion` 按工程版本显式转换，旧工程版本完整留档，缺失 R20、屏蔽形式、接地数据及系统线电压不会补猜。旧参数只读，后续通过 `PUT domain` 保存。原 v0 参数锁映射到具体领域值及稳定对象 ID；默认温限锁不冻结材料、回路或其他准则。`GET domain` 返回锁的实际目标，现有 `/lock` 接口按工程版本显式增删锁；扫描与所有交叉校核方法均遵守同一锁规则，冲突在调用插件预检前拒绝，领域历史不能撤销跨回 v0。
 
@@ -39,7 +39,7 @@
 
 ```text
 DomainDocument (cablesim.domain/1)
-├── materials[]          材料：热、电、介电、磁、热容属性
+├── materials[]          材料：热、电、介电、磁、热容属性及可选密度 density (kg/m³)
 ├── cable_types[]        电缆类型：结构、分层、额定值（可引用型号库资产）
 ├── circuits[]           回路：电气系统、使用的电缆类型、相与电缆实例、接地方式
 ├── sections[]           敷设截面：沿线路的若干截面工况（直埋、排管、空气、隧道、竖井…）
@@ -166,6 +166,8 @@ DomainDocument (cablesim.domain/1)
 | `r20` | 20 °C 直流电阻 Ω/m；可以缺失，缺失时由方法决定失败还是按其声明的规则处理 |
 | `inner_diameter` | 中空导体内径 |
 | `segments` / `wire_count` | 分割数、单线根数（影响集肤、邻近效应系数的取值，由方法使用） |
+| `wire_diameter` / `lay_length` / `lay_direction` | 可选单丝直径 / 绞合节距（m）与 `left` / `right` 绞向；CAD 圆绞层缺根数、丝径或节距时失败，不推测制造参数 |
+| `lay_factor` | 可选导体用料绞入系数，无量纲、至少 1；明确制造输入，来源记录在 provenance，未知不补默认。紧压 / 分割导体用料按标称截面 × 密度 × 绞入系数计算，CAD 外包络按设计 diameter 建模 |
 | `insulated_wires` | 分割导体单线是否绝缘（大截面导体常见） |
 
 集肤、邻近效应的系数不在这里，由方法按 `form` 等事实推导或作为方法参数。
@@ -178,7 +180,7 @@ DomainDocument (cablesim.domain/1)
 | --- | --- | --- |
 | `conductor_screen`、`insulation_screen` | 半导电材料 | `thickness` |
 | `insulation` | XLPE、EPR、PVC、油纸 | `thickness` |
-| `metallic_screen` | 铜丝、铜带 | `form: wires` + `wire_count`、`wire_diameter`、`lay_length`；或 `form: tape` + `thickness`、`overlap` |
+| `metallic_screen` | 铜丝、铜带 | `form: wires` + `wire_count`、`wire_diameter`、`lay_length`、`lay_direction`；或 `form: tape` + `thickness`、`tape_width`、`lay_length`、`lay_direction`、`overlap`；当前 CAD 只支持非重叠带 |
 | `metallic_sheath` | 铅、平铝、皱纹铝、铜 | `form: smooth` + `thickness`；`form: corrugated` + `inner_diameter`、`outer_diameter`、`thickness` |
 | `bedding`、`separator`、`filler`、`binder` | 聚合物、填充 | `thickness`；三芯填充可用 `fill_material` |
 | `armour` | 钢丝、钢带、非磁性金属丝 | `form: wires` / `tape`，`wire_count`、`wire_diameter`、`lay_length`，材料带 `relative_permeability` |

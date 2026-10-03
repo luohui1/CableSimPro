@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.thermal-network",
-  "version": "1.1.1",
+  "version": "1.1.4",
   "name": "热网络参考",
   "description": "用简化热网络估算载流量与运行温度，提供竖向和场分析参考；不替代 IEC 60287 方法。",
   "icon": "assets/icon.svg",
@@ -189,8 +189,8 @@
     },
     {
       "path": "src/cablesim_thermal_network/domain.py",
-      "sha256": "5ba92cedf84fcf38f1dd458eb9139f57d583a95437e15d9b4b51787f10ea9220",
-      "size_bytes": 5254
+      "sha256": "70cd7c18460b94d2077cb91137273933b616114713f417e6685d304ca1ab85e5",
+      "size_bytes": 5501
     },
     {
       "path": "src/cablesim_thermal_network/fields.py",
@@ -204,13 +204,13 @@
     },
     {
       "path": "src/cablesim_thermal_network/main.py",
-      "sha256": "789ac5949b04af152a2b5f40bb8bc7f27e37a6b9eefb19643aefd56f5b9fe66d",
-      "size_bytes": 8218
+      "sha256": "7b764befd649ff6249afa0fc5de5694cc5f45fe09ba7c1d3ceba45e48b460c76",
+      "size_bytes": 10253
     },
     {
       "path": "src/cablesim_thermal_network/network.py",
-      "sha256": "b16725efe804b7eee7e649678abd963eb6e7cb6715b6c322478a2397c9c359ca",
-      "size_bytes": 11097
+      "sha256": "e187b1139d3521372b9b8c2653f76756764235ed81174077aac7efad6852720f",
+      "size_bytes": 12278
     },
     {
       "path": "src/cablesim_thermal_network/properties.py",

@@ -6,6 +6,7 @@ from uuid import UUID
 from pydantic import Field, field_validator, model_validator
 
 from ..schemas import StrictModel
+from ..domain.models import Source
 
 
 class Method(StrictModel):
@@ -50,10 +51,12 @@ class CrosscheckMethod(StrictModel):
 
 class StudyDefinition(StrictModel):
     title: str = Field(min_length=1, max_length=120)
+    task: Literal['rating', 'operating', 'target'] | None = None
     method: Method
     input_source: Literal['scenario', 'domain', 'study'] = 'scenario'
     method_input: dict | None = None
     parameters: dict = Field(default_factory=dict)
+    input_sources: dict[str, Source] = Field(default_factory=dict)
     driver: Driver = Field(default_factory=Driver)
     crosschecks: list[CrosscheckMethod] = Field(default_factory=list, max_length=5)
 

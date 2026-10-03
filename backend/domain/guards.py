@@ -137,3 +137,18 @@ def check_locks(state, document, parameters=None):
                 raise ValueError('领域字段受保护：' + lock)
         except (ValueError, KeyError, IndexError, TypeError, ZeroDivisionError) as exc:
             raise HTTPException(422, str(exc)) from None
+    binding = state.get('study_cable_reference')
+    if binding:
+        # A pinned model's shape is immutable too; leaf locks alone cannot stop
+        # insertion of an extra layer or modification of previously absent facts.
+        from copy import deepcopy
+        from .models import CableType, Material
+        expected = deepcopy(binding['payload']['cable_type'])
+        expected['id'] = binding['bound_cable_type_id']
+        actual = next((t for t in document['cable_types'] if t['id'] == expected['id']), None)
+        if actual is None or CableType.model_validate(actual) != CableType.model_validate(expected):
+            raise HTTPException(422, '型号版本引用已锁定，不能修改结构；请显式选择其他版本。')
+        materials = {m['id']: m for m in document['materials']}
+        for material in binding['payload']['materials']:
+            if material['id'] not in materials or Material.model_validate(materials[material['id']]) != Material.model_validate(material):
+                raise HTTPException(422, '型号版本的材料事实已锁定，不能修改。')

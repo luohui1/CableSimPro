@@ -58,7 +58,7 @@ def test_saved_execution_replay_and_report(client, plugin, monkeypatch):
     report = client.post(f'/api/workspaces/{w["id"]}/deliveries', json={'run_ids': [run['id']]})
     assert report.status_code == 201, report.text
     assert run['id'] in report.json()['html']
-    assert report.json()['renderer'] == 'cablesim.study-html/2'
+    assert report.json()['renderer'] == 'cablesim.study-html/6'
     assert '>case-0 · rating</td>' in report.json()['html']
     if plugin == 'cablesim.thermal-network':
         assert '>case-0 · operating</td>' in report.json()['html']
@@ -84,6 +84,32 @@ def test_edits_during_execution_do_not_rebind_input(client, monkeypatch):
     assert run['status'] == 'succeeded', run
     assert run['freshness'] == 'historical'
     assert run['snapshot']['cases'][0]['input']['installation']['depth_m'] == .8
+
+
+def test_input_sources_are_pinned_with_the_run_and_report(client):
+    w, s = study(client, 'cablesim.iec60287')
+    root, _ = request(client, w, s)
+    original = {'/method_input': {'kind': 'demo', 'reference': 'public synthetic input sha256:example', 'reviewed': False}}
+    payload = {**s['definition'], 'task': 'rating', 'input_sources': original, 'expected_revision': w['revision'], 'expected_study_revision': s['revision']}
+    response = client.put(root, json=payload)
+    assert response.status_code == 200, response.text
+    s = response.json()
+    root, body = request(client, w, s)
+    run = client.post(root + '/runs', json=body).json()
+    assert run['status'] == 'succeeded'
+    assert run['snapshot']['definition']['input_sources'] == original
+    assert run['snapshot']['definition']['task'] == 'rating'
+    payload.update(expected_study_revision=s['revision'], task='operating', input_sources={'/method_input': {'kind': 'user', 'reference': 'later input', 'reviewed': False}})
+    assert client.put(root, json=payload).status_code == 200
+    historic = client.get(root + '/runs/' + run['id']).json()
+    assert historic['freshness'] == 'historical'
+    assert historic['snapshot']['definition']['input_sources'] == original
+    assert historic['snapshot']['definition']['task'] == 'rating'
+    report = client.post(f'/api/workspaces/{w["id"]}/deliveries', json={'run_ids': [run['id']]}).json()
+    assert 'public synthetic input sha256:example' in report['html']
+    assert 'later input' not in report['html']
+    assert '额定工况：IEC 计算过程' in report['html']
+    assert '护套损耗 / W/m' in report['html']
 
 
 def test_sweep_retains_failed_samples(client, monkeypatch):

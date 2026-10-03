@@ -9,6 +9,10 @@ def prepare(value, p):
     if any(len(value[k]) != 1 for k in ('circuits', 'sections', 'load_cases')):
         raise ValueError('IEC 子集仅支持单回路、单截面、单个稳态负荷')
     circuit, section, load = value['circuits'][0], value['sections'][0], value['load_cases'][0]
+    if section.get('backfill') or section.get('soil_layers'):
+        raise ValueError('IEC 当前子集仅支持均匀土壤；回填区或土壤分层计算尚未接入。请在敷设截面关闭介质分区，或选择支持分区的方法。')
+    if circuit['bonding']['kind'] not in ('both_ends', 'single_point'):
+        raise ValueError('IEC 当前能力需要明确护套两端接地或单点接地；请在工况中补齐，不从未知接地方案推断。')
     if circuit['system']['kind'] != 'ac_three_phase' or load['kind'] != 'steady' or section['kind'] != 'ground':
         raise ValueError('IEC 子集仅支持三相地下稳态')
     cable = next(t for t in value['cable_types'] if t['id'] == circuit['cable_type'])

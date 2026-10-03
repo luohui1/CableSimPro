@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.iec60287",
-  "version": "0.2.1",
+  "version": "0.2.4",
   "name": "IEC 60287 载流量",
   "description": "计算单芯接触品字形电缆直埋或排管的稳态载流量，输出损耗、热阻与计算依据。",
   "icon": "assets/icon.svg",
@@ -169,9 +169,14 @@
       "size_bytes": 277
     },
     {
+      "path": "src/cablesim_iec60287/comparison.py",
+      "sha256": "bfd9e45d96e5f003595b6128a8a8a0133db9363c9c08055d1ef52a4dc6f2fe1c",
+      "size_bytes": 3399
+    },
+    {
       "path": "src/cablesim_iec60287/domain.py",
-      "sha256": "28e33bf049eb4d6171b13c513812d69c6f497511fefe2f37be90db4aae3004bc",
-      "size_bytes": 5383
+      "sha256": "d3ecd662cec78ea264a70198cc9e3b0cc2c3d60f76cbca9bdf338887e5496e3a",
+      "size_bytes": 5853
     },
     {
       "path": "src/cablesim_iec60287/inputs.py",
@@ -180,8 +185,8 @@
     },
     {
       "path": "src/cablesim_iec60287/main.py",
-      "sha256": "8c456b6f3f6705df9858022dc218297935efdee83de8ab6ec4e07463c4ab0750",
-      "size_bytes": 4973
+      "sha256": "44655aaf3b9a282db2e4ba4d21d2b3499ca2d5bdaa89870b3cd20efc660a30fd",
+      "size_bytes": 7963
     },
     {
       "path": "src/cablesim_iec60287/method.py",

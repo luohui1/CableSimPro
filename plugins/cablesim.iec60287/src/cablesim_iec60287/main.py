@@ -7,12 +7,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # -I drops cwd/PYT
 import json
 from hashlib import sha256
 import platform
+from math import isfinite
 
 from pydantic import ValidationError
 
 from cablesim_iec60287.inputs import Rating
 from cablesim_iec60287.domain import prepare
 from cablesim_iec60287.method import METHOD_VERSION, RatingRefused, rate
+from cablesim_iec60287.comparison import decompose
 
 PROTOCOL = 'cablesim.run/2'
 PHASES = ('A', 'B', 'C')
@@ -46,7 +48,46 @@ def steady_rating(case: dict, out: Path) -> dict:
         for key, value, unit in per_cable:
             results.append({'key': key, 'type': 'quantity', 'entity': entity, 'status': 'available', 'value': value, 'unit': unit})
     artifact = f"output/{case['case_id']}.trace.json"
-    (out / Path(artifact).name).write_text(json.dumps(result.as_dict(), ensure_ascii=False, allow_nan=False), 'utf-8')
+    payload = result.as_dict()
+    payload['rating_components'] = {
+        'schema': 'cablesim.rating-components/1', 'phase': '三相等效',
+        'ampacity_a': result.ampacity_a,
+        'temperature_headroom_k': rating.max_conductor_temperature_c-rating.installation.ambient_temperature_c,
+        'ac_resistance_ohm_m': result.electrical.r_ac_max_ohm_m,
+        'lambda1': last.loss.total, 'lambda2': 0.0,
+        't1_k_m_w': result.t1_k_m_w, 't2_k_m_w': 0.0,
+        'metal_k_m_w': 0.0, 't3_k_m_w': result.t3_k_m_w,
+        't4_k_m_w': last.t4_k_m_w,
+        'dielectric_rise_k': wd * (0.5 * result.t1_k_m_w + result.t3_k_m_w + last.t4_k_m_w),
+        'dielectric_loss_w_m': wd, 'temperature_c': rating.max_conductor_temperature_c,
+        'notes': 'T4 为 IEC 品字形外部热阻；λ1 为已收敛护套损耗因子；无铠装，T2/λ2 为零。',
+    }
+    context = case.get('comparison', {})
+    reference = context.get('artifacts', {}).get('x-cablesim.thermal-network-rating', {}).get('rating_components')
+    if reference:
+        try:
+            payload['rating_attribution'] = {**decompose(reference, payload['rating_components']),
+                                           'source': context.get('source')}
+        except (ValueError, KeyError, TypeError) as exc:
+            payload['rating_attribution'] = {'status': 'unavailable', 'reason': str(exc)}
+    domain = case['input'].get('schema_version') == 'cablesim.domain/1'
+    load = case['input']['load_cases'][0]['currents'][case['input']['circuits'][0]['id']] if domain else None
+    target = case.get('parameters', {}).get('target_current_a', load)
+    if target is not None and (isinstance(target, bool) or not isinstance(target, (int, float)) or not isfinite(target) or target < 0):
+        raise ValueError('目标电流必须是非负有限数值。')
+    payload['goal_checks'] = [{
+        'id': 'research.current', 'rule_version': 'iec60287-goals/1', 'key': 'ampacity', 'condition': 'rating',
+        'actual': result.ampacity_a, 'target': target, 'unit': 'A',
+        'margin': None if target is None else result.ampacity_a-target,
+        'margin_percent': None if not target else (result.ampacity_a-target)/target*100,
+        'verdict': 'unavailable' if target is None else 'satisfied' if result.ampacity_a >= target else 'not_satisfied',
+        'source': '研究目标电流' if 'target_current_a' in case.get('parameters', {}) else '共享负荷工况',
+        'reason': '尚未填写负荷或目标电流。' if target is None else None,
+    }, {'id': 'research.temperature', 'rule_version': 'iec60287-goals/1', 'key': 'conductor_temperature',
+        'condition': 'operating', 'actual': None, 'target': rating.max_conductor_temperature_c+273.15,
+        'unit': 'K', 'margin': None, 'verdict': 'unavailable', 'source': '共享导体温限',
+        'reason': '本 IEC 稳态子集未提供给定电流下的运行温度。'}]
+    (out / Path(artifact).name).write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), 'utf-8')
     return {'results': results, 'artifacts': [{'path': artifact, 'type': 'x-cablesim.iec60287-trace'}],
             'warnings': [{'code': 'SCOPE', 'message': m} for m in result.limitations],
             'evidence': {'iterations': result.iterations, 'decisions': result.decisions}}

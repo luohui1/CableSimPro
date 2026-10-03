@@ -10,6 +10,8 @@ def prepare(value, parameters):
     if len(value['circuits']) != 1 or len(value['sections']) != 1 or len(value['load_cases']) != 1:
         raise ValueError('简化参考仅支持单回路、单截面、单个稳态负荷')
     circuit, section, load = value['circuits'][0], value['sections'][0], value['load_cases'][0]
+    if section.get('backfill') or section.get('soil_layers'):
+        raise ValueError('简化热网络仅支持均匀土壤；回填区或土壤分层计算尚未接入。请在敷设截面关闭介质分区，或选择支持分区的方法。')
     if circuit['system']['kind'] != 'ac_three_phase' or load.get('profile'):
         raise ValueError('简化参考仅支持明确的三相稳态负荷')
     if section['kind'] != 'ground' or section['enclosures'] or load['kind'] != 'steady':

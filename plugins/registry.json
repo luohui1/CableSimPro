@@ -53,8 +53,8 @@
         },
         {
           "path": "plugins/cablesim.thermal-network/src/cablesim_thermal_network/network.py",
-          "sha256": "b16725efe804b7eee7e649678abd963eb6e7cb6715b6c322478a2397c9c359ca",
-          "size_bytes": 11097
+          "sha256": "e187b1139d3521372b9b8c2653f76756764235ed81174077aac7efad6852720f",
+          "size_bytes": 12278
         },
         {
           "path": "backend/schemas.py",

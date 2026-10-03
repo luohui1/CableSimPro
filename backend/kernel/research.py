@@ -224,9 +224,13 @@ class Research:
         plugin, capability = self.resolve(snapshot['definition']['method'])
         checked = self.check_cases(plugin, capability, snapshot['cases'])
         comparisons = []
+        scopes = [{'method': snapshot['definition']['method'], 'limitations': capability.limitations,
+                   'validation': capability.validation.model_dump(mode='json')}]
         runnable = {c.case_id for c in checked if c.status == 'succeeded'}
         for index, item in enumerate(snapshot['definition']['crosschecks'], 1):
             other, other_capability = self.resolve(item['method'])
+            scopes.append({'method': item['method'], 'limitations': other_capability.limitations,
+                           'validation': other_capability.validation.model_dump(mode='json')})
             cases = [{**c, 'parameters': item['parameters']} for c in snapshot['cases']]
             comparison = self.check_cases(other, other_capability, cases)
             runnable &= {c.case_id for c in comparison if c.status == 'succeeded'}
@@ -235,7 +239,7 @@ class Research:
         all_checks = [asdict(c) for c in checked] + comparisons
         return {'ready': bool(runnable), 'partial': any(c['status'] != 'succeeded' for c in all_checks),
                 'runnable_case_ids': sorted(runnable),
-                'cases': [asdict(c) for c in checked], 'crosschecks': comparisons, 'limitations': capability.limitations,
+                'cases': [asdict(c) for c in checked], 'crosschecks': comparisons, 'method_scopes': scopes, 'limitations': capability.limitations,
                 'validation': capability.validation.model_dump(), 'lock_digest': snapshot['lock']['digest'],
                 'input_digest': fingerprint(snapshot)}
 
@@ -283,11 +287,20 @@ class Research:
                 return self.get_run(wid, rid)
             output = self.run_checked(plugin, capability, snapshot['cases'], check['cases'])
             output['preflight'] = check
-            output['executions'] = [{'method': method, 'environment': output['environment'], 'request_sha256': output['request_sha256']}]
+            output['executions'] = [{'method': method, 'environment': output['environment'], 'request_sha256': output['request_sha256'],
+                                     'validation': capability.validation.model_dump(mode='json'), 'limitations': capability.limitations}]
             for index, item in enumerate(snapshot['definition']['crosschecks'], 1):
                 try:
                     other, other_capability = self.resolve(item['method'])
-                    cases = [{**c, 'parameters': item['parameters']} for c in snapshot['cases']]
+                    # Pass immutable primary evidence for optional plugin diagnostics.
+                    # The host transports it; the comparison plugin owns all math.
+                    primary = {c['case_id']: c for c in output['cases'] if not c['case_id'].startswith('crosscheck-')}
+                    cases = [{**c, 'parameters': item['parameters'], 'comparison': {
+                        'source': {'method': method, 'case_id': c['case_id'],
+                                   'input_digest': fingerprint(c['input']),
+                                   'artifact_digests': primary.get(c['case_id'], {}).get('artifact_digests', {})},
+                        'artifacts': primary.get(c['case_id'], {}).get('artifacts', {})}}
+                             for c in snapshot['cases']]
                     prefix = f'crosscheck-{index}-'
                     checks = [{**c, 'case_id': c['case_id'][len(prefix):]} for c in check['crosschecks']
                               if c['case_id'].startswith(prefix)]
@@ -302,7 +315,8 @@ class Research:
                     entry['case_id'] = f'crosscheck-{index}-{c["case_id"]}'
                     entry['method'] = item['method']
                     output['cases'].append(entry)
-                output['executions'].append({'method': item['method'], 'environment': additional['environment'], 'request_sha256': additional['request_sha256']})
+                output['executions'].append({'method': item['method'], 'environment': additional['environment'], 'request_sha256': additional['request_sha256'],
+                                             'validation': other_capability.validation.model_dump(mode='json'), 'limitations': other_capability.limitations})
             output['assessment'] = assess(snapshot['definition'], output['cases'])
             output['crosscheck'] = crosscheck_differences(output['cases'])
             output['validation'] = capability.validation.model_dump(mode='json')
@@ -388,7 +402,7 @@ class Research:
     def comparison(self, wid, ids):
         return compare(self.verified_runs(wid, ids))
 
-    def deliver(self, wid, ids, request_id=None):
+    def deliver(self, wid, ids, request_id=None, *, current_only=False):
         from .report import RENDERER, render
         encoded_ids = encode([str(rid) for rid in ids])
         if request_id is not None:
@@ -399,11 +413,23 @@ class Research:
                     raise HTTPException(409, '同一请求标识不能用于不同源运行。')
                 return self.delivery(wid, prior['delivery'])
         runs = self.verified_runs(wid, ids)
+        if current_only and any(r['freshness'] != 'current' for r in runs):
+            raise HTTPException(409, '计算书只能纳入当前保存输入的运行；请重新计算或重新选择。')
         html = render(runs)
         source = [{'run_id': r['id'], 'input_digest': r['input_digest'], 'output_digest': r['output_digest']} for r in runs]
         did, renderer = str(uuid4()), RENDERER
         digest = fingerprint({'renderer': renderer, 'sources': source, 'html': html})
         with self.store.db(True) as db:
+            if current_only:
+                row, _ = self.store.load(db, wid)
+                for run in runs:
+                    snapshot = run['snapshot']
+                    study = self.definition(db, wid, run['study'])
+                    if (row['revision'] != snapshot['workspace_revision'] or study['revision'] != snapshot['study_revision']
+                            or self.lock(db, wid, row['revision'], study['definition']['method']) != snapshot['lock']):
+                        raise HTTPException(409, '生成期间输入或研究已改变；请重新计算后生成计算书。')
+                    for comparison in snapshot['definition']['crosschecks']:
+                        self.resolve(comparison['method'])
             if request_id is not None:
                 prior = db.execute('SELECT * FROM delivery_requests WHERE workspace=? AND request_id=?', (wid, str(request_id))).fetchone()
                 if prior:

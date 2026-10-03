@@ -89,3 +89,24 @@ def test_fem_preflight_rejects_touching_cables_before_starting_solver():
          'parameters': {**converted['method_parameters'], **ARGS}}])
     assert result.cases[0].status == 'failed'
     assert 'TOUCHING_CABLES_REQUIRE_DIFFERENT_TOPOLOGY' in result.cases[0].error['message']
+
+
+@pytest.mark.parametrize('region', ['backfill', 'soil_layers'])
+def test_native_preflight_rejects_environment_regions_instead_of_dropping_them(region):
+    _, document, parameters = inputs()
+    section = document['sections'][0]
+    soil = section['medium']['material']
+    if region == 'backfill':
+        section['backfill'] = {'id': 'region/backfill', 'label': '回填区', 'material': soil,
+                               'x': 0, 'z': -.8, 'width': .5, 'height': .5}
+    else:
+        lower = deepcopy(next(m for m in document['materials'] if m['id'] == soil))
+        lower.update(id='material/lower-soil', thermal_resistivity=2.0)
+        document['materials'].append(lower)
+        section['soil_layers'] = [
+            {'id': 'region/upper', 'label': '上层土壤', 'material': soil, 'top_z': 0, 'bottom_z': -.4},
+            {'id': 'region/lower', 'label': '下层土壤', 'material': lower['id'], 'top_z': -.4, 'bottom_z': -2}]
+    result = Executor().check('cablesim.native-reference', 'line-source', [
+        {'case_id': region, 'input': document, 'parameters': parameters}])
+    assert result.cases[0].status == 'failed'
+    assert '回填区或土壤分层计算尚未接入' in result.cases[0].error['message']

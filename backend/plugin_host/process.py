@@ -93,8 +93,24 @@ def stop_tree(api, job, process):
         raise PluginHostError('PROCESS_TERMINATION_UNCONFIRMED', f'{exc}；保留作业目录。', 503) from None
 
 
-def run_process(arguments, *, cwd, env, timeout, stderr_limit):
+def run_process(arguments, *, cwd, env, timeout, stderr_limit, stop_event=None):
     if os.name != 'nt':
+        if stop_event is not None:
+            with subprocess.Popen(arguments, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                                  start_new_session=True) as process:
+                deadline = time.monotonic()+timeout
+                while True:
+                    if stop_event.is_set() or time.monotonic()>=deadline:
+                        import signal
+                        os.killpg(process.pid, signal.SIGKILL)
+                        process.communicate()
+                        raise subprocess.TimeoutExpired(arguments,timeout)
+                    try:
+                        _,stderr=process.communicate(timeout=.05)
+                        return subprocess.CompletedProcess(arguments,process.returncode,None,stderr[-stderr_limit:])
+                    except subprocess.TimeoutExpired:
+                        pass
         return subprocess.run(arguments, cwd=cwd, env=env, timeout=timeout,
                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
     import msvcrt
@@ -126,7 +142,15 @@ def run_process(arguments, *, cwd, env, timeout, stderr_limit):
             environment = c.create_unicode_buffer('\0'.join(f'{k}={v}' for k, v in sorted(env.items(), key=lambda i: i[0].upper())) + '\0\0')
             checked(api.CreateProcessW(arguments[0], command, None, None, True,
                                        0x80000 | 0x400 | 0x08000000, environment, str(cwd), c.byref(startup), c.byref(process)))
-            wait = api.WaitForSingleObject(process.process, max(1, int(timeout * 1000)))
+            if stop_event is None:
+                wait = api.WaitForSingleObject(process.process, max(1, int(timeout * 1000)))
+            else:
+                deadline=time.monotonic()+timeout
+                while True:
+                    if stop_event.is_set() or time.monotonic()>=deadline:
+                        raise subprocess.TimeoutExpired(arguments,timeout)
+                    wait=api.WaitForSingleObject(process.process,25)
+                    if wait!=0x102:break
             if wait == 0x102:
                 raise subprocess.TimeoutExpired(arguments, timeout)
             if wait != 0:

@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.native-reference",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "name": "有限元与线源参考",
   "description": "支持单回路直埋领域文档的有限元、电热耦合与线源校核，需要明确材料参数和原生环境。",
   "icon": "assets/icon.svg",
@@ -176,8 +176,8 @@
     },
     {
       "path": "src/cablesim_native/domain.py",
-      "sha256": "98c53a22c47577b946d5402fda07273e6075e28d23c25bb8f1c64a95412aba95",
-      "size_bytes": 7375
+      "sha256": "ddbcb2b9d54eb4d7cbb84a4b2cb4efe3694e7adc8c8255b6f4e9d31f43882345",
+      "size_bytes": 7572
     },
     {
       "path": "src/cablesim_native/electrothermal.py",
@@ -196,8 +196,8 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "c548845db5135957bf9714a7d043f885a0e5aa374bb1cbd54d2ed307fe16f0d1",
-      "size_bytes": 1910
+      "sha256": "dc164a0955beaef4234b4fdcffdc745aab76b3f21d12a15be270fc9e2bab96ed",
+      "size_bytes": 2068
     }
   ]
 }

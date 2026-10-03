@@ -1,0 +1,98 @@
+{
+  "schema": "cablesim.plugin/2",
+  "id": "cablesim.cable-geometry",
+  "version": "0.4.0",
+  "name": "电缆实体建模",
+  "icon": "assets/icon.svg",
+  "description": "参数化圆绞合、螺旋丝屏蔽、反向扎带与丝铠装；紧压 / 分割导体设计外径包络与标称用料；同源 OCCT 实体与 STEP。",
+  "publisher": {
+    "id": "cablesim",
+    "name": "CableSimPro"
+  },
+  "host_api": {
+    "major": 2,
+    "min_minor": 1
+  },
+  "license": {
+    "spdx": "LicenseRef-Project-Undeclared",
+    "review_required": false
+  },
+  "platforms": [
+    "windows-x64",
+    "linux-x64",
+    "darwin-arm64",
+    "darwin-x64"
+  ],
+  "runtime": {
+    "kind": "python",
+    "python": ">=3.11,<3.14",
+    "entry": "src/cablesim_cable_geometry/main.py"
+  },
+  "permissions": [
+    "study.run",
+    "artifact.write"
+  ],
+  "dependencies": [],
+  "resources": {
+    "timeout_s": 120,
+    "memory_mb": 2048,
+    "network": "none"
+  },
+  "capabilities": [
+    {
+      "kind": "method",
+      "id": "concentric-model",
+      "title": "单芯同心层 CAD 实体",
+      "method_version": "CAD-CONCENTRIC-0.4.0",
+      "analysis": "geometry",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.outer-diameter",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "x-cablesim.envelope-volume",
+          "type": "quantity",
+          "per": "core",
+          "required": true
+        },
+        {
+          "key": "x-cablesim.material-volume",
+          "type": "quantity",
+          "per": "core",
+          "required": false
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.cad-model",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "只支持单芯圆形导体与同心公共层；不支持偏心、多芯、波纹、中空和扇形结构。未知屏蔽、护套和铠装构造仅作包络，不作为材料用量。",
+        "圆绞合与丝层需要根数、丝径和节距；紧压与分割导体按设计外径生成包络，未建单丝压实或分割缝。用料按标称截面、密度及明确绞入系数计算，缺系数时不提供导体用料。",
+        "质量只在结构与材料密度齐全时提供；不填默认密度，不包含接触形变与制造公差。"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "assets/icon.svg",
+      "sha256": "3f19fd99db3b9c31144520f8dfb67d943f30b18c8253a5d232c3c96824e6ab86",
+      "size_bytes": 279
+    },
+    {
+      "path": "src/cablesim_cable_geometry/main.py",
+      "sha256": "69834b012f7cc928152189e83659a26fcfeb9a937597a8414ad455592d27e8e6",
+      "size_bytes": 22747
+    }
+  ]
+}

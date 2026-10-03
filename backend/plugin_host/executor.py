@@ -24,6 +24,7 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
+from time import perf_counter
 from uuid import uuid4
 
 from .manifest import CUSTOM, KEY_UNITS
@@ -87,15 +88,17 @@ def violation(message: str) -> PluginHostError:
 
 
 class Executor:
-    def __init__(self, registry: Registry | None = None, jobs_root: Path | None = None, verify: bool = True):
+    def __init__(self, registry: Registry | None = None, jobs_root: Path | None = None, verify: bool = True, process_runner=None):
         self.registry = registry or Registry(discover=False)
         self.jobs_root = jobs_root
         self.verify = verify
+        self.process_runner = process_runner or run_process
 
     def check(self, plugin_id: str, capability_id: str, cases: list[dict], *, expected_manifest=None) -> RunResult:
         return self.run(plugin_id, capability_id, cases, phase='check', expected_manifest=expected_manifest)
 
-    def run(self, plugin_id: str, capability_id: str, cases: list[dict], timeout_s: int | None = None, *, phase: str = 'run', expected_manifest=None) -> RunResult:
+    def run(self, plugin_id: str, capability_id: str, cases: list[dict], timeout_s: int | None = None, *, phase: str = 'run', expected_manifest=None, reuse_artifacts: dict | None = None) -> RunResult:
+        execution_started = perf_counter()
         plugin = Registry(self.registry.root, plugin_id=plugin_id).get(plugin_id)
         manifest = plugin.manifest
         if expected_manifest is not None and manifest != expected_manifest:
@@ -114,6 +117,10 @@ class Executor:
         if not cases or len(cases) > 100 or len(set(ids)) != len(ids) or any(not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', i) for i in ids):
             raise PluginHostError('CASES_INVALID', '请求至少包含一个工况，且 case_id 唯一。')
         run_id = str(uuid4())
+        reuse_raw = None
+        if reuse_artifacts is not None:
+            reuse_raw=json.dumps(reuse_artifacts,ensure_ascii=False,allow_nan=False,sort_keys=True).encode('utf-8')
+            cases=[{**case,'parameters':{**case.get('parameters',{}),'_artifact_reuse_sha256':sha256(reuse_raw).hexdigest()}} for case in cases]
         request = {'protocol': PROTOCOL, 'phase': phase, 'run_id': run_id, 'capability': capability_id,
                    'input_schema': capability.input_schema, 'cases': cases,
                    'limits': {'timeout_s': manifest.resources.timeout_s, 'memory_mb': manifest.resources.memory_mb}}
@@ -124,19 +131,31 @@ class Executor:
             (job / 'input').mkdir()
             (job / 'output').mkdir()
             (job / 'input/request.json').write_bytes(raw)
+            if reuse_raw is not None:
+                (job / 'input/reuse-artifacts.json').write_bytes(reuse_raw)
             limit = min(timeout_s or manifest.resources.timeout_s, manifest.resources.timeout_s)
+            process_started = perf_counter()
+            process_environment=minimal_environment(job)
+            process_environment['CABLESIM_WORKER_RELEASE']=sha256(manifest.model_dump_json().encode()).hexdigest()
             try:
-                proc = run_process([sys.executable, '-I', str(plugin.entry)], cwd=job, env=minimal_environment(job),
+                proc = self.process_runner([sys.executable, '-I', str(plugin.entry)], cwd=job, env=process_environment,
                                    timeout=limit, stderr_limit=STDERR_LIMIT)
             except subprocess.TimeoutExpired:
                 raise PluginHostError('TIMEOUT', f'{plugin_id} 超过 {limit} s 时间上限，进程已终止。', 504) from None
             except OSError as exc:
                 raise PluginHostError('PROCESS_LAUNCH_FAILED', f'无法受控启动工作进程：{exc}', 503) from None
             result_path = job / 'output/result.json'
+            process_ms = (perf_counter()-process_started)*1000
             if proc.returncode != 0 or not result_path.is_file():
                 detail = proc.stderr.decode('utf-8', 'replace')[-STDERR_LIMIT:].strip()
                 raise PluginHostError('PLUGIN_CRASHED', f'{plugin_id} 退出码 {proc.returncode}，未写出有效结果。{detail}', 502)
+            accept_started = perf_counter()
             accepted = self._accept(job, plugin_id, manifest.version, capability, run_id, raw, result_path, ids, phase)
+            accepted.environment['host_profiling'] = {
+                'prepare_ms':(process_started-execution_started)*1000,
+                'process_ms':process_ms,'accept_ms':(perf_counter()-accept_started)*1000,
+                'total_ms':(perf_counter()-execution_started)*1000}
+            if hasattr(proc,'profiling'):accepted.environment['resident_profiling']=proc.profiling
             accepted.environment['host_execution'] = {
                 'platform': current_platform(), 'isolation': 'process', 'os_sandbox': False,
                 'timeout_enforced': True, 'memory_limit_enforced': False, 'network_isolation_enforced': False,
