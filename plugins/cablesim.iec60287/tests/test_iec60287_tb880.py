@@ -1,6 +1,6 @@
 """Cross-check against CIGRE TB 880 worked examples.
 
-The fixtures hold values transcribed from the licensed TB 880 PDF and are NOT part of
+The fixtures hold values transcribed from the controlled TB 880 PDF and are NOT part of
 this public repository. Point CABLESIM_TB880_FIXTURES at a directory containing the
 `tb880-case-*.json` files (schema cable-calc-core-iec60287-validation-fixture-v1).
 Without it these tests are reported as skipped, never as passed.
@@ -19,11 +19,11 @@ import pytest
 from cablesim_iec60287 import Rating, RatingRefused, rate
 from cablesim_iec60287.inputs import Solver
 
-FIXTURES = os.environ.get('CABLESIM_TB880_FIXTURES')
+FIXTURES = os.environ.get('CABLESIM_TB880_FIXTURES', str(Path(__file__).resolve().parents[3]/'.data/tb880/fixtures'))
 CASES = ['tb880-case-0-1', 'tb880-case-0-1-exact-radical', 'tb880-case-0-1-single-point-bonding',
          'tb880-case-0-1-eddy-gp31', 'tb880-case-0-2', 'tb880-case-0-2-eddy-gp31']
 pytestmark = pytest.mark.skipif(not FIXTURES or not Path(FIXTURES).is_dir(),
-                                reason='CABLESIM_TB880_FIXTURES not set: licensed TB 880 fixtures are kept outside the public repository')
+                                reason='Controlled TB 880 fixtures absent; set CABLESIM_TB880_FIXTURES or populate .data/tb880/fixtures')
 
 # Branch identities this method can represent. Any other value makes the adapter refuse.
 SUPPORTED = {

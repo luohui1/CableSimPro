@@ -1,9 +1,9 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.iec60287",
-  "version": "0.2.4",
+  "version": "0.4.0",
   "name": "IEC 60287 载流量",
-  "description": "计算单芯接触品字形电缆直埋或排管的稳态载流量，输出损耗、热阻与计算依据。",
+  "description": "计算多回路单芯直埋、排管与矩形回填的稳态温度和允许电流，输出逐电缆互热贡献与核对表。",
   "icon": "assets/icon.svg",
   "publisher": {
     "id": "cablesim",
@@ -42,10 +42,10 @@
     {
       "kind": "method",
       "id": "steady-rating",
-      "title": "稳态载流量（IEC 60287-1-1 / 2-1:2023，单芯接触品字形）",
-      "method_version": "cablesim.iec60287.single-core-trefoil-buried/0.1.0",
+      "title": "地下稳态（IEC 60287-1-1 / 2-1:2023，多回路直埋 / 排管 / 矩形回填）",
+      "method_version": "cablesim.iec60287.group/0.3.0",
       "analysis": "steady_state",
-      "input_schema": "cablesim.iec60287.single-core/1",
+      "input_schema": "cablesim.domain/1",
       "outputs": [
         {
           "key": "ampacity",
@@ -130,6 +130,30 @@
           "type": "quantity",
           "per": "cable",
           "required": true
+        },
+        {
+          "key": "x-cablesim.iec60287.thermal_resistance.duct_air",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.thermal_resistance.duct_wall",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.temperature_rise.mutual",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.current",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
         }
       ],
       "artifacts": [
@@ -146,13 +170,24 @@
           "CIGRE TB 880 Case 0-1 single-point bonding",
           "CIGRE TB 880 Case 0-1 GP31 eddy",
           "CIGRE TB 880 Case 0-2",
-          "CIGRE TB 880 Case 0-2 GP31 eddy"
+          "CIGRE TB 880 Case 0-2 GP31 eddy",
+          "CIGRE TB 880 Case 0-3 flat duct bank",
+          "CIGRE TB 880 Case 0-3 single-point bonding",
+          "CIGRE TB 880 Case 0-3 GP31 eddy",
+          "IEC 2023 image-source analytic two-cable and unequal N-source checks",
+          "IEC 2023 Table 2 nodes, interpolation and unequal backfill correction",
+          "Nine layout templates: independent logarithmic heat-balance and frozen-loss quadratic checks"
         ]
       },
       "limitations": [
-        "仅三根等负荷单芯电缆接触品字形排列；均匀土壤、恒温地表、100 % 负荷率。",
+        "地下稳态、恒温地表、均匀原土或单一矩形回填区；不支持分层土壤、多介质分区或土壤干燥。",
+        "任意 N 不接触热源；自动电损耗仅适用于完整平衡三相单回路、等间距品字形或水平。多回路、任意排列或不平衡三相须提供逐电缆损耗系数及来源。",
+        "独立多回路不套用单回路电损耗公式；当前仅以外部提供的损耗系数求热平衡，系数必须覆盖计算电流范围。未实现通用跨回路电磁求解器。",
+        "单回路接触品字形采用标准等效组热阻；其他接触组合明确拒算。排管每根一管、同心、电缆外径 25–100 mm。",
+        "逐回路允许电流保持其他回路保存负荷，各回路上限不可同时使用。",
         "无铠装、不计土壤干燥与外部热源；仅光滑管状金属护套；不支持交叉互联。",
-        "ks、kp 及管道常数 U、V、Y 由使用者按标准表给定；本插件不内置标准表。",
+        "ks、kp 及管道常数 U、V、Y 须显式给定；工程计算使用 2023 表 2，范围外或无法核实的节点拒算。水平护套涡流按 1-1:2023 5.3.7.1(2)，已用 TB 880 单点接地与两端接地变体验证。",
+        "reference_basis=tb880_reference 仅复现 TB 880 所用旧版电容、等效回填半径和接触品字形热阻约定，结果标为参考复现，不能作为 IEC 2023 工程结论。",
         "验证夹具来自受控资料，不随公开仓库分发；验证只覆盖所列算例与分支，不构成合规认证。"
       ]
     }
@@ -175,8 +210,18 @@
     },
     {
       "path": "src/cablesim_iec60287/domain.py",
-      "sha256": "d3ecd662cec78ea264a70198cc9e3b0cc2c3d60f76cbca9bdf338887e5496e3a",
-      "size_bytes": 5853
+      "sha256": "e8487fa66172451e0ecc43902dc4f28811f46d3288f3d88a8cd7aeb47e579a4b",
+      "size_bytes": 6052
+    },
+    {
+      "path": "src/cablesim_iec60287/group.py",
+      "sha256": "354c5fc80068c7f6394df646bb78317780dc28d7f8361abe05bd3e227dcff8fd",
+      "size_bytes": 17543
+    },
+    {
+      "path": "src/cablesim_iec60287/group_inputs.py",
+      "sha256": "a60f4f4b8ad5a580548d39c9c895952303fd33e837b3d953d8401fd0aabdf7e8",
+      "size_bytes": 12489
     },
     {
       "path": "src/cablesim_iec60287/inputs.py",
@@ -185,13 +230,23 @@
     },
     {
       "path": "src/cablesim_iec60287/main.py",
-      "sha256": "44655aaf3b9a282db2e4ba4d21d2b3499ca2d5bdaa89870b3cd20efc660a30fd",
-      "size_bytes": 7963
+      "sha256": "05721c41d1c29c777468939785548f175334e2baeda2434fad8dc26797f0c874",
+      "size_bytes": 13516
     },
     {
       "path": "src/cablesim_iec60287/method.py",
       "sha256": "9ee3cdc07bd985413a9eec3eab13bd49584a9fd2e85bf018b3a0538ad74fb4be",
       "size_bytes": 12482
+    },
+    {
+      "path": "src/cablesim_iec60287/soil.py",
+      "sha256": "3215588fe121aafb189dfe52e8705c8edeb536bde6f6e3a39b5e7d6240abdd51",
+      "size_bytes": 8887
+    },
+    {
+      "path": "src/cablesim_iec60287/verification.py",
+      "sha256": "30e264c5b665e9fa3a28d67c11e81ec1e50276d3ebcee159f1263e05724c8d49",
+      "size_bytes": 6630
     }
   ]
 }

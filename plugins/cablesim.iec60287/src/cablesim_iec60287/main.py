@@ -13,6 +13,8 @@ from pydantic import ValidationError
 
 from cablesim_iec60287.inputs import Rating
 from cablesim_iec60287.domain import prepare
+from cablesim_iec60287.group_inputs import GroupRating
+from cablesim_iec60287.group import rate_group
 from cablesim_iec60287.method import METHOD_VERSION, RatingRefused, rate
 from cablesim_iec60287.comparison import decompose
 
@@ -22,6 +24,8 @@ PHASES = ('A', 'B', 'C')
 
 def steady_rating(case: dict, out: Path) -> dict:
     rating = prepare(case['input'], case.get('parameters', {}))
+    if isinstance(rating, GroupRating):
+        return group_rating(case, rating, out)
     result = rate(rating)
     last = result.history[-1]
     wd = result.electrical.dielectric_loss_w_m
@@ -96,13 +100,73 @@ def steady_rating(case: dict, out: Path) -> dict:
 CAPABILITIES = {'steady-rating': steady_rating}
 
 
+def group_rating(case, group, out):
+    payload = rate_group(group)
+    results, goals = [], []
+    selected = case.get('parameters', {}).get('target_circuit_id', group.circuits[0]['id'])
+    target = case.get('parameters', {}).get('target_current_a')
+    if selected not in {c['id'] for c in group.circuits}:
+        raise ValueError('目标回路不存在，请明确选择研究要校核的回路。')
+    if target is not None and len(group.circuits) > 1 and 'target_circuit_id' not in case.get('parameters', {}):
+        raise ValueError('多回路目标电流校核必须明确 target_circuit_id，不能静默采用第一回路。')
+    if target is not None and (isinstance(target,bool) or not isinstance(target,(int,float)) or not isfinite(target) or target < 0):
+        raise ValueError('目标电流必须是非负有限数值。')
+    for rated in payload['circuit_ratings']:
+        entity = rated['entity']
+        result = {'key':'ampacity','type':'quantity','entity':entity,'case':'rating','unit':'A'}
+        result.update({'status':'unavailable','reason':rated['error']} if rated['ampacity_a'] is None else {'status':'available','value':rated['ampacity_a']})
+        results.append(result)
+        load = max(s['current_a'] for s in payload['operating']['cable_states'] if s['circuit'] == entity)
+        required = target if entity == selected and target is not None else load
+        margin = None if rated['ampacity_a'] is None else rated['ampacity_a']-required
+        goals.append({'id':'research.current/'+entity,'entity':entity,'rule_version':'iec60287-goals/2','key':'ampacity','condition':'rating',
+                      'actual':rated['ampacity_a'],'target':required,'unit':'A','margin':margin,
+                      'margin_percent':margin/required*100 if required and margin is not None else None,
+                      'verdict':'unavailable' if margin is None else 'satisfied' if margin >= 0 else 'not_satisfied',
+                      'reason':rated.get('error',{}).get('message'),
+                      'source':'研究目标电流' if entity == selected and target is not None else '保存负荷（不平衡时为最大相电流）'})
+    fields = [
+        ('conductor_temperature','conductor_temperature_c','K'), ('sheath_temperature','sheath_temperature_c','K'),
+        ('surface_temperature','surface_temperature_c','K'), ('losses.conductor','conductor_loss_w_m','W/m'),
+        ('losses.sheath','sheath_loss_w_m','W/m'), ('losses.dielectric','dielectric_loss_w_m','W/m'),
+        ('losses.total','total_loss_w_m','W/m'), ('loss_factor.sheath','lambda1','1'),
+        ('ac_resistance','ac_resistance_ohm_m','Ω/m'), ('capacitance','capacitance_f_m','F/m'),
+        ('thermal_resistance.insulation','t1_k_m_w','K·m/W'), ('thermal_resistance.oversheath','t3_k_m_w','K·m/W'),
+        ('thermal_resistance.external','t4_self_soil_k_m_w','K·m/W'),
+        ('x-cablesim.iec60287.thermal_resistance.duct_air','t4_air_gap_k_m_w','K·m/W'), ('x-cablesim.iec60287.thermal_resistance.duct_wall','t4_wall_k_m_w','K·m/W'),
+        ('x-cablesim.iec60287.temperature_rise.mutual','mutual_temperature_rise_k','K'), ('x-cablesim.iec60287.current','current_a','A')]
+    for state in payload['operating']['cable_states']:
+        for key,field,unit in fields:
+            value = state[field]+273.15 if field.endswith('_temperature_c') else state[field]
+            results.append({'key':key,'type':'quantity','entity':state['entity'],'case':'operating','status':'available','value':value,'unit':unit})
+        goals.append({'id':'research.temperature/'+state['entity'],'entity':state['entity'],'rule_version':'iec60287-goals/2',
+                      'key':'conductor_temperature','condition':'operating','actual':state['conductor_temperature_c']+273.15,
+                      'target':state['temperature_limit_c']+273.15,'unit':'K','margin':state['margin_k'],
+                      'verdict':'satisfied' if state['margin_k'] >= 0 else 'not_satisfied','source':'共享导体温限'})
+    payload['goal_checks'] = goals
+    payload['rating_attribution'] = {'status':'unavailable','reason':'N 电缆结果按逐电缆热平衡比较，不使用单回路等效 Shapley 分解。'}
+    context = case.get('comparison',{})
+    reference = context.get('artifacts',{}).get('x-cablesim.thermal-network-rating',{}).get('rating_components')
+    if reference and payload.get('rating_components'):
+        try:
+            payload['rating_attribution'] = {**decompose(reference,payload['rating_components']), 'source':context.get('source')}
+        except (ValueError,KeyError,TypeError) as exc:
+            payload['rating_attribution'] = {'status':'unavailable','reason':str(exc)}
+    artifact = f"output/{case['case_id']}.trace.json"
+    (out/Path(artifact).name).write_text(json.dumps(payload,ensure_ascii=False,allow_nan=False),'utf-8')
+    return {'results':results,'artifacts':[{'path':artifact,'type':'x-cablesim.iec60287-trace'}],
+            'warnings':[{'code':'ELECTRICAL_SCOPE','message':payload['electrical_basis']}],
+            'evidence':{'iterations':payload['operating']['iterations'],'residual_k':payload['operating']['residual_k'],
+                        'decisions':payload['decisions']}}
+
+
 def run_case(handler, case: dict, out: Path) -> dict:
     base = {'case_id': case['case_id']}
     try:
         result = handler(case, out)
         for r in result.get('results', []):
-            r['case'] = 'rating'
-        if case['input'].get('schema_version') == 'cablesim.domain/1':
+            r.setdefault('case', 'rating')
+        if case['input'].get('schema_version') == 'cablesim.domain/1' and not isinstance(prepare(case['input'], case.get('parameters', {})), GroupRating):
             circuit = case['input']['circuits'][0]
             entities = {'circuit/c1': circuit['id'], **{f'cable/c1-{p}': c['id'] for p,c in zip('ABC',circuit['cables'])}}
             for r in result.get('results', []):
@@ -131,7 +195,7 @@ def main() -> int:
     out = job / 'output'
     cases = [run_case(handler, case, out) for case in request['cases']]
     result = {'protocol': PROTOCOL, 'cases': cases,
-              'environment': {'python': platform.python_version(), 'method': METHOD_VERSION}}
+              'environment': {'python': platform.python_version(), 'method': 'iec60287-group/0.3.0', 'legacy_method': METHOD_VERSION}}
     (out / 'result.json').write_text(json.dumps(result, ensure_ascii=False, allow_nan=False), 'utf-8')
     return 0
 

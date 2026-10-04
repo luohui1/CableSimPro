@@ -6,6 +6,12 @@ from .inputs import Rating
 def prepare(value, p):
     if value.get('schema_version') != 'cablesim.domain/1':
         return Rating.model_validate(value)
+    from .group_inputs import prepare_group
+    return prepare_group(value, p)
+
+
+def prepare_contact_legacy(value, p):
+    """Retained mapping for controlled historical touching-trefoil fixtures."""
     if any(len(value[k]) != 1 for k in ('circuits', 'sections', 'load_cases')):
         raise ValueError('IEC 子集仅支持单回路、单截面、单个稳态负荷')
     circuit, section, load = value['circuits'][0], value['sections'][0], value['load_cases'][0]
