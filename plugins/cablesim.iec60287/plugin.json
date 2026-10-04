@@ -1,9 +1,9 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.iec60287",
-  "version": "0.4.0",
+  "version": "0.7.0",
   "name": "IEC 60287 载流量",
-  "description": "计算多回路单芯直埋、排管与矩形回填的稳态温度和允许电流，输出逐电缆互热贡献与核对表。",
+  "description": "计算声明范围内单芯或独立屏蔽三芯直埋、排管与矩形回填的稳态温度和允许电流，输出逐源互热、屏蔽与磁性铠装损耗及核对表。",
   "icon": "assets/icon.svg",
   "publisher": {
     "id": "cablesim",
@@ -41,9 +41,118 @@
   "capabilities": [
     {
       "kind": "method",
+      "id": "tb880-wire-foil-rating",
+      "title": "TB880 铜丝与铝箔屏蔽参考链",
+      "method_version": "cablesim.iec60287.tb880-wire-foil/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.iec60287.tb880-wire-foil/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.iec60287-reference",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "TB880:2022 Case1 pp131-163; touching trefoil and spaced flat, full primitive-input chains"
+        ]
+      },
+      "limitations": [
+        "三叶形固接、平排不换位不平衡交叉互联参考结构；两金属层损耗与温度分别迭代。",
+        "保留出版物历史公式，不替代IEC2023通用工程计算或审批。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "tb880-reference-rating",
+      "title": "TB880 三芯海缆与铜线屏蔽参考链",
+      "method_version": "cablesim.iec60287.tb880-reference/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.iec60287.tb880-reference/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.iec60287-reference",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "TB880:2022 Case2 pp164-179; Case4 pp195-205; primitive SI geometry/material chains"
+        ]
+      },
+      "limitations": [
+        "仅明确的三芯铅护套钢丝铠装、接触三叶形低覆盖铜线屏蔽两类参考结构。",
+        "保留TB880历史公式约定，不替代IEC2023通用工程计算。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "armoured-sl-rating",
+      "title": "三芯圆导体钢丝铠装SL热路（IEC 60287-1-1 §5.4）",
+      "method_version": "cablesim.iec60287.armour/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.iec60287.armoured-sl/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        },
+        {
+          "key": "x-cablesim.iec60287.loss_factor.armour",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        },
+        {
+          "key": "x-cablesim.iec60287.losses.armour",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.iec60287-armour",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "CIGRE TB880 Case 2 §6.6/6.11/6.12, pages174/178/179"
+        ]
+      },
+      "limitations": [
+        "仅三芯圆导体钢丝铠装SL热路；给定同一温限工作点Rc/Rs/λ1/T1-T4，迭代铠装温度。",
+        "非磁性护套并联替代量按§5.4.2实现；完整非磁性λ1/λ2热路未验证，拒算。",
+        "不覆盖单芯磁性、钢带、两芯及完整多芯领域映射；TB880大截面为特定参考验证，不构成任意结构认证。"
+      ]
+    },
+    {
+      "kind": "method",
       "id": "steady-rating",
       "title": "地下稳态（IEC 60287-1-1 / 2-1:2023，多回路直埋 / 排管 / 矩形回填）",
-      "method_version": "cablesim.iec60287.group/0.3.0",
+      "method_version": "cablesim.iec60287.group/0.5.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -154,6 +263,24 @@
           "type": "quantity",
           "per": "cable",
           "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.loss_factor.armour",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.losses.armour",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.thermal_resistance.bedding",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
         }
       ],
       "artifacts": [
@@ -176,16 +303,17 @@
           "CIGRE TB 880 Case 0-3 GP31 eddy",
           "IEC 2023 image-source analytic two-cable and unequal N-source checks",
           "IEC 2023 Table 2 nodes, interpolation and unequal backfill correction",
-          "Nine layout templates: independent logarithmic heat-balance and frozen-loss quadratic checks"
+          "Nine single-core layout templates: independent logarithmic heat-balance and frozen-loss quadratic checks",
+          "Three-core SL: six direct-burial/duct hand quadratics; TB880 Case2 thermal and wire-loss intermediates; Case10 steel-tape loss components"
         ]
       },
       "limitations": [
         "地下稳态、恒温地表、均匀原土或单一矩形回填区；不支持分层土壤、多介质分区或土壤干燥。",
-        "任意 N 不接触热源；自动电损耗仅适用于完整平衡三相单回路、等间距品字形或水平。多回路、任意排列或不平衡三相须提供逐电缆损耗系数及来源。",
-        "独立多回路不套用单回路电损耗公式；当前仅以外部提供的损耗系数求热平衡，系数必须覆盖计算电流范围。未实现通用跨回路电磁求解器。",
+        "单芯自动电损耗适用于完整平衡三相单回路或1-2验证的双回平排温度分支；其他单芯多回路、任意排列或不平衡三相须外部损耗系数与来源。",
+        "三芯仅等结构圆绞导体、芯相接触、独立铜带或光滑金属屏蔽、平衡三相和两端接地；需要成缆绞距、铜带纵向R20、填充材料与钢带实际间隙。",
         "单回路接触品字形采用标准等效组热阻；其他接触组合明确拒算。排管每根一管、同心、电缆外径 25–100 mm。",
         "逐回路允许电流保持其他回路保存负荷，各回路上限不可同时使用。",
-        "无铠装、不计土壤干燥与外部热源；仅光滑管状金属护套；不支持交叉互联。",
+        "三芯磁性钢带厚度0.3–1.0 mm；钢丝圆导体至400 mm²且需工频AC铠装电阻；非磁性、混合填料、分离芯、单点接地三芯与分割/扇形领域结构拒算。单芯仍无铠装，光滑管状金属护套。",
         "ks、kp 及管道常数 U、V、Y 须显式给定；工程计算使用 2023 表 2，范围外或无法核实的节点拒算。水平护套涡流按 1-1:2023 5.3.7.1(2)，已用 TB 880 单点接地与两端接地变体验证。",
         "reference_basis=tb880_reference 仅复现 TB 880 所用旧版电容、等效回填半径和接触品字形热阻约定，结果标为参考复现，不能作为 IEC 2023 工程结论。",
         "验证夹具来自受控资料，不随公开仓库分发；验证只覆盖所列算例与分支，不构成合规认证。"
@@ -204,24 +332,34 @@
       "size_bytes": 277
     },
     {
+      "path": "src/cablesim_iec60287/armour.py",
+      "sha256": "cf5c4762c8ce523f427b1779b5260934edf90b660bb443d8b29160a8f6d7a0a7",
+      "size_bytes": 5077
+    },
+    {
       "path": "src/cablesim_iec60287/comparison.py",
       "sha256": "bfd9e45d96e5f003595b6128a8a8a0133db9363c9c08055d1ef52a4dc6f2fe1c",
       "size_bytes": 3399
     },
     {
       "path": "src/cablesim_iec60287/domain.py",
-      "sha256": "e8487fa66172451e0ecc43902dc4f28811f46d3288f3d88a8cd7aeb47e579a4b",
-      "size_bytes": 6052
+      "sha256": "e602b609e57fcdd42c08f2961e9de5a6c9f5c89f2c97f49bdf0baf941f2a507f",
+      "size_bytes": 6247
+    },
+    {
+      "path": "src/cablesim_iec60287/double_flat.py",
+      "sha256": "f2d83a8a8227f1cb43b7761ec37602b758081d5ef8f2db55a31d30c7388f0517",
+      "size_bytes": 6862
     },
     {
       "path": "src/cablesim_iec60287/group.py",
-      "sha256": "354c5fc80068c7f6394df646bb78317780dc28d7f8361abe05bd3e227dcff8fd",
-      "size_bytes": 17543
+      "sha256": "d44ced1a088ac7fc5ba77ffbe9b7bc24c9759337fd2dbada920a5b2bbe103f1a",
+      "size_bytes": 22500
     },
     {
       "path": "src/cablesim_iec60287/group_inputs.py",
-      "sha256": "a60f4f4b8ad5a580548d39c9c895952303fd33e837b3d953d8401fd0aabdf7e8",
-      "size_bytes": 12489
+      "sha256": "93b23b7f28416c01a4c17b671ca132136a9440b8b458c36ab54a60b939aebf59",
+      "size_bytes": 17779
     },
     {
       "path": "src/cablesim_iec60287/inputs.py",
@@ -229,9 +367,14 @@
       "size_bytes": 5680
     },
     {
+      "path": "src/cablesim_iec60287/loss_table.py",
+      "sha256": "5ddc7998802af6c49a76b3ac92785db9cd6951730ecb30c028ea9873b0262c9e",
+      "size_bytes": 7462
+    },
+    {
       "path": "src/cablesim_iec60287/main.py",
-      "sha256": "05721c41d1c29c777468939785548f175334e2baeda2434fad8dc26797f0c874",
-      "size_bytes": 13516
+      "sha256": "17bc401adf7eb5dc6728d451b0fdc9c17ff933ba699bad6294d20c6262924f17",
+      "size_bytes": 17528
     },
     {
       "path": "src/cablesim_iec60287/method.py",
@@ -242,6 +385,21 @@
       "path": "src/cablesim_iec60287/soil.py",
       "sha256": "3215588fe121aafb189dfe52e8705c8edeb536bde6f6e3a39b5e7d6240abdd51",
       "size_bytes": 8887
+    },
+    {
+      "path": "src/cablesim_iec60287/tb880_reference.py",
+      "sha256": "b2c73653494b053c13c350155abd5b410bd8bf7319f8a2409bd825b961af26f8",
+      "size_bytes": 10723
+    },
+    {
+      "path": "src/cablesim_iec60287/tb880_wire_foil.py",
+      "sha256": "d37963e8847d905931090c0eeda13c6ddb4ee2dbee7baaa10841f77690b2d58b",
+      "size_bytes": 9956
+    },
+    {
+      "path": "src/cablesim_iec60287/three_core.py",
+      "sha256": "a84c9bb3eabbc5cbd70d2588be38d0ea7cd8430b30b750366cea6154e66630f4",
+      "size_bytes": 25957
     },
     {
       "path": "src/cablesim_iec60287/verification.py",

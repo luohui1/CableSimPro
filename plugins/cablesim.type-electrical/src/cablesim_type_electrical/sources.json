@@ -1,0 +1,46 @@
+{
+  "iec60287": {
+    "standard": "IEC 60287-1-1:2023",
+    "sha256": "b300bb2bea52ce64e24c8137193559d7ee4cc04013ec4122357a2625e868a327",
+    "page_offset": 48,
+    "file_name": "iec60287-1-1{ed3.0.CMV}en.pdf",
+    "semantics": "standard_reference"
+  },
+  "iec60287_1_3": {
+    "standard": "IEC 60287-1-3:2023",
+    "sha256": "e0321cb68f5369f868af132092e76f2bd07f21c994006c7695e754bfe71daaaf",
+    "page_offset": 26,
+    "file_name": "iec60287-1-3{ed2.0.CMV}en.pdf",
+    "semantics": "standard_reference"
+  },
+  "iec60949": {
+    "standard": "IEC 60949:1988",
+    "sha256": "b75b1b185529cb99cdf88a24c7700040c09ed366c805f760db6936ed87827de2",
+    "pages": {
+      "5": 1,
+      "7": 2,
+      "9": 3,
+      "11": 4,
+      "13": 5,
+      "15": 6,
+      "17": 7,
+      "19": 8,
+      "21": 9,
+      "23": 10,
+      "25": 11,
+      "27": 12
+    },
+    "file_name": "IEC-60949-1988-English-pages.pdf",
+    "url": "https://www.scribd.com/document/394054488/Selection",
+    "semantics": "standard_reference",
+    "coverage": "Public original English page excerpts, not complete bilingual publication"
+  },
+  "iec60949_amendment": {
+    "standard": "IEC 60949:1988/AMD1:2008",
+    "sha256": "f9d9c0ee9f5b9d579947f360b8580f953a1cd4990a8357ba4008c90a2ef12d36",
+    "page_offset": 2,
+    "file_name": "IEC-60949-1988-AMD1-2008-preview.pdf",
+    "url": "https://webstore.iec.ch/en/publication/4015",
+    "semantics": "standard_reference"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "input": {
+    "schema_version":"cablesim.capacitive-cable/1",
+    "inner_radius_m":0.0131,
+    "layers":[
+      {"uid":"inner-scc","outer_radius_m":0.01395,"conductivity_radial_s_m":2,"conductivity_axial_s_m":2,"relative_permittivity":2.25,"source":"COMSOL62 submarine03 pp11,14; geometric parameter files a/b/c"},
+      {"uid":"xlpe","outer_radius_m":0.03795,"conductivity_radial_s_m":1e-18,"conductivity_axial_s_m":1e-18,"relative_permittivity":2.5,"source":"COMSOL62 submarine03 pp11,14; Tins=24 mm"},
+      {"uid":"outer-scc","outer_radius_m":0.0388,"conductivity_radial_s_m":2,"conductivity_axial_s_m":2,"relative_permittivity":2.25,"source":"COMSOL62 submarine03 pp11,14; Dins=77.6 mm"},
+      {"uid":"sheath","outer_radius_m":0.0417,"conductivity_radial_s_m":45.5,"conductivity_axial_s_m":4550000,"relative_permittivity":1,"source":"COMSOL62 submarine03 p15 explicit numerical anisotropy: sigma_r=Spbs/Scab; sigma_z=Spbs. Not isotropic lead."}
+    ],
+    "sheath_layer":"sheath",
+    "frequency_hz":50,
+    "voltage_peak_v":127017.05922171767,
+    "axial_voltage_drop_peak_v_m":0.031084224273636822,
+    "length_m":10000,
+    "axial_coordinate_scale":100000,
+    "bonding":"single_point",
+    "source":"COMSOL Multiphysics 6.2 Submarine Cable 3 - Bonding Capacitive, pp9-16: V0=220kV/sqrt(3), I0=655A*sqrt(2), Rcon=1/(500mm2*59.6MS/m). Peak phasors as published; https://www.comsol.com/model/cable-tutorial-series-43431"
+  },
+  "parameters":{"mesh":{"radial_elements_per_layer":12,"axial_elements_per_section":100}},
+  "reference":{"single_point":{"sheath_loss_w":1500,"maximum_sheath_voltage_peak_v":83},"both_ends":{"sheath_loss_w":380,"maximum_sheath_voltage_peak_v":21},"cross_bonded":{"sheath_loss_w":85,"maximum_sheath_voltage_peak_v":6.9},"source":"COMSOL62 submarine03 p7; rounded reference values, not high precision native data"}
+}

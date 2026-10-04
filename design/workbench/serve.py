@@ -29,11 +29,13 @@ from backend.kernel.contracts import DeliveryRequest
 from backend.kernel.requirements import make_router as requirements_router
 from design.workbench.contracts import contracts, synthetic_iec
 from design.workbench.scenarios import make_router as scenario_router
+from design.workbench.type_rating import make_router as rating_table_router
 from design.workbench.cable_example import example
 
 app = create_app(Path(os.environ.get('CABLESIM_DESIGN_DB', str(ROOT / '.data' / 'design-workbench' / 'cablesim.sqlite'))))
 app.include_router(scenario_router(app.state.workspace_store))
 app.include_router(requirements_router(app.state.research))
+app.include_router(rating_table_router(app.state.research))
 preview_cache = OrderedDict()
 preview_cache_lock = Lock()
 preview_runner = ResidentRunner(ROOT/'.tmp/cad-workers')
@@ -149,7 +151,12 @@ def delivery_file(wid: str, did: str):
 @app.post('/api/design/workspaces/{wid}/deliveries', status_code=201)
 def current_delivery(wid: str, body: DeliveryRequest):
     if len(body.run_ids) != 1:
-        raise HTTPException(422, '请只选择一个当前运行生成交付。')
+        from design.workbench.type_rating import is_rating_table
+        runs = app.state.research.verified_runs(wid, body.run_ids)
+        geometry = [r for r in runs if any('x-cablesim.cad-model' in c.get('artifacts', {}) for c in r['output']['cases'])]
+        ratings = [r for r in runs if is_rating_table(r)]
+        if len(runs) != 2 or len(geometry) != 1 or len(ratings) != 1:
+            raise HTTPException(422, '规格书只接受一个结构推导和一个载流量表运行。')
     return app.state.research.deliver(wid, body.run_ids, current_only=True)
 
 

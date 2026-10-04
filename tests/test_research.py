@@ -58,7 +58,7 @@ def test_saved_execution_replay_and_report(client, plugin, monkeypatch):
     report = client.post(f'/api/workspaces/{w["id"]}/deliveries', json={'run_ids': [run['id']]})
     assert report.status_code == 201, report.text
     assert run['id'] in report.json()['html']
-    assert report.json()['renderer'] == 'cablesim.study-html/7'
+    assert report.json()['renderer'] == 'cablesim.study-html/10'
     assert '>case-0 · rating</td>' in report.json()['html']
     if plugin == 'cablesim.thermal-network':
         assert '>case-0 · operating</td>' in report.json()['html']

@@ -1,6 +1,6 @@
 """Read native COMSOL data into the same public simulation artifact contract."""
 import json
-from math import hypot, isfinite
+from math import hypot, isfinite, atan2, degrees
 import numpy as np
 from backend.foundation.simulation import validate
 from backend.foundation.reproduction import digest
@@ -64,7 +64,8 @@ def parse(log, problem, solver):
           'discretization':'COMSOL native curved quadratic physics; vertices/linear connectivity are the display mesh, not a P1 replacement solve'}
     mesh['sha256']=digest(mesh)
     field=array('field',3)
-    if field.shape[1:]!=(1,len(points)):raise SolverFailure('COMSOL 场值与网格节点数量不一致。')
+    transient=problem['physics']=='transient_heat'
+    if field.shape[2]!=len(points) or (not transient and field.shape[1]!=1):raise SolverFailure('COMSOL 场值与网格节点数量不一致。')
     observations=[]
     def obs(quantity,entity,value,unit,**extra):
         if not isfinite(float(value)):raise SolverFailure('COMSOL 观测量非有限。')
@@ -81,7 +82,7 @@ def parse(log, problem, solver):
             if v.shape!=(5,1):raise SolverFailure('COMSOL 区域积分缺项。')
             re,im,joule,total,area=v[:,0];current=hypot(re,im)
             if area<=0 or joule<0 or total<joule-1e-8*max(1,joule):raise SolverFailure('COMSOL 区域面积或损耗不符合物理约束。')
-            rdc=1/(sigma*area);rac=joule/current**2 if current>1e-8 and any(g['uid'] in e['regions'] and e['kind']=='current_rms_a' for e in problem['excitations']) else None
+            rdc=1/(sigma*area);rac=joule/current**2 if current>1e-8 and any(g['uid'] in e['regions'] and e['kind']=='current_rms_a' and any(e['value']) for e in problem['excitations']) else None
             regions.append({'entity':g['uid'],'current_complex_rms_a':[float(re),float(im)],'current_rms_a':current,
                             'joule_loss_w_m':float(joule),'magnetic_loss_w_m':float(max(0,total-joule)),
                             'dc_resistance_ohm_m':rdc,'ac_resistance_ohm_m':rac,'native_area_m2':float(area)})
@@ -114,12 +115,25 @@ def parse(log, problem, solver):
             re,im=v[:,0,0];value=hypot(re,im)
             densities.append({'entity':p['region'],'point_m':p['point_m'],'j_complex_rms_a_m2':[float(re),float(im)],'j_rms_a_m2':value})
             obs('current_density_rms',p['region'],value,'A/m^2',probe_index=i,point_m=p['point_m'])
+            obs('current_density_phase',p['region'],degrees(atan2(im,re)),'deg',probe_index=i,point_m=p['point_m'])
         result.update(regions=regions,probes=probes,current_density_probes=densities,current_constraint_errors=errors,
                       a_complex_wb_m=field[:,0,:].T.tolist(),phasor_convention='RMS; COMSOL native peak values divided by sqrt(2), native cycle-average losses retained')
     else:
-        temperatures=field[0,0,:];maximum=float(temperatures.max())
-        result['final_field']={'time_s':0.,'temperature_k':temperatures.tolist(),'maximum_k':maximum}
-        obs('maximum_temperature_k','field',maximum,'K',time_s=0.)
+        if field.shape[0]!=1:raise SolverFailure('COMSOL 热场必须只有温度变量。')
+        times=array('times',2)[0] if transient else np.asarray([0.])
+        if len(times)!=field.shape[1] or (transient and (np.any(np.diff(times)<=0) or times[0]!=0 or abs(times[-1]-problem['time']['step_s']*problem['time']['steps'])>1e-8)):
+            raise SolverFailure('COMSOL 暂态时间证据与场帧不一致。')
+        result['snapshots']=[]
+        for i,t in enumerate(times):
+            temperatures=field[0,i,:];maximum=float(temperatures.max())
+            result['snapshots'].append({'time_s':float(t),'temperature_k':temperatures.tolist(),'maximum_k':maximum})
+            obs('maximum_temperature_k','field',maximum,'K',time_s=float(t))
+        result['final_field']=result['snapshots'][-1]
+        if transient:
+            for j,point in enumerate(problem['probes_m']):
+                values=array('thermal-probe-'+str(j),3)
+                if values.shape!=(1,len(times),1):raise SolverFailure('COMSOL 暂态测点帧缺项。')
+                for i,t in enumerate(times):obs('probe_temperature_k','field',values[0,i,0],'K',time_s=float(t),probe_index=j,point_m=point)
     return mesh,result,observations
 
 

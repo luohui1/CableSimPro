@@ -14,14 +14,15 @@ from backend.domain.models import DomainDocument
 ROOT = Path(__file__).resolve().parents[2]
 MODELS = {
     ('cablesim.iec60287', 'steady-rating'): ('cablesim_iec60287', 'Rating'),
+    ('cablesim.iec60287', 'armoured-sl-rating'): ('cablesim_iec60287', 'ArmouredRating'),
     ('cablesim.thermal-network', 'steady-rating'): ('cablesim_thermal_network', 'Scenario'),
 }
 
 
 def model_for(plugin_id, capability):
     package, name = MODELS[(plugin_id, capability)]
-    path = ROOT / 'plugins' / plugin_id / 'src' / package / 'inputs.py'
-    module_name = '_design_' + package + '_inputs'
+    path = ROOT / 'plugins' / plugin_id / 'src' / package / ('armour.py' if name=='ArmouredRating' else 'inputs.py')
+    module_name = '_design_' + package + '_' + name
     if module_name not in sys.modules:
         spec = importlib.util.spec_from_file_location(module_name, path)
         module = importlib.util.module_from_spec(spec)
@@ -41,6 +42,11 @@ def contracts(research):
             research.resolve(pin)  # The form must refer to the verified release.
             model, path = model_for(*key)
             schema = model.model_json_schema()
+            if cap['id']=='armoured-sl-rating':
+                result.append({'method':pin,'input_schema':cap['input_schema'],'schema':schema,'standalone_schema':schema,
+                  'parameter_schema':{'type':'object','properties':{},'additionalProperties':False},'schema_digest':sha256(json.dumps(schema,sort_keys=True).encode()).hexdigest(),
+                  'source':path.relative_to(ROOT).as_posix(),'source_sha256':sha256(path.read_bytes()).hexdigest(),'input_sources':['study'],'tasks':['rating']})
+                continue
             parameters = {'type': 'object', 'properties': {}, 'additionalProperties': False}
             if key[0] == 'cablesim.thermal-network':
                 cable = schema['$defs']['Cable']['properties']
@@ -57,12 +63,21 @@ def contracts(research):
                                   for k in ('u', 'v', 'y_per_k', 'initial_mean_air_temperature_c')},
                                   'required': ['u', 'v', 'y_per_k', 'initial_mean_air_temperature_c']}
                 fields['per_cable_losses'] = {'type':'object', 'additionalProperties': {'type':'object','properties': {
-                    'ac_extra_factor': {'type':'number','minimum':0}, 'lambda1': {'type':'number','minimum':0}},
+                    'ac_extra_factor': {'type':'number','minimum':0}, 'lambda1': {'type':'number','minimum':0},
+                    'lambda2': {'type':'number','minimum':0,'default':0}},
                     'required':['ac_extra_factor','lambda1'], 'additionalProperties':False}}
                 fields['loss_input_source'] = {'type':'string'}
                 fields['target_circuit_id'] = {'type':'string'}
                 fields['reference_basis'] = {'type':'string','enum':['iec2023','tb880_reference'],'default':'iec2023'}
-                parameters.update(properties=fields, required=[k for k in fields if k not in ('duct','per_cable_losses','loss_input_source','target_circuit_id','reference_basis')], **{'$defs': schema['$defs']})
+                fields['operation'] = {'type':'string','enum':['both','temperature'],'default':'both'}
+                fields['double_flat_tables'] = {'type':'object','additionalProperties':True}
+                fields['external_loss_reference'] = {'type':'object','properties':{
+                    'run_id':{'type':'string'},'case_id':{'type':'string'},
+                    'artifact_type':{'const':'x-cablesim.loss-coefficients','type':'string'},
+                    'artifact_sha256':{'type':'string','pattern':'^[0-9a-f]{64}$'}},
+                    'required':['run_id','case_id','artifact_type','artifact_sha256'],'additionalProperties':False}
+                optional = ('duct','per_cable_losses','loss_input_source','target_circuit_id','reference_basis','operation','double_flat_tables','external_loss_reference')
+                parameters.update(properties=fields, required=[k for k in fields if k not in optional], **{'$defs': schema['$defs']})
             primary = DomainDocument.model_json_schema() if key[0] == 'cablesim.iec60287' else schema
             encoded = json.dumps(primary, sort_keys=True, ensure_ascii=False).encode()
             result.append({'method': pin, 'input_schema': cap['input_schema'], 'schema': primary,
@@ -73,6 +88,7 @@ def contracts(research):
                            'source_sha256': sha256(path.read_bytes()).hexdigest(),
                            'input_sources': ['domain'] if key[0] == 'cablesim.thermal-network' else ['domain', 'study'],
                            'tasks': ['rating', 'operating', 'target']})
+    result.sort(key=lambda item:item['method']['capability']!='steady-rating')
     return result
 
 

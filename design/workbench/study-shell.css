@@ -38,3 +38,5 @@
 }
 
 .study-table,.study-tabs [role=tab]{font-size:var(--text-body)}.study-nav-state,.study-tabs small{font-size:var(--text-note)}.study-table{table-layout:auto}.study-content>.study-table{max-width:1120px}.study-tabs [aria-selected=true]{background:transparent}.study-source{width:24px;height:32px}.study-source .ic{width:16px;height:16px}.study-task{max-width:none}.study-task .ic{width:16px;height:16px}.study-content h3{font-size:var(--text-subheading)}
+.study-state-marker{font-size:var(--text-note);color:var(--text-secondary);max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.study-status-details{padding:var(--space-4);border-bottom:1px solid var(--line);font-size:var(--text-note)}.study-status-details p{margin:var(--space-2) 0}.study-status-details ul{margin:var(--space-2) 0;padding-left:var(--space-6)}

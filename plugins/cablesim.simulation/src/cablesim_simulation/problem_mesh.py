@@ -102,6 +102,16 @@ def build(problem, controls):
             if problem.geometry[region-1].kind=='disk':
                 near.update(t for d,t in gmsh.model.getBoundary([(2,tag)],oriented=False) if d==1)
         fields=[]
+        # Boundary-distance refinement alone can coarsen the centre of a disk
+        # as SizeMin decreases (DistMin shrinks with it). Keep each material
+        # disk's interior at the requested size as well as its boundary.
+        for shape_index,shape in enumerate(problem.geometry):
+            if shape.kind=='disk' and not shape.void and (shape_index>0 or len(problem.geometry)==1):
+                x,z,radius=shape.values
+                ball=gmsh.model.mesh.field.add('Ball')
+                for key,val in [('XCenter',x),('YCenter',z),('ZCenter',0),('Radius',radius),('Thickness',0),('VIn',controls.size_m),('VOut',controls.far_size_m)]:
+                    gmsh.model.mesh.field.setNumber(ball,key,val)
+                fields.append(ball)
         if near:
             d = gmsh.model.mesh.field.add('Distance')
             gmsh.model.mesh.field.setNumbers(d,'CurvesList',sorted(near))

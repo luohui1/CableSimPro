@@ -10,14 +10,19 @@
     "size_bytes": 82
   },
   {
+    "path": "backend/foundation/electrothermal.py",
+    "sha256": "b43a2d60f5f5b38d477e804f0b9f061a9800f42c0fb18acff31ec3ad1527f300",
+    "size_bytes": 2973
+  },
+  {
     "path": "backend/foundation/reproduction.py",
     "sha256": "a1fd00b1cbbc8979ebff4763445f33890927e0ab3c411e68e5056fb2ebfd2d73",
     "size_bytes": 4022
   },
   {
     "path": "backend/foundation/simulation.py",
-    "sha256": "412826f8b8adf0243418b1d4cd1ab96d978bdbb637d116471a7a105134418844",
-    "size_bytes": 7508
+    "sha256": "1057069f43d2a7ff124aeed33f82c28475443ef6e42e515f267c396cecdebcab",
+    "size_bytes": 8187
   },
   {
     "path": "backend/plugin_host/__init__.py",
@@ -26,13 +31,13 @@
   },
   {
     "path": "backend/plugin_host/dependencies.py",
-    "sha256": "e1f57fa43ef91c5148070de8874757a6c30a329862679d2a33f1ba6c7210e8e4",
-    "size_bytes": 3234
+    "sha256": "8da0c0f57cc0273949daec2901865fef0bdbe34befcb12ad7d86696f96a754f7",
+    "size_bytes": 3709
   },
   {
     "path": "backend/plugin_host/executor.py",
-    "sha256": "d715dc9a0104b375c2cc0edfe959ddd6e3f979d7c10ad7a592b56beb019ea152",
-    "size_bytes": 16643
+    "sha256": "24523be06c1c4ae4c96993085433ecca3016d10646032f436eb4cd2f08303096",
+    "size_bytes": 17695
   },
   {
     "path": "backend/plugin_host/manifest.py",

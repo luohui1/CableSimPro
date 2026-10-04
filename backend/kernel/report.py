@@ -2,7 +2,7 @@
 from html import escape
 import json
 
-RENDERER = 'cablesim.study-html/7'
+RENDERER = 'cablesim.study-html/10'
 
 
 def formatted(value, digits=1):
@@ -13,11 +13,16 @@ def formatted(value, digits=1):
 
 def task_answer(run):
     definition = run['snapshot']['definition']
+    if definition['driver']['kind']=='selection' and definition['driver']['candidate_ids']:
+        return selection_answer(run)
     if definition['driver']['kind'] == 'sweep':
         return '<p class="answer">参数扫描：以下为逐点保存的真实结果；失败点不补值。</p>'
     case = next((c for c in run['output']['cases'] if not c['case_id'].startswith('crosscheck-') and c['status'] == 'succeeded'), None)
     if case is None:
         return '<p class="answer">当前任务未取得可用结果。</p>'
+    armour=case.get('artifacts',{}).get('x-cablesim.iec60287-armour')
+    if armour:
+        return '<p class="answer">'+escape('三芯钢丝铠装SL热路：允许电流 '+formatted(armour['ampacity_a'],3)+' A，λ₂='+formatted(armour['lambda2'],8)+'；同一工作点输入，限定范围。')+'</p>'
     artifact = next((v for v in case.get('artifacts', {}).values() if isinstance(v, dict) and 'goal_checks' in v), {})
     all_checks = artifact.get('goal_checks', [])
     checks = {key: min((g for g in all_checks if g['key'] == key),key=lambda g:g.get('margin') if g.get('margin') is not None else float('inf'),default=None)
@@ -76,6 +81,26 @@ def table(headers, rows):
     return '<table><thead><tr>' + ''.join('<th>'+cell(v)+'</th>' for v in headers) + '</tr></thead><tbody>' + ''.join('<tr>'+''.join('<td>'+cell(v)+'</td>' for v in row)+'</tr>' for row in rows) + '</tbody></table>'
 
 
+def selection_answer(run):
+    definition=run['snapshot']['definition'];candidates=run['snapshot']['candidate_snapshots'];rows=[];qualified=[]
+    for item in run['output'].get('assessment',[]):
+        index=int(item['case_id'].split('-')[-1]);candidate=candidates[index];payload=candidate['payload'];cable=payload.get('cable_type')
+        area=cable['cores'][0]['conductor']['nominal_area']*1e6 if cable else payload['specification']['area_m2']*1e6 if payload.get('specification') else payload['cable']['area_mm2']
+        status=item.get('status') or ('不适用' if item['value'] is None else 'satisfied' if item['meets_target'] else 'not_satisfied')
+        label={'satisfied':'满足','not_satisfied':'不满足','not_applicable':'不适用','failed':'计算失败'}.get(status,status)
+        margin=item.get('margin',None if item['value'] is None else item['value']-definition['driver']['minimum'])
+        record=[payload.get('name') or cable['label'],formatted(area,0),formatted(item['value']),formatted(margin),label,(item.get('reason') or {}).get('message') or '温限约束',payload.get('version','兼容型号'),candidate['digest']]
+        rows.append(({'satisfied':0,'not_satisfied':1,'not_applicable':2,'failed':3}.get(status,4),area,record))
+        if status=='satisfied' and candidate['state'] in ('reviewed','user_reviewed'):qualified.append((area,margin,record[0],item['value']))
+    qualified.sort();rows.sort(key=lambda r:(r[0],r[1],r[2][0]))
+    demo=definition['driver'].get('allow_demo_candidates',False)
+    conclusion=('数值满足的候选须完成型号核对后确定推荐。' if demo else '推荐 '+qualified[0][2]+'，允许 '+formatted(qualified[0][3])+' A，余量 '+formatted(qualified[0][1]/definition['driver']['minimum']*100)+'%（满足的最小截面 '+formatted(qualified[0][0],0)+' mm²）。' if qualified else '当前条件下没有合格型号。' if any(v.get('status')=='not_satisfied' for v in run['output'].get('assessment',[])) else '本次候选均不适用，尚无选型结论。')
+    method=definition['method']
+    references=sorted({(s['kind'],s['reference']) for c in candidates for s in c['payload'].get('sources',{}).values()})
+    evidence='<h3>型号来源依据</h3>'+table(['来源类型','出处与原文SHA256'],references) if references else ''
+    return '<p class="answer">'+escape(conclusion)+'</p><p>'+escape('目标电流 '+formatted(definition['driver']['minimum'])+' A；'+method['plugin_id']+' '+method['version'])+'</p>'+table(['型号','截面/mm²','允许电流/A','余量/A','判定','限制原因','型号版本','内容SHA256'],[r[2] for r in rows])+evidence
+
+
 def artifact_sections(case):
     """Render saved artifacts by their declared type, without invoking a method."""
     artifacts = case.get('artifacts') or {}
@@ -101,6 +126,17 @@ def artifact_sections(case):
             ['电缆','电流 / A','导体 / °C','温限余量 / K','总损耗 / W/m','互热温升 / K'],
             [[s['entity'],formatted(s['current_a']),formatted(s['conductor_temperature_c']),formatted(s['margin_k']),
               formatted(s['total_loss_w_m'],3),formatted(s['mutual_temperature_rise_k'],3)] for s in trace['operating']['cable_states']]))
+        three_core = [s for s in trace['operating']['cable_states'] if s.get('cores')]
+        if three_core:
+            parts.append('<h3>三芯热路与电损耗系数</h3>'+table(
+                ['电缆','每芯 Rc / Ω/m','每芯 T1','整缆 T2','整缆 T3 / K·m/W','λ1','λ2'],
+                [[s['entity'],f"{s['ac_resistance_ohm_m']:.8e}",formatted(s['t1_k_m_w'],6),formatted(s['t2_k_m_w'],6),
+                  formatted(s['t3_k_m_w'],6),formatted(s['lambda1'],8),formatted(s['lambda2'],8)] for s in three_core]))
+            parts.append('<h3>逐芯损耗明细</h3>'+table(
+                ['电缆','芯','导体 / °C','导体 / W/m','屏蔽 / W/m','介质 / W/m'],
+                [[s['entity'],core['core'],formatted(core['temperature_c']),formatted(core['conductor_loss_w_m'],6),
+                  formatted(core['screen_loss_w_m'],6),formatted(core['dielectric_loss_w_m'],6)]
+                 for s in three_core for core in s['cores']]))
         parts.append('<h3>互热贡献明细（保存负荷）</h3>'+table(
             ['受热电缆','热源电缆','热阻 / K·m/W','源损耗 / W/m','温升贡献 / K','回填修正 / K·m/W'],
             [[r['target'],r['source'],formatted(r['resistance_k_m_w'],6),formatted(r['source_loss_w_m'],3),
@@ -140,10 +176,27 @@ def artifact_sections(case):
         parts.append('<h3>工件警告</h3><ul>'+''.join('<li>'+escape(w)+'</li>' for w in network.get('warnings', []))+'</ul>')
     if trace or network:
         parts.append('<p>铠装损耗未计算：所选方法不支持铠装电缆。分项对应指定工况，不以额定损耗代替运行损耗。</p>')
+    armour=artifacts.get('x-cablesim.iec60287-armour')
+    if armour:
+        parts.append('<h3>铠装损耗与温度迭代</h3>'+table(['允许电流/A','λ₂','铠装温度/°C','铠装损耗/W/m'],[[formatted(armour['ampacity_a'],6),formatted(armour['lambda2'],9),formatted(armour['armour_temperature_k']-273.15,6),formatted(armour['armour_loss_w_m'],6)]])+'<p>'+escape('；'.join(armour['clauses']))+'</p><ul>'+''.join('<li>'+escape(s)+'</li>' for s in armour['limitations'])+'</ul>')
     return ''.join(parts)
 
 
 def render(runs):
+    from .rating_table import is_rating_table, rating_section
+    ratings = [r for r in runs if is_rating_table(r)]
+    if ratings:
+        geometry = [r for r in runs if any('x-cablesim.cad-model' in c.get('artifacts', {}) for c in r['output']['cases'])]
+        if len(ratings) == 1 and len(runs) == len(geometry)+1 and len(geometry) <= 1:
+            rating = ratings[0]
+            chapter = rating_section(rating)
+            if geometry:
+                return model_specification(geometry[0]).replace('</html>', chapter+'</html>')
+            document = rating['snapshot']['workspace_state']['domain']
+            cable = document['cable_types'][0]
+            content = '<h1>'+escape(cable['label'])+' · 规格书草稿</h1><p>未审核、未发布；结构与材料采用当前保存输入，外径与用料未纳入。</p>'
+            content += table(['额定电压/kV','芯数','标称截面/mm²'], [[str(cable['rating']['u0']/1000)+' / '+str(cable['rating']['u']/1000),len(cable['cores']),cable['cores'][0]['conductor']['nominal_area']*1e6]])
+            return ('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>CableSimPro 型号规格书草稿</title><style>body{font:14px/1.6 system-ui;max-width:1100px;margin:32px auto;padding:16px}h1{font-size:22px}h2{font-size:16px}table{width:100%;border-collapse:collapse}td,th{padding:8px;border-bottom:1px solid #ddd;text-align:left}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}</style>'+content+chapter+'</html>')
     if (len(runs) == 1 and len(runs[0]['output']['cases']) == 1
             and runs[0]['output']['cases'][0]['status'] == 'succeeded'
             and 'x-cablesim.cad-model' in runs[0]['output']['cases'][0].get('artifacts', {})):
@@ -168,6 +221,7 @@ def render(runs):
                       f'<p>Run {escape(run["id"])} · {escape(run["status"])} · {escape(run["freshness"])}</p>'
                       + task_answer(run)
                       + shared_input_summary(run)
+                      + ('<h3>温度场收敛证据</h3>'+table(['工况','网格/m','节点','热点/°C','变化/K'],[[v['case_id'],v['mesh_size_m'],v['nodes'],formatted(v['hotspot_k']-273.15,3),formatted(v['change_k'],4)] for v in run['convergence']['rows']]) if run.get('convergence') else '')
                       + '<table><thead><tr><th>采样 / 工况</th><th>对象</th><th>物理量</th><th>值</th><th>单位</th></tr></thead><tbody>'
                       + ''.join(rows) + '</tbody></table><h3>输入来源</h3>'
                       + table(['字段 / 输入包', '来源类型', '引用及版本', '核对状态'],

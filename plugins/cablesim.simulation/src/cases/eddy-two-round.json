@@ -1,0 +1,644 @@
+{
+  "id": "eddy-two-round",
+  "citation": {
+    "id": "E19",
+    "title": "Analytical-Numerical Solution for the Skin and Proximity Effects in Two Parallel Round Conductors",
+    "authors": "Jablonski; Szczegielniak; Kusiak; Piatek",
+    "year": 2019,
+    "doi": "10.3390/en12183584",
+    "url": "https://doi.org/10.3390/en12183584",
+    "local_pdf": ".data/papers/em-sixth/jablonski-2019.pdf"
+  },
+  "scope": "Table1 three current combinations, six material-side surface probes, magnitudes and phases; not all parametric studies in the paper.",
+  "frozen_inputs": [
+    {
+      "paths": [
+        "geometry",
+        "frequency_hz",
+        "excitations"
+      ],
+      "source": "PDF9 Section3.1",
+      "note": "R1=R2=1mm,d=2.5mm,sigma=55MS/m,f=40kHz. Unit RMS current normalization."
+    },
+    {
+      "paths": [
+        "current_probes"
+      ],
+      "source": "PDF3 equations1-2 and PDF12 Table1",
+      "note": "Wire1 on right x=d; Wire2 on left x=0. Angles0/90/180 degrees measured from +x."
+    }
+  ],
+  "input": {
+    "schema_version": "cablesim.simulation-problem/1",
+    "physics": "magnetic_harmonic",
+    "geometry": [
+      {
+        "uid": "air",
+        "kind": "rectangle",
+        "values": [
+          -0.05,
+          -0.05,
+          0.05,
+          0.05
+        ],
+        "material": {
+          "conductivity_s_m": 0,
+          "relative_permeability": 1,
+          "source": "Finite exterior truncation, independent domain convergence"
+        }
+      },
+      {
+        "uid": "wire2",
+        "kind": "disk",
+        "values": [
+          0,
+          0,
+          0.001
+        ],
+        "material": {
+          "conductivity_s_m": 55000000,
+          "relative_permeability": 1,
+          "source": "Paper Section3.1, copper nonmagnetic"
+        }
+      },
+      {
+        "uid": "wire1",
+        "kind": "disk",
+        "values": [
+          0.0025,
+          0,
+          0.001
+        ],
+        "material": {
+          "conductivity_s_m": 55000000,
+          "relative_permeability": 1,
+          "source": "Paper Section3.1, copper nonmagnetic"
+        }
+      }
+    ],
+    "boundaries": [
+      {
+        "uid": "outer",
+        "selector": "outer",
+        "values": [],
+        "kind": "magnetic_potential",
+        "value": 0
+      }
+    ],
+    "excitations": [
+      {
+        "regions": [
+          "wire1"
+        ],
+        "kind": "current_rms_a",
+        "value": [
+          1,
+          0
+        ],
+        "source": "Unit RMS source normalization"
+      },
+      {
+        "regions": [
+          "wire2"
+        ],
+        "kind": "current_rms_a",
+        "value": [
+          0,
+          0
+        ],
+        "source": "Case1 zero-net-current conductor"
+      }
+    ],
+    "frequency_hz": 40000,
+    "probes_m": [],
+    "current_probes": [
+      {
+        "region": "wire1",
+        "point_m": [
+          0.0035,
+          0
+        ],
+        "source": "PDF12 Table1 surface point"
+      },
+      {
+        "region": "wire1",
+        "point_m": [
+          0.0025,
+          0.001
+        ],
+        "source": "PDF12 Table1 surface point"
+      },
+      {
+        "region": "wire1",
+        "point_m": [
+          0.0015,
+          0
+        ],
+        "source": "PDF12 Table1 surface point"
+      },
+      {
+        "region": "wire2",
+        "point_m": [
+          0.001,
+          0
+        ],
+        "source": "PDF12 Table1 surface point"
+      },
+      {
+        "region": "wire2",
+        "point_m": [
+          0,
+          0.001
+        ],
+        "source": "PDF12 Table1 surface point"
+      },
+      {
+        "region": "wire2",
+        "point_m": [
+          -0.001,
+          0
+        ],
+        "source": "PDF12 Table1 surface point"
+      }
+    ],
+    "provenance": {
+      "all": {
+        "source": "Energies2019 12(18)3584 PDF9 and12"
+      }
+    },
+    "assumptions": [
+      "Infinite axial length; linear nonmagnetic copper; finite zero-A outer boundary; RMS phasors with exp(+j omega t)."
+    ]
+  },
+  "parameters": {
+    "mesh": {
+      "size_m": 0.0001,
+      "far_size_m": 0.0005,
+      "transition_m": 0.005,
+      "exterior_growth_start_m": 0.005,
+      "exterior_growth_rate": 0.25,
+      "minimum_circle_segments": 256,
+      "field_order": 2,
+      "max_nodes": 120000
+    }
+  },
+  "mesh_sizes_m": [
+    0.00015,
+    0.000075,
+    0.0000375
+  ],
+  "targets": [
+    {
+      "id": "J-0",
+      "quantity": "current_density_rms",
+      "entity": "wire1",
+      "probe_index": 0,
+      "unit": "A/m^2",
+      "reference": 686912.7343846203,
+      "proposed_reference": 688822.5937017231,
+      "tolerance": {
+        "absolute": 7957.747154594767,
+        "source": "Predeclared absolute 0.025 normalized-J envelope for finite exterior and surface interpolation; retain FEMM/Proposed discrepancy"
+      },
+      "source": {
+        "doi": "10.3390/en12183584",
+        "pdf_page": 12,
+        "table": 1,
+        "column": "FEMM",
+        "note": "Magnitude in I1/(pi R1^2), phase degrees; original Proposed values retained separately"
+      }
+    },
+    {
+      "id": "phase-0",
+      "quantity": "current_density_phase",
+      "entity": "wire1",
+      "probe_index": 0,
+      "unit": "deg",
+      "reference": 37.9,
+      "tolerance": {
+        "absolute": 1,
+        "source": "Predeclared one-degree phase comparison, same convention as Table1 discussion"
+      },
+      "source": {
+        "doi": "10.3390/en12183584",
+        "pdf_page": 12,
+        "table": 1,
+        "column": "FEMM",
+        "note": "Magnitude in I1/(pi R1^2), phase degrees; original Proposed values retained separately"
+      }
+    },
+    {
+      "id": "J-1",
+      "quantity": "current_density_rms",
+      "entity": "wire1",
+      "probe_index": 1,
+      "unit": "A/m^2",
+      "reference": 692324.0024497447,
+      "proposed_reference": 693278.9321082961,
+      "tolerance": {
+        "absolute": 7957.747154594767,
+        "source": "Predeclared absolute 0.025 normalized-J envelope for finite exterior and surface interpolation; retain FEMM/Proposed discrepancy"
+      },
+      "source": {
+        "doi": "10.3390/en12183584",
+        "pdf_page": 12,
+        "table": 1,
+        "column": "FEMM",
+        "note": "Magnitude in I1/(pi R1^2), phase degrees; original Proposed values retained separately"
+      }
+    },
+    {
+      "id": "phase-1",
+      "quantity": "current_density_phase",
+      "entity": "wire1",
+      "probe_index": 1,
+      "unit": "deg",
+      "reference": 37.1,
+      "tolerance": {
+        "absolute": 1,
+        "source": "Predeclared one-degree phase comparison, same convention as Table1 discussion"
+      },
+      "source": {
+        "doi": "10.3390/en12183584",
+        "pdf_page": 12,
+        "table": 1,
+        "column": "FEMM",
+        "note": "Magnitude in I1/(pi R1^2), phase degrees; original Proposed values retained separately"
+      }
+    },
+    {
+      "id": "J-2",
+      "quantity": "current_density_rms",
+      "entity": "wire1",
+      "probe_index": 2,
+      "unit": "A/m^2",
+      "reference": 816783.1679476069,
+      "proposed_reference": 820602.8865818123,
+      "tolerance": {
+        "absolute": 7957.747154594767,
+        "source": "Predeclared absolute 0.025 normalized-J envelope for finite exterior and surface interpolation; retain FEMM/Proposed discrepancy"
+      },
+      "source": {
+        "doi": "10.3390/en12183584",
+        "pdf_page": 12,
+        "table": 1,
+        "column": "FEMM",
+        "note": "Magnitude in I1/(pi R1^2), phase degrees; original Proposed values retained separately"
+      }
+    },
+    {
+      "id": "phase-2",
+      "quantity": "current_density_phase",
+      "entity": "wire1",
+      "probe_index": 2,
+      "unit": "deg",
+      "reference": 47.1,
+      "tolerance": {
+        "absolute": 1,
+        "source": "Predeclared one-degree phase comparison, same convention as Table1 discussion"
+      },
+      "source": {
+        "doi": "10.3390/en12183584",
+        "pdf_page": 12,
+        "table": 1,
+        "column": "FEMM",
+        "note": "Magnitude in I1/(pi R1^2), phase degrees; original Proposed values retained separately"
+      }
+    },
+    {
+      "id": "J-3",
+      "quantity": "current_density_rms",
+      "entity": "wire2",
+      "probe_index": 3,
+      "unit": "A/m^2",
+      "reference": 732749.3579950862,
+      "proposed_reference": 735614.1469707403,
+      "tolerance": {
+        "absolute": 7957.747154594767,
+        "source": "Predeclared absolute 0.025 normalized-J envelope for finite exterior and surface interpolation; retain FEMM/Proposed discrepancy"
+      },
+      "source": {
+        "doi": "10.3390/en12183584",
+        "pdf_page": 12,
+        "table": 1,
+        "column": "FEMM",
+        "note": "Magnitude in I1/(pi R1^2), phase degrees; original Proposed values retained separately"
+      }
+    },
+    {
+      "id": "phase-3",
+      "quantity": "current_density_phase",
+      "entity": "wire2",
+      "probe_index": 3,
+      "unit": "deg",
+      "reference": -122.8,
+      "tolerance": {
+        "absolute": 1,
+        "source": "Predeclared one-degree phase comparison, same convention as Table1 discussion"
+      },
+      "source": {
+        "doi": "10.3390/en12183584",
+        "pdf_page": 12,
+        "table": 1,
+        "column": "FEMM",
+        "note": "Magnitude in I1/(pi R1^2), phase degrees; original Proposed values retained separately"
+      }
+    },
+    {
+      "id": "J-4",
+      "quantity": "current_density_rms",
+      "entity": "wire2",
+      "probe_index": 4,
+      "unit": "A/m^2",
+      "reference": 153107.05525440333,
+      "proposed_reference": 153425.36514058712,
+      "tolerance": {
+        "absolute": 7957.747154594767,
+        "source": "Predeclared absolute 0.025 normalized-J envelope for finite exterior and surface interpolation; retain FEMM/Proposed discrepancy"
+      },
+      "source": {
+        "doi": "10.3390/en12183584",
+        "pdf_page": 12,
+        "table": 1,
+        "column": "FEMM",
+        "note": "Magnitude in I1/(pi R1^2), phase degrees; original Proposed values retained separately"
+      }
+    },
+    {
+      "id": "phase-4",
+      "quantity": "current_density_phase",
+      "entity": "wire2",
+      "probe_index": 4,
+      "unit": "deg",
+      "reference": 62.8,
+      "tolerance": {
+        "absolute": 1,
+        "source": "Predeclared one-degree phase comparison, same convention as Table1 discussion"
+      },
+      "source": {
+        "doi": "10.3390/en12183584",
+        "pdf_page": 12,
+        "table": 1,
+        "column": "FEMM",
+        "note": "Magnitude in I1/(pi R1^2), phase degrees; original Proposed values retained separately"
+      }
+    },
+    {
+      "id": "J-5",
+      "quantity": "current_density_rms",
+      "entity": "wire2",
+      "probe_index": 5,
+      "unit": "A/m^2",
+      "reference": 369876.08774556476,
+      "proposed_reference": 370512.70751793234,
+      "tolerance": {
+        "absolute": 7957.747154594767,
+        "source": "Predeclared absolute 0.025 normalized-J envelope for finite exterior and surface interpolation; retain FEMM/Proposed discrepancy"
+      },
+      "source": {
+        "doi": "10.3390/en12183584",
+        "pdf_page": 12,
+        "table": 1,
+        "column": "FEMM",
+        "note": "Magnitude in I1/(pi R1^2), phase degrees; original Proposed values retained separately"
+      }
+    },
+    {
+      "id": "phase-5",
+      "quantity": "current_density_phase",
+      "entity": "wire2",
+      "probe_index": 5,
+      "unit": "deg",
+      "reference": 47.6,
+      "tolerance": {
+        "absolute": 1,
+        "source": "Predeclared one-degree phase comparison, same convention as Table1 discussion"
+      },
+      "source": {
+        "doi": "10.3390/en12183584",
+        "pdf_page": 12,
+        "table": 1,
+        "column": "FEMM",
+        "note": "Magnitude in I1/(pi R1^2), phase degrees; original Proposed values retained separately"
+      }
+    }
+  ],
+  "variants": [
+    {
+      "id": "case1",
+      "input_changes": [
+        {
+          "path": [
+            "excitations",
+            1,
+            "value"
+          ],
+          "value": [
+            0,
+            0
+          ]
+        }
+      ],
+      "target_changes": [
+        {
+          "id": "J-0",
+          "reference": 686912.7343846203,
+          "proposed_reference": 688822.5937017231
+        },
+        {
+          "id": "phase-0",
+          "reference": 37.9
+        },
+        {
+          "id": "J-1",
+          "reference": 692324.0024497447,
+          "proposed_reference": 693278.9321082961
+        },
+        {
+          "id": "phase-1",
+          "reference": 37.1
+        },
+        {
+          "id": "J-2",
+          "reference": 816783.1679476069,
+          "proposed_reference": 820602.8865818123
+        },
+        {
+          "id": "phase-2",
+          "reference": 47.1
+        },
+        {
+          "id": "J-3",
+          "reference": 732749.3579950862,
+          "proposed_reference": 735614.1469707403
+        },
+        {
+          "id": "phase-3",
+          "reference": -122.8
+        },
+        {
+          "id": "J-4",
+          "reference": 153107.05525440333,
+          "proposed_reference": 153425.36514058712
+        },
+        {
+          "id": "phase-4",
+          "reference": 62.8
+        },
+        {
+          "id": "J-5",
+          "reference": 369876.08774556476,
+          "proposed_reference": 370512.70751793234
+        },
+        {
+          "id": "phase-5",
+          "reference": 47.6
+        }
+      ]
+    },
+    {
+      "id": "case2",
+      "input_changes": [
+        {
+          "path": [
+            "excitations",
+            1,
+            "value"
+          ],
+          "value": [
+            1,
+            0
+          ]
+        }
+      ],
+      "target_changes": [
+        {
+          "id": "J-0",
+          "reference": 1053605.723268347,
+          "proposed_reference": 1055833.8924716339
+        },
+        {
+          "id": "phase-0",
+          "reference": 41.3
+        },
+        {
+          "id": "J-1",
+          "reference": 833016.9721429802,
+          "proposed_reference": 834608.5215738992
+        },
+        {
+          "id": "phase-1",
+          "reference": 41.7
+        },
+        {
+          "id": "J-2",
+          "reference": 159791.56286426293,
+          "proposed_reference": 164566.2111570198
+        },
+        {
+          "id": "phase-2",
+          "reference": -6.2
+        },
+        {
+          "id": "J-3",
+          "reference": 159791.56286426293,
+          "proposed_reference": 164566.2111570198
+        },
+        {
+          "id": "phase-3",
+          "reference": -6.3
+        },
+        {
+          "id": "J-4",
+          "reference": 833016.9721429802,
+          "proposed_reference": 834608.5215738992
+        },
+        {
+          "id": "phase-4",
+          "reference": 41.7
+        },
+        {
+          "id": "J-5",
+          "reference": 1053287.4133821635,
+          "proposed_reference": 1055833.8924716339
+        },
+        {
+          "id": "phase-5",
+          "reference": 41.3
+        }
+      ]
+    },
+    {
+      "id": "case3",
+      "input_changes": [
+        {
+          "path": [
+            "excitations",
+            1,
+            "value"
+          ],
+          "value": [
+            -1,
+            0
+          ]
+        }
+      ],
+      "target_changes": [
+        {
+          "id": "J-0",
+          "reference": 328177.4926554882,
+          "proposed_reference": 328814.1124278558
+        },
+        {
+          "id": "phase-0",
+          "reference": 27
+        },
+        {
+          "id": "J-1",
+          "reference": 558315.5403663688,
+          "proposed_reference": 558633.8502525527
+        },
+        {
+          "id": "phase-1",
+          "reference": 30.3
+        },
+        {
+          "id": "J-2",
+          "reference": 1543802.9479913847,
+          "proposed_reference": 1549850.8358288768
+        },
+        {
+          "id": "phase-2",
+          "reference": 51.8
+        },
+        {
+          "id": "J-3",
+          "reference": 1543802.9479913847,
+          "proposed_reference": 1549850.8358288768
+        },
+        {
+          "id": "phase-3",
+          "reference": -128.2
+        },
+        {
+          "id": "J-4",
+          "reference": 558633.8502525527,
+          "proposed_reference": 558633.8502525527
+        },
+        {
+          "id": "phase-4",
+          "reference": -149.7
+        },
+        {
+          "id": "J-5",
+          "reference": 328495.802541672,
+          "proposed_reference": 328814.1124278558
+        },
+        {
+          "id": "phase-5",
+          "reference": -153
+        }
+      ]
+    }
+  ]
+}

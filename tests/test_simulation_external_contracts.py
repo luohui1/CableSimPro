@@ -67,6 +67,18 @@ def test_empty_reference_is_not_a_pass():
     assert comparison([],{}, {})['status']=='missing_reference'
 
 
+def test_impressed_source_requires_nonconducting_single_region():
+    d=fixture()['input']
+    e=d['excitations'][0];e['kind']='impressed_current_rms_a'
+    with pytest.raises(ValueError,match='conductivity_s_m'):
+        Problem.model_validate(d)
+    next(r for r in d['geometry'] if r['uid']==e['regions'][0])['material']['conductivity_s_m']=0
+    Problem.model_validate(d)
+    e['regions'].append(d['geometry'][0]['uid'])
+    with pytest.raises(ValueError,match='单个非导电'):
+        Problem.model_validate(d)
+
+
 def test_nonfinite_reference_or_tolerance_refused():
     d=fixture()['targets'][0]
     for patch in [{'reference':float('nan')},{'tolerance':{'absolute':float('inf'),'source':'test'}}]:

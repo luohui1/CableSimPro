@@ -1,0 +1,57 @@
+{
+  "schema_version": "cablesim.iec60287.tb880-reference/1",
+  "construction": "single_core_wire_trefoil",
+  "data": {
+    "frequency_hz": 50,
+    "line_voltage_v": 33000,
+    "conductor_r20_ohm_m": 0.0000754,
+    "conductor_diameter_m": 0.0184,
+    "conductor_alpha_per_k": 0.00393,
+    "conductor_temperature_k": 363.15,
+    "ambient_temperature_k": 293.15,
+    "relative_permittivity": 2.5,
+    "loss_tangent": 0.004,
+    "core_spacing_m": 0.044,
+    "burial_depth_m": 1,
+    "soil_thermal_resistivity_k_m_w": 1,
+    "sheath_resistivity_ohm_m": 1.7241e-8,
+    "sheath_alpha_per_k": 0.00393,
+    "screen_wire_diameter_m": 0.0009,
+    "screen_wire_lay_m": 0.24
+  },
+  "inner_layers": [
+    {
+      "outer_diameter_m": 0.0194,
+      "thermal_resistivity_k_m_w": 2.5
+    },
+    {
+      "outer_diameter_m": 0.0348,
+      "thermal_resistivity_k_m_w": 3.5
+    },
+    {
+      "outer_diameter_m": 0.0358,
+      "thermal_resistivity_k_m_w": 2.5
+    },
+    {
+      "outer_diameter_m": 0.0368,
+      "thermal_resistivity_k_m_w": 6
+    }
+  ],
+  "outer_layers": [
+    {
+      "outer_diameter_m": 0.0392,
+      "thermal_resistivity_k_m_w": 6
+    },
+    {
+      "outer_diameter_m": 0.0436,
+      "thermal_resistivity_k_m_w": 3.5
+    },
+    {
+      "outer_diameter_m": 0.044,
+      "thermal_resistivity_k_m_w": 2.5
+    }
+  ],
+  "wire_count": 56,
+  "source_reference": "CIGRE TB880:2022 Case study4 pp195-205: copper wire screen, low coverage and touching trefoil; primitive dimensions/materials",
+  "source_sha256": "9cb8b071f3bce12b18f04fbdbb2c1205c7900d131ebf16cf5cfc9cb57a533cd9"
+}

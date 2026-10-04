@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.simulation",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "name": "仿真复现基准",
   "description": "多区域稳态导热与GetDP时谐涡流、Elmer稳态/瞬态热适配，使用统一问题、网格和复现工件。",
   "icon": "assets/icon.svg",
@@ -33,11 +33,221 @@
   ],
   "dependencies": [],
   "resources": {
-    "timeout_s": 300,
+    "timeout_s": 3600,
     "memory_mb": 4096,
     "network": "none"
   },
   "capabilities": [
+    {
+      "kind": "method",
+      "id": "thermal-dataset",
+      "title": "稳态热场与允许电流数据样本",
+      "method_version": "thermal-dataset/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.thermal-model/1",
+      "outputs": [
+        {
+          "key": "conductor_temperature",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.dataset-sample",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "radial heat and resistive current hand solution; mesh refinement; same input on local and Slurm"
+        ]
+      },
+      "limitations": [
+        "计算范围继承多区域二维热场；显式保存运行点、指定回路额定电流、三档以上网格和收敛判定。",
+        "其他回路保持保存负荷；未做计算域敏感性或物理模型认证；未收敛样本保留但不进入有效标签。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "contact-electrothermal-field",
+      "title": "完整接触热域双向电热耦合",
+      "method_version": "contact-electrothermal-field/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.contact-electrothermal-field/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.maximum-temperature",
+          "type": "quantity",
+          "per": "section",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.simulation-bundle",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.temperature-field",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "COMSOL06 independent Gmsh full geometry and bidirectional GetDP/contact thermal feedback"
+        ]
+      },
+      "limitations": [
+        "显式SI网格、温变电阻率和热导率、内部接触热阻及等幅给定电流源；外磁边界A=0，热外边界给定温度。",
+        "均质绕组的平均端口Rac(T)必须有来源，含无源区域损耗；不外推材料温区，不替代IEC公式或真实三维绞合。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "terminal-field",
+      "title": "多端子三相截面电容场",
+      "method_version": "terminal-field/0.1.0",
+      "analysis": "frequency_domain",
+      "input_schema": "cablesim.terminal-field/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.terminal-capacitance",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.simulation-bundle",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "Parallel-plate complex admittance; COMSOL02 six-terminal full geometry; tests/test_triangular_fields.py"
+        ]
+      },
+      "limitations": [
+        "显式来源的SI三角网格、各向同性sigma/epsilon、等电势端子和接地边界；P1复电势场。",
+        "输出完整单位长度Y/C矩阵；不含磁感应与三维端部。网格生成来源须单独注明。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "contact-thermal-field",
+      "title": "完整热域与薄层接触热阻",
+      "method_version": "contact-thermal-field/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.contact-thermal-field/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.maximum-temperature",
+          "type": "quantity",
+          "per": "section",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.simulation-bundle",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.temperature-field",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "Two-slab temperature jump and heat balance; COMSOL06 full thermal geometry; tests/test_triangular_fields.py"
+        ]
+      },
+      "limitations": [
+        "显式来源的SI三角网格与体热源、有限温区k(T)多项式、给定温度外边界及内部零厚度接触热阻；不收敛或越界拒绝。",
+        "不含暂态、对流流场、接触层面内传热或双向电磁热耦合；接触界面两侧温度独立导出。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "electrothermal",
+      "title": "GetDP 电磁与温度场耦合",
+      "method_version": "electrothermal/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.electrothermal/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.maximum-temperature",
+          "type": "quantity",
+          "per": "section",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.simulation-bundle",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.temperature-field",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "Coaxial sigma(T) feedback versus native COMSOL FrequencyStationary; plugin-tests/test_simulation_coupled.py"
+        ]
+      },
+      "limitations": [
+        "二维P1磁准静态与稳态导热；点式sigma(T)，固定k/mu，必须给出全部导电材料的温度有效区间。",
+        "不含薄层接触热阻、暂态、介电热源、端部和完整COMSOL06多区域模型；不收敛或越界明确拒绝。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "capacitive-cable",
+      "title": "同轴电缆频域电流与电容效应",
+      "method_version": "capacitive-cable/0.1.0",
+      "analysis": "frequency_domain",
+      "input_schema": "cablesim.capacitive-cable/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.dielectric-screen-loss",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.simulation-bundle",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "COMSOL submarine02 radial capacitance submodel and submarine03 axisymmetric bonding; plugin-tests/test_simulation_capacitive.py"
+        ]
+      },
+      "limitations": [
+        "同轴层状轴对称P1频域电流场，显式sigma/epsilon及峰值相量；含单点、两端和三段交叉互联，护套连续。",
+        "不包含三相截面互电容、磁感应或铠装；COMSOL03的各向异性数值材料需显式输入，不冒充各向同性实物。"
+      ]
+    },
     {
       "kind": "method",
       "id": "getdp-eddy",
@@ -61,6 +271,10 @@
         {
           "type": "x-cablesim.reproduction-report",
           "required": true
+        },
+        {
+          "type": "x-cablesim.loss-coefficients",
+          "required": false
         }
       ],
       "validation": {
@@ -97,6 +311,10 @@
         },
         {
           "type": "x-cablesim.reproduction-report",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.temperature-field",
           "required": true
         }
       ],
@@ -140,6 +358,10 @@
         },
         {
           "type": "x-cablesim.reproduction-report",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.temperature-field",
           "required": true
         }
       ],
@@ -233,19 +455,44 @@
       "size_bytes": 52
     },
     {
+      "path": "src/cablesim_simulation/artifacts.py",
+      "sha256": "cdb033e4a3d770b51c743b8d5e72d1b6193122291a243778f90e84a05a0b229f",
+      "size_bytes": 5872
+    },
+    {
       "path": "src/cablesim_simulation/bonded.py",
       "sha256": "a04c46ca4ac11be02f47709953499752e6c2f869f4a82f9c5c77c3ce16dba968",
       "size_bytes": 4352
     },
     {
+      "path": "src/cablesim_simulation/capacitive.py",
+      "sha256": "b47bc70b0602ba738f9c348895649026e999bfca2d26c76f3e91fd4273920250",
+      "size_bytes": 10112
+    },
+    {
+      "path": "src/cablesim_simulation/contact_electrothermal.py",
+      "sha256": "68030a00e4c4d29e46975116db2781b09177d4594b74106ab5093c2ad7ea6b5e",
+      "size_bytes": 10921
+    },
+    {
+      "path": "src/cablesim_simulation/discrete_fields.py",
+      "sha256": "e052bb15686c8f4c1b4e62317ce4701e6ea1e616ac554cd5fff01a456a10bf2e",
+      "size_bytes": 4513
+    },
+    {
+      "path": "src/cablesim_simulation/electrothermal.py",
+      "sha256": "8d3238030d59bae36571d6d36687508cfe37f306917edca7a68e343798eed115",
+      "size_bytes": 8877
+    },
+    {
       "path": "src/cablesim_simulation/elmer_adapter.py",
-      "sha256": "30a7498faced0e9ba146c5dd4c870c7fdcff26cb114ad624ef7820230177efaf",
-      "size_bytes": 9378
+      "sha256": "3268992b0c3e2e43c9d00871a21f6243b29a0f68215408132c46971c7a8bf47d",
+      "size_bytes": 9522
     },
     {
       "path": "src/cablesim_simulation/external.py",
-      "sha256": "f5abe7b161d9cda58d14f82ca8b67b61bef9670f4bfa7e5a4f1f59667da3b452",
-      "size_bytes": 8328
+      "sha256": "bb3e2a8706687822c5cbea3c1f648945ff9631669b7fade4ea23d1619a376d5e",
+      "size_bytes": 11972
     },
     {
       "path": "src/cablesim_simulation/external_replay.py",
@@ -254,8 +501,8 @@
     },
     {
       "path": "src/cablesim_simulation/getdp_adapter.py",
-      "sha256": "371930560436c5933e60e2d24c3e07c3dedda5140218f1e7c5e6e8f9a9c92f39",
-      "size_bytes": 15456
+      "sha256": "dbf4cd62d1cdab4d2bbd40cabab9b9d56831dcb229150986a2c64a4473a42b22",
+      "size_bytes": 19017
     },
     {
       "path": "src/cablesim_simulation/iec_compare.py",
@@ -263,9 +510,14 @@
       "size_bytes": 6864
     },
     {
+      "path": "src/cablesim_simulation/loss_table.py",
+      "sha256": "6f4d04515235a2771b260de7c41b6d6f9ea7a7d5d051291acaae3e190f42f5e0",
+      "size_bytes": 6851
+    },
+    {
       "path": "src/cablesim_simulation/main.py",
-      "sha256": "4730de2e691c78c8be51df84146c1eed1ae7bce464f70812e994e3ae703b0523",
-      "size_bytes": 7684
+      "sha256": "d4e66361bf8c7d523c6006f155f6224d4601c240f86c49c9c0be22b579d8ba89",
+      "size_bytes": 9842
     },
     {
       "path": "src/cablesim_simulation/problem.py",
@@ -274,13 +526,13 @@
     },
     {
       "path": "src/cablesim_simulation/problem_domain.py",
-      "sha256": "241dc07b06e5af7086011779a2de10d370c476ba331493e115f99e1c739857f1",
-      "size_bytes": 6917
+      "sha256": "e449880cce74acba7aac5777391c20ee941c07bc0e4cdad4f2a497a1f520ad50",
+      "size_bytes": 7848
     },
     {
       "path": "src/cablesim_simulation/problem_mesh.py",
-      "sha256": "7af144489eaf04c596648a08650cef29f89c43c6bce19f80e2709bcdc278a4e5",
-      "size_bytes": 14579
+      "sha256": "300a7910355120278611f95d0e1369833a19292d26f3c1626ca76345da56166f",
+      "size_bytes": 15331
     },
     {
       "path": "src/cablesim_simulation/replay.py",
@@ -294,13 +546,18 @@
     },
     {
       "path": "src/cablesim_simulation/solver_runtime.py",
-      "sha256": "0ff1f64e00962e1b1613bf85c33bda5beeccc33bfe6005af1619e8a070cd0e01",
-      "size_bytes": 4416
+      "sha256": "5d70c1f038adcd843d766dcc2a40c5331dfe7ee1927464999e541eda6a76e5d4",
+      "size_bytes": 6297
     },
     {
       "path": "src/cablesim_simulation/thermal.py",
-      "sha256": "11f728e55509626cf067f3dd7e64baf47d901f9ca37090d2cf23e480a110a025",
-      "size_bytes": 13300
+      "sha256": "9863144bcdeea8a674af9b90c43a801e91d390688152442abbc454461a67e347",
+      "size_bytes": 17109
+    },
+    {
+      "path": "src/cablesim_simulation/thermal_dataset.py",
+      "sha256": "a2f887709a6c33a94a935d52a4d9cf213a9a754849cbf9171a35198c99bdfd92",
+      "size_bytes": 6213
     },
     {
       "path": "src/cablesim_simulation/thermal_domain.py",
@@ -318,9 +575,19 @@
       "size_bytes": 5343
     },
     {
+      "path": "src/cablesim_simulation/triangular_fields.py",
+      "sha256": "aedc346326b76d53ce8d335a645db860789f0a6ab24c0909e50cd1b32df9381f",
+      "size_bytes": 11270
+    },
+    {
       "path": "src/cablesim_simulation/wire.py",
       "sha256": "717fdfe35166c3eecb12820a7cc05dc4eaa6f12fe64242735546594575200ebb",
       "size_bytes": 8797
+    },
+    {
+      "path": "src/cases/capacitive-submarine.json",
+      "sha256": "975bd771ea75d29489f08d6f2e60f5ba1133c47e4eb2a51dc6daa84e5246b39d",
+      "size_bytes": 1854
     },
     {
       "path": "src/cases/eddy-cylinder.json",
@@ -329,7 +596,7 @@
     },
     {
       "path": "src/cases/eddy-induced.json",
-      "sha256": "eac35ee457e41ae9cc56e1346a99582650ed86318de7f1e306c847d9afd3eefa",
+      "sha256": "73099ba9ca9311f03f654fdc2d745aa081eb8e1075362920da85ecf39dee01d4",
       "size_bytes": 5868
     },
     {
@@ -341,6 +608,16 @@
       "path": "src/cases/eddy-twin.json",
       "sha256": "16e858f16a976d16653ee486bc019cfc5727c511be13065704917b52cd77e0ad",
       "size_bytes": 4022
+    },
+    {
+      "path": "src/cases/eddy-two-round.json",
+      "sha256": "570cb653e5c73a46a523cd26cc07f5596f9330818433d95d4e92d83105232836",
+      "size_bytes": 16540
+    },
+    {
+      "path": "src/cases/electrothermal-coaxial.json",
+      "sha256": "641083e5346f192a2ff95e033facf7d313a207894b6c00afb1524eb10f152a8c",
+      "size_bytes": 2043
     },
     {
       "path": "src/cases/heat-step-cycle.json",
@@ -374,8 +651,8 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "6296a2fbf6327f31b5d1a726d3c6623c6ff45985ed157fc4b3cf6ad8f830a706",
-      "size_bytes": 2292
+      "sha256": "aba393497cd4c1bd176f4ebb9b86323ea288008a67f9ea2c965193d349c15dd9",
+      "size_bytes": 3061
     }
   ]
 }

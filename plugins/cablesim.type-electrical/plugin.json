@@ -1,0 +1,123 @@
+{
+  "schema": "cablesim.plugin/2",
+  "id": "cablesim.type-electrical",
+  "version": "0.1.0",
+  "name": "型号电气参数与短路容量",
+  "icon": "assets/icon.svg",
+  "description": "按原文核验的 IEC 60287 与 IEC 60949 分支计算，缺项和未覆盖保留；使用不可变宿主运行快照。",
+  "publisher": {
+    "id": "cablesim",
+    "name": "CableSimPro"
+  },
+  "host_api": {
+    "major": 2,
+    "min_minor": 1
+  },
+  "license": {
+    "spdx": "LicenseRef-Project-Undeclared",
+    "review_required": false
+  },
+  "platforms": [
+    "windows-x64",
+    "linux-x64",
+    "darwin-arm64",
+    "darwin-x64"
+  ],
+  "runtime": {
+    "kind": "python",
+    "python": ">=3.11,<3.14",
+    "entry": "src/cablesim_type_electrical/main.py"
+  },
+  "permissions": [
+    "study.run",
+    "artifact.write"
+  ],
+  "dependencies": [],
+  "resources": {
+    "timeout_s": 10,
+    "memory_mb": 128,
+    "network": "none"
+  },
+  "capabilities": [
+    {
+      "id": "electrical",
+      "kind": "method",
+      "title": "型号电气参数（IEC 60287 原文分支）",
+      "method_version": "TYPE-ELECTRICAL-0.1.0",
+      "analysis": "properties",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.type-analysis.available-count",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.type-electrical",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "只覆盖单芯或三芯的明确圆导体；R20、工作温度、系数、排列和运行电压必须有来源，缺项不推测。",
+        "三芯电阻和电容按明确的长度基准与成缆绞入系数换算；邻近公式 x_p > 2.8 拒算。",
+        "复用领域接地拓扑契约；完整电感、正序与零序阻抗的求解尚未覆盖；几何电感明确不含金属回路及大地返回。"
+      ]
+    },
+    {
+      "id": "short-circuit",
+      "kind": "method",
+      "title": "组件绝热与非绝热短路容量（IEC 60949）",
+      "method_version": "TYPE-SHORT-CIRCUIT-0.1.0",
+      "analysis": "short_circuit",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.type-analysis.available-count",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.type-short-circuit",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "初始、最终温度与持续时间明确给定且带来源；计算条件不代表产品获准达到该温度。",
+        "导体非绝热修正仅覆盖铜 / 铝与 XLPE；金属组件需截面、实际构造、接触条件与两侧介质热参数。",
+        "隔离铜丝只覆盖完全嵌入且间隔至少一个丝径；反向扎带容量、未核实的接触分支与并联金属回路的总容量未覆盖。",
+        "IEC 60949:1988 英文公开原文页摘录及 AMD1:2008 已逐图核验；未持有完整双语出版物，不作完整产品认证。"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "assets/icon.svg",
+      "sha256": "4f478fe6124939221b8e23215f2ffabc51eef974449c9e7ed87a3229018ba591",
+      "size_bytes": 227
+    },
+    {
+      "path": "src/cablesim_type_electrical/main.py",
+      "sha256": "3811b027e3776bb016b289a10fa3211717c6a8b5c8c91be973465b3d070805d0",
+      "size_bytes": 29732
+    },
+    {
+      "path": "src/cablesim_type_electrical/sources.json",
+      "sha256": "8607369514d87bb40e2f75781c130b14ef6b36b4b2b762077f31b4c3dc9341de",
+      "size_bytes": 1431
+    }
+  ]
+}

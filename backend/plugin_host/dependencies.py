@@ -26,6 +26,13 @@ def host_dependencies(directory: Path) -> list[dict]:
             if required:
                 raise ValueError('HOST_DEPENDENCY_MISSING: ' + name)
             return
+        # A from-import symbol (e.g. Executor) is not executor.py. Windows'
+        # case-insensitive lookup must not invent a differently-cased module
+        # entry that then fails provenance verification on Linux.
+        if path.relative_to(root).as_posix() != path.resolve().relative_to(root).as_posix():
+            if required:
+                raise ValueError('HOST_DEPENDENCY_CASE_MISMATCH: ' + name)
+            return
         candidates = [path]
         candidates.extend(parent / '__init__.py' for parent in path.parents
                           if parent != root and parent.is_relative_to(root))
@@ -61,7 +68,7 @@ def host_dependencies(directory: Path) -> list[dict]:
                 for alias in node.names:
                     add_module(name + '.' + alias.name)
     records = []
-    for path in sorted(dependencies):
+    for path in sorted(dependencies,key=lambda p:p.relative_to(root).as_posix()):
         data = path.read_bytes()
         records.append({'path': path.relative_to(root).as_posix(), 'sha256': sha256(data).hexdigest(),
                         'size_bytes': len(data)})

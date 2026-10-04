@@ -1,0 +1,24 @@
+{
+  "input": {
+    "schema_version": "cablesim.electrothermal/1",
+    "magnetic": {
+      "schema_version": "cablesim.simulation-problem/1",
+      "physics": "magnetic_harmonic",
+      "frequency_hz": 50,
+      "geometry": [
+        {"uid":"insulation","kind":"disk","values":[0,0,0.04],"material":{"k_w_m_k":0.46,"conductivity_s_m":0,"relative_permeability":1,"source":"Explicit coaxial capability benchmark; PE/XLPE k from COMSOL62 submarine06 material table, outer radius chosen for this benchmark"}},
+        {"uid":"core","kind":"disk","values":[0,0,0.0131],"material":{"k_w_m_k":400,"conductivity_s_m":59600000,"relative_permeability":1,"source":"COMSOL62 submarine06 copper bulk material; homogeneous solid core, not tutorial strand correction"}}
+      ],
+      "boundaries":[{"uid":"outer","selector":"outer","values":[],"kind":"magnetic_potential","value":0}],
+      "excitations":[{"regions":["core"],"kind":"current_rms_a","value":[655,0],"source":"COMSOL62 submarine06 655 A RMS operating current"}],
+      "probes_m":[[0,0]],
+      "provenance":{"reference":"COMSOL Multiphysics 6.2 Submarine Cable 6, pp3-6 and material table; https://www.comsol.com/model/cable-tutorial-series-43431","scope":"coaxial homogeneous sigma(T) capability benchmark; not the full tutorial06 model"},
+      "assumptions":["2D axial invariance; prescribed outer temperature; solid copper; no thermal contact resistance"]
+    },
+    "thermal_boundaries":[{"uid":"outer","selector":"outer","values":[],"kind":"temperature","value":293.15}],
+    "resistivity_laws":{"core":{"reference_temperature_k":293.15,"alpha_per_k":0.0039,"minimum_temperature_k":273.15,"maximum_temperature_k":423.15,"source":"COMSOL62 submarine06 linearized copper resistivity; explicit numerical benchmark temperature bounds"}},
+    "initial_temperature_k":293.15
+  },
+  "parameters":{"mesh":{"size_m":0.0015,"far_size_m":0.003,"transition_m":0.02,"minimum_circle_segments":64}},
+  "scope":"Independent coupled field capability validation; not complete submarine06 reproduction"
+}

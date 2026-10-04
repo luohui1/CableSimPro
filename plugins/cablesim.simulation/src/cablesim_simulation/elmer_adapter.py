@@ -148,6 +148,8 @@ def solve(problem,mesh,work,configuration=None):
     else:
         if len(snapshots)!=1:
             raise SolverFailure('稳态输出帧数异常。')
-        snapshots[0]['time_s']=None
+        # The public temperature-field contract uses a numeric SI time for
+        # steady snapshots too; zero denotes the sole steady solution.
+        snapshots[0]['time_s']=0.
     return {'solver':version,'execution':execution,'mesh_sha256':mesh['sha256'],'problem_sha256':digest(problem),
             'snapshots':snapshots,'engineering_approval':False}

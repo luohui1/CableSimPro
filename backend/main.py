@@ -26,10 +26,12 @@ from .enterprise import Enterprise, make_router as enterprise_router
 from .foundation.router import make_router as foundation_router
 from .foundation.assets import AssetRepository, AssetError
 from .foundation.asset_router import make_router as asset_router
+from .foundation.reproduction_library import make_router as reproduction_library_router
 from .plugins.service import PluginService
 from .plugins.catalog import PluginError
 from .plugins.router import make_router as plugin_router
 from .kernel.research import Research
+from .kernel.type_versions import Types, make_router as type_versions_router
 from .kernel.router import make_router as research_router
 from .kernel.ownership import OwnerLock
 from .plugin_host import PluginHostError
@@ -48,6 +50,9 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     runtime = EngineeringRuntime(workspace_store, designs, library, providers, enterprise)
     plugins = PluginService(workspace_store, runtime)
     research = Research(workspace_store, plugins)
+    from .kernel.batch_service import Batches,make_router as batch_router
+    batches = Batches(research,root=os.environ.get('CABLESIM_DATASETS_DIR'))
+    types = Types(research, assets)
     runtime.research = research
     owner = OwnerLock(store.path)
 
@@ -64,8 +69,14 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             runtime.initialize()
             plugins.initialize()
             research.initialize()
+            batches.initialize()
+            types.initialize()
+            from .kernel.candidates import initialize as initialize_candidates
+            with workspace_store.db(True) as db:
+                initialize_candidates(db)
             yield
         finally:
+            batches.close()
             # The workspace store deliberately holds one idle SQLite connection so
             # WAL cleanup/checkpointing is an application-shutdown concern instead
             # of something an arbitrary UI request can inherit on connection close.
@@ -82,10 +93,18 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(enterprise_router(enterprise))
     app.include_router(foundation_router(workspace_store))
     app.include_router(asset_router(assets, workspace_store))
+    app.include_router(reproduction_library_router(os.environ.get('CABLESIM_REPRODUCTION_LIBRARY',str(ROOT/'.data/simulation/library'))))
     app.include_router(plugin_router(plugins))
     app.include_router(research_router(research))
+    app.include_router(batch_router(batches))
+    from .kernel.candidates import make_router as candidate_router
+    app.include_router(candidate_router(workspace_store))
     app.include_router(domain_router(workspace_store))
+    app.include_router(type_versions_router(types))
+    app.state.types = types
+    app.state.assets = assets
     app.state.research = research
+    app.state.batches = batches
     app.state.plugins = plugins
     app.state.workspace_store = workspace_store
     app.state.enterprise = enterprise

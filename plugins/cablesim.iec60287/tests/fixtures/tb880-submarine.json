@@ -1,0 +1,62 @@
+{
+  "schema_version": "cablesim.iec60287.tb880-reference/1",
+  "construction": "three_core_lead_steel",
+  "data": {
+    "frequency_hz": 50,
+    "line_voltage_v": 30000,
+    "conductor_r20_ohm_m": 0.0000283,
+    "conductor_diameter_m": 0.03,
+    "conductor_alpha_per_k": 0.00393,
+    "conductor_temperature_k": 363.15,
+    "ambient_temperature_k": 288.15,
+    "relative_permittivity": 2.5,
+    "loss_tangent": 0.004,
+    "core_spacing_m": 0.0621,
+    "burial_depth_m": 1,
+    "soil_thermal_resistivity_k_m_w": 0.7,
+    "sheath_resistivity_ohm_m": 2.14e-7,
+    "sheath_alpha_per_k": 0.004,
+    "lead_thickness_m": 0.0023,
+    "core_lay_m": 2.152,
+    "phase_outer_diameter_m": 0.0621,
+    "phase_oversheath_thermal_resistivity_k_m_w": 2.5,
+    "assembled_diameter_m": 0.1349,
+    "armour_inner_diameter_m": 0.1373,
+    "armour_wire_diameter_m": 0.006,
+    "armour_lay_m": 1.785,
+    "armour_resistivity_ohm_m": 1.38e-7,
+    "armour_alpha_per_k": 0.0045,
+    "filler_thermal_resistivity_k_m_w": 6
+  },
+  "inner_layers": [
+    {
+      "outer_diameter_m": 0.0305,
+      "thermal_resistivity_k_m_w": 6
+    },
+    {
+      "outer_diameter_m": 0.0325,
+      "thermal_resistivity_k_m_w": 2.5
+    },
+    {
+      "outer_diameter_m": 0.0485,
+      "thermal_resistivity_k_m_w": 3.5
+    },
+    {
+      "outer_diameter_m": 0.0503,
+      "thermal_resistivity_k_m_w": 2.5
+    },
+    {
+      "outer_diameter_m": 0.0525,
+      "thermal_resistivity_k_m_w": 12
+    }
+  ],
+  "outer_layers": [
+    {
+      "outer_diameter_m": 0.1553,
+      "thermal_resistivity_k_m_w": 6
+    }
+  ],
+  "wire_count": 71,
+  "source_reference": "CIGRE TB880:2022 Case study2 pp164-179: primitive dimensions/materials; no reference intermediate values are solver inputs",
+  "source_sha256": "9cb8b071f3bce12b18f04fbdbb2c1205c7900d131ebf16cf5cfc9cb57a533cd9"
+}

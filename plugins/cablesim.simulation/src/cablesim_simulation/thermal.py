@@ -77,6 +77,56 @@ class ThermalSystem:
                     w = self.weights[layer.uid]
                     self.fixed_load += layer.fixed_heat_w_m*w/w.sum()
         self.fixed_heat = float(self.fixed_load.sum())
+        self._factor = None
+        self._constant_matrix = all(bc.emissivity == 0 for _,bc in self.convection)
+        self._affine = None
+
+    def affine_temperature(self,currents,D,prescribed):
+        """Exact low-rank solve for constant k/h and the declared linear R(T).
+
+        This is the same nodal FEM system, not a surrogate or fitted thermal
+        network. The full physical residual is still checked by state().
+        """
+        from scipy.sparse.linalg import splu
+        from skfem import BilinearForm,LinearForm,asm
+        np=self.np
+        if self._affine is None:
+            matrix=self.K.copy();load=self.fixed_load.copy()
+            for fb,bc in self.convection:
+                @BilinearForm
+                def robin(u,v,w):return w.h*u*v
+                @LinearForm
+                def background(v,w):return w.value*v
+                matrix+=asm(robin,fb,h=bc.h_w_m2_k)
+                load+=asm(background,fb,value=bc.h_w_m2_k*(bc.temperature_k-self.reference))
+            free=np.setdiff1d(np.arange(self.basis.N),D)
+            factor=splu(matrix[free][:,free].tocsc())
+            boundary=matrix[free][:,D]@prescribed[D]
+            base=prescribed.copy();base[free]=factor.solve(load[free]-boundary)
+            indices=[i for i,c in enumerate(self.model.cables) if c.electrical]
+            normalized=[];sources=[]
+            for i in indices:
+                cable=self.model.cables[i];weights=self.weights[cable.layers[0].uid]
+                weights=weights/weights.sum();normalized.append(weights);source=weights.copy()
+                if cable.electrical.sheath_loss_factor:
+                    screen=self.weights[cable.electrical.sheath_layer_uid]
+                    source+=cable.electrical.sheath_loss_factor*screen/screen.sum()
+                sources.append(source)
+            response=np.zeros((self.basis.N,len(indices)))
+            if indices:response[free]=factor.solve(np.asarray(sources).T[free])
+            normalized=np.asarray(normalized).reshape(len(indices),self.basis.N)
+            self._affine=(indices,base,response,normalized@response,self.reference+normalized@base)
+            self._factor=(free,factor,boundary)
+        indices,base,response,coupling,initial_mean=self._affine
+        if not indices:return self.reference+base
+        scale=np.asarray([currents[i]**2*self.model.cables[i].electrical.r20_ohm_m*
+                          (1+self.model.cables[i].electrical.ac_extra_factor) for i in indices])
+        alpha=np.asarray([self.model.cables[i].electrical.alpha20_per_k for i in indices])
+        feedback=(scale*alpha)[:,None]*coupling
+        if max(abs(np.linalg.eigvals(feedback)))>=1-1e-12:
+            raise ValueError('温变电阻反馈不存在稳定稳态解；请降低负荷或检查散热边界。')
+        power=np.linalg.solve(np.eye(len(indices))-feedback,scale*(1+alpha*(initial_mean-293.15)))
+        return self.reference+base+response@power
 
     def state(self, currents):
         from skfem import BilinearForm, LinearForm, asm, condense, solve
@@ -88,6 +138,8 @@ class ThermalSystem:
         prescribed = np.zeros(self.basis.N)
         if len(D):
             prescribed[D] = [self.dirichlet[int(i)] for i in D]
+        if self._constant_matrix:
+            temperature=self.affine_temperature(currents,D,prescribed)
         for step in range(1,cfg.max_iterations+1):
             load = self.fixed_load.copy()
             powers = []
@@ -118,7 +170,19 @@ class ThermalSystem:
                     return w.h*(bc.temperature_k-self.reference)*v
                 matrix += asm(robin,fb,h=h)
                 load += asm(background,fb,h=h)
-            rise = solve(*condense(matrix,load,x=prescribed,D=D)) if len(D) else solve(matrix,load)
+            if self._constant_matrix:
+                # Geometry and constant-k/constant-h boundaries do not change during
+                # Picard or the rating search. Reuse only this exact factorization.
+                if self._factor is None:
+                    from scipy.sparse.linalg import splu
+                    free_nodes = np.setdiff1d(np.arange(self.basis.N),D)
+                    self._factor = (free_nodes,splu(matrix[free_nodes][:,free_nodes].tocsc()),
+                                    matrix[free_nodes][:,D]@prescribed[D])
+                free_nodes,factor,boundary_load = self._factor
+                rise = prescribed.copy()
+                rise[free_nodes] = factor.solve(load[free_nodes]-boundary_load)
+            else:
+                rise = solve(*condense(matrix,load,x=prescribed,D=D)) if len(D) else solve(matrix,load)
             proposed = rise+self.reference
             if not np.isfinite(proposed).all() or float(proposed.min()) <= 0 or float(proposed.max()) > 1500:
                 raise ValueError('无有效稳态温度解或迭代越出1500 K数值边界。')

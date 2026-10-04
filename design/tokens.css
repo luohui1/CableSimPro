@@ -32,6 +32,12 @@
   --phase-a: #B38F00;
   --phase-b: #2E8B57;
   --phase-c: #C0392B;
+  --temperature-1: #FBF3E4;
+  --temperature-2: #F2C98A;
+  --temperature-3: #E58B47;
+  --temperature-4: #C2452F;
+  --temperature-5: #6E1F35;
+  --temperature-6: #2A0F1E;
   --overlay: rgba(0,0,0,.4);
   --shadow-float: 0 2px 12px rgba(0,0,0,.05);
   --shadow-dialog: 0 12px 48px rgba(0,0,0,.12);

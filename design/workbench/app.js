@@ -16,9 +16,11 @@ function refreshDraftView(){if(TypeWorkflow.handles())TypeWorkflow.renderModule(
 const icon = key => `<span class="ic icon-glyph" aria-hidden="true">${state.icons[key]||''}</span>`;
 const button=(label,key,action,extra='')=>`<button data-action="${action}" ${extra}>${key?icon(key):''}${label}</button>`;
 async function api(path,options={}){
-  const response=await fetch('/api'+path,{...options,headers:{'Content-Type':'application/json',...options.headers}});
+  let response;
+  try{response=await fetch('/api'+path,{...options,headers:{'Content-Type':'application/json',...options.headers}});}
+  catch(cause){const error=new Error('本机服务连接中断，未保存的草稿已保留。恢复连接后重试。');error.status=0;throw error;}
   const data=await response.json();
-  if(!response.ok){const detail=data.detail,error=new Error(Array.isArray(detail)?detail.map(x=>`${x.loc?.join('.')}：${x.msg}`).join('；'):typeof detail==='object'?detail.message||JSON.stringify(detail):detail||`HTTP ${response.status}`);error.status=response.status;throw error;}
+  if(!response.ok){const detail=data.detail,error=new Error(Array.isArray(detail)?detail.map(x=>`${x.loc?.join('.')}：${x.msg}`).join('；'):typeof detail==='object'?detail.message||JSON.stringify(detail):detail||`HTTP ${response.status}`);error.status=response.status;error.field=Array.isArray(detail)?detail[0]?.loc?.filter(k=>k!=='body').join('.'):detail?.field||null;throw error;}
   return data;
 }
 function log(message){state.messages.unshift({at:new Date().toLocaleTimeString('zh-CN',{hour12:false}),message});state.messages=state.messages.slice(0,80);}
@@ -37,7 +39,7 @@ function entries(){
 const canCAD=()=>type()?.construction==='single_core'&&type().cores.length===1&&!type().cores[0].layers.length;
 function selected(){return entries()[state.selected]||entries()[0];}
 function material(row){return state.draft.materials.find(x=>x.id===row.value.material);}
-function materialLabel(m){return ({copper:'铜',aluminium:'铝','v0 semiconductor':'半导电材料','v0 insulation':'绝缘材料','v0 screen, construction unspecified':'金属屏蔽（构造未指定）','v0 oversheath':'外护套材料','v0 soil':'土壤'})[m?.label]||m?.label||'未提供';}
+function materialLabel(m){const label=({copper:'铜',aluminium:'铝','v0 semiconductor':'半导电材料','v0 insulation':'绝缘材料','v0 screen, construction unspecified':'金属屏蔽（构造未指定）','v0 oversheath':'外护套材料','v0 soil':'土壤'})[m?.label]||m?.label||'未提供';return state.route.startsWith('/types/')?TypeVersions.clean(label):label;}
 function getPath(object,path){return path.split('.').reduce((o,k)=>o?.[k],object);}
 function setPath(object,path,value){const parts=path.split('.');const last=parts.pop();parts.reduce((o,k)=>o[k],object)[last]=value;}
 function changed(path){return JSON.stringify(getPath(state.draft,path))!==JSON.stringify(getPath(state.record.document,path));}
@@ -47,7 +49,7 @@ function source(path){const pointer='/'+path.replaceAll('.','/');const stable=st
 function sourceText(path){const s=source(path);const kind={demo:'演示输入',user:'用户录入',derived:'几何推导',manufacturer:'厂家资料',standard:'标准来源',measurement:'测量',asset:'库引用'}[s.kind]||s.kind,reference=s.reference?.replace(/\s*·?\s*sha256:[a-f0-9]+/g,'');return `${kind} · ${s.reviewed?'已核对':'未核对'}${reference?' · '+reference:''}`;}
 function sourceIcon(path){const s=source(path),key=isLocked(path)?'locked':({user:'from-user',derived:'derived',standard:'from-standard',asset:'from-library'})[s.kind]||'from-document',label=sourceText(path)+(isLocked(path)?' · 锁定':'');return `<span class="cad-source" role="img" tabindex="0" aria-label="${esc(label)}" title="${esc(label)}">${icon('source/'+key)}</span>`;}
 function refreshDirty(){state.dirty=JSON.stringify(state.draft)!==JSON.stringify(state.record.document);TypeWorkflow.invalidate();renderHeader();renderStatus();if(state.view!=='quantities'&&canCAD())CableModel.schedule();}
-function edit(path,value){if(isLocked(path))throw new Error('此字段已锁定。');if(JSON.stringify(getPath(state.draft,path))===JSON.stringify(value))return;rememberDraft(path);setPath(state.draft,path,value);state.draft.provenance[stablePointer(path)]={kind:'user',reference:'结构设计 · 参数录入',reviewed:false};refreshDirty();}
+function edit(path,value){if(TypeVersions.frozen())throw new Error('已发布版本已冻结，请建立新方案。');if(isLocked(path))throw new Error('此字段已锁定。');if(JSON.stringify(getPath(state.draft,path))===JSON.stringify(value))return;rememberDraft(path);setPath(state.draft,path,value);state.draft.provenance[stablePointer(path)]={kind:'user',reference:'结构设计 · 参数录入',reviewed:false};refreshDirty();}
 function field(label,path,{scale=1,unit='',readonly=false,nullable=false,options=null}={}){
   const raw=getPath(state.draft,path),locked=isLocked(path),val=raw==null?'':typeof raw==='number'?Number((raw*scale).toFixed(unit==='Ω/km'?6:3)).toString():raw;
   let control;
@@ -68,20 +70,40 @@ function renderNav(){
 function renderHeader(){
   const open=!!state.draft&&state.route.startsWith('/types/');
   $('#header').innerHTML=open?`<span class="pill">型号</span><div class="title-wrap"><h1>${esc(type().label)}</h1></div><span class="subtle type-subtitle">新版本草稿</span><span class="spacer"></span><span class="save-state ${state.dirty?'dirty':''}">${state.dirty?'未保存':'已保存'} · r${state.record.revision}</span>${button('','action/undo','undo',`class="icon-button" aria-label="撤销" title="撤销 Ctrl+Z" ${(!draftHistory.undo.length&&(!state.snapshot.can_undo||state.dirty))||state.busy?'disabled':''}`)}${button('','action/redo','redo',`class="icon-button" aria-label="重做" title="重做 Ctrl+Shift+Z" ${(!draftHistory.redo.length&&(!state.snapshot.can_redo||state.dirty))||state.busy?'disabled':''}`)}${button('运行记录','action/history','run-history')}${button('Agent','agent/agent','agent','class="agent"')}${button('保存','action/save','save',`class="primary" ${!state.dirty||state.busy?'disabled':''}`)}`:`<h1>${({'/':'首页','/types':'型号','/studies':'研究','/library':'库','/plugins':'插件','/settings':'设置'})[state.route]||'工作区'}</h1><span class="spacer"></span><span class="subtle">本机 · 原型数据区</span>${button('快捷键','','shortcuts','class="quiet"')}`;
-  if(open){$('.save-state').textContent=state.dirty?'未保存':'已保存';if(/\/(requirements|standard-check)(?:\/|$)/.test(state.route))$('#header [data-action="save"]').classList.remove('primary');const origin=state.snapshot?.type_origin_reference;if(origin)$('.type-subtitle').textContent='基于 '+origin.version+' · 新版本草稿';$('#header').insertAdjacentHTML('beforeend',`<a class="study-header-link" href="#/types/${state.wid}/specification/content">${icon('result/report')}交付</a>`);}
+  if(open){$('.save-state').textContent=state.dirty||TypeElectrical.dirty()||TypeRating.dirty()?'未保存':'已保存';if(/\/(requirements|standard-check|electrical|short-circuit)(?:\/|$)/.test(state.route))$('#header [data-action="save"]').classList.remove('primary');if(TypeElectrical.dirty()||TypeRating.dirty())$('#header [data-action="save"]').disabled=state.busy;const origin=state.snapshot?.type_origin_reference;if(origin)$('.type-subtitle').textContent='基于 '+origin.version+' · 新版本草稿';$('#header').insertAdjacentHTML('beforeend',`<a class="study-header-link" href="#/types/${state.wid}/specification/content">${icon('result/report')}交付</a>`);}
+  if(open){
+    $('#header h1').textContent=TypeVersions.clean(type().label);
+    const purpose=/演示|合成验收数据/.test(type().label)||Object.values(state.draft.provenance||{}).some(s=>s.kind==='demo');
+    if(purpose)$('#header .title-wrap').insertAdjacentHTML('afterend','<span class="type-purpose">演示</span>');
+    const lifecycle=TypeVersions.lifecycle();
+    if(lifecycle)$('.type-subtitle').textContent='基于 '+lifecycle.base_reference.version+' · '+({draft:'方案草稿',version_draft:'新版本草稿',published:'已发布 · 冻结'})[lifecycle.status];
+    if(TypeVersions.frozen())$('#header').querySelectorAll('[data-action="save"],[data-action="undo"],[data-action="redo"]').forEach(b=>b.disabled=true);
+    if(TypeVersions.handles()||TypeRating.handles())$('#header [data-action="save"]').classList.remove('primary');
+  }
 }
 function renderStatus(){
   const r=selected();
   $('#status').innerHTML=state.draft&&state.route.startsWith('/types/')?`<span class="coordinate" id="coordinates">${r?'选中 '+esc(roleNames[r.role]||r.role):'选择结构层'}</span><span>${state.view==='three'?CableModel.status():'缩放 '+Math.round(state.zoom*100)+'% · mm'}</span><span class="spacer"></span><span class="source-status">演示输入 · 未发布${state.view==='three'?' · CAD 显示预览':' · 无计算结果'}</span><span>领域 ${esc(state.draft.schema_version.split('/')[1])} · r${state.record.revision}</span>`:`<span>已连接本机 API</span><span>${state.methods.length} 个插件 · ${state.methods.reduce((n,m)=>n+m.capabilities.length,0)} 项能力</span><span class="spacer"></span><span>结构设计 · 首模块审阅</span>`;
   if(state.draft&&state.route.startsWith('/types/')){if(state.view==='quantities')$('.source-status').textContent='未发布 · '+TypeWorkflow.resultStatus();$('#status').lastElementChild.textContent='产品标准 · '+TypeStandards.summary();}
+  if(state.draft&&TypeElectrical.handles()){$('#coordinates').textContent='数值按列头单位显示';$('#status').children[1].textContent='单个组件量';$('.source-status').textContent='型号未发布';$('#status').lastElementChild.textContent='计算快照 · '+TypeElectrical.summary();}
+  if(state.draft&&TypeRating.handles()){$('#coordinates').textContent='数值按列头单位显示';$('#status').children[1].textContent='每行一个工况';$('.source-status').textContent='型号未发布';$('#status').lastElementChild.textContent='计算快照 · '+TypeRating.summary();}
+  if(state.draft&&state.route.split('/')[3]==='specification'){$('#coordinates').textContent='报告章节';$('#status').children[1].textContent='保存运行的引用';$('.source-status').textContent='未审核 · 未发布';$('#status').lastElementChild.textContent='结果来源见报告正文';}
+  if(state.draft&&state.route.startsWith('/types/')){
+    $('.source-status').textContent=TypeVersions.frozen()?'已发布 · 冻结':'保存输入与运行记录';
+    $('#status').lastElementChild.textContent='领域 r'+state.record.revision;
+  }
 }
 function renderWorkspace(){
   CableModel.dispose();
   state.controllers.forEach(c=>c.destroy());state.controllers=[];renderNav();renderHeader();
-  if(SimulationStudy.handles(state.route))SimulationStudy.render();else if(Ampacity.handles(state.route))Ampacity.render();else {if(state.draft&&state.route.startsWith('/types/')){TypeWorkflow.bindRuns();if(TypeWorkflow.handles())TypeWorkflow.renderModule();else renderStructure();}else renderPage();renderStatus();}
+  if(ReproductionLibrary.handles(state.route))ReproductionLibrary.render();else if(SimulationStudy.handles(state.route))SimulationStudy.render();else if(Ampacity.handles(state.route))Ampacity.render();else {if(state.draft&&state.route.startsWith('/types/')){TypeWorkflow.bindRuns();if(TypeWorkflow.handles())TypeWorkflow.renderModule();else renderStructure();}else renderPage();renderStatus();}
   if(state.route==='/studies')$('#workspace').insertAdjacentHTML('afterbegin','<a class="simulation-entry" href="#/simulation">仿真复现与参考求解器 →</a>');
   const current=$('.nav-links [aria-current=page]');current?.setAttribute('aria-pressed','true');
   if(window.CableIconSelection)state.controllers.push(CableIconSelection.mount($('.nav-links'),{reduced:()=>matchMedia('(prefers-reduced-motion: reduce)').matches||localStorage.getItem('csp-reduced')==='true',onChange:key=>{const link=$(`.nav-links [data-icon-key="${key}"]`);if(link)location.hash=link.hash;}}));
+  if(state.draft&&state.route.startsWith('/types/')){
+    TypeVersions.reviewNoise();
+    if(TypeVersions.frozen())$('#workspace').querySelectorAll('input,select,textarea,[data-action="add-layer"],[data-action="delete-layer"],[data-action$="prepare"],[data-action$="derive"]').forEach(el=>el.disabled=true);
+  }
 }
 function renderStructure(){
   const t=type();
@@ -89,15 +111,20 @@ function renderStructure(){
   renderObjects();renderStage();renderInspector();renderDock();if(state.view!=='quantities'&&canCAD())CableModel.schedule();
 }
 function renderObjects(){const el=$('#objects');if(el)el.innerHTML=entries().map((r,i)=>`<button class="object-row ${i===state.selected?'selected':''}" data-select="${i}" aria-pressed="${i===state.selected}"><span class="layer-index">${r.number}</span><span class="name">${esc(r.label)}</span></button>`).join('');}
+function sectionGeometry(){
+  const rows=entries(),outer=type().cores.reduce((n,c)=>Math.max(n,Math.hypot(c.x,c.z)+c.conductor.diameter/2+c.layers.reduce((s,l)=>s+l.thickness,0)),0)+type().common_layers.reduce((s,l)=>s+l.thickness,0),scale=170/outer,cx=280,cy=245;
+  const drawingRows=[...rows.filter(r=>r.scope==='common').reverse(),...type().cores.flatMap(c=>rows.filter(r=>r.coreId===c.id).reverse())];
+  const shapes=drawingRows.map(r=>`<circle class="layer ${r.number-1===state.selected?'selected':''}" data-select="${r.number-1}" cx="${cx+r.x*scale}" cy="${cy-r.z*scale}" r="${r.outer*scale}" fill="var(--${materialColors[material(r)?.category]||'fill'})"/>`).join('');
+  return {rows,outer,scale,cx,cy,shapes};
+}
+function readOnlySection(){const g=sectionGeometry();return `<div class="analysis-section"><svg viewBox="40 20 480 460" role="img" aria-label="当前型号截面，只读">${g.shapes.replaceAll(/ data-select="\d+"/g,'')}</svg><p>已录入结构的比例包络 · 只读</p></div>`;}
 function renderStage(){
   if(TypeWorkflow.handles()){TypeWorkflow.renderModule();return;}
   if(!canCAD()&&['three','quantities'].includes(state.view)){$('#stage').innerHTML='<div class="study-empty"><h3>此结构尚未接入原生几何方法</h3><p>可在截面与分层表中编辑；不生成替代实体或用料。</p></div>';return;}
   if(state.view==='quantities'){CableModel.dispose();TypeWorkflow.renderDerived();return;}
   if(state.view==='three'){CableModel.render();return;}CableModel.dispose();
   if(state.view==='table'){renderGrid();return;}
-  const rows=entries(),outer=type().cores.reduce((n,c)=>Math.max(n,Math.hypot(c.x,c.z)+c.conductor.diameter/2+c.layers.reduce((s,l)=>s+l.thickness,0)),0)+type().common_layers.reduce((s,l)=>s+l.thickness,0),scale=170/outer,cx=280,cy=245;
-  const drawingRows=[...rows.filter(r=>r.scope==='common').reverse(),...type().cores.flatMap(c=>rows.filter(r=>r.coreId===c.id).reverse())];
-  const shapes=drawingRows.map(r=>`<circle class="layer ${r.number-1===state.selected?'selected':''}" data-select="${r.number-1}" cx="${cx+r.x*scale}" cy="${cy-r.z*scale}" r="${r.outer*scale}" fill="var(--${materialColors[material(r)?.category]||'fill'})"/>`).join('');
+  const {rows,outer,scale,cx,cy,shapes}=sectionGeometry();
   const leaders=rows.map((r,i)=>{const a=(-75+i*30)*Math.PI/180,middle=(r.inner+r.outer)/2*scale,x=cx+Math.cos(a)*middle,y=cy+Math.sin(a)*middle,lx=cx+Math.cos(a)*(188+i%2*16),ly=cy+Math.sin(a)*(188+i%2*16);return `<g class="hit" data-select="${i}"><path class="leader" d="M${x} ${y}L${lx} ${ly}"/><circle class="number-disc ${i===state.selected?'chosen':''}" cx="${lx}" cy="${ly}" r="11"/><text x="${lx}" y="${ly+4}" text-anchor="middle">${r.number}</text></g>`;}).join('');
   const current=rows[state.selected],r=current?.outer*scale+6;
   $('#stage').innerHTML=`<div class="canvas-title"><strong>${type().cores.length===1?'单芯':'三芯'}电缆 · 参数截面</strong><small>已录入结构的比例包络 · mm</small></div><svg class="drawing" viewBox="0 0 750 520" aria-label="电缆结构截面" role="img"><g id="geometry" transform="translate(${state.pan.x} ${state.pan.y}) translate(${cx} ${cy}) scale(${state.zoom}) translate(${-cx} ${-cy})">${shapes}${r?`<circle class="selection-frame" cx="${cx+current.x*scale}" cy="${cy-current.z*scale}" r="${r}"/>`:''}${type().cores.length===1?leaders:''}<path class="dimension" d="M110 445v16m340-16v16M110 453h340m-340-3v6m340-6v6"/>${state.overlay?`<text x="280" y="478" text-anchor="middle">Ø ${fmt(outer*2000,3)}</text>`:''}<path id="snap-guide" class="guide" d="M280 32v425M70 245h420" hidden/></g></svg><div class="canvas-legend"><h3 style="margin:0 8px 12px">结构层</h3>${rows.slice(0,10).map((r,i)=>`<button class="legend-row ${i===state.selected?'selected':''}" data-select="${i}" aria-pressed="${i===state.selected}"><span class="legend-badge">${r.number}</span>${esc(r.label)}</button>`).join('')}</div><div class="mini-map" aria-label="视图定位"><svg viewBox="0 0 90 66"><circle cx="45" cy="33" r="20"/><rect x="${45-32/state.zoom-state.pan.x/12}" y="${33-23/state.zoom-state.pan.y/12}" width="${64/state.zoom}" height="${46/state.zoom}" rx="2"/></svg></div><div class="tool-float" role="toolbar" aria-label="绘图工具">${button('','tool/select','tool-select',`aria-label="选择 V" aria-pressed="${state.tool==='select'}" title="选择 V"`)}${button('','tool/pan','tool-pan',`aria-label="平移 H" aria-pressed="${state.tool==='pan'}" title="平移 H"`)}<span class="divider"></span>${button('','tool/snap','snap',`aria-label="中心捕捉 S" aria-pressed="${state.snap}" title="中心捕捉 S"`)}${button('','tool/zoom-out','zoom-out','aria-label="缩小 -"')}<span class="zoom-label">${Math.round(state.zoom*100)}%</span>${button('','tool/zoom-in','zoom-in','aria-label="放大 +"')}${button('','tool/fit','fit','aria-label="适应窗口 F" title="适应窗口 F"')}</div>`;
@@ -121,8 +148,10 @@ function renderInspector(){
   if(!conductor&&r.value.form==='tape')sections[0].insertAdjacentHTML('beforeend',field('单带标称厚度',r.path+'.nominal_tape_thickness',{scale:1000,unit:'mm',nullable:true})+field('带材根数',r.path+'.tape_count',{unit:'根',nullable:true})+field('绕包形式',r.path+'.tape_application',{options:[['','未明确'],['helical_overlap','重叠绕包'],['two_tape_gap','双带间隙绕包'],['longitudinal','纵包']]} )+field('标称搭盖率',r.path+'.overlap',{scale:100,unit:'%',nullable:true})+field('最小搭盖率',r.path+'.minimum_overlap',{scale:100,unit:'%',nullable:true})+field('单带最薄点',r.path+'.minimum_tape_thickness',{scale:1000,unit:'mm',nullable:true}));
   if(!conductor&&r.value.form==='wires')sections[0].insertAdjacentHTML('beforeend',field('屏蔽下直径',r.path+'.screen_inner_diameter',{scale:1000,unit:'mm',nullable:true})+field('反向扎带厚度',r.path+'.reverse_binder_thickness',{scale:1000,unit:'mm',nullable:true})+field('反向扎带宽度',r.path+'.reverse_binder_width',{scale:1000,unit:'mm',nullable:true})+field('反向扎带根数',r.path+'.reverse_binder_count',{unit:'根',nullable:true}));
   if(m)sections[1].insertAdjacentHTML('beforeend',field('标准材料类别','materials.'+state.draft.materials.findIndex(x=>x.id===m.id)+'.standard_kind',{options:[['','未明确'],['copper_bare','裸铜'],['copper_coated','镀层铜'],['aluminium','铝 / 铝合金'],['lead','铅 / 铅合金'],['XLPE','XLPE'],['PVC','PVC'],['EPR','EPR'],['HEPR','HEPR'],['other','其他']]}));
+  if(m&&['conductor','insulation'].includes(r.role)){const path='materials.'+state.draft.materials.findIndex(x=>x.id===m.id);sections[1].insertAdjacentHTML('beforeend',r.role==='conductor'?field('电阻温度系数',path+'.temperature_coefficient_20',{unit:'1/K',nullable:true}):field('相对介电常数',path+'.relative_permittivity',{nullable:true})+field('介质损耗角正切',path+'.loss_tangent',{nullable:true}));}
   sections[3].innerHTML=`<h3>标准依据</h3><a href="#/types/${state.wid}/standard-check">${esc(TypeStandards.summary())} →</a>`;
   if(!canCAD())$('#cad-properties').textContent='此结构尚未接入原生几何方法。';
+  TypeVersions.reviewNoise();
 }
 function renderDock(){
   const el=$('#dock-body');if(!el)return;
@@ -142,19 +171,20 @@ function listWorkspaces(){
 function recentStudies(){
   const items=state.studies.filter(s=>!state.methods.find(m=>m.method.plugin_id===s.definition.method.plugin_id)?.capabilities.find(c=>c.id===s.definition.method.capability&&c.analysis==='geometry')).sort((a,b)=>new Date(b.created)-new Date(a.created)),legacy=items.filter(s=>/合成演示|^test|新研究\s*\d/i.test(s.definition.title)||/^Cu \/ XLPE \/ 光滑铝护套/.test(s.workspace_name));
   const demoModes=new Set();for(const s of items){if(legacy.includes(s)||!/^YJ.*（(?:典型结构|结构)演示）.*直埋研究（演示）$/.test(s.workspace_name))continue;const mode=s.definition.driver.kind==='sweep'?'sweep':s.definition.driver.kind==='crosscheck'?'compare':s.definition.task||'rating';if(demoModes.has(mode))legacy.push(s);else demoModes.add(mode);}
-  const rows=values=>values.map(s=>{const mode=s.definition.driver.kind==='sweep'?'sweep':s.definition.driver.kind==='crosscheck'?'compare':s.definition.task||'rating',page=mode==='sweep'?'sweep/curve':mode==='compare'?'method-compare/inputs':'ampacity';return `<div class="list-row">${icon('nav/study')}<div class="row-title"><strong>${esc(s.definition.title)}</strong><small>${esc(StudyShell.workflowNames[mode])} · ${esc(StudyShell.formatTime(s))} · ${esc(s.workspace_name)}</small></div><a href="#/studies/${s.id}/${page}">打开研究 →</a></div>`;}).join('');
+  const rows=values=>values.map(s=>{const mode=s.definition.driver.kind==='sweep'?'sweep':s.definition.driver.kind==='crosscheck'?'compare':s.definition.task||'rating',page=s.definition.modules?.selection?'selection/settings':mode==='sweep'?'sweep/curve':mode==='compare'?'method-compare/inputs':'ampacity';return `<div class="list-row">${icon('nav/study')}<div class="row-title"><strong>${esc(s.definition.title)}</strong><small>${esc(StudyShell.workflowNames[mode])} · ${esc(StudyShell.formatTime(s))} · ${esc(s.workspace_name)}</small></div><a href="#/studies/${s.id}/${page}">打开研究 →</a></div>`;}).join('');
   return (rows(items.filter(s=>!legacy.includes(s)).slice(0,6))||'<p class="empty">还没有工程问题研究。从“新建研究”选择任务和型号版本开始。</p>')+(legacy.length?`<details class="early-records"><summary>早期演示研究 · ${legacy.length} 项</summary>${rows(legacy)}</details>`:'');
 }
 function renderPage(){
   const path=state.route;let html;
   if(path==='/'){html=`<h2>开始工作</h2><p class="subtle">型号定义产品；研究回答它在指定条件下的工程问题。</p><div class="choices"><div class="choice">${icon('nav/cable-type')}<div><h2>型号</h2><p>结构、材料与产品规格</p></div>${button('新建','action/add','new-type')}</div><div class="choice">${icon('nav/study')}<div><h2>研究</h2><p>温度、允许电流与参数敏感性</p></div>${button('新建研究','action/add','amp-new')}<a href="#/studies">研究列表 →</a></div></div><h2>最近的研究</h2>${recentStudies()}<h2>最近的型号</h2>${listWorkspaces()}`;}
-  else if(path==='/types'){html=`<div class="list-head"><h2>型号草稿</h2>${button('从预置库新建','action/add','new-type','class="primary"')}</div><p class="subtle">当前使用领域文档保存结构；型号审核与发布尚未接入。</p>${listWorkspaces()}`;}
+  else if(path==='/types'){html=`<div class="list-head"><h2>型号</h2>${button('建立型号草稿','action/add','new-type','class="primary"')}</div>${(state.typeLibrary||[]).length?'<h3>已发布型号</h3>'+state.typeLibrary.map(m=>'<div class="list-row"><strong>'+esc(TypeVersions.clean(m.name))+' · '+esc(m.version)+'</strong><span class="spacer"></span><a href="#/types/'+m.workspace_id+'/specification/review">打开发布版本 →</a></div>').join(''):''}<h3>草稿与方案</h3>${listWorkspaces()}`;}
   else if(path==='/studies'){html=`<h2>研究</h2><p class="subtle">本轮先确认结构设计。研究模块的参数编辑与运行界面将在确认后制作。</p><a href="#/plugins">查看实际可用方法 →</a><div class="empty">此原型数据区尚未建立保存研究。</div>`;}
   else if(path==='/plugins'){html=`<div class="list-head"><h2>已安装插件</h2>${button('刷新','action/refresh','refresh-methods')}</div><p class="subtle">直接读取本机 /api/methods。平台可用不等于输入已齐备或工程适用。</p>${state.methods.map(m=>`<div class="capability">${icon('nav/plugin')}<div><h3>${esc(m.name)} <small>${esc(m.method.version)}</small></h3><p>${esc(m.description)}</p>${m.capabilities.map(c=>`<details style="margin-top:12px"><summary>${esc(c.title)}</summary><p>输入模式：<code>${esc(c.input_schema)}</code></p><p>${esc(c.limitations.join('；'))}</p><p>验证等级：${esc(c.validation.level)}</p></details>`).join('')}<p><code>${esc(m.method.plugin_id)}</code></p></div><span class="pill">${m.platform_supported?'本机平台支持':'平台不支持'}</span></div>`).join('')}`;}
   else if(path==='/library'){html=`<h2>本地工程资源</h2><p class="subtle">读取统一工程资源接口 /api/foundation/assets。</p>${state.assets.length?state.assets.map(a=>`<div class="list-row"><pre>${esc(JSON.stringify(a,null,2))}</pre></div>`).join(''):'<p class="empty">资源库为空，尚无已发布型号或材料可引用。</p>'}<h2>后端演示预置库</h2><p class="subtle">以下输入未获厂家认证；新建时显式选择，不作为标准限值。</p>${state.presets.map(p=>`<div class="list-row">${icon('object/cable')}<div class="row-title"><strong>${esc(p.label)}</strong><small>${esc(p.source)}</small></div>${button('用作初始输入','','preset-'+p.id)}</div>`).join('')}`;}
   else if(path==='/settings'){html=`<h2>界面设置</h2><div class="settings-row"><div><h3>主题</h3><p class="subtle">型号与研究使用同一套视觉规则</p></div>${button(document.documentElement.dataset.theme==='dark'?'切换浅色':'切换深色','','theme')}</div><div class="settings-row"><div><h3>减少动态效果</h3><p class="subtle">同时遵守系统的减少动态效果设置</p></div><input aria-label="减少动态效果" type="checkbox" id="reduce" ${localStorage.getItem('csp-reduced')==='true'?'checked':''}></div><div class="settings-row"><h3>编辑快捷键</h3>${button('查看','','shortcuts')}</div>`;}
   else html='<p class="empty">页面不存在。</p>';
   $('#workspace').innerHTML=`<div class="page">${html}</div>`;
+  if(path==='/library')$('#workspace .page').insertAdjacentHTML('afterbegin',`<div class="list-row">${icon('result/table')}<div class="row-title"><strong>复现库</strong><small>论文、标准算例与 COMSOL 教程的结果对照</small></div><a href="#/library/reproductions">打开复现库 →</a></div>`);
 }
 function openDialog(title,body,actions=''){const d=$('#modal');d.className='';d.innerHTML=`<div class="dialog-head"><h2 id="modal-title">${title}</h2><span class="spacer"></span>${button('','action/close','close','class="icon-button" aria-label="关闭"')}</div><div class="dialog-body">${body}</div>${actions?`<div class="dialog-actions">${actions}</div>`:''}`;if(!d.open)d.showModal();}
 function showRunHistory(){
@@ -166,26 +196,28 @@ function showRunHistory(){
 function moduleCatalog(){
   const definitions=[
     ['source/from-standard','要求与标准','来源、条款 / 页码、批准记录与校核绑定。','要求对象与批准接口待接入。',[]],
-    ['module/standard-check','标准核对','按全部适用要求查看实际值、余量与判定。','产品标准核对插件待接入。',[]],
-    ['module/electrical','电气参数','查看交流电阻、电容、电感与损耗。','页面按方法实际支持的参数接入。',['network-properties']],
-    ['module/rating-table','载流量表','按敷设工况比较允许电流。','型号工况表与研究关联待接入。',['steady-rating']],
-    ['module/short-circuit','短路容量','查看导体与屏蔽的短路允许电流。','短路计算插件待接入。',[]],
+    ['module/standard-check','标准核对','按适用条款查看设计值、出厂数据与判定。','已启用；未覆盖条款与缺项保留。',['standard-check']],
+    ['module/electrical','电气参数','查看交流电阻、电容、几何电感与损耗。','已启用；完整序阻抗保留未覆盖。',['electrical']],
+    ['module/rating-table','载流量表','按敷设工况比较允许电流。','已启用；逐行保存工况、计算与范围拒绝。',['steady-rating']],
+    ['module/short-circuit','短路容量','查看导体与金属组件的短路允许电流。','已启用；按明确温度、时间及构造分支计算。',['short-circuit']],
     ['module/method-compare','方案对比','比较修改项及全部要求，采纳为新版本草稿。','多方案持久化与要求关联待接入。',[]],
     ['module/datasheet','规格书 / 校核报告','交付指定方案或版本及其校核证据。','型号交付模板与版本引用待接入。',[]]
   ];
   openDialog('型号模块',`<p class="subtle">结构设计已启用。以下模块按统一模板接入；已安装计算方法不代表对应页面已可用。</p><div class="module-list">${definitions.map(([key,label,purpose,dependency,ids])=>{
     const matches=state.methods.flatMap(m=>m.capabilities.filter(c=>ids.includes(c.id)).map(c=>({m,c})));
-    return `<div class="capability">${icon(key)}<div><h3>${label}</h3><p>${purpose}</p><p class="subtle">${dependency}</p>${matches.length?`<small>已发现方法：${matches.map(({c})=>esc(c.title)).join('、')}</small>`:''}</div><span class="pill">未接入</span></div>`;
+    const target={'module/standard-check':'standard-check','module/electrical':'electrical','module/short-circuit':'short-circuit','module/rating-table':'rating-table'}[key];
+    return `<div class="capability">${icon(key)}<div><h3>${label}</h3><p>${purpose}</p><p class="subtle">${dependency}</p>${matches.length?`<small>已发现方法：${matches.map(({c})=>esc(c.title)).join('、')}</small>`:''}</div>${target?`<a class="pill" href="#/types/${state.wid}/${target}" data-action="close">打开</a>`:'<span class="pill">未接入</span>'}</div>`;
   }).join('')}</div>`);
   const groups=[['稳态载流量','steady_state'],['电气与热网络参数','properties'],['截面场','field'],['方法校核','crosscheck']];
   $('.dialog-body').insertAdjacentHTML('beforeend',`<h3 style="margin-top:24px">宿主发现的全部方法能力</h3>${groups.map(([label,analysis])=>{const found=state.methods.flatMap(m=>m.capabilities.filter(c=>c.analysis===analysis).map(c=>({m,c})));return `<details style="margin-top:12px"><summary>${label} · ${found.length} 项</summary>${found.map(({m,c})=>`<div class="capability"><div><h3>${esc(c.title)}</h3><p>${esc(m.name)} ${esc(m.method.version)} · ${m.platform_supported?'本机平台支持':'平台不支持'}</p><p>输入模式 <code>${esc(c.input_schema)}</code></p><p>${esc(c.limitations.join('；'))}</p></div><span class="subtle">未接入</span></div>`).join('')}</details>`;}).join('')}`);
 }
-async function refreshLists(){const [list,assets,types]=await Promise.all([api('/workspaces'),api('/foundation/assets'),api('/design/type-workspaces')]);state.workspaces=list;state.typeWorkspaces=types;state.assets=assets.items;state.studies=(await Promise.all(list.map(async w=>(await api(`/workspaces/${w.id}/studies`)).map(s=>({...s,workspace_name:w.name}))))).flat();}
-async function loadWorkspace(wid){
+async function refreshLists(){const [list,assets,types,published]=await Promise.all([api('/workspaces'),api('/foundation/assets'),api('/design/type-workspaces'),api('/types/library')]);state.workspaces=list;state.typeWorkspaces=types;state.typeLibrary=published.items;state.assets=assets.items;state.studies=(await Promise.all(list.map(async w=>(await api(`/workspaces/${w.id}/studies`)).map(s=>({...s,workspace_name:w.name}))))).flat();}
+async function loadWorkspace(wid,loadRuns=true){
   const token=++state.loadToken;
   const [record,snapshot,studies]=await Promise.all([api(`/workspaces/${wid}/domain`),api(`/workspaces/${wid}`),api(`/workspaces/${wid}/studies`)]);
   if(token!==state.loadToken)return false;if(!record.document)throw new Error('此工作区尚未转换为领域文档。');
   state.wid=wid;state.record=record;state.snapshot=snapshot;state.draft=clone(record.document);state.dirty=false;resetDraftHistory();state.selected=Math.min(state.selected,entries().length-1);
+  state.runsLoaded=loadRuns;if(!loadRuns){state.runs=[];return true;}
   state.runs=(await Promise.all(studies.map(async s=>{const runs=[];let cursor=0;do{const page=await api(`/workspaces/${wid}/studies/${s.id}/runs?after=${cursor}`);runs.push(...page.items.map(r=>({...r,study_id:s.id})));cursor=page.next_cursor;}while(cursor!==null);return runs;}))).flat();return true;
 }
 async function route(){
@@ -194,15 +226,18 @@ async function route(){
   if((state.busy||Ampacity.isBusy()||SimulationStudy.isBusy())&&next!==state.route){history.replaceState(null,'','#'+state.route);notify('当前操作尚未完成，请稍后切换工作区。');return;}
   if(SimulationStudy.dirty()&&next!==state.route&&!SimulationStudy.sameStudyRoute(next,state.route)){history.replaceState(null,'','#'+state.route);notify('请先保存仿真草稿，或撤销修改后再离开。');return;}
   const typeId=path=>path.match(/^\/types\/([^/?]+)/)?.[1];
-  if((state.dirty||Ampacity.dirty())&&next!==state.route&&!Ampacity.sameStudyRoute(next,state.route)&&!(typeId(next)&&typeId(next)===typeId(state.route))){history.replaceState(null,'','#'+state.route);notify('当前有未保存草稿；请先保存，或在 Esc 菜单中放弃草稿。');return;}
+  if((state.dirty||Ampacity.dirty()||TypeElectrical.dirty()||TypeRating.dirty())&&next!==state.route&&!Ampacity.sameStudyRoute(next,state.route)&&!(typeId(next)&&typeId(next)===typeId(state.route))){history.replaceState(null,'','#'+state.route);notify('当前有未保存草稿；请先保存，或在 Esc 菜单中放弃草稿。');return;}
   state.route=next.startsWith('/p/')?'/':next;
+  if(ReproductionLibrary.handles(state.route)){Ampacity.dispose();renderNav();await ReproductionLibrary.route();return;}
   if(SimulationStudy.handles(state.route)){Ampacity.dispose();await SimulationStudy.route(state.route);if(navigation===state.navigation)renderWorkspace();return;}
-  if(Ampacity.handles(state.route)){$('#workspace').inert=true;$('#header').inert=true;try{await Ampacity.route(state.route);if(navigation===state.navigation)renderWorkspace();}finally{if(navigation===state.navigation){$('#workspace').inert=false;$('#header').inert=false;}}return;}
+  if(Ampacity.handles(state.route)){if(!Ampacity.sameStudyRoute(next,state.previousStudyRoute||''))$('#workspace').innerHTML='<div class="study-loading" role="status"><h3>正在读取研究与运行记录</h3><div class="study-skeleton"></div></div>';state.previousStudyRoute=next;$('#workspace').inert=true;$('#header').inert=true;try{await Ampacity.route(state.route);if(navigation===state.navigation)renderWorkspace();}finally{if(navigation===state.navigation){$('#workspace').inert=false;$('#header').inert=false;}}return;}
   Ampacity.dispose();$('#workspace').inert=false;$('#header').inert=false;
-  const match=state.route.split('?')[0].match(/^\/types\/([^/]+)\/(structure|requirements|standard-check|specification)(?:\/([^/]+))?$/);
-  if(match&&match[1]!==state.wid){$('#workspace').innerHTML='<p class="empty">正在读取领域文档…</p>';if(!await loadWorkspace(match[1]))return;}
+  const match=state.route.split('?')[0].match(/^\/types\/([^/]+)\/(structure|requirements|standard-check|specification|comparison|electrical|short-circuit|rating-table)(?:\/([^/]+))?$/);
+  if(match&&(match[1]!==state.wid||state.runsLoaded===false)){$('#workspace').innerHTML='<p class="empty">正在读取领域文档…</p>';if(!await loadWorkspace(match[1]))return;}
   if(match&&match[2]==='structure'){const view=match[3]||new URLSearchParams(state.route.split('?')[1]||'').get('view');if(['section','three','table','quantities'].includes(view))state.view=view;}
-  if(match&&match[2]==='specification'){await TypeWorkflow.restoreDelivery();if(navigation!==state.navigation)return;}
+  if(match&&TypeVersions.handles()){await TypeVersions.load();if(navigation!==state.navigation)return;}
+  if(match&&TypeElectrical.handles()){await TypeElectrical.load();if(navigation!==state.navigation)return;}
+  if(match&&TypeRating.handles()){await TypeRating.load();if(navigation!==state.navigation)return;}
   renderWorkspace();
 }
 async function createFromPreset(id){
@@ -219,7 +254,7 @@ async function applyWorkspaceHistory(direction){
   if(state.dirty)return;state.busy=true;$('#workspace').inert=true;
   try{await api(`/workspaces/${state.wid}/history/${direction}`,{method:'POST',body:JSON.stringify({expected_revision:state.record.revision})});await loadWorkspace(state.wid);log(`${direction==='undo'?'撤销':'重做'}已保存修订；当前为 r${state.record.revision}。`);if(state.route.includes('/structure'))refreshDraftView();else renderWorkspace();}finally{state.busy=false;$('#workspace').inert=false;renderHeader();}
 }
-function validateInput(value,number,nullable,path=''){if(number){if(value===''&&nullable)return null;const zero=/\.(overlap|minimum_overlap|reverse_binder_thickness)$/.test(path),n=Number(value);if(value===''||!Number.isFinite(n)||n<0||(!zero&&n===0))throw new Error('请输入'+(zero?'非负':'正')+'数值，并核对本字段单位。');if(/\.(overlap|minimum_overlap)$/.test(path)&&n>=100)throw new Error('搭盖率应小于 100%。');if(/\.(wire_count|tape_count|reverse_binder_count)$/.test(path)&&!Number.isInteger(n))throw new Error('根数应为正整数。');return n;}return value;}
+function validateInput(value,number,nullable,path=''){if(number){if(value===''&&nullable)return null;const zero=/\.(overlap|minimum_overlap|reverse_binder_thickness|loss_tangent)$/.test(path),n=Number(value);if(value===''||!Number.isFinite(n)||n<0||(!zero&&n===0))throw new Error('请输入'+(zero?'非负':'正')+'数值，并核对本字段单位。');if(/\.(overlap|minimum_overlap)$/.test(path)&&n>=100)throw new Error('搭盖率应小于 100%。');if(/\.(wire_count|tape_count|reverse_binder_count)$/.test(path)&&!Number.isInteger(n))throw new Error('根数应为正整数。');return n;}return value;}
 function gridEdit(row,col,raw,target=state.draft){
   const r=entries()[row];if(!r)throw new Error('粘贴行数超过现有结构层。');const path=r.path+(col===0?'.material':r.role==='conductor'?'.diameter':'.thickness');if(isLocked(path))throw new Error('粘贴区域包含锁定字段。');
   let value;if(col===0){const mat=state.draft.materials.find(m=>m.id===raw||m.label===raw||materialLabel(m)===raw);if(!mat)throw new Error('未知材料：'+raw);value=mat.id;}else if(col===1)value=validateInput(raw,true,false)/1000;else throw new Error('只可批量粘贴材料与径向尺寸两列。');
@@ -257,6 +292,7 @@ function mutateLayers(operation){
   rememberDraft();operation();refreshDirty();renderStructure();
 }
 async function action(name){
+  if(name.startsWith('rep-'))return ReproductionLibrary.action(name);
   if(name.startsWith('model-'))return CableModel.action(name);
   if(name.startsWith('amp-'))return Ampacity.action(name).catch(Ampacity.error);
   if(name==='dismiss-error'){$('#error').hidden=true;return;}if(name==='close'){$('#modal').close();return;}
@@ -266,7 +302,7 @@ async function action(name){
   if(name==='new-type'){await TypeWorkflow.action('type-new');return;}
   if(name==='create-preset'){await createFromPreset($('#preset').value);return;}
   if(name.startsWith('preset-')){await createFromPreset(name.slice(7));return;}
-  if(name==='save'){await save();return;}if(name==='undo'||name==='redo'){await applyWorkspaceHistory(name);return;}
+  if(name==='save'){await save();await TypeElectrical.saveAll();await TypeRating.saveAll();renderWorkspace();return;}if(name==='undo'||name==='redo'){if(TypeElectrical.handles()&&TypeElectrical.history(name))return;if(TypeRating.handles()&&TypeRating.history(name))return;await applyWorkspaceHistory(name);return;}
   if(name.startsWith('view-')){state.view=['table','three'].includes(name.slice(5))?name.slice(5):'section';history.replaceState(null,'',location.hash.split('?')[0]+'?view='+state.view);state.route=location.hash.slice(1);renderStructure();return;}
   if(name.startsWith('dock-')){state.dock=name.slice(5);state.collapsed=false;renderStructure();return;}
   if(name==='collapse'){state.collapsed=!state.collapsed;renderStructure();return;}
@@ -307,6 +343,8 @@ document.addEventListener('focusout',()=>{draftHistory.group=null;});
 document.addEventListener('change',event=>{
   const el=event.target;
   try{
+    if(TypeElectrical.change(event))return;
+    if(TypeRating.change(event))return;
     if(Ampacity.change(event))return;
     if(el.id==='overlay'){state.overlay=el.checked;renderStage();return;}if(el.id==='reduce'){localStorage.setItem('csp-reduced',String(el.checked));return;}
     if(el.dataset.field){const raw=validateInput(el.value,el.type==='number',el.dataset.nullable==='true',el.dataset.field);edit(el.dataset.field,raw===null?null:el.type==='number'?raw/Number(el.dataset.scale||1):raw===''&&/\.(form|lay_direction|standard_kind|conductor_class|r20_basis|tape_application)$/.test(el.dataset.field)?null:/\.conductor_class$/.test(el.dataset.field)?Number(raw):raw);el.removeAttribute('aria-invalid');renderObjects();renderStage();renderInspector();renderDock();}
@@ -315,26 +353,32 @@ document.addEventListener('change',event=>{
 });
 document.addEventListener('paste',event=>{if(Ampacity.paste(event))return;const el=event.target;if(el.dataset.gridRow===undefined)return;event.preventDefault();try{pasteGrid(event.clipboardData.getData('text/plain'),Number(el.dataset.gridRow),Number(el.dataset.gridCol));}catch(error){fail(error);}});
 document.addEventListener('keydown',event=>{
+  if(ReproductionLibrary.keydown(event))return;
+  if(TypeVersions.keydown(event))return;
+  if(TypeMeasurements.keydown(event))return;
+  if(TypeElectrical.keydown(event))return;
+  if(TypeRating.keydown(event))return;
   if(SimulationStudy.keydown(event))return;
   if(TypeStandards.keydown(event))return;
   if(Ampacity.keydown(event))return;
   const editing=event.target.matches('input,textarea,select'),mod=event.ctrlKey||event.metaKey;
-  if(mod&&event.key.toLowerCase()==='s'){event.preventDefault();if(editing)event.target.blur();save().catch(fail);return;}
+  if(mod&&event.key.toLowerCase()==='s'){event.preventDefault();if(editing)event.target.blur();action('save').catch(fail);return;}
   if(mod&&event.key.toLowerCase()==='z'&&state.route.startsWith('/types/')&&!$('#modal').open){event.preventDefault();applyWorkspaceHistory(event.shiftKey?'redo':'undo').catch(fail);return;}
   if(editing){if(event.key==='Escape'&&event.target.dataset.field){event.preventDefault();const el=event.target,p=el.dataset.field,value=getPath(state.record.document,p);el.value=value==null?'':typeof value==='number'?value*Number(el.dataset.scale||1):value;el.removeAttribute('aria-invalid');edit(p,value??null);renderInspector();renderDock();return;}if(event.key==='Enter'&&event.target.tagName!=='TEXTAREA'){event.preventDefault();event.target.blur();}return;}
   if($('#modal').open)return;
   if(mod&&event.key.toLowerCase()==='z'){event.preventDefault();applyWorkspaceHistory(event.shiftKey?'redo':'undo').catch(fail);return;}
   if(mod&&event.key.toLowerCase()==='c'&&state.draft&&state.route.startsWith('/types/')){event.preventDefault();copyGrid().catch(fail);return;}
   if(event.key==='Escape'&&state.dirty){event.preventDefault();openDialog('未保存草稿','<p>选择保存到新修订，或放弃这次草稿。</p>',button('放弃草稿','','discard')+button('保存修订','','save','class="primary"'));return;}
-  if(!state.draft||!state.route.startsWith('/types/'))return;
+  if(!state.draft||!state.route.startsWith('/types/')||!state.route.split('/').includes('structure'))return;
   if(event.key==='Delete'){event.preventDefault();action('delete-layer').catch(fail);return;}
   const map={v:'tool-select',h:'tool-pan',s:'snap',f:'fit','+':'zoom-in','=':'zoom-in','-':'zoom-out'};
   if(map[event.key.toLowerCase()]){event.preventDefault();action(map[event.key.toLowerCase()]).catch(fail);}
 });
-window.addEventListener('hashchange',()=>route().catch(fail));window.addEventListener('resize',syncDiagramFont);window.addEventListener('beforeunload',event=>{if(state.dirty||Ampacity.dirty()||SimulationStudy.dirty()||SimulationStudy.isBusy()){event.preventDefault();event.returnValue='';}});
-TypeWorkflow.init({$,esc,fmt,groupNumber,api,state,icon,button,log,notify,openDialog,type,roleNames,save,loadWorkspace,renderWorkspace,renderHeader,renderStatus,entries,field});
+window.addEventListener('hashchange',()=>route().catch(fail));window.addEventListener('resize',syncDiagramFont);window.addEventListener('beforeunload',event=>{if(state.dirty||Ampacity.dirty()||TypeElectrical.dirty()||TypeRating.dirty()||SimulationStudy.dirty()||SimulationStudy.isBusy()||SelectionStudy.hasPending()){event.preventDefault();event.returnValue='';}});
+TypeWorkflow.init({$,esc,fmt,groupNumber,api,state,icon,button,log,notify,fail,openDialog,type,roleNames,save,edit,loadWorkspace,renderWorkspace,renderHeader,renderStatus,entries,field,readOnlySection});
 CableModel.init({$,esc,fmt,api,state,icon,button,log,notify,openDialog,type,select,renderStructure,renderHeader,renderStatus,renderInspector,renderDock});
 Ampacity.init({$,esc,clone,fmt,groupNumber,api,state,icon,button,log,notify,fail,openDialog,loadWorkspace,refreshLists,renderWorkspace,getPath,setPath,sourceText,isLocked,stablePointer});
 SimulationStudy.init({$,esc,api,state,icon,openDialog,refreshLists});
+ReproductionLibrary.init({$,esc,fmt,api,state,icon,button,openDialog,notify});
 async function boot(){document.documentElement.dataset.theme=localStorage.getItem('csp-theme')||'light';await hydrate();[state.methods,state.presets]=await Promise.all([api('/methods'),api('/presets')]);await refreshLists();log(`已连接真实 API：${state.methods.length} 个插件。尚无经过本页运行的结果。`);await route();}
 boot().catch(error=>{$('#workspace').innerHTML=`<div class="empty"><h2>本机 API 未连接</h2><p>${esc(error.message)}</p><p>请从仓库运行 python design/workbench/serve.py，再刷新此页。</p></div>`;fail(error);});

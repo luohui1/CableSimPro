@@ -8,3 +8,16 @@
 .simulation-history{width:300px;flex-shrink:0;border-left:1px solid var(--border);padding:var(--space-4);overflow:auto}.simulation-run{display:flex;flex-direction:column;align-items:flex-start;width:100%;margin-top:var(--space-2);padding:var(--space-3);text-align:left;white-space:normal;height:auto}.simulation-state{font-size:var(--text-note)}.simulation-workspace details{margin-top:var(--space-6)}.simulation-workspace :focus-visible{outline:2px solid var(--agent);outline-offset:2px}.simulation-workspace ::selection{background:var(--location)}
 @media(max-width:1000px){.simulation-workspace .module-rail{flex-basis:140px}.simulation-content{padding:var(--space-4)}.simulation-history{width:250px}.simulation-resultbar select{max-width:210px}}
 @media(max-width:700px){.simulation-workspace{flex-direction:column}.simulation-workspace .module-rail{display:flex;flex-basis:auto}.simulation-method{display:none}.simulation-history{width:auto;max-height:220px;border-left:0;border-top:1px solid var(--border)}.simulation-evidence{grid-template-columns:1fr}.simulation-main .study-tabbar{flex-wrap:wrap;height:auto}.simulation-settings label{flex-wrap:wrap}.simulation-state{display:none}}
+.thermal-view-tools,.thermal-input-tools,.thermal-comparison-head{display:flex;align-items:center;gap:var(--space-4);flex-wrap:wrap}
+.thermal-view-tools label{display:flex;gap:var(--space-2);align-items:center;font-size:var(--text-note)}
+.thermal-field-figure{margin:var(--space-4) 0 var(--space-6)}
+#thermal-field-canvas{display:block;width:100%;height:clamp(232px,32vh,360px);border-radius:var(--radius-surface);background:var(--panel)}
+.thermal-legend{display:flex;justify-content:center;flex-wrap:wrap;gap:var(--space-4);font-size:var(--text-note);margin-top:var(--space-2)}
+.thermal-legend span{display:flex;gap:var(--space-2);align-items:center}.thermal-legend i{display:block;width:var(--space-4);height:var(--space-3)}
+.thermal-comparison{border-top:1px solid var(--line);padding-top:var(--space-4)}.thermal-comparison-head{margin-bottom:var(--space-3)}.thermal-comparison-head h3{margin:0;flex:1}
+.thermal-comparison .study-table th:nth-child(n+2):nth-child(-n+5),.thermal-comparison .study-table td.number{text-align:right;font-variant-numeric:tabular-nums}
+.thermal-explanation{color:var(--attention)}.thermal-explanation p{color:var(--text);min-width:180px;max-width:42ch;white-space:normal;font-size:var(--text-note)}
+.thermal-input-tools{margin-bottom:var(--space-4)}.thermal-result input,.thermal-result select{font:inherit}
+.thermal-error{color:var(--error)}[data-thermal-field]{font:var(--text-body) var(--font-ui);min-height:var(--control-compact);padding:var(--space-1) var(--space-2);max-width:100%;border:1px solid var(--border);border-radius:var(--radius-input);background:var(--panel);color:var(--text);font-variant-numeric:tabular-nums}
+[data-thermal-field][type=number]{width:160px}[data-thermal-field][type=text]{min-width:200px;max-width:480px;width:100%}[data-thermal-field][aria-invalid=true]{border-color:var(--error)}
+.study-content pre{font-size:var(--text-note);white-space:pre-wrap;overflow-wrap:anywhere}

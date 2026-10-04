@@ -37,7 +37,8 @@ def coefficients():
     # (-120,0,+120) positions to B,A,C, retaining physical cable IDs A/B/C.
     cables=[{'id':label,'phase':phase,'point':(x,-.8),'rating':r,'geometry':g,'factors':None}
             for label,phase,x in zip('ABC',['B','A','C'],[-.106,0,.106])]
-    group=NS(cables=cables,circuits=[{'indices':[0,1,2],'spacing':.106,'automatic':True,'arrangement':'flat','transposed':False}])
+    group=NS(cables=cables,soil={},parameters={},circuits=[{'indices':[0,1,2],'spacing':.106,'automatic':True,
+             'arrangement':'flat','transposed':False,'phase_sequence':'ABC','bonding':{'kind':'both_ends'}}])
     losses=_loss_factors(group,[e.r_ac_max_ohm_m]*3,[80.]*3)
     return {'ys':e.skin_ys,'yp':e.proximity_yp,'r_dc_ohm_m':e.r_dc_max_ohm_m,'r_ac_ohm_m':e.r_ac_max_ohm_m,
             'lambda1_circulating':dict(zip('ABC',losses)),
@@ -69,11 +70,13 @@ def canonical_rows(rows,iec):
 
 def main():
     fixture=json.loads((ROOT/'plugins/cablesim.simulation/src/cases/eddy-lunca.json').read_text('utf-8'))
-    original=json.loads((ROOT/'.data/simulation/eddy-lunca/default-2.json').read_text('utf-8'))
-    full=original['cases'][0]['artifacts']['x-cablesim.simulation-bundle']['result']
     output=ROOT/'.data/simulation/eddy-iec';output.mkdir(parents=True,exist_ok=True)
     jobs=ROOT/'.tmp/simulation-external-iec';jobs.mkdir(parents=True,exist_ok=True)
     executor=Executor(jobs_root=jobs)
+    full_run=executor.run('cablesim.simulation','getdp-eddy',[{'case_id':'full','input':fixture['input'],'parameters':fixture['parameters']}])
+    if full_run.cases[0].status!='succeeded':raise RuntimeError(full_run.cases[0].error)
+    full=full_run.cases[0].artifacts['x-cablesim.simulation-bundle']['result']
+    (output/'full.json').write_text(json.dumps(asdict(full_run),ensure_ascii=False,allow_nan=False,separators=(',',':')),'utf-8')
     studies={}
     for name,cores in [('isolated',['B/core']),('bare',['A/core','B/core','C/core'])]:
         p=deepcopy(fixture['input'])
@@ -116,7 +119,9 @@ def main():
     canonical=canonical_rows(rows,iec)
     report={'schema':'cablesim.reproduction-report/1','kind':'case','reference':{'id':'E05-IEC-coefficients','kind':'crosscheck'},
             'scope':'IEC plugin electrical functions at matching fixed temperatures; ys isolated-core control, yp bare-three-core control, lambda full bonded FEM.',
-            'status':'not_assessed','rows':canonical,'comparisons':rows,'iec':iec,'fem_solver':full['solver'],'engineering_approval':False,
+            'status':'not_assessed','rows':canonical,'comparisons':rows,'iec':iec,'fem_solver':full['solver'],
+            'fem_run':{'run_id':full_run.run_id,'plugin_version':full_run.plugin_version,'request_sha256':full_run.request_sha256,
+                       'artifact_sha256':full_run.cases[0].artifact_digests['x-cablesim.simulation-bundle']},'engineering_approval':False,
             'limitations':['IEC flat lambda branch returns circulating losses only; FEM includes local shield eddies.',
                            'IEC yp is a shared approximate circuit coefficient; local phase FEM proximity and shield reaction need not coincide.',
                            'FEM geometry-DC resistance uses actual polygon area; compare small ratios independently of area-discretization bias.',

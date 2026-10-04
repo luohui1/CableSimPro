@@ -19,7 +19,7 @@ from ..plugin_host import Executor, PluginHostError
 from ..plugin_host.registry import Registry
 from ..plugin_host.executor import CaseResult, current_platform
 from ..workbench import fingerprint, stamp
-from .contracts import StudyDefinition
+from .contracts import LossArtifactReference, StudyConfiguration, StudyDefinition
 from .drivers import assess, cases_for, compare, crosscheck_differences
 
 
@@ -115,13 +115,26 @@ class Research:
 
     def save(self, wid, body, sid=None):
         definition = StudyDefinition.model_validate(body.model_dump(exclude={'expected_revision', 'expected_study_revision'}))
-        self.resolve(definition.method.model_dump())
-        for item in definition.crosschecks:
-            self.resolve(item.method.model_dump())
+        prior = None
+        if sid is not None:
+            with self.store.db() as db:
+                prior = StudyDefinition.model_validate(self.definition(db,wid,sid,body.expected_study_revision)['definition'])
+        def verify_changed(config, previous):
+            if previous is not None and config.model_dump()==previous.model_dump():
+                return  # Preserve an unchanged historical pin while editing another module.
+            self.resolve(config.method.model_dump())
+            for item in config.crosschecks:
+                self.resolve(item.method.model_dump())
+        primary = StudyConfiguration.model_validate(definition.model_dump(exclude={'modules'}))
+        previous = StudyConfiguration.model_validate(prior.model_dump(exclude={'modules'})) if prior else None
+        verify_changed(primary,previous)
+        for name,config in definition.modules.items():
+            verify_changed(config,prior.modules.get(name) if prior else None)
         value = definition.model_dump(mode='json')
         encoded = encode(value)
         with self.store.db(True) as db:
             self.store.load(db, wid, body.expected_revision, allow_domain=True)
+            self.store.assert_mutable(db, wid)
             if sid is None:
                 sid, revision = str(uuid4()), 1
                 db.execute('INSERT INTO studies VALUES (?,?,?)', (sid, wid, revision))
@@ -144,10 +157,55 @@ class Research:
         value = {'project_lock': lock.model_dump(mode='json'), 'project_lock_digest': lock.digest(), 'method': method}
         return {**value, 'digest': fingerprint(value)}
 
-    def prepare(self, db, wid, sid, revision, study_revision):
+    @staticmethod
+    def module_definition(definition, module=None):
+        if module is None:
+            return definition
+        selected = definition.get('modules', {}).get(module)
+        if selected is None:
+            raise HTTPException(422, '此研究尚未保存该模块的输入：' + module)
+        return selected
+
+    def bind_loss_artifact(self, wid, case):
+        if 'external_loss_artifact' in case['parameters']:
+            raise HTTPException(422, '外部损耗工件只能由已封存运行引用，不能直接替换工件正文。')
+        reference = case['parameters'].get('external_loss_reference')
+        if reference is None:
+            return
+        try:
+            reference = LossArtifactReference.model_validate(reference).model_dump(mode='json')
+        except ValidationError as exc:
+            detail='；'.join('external_loss_reference.'+'.'.join(map(str,e['loc']))+'：'+e['msg'] for e in exc.errors())
+            raise HTTPException(422,detail) from None
+        try:
+            source = self.get_run(wid, reference['run_id'])
+        except HTTPException as exc:
+            if exc.status_code==404:
+                raise HTTPException(422,'external_loss_reference.run_id：来源运行不存在或不属于当前工程，请选择本工程已封存的损耗运行。') from None
+            raise
+        if source['integrity'] != 'verified' or source['status'] not in ('succeeded','partial'):
+            raise HTTPException(422, '外部损耗来源运行未成功或完整性校验失败。')
+        rows = [v for v in source['output']['cases'] if v['case_id'] == reference['case_id']]
+        if len(rows) != 1 or rows[0]['status'] != 'succeeded':
+            raise HTTPException(422, '外部损耗来源工况不可用。')
+        row = rows[0]
+        digest = row.get('artifact_digests', {}).get(reference['artifact_type'])
+        if not digest or digest != reference['artifact_sha256']:
+            raise HTTPException(422, 'external_loss_reference.artifact_sha256：与封存工件不一致。')
+        artifact = row.get('artifacts', {}).get(reference['artifact_type'])
+        if not isinstance(artifact, dict) or artifact.get('schema') != 'cablesim.loss-coefficients/1':
+            raise HTTPException(422, '外部损耗工件须符合 cablesim.loss-coefficients/1。')
+        if artifact.get('domain_input_sha256') != fingerprint(case['input']):
+            raise HTTPException(422, '损耗工件的领域输入摘要不同，不能带入当前研究。')
+        case['parameters']['external_loss_artifact'] = deepcopy(artifact)
+        case['parameters']['external_loss_artifact']['resolved_source'] = {
+            **reference, 'method': row.get('method') or source['snapshot']['definition']['method'],
+            'source_input_digest': source['input_digest'], 'source_output_digest': source['output_digest']}
+
+    def prepare(self, db, wid, sid, revision, study_revision, module=None):
         row, state = self.store.load(db, wid, revision, allow_domain=True)
         study = self.definition(db, wid, sid, study_revision)
-        definition = study['definition']
+        definition = self.module_definition(study['definition'], module)
         source = definition['input_source']
         if source == 'study':
             inputs = definition['method_input']
@@ -164,6 +222,8 @@ class Research:
             cases = cases_for(definition, inputs)
         except (ValueError, KeyError, IndexError, TypeError) as exc:
             raise HTTPException(422, '扫描路径无效：' + str(exc)) from None
+        for case in cases:
+            self.bind_loss_artifact(wid, case)
         if source == 'domain':
             from ..domain.guards import check_locks
             for case in cases:
@@ -172,10 +232,39 @@ class Research:
                     check_locks(state, case['input'], item['parameters'])
         candidates = []
         if definition['driver']['candidate_ids']:
-            if source != 'scenario':
-                raise HTTPException(422, '现有型号库保存的是 v0 电缆；不能静默映射到另一种方法输入。')
             cases = []
             for index, cid in enumerate(definition['driver']['candidate_ids']):
+                if source == 'domain':
+                    from .candidates import apply, initialize, read, matches
+                    initialize(db)
+                    item=read(db,cid)
+                    if not matches(item,definition['driver'].get('candidate_filters',{})):
+                        raise HTTPException(422,'候选不在保存的电压、材料或截面范围内：'+cid)
+                    if item['state']=='incomplete':
+                        spec=item['payload']['specification']
+                        cases.append({'case_id':f'case-{index}',
+                            'input':{'schema_version':'cablesim.product-specification/1','specification':deepcopy(spec)},
+                            'parameters':deepcopy(definition['parameters']),
+                            'preflight_error':{'code':'CANDIDATE_DATA_MISSING',
+                                'message':'请补齐'+ '、'.join(spec['missing'])+'后计算。'}})
+                        candidates.append(item)
+                        continue
+                    if item['state']!='reviewed' and not definition['driver'].get('allow_demo_candidates'):
+                        raise HTTPException(422,'候选范围只接受已核对型号；草稿须先由工程师核对：'+cid)
+                    candidate=apply(inputs,item)
+                    from ..domain.guards import check_locks
+                    checked_state=deepcopy(state)
+                    # Exact saved model bindings are replaced for this experiment only;
+                    # manually locked dimensions and environmental inputs remain locked.
+                    binding=checked_state.get('study_cable_reference') or {}
+                    checked_state['locks']=[p for p in checked_state.get('locks',[]) if p not in binding.get('locks',[])]
+                    checked_state.pop('study_cable_reference',None)
+                    check_locks(checked_state,candidate,definition['parameters'])
+                    cases.append({'case_id':f'case-{index}','input':candidate,'parameters':deepcopy(definition['parameters'])})
+                    candidates.append(item)
+                    continue
+                if source != 'scenario':
+                    raise HTTPException(422,'型号候选须使用保存的领域或兼容工况输入。')
                 item = db.execute('SELECT * FROM catalog_entries WHERE id=?', (cid,)).fetchone()
                 if item is None:
                     raise HTTPException(422, '型号候选不存在：' + cid)
@@ -194,15 +283,21 @@ class Research:
                     path = pointer[len('/input/'):].replace('/', '.')
                     if path in state.get('locks', []):
                         raise HTTPException(422, '研究不能扫描锁定参数：' + path)
-        return {'workspace_id': wid, 'workspace_revision': row['revision'], 'study_id': sid,
+        result = {'workspace_id': wid, 'workspace_revision': row['revision'], 'study_id': sid,
                 'study_revision': study['revision'], 'definition': definition, 'workspace_state': state,
                 'lock': lock, 'cases': cases, 'candidate_snapshots': candidates, 'host_version': __version__,
                 'planned_environment': {'python': platform.python_version(), 'platform': platform.system()}}
+        if module is not None:
+            result.update(module=module, study_definition=study['definition'])
+        return result
 
     def check_cases(self, plugin, capability, cases):
         from ..domain.models import DomainDocument
         checked, valid = {}, []
         for case in cases:
+            if case.get('preflight_error'):
+                checked[case['case_id']]=CaseResult(case['case_id'],'failed',error=case['preflight_error'])
+                continue
             try:
                 if case['input'].get('schema_version') == 'cablesim.domain/1':
                     DomainDocument.model_validate(case['input'])
@@ -217,10 +312,10 @@ class Research:
             checked.update({c.case_id: c for c in result.cases})
         return [checked[c['case_id']] for c in cases]
 
-    def preflight(self, wid, sid, revision, study_revision):
+    def preflight(self, wid, sid, revision, study_revision, module=None):
         with self.store.db() as db:
             db.execute('BEGIN')
-            snapshot = self.prepare(db, wid, sid, revision, study_revision)
+            snapshot = self.prepare(db, wid, sid, revision, study_revision, module)
         plugin, capability = self.resolve(snapshot['definition']['method'])
         checked = self.check_cases(plugin, capability, snapshot['cases'])
         comparisons = []
@@ -237,6 +332,10 @@ class Research:
             comparisons.extend({**asdict(c), 'case_id': f'crosscheck-{index}-{c.case_id}', 'method': item['method']}
                                for c in comparison)
         all_checks = [asdict(c) for c in checked] + comparisons
+        if snapshot['definition']['driver']['kind'] == 'batch':
+            selected = snapshot['definition']['driver'].get('selected_case_ids')
+            if selected is not None:
+                runnable &= set(selected)
         return {'ready': bool(runnable), 'partial': any(c['status'] != 'succeeded' for c in all_checks),
                 'runnable_case_ids': sorted(runnable),
                 'cases': [asdict(c) for c in checked], 'crosschecks': comparisons, 'method_scopes': scopes, 'limitations': capability.limitations,
@@ -244,7 +343,7 @@ class Research:
                 'input_digest': fingerprint(snapshot)}
 
     def execute(self, wid, sid, body):
-        request = {'study_id': sid, **body.model_dump(mode='json')}
+        request = {'study_id': sid, **body.model_dump(mode='json', exclude={'module'} if body.module is None else set())}
         request_digest = fingerprint(request)
         # Cheap replay check comes before reading mutable state or resolving packages.
         with self.store.db() as db:
@@ -254,8 +353,11 @@ class Research:
                 if old['request_digest'] != request_digest:
                     raise HTTPException(409, '同一请求标识不能用于不同研究或参数。')
                 return self.get_run(wid, old['id'])
-        check = self.preflight(wid, sid, body.expected_revision, body.expected_study_revision)
-        if not check['ready']:
+        check = self.preflight(wid, sid, body.expected_revision, body.expected_study_revision, body.module)
+        with self.store.db() as db:
+            saved_definition=self.module_definition(self.definition(db,wid,sid)['definition'],body.module)
+        selection=saved_definition['driver']['kind']=='selection' and bool(saved_definition['driver']['candidate_ids'])
+        if not check['ready'] and not selection and saved_definition['driver']['kind'] != 'batch':
             raise HTTPException(422, {'message': '没有通过全部方法预检的工况。', 'cases': check['cases'],
                                       'crosschecks': check['crosschecks']})
         with self.store.db(True) as db:
@@ -266,7 +368,8 @@ class Research:
                     raise HTTPException(409, '同一请求标识不能用于不同参数。')
                 rid, existing = old['id'], True
             else:
-                snapshot = self.prepare(db, wid, sid, body.expected_revision, body.expected_study_revision)
+                snapshot = self.prepare(db, wid, sid, body.expected_revision, body.expected_study_revision, body.module)
+                self.store.assert_mutable(db, wid)
                 if snapshot['lock']['digest'] != body.lock_digest or fingerprint(snapshot) != check['input_digest']:
                     raise HTTPException(409, '输入或插件锁已变化，请重新预检。')
                 rid, existing = str(uuid4()), False
@@ -285,9 +388,11 @@ class Research:
                                      "AND execution_nonce=? AND status='accepted'", (rid, self.owner_epoch, nonce)).rowcount
             if not claimed:
                 return self.get_run(wid, rid)
-            output = self.run_checked(plugin, capability, snapshot['cases'], check['cases'])
+            selected = snapshot['definition']['driver'].get('selected_case_ids') if snapshot['definition']['driver']['kind'] == 'batch' else None
+            output = self.run_checked(plugin, capability, snapshot['cases'], check['cases'], selected_case_ids=selected)
             output['preflight'] = check
             output['executions'] = [{'method': method, 'environment': output['environment'], 'request_sha256': output['request_sha256'],
+                                     'executed':any(c['status']=='succeeded' and (selected is None or c['case_id'] in selected) for c in check['cases']),
                                      'validation': capability.validation.model_dump(mode='json'), 'limitations': capability.limitations}]
             for index, item in enumerate(snapshot['definition']['crosschecks'], 1):
                 try:
@@ -336,12 +441,16 @@ class Research:
                            (encode(error), stamp(), rid, self.owner_epoch, nonce))
         return self.get_run(wid, rid)
 
-    def run_checked(self, plugin, capability, cases, checks):
-        accepted = {c['case_id'] for c in checks if c['status'] == 'succeeded'}
+    def run_checked(self, plugin, capability, cases, checks, *, selected_case_ids=None):
+        accepted = {c['case_id'] for c in checks if c['status'] == 'succeeded' and (selected_case_ids is None or c['case_id'] in selected_case_ids)}
         result = asdict(self.executor.run(plugin.manifest.id, capability.id,
-                                         [c for c in cases if c['case_id'] in accepted], expected_manifest=plugin.manifest))
+                                         [c for c in cases if c['case_id'] in accepted], expected_manifest=plugin.manifest)) if accepted else {
+                                             'cases':[], 'environment':{}, 'request_sha256':None}
         solved = {c['case_id']: c for c in result['cases']}
         result['cases'] = [solved[c['case_id']] if c['case_id'] in accepted else
+                           {**c, 'status': 'not_run', 'results': [], 'artifacts': {},
+                            'error': {'code':'CASE_NOT_SELECTED', 'message':'此工况未被选中，未执行计算。'},
+                            'evidence': {**c.get('evidence', {}), 'stage': 'selection'}} if c['status']=='succeeded' else
                            {**c, 'evidence': {**c.get('evidence', {}), 'stage': 'preflight'}} for c in checks]
         return result
 
@@ -366,8 +475,14 @@ class Research:
             if not intact:
                 return {**value, 'integrity': 'corrupt', 'freshness': 'unknown'}
             study = self.definition(db, wid, value['study'])
-            current = row['revision'] == snapshot['workspace_revision'] and study['revision'] == snapshot['study_revision']
-            current = current and self.lock(db, wid, row['revision'], study['definition']['method']) == snapshot['lock']
+            current = row['revision'] == snapshot['workspace_revision']
+            try:
+                selected = self.module_definition(study['definition'], snapshot.get('module'))
+                # Editing another module does not invalidate unchanged physical inputs.
+                current = current and StudyConfiguration.model_validate({k:v for k,v in selected.items() if k!='modules'}).model_dump() == StudyConfiguration.model_validate({k:v for k,v in snapshot['definition'].items() if k!='modules'}).model_dump()
+                current = current and self.lock(db, wid, row['revision'], selected['method']) == snapshot['lock']
+            except HTTPException:
+                current = False
         availability = {'status': 'available', 'error': None}
         try:
             self.resolve(snapshot['definition']['method'], cache)
@@ -380,7 +495,41 @@ class Research:
         value['freshness'] = 'current' if current else 'historical'
         value['integrity'] = 'verified'
         value['method_availability'] = availability
+        value['artifact_status'] = self.artifact_status(value)
+        from .convergence import has_temperature_field, temperature_convergence
+        if has_temperature_field(value):
+            value['convergence'] = temperature_convergence(value)
         return value
+
+    @staticmethod
+    def artifact_status(run):
+        """Validate known presentation contracts without altering sealed output."""
+        from ..foundation.simulation_artifacts import TemperatureField
+        from ..foundation.reproduction import digest
+        statuses = {}
+        for case in (run.get('output') or {}).get('cases',[]):
+            artifact = case.get('artifacts',{}).get('x-cablesim.temperature-field')
+            if artifact is None:
+                continue
+            try:
+                field = TemperatureField.model_validate(artifact)
+                original_id = case['case_id'].split('-',2)[-1] if case['case_id'].startswith('crosscheck-') else case['case_id']
+                inputs = next(c['input'] for c in run['snapshot']['cases'] if c['case_id']==original_id)
+                method = case.get('method') or run['snapshot']['definition']['method']
+                if (field.source.case_id != original_id or field.source.input_sha256 != digest(inputs)
+                        or field.source.plugin_id != method['plugin_id'] or field.source.plugin_version != method['version']
+                        or field.source.capability != method['capability']):
+                    raise ValueError('source：温度场与本次保存输入、工况或插件版本不一致。')
+                digests = case.get('artifact_digests',{})
+                if not isinstance(case.get('artifacts',{}).get('x-cablesim.simulation-bundle'),dict) or not digests.get('x-cablesim.temperature-field') or field.source.bundle_sha256 != digests.get('x-cablesim.simulation-bundle'):
+                    raise ValueError('source.bundle_sha256：温度场没有绑定同次封存的原始场工件。')
+                if field.mesh.sha256 != digest({k:artifact['mesh'][k] for k in ('points','triangles','domain_ids','regions')}):
+                    raise ValueError('mesh.sha256：网格摘要与节点、连接和区域不一致。')
+                state = {'status':'verified','reason':None}
+            except (ValueError,KeyError,TypeError,StopIteration) as exc:
+                state = {'status':'unavailable','reason':str(exc)}
+            statuses.setdefault(case['case_id'],{})['x-cablesim.temperature-field'] = state
+        return statuses
 
     def list_runs(self, wid, sid, after=0, limit=50):
         with self.store.db() as db:
@@ -395,7 +544,7 @@ class Research:
     def verified_runs(self, wid, ids):
         cache = {}
         values = [self.get_run(wid, str(rid), cache) for rid in ids]
-        if any(r['integrity'] != 'verified' or r['status'] not in ('succeeded', 'partial') for r in values):
+        if any(r['integrity'] != 'verified' or (r['status'] not in ('succeeded', 'partial') and not (r['snapshot']['definition']['driver']['kind'] in ('selection','batch') and (r.get('output') or {}).get('cases'))) for r in values):
             raise HTTPException(409, '源运行未完成或完整性校验失败。')
         return values
 
@@ -413,6 +562,9 @@ class Research:
                     raise HTTPException(409, '同一请求标识不能用于不同源运行。')
                 return self.delivery(wid, prior['delivery'])
         runs = self.verified_runs(wid, ids)
+        from .convergence import has_temperature_field
+        if any(has_temperature_field(r) and r.get('convergence',{}).get('status') != 'converged' for r in runs):
+            raise HTTPException(422, '温度场未收敛：须完成至少三档网格及计算域加倍，热点变化小于 0.1 K 后才能纳入计算书。')
         if current_only and any(r['freshness'] != 'current' for r in runs):
             raise HTTPException(409, '计算书只能纳入当前保存输入的运行；请重新计算或重新选择。')
         html = render(runs)
@@ -426,7 +578,7 @@ class Research:
                     snapshot = run['snapshot']
                     study = self.definition(db, wid, run['study'])
                     if (row['revision'] != snapshot['workspace_revision'] or study['revision'] != snapshot['study_revision']
-                            or self.lock(db, wid, row['revision'], study['definition']['method']) != snapshot['lock']):
+                            or self.lock(db, wid, row['revision'], self.module_definition(study['definition'], snapshot.get('module'))['method']) != snapshot['lock']):
                         raise HTTPException(409, '生成期间输入或研究已改变；请重新计算后生成计算书。')
                     for comparison in snapshot['definition']['crosschecks']:
                         self.resolve(comparison['method'])

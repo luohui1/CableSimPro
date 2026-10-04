@@ -17,9 +17,11 @@ from cablesim_comsol_bridge.runtime import execute
 def run_case(request, case, job):
     work=job/'output'/('native-'+case['case_id'])
     try:
+        if request['capability']=='electrothermal-reference':
+            return coupled_case(request,case,job,work)
         problem, controls = prepare(case['input'], case.get('parameters', {}))
-        expected = 'magnetic_harmonic' if request['capability']=='magnetic-reference' else 'steady_heat'
-        if request['capability'] not in ('magnetic-reference','thermal-reference') or problem['physics']!=expected:
+        expected = 'magnetic_harmonic' if request['capability']=='magnetic-reference' else problem['physics']
+        if request['capability'] not in ('magnetic-reference','thermal-reference') or problem['physics']!=expected or (request['capability']=='thermal-reference' and expected not in ('steady_heat','transient_heat')):
             raise ValueError('physics：所选 COMSOL 能力与问题物理类型不符。')
         work=job/'output'/('native-'+case['case_id'])
         required=['COMSOL','ACDC' if expected=='magnetic_harmonic' else 'HEATTRANSFER']
@@ -53,6 +55,22 @@ def run_case(request, case, job):
         return {'case_id':case['case_id'],'status':'failed','error':{'code':type(exc).__name__,'message':str(exc)}}
     finally:
         shutil.rmtree(work, ignore_errors=True)
+
+
+def coupled_case(request,case,job,work):
+    from cablesim_comsol_bridge.electrothermal import prepare as coupled_prepare,solve as coupled_solve
+    model,controls=coupled_prepare(case['input'],case.get('parameters',{}))
+    mesh,result,observations=coupled_solve(model,controls,work,check=request['phase']=='check')
+    evidence={'input_sha256':digest(case['input']),'solver':result['solver']}
+    if request['phase']=='check':return dict(case_id=case['case_id'],status='succeeded',results=[],artifacts=[],evidence=evidence)
+    evidence['mesh_sha256']=mesh['sha256']
+    payload=dict(schema='cablesim.simulation-bundle/2',input=model.model_dump(mode='json'),mesh=mesh,result=result,observations=observations,evidence=evidence,engineering_approval=False)
+    raw=json.dumps(payload,ensure_ascii=False,allow_nan=False,separators=(',',':'))
+    if len(raw.encode('utf-8'))>16*1024*1024:raise ValueError('COMSOL耦合工件超过16 MiB，未截断。')
+    path='output/'+case['case_id']+'.json';(job/path).write_text(raw,'utf-8')
+    return dict(case_id=case['case_id'],status='succeeded',evidence=evidence,
+                artifacts=[dict(type='x-cablesim.simulation-bundle',path=path)],
+                results=[dict(key='x-cablesim.maximum-temperature',type='quantity',entity='field',value=result['maximum_temperature_k'],unit='K',status='available')])
 
 
 def main():

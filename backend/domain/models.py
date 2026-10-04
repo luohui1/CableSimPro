@@ -1,5 +1,5 @@
 """cablesim.domain/1: structural facts and stable identities, never solver defaults."""
-from math import hypot
+from math import hypot, pi
 import json
 from typing import Literal
 
@@ -13,6 +13,36 @@ class Source(StrictModel):
     kind: Literal['demo', 'user', 'manufacturer', 'standard', 'measurement', 'derived', 'asset']
     reference: str | None = None
     reviewed: bool = False
+
+
+class FactoryMeasurement(StrictModel):
+    """Reported product data is independent of design geometry and material facts."""
+    id: str = Field(pattern=r'^measurement/[A-Za-z0-9_-]+$')
+    cable_type: str
+    core: str | None = None
+    role: Literal['conductor', 'insulation', 'conductor_screen', 'insulation_screen', 'metallic_screen', 'metallic_sheath', 'bedding', 'separator', 'armour', 'oversheath']
+    quantity: Literal['r20', 'minimum_thickness', 'maximum_thickness', 'mean_thickness', 'minimum_tape_thickness', 'screen_area']
+    value: float = Field(gt=0)
+    unit: Literal['ohm/m', 'm', 'm2']
+    basis: Literal['measurement', 'manufacturer_limit']
+    source: Source
+
+    @model_validator(mode='after')
+    def meaning(self):
+        expected = 'ohm/m' if self.quantity == 'r20' else 'm2' if self.quantity == 'screen_area' else 'm'
+        if self.unit != expected:
+            raise ValueError('出厂数据单位与量不一致；R20 用 ohm/m，厚度用 m，截面用 m2')
+        if self.value > (1 if expected == 'ohm/m' else .01 if expected == 'm2' else .5):
+            raise ValueError('出厂数据超出范围，请核对 SI 单位')
+        if (self.quantity == 'r20') != (self.role == 'conductor'):
+            raise ValueError('R20 数据只能关联导体；厚度或截面需关联结构层')
+        if self.quantity == 'screen_area' and self.role not in ('metallic_screen', 'metallic_sheath', 'armour'):
+            raise ValueError('金属截面数据必须关联屏蔽、金属护套或铠装')
+        if self.basis == 'manufacturer_limit' and self.quantity != 'r20':
+            raise ValueError('厂家声明上限只用于 R20；厚度和截面请录入有报告依据的实测值')
+        if self.source.kind not in ('manufacturer', 'measurement') or not self.source.reference or not self.source.reference.strip():
+            raise ValueError('出厂数据必须填写试验报告编号或厂家数据表出处')
+        return self
 
 
 class Series(StrictModel):
@@ -88,6 +118,10 @@ class Layer(StrictModel):
     reverse_binder_count: int | None = Field(default=None, ge=1)
     screen_inner_diameter: float | None = Field(default=None, gt=0)
     minimum_tape_thickness: float | None = Field(default=None, gt=0)
+    longitudinal_r20: float | None = Field(default=None, gt=0, description='金属层沿成品电缆轴向的20°C电阻，Ω/m；铜带接触电阻不能由单带截面代替')
+    longitudinal_resistance_basis: Literal['dc', 'power_frequency_ac'] | None = None
+    longitudinal_resistance_frequency: float | None = Field(default=None, gt=0, description='纵向交流电阻的测量频率，Hz；不能以直流值替代钢丝铠装工频电阻')
+    tape_gap: float | None = Field(default=None, ge=0, description='双带间隙绕包的轴向间隙，m')
 
     @model_validator(mode='after')
     def measurements_valid(self):
@@ -118,6 +152,7 @@ class CableType(StrictModel):
     rating: Rating
     cores: list[Core] = Field(min_length=1, max_length=100)
     common_layers: list[Layer]
+    core_lay_length: float | None = Field(default=None, gt=0, description='三芯成缆完整绞合一周的轴向长度，m；区别于导体单丝绞距')
 
     def radius(self):
         return max(hypot(c.x, c.z) + c.conductor.diameter / 2 + sum(l.thickness for l in c.layers) for c in self.cores) + sum(l.thickness for l in self.common_layers)
@@ -156,6 +191,38 @@ class Bonding(StrictModel):
     kind: Literal['both_ends', 'single_point', 'cross_bonded', 'none', 'unspecified']
     minor_section_lengths: list[float] = Field(default_factory=list)
     transposed: bool = False
+    section_permutations: list[list[int]] = Field(default_factory=list,
+        description='每小段中三条连续护套支路所处的位置索引（0,1,2）；顺序与 minor_section_lengths 的 m 值相同')
+    source: Source | None = None
+
+    @model_validator(mode='after')
+    def topology(self):
+        if self.source is not None and not (self.source.reference or '').strip():
+            raise ValueError('bonding.source.reference：接地拓扑必须注明来源')
+        if self.kind == 'cross_bonded':
+            if len(self.minor_section_lengths) != 3 or any(v <= 0 for v in self.minor_section_lengths):
+                raise ValueError('bonding.minor_section_lengths：一个大段需三个正小段长度，单位 m')
+            if len(self.section_permutations) != 3 or any(sorted(v) != [0,1,2] for v in self.section_permutations):
+                raise ValueError('bonding.section_permutations：逐小段填写 0/1/2 的换位排列')
+            if any(len({v[i] for v in self.section_permutations}) != 3 for i in range(3)):
+                raise ValueError('bonding.section_permutations：每条护套支路必须依次经过全部三个位置')
+            if self.source is None:
+                raise ValueError('bonding.source：交叉互联必须给出接线图或设计来源')
+        elif self.section_permutations or self.minor_section_lengths:
+            raise ValueError('bonding：小段长度与护套换位只用于 cross_bonded')
+        return self
+
+
+class PhaseTopology(StrictModel):
+    phase_sequence: Literal['ABC','ACB']
+    reference_angle_rad: float = Field(ge=-pi,le=pi,description='A/L1 相相角，rad；所有回路共用同一时间参考')
+    source: Source
+
+    @model_validator(mode='after')
+    def sourced(self):
+        if not (self.source.reference or '').strip():
+            raise ValueError('electrical_topology.source.reference：相序和相角必须注明来源')
+        return self
 
 
 class Circuit(StrictModel):
@@ -165,6 +232,7 @@ class Circuit(StrictModel):
     cable_type: str
     cables: list[CableInstance] = Field(min_length=1, max_length=100)
     bonding: Bonding
+    electrical_topology: PhaseTopology | None = None
 
 
 class Placement(StrictModel):
@@ -231,6 +299,7 @@ class DomainDocument(StrictModel):
     load_cases: list[Load] = Field(min_length=1, max_length=1000)
     criteria: dict[str, float] = Field(default_factory=dict)
     provenance: dict[str, Source] = Field(default_factory=dict)
+    measurements: list[FactoryMeasurement] = Field(default_factory=list, max_length=10000)
 
     @model_validator(mode='after')
     def references(self):
@@ -241,6 +310,26 @@ class DomainDocument(StrictModel):
             raise ValueError('领域对象 ID 必须唯一')
         materials = {m.id for m in self.materials}
         types = {c.id: c for c in self.cable_types}
+        measurement_keys = set()
+        if len({m.id for m in self.measurements}) != len(self.measurements):
+            raise ValueError('出厂数据 ID 重复')
+        measurement_values = {}
+        for measurement in self.measurements:
+            cable_type = types.get(measurement.cable_type)
+            if cable_type is None or measurement.core is not None and measurement.core not in {c.id for c in cable_type.cores}:
+                raise ValueError('出厂数据关联的型号或线芯不存在')
+            if measurement.role == 'conductor' and measurement.core is None:
+                raise ValueError('导体出厂数据必须明确线芯')
+            key = (measurement.cable_type, measurement.core, measurement.role, measurement.quantity)
+            if key in measurement_keys:
+                raise ValueError('同一对象和量不能重复录入出厂数据；请编辑已有记录')
+            measurement_keys.add(key)
+            measurement_values[key] = measurement
+        for key, minimum in measurement_values.items():
+            if key[-1] == 'minimum_thickness':
+                maximum = measurement_values.get((*key[:-1], 'maximum_thickness'))
+                if maximum and maximum.source.reference == minimum.source.reference and minimum.value > maximum.value:
+                    raise ValueError('measurements.minimum_thickness：同一试样的最薄点不得大于最大实测厚度')
         radii = {}
         for t in self.cable_types:
             refs = [c.conductor.material for c in t.cores] + [l.material for c in t.cores for l in c.layers] + [l.material for l in t.common_layers]

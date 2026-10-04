@@ -32,8 +32,13 @@ def physical(value, p, circuit, cable, point, duct, materials, section):
         raise ValueError('当前电损耗模型只支持单芯圆形电缆；多芯请改用专门方法。')
     core = cable['cores'][0]
     cond, layers = core['conductor'], core['layers']+cable['common_layers']
-    if core['x'] or core['z'] or cond['form'] not in ('stranded_round', 'stranded_round_compacted'):
-        raise ValueError('当前模型要求同心圆绞线导体；分割导体或偏心结构请改用专门方法。')
+    allowed_forms=('stranded_round', 'stranded_round_compacted')
+    if p.get('external_loss_artifact') is not None:
+        # Solid round is a thermal geometry here: its electrical factors come
+        # exclusively from the validated external field table, including R20.
+        allowed_forms+=('solid_round',)
+    if core['x'] or core['z'] or cond['form'] not in allowed_forms:
+        raise ValueError('当前模型要求同心圆绞线导体；实心圆导体须提供已校验的变温电磁损耗表，分割或偏心结构请改用专门方法。')
     if [l['role'] for l in layers] != ['conductor_screen','insulation','insulation_screen','metallic_sheath','oversheath'] or layers[3]['form'] != 'smooth':
         raise ValueError('需要明确光滑管状金属护套；铜丝屏蔽、铠装或皱纹护套请改用专门方法。')
     cm, lm = materials[cond['material']], [materials[l['material']] for l in layers]
@@ -62,12 +67,28 @@ def physical(value, p, circuit, cable, point, duct, materials, section):
         # The legacy physical contract requires an eddy branch for single-point
         # bonding. In supplied-loss mode this selector is never evaluated:
         # group._loss_factors uses the sourced lambda1 instead.
-        'bonding': {'scheme': circuit['bonding']['kind'],
-                    'eddy': 'trefoil' if 'per_cable_losses' in p and circuit['bonding']['kind'] == 'single_point' else p['eddy']},
+        'bonding': {'scheme': 'both_ends' if circuit['bonding']['kind'] == 'cross_bonded' else circuit['bonding']['kind'],
+                    'eddy': 'trefoil' if circuit['bonding']['kind'] == 'cross_bonded' or 'per_cable_losses' in p and circuit['bonding']['kind'] == 'single_point' else p['eddy']},
         'solver': p['solver']})
 
 
 def prepare_group(value, p):
+    from copy import deepcopy
+    p = deepcopy(p)
+    artifact = p.get('external_loss_artifact')
+    if artifact is not None:
+        if artifact.get('schema') != 'cablesim.loss-coefficients/1' or not artifact.get('resolved_source'):
+            raise ValueError('external_loss_reference：需要宿主校验后的封存工件。')
+        if artifact.get('unit') != '1' or not str(artifact.get('source') or '').strip():
+            raise ValueError('external_loss_artifact：系数单位须为1且必须注明来源。')
+        if artifact.get('validity',{}).get('kind') == 'fixed_operating_point' or artifact.get('validity',{}).get('ampacity_iteration_allowed') is False:
+            raise RatingRefused('LOSS_COEFFICIENT_FIXED_POINT_ONLY','external_loss_artifact.validity：GetDP工件仅验证固定工作点，不能直接用于变温或允许电流迭代；需要逐点重算或验证有界系数表。')
+        from .loss_table import validate as validate_loss_table
+        initial_coefficients = validate_loss_table(artifact, {c['id'] for circuit in value['circuits'] for c in circuit['cables']})
+        if any(c['system']['frequency'] != artifact.get('frequency_hz') for c in value['circuits']):
+            raise ValueError('external_loss_artifact.frequency_hz：与回路频率不一致。')
+        p['per_cable_losses'] = initial_coefficients
+        p['loss_input_source'] = artifact['source']+'；工件 SHA256 '+artifact['resolved_source']['artifact_sha256']
     basis = p.get('reference_basis', 'iec2023')
     if basis not in ('iec2023', 'tb880_reference'):
         raise ValueError('reference_basis 必须为 iec2023 或 tb880_reference。')
@@ -90,14 +111,22 @@ def prepare_group(value, p):
         raise ValueError('支持每根电缆一管；包封区请用截面中的矩形回填区表示，多管共腔请改用数值方法。')
     explicit = p.get('per_cable_losses', {})
     explicit_mode = 'per_cable_losses' in p
-    if len(value['circuits']) > 1 and not explicit_mode:
+    double_candidate = len(value['circuits']) == 2 and all(c.get('electrical_topology') and c['bonding']['kind'] in ('single_point','cross_bonded') for c in value['circuits'])
+    if len(value['circuits']) > 1 and not explicit_mode and not double_candidate:
         raise RatingRefused('MULTICIRCUIT_ELECTRICAL_MODEL_REQUIRED',
-                            '多回路不能套用 IEC 60287-1-1 单回路电损耗公式；请在 per_cable_losses 填齐有来源的逐电缆交流与护套损耗系数，并填写 loss_input_source，或改用适用的电磁计算方法。')
+                            '多回路不能套用 IEC 60287-1-1 单回路电损耗公式；请在 per_cable_losses 填齐有来源的逐电缆系数并填写 loss_input_source，或用数值仿真插件（GetDP 涡流）计算护套损耗后，作为外部系数带入。')
     if explicit_mode and not str(p.get('loss_input_source') or '').strip():
         raise ValueError('逐电缆损耗系数必须注明测量、厂家或电磁计算来源。')
     cables, circuits = [], []
     for circuit in value['circuits']:
-        if circuit['bonding']['kind'] not in ('both_ends','single_point') or circuit['system']['kind'] != 'ac_three_phase':
+        topology = circuit.get('electrical_topology')
+        if topology and (topology.get('phase_sequence') not in ('ABC','ACB') or not isinstance(topology.get('reference_angle_rad'),(int,float)) or isinstance(topology.get('reference_angle_rad'),bool) or not isfinite(topology['reference_angle_rad']) or abs(topology['reference_angle_rad'])>pi or not (topology.get('source') or {}).get('reference')):
+            raise ValueError('electrical_topology：需ABC/ACB相序、−π至π参考角（rad）及来源。')
+        if circuit['bonding']['kind']=='cross_bonded':
+            b = circuit['bonding'];ls=b.get('minor_section_lengths',[]);maps=b.get('section_permutations',[])
+            if len(ls)!=3 or any(not isinstance(v,(int,float)) or isinstance(v,bool) or not isfinite(v) or v<=0 for v in ls) or len(maps)!=3 or any(len(v)!=3 or any(not isinstance(i,int) or isinstance(i,bool) for i in v) or sorted(v)!=[0,1,2] for v in maps) or any(len({v[i] for v in maps})!=3 for i in range(3)) or not (b.get('source') or {}).get('reference'):
+                raise ValueError('bonding：交叉互联需要三个正长度（m）、完整循环换位及接线来源。')
+        if circuit['bonding']['kind'] not in ('both_ends','single_point','cross_bonded') or circuit['system']['kind'] != 'ac_three_phase':
             raise ValueError('自动电损耗模型只支持三相交流、两端或单点接地；交叉互联请使用专门电损耗模型。')
         indices = []
         for instance in circuit['cables']:
@@ -120,8 +149,10 @@ def prepare_group(value, p):
             factors = explicit.get(cid)
             if explicit_mode and factors is None:
                 raise ValueError('逐电缆损耗模式尚未填齐所有电缆的交流与护套损耗系数。')
-            if factors is not None and (set(factors) != {'ac_extra_factor','lambda1'} or any(not isinstance(v,(float,int)) or isinstance(v,bool) or not isfinite(v) or v < 0 for v in factors.values())):
+            if factors is not None and (not {'ac_extra_factor','lambda1'} <= set(factors) or set(factors)-{'ac_extra_factor','lambda1','lambda2'} or any(not isinstance(v,(float,int)) or isinstance(v,bool) or not isfinite(v) or v < 0 for v in factors.values())):
                 raise ValueError('逐电缆损耗输入需要非负有限 ac_extra_factor 和 lambda1。')
+            if factors and factors.get('lambda2',0) != 0:
+                raise RatingRefused('ARMOUR_THERMAL_PATH_NOT_SUPPORTED','per_cable_losses.lambda2：当前无铠装热路只接受0；含铠装须使用数值仿真热模型。')
             indices.append(len(cables))
             cables.append({'id': cid,'phase': instance['phase'],'circuit': circuit['id'], 'point': (q['x'],q['z']),
                            'rating': r,'geometry': g,'current': current,'duct': duct,'factors': factors})
@@ -139,12 +170,17 @@ def prepare_group(value, p):
             raise ValueError('该回路布置不满足 IEC 自动电损耗公式；请逐根提供有来源的交流与护套损耗系数，或使用电磁仿真方法。')
         if automatic and len({cables[i]['current'] for i in indices}) != 1:
             raise ValueError('自动电损耗公式要求回路内三相平衡；各回路可不同负荷。不平衡三相需逐根提供有来源的损耗系数。')
-        if automatic and circuit['bonding'].get('transposed') and (circuit['bonding']['kind'] != 'both_ends' or p['eddy'] != 'ignored'):
+        if automatic and arrangement == 'flat' and circuit['bonding'].get('transposed') and (circuit['bonding']['kind'] != 'both_ends' or p['eddy'] != 'ignored'):
             raise RatingRefused('TRANSPOSED_EDDY_NOT_VERIFIED', '换位排列的单点接地或涡流分支未验证；请提供有来源的逐电缆损耗系数或使用适用的电磁方法。')
         circuits.append({'id': circuit['id'],'label': circuit['label'],'indices': indices,'arrangement': arrangement,
-                         'spacing': spacing,'automatic': automatic,'transposed': circuit['bonding'].get('transposed',False)})
+                         'spacing': spacing,'automatic': automatic,'transposed': circuit['bonding'].get('transposed',False),
+                         'bonding':circuit['bonding'], 'electrical_topology':circuit.get('electrical_topology'),
+                         'phase_sequence':(circuit.get('electrical_topology') or {}).get('phase_sequence','ABC')})
     if set(points) != {c['id'] for c in cables} or set(explicit)-set(points):
         raise ValueError('不能忽略额外电缆或引用未知电缆损耗。')
+    if artifact:
+        from .loss_table import check_materials
+        check_materials(artifact,cables)
     backfill = section.get('backfill')
     if backfill:
         backfill = {**backfill, 'rho': materials[backfill['material']]['thermal_resistivity']}
@@ -163,4 +199,19 @@ def prepare_group(value, p):
     else:
         matrix, soil = resistance_matrix([c['point'] for c in cables],radii, rho, backfill, reference_basis=basis)
     soil['reference_basis'] = basis
-    return GroupRating(value,p,cables,circuits,matrix,soil,section['medium']['surface_temperature']-273.15)
+    group = GroupRating(value,p,cables,circuits,matrix,soil,section['medium']['surface_temperature']-273.15)
+    if double_candidate and not explicit_mode:
+        from .double_flat import geometry as double_geometry, verified_tables
+        for c in circuits:
+            lengths = c['bonding'].get('minor_section_lengths',[])
+            if c['bonding']['kind'] == 'cross_bonded' and (len(lengths)!=3 or max(lengths)-min(lengths)>1e-9):
+                raise RatingRefused('DOUBLE_FLAT_CIRCULATING_CURRENT_REQUIRED','双回不等交叉互联小段产生残余环流；用数值仿真插件（GetDP 涡流）计算护套损耗后，作为外部系数带入。')
+            if c['bonding'].get('transposed'):
+                raise RatingRefused('DOUBLE_FLAT_TRANSPOSITION_NOT_VERIFIED','双回导体换位的段间几何尚未验证；请使用有来源的外部电损耗系数。')
+        soil['double_flat'] = double_geometry(group)
+        if p.get('operation') != 'temperature':
+            raise RatingRefused('DOUBLE_FLAT_RATING_SCOPE','双回1-2公式本轮仅支持同负荷温度计算（operation=temperature）；逐回路反求会改变负荷比例，需外部电损耗系数。')
+        if p.get('eddy') != 'trefoil':
+            raise ValueError('eddy：双回1-2必须计入护套涡流，请选择 trefoil。')
+        verified_tables(p.get('double_flat_tables'))
+    return group

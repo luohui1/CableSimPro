@@ -29,7 +29,7 @@
 ```sh
 python scripts/run_demo.py                      # 本机运行
 python -m pytest                                # 后端 + 仓库卫生检查
-python -m pytest plugin-tests                   # 原生插件（先装 plugins/requirements-native.txt）
+python scripts/run_plugin_tests_hpc.py          # 原生仿真回归提交 Slurm，自动回收结果与核时
 python scripts/check_hygiene.py                 # 仓库卫生检查
 python scripts/clean.py [--dry-run]             # 清理本地中间文件
 ```

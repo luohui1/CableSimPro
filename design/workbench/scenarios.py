@@ -117,6 +117,8 @@ def system_models():
     # those facts are absent. Retain the pre-extension payload bytes/identities.
     for model in models:
         payload = model['payload']
+        if payload['cable_type'].get('core_lay_length') is None:
+            payload['cable_type'].pop('core_lay_length',None)
         for material in payload['materials']:
             if material.get('standard_kind') is None:
                 material.pop('standard_kind', None)
@@ -125,7 +127,7 @@ def system_models():
                 if core['conductor'].get(key) is None:
                     core['conductor'].pop(key, None)
         for layer in [*payload['cable_type']['common_layers'], *(l for c in payload['cable_type']['cores'] for l in c['layers'])]:
-            for key in ('minimum_thickness', 'maximum_thickness', 'mean_thickness', 'nominal_tape_thickness', 'tape_count', 'tape_application', 'minimum_overlap', 'reverse_binder_thickness', 'reverse_binder_width', 'reverse_binder_count', 'screen_inner_diameter', 'minimum_tape_thickness'):
+            for key in ('minimum_thickness', 'maximum_thickness', 'mean_thickness', 'nominal_tape_thickness', 'tape_count', 'tape_application', 'minimum_overlap', 'reverse_binder_thickness', 'reverse_binder_width', 'reverse_binder_count', 'screen_inner_diameter', 'minimum_tape_thickness', 'longitudinal_r20', 'longitudinal_resistance_basis', 'longitudinal_resistance_frequency', 'tape_gap'):
                 if layer.get(key) is None:
                     layer.pop(key, None)
         model['content_sha256'] = fingerprint(payload)
@@ -173,8 +175,27 @@ def apply_example(document, example):
     return DomainDocument.model_validate(d).model_dump(mode='json')
 
 
-def model_version(model_id, digest):
-    model = next((m for m in system_models() if m['id'] == model_id), None)
+def study_models(store):
+    """Study-only catalog: system inputs plus complete immutable API candidates."""
+    from backend.kernel.candidates import read
+    entries=system_models()
+    with store.db() as db:
+        if db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='domain_cable_models'").fetchone() is None:
+            return entries
+        for row in db.execute('SELECT id FROM domain_cable_models ORDER BY created'):
+            item=read(db,row['id']);p=item['payload']
+            if not p.get('cable_type'):continue
+            cable=p['cable_type'];used={c['conductor']['material'] for c in cable['cores']}|{l['material'] for l in cable['common_layers']}|{l['material'] for c in cable['cores'] for l in c['layers']}
+            defaults=deepcopy(METHOD_DEFAULTS)
+            defaults['cablesim.iec60287']['solver']['max_iterations']=300
+            entries.append({'id':'candidate:'+item['id'],'version':p['version'],'name':p['name'],'state':item['state'],
+                'source':'；'.join(s['reference'] for s in p['sources'].values()),'content_sha256':item['digest'],
+                'payload':{'cable_type':cable,'materials':[m for m in p['materials'] if m['id'] in used]},'method_defaults':defaults})
+    return entries
+
+
+def model_version(model_id, digest, store=None):
+    model = next((m for m in (study_models(store) if store else system_models()) if m['id'] == model_id), None)
     if model is None or model['content_sha256'] != digest:
         raise HTTPException(409, '型号版本或内容已变化，请重新选择；未更新任何输入。')
     return model
@@ -207,13 +228,23 @@ def attach_model(state, model):
     locks = list(leaf_paths(cable, pointer('cable_types', cable['id'])))
     for material in model['payload']['materials']:
         locks += list(leaf_paths(material, pointer('materials', material['id'])))
-    reference = f"系统型号库 · {model['name']} · {model['version']} · 演示 · sha256:{model['content_sha256']}"
+    reference = f"型号库 · {model['name']} · {model['version']} · sha256:{model['content_sha256']}" if model['id'].startswith('candidate:') else f"系统型号库 · {model['name']} · {model['version']} · 演示 · sha256:{model['content_sha256']}"
     for path in locks:
-        document['provenance'][path] = {'kind': 'asset', 'reference': reference, 'reviewed': False}
+        document['provenance'][path] = {'kind': 'asset', 'reference': reference, 'reviewed': model['state']=='reviewed'}
     if model.get('conductor_diameter_source'):
         path = pointer('cable_types', cable['id'], 'cores', cable['cores'][0]['id'], 'conductor', 'diameter')
         document['provenance'][path] = {'kind': 'manufacturer', 'reference': model['conductor_diameter_source'], 'reviewed': False}
-    document['provenance'][pointer('cable_types', cable['id'])] = {'kind': 'asset', 'reference': reference, 'reviewed': False}
+    document['provenance'][pointer('cable_types', cable['id'])] = {'kind': 'asset', 'reference': reference+'；'+model['source'], 'reviewed': model['state']=='reviewed'}
+    if cable['construction']=='three_core':
+        if len(document['circuits'])!=1:
+            raise HTTPException(422,'多回路单芯布置不能在引用型号时自动合并为三芯；请新建三芯研究并选择对应模板。')
+        circuit=document['circuits'][0];old={c['id'] for c in circuit['cables']};cid=circuit['cables'][0]['id']
+        circuit['cables']=[{'id':cid,'phase':'L1L2L3'}]
+        document['circuits']=[circuit]
+        section=document['sections'][0];section.update(enclosures=[],backfill=None,soil_layers=[],placements=[{'cable':cid,'x':0.,'z':-1.2}])
+        document['sections']=[section]
+        for load in document['load_cases']:
+            for key in old:load['currents'].pop(key,None)
     check_locks(checked, document)
     state['domain'] = DomainDocument.model_validate(document).model_dump(mode='json')
     state['locks'] = list(dict.fromkeys([*checked['locks'], *locks]))
@@ -223,6 +254,8 @@ def attach_model(state, model):
 
 
 def apply_layout(document, kind, depth=0.8, spacing=None):
+    if kind.startswith('three_core_'):
+        return apply_three_core_layout(document,kind,depth,spacing)
     circuit, section = document['circuits'][0], document['sections'][0]
     cable = next(t for t in document['cable_types'] if t['id'] == circuit['cable_type'])
     diameter = cable['cores'][0]['conductor']['diameter']+2*sum(l['thickness'] for l in cable['common_layers'])
@@ -303,6 +336,48 @@ def apply_layout(document, kind, depth=0.8, spacing=None):
     return DomainDocument.model_validate(document).model_dump(mode='json')
 
 
+def apply_three_core_layout(document,kind,depth,spacing=None):
+    """One physical cable per balanced circuit; empty ducts are not heat sources."""
+    d=deepcopy(document);first=d['circuits'][0];section=d['sections'][0]
+    cable=next(t for t in d['cable_types'] if t['id']==first['cable_type'])
+    if cable['construction']!='three_core' or len(first['cables'])!=1 or first['cables'][0]['phase']!='L1L2L3':
+        raise HTTPException(422,'三芯模板要求每回路一根三芯电缆，电缆相别为ABC。')
+    if any(c['id'] not in {f'circuit/template{i}' for i in range(2,10)} for c in d['circuits'][1:]):
+        raise HTTPException(422,'模板不能覆盖手工新增回路，请保留当前截面。')
+    diameter=2*CableType.model_validate(cable).radius()
+    ducted=kind in ('three_core_ducts_horizontal','three_core_ducts_2x3','three_core_ducts_3x3')
+    rows=2 if kind=='three_core_ducts_2x3' else 3 if kind=='three_core_ducts_3x3' else 1
+    count=3*rows if ducted else 1 if kind=='three_core_buried_single' else 3
+    spacing=max(.25,1.5*diameter) if spacing is None else spacing
+    if spacing < (.16 if ducted else diameter):raise HTTPException(422,'回路中心距小于管道/电缆外径，请增大中心距。')
+    if depth <= (rows-1)*spacing/2+(.08 if ducted else diameter/2):raise HTTPException(422,'地表以下埋深不足，请增大中心埋深。')
+    if ducted and diameter>=.14:raise HTTPException(422,'电缆外径须小于140 mm管内径，请编辑管道尺寸。')
+    # Remove only loads belonging to the previous template.
+    known={c['id'] for c in d['circuits'][1:]}|{v['id'] for c in d['circuits'][1:] for v in c['cables']}
+    for load in d['load_cases']:
+        for cid in known:load['currents'].pop(cid,None)
+    d['circuits']=[first]
+    for i in range(2,count+1):
+        other=deepcopy(first);other.update(id=f'circuit/template{i}',label=f'回路 {i}',cables=[{'id':f'cable/template{i}','phase':'L1L2L3'}]);d['circuits'].append(other)
+        for load in d['load_cases']:load['currents'][other['id']]=load['currents'][first['id']]
+    section.update(kind='ground',enclosures=[],placements=[],backfill=None,soil_layers=[])
+    labels={'three_core_buried_single':'三芯直埋 · 单回','three_core_buried_horizontal':'三芯直埋 · 三回水平','three_core_ducts_horizontal':'三芯排管 · 三回水平','three_core_ducts_2x3':'三芯排管 · 2×3','three_core_ducts_3x3':'三芯排管 · 3×3'}
+    section['label']=labels[kind]
+    if ducted and not any(m['id']=='material/duct' for m in d['materials']):d['materials'].append({'id':'material/duct','label':'PVC管','category':'duct','thermal_resistivity':6.})
+    for i,c in enumerate(d['circuits']):
+        x=(i%3-1)*spacing if count>1 else 0.;z=-depth+(i//3-(rows-1)/2)*spacing
+        cid=c['cables'][0]['id'];eid=f'enclosure/three-core-{i+1}' if ducted else None
+        section['placements'].append({'cable':cid,'x':x,'z':z,'enclosure':eid})
+        if ducted:section['enclosures'].append({'id':eid,'type':'duct','material':'material/duct','x':x,'z':z,'inner_diameter':.14,'outer_diameter':.16,'contains':[cid]})
+    section['layout_template']={'id':'system.'+kind,'version':'1.0.0','kind':kind,'depth':depth,'spacing':spacing,
+        'duct_grid':[2,3] if kind.endswith('2x3') else [3,3] if kind.endswith('3x3') else None,
+        'occupied_cells':[[i//3,i%3] for i in range(count)] if ducted else []}
+    source={'kind':'demo','reference':f'三芯截面模板{kind}：一管一缆、140/160 mm PVC管；位置、负荷与土壤按现场条件确认。','reviewed':False}
+    for q in section['placements']:
+        for axis in ('x','z'):d['provenance'][pointer('sections',section['id'],'placements',q['cable'],axis)]=source
+    return DomainDocument.model_validate(d).model_dump(mode='json')
+
+
 class ChooseModel(StrictModel):
     model_id: str
     content_sha256: str = Field(pattern='^[0-9a-f]{64}$')
@@ -310,6 +385,8 @@ class ChooseModel(StrictModel):
 
 class CreateStudyWorkspace(ChooseModel):
     example_id: str | None = None
+    three_core_layout: Literal['three_core_buried_single','three_core_buried_horizontal','three_core_ducts_horizontal','three_core_ducts_2x3','three_core_ducts_3x3'] | None = None
+    target_current_a: float | None = Field(default=None,gt=0)
 
 
 class BindModel(ChooseModel, Revision):
@@ -318,7 +395,7 @@ class BindModel(ChooseModel, Revision):
 
 class LayoutPreview(Revision):
     document: DomainDocument
-    kind: Literal['trefoil','flat','double_trefoil','double_flat','ducts','ducts_2x3','ducts_3x3','duct_bank','backfill','tunnel','tray']
+    kind: Literal['trefoil','flat','double_trefoil','double_flat','ducts','ducts_2x3','ducts_3x3','duct_bank','backfill','tunnel','tray','three_core_buried_single','three_core_buried_horizontal','three_core_ducts_horizontal','three_core_ducts_2x3','three_core_ducts_3x3']
     depth: float = Field(default=0.8, gt=0)
     spacing: float | None = Field(default=None, gt=0)
 
@@ -329,6 +406,10 @@ def make_router(store):
     @router.get('/cable-models')
     def models():
         return system_models()
+
+    @router.get('/study-cable-models')
+    def study_catalog():
+        return study_models(store)
 
     @router.get('/engineering-examples')
     def examples():
@@ -352,7 +433,7 @@ def make_router(store):
         if state['revision'] != body.expected_revision:
             raise HTTPException(409, '共享输入已更新，请重新打开研究。')
         document = body.document.model_dump(mode='json')
-        if len(document['sections']) != 1 or len(document['circuits'][0]['cables']) != 3:
+        if len(document['sections']) != 1 or len(document['circuits'][0]['cables']) != (1 if body.kind.startswith('three_core_') else 3):
             raise HTTPException(422, '当前系统模板需要一个截面和每回路三根单芯电缆。')
         check_locks(state, document)
         result = apply_layout(document, body.kind, body.depth, body.spacing)
@@ -365,7 +446,8 @@ def make_router(store):
 
     @router.post('/study-workspaces', status_code=201)
     def create(body: CreateStudyWorkspace):
-        model = model_version(body.model_id, body.content_sha256)
+        body=CreateStudyWorkspace.model_validate(body.model_dump())
+        model = model_version(body.model_id, body.content_sha256,store)
         example_id = getattr(body,'example_id',None)
         example = next((e for e in engineering_examples() if e['id'] == example_id),None)
         if example_id and (not example or example['model_id'] != model['id']):
@@ -383,20 +465,22 @@ def make_router(store):
             attach_model(state, model)
             soil = next(m for m in state['domain']['materials'] if m['id'] == state['domain']['sections'][0]['medium']['material'])
             soil['thermal_resistivity'] = 1.0
-            state['domain']['load_cases'][0]['currents'][state['domain']['circuits'][0]['id']] = 350.0
+            state['domain']['load_cases'][0]['currents'][state['domain']['circuits'][0]['id']] = body.target_current_a or 350.0
             state['domain']['sections'][0]['medium']['surface_temperature'] = 298.15
             state['domain']['circuits'][0]['bonding']['kind'] = 'both_ends'
-            demo = {'kind': 'demo', 'reference': '系统研究初始工况：350 A、25 °C、土壤 1.0 K·m/W；使用前按实际条件核对', 'reviewed': False}
+            demo = {'kind': 'demo', 'reference': f'系统研究初始工况：{body.target_current_a or 350:g} A、25 °C、土壤 1.0 K·m/W；按实际条件核对', 'reviewed': False}
             for path in [pointer('materials', soil['id'], 'thermal_resistivity'),
                          pointer('sections', state['domain']['sections'][0]['id'], 'medium', 'surface_temperature'),
                          pointer('load_cases', state['domain']['load_cases'][0]['id'], 'currents', state['domain']['circuits'][0]['id']),
                          '/criteria/max_conductor_temperature']:
                 state['domain']['provenance'][path] = demo
+            if body.target_current_a is not None:
+                state['domain']['provenance'][pointer('load_cases',state['domain']['load_cases'][0]['id'],'currents',state['domain']['circuits'][0]['id'])]={'kind':'user','reference':'新建问询目标电流，单位A','reviewed':False}
             state['domain']['provenance'][pointer('circuits', state['domain']['circuits'][0]['id'], 'bonding', 'kind')] = {
                 'kind': 'demo', 'reference': '系统演示工况：护套两端接地；按实际接地方案核对', 'reviewed': False}
             state['domain']['name'] = f"{model['name']} · 直埋研究（演示）"
             state['scenario']['name'] = state['domain']['name']
-            state['domain'] = apply_layout(state['domain'], 'trefoil')
+            state['domain'] = apply_layout(state['domain'], body.three_core_layout or 'three_core_buried_single' if model['payload']['cable_type']['construction']=='three_core' else 'trefoil',depth=1.2 if model['payload']['cable_type']['construction']=='three_core' else .8)
             if example:
                 state['domain'] = apply_example(state['domain'],example)
                 state['scenario']['name'] = example['title']
@@ -406,7 +490,7 @@ def make_router(store):
 
     @router.post('/type-workspaces', status_code=201)
     def create_type(body: ChooseModel):
-        created = create(body)
+        created = create(CreateStudyWorkspace.model_validate(body.model_dump()))
         with store.db(True) as db:
             row, state = store.load(db, created['id'], created['revision'], allow_domain=True)
             binding = state.pop('study_cable_reference')
@@ -427,7 +511,7 @@ def make_router(store):
 
     @router.post('/workspaces/{wid}/cable-reference')
     def bind(wid: str, body: BindModel):
-        model = model_version(body.model_id, body.content_sha256)
+        model = model_version(body.model_id, body.content_sha256,store)
         with store.db(True) as db:
             row, state = store.load(db, wid, body.expected_revision, allow_domain=True)
             if 'domain' not in state:

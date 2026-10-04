@@ -6,6 +6,9 @@ from .inputs import Rating
 def prepare(value, p):
     if value.get('schema_version') != 'cablesim.domain/1':
         return Rating.model_validate(value)
+    if any(t.get('construction') == 'three_core' for t in value.get('cable_types', [])):
+        from .three_core import prepare as prepare_three_core
+        return prepare_three_core(value, p)
     from .group_inputs import prepare_group
     return prepare_group(value, p)
 

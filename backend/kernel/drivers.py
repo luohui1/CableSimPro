@@ -26,6 +26,10 @@ def replace_number(value, pointer, replacement):
 
 
 def cases_for(definition, source):
+    if definition['driver']['kind'] == 'batch':
+        return [{'case_id': c['case_id'], 'input': deepcopy(c['input']),
+                 'parameters': {**deepcopy(definition['parameters']), **deepcopy(c['parameters'])}}
+                for c in definition['driver']['cases']]
     samples = definition['driver']['samples'] or [{'label': 'single', 'changes': {}}]
     cases = []
     for i, sample in enumerate(samples):
@@ -49,24 +53,49 @@ def assess(definition, cases):
         return []
     assessed = []
     for case in cases:
+        entities=driver.get('target_entities') or [driver['target_entity']]
         matches = [r for r in case['results'] if r['key'] == driver['target_key']
-                   and r['entity'] == driver['target_entity'] and r.get('unit') == driver['target_unit']
+                   and r['entity'] in entities and r.get('unit') == driver['target_unit']
                    and r['type'] == 'quantity'
                    and (driver.get('target_condition') is None or r.get('case') == driver['target_condition'])]
         value, reason = None, None
         if case['status'] != 'succeeded':
             reason = case.get('error') or {'code': 'CASE_FAILED', 'message': '该候选未完成计算。'}
-        elif not matches:
+        elif not matches or set(r['entity'] for r in matches)!=set(entities):
             reason = {'code': 'TARGET_MISSING', 'message': '方法未输出指定物理量、实体、单位与工况的结果。'}
-        elif len(matches) != 1:
+        elif len(matches) != len(entities):
             reason = {'code': 'TARGET_AMBIGUOUS', 'message': '匹配到多个工况，请指定 target_condition。'}
-        elif matches[0]['status'] != 'available':
-            reason = matches[0].get('reason') or {'code': 'TARGET_UNAVAILABLE', 'message': '目标结果不可用。'}
+        elif any(r['status'] != 'available' for r in matches):
+            reason = next(r for r in matches if r['status']!='available').get('reason') or {'code': 'TARGET_UNAVAILABLE', 'message': '目标结果不可用。'}
         else:
-            value = matches[0]['value']
-        assessed.append({'case_id': case['case_id'], 'value': value,
-                         'meets_target': None if value is None else value >= driver['minimum'],
-                         'reason': reason})
+            value = min(r['value'] for r in matches)
+        record={'case_id': case['case_id'], 'value': value,
+                'meets_target': None if value is None else value >= driver['minimum'], 'reason': reason}
+        if driver.get('candidate_ids') or driver.get('target_entities'):
+            status=('not_satisfied' if reason and reason.get('code')=='NO_POSITIVE_RATING' else
+                    'failed' if reason and case['status']!='succeeded' and case.get('evidence',{}).get('stage')!='preflight' else
+                    'not_applicable' if reason else 'satisfied' if value>=driver['minimum'] else 'not_satisfied')
+            record.update(margin=None if value is None else value-driver['minimum'],
+                          status=status)
+        # Describe a failed temperature constraint using saved plugin goals only.
+        # No temperature is estimated from the current or the cross-section.
+        goals = [g for a in case.get('artifacts', {}).values() if isinstance(a, dict)
+                 for g in a.get('goal_checks', []) if g.get('key') == 'conductor_temperature'
+                 and g.get('condition') == 'operating' and g.get('unit') == 'K'
+                 and isinstance(g.get('actual'), (int, float))
+                 and isinstance(g.get('target'), (int, float))]
+        hot = max(goals, key=lambda g: g['actual']-g['target'], default=None)
+        if hot and record.get('status') == 'not_satisfied' and hot['actual'] > hot['target']:
+            currents = {s['current_a'] for a in case.get('artifacts', {}).values() if isinstance(a, dict)
+                        and isinstance(a.get('operating'), dict) for s in a['operating'].get('cable_states', [])
+                        if s.get('entity') == hot['entity'] and isinstance(s.get('current_a'), (float,int))
+                        and not isinstance(s['current_a'],bool)}
+            current = hot.get('current_a') if isinstance(hot.get('current_a'), (float,int)) and not isinstance(hot.get('current_a'),bool) else next(iter(currents)) if len(currents)==1 else None
+            operating = f'{current:g} A 下' if current is not None else '保存负荷下'
+            record['reason'] = {'code': 'CONDUCTOR_OVER_TEMPERATURE',
+                'message': f"该截面在{operating}导体温度 {hot['actual']-273.15:.1f} °C，超过 {hot['target']-273.15:g} °C。",
+                'entity': hot['entity'], 'actual_k': hot['actual'], 'limit_k': hot['target']}
+        assessed.append(record)
     return assessed
 
 

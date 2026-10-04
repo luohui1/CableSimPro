@@ -2,7 +2,7 @@
 from pathlib import Path
 from hashlib import sha256
 import json
-from math import isfinite
+from math import isfinite, atan2, degrees
 import shutil
 from .problem import validate
 from .problem_mesh import build,from_thermal
@@ -11,7 +11,8 @@ from .solver_runtime import environment
 
 
 def prepare(value,parameters,solver):
-    allowed={'mesh','controls','domain_options','reproduction','electromagnetic_options'}
+    original=value
+    allowed={'mesh','controls','domain_options','reproduction','electromagnetic_options','loss_export'}
     if set(parameters)-allowed:
         raise ValueError('未知外部仿真研究参数；案例不能指定可执行文件或命令行。')
     if parameters.get('reproduction',{}).get('missing_inputs'):
@@ -34,6 +35,27 @@ def prepare(value,parameters,solver):
         if (solver=='getdp') != (p.physics=='magnetic_harmonic'):
             raise ValueError('所选适配器不支持该物理类型，未回退到另一求解器。')
         mesh=build(p,c);problem=p.model_dump(mode='json')
+    if parameters.get('loss_export') is not None:
+        from backend.foundation.simulation_artifacts import LossExport
+        if solver != 'getdp':
+            raise ValueError('loss_export：仅GetDP电磁能力接受损耗系数导出。')
+        cfg=LossExport.model_validate(parameters['loss_export'])
+        from .loss_table import validate_scope
+        validate_scope(problem, parameters['loss_export'])
+        if original.get('schema_version')=='cablesim.domain/1':
+            expected=sha256(json.dumps(original,sort_keys=True,ensure_ascii=False,separators=(',',':'),allow_nan=False).encode('utf-8')).hexdigest()
+            if cfg.source_domain_sha256!=expected:
+                raise ValueError('loss_export.source_domain_sha256：与本次完整领域输入的宿主紧凑JSON摘要不一致。')
+            topology={c['id']:{'electrical_topology':c.get('electrical_topology'),'bonding':c['bonding']} for c in original['circuits']}
+            if cfg.topology.get('circuits')!=topology:
+                raise ValueError('loss_export.topology.circuits：必须逐项保留当前领域的相序/参考角、护套互联及来源。')
+        constraints=[{'regions':e['regions'],'kind':e['kind'],'connection':e.get('connection','parallel'),'value':e['value']} for e in problem['excitations']]
+        if cfg.topology.get('constraints') != constraints:
+            raise ValueError('loss_export.topology.constraints：必须匹配本次求解约束。')
+        ids={r['uid'] for r in problem['geometry'] if not r['void'] and r['material']['conductivity_s_m']>0}
+        selected={u for b in cfg.bindings for u in b.conductor_regions+b.sheath_regions+b.armor_regions}
+        if not selected<=ids or not selected<=set(cfg.material_temperatures_k):
+            raise ValueError('loss_export.bindings：缺导电区域或工作温度。')
     return problem,mesh
 
 
@@ -63,6 +85,8 @@ def observations(problem,mesh,result):
                 add('magnetic_flux_density_integrated_rms','field',p['b_current_integral_rms_t'],'T',probe_index=i,point_m=p['point_m'])
         for i,p in enumerate(result['current_density_probes']):
             add('current_density_rms',p['entity'],p['j_rms_a_m2'],'A/m^2',probe_index=i,point_m=p['point_m'])
+            real,imag=p['j_complex_rms_a_m2']
+            add('current_density_phase',p['entity'],degrees(atan2(imag,real)),'deg',probe_index=i,point_m=p['point_m'])
     else:
         from skfem import MeshTri,Basis,ElementTriP1
         # Sampling only. No heat matrix or time step is solved by scikit-fem.
@@ -125,13 +149,31 @@ def host_case(request,case,job,solver):
             if len(raw.encode('utf-8'))>16*1024*1024:
                 raise ValueError('仿真工件超过宿主16 MiB限制；未丢弃字段或替换精度。')
             (job/path).write_text(raw,'utf-8')
+        from .artifacts import source,temperature_field,loss_coefficients,write
+        source_info=source(request,case,(job/name).read_bytes())
+        extra=[]
+        if solver=='elmer':
+            frame=result['final_field']
+            samples=[dict(entity=o['entity'],point_m=o['point_m'],temperature_k=o['value'],
+                          time_s=o['time_s'],method='linear nodal interpolation') for o in obs if o['quantity']=='probe_temperature_k']
+            field=temperature_field(mesh,frame['temperature_k'],source_info,time_s=frame['time_s'],samples=samples,
+                                    convergence={'solver_status':'completed','time_history':result['time_history']})
+            extra.append(write(job,case['case_id'],'temperature','x-cablesim.temperature-field',field))
+        if case.get('parameters',{}).get('loss_export') is not None:
+            coefficients=loss_coefficients(problem,result,case['parameters']['loss_export'],source_info)
+            if case['parameters']['loss_export'].get('temperature_table'):
+                from .loss_table import produce
+                coefficients['temperature_table']=produce(problem,mesh,case['parameters']['loss_export'],source_info,work)
+                coefficients['validity']={'kind':'temperature_tensor','ampacity_iteration_allowed':True,
+                    'reason':'仅在温度张量范围与共同电流倍率范围内；误差为独立中心点实测，非全域上界。'}
+            extra.append(write(job,case['case_id'],'losses','x-cablesim.loss-coefficients',coefficients))
         if solver=='getdp':
             values=[{'key':'x-cablesim.joule-loss','entity':r['entity'],'value':r['joule_loss_w_m'],'unit':'W/m'} for r in result['regions']]
         else:
             values=[{'key':'x-cablesim.maximum-temperature','entity':'field','value':result['final_field']['maximum_k'],'unit':'K'}]
         return {'case_id':case['case_id'],'status':'succeeded','evidence':evidence,
                 'results':[{**v,'type':'quantity','status':'available'} for v in values],
-                'artifacts':[{'path':name,'type':'x-cablesim.simulation-bundle'},{'path':report_name,'type':'x-cablesim.reproduction-report'}]}
+                'artifacts':[{'path':name,'type':'x-cablesim.simulation-bundle'},{'path':report_name,'type':'x-cablesim.reproduction-report'},*extra]}
     finally:
         # Only our job-owned raw files; canonical mesh/input/log/results already
         # reside in declared JSON artifacts. Keeps batched host output bounded.

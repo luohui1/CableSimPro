@@ -33,6 +33,11 @@ def environment(name, work, configuration=None):
     env = {k: os.environ[k] for k in ('PATH', 'SYSTEMROOT', 'WINDIR') if k in os.environ}
     env.update(OMP_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1', TMP=str(work), TEMP=str(work))
     env['PATH'] = str(executable.parent) + os.pathsep + env.get('PATH', '')
+    if os.name != 'nt' and config.get('library_paths'):
+        paths=config['library_paths']
+        if not isinstance(paths,list) or any(not isinstance(p,str) or not Path(p).is_absolute() or not Path(p).is_dir() for p in paths):
+            raise EnvironmentMissing('管理员 library_paths 必须是存在的绝对目录；不能来自样本输入。')
+        env['LD_LIBRARY_PATH']=os.pathsep.join(paths)
     if name == 'elmer':
         root = executable.parent.parent
         env.update(ELMER_HOME=str(root), ELMER_LIB=str(root/'share'/'elmersolver'/'lib'))
@@ -49,12 +54,29 @@ def environment(name, work, configuration=None):
         raise EnvironmentMissing(f'{name}无法识别版本：{banner[:1200]}')
     version = found.group(1)
     # The official 26.1 Windows release still reports the solver ABI version 9.0.
-    supported = version == '3.5.0' if name == 'getdp' else (version=='9.0' and 'Compiled: 2026-01-20' in banner)
+    linux_build=config.get('elmer_build') if name=='elmer' and os.name!='nt' else None
+    source_build=(isinstance(linux_build,dict) and linux_build.get('version')==version and
+                  re.fullmatch(r'[a-f0-9]{64}',linux_build.get('source_archive_sha256','')) is not None)
+    supported = version == '3.5.0' if name == 'getdp' else source_build or (version=='9.0' and 'Compiled: 2026-01-20' in banner and os.name=='nt')
     if not supported:
-        raise EnvironmentMissing(f'{name}版本{version}未在适配器验证范围内；需要'+('3.5.0' if name == 'getdp' else '官方26.1 Windows发行包（Solver9.0，Compiled2026-01-20）')+'。')
+        raise EnvironmentMissing(f'{name}版本{version}未在适配器声明范围内；需要'+('3.5.0' if name == 'getdp' else '官方26.1 Windows包，或带源码与二进制摘要的管理员Linux构建清单')+'。')
     evidence = {'name':name, 'version':version, 'executable_sha256':sha256(executable.read_bytes()).hexdigest(),
                 'executable':str(executable), 'version_banner':banner.strip(), 'execution':'separate-process'}
+    evidence.update(license_source='open-source',slurm_job_id=os.environ.get('SLURM_JOB_ID'),
+                    node=os.environ.get('SLURM_JOB_NODELIST'),threads=1)
     if name=='elmer':
+        if os.name!='nt':
+            required={'bin/ElmerSolver','lib/elmersolver/libelmersolver.so',
+                      'share/elmersolver/lib/HeatSolve.so','share/elmersolver/lib/ResultOutputSolve.so'}
+            files=linux_build.get('files',{})
+            if not required<=set(files):raise EnvironmentMissing('Linux Elmer构建清单缺少必需求解器/模块摘要。')
+            for relative,expected in files.items():
+                path=(root/relative).resolve()
+                if not path.is_relative_to(root.resolve()) or not path.is_file() or sha256(path.read_bytes()).hexdigest()!=expected:
+                    raise EnvironmentMissing('Linux Elmer文件与管理员构建清单不符：'+relative)
+            evidence.update(distribution_release='source-archive/'+linux_build['source_archive_sha256'],
+                source_build=linux_build,modules_sha256={p:files[p] for p in sorted(required)})
+            return executable,env,evidence
         modules=[executable.parent/'libelmersolver.dll',root/'share/elmersolver/lib/HeatSolve.dll',root/'share/elmersolver/lib/ResultOutputSolve.dll']
         if any(not p.is_file() for p in modules):
             raise EnvironmentMissing('Elmer运行库或HeatSolve/ResultOutputSolve模块缺失；请安装完整官方运行环境。')

@@ -33,6 +33,22 @@ def thermal_case(request,case,job):
     payload = {'prepared_input':prepared,'summary':summary,'field':field,'evidence':evidence}
     (job/name).write_text(json.dumps(payload,ensure_ascii=False,allow_nan=False),'utf-8')
     (job/report_name).write_text(json.dumps(report,ensure_ascii=False,allow_nan=False),'utf-8')
+    from cablesim_simulation.artifacts import source,temperature_field,write
+    samples=[]
+    from skfem import MeshTri,Basis,ElementTriP1
+    import numpy as np
+    basis=Basis(MeshTri(np.asarray(field['points']).T,np.asarray(field['triangles']).T),ElementTriP1())
+    for cable in model.cables:
+        if cable.prescribed_core_temperature_k is not None:
+            continue  # A prescribed core is a geometric hole, not a sampled field.
+        point=[cable.x_m,cable.z_m]
+        value=float((basis.probes(np.asarray(point)[:,None])@np.asarray(field['temperature']))[0])
+        samples.append(dict(entity=cable.uid,point_m=point,temperature_k=value,time_s=0.,method='linear nodal interpolation'))
+    contract=temperature_field(field,field['temperature'],source(request,case,(job/name).read_bytes()),samples=samples,
+                               convergence={'solver_status':'converged','iterations':summary['iterations'],
+                                            'energy_relative_residual':summary['energy_relative_residual'],
+                                            'physical_residual_inf_w_m':summary['physical_residual_inf_w_m']})
+    field_artifact=write(job,case['case_id'],'temperature','x-cablesim.temperature-field',contract)
     results = [{'key':'conductor_temperature','type':'quantity','entity':c['entity'],'status':'available',
                 'value':c['conductor_max_temperature_k'],'unit':'K'} for c in summary['cables']]
     if summary['rating']:
@@ -40,7 +56,7 @@ def thermal_case(request,case,job):
                         'status':'available','value':summary['rating']['ampacity_a'],'unit':'A'})
     return {'case_id':case['case_id'],'status':'succeeded','results':results,'evidence':evidence,
             'artifacts':[{'path':name,'type':'x-cablesim.simulation-bundle'},
-                         {'path':report_name,'type':'x-cablesim.reproduction-report'}],
+                         {'path':report_name,'type':'x-cablesim.reproduction-report'},field_artifact],
             'warnings':[{'code':'THERMAL_SCOPE','message':'二维常热物性、显式损耗/温变电阻与边界；管内空气为有来源的等效热阻，不是CFD或自动IEC损耗计算。'}]}
 
 
@@ -68,6 +84,21 @@ def bonded_case(request, case, job):
 
 def run_case(request, case, job):
     try:
+        if request['capability']=='thermal-dataset':
+            from cablesim_simulation.thermal_dataset import host_case
+            return host_case(request,case,job)
+        if request['capability']=='contact-electrothermal-field':
+            from cablesim_simulation.contact_electrothermal import host_case
+            return host_case(request,case,job)
+        if request['capability'] in ('terminal-field','contact-thermal-field'):
+            from cablesim_simulation.discrete_fields import host_case
+            return host_case(request,case,job)
+        if request['capability']=='electrothermal':
+            from cablesim_simulation.electrothermal import host_case
+            return host_case(request,case,job)
+        if request['capability']=='capacitive-cable':
+            from cablesim_simulation.capacitive import host_case
+            return host_case(request,case,job)
         if request['capability'] in ('getdp-eddy','elmer-heat'):
             from cablesim_simulation.external import host_case
             return host_case(request,case,job,'getdp' if request['capability']=='getdp-eddy' else 'elmer')

@@ -39,8 +39,9 @@ def make_router(research):
         return research.save(wid, body, sid)
 
     @router.get('/workspaces/{wid}/studies/{sid}/preflight')
-    def preflight(wid: str, sid: str, expected_revision: int, expected_study_revision: int):
-        return research.preflight(wid, sid, expected_revision, expected_study_revision)
+    def preflight(wid: str, sid: str, expected_revision: int, expected_study_revision: int,
+                  module: str | None = Query(None, pattern=r'^[a-z][a-z0-9-]{0,63}$')):
+        return research.preflight(wid, sid, expected_revision, expected_study_revision, module)
 
     @router.post('/workspaces/{wid}/studies/{sid}/runs')
     def execute(wid: str, sid: str, body: RunStudy):

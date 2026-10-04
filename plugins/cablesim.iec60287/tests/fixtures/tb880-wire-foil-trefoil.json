@@ -1,0 +1,61 @@
+{
+  "schema_version": "cablesim.iec60287.tb880-wire-foil/1",
+  "arrangement": "trefoil",
+  "data": {
+    "frequency_hz": 50,
+    "line_voltage_v": 132000,
+    "conductor_r20_ohm_m": 0.0000151,
+    "conductor_diameter_m": 0.0431,
+    "conductor_alpha_per_k": 0.00393,
+    "conductor_temperature_k": 363.15,
+    "ambient_temperature_k": 293.15,
+    "relative_permittivity": 2.5,
+    "loss_tangent": 0.001,
+    "core_spacing_m": 0.098,
+    "burial_depth_m": 1,
+    "soil_thermal_resistivity_k_m_w": 1,
+    "sheath_resistivity_ohm_m": 1.7241e-8,
+    "sheath_alpha_per_k": 0.00393,
+    "screen_wire_diameter_m": 0.00177,
+    "screen_wire_lay_m": 0.5,
+    "conductor_ks": 0.8,
+    "conductor_kp": 0.37,
+    "foil_inner_diameter_m": 0.0884,
+    "foil_thickness_m": 0.0002,
+    "foil_resistivity_ohm_m": 2.84e-8,
+    "foil_alpha_per_k": 0.00403,
+    "bedding_thermal_resistivity_k_m_w": 12
+  },
+  "inner_layers": [
+    {
+      "outer_diameter_m": 0.0467,
+      "thermal_resistivity_k_m_w": 2.5
+    },
+    {
+      "outer_diameter_m": 0.0805,
+      "thermal_resistivity_k_m_w": 3.5
+    },
+    {
+      "outer_diameter_m": 0.0829,
+      "thermal_resistivity_k_m_w": 2.5
+    },
+    {
+      "outer_diameter_m": 0.0843,
+      "thermal_resistivity_k_m_w": 12
+    }
+  ],
+  "outer_layers": [
+    {
+      "outer_diameter_m": 0.097,
+      "thermal_resistivity_k_m_w": 3.5
+    },
+    {
+      "outer_diameter_m": 0.098,
+      "thermal_resistivity_k_m_w": 2.5
+    }
+  ],
+  "wire_count": 57,
+  "minor_section_ratios": null,
+  "source_reference": "CIGRE TB880:2022 Case1 5.1 pp131–146; calculation-table outer diameters; primitive SI inputs, no intermediate reference factors",
+  "source_sha256": "9cb8b071f3bce12b18f04fbdbb2c1205c7900d131ebf16cf5cfc9cb57a533cd9"
+}

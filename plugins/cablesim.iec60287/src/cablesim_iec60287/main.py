@@ -97,7 +97,43 @@ def steady_rating(case: dict, out: Path) -> dict:
             'evidence': {'iterations': result.iterations, 'decisions': result.decisions}}
 
 
-CAPABILITIES = {'steady-rating': steady_rating}
+def prepare_case(case):
+    if case['input'].get('schema_version')=='cablesim.iec60287.tb880-wire-foil/1':
+        from cablesim_iec60287.tb880_wire_foil import WireFoilRating
+        if case.get('parameters'):raise ValueError('TB880 wire/foil reference uses complete SI input')
+        return WireFoilRating.model_validate(case['input'])
+    if case['input'].get('schema_version')=='cablesim.iec60287.tb880-reference/1':
+        from cablesim_iec60287.tb880_reference import ReferenceRating
+        if case.get('parameters'):raise ValueError('TB880 reference uses complete SI input; extra parameters are not accepted')
+        return ReferenceRating.model_validate(case['input'])
+    if case['input'].get('schema_version')=='cablesim.iec60287.armoured-sl/1':
+        from cablesim_iec60287.armour import ArmouredRating
+        return ArmouredRating.model_validate(case['input'])
+    return prepare(case['input'],case.get('parameters',{}))
+
+
+def armoured(case,out):
+    from cablesim_iec60287.armour import armoured_rating
+    value=armoured_rating(prepare_case(case));name=case['case_id']+'.armour.json'
+    (out/name).write_text(json.dumps(value,ensure_ascii=False,allow_nan=False),'utf-8')
+    return {'results':[{'key':key,'type':'quantity','entity':'circuit/c1','status':'available','value':value[field],'unit':unit} for key,field,unit in [('ampacity','ampacity_a','A'),('x-cablesim.iec60287.loss_factor.armour','lambda2','1'),('x-cablesim.iec60287.losses.armour','armour_loss_w_m','W/m')]],
+            'artifacts':[{'path':'output/'+name,'type':'x-cablesim.iec60287-armour'}],
+            'warnings':[{'code':'SCOPE','message':s} for s in value['limitations']]}
+
+
+def tb880_reference(case,out):
+    if case['input'].get('schema_version')=='cablesim.iec60287.tb880-wire-foil/1':
+        from cablesim_iec60287.tb880_wire_foil import rate
+    else:
+        from cablesim_iec60287.tb880_reference import rate
+    value=rate(prepare_case(case));name=case['case_id']+'.reference.json'
+    (out/name).write_text(json.dumps(value,ensure_ascii=False,allow_nan=False),'utf-8')
+    return {'results':[{'key':'ampacity','type':'quantity','entity':'circuit/c1','status':'available','value':value['ampacity_a'],'unit':'A'}],
+            'artifacts':[{'path':'output/'+name,'type':'x-cablesim.iec60287-reference'}],
+            'warnings':[{'code':'REFERENCE_SCOPE','message':s} for s in value['limitations']]}
+
+
+CAPABILITIES = {'steady-rating': steady_rating,'armoured-sl-rating':armoured,'tb880-reference-rating':tb880_reference,'tb880-wire-foil-rating':tb880_reference}
 
 
 def group_rating(case, group, out):
@@ -136,6 +172,9 @@ def group_rating(case, group, out):
         ('x-cablesim.iec60287.thermal_resistance.duct_air','t4_air_gap_k_m_w','K·m/W'), ('x-cablesim.iec60287.thermal_resistance.duct_wall','t4_wall_k_m_w','K·m/W'),
         ('x-cablesim.iec60287.temperature_rise.mutual','mutual_temperature_rise_k','K'), ('x-cablesim.iec60287.current','current_a','A')]
     for state in payload['operating']['cable_states']:
+        if group.soil.get('three_core'):
+            for key,field,unit in [('x-cablesim.iec60287.loss_factor.armour','lambda2','1'),('x-cablesim.iec60287.losses.armour','armour_loss_w_m','W/m'),('x-cablesim.iec60287.thermal_resistance.bedding','t2_k_m_w','K·m/W')]:
+                results.append({'key':key,'type':'quantity','entity':state['entity'],'case':'operating','status':'available','value':state[field],'unit':unit})
         for key,field,unit in fields:
             value = state[field]+273.15 if field.endswith('_temperature_c') else state[field]
             results.append({'key':key,'type':'quantity','entity':state['entity'],'case':'operating','status':'available','value':value,'unit':unit})
@@ -171,7 +210,7 @@ def run_case(handler, case: dict, out: Path) -> dict:
             entities = {'circuit/c1': circuit['id'], **{f'cable/c1-{p}': c['id'] for p,c in zip('ABC',circuit['cables'])}}
             for r in result.get('results', []):
                 r['entity'] = entities.get(r['entity'], r['entity'])
-        prepared = prepare(case['input'], case.get('parameters', {})).model_dump(mode='json')
+        prepared = prepare_case(case).model_dump(mode='json')
         result.setdefault('evidence', {})['prepared_input_sha256'] = sha256(json.dumps(prepared, sort_keys=True, ensure_ascii=False, allow_nan=False).encode('utf-8')).hexdigest()
         return {**base, 'status': 'succeeded', **result}
     except ValidationError as exc:
@@ -190,12 +229,25 @@ def main() -> int:
     handler = CAPABILITIES[request['capability']]
     if request['phase'] == 'check':
         def handler(case, out):
-            prepare(case['input'], case.get('parameters', {}))
+            prepared=prepare_case(case)
+            if request['capability']=='armoured-sl-rating':
+                from cablesim_iec60287.armour import armoured_rating
+                armoured_rating(prepared)
+            elif request['capability']=='tb880-reference-rating':
+                from cablesim_iec60287.tb880_reference import rate as reference_rate
+                reference_rate(prepared)
+            elif request['capability']=='tb880-wire-foil-rating':
+                from cablesim_iec60287.tb880_wire_foil import rate as reference_rate
+                reference_rate(prepared)
             return {'results': [], 'artifacts': []}
     out = job / 'output'
-    cases = [run_case(handler, case, out) for case in request['cases']]
+    def invoke(case,out):
+        schema={'tb880-reference-rating':'cablesim.iec60287.tb880-reference/1','tb880-wire-foil-rating':'cablesim.iec60287.tb880-wire-foil/1'}.get(request['capability'])
+        if schema and case['input'].get('schema_version')!=schema:raise ValueError('input schema does not match the selected reference capability')
+        return handler(case,out)
+    cases = [run_case(invoke, case, out) for case in request['cases']]
     result = {'protocol': PROTOCOL, 'cases': cases,
-              'environment': {'python': platform.python_version(), 'method': 'iec60287-group/0.3.0', 'legacy_method': METHOD_VERSION}}
+              'environment': {'python': platform.python_version(), 'method': {'armoured-sl-rating':'iec60287-armour/0.1.0','tb880-reference-rating':'iec60287-tb880-reference/0.1.0','tb880-wire-foil-rating':'iec60287-tb880-wire-foil/0.1.0'}.get(request['capability'],'iec60287-group/0.4.0'), 'legacy_method': METHOD_VERSION}}
     (out / 'result.json').write_text(json.dumps(result, ensure_ascii=False, allow_nan=False), 'utf-8')
     return 0
 

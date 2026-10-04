@@ -69,10 +69,24 @@ def running_comsol(api):
 
 
 @contextmanager
-def exclusive():
+def exclusive(configuration=None):
     """Do not start a second bridge solve, even in a different host process."""
     if os.name != 'nt':
-        raise EnvironmentMissing('环境缺失：此 COMSOL 桥接版本仅验证 Windows x64。')
+        if not os.environ.get('SLURM_JOB_ID'):
+            raise EnvironmentMissing('COMSOL 计算必须由 Slurm 提交到计算节点，不能在登录节点启动。')
+        import fcntl
+        # One COMSOL process at a time for this account, across all compute jobs.
+        # Do not wait while holding paid resources behind another bridge run.
+        config=configuration if configuration is not None else json.loads(CONFIG.read_text('utf-8')) if CONFIG.is_file() else {}
+        lock=Path(config.get('comsol_lock',''))
+        if not lock.is_absolute() or not lock.parent.is_dir():
+            raise EnvironmentMissing('管理员须配置共享文件系统上的 comsol_lock 绝对路径。')
+        with lock.open('a+b') as stream:
+            try:fcntl.flock(stream.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
+            except BlockingIOError:raise EnvironmentBusy('超算 COMSOL 正在执行另一项对照；本次未启动重复计算。') from None
+            try:yield
+            finally:fcntl.flock(stream.fileno(),fcntl.LOCK_UN)
+        return
     api = ctypes.WinDLL('kernel32', use_last_error=True)
     api.CreateMutexW.argtypes = [ctypes.c_void_p, wintypes.BOOL, wintypes.LPCWSTR]
     api.CreateMutexW.restype = wintypes.HANDLE
@@ -103,6 +117,10 @@ def resolve(configuration=None):
     if not value or not Path(value).is_file():
         raise EnvironmentMissing(f'环境缺失：请安装自备有效商业许可证的 COMSOL 6.2，在 {CONFIG} 的 comsol 字段填写 comsolbatch.exe 绝对路径。安装说明：{INSTALL_GUIDE}')
     executable = Path(value).resolve()
+    if os.name!='nt':
+        if executable!=Path('/data/app/comsol/62/multiphysics/bin/comsol').resolve():
+            raise EnvironmentMissing('超算 COMSOL 仅允许已核验的 /data/app/comsol/62/multiphysics/bin/comsol。')
+        return executable,executable
     if executable.name.lower() != 'comsolbatch.exe':
         raise EnvironmentMissing('comsol 配置必须指向官方 bin/win64/comsolbatch.exe。')
     compiler = executable.with_name('comsolcompile.exe')
@@ -112,16 +130,17 @@ def resolve(configuration=None):
 
 
 def environment(work):
-    env = {key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'WINDIR', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA', 'PROGRAMFILES', 'COMSOL_LICENSE_FILE', 'LM_LICENSE_FILE') if key in os.environ}
-    env.update(TEMP=str(work), TMP=str(work), OMP_NUM_THREADS='2')
+    env = {key: os.environ[key] for key in ('PATH', 'SYSTEMROOT', 'WINDIR', 'USERPROFILE', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA', 'PROGRAMFILES', 'COMSOL_LICENSE_FILE', 'LM_LICENSE_FILE','SLURM_JOB_ID','SLURM_ARRAY_JOB_ID','SLURM_ARRAY_TASK_ID','SLURM_CPUS_PER_TASK','SLURM_JOB_NODELIST') if key in os.environ}
+    env.update(HOME=str(work),TEMP=str(work), TMP=str(work),TMPDIR=str(work),OMP_NUM_THREADS='1')
     return env
 
 
 def command(executable, arguments, work, timeout=300, name='process'):
     """Host Job Object owns the Python relay, COMSOL and every child process."""
     try:
+        import threading
         result = run_process([sys.executable, str(Path(__file__).resolve()), '--relay', str(executable), *arguments],
-                             cwd=work, env=environment(work), timeout=timeout, stderr_limit=24*1024*1024)
+                             cwd=work, env=environment(work), timeout=timeout, stderr_limit=24*1024*1024,stop_event=threading.Event())
     except subprocess.TimeoutExpired as exc:
         raise SolverFailure(f'COMSOL {name} 超时（{timeout} s）；进程树已终止，本次没有有效结果。') from exc
     output = decode(result.stderr or b'')
@@ -136,7 +155,7 @@ def command(executable, arguments, work, timeout=300, name='process'):
 def compile_source(source, work, compiler):
     path = work/'BridgeJob.java'
     path.write_text(source, encoding='utf-8')
-    output = command(compiler, [str(path)], work, timeout=120, name='compile')
+    output = command(compiler, (['compile'] if os.name!='nt' else [])+[str(path)], work, timeout=120, name='compile')
     compiled = path.with_suffix('.class')
     if not compiled.is_file() or compiled.stat().st_mtime_ns < path.stat().st_mtime_ns:
         raise SolverFailure('COMSOL Java 编译未生成本次类文件：'+output[-2000:])
@@ -144,17 +163,19 @@ def compile_source(source, work, compiler):
 
 
 def execute(source, work, required_modules, configuration=None, timeout=600, save_model=True):
+    if os.name=='nt':
+        raise EnvironmentMissing('本机 COMSOL 计算已禁用；请使用超算 Slurm 后端。')
     work.mkdir(parents=True, exist_ok=True)
     if any(work.glob('model*.mph')):
         raise SolverFailure('COMSOL 工作目录已有模型；请使用新的运行目录，避免读取历史模型。')
     executable, compiler = resolve(configuration)
-    with exclusive():
+    with exclusive(configuration):
         banner = command(executable, ['-version'], work, timeout=60, name='version')
         match = re.search(r'COMSOL Multiphysics\s+(6\.2\.\d+\.\d+)', banner)
         if not match:
             raise EnvironmentMissing('环境缺失：仅支持已核验的 COMSOL 6.2；检测结果为 '+banner[:500])
         compiled = compile_source(source, work, compiler)
-        args = ['-np', '2', '-inputfile', str(compiled), '-batchlog', str(work/'batch.log')]
+        args = (['batch'] if os.name!='nt' else [])+['-np', '1', '-inputfile', str(compiled), '-batchlog', str(work/'batch.log')]
         args += ['-outputfile', str(work/'model.mph')] if save_model else ['-nosave']
         log = command(executable, args, work, timeout=timeout, name='solver')
         batch = (work/'batch.log').read_text('utf-8', errors='replace') if (work/'batch.log').is_file() else ''
@@ -170,6 +191,9 @@ def execute(source, work, required_modules, configuration=None, timeout=600, sav
         if save_model and len(models) != 1:
             raise SolverFailure('COMSOL 没有保存唯一的本次模型文件。')
         evidence = {'name': 'comsol', 'version': match.group(1), 'version_banner': banner.strip(),
+                    'license_source':'hpc-installation','slurm_job_id':os.environ.get('SLURM_JOB_ID'),
+                    'slurm_array_job_id':os.environ.get('SLURM_ARRAY_JOB_ID'),'node':os.environ.get('SLURM_JOB_NODELIST'),
+                    'threads':1,
                     'modules': products, 'execution': 'separate-process', 'executable_sha256': fingerprint(executable),
                     'generated_source_sha256': sha256(source.encode()).hexdigest(),
                     'model_sha256': fingerprint(models[0]) if models else None,

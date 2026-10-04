@@ -6,12 +6,13 @@ from .report import digest
 from .solver_runtime import environment, execute, SolverFailure
 
 
-def translate(problem, mesh, work):
+def translate(problem, mesh, work, feedback=None):
     gmsh_file(mesh,work/'mesh.msh')
     regions = mesh['regions']
     order=mesh.get('field_order',1)
     by_uid = {r['uid']:r['id'] for r in regions}
     conductive = [r['id'] for r in regions if r['material']['conductivity_s_m']>0]
+    impressed = [e for e in problem['excitations'] if e['kind']=='impressed_current_rms_a']
     bonded = [e for e in problem['excitations'] if len(e['regions'])>1]
     if any(any(e['value']) or e['kind'] != ('voltage_gradient_v_m' if e.get('connection')=='series' else 'current_rms_a') for e in bonded):
         raise ValueError('多区域互联组仅支持零总电流并联或零总电压梯度串联网络。')
@@ -23,13 +24,27 @@ def translate(problem, mesh, work):
     for i,e in enumerate(problem['excitations']):
         lines.append(f'G{i} = Region['+group([by_uid[u] for u in e['regions']])+'];')
     lines += ['}', 'Function {']
+    if not conductive:
+        lines.append('sigma[] = 0;')
     for r in regions:
         m = r['material']
         nu=1/(4*pi*1e-7*complex(m['relative_permeability'],-m.get('relative_permeability_loss',0)))
         lines.append(f'nu[Region[{r["id"]}]] = Complex[{nu.real:.17g},{nu.imag:.17g}];')
         lines.append(f'magneticLoss[Region[{r["id"]}]] = {2*pi*problem["frequency_hz"]*nu.imag:.17g};')
         if r['id'] in conductive:
-            lines.append(f'sigma[Region[{r["id"]}]] = {m["conductivity_s_m"]:.17g};')
+            expression=f'{m["conductivity_s_m"]:.17g}'
+            if feedback is not None:
+                law=feedback['laws'][r['uid']]
+                expression+=f'/(1+{law["alpha_per_k"]:.17g}*(ScalarField[XYZ[]]{{1}}-{law["reference_temperature_k"]:.17g}))'
+            lines.append(f'sigma[Region[{r["id"]}]] = {expression};')
+    if impressed:
+        import numpy as np
+        xy=np.asarray(mesh['points'])[np.asarray(mesh['triangles'])]
+        a=xy[:,1]-xy[:,0];b=xy[:,2]-xy[:,0];area=np.abs(a[:,0]*b[:,1]-a[:,1]*b[:,0])/2
+        for e in impressed:
+            rid=by_uid[e['regions'][0]]
+            value=complex(e['value'][0],e['value'][1] if len(e['value'])>1 else 0)/float(area[np.asarray(mesh['domain_ids'])==rid].sum())
+            lines.append(f'js[Region[{rid}]] = Vector[0,0,Complex[{value.real:.17g},{value.imag:.17g}]];')
     lines += ['}', 'Constraint {','{ Name A0; Case {']
     for i,b in enumerate(problem['boundaries'],1):
         lines.append(f'{{ Region Region[{1000+i}]; Value {b["value"]:.17g}; }}')
@@ -57,7 +72,7 @@ def translate(problem, mesh, work):
         lines += ['} }']
     lines += ['}',
               'Jacobian { { Name J; Case { { Region All; Jacobian Vol; } } } }',
-              'Integration { { Name Q; Case { { Type Gauss; Case { { GeoElement Triangle; NumberOfPoints '+('7' if order==2 else '4')+'; } } } } } }',
+              'Integration { { Name Q; Case { { Type Gauss; Case { { GeoElement Triangle; NumberOfPoints '+('7' if order==2 or feedback is not None else '4')+'; } } } } } }',
               'FunctionSpace {',
               '{ Name H_A; Type Form1P; BasisFunction { { Name s; NameOfCoef a; Function BF_PerpendicularEdge; Support D; Entity NodesOf[All]; } '+
               ('{ Name s2; NameOfCoef a2; Function BF_PerpendicularEdge_2E; Support D; Entity EdgesOf[All]; } ' if order==2 else '')+
@@ -79,12 +94,16 @@ def translate(problem, mesh, work):
     if bonded:
         bonded_ids=[by_uid[u] for e in bonded for u in e['regions']]
         lines += ['GlobalEquation { Type Network; NameOfConstraint Bonding; { Node {I}; Loop {U}; Equation {I}; In Region['+group(bonded_ids)+']; } }']
+    if impressed:
+        source_ids=[by_uid[e['regions'][0]] for e in impressed]
+        lines.append('Integral { [ -js[], {a} ]; In Region['+group(source_ids)+']; Jacobian J; Integration Q; }')
     lines += ['} } }',
               'Resolution { { Name SolveEddy; System { { Name S; NameOfFormulation Eddy; Type ComplexValue; Frequency '+str(problem['frequency_hz'])+'; } } Operation { Generate[S]; Solve[S]; SaveSolution[S]; } } }',
               'PostProcessing { { Name Fields; NameOfFormulation Eddy; Quantity {',
               '{ Name A; Value { Local { [ CompZ[{a}] ]; In D; Jacobian J; } } }',
               '{ Name B; Value { Local { [ {d a} ]; In D; Jacobian J; } } }',
               '{ Name Jz; Value { Local { [ -sigma[]*CompZ[Dt[{a}]+{u}] ]; In C; Jacobian J; } } }',
+              '{ Name Ez; Value { Local { [ -CompZ[Dt[{a}]+{u}] ]; In C; Jacobian J; } } }',
               '{ Name P; Value { Integral { [ sigma[]*SquNorm[Dt[{a}]+{u}] ]; In C; Jacobian J; Integration Q; } } }',
               '{ Name Pmag; Value { Integral { [ magneticLoss[]*SquNorm[{d a}] ]; In D; Jacobian J; Integration Q; } } }',
               '{ Name Inet; Value { Integral { [ -sigma[]*CompZ[Dt[{a}]+{u}] ]; In C; Jacobian J; Integration Q; } } }',
@@ -97,18 +116,30 @@ def translate(problem, mesh, work):
         if r['id'] in conductive:
             for quantity,filename in [('P','power'),('Inet','current')]:
                 lines.append(f'Print[{quantity}[Region[{r["id"]}]], OnGlobal, Format Table, File "{filename}-{r["id"]}.txt"];')
-            if problem['probes_m'] or any(p['region']==r['uid'] for p in problem.get('current_probes',[])):
+            if feedback is not None or problem['probes_m'] or any(p['region']==r['uid'] for p in problem.get('current_probes',[])):
                 lines.append(f'Print[Jz, OnElementsOf Region[{r["id"]}], Format NodeTable, File "j-{r["id"]}.txt"];')
+            if feedback is not None:
+                lines.append(f'Print[Ez, OnElementsOf Region[{r["id"]}], Format NodeTable, File "e-{r["id"]}.txt"];')
     for i,(x,z) in enumerate(problem['probes_m']):
         lines.append(f'Print[B, OnPoint {{{x:.17g},{z:.17g},0}}, Format Table, File "probe-{i}.txt"];')
     lines += ['} } }']
+    if feedback is not None:
+        lines=[line.replace('Generate[S]; Solve[S];','GmshRead["temperature.pos"]; Generate[S]; Solve[S];') for line in lines]
+        values=feedback.get('temperature_k');points=mesh['points']
+        view=['View "temperature" {']
+        for index,tri in enumerate(mesh['triangles']):
+            xyz=','.join(f'{v:.17g}' for n in tri for v in (*points[n],0.))
+            local=feedback['temperature_triangles_k'][index] if 'temperature_triangles_k' in feedback else [values[n] for n in tri]
+            ts=','.join(f'{v:.17g}' for v in local)
+            view.append(f'ST({xyz}){{{ts}}};')
+        (work/'temperature.pos').write_text('\n'.join(view+['};']),'ascii')
     (work/'case.pro').write_text('\n'.join(lines)+'\n',encoding='ascii')
 
 
-def solve(problem, mesh, work, configuration=None):
+def solve(problem, mesh, work, configuration=None, *, feedback=None):
     work.mkdir(parents=True,exist_ok=True)
     executable,env,version = environment('getdp',work,configuration)
-    translate(problem,mesh,work)
+    translate(problem,mesh,work,feedback)
     execution = execute(executable,['case.pro','-msh','mesh.msh','-solve','SolveEddy','-pos','Export','-v','3'],work,env)
     # Parsing is deliberately strict: a missing output cannot become a zero.
     import numpy as np
@@ -137,7 +168,7 @@ def solve(problem, mesh, work, configuration=None):
         rdc = 1/(region['material']['conductivity_s_m']*area)
         currents.append({'entity':region['uid'],'current_complex_rms_a':[real,imag],'current_rms_a':magnitude,
                          'joule_loss_w_m':watts,'dc_resistance_ohm_m':rdc,
-                         'ac_resistance_ohm_m':watts/magnitude**2 if magnitude>1e-10 and any(region['uid'] in e['regions'] and e['kind']=='current_rms_a' for e in problem['excitations']) else None})
+                         'ac_resistance_ohm_m':watts/magnitude**2 if magnitude>1e-10 and any(region['uid'] in e['regions'] and e['kind']=='current_rms_a' and any(e['value']) for e in problem['excitations']) else None})
     constraint_errors=[]
     for e in problem['excitations']:
         if e.get('connection')=='series':
@@ -180,7 +211,7 @@ def solve(problem, mesh, work, configuration=None):
     # This does not replace the GetDP A-u field/circuit solve with line currents.
     # In P1 triangles, J is linear; three-point quadrature integrates its smooth
     # distant-field kernel. Only nonmagnetic models and nonconducting probes apply.
-    eligible=mesh.get('field_order',1)==1 and all(abs(r['material']['relative_permeability']-1)<1e-12 and r['material'].get('relative_permeability_loss',0)==0 for r in mesh['regions'])
+    eligible=not any(e['kind']=='impressed_current_rms_a' for e in problem['excitations']) and mesh.get('field_order',1)==1 and all(abs(r['material']['relative_permeability']-1)<1e-12 and r['material'].get('relative_permeability_loss',0)==0 for r in mesh['regions'])
     if probes and eligible:
         active=[]
         for p in probes:
@@ -217,7 +248,24 @@ def solve(problem, mesh, work, configuration=None):
                 p.update(b_current_integral_real_t=b.real.tolist(),b_current_integral_imag_t=b.imag.tolist(),
                          b_current_integral_rms_t=float(np.sqrt(np.sum(np.abs(b)**2))),
                          recovery='Free-space Biot-Savart quadrature of GetDP distributed P1 current density, not line-current approximation')
-    return {'solver':version,'execution':execution,'mesh_sha256':mesh['sha256'],
+    coupled={}
+    if feedback is not None:
+        # P1 A and constant regional voltage gradients imply that E is P1.
+        # Export E directly: contact-side temperature traces can differ. Heat assembly evaluates sigma(T) at
+        # quadrature points, never smears heat across a material interface.
+        if mesh.get('field_order',1)!=1:
+            raise SolverFailure('coupled mesh.field_order：当前反馈只支持P1。')
+        electric={}
+        for region in mesh['regions']:
+            if region['material']['conductivity_s_m']<=0:continue
+            raw=np.loadtxt(work/f'e-{region["id"]}.txt',skiprows=1,ndmin=2)
+            nodes=raw[:,0].astype(int)-1
+            if raw.shape[1]!=3 or not np.isfinite(raw).all() or np.any(nodes<0) or np.any(nodes>=len(mesh['points'])):
+                raise SolverFailure('GetDP区域电场输出格式或节点映射无效。')
+            electric[region['uid']]={'nodes':nodes.tolist(),'electric_complex_v_m':raw[:,1:].tolist()}
+        coupled={'electric_field_by_region':electric}
+    return {'solver':version,'execution':execution,'mesh_sha256':mesh['sha256'],**coupled,
+            'impressed_currents':[{'entity':e['regions'][0],'current_complex_rms_a':e['value'],'distribution':'uniform over actual source mesh area; no source-domain eddy currents'} for e in problem['excitations'] if e['kind']=='impressed_current_rms_a'],
             'problem_sha256':digest(problem),'regions':currents,'magnetic_losses':magnetic_losses,'a_complex_wb_m':field[:,1:].tolist(),
             'probes':probes,'current_density_probes':density,'current_constraint_errors':constraint_errors,
             'phasor_convention':'RMS; Joule integral has no factor 1/2',

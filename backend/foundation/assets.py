@@ -86,7 +86,10 @@ class AssetRepository:
                    (str(uuid4()), row['id'], row['revision'], action, note,
                     row['content_sha256'], stamp()))
 
-    def _insert(self, db, release: AssetRelease, note: str) -> str:
+    def _insert(self, db, release: AssetRelease, note: str, *, managed_type: bool = False) -> str:
+        if (not managed_type and db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='type_families'").fetchone()
+                and db.execute('SELECT 1 FROM type_families WHERE id=?', (release.asset_id,)).fetchone()):
+            raise AssetError('TYPE_VERSION_WORKFLOW_REQUIRED', '型号资产须从型号模块建立方案、人工审核后发布。', 409)
         # This lane imports JSON definitions only, not unverified payload manifests.
         if release.files:
             raise AssetError('ASSET_PAYLOAD_NOT_SUPPORTED', '本批仅接收 JSON 定义；文件载荷须先接入隔离校验服务。')

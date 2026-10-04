@@ -45,7 +45,7 @@ class Condition(Strict):
 
 class Excitation(Strict):
     regions: list[str] = Field(min_length=1)
-    kind: Literal['heat_w_m','current_rms_a','voltage_gradient_v_m']
+    kind: Literal['heat_w_m','current_rms_a','voltage_gradient_v_m','impressed_current_rms_a']
     connection: Literal['parallel', 'series'] = 'parallel'
     value: list[float] = Field(min_length=1,max_length=2)
     # Piecewise constant heat factors, at time t the latest entry applies.
@@ -115,7 +115,13 @@ class Problem(Strict):
                     raise ValueError('负荷切换时间必须落在时间步边界。')
         if magnetic:
             conducting = {r.uid for r in self.geometry if not r.void and r.material.conductivity_s_m > 0}
-            if used != conducting:
+            impressed = {u for e in self.excitations if e.kind=='impressed_current_rms_a' for u in e.regions}
+            for e in self.excitations:
+                if e.kind=='impressed_current_rms_a' and (len(e.regions)!=1 or e.connection!='parallel'):
+                    raise ValueError('excitations：给定均匀电流源需要单个非导电实体区域，不接受互联约束。')
+            if any(r.uid in impressed and (r.void or r.material.conductivity_s_m!=0) for r in self.geometry):
+                raise ValueError('excitations：给定均匀电流源的 conductivity_s_m 必须显式为0；不同时求解源域涡流。')
+            if used-impressed != conducting:
                 raise ValueError('每个导电区域必须显式指定电流/电压或互联组；零净电流不能默认猜测。')
             if any(probe.region not in conducting for probe in self.current_probes):
                 raise ValueError('电流密度测点必须绑定导电区域。')

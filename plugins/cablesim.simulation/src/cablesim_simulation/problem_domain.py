@@ -70,6 +70,14 @@ def electromagnetic(value,options):
         if current is None:
             raise ValueError('缺少电缆负荷。')
         angle=options['phase_degrees'][q.cable]*pi/180
+        topology=circuit.electrical_topology
+        if topology is not None:
+            position={'A':0,'L1':0,'B':1,'L2':1,'C':-1,'L3':-1}.get(instance.phase)
+            if position is None:
+                raise ValueError('electrical_topology：当前只翻译三相A/B/C或L1/L2/L3。')
+            expected=topology.reference_angle_rad+position*(-1 if topology.phase_sequence=='ABC' else 1)*2*pi/3
+            if abs(complex(cos(angle),sin(angle))-complex(cos(expected),sin(expected)))>1e-9:
+                raise ValueError('phase_degrees.'+q.cable+'：与领域electrical_topology的已保存相序/参考角不一致。')
         excitations.append({'regions':[shapes[0]['uid']],'kind':'current_rms_a','value':[current*cos(angle),current*sin(angle)],'source':options['source']})
         metal_uids.extend(s['uid'] for s in shapes[1:] if s['material']['conductivity_s_m']>0)
     if set(options['material_states'])!=used_materials:
@@ -93,6 +101,8 @@ def electromagnetic(value,options):
     p={'schema_version':'cablesim.simulation-problem/1','physics':'magnetic_harmonic','geometry':geometry,
        'boundaries':[{'uid':'outer','selector':'outer','values':[],'kind':'magnetic_potential','value':0}],
        'excitations':excitations,'frequency_hz':next(iter(frequency)),'probes_m':options['probes_m'],
-       'provenance':{'domain':{'source':options['source'],'source_schema':d.schema_version}},
+       'provenance':{'domain':{'source':options['source'],'source_schema':d.schema_version},
+                     'electrical_topology':{c.id:{'phase':c.electrical_topology.model_dump(mode='json') if c.electrical_topology else None,
+                                                  'bonding':c.bonding.model_dump(mode='json')} for c in d.circuits if any(i.id in placed for i in c.cables)}},
        'assumptions':['2D axial invariance; constant isotropic material states; RMS phasors; finite A=0 boundary; ideal explicit bonding groups.']}
     return Problem.model_validate(p).model_dump(mode='json')

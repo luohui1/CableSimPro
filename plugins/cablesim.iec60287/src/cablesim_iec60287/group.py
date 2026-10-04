@@ -49,6 +49,17 @@ def _flat_eddy(r, g, rs, theta_s, spacing, role):
 
 
 def _loss_details(group, resistances, sheath_temperatures):
+    if group.soil.get('double_flat'):
+        from .double_flat import eddy_factor
+        setup = group.soil['double_flat']
+        result = [None]*len(group.cables)
+        for position,i in enumerate(setup['indices']):
+            c = group.cables[i]; r,g = c['rating'],c['geometry']
+            rho = r.sheath.resistivity20_ohm_m*(1+r.sheath.alpha20_per_k*(sheath_temperatures[i]-20))
+            rs = rho/(pi*g.sheath_mean_m*r.sheath.thickness_m)
+            result[i] = eddy_factor(rs,resistances[i],rho,r.sheath.thickness_m,g.over_sheath_m,
+                g.sheath_mean_m,r.frequency_hz,setup['spacing'],setup['separation'],position,setup['direction'],group.parameters.get('double_flat_tables'))
+        return result
     losses = [None]*len(group.cables)
     for circuit in group.circuits:
         ids, spacing = circuit['indices'], circuit['spacing']
@@ -86,7 +97,7 @@ def _loss_details(group, resistances, sheath_temperatures):
                     role = 'middle'
                     factor = cq*cq/(rs*rs+cq*cq)  # Eq. (10), no multiplier 2
                 else:
-                    lagging = (phases[group.cables[i]['phase']]-center_phase)%3 == 1
+                    lagging = (phases[group.cables[i]['phase']]-center_phase)%3 == (1 if circuit['phase_sequence']=='ABC' else 2)
                     role = 'outer_lagging' if lagging else 'outer_leading'
                     factor = .75*cp*cp/(rs*rs+cp*cp)+.25*cq*cq/(rs*rs+cq*cq)
                     cross = 2*rs*cp*cq*xm/(sqrt(3)*(rs*rs+cp*cp)*(rs*rs+cq*cq))
@@ -101,6 +112,18 @@ def _loss_details(group, resistances, sheath_temperatures):
                 losses[i] = {'total':circulating+eddy*(reduction if reduction is not None else 1),
                              'circulating':circulating,'eddy_raw':eddy,'eddy_factor_f':reduction,
                              'sheath_r_ohm_m':rs,'phase_role':role}
+    for circuit in group.circuits:
+        if circuit['automatic'] and circuit['bonding']['kind'] == 'cross_bonded':
+            lengths = circuit['bonding'].get('minor_section_lengths',[])
+            if len(lengths)!=3 or any(v<=0 for v in lengths) or not circuit['bonding'].get('section_permutations') or not circuit['bonding'].get('source'):
+                raise RatingRefused('CROSS_BONDING_TOPOLOGY_REQUIRED','bonding：交叉互联需要三个正小段长度（m）、护套换位和来源。')
+            a,b,c = sorted(lengths); p,q=b/a,c/a
+            factor = (1+p*p+q*q-p-p*q-q)/(1+p+q)**2
+            for i in circuit['indices']:
+                row = losses[i]
+                row.update(circulating=row['circulating']*factor,eddy_factor_f=None,
+                           cross_bonding_factor=factor,basis='IEC 60287-1-1:2023 5.3.7.2 Eq.(11)')
+                row['total'] = row['circulating']+row['eddy_raw']
     if any(not isfinite(x['total']) or x['total'] < 0 for x in losses):
         raise RatingRefused('LOSS_STATE_INVALID', '护套损耗计算产生无效值。')
     return losses
@@ -111,6 +134,9 @@ def _loss_factors(group, resistances, sheath_temperatures):
 
 
 def operating(group, currents=None):
+    if group.soil.get('three_core'):
+        from .three_core import operating as three_core_operating
+        return three_core_operating(group,currents)
     n, ambient = len(group.cables), group.ambient
     currents = [c['current'] for c in group.cables] if currents is None else currents
     limits = [c['rating'].max_conductor_temperature_c for c in group.cables]
@@ -133,6 +159,14 @@ def operating(group, currents=None):
     max_iterations = max(c['rating'].solver.max_iterations for c in group.cables)
     tolerance = 1e-6
     for iteration in range(1,max_iterations+1):
+        supplied = group.parameters.get('external_loss_artifact')
+        if supplied:
+            from .loss_table import interpolate
+            factors=interpolate(supplied,group.cables,currents,temperatures,sheaths)
+            for cable in group.cables:
+                cable['factors']=factors[cable['id']]
+        if group.soil.get('double_flat') and max(currents)-min(currents)>1e-9:
+            raise RatingRefused('DOUBLE_FLAT_BALANCED_LOAD_REQUIRED','IEC 1-2 的此分支要求两回共同平衡负荷。')
         resistances = [_resistance(c,temperatures[i],spacings[i]) for i,c in enumerate(group.cables)]
         loss_details = _loss_details(group,resistances,sheaths)
         lambdas = [row['total'] for row in loss_details]
@@ -157,6 +191,8 @@ def operating(group, currents=None):
         if not all(isfinite(v) and -273.15 < v < 500 for v in new_temperatures):
             raise RatingRefused('THERMAL_RUNAWAY', '该负荷下无有效稳态温度解；请减小负荷或采用适用的数值模型。')
         if residual < tolerance:
+            if supplied:
+                interpolate(supplied,group.cables,currents,new_temperatures,new_sheaths)
             break
         temperatures = [(a+b)/2 for a,b in zip(temperatures,new_temperatures)]
         sheaths = [(a+b)/2 for a,b in zip(sheaths,new_sheaths)]
@@ -169,6 +205,7 @@ def operating(group, currents=None):
             'conductor_temperature_c': new_temperatures[i], 'temperature_limit_c': limits[i], 'margin_k': limits[i]-new_temperatures[i],
             'sheath_temperature_c': new_sheaths[i],'surface_temperature_c': surfaces[i],
             'ac_resistance_ohm_m': resistances[i],'capacitance_f_m': capacitance[i], 'lambda1': lambdas[i],
+            'ac_extra_factor':resistances[i]/(c['rating'].conductor.r20_ohm_m*(1+c['rating'].conductor.alpha20_per_k*(new_temperatures[i]-20)))-1,
             'lambda1_components':loss_details[i],
             'conductor_loss_w_m': wc[i],'sheath_loss_w_m': ws[i],'dielectric_loss_w_m': wd[i],'total_loss_w_m': total[i],
             't1_k_m_w': T1[i],'t3_k_m_w': T3[i], 't4_air_gap_k_m_w': gap[i], 't4_wall_k_m_w': walls[i],
@@ -184,6 +221,10 @@ def rate_group(group):
     ratings = []
     base = [c['current'] for c in group.cables]
     for circuit in group.circuits:
+        if group.parameters.get('operation') == 'temperature':
+            ratings.append({'entity':circuit['id'],'label':circuit['label'],'ampacity_a':None,
+                'limiting_cable':None,'error':{'code':'TEMPERATURE_ONLY','message':'本次仅计算保存负荷温度，未求允许电流。'}})
+            continue
         indices = circuit['indices']
         # With explicit unequal phase loads, vary a common scale; report each
         # phase current as well as the largest current, rather than averaging.
@@ -201,6 +242,7 @@ def rate_group(group):
                             'message':f"{circuit['label']}：其他回路保存负荷已使电缆超温，不存在正允许电流；运行温度仍可查看。"}})
             continue
         lo, hi, safe = 0.0, max(100.0,largest), zero
+        unavailable_boundary = None
         for _ in range(30):
             try:
                 state = solve(hi)
@@ -208,8 +250,10 @@ def rate_group(group):
                     break
                 lo, safe, hi = hi, state, hi*2
             except RatingRefused as exc:
-                if exc.code not in ('THERMAL_RUNAWAY','NOT_CONVERGED'):
+                if exc.code not in ('THERMAL_RUNAWAY','NOT_CONVERGED','LOSS_COEFFICIENT_VALIDITY_EXCEEDED'):
                     raise
+                if exc.code == 'LOSS_COEFFICIENT_VALIDITY_EXCEEDED':
+                    unavailable_boundary = exc
                 break
         else:
             raise RatingRefused('RATING_NOT_BRACKETED', '无法找到允许电流的温限区间。')
@@ -220,8 +264,10 @@ def rate_group(group):
                 state = solve(mid)
                 admissible = min(s['margin_k'] for s in state['cable_states']) >= 0
             except RatingRefused as exc:
-                if exc.code not in ('THERMAL_RUNAWAY','NOT_CONVERGED'):
+                if exc.code not in ('THERMAL_RUNAWAY','NOT_CONVERGED','LOSS_COEFFICIENT_VALIDITY_EXCEEDED'):
                     raise
+                if exc.code == 'LOSS_COEFFICIENT_VALIDITY_EXCEEDED':
+                    unavailable_boundary = exc
                 admissible = False
             if admissible:
                 lo, safe = mid, state
@@ -229,6 +275,8 @@ def rate_group(group):
                 hi = mid
         limiting = min(safe['cable_states'],key=lambda s:s['margin_k'])
         if limiting['margin_k'] > 1e-3:
+            if unavailable_boundary:
+                raise RatingRefused('LOSS_COEFFICIENT_VALIDITY_EXCEEDED','外部损耗表有效范围内未到达温限；未将范围边界冒充允许电流。'+str(unavailable_boundary))
             raise RatingRefused('RATING_NOT_CONVERGED', '电流区间收敛但温限残差未通过，未生成允许电流。')
         ratings.append({'entity': circuit['id'],'label': circuit['label'],'ampacity_a': lo,'limiting_cable': limiting['entity'],
                         'cable_currents_a': {group.cables[i]['id']:lo*ratio for i,ratio in zip(indices,ratios)},
@@ -242,7 +290,11 @@ def rate_group(group):
                       'temperature_rise_k': group.matrix[i][j]*saved['cable_states'][j]['total_loss_w_m']}
                      for i,target in enumerate(group.cables) for j,source in enumerate(group.cables)]
     from .verification import verify_balance
-    verification = verify_balance(group, saved, ratings)
+    if group.soil.get('three_core'):
+        from .three_core import verify as verify_three_core
+        verification = verify_three_core(group,saved,ratings)
+    else:
+        verification = verify_balance(group, saved, ratings)
     components = None
     if group.soil.get('contact_trefoil') and len(ratings) == 1 and ratings[0]['ampacity_a'] is not None:
         s = ratings[0]['cable_states'][0]
@@ -257,18 +309,27 @@ def rate_group(group):
                       'dielectric_loss_w_m':s['dielectric_loss_w_m'],'temperature_c':s['temperature_limit_c'],
                       'notes':'单回路接触品字形等效组；Rac、λ1、T4 取额定收敛状态，保留同输入分项对比。'}
     reference = group.parameters.get('reference_basis') == 'tb880_reference'
-    return {'schema': 'cablesim.iec60287.group-trace/1','method_version': 'iec60287-group/0.3.0',
+    payload = {'schema': 'cablesim.iec60287.group-trace/1','method_version': 'iec60287-group/0.5.0',
             'reference_basis': 'tb880_reference' if reference else 'iec2023',
             'result_scope': '旧版 TB880 参考复现，不能作为 IEC 2023 工程结论' if reference else 'IEC 2023 地下稳态；电损耗须满足声明范围',
             'operating': saved, 'circuit_ratings': ratings,'heat_contributions': contributions,'soil': group.soil, 'verification': verification,
             'rating_components':components,
+            'electrical_topology':[{c['id']: {'bonding':c['bonding'], 'phase_reference':c['electrical_topology'],
+                'legacy_assumption':None if c['electrical_topology'] else '旧输入未给相序/相角，沿用原单回路 ABC 假设'}} for c in group.circuits],
+            'external_loss_source':(group.parameters.get('external_loss_artifact') or {}).get('resolved_source'),
+            'external_loss_interpolation_error':((group.parameters.get('external_loss_artifact') or {}).get('temperature_table') or {}).get('error'),
             'rating_basis': '逐回路求允许电流；其他回路保持已保存负荷。各回路上限不能同时使用。',
-            'electrical_basis': '单回路自动损耗按 IEC 60287-1-1；多回路只接受有来源的逐电缆损耗系数，未自行计算跨回路电磁耦合。',
+            'electrical_basis': '双回平排按 IEC 60287-1-2:2023，仅同负荷、无显著环流的温度工况；表1–11在声明范围内插值。' if group.soil.get('double_flat') else '单回路按 IEC 60287-1-1:2023（含已知段长交叉互联）；其余多回路仅接受有来源、有效范围匹配的外部损耗系数。旧输入未声明相序时沿用原 ABC 假设。',
             'sources': (['CIGRE TB 880:2022 Cases 0-1 / 0-2 / 0-3, pp. 62–101; reference conventions only'] if reference else
-                        ['IEC 60287-1-1:2023 4.2.1 / 5.1.2 / 5.1.5.1 / 5.2 / 5.3.2–5.3.4 / 5.3.7.1',
+                        ['IEC 60287-1-1:2023 4.2.1 / 5.1.2 / 5.1.5.1 / 5.2 / 5.3.2–5.3.4 / 5.3.7.1–5.3.7.2; IEC 60287-1-2:2023 4–7 (double-flat only)',
                          'IEC 60287-2-1:2023 4.1 / 4.2.2 / 4.2.3.2 / 4.2.6 / 4.2.7, Table 2']),
             'decisions': ['导体电阻、护套电阻、管内空气热阻随温度迭代；返回热平衡残差。',
                           '每根源电缆采用实际损耗 W/m；镜像法互热未以平均负荷替代。',
                           '介质损耗内部热路按 IEC 60287-1-1 4.2.1 式 (1) 取 0.5·T1，包含半导电层。',
                           'TB880 参考复现：旧版电容与矩形半径，回填采用算例 N·C；不作为 IEC 2023 工程结论。' if reference else
                           '回填修正按共同温升 C·ΣW 叠加；等负荷时还原标准 N·C 热阻修正。']}
+    if group.soil.get('three_core'):
+        from .three_core import SOURCES
+        payload.update(sources=SOURCES,electrical_basis='平衡圆形三芯独立金属屏蔽；每芯环流按SL分支，公共磁性钢带/钢丝铠装按对应条款。')
+        payload['decisions'].append('T1、Rc及电容按每芯；导体、屏蔽、介质及铠装损耗按整根三芯电缆W/m输出；芯明细单独保留。')
+    return payload

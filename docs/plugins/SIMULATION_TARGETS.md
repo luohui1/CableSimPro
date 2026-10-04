@@ -1,8 +1,8 @@
 # 电缆仿真复现目标清单
 
-检索日期：2026-10-03。用途：为数值仿真插件确定能力和取得数据的优先级。共 **51 个文献或官方算例条目**：18 篇热研究、15 篇电磁/耦合研究、10 项官方基准/标准、8 个 COMSOL 海缆教程。标准分册及不同教程分别登记，不按每张图重复计数。不是“已复现51篇”，也不能据此统计行业论文覆盖率。自建解析验证不计入来源数量。
+检索与复核日期：2026-10-04。用途：为数值仿真插件确定能力和取得数据的优先级。共 **55 个文献或官方算例条目**：20 篇热研究、17 篇电磁/耦合研究、10 项官方基准/标准、8 个 COMSOL 海缆教程。标准分册及不同教程分别登记，不按每张图重复计数。不是“已复现55篇”，也不能据此统计行业论文覆盖率。自建解析验证不计入来源数量。
 
-实现、能力矩阵及验证证据见 [仿真方法](SIMULATION.md)，几何接口见 [仿真几何契约](../architecture/simulation-geometry.md)。可运行案例包括B01、E05解析基准及GetDP二维磁准静态FEM、E17/E18涡流FEM，以及E03/E02限定热子问题；E03还进行Elmer同网格独立校核。各自近似和未覆盖量在报告中声明。原文保存在忽略的 `.data/papers/`，不入库；仓库只保存引用、必要参数/目标及定位。
+实现、能力矩阵及验证证据见 [仿真方法](SIMULATION.md)，几何接口见 [仿真几何契约](../architecture/simulation-geometry.md)。累计有结果的独立物理来源为论文6项、标准算例8项、COMSOL教程4项，其中12项完成声明范围、6项部分复现；完成项分为论文2、标准6、教程4。B01官方教学基准和C01完整几何验证另列，不计入12项。E19电流变体、TB880 Case1的三叶形/平排和网格不重复计数。C02独立几何六端子场、C04三分支、C06完整开源双向电热见SIMULATION §12。原文保存在忽略的 `.data/papers/`，不入库；仓库只保存引用、必要参数/目标及定位。
 
 ## 证据与优先级
 
@@ -12,7 +12,7 @@
 - **完整性**按具体工况判定：B01及E03热子问题有冻结输入；E02明确使用名义几何和标定边界，其余缺口见条目与案例文件。不根据题名猜参数齐全。难度为本项目估计：低=线性二维导热，中=分区/瞬态/反算，高=电磁电路/非线性/CFD，极高=三维绞合及湿迁移。
 - 定位采用原文图表/章节；只读 HTML 时写“无页码”，未知图表写“待原文”，不拿期刊总页码冒充具体目标所在页。
 
-## 热传导、敷设与暂态（18 篇）
+## 热传导、敷设与暂态（20 篇）
 
 | ID / 引用 | 物理问题与几何 | 材料、边界与完整性 | 可比较目标及位置 | 能力 / 难度 / 证据 |
 | --- | --- | --- | --- | --- |
@@ -35,7 +35,10 @@
 | T17 Paweł Ocłoń, Piotr Cisek, Marcelina Matysiak (2021). **Analysis of an application possibility of geopolymer materials as thermal backfill for underground power cable system**. Clean Technologies and Environmental Policy 23, 869–878. [官方全文](https://doi.org/10.1007/s10098-020-01942-8) | 400 kV 平排、回填、对称半域 x=0–5 m，深10 m | 埋深2 m，1200 A，土壤k=1，回填k=0.8/1.4，环境30°C，地表h=5；芯/绝缘/外层k=400/0.285/0.57。部分几何从等效面积多项式推导。HTML Eq.(6)/(7)/(11)/(12) 的电阻/集肤表达有量纲或排版疑点，未核对PDF前不可照抄运行 | Fig.6d：地聚物k=1.4且1400 mm²时芯温<90°C；砂水泥同面积>90°C，需1600 mm²。HTML “UPCS physical model”“Results and discussion”，无页码；具体曲线值待数字化 | 2D 回填+温变电阻/损耗；中高；A，有待澄清公式 |
 | T18 Hwang, Chang, Chen (2000). **Calculation of ampacities for cables in trays using finite elements**. Electric Power Systems Research 54(2), 75–81. [出版社](https://www.sciencedirect.com/science/article/abs/pii/S0378779699000723) · [DOI](https://doi.org/10.1016/S0378-7796(99)00072-3) | 桥架宽0.6096 m、填深0.0762 m；开口/加盖；四种XLP铜缆 | 2D无限长均质缆束、对流/辐射；填充等效k、发射率和热源完整性待原文 | Fig.4 ampacity，Fig.5–6 填深降额曲线；绝对电流/页码待提取，不使用未核单位的拟合式 | 2D 非线性热边界/均质化；中高；B |
 
-## 电磁、护套、铠装与多物理场（15 篇）
+| T19 Karahan, Varol, Kalenderli (2009). **Thermal Analysis of Power Cables Using Finite Element Method and Current-carrying Capacity Evaluation**. IJEE25(6),1158–1165. [期刊](https://www.ijee.ie/contents/c250609.html) | 三根300mm²单芯平排，中心深1m、间距71.4mm，10×5m热域 | 全文PDF2–4有层径、k和边界；缺铜σ(T)数值，顶部恒温/对流描述有歧义，不能用默认铜参数补齐 | PDF3–4三缆626.21A、单缆890.97A，绝缘90°C；PDF5–6另有PILC暂态介损例但负荷输入未闭合 | σ(T)电热、边界核验；中高；A，缺资料 |
+| T20 Meng等 (2019). **Working temperature calculation of single-core cable by nonlinear finite element method**. AEE68(3),643–656. [全文](https://www.journals.pan.pl/Content/112891/PDF/13_AEE-2019-3_INTERNET.pdf?handler=pdf) | 3D单芯、EPR/Neoprene及空气域 | PDF5 Table1的铜Thickness=8.74mm未明确半径/直径；边界环境温度值未闭合；不能擅自降维后声称完整原文复现 | PDF7 Table2：50/100/140/200A导体仿真21.6/29.9/38.0/58.9°C；实验21.1/28.4/35.4/45.1°C | 稳态热、非线性材料；中高；A，缺资料 |
+
+## 电磁、护套、铠装与多物理场（17 篇）
 
 | ID / 引用 | 问题与几何 | 材料与参数完整性 | 比较目标与定位 | 能力 / 难度 / 证据 |
 | --- | --- | --- | --- | --- |
@@ -55,12 +58,15 @@
 | E17 Jabłoński, Kusiak, Szczegielniak (2020). **Analytical-Numerical Approach to the Skin and Proximity Effect in Lines with Round Parallel Wires**. Energies13,6716. [全文](https://www.mdpi.com/1996-1073/13/24/6716) | 无限长双圆导体，反向RMS电流 | Table1 c=1：R10mm、d40mm、σ36.9MS/m、60Hz；线性单位电流归一化，外域另扫 | Table1线对FEM电阻177μΩ/m；GetDP三档网格及域扫描，HTML无页码 | 2D集肤/邻近损耗；中；A，输入完整 |
 | E18 Szczegielniak, Jabłoński, Kusiak, Piątek (2019). **Eddy Currents Induced in Two Parallel Round Conductors**. ACES Journal34(12). [全文PDF](https://journals.riverpublishers.com/index.php/ACES/article/download/8089/6643/27797) | 有源圆导体对无净电流圆导体的诱导涡流 | R10mm、d30mm、σ55MS/m、200Hz、源1kA；被动导体零净电流；Fig2坐标和Table1已视觉核对 | PDF5/印刷1926，Table1被动导体θ=0/π2/π的FEM J=3714/650/2321kA/m²；不能与源导体总J混用 | 2D分布涡流与材料侧测点；中；A，输入完整 |
 
+| E19 Jabłoński, Szczegielniak, Kusiak, Piątek (2019). **Analytical–Numerical Solution for the Skin and Proximity Effects in Two Parallel Round Conductors**. Energies12(18),3584. [全文](https://doi.org/10.3390/en12183584) | 双圆导体R1=R2=1mm、d=2.5mm、40kHz；三种电流组合 | PDF9：σ55MS/m；I2/I1=0,+1,−1；R1在右、R2在左，角度均相对+x。单位电流归一化是线性模型等效，不是未知激励补值 | PDF12 Table1每导体0/90/180°表面J幅值及相位，幅值以I1/(πR1²)归一化；Proposed与FEMM原值分别保留 | 2D谐波涡流；中；A，输入完整 |
+| E20 Piwonski, Dular, Rezende, Schuhmann (2023). **2D Eddy Current Boundary Value Problems for Power Cables with Helicoidal Symmetry**. arXiv2301.03370. [全文](https://arxiv.org/abs/2301.03370) | 13根螺旋导体，rc5mm，层半径0/15/30mm | H–φ、各向异性变换与上同调电流约束；PDF3印刷电阻率17.2pΩm，需勘误，不能静默改为nΩm | PDF4二维21.9μW/m，三维0.2m总4.34μW；不将普通Az截面模型冒充螺旋等价 | 螺旋H–φ有限元；极高；A，能力缺口及原文单位疑点 |
+
 ## 官方算例与标准依据（10 项）
 
 | ID / 引用 | 问题与几何 | 完整性 / 可取得性 | 比较目标与位置 | 能力 / 难度 / 证据 |
 | --- | --- | --- | --- | --- |
 | B01 scikit-fem 12.0.2. **Example 17: Insulated wire**. [官方源码](https://github.com/kinnala/scikit-fem/blob/12.0.2/docs/examples/ex17.py) | 同心圆芯a=2、外径半径b=3；均匀热源、外表Robin | **完整**：k0=101、k1=11、A=5、h=7；温升问题。此为数学教学尺寸，非厂家电缆 | 源码参数段及 `T0['exact']`；无PDF页码。由执行式独立求得中心温升0.894300070420 K；本项目已实跑，详见设计文档 | 2D稳态多材料导热/对流边界；低；A |
-| B02 CIGRE WG B1.56 (2022). **TB 880: Power cable rating examples for calculation tool verification**. [官方目录](https://www.e-cigre.org/publications/detail/880-power-cable-rating-examples-for-calculation-tool-verification.html) | 11组case studies、多种电缆与敷设；331页 | 已定位用户提供的本地331页扫描PDF并核对目录；现有IEC受控对拍由研究线程维护，未作为本插件新增运行 | I、Rac、λ、热阻；目录PDF6–8主要为稳态例题，不能当作IEC60853瞬态输入 | 稳态标准损耗/热阻；中高；B，尚未在本插件冻结完整标准工况 |
+| B02 CIGRE WG B1.56 (2022). **TB 880: Power cable rating examples for calculation tool verification**. [官方目录](https://www.e-cigre.org/publications/detail/880-power-cable-rating-examples-for-calculation-tool-verification.html) | 11组case studies、多种电缆与敷设；331页 | 本地受控全文；Case0-1/0-2/0-3及Case1/2/4共六例完成。新增三例从原始几何和材料重算，不输入参考Rc/Rs/λ/热阻 | Case1 pp131–163：990.540145/1460.454542A；Case2 pp164–179：838.339974A；Case4 pp195–205：537.463110A。两种Case1敷设只计一例 | IEC插件宿主实际运行，原文损耗、温度、载流量及热平衡核验；A。其余案例未冒称完成 |
 | B03 CIGRE WG B1.35 (2015). **TB 640: A guide for rating calculations of insulated cables**. [官方目录](https://www.e-cigre.org/publications/detail/640-a-guide-for-rating-calculations-of-insulated-cables.html) | 电缆载流量计算指导 | 目录级；指导书不自动等于有完整公开基准，需原文确定章节与算例 | 可比中间量/案例待授权原文选定；暂无数值夹具 | 方法选择与边界核验；中高；C |
 | B04 IEC (2023). **IEC 60287-1-1: Electric cables—Calculation of the current rating—Current rating equations and calculation of losses—General**. [IEC](https://webstore.iec.ch/en/publication/68118) | 稳态载流量与损耗，适用范围按分支明确 | 官方范围，非本轮全文；参数/条款由研究线程受控资料维护 | I、ys/yp、护套/铠装损耗；具体算例从B02绑定，不伪造IEC出版算例数值 | 电气损耗/稳态反算；中；C |
 | B05 IEC (2023). **IEC 60287-2-1: Thermal resistance—Calculation of thermal resistance**. [IEC](https://webstore.iec.ch/en/publication/68134) | 埋地、排管、空气等热阻 | 官方目录；具体表格/工况须授权原文 | T1–T4及边界处理；条款页码未转录，暂无独立数字目标 | 热阻、排管/空气换热；中；C |
@@ -78,16 +84,16 @@
 
 | ID / 教程 | 原文参数与定位 | 参考目标 | 开源复现与缺项 |
 | --- | --- | --- | --- |
-| C01 `01_introduction` | PDF29材料表、31–56几何；三相圆心(-Dpha/(2√3),±Dpha/2)、(Dpha/√3,0)，磁域R=5Dcab/2；外热域10×8 m | 几何/材料/网格模板，本身无独立求解结果 | 已重建用于04的三芯、SCC、铅、钢光纤套及110根铠装磁域；将同μ、可忽略漏导的聚合物合并，仅为电磁等价子域，不宣称已重建全部热几何与接触面 |
-| C02 `02_capacitive_effects` | PDF10–11；εXLPE=2.5，σXLPE=1e−18 S/m，σSCC=2 S/m；c参数Cpha/Icpha表达式 | 约0.14 μF/km、5.5 A/km，10 km端部电压变化 | **未覆盖完整场解**：当前公共问题/适配器尚无频域电流连续方程、复介电参数与电容/端子输出 |
-| C03 `03_bonding_capacitive` | PDF2–7；轴对称10 km，三段各1/3，单点/两端/交叉互联 | PDF7：55 A/83 V/1.5 kW；28 A/21 V/0.38 kW；10.7 A/6.9 V/85 W | **未覆盖**：轴对称带2πr权重的电流场、终端及区段互联；不能拿二维横截面电磁结果代替 |
-| C04 `04_inductive_effects` | PDF6–10、16–18；a/b/c参数；普通2D、铠装串联2.5D、Milliken三种模型分开 | Table1：普通2D损耗47/13/7.6 W/m；2.5D为47/15/0.36；Milliken为43/16/0.37 | **普通2D与串联2.5D已实跑对照**，数值见SIMULATION §10；包含复磁导率磁损。Milliken均质多匝尚未覆盖；未据此宣称真实3D绞合 |
+| C01 `01_introduction` | PDF29材料表、31–56几何；三相圆心(-Dpha/(2√3),±Dpha/2)、(Dpha/√3,0)，磁域R=5Dcab/2；外热域10×8 m | 几何/材料/网格模板，本身无独立物理求解结果 | 独立Gmsh/OCC完整166域、24空气腔、110钢丝及薄层接触边；13类材料域数一致，面积对原生曲边积分最大差0.148%。完整几何验证单列，不计入物理复现数量 |
+| C02 `02_capacitive_effects` | PDF10–11；εXLPE=2.5，σXLPE=1e−18 S/m，σSCC=2 S/m；c参数Cpha/Icpha表达式 | 约0.14 μF/km、5.5 A/km，10 km端部电压变化 | 独立Gmsh几何及完整三相六端子复电势场/Y矩阵，含接地与浮置护套；24184/40155/66766节点，对COMSOL非零C分量最大差0.091%，最后网格变化通过0.2%或0.01pF/m核验 |
+| C03 `03_bonding_capacitive` | PDF2–7、14–16；轴对称10 km，坐标缩放1e5，护套径向σ=Spbs/Scab；三段各1/3 | PDF7：55 A/83 V/1.5 kW；28 A/21 V/0.38 kW；10.7 A/6.9 V/85 W | 已复现教程式单支路轴对称充电场；原生COMSOL损耗1531.226629/383.041302/85.120341W，开源细网格相对差+0.00569%/+0.00666%/+0.00791%。不是任意三相接地网，也不包含感应互联 |
+| C04 `04_inductive_effects` | PDF6–10、16–18、37；a/b/c参数；普通2D、铠装串联2.5D、N=1均质多匝三模型分开 | Table1：普通2D损耗47/13/7.6 W/m；2.5D为47/15/0.36；Milliken为43/16/0.37 | 三分支均完成独立GetDP与COMSOL对照；多匝分支43.190436/15.551756/0.370774W/m，全部分支最大对拍差0.311%；不宣称真实3D绞合 |
 | C05 `05_bonding_inductive` | PDF2–8，三个磁场区段+电路；显式固接/单点/交叉互联 | 单点屏蔽约2.9 W/m、Rac45 mΩ/km、屏蔽473 V；交叉区段158 V | **未覆盖完整教程**：目前只有单截面理想串/并联约束，尚无分段长度、电压未知量和跨段换位联立 |
-| C06 `06_thermal_effects` | PDF4–7；d参数：导体/铅/铠装预设89.4/82.7/70.1°C，外界20°C，αCu/Pb/armor=.0039/.00386/.0053 K⁻¹；20μm空气接触层 | Table1：单向81°C；线性电阻92°C；全耦合90/83/70°C，损耗58/11/6.8 W/m | **未覆盖完整教程**：需真实聚合物/空气域和接触面、温变σ与损耗—温度闭环。已验证的恒物性稳态热桥接不能代替此耦合算例 |
+| C06 `06_thermal_effects` | PDF4–7及最终MPH Multi+Scup2全局约束；αCu/Pb/armor=.0039/.00386/.0053 K⁻¹；20μm空气接触层 | 最终双向模型约90/83/70°C；Rac(T)约束包含被动损耗的平均端口电阻 | 独立Gmsh完整166域，GetDP损耗↔σ(T)/k(T)接触热场双向反馈，不导入原生热源或网格。90534节点Tmax362.738486K，对COMSOL−0.065831K，末次网格变化0.020004K；最大均温诊断差0.169446K，分项损耗差<1%。不是3D逐股模型或自动工程批准 |
 | C07 `07_geometry_mesh_3d` | PDF2–14；f参数LLpha=18Dpha3、LLarm=−15Darm、Nper=1/10或1 | 无物理方程；目标是扭绞几何与扫掠/映射网格 | **未覆盖**：三维周期切片、共形面映射、扫掠网格、曲面面积校正；不是缺一个损耗公式 |
 | C08 `08_inductive_effects_3d` | PDF17、20、22–24；相电流655√2 A，绝缘稳定化σ=50 S/m；忽略电容 | Table2三维损耗48/17.5/2.8 W/m、Rac53 mΩ/km、L0.44 mH/km | **未覆盖**：3D矢量A、线圈几何分析、twisted/short-twisted周期映射、横向涡流和稳定化补偿，不能用2.5D数值冒充 |
 
-本轮只完成 C04 两个模型及 C01 所需电磁几何。C02/03/05/06/07/08 没有开源偏差数值，明确计为未覆盖；八项登记不等于八项完成。
+已完成 C04三个磁模型、C03教程式轴对称单支路、C02独立几何六端子场、C06完整双向电热的声明范围。C01完整几何验证单列；C05/07/08仍未覆盖。详细范围、数值和重放入口见SIMULATION §10–12。
 
 ## 接地方式取数注意事项
 

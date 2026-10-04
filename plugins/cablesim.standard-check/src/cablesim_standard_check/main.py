@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 import platform
 
-VERSION = 'GB-DIMENSIONS-0.1.0'
+VERSION = 'GB-DIMENSIONS-0.1.1'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 AREAS = [1.5, 2.5, 4, 6, 10, 16, 25, 35, 50, 70, 95, 120, 150, 185, 240, 300, 400, 500, 630, 800, 1000, 1200, 1400, 1600]
 DL = dict(zip(AREAS[4:], [3.6, 4.5, 5.6, 6.7, 8, 9.4, 11, 12.4, 13.8, 15.3, 17.5, 19.5, 22.6, 25.2, 28.3, 31.9, 35.7, 39.1, 42.2, 45.1]))
@@ -147,16 +147,20 @@ def screen_increment(layer):
 def check(document, parameters):
     cable, root, family, materials = prepare(document, parameters)
     rows, trace = [], []
+    observations = document.get('measurements', [])
+    for observation in observations:
+        number(observation.get('value'), 'measurements.value', 1)
+        if observation.get('basis') not in ('measurement', 'manufacturer_limit') or observation.get('source', {}).get('kind') not in ('measurement', 'manufacturer') or not observation.get('source', {}).get('reference', '').strip():
+            raise ValueError('measurements.source.reference：请填写试验报告编号或厂家数据表出处。')
+        if observation.get('basis') == 'manufacturer_limit' and observation.get('quantity') != 'r20':
+            raise ValueError('measurements.basis：声明上限不能作为实际厚度或金属截面。')
+    def observed(core, role, quantity):
+        matches = [o for o in observations if o.get('cable_type') == cable['id'] and o.get('core') == core and o.get('role') == role and o.get('quantity') == quantity]
+        if len(matches) > 1:
+            raise ValueError('measurements：同一对象和量重复，请编辑已有记录。')
+        return matches[0] if matches else None
     def row(key, title, path, clause, page, limit=None, actual=None, unit='mm', comparison='>=', *, formula=None, inputs=None, reason=None, uncovered=False, basis='design', source=family, precision=None, target_override=None):
         source_record = SOURCES[source]
-        value, threshold = actual, limit
-        if value is not None and precision is not None:
-            value = rounded(value, precision)
-        if threshold is not None and precision is not None:
-            threshold = rounded(threshold, precision)
-        satisfied = value is not None and threshold is not None and (value >= threshold if comparison == '>=' else value == threshold if comparison == '=' else value <= threshold)
-        verdict = 'uncovered' if uncovered else 'missing' if threshold is None or value is None else 'passed' if satisfied else 'failed'
-        margin = None if value is None or threshold is None else (value - threshold if comparison == '>=' else threshold - value)
         pointer = '/' + path.replace('.', '/')
         provenance = document.get('provenance', {}).get(pointer)
         stable_parts, cursor = [], document
@@ -180,9 +184,28 @@ def check(document, parameters):
                 target['role'] = (cable['cores'][int(parts[parts.index('cores') + 1])]['layers'] if marker == 'layers' else cable['common_layers'])[int(parts[at + 1])]['role']
         if target_override is not None:
             target = target_override
+        quantity = 'screen_area' if key == 'screen-area' else None if key == 'insulation-uniformity' else path.rsplit('.', 1)[-1]
+        observation = observed(target.get('core_id'), target.get('role'), quantity)
+        design_actual = actual
+        if observation:
+            expected_unit = 'ohm/m' if quantity == 'r20' else 'm2' if quantity == 'screen_area' else 'm'
+            if observation.get('unit') != expected_unit:
+                raise ValueError('measurements.unit：实测量的 SI 单位不正确。')
+            actual = observation['value'] * (1e6 if expected_unit == 'm2' else 1000)
+            basis, provenance = observation['basis'], observation['source']
+            if limit is not None and key == 'r20':
+                reason = '出厂数据与标准上限比较；来源记录不代表已人工批准。'
+        value, threshold = actual, limit
+        if value is not None and precision is not None:
+            value = rounded(value, precision)
+        if threshold is not None and precision is not None:
+            threshold = rounded(threshold, precision)
+        satisfied = value is not None and threshold is not None and (value >= threshold if comparison == '>=' else value == threshold if comparison == '=' else value <= threshold)
+        verdict = 'uncovered' if uncovered else 'missing' if threshold is None or value is None else 'passed' if satisfied else 'failed'
+        margin = None if value is None or threshold is None else (value - threshold if comparison == '>=' else threshold - value)
         rows.append({'id': path + ':' + key, 'title': title, 'path': path, 'layer_path': path.rsplit('.', 1)[0], 'target': target, 'standard': source_record['standard'], 'clause': clause, 'printed_page': page,
                      'pdf_page': page + source_record['page_offset'] if page is not None else None, 'source_digest': source_record.get('sha256'), 'source_status': source_record['status'], 'limit': threshold, 'actual': value, 'actual_unrounded': actual,
-                     'margin': margin, 'unit': unit, 'comparison': comparison, 'verdict': verdict, 'reason': reason, 'formula': formula, 'formula_inputs': inputs or {}, 'basis': basis, 'input_source': provenance})
+                     'margin': margin, 'unit': unit, 'comparison': comparison, 'verdict': verdict, 'reason': reason, 'formula': formula, 'formula_inputs': inputs or {}, 'basis': basis, 'input_source': provenance, 'design_actual': design_actual if observation else None, 'measurement_id': observation['id'] if observation else None})
         return rows[-1]
     def layer_pairs(core, index):
         return [(l, root + f'.cores.{index}.layers.{j}') for j, l in enumerate(core['layers'])] + ([(l, root + f'.common_layers.{j}') for j, l in enumerate(cable['common_layers'])] if len(cable['cores']) == 1 else [])
@@ -215,6 +238,13 @@ def check(document, parameters):
         else:
             row('insulation-minimum', f'芯 {i+1} · 绝缘最薄点', ip + '.minimum_thickness', '17.5.2，式 (4)；附录 B 表 B.1', 17 if family == 'mv2' else 14, .9 * specified_insulation - .1 if specified_insulation is not None else None, ins.get('minimum_thickness') * 1000 if ins.get('minimum_thickness') is not None else None, formula='t_min ≥ 0.9 t_n − 0.1', inputs={'t_n_declared_mm': declared_insulation, 't_n_standard_min_mm': tn, 't_n_mm': specified_insulation}, basis='measurement', precision=2, reason='t_n 为该层规定标称厚度；不低于标准标称要求，采用更厚的设计时随之提高。最薄点必须录入实测值。')
             tmin, tmax = ins.get('minimum_thickness'), ins.get('maximum_thickness')
+            minimum = observed(core['id'] if len(cable['cores']) > 1 else None if '.common_layers.' in ip else core['id'], 'insulation', 'minimum_thickness')
+            maximum = observed(core['id'] if len(cable['cores']) > 1 else None if '.common_layers.' in ip else core['id'], 'insulation', 'maximum_thickness')
+            if minimum or maximum:
+                same_sample = minimum and maximum and minimum['source']['reference'] == maximum['source']['reference']
+                tmin, tmax = (minimum['value'], maximum['value']) if same_sample else (None, None)
+                if tmin is not None and tmin > tmax:
+                    raise ValueError('measurements.minimum_thickness：同一试样的最薄点大于最大实测厚度。')
             row('insulation-uniformity', f'芯 {i+1} · 绝缘厚度偏差', ip + '.maximum_thickness', '17.5.2，式 (5)', 17 if family == 'mv2' else 14, .15, (tmax - tmin) / tmax if tmax is not None and tmin is not None else None, '1', '<=', basis='measurement', formula='(t_max − t_min) / t_max ≤ 0.15', reason='需录入同一试样的最薄点和最大实测厚度。')
         screen, sp = find_layer(pairs, 'metallic_screen')
         if screen:

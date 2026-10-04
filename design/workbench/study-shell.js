@@ -1,7 +1,7 @@
 'use strict';
 // One workspace shell for every study module. Modules supply content and selection only.
 window.StudyShell=(()=>{
-  let C,tabObserver,navigationFocus=null;
+  let C,tabObserver,navigationFocus=null,contentChecks=[];
   const tabScroll=new Map();
   const compact=matchMedia('(max-width:800px)');
   const unavailableTabs=new Set();
@@ -12,40 +12,51 @@ window.StudyShell=(()=>{
     {id:'conditions',name:'工况',icon:'object/conditions',tabs:[]},
     {id:'ampacity',name:'载流量',icon:'calc/ampacity',tabs:[['results','结果'],['parameters','任务与参数'],['losses','损耗与热阻'],['diagnostics','诊断']]},
     {id:'thermal-field',name:'温度场',icon:'calc/thermal-field',tabs:[['field','场图',true],['samples','取样表'],['parameters','方法参数'],['diagnostics','诊断']]},
+    {id:'selection',name:'问询选型',icon:'calc/ampacity',tabs:[['results','候选结果'],['settings','问询条件']]},
     {id:'sweep',name:'参数扫描',icon:'module/sweep',tabs:[['curve','曲线'],['points','逐点表'],['settings','扫描设置']]},
+    {id:'batch',name:'批量仿真',icon:'module/sweep',tabs:[['space','参数空间'],['results','样本结果'],['execution','执行记录']]},
     {id:'method-compare',name:'方法对比',icon:'module/method-compare',tabs:[['results','结果差异'],['inputs','输入差异'],['evidence','验证证据']]},
     {id:'report',name:'计算书',icon:'result/report',tabs:[['content','内容'],['sources','来源清单'],['preview','预览']]}
   ];
   const taskNames={rating:'求允许电流',operating:'给定电流求温度',target:'目标电流校核'};
-  const workflowNames={target:'载流量校核',operating:'给定电流求温升',rating:'求允许载流量',sweep:'参数扫描',compare:'方法对比'};
+  const workflowNames={target:'载流量校核',operating:'给定电流求温升',rating:'求允许载流量',selection:'客户问询选型',sweep:'参数扫描',compare:'方法对比'};
   const visibleModules=()=>modules.filter(m=>C.activeModules?.().includes(m.id)??true);
   const E=v=>C.H.esc(v), B=(label,icon,action,attrs='')=>C.H.button(label,icon,'amp-'+action,attrs);
+  const displayName=v=>String(v||'').replace(/（[^）]*(?:演示|非厂家|不供客户)[^）]*）|\([^)]*(?:演示|非厂家|不供客户)[^)]*\)/g,'').replace(/\s*·\s*未核对候选演示/g,'').replace(/演示/g,'').trim();
   const module=()=>modules.find(m=>m.id===C.A.module);
   const formatTime=r=>new Date(r.created).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
   function circuitName(label,index){const value=String(label||'').replace(/（(?:典型)?结构演示）|（演示）/g,'').trim();const match=value.match(/^(?:第\s*(\d+)\s*回路|回路\s*(\d+))$/);return match?'回路 '+(match[1]||match[2]):!value||value.startsWith('v0 ')?'回路 '+(index+1):value;}
   function sourceBadge(source,locked=false,host=C?.H){
     const kind=locked?'locked':source?.kind;
-    const kinds={asset:['from-library','库'],standard:['from-standard','标准'],manufacturer:['from-document','资料'],measurement:['from-document','测量'],derived:['derived','推导'],locked:['locked','锁定'],user:['from-user','人工'],demo:['from-document','演示输入']};
+    const kinds={asset:['from-library','库'],standard:['from-standard','标准'],manufacturer:['from-document','资料'],measurement:['from-document','测量'],derived:['derived','推导'],locked:['locked','锁定'],user:['from-user','人工'],demo:['from-document','预置']};
     const reference=source?.reference?.replace(/\s*·?\s*sha256:[a-f0-9]+/g,'');
     const entry=kinds[kind]||['from-document','来源未提供'],label=entry[1]+(reference?' · '+reference:'')+(source?.reviewed?' · 已核对':' · 未核对');
     return `<span class="study-source" role="img" tabindex="0" aria-label="${host.esc(label)}" title="${host.esc(label)}">${host.icon('source/'+entry[0])}</span>`;
   }
   function sourceLegend(){return `<div class="study-source-legend">${[['from-library','库'],['from-standard','标准'],['from-document','资料'],['derived','推导'],['locked','锁定'],['from-user','人工']].map(([key,label])=>`<span>${C.H.icon('source/'+key)}${label}</span>`).join('')}</div>`;}
+  function studyStateLabel(){
+    const {A}=C,dirty=C.dirty(),readonly=!!A.viewRunId,thermal=A.module==='thermal-field',ref=readonly?A.run.snapshot.definition:thermal?A.draft.modules?.['thermal-field']:A.module==='selection'?A.draft.modules?.selection:A.draft;
+    const demo=C.H.state.snapshot?.study_cable_reference?.state==='demo'||Object.values(C.H.state.draft?.provenance||{}).some(v=>v.kind==='demo')||Object.values(ref?.input_sources||{}).some(v=>v.kind==='demo');
+    const state=readonly?'运行快照 · 只读':A.busy?'处理中':dirty?'未保存':A.module==='report'&&A.delivery?'已生成':C.runBlock?.()?'需核对':thermal?window.SimulationStudy?.moduleStatus().summary||'尚未计算':A.module==='selection'?(window.SelectionStudy?.current()?.freshness==='current'?'候选已核验':'尚未选型'):'已保存';
+    const historical=!readonly&&(thermal?window.SimulationStudy?.thermalHistorical():A.run?.freshness==='historical');
+    return [state,historical&&!state.includes('历史')?'历史结果':null,demo?'演示':null].filter(Boolean).join(' · ');
+  }
   function header(){
     const {A}=C,dirty=C.dirty(),readonly=!!A.viewRunId,ref=readonly?A.run.snapshot.definition:A.draft,block=C.runBlock?.(),next=C.workflowNext?.(),binding=readonly?A.run.snapshot.workspace_state?.study_cable_reference:C.H.state.snapshot?.study_cable_reference;
-    const stale=!!A.run&&(A.run.freshness!=='current'||dirty),context=[readonly?'运行快照 · 只读':stale?'历史结果':null,ref.parameters?.reference_basis==='tb880_reference'?'TB 880 参考复现':null,binding?.state==='demo'?'演示输入':null].filter(Boolean).join(' · ');
-    C.H.$('#header').innerHTML=`<span class="pill">研究</span><div class="title-wrap"><h1>${E(ref.title)}</h1><span class="study-subtitle">${E(C.subtitle?.()||'')}</span></div><button class="study-task quiet" data-action="amp-change-task" ${readonly||A.busy?'disabled':''} title="更换研究任务">${E(workflowNames[C.workflow?.(ref)]||taskNames[ref.task||A.task])}${C.H.icon('action/chevron-down')}</button><span class="spacer"></span>${context?`<span class="study-context-tag" title="${ref.parameters?.reference_basis==='tb880_reference'?'旧版 TB 880 参考复现，不能作为 IEC 2023 工程结论':binding?.state==='demo'?'含明示假设，来源见电缆引用与计算书':'输入及物理量来自保存的运行'}">${context}</span>`:''}<span class="amp-state ${A.busy?'pending':dirty?'draft':''}">${A.busy?'处理中':dirty?'草稿 · 未保存':'已保存'}</span>${readonly?`<a class="study-return" href="${C.href('ampacity','results',null)}">返回研究</a>`:B('保存','action/save','save',dirty&&!A.busy?'':'disabled')}${B('运行记录','action/history','records',A.busy?'disabled':'')}<a class="study-header-link" href="${C.href('report','content',null)}">${C.H.icon('result/report')}交付</a>${!readonly&&next?B(next.label,next.action==='preflight'?'run/run':'action/chevron-down','workflow-next',`class="run-button study-primary-next" ${A.busy?'disabled':''}`):''}<div class="study-run-hint" ${block&&!readonly?'':'hidden'}>${block?E(block.text):''}</div>`;
+    const conclusionAction=A.module==='selection'&&A.tab==='results'&&window.SelectionStudy?.current();
+    const stateText=studyStateLabel();
+    C.H.$('#header').innerHTML=`<span class="pill">研究</span><div class="title-wrap"><h1>${E(displayName(ref.title))}</h1><span class="study-subtitle">${E(C.subtitle?.()||'')}</span></div>${['thermal-field','selection','batch'].includes(A.module)?'':`<button class="study-task quiet" data-action="amp-change-task" ${readonly||A.busy?'disabled':''} title="更换研究任务">${E(workflowNames[C.workflow?.(ref)]||taskNames[ref.task||A.task])}${C.H.icon('action/chevron-down')}</button>`}<span class="spacer"></span><button class="study-state-marker quiet" data-action="amp-status-details" aria-expanded="${A.checksOpen}" aria-controls="study-check-table">${E(stateText)}${C.H.icon('action/chevron-down')}</button>${readonly?`<a class="study-return" href="${C.href(A.module,A.tab,null)}">返回研究</a>`:B('保存','action/save','save',dirty&&!A.busy?'':'disabled')}${B('运行记录','action/history','records',A.busy?'disabled':'')}<a class="study-header-link" href="${C.href('report','content',null)}">${C.H.icon('result/report')}交付</a>${!readonly&&next&&!conclusionAction?B(next.label,next.action==='preflight'||next.action==='thermal-preflight'?'run/run':'action/chevron-down','workflow-next',`class="run-button study-primary-next" ${A.busy||next.disabled?'disabled':''}`):''}`;
   }
   function navigation(){
     const {A}=C;
     const items=visibleModules();
-    return `<div class="study-mobile-navigation"><label for="study-module-select">模块</label><select id="study-module-select" aria-label="研究模块">${items.map(m=>`<option value="${m.id}" ${A.module===m.id?'selected':''}>${m.name}</option>`).join('')}</select>${B('属性','','mobile-inspector',`class="quiet" aria-expanded="${(isCanvas()||C.hasSelection())&&!A.inspectorClosed[A.module+'/'+A.tab]}"`)}</div><div class="study-module-links"><div class="rail-caption">${E(workflowNames[C.workflow?.()]||'研究模块')}</div>${items.map(m=>`<a class="module-row ${A.module===m.id?'active':''}" href="${C.href(m.id,null,null)}" ${A.module===m.id?'aria-current="page"':''}>${C.H.icon(m.icon)}<span>${m.name}</span></a>${A.module===m.id?C.objects()||'':''}`).join('')}${B('添加模块','module/add-module','modules','class="module-row study-more-modules"')}</div>`;
+    return `<div class="study-mobile-navigation"><label for="study-module-select">模块</label><select id="study-module-select" aria-label="研究模块">${items.map(m=>`<option value="${m.id}" ${A.module===m.id?'selected':''}>${m.name}</option>`).join('')}</select>${B('属性','','mobile-inspector',`class="quiet" aria-expanded="${(isCanvas()||C.hasSelection())&&!A.inspectorClosed[A.module+'/'+A.tab]}"`)}</div><div class="study-module-links"><div class="rail-caption">${E(workflowNames[C.workflow?.()]||'研究模块')}</div>${items.map(m=>`<a class="module-row ${A.module===m.id?'active':''}" href="${C.href(m.id,null,null)}" ${A.module===m.id?'aria-current="page"':''}>${C.H.icon(m.icon)}<span>${m.name}</span></a>${A.module===m.id?(C.objects()||'').replace(/第\s*(\d+)\s*回路/g,'回路 $1'):''}`).join('')}${B('添加模块','module/add-module','modules','class="module-row study-more-modules"')}</div>`;
   }
   function updateState(){
-    if(!C)return;const {A}=C,dirty=C.dirty(),save=C.H.$('[data-action="amp-save"]'),run=C.H.$('[data-action="amp-workflow-next"]'),state=C.H.$('.amp-state');
-    if(save)save.disabled=!dirty||A.busy;if(run){run.disabled=A.busy;run.lastChild.textContent=C.workflowNext?.().label||'预检并运行';}
+    if(!C)return;const {A}=C,dirty=C.dirty(),save=C.H.$('[data-action="amp-save"]'),run=C.H.$('[data-action="amp-workflow-next"]'),state=C.H.$('.study-state-marker');
+    if(save)save.disabled=!dirty||A.busy;if(run){run.disabled=A.busy||!!C.workflowNext?.().disabled;run.lastChild.textContent=C.workflowNext?.().label||'预检并运行';}
     const hint=C.H.$('.study-run-hint'),block=C.runBlock?.();if(hint){hint.hidden=!block||!!A.viewRunId;hint.textContent=block?.text||'';}
-    if(state){state.textContent=A.busy?'处理中':dirty?'草稿 · 未保存':'已保存';state.classList.toggle('draft',dirty&&!A.busy);state.classList.toggle('pending',A.busy);}
+    if(state){state.innerHTML=E(studyStateLabel())+C.H.icon('action/chevron-down');state.setAttribute('aria-expanded',String(A.checksOpen));}
   }
   function tabs(){
     const m=module();if(!m)return '';
@@ -60,7 +71,7 @@ window.StudyShell=(()=>{
     left.disabled=list.scrollLeft<=1;right.disabled=list.scrollLeft+list.clientWidth>=list.scrollWidth-1;
   }
   function isCanvas(){return !!module()?.tabs.find(t=>t[0]===C.A.tab)?.[2];}
-  function inspectorOpen(){const key=C.A.module+'/'+C.A.tab;return (isCanvas()||C.hasSelection())&&!(C.A.inspectorClosed[key]??(compact.matches&&isCanvas()));}
+  function inspectorOpen(){const key=C.A.module+'/'+C.A.tab;return ((C.A.module==='thermal-field'?false:isCanvas())||C.hasSelection())&&!(C.A.inspectorClosed[key]??(compact.matches&&isCanvas()));}
   function inspector(){
     const el=C.H.$('#study-inspector');if(!el)return;
     const open=inspectorOpen();
@@ -73,13 +84,33 @@ window.StudyShell=(()=>{
   function checks(){
     const el=C.H.$('#study-checks');if(!el)return;
     const data=C.checks(),open=C.A.checksOpen;
-    el.innerHTML=`<div class="study-checkbar"><strong>校核项</strong><span class="study-check-summary">${E(data.summary)}</span><span class="spacer"></span>${C.A.messages.length?B('消息 '+C.A.messages.length,'','messages','class="quiet"'):''}${B(open?'收起':'展开','action/chevron-down','toggle-checks',`class="quiet" aria-expanded="${open}" aria-controls="study-check-table"`)}</div>${open?`<div id="study-check-table" class="study-check-table">${data.table}</div>`:''}`;
+    el.innerHTML=`<div class="study-checkbar"><strong>校核项</strong><span class="study-check-summary">${E(data.summary)}</span><span class="spacer"></span>${C.A.messages.length?B('消息 '+C.A.messages.length,'','messages','class="quiet"'):''}${B(open?'收起':'展开','action/chevron-down','toggle-checks',`class="quiet" aria-expanded="${open}" aria-controls="study-check-table"`)}</div>${open?`<div id="study-check-table" class="study-check-table">${statusDetails()}${data.table}</div>`:''}`;
+  }
+  function statusDetails(){
+    const ref=C.A.viewRunId?C.A.run.snapshot.definition:C.A.module==='thermal-field'?C.A.draft.modules?.['thermal-field']:C.A.module==='selection'?C.A.draft.modules?.selection:C.A.draft;
+    const method=ref?.method,entry=C.H.state.methods.find(m=>m.method.plugin_id===method?.plugin_id),cap=entry?.capabilities.find(c=>c.id===method?.capability),binding=C.H.state.snapshot?.study_cable_reference,block=C.runBlock?.(),limits=C.A.viewRunId?C.A.run.output?.preflight?.limitations||[]:cap?.limitations||[];
+    const messages=[...limits,...contentChecks,...(C.A.module==='selection'?window.SelectionStudy?.checks?.()||[]:[]),...(block?[block.text]:[]),...(binding?.state==='demo'?['预置输入须按现场和产品资料核对。']:[]),...(ref?.parameters?.reference_basis==='tb880_reference'?['TB 880 参考复现采用原算例版本。']:[])];
+    return `<div class="study-status-details"><strong>方法与来源</strong><p>${E(entry?.name||'方法未配置')}${method?' · '+E(method.version):''}</p><ul>${[...new Set(messages)].map(v=>`<li>${E(v)}</li>`).join('')}</ul></div>`;
+  }
+  function collectContentChecks(){
+    contentChecks=[];const stage=C.H.$('#study-stage');if(!stage)return;
+    // Explanatory limitations have one home. Forms, actual numeric results,
+    // recovery controls and field errors stay with the operation they explain.
+    for(const node of stage.querySelectorAll('.study-note,.amp-inline-note,.amp-limitations,.amp-scope')){
+      if(!node.isConnected)continue;
+      if(node.closest('[role="alert"]')||node.querySelector('input,button,select,table,a')||node.matches('[role="alert"]'))continue;
+      const scope=node.matches('.amp-limitations')||node.matches('.amp-scope')&&/范围|验证声明/.test(node.querySelector('summary')?.textContent||'');
+      if(scope||/演示|假设|未覆盖|不能|未接入|待补数据|不供客户|非厂家/.test(node.textContent)){
+        const rows=node.querySelectorAll('li');if(rows.length)rows.forEach(row=>contentChecks.push(row.textContent.trim()));else contentChecks.push(node.textContent.trim());node.remove();
+      }
+    }
+    for(const row of stage.querySelectorAll('tr'))for(const cell of row.cells)if(/^演示\s*·\s*未核对$/.test(cell.textContent.trim()))cell.textContent='草稿';
   }
   function render(ctx){
     const previous=document.querySelector('.study-tabs');if(previous)tabScroll.set(previous.dataset.scrollKey,previous.scrollLeft);tabObserver?.disconnect();C=ctx;header();
     C.H.$('#workspace').innerHTML=`<div class="study-workspace"><nav class="module-rail study-modules" aria-label="研究模块">${navigation()}</nav><section class="study-main"><div class="study-tabbar">${tabs()}</div><div id="study-stage" class="study-stage" role="tabpanel" ${module()?.tabs.length?`aria-labelledby="study-tab-${C.A.tab}"`:''} tabindex="-1"></div><section id="study-checks" class="study-checks" aria-label="校核项"></section></section><aside id="study-inspector" class="inspector study-inspector"></aside></div>`;
-    C.renderContent();inspector();checks();C.renderStatus();
     C.H.$('#workspace').inert=C.A.busy;
+    C.renderContent();collectContentChecks();inspector();checks();C.renderStatus();
     const list=C.H.$('.study-tabs');if(list){list.scrollLeft=tabScroll.get(list.dataset.scrollKey)||0;list.addEventListener('scroll',()=>syncTabs());tabObserver=new ResizeObserver(()=>syncTabs(true));tabObserver.observe(C.H.$('.study-tabstrip'));}
     queueMicrotask(()=>{syncTabs(true);if(navigationFocus&&navigationFocus.href===location.hash){const link=[...document.querySelectorAll(navigationFocus.selector)].find(el=>el.matches('select')||el.getAttribute('href')===navigationFocus.href);if(link&&!C.A.busy)link.focus({preventScroll:true});navigationFocus=null;}});
     list?.addEventListener('keydown',event=>{
@@ -103,6 +134,7 @@ window.StudyShell=(()=>{
     return `<table class="study-table"><thead><tr><th>计算时间 / 方法</th><th>状态</th><th>耗时</th><th></th></tr></thead><tbody>${runs.map(r=>`<tr><td>${E(formatTime(r))}<small>${E(C.methodName(r.snapshot.definition.method))} · ${E(r.snapshot.definition.method.version)}</small></td><td>${E(C.statusLabel(r.status))}<small>${r.freshness==='current'?'当前输入':'历史输入'}</small></td><td class="number">${r.finished?((new Date(r.finished)-new Date(r.created))/1000).toFixed(1)+' s':'—'}</td><td>${B('详情','','open-run-'+r.id,'class="quiet"')}</td></tr>`).join('')}</tbody></table>`;
   }
   function action(k){
+    if(k==='status-details'){C.A.checksOpen=true;checks();C.H.$('#study-check-table')?.scrollIntoView({block:'nearest'});C.H.$('.study-state-marker')?.setAttribute('aria-expanded','true');return true;}
     if(k==='tabs-left'||k==='tabs-right'){const list=C.H.$('.study-tabs');if(list)list.scrollLeft+=(k==='tabs-left'?-1:1)*Math.max(120,list.clientWidth*.75);syncTabs();return true;}
     if(k==='mobile-inspector'){C.A.inspectorClosed[C.A.module+'/'+C.A.tab]=inspectorOpen();inspector();return true;}
     if(k==='records'||k==='messages'){openRecords(k==='records'?'runs':'messages');return true;}

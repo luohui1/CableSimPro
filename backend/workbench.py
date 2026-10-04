@@ -166,7 +166,13 @@ class WorkspaceStore:
     def audit(self, db, wid, revision, event, details=''):
         db.execute('INSERT INTO workspace_audit VALUES (?,?,?,?,?,?)', (str(uuid4()), wid, revision, event, details, stamp()))
 
+    @staticmethod
+    def assert_mutable(db, wid):
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='engineering_type_releases'").fetchone() and db.execute('SELECT 1 FROM engineering_type_releases WHERE workspace=?', (wid,)).fetchone():
+            raise HTTPException(409, '已发布型号版本已冻结，请基于该版本建立新方案。')
+
     def commit(self, db, row, state, label):
+        self.assert_mutable(db, row['id'])
         Scenario.model_validate(state['scenario'])
         rev, pos, wid = row['revision'] + 1, row['cursor'] + 1, row['id']
         encoded = json.dumps(state, ensure_ascii=False)
@@ -185,7 +191,15 @@ class WorkspaceStore:
             runs = [dict(r) for r in db.execute('SELECT id,revision,input_hash,created FROM workspace_runs WHERE workspace=? ORDER BY rowid DESC LIMIT 30', (wid,))]
             previous = db.execute('SELECT state FROM workspace_history WHERE workspace=? AND position=?', (wid, row['cursor'] - 1)).fetchone()
             can_undo = previous is not None and ('domain' not in state or 'domain' in json.loads(previous['state']))
-        return {'id': wid, 'revision': row['revision'], **state, 'can_undo': can_undo, 'can_redo': row['cursor'] < maximum, 'audit': audit, 'runs': runs, 'updated_at': row['updated']}
+            type_lifecycle = None
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='type_plans'").fetchone():
+                plan = db.execute('SELECT family,name,status,base_reference FROM type_plans WHERE workspace=?', (wid,)).fetchone()
+                if plan:
+                    type_lifecycle = {**dict(plan), 'base_reference': json.loads(plan['base_reference'])}
+                    if plan['status'] == 'published':
+                        can_undo = False
+        frozen = type_lifecycle and type_lifecycle['status'] == 'published'
+        return {'id': wid, 'revision': row['revision'], **state, 'type_lifecycle': type_lifecycle, 'can_undo': can_undo, 'can_redo': row['cursor'] < maximum and not frozen, 'audit': audit, 'runs': runs, 'updated_at': row['updated']}
 
     def create(self, scenario):
         wid, now = str(uuid4()), stamp()
@@ -317,6 +331,7 @@ def make_router(store: WorkspaceStore, providers=None):
     def history(wid: str, direction: Literal['undo', 'redo'], body: Revision):
         with store.db(True) as db:
             row, current = store.load(db, wid, body.expected_revision, allow_domain=True)
+            store.assert_mutable(db, wid)
             pos = row['cursor'] + (-1 if direction == 'undo' else 1)
             target = db.execute('SELECT * FROM workspace_history WHERE workspace=? AND position=?', (wid, pos)).fetchone()
             if target is None:

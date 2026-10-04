@@ -24,7 +24,7 @@ import subprocess
 import sys
 import sysconfig
 import tempfile
-from time import perf_counter
+from time import perf_counter, sleep
 from uuid import uuid4
 
 from .manifest import CUSTOM, KEY_UNITS
@@ -77,7 +77,7 @@ class RunResult:
 
 
 def minimal_environment(job: Path) -> dict[str, str]:
-    env = {k: os.environ[k] for k in ('PATH', 'SYSTEMROOT', 'WINDIR') if k in os.environ}
+    env = {k: os.environ[k] for k in ('PATH', 'SYSTEMROOT', 'WINDIR','SLURM_JOB_ID','SLURM_ARRAY_JOB_ID','SLURM_ARRAY_TASK_ID','SLURM_CPUS_PER_TASK','SLURM_JOB_NODELIST') if k in os.environ}
     env.update(HOME=str(job), USERPROFILE=str(job), TMP=str(job), TEMP=str(job), TMPDIR=str(job),
                PYTHONIOENCODING='utf-8', PYTHONDONTWRITEBYTECODE='1', OMP_NUM_THREADS='1', OPENBLAS_NUM_THREADS='1')
     return env
@@ -169,7 +169,20 @@ class Executor:
             raise
         finally:
             if clean_job:
-                shutil.rmtree(job, ignore_errors=True)
+                # Windows may briefly retain an I/O handle after the confirmed tree exit.
+                allowed_root = Path(self.jobs_root or tempfile.gettempdir()).resolve()
+                if job.resolve().parent != allowed_root or not job.name.startswith('csp-job-'):
+                    raise PluginHostError('JOB_CLEANUP_FAILED', f'作业目录越出临时根目录，已保留：{job}', 503)
+                for attempt in range(7):
+                    try:
+                        shutil.rmtree(job)
+                        break
+                    except FileNotFoundError:
+                        break
+                    except PermissionError as error:
+                        if os.name != 'nt' or getattr(error, 'winerror', None) not in (5, 32) or attempt == 6:
+                            raise PluginHostError('JOB_CLEANUP_FAILED', f'工作进程已退出，但临时目录清理失败，已保留：{job}；{error}', 503) from None
+                        sleep(.1)
 
     def _accept(self, job, plugin_id, version, capability, run_id, raw, result_path, ids, phase='run') -> RunResult:
         if result_path.stat().st_size > MAX_RESULT_BYTES:
