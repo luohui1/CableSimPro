@@ -1,0 +1,16 @@
+{
+  "id":"thermal-oclon",
+  "citation":{"id":"T17","title":"Analysis of an application possibility of geopolymer materials as thermal backfill for underground power cable system","authors":"Paweł Ocłoń; Piotr Cisek; Marcelina Matysiak","year":2021,"doi":"10.1007/s10098-020-01942-8","url":"https://link.springer.com/article/10.1007/s10098-020-01942-8","local_pdf":".data/papers/thermal-c/oclon-cisek-matysiak-2021.pdf"},
+  "scope":"400 kV平排回填温度与导体截面积比较；原文公式/参数未闭合，不补猜求解。",
+  "frozen_inputs":[
+    {"paths":["current_a","depth_m","ambient_c","h_w_m2_k"],"values":[1200,2,30,5],"source":"UPCS physical model and Eq.2","pdf_page":5,"printed_page":873},
+    {"paths":["core_xlpe_outer_soil_k","scm_geopolymer_k"],"values":[[400,0.285,0.57,1],[0.8,1.4]],"source":"Heat transfer model","pdf_page":5,"printed_page":873},
+    {"paths":["geopolymer_1400_mm2_temperature"],"value":"below 90 C","source":"Figure 6d and discussion","pdf_page":8,"printed_page":876}
+  ],
+  "missing_inputs":[
+    {"path":"electrical_equations","source":"Eq.6–12, PDF6 / p874","reason":"PDF内R′含I²且xs/xp表达与量纲不符；不是仅HTML抽取错误","impact":"不能自行修公式并声称复现作者实现"},
+    {"path":"insulation_capacitance_and_voltage","source":"Eq.13–15, PDF6 / p874","reason":"绝缘电容引用Nexans2011，缺对应产品电容/层结构的完整绑定；400kV标签不能替代公式中具体U定义","impact":"介质损耗无法唯一冻结"},
+    {"path":"complete_layer_geometry","source":"Figure 4 and equivalent-area formulas, PDF5–6 / p873–874","reason":"等效面积与外层尺寸/完整几何需前作或厂家曲线确认","impact":"不能冻结全部热阻域"},
+    {"path":"reference_curve_points","source":"Figure 6d, PDF8 / p876","reason":"目前只有小于90°C的范围事实；未逐点数字化且校验读图不确定度","impact":"不能输出精确论文温度偏差"}
+  ]
+}

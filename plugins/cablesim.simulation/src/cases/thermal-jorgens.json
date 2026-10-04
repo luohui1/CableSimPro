@@ -1,0 +1,39 @@
+{
+  "id": "thermal-jorgens",
+  "citation": {"id":"E03","title":"Electric Field and Temperature Simulations of High-Voltage Direct Current Cables Considering the Soil Environment","authors":"Christoph Jörgens; Markus Clemens","year":2021,"doi":"10.3390/en14164910","url":"https://www.mdpi.com/1996-1073/14/16/4910","local_pdf":".data/papers/thermal-b/E03-Jorgens-Clemens-2021.pdf"},
+  "scope": "单根XLPE电缆的弱耦合稳态热子问题，指定芯温90°C；不复现电荷输运或反求载流量。",
+  "missing_inputs": [],
+  "frozen_inputs": [
+    {"paths":["cables/0/layers","cables/0/prescribed_core_temperature_k"],"source":"Table 1","pdf_page":6,"printed_page":6,"note":"ri=23.2, ra=42.4, rout=52.4 mm，XLPE及PE k=0.3，Ti=90°C；芯为Dirichlet孔，不补未知芯热导率。"},
+    {"paths":["cables/0/x_m","cables/0/z_m","environment/background/bounds_m"],"source":"Figure 3a and domain paragraph","pdf_page":5,"printed_page":5,"note":"按图中1.5 m量至电缆上表面、y=0在下表面、h量至下边界：中心深度1.5+rout=1.5524 m，域底深度1.5+2rout+5.2=6.8048 m；横向平移至电缆x=0，宽10.6 m。正文埋深语义与图示需随结果说明。"},
+    {"paths":["environment/background/k_w_m_k","environment/boundaries"],"source":"Eq.13, Table 1 and surrounding text","pdf_page":6,"printed_page":6,"note":"干土0.47/湿土2.1，远侧及底20°C，地表h=1.5 W/(m²K)、环境20°C；无额外辐射。"},
+    {"paths":["cables/0/layers/*/fixed_heat_w_m"],"source":"Weakly coupled thermal model paragraph","pdf_page":5,"printed_page":5,"note":"绝缘损耗忽略；热由给定导体温度供入，不再重复施加Table2导体损耗。"}
+  ],
+  "input": {
+    "schema_version":"cablesim.thermal-model/1",
+    "cables":[{"uid":"cable/xlpe","circuit":"circuit/hvdc","x_m":0,"z_m":-1.5524,
+      "layers":[
+        {"uid":"layer/conductor","role":"conductor","outer_radius_m":0.0232,"k_w_m_k":null,"fixed_heat_w_m":0},
+        {"uid":"layer/xlpe","role":"insulation","outer_radius_m":0.0424,"k_w_m_k":0.3,"fixed_heat_w_m":0},
+        {"uid":"layer/pe","role":"oversheath","outer_radius_m":0.0524,"k_w_m_k":0.3,"fixed_heat_w_m":0}],
+      "current_a":0,"electrical":null,"prescribed_core_temperature_k":363.15,"temperature_limit_k":363.15,"duct":null}],
+    "environment":{"kind":"ground","background":{"uid":"soil","bounds_m":[-5.3,-6.8048,5.3,0],"k_w_m_k":0.47},"soil_layers":[],"backfills":[],
+      "boundaries":{
+        "top":{"kind":"convection","temperature_k":293.15,"h_w_m2_k":1.5,"emissivity":0},
+        "left":{"kind":"temperature","temperature_k":293.15,"h_w_m2_k":null,"emissivity":null},
+        "right":{"kind":"temperature","temperature_k":293.15,"h_w_m2_k":null,"emissivity":null},
+        "bottom":{"kind":"temperature","temperature_k":293.15,"h_w_m2_k":null,"emissivity":null}}},
+    "provenance":{"all":{"doi":"10.3390/en14164910","pages":[5,6],"tables":[1],"figures":[3]}},
+    "assumptions":["采用原文弱耦合热模型：忽略绝缘发热及金属屏蔽热阻；固定芯温","零电流表示未启用电阻驱动，不能当成电缆实际运行电流"]
+  },
+  "parameters":{"controls":{"operation":"temperature","mesh_size_m":0.004,"far_mesh_size_m":0.2,"mesh_transition_m":0.6,"max_nodes":60000,"tolerance_k":0.000001,"max_iterations":100,"relaxation":0.7,"current_upper_a":2000,"current_tolerance_a":0.01,"rated_circuit":null}},
+  "mesh_sizes_m":[0.008,0.004,0.002],
+  "targets":[
+    {"id":"insulation-surface","quantity":"probe_temperature_k","entity":"cable/xlpe","point_m":[0.0424,-1.5524],"unit":"K","reference":351.05,"tolerance":{"absolute":0.5,"source":"预先规定的项目数值对比门槛0.5 K；论文结果舍入0.1°C，不是作者认证容差"},"source":{"table":2,"pdf_page":8,"printed_page":8}},
+    {"id":"ground-centre","quantity":"probe_temperature_k","entity":"section/ground","point_m":[0,0],"unit":"K","reference":297.35,"tolerance":{"absolute":0.5,"source":"项目预先规定0.5 K，覆盖发表数值舍入与边界图示解释，不事后调整"},"source":{"figure":5,"pdf_page":12,"printed_page":12}}
+  ],
+  "variants":[
+    {"id":"dry","input_changes":[],"target_changes":[]},
+    {"id":"wet","input_changes":[{"path":["environment","background","k_w_m_k"],"value":2.1}],"target_changes":[{"id":"insulation-surface","reference":334.15},{"id":"ground-centre","reference":299.85}]}
+  ]
+}

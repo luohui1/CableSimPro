@@ -1,0 +1,19 @@
+{
+  "id": "eddy-cylinder",
+  "citation": {"id":"V01","title":"Infinite round conductor: Bessel internal impedance","kind":"analytic-benchmark","source":"Classical cylindrical diffusion equation; independent Bessel evaluation in validation harness"},
+  "scope": "单根无限长非磁性实心圆导体集肤效应解析校核；外边界承担回流，不是论文或IEC合规认证。",
+  "input": {
+    "schema_version":"cablesim.simulation-problem/1", "physics":"magnetic_harmonic",
+    "geometry":[
+      {"uid":"air","kind":"disk","values":[0,0,0.1],"material":{"conductivity_s_m":0,"relative_permeability":1,"source":"Explicit analytic benchmark: insulating air"}},
+      {"uid":"conductor","kind":"disk","values":[0,0,0.01],"material":{"conductivity_s_m":58000000,"relative_permeability":1,"source":"Explicit analytic benchmark: constant sigma"}}
+    ],
+    "boundaries":[{"uid":"outer","selector":"circle","values":[0,0,0.1],"kind":"magnetic_potential","value":0}],
+    "excitations":[{"regions":["conductor"],"kind":"current_rms_a","value":[1,0],"source":"RMS phasor benchmark"}],
+    "frequency_hz":50,"probes_m":[[0.03,0]],
+    "provenance":{"all":{"source":"Analytic verification fixture; numeric choices are explicit, not attributed to a paper"}},
+    "assumptions":["Infinite axial length; RMS phasors; constant isotropic sigma/mu; no displacement current"]
+  },
+  "parameters":{"mesh":{"size_m":0.001,"far_size_m":0.01,"transition_m":0.025,"max_nodes":60000}},
+  "mesh_sizes_m":[0.002,0.001,0.0005]
+}

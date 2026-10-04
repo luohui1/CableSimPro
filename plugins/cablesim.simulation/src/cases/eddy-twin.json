@@ -1,0 +1,152 @@
+{
+  "id": "eddy-twin",
+  "citation": {
+    "id": "E17",
+    "title": "Analytical-Numerical Approach to the Skin and Proximity Effect in Lines with Round Parallel Wires",
+    "authors": "Pawel Jablonski; Dariusz Kusiak; Tomasz Szczegielniak",
+    "year": 2020,
+    "doi": "10.3390/en13246716",
+    "url": "https://www.mdpi.com/1996-1073/13/24/6716"
+  },
+  "scope": "Table 1 c=1 twin line: complete 2D skin/proximity FEM, opposing RMS currents.",
+  "frozen_inputs": [
+    {
+      "paths": [
+        "geometry",
+        "frequency_hz"
+      ],
+      "source": "Table 1; conductor conductivity definition sigmaAl=36.9 MS/m",
+      "note": "R=10mm,d=40mm,f=60Hz,c=1."
+    },
+    {
+      "paths": [
+        "excitations"
+      ],
+      "source": "Twin-line opposing-current definition, linearity and per-length resistance",
+      "note": "RMS normalization to +/-1A; total pair resistance=sum(P)/I^2."
+    }
+  ],
+  "input": {
+    "schema_version": "cablesim.simulation-problem/1",
+    "physics": "magnetic_harmonic",
+    "geometry": [
+      {
+        "uid": "air",
+        "kind": "rectangle",
+        "values": [
+          -0.4,
+          -0.4,
+          0.4,
+          0.4
+        ],
+        "material": {
+          "conductivity_s_m": 0,
+          "relative_permeability": 1,
+          "source": "Jablonski et al., Energies 2020, 13, 6716, Table 1; section 2.1 RMS linear magnetoquasistatic model"
+        }
+      },
+      {
+        "uid": "wire-1",
+        "kind": "disk",
+        "values": [
+          -0.02,
+          0,
+          0.01
+        ],
+        "material": {
+          "conductivity_s_m": 36900000,
+          "relative_permeability": 1,
+          "source": "Jablonski et al., Energies 2020, 13, 6716, Table 1; section 2.1 RMS linear magnetoquasistatic model"
+        }
+      },
+      {
+        "uid": "wire-2",
+        "kind": "disk",
+        "values": [
+          0.02,
+          0,
+          0.01
+        ],
+        "material": {
+          "conductivity_s_m": 36900000,
+          "relative_permeability": 1,
+          "source": "Jablonski et al., Energies 2020, 13, 6716, Table 1; section 2.1 RMS linear magnetoquasistatic model"
+        }
+      }
+    ],
+    "boundaries": [
+      {
+        "uid": "outer",
+        "selector": "outer",
+        "values": [],
+        "kind": "magnetic_potential",
+        "value": 0
+      }
+    ],
+    "excitations": [
+      {
+        "regions": [
+          "wire-1"
+        ],
+        "kind": "current_rms_a",
+        "value": [
+          1,
+          0
+        ],
+        "source": "Jablonski et al., Energies 2020, 13, 6716, Table 1; section 2.1 RMS linear magnetoquasistatic model"
+      },
+      {
+        "regions": [
+          "wire-2"
+        ],
+        "kind": "current_rms_a",
+        "value": [
+          -1,
+          0
+        ],
+        "source": "Jablonski et al., Energies 2020, 13, 6716, Table 1; section 2.1 RMS linear magnetoquasistatic model"
+      }
+    ],
+    "frequency_hz": 60,
+    "probes_m": [],
+    "provenance": {
+      "all": {
+        "source": "Jablonski et al., Energies 2020, 13, 6716, Table 1; section 2.1 RMS linear magnetoquasistatic model"
+      }
+    },
+    "assumptions": [
+      "Infinite exterior represented by finite A=0 boundary; domain convergence separate.",
+      "No displacement current; constant sigma; RMS phasors."
+    ]
+  },
+  "parameters": {
+    "mesh": {
+      "size_m": 0.001,
+      "far_size_m": 0.04,
+      "transition_m": 0.4,
+      "max_nodes": 70000
+    }
+  },
+  "mesh_sizes_m": [
+    0.002,
+    0.001,
+    0.0005
+  ],
+  "targets": [
+    {
+      "id": "pair-resistance",
+      "quantity": "series_resistance_ohm_m",
+      "entity": "current-path",
+      "unit": "ohm/m",
+      "reference": 0.000177,
+      "tolerance": {
+        "absolute": 3e-7,
+        "source": "Predeclared 0.3 micro-ohm/m allowance for Table1 FEM rounding and numerical discretization; unit RMS current makes W/m numerically equal to ohm/m."
+      },
+      "source": {
+        "table": 1,
+        "doi": "10.3390/en13246716"
+      }
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "id":"thermal-deleon",
+  "citation":{"id":"T10","title":"Effects of Backfilling on Cable Ampacity Analyzed With the Finite Element Method","authors":"Francisco de León; George J. Anders","year":2008,"doi":"10.1109/TPWRD.2008.917648","url":"https://research.engineering.nyu.edu/power/sites/engineering.nyu.edu.power/files/uploads/Backfilling.pdf","local_pdf":".data/papers/thermal-a/Backfilling.pdf"},
+  "scope":"直埋三组品字形与矩形回填，目标为Fig.8载流量；缺关键参数时仅生成未运行报告。",
+  "frozen_inputs":[
+    {"paths":["conductor_diameter_mm","nominal_area_mm2","voltage_kv"],"values":[27,507,44],"source":"Figure 5","pdf_page":3,"printed_page":539},
+    {"paths":["backfill_width_height_m"],"values":[[0.7,0.5],[1.2,1.0],[2.0,1.5]],"source":"Figure 7 and section III.B","pdf_page":3,"printed_page":539},
+    {"paths":["soil_resistivity_range_k_m_w","ampacity_improvements_percent"],"values":[[0.5,4.0],[37.5,72,95]],"source":"Figure 8 and section III.B","pdf_page":3,"printed_page":539}
+  ],
+  "missing_inputs":[
+    {"path":"cables[*].position","source":"Figure 4, PDF3 / p539","reason":"三组圆心/组间距没有完整数字标注；未用示意图比例冒充精确坐标","impact":"互热和载流量不能唯一计算"},
+    {"path":"cable.geometry","source":"Figure 5, PDF3 / p539","reason":"铜丝层外径58.03 mm加2×PVC厚2.8 mm得到63.63 mm，图同时标外径66.12 mm；几何不自洽","impact":"不能冻结同心层外径/热阻，须作者模型或澄清"},
+    {"path":"cables[*].electrical","source":"Sections II–III, PDF2–3 / p538–539","reason":"未给目标工况R20、α、交流/护套/介质损耗和接地完整参数","impact":"不能由电流求发热或反求载流量"},
+    {"path":"cables[*].layers[*].k","source":"Figure 5, PDF3 / p539","reason":"逐层热物性未给数值","impact":"不能计算内部温降"},
+    {"path":"temperature_limit_and_ambient","source":"Figures 4–18","reason":"目标工况温限和环境温度未完整绑定，不能借用Fig.3其他示意值","impact":"载流量目标无唯一温差"},
+    {"path":"far_domain_and_surface_boundary","source":"Section II, PDF2 / p538","reason":"侧底仅写足够远绝热，地表可恒温/对流，目标数值边界未完整指定","impact":"域截断与边界误差无法和论文唯一对应"},
+    {"path":"absolute_reference","source":"Figure 8, PDF3 / p539","reason":"绝对电流是图线，未形成经复核数字化点及读图误差","impact":"不能给出精确数值偏差表"}
+  ]
+}

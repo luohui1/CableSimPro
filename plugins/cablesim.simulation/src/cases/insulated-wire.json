@@ -1,0 +1,28 @@
+{
+  "reference": {
+    "id": "B01",
+    "title": "scikit-fem 12.0.2 Example 17: Insulated wire",
+    "url": "https://github.com/kinnala/scikit-fem/blob/12.0.2/docs/examples/ex17.py",
+    "locator": "docstring parameters; T0['exact'] executable expression",
+    "kind": "official-analytic-benchmark",
+    "note": "官方使用温升和归一化教学尺寸；此处以m解释长度、以293.15 K为任意温度零点偏移。只比较温升，不声称实际电缆尺寸或额定值。说明式前因子写b²，执行代码用a²；采用能量守恒独立推导的a²。"
+  },
+  "input": {
+    "core_radius_m": 2.0,
+    "outer_radius_m": 3.0,
+    "core_k_w_m_k": 101.0,
+    "insulation_k_w_m_k": 11.0,
+    "source_w_m3": 5.0,
+    "convection_w_m2_k": 7.0,
+    "ambient_k": 293.15,
+    "entity": "cable/benchmark-wire",
+    "source_reference": "scikit-fem 12.0.2 ex17.py, parameter block and executable T0['exact']; ambient offset is a declared local convention"
+  },
+  "mesh_sizes_m": [0.3, 0.15, 0.075],
+  "acceptance": {
+    "finest_centre_relative_error_max": 0.005,
+    "finest_energy_relative_residual_max": 1e-7,
+    "l2_error_decreases": true,
+    "basis": "本项目预先选择的数值验证门槛，不是论文容差或工程认证。"
+  }
+}

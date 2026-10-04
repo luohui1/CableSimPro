@@ -1,0 +1,155 @@
+{
+  "schema": "cablesim.plugin/2",
+  "id": "cablesim.comsol-bridge",
+  "version": "0.1.0",
+  "name": "COMSOL 参考对照",
+  "description": "独立运行用户已安装的 COMSOL 6.2，对同一 SI 问题作可选内部基准比较；平台开源计算不依赖它。",
+  "icon": "assets/icon.svg",
+  "publisher": {
+    "id": "cablesim",
+    "name": "CableSimPro"
+  },
+  "host_api": {
+    "major": 2,
+    "min_minor": 1
+  },
+  "license": {
+    "spdx": "LicenseRef-Project-Undeclared",
+    "review_required": true
+  },
+  "platforms": [
+    "windows-x64"
+  ],
+  "runtime": {
+    "kind": "python",
+    "python": ">=3.11,<3.14",
+    "entry": "src/cablesim_comsol_bridge/main.py"
+  },
+  "permissions": [
+    "project.read",
+    "study.run",
+    "artifact.write"
+  ],
+  "dependencies": [],
+  "resources": {
+    "timeout_s": 1800,
+    "memory_mb": 8192,
+    "network": "none"
+  },
+  "capabilities": [
+    {
+      "kind": "method",
+      "id": "magnetic-reference",
+      "title": "COMSOL 二维涡流对照",
+      "method_version": "magnetic-reference/0.1.0",
+      "analysis": "frequency_domain",
+      "input_schema": "cablesim.simulation-problem/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.joule-loss",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.simulation-bundle",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.reproduction-report",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "E05/E17/E18: tests/compare_papers.py; finite exterior and paper-statistic limitations retained",
+          "COMSOL tutorial04 plain/series magnetic submodels: tests/compare_tutorial.py"
+        ]
+      },
+      "limitations": [
+        "二维原生 Magnetic Fields，显式恒定各向同性材料、RMS 电流/电压及理想串并联组；外边界 A=0。",
+        "需要用户自备有效商业许可证和 COMSOL 6.2；缺安装、版本或模块即明确拒算，不回退到近似。",
+        "仅为可选内部对照，平台不分发 COMSOL 模型、程序、库或许可证；不同离散与模型假设必须单独核验。",
+        "COMSOL 串行运行；本地宿主 Job Object 控制进程树。Windows 内存预算声明不等于操作系统硬限制。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "thermal-reference",
+      "title": "COMSOL 稳态热对照",
+      "method_version": "thermal-reference/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.simulation-problem/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.maximum-temperature",
+          "type": "quantity",
+          "per": "section",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.simulation-bundle",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.reproduction-report",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "analytic-benchmark",
+        "cases": [
+          "Layered radial conductor: plugin-tests/test_comsol_native.py; native steady solution versus independent analytic temperature"
+        ]
+      },
+      "limitations": [
+        "二维原生 Heat Transfer in Solids；恒定热导率、逐域固定热源、外边界恒温。不支持暂态、内孔、辐射或温变电阻。",
+        "需要用户自备有效商业许可证和 COMSOL 6.2；缺安装、版本或模块即明确拒算，不回退到近似。",
+        "仅为可选内部对照，平台不分发 COMSOL 模型、程序、库或许可证；不同离散与模型假设必须单独核验。",
+        "COMSOL 串行运行；本地宿主 Job Object 控制进程树。Windows 内存预算声明不等于操作系统硬限制。"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "assets/icon.svg",
+      "sha256": "2382115ab4a1d656aa5eafee14d25d146accdc8a135287b50df4f196d290e4ba",
+      "size_bytes": 347
+    },
+    {
+      "path": "src/cablesim_comsol_bridge/__init__.py",
+      "sha256": "551d7dec37257d757204b245ec4f9e582aa5946cd1c0c9f1572d6f1e4af8c509",
+      "size_bytes": 70
+    },
+    {
+      "path": "src/cablesim_comsol_bridge/adapter.py",
+      "sha256": "88af20b5a0fe732af24b4b2a5dfd636f848ac12ad5cc6081b53d5357a61e9680",
+      "size_bytes": 8875
+    },
+    {
+      "path": "src/cablesim_comsol_bridge/java_model.py",
+      "sha256": "8e158b74d930cdef998fa6906bed22fd72a4c3e8ca2216bfab309e28ad2925a5",
+      "size_bytes": 15128
+    },
+    {
+      "path": "src/cablesim_comsol_bridge/main.py",
+      "sha256": "b2cd507119c16acd49d463ad7221d0904a3f01c4830fc654d1233e32f3a5b7e5",
+      "size_bytes": 4779
+    },
+    {
+      "path": "src/cablesim_comsol_bridge/runtime.py",
+      "sha256": "75c0fcb414a58fedea90a327ed05bcb8c2c9865e909a32eb5904cf47cecd9d79",
+      "size_bytes": 9216
+    },
+    {
+      "path": "src/host-dependencies.json",
+      "sha256": "62f4e3c76519a78a6f21683cd6b3aec1287bc36ad2a84a3e2968cdddf4d8421e",
+      "size_bytes": 1656
+    }
+  ]
+}

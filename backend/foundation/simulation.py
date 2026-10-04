@@ -1,0 +1,159 @@
+"""Solver-neutral SI analysis contract; contains no solver or meshing algorithm."""
+from typing import Literal
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class Strict(BaseModel):
+    model_config = ConfigDict(extra='forbid', allow_inf_nan=False)
+
+
+class Material(Strict):
+    k_w_m_k: float | None = Field(default=None, gt=0)
+    heat_capacity_j_m3_k: float | None = Field(default=None, gt=0)
+    conductivity_s_m: float | None = Field(default=None, ge=0)
+    relative_permeability: float | None = Field(default=None, gt=0)
+    relative_permeability_loss: float = Field(default=0, ge=0)
+    relative_permittivity: float | None = Field(default=None, gt=0)
+    source: str = Field(min_length=1)
+
+
+class Shape(Strict):
+    uid: str = Field(min_length=1)
+    kind: Literal['rectangle','disk']
+    values: list[float]
+    material: Material
+    void: bool = False
+
+    @model_validator(mode='after')
+    def valid(self):
+        a = self.values
+        if self.kind == 'disk' and (len(a) != 3 or a[2] <= 0):
+            raise ValueError('圆域需要x,z,正半径。')
+        if self.kind == 'rectangle' and (len(a) != 4 or a[2] <= a[0] or a[3] <= a[1]):
+            raise ValueError('矩形需要有正面积的x0,z0,x1,z1。')
+        return self
+
+
+class Condition(Strict):
+    uid: str
+    selector: Literal['outer','x','z','circle']
+    values: list[float]
+    kind: Literal['temperature','convection','insulated','magnetic_potential']
+    value: float | None
+    h_w_m2_k: float | None = Field(default=None,gt=0)
+
+
+class Excitation(Strict):
+    regions: list[str] = Field(min_length=1)
+    kind: Literal['heat_w_m','current_rms_a','voltage_gradient_v_m']
+    connection: Literal['parallel', 'series'] = 'parallel'
+    value: list[float] = Field(min_length=1,max_length=2)
+    # Piecewise constant heat factors, at time t the latest entry applies.
+    schedule: list[tuple[float,float]] = Field(default_factory=list)
+    source: str = Field(min_length=1)
+
+
+class Time(Strict):
+    initial_temperature_k: float = Field(gt=0)
+    step_s: float = Field(gt=0)
+    steps: int = Field(ge=1,le=10000)
+    bdf_order: Literal[1,2] = 1
+
+
+class CurrentProbe(Strict):
+    region: str
+    point_m: tuple[float,float]
+    source: str = Field(min_length=1)
+
+
+class Problem(Strict):
+    schema_version: Literal['cablesim.simulation-problem/1']
+    physics: Literal['steady_heat','transient_heat','magnetic_harmonic']
+    geometry: list[Shape] = Field(min_length=1,max_length=256)
+    boundaries: list[Condition] = Field(min_length=1,max_length=64)
+    excitations: list[Excitation]
+    frequency_hz: float | None = Field(default=None,gt=0)
+    time: Time | None = None
+    probes_m: list[tuple[float,float]] = Field(default_factory=list,max_length=100)
+    current_probes: list[CurrentProbe] = Field(default_factory=list,max_length=100)
+    provenance: dict = Field(min_length=1)
+    assumptions: list[str]
+
+    @model_validator(mode='after')
+    def complete(self):
+        ids = [r.uid for r in self.geometry]
+        if len(ids) != len(set(ids)):
+            raise ValueError('区域UID必须唯一。')
+        magnetic = self.physics == 'magnetic_harmonic'
+        if magnetic != (self.frequency_hz is not None) or (self.physics == 'transient_heat') != (self.time is not None):
+            raise ValueError('物理类型与频率/时间参数不匹配。')
+        for r in self.geometry:
+            m = r.material
+            if r.void:
+                continue
+            if magnetic and (m.conductivity_s_m is None or m.relative_permeability is None):
+                raise ValueError('电磁区域必须给出sigma和mur，包括非导电区域的显式0。')
+            if not magnetic and m.k_w_m_k is None:
+                raise ValueError('热区域缺k。')
+            if self.time and m.heat_capacity_j_m3_k is None:
+                raise ValueError('瞬态区域缺体积热容。')
+        used = set()
+        for e in self.excitations:
+            if not set(e.regions) <= set(ids) or used.intersection(e.regions) or len(set(e.regions)) != len(e.regions):
+                raise ValueError('激励区域缺失或重复。')
+            if e.connection == 'series' and (not magnetic or len(e.regions) < 2 or e.kind != 'voltage_gradient_v_m' or any(e.value)):
+                raise ValueError('excitations.connection：串联组需要至少两个导电区域，当前仅支持显式零总电压梯度。')
+            used.update(e.regions)
+            if magnetic == (e.kind == 'heat_w_m'):
+                raise ValueError('激励与物理类型不匹配。')
+            if not magnetic and (len(e.value) != 1 or e.value[0] < 0):
+                raise ValueError('热源必须是非负实数W/m。')
+            if e.schedule:
+                if not self.time or e.schedule[0][0] != 0 or any(a[0]>=b[0] for a,b in zip(e.schedule,e.schedule[1:])) or any(t<0 or v<0 for t,v in e.schedule):
+                    raise ValueError('负荷表必须从0开始，时间严格递增、热源倍数非负。')
+                if any(abs(t/self.time.step_s-round(t/self.time.step_s))>1e-8 for t,_ in e.schedule):
+                    raise ValueError('负荷切换时间必须落在时间步边界。')
+        if magnetic:
+            conducting = {r.uid for r in self.geometry if not r.void and r.material.conductivity_s_m > 0}
+            if used != conducting:
+                raise ValueError('每个导电区域必须显式指定电流/电压或互联组；零净电流不能默认猜测。')
+            if any(probe.region not in conducting for probe in self.current_probes):
+                raise ValueError('电流密度测点必须绑定导电区域。')
+        elif self.current_probes:
+            raise ValueError('热问题不接受电流密度测点。')
+        for b in self.boundaries:
+            expected = {'outer':0,'x':1,'z':1,'circle':3}[b.selector]
+            if len(b.values) != expected or (b.kind != 'insulated' and b.value is None):
+                raise ValueError('边界选择器/值不完整。')
+            if magnetic != (b.kind == 'magnetic_potential'):
+                raise ValueError('边界与物理类型不匹配。')
+            if b.kind == 'convection' and b.h_w_m2_k is None:
+                raise ValueError('Robin边界缺h。')
+            if b.kind in ('temperature','convection') and b.value<=0:
+                raise ValueError('热边界必须使用正的绝对温度K。')
+        if self.physics=='steady_heat' and all(b.kind=='insulated' for b in self.boundaries):
+            raise ValueError('全绝热稳态问题没有温度基准或散热路径。')
+        return self
+
+
+class MeshControls(Strict):
+    size_m: float = Field(gt=0)
+    far_size_m: float = Field(gt=0)
+    transition_m: float = Field(gt=0)
+    max_nodes: int = Field(default=60000,ge=100,le=120000)
+    probe_cell_size_m: float | None = Field(default=None,gt=0)
+    exterior_growth_start_m: float | None = Field(default=None,gt=0)
+    exterior_growth_rate: float = Field(default=0.1,gt=0,le=0.25)
+    field_order: Literal[1,2] | None = None
+    minimum_circle_segments: int = Field(default=8,ge=8,le=512)
+
+    @model_validator(mode='after')
+    def consistent(self):
+        if self.far_size_m < self.size_m:
+            raise ValueError('mesh.far_size_m：远场尺寸不能小于近场 size_m；两者单位均为 m。')
+        return self
+
+
+def validate(value, controls):
+    return Problem.model_validate(value), MeshControls.model_validate(controls)
+

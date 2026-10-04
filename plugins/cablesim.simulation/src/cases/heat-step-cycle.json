@@ -1,0 +1,138 @@
+{
+  "id": "heat-step-cycle",
+  "citation": {
+    "id": "V02",
+    "title": "Finite slab with switched uniform heat generation",
+    "kind": "analytic-benchmark",
+    "source": "Independent Fourier-series verification of 1D diffusion in a slab; explicit synthetic SI parameters, not an IEC or paper case"
+  },
+  "scope": "Elmer HeatSolve 2D mesh with a 1D exact solution; fixed-property step and periodic power.",
+  "input": {
+    "schema_version": "cablesim.simulation-problem/1",
+    "physics": "transient_heat",
+    "geometry": [
+      {
+        "uid": "slab",
+        "kind": "rectangle",
+        "values": [
+          0,
+          0,
+          0.02,
+          0.005
+        ],
+        "material": {
+          "k_w_m_k": 0.2,
+          "heat_capacity_j_m3_k": 2000000,
+          "source": "Independent Fourier-series verification of 1D diffusion in a slab; explicit synthetic SI parameters, not an IEC or paper case"
+        }
+      }
+    ],
+    "boundaries": [
+      {
+        "uid": "left",
+        "selector": "x",
+        "values": [
+          0
+        ],
+        "kind": "temperature",
+        "value": 293.15
+      },
+      {
+        "uid": "right",
+        "selector": "x",
+        "values": [
+          0.02
+        ],
+        "kind": "temperature",
+        "value": 293.15
+      },
+      {
+        "uid": "bottom",
+        "selector": "z",
+        "values": [
+          0
+        ],
+        "kind": "insulated",
+        "value": null
+      },
+      {
+        "uid": "top",
+        "selector": "z",
+        "values": [
+          0.005
+        ],
+        "kind": "insulated",
+        "value": null
+      }
+    ],
+    "excitations": [
+      {
+        "regions": [
+          "slab"
+        ],
+        "kind": "heat_w_m",
+        "value": [
+          10
+        ],
+        "schedule": [
+          [
+            0,
+            1
+          ],
+          [
+            1000,
+            0
+          ],
+          [
+            2000,
+            1
+          ],
+          [
+            3000,
+            0
+          ]
+        ],
+        "source": "Independent Fourier-series verification of 1D diffusion in a slab; explicit synthetic SI parameters, not an IEC or paper case"
+      }
+    ],
+    "time": {
+      "initial_temperature_k": 293.15,
+      "step_s": 10,
+      "steps": 400,
+      "bdf_order": 1
+    },
+    "probes_m": [
+      [
+        0.01,
+        0.0025
+      ]
+    ],
+    "provenance": {
+      "all": {
+        "source": "Independent Fourier-series verification of 1D diffusion in a slab; explicit synthetic SI parameters, not an IEC or paper case"
+      }
+    },
+    "assumptions": [
+      "Constant volumetric heat capacity and k; no electrical resistance feedback.",
+      "Step source applies to the time interval following its declared switch time."
+    ]
+  },
+  "parameters": {
+    "mesh": {
+      "size_m": 0.001,
+      "far_size_m": 0.001,
+      "transition_m": 0.01,
+      "max_nodes": 10000
+    }
+  },
+  "mesh_sizes_m": [
+    0.002,
+    0.001,
+    0.0005
+  ],
+  "time_steps_s": [
+    20,
+    10,
+    5
+  ]
+}

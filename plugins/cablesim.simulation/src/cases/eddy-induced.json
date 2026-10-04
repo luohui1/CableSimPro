@@ -1,0 +1,211 @@
+{
+  "id": "eddy-induced",
+  "citation": {
+    "id": "E18",
+    "title": "Eddy Currents Induced in Two Parallel Round Conductors",
+    "authors": "Tomasz Szczegielniak; Pawel Jablonski; Dariusz Kusiak; Zygmunt Piatek",
+    "year": 2019,
+    "url": "https://journals.riverpublishers.com/index.php/ACES/article/view/8089",
+    "journal": "ACES Journal 34(12), 1922-1927"
+  },
+  "scope": "One source current and one zero-net-current passive conductor; Table1 passive-conductor induced surface density, not source total density.",
+  "frozen_inputs": [
+    {
+      "paths": [
+        "geometry",
+        "frequency_hz",
+        "excitations"
+      ],
+      "source": "ACES2019 pp1923-1926, Figure2 and Table1: passive left conductor2 driven by 1kA RMS in right conductor1",
+      "note": "R1=R2=.01m,d=3R2,sigma55MS/m,f200Hz,I1=1kA; second conductor net current zero. Table contains symmetric separate mutual responses; only conductor2 is compared."
+    }
+  ],
+  "input": {
+    "schema_version": "cablesim.simulation-problem/1",
+    "physics": "magnetic_harmonic",
+    "geometry": [
+      {
+        "uid": "air",
+        "kind": "rectangle",
+        "values": [
+          -0.4,
+          -0.4,
+          0.4,
+          0.4
+        ],
+        "material": {
+          "conductivity_s_m": 0,
+          "relative_permeability": 1,
+          "source": "ACES2019 pp1923-1926, Figure2 and Table1: passive left conductor2 driven by 1kA RMS in right conductor1"
+        }
+      },
+      {
+        "uid": "passive",
+        "kind": "disk",
+        "values": [
+          0,
+          0,
+          0.01
+        ],
+        "material": {
+          "conductivity_s_m": 55000000,
+          "relative_permeability": 1,
+          "source": "ACES2019 pp1923-1926, Figure2 and Table1: passive left conductor2 driven by 1kA RMS in right conductor1"
+        }
+      },
+      {
+        "uid": "source",
+        "kind": "disk",
+        "values": [
+          0.03,
+          0,
+          0.01
+        ],
+        "material": {
+          "conductivity_s_m": 55000000,
+          "relative_permeability": 1,
+          "source": "ACES2019 pp1923-1926, Figure2 and Table1: passive left conductor2 driven by 1kA RMS in right conductor1"
+        }
+      }
+    ],
+    "boundaries": [
+      {
+        "uid": "outer",
+        "selector": "outer",
+        "values": [],
+        "kind": "magnetic_potential",
+        "value": 0
+      }
+    ],
+    "excitations": [
+      {
+        "regions": [
+          "passive"
+        ],
+        "kind": "current_rms_a",
+        "value": [
+          0,
+          0
+        ],
+        "source": "ACES2019 pp1923-1926, Figure2 and Table1: passive left conductor2 driven by 1kA RMS in right conductor1"
+      },
+      {
+        "regions": [
+          "source"
+        ],
+        "kind": "current_rms_a",
+        "value": [
+          1000,
+          0
+        ],
+        "source": "ACES2019 pp1923-1926, Figure2 and Table1: passive left conductor2 driven by 1kA RMS in right conductor1"
+      }
+    ],
+    "frequency_hz": 200,
+    "probes_m": [],
+    "provenance": {
+      "all": {
+        "source": "ACES2019 pp1923-1926, Figure2 and Table1: passive left conductor2 driven by 1kA RMS in right conductor1"
+      }
+    },
+    "assumptions": [
+      "Infinite exterior represented by finite A=0 boundary; domain convergence separate.",
+      "No displacement current; constant sigma; RMS phasors."
+    ],
+    "current_probes": [
+      {
+        "region": "passive",
+        "point_m": [
+          0.01,
+          0
+        ],
+        "source": "ACES2019 pp1923-1926, Figure2 and Table1: passive left conductor2 driven by 1kA RMS in right conductor1"
+      },
+      {
+        "region": "passive",
+        "point_m": [
+          0,
+          0.01
+        ],
+        "source": "ACES2019 pp1923-1926, Figure2 and Table1: passive left conductor2 driven by 1kA RMS in right conductor1"
+      },
+      {
+        "region": "passive",
+        "point_m": [
+          -0.01,
+          0
+        ],
+        "source": "ACES2019 pp1923-1926, Figure2 and Table1: passive left conductor2 driven by 1kA RMS in right conductor1"
+      }
+    ]
+  },
+  "parameters": {
+    "mesh": {
+      "size_m": 0.001,
+      "far_size_m": 0.04,
+      "transition_m": 0.4,
+      "max_nodes": 70000
+    }
+  },
+  "mesh_sizes_m": [
+    0.002,
+    0.001,
+    0.0005
+  ],
+  "targets": [
+    {
+      "id": "passive-surface-0",
+      "quantity": "current_density_rms",
+      "entity": "passive",
+      "probe_index": 0,
+      "unit": "A/m^2",
+      "reference": 3714000,
+      "tolerance": {
+        "absolute": 55710,
+        "source": "Predeclared 1.5% or 15 kA/m2 floor for published FEM values rounded to integer kA/m2 and boundary discretization."
+      },
+      "source": {
+        "table": 1,
+        "printed_page": 1926,
+        "pdf_page": 5,
+        "location": "theta=0"
+      }
+    },
+    {
+      "id": "passive-surface-1",
+      "quantity": "current_density_rms",
+      "entity": "passive",
+      "probe_index": 1,
+      "unit": "A/m^2",
+      "reference": 650000,
+      "tolerance": {
+        "absolute": 15000,
+        "source": "Predeclared 1.5% or 15 kA/m2 floor for published FEM values rounded to integer kA/m2 and boundary discretization."
+      },
+      "source": {
+        "table": 1,
+        "printed_page": 1926,
+        "pdf_page": 5,
+        "location": "theta=pi/2"
+      }
+    },
+    {
+      "id": "passive-surface-2",
+      "quantity": "current_density_rms",
+      "entity": "passive",
+      "probe_index": 2,
+      "unit": "A/m^2",
+      "reference": 2321000,
+      "tolerance": {
+        "absolute": 34815,
+        "source": "Predeclared 1.5% or 15 kA/m2 floor for published FEM values rounded to integer kA/m2 and boundary discretization."
+      },
+      "source": {
+        "table": 1,
+        "printed_page": 1926,
+        "pdf_page": 5,
+        "location": "theta=pi"
+      }
+    }
+  ]
+}

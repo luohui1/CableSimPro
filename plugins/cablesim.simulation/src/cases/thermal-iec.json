@@ -1,0 +1,30 @@
+{
+  "schema_version":"cablesim.domain/1",
+  "name":"合成三相直埋IEC与FEM共同输入，不是论文或厂家数据",
+  "materials":[
+    {"id":"material/cu","label":"显式合成铜","category":"conductor","thermal_resistivity":0.0025,"electrical_resistivity_20":0.000000017241,"temperature_coefficient_20":0.00393},
+    {"id":"material/semicon","label":"显式半导电热层","category":"semiconductor","thermal_resistivity":5.0},
+    {"id":"material/xlpe","label":"显式XLPE热层","category":"insulation","thermal_resistivity":3.5,"relative_permittivity":2.5,"loss_tangent":0.002},
+    {"id":"material/sheath","label":"光滑铜护套","category":"metal","thermal_resistivity":0.0025,"electrical_resistivity_20":0.000000017241,"temperature_coefficient_20":0.00393},
+    {"id":"material/pvc","label":"PVC","category":"polymer","thermal_resistivity":3.5},
+    {"id":"material/soil","label":"均匀原土","category":"soil","thermal_resistivity":1.2},
+    {"id":"material/duct","label":"圆管","category":"duct","thermal_resistivity":6.0}
+  ],
+  "cable_types":[{"id":"cable_type/test","label":"合成六层单芯","construction":"single_core",
+    "rating":{"u0":22000,"max_conductor_temperature":{"normal":363.15}},
+    "cores":[{"id":"core/one","x":0,"z":0,"conductor":{"material":"material/cu","form":"stranded_round","nominal_area":0.000507,"diameter":0.027,"r20":0.000034},
+      "layers":[{"role":"conductor_screen","material":"material/semicon","thickness":0.0013},
+                {"role":"insulation","material":"material/xlpe","thickness":0.0114},
+                {"role":"insulation_screen","material":"material/semicon","thickness":0.00076},
+                {"role":"metallic_sheath","material":"material/sheath","thickness":0.001,"form":"smooth"},
+                {"role":"oversheath","material":"material/pvc","thickness":0.0028}]}],"common_layers":[]}],
+  "circuits":[{"id":"circuit/one","label":"三相回路","system":{"kind":"ac_three_phase","frequency":50},"cable_type":"cable_type/test",
+    "cables":[{"id":"cable/A","phase":"A"},{"id":"cable/B","phase":"B"},{"id":"cable/C","phase":"C"}],
+    "bonding":{"kind":"both_ends","minor_section_lengths":[],"transposed":false}}],
+  "sections":[{"id":"section/ground","label":"三根平排","kind":"ground","length":1,
+    "medium":{"material":"material/soil","surface_temperature":293.15},"enclosures":[],"soil_layers":[],"backfill":null,
+    "placements":[{"cable":"cable/A","x":-0.3,"z":-1},{"cable":"cable/B","x":0,"z":-1},{"cable":"cable/C","x":0.3,"z":-1}]}],
+  "load_cases":[{"id":"load/steady","kind":"steady","currents":{"circuit/one":400},"profile":{},"base_current":{}}],
+  "criteria":{"max_conductor_temperature":363.15},
+  "provenance":{"all":{"kind":"demo","reference":"本插件显式构造的合成对照，所有参数独立给定，不是T10电缆或标准算例","reviewed":false}}
+}

@@ -1,0 +1,26 @@
+{
+  "id":"thermal-cywinski",
+  "citation":{"id":"E02","title":"A Multiphysics Analysis of Coupled Electromagnetic-Thermal Phenomena in Cable Lines","authors":"Artur Cywiński; Krzysztof Chwastek","year":2021,"doi":"10.3390/en14072008","url":"https://www.mdpi.com/1996-1073/14/7/2008","local_pdf":".data/papers/thermal-c/cywinski-chwastek-2021.pdf"},
+  "scope":"单根YAKXS 1×240的名义几何、发表定功率、已标定h与辐射的二维热子模型；不是ICEPACK自然对流场或完整耦合复现。",
+  "missing_inputs":[],
+  "frozen_inputs":[
+    {"paths":["cables/0/layers/*/outer_radius_m"],"source":"Table 1","pdf_page":5,"printed_page":5,"note":"明确选择论文名义外径24.8 mm、XLPE/PVC各1.7 mm，推导几何导体半径9.0 mm，非由240 mm²反推。实测外径25.77 mm与名义值不同，未混入名义模型。"},
+    {"paths":["cables/0/layers/*/k_w_m_k","cables/0/layers/0/fixed_heat_w_m","environment/boundaries/surface"],"source":"ICEPACK modeling assumptions","pdf_page":10,"printed_page":10,"note":"Al237、XLPE0.52、PVC0.17 W/(mK)，每cm损耗0.557 W=55.7 W/m，辐射率0.94，环境26.1°C。"},
+    {"paths":["environment/boundaries/surface/h_w_m2_k"],"source":"calibrated coefficient paragraph","pdf_page":11,"printed_page":11,"note":"h=10.2 W/(m²K)来自测量/模型标定；不同于直接解自然对流空气场，不能称独立实验验证。"}
+  ],
+  "input":{"schema_version":"cablesim.thermal-model/1","cables":[{"uid":"cable/yakxs","circuit":"circuit/single","x_m":0,"z_m":0,
+    "layers":[{"uid":"layer/al","role":"conductor","outer_radius_m":0.009,"k_w_m_k":237,"fixed_heat_w_m":55.7},
+              {"uid":"layer/xlpe","role":"insulation","outer_radius_m":0.0107,"k_w_m_k":0.52,"fixed_heat_w_m":0},
+              {"uid":"layer/pvc","role":"oversheath","outer_radius_m":0.0124,"k_w_m_k":0.17,"fixed_heat_w_m":0}],
+    "current_a":0,"electrical":null,"prescribed_core_temperature_k":null,"temperature_limit_k":363.15,"duct":null}],
+    "environment":{"kind":"isolated_cables","background":null,"soil_layers":[],"backfills":[],"boundaries":{"surface":{"kind":"convection","temperature_k":299.25,"h_w_m2_k":10.2,"emissivity":0.94}}},
+    "provenance":{"all":{"doi":"10.3390/en14072008","pages":[5,10,11]}},
+    "assumptions":["选择Table1名义几何，不声称与实测直径一致","采用发表定功率55.7 W/m，不把未知运行温度下实测电阻当R20","h和发射率为原文已标定参数；仅局部对环境辐射，不求CFD"]},
+  "parameters":{"controls":{"operation":"temperature","mesh_size_m":0.0004,"far_mesh_size_m":0.002,"mesh_transition_m":0.04,"max_nodes":60000,"tolerance_k":0.000001,"max_iterations":150,"relaxation":0.5,"current_upper_a":1000,"current_tolerance_a":0.01,"rated_circuit":null}},
+  "mesh_sizes_m":[0.0008,0.0004,0.0002],
+  "targets":[
+    {"id":"core-temperature","quantity":"conductor_max_temperature_k","entity":"cable/yakxs","unit":"K","reference":352.35,"tolerance":{"absolute":1.0,"source":"预先选定1 K温度差用于检查等效边界模型；超差保留，不表述为完整CFD复现成功"},"source":{"figure":12,"pdf_page":11,"printed_page":11}},
+    {"id":"surface-mean","quantity":"interface_nodal_mean_k","entity":"cable/yakxs","layer_uid":"layer/pvc","unit":"K","reference":337.9,"comparison_allowed":false,"comparison_reason":"原文只有上下两点温度，其算术中点不能冒充圆周平均；仅展示差异，不验收。","tolerance":null,"source":{"figure":12,"pdf_page":11,"printed_page":11,"derived":"(61.6+67.9)/2+273.15"}}
+  ],
+  "variants":[{"id":"nominal-fixed-loss","input_changes":[],"target_changes":[]}]
+}

@@ -1,0 +1,9 @@
+{
+  "id":"thermal-nahman",
+  "citation":{"id":"T04","title":"Determination of the current carrying capacity of cables using the finite element method","authors":"J. Nahman; M. Tanaskovic","year":2002,"doi":"10.1016/S0378-7796(02)00003-2","url":"https://doi.org/10.1016/S0378-7796(02)00003-2"},
+  "scope":"110 kV沟槽/回填稳态热工况；仅有题录与摘要，未取得可读原文。",
+  "frozen_inputs":[],
+  "missing_inputs":[
+    {"path":"primary_fulltext","source":"出版社/Crossref原始记录；期刊61(2),109–117","reason":"公开读取返回出版社外壳，text-mining端点未返回正文；没有可核图表","impact":"几何、物性、热源、边界、工况与目标均不可冻结，不能求解"}
+  ]
+}
