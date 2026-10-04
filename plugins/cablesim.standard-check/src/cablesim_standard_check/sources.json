@@ -1,0 +1,37 @@
+{
+  "mv1": {
+    "standard": "GB/T 12706.1—2020",
+    "file_name": "GBT12706.1-2020 额定电压1 kV(Um=1.2 kV)到35 kV(Um=40.5 kV)挤包绝缘电力电缆及附件 第1部分：额定电压1 kV(Um=1.2 kV)和3 kV(Um=3.6 kV)电缆.pdf",
+    "sha256": "9c398e261e5b88d24db5f0ca5a698402bc25eab6e4da0de063ebd4cd7790f6f1",
+    "page_offset": 6,
+    "status": "original-verified"
+  },
+  "mv2": {
+    "standard": "GB/T 12706.2—2020",
+    "file_name": "GBT12706.2-2020 额定电压1 kV(Um=1.2 kV)到35 kV(Um=40.5 kV)挤包绝缘电力电缆及附件 第2部分：额定电压6 kV(Um=7.2kV)到30 kV(Um=36 kV)电缆.pdf",
+    "sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d",
+    "page_offset": 8,
+    "status": "original-verified"
+  },
+  "mv3": {
+    "standard": "GB/T 12706.3—2020",
+    "file_name": "GBT12706.3-2020 额定电压1 kV(Um=1.2 kV)到35 kV(Um=40.5 kV)挤包绝缘电力电缆及附件 第3部分：额定电压35 kV(Um=40.5 kV)电缆.pdf",
+    "sha256": "4b2cca105c903cf4fed10b7f06cced06b834da1561170f1d9be96eb67ad0e3bb",
+    "page_offset": 5,
+    "status": "original-verified"
+  },
+  "hv": {
+    "standard": "GB/T 11017.2—2024",
+    "file_name": "GBT+11017.2-2024.pdf",
+    "sha256": "5a9ecebbedf59c0b99d44c4b3520147d8bd08208ff2b7b6f338cdbbe5628b89b",
+    "page_offset": 6,
+    "status": "original-verified"
+  },
+  "conductor": {
+    "standard": "GB/T 3956—2008",
+    "file_name": "GB-T 3956-2008 电缆的导体.pdf",
+    "sha256": "b9a118e1282b4eeee6ec6ae4653e8c80e0a42beee0df5bf84360c4876a856939",
+    "page_offset": 3,
+    "status": "original-verified"
+  }
+}

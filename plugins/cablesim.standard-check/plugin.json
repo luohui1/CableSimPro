@@ -1,0 +1,92 @@
+{
+  "schema": "cablesim.plugin/2",
+  "id": "cablesim.standard-check",
+  "version": "0.1.0",
+  "name": "产品标准尺寸核对",
+  "icon": "assets/icon.svg",
+  "description": "按已核验 GB 产品标准核对结构尺寸和导体 R₂₀，逐条记录条款、余量、数据缺项与未覆盖范围。",
+  "publisher": {
+    "id": "cablesim",
+    "name": "CableSimPro"
+  },
+  "host_api": {
+    "major": 2,
+    "min_minor": 1
+  },
+  "license": {
+    "spdx": "LicenseRef-Project-Undeclared",
+    "review_required": false
+  },
+  "platforms": [
+    "windows-x64",
+    "linux-x64",
+    "darwin-arm64",
+    "darwin-x64"
+  ],
+  "runtime": {
+    "kind": "python",
+    "python": ">=3.11,<3.14",
+    "entry": "src/cablesim_standard_check/main.py"
+  },
+  "permissions": [
+    "study.run",
+    "artifact.write"
+  ],
+  "dependencies": [],
+  "resources": {
+    "timeout_s": 10,
+    "memory_mb": 128,
+    "network": "none"
+  },
+  "capabilities": [
+    {
+      "kind": "method",
+      "id": "dimensions",
+      "title": "GB 产品标准结构尺寸与电阻核对",
+      "method_version": "GB-DIMENSIONS-0.1.0",
+      "analysis": "standard_check",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.standard-failed-count",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.standard-check",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "仅已核验的 XLPE 表内额定电压及单芯 / 三芯结构；第 2 类导体 R₂₀ 已核验条目，其他材料、导体类别或表外值保留未覆盖。",
+        "GB/T 11017.1—2024 和 11017.2—2014 原文缺失；其最薄点与中压铜丝间隙算法不由其他版本代替。",
+        "第 1 部分内衬层、护套、最薄点及成缆分支尚未覆盖；附加包带和未知构造阻止完整假定直径链。",
+        "设计输入、厂家上限与实测值分别标记；缺少短路故障要求时金属屏蔽截面不作合格判定。本核对不批准要求、型号或产品认证。"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "assets/icon.svg",
+      "sha256": "a66fe11c418b7301313e9cf084c6832305f84039c6c0860831cfb9282985c9c9",
+      "size_bytes": 243
+    },
+    {
+      "path": "src/cablesim_standard_check/main.py",
+      "sha256": "c66b78e991daa34bae558b8e063be3cc2202b05a1ecf140543a238292f6ce67d",
+      "size_bytes": 38725
+    },
+    {
+      "path": "src/cablesim_standard_check/sources.json",
+      "sha256": "229b09e8921bb3605c3230e9ed48974a7d98ebb5a4a7a3c1a4007128ad1921ff",
+      "size_bytes": 1607
+    }
+  ]
+}

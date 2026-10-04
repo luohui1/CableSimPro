@@ -1,0 +1,700 @@
+[
+  {
+    "case_id": "jiangnan-10kv",
+    "source_url": "http://www.wxjncable.com.cn/products-center/8-715kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/",
+    "published_approximate_od_mm": 73.3,
+    "coverage_note": "缺失的半导电、屏蔽、内衬、铠装或护套数值未补造；R20 条件待厂家确认，试验数据未提供。",
+    "input": {
+      "schema_version": "cablesim.domain/1",
+      "name": "江南 YJV22 8.7/15 kV 3×240 · 资料核对",
+      "materials": [
+        {
+          "id": "material/cu",
+          "label": "铜 · 镀层待确认",
+          "category": "conductor",
+          "standard_kind": "copper_bare"
+        },
+        {
+          "id": "material/xlpe",
+          "label": "XLPE",
+          "category": "insulation",
+          "standard_kind": "XLPE"
+        },
+        {
+          "id": "material/pvc",
+          "label": "外护套材料 · 资料待补",
+          "category": "polymer",
+          "standard_kind": "PVC"
+        }
+      ],
+      "cable_types": [
+        {
+          "id": "cable_type/public",
+          "label": "江南 YJV22 8.7/15 kV 3×240 · 资料核对",
+          "construction": "three_core",
+          "rating": {
+            "u0": 8700,
+            "u": 15000,
+            "um": null,
+            "max_conductor_temperature": {
+              "normal": 363.15
+            }
+          },
+          "cores": [
+            {
+              "id": "core/public0",
+              "conductor": {
+                "material": "material/cu",
+                "form": "unspecified",
+                "nominal_area": 0.00023999999999999998,
+                "diameter": 0.017480774889473263,
+                "conductor_class": 2,
+                "r20": null,
+                "r20_basis": null
+              },
+              "layers": [
+                {
+                  "role": "insulation",
+                  "material": "material/xlpe",
+                  "thickness": 0.0045
+                }
+              ],
+              "x": 0.015288682510787273,
+              "z": 0
+            },
+            {
+              "id": "core/public1",
+              "conductor": {
+                "material": "material/cu",
+                "form": "unspecified",
+                "nominal_area": 0.00023999999999999998,
+                "diameter": 0.017480774889473263,
+                "conductor_class": 2,
+                "r20": null,
+                "r20_basis": null
+              },
+              "layers": [
+                {
+                  "role": "insulation",
+                  "material": "material/xlpe",
+                  "thickness": 0.0045
+                }
+              ],
+              "x": -0.007644341255393633,
+              "z": 0.013240387444736634
+            },
+            {
+              "id": "core/public2",
+              "conductor": {
+                "material": "material/cu",
+                "form": "unspecified",
+                "nominal_area": 0.00023999999999999998,
+                "diameter": 0.017480774889473263,
+                "conductor_class": 2,
+                "r20": null,
+                "r20_basis": null
+              },
+              "layers": [
+                {
+                  "role": "insulation",
+                  "material": "material/xlpe",
+                  "thickness": 0.0045
+                }
+              ],
+              "x": -0.0076443412553936435,
+              "z": -0.013240387444736629
+            }
+          ],
+          "common_layers": []
+        }
+      ],
+      "circuits": [
+        {
+          "id": "circuit/public",
+          "label": "型号查看",
+          "system": {
+            "kind": "ac_three_phase",
+            "frequency": 50,
+            "voltage": 15000
+          },
+          "cable_type": "cable_type/public",
+          "cables": [
+            {
+              "id": "cable/public",
+              "phase": "L1L2L3",
+              "parallel_index": 1
+            }
+          ],
+          "bonding": {
+            "kind": "unspecified",
+            "minor_section_lengths": [],
+            "transposed": false
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "section/public",
+          "label": "资料结构查看",
+          "kind": "air",
+          "length": 1,
+          "medium": {},
+          "enclosures": [],
+          "placements": [
+            {
+              "cable": "cable/public",
+              "x": 0,
+              "z": 0
+            }
+          ],
+          "layout_template": {}
+        }
+      ],
+      "load_cases": [
+        {
+          "id": "load/public",
+          "kind": "steady",
+          "currents": {
+            "circuit/public": 0
+          }
+        }
+      ],
+      "criteria": {},
+      "provenance": {
+        "/cable_types/cable_type~1public/cores/core~1public0/layers/insulation/thickness": {
+          "kind": "manufacturer",
+          "reference": "http://www.wxjncable.com.cn/products-center/8-715kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/ · 240 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/conductor/nominal_area": {
+          "kind": "manufacturer",
+          "reference": "http://www.wxjncable.com.cn/products-center/8-715kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/ · 240 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/conductor/conductor_class": {
+          "kind": "user",
+          "reference": "核对条件：第 2 类裸铜导体；需用制造商构造与镀层资料确认，不作为厂家事实",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/conductor/diameter": {
+          "kind": "derived",
+          "reference": "标称截面等面积圆包络；用于资料草稿布局，不是厂家导体外径",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/x": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/z": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public1/layers/insulation/thickness": {
+          "kind": "manufacturer",
+          "reference": "http://www.wxjncable.com.cn/products-center/8-715kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/ · 240 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public1/conductor/nominal_area": {
+          "kind": "manufacturer",
+          "reference": "http://www.wxjncable.com.cn/products-center/8-715kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/ · 240 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public1/conductor/conductor_class": {
+          "kind": "user",
+          "reference": "核对条件：第 2 类裸铜导体；需用制造商构造与镀层资料确认，不作为厂家事实",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public1/conductor/diameter": {
+          "kind": "derived",
+          "reference": "标称截面等面积圆包络；用于资料草稿布局，不是厂家导体外径",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public1/x": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public1/z": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public2/layers/insulation/thickness": {
+          "kind": "manufacturer",
+          "reference": "http://www.wxjncable.com.cn/products-center/8-715kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/ · 240 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public2/conductor/nominal_area": {
+          "kind": "manufacturer",
+          "reference": "http://www.wxjncable.com.cn/products-center/8-715kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/ · 240 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public2/conductor/conductor_class": {
+          "kind": "user",
+          "reference": "核对条件：第 2 类裸铜导体；需用制造商构造与镀层资料确认，不作为厂家事实",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public2/conductor/diameter": {
+          "kind": "derived",
+          "reference": "标称截面等面积圆包络；用于资料草稿布局，不是厂家导体外径",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public2/x": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public2/z": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/materials/material~1cu/standard_kind": {
+          "kind": "user",
+          "reference": "核对条件：第 2 类裸铜导体；需用制造商构造与镀层资料确认，不作为厂家事实",
+          "reviewed": false
+        }
+      }
+    },
+    "parameters": {
+      "cable_type_id": "cable_type/public"
+    }
+  },
+  {
+    "case_id": "jiangnan-35kv",
+    "source_url": "http://www.wxjncable.com.cn/products-center/2635kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/",
+    "published_approximate_od_mm": 112.5,
+    "coverage_note": "缺失的半导电、屏蔽、内衬、铠装或护套数值未补造；R20 条件待厂家确认，试验数据未提供。",
+    "input": {
+      "schema_version": "cablesim.domain/1",
+      "name": "江南 YJV22 26/35 kV 3×240 · 资料核对",
+      "materials": [
+        {
+          "id": "material/cu",
+          "label": "铜 · 镀层待确认",
+          "category": "conductor",
+          "standard_kind": "copper_bare"
+        },
+        {
+          "id": "material/xlpe",
+          "label": "XLPE",
+          "category": "insulation",
+          "standard_kind": "XLPE"
+        },
+        {
+          "id": "material/pvc",
+          "label": "外护套材料 · 资料待补",
+          "category": "polymer",
+          "standard_kind": "PVC"
+        }
+      ],
+      "cable_types": [
+        {
+          "id": "cable_type/public",
+          "label": "江南 YJV22 26/35 kV 3×240 · 资料核对",
+          "construction": "three_core",
+          "rating": {
+            "u0": 26000,
+            "u": 35000,
+            "um": null,
+            "max_conductor_temperature": {
+              "normal": 363.15
+            }
+          },
+          "cores": [
+            {
+              "id": "core/public0",
+              "conductor": {
+                "material": "material/cu",
+                "form": "unspecified",
+                "nominal_area": 0.00023999999999999998,
+                "diameter": 0.017480774889473263,
+                "conductor_class": 2,
+                "r20": null,
+                "r20_basis": null
+              },
+              "layers": [
+                {
+                  "role": "insulation",
+                  "material": "material/xlpe",
+                  "thickness": 0.0105
+                }
+              ],
+              "x": 0.022216885741062783,
+              "z": 0
+            },
+            {
+              "id": "core/public1",
+              "conductor": {
+                "material": "material/cu",
+                "form": "unspecified",
+                "nominal_area": 0.00023999999999999998,
+                "diameter": 0.017480774889473263,
+                "conductor_class": 2,
+                "r20": null,
+                "r20_basis": null
+              },
+              "layers": [
+                {
+                  "role": "insulation",
+                  "material": "material/xlpe",
+                  "thickness": 0.0105
+                }
+              ],
+              "x": -0.011108442870531386,
+              "z": 0.019240387444736634
+            },
+            {
+              "id": "core/public2",
+              "conductor": {
+                "material": "material/cu",
+                "form": "unspecified",
+                "nominal_area": 0.00023999999999999998,
+                "diameter": 0.017480774889473263,
+                "conductor_class": 2,
+                "r20": null,
+                "r20_basis": null
+              },
+              "layers": [
+                {
+                  "role": "insulation",
+                  "material": "material/xlpe",
+                  "thickness": 0.0105
+                }
+              ],
+              "x": -0.011108442870531402,
+              "z": -0.019240387444736627
+            }
+          ],
+          "common_layers": []
+        }
+      ],
+      "circuits": [
+        {
+          "id": "circuit/public",
+          "label": "型号查看",
+          "system": {
+            "kind": "ac_three_phase",
+            "frequency": 50,
+            "voltage": 35000
+          },
+          "cable_type": "cable_type/public",
+          "cables": [
+            {
+              "id": "cable/public",
+              "phase": "L1L2L3",
+              "parallel_index": 1
+            }
+          ],
+          "bonding": {
+            "kind": "unspecified",
+            "minor_section_lengths": [],
+            "transposed": false
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "section/public",
+          "label": "资料结构查看",
+          "kind": "air",
+          "length": 1,
+          "medium": {},
+          "enclosures": [],
+          "placements": [
+            {
+              "cable": "cable/public",
+              "x": 0,
+              "z": 0
+            }
+          ],
+          "layout_template": {}
+        }
+      ],
+      "load_cases": [
+        {
+          "id": "load/public",
+          "kind": "steady",
+          "currents": {
+            "circuit/public": 0
+          }
+        }
+      ],
+      "criteria": {},
+      "provenance": {
+        "/cable_types/cable_type~1public/cores/core~1public0/layers/insulation/thickness": {
+          "kind": "manufacturer",
+          "reference": "http://www.wxjncable.com.cn/products-center/2635kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/ · 240 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/conductor/nominal_area": {
+          "kind": "manufacturer",
+          "reference": "http://www.wxjncable.com.cn/products-center/2635kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/ · 240 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/conductor/conductor_class": {
+          "kind": "user",
+          "reference": "核对条件：第 2 类裸铜导体；需用制造商构造与镀层资料确认，不作为厂家事实",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/conductor/diameter": {
+          "kind": "derived",
+          "reference": "标称截面等面积圆包络；用于资料草稿布局，不是厂家导体外径",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/x": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/z": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public1/layers/insulation/thickness": {
+          "kind": "manufacturer",
+          "reference": "http://www.wxjncable.com.cn/products-center/2635kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/ · 240 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public1/conductor/nominal_area": {
+          "kind": "manufacturer",
+          "reference": "http://www.wxjncable.com.cn/products-center/2635kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/ · 240 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public1/conductor/conductor_class": {
+          "kind": "user",
+          "reference": "核对条件：第 2 类裸铜导体；需用制造商构造与镀层资料确认，不作为厂家事实",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public1/conductor/diameter": {
+          "kind": "derived",
+          "reference": "标称截面等面积圆包络；用于资料草稿布局，不是厂家导体外径",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public1/x": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public1/z": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public2/layers/insulation/thickness": {
+          "kind": "manufacturer",
+          "reference": "http://www.wxjncable.com.cn/products-center/2635kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/ · 240 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public2/conductor/nominal_area": {
+          "kind": "manufacturer",
+          "reference": "http://www.wxjncable.com.cn/products-center/2635kv-yjv22-copper-conductor-xlpe-insulated-pvc-sheathed-steel-tape-armoured-power-cable/ · 240 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public2/conductor/conductor_class": {
+          "kind": "user",
+          "reference": "核对条件：第 2 类裸铜导体；需用制造商构造与镀层资料确认，不作为厂家事实",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public2/conductor/diameter": {
+          "kind": "derived",
+          "reference": "标称截面等面积圆包络；用于资料草稿布局，不是厂家导体外径",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public2/x": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public2/z": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/materials/material~1cu/standard_kind": {
+          "kind": "user",
+          "reference": "核对条件：第 2 类裸铜导体；需用制造商构造与镀层资料确认，不作为厂家事实",
+          "reviewed": false
+        }
+      }
+    },
+    "parameters": {
+      "cable_type_id": "cable_type/public"
+    }
+  },
+  {
+    "case_id": "qifan-110kv",
+    "source_url": "https://www.qifancablegroup.com/products/64-110125kv-high-voltage-xlpe-insulation-power-cable/",
+    "published_approximate_od_mm": 102,
+    "coverage_note": "缺失的半导电、屏蔽、内衬、铠装或护套数值未补造；R20 条件待厂家确认，试验数据未提供。",
+    "input": {
+      "schema_version": "cablesim.domain/1",
+      "name": "起帆 CU/XLPE/CAS/PVC 64/110 kV 1×800 · 资料核对",
+      "materials": [
+        {
+          "id": "material/cu",
+          "label": "铜 · 镀层待确认",
+          "category": "conductor",
+          "standard_kind": "copper_bare"
+        },
+        {
+          "id": "material/xlpe",
+          "label": "XLPE",
+          "category": "insulation",
+          "standard_kind": "XLPE"
+        },
+        {
+          "id": "material/pvc",
+          "label": "外护套材料 · 资料待补",
+          "category": "polymer",
+          "standard_kind": "PVC"
+        }
+      ],
+      "cable_types": [
+        {
+          "id": "cable_type/public",
+          "label": "起帆 CU/XLPE/CAS/PVC 64/110 kV 1×800 · 资料核对",
+          "construction": "single_core",
+          "rating": {
+            "u0": 64000,
+            "u": 110000,
+            "um": null,
+            "max_conductor_temperature": {
+              "normal": 363.15
+            }
+          },
+          "cores": [
+            {
+              "id": "core/public0",
+              "conductor": {
+                "material": "material/cu",
+                "form": "stranded_round_compacted",
+                "nominal_area": 0.0007999999999999999,
+                "diameter": 0.034,
+                "conductor_class": 2,
+                "r20": null,
+                "r20_basis": null
+              },
+              "layers": [
+                {
+                  "role": "insulation",
+                  "material": "material/xlpe",
+                  "thickness": 0.016
+                }
+              ],
+              "x": 0,
+              "z": 0
+            }
+          ],
+          "common_layers": [
+            {
+              "role": "oversheath",
+              "material": "material/pvc",
+              "thickness": 0.0045
+            }
+          ]
+        }
+      ],
+      "circuits": [
+        {
+          "id": "circuit/public",
+          "label": "型号查看",
+          "system": {
+            "kind": "ac_single_phase",
+            "frequency": 50,
+            "voltage": 110000
+          },
+          "cable_type": "cable_type/public",
+          "cables": [
+            {
+              "id": "cable/public",
+              "phase": "A",
+              "parallel_index": 1
+            }
+          ],
+          "bonding": {
+            "kind": "unspecified",
+            "minor_section_lengths": [],
+            "transposed": false
+          }
+        }
+      ],
+      "sections": [
+        {
+          "id": "section/public",
+          "label": "资料结构查看",
+          "kind": "air",
+          "length": 1,
+          "medium": {},
+          "enclosures": [],
+          "placements": [
+            {
+              "cable": "cable/public",
+              "x": 0,
+              "z": 0
+            }
+          ],
+          "layout_template": {}
+        }
+      ],
+      "load_cases": [
+        {
+          "id": "load/public",
+          "kind": "steady",
+          "currents": {
+            "circuit/public": 0
+          }
+        }
+      ],
+      "criteria": {},
+      "provenance": {
+        "/cable_types/cable_type~1public/cores/core~1public0/layers/insulation/thickness": {
+          "kind": "manufacturer",
+          "reference": "https://www.qifancablegroup.com/products/64-110125kv-high-voltage-xlpe-insulation-power-cable/ · 800 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/conductor/nominal_area": {
+          "kind": "manufacturer",
+          "reference": "https://www.qifancablegroup.com/products/64-110125kv-high-voltage-xlpe-insulation-power-cable/ · 800 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/conductor/conductor_class": {
+          "kind": "user",
+          "reference": "核对条件：第 2 类裸铜导体；需用制造商构造与镀层资料确认，不作为厂家事实",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/conductor/diameter": {
+          "kind": "manufacturer",
+          "reference": "https://www.qifancablegroup.com/products/64-110125kv-high-voltage-xlpe-insulation-power-cable/ · 800 mm² 行近似导体直径 34.0 mm",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/x": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/cores/core~1public0/z": {
+          "kind": "derived",
+          "reference": "按已知绝缘与等面积包络排列的资料草稿位置；缺失结构未补厚度",
+          "reviewed": false
+        },
+        "/materials/material~1cu/standard_kind": {
+          "kind": "user",
+          "reference": "核对条件：第 2 类裸铜导体；需用制造商构造与镀层资料确认，不作为厂家事实",
+          "reviewed": false
+        },
+        "/cable_types/cable_type~1public/common_layers/oversheath/thickness": {
+          "kind": "manufacturer",
+          "reference": "https://www.qifancablegroup.com/products/64-110125kv-high-voltage-xlpe-insulation-power-cable/ · 800 mm² 产品表；公开设计值，未提供试验记录",
+          "reviewed": false
+        }
+      }
+    },
+    "parameters": {
+      "cable_type_id": "cable_type/public"
+    }
+  }
+]
