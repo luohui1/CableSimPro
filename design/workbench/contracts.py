@@ -9,6 +9,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+from backend.domain.models import DomainDocument
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS = {
@@ -55,15 +56,23 @@ def contracts(research):
                 fields['duct'] = {'type': 'object', 'properties': {k: schema['$defs']['Duct']['properties'][k]
                                   for k in ('u', 'v', 'y_per_k', 'initial_mean_air_temperature_c')},
                                   'required': ['u', 'v', 'y_per_k', 'initial_mean_air_temperature_c']}
-                parameters.update(properties=fields, required=[k for k in fields if k != 'duct'], **{'$defs': schema['$defs']})
-            encoded = json.dumps(schema, sort_keys=True, ensure_ascii=False).encode()
-            result.append({'method': pin, 'input_schema': cap['input_schema'], 'schema': schema,
+                fields['per_cable_losses'] = {'type':'object', 'additionalProperties': {'type':'object','properties': {
+                    'ac_extra_factor': {'type':'number','minimum':0}, 'lambda1': {'type':'number','minimum':0}},
+                    'required':['ac_extra_factor','lambda1'], 'additionalProperties':False}}
+                fields['loss_input_source'] = {'type':'string'}
+                fields['target_circuit_id'] = {'type':'string'}
+                fields['reference_basis'] = {'type':'string','enum':['iec2023','tb880_reference'],'default':'iec2023'}
+                parameters.update(properties=fields, required=[k for k in fields if k not in ('duct','per_cable_losses','loss_input_source','target_circuit_id','reference_basis')], **{'$defs': schema['$defs']})
+            primary = DomainDocument.model_json_schema() if key[0] == 'cablesim.iec60287' else schema
+            encoded = json.dumps(primary, sort_keys=True, ensure_ascii=False).encode()
+            result.append({'method': pin, 'input_schema': cap['input_schema'], 'schema': primary,
+                           'standalone_schema': schema,
                            'parameter_schema': parameters,
                            'schema_digest': sha256(encoded).hexdigest(),
                            'source': path.relative_to(ROOT).as_posix(),
                            'source_sha256': sha256(path.read_bytes()).hexdigest(),
                            'input_sources': ['domain'] if key[0] == 'cablesim.thermal-network' else ['domain', 'study'],
-                           'tasks': ['rating', 'operating', 'target'] if key[0] == 'cablesim.thermal-network' else ['rating', 'target']})
+                           'tasks': ['rating', 'operating', 'target']})
     return result
 
 

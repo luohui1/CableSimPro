@@ -32,6 +32,7 @@ class Material(StrictModel):
     id: str = Field(pattern=r'^material/[A-Za-z0-9_-]+$')
     label: str
     category: Literal['conductor', 'semiconductor', 'insulation', 'metal', 'polymer', 'filler', 'soil', 'backfill', 'concrete', 'duct', 'fluid']
+    standard_kind: Literal['copper_bare', 'copper_coated', 'aluminium', 'lead', 'XLPE', 'PVC', 'EPR', 'HEPR', 'other'] | None = None
     thermal_resistivity: float | None = Field(default=None, gt=0)
     volumetric_heat_capacity: float | None = Field(default=None, gt=0)
     electrical_resistivity_20: float | None = Field(default=None, gt=0)
@@ -52,6 +53,8 @@ class Conductor(StrictModel):
     nominal_area: float = Field(gt=0)
     diameter: float = Field(gt=0)
     r20: float | None = Field(default=None, gt=0)
+    conductor_class: Literal[1, 2, 5, 6] | None = None
+    r20_basis: Literal['design', 'measurement', 'manufacturer_limit'] | None = None
     inner_diameter: float | None = Field(default=None, ge=0)
     segments: int | None = Field(default=None, ge=1)
     wire_count: int | None = Field(default=None, ge=1)
@@ -73,6 +76,24 @@ class Layer(StrictModel):
     overlap: float | None = Field(default=None, ge=0, lt=1)
     tape_width: float | None = Field(default=None, gt=0)
     lay_direction: Literal['left', 'right'] | None = None
+    minimum_thickness: float | None = Field(default=None, gt=0, description='最薄点实测值 / m；不以标称厚度代替')
+    maximum_thickness: float | None = Field(default=None, gt=0, description='最大厚度实测值 / m')
+    mean_thickness: float | None = Field(default=None, gt=0, description='厚度平均实测值 / m；不以标称厚度代替')
+    nominal_tape_thickness: float | None = Field(default=None, gt=0, description='单带标称厚度 / m；区别于层的径向厚度')
+    tape_count: int | None = Field(default=None, ge=1, le=100)
+    tape_application: Literal['helical_overlap', 'two_tape_gap', 'longitudinal'] | None = None
+    minimum_overlap: float | None = Field(default=None, ge=0, lt=1)
+    reverse_binder_thickness: float | None = Field(default=None, ge=0)
+    reverse_binder_width: float | None = Field(default=None, gt=0)
+    reverse_binder_count: int | None = Field(default=None, ge=1)
+    screen_inner_diameter: float | None = Field(default=None, gt=0)
+    minimum_tape_thickness: float | None = Field(default=None, gt=0)
+
+    @model_validator(mode='after')
+    def measurements_valid(self):
+        if self.minimum_thickness is not None and self.maximum_thickness is not None and self.minimum_thickness > self.maximum_thickness:
+            raise ValueError('最薄点不得大于最大实测厚度')
+        return self
 
 
 class Core(StrictModel):
@@ -191,7 +212,7 @@ class Section(StrictModel):
 class Load(StrictModel):
     id: str = Field(pattern=r'^load/[A-Za-z0-9_-]+$')
     kind: Literal['steady', 'cyclic', 'emergency', 'short_circuit', 'time_series']
-    currents: dict[str, float] = Field(default_factory=dict)
+    currents: dict[str, float] = Field(default_factory=dict, description='SI 电流 A；回路 ID 为默认值，电缆 ID 为逐根覆盖值')
     profile: dict[str, Series] = Field(default_factory=dict)
     base_current: dict[str, float] = Field(default_factory=dict)
     duration: float | None = Field(default=None, gt=0)
@@ -274,8 +295,8 @@ class DomainDocument(StrictModel):
         circuits = {c.id for c in self.circuits}
         loads = {l.id for l in self.load_cases}
         for load in self.load_cases:
-            if not (set(load.currents) | set(load.profile) | set(load.base_current)) <= circuits:
-                raise ValueError('负荷引用未知回路')
+            if not set(load.currents) <= circuits | radii.keys() or not (set(load.profile) | set(load.base_current)) <= circuits:
+                raise ValueError('负荷引用未知回路或电缆')
             if any(v < 0 for v in [*load.currents.values(), *load.base_current.values()]):
                 raise ValueError('负荷电流不得为负')
             if load.kind == 'steady' and (not load.currents or load.profile):

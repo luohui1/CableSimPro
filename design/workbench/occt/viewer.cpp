@@ -57,6 +57,9 @@
 #include <chrono>
 #include <string>
 #include <vector>
+#include <array>
+#include <map>
+#include <TopExp_Explorer.hxx>
 
 using emscripten::val;
 namespace {
@@ -124,7 +127,15 @@ struct Part {
   double innerRadius,outerRadius,wireDiameter;
   bool fineEdges=false;
   bool meshDisplay=false;
+  gp_Trsf placement;
+  int sceneGroup=-1;
+  double sceneOpacity=1;
+  bool selectable=true;
 };
+struct SceneGroup {Bnd_Box bounds;int priority=0;std::string kind;};
+bool sceneMode=false;
+Bnd_Box sceneBounds;
+std::vector<SceneGroup> sceneGroups;
 Handle(OpenGl_GraphicDriver) driver;
 Handle(V3d_Viewer) viewer;
 Handle(V3d_View) view;
@@ -145,8 +156,55 @@ double diameter = 1, cableLength=1, yaw=0, elevation=.6154797, zoomLevel=1, panX
 
 void redraw() { if (!view.IsNull()) view->Redraw(); }
 double visibleLength(size_t i){return parts[i].length*(layout=="section"?sectionPosition:layout=="peel"?1.-static_cast<double>(i)/std::max<size_t>(1,parts.size()-1)*.55:1.);}
+TopoDS_Compound sceneContour(int group){
+  BRep_Builder builder;TopoDS_Compound edges;builder.MakeCompound(edges);
+  const gp_Vec sight(view->Camera()->Direction());
+  const double cut=cableLength*sectionPosition;
+  if(sceneGroups[group].kind=="cable"){
+    const Part* outer=nullptr;for(const auto& p:parts)if(p.sceneGroup==group&&(!outer||p.outerRadius>outer->outerRadius))outer=&p;
+    if(!outer)return edges;
+    const double end=layout=="section"?cut:outer->length;
+    gp_Vec localSight=sight;localSight.Transform(outer->placement.Inverted());
+    const double angle=std::atan2(localSight.Y(),localSight.X())+M_PI/2;
+    for(double z:{0.,end})builder.Add(edges,BRepBuilderAPI_MakeEdge(gp_Circ(gp_Ax2(gp_Pnt(0,0,z),gp_Dir(0,0,1)),outer->outerRadius)).Edge().Moved(TopLoc_Location(outer->placement)));
+    for(double sign:{-1.,1.}){const double x=sign*outer->outerRadius*std::cos(angle),y=sign*outer->outerRadius*std::sin(angle);builder.Add(edges,BRepBuilderAPI_MakeEdge(gp_Pnt(x,y,0),gp_Pnt(x,y,end)).Edge().Moved(TopLoc_Location(outer->placement)));}
+    return edges;
+  }
+  // Regions use the boundary of the actual display triangles, including voids.
+  // This contour is display-only; it never becomes measurement or export data.
+  struct Edge {gp_Pnt a,b;bool front=false,back=false;int count=0;};
+  std::map<std::array<long long,6>,Edge> boundary;
+  const auto keyPoint=[](const gp_Pnt& p){return std::array<long long,3>{std::llround(p.X()*1e5),std::llround(p.Y()*1e5),std::llround(p.Z()*1e5)};};
+  for(const auto& part:parts)if(part.sceneGroup==group){
+    for(TopExp_Explorer faces(part.shape,TopAbs_FACE);faces.More();faces.Next()){
+      TopLoc_Location location;const auto poly=BRep_Tool::Triangulation(TopoDS::Face(faces.Current()),location);if(poly.IsNull())continue;
+      const auto transform=part.placement*location.Transformation();
+      for(int i=1;i<=poly->NbTriangles();i++){
+        int ia,ib,ic;poly->Triangle(i).Get(ia,ib,ic);const std::array<gp_Pnt,3> ps={poly->Node(ia).Transformed(transform),poly->Node(ib).Transformed(transform),poly->Node(ic).Transformed(transform)};
+        const gp_Vec normal=gp_Vec(ps[0],ps[1]).Crossed(gp_Vec(ps[0],ps[2]));const bool front=normal.Dot(sight)<0;
+        for(int j=0;j<3;j++){const auto a=ps[j],b=ps[(j+1)%3];auto ka=keyPoint(a),kb=keyPoint(b);if(kb<ka)std::swap(ka,kb);std::array<long long,6> key;std::copy(ka.begin(),ka.end(),key.begin());std::copy(kb.begin(),kb.end(),key.begin()+3);auto& edge=boundary[key];edge.a=a;edge.b=b;edge.front|=front;edge.back|=!front;edge.count++;}
+        if(layout=="section"){
+          std::vector<gp_Pnt> crossings;for(int j=0;j<3;j++){const auto& a=ps[j];const auto& b=ps[(j+1)%3];if((a.Y()<cut)!=(b.Y()<cut)){const double f=(cut-a.Y())/(b.Y()-a.Y());crossings.emplace_back(a.X()+(b.X()-a.X())*f,cut,a.Z()+(b.Z()-a.Z())*f);}}
+          if(crossings.size()==2&&crossings[0].Distance(crossings[1])>1e-8)builder.Add(edges,BRepBuilderAPI_MakeEdge(crossings[0],crossings[1]).Edge());
+        }
+      }
+    }
+  }
+  for(const auto& [key,e]:boundary)if((e.front&&e.back)||e.count==1){
+    auto a=e.a,b=e.b;if(layout=="section"){if(a.Y()>cut&&b.Y()>cut)continue;if((a.Y()>cut)!=(b.Y()>cut)){const double f=(cut-a.Y())/(b.Y()-a.Y());const gp_Pnt p(a.X()+(b.X()-a.X())*f,cut,a.Z()+(b.Z()-a.Z())*f);if(a.Y()>cut)a=p;else b=p;}}
+    if(a.Distance(b)>1e-8)builder.Add(edges,BRepBuilderAPI_MakeEdge(a,b).Edge());
+  }
+  return edges;
+}
 void outline(Handle(AIS_Shape)& object,int& cached,double& cachedLength,int index,const Quantity_Color& color){
   if(index<0||static_cast<size_t>(index)>=parts.size()){if(!object.IsNull())context->Erase(object,false);cached=-1;return;}
+  if(sceneMode){
+    const int group=parts[index].sceneGroup;
+    if(group<0||static_cast<size_t>(group)>=sceneGroups.size())return;
+    if(!object.IsNull())context->Remove(object,false);
+    object=new AIS_Shape(sceneContour(group));object->SetDisplayMode(AIS_WireFrame);object->SetColor(color);object->SetWidth(1.5);object->Attributes()->SetLineAspect(new Prs3d_LineAspect(color,Aspect_TOL_SOLID,1.5));object->SetZLayer(Graphic3d_ZLayerId_Topmost);cached=group;
+    context->Display(object,false);context->Deactivate(object);return;
+  }
   const auto& p=parts[index];const double end=visibleLength(index);
   if(index!=cached||std::abs(cachedLength-end)>1e-6){
     if(!object.IsNull())context->Remove(object,false);
@@ -162,8 +220,9 @@ void outline(Handle(AIS_Shape)& object,int& cached,double& cachedLength,int inde
   gp_Trsf location;location.SetRotation(gp_Ax1(gp_Pnt(),gp_Dir(0,0,1)),heading+1.57079632679);
   context->SetLocation(object,TopLoc_Location(location));
 }
-void updateOutlines(){outline(selectedOutline,outlined,outlinedLength,active,selectedColor);outline(hoverOutline,hoverOutlined,hoverLength,interacting||hovered==active?-1:hovered,hoverColor);}
+void updateOutlines(){const bool same=hovered==active||sceneMode&&active>=0&&hovered>=0&&parts[hovered].sceneGroup==parts[active].sceneGroup;outline(selectedOutline,outlined,outlinedLength,active,selectedColor);outline(hoverOutline,hoverOutlined,hoverLength,interacting||same?-1:hovered,hoverColor);}
 void fineEdges(){
+  if(sceneMode)return;
   int leftX,leftY,rightX,rightY;view->Convert(-diameter/2,0,0,leftX,leftY);view->Convert(diameter/2,0,0,rightX,rightY);
   const double diameterPixels=std::hypot(rightX-leftX,rightY-leftY);
   for(auto& p:parts){const double pixels=diameterPixels*p.wireDiameter/diameter;
@@ -172,6 +231,7 @@ void fineEdges(){
 }
 void activateSelection(){
   for(size_t i=0;i<parts.size();++i){auto& p=parts[i];context->Deactivate(p.display);
+    if(sceneMode&&!p.selectable)continue;
     if(selectionKind=="diameter" && active>=0 && static_cast<int>(i)!=active)continue;
     if(context->IsDisplayed(p.display)){context->Activate(p.display,pickMode,true);
       if(selectionKind=="point")context->Activate(p.display,AIS_Shape::SelectionMode(TopAbs_VERTEX),true);
@@ -184,6 +244,12 @@ void applyLayout() {
     // Re-displaying an already visible actor with automatic activation disabled
     // applies selection mode -1. Layout changes must preserve its active modes.
     if(!context->IsDisplayed(p.display))context->Display(p.display,false);
+    if(sceneMode){
+      p.peel->SetEquation(gp_Pln(gp_Pnt(0,cableLength*sectionPosition,0),gp_Dir(0,-1,0)));
+      const int chosen=active>=0&&static_cast<size_t>(active)<parts.size()?parts[active].sceneGroup:-1;
+      const double opacity=chosen<0?p.sceneOpacity:p.sceneGroup==chosen?std::max(p.sceneOpacity,.35):std::min(p.sceneOpacity,.24);
+      p.peel->SetOn(layout=="section");context->SetTransparency(p.display,1.-opacity,false);context->SetLocation(p.display,TopLoc_Location(p.placement));continue;
+    }
     const double fraction=1.0-(static_cast<double>(i)/std::max<size_t>(1,parts.size()-1))*.55;
     p.peel->SetEquation(gp_Pln(gp_Pnt(0,0,p.length*(layout=="section"?sectionPosition:fraction)),gp_Dir(0,0,-1)));
     p.peel->SetOn(layout=="section" || (layout=="peel" && i>0));
@@ -198,15 +264,16 @@ void camera(double azimuth,double angle,double zoom,double px,double py,double d
   yaw=azimuth;elevation=std::clamp(angle,-.7,1.57079632679);zoomLevel=std::clamp(zoom,.65,3.);
   panX=std::clamp(px,-.28,.28);panY=std::clamp(py,-.28,.28);
   heading=directionHeading;
-  view->SetProj(std::cos(elevation)*std::cos(heading),std::cos(elevation)*std::sin(heading),std::sin(elevation));view->SetUp(0,1,0);
-  Bnd_Box box;box.Update(-diameter/2,-diameter/2,0,diameter/2,diameter/2,cableLength);
+  const double az=heading+(sceneMode?yaw:0);
+  view->SetProj(std::cos(elevation)*std::cos(az),std::cos(elevation)*std::sin(az),std::sin(elevation));view->SetUp(0,sceneMode&&std::abs(elevation-1.57079632679)>.001?0:1,sceneMode&&std::abs(elevation-1.57079632679)>.001?1:0);
+  Bnd_Box box;if(sceneMode)box=sceneBounds;else box.Update(-diameter/2,-diameter/2,0,diameter/2,diameter/2,cableLength);
   view->FitAll(box,.18,false);
   auto cam=view->Camera();cam->SetScale(cam->Scale()/zoomLevel);
-  const gp_Vec focusShift(0,0,layout=="section"?cableLength*(sectionPosition-1)/2:0);
+  const gp_Vec focusShift=sceneMode?gp_Vec(0,0,0):gp_Vec(0,0,layout=="section"?cableLength*(sectionPosition-1)/2:0);
   const gp_Dir direction=cam->Direction(),up=cam->Up();const gp_Vec right=gp_Vec(direction).Crossed(gp_Vec(up));
   const gp_Vec shift=focusShift+right*(panX*cam->Scale()*cam->Aspect())+gp_Vec(up)*(panY*cam->Scale());
   const auto eye=cam->Eye(),center=cam->Center();cam->SetEye(eye.Translated(shift));cam->SetCenter(center.Translated(shift));
-  for(auto& p:parts){gp_Trsf trsf;trsf.SetRotation(gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,0,1)),yaw);context->SetLocation(p.display,TopLoc_Location(trsf));}
+  for(auto& p:parts){if(sceneMode){context->SetLocation(p.display,TopLoc_Location(p.placement));continue;}gp_Trsf trsf;trsf.SetRotation(gp_Ax1(gp_Pnt(0,0,0),gp_Dir(0,0,1)),yaw);context->SetLocation(p.display,TopLoc_Location(trsf));}
   updateOutlines();fineEdges();
   redraw();
 }
@@ -244,6 +311,7 @@ void clearModel() {
   if (context.IsNull()) return;
   context->RemoveAll(false);parts.clear();active=hovered=outlined=hoverOutlined=-1;selectedOutline.Nullify();hoverOutline.Nullify();interacting=false;
   hasMeasureStart=false;pairMeasure=false;redraw();
+  sceneMode=false;sceneGroups.clear();sceneBounds.SetVoid();
 }
 
 double profileNow(){return std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();}
@@ -269,8 +337,8 @@ val displayPart(const TopoDS_Shape& shape,double r,double g,double b,bool metall
 }
 val addPart(const std::string& brep, double r, double g, double b, bool metallic, double length,double innerRadius,double outerRadius,double wireDiameter) {
   try {
-    // One temporary slot is needed for an atomic replacement of a 32-layer model.
-    if (context.IsNull() || brep.size()>8*1024*1024 || parts.size()>=33) return failure("模型或视口状态无效");
+    // One temporary slot is reserved for an atomic replacement.
+    if (context.IsNull() || brep.size()>8*1024*1024 || parts.size()>=(sceneMode?513:33)) return failure("模型或视口状态无效");
     const auto parseAt=profileNow();
     TopoDS_Shape shape;BRep_Builder builder;std::istringstream stream(brep);
     BRepTools::Read(shape,stream,builder);
@@ -285,7 +353,7 @@ val addPart(const std::string& brep, double r, double g, double b, bool metallic
 // loaded on demand before topology measurement; these proxies never leave the viewer.
 val addMeshPart(const val& mesh,double r,double g,double b,bool metallic,double length,double inner,double outer,double wire){
   try{
-    if(context.IsNull()||parts.size()>=33||mesh["schema"].as<std::string>()!="cablesim.display-mesh/1")return failure("显示网格无效");
+    if(context.IsNull()||parts.size()>=(sceneMode?513:33)||mesh["schema"].as<std::string>()!="cablesim.display-mesh/1")return failure("显示网格无效");
     const auto parseAt=profileNow();BRep_Builder builder;TopoDS_Compound compound;builder.MakeCompound(compound);std::vector<MeshPickPrototype> pickingPrototypes;
     auto groups=mesh["prototypes"];const auto n=groups["length"].as<unsigned>();
     for(unsigned g=0;g<n;g++){
@@ -355,6 +423,37 @@ val replaceMeshPart(int index,const val& mesh,double r,double g,double b,bool me
   return commitReplacement(index,addMeshPart(mesh,r,g,b,metallic,length,inner,outer,wire));
 }
 
+val configureScene(const val& bounds,const val& groups){
+  try{
+    const auto b=emscripten::convertJSArrayToNumberVector<double>(bounds);if(b.size()!=6)return failure("场景边界无效");
+    for(double v:b)if(!std::isfinite(v))return failure("场景边界无效");
+    if(b[0]>=b[3]||b[1]>=b[4]||b[2]>=b[5])return failure("场景边界无效");
+    sceneBounds.SetVoid();sceneBounds.Update(b[0],b[1],b[2],b[3],b[4],b[5]);sceneGroups.clear();
+    const unsigned n=groups["length"].as<unsigned>();if(n>128)return failure("场景对象超过 128 个");
+    for(unsigned i=0;i<n;i++){
+      const auto row=groups[i];const auto v=emscripten::convertJSArrayToNumberVector<double>(row["bounds"]);if(v.size()!=6)return failure("场景对象边界无效");
+      for(double x:v)if(!std::isfinite(x))return failure("场景对象边界无效");
+      SceneGroup group;group.bounds.Update(v[0],v[1],v[2],v[3],v[4],v[5]);group.priority=row["priority"].as<int>();group.kind=row["kind"].as<std::string>();sceneGroups.push_back(group);
+    }
+    sceneMode=true;outlined=hoverOutlined=-1;return val(true);
+  }catch(const Standard_Failure& e){return failure(e.GetMessageString());}
+}
+val setScenePart(int index,int group,const val& transform,double opacity,bool selectable){
+  try{
+    if(!sceneMode||index<0||static_cast<size_t>(index)>=parts.size()||group<0||static_cast<size_t>(group)>=sceneGroups.size())return failure("场景实体不存在");
+    const auto t=emscripten::convertJSArrayToNumberVector<double>(transform);if(t.size()!=12)return failure("场景位姿无效");for(double v:t)if(!std::isfinite(v))return failure("场景位姿无效");
+    auto& p=parts[index];p.placement.SetValues(t[0],t[1],t[2],t[3],t[4],t[5],t[6],t[7],t[8],t[9],t[10],t[11]);p.sceneGroup=group;p.sceneOpacity=std::clamp(opacity,0.,1.);p.selectable=selectable;context->SetLocation(p.display,TopLoc_Location(p.placement));return val(true);
+  }catch(const Standard_Failure& e){return failure(e.GetMessageString());}
+}
+int sceneDetectedPart(){
+  int chosen=-1,priority=-100;
+  for(context->InitDetected();context->MoreDetected();context->NextDetected()){
+    const auto owner=context->DetectedCurrentOwner();if(owner.IsNull())continue;
+    for(size_t i=0;i<parts.size();++i){const auto& p=parts[i];if(!p.selectable||p.sceneGroup<0||owner->Selectable()!=p.display)continue;
+      const int rank=sceneGroups[p.sceneGroup].priority;if(rank>priority){chosen=static_cast<int>(i);priority=rank;}break;}
+  }
+  return chosen;
+}
 void finishModel(double outerDiameter, const std::string& mode) {
   diameter=outerDiameter;cableLength=parts.empty()?1:parts[0].length;layout=mode;applyLayout();camera(yaw,elevation,zoomLevel,panX,panY,heading);
 }
@@ -368,7 +467,7 @@ void selectPart(int i) {
   active=i;context->ClearSelected(false);applyLayout();activateSelection();redraw();
 }
 void setMode(const std::string& mode) {
-  if (mode=="transparent" || mode=="peel" || mode=="section") {layout=mode;applyLayout();camera(yaw,elevation,zoomLevel,panX,panY,heading);}
+  if (mode=="transparent" || mode=="peel" || mode=="section" || sceneMode&&mode=="scene") {layout=mode;applyLayout();camera(yaw,elevation,zoomLevel,panX,panY,heading);}
 }
 void setSelectionMode(const std::string& mode) {
   selectionKind=mode;
@@ -384,12 +483,12 @@ void finishUpdate(double outerDiameter,const std::string& mode,int selectedIndex
   hasMeasureStart=false;applyLayout();activateSelection();
 }
 void setSection(double fraction){sectionPosition=std::clamp(fraction,.05,.95);applyLayout();camera(yaw,elevation,zoomLevel,panX,panY,heading);}
-val project(double x,double y,double z){gp_Pnt p(x,y,z);gp_Trsf trsf;trsf.SetRotation(gp_Ax1(gp_Pnt(),gp_Dir(0,0,1)),yaw);p.Transform(trsf);int px,py;view->Convert(p.X(),p.Y(),p.Z(),px,py);val v=val::object();v.set("x",px);v.set("y",py);return v;}
+val project(double x,double y,double z){gp_Pnt p(x,y,z);if(!sceneMode){gp_Trsf trsf;trsf.SetRotation(gp_Ax1(gp_Pnt(),gp_Dir(0,0,1)),yaw);p.Transform(trsf);}int px,py;view->Convert(p.X(),p.Y(),p.Z(),px,py);val v=val::object();v.set("x",px);v.set("y",py);return v;}
 bool hitTest(int x,int y){context->MoveTo(x,y,view,false);return context->HasDetected();}
 void hover(int x,int y) {
   int next=-1;
   if(x<0||y<0||interacting)context->ClearDetected(false);
-  else{context->MoveTo(x,y,view,false);if(context->HasDetected()){const auto object=context->DetectedInteractive();for(size_t i=0;i<parts.size();++i)if(parts[i].display==object)next=static_cast<int>(i);}}
+  else{context->MoveTo(x,y,view,false);if(sceneMode)next=sceneDetectedPart();else if(context->HasDetected()){const auto object=context->DetectedInteractive();for(size_t i=0;i<parts.size();++i)if(parts[i].display==object)next=static_cast<int>(i);}}
   if(next!=hovered){hovered=next;updateOutlines();redraw();}
 }
 void setInteracting(bool value){interacting=value;if(value){hovered=-1;context->ClearDetected(false);}updateOutlines();fineEdges();redraw();}
@@ -397,6 +496,10 @@ void outlineColors(double sr,double sg,double sb,double hr,double hg,double hb){
 val viewportInfo(){
   val value=val::object();value.set("layers",parts.size());value.set("selected",active);value.set("hovered",hovered);value.set("interacting",interacting);
   value.set("selection_kind",selectionKind);value.set("msaa_samples",view->RenderingParams().NbMsaaSamples);
+  value.set("scene",sceneMode);value.set("scene_objects",sceneGroups.size());value.set("selected_group",active>=0&&static_cast<size_t>(active)<parts.size()?parts[active].sceneGroup:-1);value.set("hovered_group",hovered>=0&&static_cast<size_t>(hovered)<parts.size()?parts[hovered].sceneGroup:-1);
+  const auto edgeCount=[](const Handle(AIS_Shape)& shape){int count=0;if(!shape.IsNull()&&!shape->Shape().IsNull())for(TopExp_Explorer e(shape->Shape(),TopAbs_EDGE);e.More();e.Next())++count;return count;};
+  value.set("selected_outline_edges",edgeCount(selectedOutline));value.set("hover_outline_edges",edgeCount(hoverOutline));
+  if(sceneMode){val opacity=val::array();for(const auto& p:parts){val item=val::object();item.set("group",p.sceneGroup);item.set("base",p.sceneOpacity);item.set("display",1.-p.display->Transparency());opacity.call<void>("push",item);}value.set("scene_opacities",opacity);}
   int edges=0,precise=0;for(auto& p:parts){if(p.fineEdges)++edges;if(!p.meshDisplay)++precise;}
   value.set("fine_edge_layers",edges);value.set("original_topology_layers",precise);
   Standard_Integer width,height;window->Size(width,height);value.set("window_width",width);value.set("window_height",height);
@@ -414,6 +517,7 @@ void measurePair(bool enabled) {pairMeasure=enabled;hasMeasureStart=false;}
 val pick(int x,int y) {
   try {
     context->MoveTo(x,y,view,false);
+    if(sceneMode){const int part=sceneDetectedPart();if(part<0)return val::null();active=part;val result=val::object();result.set("part",part);result.set("object_group",parts[part].sceneGroup);result.set("kind","part");context->ClearSelected(false);applyLayout();redraw();return result;}
     if (!context->HasDetected()) {context->ClearSelected(false);redraw();return val::null();}
     context->SelectDetected(AIS_SelectionScheme_Replace);
     context->InitSelected();
@@ -476,6 +580,8 @@ EMSCRIPTEN_BINDINGS(cablesim_occt_viewer) {
   emscripten::function("envelopeBrep",&envelopeBrep);
   emscripten::function("finishModel",&finishModel);
   emscripten::function("finishUpdate",&finishUpdate);
+  emscripten::function("configureScene",&configureScene);
+  emscripten::function("setScenePart",&setScenePart);
   emscripten::function("resize",&resize);
   emscripten::function("fit",&fit);
   emscripten::function("selectPart",&selectPart);

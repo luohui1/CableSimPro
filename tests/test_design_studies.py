@@ -140,7 +140,8 @@ def test_ground_regions_validate_facts_and_do_not_silently_use_uniform_soil(clie
         s = saved_study(client, w, plugin=plugin)
         p = client.get(f"/api/workspaces/{w['id']}/studies/{s['id']}/preflight", params={'expected_revision': w['revision'], 'expected_study_revision': s['revision']})
         assert p.status_code == 200 and not p.json()['ready'], p.text
-        assert '均匀土壤' in p.json()['cases'][0]['error']['message']
+        reason = p.json()['cases'][0]['error']['message']
+        assert ('均匀土壤' in reason if plugin == 'cablesim.thermal-network' else '数值' in reason)
     invalid = deepcopy(document)
     if region == 'backfill':
         invalid['sections'][0]['backfill']['z'] = 0
@@ -218,7 +219,7 @@ def test_same_input_crosscheck_preserves_method_validation(client):
     assert all('validation' in e and 'limitations' in e for e in run['output']['executions'])
     assert any(q['key'] == 'ampacity' for q in run['output']['crosscheck']['quantities'])
     iec = run['output']['cases'][1]['artifacts']['x-cablesim.iec60287-trace']['goal_checks']
-    assert next(g for g in iec if g['key'] == 'conductor_temperature')['verdict'] == 'unavailable'
+    assert next(g for g in iec if g['key'] == 'conductor_temperature')['verdict'] == 'satisfied'
     trace = run['output']['cases'][1]['artifacts']['x-cablesim.iec60287-trace']
     attribution = trace['rating_attribution']
     assert attribution['schema'] == 'cablesim.rating-attribution/1'
@@ -230,3 +231,58 @@ def test_same_input_crosscheck_preserves_method_validation(client):
     assert contributions == sorted(contributions, reverse=True)
     assert attribution['source']['artifact_digests'] == run['output']['cases'][0]['artifact_digests']
     assert attribution['source']['method'] == run['snapshot']['definition']['method']
+
+
+@pytest.mark.parametrize('example_id',['trefoil','flat','ducts','backfill'])
+def test_engineering_example_runs_real_plugin_and_report_has_each_cable_and_check(client,example_id):
+    example = next(e for e in client.get('/api/design/engineering-examples').json() if e['id'] == example_id)
+    model = next(m for m in system_models() if m['id'] == example['model_id'])
+    response = client.post('/api/design/study-workspaces',json={'model_id':model['id'],'content_sha256':model['content_sha256'],'example_id':example_id})
+    assert response.status_code == 201,response.text
+    w = response.json()
+    assert w['domain']['sections'][0]['layout_template']['kind'] == example_id
+    s = saved_study(client,w,plugin='cablesim.iec60287',title=example['title'])
+    run = execute(client,w,s)
+    assert run['status'] == 'succeeded',run.get('error') or run['output']
+    case = run['output']['cases'][0]
+    tr = case['artifacts']['x-cablesim.iec60287-trace']
+    assert tr['schema'] == 'cablesim.iec60287.group-trace/1'
+    assert tr['verification']['passed']
+    assert len(tr['operating']['cable_states']) == len(w['domain']['sections'][0]['placements'])
+    assert len({g['id'] for g in tr['goal_checks']}) == len(tr['goal_checks'])
+    report = client.app.state.research.deliver(w['id'],[run['id']],current_only=True)['html']
+    assert '手算核对表' in report and '互热贡献明细' in report
+    assert '各回路上限不能同时使用' in report
+    for circuit in w['domain']['circuits']:
+        for cable in circuit['cables']:
+            assert cable['id'] in report
+
+
+@pytest.mark.parametrize('example_id',['double_trefoil','double_flat','ducts_2x3','ducts_3x3','duct_bank'])
+def test_multicircuit_example_preflight_requires_electrical_model(client,example_id):
+    example = next(e for e in client.get('/api/design/engineering-examples').json() if e['id'] == example_id)
+    model = next(m for m in system_models() if m['id'] == example['model_id'])
+    w = client.post('/api/design/study-workspaces',json={'model_id':model['id'],'content_sha256':model['content_sha256'],'example_id':example_id}).json()
+    s = saved_study(client,w,plugin='cablesim.iec60287',title=example['title'])
+    root = f"/api/workspaces/{w['id']}/studies/{s['id']}"
+    preflight = client.get(root+'/preflight',params={'expected_revision':w['revision'],'expected_study_revision':s['revision']}).json()
+    assert not preflight['ready']
+    assert preflight['cases'][0]['error']['code'] == 'MULTICIRCUIT_ELECTRICAL_MODEL_REQUIRED'
+    assert client.get(root+'/runs').json()['items'] == []
+
+
+def test_multi_circuit_goal_explicitly_targets_second_circuit(client):
+    example = next(e for e in client.get('/api/design/engineering-examples').json() if e['id'] == 'double_trefoil')
+    model = next(m for m in system_models() if m['id'] == example['model_id'])
+    w = client.post('/api/design/study-workspaces',json={'model_id':model['id'],'content_sha256':model['content_sha256'],'example_id':example['id']}).json()
+    target = w['domain']['circuits'][1]['id']
+    parameters = {**w['study_cable_reference']['method_defaults']['cablesim.iec60287'],'target_current_a':450,'target_circuit_id':target}
+    parameters.update(per_cable_losses={c['id']:{'ac_extra_factor':.04,'lambda1':.1}
+                                       for circuit in w['domain']['circuits'] for c in circuit['cables']},
+                      loss_input_source='Synthetic coefficients for entity-target regression only; not engineering data')
+    s = saved_study(client,w,plugin='cablesim.iec60287',task='target',parameters=parameters,
+                    driver={'kind':'selection','samples':[{'label':'第二回路','changes':{}}],'target_entity':target,'minimum':450})
+    run = execute(client,w,s)
+    assert run['status'] == 'succeeded',run['output']
+    checks = run['output']['cases'][0]['artifacts']['x-cablesim.iec60287-trace']['goal_checks']
+    assert next(g for g in checks if g['key']=='ampacity' and g['entity']==target)['target'] == 450

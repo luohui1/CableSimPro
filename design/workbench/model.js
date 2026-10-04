@@ -1,4 +1,6 @@
 'use strict';
+window.CableSceneReady=import('./model.scene.js?installation');
+window.CableSceneReady.catch(()=>{});
 window.CableModel=(()=>{
   let H,viewer=null,mounting=null,displayed=null,sequence=0,request=0,timer,envelopeFrame,generating=false,mode='peel',measurement='part',hit=null,length=.18,scheduled='',problem='',camera={zoom:1,yaw:0,elevation:.61548,view:'等轴'},section=.55,pendingAt=0,latestTimings={};
   const cache=new Map(),recent=new Map();let historic=null;

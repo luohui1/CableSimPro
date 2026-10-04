@@ -3,6 +3,7 @@ from pathlib import Path
 import os
 import sys
 import json
+import logging
 from hashlib import sha256
 from collections import OrderedDict
 from threading import Lock
@@ -13,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from fastapi import Response, HTTPException, Request
 from fastapi.responses import JSONResponse
 from backend.schemas import StrictModel
@@ -21,14 +23,17 @@ from backend.domain.guards import check_locks
 from backend.plugin_host import Executor, PluginHostError
 from backend.plugin_host.registry import Registry
 from backend.plugin_host.resident import ResidentRunner
+from backend.plugin_host.executor import minimal_environment
 from backend.main import create_app
 from backend.kernel.contracts import DeliveryRequest
+from backend.kernel.requirements import make_router as requirements_router
 from design.workbench.contracts import contracts, synthetic_iec
 from design.workbench.scenarios import make_router as scenario_router
 from design.workbench.cable_example import example
 
 app = create_app(Path(os.environ.get('CABLESIM_DESIGN_DB', str(ROOT / '.data' / 'design-workbench' / 'cablesim.sqlite'))))
 app.include_router(scenario_router(app.state.workspace_store))
+app.include_router(requirements_router(app.state.research))
 preview_cache = OrderedDict()
 preview_cache_lock = Lock()
 preview_runner = ResidentRunner(ROOT/'.tmp/cad-workers')
@@ -40,7 +45,17 @@ host_lifespan = app.router.lifespan_context
 @asynccontextmanager
 async def preview_lifespan(application):
     async with host_lifespan(application):
-        try:yield
+        try:
+            for plugin in Registry(app.state.research.executor.registry.root).plugins.values():
+                if not any(c.analysis=='geometry' for c in plugin.manifest.capabilities) or not preview_runner.supports(plugin.entry):continue
+                try:
+                    plugin.verify()
+                    environment=minimal_environment(preview_runner.root)
+                    environment['CABLESIM_WORKER_RELEASE']=sha256(plugin.manifest.model_dump_json().encode()).hexdigest()
+                    preview_runner.warmup(plugin.entry,env=environment,timeout=plugin.manifest.resources.timeout_s)
+                except Exception as error:
+                    logging.getLogger(__name__).warning('Geometry preview warmup unavailable for %s: %s',plugin.manifest.id,str(error))
+            yield
         finally:preview_runner.close()
 
 
@@ -145,6 +160,22 @@ class DesignFiles(StaticFiles):
         return False
 
     async def get_response(self, path, scope):
+        path = path.replace('\\', '/')
+        prefix='node_modules/.cache/cablesim-occt/'
+        if path.startswith(prefix) and path[len(prefix):] in ('occt-viewer.js','occt-viewer.wasm'):
+            digest=Request(scope).query_params.get('v')
+            if digest:
+                asset=Path(self.directory)/path
+                if not asset.is_file() or sha256(asset.read_bytes()).hexdigest()!=digest:
+                    return JSONResponse({'detail':'CAD 运行文件已更新，请刷新页面。'},status_code=409,headers={'Cache-Control':'no-store'})
+                headers={'Cache-Control':'public, max-age=31536000, immutable','ETag':'"'+digest+'"','Vary':'Accept-Encoding'}
+                if Request(scope).headers.get('if-none-match') == headers['ETag']:
+                    return Response(status_code=304,headers=headers)
+                compressed=asset.with_name(asset.name+'.gz')
+                if path.endswith('.wasm') and compressed.is_file() and 'gzip' in Request(scope).headers.get('accept-encoding',''):
+                    headers['Content-Encoding']='gzip'
+                    return FileResponse(compressed,media_type='application/wasm',headers=headers)
+                return FileResponse(asset,media_type='application/wasm' if path.endswith('.wasm') else 'application/javascript',headers=headers)
         response=await super().get_response(path,scope)
         response.headers['Cache-Control']='no-store'
         return response

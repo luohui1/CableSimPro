@@ -2,7 +2,7 @@
 from html import escape
 import json
 
-RENDERER = 'cablesim.study-html/6'
+RENDERER = 'cablesim.study-html/7'
 
 
 def formatted(value, digits=1):
@@ -19,10 +19,22 @@ def task_answer(run):
     if case is None:
         return '<p class="answer">当前任务未取得可用结果。</p>'
     artifact = next((v for v in case.get('artifacts', {}).values() if isinstance(v, dict) and 'goal_checks' in v), {})
-    checks = {g['key']: g for g in artifact.get('goal_checks', [])}
+    all_checks = artifact.get('goal_checks', [])
+    checks = {key: min((g for g in all_checks if g['key'] == key),key=lambda g:g.get('margin') if g.get('margin') is not None else float('inf'),default=None)
+              for key in ('ampacity','conductor_temperature')}
     current, temperature = checks.get('ampacity'), checks.get('conductor_temperature')
     task = definition.get('task') or 'rating'
-    if task == 'operating' and temperature and temperature.get('actual') is not None:
+    if artifact.get('schema') == 'cablesim.iec60287.group-trace/1':
+        state = artifact['operating']
+        hot = next(s for s in state['cable_states'] if s['entity'] == state['hottest_cable'])
+        passed = all(g['verdict'] == 'satisfied' for g in all_checks if g['key'] == ('conductor_temperature' if task == 'operating' else 'ampacity'))
+        relevant = [g for g in all_checks if g['key'] == ('conductor_temperature' if task == 'operating' else 'ampacity')]
+        verdict = '无法判断' if any(g['verdict'] == 'unavailable' for g in relevant) else '满足' if passed else '不满足'
+        text = (f"保存负荷下最热电缆 {hot['entity']}，导体 {formatted(hot['conductor_temperature_c'])} °C；"
+                f"全线路温限{'满足' if all(s['margin_k'] >= 0 for s in state['cable_states']) else '不满足'}，最小温度余量 {formatted(min(s['margin_k'] for s in state['cable_states']))} K。")
+        if task != 'operating':
+            text += ' '+('目标电流校核'+verdict+'；' if task == 'target' else '')+'；'.join(r['label']+'允许电流 '+formatted(r['ampacity_a'])+' A' for r in artifact['circuit_ratings'])+'。'+artifact['rating_basis']
+    elif task == 'operating' and temperature and temperature.get('actual') is not None:
         text = (f"{formatted(temperature.get('current_a'))} A 时最高导体温度 {formatted(temperature['actual']-273.15)} °C"
                 f"（{temperature.get('phase') or '未输出'} 相），温限 {formatted(temperature['target']-273.15)} °C，余量 {formatted(temperature['margin'])} K。")
     elif task == 'target' and current:
@@ -47,13 +59,13 @@ def shared_input_summary(run):
     cable, section, circuit = document['cable_types'][0], document['sections'][0], document['circuits'][0]
     soil = next(m for m in document['materials'] if m['id'] == section['medium']['material'])
     binding = run['snapshot'].get('workspace_state', {}).get('study_cable_reference') or {}
-    load = document['load_cases'][0]['currents'][circuit['id']]
+    loads = document['load_cases'][0]['currents']
     depth = -sum(p['z'] for p in section['placements'])/len(section['placements'])
     return '<h3>本次引用的共享输入</h3>'+table(['对象', '采用值', '来源'], [
         ['电缆型号', cable['label']+' · '+str(binding.get('version') or '研究本地输入'), binding.get('source') or '保存的领域电缆'],
         ['平均中心埋深', formatted(depth, 3)+' m', '保存的截面坐标'],
         ['土壤热阻率', formatted(soil.get('thermal_resistivity'), 2)+' K·m/W', '保存的介质材料'],
-        ['负荷电流', formatted(load)+' A', '保存的负荷工况'],
+        *[[c['label']+'负荷', ' / '.join(i['phase']+' '+formatted(loads.get(i['id'],loads.get(c['id'])))+' A' for i in c['cables']), '保存的负荷工况；逐根值优先'] for c in document['circuits']],
         ['地表温度', formatted(section['medium']['surface_temperature']-273.15)+' °C', '保存的介质边界'],
     ])
 
@@ -77,12 +89,32 @@ def artifact_sections(case):
             if value is None:
                 return '未输出'
             return f'{value-273.15:.1f} °C' if unit == 'K' and not margin else f'{value:.1f} {unit}'
-        parts.append('<h3>研究目标与插件校核</h3>'+table(['目标', '实际值', '目标值', '余量', '判定', '来源 / 规则'], [
-            ['运行导体温度' if g['key'] == 'conductor_temperature' else '允许电流',
+        parts.append('<h3>研究目标与插件校核</h3>'+table(['对象', '目标', '实际值', '目标值', '余量', '判定', '来源 / 规则'], [
+            [g.get('entity') or '研究', '运行导体温度' if g['key'] == 'conductor_temperature' else '允许电流',
              number(g.get('actual'), g['unit']), number(g.get('target'), g['unit']),
              number(g.get('margin'), g['unit'], True), labels[g['verdict']], g['source']+' · '+g['rule_version']]
             for g in goals]))
-    if trace:
+    if trace and trace.get('schema') == 'cablesim.iec60287.group-trace/1':
+        parts.append('<h3>各回路允许电流</h3><p>'+escape(trace['rating_basis'])+'</p>'+table(
+            ['回路','允许电流 / A','限制电缆','不可用原因'], [[r['label'],formatted(r['ampacity_a'],3),r['limiting_cable'],r.get('error',{}).get('message') or '—'] for r in trace['circuit_ratings']]))
+        parts.append('<h3>保存负荷下的逐电缆温度与损耗</h3>'+table(
+            ['电缆','电流 / A','导体 / °C','温限余量 / K','总损耗 / W/m','互热温升 / K'],
+            [[s['entity'],formatted(s['current_a']),formatted(s['conductor_temperature_c']),formatted(s['margin_k']),
+              formatted(s['total_loss_w_m'],3),formatted(s['mutual_temperature_rise_k'],3)] for s in trace['operating']['cable_states']]))
+        parts.append('<h3>互热贡献明细（保存负荷）</h3>'+table(
+            ['受热电缆','热源电缆','热阻 / K·m/W','源损耗 / W/m','温升贡献 / K','回填修正 / K·m/W'],
+            [[r['target'],r['source'],formatted(r['resistance_k_m_w'],6),formatted(r['source_loss_w_m'],3),
+              formatted(r['temperature_rise_k'],4),formatted(r['backfill_correction_k_m_w'],6)] for r in trace['heat_contributions']]))
+        parts.append('<h3>排管三段热阻（保存负荷）</h3>'+table(
+            ['电缆','管内 T4′','管壁 T4″','管外自热 T4‴ / K·m/W'],
+            [[s['entity'],formatted(s['t4_air_gap_k_m_w'],6),formatted(s['t4_wall_k_m_w'],6),formatted(s['t4_self_soil_k_m_w'],6)] for s in trace['operating']['cable_states']]))
+        verification = trace['verification']
+        parts.append('<h3>手算核对表</h3><p>'+escape(verification['basis'])+'</p>'+table(
+            ['对象','核对项目','插件值','手算值','差值','单位','容差','判定','依据'],
+            [[r['entity'],r['item'],formatted(r['computed'],6),formatted(r['reference'],6),f"{r['difference']:.3e}",
+              r['unit'],r['tolerance'],'通过' if r['passed'] else '未通过',r['source']] for r in verification['rows']]))
+        parts.append('<h3>标准与电损耗口径</h3><p>'+escape(trace['electrical_basis'])+'</p><ul>'+''.join('<li>'+escape(s)+'</li>' for s in trace['sources'])+'</ul>')
+    elif trace:
         parts.append('<h3>额定工况：IEC 计算过程</h3>' + table(['项目', '值'], [
             ['收敛', trace.get('converged')], ['迭代次数', trace.get('iterations')],
             ['绝缘热阻 T1 / K·m/W', trace.get('t1_k_m_w')],

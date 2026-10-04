@@ -6,6 +6,8 @@ import os
 import shutil
 import subprocess
 import sys
+import gzip
+from hashlib import sha256
 
 ROOT = Path(__file__).resolve().parents[2]
 OCCT_COMMIT = '858dd02fed80c8ca68cf1d70a6e03ecf97f849ca'
@@ -82,12 +84,15 @@ def main():
     run(cmake,'--build',bridge,'--parallel',args.jobs)
     target = ROOT/'design/node_modules/.cache/cablesim-occt'
     target.mkdir(parents=True,exist_ok=True)
+    assets={}
     for name in ('occt-viewer.js','occt-viewer.wasm'):
         shutil.copyfile(bridge/name,target/name)
+        content=(target/name).read_bytes();assets[name]=sha256(content).hexdigest()
+        if name.endswith('.wasm'):(target/(name+'.gz')).write_bytes(gzip.compress(content,compresslevel=6,mtime=0))
     for name in ('LICENSE_LGPL_21.txt','OCCT_LGPL_EXCEPTION.txt'):
         shutil.copyfile(licenses/name,target/name)
     (target/'build.json').write_text(json.dumps({'occt':'7.9.0','commit':revision,'emscripten':EMSDK_VERSION,
-        'renderer':'AIS/V3d/TKOpenGles','units':'mm'},indent=2)+'\n',encoding='utf-8')
+        'renderer':'AIS/V3d/TKOpenGles','units':'mm','assets':assets},indent=2)+'\n',encoding='utf-8')
     print('Built OCCT CAD viewport: '+str(target))
 
 if __name__ == '__main__':

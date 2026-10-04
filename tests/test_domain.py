@@ -138,7 +138,7 @@ def test_domain_locks_follow_identity_and_protect_method_parameters():
 def test_iec_domain_mapping_matches_explicit_synthetic_input():
     from math import pi
     from test_plugin_host import SYNTHETIC_IEC
-    from cablesim_iec60287.domain import prepare as iec_prepare
+    from cablesim_iec60287.domain import prepare_contact_legacy as iec_prepare
     from cablesim_iec60287 import Rating, rate
     s = Scenario().model_dump()
     i = SYNTHETIC_IEC

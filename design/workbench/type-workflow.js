@@ -11,6 +11,7 @@ window.TypeWorkflow=(()=>{
   const model=r=>r?.output?.cases.find(c=>c.status==='succeeded')?.artifacts?.['x-cablesim.cad-model'];
   const current=()=>{const f=F(),r=f.run,m=entry();return !!model(r)&&r.integrity==='verified'&&r.freshness==='current'&&!H.state.dirty&&r.snapshot.workspace_revision===H.state.record.revision&&r.snapshot.definition.method.release_digest===m?.method.release_digest;};
   function bindRuns(){
+    TypeStandards.bindRuns();
     const f=F(),runs=H.state.runs.filter(r=>r.snapshot.definition.method.plugin_id===entry()?.method.plugin_id&&model(r));
     runs.sort((a,b)=>new Date(b.created)-new Date(a.created));f.run=runs[0]||null;
     if(f.delivery&&(!current()||f.delivery.sources?.[0]?.run_id!==f.run?.id))f.delivery=null;
@@ -21,10 +22,11 @@ window.TypeWorkflow=(()=>{
   }
   function rail(){
     const id=moduleId(),root='#/types/'+H.state.wid;
-    return `<div class="rail-caption">型号模块</div><a class="module-row ${id==='structure'?'active':''}" href="${root}/structure" ${id==='structure'?'aria-current="page"':''}>${H.icon('module/structure')}结构设计</a>${id==='structure'?'<div id="objects"></div>':''}<a class="module-row ${id==='standard-check'?'active':''}" href="${root}/standard-check">${H.icon('module/standard-check')}标准核对<span class="study-nav-state">未接入</span></a><a class="module-row ${id==='specification'?'active':''}" href="${root}/specification/content">${H.icon('module/datasheet')}规格书草稿</a>${H.button('添加模块','module/add-module','modules','class="module-row"')}<div class="rail-foot"><p>新版本草稿 · 未发布</p><p>保存与推导不代表产品通过标准审核。</p></div>`;
+    return `<div class="rail-caption">型号模块</div><a class="module-row ${id==='structure'?'active':''}" href="${root}/structure" ${id==='structure'?'aria-current="page"':''}>${H.icon('module/structure')}结构设计</a>${id==='structure'?'<div id="objects"></div>':''}<a class="module-row ${id==='requirements'?'active':''}" href="${root}/requirements">${H.icon('source/from-standard')}要求与标准</a><a class="module-row ${id==='standard-check'?'active':''}" href="${root}/standard-check">${H.icon('module/standard-check')}标准核对</a><a class="module-row ${id==='specification'?'active':''}" href="${root}/specification/content">${H.icon('module/datasheet')}规格书草稿</a>${H.button('添加模块','module/add-module','modules','class="module-row"')}<div class="rail-foot"><p>新版本草稿 · 未发布</p><p>保存与推导不代表产品通过标准审核。</p></div>`;
   }
   function tabs(){return `<div class="study-tabs type-structure-tabs" role="tablist" aria-label="结构设计页签">${[['section','截面'],['three','三维'],['table','分层表'],['quantities','用料']].map(([key,label])=>`<a role="tab" aria-selected="${H.state.view===key}" href="#/types/${H.state.wid}/structure/${key}" tabindex="${H.state.view===key?0:-1}">${label}</a>`).join('')}</div>`;}
   function invalidate(){
+    TypeStandards.invalidate();
     if(!H.state.wid)return;F().delivery=null;
     if(H.state.view==='quantities')renderDerived();
     const status=H.$('#type-result-freshness');if(status)status.textContent='历史结果 · 参数已修改，请保存并更新推导';
@@ -39,7 +41,7 @@ window.TypeWorkflow=(()=>{
       ['领域文档有效性','字段与几何一致',H.state.dirty?'未保存草稿':'已保存输入',H.state.dirty?'待保存校验':'服务端已校验'],
       ['成品外径 · 几何插件','未关联产品标准限值',m?N(m.outer_diameter_m*1000)+' mm':'尚未运行',fresh?'当前推导':m?'历史结果':'待更新推导'],
       ['当前层理论用料','保存的构造与材料密度',r?N(r.mass_kg_per_km)+' kg/km':'尚未运行',fresh?'当前推导':r?'历史结果':'待更新推导'],
-      ['结构标准符合性','待关联原文与条款','未判定','未接入']
+      ['产品标准核对','GB/T 12706 / 11017 / 3956',TypeStandards.summary(),'查看标准核对模块']
     ];return `<table class="checks"><thead><tr><th>校核项 / 来源</th><th>要求</th><th>当前</th><th>状态</th></tr></thead><tbody>${rows.map(row=>'<tr>'+row.map(v=>'<td>'+E(v)+'</td>').join('')+'</tr>').join('')}</tbody></table>`;
   }
   function renderDerived(){
@@ -52,18 +54,15 @@ window.TypeWorkflow=(()=>{
       el.querySelector('.type-derived-summary')?.nextElementSibling?.insertAdjacentHTML('afterend',`<p class="subtle type-geometry-note">设计导体包络 Ø ${N(c.diameter*1000)} mm；保存几何采用面积等效实体 Ø ${N(diameter)} mm。上表外径与用料属于该等效模型，结构尺寸包络外径 ${N(envelope)} mm；实际紧压导体外形尚需几何插件支持。</p>`);
     }
   }
-  function standardPage(){
-    const t=H.type(),ins=t.common_layers.find(l=>l.role==='insulation'),cond=t.cores[0].conductor;
-    return `<div class="study-content"><h3>产品标准核对尚未接入</h3><p class="study-note">当前没有提供产品标准判定的插件，也没有批准的标准条款绑定。尺寸和电阻可查看，符合性保持未判定。</p><table class="study-table"><thead><tr><th>待核对项</th><th>保存输入</th><th>要求 / 来源</th><th>状态</th></tr></thead><tbody><tr><td>绝缘厚度</td><td class="number">${N(ins?.thickness*1000,2)} mm</td><td>尚未关联标准条款</td><td>未接入</td></tr><tr><td>导体 R₂₀</td><td class="number">${N(cond.r20==null?null:cond.r20*1000,4)} Ω/km</td><td>尚未关联标准条款</td><td>未接入</td></tr><tr><td>成品外径</td><td>${current()?N(model(F().run).outer_diameter_m*1000)+' mm':'待更新推导'}</td><td>尚未关联标准条款</td><td>未接入</td></tr></tbody></table><div class="study-actions"><a href="#/types/${H.state.wid}/structure/quantities">查看外径与用料</a><a class="study-header-link" href="#/types/${H.state.wid}/specification/content">下一步：规格书草稿</a></div></div>`;
-  }
   function specificationPage(){
     const f=F(),preview=H.state.route.split('?')[0].split('/')[4]==='preview';
     if(preview)return f.delivery&&current()?`<div class="amp-preview-actions"><span>规格书草稿 · 未审核 / 未发布</span><a href="/api/design/workspaces/${H.state.wid}/deliveries/${f.delivery.id}/file" download="cable-specification.html">下载 HTML</a></div><iframe class="amp-report-preview" sandbox title="规格书草稿预览" srcdoc="${E(f.delivery.html)}"></iframe>`:`<div class="study-empty"><h3>尚无当前规格书草稿</h3><p>先确认当前结构推导，再生成。历史结果不能混入。</p><a href="#/types/${H.state.wid}/specification/content">选择内容</a></div>`;
-    return `<div class="study-content"><h3>生成当前型号的规格书草稿</h3><p class="study-note">结构尺寸、材料来源和指定几何运行一并纳入；产品标准核对保留“未接入”，保存不发布。</p><table class="study-table"><thead><tr><th>章节</th><th>纳入内容</th><th>状态</th></tr></thead><tbody><tr><td>型号与额定参数</td><td>${E(H.type().label)}</td><td>新版本草稿</td></tr><tr><td>结构与材料</td><td>当前保存的分层与来源</td><td>${H.state.dirty?'有未保存编辑':'已保存'}</td></tr><tr><td>外径与理论用料</td><td>指定几何运行 · ${E(f.run?.snapshot.definition.method.version||'未运行')}</td><td>${current()?'当前结果':'需要更新推导'}</td></tr><tr><td>产品标准核对</td><td>未绑定条款及判定能力</td><td>未接入</td></tr></tbody></table><div class="study-actions">${B('生成并预览规格书草稿','result/report','report',`class="primary" ${!current()||H.state.busy?'disabled':''}`)}</div>${current()?'':`<p class="warning amp-inline-note">${H.state.dirty?'请先保存结构修改。':'缺少当前结构推导。'} <a href="#/types/${H.state.wid}/structure/quantities">去更新外径与用料</a></p>`}</div>`;
+    return `<div class="study-content"><h3>生成当前型号的规格书草稿</h3><p class="study-note">结构尺寸、材料来源和指定几何运行一并纳入；此规格书流程尚未纳入标准核对快照，保存不发布。</p><table class="study-table"><thead><tr><th>章节</th><th>纳入内容</th><th>状态</th></tr></thead><tbody><tr><td>型号与额定参数</td><td>${E(H.type().label)}</td><td>新版本草稿</td></tr><tr><td>结构与材料</td><td>当前保存的分层与来源</td><td>${H.state.dirty?'有未保存编辑':'已保存'}</td></tr><tr><td>外径与理论用料</td><td>指定几何运行 · ${E(f.run?.snapshot.definition.method.version||'未运行')}</td><td>${current()?'当前结果':'需要更新推导'}</td></tr><tr><td>产品标准核对</td><td>另见标准核对模块</td><td>尚未纳入此草稿</td></tr></tbody></table><div class="study-actions">${B('生成并预览规格书草稿','result/report','report',`class="primary" ${!current()||H.state.busy?'disabled':''}`)}</div>${current()?'':`<p class="warning amp-inline-note">${H.state.dirty?'请先保存结构修改。':'缺少当前结构推导。'} <a href="#/types/${H.state.wid}/structure/quantities">去更新外径与用料</a></p>`}</div>`;
   }
   function renderModule(){
-    const id=moduleId(),name=id==='standard-check'?'标准核对':'规格书草稿';
-    H.$('#workspace').innerHTML=`<div class="work-area type-work-area type-document-workspace"><nav class="module-rail" aria-label="型号模块">${rail()}</nav><section class="center"><div class="study-tabbar"><h2>${name}</h2>${id==='specification'?`<div class="study-tabs" role="tablist">${[['content','内容'],['preview','预览']].map(([key,label])=>`<a role="tab" href="#/types/${H.state.wid}/specification/${key}" aria-selected="${(H.state.route.split('?')[0].split('/')[4]||'content')===key}">${label}</a>`).join('')}</div>`:''}</div><div id="stage" class="study-stage type-data-stage">${id==='standard-check'?standardPage():specificationPage()}</div><div class="study-checkbar"><strong>校核项</strong><span class="subtle">标准符合性未判定 · 型号尚未发布</span></div></section><aside class="study-inspector is-collapsed"><div class="study-inspector-rail">属性</div></aside></div>`;
+    if(['requirements','standard-check'].includes(moduleId())){TypeStandards.render(rail());return;}
+    const id=moduleId(),name='规格书草稿';
+    H.$('#workspace').innerHTML=`<div class="work-area type-work-area type-document-workspace"><nav class="module-rail" aria-label="型号模块">${rail()}</nav><section class="center"><div class="study-tabbar"><h2>${name}</h2>${id==='specification'?`<div class="study-tabs" role="tablist">${[['content','内容'],['preview','预览']].map(([key,label])=>`<a role="tab" href="#/types/${H.state.wid}/specification/${key}" aria-selected="${(H.state.route.split('?')[0].split('/')[4]||'content')===key}">${label}</a>`).join('')}</div>`:''}</div><div id="stage" class="study-stage type-data-stage">${specificationPage()}</div><div class="study-checkbar"><strong>校核项</strong><span class="subtle">标准符合性未判定 · 型号尚未发布</span></div></section><aside class="study-inspector is-collapsed"><div class="study-inspector-rail">属性</div></aside></div>`;
   }
   async function derive(){
     if(H.state.busy)return;if(H.state.dirty)await H.save();if(H.state.dirty)throw new Error('型号修改尚未保存，未创建推导。');
@@ -88,9 +87,11 @@ window.TypeWorkflow=(()=>{
     H.openDialog('新建型号草稿',`<p>从明确型号版本复制独立草稿；原库版本不改变，保存不发布。</p><label class="amp-task-change">型号版本<select id="type-new-version">${models.slice().reverse().map(m=>`<option value="${m.id}">${E(m.name)} · ${m.version}</option>`).join('')}</select></label><p class="subtle amp-inline-note">尺寸、物性与制造参数仍按该版本标记的来源核对。</p>`,B('建立型号草稿','','create','class="primary"'));F().newModels=models;
   }
   async function action(name){
+    if(name.startsWith('type-requirement-'))return TypeRequirements.action(name.slice(17));
+    if(name.startsWith('type-standard-'))return TypeStandards.action(name.slice(14));
     const key=name.slice(5);if(key==='new'){await newType();return;}if(key==='derive'){await derive();return;}if(key==='execute'){await execute();return;}if(key==='report'){await report();return;}
     if(key==='create'){const models=F().newModels,m=models.find(m=>m.id===H.$('#type-new-version').value),created=await H.api('/design/type-workspaces',{method:'POST',body:JSON.stringify({model_id:m.id,content_sha256:m.content_sha256})});H.$('#modal').close();location.hash=`/types/${created.id}/structure/table`;}
   }
   document.addEventListener('change',event=>{if(event.target.id==='type-scope-ack')document.querySelector('[data-action="type-execute"]').disabled=!event.target.checked;});
-  return {init:h=>H=h,rail,tabs,bindRuns,restoreDelivery,invalidate,renderDerived,renderModule,action,checks,resultStatus,handles:()=>['standard-check','specification'].includes(moduleId())};
+  return {init:h=>{H=h;TypeStandards.init(h);},rail,tabs,bindRuns,restoreDelivery,invalidate,renderDerived,renderModule,action,checks,resultStatus,handles:()=>['requirements','standard-check','specification'].includes(moduleId())};
 })();

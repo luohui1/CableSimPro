@@ -92,10 +92,22 @@ class ResidentRunner:
         return {'resident_main','resident_warmup'}<=functions
 
     def __call__(self,arguments,*,cwd,env,timeout,stderr_limit):
-        entry=Path(arguments[-1]).resolve();raw=entry.read_bytes()
+        worker=self._worker(Path(arguments[-1]),env)
+        if worker is None:return run_process(arguments,cwd=cwd,env=env,timeout=timeout,stderr_limit=stderr_limit)
+        return worker.run(arguments,cwd,env,timeout)
+
+    def warmup(self,entry,*,env,timeout):
+        """Load an opt-in worker without creating or executing an engineering job."""
+        worker=self._worker(Path(entry),env)
+        if worker is None:return False
+        worker._wait(worker.mailbox/'ready.json',monotonic()+timeout)
+        return True
+
+    def _worker(self,entry,env):
+        entry=entry.resolve();raw=entry.read_bytes()
         functions={n.name for n in ast.parse(raw).body if isinstance(n,ast.FunctionDef)}
         if not {'resident_main','resident_warmup'}<=functions:
-            return run_process(arguments,cwd=cwd,env=env,timeout=timeout,stderr_limit=stderr_limit)
+            return None
         key=(str(entry),sha256(raw).hexdigest(),env.get('CABLESIM_WORKER_RELEASE',''))
         with self.lock:
             worker=self.workers.get(key)
@@ -105,7 +117,7 @@ class ResidentRunner:
                     if old_key[0]==key[0] or len(self.workers)>=2:self.workers.pop(old_key).close()
                 self.root.mkdir(parents=True,exist_ok=True)
                 worker=ResidentWorker(entry,self.root,env);self.workers[key]=worker
-        return worker.run(arguments,cwd,env,timeout)
+        return worker
 
     def close(self):
         with self.lock:

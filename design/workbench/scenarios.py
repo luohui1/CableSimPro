@@ -22,7 +22,8 @@ from backend.workbench import Revision, fingerprint
 VERSION = '1.0.0'
 METHOD_DEFAULTS = {
     'cablesim.thermal-network': {'conductor_kind': 'copper', 'ac_extra_factor': 0.05, 'screen_loss_factor': 0.05},
-    'cablesim.iec60287': {'ks': 1.0, 'kp': 1.0, 't4_form': 'simplified', 'eddy': 'ignored',
+    'cablesim.iec60287': {'ks': 1.0, 'kp': 1.0, 't4_form': 'exact', 'eddy': 'ignored',
+                        'duct': {'u': 1.87, 'v': .312, 'y_per_k': .0037, 'initial_mean_air_temperature_c': 40.0},
                         'solver': {'initial_sheath_temperature_c': 70.0, 'current_tolerance_a': 1e-8, 'max_iterations': 100}},
 }
 
@@ -90,7 +91,86 @@ def system_models():
     lead['payload']['cable_type'] = CableType.model_validate(cable).model_dump(mode='json')
     lead['content_sha256'] = fingerprint(lead['payload'])
     models.append(lead)
+    medium = deepcopy(models[0])
+    medium.update(id='system.cu-xlpe-10kv-240',version='1.0.0',name='6/10 kV · 1×240 · 光滑管套校核模型（结构演示）')
+    medium['source'] = ('Tratos 官方 6/10 kV 结构表：铜 240 mm² 导体参考直径 18.2 mm、绝缘 3.4 mm、R20 0.0754 Ω/km。'
+                        '厂家产品为铜丝屏蔽；此校核模型使用明示的 0.8 mm 光滑铝管套及 2.0 mm PVC 外套，不能视为该厂产品。'
+                        ' https://tratosgroup.com/wp-content/uploads/2020/06/XLPE-Medium-Tension-Cable-mod2.pdf')
+    cable = medium['payload']['cable_type']
+    cable['label'] = medium['name']
+    cable['rating'].update(u0=6000.0,u=10000.0,um=12000.0)
+    cable['cores'][0]['conductor'].update(diameter=.0182,r20=7.54e-5)
+    cable['common_layers'][1]['thickness'] = .0034
+    cable['common_layers'][4]['thickness'] = .0020
+    medium['payload']['materials'][4]['thermal_resistivity'] = 5.0
+    medium['payload']['cable_type'] = CableType.model_validate(cable).model_dump(mode='json')
+    medium['content_sha256'] = fingerprint(medium['payload'])
+    models.append(medium)
+    compacted = deepcopy(models[1])
+    compacted.update(id='system.cu-xlpe-al-compacted-400', version='1.0.0',
+                     name='YJL02-12/20 kV 1×400（紧压包络演示）')
+    compacted['payload']['cable_type']['label'] = compacted['name']
+    compacted['payload']['cable_type']['cores'][0]['conductor']['form'] = 'stranded_round_compacted'
+    compacted['source'] += ' 此独立演示版本显式采用紧压导体设计外径包络；未给单丝制造参数和绞入系数，不据包络计算铜量。'
+    models.append(compacted)
+    # Optional standards facts must not alter already named demo versions when
+    # those facts are absent. Retain the pre-extension payload bytes/identities.
+    for model in models:
+        payload = model['payload']
+        for material in payload['materials']:
+            if material.get('standard_kind') is None:
+                material.pop('standard_kind', None)
+        for core in payload['cable_type']['cores']:
+            for key in ('conductor_class', 'r20_basis'):
+                if core['conductor'].get(key) is None:
+                    core['conductor'].pop(key, None)
+        for layer in [*payload['cable_type']['common_layers'], *(l for c in payload['cable_type']['cores'] for l in c['layers'])]:
+            for key in ('minimum_thickness', 'maximum_thickness', 'mean_thickness', 'nominal_tape_thickness', 'tape_count', 'tape_application', 'minimum_overlap', 'reverse_binder_thickness', 'reverse_binder_width', 'reverse_binder_count', 'screen_inner_diameter', 'minimum_tape_thickness'):
+                if layer.get(key) is None:
+                    layer.pop(key, None)
+        model['content_sha256'] = fingerprint(payload)
     return models
+
+
+def engineering_examples():
+    """Repeatable design inputs; all results are produced by a real saved run."""
+    descriptions = [
+        ('trefoil','110 kV 单回接触品字形直埋载流量校核',[600]),
+        ('flat','110 kV 单回水平直埋载流量校核',[500]),
+        ('double_trefoil','110 kV 双回品字形直埋出线载流量校核',[600,400]),
+        ('double_flat','110 kV 双回水平直埋出线载流量校核',[450,300]),
+        ('ducts','10 kV 单回接触品字形排管载流量校核',[200]),
+        ('ducts_2x3','10 kV 排管 2×3 载流量校核',[220,160]),
+        ('ducts_3x3','10 kV 排管 3×3 载流量校核',[200,150,180]),
+        ('backfill','110 kV 矩形回填直埋载流量校核',[600]),
+        ('duct_bank','10 kV 包封排管 3×3 载流量校核',[200,150,180]),
+    ]
+    return [{'id':kind,'layout':kind,'title':title,
+             'model_id':'system.cu-xlpe-10kv-240' if '10 kV' in title and '110 kV' not in title else 'system.yjq02-110kv-800',
+             'depth_m':1.2,'currents_a':currents,'soil_rho_k_m_w':1.2,'ambient_temperature_c':25.0,
+             'source':'敷设与工况为可重复的设计假设：中心埋深 1.2 m、地表 25 °C、原土 1.2 K·m/W、所列负荷；未有现场勘测。型号尺寸及物性来源见绑定版本。',
+             'verification':'插件运行后生成独立对数式热平衡与固定收敛损耗参数的允许电流手算核对表。'} for kind,title,currents in descriptions]
+
+
+def apply_example(document, example):
+    d = apply_layout(document,example['layout'],example['depth_m'])
+    d['name'] = example['title']
+    soil = next(m for m in d['materials'] if m['id'] == d['sections'][0]['medium']['material'])
+    soil['thermal_resistivity'] = example['soil_rho_k_m_w']
+    d['sections'][0]['medium']['surface_temperature'] = example['ambient_temperature_c']+273.15
+    src = {'kind':'demo','reference':example['source'],'reviewed':False}
+    d['provenance'][pointer('materials',soil['id'],'thermal_resistivity')] = src
+    d['provenance'][pointer('sections',d['sections'][0]['id'],'medium','surface_temperature')] = src
+    for circuit,current in zip(d['circuits'],example['currents_a']):
+        d['load_cases'][0]['currents'][circuit['id']] = current
+        circuit['system']['voltage'] = 10000.0 if example['model_id'] == 'system.cu-xlpe-10kv-240' else 110000.0
+        d['provenance'][pointer('load_cases',d['load_cases'][0]['id'],'currents',circuit['id'])] = src
+    if example['layout'] == 'duct_bank':
+        material = next(m for m in d['materials'] if m['id'] == d['sections'][0]['backfill']['material'])
+        material['thermal_resistivity'] = 1.0
+        d['provenance'][pointer('materials',material['id'],'thermal_resistivity')] = {
+            'kind':'standard','reference':'IEC 60287-2-1:2023 Table 1 混凝土参考值 1.0 K·m/W；实际配比需核实','reviewed':True}
+    return DomainDocument.model_validate(d).model_dump(mode='json')
 
 
 def model_version(model_id, digest):
@@ -146,48 +226,72 @@ def apply_layout(document, kind, depth=0.8, spacing=None):
     circuit, section = document['circuits'][0], document['sections'][0]
     cable = next(t for t in document['cable_types'] if t['id'] == circuit['cable_type'])
     diameter = cable['cores'][0]['conductor']['diameter']+2*sum(l['thickness'] for l in cable['common_layers'])
-    spacing = diameter if spacing is None else spacing
+    spacing = (max(.15,diameter*1.5) if kind in ('flat','double_trefoil','double_flat','backfill') else diameter) if spacing is None else spacing
     section['enclosures'] = []
     section['backfill'] = None
     section['soil_layers'] = []
     section['kind'] = 'tunnel' if kind == 'tunnel' else 'air' if kind == 'tray' else 'ground'
     section['label'] = {'trefoil': '直埋单回 · 品字形', 'flat': '直埋单回 · 水平',
-                        'double_trefoil': '直埋双回 · 品字形', 'ducts': '排管截面',
+                        'double_trefoil': '直埋双回 · 留间隔品字形', 'double_flat': '直埋双回 · 水平',
+                        'ducts': '排管截面', 'ducts_2x3': '排管 · 2×3', 'ducts_3x3': '排管 · 3×3',
+                        'duct_bank': '包封排管 · 3×3', 'backfill': '矩形回填 · 留间隔品字形',
                         'tunnel': '隧道截面', 'tray': '桥架截面'}[kind]
     # A second circuit belongs to this template; never remove manually added circuits.
-    if any(c['id'] != 'circuit/template2' for c in document['circuits'][1:]):
+    if any(c['id'] not in ('circuit/template2','circuit/template3') for c in document['circuits'][1:]):
         raise HTTPException(422, '模板不能覆盖手工新增的回路，请保留当前布置并在图上调整。')
     document['circuits'] = [circuit]
     for load in document['load_cases']:
         load['currents'].pop('circuit/template2', None)
-    if kind == 'double_trefoil':
+        load['currents'].pop('circuit/template3', None)
+        for cid in list(load['currents']):
+            if cid.startswith(('cable/template2-','cable/template3-')):
+                load['currents'].pop(cid)
+    count = 3 if kind in ('ducts_3x3','duct_bank') else 2 if kind in ('double_trefoil','double_flat','ducts_2x3') else 1
+    for ci in range(2,count+1):
         other = deepcopy(circuit)
-        other['id'], other['label'] = 'circuit/template2', '第二回路（模板演示）'
-        other['cables'] = [{**c, 'id': f'cable/template2-{c["phase"]}'} for c in circuit['cables']]
+        other['id'], other['label'] = f'circuit/template{ci}', f'回路 {ci}'
+        other['cables'] = [{**c, 'id': f'cable/template{ci}-{c["phase"]}'} for c in circuit['cables']]
         document['circuits'].append(other)
         for load in document['load_cases']:
             load['currents'][other['id']] = load['currents'][circuit['id']]
     if section['kind'] != 'ground':
         section['medium']['air_temperature'] = section['medium']['surface_temperature']
         section['medium']['ventilation'] = 'natural'
-    if kind == 'ducts':
-        outer, inner = 0.075, 0.064
-        spacing = outer
+    ducted = kind in ('ducts','ducts_2x3','ducts_3x3','duct_bank')
+    if ducted:
+        outer, inner = (.075,.064) if kind == 'ducts' else (.16,.14)
+        spacing = outer if kind == 'ducts' else max(.25,spacing)
         if diameter > inner:
             raise HTTPException(422, '所选演示管径容纳不了电缆，请选择更大的排管模板。')
         if not any(m['id'] == 'material/duct' for m in document['materials']):
-            document['materials'].append({'id': 'material/duct', 'label': '管材（演示）', 'category': 'duct', 'thermal_resistivity': 3.5})
-    positions = [(-spacing, -depth), (0.0, -depth), (spacing, -depth)] if kind in ('flat', 'tunnel', 'tray') else [
+            document['materials'].append({'id': 'material/duct', 'label': 'PVC 管材', 'category': 'duct', 'thermal_resistivity': 6.0})
+        duct_material = next(m for m in document['materials'] if m['id'] == 'material/duct')
+        duct_material['thermal_resistivity'] = 6.0
+        document['provenance']['/materials/material~1duct/thermal_resistivity'] = {
+            'kind': 'standard', 'reference': 'IEC 60287-2-1:2023 Table 1，PVC 管材 6.0 K·m/W', 'reviewed': True}
+    rows = kind in ('ducts_2x3','ducts_3x3','duct_bank')
+    positions = [(-spacing, -depth), (0.0, -depth), (spacing, -depth)] if kind in ('flat','double_flat','tunnel','tray') or rows else [
         (0.0, -depth+sqrt(3)*spacing/3), (-spacing/2, -depth-sqrt(3)*spacing/6), (spacing/2, -depth-sqrt(3)*spacing/6)]
     section['placements'] = []
     for ci, selected in enumerate(document['circuits']):
-        shift = (ci-.5)*.6 if kind == 'double_trefoil' else 0.0
+        shift = (ci-.5)*max(.6,4*spacing) if kind in ('double_trefoil','double_flat') else 0.0
         for i, (instance, (x, z)) in enumerate(zip(selected['cables'], positions)):
-            enclosure = f'enclosure/duct-{i+1}' if kind == 'ducts' else 'enclosure/template-tray' if kind in ('tunnel', 'tray') else None
+            if rows:
+                z += (ci-(count-1)/2)*spacing
+            enclosure = f'enclosure/duct-{ci*3+i+1}' if ducted else 'enclosure/template-tray' if kind in ('tunnel', 'tray') else None
             section['placements'].append({'cable': instance['id'], 'x': x+shift, 'z': z, 'enclosure': enclosure})
-            if kind == 'ducts':
+            if ducted:
                 section['enclosures'].append({'id': enclosure, 'type': 'duct', 'material': 'material/duct', 'x': x, 'z': z,
                                               'inner_diameter': inner, 'outer_diameter': outer, 'contains': [instance['id']]})
+    if kind in ('backfill','duct_bank'):
+        width, height = (1.2,.6) if kind == 'backfill' else (1.2,1.0)
+        region_id = 'material/concrete' if kind == 'duct_bank' else 'material/backfill'
+        if not any(m['id'] == region_id for m in document['materials']):
+            document['materials'].append({'id':region_id,'label':'混凝土包封' if kind == 'duct_bank' else '导热回填料',
+                                          'category':'soil','thermal_resistivity': .8})
+        section['backfill'] = {'id':'region/backfill','material':region_id,'x':0.0,'z':-depth,'width':width,'height':height}
+        document['provenance'][pointer('materials',region_id,'thermal_resistivity')] = {
+            'kind':'demo','reference':'算例设计假设：回填 / 包封热阻率 0.8 K·m/W，未有现场测量；使用前核实材料', 'reviewed':False}
     if kind in ('tunnel', 'tray'):
         section['enclosures'].append({'id': 'enclosure/template-tray', 'type': 'tray', 'x': 0.0, 'z': -depth-diameter/2-.05,
                                      'width': max(.4, diameter*5), 'height': .1, 'contains': [c['id'] for c in circuit['cables']]})
@@ -204,13 +308,17 @@ class ChooseModel(StrictModel):
     content_sha256: str = Field(pattern='^[0-9a-f]{64}$')
 
 
+class CreateStudyWorkspace(ChooseModel):
+    example_id: str | None = None
+
+
 class BindModel(ChooseModel, Revision):
     pass
 
 
 class LayoutPreview(Revision):
     document: DomainDocument
-    kind: Literal['trefoil', 'flat', 'double_trefoil', 'ducts', 'tunnel', 'tray']
+    kind: Literal['trefoil','flat','double_trefoil','double_flat','ducts','ducts_2x3','ducts_3x3','duct_bank','backfill','tunnel','tray']
     depth: float = Field(default=0.8, gt=0)
     spacing: float | None = Field(default=None, gt=0)
 
@@ -221,6 +329,10 @@ def make_router(store):
     @router.get('/cable-models')
     def models():
         return system_models()
+
+    @router.get('/engineering-examples')
+    def examples():
+        return engineering_examples()
 
     @router.get('/type-workspaces')
     def types():
@@ -252,8 +364,12 @@ def make_router(store):
         return result
 
     @router.post('/study-workspaces', status_code=201)
-    def create(body: ChooseModel):
+    def create(body: CreateStudyWorkspace):
         model = model_version(body.model_id, body.content_sha256)
+        example_id = getattr(body,'example_id',None)
+        example = next((e for e in engineering_examples() if e['id'] == example_id),None)
+        if example_id and (not example or example['model_id'] != model['id']):
+            raise HTTPException(422,'敷设算例与型号版本不匹配，请重新选择。')
         area = model['payload']['cable_type']['cores'][0]['conductor']['nominal_area']*1e6
         preset = next(p for p in presets() if p['id'] == f'copper-{round(area)}') if round(area) in (240, 400) else next(p for p in presets() if p['id'] == 'copper-400')
         created = store.create(Scenario.model_validate(preset['scenario']))
@@ -281,6 +397,10 @@ def make_router(store):
             state['domain']['name'] = f"{model['name']} · 直埋研究（演示）"
             state['scenario']['name'] = state['domain']['name']
             state['domain'] = apply_layout(state['domain'], 'trefoil')
+            if example:
+                state['domain'] = apply_example(state['domain'],example)
+                state['scenario']['name'] = example['title']
+                state['engineering_example'] = deepcopy(example)
             store.commit(db, row, state, '显式选择系统演示型号版本与直埋模板')
         return store.snapshot(created['id'])
 

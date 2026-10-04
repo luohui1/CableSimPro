@@ -62,7 +62,7 @@ def test_iec60287_runs_through_the_host_with_typed_results(host):
     trace = case.artifacts['x-cablesim.iec60287-trace']
     assert trace['method_version'] == '0.1.0' and trace['iterations'] == direct.iterations
     assert len(case.artifact_digests['x-cablesim.iec60287-trace']) == 64
-    assert run.method_version.endswith('/0.1.0') and len(run.request_sha256) == 64
+    assert run.method_version == 'cablesim.iec60287.group/0.3.0' and len(run.request_sha256) == 64
 
 
 def test_refusal_is_a_failed_case_with_its_code_not_a_number(host):

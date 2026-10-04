@@ -16,8 +16,8 @@
   },
   {
     "path": "backend/domain/models.py",
-    "sha256": "4e43817081e67064a16b1acd323b908588e868aaf991c1920aea9871c80bf2f2",
-    "size_bytes": 14225
+    "sha256": "534aca8029729df4cefc9221279d2b7e679ce980f955cdc8b1a77b7fa0ed8b56",
+    "size_bytes": 15987
   },
   {
     "path": "backend/foundation/__init__.py",

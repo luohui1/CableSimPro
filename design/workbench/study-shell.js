@@ -4,7 +4,7 @@ window.StudyShell=(()=>{
   let C,tabObserver,navigationFocus=null;
   const tabScroll=new Map();
   const compact=matchMedia('(max-width:800px)');
-  const unavailableTabs=new Set(['section/three-dimensional']);
+  const unavailableTabs=new Set();
   const tabAvailable=(module,id)=>!unavailableTabs.has(module+'/'+id);
   const modules=[
     {id:'cable',name:'电缆',icon:'object/cable',tabs:[['section','截面',true],['layers','分层表'],['references','引用']]},
@@ -22,6 +22,7 @@ window.StudyShell=(()=>{
   const E=v=>C.H.esc(v), B=(label,icon,action,attrs='')=>C.H.button(label,icon,'amp-'+action,attrs);
   const module=()=>modules.find(m=>m.id===C.A.module);
   const formatTime=r=>new Date(r.created).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});
+  function circuitName(label,index){const value=String(label||'').replace(/（(?:典型)?结构演示）|（演示）/g,'').trim();const match=value.match(/^(?:第\s*(\d+)\s*回路|回路\s*(\d+))$/);return match?'回路 '+(match[1]||match[2]):!value||value.startsWith('v0 ')?'回路 '+(index+1):value;}
   function sourceBadge(source,locked=false,host=C?.H){
     const kind=locked?'locked':source?.kind;
     const kinds={asset:['from-library','库'],standard:['from-standard','标准'],manufacturer:['from-document','资料'],measurement:['from-document','测量'],derived:['derived','推导'],locked:['locked','锁定'],user:['from-user','人工'],demo:['from-document','演示输入']};
@@ -31,20 +32,20 @@ window.StudyShell=(()=>{
   }
   function sourceLegend(){return `<div class="study-source-legend">${[['from-library','库'],['from-standard','标准'],['from-document','资料'],['derived','推导'],['locked','锁定'],['from-user','人工']].map(([key,label])=>`<span>${C.H.icon('source/'+key)}${label}</span>`).join('')}</div>`;}
   function header(){
-    const {A}=C,dirty=C.dirty(),readonly=!!A.viewRunId,ref=readonly?A.run.snapshot.definition:A.draft,block=C.runBlock?.(),runnable=['ampacity','sweep','method-compare'].includes(A.module)&&!readonly;
-    C.H.$('#header').innerHTML=`<span class="pill">研究</span><div class="title-wrap"><h1>${E(ref.title)}</h1><span class="study-subtitle">${E(C.subtitle?.()||'')}</span></div><button class="study-task quiet" data-action="amp-change-task" ${readonly||A.busy?'disabled':''} title="更换研究任务">${E(workflowNames[C.workflow?.(ref)]||taskNames[ref.task||A.task])}${C.H.icon('action/chevron-down')}</button><span class="spacer"></span><span class="amp-state ${A.busy?'pending':dirty?'draft':''}">${A.busy?'处理中':readonly?'运行快照 · 只读':dirty?'草稿 · 未保存':'已保存'}</span>${readonly?`<a class="study-return" href="${C.href('ampacity','results',null)}">返回研究</a>`:B('保存','action/save','save',dirty&&!A.busy?'':'disabled')}${B('运行记录','action/history','records',A.busy?'disabled':'')}<a class="study-header-link" href="${C.href('report','content',null)}">${C.H.icon('result/report')}交付</a>${runnable?B(dirty?'保存并预检':A.module==='method-compare'?'预检并对比':'预检并运行','run/run','preflight',`class="run-button" ${block||A.busy||!C.canRun()?'disabled':''}`):''}${runnable?`<div class="study-run-hint" ${block?'':'hidden'}>${block?E(block.text)+(block.module?` <a href="${C.href(block.module,block.tab,null)}">${E(block.action||'去补齐')}</a>`:''):''}</div>`:''}`;
+    const {A}=C,dirty=C.dirty(),readonly=!!A.viewRunId,ref=readonly?A.run.snapshot.definition:A.draft,block=C.runBlock?.(),next=C.workflowNext?.(),binding=readonly?A.run.snapshot.workspace_state?.study_cable_reference:C.H.state.snapshot?.study_cable_reference;
+    const stale=!!A.run&&(A.run.freshness!=='current'||dirty),context=[readonly?'运行快照 · 只读':stale?'历史结果':null,ref.parameters?.reference_basis==='tb880_reference'?'TB 880 参考复现':null,binding?.state==='demo'?'演示输入':null].filter(Boolean).join(' · ');
+    C.H.$('#header').innerHTML=`<span class="pill">研究</span><div class="title-wrap"><h1>${E(ref.title)}</h1><span class="study-subtitle">${E(C.subtitle?.()||'')}</span></div><button class="study-task quiet" data-action="amp-change-task" ${readonly||A.busy?'disabled':''} title="更换研究任务">${E(workflowNames[C.workflow?.(ref)]||taskNames[ref.task||A.task])}${C.H.icon('action/chevron-down')}</button><span class="spacer"></span>${context?`<span class="study-context-tag" title="${ref.parameters?.reference_basis==='tb880_reference'?'旧版 TB 880 参考复现，不能作为 IEC 2023 工程结论':binding?.state==='demo'?'含明示假设，来源见电缆引用与计算书':'输入及物理量来自保存的运行'}">${context}</span>`:''}<span class="amp-state ${A.busy?'pending':dirty?'draft':''}">${A.busy?'处理中':dirty?'草稿 · 未保存':'已保存'}</span>${readonly?`<a class="study-return" href="${C.href('ampacity','results',null)}">返回研究</a>`:B('保存','action/save','save',dirty&&!A.busy?'':'disabled')}${B('运行记录','action/history','records',A.busy?'disabled':'')}<a class="study-header-link" href="${C.href('report','content',null)}">${C.H.icon('result/report')}交付</a>${!readonly&&next?B(next.label,next.action==='preflight'?'run/run':'action/chevron-down','workflow-next',`class="run-button study-primary-next" ${A.busy?'disabled':''}`):''}<div class="study-run-hint" ${block&&!readonly?'':'hidden'}>${block?E(block.text):''}</div>`;
   }
   function navigation(){
     const {A}=C;
     const items=visibleModules();
-    return `<div class="study-mobile-navigation"><label for="study-module-select">模块</label><select id="study-module-select" aria-label="研究模块">${items.map(m=>`<option value="${m.id}" ${A.module===m.id?'selected':''}>${m.name}${m.id==='thermal-field'?' · 待接入':''}</option>`).join('')}</select>${B('属性','','mobile-inspector',`class="quiet" aria-expanded="${(isCanvas()||C.hasSelection())&&!A.inspectorClosed[A.module+'/'+A.tab]}"`)}</div><div class="study-module-links"><div class="rail-caption">${E(workflowNames[C.workflow?.()]||'研究模块')}</div>${items.map(m=>`<a class="module-row ${A.module===m.id?'active':''}" href="${C.href(m.id,null,null)}" ${A.module===m.id?'aria-current="page"':''}>${C.H.icon(m.icon)}<span>${m.name}</span>${m.id==='thermal-field'?'<small class="study-nav-state">待接入</small>':''}</a>${A.module===m.id?C.objects()||'':''}`).join('')}${B('添加模块','module/add-module','modules','class="module-row study-more-modules"')}</div>`;
+    return `<div class="study-mobile-navigation"><label for="study-module-select">模块</label><select id="study-module-select" aria-label="研究模块">${items.map(m=>`<option value="${m.id}" ${A.module===m.id?'selected':''}>${m.name}</option>`).join('')}</select>${B('属性','','mobile-inspector',`class="quiet" aria-expanded="${(isCanvas()||C.hasSelection())&&!A.inspectorClosed[A.module+'/'+A.tab]}"`)}</div><div class="study-module-links"><div class="rail-caption">${E(workflowNames[C.workflow?.()]||'研究模块')}</div>${items.map(m=>`<a class="module-row ${A.module===m.id?'active':''}" href="${C.href(m.id,null,null)}" ${A.module===m.id?'aria-current="page"':''}>${C.H.icon(m.icon)}<span>${m.name}</span></a>${A.module===m.id?C.objects()||'':''}`).join('')}${B('添加模块','module/add-module','modules','class="module-row study-more-modules"')}</div>`;
   }
   function updateState(){
-    if(!C)return;const {A}=C,dirty=C.dirty(),save=C.H.$('[data-action="amp-save"]'),run=C.H.$('[data-action="amp-preflight"]'),state=C.H.$('.amp-state');
-    if(save)save.disabled=!dirty||A.busy;if(run)run.disabled=!!C.runBlock?.()||A.busy||!C.canRun();
-    const hint=C.H.$('.study-run-hint'),block=C.runBlock?.();if(hint){hint.hidden=!block;hint.innerHTML=block?E(block.text)+(block.module?` <a href="${C.href(block.module,block.tab,null)}">去补齐</a>`:''):'';}
-    if(run&&!A.busy)run.lastChild.textContent=dirty?'保存并预检':C.A.module==='method-compare'?'预检并对比':'预检并运行';
-    if(state){state.textContent=A.busy?'处理中':A.viewRunId?'运行快照 · 只读':dirty?'草稿 · 未保存':'已保存';state.classList.toggle('draft',dirty&&!A.busy);state.classList.toggle('pending',A.busy);}
+    if(!C)return;const {A}=C,dirty=C.dirty(),save=C.H.$('[data-action="amp-save"]'),run=C.H.$('[data-action="amp-workflow-next"]'),state=C.H.$('.amp-state');
+    if(save)save.disabled=!dirty||A.busy;if(run){run.disabled=A.busy;run.lastChild.textContent=C.workflowNext?.().label||'预检并运行';}
+    const hint=C.H.$('.study-run-hint'),block=C.runBlock?.();if(hint){hint.hidden=!block||!!A.viewRunId;hint.textContent=block?.text||'';}
+    if(state){state.textContent=A.busy?'处理中':dirty?'草稿 · 未保存':'已保存';state.classList.toggle('draft',dirty&&!A.busy);state.classList.toggle('pending',A.busy);}
   }
   function tabs(){
     const m=module();if(!m)return '';
@@ -113,5 +114,5 @@ window.StudyShell=(()=>{
   document.addEventListener('click',event=>{const link=event.target.closest('.study-tabs [role=tab],.study-modules .module-row');if(!link)return;if(link.getAttribute('aria-disabled')==='true'){event.preventDefault();return;}if(!event.ctrlKey&&!event.metaKey&&!event.shiftKey&&event.button<=0)navigationFocus={href:link.getAttribute('href'),selector:link.matches('[role=tab]')?'.study-tabs a':'.study-modules .module-row'};},true);
   document.addEventListener('change',event=>{if(C&&event.target.id==='study-module-select')navigationFocus={href:C.href(event.target.value,null,null),selector:'#study-module-select'};},true);
   compact.addEventListener('change',()=>{if(C&&document.querySelector('.study-workspace'))inspector();});
-  return {modules,taskNames,workflowNames,tabAvailable,render,header,updateState,inspector,checks,refreshSelection,openRecords,action,sourceBadge,sourceLegend,isCanvas,formatTime};
+  return {modules,taskNames,workflowNames,tabAvailable,render,header,updateState,inspector,checks,refreshSelection,openRecords,action,sourceBadge,sourceLegend,isCanvas,formatTime,circuitName};
 })();

@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.thermal-network",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "name": "热网络参考",
   "description": "用简化热网络估算载流量与运行温度，提供竖向和场分析参考；不替代 IEC 60287 方法。",
   "icon": "assets/icon.svg",
@@ -189,8 +189,8 @@
     },
     {
       "path": "src/cablesim_thermal_network/domain.py",
-      "sha256": "70cd7c18460b94d2077cb91137273933b616114713f417e6685d304ca1ab85e5",
-      "size_bytes": 5501
+      "sha256": "3b5d2fd52116f763d1e2ca8a1a6e5aa7e3011253aae038968d7e182686634052",
+      "size_bytes": 5680
     },
     {
       "path": "src/cablesim_thermal_network/fields.py",

@@ -65,3 +65,17 @@ def test_resident_startup_error_is_explicit(tmp_path):
         with pytest.raises(PluginHostError,match='synthetic startup failure'):run(runner,path,tmp_path/'job')
     finally:runner.close()
     assert not list((tmp_path/'workers').iterdir())
+
+
+def test_warmup_loads_no_engineering_job_and_next_job_uses_the_same_worker(tmp_path):
+    path=entry(tmp_path,"    Path('output/result.json').write_text(json.dumps({'count':COUNT}))\n")
+    runner=ResidentRunner(tmp_path/'workers')
+    try:
+        assert runner.warmup(path,env=minimal_environment(tmp_path),timeout=4)
+        worker=next(iter(runner.workers.values()))
+        assert not (worker.mailbox/'input').exists() and not (worker.mailbox/'output').exists()
+        pid=json.loads((worker.mailbox/'ready.json').read_text())['pid']
+        proc=run(runner,path,tmp_path/'job')
+        assert proc.profiling['startup_ms']==0 and proc.profiling['worker_pid']==pid
+        assert json.loads((tmp_path/'job/output/result.json').read_text())['count']==1
+    finally:runner.close()

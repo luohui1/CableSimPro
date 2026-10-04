@@ -10,9 +10,11 @@ from array import array
 from base64 import b64encode
 
 PROTOCOL = 'cablesim.run/2'
-VERSION = 'CAD-CONCENTRIC-0.4.0'
+VERSION = 'CAD-CONCENTRIC-0.5.0'
+SCENE_VERSION = 'CAD-INSTALLATION-0.5.0'
 RESIDENT = False
 SHAPE_CACHE = OrderedDict()
+SCENE_CACHE = OrderedDict()
 
 
 def positive(value, name, maximum):
@@ -162,7 +164,7 @@ def display_mesh(solid):
     from OCP.TopLoc import TopLoc_Location
     from OCP.TopAbs import TopAbs_Orientation
     groups=[]
-    for body in solid.Solids():
+    for body in solid.Solids() or [solid]:
         group=next((g for g in groups if g['body'].wrapped.IsPartner(body.wrapped)
                     and g['body'].wrapped.Orientation()==body.wrapped.Orientation()),None)
         if group is None:
@@ -190,7 +192,7 @@ def display_mesh(solid):
             'prototypes':[{k:v for k,v in g.items() if k!='body'} for g in groups]}
 
 
-def build(document, parameters, out, case_id, reuse_artifacts=None):
+def build(document, parameters, out, case_id, reuse_artifacts=None, native_layers=None):
     import cadquery as cq
     from OCP.BRepMesh import BRepMesh_IncrementalMesh
     cable, rows, length = prepare(document, parameters)
@@ -277,6 +279,7 @@ def build(document, parameters, out, case_id, reuse_artifacts=None):
             display_mesh_ms=(perf_counter()-display_started)*1000
         row['display_mesh']=mesh
         solids.append(solid)
+        if native_layers is not None:native_layers.append(solid)
         if RESIDENT:
             SHAPE_CACHE[geometry_key]=(solid,representation,known,volume,brep_text,mesh)
             while len(SHAPE_CACHE)>48:SHAPE_CACHE.popitem(last=False)
@@ -317,9 +320,197 @@ def build(document, parameters, out, case_id, reuse_artifacts=None):
             'warnings': [{'code': 'IDEALIZED_GEOMETRY', 'message': payload['geometry_approximation']}]}
 
 
+def finite_coordinate(value, name):
+    if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or abs(value)>1e6:
+        raise ValueError(name+'必须为有效 SI 坐标')
+    return float(value)
+
+
+def prepare_scene(document, parameters):
+    if document.get('schema_version')!='cablesim.domain/1':raise ValueError('只接收有效的 SI 领域文档')
+    section=next((s for s in document.get('sections',[]) if s['id']==parameters.get('section_id')),None)
+    if section is None:raise ValueError('必须选择当前文档中的敷设截面')
+    length=positive(parameters.get('length_m',.4),'展示长度',1)
+    placements=section.get('placements',[])
+    if not 1<=len(placements)<=32:raise ValueError('场景支持 1–32 根电缆')
+    types={t['id']:t for t in document['cable_types']}
+    instances={p['id']:(c,p) for c in document['circuits'] for p in c['cables']}
+    if len({p['cable'] for p in placements})!=len(placements):raise ValueError('截面电缆 ID 重复')
+    bounds=[];cables=[]
+    for p in placements:
+        circuit,instance=instances[p['cable']]
+        t=types[circuit['cable_type']]
+        _,rows,_=prepare(document,{'cable_type_id':t['id'],'length_m':length})
+        radius=rows[-1]['outer_radius_m']
+        x,z=finite_coordinate(p['x'],'电缆 x'),finite_coordinate(p['z'],'电缆 z')
+        if section['kind']=='ground' and z+radius>1e-12:raise ValueError('电缆超出地表')
+        cables.append({'placement':p,'circuit':circuit,'instance':instance,'type':t,'radius':radius,'x':x,'z':z})
+        bounds.append((x-radius,z-radius,x+radius,z+radius))
+    for i,a in enumerate(cables):
+        for b in cables[i+1:]:
+            if math.hypot(a['x']-b['x'],a['z']-b['z'])<a['radius']+b['radius']-1e-12:raise ValueError('截面电缆相互重叠')
+    enclosures=section.get('enclosures',[])
+    if len(enclosures)>32:raise ValueError('场景容纳结构超过 32 个')
+    for e in enclosures:
+        x,z=finite_coordinate(e['x'],'容纳结构 x'),finite_coordinate(e['z'],'容纳结构 z')
+        if e['type']=='duct':
+            outer=positive(e.get('outer_diameter'),'管外径',10)/2
+            inner=positive(e.get('inner_diameter'),'管内径',10)/2
+            if inner>=outer:raise ValueError('管内径必须小于外径')
+            for c in cables:
+                if c['placement'].get('enclosure')==e['id'] and math.hypot(c['x']-x,c['z']-z)+c['radius']>inner+1e-12:raise ValueError('电缆超出管内边界')
+            bounds.append((x-outer,z-outer,x+outer,z+outer))
+        else:
+            w,h=positive(e.get('width'),'容纳结构宽度',100),positive(e.get('height'),'容纳结构高度',100)
+            bounds.append((x-w/2,z-h/2,x+w/2,z+h/2))
+    backfill=section.get('backfill')
+    if backfill:
+        x,z=finite_coordinate(backfill['x'],'回填 x'),finite_coordinate(backfill['z'],'回填 z')
+        w,h=positive(backfill['width'],'回填宽度',100),positive(backfill['height'],'回填高度',100)
+        if z+h/2>1e-12:raise ValueError('回填区超出地表')
+        bounds.append((x-w/2,z-h/2,x+w/2,z+h/2))
+    layers=section.get('soil_layers',[])
+    if len(layers)>16:raise ValueError('场景土壤分层超过 16 层')
+    for i,l in enumerate(layers):
+        top,bottom=finite_coordinate(l['top_z'],'层顶 z'),finite_coordinate(l['bottom_z'],'层底 z')
+        if top>0 or bottom>=top or i and abs(layers[i-1]['bottom_z']-top)>1e-12:raise ValueError('土壤层边界无效或不连续')
+    if section['kind']!='ground' and (backfill or layers):raise ValueError('回填与土壤分层仅支持地下截面')
+    xmin=min(b[0] for b in bounds);xmax=max(b[2] for b in bounds)
+    zmin=min([b[1] for b in bounds]+[l['bottom_z'] for l in layers]);zmax=0 if section['kind']=='ground' else max(b[3] for b in bounds)
+    margin=max(.15,(xmax-xmin)*.15)
+    crop=[xmin-margin,0,zmin-(0 if layers and zmin==layers[-1]['bottom_z'] else .15),xmax+margin,length,zmax]
+    if parameters.get('crop_bounds_m') is not None:
+        candidate=parameters['crop_bounds_m']
+        if not isinstance(candidate,list) or len(candidate)!=6:raise ValueError('显示窗口必须为六个 SI 坐标')
+        candidate=[finite_coordinate(v,'显示窗口') for v in candidate]
+        if candidate[0]>xmin or candidate[3]<xmax or candidate[2]>zmin or candidate[5]<zmax or candidate[1]!=0 or candidate[4]!=length:
+            raise ValueError('显示窗口必须包含全部截面对象并沿展示段拉伸')
+        if any(candidate[i]>=candidate[i+3] for i in range(3)) or section['kind']=='ground' and candidate[5]!=0:raise ValueError('显示窗口边界无效')
+        crop=candidate
+    return section,cables,length,crop
+
+
+def build_scene(document, parameters, out, case_id):
+    import cadquery as cq
+    from OCP.BRepMesh import BRepMesh_IncrementalMesh
+    started=perf_counter()
+    section,cables,length,crop=prepare_scene(document,parameters)
+    include_exact=parameters.get('include_exact',True)
+    if not isinstance(include_exact,bool):raise ValueError('include_exact 必须为布尔值')
+    L=length*1000;assets={};objects=[];world=[];templates={};tools=[];enclosure_tools=[];regions_reused=0;region_timings=[]
+    identity=[1,0,0,0,0,1,0,0,0,0,1,0]
+    materials={m['id']:m for m in document['materials']}
+    def box(b):
+        return cq.Workplane('XY').box((b[3]-b[0])*1000,(b[4]-b[1])*1000,(b[5]-b[2])*1000).translate(((b[0]+b[3])*500,(b[1]+b[4])*500,(b[2]+b[5])*500)).val()
+    def asset(key,make,material,representation,dimension=3):
+        nonlocal regions_reused
+        at=perf_counter();aid=sha256(json.dumps([VERSION,key],sort_keys=True).encode()).hexdigest()
+        cached=SCENE_CACHE.get(aid) if RESIDENT else None
+        if cached:
+            body,mesh,brep,volume=cached;SCENE_CACHE.move_to_end(aid);regions_reused+=1
+        else:
+            body=make()
+            if not body.isValid() or dimension==3 and not body.Solids():raise ValueError('场景原生实体无效')
+            volume=body.Volume()*1e-9 if dimension==3 else 0.
+            if dimension==3 and volume<=0:raise ValueError('场景实体体积无效')
+            BRepMesh_IncrementalMesh(body.wrapped,.08,False,.35)
+            mesh=display_mesh(body);brep=None
+        if include_exact and brep is None:
+            path=out/(case_id+'.scene-part.brep');body.exportBrep(str(path));brep=path.read_text('utf-8');path.unlink()
+        row={'geometry_key':aid,'display_mesh':mesh,'material':material,'category':materials.get(material,{}).get('category','soil'),
+             'representation':representation,'volume_m3':volume,'topology_dimension':dimension,'solid_count':len(body.Solids())}
+        if include_exact:row['brep_text']=brep
+        assets[aid]=row
+        if RESIDENT:
+            SCENE_CACHE[aid]=(body,mesh,brep,volume)
+            while len(SCENE_CACHE)>48:SCENE_CACHE.popitem(last=False)
+        region_timings.append({'kind':key[0],'reused':bool(cached),'total_ms':(perf_counter()-at)*1000})
+        return aid,body
+    for ci,c in enumerate(cables):
+        tid=c['type']['id']
+        if tid not in templates:
+            native=[];name=case_id+'.type'+str(len(templates))
+            build(document,{'cable_type_id':tid,'length_m':length,'include_exact':include_exact},out,name,native_layers=native)
+            path=out/(name+'.geometry.json');model=json.loads(path.read_text('utf-8'));path.unlink()
+            templates[tid]=(model,native)
+            for row in model['layers']:assets[row['geometry_key']]={k:v for k,v in row.items() if k not in ('entity','construction','mass_kg','mass_kg_per_km')}
+        model,native=templates[tid]
+        x,z=c['x'],c['z'];r=c['radius']
+        transform=[1,0,0,x*1000,0,0,1,0,0,-1,0,z*1000]
+        parts=[]
+        for row,body in zip(model['layers'],native):
+            parts.append({'asset_id':row['geometry_key'],'transform_mm':transform})
+            world.append(body.rotate((0,0,0),(1,0,0),-90).translate((x*1000,0,z*1000)))
+        circuit_label=c['circuit'].get('label')
+        if not circuit_label or circuit_label.startswith('v0 '):
+            circuit_label=f"第{document['circuits'].index(c['circuit'])+1}回路"
+        label=circuit_label+' · '+c['instance']['phase']+' 相'
+        if c['instance'].get('parallel_index',1)>1:label+=' · 并联 '+str(c['instance']['parallel_index'])
+        objects.append({'id':c['placement']['cable'],'kind':'cable','label':label,'cable_type_id':tid,'type_label':c['type']['label'],
+            'position_m':{'x':x,'z':z},'outer_diameter_m':r*2,'bounds_m':[x-r,0,z-r,x+r,length,z+r],'parts':parts})
+        tools.append(shell(cq,0,r*1000,L).rotate((0,0,0),(1,0,0),-90).translate((x*1000,0,z*1000)))
+    enclosure_keys=[]
+    for e in section.get('enclosures',[]):
+        x,z=e['x'],e['z']
+        if e['type']=='duct':
+            ri,ro=e['inner_diameter']/2,e['outer_diameter']/2
+            b=[x-ro,0,z-ro,x+ro,length,z+ro]
+            make=lambda ri=ri,ro=ro,x=x,z=z:shell(cq,ri*1000,ro*1000,L).rotate((0,0,0),(1,0,0),-90).translate((x*1000,0,z*1000))
+            tool=shell(cq,0,ro*1000,L).rotate((0,0,0),(1,0,0),-90).translate((x*1000,0,z*1000))
+            representation='按输入内外径拉伸的排管壁'
+        else:
+            b=[x-e['width']/2,0,z-e['height']/2,x+e['width']/2,length,z+e['height']/2]
+            make=lambda b=b:box(b);tool=box(b);representation='矩形容纳结构外包络 · 未指定壁厚'
+        key=['enclosure',e,L];aid,body=asset(key,make,e.get('material'),representation)
+        objects.append({'id':e['id'],'kind':'enclosure','label':e.get('label') or ('排管' if e['type']=='duct' else '容纳结构'),
+            'position_m':{'x':x,'z':z},'bounds_m':b,'parts':[{'asset_id':aid,'transform_mm':identity}]})
+        world.append(body);enclosure_tools.append(tool);enclosure_keys.append(key)
+    voids=enclosure_tools+[t for t,c in zip(tools,cables) if not c['placement'].get('enclosure')]
+    void_key=[[(c['placement']['cable'],c['x'],c['z'],c['radius']) for c in cables],enclosure_keys]
+    def cut_voids(body):return body.cut(cq.Compound.makeCompound(voids)) if voids else body
+    bf=section.get('backfill');backfill_box=None
+    if bf:
+        b=[bf['x']-bf['width']/2,0,bf['z']-bf['height']/2,bf['x']+bf['width']/2,length,bf['z']+bf['height']/2]
+        backfill_box=box(b)
+        aid,body=asset(['backfill',b,void_key],lambda:cut_voids(box(b)),bf['material'],'回填区截面拉伸，扣除电缆及容纳结构包络')
+        objects.append({'id':bf['id'],'kind':'backfill','label':bf.get('label','回填区'),'bounds_m':b,'parts':[{'asset_id':aid,'transform_mm':identity}]});world.append(body)
+    if section['kind']=='ground':
+        layers=section.get('soil_layers',[]);bands=[];top=0.
+        for l in layers:
+            if top>l['top_z']:bands.append((section['id']+'/soil-upper','基准土壤',section['medium'].get('material'),top,l['top_z']))
+            bands.append((l['id'],l['label'],l['material'],l['top_z'],l['bottom_z']));top=l['bottom_z']
+        if top>crop[2]:bands.append((section['id']+'/soil-base','基准土壤',section['medium'].get('material'),top,crop[2]))
+        for index,(rid,label,material,ztop,zbottom) in enumerate(bands):
+            b=[crop[0],0,zbottom,crop[3],length,ztop]
+            def soil(b=b):
+                body=box(b)
+                if backfill_box is not None:body=body.cut(backfill_box)
+                return cut_voids(body)
+            aid,body=asset(['soil',b,void_key,bf],soil,material,'土壤层截面拉伸，扣除回填及电缆 / 排管包络')
+            objects.append({'id':rid,'kind':'soil','label':label,'bounds_m':b,'tint_index':index,'parts':[{'asset_id':aid,'transform_mm':identity}]});world.append(body)
+        gb=[crop[0],0,0,crop[3],length,0]
+        def ground():return cq.Face.makeFromWires(cq.Wire.makePolygon([(crop[0]*1000,0,0),(crop[3]*1000,0,0),(crop[3]*1000,L,0),(crop[0]*1000,L,0)],close=True))
+        aid,body=asset(['ground',gb],ground,None,'地表 z=0 参考面，无厚度',dimension=2)
+        objects.append({'id':section['id']+'/ground','kind':'ground','label':'地表 z=0','bounds_m':gb,'parts':[{'asset_id':aid,'transform_mm':identity}]});world.append(body)
+    if sum(len(o['parts']) for o in objects)>512:raise ValueError('场景显示实体超过 512 个')
+    warnings=['场景沿展示长度拉伸，有限土壤窗口仅用于显示，不是数值远场边界。','电缆保留单根建模方法的制造近似；管内空腔和未知构造不补材料。']
+    payload={'schema':'cablesim.cad-scene/1','section_id':section['id'],'label':section['label'],'length_m':length,
+        'geometry_unit':'m','brep_unit':'mm','step_unit':'mm','coordinate_frame':'x/y/z','extrusion_axis':'+Y',
+        'crop_bounds_m':crop,'assets':assets,'objects':objects,'exact_pending':not include_exact,'material_sources':document['materials'],
+        'input_sha256':sha256(json.dumps(document,sort_keys=True,ensure_ascii=False).encode()).hexdigest(),'limitations':warnings,
+        'build_stats':{'build_ms':(perf_counter()-started)*1000,'cable_instances':len(cables),'cable_templates':len(templates),
+            'display_parts':sum(len(o['parts']) for o in objects),'reused_regions':regions_reused,'regions':region_timings,
+            'cables':[m['build_stats'] for m,_ in templates.values()]}}
+    if include_exact:
+        path=out/(case_id+'.scene.step');cq.exporters.export(cq.Compound.makeCompound(world),str(path),exportType='STEP');payload['step_text']=path.read_text('utf-8');path.unlink()
+    name=case_id+'.scene.json';(out/name).write_text(json.dumps(payload,ensure_ascii=False,allow_nan=False),'utf-8')
+    return {'results':[{'key':'x-cablesim.scene-extrusion-length','type':'quantity','entity':section['id'],'status':'available','value':length,'unit':'m'}],'artifacts':[{'type':'x-cablesim.cad-scene','path':'output/'+name}],
+        'warnings':[{'code':'SCENE_DISPLAY_DOMAIN','message':w} for w in warnings]}
+
+
 def main():
     request = json.loads(Path('input/request.json').read_text('utf-8'))
-    if request.get('protocol') != PROTOCOL or request.get('capability') != 'concentric-model' or request.get('phase') not in ('check', 'run'):
+    if request.get('protocol') != PROTOCOL or request.get('capability') not in ('concentric-model','installation-scene') or request.get('phase') not in ('check', 'run'):
         raise ValueError('不支持的协议或能力')
     cases = []
     import_started = perf_counter()
@@ -335,21 +526,22 @@ def main():
         try:
             if dependency_error:
                 raise ValueError(dependency_error)
-            prepare(case['input'], case.get('parameters', {}))
+            scene=request['capability']=='installation-scene'
+            (prepare_scene if scene else prepare)(case['input'], case.get('parameters', {}))
             reuse=None;reuse_path=Path('input/reuse-artifacts.json')
             if reuse_path.is_file():
                 raw=reuse_path.read_bytes()
                 if sha256(raw).hexdigest()!=case.get('parameters',{}).get('_artifact_reuse_sha256'):
                     raise ValueError('复用工件摘要不一致')
                 reuse=json.loads(raw)
-            result = {} if request['phase'] == 'check' else build(case['input'], case.get('parameters', {}), Path('output'), case['case_id'],reuse_artifacts=reuse)
+            result = {} if request['phase'] == 'check' else build_scene(case['input'],case.get('parameters',{}),Path('output'),case['case_id']) if scene else build(case['input'], case.get('parameters', {}), Path('output'), case['case_id'],reuse_artifacts=reuse)
             cases.append({**base, 'status': 'succeeded', **result})
         except (ValueError, KeyError, TypeError) as exc:
             cases.append({**base, 'status': 'not_applicable', 'error': {'code': 'CAD_INPUT_UNSUPPORTED', 'message': str(exc)}})
         except Exception:
             cases.append({**base, 'status': 'failed', 'error': {'code': 'CAD_BUILD_FAILED', 'message': 'CAD 内核生成失败，未返回替代几何或数值'}})
     Path('output/result.json').write_text(json.dumps({'protocol': PROTOCOL, 'cases': cases,
-        'environment': {'python': platform.python_version(), 'packages': {'cadquery': cq.__version__ if cq else 'unavailable'}, 'method': VERSION,
+            'environment': {'python': platform.python_version(), 'packages': {'cadquery': cq.__version__ if cq else 'unavailable'}, 'method': SCENE_VERSION if request['capability']=='installation-scene' else VERSION,
             'profiling': {'cadquery_import_ms':import_ms}}},
         ensure_ascii=False, allow_nan=False), 'utf-8')
 
