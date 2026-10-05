@@ -89,6 +89,14 @@ jobs:
         env:
           E2E_DATABASE_SOURCE: ${{ runner.temp }}/cablesim-empty.sqlite
         run: npm run test:workbench-browser
+      - name: Upload real GitHub runner screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: workbench-screenshots
+          retention-days: 7
+          path: .data/frontend-handoff/github-workbench/
+          if-no-files-found: warn
   native-plugins:
     name: Native plugins / Slurm dg83
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
