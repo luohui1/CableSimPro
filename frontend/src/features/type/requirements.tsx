@@ -12,7 +12,7 @@ import { formatNumber } from '@/lib/format';
 import { useTypeWorkspace } from './provider';
 import { useTypeInspector } from './inspector';
 import { typePath, useTypeNavigation } from './navigation';
-import { artifactRows, chooseEvidence, currentEvidence, useTypeEvidence } from './evidence';
+import { chooseEvidence, currentEvidence, useTypeEvidence } from './evidence';
 import { standardDefinition } from './standard-check';
 import { TypeRunControl } from './run-control';
 import { EvidenceDigest } from './evidence-digest';
