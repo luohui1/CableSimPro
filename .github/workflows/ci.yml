@@ -26,6 +26,36 @@ jobs:
       - run: python scripts/plugin_sdk.py verify
       - name: Plugin catalog seals match committed sources
         run: python scripts/seal_plugin_catalog.py
+  frontend:
+    name: Frontend build and workbench interactions
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: python -m pip install -r ../backend/requirements-dev.txt
+      - run: npx playwright install --with-deps chromium
+      - name: Create an empty source database, not engineering fixtures
+        run: python -c "import os,sqlite3; from pathlib import Path; p=Path(os.environ['RUNNER_TEMP'])/'cablesim-empty.sqlite'; db=sqlite3.connect(p); db.execute('VACUUM'); db.close()"
+      - name: Isolated workbench browser checks without solver calls
+        env:
+          E2E_DATABASE_SOURCE: ${{ runner.temp }}/cablesim-empty.sqlite
+        run: npm run test:workbench-browser
   native-plugins:
     name: Native plugins / Slurm dg83
     runs-on: [self-hosted, linux, cablesim-hpc]
@@ -71,7 +101,7 @@ jobs:
           path: artifacts/
   verified-demo:
     name: Package only after every check passes
-    needs: [hygiene, native-plugins, backend]
+    needs: [hygiene, frontend, native-plugins, backend]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
