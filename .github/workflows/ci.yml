@@ -3,6 +3,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
   workflow_dispatch:
 permissions:
   contents: read
@@ -10,6 +11,38 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.head.ref || github.ref_name }}
   cancel-in-progress: true
 jobs:
+  frontend-environment:
+    name: Prepare frontend migration environment
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Archive the exact review source
+        run: |
+          mkdir -p "$RUNNER_TEMP/frontend-environment"
+          git archive --format=zip --output="$RUNNER_TEMP/frontend-environment/source.zip" HEAD
+          git rev-parse HEAD > "$RUNNER_TEMP/frontend-environment/source-sha.txt"
+      - name: Resolve public migration dependencies without lifecycle scripts
+        working-directory: frontend
+        run: |
+          npm install --ignore-scripts --save-exact next@16.3.8 echarts@6.1.0 --cache "$RUNNER_TEMP/npm-cache" --no-audit --no-fund
+          npm install --ignore-scripts --save-dev --save-exact @tailwindcss/postcss@4.3.3 --cache "$RUNNER_TEMP/npm-cache" --no-audit --no-fund
+          cp package.json package-lock.json "$RUNNER_TEMP/frontend-environment/"
+          tar -czf "$RUNNER_TEMP/frontend-environment/npm-cache.tar.gz" -C "$RUNNER_TEMP/npm-cache" _cacache
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: frontend-migration-environment
+          retention-days: 1
+          compression-level: 0
+          path: ${{ runner.temp }}/frontend-environment/
   hygiene:
     name: Hygiene and plugin catalog checks
     runs-on: ubuntu-latest
@@ -58,6 +91,7 @@ jobs:
         run: npm run test:workbench-browser
   native-plugins:
     name: Native plugins / Slurm dg83
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: [self-hosted, linux, cablesim-hpc]
     timeout-minutes: 90
     steps:
