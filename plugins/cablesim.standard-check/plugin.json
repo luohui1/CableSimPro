@@ -79,9 +79,14 @@
       "size_bytes": 243
     },
     {
+      "path": "src/cablesim_standard_check/dimensions.json",
+      "sha256": "5ea326e21c2a549777810281bcc2e62b04555303cee25b3d2ee102c63f6300b7",
+      "size_bytes": 17321
+    },
+    {
       "path": "src/cablesim_standard_check/main.py",
-      "sha256": "ec600b29f6c3d62d35398bcaf103cfd637f9ee2d547af90ca1c88e6df9d9d2d9",
-      "size_bytes": 41527
+      "sha256": "d15e3f2eea629435c6380d0d285681cd7925fc141d008377746875ea492a0eec",
+      "size_bytes": 47536
     },
     {
       "path": "src/cablesim_standard_check/sources.json",

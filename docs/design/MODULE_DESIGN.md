@@ -109,7 +109,9 @@ AI、资料、资产、外部建模 → 变更提案 → 人工确认 → M01 �
 
 规格书包含封面、型号与执行标准、结构尺寸、电气参数、载流量、短路容量、标准核对与偏离、修订记录八章。宿主只格式化领域文档和运行工件，引用 Run 的输入/输出摘要、方法 pin 与研究修订。提交展示缺项清单，过期、失败、未覆盖要求及必需数据缺项阻止批准；输入、研究、方法、修订记录或要求批准状态变化后须重新提交。
 
-人工批准要求批准人、明确确认和独立配置的本机审核凭据 `CABLESIM_TYPE_APPROVER_TOKEN`；凭据只由操作人输入，不写入浏览器持久存储，不作为 AI 或插件命令提供。未配置时该入口关闭。批准记录包含服务器时间、规格书摘要和运行引用，并校验记录摘要；该机制是本机操作人权限，不是多人签名系统。
+人工批准要求本地操作人明确确认；批准人由服务器读取当前操作系统登录用户名，不接收客户端指定的批准人。记录包含服务器时间、规格书摘要、运行输入/输出摘要和方法版本，并校验记录摘要。`Types._human` 是身份提供接口，`type_versions.make_router` 是请求入口；以后接企业认证时在此注入已认证主体与权限校验，并保留同一批准记录和来源校验。当前阶段只提供本机人工确认与审计，不连接外部身份系统。
+
+`backend/kernel/type_specification.py` 是八章规格书的唯一渲染器，型号发布和研究交付中的规格书分支共用表格、设计令牌及稳定区块标记；交付适配器只读取保存输入和运行工件，不执行计算。研究计算书正文仍由独立的研究渲染流程管理。
 
 发布在同一写事务中创建 assembly 资产、固定规格书载荷、批准记录、版本链与审计。发布版本的领域写入、撤销/重做和研究编辑/执行入口冻结；通用资产派生不能绕过型号审核。后续方案必须明确引用发布版本的 ID、版本和内容摘要，已有方案与研究不自动升级。`/api/types/library` 返回固定版本与定义入口；规格书正文和输入仍以该版本的冻结载荷为准。
 
@@ -340,7 +342,7 @@ running → cancel_requested → cancelled（确认进程结束后）
 
 当前 v2 研究执行器在 Windows 10+ 使用匿名 Job Object，通过 `PROC_THREAD_ATTRIBUTE_JOB_LIST` 在创建进程时绑定，宿主不向子进程继承作业句柄。宿主强退后由系统结束该进程树；超时及正常退出时也终止残留子孙进程并核对作业中已无活动进程。终止不能确认时保留作业目录并报错。实现见 `backend/plugin_host/process.py`；[Windows 官方生命周期说明](https://learn.microsoft.com/en-us/windows/win32/procthread/job-objects)及[创建时绑定接口](https://learn.microsoft.com/en-us/windows/win32/api/processthreadsapi/nf-processthreadsapi-updateprocthreadattribute)解释对应系统保证。真实宿主强退与超时测试见 `tests/test_plugin_host.py`。
 
-启动恢复只将其他 owner_epoch 的未完成研究标记为 interrupted，重复初始化不影响当前所有者；发起、成功封存和失败写回均核对 owner_epoch、execution_nonce 及预期状态，迟到结果不能覆盖恢复状态。v2 JSON 工件与量值在同一 SQLite 事务封存，未提交的进程暂存结果不恢复成成功、不自动重算。Linux 与 v1 兼容工作进程尚未具有上述 Windows 进程树保证，运行环境分别标记 `parent_death_enforced`、`process_tree_cleanup_enforced`；不提供“可靠后台运行”或“通用取消”承诺。
+启动恢复只将其他 owner_epoch 的未完成研究标记为 interrupted，重复初始化不影响当前所有者；发起、成功封存和失败写回均核对 owner_epoch、execution_nonce 及预期状态，迟到结果不能覆盖恢复状态。v2 JSON 工件与量值在同一 SQLite 事务封存，未提交的进程暂存结果不恢复成成功、不自动重算。Linux 工作进程尚未具有上述 Windows 进程树保证，运行环境分别标记 `parent_death_enforced`、`process_tree_cleanup_enforced`；不提供“可靠后台运行”或“通用取消”承诺。
 
 ## 7. 结果怎样算“当前”
 
@@ -504,15 +506,15 @@ Core 导出标识 coincident-unmerged，不能直接当共形 FEM 网格。simul
 
 | 内容 | 优先落点 | 保持不动的部分 |
 | --- | --- | --- |
-| 工程保存与版本档案 | `workbench.py` / `sqlite_workspace.py` | Scenario 校验、参数锁、人工审批语义 |
-| 研究配置与规范 Run | 拟新增小型 `backend/studies/` | 不另建通用 workflow 引擎 |
-| 新能力路由与完成策略 | `runtime.py` / `nonblocking_runtime.py` | 原能力默认完成规则，逐项迁移 |
-| 快照计算适配 | `kernel/research.py` 调用 `plugin_host/` 的 v2 子进程执行器；`methods.py` 保留 v0 适配 | 插件数值公式和已有场契约 |
-| 原生任务与发行校验 | `backend/plugins/` | 不新增第二套 PluginService |
+| 工程保存与版本档案 | `kernel/workspace.py` / `sqlite_workspace.py` | 旧数据档案、参数锁与显式领域迁移 |
+| 研究配置与规范 Run | `kernel/contracts.py` / `kernel/research.py` | 不另建通用 workflow 引擎 |
+| 新能力路由与完成策略 | `kernel/router.py` 与通用运行状态 | 不保留 v0 规划器或求解入口 |
+| 快照计算适配 | `kernel/research.py` 调用 v2 `plugin_host/`；仿真可由 `HpcExecutor` 冻结后提交 Slurm | 插件公式与外部数值参照 |
+| 原生任务与发行校验 | `backend/plugin_host/` | 只保留一个通用执行器 |
 | 研究文档与运行详情 | 现有 workflow 工作区内增量组件 | StudioProvider、原模型视图、共享草稿 |
-| 交付 | `report.py` 与登记的 renderer adapter | 旧 HTML 快照报告语义 |
+| 交付 | `kernel/report.py` 唯一研究计算书渲染器 | 规格书独立；旧 HTML 交付快照仍可读 |
 
-建议 `backend/studies/` 首期只拆四项：契约、存储、协调服务、路由/能力接入。确有多个方法适配复杂度后再拆 adapter 文件，不提前创建几十个空模块。
+上述能力已集中在 `backend/kernel/`。敷设模板、需求和载流量表路由由正式 `main.py` 挂载；样板服务不登记重复路由。
 
 ### 11.1 契约版本不能混用
 
@@ -587,7 +589,7 @@ SQLite WAL 官方约束是同一宿主访问，且同一时刻只有一个 write
 
 当前预检对每个工况和交叉校核方法执行 `check`。没有通过全部已选方法的工况时拒绝启动；扫描或选型部分通过时保留失败项及预检原因，只将通过的工况送入求解。运行输出保存预检记录。历史列表和比较在单次读取请求内复用方法解析与封签检查；新请求和执行重新校验磁盘字节，不用跨请求缓存隐藏插件变化。
 
-当前已覆盖 accepted / running / validating 研究的重启中断、当前所有者保护、迟到成功/失败写回、Windows v2 工作进程树退出，以及 v2 发行缺失、清单损坏或文件被改后的历史读取、重放与导出。工程另存路径也在创建事务中归档初始版本。历史运行返回 `method_availability`，它仅表示对应发行文件和封签的可用性，不表示原生库已加载或可重算；历史查看与计算书仍取原保存结果。实际依赖库不可用的重算限制、v1 / Linux 进程生命周期及外部资产来源故障继续单独验收。
+当前已覆盖 accepted / running / validating 研究的重启中断、当前所有者保护、迟到成功/失败写回、Windows v2 工作进程树退出，以及 v2 发行缺失、清单损坏或文件被改后的历史读取、重放与导出。工程另存路径也在创建事务中归档初始版本。历史运行返回 `method_availability`，它仅表示对应发行文件和封签的可用性，不表示原生库已加载或可重算；历史查看与计算书仍取原保存结果。实际依赖库不可用的重算限制、Linux 进程生命周期及外部资产来源故障继续单独验收。
 
 ## 13. 可选语义判断服务（Jev）
 

@@ -9,7 +9,7 @@ from .soil import geometric_factor
 from .method import RatingRefused
 
 
-def verify_balance(group, operating_state, ratings):
+def verify_balance(group, operating_state, ratings, *, external_coefficients=None):
     n = len(group.cables)
     radii = [c['rating'].installation.duct.outer_diameter_m/2 if c['duct'] else c['geometry'].overall_m/2 for c in group.cables]
     section = group.document['sections'][0]
@@ -51,6 +51,10 @@ def verify_balance(group, operating_state, ratings):
                 value = rho/(4*pi)*log(image_squared/distance_squared)+correction
             row.append(value)
         coefficients.append(row)
+    if external_coefficients is not None:
+        if not section.get('soil_layers') or len(external_coefficients)!=n or any(len(row)!=n for row in external_coefficients):
+            raise ValueError('external_coefficients：独立分层热阻核验必须匹配实际土层与全部热源。')
+        coefficients=external_coefficients
     rows = []
     def add(entity,label,computed,reference,unit,tolerance,source):
         delta = computed-reference
@@ -103,5 +107,5 @@ def verify_balance(group, operating_state, ratings):
         hand = sqrt(numerator/coefficient)
         add(rated['entity'],'允许电流（固定收敛损耗参数二次式）',rated['ampacity_a'],hand,'A',1e-3,
             'IEC 60287 热平衡；Rac、λ1、管内平均温度采用最终迭代值，其余回路采用保存负荷')
-    return {'basis':'独立对数式重建互热与内部热路，再以最终损耗参数做手算二次式核对；未替代独立电磁模型或现场试验。',
+    return {'basis':('独立傅里叶积分重建分层互热，' if external_coefficients is not None else '独立对数式重建互热，')+'以内部热路及最终损耗参数做手算二次式核对；未替代独立电磁模型或现场试验。',
             'rows':rows,'passed':all(r['passed'] for r in rows)}

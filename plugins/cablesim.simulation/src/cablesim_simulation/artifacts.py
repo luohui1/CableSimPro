@@ -2,7 +2,7 @@
 from hashlib import sha256
 from pathlib import Path
 import json
-from backend.foundation.simulation_artifacts import TemperatureField, LossExport
+from cablesim_sdk.simulation_artifacts import TemperatureField, LossExport
 from .report import digest
 
 
@@ -45,18 +45,31 @@ def loss_coefficients(problem, result, options, source_info):
                     'value':e['value']} for e in problem['excitations']]
     if cfg.topology.get('constraints') != constraints:
         raise ValueError('loss_export.topology.constraints：必须逐项匹配本次求解的电流、相角及互联约束。')
+    integration=cfg.topology.get('longitudinal_integration')
+    weights={uid:1. for uid in used}
+    if integration is not None:
+        length=integration.get('section_length_m')
+        declared=integration.get('regional_length_weights',{})
+        actual=problem.get('axial_lengths_m',{})
+        if not isinstance(length,(int,float)) or length<=0 or set(actual)!=set(declared) or not used<=set(declared):
+            raise ValueError('loss_export.topology.longitudinal_integration：分段长度与区域权重缺失。')
+        if cfg.topology.get('electrical_networks')!=problem.get('electrical_networks',[]) or cfg.topology.get('axial_lengths_m')!=actual:
+            raise ValueError('loss_export.topology：须逐项保留实际 GetDP 网络和轴向长度。')
+        if any(abs(declared[uid]-actual[uid]/length)>1e-12 for uid in actual):
+            raise ValueError('loss_export.topology.longitudinal_integration：权重须由真实小段长度除以总长得到。')
+        weights={uid:declared[uid] for uid in used}
     magnetic = {r['entity']:r['magnetic_loss_w_m'] for r in result.get('magnetic_losses',[])}
     rows=[]
     for b in cfg.bindings:
         cores=[states[u] for u in b.conductor_regions]
-        pc=sum(r['joule_loss_w_m'] for r in cores)
-        dc=sum(r['current_rms_a']**2*r['dc_resistance_ohm_m'] for r in cores)
+        pc=sum(weights[r['entity']]*r['joule_loss_w_m'] for r in cores)
+        dc=sum(weights[r['entity']]*r['current_rms_a']**2*r['dc_resistance_ohm_m'] for r in cores)
         if pc<=0 or dc<=0 or any(r['current_rms_a']<=1e-8 for r in cores):
             raise ValueError('loss_export.bindings：零导体电流/损耗不能定义损耗比。')
         if pc<dc:
             raise ValueError('loss_export.ac_extra_factor：交流损耗小于同一材料/面积的直流下界，需核验离散积分；未截断为零。')
         def power(regions):
-            return sum(states[u]['joule_loss_w_m']+magnetic.get(u,0.) for u in regions)
+            return sum(weights[u]*(states[u]['joule_loss_w_m']+magnetic.get(u,0.)) for u in regions)
         ps,pa=power(b.sheath_regions),power(b.armor_regions)
         rows.append(dict(entity=b.entity,conductor_regions=b.conductor_regions,
                          sheath_regions=b.sheath_regions,armor_regions=b.armor_regions,

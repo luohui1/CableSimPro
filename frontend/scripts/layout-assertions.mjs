@@ -1,0 +1,128 @@
+import assert from "node:assert/strict";
+import { assertVisibleNames } from './visible-names.mjs';
+export async function assertLayout(page, label) {
+  await assertVisibleNames(page, label);
+  const result = await page.evaluate(() => {
+    const seen = [
+      ...document.querySelectorAll(
+        "h1,h2,h3,p,span,label,button,a,td,th,dt,dd,input,select,textarea,text",
+      ),
+    ].filter((node) => {
+      const box = node.getBoundingClientRect();
+      return (
+        box.width > 0 &&
+        box.height > 0 &&
+        (node.textContent.trim() || node.value) &&
+        !node.closest('[aria-hidden="true"]')
+      );
+    });
+    const font = Math.min(
+      ...seen.map((node) => parseFloat(getComputedStyle(node).fontSize)),
+    );
+    function rgba(color) {
+      const values = color.match(/[\d.]+/g)?.map(Number) || [];
+      return values.length >= 3
+        ? [...values.slice(0, 3), values[3] ?? 1]
+        : [0, 0, 0, 0];
+    }
+    function over(a, b) {
+      return [0, 1, 2]
+        .map((index) => a[index] * a[3] + b[index] * (1 - a[3]))
+        .concat(1);
+    }
+    function background(node) {
+      if (!node) return [255, 255, 255, 1];
+      const color = rgba(getComputedStyle(node).backgroundColor);
+      return color[3] === 1
+        ? color
+        : over(color, background(node.parentElement));
+    }
+    function luminance(rgb) {
+      return rgb
+        .slice(0, 3)
+        .map((value) => value / 255)
+        .map((value) =>
+          value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+        )
+        .reduce(
+          (sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index],
+          0,
+        );
+    }
+    const contrast = [];
+    for (const node of seen.filter(
+      (node) =>
+        !node.children.length &&
+        !node.matches("svg text") &&
+        !node.closest("svg,[disabled],[data-disabled]"),
+    )) {
+      const style = getComputedStyle(node);
+      if (parseFloat(style.opacity) < 1) continue;
+      const fg = rgba(style.color),
+        bg = background(node),
+        a = luminance(over(fg, bg)),
+        b = luminance(bg),
+        ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      const threshold = parseFloat(style.fontSize) >= 24 ? 3 : 4.5;
+      if (ratio + 0.02 < threshold)
+        contrast.push({
+          text: (node.textContent || node.value || "").slice(0, 80),
+          ratio,
+          color: style.color,
+          background: bg,
+        });
+    }
+    const zones = [".nav-rail", ".module-sidebar", ".work-panel"].map(
+      (selector) => ({
+        selector,
+        box: document.querySelector(selector)?.getBoundingClientRect(),
+      }),
+    );
+    const overlap = [];
+    for (let i = 0; i < zones.length; i++)
+      for (let j = i + 1; j < zones.length; j++) {
+        const a = zones[i].box,
+          b = zones[j].box;
+        if (
+          a &&
+          b &&
+          Math.min(a.right, b.right) - Math.max(a.left, b.left) > 1 &&
+          Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top) > 1
+        )
+          overlap.push([zones[i].selector, zones[j].selector]);
+      }
+    const collapsed = [...document.querySelectorAll(".property-collapsed")].map(
+      (node) => ({ width: node.clientWidth, scrollWidth: node.scrollWidth }),
+    );
+    const primaryScope = document.querySelector('[role="dialog"]') || document;
+    const primary = [
+      ...primaryScope.querySelectorAll(".button-primary,.button-run"),
+    ].filter(
+      (node) => node.getBoundingClientRect().height && !node.disabled,
+    ).length;
+    return {
+      overflow:
+        document.documentElement.scrollWidth > innerWidth + 1 ||
+        document.documentElement.scrollHeight > innerHeight + 1,
+      font,
+      contrast,
+      overlap,
+      collapsed,
+      primary,
+    };
+  });
+  assert.equal(result.overflow, false, label + ": 页面越界");
+  assert.ok(result.font >= 13, label + ": 字号不足 " + result.font);
+  assert.deepEqual(result.overlap, [], label + ": 工作区重叠");
+  assert.deepEqual(
+    result.contrast,
+    [],
+    label + ": 文字对比度 " + JSON.stringify(result.contrast.slice(0, 4)),
+  );
+  assert.ok(
+    result.collapsed.every((value) => value.scrollWidth <= value.width),
+    label + ": 收起属性栏横向溢出",
+  );
+  assert.ok(result.primary <= 1, label + ": 多个主操作");
+  return result;
+}

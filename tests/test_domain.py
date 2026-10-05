@@ -28,7 +28,7 @@ def test_conversion_preserves_units_coordinates_and_numbers():
     assert d['cable_types'][0]['rating']['u0'] == s['cable']['u0_kv'] * 1000
     assert d['cable_types'][0]['cores'][0]['conductor']['form'] == 'unspecified'
     restored = prepare(d, result['method_parameters'])
-    from cablesim_thermal_network.inputs import Scenario as PluginScenario
+    from backend.schemas import Scenario as PluginScenario
     assert calculate(restored)['summary']['ampacity_a'] == pytest.approx(calculate(PluginScenario.model_validate(s))['summary']['ampacity_a'], rel=1e-12)
 
 
@@ -72,7 +72,7 @@ def test_explicit_conversion_keeps_original_revision_and_blocks_v0_writes(tmp_pa
         assert r.json()['revision'] == 2
         assert client.get(root + '/revisions/1').json()['state']['scenario'] == s
         assert client.post(root + '/edit', json={'expected_revision': 2, 'changes': [{'path': 'installation.depth_m', 'value': 1}]}).status_code == 409
-        assert client.post(root + '/calculate', json={'expected_revision': 2}).status_code == 409
+        assert client.post(root + '/calculate', json={'expected_revision': 2}).status_code == 404
         assert client.get(root).json()['scenario'] == s
 
 

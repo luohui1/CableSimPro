@@ -4,7 +4,7 @@ from itertools import product
 from pathlib import Path
 import shutil
 
-from backend.foundation.simulation_artifacts import LossExport
+from cablesim_sdk.simulation_artifacts import LossExport
 from .artifacts import loss_coefficients
 from .getdp_adapter import solve
 from .report import digest

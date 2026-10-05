@@ -1,0 +1,753 @@
+{
+  "areas_mm2": [1.5,2.5,4,6,10,16,25,35,50,70,95,120,150,185,240,300,400,500,630,800,1000,1200,1400,1600],
+  "fictitious_diameters_mm": [1.4,1.8,2.3,2.8,3.6,4.5,5.6,6.7,8,9.4,11,12.4,13.8,15.3,17.5,19.5,22.6,25.2,28.3,31.9,35.7,39.1,42.2,45.1],
+  "lv_xlpe_mm": [0.7,0.7,0.7,0.7,0.7,0.7,0.9,0.9,1,1.1,1.1,1.2,1.4,1.6,1.7,1.8,2,2.2,2.4,2.6,2.8],
+  "r20_areas_mm2": [0.5,0.75,1,1.5,2.5,4,6,10,16,25,35,50,70,95,120,150,185,240,300,400,500,630,800,1000,1200,1400,1600,1800,2000,2500],
+  "r20_ohm_km": {
+    "copper_bare": [36,24.5,18.1,12.1,7.41,4.61,3.08,1.83,1.15,0.727,0.524,0.387,0.268,0.193,0.153,0.124,0.0991,0.0754,0.0601,0.047,0.0366,0.0283,0.0221,0.0176,0.0151,0.0129,0.0113,0.0101,0.009,0.0072],
+    "copper_coated": [36.7,24.8,18.2,12.2,7.56,4.7,3.11,1.84,1.16,0.734,0.529,0.391,0.27,0.195,0.154,0.126,0.1,0.0762,0.0607,0.0475,0.0369,0.0286,0.0224,0.0177,0.0151,0.0129,0.0113,0.0101,0.009,0.0072],
+    "aluminium": [3.08,1.91,1.2,0.868,0.641,0.443,0.32,0.253,0.206,0.164,0.125,0.1,0.0778,0.0605,0.0469,0.0367,0.0291,0.0247,0.0212,0.0186,0.0165,0.0149,0.0127]
+  },
+  "hv_areas_mm2": [240,300,400,500,630,800,1000,1200,1400,1600,1800,2000],
+  "hv_mm": {
+    "insulation": [19,18.5,17.5,17,16.5,16,16,16,16,16,16,16],
+    "lead": [2.6,2.6,2.7,2.7,2.8,2.9,3,3.1,3.2,3.3,3.3,3.3],
+    "corrugated_aluminium": [2,2,2,2,2,2,2.3,2.3,2.3,2.3,2.3,2.3],
+    "oversheath": [4,4,4,4,4.5,4.5,4.5,5,5,5,5,5]
+  },
+  "screen_increment": [
+    [1.5,0.5],
+    [2.5,0.5],
+    [4,0.5],
+    [6,0.6],
+    [10,0.8],
+    [16,1.1],
+    [25,1.2],
+    [35,1.4],
+    [50,1.7],
+    [70,2],
+    [95,2.4],
+    [120,2.7],
+    [150,3],
+    [185,4],
+    [240,5],
+    [300,6]
+  ],
+  "insulation": [
+    {
+      "family": "mv1",
+      "u0": 600,
+      "table": "LV_XLPE"
+    },
+    {
+      "family": "mv1",
+      "u0": 1800,
+      "table": "LV_XLPE",
+      "min_area_mm2": 10,
+      "minimum_mm": 2
+    },
+    {
+      "family": "mv2",
+      "u0": 3600,
+      "table": "DL",
+      "bands": [
+        [185,2.5],
+        [240,2.6],
+        [300,2.8],
+        [400,3],
+        [null,3.2]
+      ]
+    },
+    {
+      "family": "mv2",
+      "u0": 6000,
+      "table": "DL",
+      "min_area_mm2": 16,
+      "value_mm": 3.4
+    },
+    {
+      "family": "mv2",
+      "u0": 8700,
+      "table": "DL",
+      "min_area_mm2": 25,
+      "value_mm": 4.5
+    },
+    {
+      "family": "mv2",
+      "u0": 12000,
+      "table": "DL",
+      "min_area_mm2": 35,
+      "value_mm": 5.5
+    },
+    {
+      "family": "mv2",
+      "u0": 18000,
+      "table": "DL",
+      "min_area_mm2": 50,
+      "value_mm": 8
+    },
+    {
+      "family": "mv3",
+      "u0": 21000,
+      "table": "DL",
+      "min_area_mm2": 50,
+      "value_mm": 9.3
+    },
+    {
+      "family": "mv3",
+      "u0": 26000,
+      "table": "DL",
+      "min_area_mm2": 50,
+      "value_mm": 10.5
+    },
+    {
+      "family": "hv",
+      "table": "HV_INS"
+    }
+  ],
+  "voltage_families": [
+    [
+      600,
+      1000,
+      "mv1"
+    ],
+    [
+      1800,
+      3000,
+      "mv1"
+    ],
+    [
+      3600,
+      6000,
+      "mv2"
+    ],
+    [
+      6000,
+      6000,
+      "mv2"
+    ],
+    [
+      6000,
+      10000,
+      "mv2"
+    ],
+    [
+      8700,
+      10000,
+      "mv2"
+    ],
+    [
+      8700,
+      15000,
+      "mv2"
+    ],
+    [
+      12000,
+      20000,
+      "mv2"
+    ],
+    [
+      18000,
+      20000,
+      "mv2"
+    ],
+    [
+      18000,
+      30000,
+      "mv2"
+    ],
+    [
+      21000,
+      35000,
+      "mv3"
+    ],
+    [
+      26000,
+      35000,
+      "mv3"
+    ],
+    [
+      64000,
+      110000,
+      "hv"
+    ]
+  ],
+  "rules": {
+    "r20": {
+      "mv1": {
+        "clause": "5.2.2 / 5.3.2，表 2；第 7 章",
+        "printed_page": 4,
+        "page_bands_mm2": [
+          [1000,4],
+          [null,5]
+        ]
+      },
+      "mv2": {
+        "clause": "5.2.2 / 5.3.2，表 2；第 7 章",
+        "printed_page": 4,
+        "page_bands_mm2": [
+          [1000,4],
+          [null,5]
+        ]
+      },
+      "mv3": {
+        "clause": "5.2.2 / 5.3.2，表 2；第 7 章",
+        "printed_page": 4,
+        "page_bands_mm2": [
+          [1000,4],
+          [null,5]
+        ]
+      },
+      "hv": {
+        "clause": "5.2.2 / 5.3.2，表 2；第 7 章",
+        "printed_page": 4,
+        "page_bands_mm2": [
+          [1000,4],
+          [null,5]
+        ]
+      }
+    },
+    "insulation-nominal": {
+      "mv1": {
+        "clause": "6.2，表 7",
+        "printed_page": 6
+      },
+      "mv2": {
+        "clause": "6.2，表 7",
+        "printed_page": 7
+      },
+      "mv3": {
+        "clause": "6.2，表 6",
+        "printed_page": 6
+      },
+      "hv": {
+        "clause": "6.2.2，表 2",
+        "printed_page": 4
+      }
+    },
+    "insulation-minimum": {
+      "mv1": {
+        "clause": "16.5.2，式 (4)；附录 B 表 B.1",
+        "printed_page": 16,
+        "factor": 0.9,
+        "offset": -0.1,
+        "formula": "t_min ≥ 0.9 t_n − 0.1",
+        "precision": 2
+      },
+      "mv2": {
+        "clause": "17.5.2，式 (4)；附录 B 表 B.1",
+        "printed_page": 17,
+        "factor": 0.9,
+        "offset": -0.1,
+        "formula": "t_min ≥ 0.9 t_n − 0.1",
+        "precision": 2
+      },
+      "mv3": {
+        "clause": "17.5.2，式 (4)；附录 B 表 B.1",
+        "printed_page": 14,
+        "factor": 0.9,
+        "offset": -0.1,
+        "formula": "t_min ≥ 0.9 t_n − 0.1",
+        "precision": 2
+      },
+      "hv": {
+        "clause": "6.2.2 → GB/T 11017.1—2024 10.6.2",
+        "printed_page": 4,
+        "factor": 0.9,
+        "offset": -0.1
+      }
+    },
+    "insulation-mean": {
+      "mv1": {
+        "clause": "16.5.2；附录 B 表 B.1",
+        "printed_page": 16,
+        "precision": 1
+      }
+    },
+    "insulation-uniformity": {
+      "mv2": {
+        "clause": "17.5.2，式 (5)",
+        "printed_page": 17,
+        "limit": 0.15,
+        "formula": "(t_max − t_min) / t_max ≤ 0.15"
+      },
+      "mv3": {
+        "clause": "17.5.2，式 (5)",
+        "printed_page": 14,
+        "limit": 0.15,
+        "formula": "(t_max − t_min) / t_max ≤ 0.15"
+      }
+    },
+    "screen-tape-nominal": {
+      "mv1": {
+        "clause": "9.2.3",
+        "printed_page": 9,
+        "limits_by_cores": {
+          "1": 0.12,
+          "3": 0.1
+        }
+      },
+      "mv2": {
+        "clause": "10.2.3",
+        "printed_page": 10,
+        "limits_by_cores": {
+          "1": 0.12,
+          "3": 0.1
+        }
+      },
+      "mv3": {
+        "clause": "10.2.2",
+        "printed_page": 8,
+        "limits_by_cores": {
+          "1": 0.12,
+          "3": 0.1
+        }
+      }
+    },
+    "screen-tape-minimum": {
+      "mv1": {
+        "clause": "9.2.3；附录 B 表 B.1",
+        "printed_page": 9,
+        "factor": 0.9,
+        "offset": 0,
+        "formula": "t_t,min ≥ 0.9 t_t,n",
+        "precision": 2
+      },
+      "mv2": {
+        "clause": "10.2.3；附录 B 表 B.1",
+        "printed_page": 10,
+        "factor": 0.9,
+        "offset": 0,
+        "formula": "t_t,min ≥ 0.9 t_t,n",
+        "precision": 2
+      },
+      "mv3": {
+        "clause": "10.2.2；附录 B 表 B.1",
+        "printed_page": 8,
+        "factor": 0.9,
+        "offset": 0,
+        "formula": "t_t,min ≥ 0.9 t_t,n",
+        "precision": 2
+      }
+    },
+    "screen-overlap": {
+      "mv1": {
+        "clause": "9.2.3",
+        "printed_page": 9,
+        "limit": 0.15
+      },
+      "mv2": {
+        "clause": "10.2.3",
+        "printed_page": 10,
+        "limit": 0.15
+      },
+      "mv3": {
+        "clause": "10.2.2",
+        "printed_page": 8,
+        "limit": 0.15
+      }
+    },
+    "screen-overlap-minimum": {
+      "mv1": {
+        "clause": "9.2.3",
+        "printed_page": 9,
+        "limit": 0.05
+      },
+      "mv2": {
+        "clause": "10.2.3",
+        "printed_page": 10,
+        "limit": 0.05
+      },
+      "mv3": {
+        "clause": "10.2.2",
+        "printed_page": 8,
+        "limit": 0.05
+      }
+    },
+    "screen-wire-required": {
+      "mv3": {
+        "clause": "10.2.3",
+        "printed_page": 8,
+        "area_minimum_mm2": 500,
+        "limit": 1
+      }
+    },
+    "screen-wire-diameter": {
+      "hv": {
+        "clause": "6.5.2",
+        "printed_page": 6,
+        "limit": 1
+      }
+    },
+    "screen-wire-gap": {
+      "mv1": {
+        "clause": "9.2.2",
+        "printed_page": 9
+      },
+      "mv2": {
+        "clause": "10.2.2",
+        "printed_page": 10
+      },
+      "mv3": {
+        "clause": "10.2.3",
+        "printed_page": 8
+      },
+      "hv": {
+        "clause": "6.5.2，式 (1)",
+        "printed_page": 6,
+        "limit": 4,
+        "formula": "G = [π(D+d) − nd] / n"
+      }
+    },
+    "screen-area": {
+      "mv1": {
+        "clause": "9.2.1 / 附录 A.2.5",
+        "printed_page": 9,
+        "formula": "n_t t_t W_t / n_w π d_w²/4 + n_h t_h W_h"
+      },
+      "mv2": {
+        "clause": "10.2.1 / 附录 A.2.5",
+        "printed_page": 10,
+        "formula": "n_t t_t W_t / n_w π d_w²/4 + n_h t_h W_h"
+      },
+      "mv3": {
+        "clause": "10.2.1 / 附录 A.2.5",
+        "printed_page": 8,
+        "formula": "n_t t_t W_t / n_w π d_w²/4 + n_h t_h W_h"
+      },
+      "hv": {
+        "clause": "6.5.2 / 6.5.3",
+        "printed_page": 6,
+        "formula": "n_t t_t W_t / n_w π d_w²/4 + n_h t_h W_h"
+      }
+    },
+    "screen-area-missing": {
+      "mv2": {
+        "clause": "10.2",
+        "printed_page": 10
+      },
+      "mv3": {
+        "clause": "10.2",
+        "printed_page": 8
+      },
+      "hv": {
+        "clause": "6.5",
+        "printed_page": 6
+      }
+    },
+    "screen-dimensions": {
+      "mv2": {
+        "clause": "10.2.2 / 10.2.3",
+        "printed_page": 10
+      },
+      "mv3": {
+        "clause": "10.2.2 / 10.2.3",
+        "printed_page": 8
+      }
+    },
+    "sheath-nominal": {
+      "mv1": {
+        "clause": "11，式 (1)",
+        "printed_page": 10,
+        "factor": 0.03,
+        "offset": 0.7,
+        "minimum": 1.2,
+        "formula": "t_Pb = max(1.2, round_0.1(0.03 D_g + 0.7))"
+      },
+      "mv2": {
+        "clause": "12，式 (1)",
+        "printed_page": 11,
+        "factor": 0.03,
+        "offset": 0.7,
+        "minimum": 1.2,
+        "formula": "t_Pb = max(1.2, round_0.1(0.03 D_g + 0.7))"
+      },
+      "mv3": {
+        "clause": "12，式 (1)",
+        "printed_page": 8,
+        "factor": 0.03,
+        "offset": 0.7,
+        "minimum": 1.2,
+        "formula": "t_Pb = max(1.2, round_0.1(0.03 D_g + 0.7))"
+      },
+      "hv": {
+        "clause": "6.6.2，表 3",
+        "printed_page": 7,
+        "factor": 0.03,
+        "offset": 0.7,
+        "minimum": 1.2,
+        "smooth_aluminium_mm": 1.8
+      }
+    },
+    "sheath-minimum": {
+      "mv2": {
+        "clause": "17.6.1，式 (7)；附录 B 表 B.1",
+        "printed_page": 18,
+        "factor": 0.95,
+        "offset": -0.1,
+        "formula": "t_Pb,min ≥ 0.95 t_Pb − 0.1",
+        "precision": 2
+      },
+      "mv3": {
+        "clause": "17.6.1，式 (7)；附录 B 表 B.1",
+        "printed_page": 15,
+        "factor": 0.95,
+        "offset": -0.1,
+        "formula": "t_Pb,min ≥ 0.95 t_Pb − 0.1",
+        "precision": 2
+      },
+      "hv": {
+        "clause": "6.6.2 → GB/T 11017.1—2024 10.7.2 / 10.7.3",
+        "printed_page": 6,
+        "factor": 0.95,
+        "offset": -0.1
+      }
+    },
+    "conductor_screen-minimum": {
+      "hv": {
+        "clause": "6.3.2",
+        "printed_page": 5,
+        "limit": 0.5
+      }
+    },
+    "insulation_screen-minimum": {
+      "hv": {
+        "clause": "6.3.3",
+        "printed_page": 5,
+        "limit": 0.5
+      }
+    },
+    "bedding-nominal": {
+      "mv1": {
+        "clause": "7.2.3 / 7.2.4",
+        "printed_page": 8,
+        "formula": "t_B = table(D_f)"
+      },
+      "mv2": {
+        "clause": "8.2.3，表 9",
+        "printed_page": 8,
+        "formula": "t_B = table(D_f)"
+      },
+      "mv3": {
+        "clause": "8.2.3，表 7",
+        "printed_page": 7,
+        "formula": "t_B = table(D_f)"
+      },
+      "hv": {
+        "clause": "6.4",
+        "printed_page": 5
+      }
+    },
+    "bedding-wrapped": {
+      "mv1": {
+        "clause": "7.2.3 / 7.2.4",
+        "printed_page": 8,
+        "formula": "D_f ≤ 40: 0.4; D_f > 40: 0.6"
+      },
+      "mv2": {
+        "clause": "8.2.4",
+        "printed_page": 9,
+        "formula": "D_f ≤ 40: 0.4; D_f > 40: 0.6"
+      },
+      "mv3": {
+        "clause": "8.2.3，表 7",
+        "printed_page": 7,
+        "formula": "D_f ≤ 40: 0.4; D_f > 40: 0.6"
+      }
+    },
+    "bedding-minimum": {
+      "mv2": {
+        "clause": "17.5.3，式 (6)；附录 B 表 B.1",
+        "printed_page": 18,
+        "factor": 0.8,
+        "offset": -0.2,
+        "precision": 2,
+        "formula": "t_min ≥ 0.8 t_n − 0.2"
+      },
+      "mv3": {
+        "clause": "17.5.3，式 (6)；附录 B 表 B.1",
+        "printed_page": 15,
+        "factor": 0.8,
+        "offset": -0.2,
+        "precision": 2,
+        "formula": "t_min ≥ 0.8 t_n − 0.2"
+      }
+    },
+    "bedding-wrapped-minimum": {
+      "mv2": {
+        "clause": "17.12",
+        "printed_page": 21,
+        "precision": 2
+      },
+      "mv3": {
+        "clause": "17.12",
+        "printed_page": 21,
+        "precision": 2
+      }
+    },
+    "separator-nominal": {
+      "mv1": {
+        "clause": "13.3.3，式 (2)",
+        "printed_page": 9,
+        "factor": 0.02,
+        "offset": 0.6,
+        "minimum_on_lead": 1,
+        "minimum": 1.2,
+        "formula": "t_ss = max(minimum, round_0.1(0.02 D_u + 0.6))"
+      },
+      "mv2": {
+        "clause": "13.3.3，式 (2)",
+        "printed_page": 12,
+        "factor": 0.02,
+        "offset": 0.6,
+        "minimum_on_lead": 1,
+        "minimum": 1.2,
+        "formula": "t_ss = max(minimum, round_0.1(0.02 D_u + 0.6))"
+      },
+      "mv3": {
+        "clause": "13.3.3，式 (2)",
+        "printed_page": 9,
+        "factor": 0.02,
+        "offset": 0.6,
+        "minimum_on_lead": 1,
+        "minimum": 1.2,
+        "formula": "t_ss = max(minimum, round_0.1(0.02 D_u + 0.6))"
+      }
+    },
+    "armour-padding": {
+      "mv1": {
+        "clause": "13.7 / 附录 A.2.8",
+        "printed_page": 11
+      },
+      "mv2": {
+        "clause": "13.7 / 附录 A.2.9",
+        "printed_page": 13
+      },
+      "mv3": {
+        "clause": "13.7 / 附录 A.2.8",
+        "printed_page": 11
+      }
+    },
+    "bedding-missing": {
+      "mv1": {
+        "clause": "7.2 / 7.3 / 7.4",
+        "printed_page": 8
+      },
+      "mv2": {
+        "clause": "8.2 / 13.3.1",
+        "printed_page": 8
+      },
+      "mv3": {
+        "clause": "8.2 / 13.3.1",
+        "printed_page": 7
+      }
+    },
+    "oversheath-nominal": {
+      "mv1": {
+        "clause": "13.3，式 (3)；附录 A / B.1",
+        "printed_page": 13,
+        "factor": 0.035,
+        "offset": 1,
+        "minimums_by_cores": {
+          "1": 1.4,
+          "3": 1.8
+        },
+        "formula": "t_os = max(minimum, round_0.1(0.035 D_os + 1))"
+      },
+      "mv2": {
+        "clause": "14.3，式 (3)；附录 A / B.1",
+        "printed_page": 14,
+        "factor": 0.035,
+        "offset": 1,
+        "minimums_by_cores": {
+          "1": 1.4,
+          "3": 1.8
+        },
+        "formula": "t_os = max(minimum, round_0.1(0.035 D_os + 1))"
+      },
+      "mv3": {
+        "clause": "14.3，式 (3)；附录 A / B.1",
+        "printed_page": 11,
+        "factor": 0.035,
+        "offset": 1,
+        "minimums_by_cores": {
+          "1": 1.4,
+          "3": 1.8
+        },
+        "formula": "t_os = max(minimum, round_0.1(0.035 D_os + 1))"
+      },
+      "hv": {
+        "clause": "6.7.2，表 4",
+        "printed_page": 8,
+        "factor": 0.035,
+        "offset": 1,
+        "minimums_by_cores": {
+          "1": 1.4,
+          "3": 1.8
+        }
+      }
+    },
+    "oversheath-minimum": {
+      "mv1": {
+        "clause": "16.5.3，式 (5)；附录 B 表 B.1",
+        "printed_page": 16,
+        "factor": 0.8,
+        "offset": -0.2,
+        "precision": 2,
+        "formula": "t_min ≥ 0.8 t_n − 0.2"
+      },
+      "mv2": {
+        "clause": "17.5.3，式 (6)；附录 B 表 B.1",
+        "printed_page": 18,
+        "factor": 0.8,
+        "offset": -0.2,
+        "precision": 2,
+        "formula": "t_min ≥ 0.8 t_n − 0.2"
+      },
+      "mv3": {
+        "clause": "17.5.3，式 (6)；附录 B 表 B.1",
+        "printed_page": 15,
+        "factor": 0.8,
+        "offset": -0.2,
+        "precision": 2,
+        "formula": "t_min ≥ 0.8 t_n − 0.2"
+      },
+      "hv": {
+        "clause": "6.7.2 → GB/T 11017.1—2024 10.6.3",
+        "printed_page": 7,
+        "factor": 0.8,
+        "offset": -0.2
+      }
+    }
+  },
+  "fictitious": {
+    "semiconductor_increment_mm": {
+      "mv1": 0,
+      "mv2": 3,
+      "mv3": 3
+    },
+    "bundle_factors": {
+      "1": 1,
+      "3": 2.16
+    },
+    "bedding_bands_mm": [
+      [25,1],
+      [35,1.2],
+      [45,1.4],
+      [60,1.6],
+      [80,1.8],
+      [null,2]
+    ],
+    "mv3_bedding_minimum_mm": 1.2,
+    "wrapped_bedding_bands_mm": [
+      [40,0.4],
+      [null,0.6]
+    ],
+    "ignored_binder_maximum_m": 0.0003,
+    "screen_tape_ignore_maximum_mm": 0.15,
+    "reverse_binder_increment_minimum_mm": 0.3,
+    "core_clause": "附录 A.2.1 / A.2.2 / A.2.5；B.1",
+    "cable_clause": "附录 A.2.3；B.1",
+    "common_clause": "附录 A；B.1"
+  }
+}

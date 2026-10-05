@@ -6,8 +6,8 @@ import pytest
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'plugins/cablesim.simulation/src'))
 from cablesim_simulation.artifacts import temperature_field,loss_coefficients
-from backend.foundation.simulation_artifacts import TemperatureField
-from backend.foundation.simulation_artifacts import LossTemperatureAxis
+from cablesim_sdk.simulation_artifacts import TemperatureField
+from cablesim_sdk.simulation_artifacts import LossTemperatureAxis
 
 
 def source():
@@ -65,3 +65,21 @@ def test_losses_refuse_ambiguous_or_invalid_inputs(change):
 @pytest.mark.parametrize('values',[[20.,float('nan')],[float('-inf'),100.],[20.,float('inf')]])
 def test_temperature_axis_rejects_nonfinite_nodes(values):
     with pytest.raises(ValueError):LossTemperatureAxis(entity='cable/A',state='conductor_temperature_c',regions=['core'],values_c=values)
+
+
+@pytest.mark.parametrize('change',[None,'domain','bundle','topology'])
+def test_research_loss_readback_requires_saved_input_and_bundle(change):
+    from backend.kernel.research import Research
+    from backend.kernel.workspace import fingerprint
+    from cablesim_sdk.reproduction import digest
+    p,r,c=inputs();s=source();s['input_sha256']=digest(p);c['source_domain_sha256']=fingerprint(p)
+    artifact=loss_coefficients(p,r,c,s)
+    run={'snapshot':{'cases':[{'case_id':'case','input':p}],
+        'definition':{'method':{'plugin_id':s['plugin_id'],'version':s['plugin_version'],'capability':s['capability']}}},
+        'output':{'cases':[{'case_id':'case','artifacts':{'x-cablesim.simulation-bundle':{},'x-cablesim.loss-coefficients':artifact},
+            'artifact_digests':{'x-cablesim.simulation-bundle':s['bundle_sha256'],'x-cablesim.loss-coefficients':'f'*64}}]}}
+    if change=='domain':artifact['domain_input_sha256']='0'*64
+    elif change=='bundle':artifact['producer']['bundle_sha256']='0'*64
+    elif change=='topology':artifact['topology']['constraints'][0]['value']=[20,0]
+    status=Research.artifact_status(run)['case']['x-cablesim.loss-coefficients']['status']
+    assert status==('verified' if change is None else 'unavailable')

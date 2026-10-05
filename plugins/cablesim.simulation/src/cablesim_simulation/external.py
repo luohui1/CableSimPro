@@ -36,7 +36,7 @@ def prepare(value,parameters,solver):
             raise ValueError('所选适配器不支持该物理类型，未回退到另一求解器。')
         mesh=build(p,c);problem=p.model_dump(mode='json')
     if parameters.get('loss_export') is not None:
-        from backend.foundation.simulation_artifacts import LossExport
+        from cablesim_sdk.simulation_artifacts import LossExport
         if solver != 'getdp':
             raise ValueError('loss_export：仅GetDP电磁能力接受损耗系数导出。')
         cfg=LossExport.model_validate(parameters['loss_export'])
@@ -94,16 +94,21 @@ def observations(problem,mesh,result):
         probes=basis.probes(np.asarray(problem['probes_m']).T) if problem['probes_m'] else None
         for snap in result['snapshots']:
             t=snap['time_s'];temps=np.asarray(snap['temperature_k'])
-            add('maximum_temperature_k','field',snap['maximum_k'],'K',time_s=t)
+            if not result.get('temperature_history'):
+                add('maximum_temperature_k','field',snap['maximum_k'],'K',time_s=t)
             if probes is not None:
                 for i,v in enumerate(probes@temps):
                     add('probe_temperature_k','field',v,'K',probe_index=i,time_s=t,point_m=problem['probes_m'][i])
+        for entity,history in result.get('temperature_history',{}).items():
+            for row in history:
+                add('maximum_temperature_k',entity,row['maximum_k'],'K',time_s=row['time_s'])
+                add('mean_temperature_k',entity,row['mean_k'],'K',time_s=row['time_s'])
         # Keep final spatial field and sampled temporal quantities; full VTU
         # frames remain raw working files until the job is collected.
     return rows
 
 
-from backend.foundation.reproduction import comparison
+from cablesim_sdk.reproduction import comparison
 
 
 def run(problem,mesh,solver,work):

@@ -18,17 +18,18 @@ def translate(problem,mesh,work):
     import numpy as np
     mesh_files(mesh,work/'mesh')
     time=problem.get('time')
+    observers=problem.get('temperature_regions',{}) if time else {}
     lines=['Header','  CHECK KEYWORDS Warn','  Mesh DB "." "mesh"','End','Simulation',
            '  Coordinate System = Cartesian 2D','  Simulation Type = '+('Transient' if time else 'Steady State'),
            '  Steady State Max Iterations = 1','  Max Output Level = 3']
     if time:
         # Cap full-field snapshots so the host's output-file limit remains valid.
         stride=max(1,math.ceil(time['steps']/100))
-        if time['steps']%stride:
-            raise ValueError('步数必须可被输出间隔ceil(steps/100)整除。')
         lines += ['  Timestepping Method = BDF',f'  BDF Order = {time["bdf_order"]}',
                   f'  Timestep Sizes = {time["step_s"]:.17g}',f'  Timestep Intervals = {time["steps"]}',f'  Output Intervals = {stride}']
-    lines += ['End','Equation 1','  Active Solvers(2) = 1 2','End',
+    scalar_ids={entity:4+i for i,entity in enumerate(sorted(observers))}
+    active='1 2 3' if time else '1 2'
+    lines += ['End','Equation 1',f'  Active Solvers({len(active.split())}) = '+active,'End',
               'Solver 1','  Equation = Heat Equation','  Procedure = "HeatSolve" "HeatSolver"',
               '  Variable = Temperature','  Variable DOFs = 1','  Linear System Solver = Direct',
               '  Linear System Direct Method = UMFPACK','  Linear System Convergence Tolerance = 1.0e-12',
@@ -38,6 +39,17 @@ def translate(problem,mesh,work):
               '  Exec Solver = After Saving','  Save Geometry Ids = True','End']
     if time:
         lines.insert(len(lines)-1,'  Vtu Time Collection = True')
+        for entity,identifier in [('field',3),*scalar_ids.items()]:
+            masked=entity!='field'
+            lines += [f'Solver {identifier}','  Exec Solver = After Timestep',
+                      f'  Equation = SaveScalars{identifier}','  Procedure = "SaveData" "SaveScalars"',
+                      f'  Filename = "scalars-{identifier}.dat"',
+                      '  Variable 1 = Time',
+                      '  Variable 2 = Temperature','  Operator 2 = '+('body max' if masked else 'max'),
+                      '  Variable 3 = Temperature','  Operator 3 = '+('body int mean' if masked else 'int mean')]
+            if masked:
+                lines += [f'  Mask Name 2 = observe-{identifier}',f'  Mask Name 3 = observe-{identifier}']
+            lines += ['End']
     xy=np.asarray(mesh['points'])[np.asarray(mesh['triangles'])]
     areas=np.abs((xy[:,1,0]-xy[:,0,0])*(xy[:,2,1]-xy[:,0,1])-(xy[:,2,0]-xy[:,0,0])*(xy[:,1,1]-xy[:,0,1]))/2
     by_uid={}
@@ -62,7 +74,14 @@ def translate(problem,mesh,work):
     lines+=['Initial Condition 1',f'  Temperature = {initial:.17g}','End']
     for r in mesh['regions']:
         i=r['id']; m=r['material']
-        lines += [f'Body {i}',f'  Target Bodies(1) = {i}','  Equation = 1',f'  Material = {i}',f'  Body Force = {i}','  Initial Condition = 1','End',
+        selected=[identifier for entity,identifier in scalar_ids.items() if r['uid'] in observers[entity]]
+        equation=i+1 if selected else 1
+        if selected:
+            solvers=[1,2,3,*selected]
+            lines += [f'Equation {equation}',f'  Active Solvers({len(solvers)}) = '+' '.join(map(str,solvers)),'End']
+        lines += [f'Body {i}',f'  Target Bodies(1) = {i}',f'  Equation = {equation}',f'  Material = {i}',f'  Body Force = {i}','  Initial Condition = 1']
+        lines += [f'  observe-{identifier} = Logical True' for identifier in selected]
+        lines += ['End',
                   f'Material {i}',f'  Heat Conductivity = {m["k_w_m_k"]:.17g}','  Density = 1',
                   f'  Heat Capacity = {m.get("heat_capacity_j_m3_k") or 1:.17g}','End',f'Body Force {i}']
         q,expr,vary=power.get(i,(0,'0',False))
@@ -151,5 +170,20 @@ def solve(problem,mesh,work,configuration=None):
         # The public temperature-field contract uses a numeric SI time for
         # steady snapshots too; zero denotes the sole steady solution.
         snapshots[0]['time_s']=0.
+    scalars={}
+    if t:
+        labels={'field':3,**{entity:4+i for i,entity in enumerate(sorted(problem.get('temperature_regions',{})))}}
+        for entity,identifier in labels.items():
+            path=work/f'scalars-{identifier}.dat'
+            if not path.is_file():raise SolverFailure('Elmer缺少逐时间步温度统计：'+entity)
+            data=np.loadtxt(path,ndmin=2)
+            if data.shape!=(t['steps'],3) or not np.isfinite(data).all() or np.any(data[:,1:]<=0):
+                raise SolverFailure('Elmer逐步温度统计不完整或格式异常：'+entity+
+                    '; shape='+str(data.shape)+'; first='+str(data[:2].tolist())+'; last='+str(data[-1:].tolist()))
+            times=np.arange(1,t['steps']+1)*t['step_s']
+            if not np.allclose(data[:,0],times,rtol=5.1e-7,atol=1e-10):
+                raise SolverFailure('Elmer逐步统计时间与固定时间步不匹配：'+entity)
+            scalars[entity]=[{'time_s':0.,'maximum_k':t['initial_temperature_k'],'mean_k':t['initial_temperature_k']},
+                *[{'time_s':float(at),'maximum_k':float(row[1]),'mean_k':float(row[2])} for at,row in zip(times,data)]]
     return {'solver':version,'execution':execution,'mesh_sha256':mesh['sha256'],'problem_sha256':digest(problem),
-            'snapshots':snapshots,'engineering_approval':False}
+            'snapshots':snapshots,'temperature_history':scalars,'engineering_approval':False}

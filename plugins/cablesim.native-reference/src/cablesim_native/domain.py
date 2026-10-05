@@ -14,8 +14,7 @@ METHOD_FIELDS = {'conductor_kind', 'ac_extra_factor', 'screen_loss_factor', 'fil
 
 def prepare(value, parameters):
     if value.get('schema_version') != 'cablesim.domain/1':
-        return Scenario.model_validate(value), dict(parameters), {
-            'circuit': 'circuit/c1', 'cables': [f'cable/c1-{p}' for p in 'ABC']}
+        raise ValueError('原生方法输入须为 SI 领域文档，请先显式迁移旧工况。')
     d = DomainDocument.model_validate(value)
     if len(d.circuits) != 1 or len(d.sections) != 1 or len(d.load_cases) != 1:
         raise ValueError('原生参考仅支持单回路、单截面、单个稳态负荷')
@@ -70,7 +69,7 @@ def prepare(value, parameters):
     # supplied, and cannot silently override a property present in the SI document.
     for material, field in ((materials[conductor.material], 'conductor_k_w_m_k'),
                             (materials[layers[3].material], 'metal_screen_k_w_m_k')):
-        if material.thermal_resistivity is not None and not isclose(parameters[field], 1 / material.thermal_resistivity, rel_tol=1e-10):
+        if field in parameters and material.thermal_resistivity is not None and not isclose(parameters[field], 1 / material.thermal_resistivity, rel_tol=1e-10):
             raise ValueError('方法导热系数与领域材料热阻率不一致：' + field)
     alpha = materials[conductor.material].temperature_coefficient_20
     if alpha is not None and 'alpha20_per_k' in parameters and not isclose(alpha, parameters['alpha20_per_k'], rel_tol=1e-10):

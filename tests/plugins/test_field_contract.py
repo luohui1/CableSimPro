@@ -1,7 +1,7 @@
 """Synthetic structural fixtures only; numerical evidence is in native integration."""
 from copy import deepcopy
 import pytest
-from backend.plugins.field_contract import ThermalField, validate_thermal_projection
+from backend.plugin_host.field_contract import ThermalField, validate_thermal_projection
 
 
 def sample():

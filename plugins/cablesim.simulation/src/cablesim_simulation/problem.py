@@ -1,5 +1,5 @@
 """Compatibility import for the shared solver-neutral SI analysis contract."""
-from backend.foundation.simulation import (
+from cablesim_sdk.simulation import (
     Material, Shape, Condition, Excitation, Time, CurrentProbe, Problem, MeshControls, validate,
 )
 

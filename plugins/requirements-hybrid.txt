@@ -1,0 +1,6 @@
+# CPU training only; inference consumes portable numeric JSON and needs none of these.
+# Install into the separate Slurm hybrid-env, preserving the native solver environment.
+xgboost-cpu==3.0.5
+scikit-learn==1.7.2
+joblib==1.5.2
+threadpoolctl==3.6.0

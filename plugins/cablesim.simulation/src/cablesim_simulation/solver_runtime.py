@@ -21,6 +21,10 @@ GUIDES = {'getdp': 'https://getdp.info/', 'elmer': 'https://www.elmerfem.org/blo
 
 
 def environment(name, work, configuration=None):
+    policy=Path(__file__).resolve().parents[4]/'.data/hpc/config.json'
+    local_fallback=policy.is_file() and json.loads(policy.read_text('utf-8')).get('allow_local_fallback') is True
+    if not os.environ.get('SLURM_JOB_ID') and not local_fallback:
+        raise EnvironmentMissing('环境缺失：本机求解已禁用，求解器验证和计算须提交 Slurm。')
     if name not in GUIDES:
         raise ValueError('未知的外部求解器。')
     config = configuration
@@ -62,12 +66,14 @@ def environment(name, work, configuration=None):
         raise EnvironmentMissing(f'{name}版本{version}未在适配器声明范围内；需要'+('3.5.0' if name == 'getdp' else '官方26.1 Windows包，或带源码与二进制摘要的管理员Linux构建清单')+'。')
     evidence = {'name':name, 'version':version, 'executable_sha256':sha256(executable.read_bytes()).hexdigest(),
                 'executable':str(executable), 'version_banner':banner.strip(), 'execution':'separate-process'}
-    evidence.update(license_source='open-source',slurm_job_id=os.environ.get('SLURM_JOB_ID'),
+    evidence.update(license_source='hpc-installation' if os.environ.get('SLURM_JOB_ID') else 'local-installation',
+                    license_type='open-source',slurm_job_id=os.environ.get('SLURM_JOB_ID'),
                     node=os.environ.get('SLURM_JOB_NODELIST'),threads=1)
     if name=='elmer':
         if os.name!='nt':
             required={'bin/ElmerSolver','lib/elmersolver/libelmersolver.so',
-                      'share/elmersolver/lib/HeatSolve.so','share/elmersolver/lib/ResultOutputSolve.so'}
+                      'share/elmersolver/lib/HeatSolve.so','share/elmersolver/lib/ResultOutputSolve.so',
+                      'share/elmersolver/lib/SaveData.so'}
             files=linux_build.get('files',{})
             if not required<=set(files):raise EnvironmentMissing('Linux Elmer构建清单缺少必需求解器/模块摘要。')
             for relative,expected in files.items():

@@ -1,7 +1,7 @@
 """IEC 60287 steady-state rating, single-core cables, touching trefoil, buried.
 
 Scope (anything else is refused, never approximated):
-- IEC 60287-1-1:2023 conductor resistance, skin (x_s <= 2.8) and proximity effect for
+- IEC 60287-1-1:2023 conductor resistance, skin (IEC piecewise branches) and proximity effect for
   round stranded conductors, capacitance, dielectric loss, sheath reactance, sheath
   circulating-current loss (both ends bonded) and trefoil sheath eddy-current loss
   (clause 5.3.7.1), with the clause 5.3.6 F factor applied to both-ends bonding as
@@ -23,21 +23,14 @@ from dataclasses import asdict, dataclass, field
 from math import isfinite, log, pi, sqrt
 
 from .inputs import Rating
+from .electrical import (RatingRefused, ac_factors, resistance, sheath_reactance,
+                         circulating, sheath_thickness_terms, eddy_geometry)
 
 METHOD_ID = 'cablesim.iec60287.single-core-trefoil-buried'
 METHOD_VERSION = '0.1.0'
-X_LIMIT = 2.8  # skin/proximity expressions are only given for x <= 2.8
 # Oversheath T3 of touching single-core cables buried in trefoil is increased by 1.6
 # (IEC 60287-2-1); a single cable inside its own duct is not.
 T3_MULTIPLIER = {'direct_buried': 1.6, 'buried_ducts': 1.0}
-
-
-class RatingRefused(ValueError):
-    """The input is outside this method's scope or has no admissible solution."""
-
-    def __init__(self, code: str, message: str):
-        super().__init__(message)
-        self.code = code
 
 
 @dataclass(frozen=True)
@@ -130,29 +123,16 @@ def geometry(r: Rating) -> Geometry:
     return Geometry(dc, d1, d2, d3, d3 + ts, d3 + 2 * ts, de, spacing)
 
 
-def _effect_factor(x2: float) -> float:
-    return x2 * x2 / (192 + 0.8 * x2 * x2)
-
-
 def electrical(r: Rating, g: Geometry) -> Electrical:
     c, f = r.conductor, r.frequency_hz
     omega = 2 * pi * f
-    r_dc = c.r20_ohm_m * (1 + c.alpha20_per_k * (r.max_conductor_temperature_c - 20))
-    xs2 = 8 * pi * f / r_dc * 1e-7 * c.ks
-    xp2 = 8 * pi * f / r_dc * 1e-7 * c.kp
-    xs, xp = sqrt(xs2), sqrt(xp2)
-    if xs > X_LIMIT or xp > X_LIMIT:
-        raise RatingRefused('SKIN_PROXIMITY_OUT_OF_RANGE', f'x_s={xs:.3f}、x_p={xp:.3f}；本方法只实现 x ≤ {X_LIMIT} 的公式。')
-    ys = _effect_factor(xs2)
-    fp = _effect_factor(xp2)
-    ratio2 = (g.conductor_m / g.axis_spacing_m) ** 2
-    yp = fp * ratio2 * (0.312 * ratio2 + 1.18 / (fp + 0.27))
-    r_ac = r_dc * (1 + ys + yp)
+    r_dc = resistance(c.r20_ohm_m, c.alpha20_per_k, r.max_conductor_temperature_c)
+    xs, ys, xp, yp, r_ac = ac_factors(r_dc, f, c.ks, c.kp, g.conductor_m, g.axis_spacing_m)
     cap = r.insulation.relative_permittivity / (18 * log(g.over_insulation_m / g.over_inner_screen_m)) * 1e-9
     wd = omega * cap * r.phase_voltage_v ** 2 * r.insulation.tan_delta
     s = r.sheath
     rs20 = s.resistivity20_ohm_m / (pi * g.sheath_mean_m * s.thickness_m)
-    x = 2 * omega * 1e-7 * log(2 * g.axis_spacing_m / g.sheath_mean_m)
+    x = sheath_reactance(f, g.axis_spacing_m, g.sheath_mean_m)
     return Electrical(r_dc, xs, ys, xp, yp, r_ac, cap, wd, rs20, x)
 
 
@@ -175,23 +155,19 @@ def sheath_loss(r: Rating, g: Geometry, e: Electrical, theta_s: float) -> Sheath
     if rs <= 0:
         raise RatingRefused('SHEATH_TEMPERATURE_INVALID', '护套温度使护套电阻非正。')
     ratio = rs / e.sheath_reactance_ohm_m
-    circulating = rs / e.r_ac_max_ohm_m / (1 + ratio ** 2) if b.scheme == 'both_ends' else 0.0
+    circulating_loss = circulating(rs, e.r_ac_max_ohm_m, e.sheath_reactance_ohm_m) if b.scheme == 'both_ends' else 0.0
     eddy, factor = 0.0, None
     if b.eddy == 'trefoil':
         # IEC 60287-1-1 clause 5.3.7.1, trefoil. t_s and D_s in mm inside C_gs; d is the mean sheath diameter.
-        ts_mm, ds_mm = s.thickness_m * 1000, g.over_sheath_m * 1000
-        beta1 = sqrt(4 * pi * omega / (1e7 * rho_s))
-        cgs = 1 + (ts_mm / ds_mm) ** 1.74 * (beta1 * ds_mm * 1e-3 - 1.6)
+        cgs, thickness_term = sheath_thickness_terms(rho_s, s.thickness_m, g.over_sheath_m, r.frequency_hz)
         m = omega / rs * 1e-7
         ratio_d = g.sheath_mean_m / (2 * g.axis_spacing_m)
-        lambda0 = 3 * (m * m / (1 + m * m)) * ratio_d ** 2
-        delta1 = (1.14 * m ** 2.45 + 0.33) * ratio_d ** (0.92 * m + 1.66)
-        eddy = rs / e.r_ac_max_ohm_m * (cgs * lambda0 * (1 + delta1) + (beta1 * ts_mm) ** 4 / 12e12)
+        eddy = rs / e.r_ac_max_ohm_m * (cgs * eddy_geometry(m, ratio_d) + thickness_term)
         if b.scheme == 'both_ends':
             # Clause 5.3.6 F with M = N = R_s/X (trefoil), applied to all conductors per TB 880 GP31.
             factor = ratio ** 2 / (ratio ** 2 + 1)
-    total = circulating + (eddy * factor if factor is not None else eddy)
-    return SheathLoss(theta_s, rs, circulating, eddy, factor, total)
+    total = circulating_loss + (eddy * factor if factor is not None else eddy)
+    return SheathLoss(theta_s, rs, circulating_loss, eddy, factor, total)
 
 
 def _t4_air_gap(r: Rating, g: Geometry, theta_m: float) -> float:

@@ -9,8 +9,8 @@ import pytest
 
 from backend.main import create_app
 from backend.kernel.requirements import make_router as requirements_router
-from backend.workbench import fingerprint
-from design.workbench.scenarios import make_router as design_router
+from backend.kernel.workspace import fingerprint
+from backend.kernel.scenarios import make_router as design_router
 
 
 @pytest.fixture

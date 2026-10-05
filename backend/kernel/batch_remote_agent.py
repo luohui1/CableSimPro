@@ -59,8 +59,8 @@ def unpack(root,archive_path,expected):
             for item in members:
                 p=Path(item.name)
                 allowed=(item.name in ('plan.json','integrity.json') or
-                    item.name.startswith(('runtime/backend/','runtime/plugins/','runtime/plugin-tests/','runtime/tests/','inputs/')) or
-                    item.name in ('runtime/runtime-manifest.json','runtime/pytest.ini'))
+                    item.name.startswith(('runtime/backend/','runtime/cablesim_sdk/','runtime/plugins/','runtime/plugin-tests/','runtime/tests/','inputs/')) or
+                    item.name in ('runtime/runtime-manifest.json','runtime/pytest.ini','runtime/scripts/evaluate_datasheets.py'))
                 if not allowed or p.is_absolute() or '..' in p.parts or not item.isfile() or item.size>100*1024*1024:
                     raise ValueError('UNSAFE_ARCHIVE_MEMBER: '+item.name)
             for item in members:
@@ -108,8 +108,10 @@ def submit(root,request_path):
         groups=request.get('task_groups',[[i] for i in indices])
         if not groups or any(not group for group in groups) or sorted(i for group in groups for i in group)!=sorted(indices):
             raise ValueError('Invalid task-group partition')
-        task_wall=max(map(len,groups))*resources['slurm_wall_seconds']
-        accounting_cpus=max(1,-(-resources['slurm_memory_mb']//6500))
+        workers=resources.get('slurm_cpus_per_task',1)
+        if type(workers) is not int or not 1<=workers<=32:raise ValueError('Invalid task CPU allocation')
+        task_wall=-(-max(map(len,groups))//workers)*resources['slurm_wall_seconds']
+        accounting_cpus=max(workers,-(-resources['slurm_memory_mb']//6500))
         if len(groups)*task_wall*accounting_cpus>2000*3600:raise ValueError('SINGLE_BUDGET_EXCEEDED')
         profile=request['profile'];python=profile['python']
         for key in ('python','getdp','elmer'):
@@ -137,7 +139,7 @@ def submit(root,request_path):
         atomic(record,saved)
         h,rest=divmod(task_wall,3600);m,s=divmod(rest,60)
         args=['sbatch','--parsable','--job-name',name,'--comment',token,'--partition','dg83',
-              '--nodes','1','--ntasks','1','--cpus-per-task','1','--no-requeue',
+              '--nodes','1','--ntasks','1','--cpus-per-task',str(workers),'--no-requeue',
               '--mem',str(resources['slurm_memory_mb'])+'M','--time',f'{h:02d}:{m:02d}:{s:02d}',
               '--array',f'0-{len(groups)-1}%{min(len(groups),resources["slurm_parallelism"])}',
               '--output',str(folder/'slurm-%A_%a.log'),str(folder/'worker.sh')]
@@ -161,25 +163,42 @@ def accounting(root,token):
     for line in raw.splitlines():
         values=line.split('|')
         if len(values)>=len(fields):records.append(dict(zip(fields,values)))
-    # Only array allocation rows contribute CPUTime; .batch/.extern are step evidence.
+    # Charge once per array allocation. Some cluster accounting parents retain
+    # zero time/"None assigned" after real completed batch/extern steps. In that
+    # case retain the raw rows and use the maximum step CPUTime, never their sum.
     allocations=[r for r in records if re.fullmatch(re.escape(job)+r'_\d+',r['JobID'])]
     terminal_states={'COMPLETED','FAILED','CANCELLED','TIMEOUT','OUT_OF_MEMORY','NODE_FAIL','PREEMPTED','BOOT_FAIL','DEADLINE'}
     expected=saved.get('task_count',len(saved['request']['indices']))
     terminal=len(allocations)==expected and all(r['State'].split()[0].rstrip('+') in terminal_states for r in allocations)
-    actual=sum(int(r['CPUTimeRAW'] or 0) for r in allocations)
-    value={**saved,'accounting':records,'actual_cpu_seconds':actual,'terminal':terminal,'accounted_samples':len(allocations),'updated':now()}
+    actual=0;reconciliations=[]
+    for allocation in allocations:
+        seconds=int(allocation['CPUTimeRAW'] or 0)
+        steps=[r for r in records if r['JobID'].startswith(allocation['JobID']+'.')]
+        observed=max((int(r['CPUTimeRAW'] or 0) for r in steps),default=0)
+        if seconds==0 and observed>0:
+            reconciliations.append({'job_id':allocation['JobID'],'allocation_cpu_seconds':seconds,
+                'observed_step_maximum_cpu_seconds':observed,'source':'maximum step CPUTimeRAW; overlapping steps are not summed'})
+            seconds=observed
+        actual+=seconds
+    value={**saved,'accounting':records,'actual_cpu_seconds':actual,'accounting_reconciliations':reconciliations,
+           'terminal':terminal,'accounted_samples':len(allocations),'updated':now()}
     atomic(root/'submissions'/token/'accounting.json',value)
     return value
 
 
 def run_group(root,token):
     import signal
+    from concurrent.futures import ThreadPoolExecutor
     folder=root/'submissions'/str(UUID(token));saved=read(folder/'submission.json')
     group=read(folder/'groups.json')[int(os.environ['SLURM_ARRAY_TASK_ID'])]
     plan=read(root/'plan.json');failures=[]
-    for index in group:
+    def run_one(index):
+        errors=[]
         if plan.get('schema_version')=='cablesim.native-test-plan/1':
             arguments=[saved['request']['profile']['python'],'-I',str(root/'runtime/backend/kernel/hpc_test_worker.py'),str(root)]
+        elif plan.get('schema_version')=='cablesim.remote-run-plan/1':
+            arguments=[saved['request']['profile']['python'],'-I',str(root/'runtime/backend/kernel/hpc_run_worker.py'),str(root)]
+            if plan.get('case_array'):arguments.extend(['--index',str(index)])
         else:
             arguments=[saved['request']['profile']['python'],'-I',str(root/'runtime/backend/kernel/batch_worker.py'),
                        str(root),'--backend','slurm','--index',str(index)]
@@ -187,7 +206,7 @@ def run_group(root,token):
         with subprocess.Popen(arguments,stdout=subprocess.PIPE,stderr=subprocess.PIPE,start_new_session=True) as process:
             try:
                 out,error=process.communicate(timeout=plan['execution']['sample_timeout_s']+90)
-                if process.returncode:failures.append({'index':index,'code':'WORKER_CRASHED','message':error.decode('utf-8','replace')[-4000:]})
+                if process.returncode:errors.append({'index':index,'code':'WORKER_CRASHED','message':error.decode('utf-8','replace')[-4000:]})
             except subprocess.TimeoutExpired:
                 import psutil
                 parent=psutil.Process(process.pid);children=parent.children(recursive=True)
@@ -197,14 +216,24 @@ def run_group(root,token):
                 try:os.killpg(process.pid,signal.SIGKILL)
                 except ProcessLookupError:pass
                 process.communicate()
-                failures.append({'index':index,'code':'WORKER_TIMEOUT','message':'Sample worker exceeded its saved timeout; no result synthesized.'})
+                errors.append({'index':index,'code':'WORKER_TIMEOUT','message':'Sample worker exceeded its saved timeout; no result synthesized.'})
+        return errors
+    workers=plan['execution'].get('slurm_cpus_per_task',1)
+    if plan.get('schema_version') in ('cablesim.native-test-plan/1','cablesim.remote-run-plan/1'):workers=1
+    if type(workers) is not int or not 1<=workers<=32:raise ValueError('Invalid task worker count')
+    allocated=int(os.environ.get('SLURM_CPUS_PER_TASK',str(workers)))
+    if workers>allocated:raise ValueError('Saved workers exceed the actual Slurm CPU allocation')
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for errors in pool.map(run_one,group):failures.extend(errors)
     result={'indices':group,'failures':failures,'job_id':os.environ.get('SLURM_JOB_ID'),'updated':now()}
     atomic(folder/('group-'+os.environ['SLURM_ARRAY_TASK_ID']+'.json'),result)
     return result
 
 
 def collect(root,destination):
-    with tarfile.open(destination,'w:gz') as archive:
+    # Numeric result payloads are already gzip-compressed. Fast outer
+    # compression avoids spending collection time recompressing those bytes.
+    with tarfile.open(destination,'w:gz',compresslevel=1) as archive:
         for name in ('samples','raw','attempts','submissions','worker-errors'):
             for path in sorted((root/name).rglob('*')):
                 if path.is_file() and path.suffix not in ('.lock','.part') and '__pycache__' not in path.parts:

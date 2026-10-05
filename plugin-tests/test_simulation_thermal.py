@@ -115,7 +115,8 @@ def test_multiregion_real_host_artifact_and_report(tmp_path):
 
 def test_domain_and_explicit_model_share_identical_solver_input(tmp_path):
     from backend.plugin_host import Executor
-    from cablesim_simulation.iec_compare import inputs,thermal_parameters
+    sys.path.insert(0,str(ROOT/'plugins/cablesim.simulation/validation'))
+    from iec_compare import inputs,thermal_parameters
     document,iec_parameters = inputs(False)
     host = Executor(jobs_root=tmp_path)
     source = host.run('cablesim.iec60287','steady-rating',[{'case_id':'source','input':document,'parameters':iec_parameters}])

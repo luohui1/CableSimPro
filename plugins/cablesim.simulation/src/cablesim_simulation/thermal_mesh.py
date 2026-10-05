@@ -70,8 +70,12 @@ def build(model, controls):
         gmsh.model.mesh.field.setNumbers(distance,'CurvesList',sorted(near_curves))
         gmsh.model.mesh.field.setNumber(distance,'Sampling',200)
         threshold = gmsh.model.mesh.field.add('Threshold')
+        band=controls.fine_mesh_band_m
+        if band is None:band=max(c.layers[-1].outer_radius_m for c in model.cables)
+        if band>=controls.mesh_transition_m:
+            raise ValueError('controls.fine_mesh_band_m：细网格带宽须小于网格过渡距离。')
         for key,v in [('InField',distance),('SizeMin',controls.mesh_size_m),('SizeMax',controls.far_mesh_size_m),
-                      ('DistMin',max(c.layers[-1].outer_radius_m for c in model.cables)),('DistMax',controls.mesh_transition_m)]:
+                      ('DistMin',band),('DistMax',controls.mesh_transition_m)]:
             gmsh.model.mesh.field.setNumber(threshold,key,v)
         gmsh.model.mesh.field.setAsBackgroundMesh(threshold)
         for option in ('MeshSizeFromPoints','MeshSizeFromCurvature','MeshSizeExtendFromBoundary'):

@@ -1,11 +1,11 @@
 # Three-cable + homogeneous-soil thermal reference
 
-This increment reuses `backend/plugins`, the existing saved `Scenario`, the R2
-`CircularRecipe`, project locks and immutable job artifacts. It adds
-`cablesim.buried-reference@0.1.0` / `skfem.buried-reference`. It does not add another
-plugin runtime, CAD data model or database. The unchanged six-domain radial field
-keeps `cablesim.thermal-field/1`; the 19-domain field has the separate additive
-`cablesim.buried-field/1` contract.
+The `cablesim.native-reference` v2 plugin accepts a saved SI domain document;
+legacy data must pass the explicit domain migration first. It uses the shared
+plugin_host executor, immutable Study/Run records and source-bound JSON bundles.
+The six-domain radial field retains `cablesim.thermal-field/1`, and the 19-domain
+field retains `cablesim.buried-field/1`. Physical artifact schema versions are
+independent of the retired v1 execution protocol.
 
 ## Exact physical problem
 
@@ -74,11 +74,11 @@ Use a separate test environment and intentionally install the optional packages:
 python -m pip install -r backend/requirements-dev.txt -r plugins/requirements-native.txt
 python scripts/plugin_sdk.py verify
 python scripts/seal_plugin_catalog.py
-python -m pytest plugin-tests/test_native.py plugin-tests/test_cad_runtime.py plugin-tests/test_buried.py
+python scripts/run_plugin_tests_hpc.py --test plugin-tests/test_native.py --test plugin-tests/test_cad_runtime.py --test plugin-tests/test_buried.py
 ```
 
-The project plugin center exposes the new study. Installation only registers the
-bundled first-party adapter. It never installs Python dependencies or changes the
-project design. The previous plugin ecosystem/browser cases remain in the CI gate.
-Final numerical claims are tied to exact source commits and CI artifacts; local
-results do not stand in for Windows or production browser validation.
+The generic method catalog exposes `fixed-power`, `electrothermal`, `line-source`,
+CAD/mesh/postprocessing and `line-source-crosscheck`. Upstream native references
+must bind a saved run/case, unchanged domain input and artifact SHA256; direct
+caller-supplied file bytes are refused. Native validation runs only under Slurm
+dg83 and records actual core time. Installing a plugin does not install dependencies.

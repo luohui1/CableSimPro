@@ -77,7 +77,3 @@ class Scenario(StrictModel):
         return self
 
 
-class SweepRequest(StrictModel):
-    scenario: Scenario
-    parameter: Literal["soil_rho_k_m_w", "ambient_temperature_c", "depth_m", "spacing_m"]
-    values: list[float] = Field(min_length=2, max_length=12)

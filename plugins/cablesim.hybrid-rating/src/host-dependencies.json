@@ -1,0 +1,187 @@
+[
+  {
+    "path": "cablesim_sdk/__init__.py",
+    "sha256": "554b5376d66cf9961d4f6f48272abc93f4cab342a7496801d5f5c8e800806817",
+    "size_bytes": 81
+  },
+  {
+    "path": "cablesim_sdk/base.py",
+    "sha256": "65ad67798ef624e21b2c17ba5735b74d0f796048e24edda5be6baed0b92ebbf4",
+    "size_bytes": 242
+  },
+  {
+    "path": "cablesim_sdk/domain.py",
+    "sha256": "da05192cb20b38c5af17ca0ed4af88e7caabc76ef1f313d02588eec8f9038114",
+    "size_bytes": 24563
+  },
+  {
+    "path": "cablesim_sdk/electrothermal.py",
+    "sha256": "5d9a344951ad07dbde0d3775e44f05875cafc05efa2ffdef88d3589769565e44",
+    "size_bytes": 3348
+  },
+  {
+    "path": "cablesim_sdk/environment.py",
+    "sha256": "299ceb35de56925b8604b5437ae17ecaeb476c322e23537ada0c82260ac5532f",
+    "size_bytes": 924
+  },
+  {
+    "path": "cablesim_sdk/reproduction.py",
+    "sha256": "dedd26ded610c9420c42450196d1e465a382850d13d3cee23a6069084e5e6120",
+    "size_bytes": 4014
+  },
+  {
+    "path": "cablesim_sdk/simulation.py",
+    "sha256": "d21873f6fd02caa297ecfc9b3938f0ce694b1e9a62ac435e81fe6278dfea4ec1",
+    "size_bytes": 10469
+  },
+  {
+    "path": "cablesim_sdk/simulation_artifacts.py",
+    "sha256": "f95e77c720d38a3377843f5e12b76e9cee3ad4a3bb8d1b498d7bf23f88ad794f",
+    "size_bytes": 9900
+  },
+  {
+    "path": "cablesim_sdk/validation.py",
+    "sha256": "106aaed828610dbaa5cea6ba72cb8ba8da0f1befa0be04678501414d2ab7cd11",
+    "size_bytes": 906
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/__init__.py",
+    "sha256": "84390f2e1363f74a79fc27d7e7f4630c0de8f47176578c65e44f1d82ca2bf2bf",
+    "size_bytes": 277
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/domain.py",
+    "sha256": "69f331f57296b003ac577c0e8eef6ecdedba9d5d16aa8785d35681e679c14961",
+    "size_bytes": 6510
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/double_flat.py",
+    "sha256": "a50dc8553911a13fb26fbcca489ebb3c6a56e32aad255f15431331f44b57561f",
+    "size_bytes": 6804
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/electrical.py",
+    "sha256": "f4fbd642ac7e61b8f926a54c57a659b840b17b4f0ababc62650a61390ce078b8",
+    "size_bytes": 3158
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/group.py",
+    "sha256": "2026893234d1568ae94b10a53110f00234a381873e4214b1036c62e937e462e1",
+    "size_bytes": 24837
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/group_inputs.py",
+    "sha256": "888e9ba6e7f7ef06843db1a2f6792e274b8cb3585830e325d9b61f337b1bab86",
+    "size_bytes": 19671
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/inputs.py",
+    "sha256": "89aa65f7f68659fa80e01aa204045d6f579598deaf4f383731fe8e744e7ba367",
+    "size_bytes": 5874
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/loss_table.py",
+    "sha256": "5ddc7998802af6c49a76b3ac92785db9cd6951730ecb30c028ea9873b0262c9e",
+    "size_bytes": 7462
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/method.py",
+    "sha256": "09de8c610fb1b416bc8744115927386abf716c5b891be72389bbedbb5d785772",
+    "size_bytes": 11655
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/soil.py",
+    "sha256": "e73beab2f800b3bc17a25852ea494bf84477000a26fa6be28e937906b780d263",
+    "size_bytes": 9315
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/three_core.py",
+    "sha256": "072da1059e9b6f99d267a9a382a86d12c42c4eacbeafcea1fef72be8a477f2ff",
+    "size_bytes": 27516
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/verification.py",
+    "sha256": "c8fe9b90093f7ea3c49dc9b866a7ba31140e3df36e2fc8817e02781795e2a624",
+    "size_bytes": 7087
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/__init__.py",
+    "sha256": "1006479d932d81267b063090f128e7d41a147b3ca6b648257e857d8c13d3ecc9",
+    "size_bytes": 52
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/artifacts.py",
+    "sha256": "d38d42d7d81df9afa0e397a0878dc4cd8700d41bf60c1b59843bdd0aef0ff080",
+    "size_bytes": 6957
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/domain_coupled.py",
+    "sha256": "103c1b8224bd1b5955d0497b469e80b956800c6a69b4ea292f5cc932afb23058",
+    "size_bytes": 4147
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/electrothermal.py",
+    "sha256": "387f2714a974e7de834820e6b4b1a2b88f574169560d7322331f8e6672cc20ab",
+    "size_bytes": 9804
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/getdp_adapter.py",
+    "sha256": "eb39e374e2d093f029504f3579dc950a445638b3de1b7565a4b9df0060e71798",
+    "size_bytes": 20790
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/problem.py",
+    "sha256": "6f3e63b591d50d48e58c9603bd694e9125d82bd2aaec1104ce7014a95eca3fdf",
+    "size_bytes": 339
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/problem_domain.py",
+    "sha256": "e64239a830a48d188af851c8172c3d68141b58b0a1bda0469c258edd18e18271",
+    "size_bytes": 7972
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/problem_mesh.py",
+    "sha256": "300a7910355120278611f95d0e1369833a19292d26f3c1626ca76345da56166f",
+    "size_bytes": 15331
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/report.py",
+    "sha256": "a5a2a41fcd92b37b765648a005be0fb243fcd76b466c4f3127c643364626d76c",
+    "size_bytes": 4799
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/research_electromagnetic.py",
+    "sha256": "93165042a4d380cd620c2e11f594b9562d4818c2eef589a56546f5299eaafd54",
+    "size_bytes": 9184
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/solver_runtime.py",
+    "sha256": "33a614dcebd7bab646866f3fab4ceb35bbfa83b6ea9fc03998412638d2f80625",
+    "size_bytes": 6838
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/thermal.py",
+    "sha256": "3a2732bba2d0ebbff506a52e2459b4f09dd87c43dd7a6a5854652a803a1e2d4a",
+    "size_bytes": 18126
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/thermal_dataset.py",
+    "sha256": "089fcbfafbca76831f4185528552692c4d36eb5def0c62d9c09cf81b9fd6cc24",
+    "size_bytes": 6420
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/thermal_domain.py",
+    "sha256": "7f1df2b1cb25fff196308a707bba469db5cb878c3c7794b758b9b2e8187909d5",
+    "size_bytes": 8620
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/thermal_input.py",
+    "sha256": "095ea98208d6c8795e449ee404fc9423753b2449d2218327182ca9c1f28a5ceb",
+    "size_bytes": 9362
+  },
+  {
+    "path": "plugins/cablesim.simulation/src/cablesim_simulation/thermal_mesh.py",
+    "sha256": "c3f61b3aafd1c52b0056bc6547d64baefb8b5b5af9041967b20c0d06384728e0",
+    "size_bytes": 5567
+  }
+]

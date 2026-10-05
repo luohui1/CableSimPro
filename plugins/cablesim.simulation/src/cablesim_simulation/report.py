@@ -1,6 +1,6 @@
 """统一论文复现报告：缺失、不可比、超差与达标是不同状态。"""
 from math import isfinite
-from backend.foundation.reproduction import digest
+from cablesim_sdk.reproduction import digest
 
 
 def comparison(summary, field, reference):

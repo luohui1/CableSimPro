@@ -1,9 +1,9 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.native-reference",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "name": "有限元与线源参考",
-  "description": "支持单回路直埋领域文档的有限元、电热耦合与线源校核，需要明确材料参数和原生环境。",
+  "description": "领域输入的CAD、网格、有限元、电热与线源参考；来源工件由宿主绑定并验证哈希。",
   "icon": "assets/icon.svg",
   "publisher": {
     "id": "cablesim",
@@ -44,7 +44,7 @@
       "title": "直埋有限元温度",
       "method_version": "native-reference/0.1.0",
       "analysis": "steady_state",
-      "input_schema": "cablesim.native-input/1",
+      "input_schema": "cablesim.domain/1",
       "outputs": [
         {
           "key": "conductor_temperature",
@@ -65,7 +65,7 @@
       },
       "limitations": [
         "固定功率温度参考研究，不反求载流量；有限元网格要求电缆之间存在间隙。",
-        "接受 v0 或 SI 领域输入；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。"
+        "接受 SI 领域输入，旧工况须显式迁移；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。"
       ]
     },
     {
@@ -74,7 +74,7 @@
       "title": "直埋电热耦合",
       "method_version": "native-reference/0.1.0",
       "analysis": "steady_state",
-      "input_schema": "cablesim.native-input/1",
+      "input_schema": "cablesim.domain/1",
       "outputs": [
         {
           "key": "ampacity",
@@ -119,7 +119,7 @@
       },
       "limitations": [
         "显式系数损耗与线性电阻温变的有限元参考；支持运行温度和载流量反求，不等于完整 IEC 或电磁场求解。电缆之间须存在间隙。",
-        "接受 v0 或 SI 领域输入；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。"
+        "接受 SI 领域输入，旧工况须显式迁移；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。"
       ]
     },
     {
@@ -128,7 +128,7 @@
       "title": "线源交叉校核",
       "method_version": "native-reference/0.1.0",
       "analysis": "crosscheck",
-      "input_schema": "cablesim.native-input/1",
+      "input_schema": "cablesim.domain/1",
       "outputs": [
         {
           "key": "conductor_temperature",
@@ -149,7 +149,187 @@
       },
       "limitations": [
         "范围限定的参考研究；固定功率温度不等于载流量。",
-        "接受 v0 或 SI 领域输入；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。"
+        "接受 SI 领域输入，旧工况须显式迁移；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "cable-step",
+      "title": "圆电缆CAD参考",
+      "method_version": "native-adapters/0.1.0",
+      "analysis": "geometry",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.native-artifact-count",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.native-bundle",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "单回路六层圆电缆的参考适配；不代表制造或工程认证。",
+        "上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "section-mesh",
+      "title": "圆截面网格参考",
+      "method_version": "native-adapters/0.1.0",
+      "analysis": "mesh",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.native-artifact-count",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.native-bundle",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "单回路六层圆电缆的参考适配；不代表制造或工程认证。",
+        "上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "mesh-vtu",
+      "title": "网格格式转换",
+      "method_version": "native-adapters/0.1.0",
+      "analysis": "postprocess",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.native-artifact-count",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.native-bundle",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "单回路六层圆电缆的参考适配；不代表制造或工程认证。",
+        "上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "radial-thermal",
+      "title": "定表温径向传热参考",
+      "method_version": "native-adapters/0.1.0",
+      "analysis": "crosscheck",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.native-artifact-count",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.native-bundle",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "单回路六层圆电缆的参考适配；不代表制造或工程认证。",
+        "上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "field-summary",
+      "title": "温度场统计与等温线",
+      "method_version": "native-adapters/0.1.0",
+      "analysis": "postprocess",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.native-artifact-count",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.native-bundle",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "单回路六层圆电缆的参考适配；不代表制造或工程认证。",
+        "上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "line-source-crosscheck",
+      "title": "有限域与半空间线源交叉校核",
+      "method_version": "native-crosscheck/0.1.0",
+      "analysis": "crosscheck",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.native-difference",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.native-bundle",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "仅引用相同领域输入的已封存固定功率有限元运行，不重算来源有限元。",
+        "差值为信息，不作为工程认证或通过判据。"
       ]
     }
   ],
@@ -166,38 +346,38 @@
     },
     {
       "path": "src/cablesim_native/adapters.py",
-      "sha256": "785fff6d9a766fd2b54e8896fb446e15b0d211c7ca5355abbe8e580923902321",
-      "size_bytes": 10070
+      "sha256": "d496c0ee268898a43ff85e15dc8be021d80187d44bf292ef2b74c0eaab7e7ac9",
+      "size_bytes": 10074
     },
     {
       "path": "src/cablesim_native/buried.py",
-      "sha256": "3ad8d7d641b7653dd42384bdfd6473f3d929a35c78396d18708ecd4e3b4e2584",
-      "size_bytes": 10536
+      "sha256": "c73339c59a99c39ee1173efdf7270e2f9eba16b9e725775779993c834e405c90",
+      "size_bytes": 10540
     },
     {
       "path": "src/cablesim_native/domain.py",
-      "sha256": "ddbcb2b9d54eb4d7cbb84a4b2cb4efe3694e7adc8c8255b6f4e9d31f43882345",
-      "size_bytes": 7572
+      "sha256": "e7b6a99bb0ef563eed9aada99fe09ca39a13ea98b6737dfaf6060b0f75c13e19",
+      "size_bytes": 7550
     },
     {
       "path": "src/cablesim_native/electrothermal.py",
-      "sha256": "f7a55406b1c6a1a470f3d3f9114e7d86ec77df53534ad61f2b557ee681e20b32",
-      "size_bytes": 14870
+      "sha256": "0d834aa02ed7017ddc89f1dcb661f938a7dcda27d41b9c3356b66886d7e2437e",
+      "size_bytes": 14878
     },
     {
       "path": "src/cablesim_native/line_source.py",
-      "sha256": "137827b5cffa57f2ee2aa842cd8dcf5e6e8bcfe1e0bcd1ec6c0a54209a416e36",
-      "size_bytes": 6285
+      "sha256": "3068cbcc10f77232b5fc91a7bc150aa82e6b03e6586431815ed6f7adfa7f5bb2",
+      "size_bytes": 6347
     },
     {
       "path": "src/cablesim_native/main.py",
-      "sha256": "ab25d9652f5ab9678ed94af822d57384b971576d76fb123bbb62ec1c75a4ac8d",
-      "size_bytes": 6354
+      "sha256": "0fbb3a352c7c307fae0d03810bb385857299f0cb18aad2de723a41bacddc47f2",
+      "size_bytes": 9305
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "430d8979e690c60f6ab52011242ae19ecdd64489d549281930c30a2f02a3ea51",
-      "size_bytes": 2068
+      "sha256": "5508ea8e9a7219a07dd8863a46d00f3347abd1a71c21b30d8c45afe355af5d14",
+      "size_bytes": 3672
     }
   ]
 }

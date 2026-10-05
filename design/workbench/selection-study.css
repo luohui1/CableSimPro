@@ -3,3 +3,7 @@
 @media(max-width:700px){.selection-controls label{flex:1 1 140px}.selection-controls input,.selection-controls select{max-width:100%}.selection-conclusion{align-items:flex-start}}
 .selection-table td:last-child small{display:block;font-size:var(--text-note);margin-top:var(--space-1)}
 .selection-group{margin-bottom:var(--space-4)}.selection-group>summary{padding:var(--space-2) 0;font-size:var(--text-body);font-weight:600;cursor:pointer}.selection-group>summary .number{margin-left:var(--space-2);font-weight:400;color:var(--text-secondary)}.selection-conclusion{padding:var(--space-3) 0;border-bottom:1px solid var(--border)}.selection-conclusion strong{font-size:var(--text-body);line-height:1.6}
+#modal[open]:has(#engineering-form),#modal[open]:has(#new-engineering-form){display:grid;grid-template-rows:auto minmax(0,1fr) auto;overflow:hidden}
+#modal:has(#engineering-form) .dialog-body,#modal:has(#new-engineering-form) .dialog-body{min-height:0;overflow:auto}
+#engineering-form .amp-dialog-fields,#new-engineering-form .amp-dialog-fields{gap:var(--space-4)}
+#engineering-form input,#engineering-form select,#new-engineering-form input,#new-engineering-form select{font:var(--text-note) var(--font-ui);font-variant-numeric:tabular-nums;border-radius:var(--radius-input);padding-inline:var(--space-2)}

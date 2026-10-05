@@ -3,52 +3,20 @@
 'use strict';
 const {chromium}=require('../../design/node_modules/@playwright/test');
 const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
-const {spawn}=require('node:child_process'),{randomUUID}=require('node:crypto');
-const root=path.resolve(__dirname,'../..'),base=process.env.CABLESIM_BASE_URL||'http://127.0.0.1:8041';
-const out=path.join(root,'.data/type-versions'),parent=path.join(root,'.tmp/type-versions-e2e'),owned=path.join(parent,randomUUID());
-fs.mkdirSync(out,{recursive:true});fs.mkdirSync(owned,{recursive:true});
-const checks=[],errors=[],sessions=[];let server,browser,context,fixtureBase,fixtureWid,historyWid;
+const fixtures=require('./type-fixtures.cjs');
+const root=fixtures.root;let base;
+const out=path.join(root,'.data/type-versions');
+fs.mkdirSync(out,{recursive:true});
+const checks=[],errors=[],sessions=[];let primary,receiptServer,browser,context,fixtureBase,fixtureWid,historyWid;
 const record=(name,detail={})=>{checks.push({name,...detail});console.log('PASS '+name);};
 async function api(route,body,method=body?'POST':'GET',url=base,headers={}){
   const response=await fetch(url+'/api'+route,{method,headers:{'Content-Type':'application/json',...headers},body:body?JSON.stringify(body):undefined});
   const data=await response.json();assert.ok(response.ok,JSON.stringify(data));return data;
 }
 async function fixture(){
-  const py=String.raw`import importlib.util, os, json
-from pathlib import Path
-from copy import deepcopy
-from fastapi.testclient import TestClient
-from pytest import MonkeyPatch
-from design.workbench.serve import app
-spec=importlib.util.spec_from_file_location('type_receipt_fixture', Path(os.environ['TYPE_TEST_ROOT'])/'tests/test_type_versions.py')
-module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-patch=MonkeyPatch()
-with TestClient(app) as client:
-    w=module.workspace(client)
-    runs=module.seed_evidence(client,w,patch)
-    historical=module.workspace(client)
-    runs.update(module.seed_evidence(client,historical,patch))
-    def get_run(wid,rid,cache=None):
-        value=deepcopy(runs[rid])
-        if app.state.workspace_store.snapshot(wid)['revision']!=value['snapshot']['workspace_revision']:
-            value['freshness']='historical'
-        return value
-    patch.setattr(app.state.research,'get_run',get_run)
-    (Path(os.environ['TYPE_TEST_DIR'])/'fixture.json').write_text(json.dumps({'workspace_id':w['id'],'historical_workspace_id':historical['id']}),'utf-8')
-`;
-  fs.writeFileSync(path.join(owned,'type_versions_fixture.py'),py,'utf8');
-  const net=require('node:net'),probe=net.createServer();await new Promise(resolve=>probe.listen(0,'127.0.0.1',resolve));
-  const port=probe.address().port;await new Promise(resolve=>probe.close(resolve));fixtureBase='http://127.0.0.1:'+port;
-  server=spawn(path.join(root,'.venv/Scripts/python.exe'),['-m','uvicorn','type_versions_fixture:app','--app-dir',owned,'--host','127.0.0.1','--port',String(port)],{cwd:root,windowsHide:true,env:{...process.env,CABLESIM_DESIGN_DB:path.join(owned,'types.sqlite'),CABLESIM_TYPE_APPROVER_TOKEN:'isolated-test-credential',TYPE_TEST_ROOT:root,TYPE_TEST_DIR:owned},stdio:['ignore','pipe','pipe']});
-  let log='';server.stdout.on('data',b=>log+=b.toString());server.stderr.on('data',b=>log+=b.toString());
-  await new Promise((resolve,reject)=>{const deadline=setTimeout(()=>reject(new Error('Receipt fixture did not start: '+log)),60000);const check=b=>{if(b.toString().includes('Uvicorn running')){clearTimeout(deadline);resolve();}};server.stderr.on('data',check);server.once('exit',code=>{clearTimeout(deadline);reject(new Error('Receipt fixture exited '+code+': '+log));});});
-  fixtureWid=JSON.parse(fs.readFileSync(path.join(owned,'fixture.json'),'utf8')).workspace_id;
-  historyWid=JSON.parse(fs.readFileSync(path.join(owned,'fixture.json'),'utf8')).historical_workspace_id;
-}
-async function stopFixture(){
-  if(!server)return;
-  if(process.platform==='win32')await new Promise(resolve=>{const killer=spawn('taskkill',['/PID',String(server.pid),'/T','/F'],{windowsHide:true,stdio:'ignore'});killer.once('exit',resolve);killer.once('error',resolve);});
-  else server.kill('SIGTERM');
+  receiptServer=await fixtures.startServer({lifecycle:true});
+  fixtureBase=receiptServer.base;fixtureWid=receiptServer.fixture.workspace_id;
+  historyWid=receiptServer.fixture.historical_workspace_id;
 }
 async function goto(page,id,module,url=base){await page.goto(`${url}/design/workbench/#/types/${id}/${module}`);await page.waitForSelector('[data-version-state]');await page.waitForFunction(()=>!state.busy&&!document.querySelector('[data-version-state="loading"]'));}
 async function capture(page,name,width=1366,height=768){
@@ -58,9 +26,11 @@ async function capture(page,name,width=1366,height=768){
   await page.screenshot({path:path.join(out,name+'.png')});record('layout '+name,stats);
 }
 (async()=>{
-  const demo=JSON.parse(fs.readFileSync(path.join(out,'demo.json'),'utf8'));
-  browser=await chromium.launch({channel:'msedge',headless:true});context=await browser.newContext({viewport:{width:1366,height:768}});sessions.push(context);let page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
   try{
+  primary=await fixtures.startServer();base=primary.base;
+  const demo=await fixtures.comparisonExamples(base,{ks:1,kp:1,eddy:'ignored',t4_form:'exact',reference_basis:'iec2023',source:'合成验收数据的显式校核条件；非厂家数据',duct:{u:1.87,v:.312,y_per_k:.0037,initial_mean_air_temperature_c:40},solver:{initial_sheath_temperature_c:70,current_tolerance_a:1e-8,max_iterations:100}});
+  fs.writeFileSync(path.join(out,'demo.json'),JSON.stringify(demo,null,2));
+  browser=await chromium.launch({channel:'msedge',headless:true});context=await browser.newContext({viewport:{width:1366,height:768}});context.setDefaultTimeout(300000);sessions.push(context);let page=await context.newPage();page.on('pageerror',e=>errors.push(e.message));
     const ids=demo.examples.single_core;
     await goto(page,ids.a,'comparison/matrix');assert.equal(await page.locator('[aria-label="方案结果矩阵"] thead input[type="radio"]').count(),2);
     const values=await api('/types/'+ids.a+'/comparison'),[a,b]=values.items;
@@ -87,11 +57,11 @@ async function capture(page,name,width=1366,height=768){
     // Original snapshots remain historical after restoring inputs: refresh runs explicitly.
     const review=await context.newPage();review.on('pageerror',e=>errors.push(e.message));
     await goto(review,fixtureWid,'comparison/matrix',fixtureBase);await review.locator('[data-action="type-version-adopt"]').click();await review.locator('[data-action="type-version-confirm-adopt"]').click();await review.locator('[data-action="type-version-submit"]').waitFor();await review.locator('[data-action="type-version-submit"]').click();await review.locator('#version-checks-ack').check();await review.locator('#version-checks-ack').press('Enter');await review.locator('[data-action="type-version-approve"]:not([disabled])').waitFor();await capture(review,'release-submitted-1366');
-    await review.locator('[data-action="type-version-approve"]').click();await review.locator('#version-reviewer').fill('TEST RECEIPT');await review.locator('#version-review-token').fill('isolated-test-credential');await review.locator('#version-human-ack').check();await review.locator('#version-human-ack').press('Enter');await review.waitForFunction(()=>document.querySelector('.version-review-header h3')?.textContent==='已批准'&&!state.busy);await capture(review,'release-approved-1366');
-    await review.locator('[data-action="type-version-publish"]').click();await review.locator('#version-publish-token').fill('isolated-test-credential');await review.locator('[data-action="type-version-confirm-publish"]').press('Enter');await review.waitForFunction(()=>document.querySelector('.version-review-header h3')?.textContent==='已发布'&&!state.busy);await capture(review,'release-published-1920',1920,1080);
-    const released=await api('/types/'+fixtureWid+'/specification',null,'GET',fixtureBase);assert.equal(released.lifecycle.status,'published');assert.equal(released.lifecycle.approval.reviewer,'TEST RECEIPT');assert.ok(released.lifecycle.approval.approved_at);assert.equal(released.payload.chapters.length,8);
+    await review.locator('[data-action="type-version-approve"]').click();assert.equal(await review.locator('#version-reviewer').getAttribute('readonly'),'');assert.ok(await review.locator('#version-reviewer').inputValue());await review.locator('#version-human-ack').check();await review.locator('#version-human-ack').press('Enter');await review.waitForFunction(()=>document.querySelector('.version-review-header h3')?.textContent==='已批准'&&!state.busy);await capture(review,'release-approved-1366');
+    await review.locator('[data-action="type-version-publish"]').click();await review.locator('[data-action="type-version-confirm-publish"]').press('Enter');await review.waitForFunction(()=>document.querySelector('.version-review-header h3')?.textContent==='已发布'&&!state.busy);await capture(review,'release-published-1920',1920,1080);
+    const released=await api('/types/'+fixtureWid+'/specification',null,'GET',fixtureBase);assert.equal(released.lifecycle.status,'published');assert.equal(released.lifecycle.approval.reviewer,released.lifecycle.operator.username);assert.ok(released.lifecycle.approval.approved_at);assert.equal(released.payload.chapters.length,8);
     const snapshot=await api('/workspaces/'+fixtureWid,null,'GET',fixtureBase),deny=await fetch(fixtureBase+'/api/workspaces/'+fixtureWid+'/domain',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({expected_revision:snapshot.revision,document:snapshot.domain})});assert.equal(deny.status,409);
-    await goto(review,fixtureWid,'specification/preview',fixtureBase);assert.equal(await review.frameLocator('.version-spec-preview').locator('section').count(),8);record('isolated credentialed human receipt publishes and freezes complete specification',{authority:'isolated test receipt',chapters:8});
+    await goto(review,fixtureWid,'specification/preview',fixtureBase);assert.equal(await review.frameLocator('.version-spec-preview').locator('section').count(),8);record('isolated local human receipt publishes and freezes complete specification',{authority:'isolated test receipt',chapters:8});
     const exported=review.waitForEvent('download');await review.locator('[data-action="type-version-download"]').click();const download=await exported;await download.saveAs(path.join(out,'specification.html'));const exportedHtml=fs.readFileSync(path.join(out,'specification.html'),'utf8');assert.equal((exportedHtml.match(/<section id=/g)||[]).length,8);assert.ok(exportedHtml.includes('--font-ui'));assert.ok(!exportedHtml.includes('<link rel="stylesheet"'));record('standalone specification export embeds tokens and all eight chapters');
     await goto(review,fixtureWid,'specification/review',fixtureBase);await review.reload();await review.locator('[data-action="type-version-fork"]').waitFor();assert.equal(await review.locator('#header [data-action="save"]').isDisabled(),true);record('published version reload remains frozen');
     await capture(review,'release-published-1366');await capture(review,'release-mobile',390,844);
@@ -101,7 +71,6 @@ async function capture(page,name,width=1366,height=768){
     const historical=await api('/workspaces/'+historyWid,null,'GET',fixtureBase),historyDocument=structuredClone(historical.domain);historyDocument.cable_types[0].common_layers[1].thickness+=.0005;await api('/workspaces/'+historyWid+'/domain',{expected_revision:historical.revision,document:historyDocument},'PUT',fixtureBase);await goto(review,historyWid,'specification/content',fixtureBase);await review.locator('[data-version-state="historical"]').waitFor();await capture(review,'specification-historical-1366');record('specification historical state retains source snapshots');
     assert.deepEqual(errors,[]);record('no browser page errors');fs.writeFileSync(path.join(out,'acceptance.json'),JSON.stringify({base,checks,errors,fixture_scope:'isolated lifecycle data, not manufacturer certification'},null,2));
   }finally{
-    for(const c of sessions)await c.close();if(browser){assert.equal(browser.contexts().length,0);await browser.close();}await stopFixture();
-    if(path.resolve(owned).startsWith(path.resolve(parent)+path.sep))fs.rmSync(owned,{recursive:true,force:true});
+    for(const c of sessions)await c.close();if(browser){assert.equal(browser.contexts().length,0);await browser.close();}if(receiptServer)await receiptServer.close();if(primary)await primary.close();
   }
 })().catch(e=>{console.error(e);process.exitCode=1;});

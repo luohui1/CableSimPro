@@ -71,7 +71,7 @@ def test_line_source_v2_domain_results_keep_engineering_ids_and_match_v0():
         cable['id'] = 'cable/feeder-' + str(index)
         next(place for place in d['sections'][0]['placements'] if place['cable'] == cid)['cable'] = cable['id']
     result = Executor().run('cablesim.native-reference', 'line-source', [
-        {'case_id': 'v0', 'input': s, 'parameters': ARGS}, {'case_id': 'domain', 'input': d, 'parameters': p}])
+        {'case_id': 'migrated', 'input': convert(s)['document'], 'parameters': p}, {'case_id': 'domain', 'input': d, 'parameters': p}])
     a, b = result.cases
     assert a.status == b.status == 'succeeded', (a.error, b.error)
     assert [r['entity'] for r in b.results] == [c['id'] for c in circuit['cables']]

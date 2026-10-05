@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.iec60287",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "name": "IEC 60287 载流量",
   "description": "计算声明范围内单芯或独立屏蔽三芯直埋、排管与矩形回填的稳态温度和允许电流，输出逐源互热、屏蔽与磁性铠装损耗及核对表。",
   "icon": "assets/icon.svg",
@@ -152,7 +152,7 @@
       "kind": "method",
       "id": "steady-rating",
       "title": "地下稳态（IEC 60287-1-1 / 2-1:2023，多回路直埋 / 排管 / 矩形回填）",
-      "method_version": "cablesim.iec60287.group/0.5.0",
+      "method_version": "cablesim.iec60287.group/0.6.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -318,6 +318,200 @@
         "reference_basis=tb880_reference 仅复现 TB 880 所用旧版电容、等效回填半径和接触品字形热阻约定，结果标为参考复现，不能作为 IEC 2023 工程结论。",
         "验证夹具来自受控资料，不随公开仓库分发；验证只覆盖所列算例与分支，不构成合规认证。"
       ]
+    },
+    {
+      "kind": "method",
+      "id": "reference-rating",
+      "title": "单芯电气与热路原语对拍",
+      "method_version": "0.1.0",
+      "analysis": "crosscheck",
+      "input_schema": "cablesim.iec60287.single-core/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        },
+        {
+          "key": "conductor_temperature",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "sheath_temperature",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "surface_temperature",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "losses.conductor",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "losses.sheath",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "losses.dielectric",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "losses.total",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "loss_factor.sheath",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "ac_resistance",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "capacitance",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "thermal_resistance.insulation",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "thermal_resistance.oversheath",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "thermal_resistance.external",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        },
+        {
+          "key": "x-cablesim.iec60287.thermal_resistance.duct_air",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.thermal_resistance.duct_wall",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.temperature_rise.mutual",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.current",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.loss_factor.armour",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.losses.armour",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.thermal_resistance.bedding",
+          "type": "quantity",
+          "per": "cable",
+          "required": false
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.iec60287-trace",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "CIGRE TB 880 Case 0-1",
+          "CIGRE TB 880 Case 0-1 exact radical T4",
+          "CIGRE TB 880 Case 0-1 single-point bonding",
+          "CIGRE TB 880 Case 0-1 GP31 eddy",
+          "CIGRE TB 880 Case 0-2",
+          "CIGRE TB 880 Case 0-2 GP31 eddy",
+          "CIGRE TB 880 Case 0-3 flat duct bank",
+          "CIGRE TB 880 Case 0-3 single-point bonding",
+          "CIGRE TB 880 Case 0-3 GP31 eddy",
+          "IEC 2023 image-source analytic two-cable and unequal N-source checks",
+          "IEC 2023 Table 2 nodes, interpolation and unequal backfill correction",
+          "Nine single-core layout templates: independent logarithmic heat-balance and frozen-loss quadratic checks",
+          "Three-core SL: six direct-burial/duct hand quadratics; TB880 Case2 thermal and wire-loss intermediates; Case10 steel-tape loss components"
+        ]
+      },
+      "limitations": [
+        "公开完整SI原语输入，用于标准公式验证；工程研究请选择领域输入能力。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "model-completion",
+      "title": "三芯工程参数与标准推导",
+      "method_version": "engineering-model/0.1.0",
+      "analysis": "model_preparation",
+      "input_schema": "cablesim.product-specification/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.completed-fields",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.engineering-model",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "只覆盖公开结构完整的8.7/15 kV YJV/YJV22三芯圆铜导体；缺少厂家层厚仍拒绝。",
+        "电阻推导依赖工程师给定连续接触模型；不改写厂家值、标准上限或型号审核状态。",
+        "成缆、填料、径向包络和钢带参数必须有单位及出处，计算结论须注明这些依赖。"
+      ]
     }
   ],
   "files": [
@@ -343,28 +537,43 @@
     },
     {
       "path": "src/cablesim_iec60287/domain.py",
-      "sha256": "e602b609e57fcdd42c08f2961e9de5a6c9f5c89f2c97f49bdf0baf941f2a507f",
-      "size_bytes": 6247
+      "sha256": "69f331f57296b003ac577c0e8eef6ecdedba9d5d16aa8785d35681e679c14961",
+      "size_bytes": 6510
     },
     {
       "path": "src/cablesim_iec60287/double_flat.py",
-      "sha256": "f2d83a8a8227f1cb43b7761ec37602b758081d5ef8f2db55a31d30c7388f0517",
-      "size_bytes": 6862
+      "sha256": "a50dc8553911a13fb26fbcca489ebb3c6a56e32aad255f15431331f44b57561f",
+      "size_bytes": 6804
+    },
+    {
+      "path": "src/cablesim_iec60287/electrical.py",
+      "sha256": "f4fbd642ac7e61b8f926a54c57a659b840b17b4f0ababc62650a61390ce078b8",
+      "size_bytes": 3158
+    },
+    {
+      "path": "src/cablesim_iec60287/engineering.py",
+      "sha256": "06a20d503c0f159514970f2b25fce7c1d76ebe91e4350ec0b55a1cf545beefbc",
+      "size_bytes": 9766
+    },
+    {
+      "path": "src/cablesim_iec60287/engineering_contract.py",
+      "sha256": "899c9771edebfa2d2cfbd43cfe1a61d09a5caf58ab75179764c1813faa0be1b4",
+      "size_bytes": 6719
     },
     {
       "path": "src/cablesim_iec60287/group.py",
-      "sha256": "d44ced1a088ac7fc5ba77ffbe9b7bc24c9759337fd2dbada920a5b2bbe103f1a",
-      "size_bytes": 22500
+      "sha256": "2026893234d1568ae94b10a53110f00234a381873e4214b1036c62e937e462e1",
+      "size_bytes": 24837
     },
     {
       "path": "src/cablesim_iec60287/group_inputs.py",
-      "sha256": "93b23b7f28416c01a4c17b671ca132136a9440b8b458c36ab54a60b939aebf59",
-      "size_bytes": 17779
+      "sha256": "888e9ba6e7f7ef06843db1a2f6792e274b8cb3585830e325d9b61f337b1bab86",
+      "size_bytes": 19671
     },
     {
       "path": "src/cablesim_iec60287/inputs.py",
-      "sha256": "2ce18ff0af9a849b76163956127445a1d9597fb6ee1118f69a669f6032a69e64",
-      "size_bytes": 5680
+      "sha256": "89aa65f7f68659fa80e01aa204045d6f579598deaf4f383731fe8e744e7ba367",
+      "size_bytes": 5874
     },
     {
       "path": "src/cablesim_iec60287/loss_table.py",
@@ -373,18 +582,18 @@
     },
     {
       "path": "src/cablesim_iec60287/main.py",
-      "sha256": "17bc401adf7eb5dc6728d451b0fdc9c17ff933ba699bad6294d20c6262924f17",
-      "size_bytes": 17528
+      "sha256": "9c86f715880d214c07d0636f2842bd26081908e6114085660dc5ad5f99c0dc20",
+      "size_bytes": 19279
     },
     {
       "path": "src/cablesim_iec60287/method.py",
-      "sha256": "9ee3cdc07bd985413a9eec3eab13bd49584a9fd2e85bf018b3a0538ad74fb4be",
-      "size_bytes": 12482
+      "sha256": "09de8c610fb1b416bc8744115927386abf716c5b891be72389bbedbb5d785772",
+      "size_bytes": 11655
     },
     {
       "path": "src/cablesim_iec60287/soil.py",
-      "sha256": "3215588fe121aafb189dfe52e8705c8edeb536bde6f6e3a39b5e7d6240abdd51",
-      "size_bytes": 8887
+      "sha256": "e73beab2f800b3bc17a25852ea494bf84477000a26fa6be28e937906b780d263",
+      "size_bytes": 9315
     },
     {
       "path": "src/cablesim_iec60287/tb880_reference.py",
@@ -393,18 +602,23 @@
     },
     {
       "path": "src/cablesim_iec60287/tb880_wire_foil.py",
-      "sha256": "d37963e8847d905931090c0eeda13c6ddb4ee2dbee7baaa10841f77690b2d58b",
-      "size_bytes": 9956
+      "sha256": "e0667edf66429918631a4aeaaa25bc94a2200bbb9961df998fbf759f0b60236e",
+      "size_bytes": 9513
     },
     {
       "path": "src/cablesim_iec60287/three_core.py",
-      "sha256": "a84c9bb3eabbc5cbd70d2588be38d0ea7cd8430b30b750366cea6154e66630f4",
-      "size_bytes": 25957
+      "sha256": "072da1059e9b6f99d267a9a382a86d12c42c4eacbeafcea1fef72be8a477f2ff",
+      "size_bytes": 27516
     },
     {
       "path": "src/cablesim_iec60287/verification.py",
-      "sha256": "30e264c5b665e9fa3a28d67c11e81ec1e50276d3ebcee159f1263e05724c8d49",
-      "size_bytes": 6630
+      "sha256": "c8fe9b90093f7ea3c49dc9b866a7ba31140e3df36e2fc8817e02781795e2a624",
+      "size_bytes": 7087
+    },
+    {
+      "path": "src/host-dependencies.json",
+      "sha256": "92e962d7cecbab28f8690a12cf15674a74ea67ccd63db25bce901c37aa19515c",
+      "size_bytes": 1224
     }
   ]
 }

@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # -I drops cwd/PYTHONPATH; add our own src only
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 import json
 from hashlib import sha256
@@ -10,6 +11,7 @@ import platform
 from math import isfinite
 
 from pydantic import ValidationError
+from cablesim_sdk.validation import FieldValueError, validation_error, pointer
 
 from cablesim_iec60287.inputs import Rating
 from cablesim_iec60287.domain import prepare
@@ -98,6 +100,9 @@ def steady_rating(case: dict, out: Path) -> dict:
 
 
 def prepare_case(case):
+    if case['input'].get('schema_version')=='cablesim.product-specification/1':
+        from cablesim_iec60287.engineering import complete
+        return complete(case['input'],case.get('parameters',{}))
     if case['input'].get('schema_version')=='cablesim.iec60287.tb880-wire-foil/1':
         from cablesim_iec60287.tb880_wire_foil import WireFoilRating
         if case.get('parameters'):raise ValueError('TB880 wire/foil reference uses complete SI input')
@@ -133,7 +138,14 @@ def tb880_reference(case,out):
             'warnings':[{'code':'REFERENCE_SCOPE','message':s} for s in value['limitations']]}
 
 
-CAPABILITIES = {'steady-rating': steady_rating,'armoured-sl-rating':armoured,'tb880-reference-rating':tb880_reference,'tb880-wire-foil-rating':tb880_reference}
+def model_completion(case,out):
+    value=prepare_case(case);name=case['case_id']+'.model.json'
+    (out/name).write_text(json.dumps(value,sort_keys=True,ensure_ascii=False,allow_nan=False),'utf-8')
+    return {'results':[{'key':'x-cablesim.completed-fields','type':'quantity','entity':value['cable_type']['id'],'status':'available','value':len(value['derived']),'unit':'1'}],
+            'artifacts':[{'type':'x-cablesim.engineering-model','path':'output/'+name}]}
+
+
+CAPABILITIES = {'model-completion':model_completion,'steady-rating': steady_rating,'reference-rating':steady_rating,'armoured-sl-rating':armoured,'tb880-reference-rating':tb880_reference,'tb880-wire-foil-rating':tb880_reference}
 
 
 def group_rating(case, group, out):
@@ -161,6 +173,13 @@ def group_rating(case, group, out):
                       'verdict':'unavailable' if margin is None else 'satisfied' if margin >= 0 else 'not_satisfied',
                       'reason':rated.get('error',{}).get('message'),
                       'source':'研究目标电流' if entity == selected and target is not None else '保存负荷（不平衡时为最大相电流）'})
+    simultaneous = payload.get('simultaneous_rating')
+    if simultaneous:
+        for circuit in group.circuits:
+            result = {'key':'ampacity', 'type':'quantity', 'entity':circuit['id'], 'case':'rating-simultaneous', 'unit':'A'}
+            result.update({'status':'unavailable', 'reason':simultaneous['error']} if simultaneous['ampacity_a'] is None else
+                          {'status':'available', 'value':simultaneous['ampacity_a']})
+            results.append(result)
     fields = [
         ('conductor_temperature','conductor_temperature_c','K'), ('sheath_temperature','sheath_temperature_c','K'),
         ('surface_temperature','surface_temperature_c','K'), ('losses.conductor','conductor_loss_w_m','W/m'),
@@ -210,15 +229,19 @@ def run_case(handler, case: dict, out: Path) -> dict:
             entities = {'circuit/c1': circuit['id'], **{f'cable/c1-{p}': c['id'] for p,c in zip('ABC',circuit['cables'])}}
             for r in result.get('results', []):
                 r['entity'] = entities.get(r['entity'], r['entity'])
-        prepared = prepare_case(case).model_dump(mode='json')
+        prepared = prepare_case(case)
+        if not isinstance(prepared,dict):prepared=prepared.model_dump(mode='json')
         result.setdefault('evidence', {})['prepared_input_sha256'] = sha256(json.dumps(prepared, sort_keys=True, ensure_ascii=False, allow_nan=False).encode('utf-8')).hexdigest()
         return {**base, 'status': 'succeeded', **result}
     except ValidationError as exc:
-        return {**base, 'status': 'failed', 'error': {'code': 'INPUT_INVALID', 'message': '；'.join(e['msg'] for e in exc.errors())}}
+        prefix=('parameters',) if exc.title=='EngineeringParameters' else ()
+        return {**base, 'status': 'failed', 'error': validation_error(exc, prefix=prefix)}
+    except FieldValueError as exc:
+        return {**base, 'status': 'not_applicable', 'error': {'code':'DOMAIN_NOT_SUPPORTED','message':str(exc),'path':pointer(exc.field_path)}}
     except RatingRefused as exc:
-        return {**base, 'status': 'failed', 'error': {'code': exc.code, 'message': str(exc)}}
+        return {**base, 'status': 'failed', 'error': {'code': exc.code, 'message': str(exc), 'path':exc.path}}
     except (ValueError, KeyError, TypeError, StopIteration) as exc:
-        return {**base, 'status': 'not_applicable', 'error': {'code': 'DOMAIN_NOT_SUPPORTED', 'message': str(exc)}}
+        return {**base, 'status': 'not_applicable', 'error': {'code': 'DOMAIN_NOT_SUPPORTED', 'message': str(exc), 'path':pointer(('parameters',str(exc.args[0]))) if isinstance(exc,KeyError) else '/parameters'}}
 
 
 def main() -> int:

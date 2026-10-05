@@ -27,33 +27,26 @@ jobs:
       - name: Plugin catalog seals match committed sources
         run: python scripts/seal_plugin_catalog.py
   native-plugins:
-    name: Native plugins / ${{ matrix.os }} / ${{ matrix.python }}
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        python: ['3.11', '3.12']
+    name: Native plugins / Slurm dg83
+    runs-on: [self-hosted, linux, cablesim-hpc]
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python }}
+          python-version: '3.12'
           cache: pip
           cache-dependency-path: |
             backend/requirements*.txt
-            plugins/requirements*.txt
-      - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libglu1-mesa libgl1
-      - run: python -m pip install -r backend/requirements-dev.txt -r plugins/requirements-native.txt
-      - run: python -m pytest plugin-tests --junitxml=artifacts/native-plugins.xml
+      - run: python -m pip install -r backend/requirements-dev.txt
+      - name: Submit frozen native regressions to dg83
+        run: python scripts/run_plugin_tests_hpc.py --profile "$CABLESIM_HPC_PROFILE" --wall-seconds 3600
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: native-plugins-${{ matrix.os }}-${{ matrix.python }}
+          name: native-plugins-slurm
           retention-days: 14
-          path: artifacts/
+          path: .data/hpc/native-tests/
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 10

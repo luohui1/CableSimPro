@@ -8,6 +8,7 @@ from hashlib import sha256
 from importlib import metadata, util
 import json
 import platform
+import os
 from cablesim_simulation.wire import WireInput, mesh_size, solve_wire
 from cablesim_simulation.bonded import prepare as prepare_bonded, solve_bonded
 
@@ -84,6 +85,15 @@ def bonded_case(request, case, job):
 
 def run_case(request, case, job):
     try:
+        if not os.environ.get('SLURM_JOB_ID'):
+            from cablesim_simulation.solver_runtime import EnvironmentMissing
+            raise EnvironmentMissing('仿真方法的原生预检和求解必须由研究接口提交 Slurm。')
+        if request['capability']=='transient-temperature':
+            from cablesim_simulation.transient import host_case
+            return host_case(request,case,job)
+        if request['capability']=='sheath-losses':
+            from cablesim_simulation.sheath import host_case
+            return host_case(request,case,job)
         if request['capability']=='thermal-dataset':
             from cablesim_simulation.thermal_dataset import host_case
             return host_case(request,case,job)
@@ -93,7 +103,7 @@ def run_case(request, case, job):
         if request['capability'] in ('terminal-field','contact-thermal-field'):
             from cablesim_simulation.discrete_fields import host_case
             return host_case(request,case,job)
-        if request['capability']=='electrothermal':
+        if request['capability'] in ('electrothermal','electrothermal-steady'):
             from cablesim_simulation.electrothermal import host_case
             return host_case(request,case,job)
         if request['capability']=='capacitive-cable':

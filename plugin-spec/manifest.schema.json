@@ -1,1 +1,445 @@
-{"$defs":{"Command":{"additionalProperties":false,"properties":{"id":{"pattern":"^[a-z][a-z0-9_.-]{2,99}$","title":"Id","type":"string"},"title":{"maxLength":100,"minLength":1,"title":"Title","type":"string"},"effect":{"enum":["read","proposal","study","artifact"],"title":"Effect","type":"string"},"input_contract":{"maxLength":100,"minLength":3,"title":"Input Contract","type":"string"},"output_contract":{"maxLength":100,"minLength":3,"title":"Output Contract","type":"string"},"ui_slot":{"enum":["command","inspector","canvas","results","artifacts"],"title":"Ui Slot","type":"string"}},"required":["id","title","effect","input_contract","output_contract","ui_slot"],"title":"Command","type":"object"},"Dependency":{"additionalProperties":false,"properties":{"plugin_id":{"pattern":"^[a-z][a-z0-9-]{1,39}\\.[a-z][a-z0-9-]{1,63}$","title":"Plugin Id","type":"string"},"version":{"pattern":"^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$","title":"Version","type":"string"}},"required":["plugin_id","version"],"title":"Dependency","type":"object"},"EngineeringScope":{"additionalProperties":false,"properties":{"description":{"maxLength":1500,"minLength":10,"title":"Description","type":"string"},"limitations":{"items":{"type":"string"},"maxItems":20,"minItems":1,"title":"Limitations","type":"array"},"validation":{"enum":["unverified","contract-tests","analytic-benchmark","cross-validated"],"title":"Validation","type":"string"},"evidence":{"default":[],"items":{"type":"string"},"maxItems":30,"title":"Evidence","type":"array"}},"required":["description","limitations","validation"],"title":"EngineeringScope","type":"object"},"PayloadFile":{"additionalProperties":false,"properties":{"path":{"maxLength":240,"minLength":1,"title":"Path","type":"string"},"sha256":{"pattern":"^[a-f0-9]{64}$","title":"Sha256","type":"string"},"size_bytes":{"maximum":134217728,"minimum":0,"title":"Size Bytes","type":"integer"}},"required":["path","sha256","size_bytes"],"title":"PayloadFile","type":"object"},"RuntimeRequirement":{"additionalProperties":false,"properties":{"distribution":{"pattern":"^[A-Za-z][A-Za-z0-9_.-]{0,63}$","title":"Distribution","type":"string"},"version":{"maxLength":64,"pattern":"^(0|[1-9][0-9]*)(\\.(0|[1-9][0-9]*)){1,5}$","title":"Version","type":"string"}},"required":["distribution","version"],"title":"RuntimeRequirement","type":"object"}},"additionalProperties":false,"properties":{"schema_version":{"const":"cablesim.plugin/1","default":"cablesim.plugin/1","title":"Schema Version","type":"string"},"plugin_id":{"pattern":"^[a-z][a-z0-9-]{1,39}\\.[a-z][a-z0-9-]{1,63}$","title":"Plugin Id","type":"string"},"version":{"pattern":"^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$","title":"Version","type":"string"},"api_major":{"const":1,"default":1,"title":"Api Major","type":"integer"},"name":{"maxLength":100,"minLength":1,"title":"Name","type":"string"},"publisher":{"maxLength":80,"minLength":1,"title":"Publisher","type":"string"},"category":{"enum":["design","mesh","analysis","data","visualization","report","validation"],"title":"Category","type":"string"},"runtime":{"enum":["host","python-worker","external","frontend"],"title":"Runtime","type":"string"},"distribution":{"enum":["core","bundled-adapter","roadmap"],"title":"Distribution","type":"string"},"adapter_license":{"maxLength":100,"minLength":1,"title":"Adapter License","type":"string"},"upstream":{"default":"","maxLength":250,"title":"Upstream","type":"string"},"upstream_license":{"default":"","maxLength":200,"title":"Upstream License","type":"string"},"license_review_required":{"default":false,"title":"License Review Required","type":"boolean"},"platforms":{"items":{"enum":["linux","windows","darwin"],"type":"string"},"minItems":1,"title":"Platforms","type":"array"},"permissions":{"default":[],"items":{"enum":["project.read","project.propose","study.run","artifact.read","artifact.write"],"type":"string"},"maxItems":5,"title":"Permissions","type":"array"},"dependencies":{"default":[],"items":{"$ref":"#/$defs/Dependency"},"maxItems":12,"title":"Dependencies","type":"array"},"requirements":{"default":[],"items":{"$ref":"#/$defs/RuntimeRequirement"},"maxItems":12,"title":"Requirements","type":"array"},"commands":{"items":{"$ref":"#/$defs/Command"},"maxItems":30,"minItems":1,"title":"Commands","type":"array"},"scope":{"$ref":"#/$defs/EngineeringScope"},"files":{"default":[],"items":{"$ref":"#/$defs/PayloadFile"},"maxItems":64,"title":"Files","type":"array"}},"required":["plugin_id","version","name","publisher","category","runtime","distribution","adapter_license","platforms","commands","scope"],"title":"PluginManifest","type":"object"}
+{
+  "$defs": {
+    "ArtifactSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "pattern": "^(x-[a-z0-9-]+\\.)?[a-z0-9.-]+$",
+          "title": "Type",
+          "type": "string"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "type",
+        "required"
+      ],
+      "title": "ArtifactSpec",
+      "type": "object"
+    },
+    "Capability": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "method",
+          "title": "Kind",
+          "type": "string"
+        },
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "method_version": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Method Version",
+          "type": "string"
+        },
+        "analysis": {
+          "pattern": "^[a-z_]+$",
+          "title": "Analysis",
+          "type": "string"
+        },
+        "input_schema": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Input Schema",
+          "type": "string"
+        },
+        "outputs": {
+          "items": {
+            "$ref": "#/$defs/Output"
+          },
+          "maxItems": 100,
+          "minItems": 1,
+          "title": "Outputs",
+          "type": "array"
+        },
+        "artifacts": {
+          "items": {
+            "$ref": "#/$defs/ArtifactSpec"
+          },
+          "maxItems": 20,
+          "title": "Artifacts",
+          "type": "array"
+        },
+        "validation": {
+          "$ref": "#/$defs/Validation"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 40,
+          "minItems": 1,
+          "title": "Limitations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "title",
+        "method_version",
+        "analysis",
+        "input_schema",
+        "outputs",
+        "validation",
+        "limitations"
+      ],
+      "title": "Capability",
+      "type": "object"
+    },
+    "HostApi": {
+      "additionalProperties": false,
+      "properties": {
+        "major": {
+          "title": "Major",
+          "type": "integer"
+        },
+        "min_minor": {
+          "minimum": 0,
+          "title": "Min Minor",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "major",
+        "min_minor"
+      ],
+      "title": "HostApi",
+      "type": "object"
+    },
+    "License": {
+      "additionalProperties": false,
+      "properties": {
+        "spdx": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Spdx",
+          "type": "string"
+        },
+        "review_required": {
+          "title": "Review Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "spdx",
+        "review_required"
+      ],
+      "title": "License",
+      "type": "object"
+    },
+    "Output": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "type": {
+          "title": "Type",
+          "type": "string"
+        },
+        "per": {
+          "enum": [
+            "circuit",
+            "cable",
+            "core",
+            "section"
+          ],
+          "title": "Per",
+          "type": "string"
+        },
+        "required": {
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "key",
+        "type",
+        "per",
+        "required"
+      ],
+      "title": "Output",
+      "type": "object"
+    },
+    "PackageFile": {
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "pattern": "^(src/[A-Za-z0-9_./-]+|assets/icon\\.svg)$",
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "size_bytes": {
+          "maximum": 20971520,
+          "minimum": 0,
+          "title": "Size Bytes",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "size_bytes"
+      ],
+      "title": "PackageFile",
+      "type": "object"
+    },
+    "Publisher": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ],
+      "title": "Publisher",
+      "type": "object"
+    },
+    "Resources": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_s": {
+          "maximum": 3600,
+          "minimum": 1,
+          "title": "Timeout S",
+          "type": "integer"
+        },
+        "memory_mb": {
+          "maximum": 65536,
+          "minimum": 16,
+          "title": "Memory Mb",
+          "type": "integer"
+        },
+        "network": {
+          "const": "none",
+          "title": "Network",
+          "type": "string"
+        }
+      },
+      "required": [
+        "timeout_s",
+        "memory_mb",
+        "network"
+      ],
+      "title": "Resources",
+      "type": "object"
+    },
+    "Runtime": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "python",
+          "title": "Kind",
+          "type": "string"
+        },
+        "python": {
+          "title": "Python",
+          "type": "string"
+        },
+        "entry": {
+          "pattern": "^src/[A-Za-z0-9_./-]+\\.py$",
+          "title": "Entry",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "python",
+        "entry"
+      ],
+      "title": "Runtime",
+      "type": "object"
+    },
+    "Validation": {
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "enum": [
+            "unverified",
+            "interface-tested",
+            "analytic-benchmark",
+            "reference-benchmark",
+            "field-validated"
+          ],
+          "title": "Level",
+          "type": "string"
+        },
+        "cases": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 100,
+          "title": "Cases",
+          "type": "array"
+        }
+      },
+      "required": [
+        "level"
+      ],
+      "title": "Validation",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "cablesim.plugin/2",
+      "title": "Schema",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+      "title": "Id",
+      "type": "string"
+    },
+    "version": {
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+      "title": "Version",
+      "type": "string"
+    },
+    "name": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Name",
+      "type": "string"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "maxLength": 120,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "icon": {
+      "anyOf": [
+        {
+          "const": "assets/icon.svg",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Icon"
+    },
+    "publisher": {
+      "$ref": "#/$defs/Publisher"
+    },
+    "host_api": {
+      "$ref": "#/$defs/HostApi"
+    },
+    "license": {
+      "$ref": "#/$defs/License"
+    },
+    "platforms": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Platforms",
+      "type": "array"
+    },
+    "runtime": {
+      "$ref": "#/$defs/Runtime"
+    },
+    "permissions": {
+      "items": {
+        "enum": [
+          "project.read",
+          "study.run",
+          "artifact.read",
+          "artifact.write",
+          "project.propose"
+        ],
+        "type": "string"
+      },
+      "title": "Permissions",
+      "type": "array"
+    },
+    "dependencies": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "maxItems": 0,
+      "title": "Dependencies",
+      "type": "array"
+    },
+    "resources": {
+      "$ref": "#/$defs/Resources"
+    },
+    "capabilities": {
+      "items": {
+        "$ref": "#/$defs/Capability"
+      },
+      "maxItems": 50,
+      "minItems": 1,
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/PackageFile"
+      },
+      "title": "Files",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema",
+    "id",
+    "version",
+    "name",
+    "publisher",
+    "host_api",
+    "license",
+    "platforms",
+    "runtime",
+    "permissions",
+    "dependencies",
+    "resources",
+    "capabilities",
+    "files"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

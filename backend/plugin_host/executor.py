@@ -27,6 +27,7 @@ import tempfile
 from time import perf_counter, sleep
 from uuid import uuid4
 
+from ..domain.models import FactoryMeasurement
 from .manifest import CUSTOM, KEY_UNITS
 from .registry import PluginHostError, Registry
 from .process import run_process
@@ -87,6 +88,43 @@ def violation(message: str) -> PluginHostError:
     return PluginHostError('OUTPUT_CONTRACT_VIOLATION', message, 502)
 
 
+def validate_domain_input(document):
+    """Shared wire checks; research also validates the complete domain model.
+
+    Direct CAD calls may contain only structural facts, so this boundary does
+    not fill in circuits, ratings or operating conditions that were not supplied.
+    """
+    if not isinstance(document, dict) or document.get('schema_version') != 'cablesim.domain/1':
+        raise ValueError('schema_version：请选择 cablesim.domain/1 的 SI 输入。')
+    pending = [('', document)]
+    while pending:
+        path, value = pending.pop()
+        if isinstance(value, float) and not isfinite(value):
+            raise ValueError(path + '：请输入有限数值，并核对 SI 单位。')
+        if isinstance(value, dict):
+            pending.extend((path + '.' + key if path else key, item) for key, item in value.items())
+        elif isinstance(value, list):
+            pending.extend((path + '.' + str(i), item) for i, item in enumerate(value))
+    materials = {item['id'] for item in document.get('materials', [])}
+    for i, cable in enumerate(document.get('cable_types', [])):
+        refs = []
+        for j, core in enumerate(cable.get('cores', [])):
+            root = f'cable_types.{i}.cores.{j}'
+            refs.append((root + '.conductor.material', core['conductor']['material']))
+            refs.extend((root + f'.layers.{k}.material', layer['material'])
+                        for k, layer in enumerate(core.get('layers', [])))
+        refs.extend((f'cable_types.{i}.common_layers.{j}.material', layer['material'])
+                    for j, layer in enumerate(cable.get('common_layers', [])))
+        for path, reference in refs:
+            if reference not in materials:
+                raise ValueError(path + '：材料引用不存在，请选择文档中的材料。')
+    for i, observation in enumerate(document.get('measurements', [])):
+        try:
+            FactoryMeasurement.model_validate(observation)
+        except ValueError as exc:
+            raise ValueError(f'measurements.{i}：{exc}') from None
+
+
 class Executor:
     def __init__(self, registry: Registry | None = None, jobs_root: Path | None = None, verify: bool = True, process_runner=None):
         self.registry = registry or Registry(discover=False)
@@ -116,6 +154,12 @@ class Executor:
         ids = [c['case_id'] for c in cases]
         if not cases or len(cases) > 100 or len(set(ids)) != len(ids) or any(not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', i) for i in ids):
             raise PluginHostError('CASES_INVALID', '请求至少包含一个工况，且 case_id 唯一。')
+        if capability.input_schema == 'cablesim.domain/1':
+            for case in cases:
+                try:
+                    validate_domain_input(case['input'])
+                except (ValueError, KeyError, TypeError) as exc:
+                    raise PluginHostError('INPUT_CONTRACT_VIOLATION', f"{case['case_id']}：{exc}", 422) from None
         run_id = str(uuid4())
         reuse_raw = None
         if reuse_artifacts is not None:
@@ -228,8 +272,13 @@ class Executor:
                     raise violation(f'{case_id}: 失败必须带 code 与 message')
                 if results or artifact_refs:
                     raise violation(f'{case_id}: 失败工况不得返回数值结果或工件')
+                for name in ('path', 'field'):
+                    if name in error and (not isinstance(error[name], str) or not error[name].strip()):
+                        raise violation(f'{case_id}: error.{name} 必须为非空字段路径')
+                if 'issues' in error and (not isinstance(error['issues'], list) or any(not isinstance(i, dict) or any(not isinstance(i.get(k), str) or not i[k].strip() for k in ('path','message','code')) for i in error['issues'])):
+                    raise violation(f'{case_id}: error.issues 必须带 path/message/code')
                 cases.append(CaseResult(case_id, status, warnings=warnings, evidence=evidence,
-                                        error={'code': error['code'], 'message': error['message']}))
+                                        error={k: error[k] for k in ('code','message','path','field','issues') if k in error}))
                 continue
             if phase == 'check':
                 if results or artifact_refs:

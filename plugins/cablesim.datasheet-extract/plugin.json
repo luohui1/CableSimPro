@@ -1,0 +1,259 @@
+{
+  "schema": "cablesim.plugin/2",
+  "id": "cablesim.datasheet-extract",
+  "version": "0.1.0",
+  "name": "厂家资料参数提取",
+  "icon": "assets/icon.svg",
+  "description": "PDF 文字层与表格优先；保留型号、页码、原文坐标和单位，模型输出只作为待人工核对候选。",
+  "publisher": {
+    "id": "cablesim",
+    "name": "CableSimPro"
+  },
+  "host_api": {
+    "major": 2,
+    "min_minor": 1
+  },
+  "license": {
+    "spdx": "LicenseRef-Project-Undeclared",
+    "review_required": false
+  },
+  "platforms": [
+    "windows-x64",
+    "linux-x64",
+    "darwin-arm64",
+    "darwin-x64"
+  ],
+  "runtime": {
+    "kind": "python",
+    "python": ">=3.11,<3.14",
+    "entry": "src/cablesim_datasheet_extract/main.py"
+  },
+  "permissions": [
+    "study.run",
+    "artifact.write",
+    "project.propose"
+  ],
+  "dependencies": [],
+  "resources": {
+    "timeout_s": 90,
+    "memory_mb": 1024,
+    "network": "none"
+  },
+  "capabilities": [
+    {
+      "id": "inspect",
+      "kind": "method",
+      "title": "inspect",
+      "method_version": "DATASHEET-0.1.0",
+      "analysis": "extraction",
+      "input_schema": "cablesim.datasheet/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.datasheet.count",
+          "type": "quantity",
+          "per": "section",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.datasheet",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "interface-tested",
+        "cases": [
+          "tests/test_datasheet_import.py"
+        ]
+      },
+      "limitations": [
+        "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。",
+        "PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
+        "无法唯一定位型号、字段或单位时标歧义；不推测缺项。"
+      ]
+    },
+    {
+      "id": "page",
+      "kind": "method",
+      "title": "page",
+      "method_version": "DATASHEET-0.1.0",
+      "analysis": "extraction",
+      "input_schema": "cablesim.datasheet/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.datasheet.count",
+          "type": "quantity",
+          "per": "section",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.datasheet",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "interface-tested",
+        "cases": [
+          "tests/test_datasheet_import.py"
+        ]
+      },
+      "limitations": [
+        "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。",
+        "PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
+        "无法唯一定位型号、字段或单位时标歧义；不推测缺项。"
+      ]
+    },
+    {
+      "id": "rules",
+      "kind": "method",
+      "title": "rules",
+      "method_version": "DATASHEET-0.1.0",
+      "analysis": "extraction",
+      "input_schema": "cablesim.datasheet/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.datasheet.count",
+          "type": "quantity",
+          "per": "section",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.datasheet",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "interface-tested",
+        "cases": [
+          "tests/test_datasheet_import.py"
+        ]
+      },
+      "limitations": [
+        "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。",
+        "PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
+        "无法唯一定位型号、字段或单位时标歧义；不推测缺项。"
+      ]
+    },
+    {
+      "id": "provider-request",
+      "kind": "method",
+      "title": "provider-request",
+      "method_version": "DATASHEET-0.1.0",
+      "analysis": "extraction",
+      "input_schema": "cablesim.datasheet/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.datasheet.count",
+          "type": "quantity",
+          "per": "section",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.datasheet",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "interface-tested",
+        "cases": [
+          "tests/test_datasheet_import.py"
+        ]
+      },
+      "limitations": [
+        "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。",
+        "PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
+        "无法唯一定位型号、字段或单位时标歧义；不推测缺项。"
+      ]
+    },
+    {
+      "id": "provider-response",
+      "kind": "method",
+      "title": "provider-response",
+      "method_version": "DATASHEET-0.1.0",
+      "analysis": "extraction",
+      "input_schema": "cablesim.datasheet/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.datasheet.count",
+          "type": "quantity",
+          "per": "section",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.datasheet",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "interface-tested",
+        "cases": [
+          "tests/test_datasheet_import.py"
+        ]
+      },
+      "limitations": [
+        "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。",
+        "PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
+        "无法唯一定位型号、字段或单位时标歧义；不推测缺项。"
+      ]
+    },
+    {
+      "id": "normalize",
+      "kind": "method",
+      "title": "人工编辑值的 SI 单位归一",
+      "method_version": "DATASHEET-0.1.0",
+      "analysis": "extraction",
+      "input_schema": "cablesim.datasheet/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.datasheet.count",
+          "type": "quantity",
+          "per": "section",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.datasheet",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "interface-tested",
+        "cases": [
+          "tests/test_datasheet_import.py"
+        ]
+      },
+      "limitations": [
+        "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。",
+        "PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
+        "无法唯一定位型号、字段或单位时标歧义；不推测缺项。"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "assets/icon.svg",
+      "sha256": "da4b2d4bdaaea5b1035c943edf53546eb399cabe9942c01893583e2638854fa6",
+      "size_bytes": 307
+    },
+    {
+      "path": "src/cablesim_datasheet_extract/__init__.py",
+      "sha256": "bd4f5dab379b58100de894a25d8e7086eb6ea20461189646ff167071404e0b49",
+      "size_bytes": 80
+    },
+    {
+      "path": "src/cablesim_datasheet_extract/main.py",
+      "sha256": "da3a6d700e9b5607fc4628cd15a45021013b0a88b7d772f13b2d352bb4e12060",
+      "size_bytes": 43627
+    }
+  ]
+}

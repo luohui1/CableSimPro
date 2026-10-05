@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from backend.domain.models import DomainDocument, FactoryMeasurement
 from backend.main import create_app
 from backend.plugin_host import Executor
-from design.workbench.scenarios import make_router, system_models
+from backend.kernel.scenarios import make_router, system_models
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('type_electrical', ROOT/'plugins/cablesim.type-electrical/src/cablesim_type_electrical/main.py')

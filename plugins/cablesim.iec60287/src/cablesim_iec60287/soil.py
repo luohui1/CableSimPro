@@ -8,6 +8,7 @@ from bisect import bisect_left
 from math import acosh, exp, hypot, log, pi
 
 from .method import RatingRefused
+from cablesim_sdk.validation import FieldValueError
 
 HEIGHT_WIDTH = [0.05,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1,1.2,1.4,1.6,1.8,2,2.2,2.4,2.6,2.8,3,3.2,3.4,3.6,3.8,4,4.5,5]
 DEPTH_HEIGHT = [0.6,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,20]
@@ -46,7 +47,7 @@ GB = [
 def _bracket(axis, value):
     if not axis[0] <= value <= axis[-1]:
         raise RatingRefused('BACKFILL_GEOMETRY_OUT_OF_RANGE',
-                            '回填几何比超出 IEC 60287-2-1:2023 表 2；请改用数值热传导方法。')
+                            '回填几何比超出 IEC 60287-2-1:2023 表 2；请改用数值热传导方法。','/sections/0/backfill')
     i = bisect_left(axis, value)
     if i < len(axis) and abs(axis[i]-value) < 1e-12:
         return [(i, 1.0)]
@@ -65,12 +66,12 @@ def geometric_factor(depth, height, width):
             # inconsistent node (0.3, 17). Neither is silently repaired.
             if GB[row][col] is None or (HEIGHT_WIDTH[row] == .3 and DEPTH_HEIGHT[col] == 17):
                 raise RatingRefused('BACKFILL_TABLE_AMBIGUOUS',
-                                    '所需几何因子表格节点无法可靠核对；请提供经核实的数据或改用数值热传导方法。')
+                                    '所需几何因子表格节点无法可靠核对；请提供经核实的数据或改用数值热传导方法。','/sections/0/backfill')
             result += a*b*GB[row][col]
     return result
 
 
-def resistance_matrix(points, radii, earth_rho, backfill=None, *, reference_basis='iec2023'):
+def resistance_matrix(points, radii, earth_rho, backfill=None, *, reference_basis='iec2023', source_paths=None):
     """R[i][j] times source-j W/m gives receiving surface-i rise in K.
 
     backfill = {x,z,width,height,rho}. Equal losses reduce its common
@@ -78,37 +79,37 @@ def resistance_matrix(points, radii, earth_rho, backfill=None, *, reference_basi
     For unequal losses linear superposition gives C*sum(W_j).
     """
     if not points or len(points) != len(radii) or earth_rho <= 0:
-        raise ValueError('热源、半径和土壤热阻率必须明确且有效。')
+        raise FieldValueError('热源、半径和土壤热阻率必须明确且有效。','sections',0,'medium' if earth_rho<=0 else 'placements')
     rho, common, factor, rb = earth_rho, 0.0, None, None
     if backfill:
         rho = backfill['rho']
         x, z, width, height = (backfill[k] for k in ('x', 'z', 'width', 'height'))
         depth = -z
         if width <= 0 or height <= 0 or depth <= height/2 or rho <= 0:
-            raise ValueError('回填区必须为完整地下矩形且热阻率为正。')
+            raise FieldValueError('回填区必须为完整地下矩形且热阻率为正。','sections',0,'backfill')
         if any(abs(px-x)+r > width/2+1e-12 or abs(pz-z)+r > height/2+1e-12
                for (px,pz),r in zip(points,radii)):
             raise RatingRefused('BACKFILL_NOT_CONTAINING_SOURCES',
-                                '标准几何修正要求全部电缆或管道位于同一个回填矩形内；请调整布置或改用数值热传导方法。')
+                                '标准几何修正要求全部电缆或管道位于同一个回填矩形内；请调整布置或改用数值热传导方法。','/sections/0/backfill')
         if reference_basis == 'tb880_reference':
             # TB 880 p.92: former IEC 60287-2-1 radius, for replay only.
             # IEC 2023 4.2.7 (printed p.29) expressly supersedes this form.
             short, long = sorted((height, width))
             ratio = short/long
             if long/short >= 3:
-                raise RatingRefused('TB880_BANK_GEOMETRY_OUT_OF_RANGE', 'TB880 旧版矩形公式仅在长短边比小于 3 时用于参考复现。')
+                raise RatingRefused('TB880_BANK_GEOMETRY_OUT_OF_RANGE', 'TB880 旧版矩形公式仅在长短边比小于 3 时用于参考复现。','/sections/0/backfill')
             rb = exp(.5*ratio*(4/pi-ratio)*log(1+1/ratio**2)+log(short/2))
         else:
             factor = geometric_factor(depth, height, width)
             rb = depth/exp(factor)
         if depth <= rb:
-            raise RatingRefused('BACKFILL_RADIUS_INVALID', '回填等效半径不满足地下热阻公式；请改用数值热传导方法。')
+            raise RatingRefused('BACKFILL_RADIUS_INVALID', '回填等效半径不满足地下热阻公式；请改用数值热传导方法。','/sections/0/backfill')
         common = (earth_rho-rho)/(2*pi)*acosh(depth/rb)
     matrix, base = [], []
     for i, (xi,zi) in enumerate(points):
         depth = -zi
         if not 0 < radii[i] < depth <= 10:
-            raise RatingRefused('DEPTH_OUT_OF_RANGE', '热源需完整位于地表下且埋深不超过 10 m；更深或近地表布置请改用数值方法。')
+            raise RatingRefused('DEPTH_OUT_OF_RANGE', '热源需完整位于地表下且埋深不超过 10 m；更深或近地表布置请改用数值方法。',source_paths[i]+'/z' if source_paths else '/sections/0/placements')
         row = []
         for j, (xj,zj) in enumerate(points):
             if i == j:
@@ -117,7 +118,7 @@ def resistance_matrix(points, radii, earth_rho, backfill=None, *, reference_basi
                 distance = hypot(xi-xj, zi-zj)
                 if distance <= radii[i]+radii[j]+1e-10:
                     raise RatingRefused('TOUCHING_GROUP_NOT_SUPPORTED',
-                                        '通用镜像法要求热源不接触；接触品字形单回路请使用接触模板，其他接触组合请改用数值方法。')
+                                        '通用镜像法要求热源不接触；接触品字形单回路请使用接触模板，其他接触组合请改用数值方法。',source_paths[i] if source_paths else '/sections/0/placements')
                 rij = rho/(2*pi)*log(hypot(xi-xj, zi+zj)/distance)
             row.append(rij)
         base.append(row)
@@ -127,7 +128,7 @@ def resistance_matrix(points, radii, earth_rho, backfill=None, *, reference_basi
                       if reference_basis == 'tb880_reference' else [v+common for v in row])
     if any(v < 0 for row in matrix for v in row):
         raise RatingRefused('BACKFILL_CORRECTION_INVALID',
-                            '此回填几何修正产生负热阻，超出近似适用范围；请改用数值热传导方法。')
+                            '此回填几何修正产生负热阻，超出近似适用范围；请改用数值热传导方法。','/sections/0/backfill')
     return matrix, {'base_matrix_k_m_w': base, 'common_correction_k_m_w': common,
                     'geometric_factor': factor, 'equivalent_radius_m': rb,
                     'reference_basis':reference_basis,

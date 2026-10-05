@@ -30,7 +30,8 @@ VERSION_NAME = re.compile(
     r'(?i)(?:^|[-_.])(?:v\d{2,}|v\d+(?:\.\d+)+|r\d+)(?=[-_.]|$)'   # _v04, V073, v0.7, R21_
     r'|(?:19|20)\d{2}-?\d{2}-?\d{2}'                               # 20260908, 2026-09-08
     r'|(?i:(?:^|[-_.])(?:legacy|old|new|final|tmp|temp|backup|copy)(?=[-_.]|$))'
-    r'|^(?:Legacy|Old|New|Final|Tmp|Temp|Backup)[A-Z]'
+    # CamelCase suffix detection must stay case-sensitive: Temperature is not TempFile.
+    r'|(?-i:^(?:[Ll]egacy|[Oo]ld|[Nn]ew|[Ff]inal|[Tt]mp|[Tt]emp|[Bb]ackup)[A-Z])'
 )
 MAX_BYTES = 1_000_000
 BINARY_EXT = {'.png', '.jpg', '.jpeg', '.webp', '.gif', '.glb', '.step', '.stp', '.brep', '.pdf', '.zip', '.woff', '.woff2'}
@@ -84,17 +85,26 @@ def branch_bound_workflows(files: list[str]) -> list[str]:
 
 
 def dead_scripts(files: list[str]) -> list[str]:
-    consumers = [f for f in files if not f.startswith('docs/') and PurePosixPath(f).suffix in {'.py', '.mjs', '.ts', '.tsx', '.yml', '.yaml', '.json', '.md', '.toml', '.ini', '.css'}]
+    consumers = [f for f in files if PurePosixPath(f).suffix in {'.py', '.mjs', '.ts', '.tsx', '.yml', '.yaml', '.json', '.md', '.toml', '.ini', '.css'}]
     texts = {f: (ROOT / f).read_text(encoding='utf-8', errors='ignore') for f in consumers}
     globs = {g for body in texts.values() for g in re.findall(r'scripts/[\w./-]*\*[\w.*/-]*', body)}
     issues = []
     for f in files:
-        if not f.startswith('scripts/') or f in {'scripts/hygiene-baseline.txt'}:
+        validation = fnmatch.fnmatch(f, 'plugins/*/validation/*.py')
+        if not validation and (not f.startswith('scripts/') or f in {'scripts/hygiene-baseline.txt'}):
             continue
         name, stem = PurePosixPath(f).name, PurePosixPath(f).stem
-        used = any(fnmatch.fnmatch(f, g) for g in globs) or any(other != f and (name in body or re.search(rf'\bfrom {re.escape(stem)} import|\bimport {re.escape(stem)}\b', body)) for other, body in texts.items())
+        if validation:
+            parent=PurePosixPath(f).parent.as_posix()
+            plugin='/'.join(f.split('/')[:2])
+            local=f[len(plugin)+1:]
+            used=any(other != f and (f in body or other.startswith(plugin+'/') and local in body or
+                (PurePosixPath(other).parent.as_posix()==parent or parent in body) and
+                re.search(rf'\bfrom {re.escape(stem)} import|\bimport {re.escape(stem)}\b',body)) for other,body in texts.items())
+        else:
+            used = any(fnmatch.fnmatch(f, g) for g in globs) or any(other != f and (name in body or re.search(rf'\bfrom {re.escape(stem)} import|\bimport {re.escape(stem)}\b', body)) for other, body in texts.items())
         if not used:
-            issues.append(f'script not referenced by CI, code, package.json or README: {f}')
+            issues.append(f'script not referenced by CI, code, package.json or docs: {f}')
     return issues
 
 

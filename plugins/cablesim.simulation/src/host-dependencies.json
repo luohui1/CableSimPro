@@ -1,97 +1,62 @@
 [
   {
-    "path": "backend/__init__.py",
-    "sha256": "83886d7841f43649b5a21609d4fcb64a2cde0dee7ba26cec27240a824b5e4d55",
-    "size_bytes": 127
+    "path": "cablesim_sdk/__init__.py",
+    "sha256": "554b5376d66cf9961d4f6f48272abc93f4cab342a7496801d5f5c8e800806817",
+    "size_bytes": 81
   },
   {
-    "path": "backend/domain/__init__.py",
-    "sha256": "642f57baa696810691637270bf55fb3f70ba893e241147f3e230c301b8f95ad6",
-    "size_bytes": 129
+    "path": "cablesim_sdk/base.py",
+    "sha256": "65ad67798ef624e21b2c17ba5735b74d0f796048e24edda5be6baed0b92ebbf4",
+    "size_bytes": 242
   },
   {
-    "path": "backend/domain/environment.py",
-    "sha256": "6f659a9c88129908c218028708d6a21db26fc5bff51a13cf2afcc957f2dea5bb",
-    "size_bytes": 928
+    "path": "cablesim_sdk/capacitive.py",
+    "sha256": "fe00ee0f478d0490d25a98665fd783cfab7f73cbad4137fa422f09a8bac2dddc",
+    "size_bytes": 2851
   },
   {
-    "path": "backend/domain/models.py",
-    "sha256": "6b51809df2adad46e402cbd9d65ff4b6303b17a6b4724595e7235ae6cf0883e5",
-    "size_bytes": 22210
+    "path": "cablesim_sdk/contact_electrothermal.py",
+    "sha256": "972388f013e6b16b9a3de9bef3d4be9ba487d2d54bd1243100c437ae95834e2e",
+    "size_bytes": 5033
   },
   {
-    "path": "backend/foundation/__init__.py",
-    "sha256": "bfed2ceb28d8fb6c456942fe46798de8f4845b9ae994ca8c1a10991290227f48",
-    "size_bytes": 82
+    "path": "cablesim_sdk/discrete_fields.py",
+    "sha256": "0446303c9a24dfa6b11d37ad659ea570c67335c49f7aa1310d1b5faa96d95d1e",
+    "size_bytes": 5960
   },
   {
-    "path": "backend/foundation/capacitive.py",
-    "sha256": "a01ad21f555f723a0c4d059bfd831c200ce281765751e365b1073c3e7ead9ff0",
-    "size_bytes": 2849
+    "path": "cablesim_sdk/domain.py",
+    "sha256": "da05192cb20b38c5af17ca0ed4af88e7caabc76ef1f313d02588eec8f9038114",
+    "size_bytes": 24563
   },
   {
-    "path": "backend/foundation/contact_electrothermal.py",
-    "sha256": "2a0ef183003c79f12c66ee756d0ce4d7d874ec8a6e7b35ac1ab31990c62136cc",
-    "size_bytes": 5035
+    "path": "cablesim_sdk/electrothermal.py",
+    "sha256": "5d9a344951ad07dbde0d3775e44f05875cafc05efa2ffdef88d3589769565e44",
+    "size_bytes": 3348
   },
   {
-    "path": "backend/foundation/discrete_fields.py",
-    "sha256": "bdc276646f2e58a5308c31c389a8e9aa53a5eaa9d877f841e2133c9216b9e85d",
-    "size_bytes": 5959
+    "path": "cablesim_sdk/environment.py",
+    "sha256": "299ceb35de56925b8604b5437ae17ecaeb476c322e23537ada0c82260ac5532f",
+    "size_bytes": 924
   },
   {
-    "path": "backend/foundation/electrothermal.py",
-    "sha256": "b43a2d60f5f5b38d477e804f0b9f061a9800f42c0fb18acff31ec3ad1527f300",
-    "size_bytes": 2973
+    "path": "cablesim_sdk/reproduction.py",
+    "sha256": "dedd26ded610c9420c42450196d1e465a382850d13d3cee23a6069084e5e6120",
+    "size_bytes": 4014
   },
   {
-    "path": "backend/foundation/reproduction.py",
-    "sha256": "a1fd00b1cbbc8979ebff4763445f33890927e0ab3c411e68e5056fb2ebfd2d73",
-    "size_bytes": 4022
+    "path": "cablesim_sdk/simulation.py",
+    "sha256": "d21873f6fd02caa297ecfc9b3938f0ce694b1e9a62ac435e81fe6278dfea4ec1",
+    "size_bytes": 10469
   },
   {
-    "path": "backend/foundation/simulation.py",
-    "sha256": "1057069f43d2a7ff124aeed33f82c28475443ef6e42e515f267c396cecdebcab",
-    "size_bytes": 8187
+    "path": "cablesim_sdk/simulation_artifacts.py",
+    "sha256": "f95e77c720d38a3377843f5e12b76e9cee3ad4a3bb8d1b498d7bf23f88ad794f",
+    "size_bytes": 9900
   },
   {
-    "path": "backend/foundation/simulation_artifacts.py",
-    "sha256": "cef228318b898a050e7d3cb2f0ba3e73a74cd38e5f4d9351e517da550c1d9cd7",
-    "size_bytes": 6699
-  },
-  {
-    "path": "backend/plugin_host/__init__.py",
-    "sha256": "0fae30ea48a3b91522d371cc95bbfa6500b2495a24961b9c695475e60128d0ed",
-    "size_bytes": 265
-  },
-  {
-    "path": "backend/plugin_host/dependencies.py",
-    "sha256": "8da0c0f57cc0273949daec2901865fef0bdbe34befcb12ad7d86696f96a754f7",
-    "size_bytes": 3709
-  },
-  {
-    "path": "backend/plugin_host/executor.py",
-    "sha256": "24523be06c1c4ae4c96993085433ecca3016d10646032f436eb4cd2f08303096",
-    "size_bytes": 17695
-  },
-  {
-    "path": "backend/plugin_host/manifest.py",
-    "sha256": "e360c1a70fd3ab07ac740ee0de04948a6562450a6ec8833011340aa6ecabd00e",
-    "size_bytes": 7236
-  },
-  {
-    "path": "backend/plugin_host/process.py",
-    "sha256": "8dc4b0dac88141e0fe1a58a6d739aea89f1c15c8e6c71d360454f3ec17be8c09",
-    "size_bytes": 8912
-  },
-  {
-    "path": "backend/plugin_host/registry.py",
-    "sha256": "ebe38c90b7fd75badf9cb3009a295717ce51cbbf929364752984688a617f24d4",
-    "size_bytes": 4513
-  },
-  {
-    "path": "backend/schemas.py",
-    "sha256": "1fb54ed271f1f858c7b6bdf002e99378e962cb7ba5dfe68cdae7668ef4983dbc",
-    "size_bytes": 4030
+    "path": "cablesim_sdk/validation.py",
+    "sha256": "106aaed828610dbaa5cea6ba72cb8ba8da0f1befa0be04678501414d2ab7cd11",
+    "size_bytes": 906
   }
 ]

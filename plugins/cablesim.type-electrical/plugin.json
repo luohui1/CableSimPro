@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.type-electrical",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "name": "型号电气参数与短路容量",
   "icon": "assets/icon.svg",
   "description": "按原文核验的 IEC 60287 与 IEC 60949 分支计算，缺项和未覆盖保留；使用不可变宿主运行快照。",
@@ -43,7 +43,7 @@
       "id": "electrical",
       "kind": "method",
       "title": "型号电气参数（IEC 60287 原文分支）",
-      "method_version": "TYPE-ELECTRICAL-0.1.0",
+      "method_version": "TYPE-ELECTRICAL-0.3.0",
       "analysis": "properties",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -74,7 +74,7 @@
       "id": "short-circuit",
       "kind": "method",
       "title": "组件绝热与非绝热短路容量（IEC 60949）",
-      "method_version": "TYPE-SHORT-CIRCUIT-0.1.0",
+      "method_version": "TYPE-SHORT-CIRCUIT-0.2.0",
       "analysis": "short_circuit",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -110,14 +110,24 @@
       "size_bytes": 227
     },
     {
+      "path": "src/cablesim_type_electrical/inputs.py",
+      "sha256": "f5b9d43673d74a2c8d7a54eb6183d8e7f4550354bc2efefd93e7ae398dca2b91",
+      "size_bytes": 4992
+    },
+    {
       "path": "src/cablesim_type_electrical/main.py",
-      "sha256": "3811b027e3776bb016b289a10fa3211717c6a8b5c8c91be973465b3d070805d0",
-      "size_bytes": 29732
+      "sha256": "3b900881fec505a7f17ce2156f31ea551eb36a628696438b7e23724c582ce237",
+      "size_bytes": 28971
     },
     {
       "path": "src/cablesim_type_electrical/sources.json",
-      "sha256": "8607369514d87bb40e2f75781c130b14ef6b36b4b2b762077f31b4c3dc9341de",
-      "size_bytes": 1431
+      "sha256": "21d2dbf686359da50f0677e20615c52068f965b478b7d33ebfd774f5d779a284",
+      "size_bytes": 1687
+    },
+    {
+      "path": "src/host-dependencies.json",
+      "sha256": "6b9653d6894e72e4a52a2b2d29cc84eb794c6bc5ae584655e0b331e96cd2dadb",
+      "size_bytes": 1064
     }
   ]
 }

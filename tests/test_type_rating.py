@@ -13,8 +13,8 @@ from backend.main import create_app
 from backend.kernel.contracts import Driver, StudyDefinition
 from backend.kernel.drivers import cases_for
 from backend.kernel.report import render
-from design.workbench.scenarios import make_router as scenarios_router, system_models
-from design.workbench.type_rating import make_router, RatingRow, RatingTableDefinition, table_definition, rating_rows, condition_input
+from backend.kernel.scenarios import make_router as scenarios_router, system_models
+from backend.kernel.rating_conditions import make_router, RatingRow, RatingTableDefinition, table_definition, rating_rows, condition_input
 
 ROOT = Path(__file__).resolve().parents[1]
 PARAMETERS = {'ks': 1, 'kp': 1, 'eddy': 'ignored', 't4_form': 'exact', 'reference_basis': 'iec2023',
@@ -66,6 +66,8 @@ def test_condition_batch_reuses_real_iec_and_archives_air_refusal(client):
     w = type_workspace(client)
     original = deepcopy(w['domain'])
     study = save_table(client, w)
+    assert study['definition']['input_sources']['/parameters/ks']['reference'] == PARAMETERS['source']
+    assert study['definition']['input_sources']['/parameters/solver']['kind'] == 'user'
     run, root, body = execute(client, w, study)
     assert run['status'] == 'partial'
     assert run['integrity'] == 'verified'
@@ -87,8 +89,13 @@ def test_condition_batch_reuses_real_iec_and_archives_air_refusal(client):
         dielectric_rise = d('dielectric_loss_w_m')*(d('t1_k_m_w')/2+d('t3_k_m_w')+d('t4_k_m_w'))
         hand = ((d('temperature_headroom_k')-dielectric_rise)/denominator).sqrt()
     assert rows[0]['value_a'] == pytest.approx(float(hand), rel=1e-7)
-    assert '<h2>载流量表</h2>' in render([run])
-    assert '地下稳态' in render([run])
+    html = render([run])
+    assert 'data-specification-section="rating"' in html
+    # Customer documents round display values; saved results retain full precision.
+    displayed_current = format(Decimal(str(rows[0]['value_a'])).quantize(Decimal('0.001')), 'f').rstrip('0').rstrip('.')
+    assert f'<td>{displayed_current}</td>' in html
+    assert str(rows[0]['value_a']) not in html
+    assert run['input_digest'] in html and run['output_digest'] in html
 
 
 def test_batch_inputs_are_saved_not_runtime_overrides_and_deep_copied():
@@ -163,6 +170,10 @@ def test_invalid_units_and_stale_type_are_rejected_at_fields(client):
     body['parameters'] = {**PARAMETERS, 'source': ''}
     response = client.post(root, json=body)
     assert response.status_code == 422 and response.json()['detail']['field'] == 'parameters.source'
+    body['parameters'] = {'t4_form': 'exact'}
+    response = client.post(root, json=body)
+    assert response.status_code == 200
+    assert '/parameters/t4_form' not in response.json()['input_sources']
 
 
 def test_edited_conditions_preserve_history_and_block_current_export(client):

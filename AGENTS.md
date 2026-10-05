@@ -8,7 +8,7 @@
 
 - 产品需求：`docs/product/PRD.md`
 - 架构与实施细则：`docs/design/SYSTEM_ARCHITECTURE.md`、`docs/design/MODULE_DESIGN.md`
-- 插件规范：[唯一现行规范](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md)，插件目录 `plugins/registry.json`、`plugins/releases/`
+- 插件规范：[唯一现行规范](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md)，v2 清单 `plugins/<id>/plugin.json`；`plugins/registry.json` 仅为这些清单生成的发布索引。
 
 工程底线：不产生假结果（缺数据就明确失败，不用编造公式兜底）；每个结果可追溯到输入、方法和版本；AI 与插件只提提案，不能自行批准。
 
@@ -16,10 +16,11 @@
 
 | 目录 | 内容 |
 | --- | --- |
-| `backend/` | FastAPI 宿主；`kernel/` 保存研究、快照执行、比较与交付；`domain/` SI 领域事实与转换；`foundation/` 原生几何契约；`plugins/` v1 安装与传输兼容；`plugin_host/` 通用 v2 执行器；`methods.py` v0 调用适配 |
+| `backend/` | FastAPI 宿主；`kernel/` 保存工程、研究、快照执行、比较与交付，并提供敷设/需求/载流量表接口；`domain/` SI 事实与旧数据显式迁移；`foundation/` 几何与资源；`plugin_host/` 通用 v2 执行器与工件校验 |
 | `design/` | 设计素材；`plugin-system/` 为插件页面素材（封面、图标、原型）；自研图标、品牌、动效放 `icons/`、`brand/`、`motion/`（规格见 `docs/design/VISUAL_ASSETS.md`）。界面待按 `docs/design/FRONTEND_REQUIREMENTS.md` 重建 |
-| `plugins/` | 每个第一方插件一个 `plugins/<id>/src/`；热网络包含竖向与场分析，IEC 包含标准子集，native-reference 包含原生算法；另有 v1 清单和原生依赖锁 |
-| `plugin-spec/` | 插件清单 / 命令 / 结果的 JSON Schema |
+| `plugins/` | 每个第一方插件一个 `plugins/<id>/src/` 与 v2 清单；IEC 标准子集、热网络交叉校核参考、原生算法及仿真插件；清单封签含静态引用的公共源码 |
+| `cablesim_sdk/` | 插件与宿主共用的领域和仿真工件契约 |
+| `plugin-spec/` | v2 插件清单与仍在使用的物理工件 JSON Schema；schema 数字版本不代表已删除的 v1 执行器 |
 | `tests/` | 默认 pytest；`plugin-tests/` 需要原生环境 |
 | `scripts/` | 仍在使用的工具脚本（每个都必须被 CI、代码或本文件引用） |
 | `docs/` | `product/` 需求，`design/` 架构，`architecture/` 已实现的契约，`plugins/` 插件说明，`METHOD.md` 计算方法 |
@@ -50,7 +51,8 @@ python scripts/clean.py [--dry-run]             # 清理本地中间文件
 1. 删除本任务产生的临时文件、调试输出、临时 worktree / 分支。
 2. `python scripts/clean.py` 清掉本地中间文件（不会动 `.data/` 里的工程数据）。
 3. `python -m pytest` 通过（含卫生检查）；动了插件跑 `plugin-tests`。
-4. 改了插件或宿主被封签的文件：`python scripts/plugin_sdk.py seal` 会报出不一致（v2 插件 `plugins/<id>/src/` 与 v1 目录 `plugins/registry.json` 登记的文件）；未发布版本用 `seal --write` 重新封签，已发布版本先升插件版本号。改了 v1 清单结构或 `plugin-spec/` 模型时才用 `python scripts/seal_plugin_catalog.py --write-draft`（会整体重排格式）。最后确认 `python scripts/plugin_sdk.py verify` 与 `python scripts/seal_plugin_catalog.py` 通过。
+4. 改了插件或公共被封签源码：`python scripts/plugin_sdk.py seal` 检查各 v2 清单和生成索引；未发布版本用 `seal --write`，已发布版本先升版本号。清单模型/物理工件 schema 改动后用 `python scripts/seal_plugin_catalog.py --write-draft` 同步生成文件。最后确认 `python scripts/plugin_sdk.py verify` 与 `python scripts/seal_plugin_catalog.py` 通过。
+5. 有限元、批量仿真、收敛与性能计算只提交超算 dg83；CI 原生回归使用 `cablesim-hpc` 自托管 runner 的 `CABLESIM_HPC_PROFILE`。本机保留轻量单元与标准代数核验；不要在本机执行原生求解器。
 
 ## 分支
 

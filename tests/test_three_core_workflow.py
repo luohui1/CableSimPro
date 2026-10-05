@@ -8,7 +8,7 @@ import pytest
 from backend.main import create_app
 from backend.domain.models import DomainDocument
 from backend.domain.guards import pointer
-from design.workbench.scenarios import make_router,apply_layout
+from backend.kernel.scenarios import make_router,apply_layout
 
 
 def design():
@@ -84,4 +84,4 @@ def test_three_core_host_execution_validates_armour_quantities_and_snapshot(tmp_
         assert trace['operating']['cable_states'][0]['conductor_loss_w_m']==pytest.approx(sum(s['conductor_loss_w_m'] for s in trace['operating']['cable_states'][0]['cores']))
         delivery=c.post('/api/workspaces/'+w['id']+'/deliveries',json={'run_ids':[run['id']]});assert delivery.status_code==201,delivery.text
         html=delivery.json()['html']
-        assert '整缆 T2' in html and 'λ2' in html and '逐芯损耗明细' in html
+        assert 'data-section="three-core-thermal"' in html and 'data-section="core-losses"' in html

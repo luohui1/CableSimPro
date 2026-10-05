@@ -3,8 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 import json
 import pytest
-from backend.plugins.buried_contract import BuriedArgs, BuriedField, BuriedSummary, validate_buried_projection
-from backend.plugins.contracts import RuntimeRequirement, Dependency
+from backend.plugin_host.buried_contract import BuriedArgs, BuriedField, BuriedSummary, validate_buried_projection
 
 
 def fixture():
@@ -42,13 +41,6 @@ def test_no_default_power_or_materials():
     assert BuriedArgs(conductor_powers_w_m=[0,0,0],conductor_k_w_m_k=380,metal_screen_k_w_m_k=380)
 
 
-def test_exact_binary_release_versions_do_not_relax_plugin_versions():
-    assert RuntimeRequirement(distribution='cadquery-ocp',version='7.9.3.1.1').version=='7.9.3.1.1'
-    for version in ['latest','>=3.7.2','3.07.2','3.7.2+local','3.7.2rc1']:
-        with pytest.raises(ValueError):RuntimeRequirement(distribution='casadi',version=version)
-    with pytest.raises(ValueError):Dependency(plugin_id='cablesim.cadquery',version='7.9.3.1.1')
-
-
 @pytest.mark.parametrize('change', ['count','nan','unit','depth','topology','boundary','duplicate','semantics','peak','energy','relative'])
 def test_invalid_buried_artifacts_fail_closed(change):
     f,s=fixture()
@@ -73,12 +65,3 @@ def test_artifact_schemas_match_executable_contracts():
     assert validate_buried_projection(*fixture()).unit=='K'
 
 
-def test_cad_readiness_checks_the_compatible_dependency_combination(monkeypatch):
-    from backend.plugins.catalog import Catalog
-    import importlib.metadata
-    catalog=Catalog();m=catalog.get('cablesim.cadquery')
-    expected={r.distribution:r.version for r in m.requirements}
-    assert expected=={'cadquery':'2.8.0','cadquery-ocp':'7.9.3.1.1','vtk':'9.6.2','casadi':'3.7.2','nlopt':'2.11.0'}
-    monkeypatch.setattr(importlib.metadata,'version',lambda name:'3.8.0' if name=='casadi' else expected[name])
-    result=catalog.environment(m)
-    assert result['metadata_ready'] is False and result['missing']==['casadi==3.7.2']

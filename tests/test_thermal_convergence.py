@@ -4,7 +4,7 @@ from backend.kernel.convergence import temperature_convergence
 from backend.kernel.contracts import ThermalConvergence
 
 
-def evidence(peaks=(320.2,320.04,320.,320.02)):
+def evidence(peaks=(320.1,320.04,320.,320.02)):
     ids=['case-0','case-1','case-2','case-3']
     inputs=[];outputs=[];statuses={}
     for i,(h,t) in enumerate(zip([.012,.006,.003,.003],peaks)):
@@ -24,6 +24,7 @@ def test_last_grid_and_independent_domain_both_required():
     assert result['reference_case_id']=='case-2'
     assert temperature_convergence(evidence((320.2,320.04,320.,320.11)))['status']=='unconverged'
     assert temperature_convergence(evidence((320.3,320.2,320.,320.02)))['status']=='unconverged'
+    assert temperature_convergence(evidence((330.,320.,320.05,320.07)))['status']=='unconverged'
 
 
 @pytest.mark.parametrize('change',['heat','bounds','mesh','integrity'])
@@ -33,6 +34,19 @@ def test_cannot_promote_unrelated_or_unverified_evidence(change):
     if change=='bounds':r['snapshot']['cases'][3]['parameters']['domain_options']['bounds_m']=[-12,-8,12,0]
     if change=='mesh':r['snapshot']['cases'][1]['parameters']['controls']['mesh_size_m']=.02
     if change=='integrity':r['artifact_status']['case-1']['x-cablesim.temperature-field']['status']='unavailable'
+    assert temperature_convergence(r)['status']=='unconverged'
+
+
+@pytest.mark.parametrize('bounds_key',['domain_options','electromagnetic_options'])
+def test_new_simulation_mesh_contract_keeps_same_convergence_gate(bounds_key):
+    r=evidence()
+    for case in r['snapshot']['cases']:
+        params=case['parameters'];controls=params.pop('controls')
+        params['mesh']={'size_m':controls['mesh_size_m'],'far_size_m':controls['mesh_size_m']*4,'max_nodes':60000,'field_order':1}
+        bounds=params.pop('domain_options');params[bounds_key]=bounds
+    result=temperature_convergence(r)
+    assert result['status']=='converged' and result['domain_change_k']==pytest.approx(.02)
+    r['snapshot']['cases'][1]['parameters']['mesh']['field_order']=2
     assert temperature_convergence(r)['status']=='unconverged'
 
 

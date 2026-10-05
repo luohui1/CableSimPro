@@ -11,7 +11,9 @@ in the same change; never edit the numbers to make a failing refactor pass.
 """
 import pytest
 
-from backend.methods import MODEL_VERSION, calculate_many
+from backend.plugin_host import Executor
+from backend.domain.migration import convert
+from cablesim_thermal_network.network import MODEL_VERSION, ThermalNetwork
 from backend.schemas import Scenario
 
 GOLDEN = {
@@ -64,7 +66,15 @@ def test_golden_values_belong_to_this_method_version():
 def results():
     names = sorted(GOLDEN)
     # One plugin process for all cases; also exercises the batch path.
-    return dict(zip(names, calculate_many([scenario(GOLDEN[n][0]) for n in names])))
+    cases = []
+    for index,name in enumerate(names):
+        value = scenario(GOLDEN[name][0])
+        value.cable.r20_ohm_km = ThermalNetwork(value).r20*1000
+        migrated = convert(value.model_dump(mode='json'))
+        cases.append({'case_id':f'golden-{index}', 'input':migrated['document'], 'parameters':migrated['method_parameters']})
+    run = Executor().run('cablesim.thermal-network','steady-rating',cases)
+    assert all(c.status == 'succeeded' for c in run.cases)
+    return {name:case.artifacts['x-cablesim.thermal-network-rating'] for name,case in zip(names,run.cases)}
 
 
 @pytest.mark.parametrize('name', sorted(GOLDEN))

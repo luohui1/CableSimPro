@@ -81,8 +81,8 @@ class BudgetLedger:
             known = json.loads(row['jobs'])
             if known and known != [str(j) for j in jobs]:
                 raise ValueError('budget: 已登记作业号不能被另一组覆盖。')
-            if row['state'] == 'accounted' and (not terminal or actual_seconds != row['actual_seconds']):
-                raise ValueError('budget: 已结算核时不可改写。')
+            if row['state'] == 'accounted' and (not terminal or actual_seconds < row['actual_seconds']):
+                raise ValueError('budget: 已结算核时不可改写为较小值或重新预留；同一作业的迟到记账只能上调。')
             actual = actual_seconds if actual_seconds is not None else row['actual_seconds']
             if actual is not None and row['actual_seconds'] is not None and actual < row['actual_seconds']:
                 raise ValueError('budget: 观测到的核时不能倒退。')

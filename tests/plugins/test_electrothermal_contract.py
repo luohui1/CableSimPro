@@ -3,7 +3,7 @@ from pathlib import Path
 import json
 import pytest
 from backend.schemas import Scenario
-from backend.plugins.electrothermal_contract import ElectrothermalArgs, ElectrothermalSummary, preflight
+from backend.plugin_host.electrothermal_contract import ElectrothermalArgs, ElectrothermalSummary, preflight
 
 
 def args(**changes):

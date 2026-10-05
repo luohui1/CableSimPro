@@ -1,7 +1,7 @@
 """Explicit conversion and one current domain document per workspace."""
 from fastapi import APIRouter, HTTPException
 
-from ..workbench import Revision
+from ..kernel.workspace import Revision
 from .guards import check_locks, describe_locks, validate_lock
 from .migration import convert
 from .models import DomainDocument

@@ -170,11 +170,13 @@ class Controls(Strict):
     mesh_size_m: float = Field(gt=0)
     far_mesh_size_m: float = Field(gt=0)
     mesh_transition_m: float = Field(gt=0)
-    max_nodes: int = Field(ge=100,le=70000)
+    fine_mesh_band_m: float | None = Field(default=None,ge=0)
+    max_nodes: int = Field(ge=100,le=200000)
     tolerance_k: float = Field(gt=0,le=.01)
     max_iterations: int = Field(ge=2,le=500)
     relaxation: float = Field(gt=0,le=1)
     current_upper_a: float = Field(gt=0)
+    current_maximum_a: float | None = Field(default=None, gt=0)
     current_tolerance_a: float = Field(gt=0,le=1)
     rated_circuit: str | None
 
@@ -185,6 +187,8 @@ def prepare(value, parameters):
     if parameters.get('reproduction',{}).get('missing_inputs'):
         raise ValueError('论文工况有未补齐输入，禁止使用默认值求解。')
     controls = Controls.model_validate(parameters['controls'])
+    if controls.current_maximum_a is not None and controls.current_maximum_a < controls.current_upper_a:
+        raise ValueError('controls.current_maximum_a：自适应扩界上限不能小于初始上界，单位 A。')
     if value.get('schema_version') == 'cablesim.domain/1':
         from .thermal_domain import from_domain
         model = from_domain(value,parameters.get('domain_options',{}))

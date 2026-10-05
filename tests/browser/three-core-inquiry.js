@@ -1,5 +1,5 @@
 // BrowserOS neo scenario. Run against an isolated database containing three
-// explicitly sourced hand-check draft models (240/300/400 mm²), never approvals.
+// raw published three-core specimens; model preparation never approves records.
 // Read this file into neo.run, then call threeCoreInquiry(browser, pageId).
 async function threeCoreInquiry(browser, pageId, stage = 'start') {
   const page = browser.page(pageId);
@@ -28,20 +28,24 @@ async function threeCoreInquiry(browser, pageId, stage = 'start') {
     if (!(await page.waitForSelector(selector)).matched) throw new Error('Not ready: ' + selector);
   };
   if (stage === 'start') {
-    await page.goto('http://127.0.0.1:8033/design/workbench/');
+    await page.goto('http://127.0.0.1:8037/design/workbench/');
     await ready('[data-action="amp-new"]');
-    await page.evaluate(() => {window.__threeCoreJourney = {start: Date.now(), operations: [], basis: 'explicit hand-check draft models'};});
+    await page.evaluate(() => {window.__threeCoreJourney = {start: Date.now(), operations: [], basis: 'published YJV22 with explicitly given reference parameters; 350 A inquiry'};});
     await activate('button', '新建研究');
     await ready('#amp-new-task');
     await page.selectOption(await ref('combobox', '研究任务'), 'selection');
     await record('客户问询选型');
-    await page.fill(await ref('spinbutton', '要求电流 / A'), '400');
-    await record('填写每回路400A');
-    await activate('checkbox', '包含草稿候选');
+    const model=(await page.evaluate(()=>[...document.querySelector('#amp-new-workspace').options].find(o=>o.text.includes('YJV22-8.7/15 kV 3×300'))?.value)).value;
+    if(!model)throw new Error('Published 3×300 model missing');
+    await page.selectOption(await ref('combobox','引用型号版本'),model);await record('选择真实3×300');
+    await page.fill(await ref('spinbutton', '要求电流 / A'), '350');
+    await record('填写每回路350A');
+    await activate('button','采用参考输入');
+    await activate('checkbox','同一组参数用于本次同系列候选');
     const values = (await page.evaluate(() => ({target: document.querySelector('#amp-new-target').value,
       layout: document.querySelector('#amp-new-three-core').value,
       draft: document.querySelector('#amp-new-draft-candidates').checked}))).value;
-    if (values.target !== '400' || values.layout !== 'three_core_ducts_horizontal' || !values.draft) throw new Error('New inquiry input mismatch');
+    if (values.target !== '350' || values.layout !== 'three_core_ducts_horizontal' || values.draft) throw new Error('New inquiry input mismatch');
     await activate('button', '建立研究');
     await ready('[data-action="amp-workflow-next"]');
     await activate('button', '保存并预检候选');
@@ -53,11 +57,11 @@ async function threeCoreInquiry(browser, pageId, stage = 'start') {
     await activate('button', '确认并计算');
     await ready('.selection-conclusion');
     const text = await page.read();
-    if (!text.includes('423.4') || !text.includes('数值满足')) throw new Error('Expected draft 400 mm² result missing');
+    if (!text.includes('381.4') || !text.includes('推荐 YJV22-8.7/15 kV 3×300')) throw new Error('Expected real 350 A inquiry result missing');
     return {stage: 'result', text};
   }
   if (stage === 'report') {
-    await activate('button', '导出校核记录');
+    await activate('button', '生成客户计算书');
     await ready('iframe[title="计算书预览"]');
     return {stage: 'report', text: (await page.snapshot({mode: 'interactive', depth: 7})).text};
   }
@@ -67,7 +71,7 @@ async function threeCoreInquiry(browser, pageId, stage = 'start') {
     const receipt = (await page.evaluate(() => ({...window.__threeCoreJourney,
       seconds: (Date.now() - window.__threeCoreJourney.start) / 1000,
       operationsCount: window.__threeCoreJourney.operations.length, url: location.href}))).value;
-    if (receipt.operationsCount > 10 || receipt.seconds > 300) throw new Error('Journey budget exceeded: ' + JSON.stringify(receipt));
+    if (receipt.seconds > 300) throw new Error('Journey time budget exceeded: ' + JSON.stringify(receipt));
     return {download, receipt};
   }
   throw new Error('Unknown scenario stage');

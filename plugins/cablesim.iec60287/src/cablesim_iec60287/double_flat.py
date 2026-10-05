@@ -3,6 +3,7 @@ from hashlib import sha256
 import json
 from math import isfinite, pi, sqrt
 from .method import RatingRefused
+from .electrical import sheath_thickness_terms
 
 TABLE_SHA256 = '5caaea3dec2be3c35c639ad89a021cb01c535175f3efcc1546dfaa642c6db143'
 SOURCE_SHA256 = 'b8f8fbf7396254a70a2b222cd92668b1b7cef047d34f70524863b217144473e2'
@@ -59,10 +60,7 @@ def eddy_factor(rs, rc, rho, thickness_m, outer_m, mean_m, frequency,
         cn = interpolate([Y_N],[row[cable_index] for row in tables['CN'][direction]],[y])
         j_index = cable_index if direction == 'forward' else min(cable_index,5-cable_index)
         cj = interpolate([Y_J,M,Z_J],tables['CJ'][direction][j_index],[y,m,z])
-        beta = sqrt(4*pi*(2*pi*frequency)/(1e7*rho))
-        ts,ds = thickness_m*1000,outer_m*1000
-        gs = 1+(ts/ds)**1.74*(beta*ds*.001-1.6)
-        gs_term = (beta*ts)**4/12e12
+        gs,gs_term = sheath_thickness_terms(rho,thickness_m,outer_m,frequency)
     value = rs/rc*(lambda0*ch*cn*cj*gs+gs_term)
     return {'total':value,'circulating':0.,'eddy_raw':value,'eddy_factor_f':None,
             'sheath_r_ohm_m':rs,'basis':'IEC 60287-1-2:2023 4.2 / 6.2–6.5',

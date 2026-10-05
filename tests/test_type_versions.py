@@ -1,5 +1,6 @@
-"""Branch isolation, sealed report references and credentialed publication gates."""
+"""Branch isolation, sealed report references and local human publication gates."""
 from copy import deepcopy
+import getpass
 import json
 from pathlib import Path
 from uuid import uuid4
@@ -12,8 +13,8 @@ from backend.main import create_app
 from backend.kernel.type_versions import CHAPTERS
 from backend.kernel.type_versions import Types
 from backend.domain.models import CableType
-from backend.workbench import fingerprint, stamp
-from design.workbench.scenarios import make_router, system_models
+from backend.kernel.workspace import fingerprint, stamp
+from backend.kernel.scenarios import make_router, system_models
 
 
 @pytest.fixture
@@ -64,7 +65,7 @@ def seed_evidence(c, w, monkeypatch, *, bad_status=False, uncovered=False):
                 (rid,w['id'],sid,str(uuid4()),'a'*64,fingerprint(snapshot),json.dumps(snapshot),'failed' if bad_status and channel=='geometry' else 'succeeded',json.dumps(output),fingerprint(output),'fixture',str(uuid4()),stamp()))
         runs[rid]={'id':rid,'workspace':w['id'],'study':sid,'snapshot':snapshot,'output':output,'status':'failed' if bad_status and channel=='geometry' else 'succeeded','freshness':'current','integrity':'verified','input_digest':fingerprint(snapshot),'output_digest':fingerprint(output)}
     # A real archived rating batch shape, with only a successful underground row.
-    from design.workbench.type_rating import RatingRow, RatingTableDefinition, table_definition
+    from backend.kernel.rating_conditions import RatingRow, RatingTableDefinition, table_definition
     definition = table_definition(w, RatingTableDefinition(expected_revision=w['revision'],rows=[RatingRow(case_id='buried',name='receipt fixture buried',layout='trefoil')]),method)
     sid,rid=str(uuid4()),str(uuid4())
     snapshot={'workspace_revision':w['revision'],'study_revision':1,'definition':definition,'cases':[{'case_id':'buried','input':definition['driver']['cases'][0]['input']}], 'lock':{'digest':'fixture-lock'}}
@@ -127,26 +128,27 @@ def test_failed_source_not_selected_and_uncovered_blocks_approval(client,monkeyp
     assert spec['payload']['chapters']==CHAPTERS
     assert any(c['id']=='geometry/missing' for c in spec['payload']['checks'])
     assert any(c['id'].startswith('standards/') for c in spec['payload']['checks'])
-    monkeypatch.setenv('CABLESIM_TYPE_APPROVER_TOKEN','isolated-test-credential')
-    body={'request_id':str(uuid4()),'submission_id':submitted['submission_id'],'specification_digest':spec['digest'],'reviewer':'TEST RECEIPT','human_confirmed':True}
-    assert client.post(f"/api/types/{w['id']}/approve",json=body,headers={'X-CableSim-Actor':'human','Authorization':'Bearer isolated-test-credential'}).status_code==422
+    body={'request_id':str(uuid4()),'submission_id':submitted['submission_id'],'specification_digest':spec['digest'],'human_confirmed':True}
+    assert client.post(f"/api/types/{w['id']}/approve",json=body,headers={'X-CableSim-Actor':'human'}).status_code==422
 
 
-def test_human_credential_required_stale_approval_and_immutable_release(client,monkeypatch):
+def test_local_identity_human_confirmation_and_immutable_release(client,monkeypatch):
     w=workspace(client);runs=seed_evidence(client,w,monkeypatch);adopt(client,w)
     spec,submitted=submit(client,w)
     assert spec['ready']
     assert spec['html'].count('<section id="chapter-')==8
     assert '777.125' in spec['html']
-    approval={'request_id':str(uuid4()),'submission_id':submitted['submission_id'],'specification_digest':spec['digest'],'reviewer':'TEST RECEIPT','human_confirmed':True}
-    monkeypatch.setenv('CABLESIM_TYPE_APPROVER_TOKEN','isolated-test-credential')
-    for actor in ('ai','plugin','human'):
+    approval={'request_id':str(uuid4()),'submission_id':submitted['submission_id'],'specification_digest':spec['digest'],'human_confirmed':True}
+    for actor in ('ai','plugin','unknown'):
         assert client.post(f"/api/types/{w['id']}/approve",json=approval,headers={'X-CableSim-Actor':actor}).status_code==403
-    human={'X-CableSim-Actor':'human','Authorization':'Bearer isolated-test-credential'}
+    human={'X-CableSim-Actor':'human'}
+    assert spec['lifecycle']['operator']['username'] == getpass.getuser()
+    assert client.post(f"/api/types/{w['id']}/approve",json={**approval,'reviewer':'forged'},headers=human).status_code==422
     assert client.post(f"/api/types/{w['id']}/approve",json={**approval,'human_confirmed':False},headers=human).status_code==422
     approved=client.post(f"/api/types/{w['id']}/approve",json=approval,headers=human)
     assert approved.status_code==200,approved.text
-    assert approved.json()['reviewer']=='TEST RECEIPT' and approved.json()['approved_at']
+    assert approved.json()['reviewer']==getpass.getuser() and approved.json()['approved_at']
+    assert approved.json()['sources'] == spec['payload']['sources']
     assert client.post(f"/api/types/{w['id']}/approve",json=approval,headers=human).json()==approved.json()
     publish={'request_id':str(uuid4()),'submission_id':submitted['submission_id'],'specification_digest':spec['digest']}
     released=client.post(f"/api/types/{w['id']}/publish",json=publish,headers=human)
@@ -178,9 +180,8 @@ def test_input_change_marks_comparison_and_rejects_old_submission(client,monkeyp
     assert changed['lifecycle']['stale'] and not changed['ready']
     values=client.get(f"/api/types/{w['id']}/comparison").json()['items'][0]['values']
     assert values['outer_diameter']['state']=='historical'
-    monkeypatch.setenv('CABLESIM_TYPE_APPROVER_TOKEN','isolated-test-credential')
-    body={'request_id':str(uuid4()),'submission_id':submitted['submission_id'],'specification_digest':spec['digest'],'reviewer':'TEST RECEIPT','human_confirmed':True}
-    assert client.post(f"/api/types/{w['id']}/approve",json=body,headers={'X-CableSim-Actor':'human','Authorization':'Bearer isolated-test-credential'}).status_code==409
+    body={'request_id':str(uuid4()),'submission_id':submitted['submission_id'],'specification_digest':spec['digest'],'human_confirmed':True}
+    assert client.post(f"/api/types/{w['id']}/approve",json=body,headers={'X-CableSim-Actor':'human'}).status_code==409
 
 
 def test_comparison_aligns_conditions_after_case_ids_and_order_change(client,monkeypatch):
@@ -219,3 +220,37 @@ def test_type_binding_normalizes_nullable_schema_fields_without_accepting_input_
     assert Types._matches_type(run,document)
     run['snapshot']['cases'][0]['input']['cable_types'][0]['common_layers'][1]['thickness']+=.0005
     assert not Types._matches_type(run,document)
+
+
+def test_saved_run_specification_keeps_selected_type_precision_and_escaped_evidence(client,monkeypatch):
+    from backend.kernel.report import render
+    from backend.kernel.type_specification import payload_from_runs, render_run_specification
+
+    w = workspace(client)
+    runs = seed_evidence(client,w,monkeypatch)
+    run = deepcopy(next(r for r in runs.values() if 'x-cablesim.cad-model' in r['output']['cases'][0].get('artifacts',{})))
+    selected = w['domain']['cable_types'][0]
+    other = deepcopy(selected)
+    other.update(id='type/other',label='<unselected & type>')
+    document = run['snapshot']['cases'][0]['input']
+    document['cable_types'].insert(0,other)
+    material = next(item for item in document['materials'] if item['id'] == selected['cores'][0]['conductor']['material'])
+    material['label'] = '<铜 & 备注>'
+    material['standard_kind'] = None
+    run['snapshot']['definition']['parameters']['cable_type_id'] = selected['id']
+    run['snapshot']['workspace_state'] = w
+    original = deepcopy(run)
+    payload = payload_from_runs([run])
+    assert payload['document']['cable_types'] == [selected]
+    html = render([run])
+    assert html == render_run_specification([run])
+    assert html.count('data-specification-section=') == 8
+    assert 'data-specification-evidence' in html
+    assert payload['results']['geometry']['artifact']['outer_diameter_m'] == .042
+    assert '42.0 mm' in html and '2400' in html
+    assert '&lt;铜 &amp; 备注&gt;' in html
+    assert '&lt;unselected &amp; type&gt;' not in html
+    assert '<unselected & type>' not in html
+    assert run['input_digest'] in html and run['output_digest'] in html
+    assert '--font-ui' in html and '<link rel="stylesheet"' not in html
+    assert run == original

@@ -55,7 +55,7 @@ def test_passive_complex_permeability_and_series_constraints():
 
 
 def test_reference_solver_requires_same_canonical_problem_hash():
-    from backend.foundation.reproduction import comparison
+    from cablesim_sdk.reproduction import comparison
     target={'id':'r','quantity':'resistance','entity':'wire','unit':'ohm/m','reference':1.,'tolerance':{'absolute':.1,'source':'test'},'source':'test'}
     obs={'quantity':'resistance','entity':'wire','unit':'ohm/m','value':1.01}
     reference={'targets':[target],'reference_solver':{'name':'COMSOL','problem_sha256':'same','observations':[{**obs,'value':1.02}]}}
@@ -68,7 +68,7 @@ def test_reference_solver_requires_same_canonical_problem_hash():
 
 def test_both_solvers_use_identical_problem_digest_without_rewriting_history():
     from hashlib import sha256
-    from backend.foundation.reproduction import digest as shared
+    from cablesim_sdk.reproduction import digest as shared
     from cablesim_comsol_bridge.adapter import digest as commercial
     sys.path.insert(0,str(ROOT/'plugins/cablesim.simulation/src'))
     from cablesim_simulation.report import digest as opened

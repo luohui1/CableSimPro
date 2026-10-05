@@ -46,3 +46,7 @@ def test_budget_cannot_erase_or_reassign_accounting(tmp_path):
     ledger.record('job', jobs=['1'], actual_seconds=60, terminal=True)
     with pytest.raises(ValueError, match='不可改写'):
         ledger.record('job', jobs=['1'], actual_seconds=0, terminal=True)
+    ledger.record('job',jobs=['1'],actual_seconds=65,terminal=True)
+    assert ledger.summary()['actual']==65/3600
+    with pytest.raises(ValueError,match='不可改写'):
+        ledger.record('job',jobs=['1'],actual_seconds=65,terminal=False)

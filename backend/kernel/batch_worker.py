@@ -32,6 +32,17 @@ def error_state(error):
     return 'failed'
 
 
+def failure_reason(row):
+    """A stable category supplements, but never replaces, the original failure."""
+    if row.get('valid') or row.get('status') in ('pending','running'):
+        return None
+    error=row.get('error') or {}
+    message=str(error.get('message',''))
+    if '未夹住温限' in message:
+        return 'ampacity_unbracketed_within_declared_current_range'
+    return str(error.get('code') or row.get('status') or 'unknown_failure')
+
+
 def verify_row(row, directory=None):
     content={k:v for k,v in row.items() if k!='row_sha256'}
     if row.get('row_sha256')!=digest(content):raise ValueError('RESULT_INTEGRITY_FAILED')
@@ -115,6 +126,7 @@ def execute_sample(directory,index,backend='local',retry=False):
             'backend':backend,'host':socket.gethostname(),'slurm':{k:os.environ[k] for k in
                 ('SLURM_JOB_ID','SLURM_ARRAY_JOB_ID','SLURM_ARRAY_TASK_ID','SLURM_CPUS_PER_TASK','SLURM_JOB_NODELIST') if k in os.environ},
             'authority':'reference_only','engineering_approval':False}
+        row['license_source']='hpc-installation' if os.environ.get('SLURM_JOB_ID') else 'local-installation'
         atomic(result_path,row)
         started=time.perf_counter();probe=MemoryProbe();probe.thread.start()
         try:

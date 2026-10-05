@@ -9,8 +9,8 @@ def configuration(w,s):
     return {'expected_revision':w['revision'],'expected_study_revision':s['revision'],
         'expected_configuration_revision':0,'source_module':None,
         'parameter_space':{'sampling':'latin_hypercube','sample_count':3,'seed':7,'source':'Explicit study sensitivity range',
-            'axes':[{'name':'depth','label':'埋深','unit':'m','minimum':.7,'maximum':.9,'source':'Engineering sensitivity',
-                     'bindings':[{'pointer':'/input/installation/depth_m','target_unit':'m'}]}]},
+            'axes':[{'name':'depth','label':'埋深坐标 z','unit':'m','minimum':-.9,'maximum':-.7,'source':'Engineering sensitivity; negative z means depth below ground',
+                     'bindings':[{'pointer':f'/input/sections/0/placements/{i}/z','target_unit':'m'} for i in range(3)]}]},
         'execution':{'backend':'local','workers':2,'sample_timeout_s':30,'slurm_wall_seconds':60}}
 
 

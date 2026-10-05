@@ -9,8 +9,8 @@ import json,sys
 import numpy as np
 import pytest
 ROOT=Path(__file__).resolve().parents[1]
-sys.path[:0]=[str(ROOT/'plugins/cablesim.simulation/tests'),str(ROOT/'plugins/cablesim.simulation/src'),
-              str(ROOT/'plugins/cablesim.comsol-bridge/tests')]
+sys.path[:0]=[str(ROOT/'plugins/cablesim.simulation/validation'),str(ROOT/'plugins/cablesim.simulation/src'),
+              str(ROOT/'plugins/cablesim.comsol-bridge/validation')]
 from backend.plugin_host import Executor
 from cablesim_simulation.solver_runtime import environment,EnvironmentMissing
 from submarine_geometry import build

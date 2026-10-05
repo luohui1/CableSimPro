@@ -10,7 +10,7 @@ import pytest
 from backend.schemas import Scenario
 from backend.foundation.contracts import CircularLayer, CircularRecipe
 from cablesim_native.buried import buried_mesh, solve_buried, assemble_conduction
-from backend.plugins.buried_contract import validate_buried_projection
+from backend.plugin_host.buried_contract import validate_buried_projection
 
 
 def recipe(scenario):
@@ -115,43 +115,19 @@ def test_real_buried_plugin_api_preserves_project_and_vtu(tmp_path):
     import meshio
     from fastapi.testclient import TestClient
     from backend.main import create_app
-    from uuid import uuid4
+    from native_workflow import run, bundle, download
     with TestClient(create_app(tmp_path/'buried.sqlite')) as c:
-        w = c.post('/api/workspaces', json={}).json()
-        baseline = c.get(f'/api/workspaces/{w["id"]}').json()
-        p = c.post('/api/plugins/install-plan', json={'plugin_id': 'cablesim.buried-reference', 'version': '0.2.0'}).json()
-        r = c.post('/api/plugins/install', json={k: p[k] for k in ('plugin_id', 'version', 'plan_sha256', 'state_revision')} |
-                   {'approved': True, 'license_acknowledged': True, 'grants': {i['plugin_id']: i['permissions'] for i in p['plugins']}})
-        assert r.status_code == 200, r.text
-        lock = c.get(f'/api/plugins/workspaces/{w["id"]}/lock').json()
-        r = c.post(f'/api/plugins/workspaces/{w["id"]}/enable', json={'plugin_id': 'cablesim.buried-reference',
-                    'expected_revision': w['revision'], 'lock_revision': lock['lock']['lock_revision'], 'enabled': True, 'approved': True})
-        assert r.status_code == 200, r.text
-        body = {'plugin_id': 'cablesim.buried-reference', 'command': 'skfem.buried-reference', 'request_id': str(uuid4()),
-                'expected_revision': w['revision'], 'lock_sha256': r.json()['lock_sha256'], 'arguments': arguments(), 'confirmed': True}
-        r = c.post(f'/api/plugins/workspaces/{w["id"]}/invoke', json=body)
-        assert r.status_code == 200, r.text
-        job = r.json(); assert job['status'] == 'succeeded'
-        root = f'/api/plugins/workspaces/{w["id"]}/jobs/{job["job_id"]}/artifacts'
-        field = c.get(root+'/field.json').json(); validate_buried_projection(field, job['result']['summary'])
-        path = tmp_path/'temperature.vtu'; path.write_bytes(c.get(root+'/temperature.vtu').content)
-        loaded = meshio.read(path)
-        assert loaded.point_data['temperature_c']+273.15 == pytest.approx(field['values'], abs=1e-9)
-        assert c.get(f'/api/workspaces/{w["id"]}').json() == baseline
-        assert job['promoted_to_current_ampacity'] is False
-        assert c.post(f'/api/plugins/workspaces/{w["id"]}/invoke', json=body).json()['replayed'] is True
-        # Public proposal/approval flow on a generated test project, not user data.
-        proposed = c.post(f'/api/runtime/{w["id"]}/invoke', json={'capability':'standards.propose',
-            'request_id':str(uuid4()),'expected_revision':1,'arguments':{'environment':'vertical_air'}})
-        assert proposed.status_code == 200, proposed.text
-        proposal = proposed.json()['result']
-        approved = c.post(f'/api/workspaces/{w["id"]}/proposals/{proposal["id"]}/approve',json={'expected_revision':1})
-        assert approved.status_code == 200, approved.text
-        new_lock = c.get(f'/api/plugins/workspaces/{w["id"]}/lock').json()
-        body.update(request_id=str(uuid4()),expected_revision=2,lock_sha256=new_lock['lock_sha256'])
-        rejected = c.post(f'/api/plugins/workspaces/{w["id"]}/invoke',json=body)
-        assert rejected.status_code == 409 and rejected.json()['detail']['code'] == 'METHOD_SCOPE'
-
+        w=c.post('/api/workspaces',json={}).json()
+        result,study,root,body=run(c,w,'fixed-power',arguments())
+        field=download(c,w,result,'field.json').json()
+        validate_buried_projection(field,bundle(result)['summary'])
+        path=tmp_path/'temperature.vtu';path.write_bytes(download(c,w,result,'temperature.vtu').content)
+        loaded=meshio.read(path)
+        assert loaded.point_data['temperature_c']+273.15==pytest.approx(field['values'],abs=1e-9)
+        saved=c.get('/api/workspaces/'+w['id']).json()
+        assert saved['revision']==w['revision'] and saved['scenario']==w['scenario']
+        assert c.post(root+'/runs',json=body).json()['id']==result['id']
+        assert result['integrity']=='verified'
 
 def test_trefoil_with_independent_phase_powers(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)

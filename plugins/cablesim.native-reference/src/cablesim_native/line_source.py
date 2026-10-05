@@ -13,8 +13,8 @@ from math import hypot, isclose, log, pi, sqrt
 from pathlib import Path
 from backend.foundation.contracts import CircularRecipe
 from backend.schemas import Scenario
-from backend.plugins.buried_contract import BuriedArgs, BuriedSummary
-from backend.plugins.line_source_contract import LineSourceComparison, PhaseComparison
+from backend.plugin_host.buried_contract import BuriedArgs, BuriedSummary
+from backend.plugin_host.line_source_contract import LineSourceComparison, PhaseComparison
 
 
 def internal_resistance(recipe, scenario, arguments):
@@ -55,10 +55,10 @@ def soil_matrix(scenario, outer_radius_m):
 def compare_line_source(recipe, scenario, source_summary, source_context):
     scenario = Scenario.model_validate(scenario)
     summary = BuriedSummary.model_validate(source_summary)
-    if source_context.get('command') != 'skfem.buried-reference':
+    if source_context.get('command') not in ('skfem.buried-reference','fixed-power'):
         raise ValueError('SOURCE_COMMAND_MISMATCH')
     source_plugin = source_context.get('plugin', {})
-    if source_plugin.get('plugin_id') != 'cablesim.buried-reference':
+    if source_plugin.get('plugin_id') not in ('cablesim.buried-reference','cablesim.native-reference'):
         raise ValueError('SOURCE_PLUGIN_MISMATCH')
     arguments = BuriedArgs.model_validate(source_context.get('arguments'))
     if (tuple(summary.source_powers_w_m) != tuple(arguments.conductor_powers_w_m) or

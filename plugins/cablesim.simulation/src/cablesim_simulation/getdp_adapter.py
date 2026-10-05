@@ -14,6 +14,8 @@ def translate(problem, mesh, work, feedback=None):
     conductive = [r['id'] for r in regions if r['material']['conductivity_s_m']>0]
     impressed = [e for e in problem['excitations'] if e['kind']=='impressed_current_rms_a']
     bonded = [e for e in problem['excitations'] if len(e['regions'])>1]
+    networks=problem.get('electrical_networks',[])
+    lengths=problem.get('axial_lengths_m',{})
     if any(any(e['value']) or e['kind'] != ('voltage_gradient_v_m' if e.get('connection')=='series' else 'current_rms_a') for e in bonded):
         raise ValueError('多区域互联组仅支持零总电流并联或零总电压梯度串联网络。')
     def group(values):
@@ -31,6 +33,8 @@ def translate(problem, mesh, work, feedback=None):
         nu=1/(4*pi*1e-7*complex(m['relative_permeability'],-m.get('relative_permeability_loss',0)))
         lines.append(f'nu[Region[{r["id"]}]] = Complex[{nu.real:.17g},{nu.imag:.17g}];')
         lines.append(f'magneticLoss[Region[{r["id"]}]] = {2*pi*problem["frequency_hz"]*nu.imag:.17g};')
+        length=lengths.get(r['uid'],1.)
+        lines.append(f'inverseLength[Region[{r["id"]}]] = {1/length:.17g};')
         if r['id'] in conductive:
             expression=f'{m["conductivity_s_m"]:.17g}'
             if feedback is not None:
@@ -58,9 +62,12 @@ def translate(problem, mesh, work, feedback=None):
         for i,e in enumerate(problem['excitations']):
             if e['kind']==kind and len(e['regions'])==1:
                 real=e['value'][0]; imag=e['value'][1] if len(e['value'])>1 else 0
+                if kind=='voltage_gradient_v_m':
+                    length=lengths.get(e['regions'][0],1.)
+                    real*=length;imag*=length
                 lines.append(f'{{ Region G{i}; Value Complex[{real:.17g},{imag:.17g}]; }}')
         lines += ['} }']
-    if bonded:
+    if bonded or networks:
         lines += ['{ Name Bonding; Type Network; Case Bonded {']
         node=1
         for e in bonded:
@@ -69,6 +76,12 @@ def translate(problem, mesh, work, feedback=None):
                 a,b=(node+index,node+(index+1)%n) if e.get('connection')=='series' else (node,node+1)
                 lines.append(f'{{ Region Region[{by_uid[uid]}]; Branch {{{a},{b}}}; }}')
             node+=max(n,2)
+        for network in networks:
+            nodes={number:node+index for index,number in enumerate(sorted({n for branch in network['branches'] for n in branch['nodes']}))}
+            for branch in network['branches']:
+                a,b=[nodes[n] for n in branch['nodes']]
+                lines.append(f'{{ Region Region[{by_uid[branch["region"]]}]; Branch {{{a},{b}}}; }}')
+            node+=len(nodes)
         lines += ['} }']
     lines += ['}',
               'Jacobian { { Name J; Case { { Region All; Jacobian Vol; } } } }',
@@ -87,12 +100,12 @@ def translate(problem, mesh, work, feedback=None):
               'Equation {',
               'Integral { [ nu[]*Dof{d a}, {d a} ]; In D; Jacobian J; Integration Q; }',
               'Integral { DtDof [ sigma[]*Dof{a}, {a} ]; In C; Jacobian J; Integration Q; }',
-              'Integral { [ sigma[]*Dof{u}, {a} ]; In C; Jacobian J; Integration Q; }',
+              'Integral { [ sigma[]*inverseLength[]*Dof{u}, {a} ]; In C; Jacobian J; Integration Q; }',
               'Integral { DtDof [ sigma[]*Dof{a}, {u} ]; In C; Jacobian J; Integration Q; }',
-              'Integral { [ sigma[]*Dof{u}, {u} ]; In C; Jacobian J; Integration Q; }',
+              'Integral { [ sigma[]*inverseLength[]*Dof{u}, {u} ]; In C; Jacobian J; Integration Q; }',
               'GlobalTerm { [ Dof{I}, {U} ]; In C; }']
-    if bonded:
-        bonded_ids=[by_uid[u] for e in bonded for u in e['regions']]
+    if bonded or networks:
+        bonded_ids=[by_uid[u] for e in bonded for u in e['regions']]+[by_uid[branch['region']] for network in networks for branch in network['branches']]
         lines += ['GlobalEquation { Type Network; NameOfConstraint Bonding; { Node {I}; Loop {U}; Equation {I}; In Region['+group(bonded_ids)+']; } }']
     if impressed:
         source_ids=[by_uid[e['regions'][0]] for e in impressed]
@@ -102,11 +115,11 @@ def translate(problem, mesh, work, feedback=None):
               'PostProcessing { { Name Fields; NameOfFormulation Eddy; Quantity {',
               '{ Name A; Value { Local { [ CompZ[{a}] ]; In D; Jacobian J; } } }',
               '{ Name B; Value { Local { [ {d a} ]; In D; Jacobian J; } } }',
-              '{ Name Jz; Value { Local { [ -sigma[]*CompZ[Dt[{a}]+{u}] ]; In C; Jacobian J; } } }',
-              '{ Name Ez; Value { Local { [ -CompZ[Dt[{a}]+{u}] ]; In C; Jacobian J; } } }',
-              '{ Name P; Value { Integral { [ sigma[]*SquNorm[Dt[{a}]+{u}] ]; In C; Jacobian J; Integration Q; } } }',
+              '{ Name Jz; Value { Local { [ -sigma[]*CompZ[Dt[{a}]+inverseLength[]*{u}] ]; In C; Jacobian J; } } }',
+              '{ Name Ez; Value { Local { [ -CompZ[Dt[{a}]+inverseLength[]*{u}] ]; In C; Jacobian J; } } }',
+              '{ Name P; Value { Integral { [ sigma[]*SquNorm[Dt[{a}]+inverseLength[]*{u}] ]; In C; Jacobian J; Integration Q; } } }',
               '{ Name Pmag; Value { Integral { [ magneticLoss[]*SquNorm[{d a}] ]; In D; Jacobian J; Integration Q; } } }',
-              '{ Name Inet; Value { Integral { [ -sigma[]*CompZ[Dt[{a}]+{u}] ]; In C; Jacobian J; Integration Q; } } }',
+              '{ Name Inet; Value { Integral { [ -sigma[]*CompZ[Dt[{a}]+inverseLength[]*{u}] ]; In C; Jacobian J; Integration Q; } } }',
               '} } }',
               'PostOperation { { Name Export; NameOfPostProcessing Fields; Operation {',
               'Print[A, OnElementsOf D, Format NodeTable, File "a.txt"];']
@@ -170,6 +183,17 @@ def solve(problem, mesh, work, configuration=None, *, feedback=None):
                          'joule_loss_w_m':watts,'dc_resistance_ohm_m':rdc,
                          'ac_resistance_ohm_m':watts/magnitude**2 if magnitude>1e-10 and any(region['uid'] in e['regions'] and e['kind']=='current_rms_a' and any(e['value']) for e in problem['excitations']) else None})
     constraint_errors=[]
+    by_region={row['entity']:complex(*row['current_complex_rms_a']) for row in currents}
+    for network in problem.get('electrical_networks',[]):
+        balances={n:0j for branch in network['branches'] for n in branch['nodes']}
+        for branch in network['branches']:
+            a,b=branch['nodes'];current=by_region[branch['region']]
+            balances[a]+=current;balances[b]-=current
+        error=max(map(abs,balances.values()),default=0.)
+        scale=max((abs(by_region[branch['region']]) for branch in network['branches']),default=0.)
+        constraint_errors.append({'network':network['id'],'absolute_error_a':error,'constraint':'network-node-KCL'})
+        if error>1e-7*max(1.,scale):
+            raise SolverFailure('GetDP接地拓扑网络KCL不满足：'+network['id'])
     for e in problem['excitations']:
         if e.get('connection')=='series':
             group_currents=[complex(*r['current_complex_rms_a']) for r in currents if r['entity'] in e['regions']]

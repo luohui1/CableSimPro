@@ -1,0 +1,274 @@
+{
+  "baseline_parser_sha256": "d1cf3d5ece572445c6d3391f0d100b14c70c7062d195aaf9a6c4cd997894ffef",
+  "truth_unchanged": true,
+  "missing_before": 34,
+  "recovered": 19,
+  "missing_after": 15,
+  "categories": [
+    {
+      "cause": "属性值行未解析",
+      "count": 7,
+      "recovered": 7
+    },
+    {
+      "cause": "跨页型号上下文未关联",
+      "count": 10,
+      "recovered": 5
+    },
+    {
+      "cause": "型号列表粘连",
+      "count": 10,
+      "recovered": 2
+    },
+    {
+      "cause": "铜重量与总重量表头混淆",
+      "count": 1,
+      "recovered": 1
+    },
+    {
+      "cause": "多结构列及缩写表头",
+      "count": 6,
+      "recovered": 4
+    }
+  ],
+  "fields": [
+    {
+      "sample_id": "people-0",
+      "file": "People-YJLW-110.pdf",
+      "field": "conductor_diameter",
+      "category": "型号列表粘连",
+      "recovered": true
+    },
+    {
+      "sample_id": "people-0",
+      "file": "People-YJLW-110.pdf",
+      "field": "insulation_thickness",
+      "category": "型号列表粘连",
+      "recovered": false
+    },
+    {
+      "sample_id": "people-0",
+      "file": "People-YJLW-110.pdf",
+      "field": "metallic_sheath_thickness",
+      "category": "型号列表粘连",
+      "recovered": false
+    },
+    {
+      "sample_id": "people-0",
+      "file": "People-YJLW-110.pdf",
+      "field": "oversheath_thickness",
+      "category": "型号列表粘连",
+      "recovered": false
+    },
+    {
+      "sample_id": "people-0",
+      "file": "People-YJLW-110.pdf",
+      "field": "outer_diameter",
+      "category": "型号列表粘连",
+      "recovered": false
+    },
+    {
+      "sample_id": "people-1",
+      "file": "People-YJLW-110.pdf",
+      "field": "conductor_diameter",
+      "category": "型号列表粘连",
+      "recovered": true
+    },
+    {
+      "sample_id": "people-1",
+      "file": "People-YJLW-110.pdf",
+      "field": "insulation_thickness",
+      "category": "型号列表粘连",
+      "recovered": false
+    },
+    {
+      "sample_id": "people-1",
+      "file": "People-YJLW-110.pdf",
+      "field": "metallic_sheath_thickness",
+      "category": "型号列表粘连",
+      "recovered": false
+    },
+    {
+      "sample_id": "people-1",
+      "file": "People-YJLW-110.pdf",
+      "field": "oversheath_thickness",
+      "category": "型号列表粘连",
+      "recovered": false
+    },
+    {
+      "sample_id": "people-1",
+      "file": "People-YJLW-110.pdf",
+      "field": "outer_diameter",
+      "category": "型号列表粘连",
+      "recovered": false
+    },
+    {
+      "sample_id": "expanded-0",
+      "file": "Helukabel-N2XSH.pdf",
+      "field": "weight",
+      "category": "铜重量与总重量表头混淆",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-1",
+      "file": "Nexans-XKDT.pdf",
+      "field": "conductor_diameter",
+      "category": "属性值行未解析",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-1",
+      "file": "Nexans-XKDT.pdf",
+      "field": "insulation_thickness",
+      "category": "属性值行未解析",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-1",
+      "file": "Nexans-XKDT.pdf",
+      "field": "insulation_diameter",
+      "category": "属性值行未解析",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-1",
+      "file": "Nexans-XKDT.pdf",
+      "field": "oversheath_thickness",
+      "category": "属性值行未解析",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-1",
+      "file": "Nexans-XKDT.pdf",
+      "field": "outer_diameter",
+      "category": "属性值行未解析",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-1",
+      "file": "Nexans-XKDT.pdf",
+      "field": "weight",
+      "category": "属性值行未解析",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-1",
+      "file": "Nexans-XKDT.pdf",
+      "field": "r20",
+      "category": "属性值行未解析",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-2",
+      "file": "Prysmian-N2XS2Y.pdf",
+      "field": "insulation_thickness",
+      "category": "跨页型号上下文未关联",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-2",
+      "file": "Prysmian-N2XS2Y.pdf",
+      "field": "insulation_diameter",
+      "category": "跨页型号上下文未关联",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-2",
+      "file": "Prysmian-N2XS2Y.pdf",
+      "field": "outer_diameter",
+      "category": "跨页型号上下文未关联",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-2",
+      "file": "Prysmian-N2XS2Y.pdf",
+      "field": "weight",
+      "category": "跨页型号上下文未关联",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-2",
+      "file": "Prysmian-N2XS2Y.pdf",
+      "field": "r20",
+      "category": "跨页型号上下文未关联",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-3",
+      "file": "Prysmian-AXLJ.pdf",
+      "field": "conductor_diameter",
+      "category": "跨页型号上下文未关联",
+      "recovered": false
+    },
+    {
+      "sample_id": "expanded-3",
+      "file": "Prysmian-AXLJ.pdf",
+      "field": "insulation_diameter",
+      "category": "跨页型号上下文未关联",
+      "recovered": false
+    },
+    {
+      "sample_id": "expanded-3",
+      "file": "Prysmian-AXLJ.pdf",
+      "field": "oversheath_thickness",
+      "category": "跨页型号上下文未关联",
+      "recovered": false
+    },
+    {
+      "sample_id": "expanded-3",
+      "file": "Prysmian-AXLJ.pdf",
+      "field": "outer_diameter",
+      "category": "跨页型号上下文未关联",
+      "recovered": false
+    },
+    {
+      "sample_id": "expanded-3",
+      "file": "Prysmian-AXLJ.pdf",
+      "field": "weight",
+      "category": "跨页型号上下文未关联",
+      "recovered": false
+    },
+    {
+      "sample_id": "expanded-4",
+      "file": "Keystone-MV.pdf",
+      "field": "conductor_diameter",
+      "category": "多结构列及缩写表头",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-4",
+      "file": "Keystone-MV.pdf",
+      "field": "outer_diameter",
+      "category": "多结构列及缩写表头",
+      "recovered": false
+    },
+    {
+      "sample_id": "expanded-4",
+      "file": "Keystone-MV.pdf",
+      "field": "weight",
+      "category": "多结构列及缩写表头",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-5",
+      "file": "Keystone-MV.pdf",
+      "field": "conductor_diameter",
+      "category": "多结构列及缩写表头",
+      "recovered": true
+    },
+    {
+      "sample_id": "expanded-5",
+      "file": "Keystone-MV.pdf",
+      "field": "outer_diameter",
+      "category": "多结构列及缩写表头",
+      "recovered": false
+    },
+    {
+      "sample_id": "expanded-5",
+      "file": "Keystone-MV.pdf",
+      "field": "weight",
+      "category": "多结构列及缩写表头",
+      "recovered": true
+    }
+  ]
+}

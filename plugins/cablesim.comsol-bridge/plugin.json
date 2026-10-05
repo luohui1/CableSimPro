@@ -98,8 +98,8 @@
       "validation": {
         "level": "reference-benchmark",
         "cases": [
-          "E05/E17/E18: tests/compare_papers.py; finite exterior and paper-statistic limitations retained",
-          "COMSOL tutorial04 plain/series magnetic submodels: tests/compare_tutorial.py"
+          "E05/E17/E18: validation/compare_papers.py; finite exterior and paper-statistic limitations retained",
+          "COMSOL tutorial04 plain/series magnetic submodels: validation/compare_tutorial.py"
         ]
       },
       "limitations": [
@@ -161,13 +161,13 @@
     },
     {
       "path": "src/cablesim_comsol_bridge/adapter.py",
-      "sha256": "a6ec0dfecebcdff1288928b9af8933c2a74d4c25148f2b443bf61042099a8541",
-      "size_bytes": 10068
+      "sha256": "a41699b6c4640a088e22d2879943fc74e9200d0f2bf87f1a330dd182f3c19ae6",
+      "size_bytes": 10056
     },
     {
       "path": "src/cablesim_comsol_bridge/electrothermal.py",
-      "sha256": "ac173c2190c0117ed483d0d05efc25ef2c111bfcd0685eecd387016b32fa15c1",
-      "size_bytes": 4031
+      "sha256": "c0f3d0bbe4228975a3ac2dac6fe8370a111e0e01becea07d2bdfef9cad497eb3",
+      "size_bytes": 4013
     },
     {
       "path": "src/cablesim_comsol_bridge/java_model.py",
@@ -176,18 +176,23 @@
     },
     {
       "path": "src/cablesim_comsol_bridge/main.py",
-      "sha256": "e816d1fdf69e47026ee597896987b69f2a46088f0c6a138342b040a786c1d1a9",
-      "size_bytes": 6359
+      "sha256": "8b5d645b3bae84f04af02549f88122799baac474cc674f5ba994fb97b51f3501",
+      "size_bytes": 6353
+    },
+    {
+      "path": "src/cablesim_comsol_bridge/process.py",
+      "sha256": "64635279adb8d092a1e80a4d7a1a917634333a419086375e7c34832e30932aa5",
+      "size_bytes": 1377
     },
     {
       "path": "src/cablesim_comsol_bridge/runtime.py",
-      "sha256": "defd617abfe89c343d22eb01bb5a6c49997d84a9835a9766eb69536c5e880f58",
-      "size_bytes": 11121
+      "sha256": "63fc69146782791b531001f0f91f59e6715f7fc64c337fd275496b04ba12e2fb",
+      "size_bytes": 11182
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "97f72abc4e02261b0ace82d3a95f84ea459bcf827a2fa3d7894bf198a4fea052",
-      "size_bytes": 1770
+      "sha256": "ef1a772e3b5c9479912cfbda0346154f8121b8eb039b2911fbfdb2724ad0e644",
+      "size_bytes": 630
     }
   ]
 }

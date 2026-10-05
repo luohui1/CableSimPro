@@ -58,7 +58,10 @@ class SlurmBackend:
         self.remote_json('import pathlib,sys,hashlib,json,os; p=pathlib.Path(sys.argv[1]); assert hashlib.sha256(p.read_bytes()).hexdigest()==sys.argv[2]; os.replace(p,sys.argv[3]); print(json.dumps({"installed":True}))',self.agent+'.part',expected,self.agent)
 
     def call(self,action,root,value,*extra):
-        try:raw=self.ssh([self.python,self.agent,action,root,value,*extra],timeout=120)
+        # Result archives may contain thousands of small provenance files on
+        # the shared filesystem. Keep ordinary control requests short while
+        # allowing a bounded collection operation to finish without resubmission.
+        try:raw=self.ssh([self.python,self.agent,action,root,value,*extra],timeout=600 if action=='collect' else 120)
         except RemoteDisconnected as exc:
             try:response=json.loads(str(exc))
             except ValueError:raise exc
@@ -157,8 +160,9 @@ print(json.dumps(parts))'''
             saved=folder/'submission.json'
             if saved.is_file() and read(saved).get('job_id'):
                 return read(saved)  # historical accounting policy must not create a new allocation
-            cpus=max(self.configuration.get('accounting_cpus_per_task',1),ceil(resources['slurm_memory_mb']/self.configuration.get('max_memory_per_cpu_mb',6500)))
-            reservation=self.ledger.reserve(token,tasks=len(groups),cpus_per_task=cpus,wall_seconds=group_size*resources['slurm_wall_seconds'])
+            workers=resources.get('slurm_cpus_per_task',1)
+            cpus=max(workers,self.configuration.get('accounting_cpus_per_task',1),ceil(resources['slurm_memory_mb']/self.configuration.get('max_memory_per_cpu_mb',6500)))
+            reservation=self.ledger.reserve(token,tasks=len(groups),cpus_per_task=cpus,wall_seconds=ceil(group_size/workers)*resources['slurm_wall_seconds'])
             if reservation['state']=='accounted':
                 saved=folder/'submission.json'
                 if saved.is_file():return read(saved)
@@ -213,7 +217,11 @@ print(json.dumps(parts))'''
                 path.parent.mkdir(parents=True,exist_ok=True)
                 with bundle.extractfile(entry) as source,path.open('wb') as target:shutil.copyfileobj(source,target)
         imported=0;replicated=0
-        if plan.get('schema_version')=='cablesim.native-test-plan/1':
+        if plan.get('schema_version') in ('cablesim.native-test-plan/1','cablesim.remote-run-plan/1'):
+            if plan.get('case_array'):
+                result={'accounting':accounting,'evidence':str(replica/'raw'),'array':True}
+                atomic(folder/'collection.json',result)
+                return result
             status=replica/'raw/status.json'
             result={'status':read(status) if status.is_file() else {'state':'missing_test_result'},
                     'accounting':accounting,'evidence':str(replica/'raw')}

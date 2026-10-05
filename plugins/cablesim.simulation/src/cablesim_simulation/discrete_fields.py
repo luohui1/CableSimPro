@@ -1,7 +1,7 @@
 """Host entrypoints for sourced terminal matrices and discontinuous heat fields."""
 import json
 import numpy as np
-from backend.foundation.discrete_fields import TerminalField,ContactThermalField
+from cablesim_sdk.discrete_fields import TerminalField,ContactThermalField
 from .triangular_fields import terminal_admittance,contact_thermal,floating_admittance
 from .artifacts import source,temperature_field,write
 from .report import digest

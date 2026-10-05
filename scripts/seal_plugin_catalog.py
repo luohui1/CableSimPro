@@ -1,66 +1,62 @@
-"""Maintainer-only pre-release sealing. This is not installation or signing.
-
-Default is check-only; --write-draft explicitly regenerates source digests and
-machine schemas before publishing a release. Distributed versions must not be
-resealed in place; bump plugin versions and re-review the dependency pins first.
-No plugin modules or optional engineering libraries are imported.
-"""
+"""Check the v2 catalog and executable physical-artifact schemas; no plugins execute."""
 from pathlib import Path
-from hashlib import sha256
 import argparse
 import json
+import os
 import sys
+import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from backend.plugins.contracts import PluginManifest, ProjectPluginLock
-from backend.plugins.managed_commands import COMMAND_ARGUMENTS
-from backend.plugins.buried_contract import BuriedField, BuriedSummary
-from backend.plugins.electrothermal_contract import ElectrothermalSummary
-from backend.plugins.line_source_contract import LineSourceComparison
-from backend.plugins.catalog import Catalog
+from backend.plugin_host.registry import Registry
+from backend.plugin_host.manifest import Manifest
+from backend.plugin_host.buried_contract import BuriedField, BuriedSummary
+from backend.plugin_host.electrothermal_contract import ElectrothermalSummary
+from backend.plugin_host.line_source_contract import LineSourceComparison
+from backend.kernel.workspace import fingerprint
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def write_json(path,value):
+    """Readers observe the previous or next complete seal, never truncated JSON."""
+    path=Path(path);path.parent.mkdir(parents=True,exist_ok=True)
+    with tempfile.NamedTemporaryFile(dir=path.parent,prefix='.',suffix='.part',delete=False) as stream:
+        temporary=Path(stream.name)
+        stream.write((json.dumps(value,ensure_ascii=False,indent=2)+'\n').encode('utf-8'))
+    try:os.replace(temporary,path)
+    finally:temporary.unlink(missing_ok=True)
+
+
+def synchronize(write=False):
+    registry = Registry()
+    catalogue = {'schema_version':'cablesim.catalog/2', 'plugins':[
+        {'plugin_id':p.manifest.id, 'version':p.manifest.version,
+         'manifest':'plugins/'+p.manifest.id+'/plugin.json',
+         'release_digest':fingerprint(p.manifest.model_dump(mode='json',by_alias=True))}
+        for p in registry.plugins.values()]}
+    schemas = {'manifest':Manifest.model_json_schema(),
+               'buried-field':BuriedField.model_json_schema(), 'buried-summary':BuriedSummary.model_json_schema(),
+               'electrothermal-summary':ElectrothermalSummary.model_json_schema(),
+               'line-source-crosscheck':LineSourceComparison.model_json_schema()}
+    expected = {ROOT/'plugins/registry.json':catalogue, **{
+        ROOT/('plugin-spec/'+name+'.schema.json'):value for name,value in schemas.items()}}
+    drifted = []
+    for path,value in expected.items():
+        if not path.is_file() or json.loads(path.read_text('utf-8')) != value:
+            drifted.append(path.relative_to(ROOT).as_posix())
+            if write:
+                path.parent.mkdir(parents=True,exist_ok=True)
+                write_json(path,value)
+    return drifted
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--write-draft', action='store_true')
+    parser.add_argument('--write-draft',action='store_true')
     args = parser.parse_args()
-    root = Path(__file__).resolve().parents[1]
-    catalog = Catalog(root)
-    releases = []
-    for manifest in catalog.manifests:
-        if not args.write_draft:
-            if manifest.distribution != 'roadmap':
-                catalog.verify(manifest)
-            continue
-        data = manifest.model_dump(mode='json')
-        for item in data['files']:
-            path = root / item['path']
-            if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(root):
-                raise ValueError('UNSAFE_RELEASE_PATH')
-            item.update(sha256=sha256(path.read_bytes()).hexdigest(), size_bytes=path.stat().st_size)
-        sealed = PluginManifest.model_validate(data).model_dump(mode='json')
-        if manifest.plugin_id in catalog.release_paths:
-            catalog.release_paths[manifest.plugin_id].write_text(json.dumps(sealed,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-        else:
-            releases.append(sealed)
-    schemas = {'manifest': PluginManifest.model_json_schema(),
-               'project-lock': ProjectPluginLock.model_json_schema(),
-               'commands': {k: v.model_json_schema() for k, v in COMMAND_ARGUMENTS.items()},
-               'buried-field': BuriedField.model_json_schema(),
-               'buried-summary': BuriedSummary.model_json_schema(),
-               'electrothermal-summary': ElectrothermalSummary.model_json_schema(),
-               'line-source-crosscheck': LineSourceComparison.model_json_schema()}
-    for name, schema in schemas.items():
-        path = root / f'plugin-spec/{name}.schema.json'
-        if args.write_draft:
-            path.write_text(json.dumps(schema, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-        elif json.loads(path.read_text('utf-8')) != schema:
-            raise ValueError(f'SCHEMA_DRIFT: {name}')
-    if args.write_draft:
-        (root / 'plugins/registry.json').write_text(json.dumps(
-            {'schema_version': 'cablesim.catalog/1', 'plugins': releases},
-            ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
-    print(json.dumps({'plugins': len(catalog.manifests), 'wrote_draft': args.write_draft,
-                      'executed_plugins': False, 'signed': False}))
+    drifted = synchronize(args.write_draft)
+    if drifted and not args.write_draft:
+        raise ValueError('CATALOG_SCHEMA_DRIFT: '+', '.join(drifted))
+    print(json.dumps({'plugins':len(Registry().plugins),'wrote_draft':args.write_draft,'executed_plugins':False,'signed':False}))
 
 
 if __name__ == '__main__':

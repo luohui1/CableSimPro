@@ -5,8 +5,8 @@ import numpy as np
 import pytest
 ROOT=Path(__file__).resolve().parents[1]
 sys.path[:0]=[str(ROOT),str(ROOT/'plugins/cablesim.simulation/src')]
-from backend.foundation.simulation import validate
-from backend.foundation.contact_electrothermal import ContactElectrothermal
+from cablesim_sdk.simulation import validate
+from cablesim_sdk.contact_electrothermal import ContactElectrothermal
 from cablesim_simulation.problem_mesh import build
 from cablesim_simulation.solver_runtime import environment,EnvironmentMissing
 

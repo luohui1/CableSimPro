@@ -3,6 +3,10 @@ from math import pi
 from .thermal_mesh import build
 
 
+class UnstableState(ValueError):
+    """A load outside the stable steady-state branch, never a label."""
+
+
 class ThermalSystem:
     def __init__(self, model, controls, prepared_mesh=None):
         import numpy as np
@@ -124,7 +128,7 @@ class ThermalSystem:
         alpha=np.asarray([self.model.cables[i].electrical.alpha20_per_k for i in indices])
         feedback=(scale*alpha)[:,None]*coupling
         if max(abs(np.linalg.eigvals(feedback)))>=1-1e-12:
-            raise ValueError('温变电阻反馈不存在稳定稳态解；请降低负荷或检查散热边界。')
+            raise UnstableState('温变电阻反馈不存在稳定稳态解；请降低负荷或检查散热边界。')
         power=np.linalg.solve(np.eye(len(indices))-feedback,scale*(1+alpha*(initial_mean-293.15)))
         return self.reference+base+response@power
 
@@ -185,7 +189,7 @@ class ThermalSystem:
                 rise = solve(*condense(matrix,load,x=prescribed,D=D)) if len(D) else solve(matrix,load)
             proposed = rise+self.reference
             if not np.isfinite(proposed).all() or float(proposed.min()) <= 0 or float(proposed.max()) > 1500:
-                raise ValueError('无有效稳态温度解或迭代越出1500 K数值边界。')
+                raise UnstableState('无有效稳态温度解或迭代越出1500 K数值边界。')
             delta = float(np.max(np.abs(proposed-temperature)))
             trace.append({'iteration':step,'temperature_update_inf_k':delta,'max_temperature_k':float(proposed.max())})
             if delta <= cfg.tolerance_k:
@@ -275,20 +279,35 @@ class ThermalSystem:
             result,excess = trial(low)
             if excess >= 0:
                 raise ValueError('被保持负荷/固定热源已超温，不存在可行额定电流。')
-            _,excess = trial(high)
-            if excess < 0:
-                raise ValueError('给定上界未夹住温限；明确扩大搜索范围，不能返回假载流量。')
+            def bounded_trial(current):
+                try:
+                    return trial(current)
+                except UnstableState as error:
+                    brackets.append({'trial_current_a':current,'status':'unstable','reason':str(error)})
+                    return None,float('inf')
+            ceiling = cfg.current_maximum_a or high
+            while True:
+                state,excess = bounded_trial(high)
+                if excess >= 0:
+                    break
+                low,result = high,state
+                if high >= ceiling:
+                    raise ValueError('controls.current_maximum_a：达到明确搜索上限仍未夹住温限；请提高上限，未返回载流量。')
+                high = min(ceiling,high*1.6)
             for _ in range(70):
                 if high-low <= cfg.current_tolerance_a:
                     break
                 middle = (low+high)/2
-                state,excess = trial(middle)
+                state,excess = bounded_trial(middle)
                 if excess <= 0:
                     low,result = middle,state
                 else:
                     high = middle
             else:
                 raise ValueError('电流求根不收敛。')
+            margin = min(c['limit_k']-c['conductor_max_temperature_k'] for c in result['cables'])
+            if margin > max(.02, cfg.tolerance_k*10):
+                raise ValueError('controls.current_tolerance_a：电流区间收敛但未到温限，不能把失稳边界作为载流量；请缩小电流容差。')
             rating = {'circuit':cfg.rated_circuit,'ampacity_a':low,'upper_bracket_a':high,
                       'held_currents_a':{c.uid:currents[i] for i,c in enumerate(model.cables) if i not in indices},
                       'trace':brackets}

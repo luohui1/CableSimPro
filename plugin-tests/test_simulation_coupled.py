@@ -12,20 +12,26 @@ from cablesim_simulation.electrothermal import prepare,solve
 def fixture():return json.loads((ROOT/'plugins/cablesim.simulation/src/cases/electrothermal-coaxial.json').read_text('utf-8'))
 
 
-def test_coupled_constant_conductivity_matches_bessel_heat_integral(tmp_path):
+@pytest.mark.parametrize('fixed_heat',[0.,2.])
+def test_coupled_constant_conductivity_matches_bessel_heat_integral(tmp_path,fixed_heat):
     from scipy.special import jv
     from scipy.integrate import quad
     d=fixture();d['input']['resistivity_laws']['core']['alpha_per_k']=0
+    d['input']['fixed_heat_w_m_by_region']={'core':fixed_heat}
     m,mesh=prepare(d['input'],d['parameters']);r=solve(m,mesh,tmp_path)
     a,b,sigma,kc,ki,I,f=.0131,.04,5.96e7,400,.46,655,50
     q=np.sqrt(-1j*2*np.pi*f*4*np.pi*1e-7*sigma)
     def density(radius):return abs(I*q*jv(0,q*radius)/(2*np.pi*a*jv(1,q*a)))**2/sigma
     power=quad(lambda radius:2*np.pi*radius*density(radius),0,a,epsabs=1e-10)[0]
     rise=power*np.log(b/a)/(2*np.pi*ki)+quad(lambda radius:density(radius)*radius*np.log(a/radius)/kc,0,a,epsabs=1e-10)[0]
-    assert r['source_heat_w_m']==pytest.approx(power,rel=.0025)
+    rise+=fixed_heat/(4*np.pi*kc)+fixed_heat*np.log(b/a)/(2*np.pi*ki)
+    assert r['electromagnetic_heat_w_m']==pytest.approx(power,rel=.0025)
+    assert r['source_heat_w_m']==pytest.approx(power+fixed_heat,rel=.0025)
     assert r['maximum_temperature_k']-293.15==pytest.approx(rise,abs=.015)
     assert r['iterations'][-1]['transfer_relative_error']<1e-8
     assert r['iterations'][-1]['energy_relative_residual']<1e-5
+    from cablesim_sdk.reproduction import digest
+    assert r['iterations'][-1]['temperature_input_sha256']==digest(r['temperature_k'])
 
 
 def test_coupled_feedback_increases_resistive_heat_and_refuses_range(tmp_path):

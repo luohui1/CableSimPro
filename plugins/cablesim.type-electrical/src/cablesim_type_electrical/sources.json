@@ -1,4 +1,10 @@
 {
+  "gbt3956": {
+    "standard": "GB/T 3956-2008 (IEC 60228:2004 IDT)",
+    "sha256": "b9a118e1282b4eeee6ec6ae4653e8c80e0a42beee0df5bf84360c4876a856939",
+    "file_name": "GB-T 3956-2008 电缆的导体.pdf",
+    "semantics": "standard_limit_reference"
+  },
   "iec60287": {
     "standard": "IEC 60287-1-1:2023",
     "sha256": "b300bb2bea52ce64e24c8137193559d7ee4cc04013ec4122357a2625e868a327",

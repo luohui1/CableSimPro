@@ -8,7 +8,7 @@ import json
 from math import hypot
 from backend.schemas import Scenario
 from backend.foundation.contracts import CircularRecipe
-from backend.plugins.buried_contract import BuriedArgs, BuriedField, BuriedSummary, validate_buried_projection
+from backend.plugin_host.buried_contract import BuriedArgs, BuriedField, BuriedSummary, validate_buried_projection
 
 
 def check_mesh_geometry(scenario):

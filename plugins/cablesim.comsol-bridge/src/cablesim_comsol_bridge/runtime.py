@@ -12,7 +12,8 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT))
-from backend.plugin_host.process import run_process
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from cablesim_comsol_bridge.process import run_process
 
 CONFIG = ROOT / '.data/cablesim-solvers.json'
 INSTALL_GUIDE = 'https://www.comsol.com/support/knowledgebase/1221'
@@ -136,7 +137,7 @@ def environment(work):
 
 
 def command(executable, arguments, work, timeout=300, name='process'):
-    """Host Job Object owns the Python relay, COMSOL and every child process."""
+    """The Slurm allocation and relay process group own every COMSOL child."""
     try:
         import threading
         result = run_process([sys.executable, str(Path(__file__).resolve()), '--relay', str(executable), *arguments],

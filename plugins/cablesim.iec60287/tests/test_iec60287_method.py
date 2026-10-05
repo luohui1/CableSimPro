@@ -122,7 +122,7 @@ def test_ducts_add_air_gap_and_wall_resistance():
 
 
 @pytest.mark.parametrize('patch,code', [
-    ({'conductor__r20_ohm_m': 2e-6}, 'SKIN_PROXIMITY_OUT_OF_RANGE'),
+    ({'conductor__r20_ohm_m': 2e-6}, 'PROXIMITY_OUT_OF_RANGE'),
     ({'installation__depth_m': 0.03}, 'DEPTH_TOO_SMALL'),
     ({'insulation__tan_delta': 0.1, 'phase_voltage_v': 400000}, 'NO_POSITIVE_RATING'),
     ({'solver__max_iterations': 1}, 'NOT_CONVERGED'),

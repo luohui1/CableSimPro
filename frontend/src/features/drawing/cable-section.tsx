@@ -1,0 +1,104 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button, IconButton } from '@/components/ui/button';
+import { EmptyState, ErrorState, LoadingState, StaleBanner } from '@/components/states';
+import { formatNumber } from '@/lib/format';
+import { cableShape, dimensionValue, targetId } from './cable-geometry';
+import { CableShapes, LayerNumbers } from './cable-shapes';
+import { fitBounds, worldToScreen, zoomView } from './coordinates';
+import { DimensionEditor } from './dimension-editor';
+import { useCanvasSize } from './use-canvas-size';
+import { drawingShortcut } from './use-drawing-shortcuts';
+import type { CableSectionProps, DrawingView } from './types';
+import './drawing.css';
+
+export function CableSection(props: CableSectionProps) {
+  const { host, size } = useCanvasSize();
+  const svg = useRef<SVGSVGElement>(null);
+  const [view, setView] = useState<DrawingView | null>(null);
+  const [edit, setEdit] = useState(false);
+  const [showDimensions, setShowDimensions] = useState(props.showDimensions || false);
+  const calculated = useMemo(() => {
+    if (!props.cableType) return { shape: null, problem: '' };
+    try { return { shape: cableShape(props.cableType, props.materials), problem: '' }; }
+    catch (error) { return { shape: null, problem: error instanceof Error ? error.message : String(error) }; }
+  }, [props.cableType, props.materials]);
+  const shape = calculated.shape;
+  const state = props.state || (props.cableType ? 'success' : 'empty');
+  const problem = props.error || calculated.problem || (state === 'error' ? '电缆结构读取失败，请重试。' : '');
+  const fitted = shape ? fitBounds({ left: -shape.radiusM * 1.1, right: shape.radiusM * 1.1,
+    bottom: -shape.radiusM * 1.8, top: shape.radiusM * 1.1 }, size) : { x: 0, z: 0, widthM: .1 };
+  const camera = view || fitted;
+  const selectedId = props.selectedObject ? targetId(props.selectedObject) : undefined;
+  useEffect(() => { setEdit(false); }, [selectedId, props.cableType?.id, state]);
+  const selected = shape?.rings.find(ring => ring.id === selectedId);
+  const value = props.cableType && props.selectedObject ? dimensionValue(props.cableType, props.selectedObject) : null;
+  const editable = props.editable !== false && !!props.onDimensionChange && state === 'success'
+    && !!selected && !props.isLocked?.(selected.target);
+  const center = selected ? worldToScreen({ x: selected.centerX, z: selected.centerZ }, camera, size) : null;
+  const scale = size.width / camera.widthM;
+  const shapeBottom = shape ? Math.max(...shape.rings.map(ring => worldToScreen({ x: ring.centerX, z: ring.centerZ - ring.outerM }, camera, size).y)) : 0;
+  const dimensionY = center && selected ? shapeBottom + 36 : 0;
+
+  function dismiss() { setEdit(false); requestAnimationFrame(() => svg.current?.focus()); }
+  function select(target: Parameters<NonNullable<CableSectionProps['onSelectionChange']>>[0]) {
+    setEdit(false); props.onSelectionChange?.(target);
+  }
+
+  return <div className={`drawing-frame cable-section ${props.className || ''}`} data-cable-section-state={problem ? 'error' : state}
+    aria-label={props.label || '电缆等比例截面'} aria-busy={state === 'loading'} onKeyDown={event => {
+      if (drawingShortcut(event, state === 'historical' ? undefined : props.onCommand)) return;
+      if ((event.target as HTMLElement).closest('input,textarea')) return;
+      if (event.key === 'Escape' && !edit) { event.preventDefault(); select(null); }
+      if (event.key.toLowerCase() === 'f' && !event.ctrlKey && !event.metaKey) { event.preventDefault(); setView(null); }
+    }}>
+    {state === 'historical' && <StaleBanner description="原截面对应历史输入；尺寸保持只读。" />}
+    <div className="drawing-toolbar" role="toolbar" aria-label="电缆截面工具">
+      <IconButton icon="tool/fit" label="适应电缆截面 F" onClick={() => setView(null)} disabled={!shape} />
+      <IconButton icon="tool/zoom-out" label="缩小电缆截面" disabled={!shape} onClick={() => setView(zoomView(camera, 1.2, { x: size.width / 2, y: size.height / 2 }, size))} />
+      <IconButton icon="tool/zoom-in" label="放大电缆截面" disabled={!shape} onClick={() => setView(zoomView(camera, 1 / 1.2, { x: size.width / 2, y: size.height / 2 }, size))} />
+      <Button size="compact" aria-pressed={showDimensions} disabled={!shape} onClick={() => setShowDimensions(value => !value)}>图上尺寸</Button>
+    </div>
+    <div ref={host} className="drawing-stage">
+      {state === 'loading' && !shape ? <LoadingState title="正在读取电缆结构" />
+        : state === 'empty' || !props.cableType ? <EmptyState title="尚无电缆结构" description="选择型号或提供电缆结构后查看截面。" />
+          : problem || !shape ? <ErrorState title="截面不可用" description={problem || '结构尚未提供。'}
+            action={props.onRetry && <Button size="compact" onClick={props.onRetry}>重新读取</Button>} />
+            : <svg ref={svg} className="drawing-svg" viewBox={`0 0 ${size.width} ${size.height}`} tabIndex={0}
+              aria-label="电缆截面，单位 mm" data-drawing-canvas="cable" onWheel={event => {
+                if (edit) return;
+                event.preventDefault();
+                const bounds = event.currentTarget.getBoundingClientRect();
+                setView(zoomView(camera, event.deltaY > 0 ? 1.12 : 1 / 1.12,
+                  { x: event.clientX - bounds.left, y: event.clientY - bounds.top }, size));
+              }}>
+              <CableShapes shape={shape} view={camera} size={size} selectedId={selectedId} onSelect={select} />
+              <LayerNumbers rings={shape.rings} view={camera} size={size} selectedId={selectedId} onSelect={select} />
+              {(showDimensions || !!selected) && <g className="drawing-dimensions" data-cable-dimensions>
+                {selected && center ? <>
+                  <path d={`M${center.x - selected.outerM * scale} ${center.y}V${dimensionY + 6}M${center.x + selected.outerM * scale} ${center.y}V${dimensionY + 6}M${center.x - selected.outerM * scale} ${dimensionY}H${center.x + selected.outerM * scale}M${center.x - selected.outerM * scale - 5} ${dimensionY + 5}l10 -10M${center.x + selected.outerM * scale - 5} ${dimensionY + 5}l10 -10`} />
+                  <text x={center.x} y={dimensionY - 8} textAnchor="middle">本层外径 Ø {formatNumber(selected.outerM * 2000, 1)}</text>
+                  <g className={`drawing-dimension-chip ${editable ? 'is-editable' : ''}`} role={editable ? 'button' : undefined}
+                    tabIndex={editable ? 0 : undefined} aria-label={`${editable ? '编辑' : '查看'}${selected.name}${value?.field === 'diameter' ? '直径' : '厚度'}，单位 mm`}
+                    data-dimension-trigger="cable" onDoubleClick={() => { if (editable) setEdit(true); }}
+                    onKeyDown={event => { if (editable && event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); setEdit(true); } }}>
+                    <rect x={center.x - 76} y={dimensionY + 8} width="152" height="32" />
+                    <text x={center.x} y={dimensionY + 29} textAnchor="middle">
+                      {value?.field === 'diameter' ? '直径' : '厚度'} {formatNumber((value?.valueM || 0) * 1000, 1)}
+                    </text>
+                  </g>
+                </> : <text x={size.width / 2} y={size.height - 32} textAnchor="middle">绘图外径 Ø {formatNumber(shape.radiusM * 2000, 1)}</text>}
+              </g>}
+              {edit && selected && value && center && <DimensionEditor label={`${selected.name}${value.field === 'diameter' ? '直径' : '厚度'}`}
+                x={Math.max(8, Math.min(size.width - 232, center.x - 112))} y={Math.max(8, Math.min(size.height - 156, dimensionY - 24))}
+                value={value.valueM * 1000} unit="mm" onCancel={dismiss} onCommit={async number => {
+                  if (!Number.isFinite(number) || number <= 0) throw new Error('请输入正尺寸，单位 mm。');
+                  if (!editable) throw new Error('所选尺寸已锁定或保持只读。');
+                  await props.onDimensionChange?.({ target: selected.target, field: value.field, valueM: number / 1000,
+                    previousValueM: value.valueM });
+                }} />}
+            </svg>}
+    </div>
+    <div className="drawing-status"><span>参数截面 · mm</span><span>{state === 'loading' ? '正在更新' : selected ? `${selected.number} ${selected.name}` : '选择结构层'}</span>
+      <span>{editable ? '双击尺寸编辑' : props.cableType?.construction === 'three_core' ? '三芯按原始位置绘制' : '等比例绘制'}</span></div>
+  </div>;
+}

@@ -1,12 +1,12 @@
 """The simplified method's deliberately narrow domain adapter (no inferred facts)."""
 from math import isclose, pi
 
-from .inputs import Scenario
+from backend.schemas import Scenario
 
 
 def prepare(value, parameters):
     if value.get('schema_version') != 'cablesim.domain/1':
-        return Scenario.model_validate(value)
+        raise ValueError('交叉校核参考仅接收已迁移的领域输入。')
     if len(value['circuits']) != 1 or len(value['sections']) != 1 or len(value['load_cases']) != 1:
         raise ValueError('简化参考仅支持单回路、单截面、单个稳态负荷')
     circuit, section, load = value['circuits'][0], value['sections'][0], value['load_cases'][0]

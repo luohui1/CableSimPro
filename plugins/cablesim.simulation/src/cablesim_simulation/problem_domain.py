@@ -1,6 +1,6 @@
 """Read-only SI domain mapping for magnetoquasistatic single-core sections."""
 from math import cos,sin,pi
-from backend.domain.models import DomainDocument
+from cablesim_sdk.domain import DomainDocument
 from .problem import Problem
 
 
@@ -58,7 +58,8 @@ def electromagnetic(value,options):
         if core.x or core.z or cond.inner_diameter or cond.form!='solid_round':
             raise ValueError('电磁领域映射要求显式实心圆导体；不自动把绞线/分割导体变为实心。')
         layers=core.layers+cable.common_layers
-        if any(l.form!='smooth' for l in layers):
+        metal_roles={'metallic_screen','metallic_sheath','armour'}
+        if any(l.form not in (None,'smooth') or l.role in metal_roles and l.form!='smooth' for l in layers):
             raise ValueError('电磁层须为明确光滑同心层；丝/带屏蔽必须先建立有依据的等效模型。')
         radius=cond.diameter/2
         shapes=[{'uid':q.cable+'/conductor','kind':'disk','values':[q.x,q.z,radius],'material':material(cond.material)}]

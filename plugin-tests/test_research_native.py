@@ -13,12 +13,13 @@ from backend.domain.migration import convert
 
 
 ARGS = {'conductor_powers_w_m': [20, 20, 20], 'conductor_k_w_m_k': 380,
-        'metal_screen_k_w_m_k': 380, 'domain_scale': 4, 'resolution': 16}
+        'metal_screen_k_w_m_k': 380, 'domain_scale': 4, 'resolution': 16,
+        'conductor_kind':'copper','ac_extra_factor':.05,'screen_loss_factor':.05}
 
 
 def test_v2_native_bundle_and_line_source():
     host = Executor()
-    inputs = Scenario().model_dump(mode='json')
+    inputs = convert(Scenario().model_dump(mode='json'))['document']
     cases = [{'case_id': 'base', 'input': inputs, 'parameters': ARGS}]
     for capability in ('fixed-power', 'line-source'):
         run = host.run('cablesim.native-reference', capability, cases)
@@ -37,6 +38,7 @@ def test_saved_crosscheck_records_both_methods(tmp_path):
         w = client.post('/api/workspaces', json={}).json()
         method = next(p['method'] for p in client.get('/api/methods').json() if p['method']['plugin_id'] == 'cablesim.native-reference')
         definition = {'expected_revision': 1, 'title': '合成 FEM / 线源对照', 'method': {**method, 'capability': 'fixed-power'},
+                      'input_source':'study','method_input':convert(w['scenario'])['document'],
                       'parameters': ARGS, 'driver': {'kind': 'crosscheck'},
                       'crosschecks': [{'method': {**method, 'capability': 'line-source'}, 'parameters': ARGS}]}
         s = client.post(f'/api/workspaces/{w["id"]}/studies', json=definition)
@@ -62,7 +64,7 @@ def test_real_native_domain_transport_and_typed_ampacity(capability, mode):
         'mode': mode, 'alpha20_per_k': .00393, 'conductor_k_w_m_k': 380., 'metal_screen_k_w_m_k': 380.,
         'coefficient_basis': 'Synthetic reference fixture; no manufacturer data',
         'acknowledged_coefficient_model': True, 'domain_scale': 4, 'resolution': 16}
-    cases = [{'case_id': 'v0', 'input': s, 'parameters': arguments},
+    cases = [{'case_id': 'migrated-record', 'input': convert(s)['document'], 'parameters': {**converted['method_parameters'],**arguments}},
              {'case_id': 'domain', 'input': converted['document'], 'parameters': {**converted['method_parameters'], **arguments}}]
     result = Executor().run('cablesim.native-reference', capability, cases)
     original, domain = result.cases

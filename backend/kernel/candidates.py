@@ -7,13 +7,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import Field, model_validator
 from backend.schemas import StrictModel
 from backend.domain.models import CableType, Material, Source
-from backend.workbench import fingerprint
+from backend.kernel.workspace import fingerprint
 
 
 class PublishedValue(StrictModel):
     value: float = Field(gt=0)
-    unit: Literal['m', 'm2', 'ohm/m', 'K', '1']
-    basis: Literal['manufacturer', 'standard_nominal', 'standard_limit']
+    unit: Literal['m', 'm2', 'ohm/m', 'kg/m', 'K', '1']
+    basis: Literal['manufacturer', 'standard_nominal', 'standard_limit', 'engineer_given']
     source: str = Field(min_length=1)
 
     @model_validator(mode='before')
@@ -39,7 +39,7 @@ class PublishedSpecification(StrictModel):
     @model_validator(mode='after')
     def units(self):
         for key, fact in self.values.items():
-            expected = 'ohm/m' if key == 'r20' else 'K' if key == 'temperature_limit' else '1' if key.endswith('_count') or key.endswith('_overlap') else 'm'
+            expected = 'kg/m' if key == 'weight' else 'ohm/m' if key == 'r20' else 'K' if key == 'temperature_limit' else '1' if key.endswith('_count') or key.endswith('_overlap') else 'm'
             if fact.unit != expected:
                 raise ValueError(key+'：单位应为 '+expected)
             maximum = 1 if expected in ('m', 'ohm/m') else 1000

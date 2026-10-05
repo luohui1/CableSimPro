@@ -12,6 +12,7 @@ from .group_inputs import GroupRating
 from .inputs import Duct, Solver
 from .method import RatingRefused
 from .soil import resistance_matrix
+from .electrical import ac_factors, resistance, sheath_reactance, circulating
 
 
 SOURCES = ['IEC 60287-1-1:2023 4.2.1 Eq.(1); 5.1.2; 5.1.3; 5.1.5.1; 5.2; 5.3.1/5.3.2/5.3.11; 5.4.3.3.1/5.4.3.4/5.4.3.5',
@@ -172,64 +173,69 @@ def physical(cable, materials, p, circuit, criteria, duct):
 
 
 def prepare(value,p):
+    from cablesim_sdk.validation import FieldValueError
     value=deepcopy(value);p=deepcopy(p)
-    if p.get('reference_basis','iec2023') != 'iec2023':raise RatingRefused('THREE_CORE_REFERENCE_MODE','此三芯领域能力按IEC2023计算；TB880旧版扩展独立验证。')
-    if any(k in p for k in ('external_loss_artifact','per_cable_losses')):raise RatingRefused('THREE_CORE_EXTERNAL_LOSS_SCOPE','三芯外部损耗工件的芯/公共铠装映射尚未验证。')
-    if len(value['sections'])!=1 or len(value['load_cases'])!=1:raise ValueError('三芯稳态研究需一个截面和一个负荷工况。')
+    if p.get('reference_basis','iec2023') != 'iec2023':raise RatingRefused('THREE_CORE_REFERENCE_MODE','此三芯领域能力按IEC2023计算；TB880旧版扩展独立验证。','/parameters/reference_basis')
+    if any(k in p for k in ('external_loss_artifact','per_cable_losses')):raise RatingRefused('THREE_CORE_EXTERNAL_LOSS_SCOPE','三芯外部损耗工件的芯/公共铠装映射尚未验证。','/parameters/external_loss_reference' if 'external_loss_artifact' in p else '/parameters/per_cable_losses')
+    if len(value['sections'])!=1 or len(value['load_cases'])!=1:raise FieldValueError('三芯稳态研究需一个截面和一个负荷工况。','sections' if len(value['sections'])!=1 else 'load_cases')
     sec,load=value['sections'][0],value['load_cases'][0]
     if sec['kind']!='ground' or sec.get('soil_layers') or load['kind']!='steady' or load.get('profile'):
-        raise RatingRefused('THREE_CORE_ENVIRONMENT','分层土壤、非地下或时变负荷使用数值仿真插件。')
-    if not isinstance(sec['medium'].get('surface_temperature'),(int,float)):raise ValueError('surface_temperature (K)：需要等温地表温度。')
+        path='/sections/0/soil_layers' if sec.get('soil_layers') else '/sections/0/kind' if sec['kind']!='ground' else '/load_cases/0/kind'
+        raise RatingRefused('THREE_CORE_ENVIRONMENT','分层土壤、非地下或时变负荷使用数值仿真插件。',path)
+    if not isinstance(sec['medium'].get('surface_temperature'),(int,float)):raise FieldValueError('surface_temperature (K)：需要等温地表温度。','sections',0,'medium','surface_temperature')
     ambient=sec['medium']['surface_temperature']-273.15;materials={m['id']:m for m in value['materials']};types={t['id']:t for t in value['cable_types']}
     points={q['cable']:q for q in sec['placements']};enclosures={d['id']:d for d in sec['enclosures']};cables=[];circuits=[]
-    for circuit in value['circuits']:
+    for ci,circuit in enumerate(value['circuits']):
         cable_type=types[circuit['cable_type']]
         provenance=value.get('provenance',{})
         model_paths=['/cable_types/'+cable_type['id'],'/cable_types/'+cable_type['id'].replace('/','~1')]
         if not any((source.get('reference') or '').strip() and any(path==base or base.startswith(path+'/') for base in model_paths) for path,source in provenance.items()):
-            raise ValueError('provenance/cable_types：三芯尺寸、成缆绞距、屏蔽电阻与铠装绕包需可追溯来源；请补齐型号来源。')
+            raise FieldValueError('provenance/cable_types：三芯尺寸、成缆绞距、屏蔽电阻与铠装绕包需可追溯来源；请补齐型号来源。','provenance',model_paths[0])
         if len(circuit['cables'])!=1 or circuit['cables'][0]['phase']!='L1L2L3' or circuit['system']['kind']!='ac_three_phase' or circuit['bonding']['kind']!='both_ends':
-            raise RatingRefused('THREE_CORE_CIRCUIT','每回路须一根三芯电缆（phase=ABC）、平衡三相及屏蔽两端接地；其他连接拓扑使用对应电磁方法。')
+            raise RatingRefused('THREE_CORE_CIRCUIT','每回路须一根三芯电缆（phase=ABC）、平衡三相及屏蔽两端接地；其他连接拓扑使用对应电磁方法。',f'/circuits/{ci}/bonding')
         positive(circuit['system']['frequency'],'frequency (Hz)')
-        if not 45<=circuit['system']['frequency']<=65:raise RatingRefused('POWER_FREQUENCY_REQUIRED','磁性铠装公式仅声明45–65 Hz工频。')
+        if not 45<=circuit['system']['frequency']<=65:raise RatingRefused('POWER_FREQUENCY_REQUIRED','磁性铠装公式仅声明45–65 Hz工频。',f'/circuits/{ci}/system/frequency')
         instance=circuit['cables'][0];cid=instance['id'];q=points.get(cid)
-        if not q:raise ValueError('placements/'+cid+'：缺少电缆位置。')
+        if not q:raise FieldValueError('placements/'+cid+'：缺少电缆位置。','sections',0,'placements')
         duct=None;d=enclosures.get(q.get('enclosure'))
         if q.get('enclosure'):
             if not d or d['type']!='duct' or d['contains']!=[cid] or not isclose(q['x'],d['x'],abs_tol=1e-10) or not isclose(q['z'],d['z'],abs_tol=1e-10):
-                raise ValueError('enclosures/'+str(q.get('enclosure'))+'：需同心一管一缆。')
+                raise FieldValueError('enclosures/'+str(q.get('enclosure'))+'：需同心一管一缆。','sections',0,'placements',sec['placements'].index(q),'enclosure')
             duct=Duct.model_validate({**p.get('duct',{}),'inner_diameter_m':d['inner_diameter'],'outer_diameter_m':d['outer_diameter'],'rho_k_m_w':materials[d['material']]['thermal_resistivity']})
         normal=cable_type['rating']['max_conductor_temperature']['normal']
         if value['criteria'].get('max_conductor_temperature',normal)>normal:
-            raise ValueError('criteria/max_conductor_temperature (K)：稳态温限不得超过该型号长期允许温度。')
-        model=physical(cable_type,materials,p,circuit,value['criteria'],duct)
+            raise FieldValueError('criteria/max_conductor_temperature (K)：稳态温限不得超过该型号长期允许温度。','criteria','max_conductor_temperature')
+        try:model=physical(cable_type,materials,p,circuit,value['criteria'],duct)
+        except RatingRefused as exc:
+            suffix={'THREE_CORE_REQUIRED':'cores','UNEQUAL_CORE_NOT_SUPPORTED':'cores','THREE_CORE_CONDUCTOR_FORM':'cores/0/conductor/form','SL_INSULATION_PATH':'cores/0/layers','SL_CORE_LAYOUT':'cores','SL_CORE_SPACING':'cores','SL_SCREEN_FORM':'cores/0/layers','SL_COMMON_PATH':'common_layers','SL_FILLER_MATERIALS':'common_layers','NONMAGNETIC_SL_ARMOUR':'common_layers','STEEL_TAPE_CONSTRUCTION':'common_layers','STEEL_WIRE_CONDUCTOR_SIZE':'cores/0/conductor/nominal_area','SL_ARMOUR_FORM':'common_layers','SL_OUTER_PATH':'common_layers'}.get(exc.code,'common_layers')
+            exc.path=f"/cable_types/{value['cable_types'].index(cable_type)}/{suffix}"
+            raise
         if duct and (model['overall']>=duct.inner_diameter_m or not .025<=model['overall']<=.1):
-            raise RatingRefused('THREE_CORE_DUCT_GEOMETRY','管内空气经验式的电缆外径须25–100 mm且小于管内径。')
-        if ambient>=model['limit']:raise ValueError('surface_temperature：环境温度须低于导体温限。')
+            raise RatingRefused('THREE_CORE_DUCT_GEOMETRY','管内空气经验式的电缆外径须25–100 mm且小于管内径。',f"/sections/0/enclosures/{sec['enclosures'].index(d)}/inner_diameter")
+        if ambient>=model['limit']:raise FieldValueError('surface_temperature：环境温度须低于导体温限。','sections',0,'medium','surface_temperature')
         current=load['currents'].get(cid,load['currents'].get(circuit['id']))
-        if isinstance(current,bool) or not isinstance(current,(int,float)) or not isfinite(current) or current<0:raise ValueError('load_cases/currents/'+circuit['id']+' (A)：填写非负电流。')
+        if isinstance(current,bool) or not isinstance(current,(int,float)) or not isfinite(current) or current<0:raise FieldValueError('load_cases/currents/'+circuit['id']+' (A)：填写非负电流。','load_cases',0,'currents',cid if cid in load['currents'] else circuit['id'])
         indices=[len(cables)];cables.append({'id':cid,'circuit':circuit['id'],'phase':'L1L2L3','current':current,'point':(q['x'],q['z']),'duct':bool(duct),
             'model':model,'rating':model['rating'],'geometry':NS(overall_m=model['overall'])})
         circuits.append({'id':circuit['id'],'label':circuit['label'],'indices':indices,'bonding':circuit['bonding'],'electrical_topology':circuit.get('electrical_topology'),'automatic':True,'spacing':model['spacing'],'arrangement':'three_core'})
-    if set(points)!={c['id'] for c in cables} or {e['id'] for e in enclosures.values()}!={q['enclosure'] for q in points.values() if q.get('enclosure')}:raise ValueError('截面含额外电缆或管道；不忽略热源与空管。')
+    if set(points)!={c['id'] for c in cables} or {e['id'] for e in enclosures.values()}!={q['enclosure'] for q in points.values() if q.get('enclosure')}:raise FieldValueError('截面含额外电缆或管道；不忽略热源与空管。','sections',0,'placements')
     fill=sec.get('backfill')
     if fill:fill={**fill,'rho':materials[fill['material']]['thermal_resistivity']}
-    matrix,soil=resistance_matrix([c['point'] for c in cables],[c['rating'].installation.duct.outer_diameter_m/2 if c['duct'] else c['model']['overall']/2 for c in cables],positive(materials[sec['medium']['material']].get('thermal_resistivity'),'soil/thermal_resistivity'),fill)
+    matrix,soil=resistance_matrix([c['point'] for c in cables],[c['rating'].installation.duct.outer_diameter_m/2 if c['duct'] else c['model']['overall']/2 for c in cables],positive(materials[sec['medium']['material']].get('thermal_resistivity'),'soil/thermal_resistivity'),fill,
+                                 source_paths=[f"/sections/0/placements/{sec['placements'].index(points[c['id']])}" for c in cables])
     soil['three_core']=True
-    if positive(p.get('ks'),'ks')>2 or positive(p.get('kp'),'kp')>2:raise ValueError('ks/kp：系数须不大于2，并按对应导体形式提供来源。')
+    for key in ('ks','kp'):
+        if not isinstance(p.get(key),(int,float)) or isinstance(p[key],bool) or not isfinite(p[key]) or not 0<p[key]<=2:
+            raise FieldValueError('ks/kp：系数须为不大于2的正数，并按对应导体形式提供来源。','parameters',key)
     return GroupRating(value,p,cables,circuits,matrix,soil,ambient)
 
 
 def electrical(m,theta,theta_s,theta_a,p,frequency):
-    dc=m['r20']*(1+m['alpha']*(theta-20));omega=2*pi*frequency
-    if dc<=0:raise RatingRefused('ELECTRICAL_STATE_INVALID','导体电阻非正。')
-    xs=sqrt(8*pi*frequency*1e-7*p['ks']/dc);xp=sqrt(8*pi*frequency*1e-7*p['kp']/dc)
-    if xp>2.8:raise RatingRefused('PROXIMITY_OUT_OF_RANGE','三芯邻近效应xp超过2.8；使用数值电磁模型。')
-    ys=xs**4/(192+.8*xs**4) if xs<=2.8 else -.136-.0177*xs+.0563*xs*xs if xs<=3.8 else .354*xs-.733
-    fp=xp**4/(192+.8*xp**4);ratio=(m['dc']/m['spacing'])**2;yp=fp*ratio*(.312*ratio+1.18/(fp+.27));rc=dc*(1+ys+yp)
-    rs=m['rs20']*(1+m['screen_alpha']*(theta_s-20));x=2*omega*1e-7*log(2*m['spacing']/m['screen_mean'])*m['cll']
+    dc=resistance(m['r20'],m['alpha'],theta)
+    xs,ys,xp,yp,rc=ac_factors(dc,frequency,p['ks'],p['kp'],m['dc'],m['spacing'])
+    rs=resistance(m['rs20'],m['screen_alpha'],theta_s);x=sheath_reactance(frequency,m['spacing'],m['screen_mean'],m['cll'])
     # 5.3.11 for armoured; 5.3.2 for unarmoured separate metallic screens.
-    l1=rs/rc/(1+(rs/x)**2)*(1.5 if m['armour'] else 1.)
+    l1=circulating(rs,rc,x,1.5 if m['armour'] else 1.)
     a=m['armour'];loss={'total':0.,'basis':'unarmoured'}
     if a:
         if a['kind']=='tape':loss=steel_tape_loss(rc,m['spacing'],a['mean'],a['equivalent'],a['material']['relative_permeability'],frequency,a['layer']['nominal_tape_thickness'])

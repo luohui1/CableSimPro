@@ -1,0 +1,869 @@
+{
+  "schema": "cablesim.datasheet-labels/1",
+  "annotation_date": "2026-10-04",
+  "samples": [
+    {
+      "id": "bahra-0",
+      "manufacturer": "Bahra",
+      "file": "Bahra-MV_Lead_Sheathed.pdf",
+      "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+      "url": "https://www.bahra-electric.com/Downloads/MV_Lead_Sheathed.pdf",
+      "model": {
+        "designation": "CU/XLPE/LC/PVC",
+        "specification": "185",
+        "identity_note": "6/10(12) kV, copper, single-core lead/PVC; printed pp19–20"
+      },
+      "selections": [
+        {
+          "page": 20
+        },
+        {
+          "page": 21
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "value_si": 0.0161,
+          "unit_si": "m",
+          "raw_value": 16.1,
+          "raw_unit": "mm"
+        },
+        "insulation_thickness": {
+          "value_si": 0.0034,
+          "unit_si": "m",
+          "raw_value": 3.4,
+          "raw_unit": "mm"
+        },
+        "metallic_sheath_thickness": {
+          "value_si": 0.0016,
+          "unit_si": "m",
+          "raw_value": 1.6,
+          "raw_unit": "mm"
+        },
+        "oversheath_thickness": {
+          "value_si": 0.002,
+          "unit_si": "m",
+          "raw_value": 2,
+          "raw_unit": "mm"
+        },
+        "outer_diameter": {
+          "value_si": 0.035,
+          "unit_si": "m",
+          "raw_value": 35,
+          "raw_unit": "mm"
+        },
+        "r20": {
+          "value_si": 9.91e-05,
+          "unit_si": "ohm/m",
+          "raw_value": 0.0991,
+          "raw_unit": "ohm/km"
+        },
+        "weight": {
+          "value_si": 4.03,
+          "unit_si": "kg/m",
+          "raw_value": 4030,
+          "raw_unit": "kg/km"
+        }
+      },
+      "annotation_basis": "Manually checked original source table, header/row and numeric values; selected small factual excerpt, not source full text.",
+      "other_model_values": {}
+    },
+    {
+      "id": "bahra-1",
+      "manufacturer": "Bahra",
+      "file": "Bahra-MV_Lead_Sheathed.pdf",
+      "sha256": "6c0d7cf7e92a7292d3b1c3a0ed07a956ac17005c2918c1debd6234c7c155243a",
+      "url": "https://www.bahra-electric.com/Downloads/MV_Lead_Sheathed.pdf",
+      "model": {
+        "designation": "CU/XLPE/LC/PVC",
+        "specification": "240",
+        "identity_note": "6/10(12) kV, copper, single-core lead/PVC; printed pp19–20"
+      },
+      "selections": [
+        {
+          "page": 20
+        },
+        {
+          "page": 21
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "value_si": 0.018699999999999998,
+          "unit_si": "m",
+          "raw_value": 18.7,
+          "raw_unit": "mm"
+        },
+        "insulation_thickness": {
+          "value_si": 0.0034,
+          "unit_si": "m",
+          "raw_value": 3.4,
+          "raw_unit": "mm"
+        },
+        "metallic_sheath_thickness": {
+          "value_si": 0.0016,
+          "unit_si": "m",
+          "raw_value": 1.6,
+          "raw_unit": "mm"
+        },
+        "oversheath_thickness": {
+          "value_si": 0.0021000000000000003,
+          "unit_si": "m",
+          "raw_value": 2.1,
+          "raw_unit": "mm"
+        },
+        "outer_diameter": {
+          "value_si": 0.038,
+          "unit_si": "m",
+          "raw_value": 38,
+          "raw_unit": "mm"
+        },
+        "r20": {
+          "value_si": 7.539999999999999e-05,
+          "unit_si": "ohm/m",
+          "raw_value": 0.0754,
+          "raw_unit": "ohm/km"
+        },
+        "weight": {
+          "value_si": 4.77,
+          "unit_si": "kg/m",
+          "raw_value": 4770,
+          "raw_unit": "kg/km"
+        }
+      },
+      "annotation_basis": "Manually checked original source table, header/row and numeric values; selected small factual excerpt, not source full text.",
+      "other_model_values": {}
+    },
+    {
+      "id": "people-0",
+      "manufacturer": "人民电器",
+      "file": "People-YJLW-110.pdf",
+      "sha256": "5f1e3af4c35d474ab69120bea4b66534b6cd3bed9860712205038239babbd3b3",
+      "url": "https://www.chinapeople.com/pdf/sh/dxdl/64-110kV.pdf",
+      "model": {
+        "designation": "YJLW03",
+        "specification": "240",
+        "identity_note": "64/110 kV single-core copper; upper aluminium-sheath table, printed p065; dimensions mm shared header. Weight intentionally excluded: variant header repeats PVC ambiguously."
+      },
+      "selections": [
+        {
+          "page": 3,
+          "region": [
+            200,
+            140,
+            560,
+            292
+          ]
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "value_si": 0.0183,
+          "unit_si": "m",
+          "raw_value": 18.3,
+          "raw_unit": "mm"
+        },
+        "insulation_thickness": {
+          "value_si": 0.019,
+          "unit_si": "m",
+          "raw_value": 19,
+          "raw_unit": "mm"
+        },
+        "metallic_sheath_thickness": {
+          "value_si": 0.002,
+          "unit_si": "m",
+          "raw_value": 2,
+          "raw_unit": "mm"
+        },
+        "oversheath_thickness": {
+          "value_si": 0.004,
+          "unit_si": "m",
+          "raw_value": 4,
+          "raw_unit": "mm"
+        },
+        "outer_diameter": {
+          "value_si": 0.082,
+          "unit_si": "m",
+          "raw_value": 82,
+          "raw_unit": "mm"
+        }
+      },
+      "annotation_basis": "Manually checked original source table, header/row and numeric values; selected small factual excerpt, not source full text.",
+      "other_model_values": {}
+    },
+    {
+      "id": "people-1",
+      "manufacturer": "人民电器",
+      "file": "People-YJLW-110.pdf",
+      "sha256": "5f1e3af4c35d474ab69120bea4b66534b6cd3bed9860712205038239babbd3b3",
+      "url": "https://www.chinapeople.com/pdf/sh/dxdl/64-110kV.pdf",
+      "model": {
+        "designation": "YJLW03",
+        "specification": "300",
+        "identity_note": "64/110 kV single-core copper; upper aluminium-sheath table, printed p065; dimensions mm shared header. Weight intentionally excluded: variant header repeats PVC ambiguously."
+      },
+      "selections": [
+        {
+          "page": 3,
+          "region": [
+            200,
+            140,
+            560,
+            292
+          ]
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "value_si": 0.0205,
+          "unit_si": "m",
+          "raw_value": 20.5,
+          "raw_unit": "mm"
+        },
+        "insulation_thickness": {
+          "value_si": 0.0185,
+          "unit_si": "m",
+          "raw_value": 18.5,
+          "raw_unit": "mm"
+        },
+        "metallic_sheath_thickness": {
+          "value_si": 0.002,
+          "unit_si": "m",
+          "raw_value": 2,
+          "raw_unit": "mm"
+        },
+        "oversheath_thickness": {
+          "value_si": 0.004,
+          "unit_si": "m",
+          "raw_value": 4,
+          "raw_unit": "mm"
+        },
+        "outer_diameter": {
+          "value_si": 0.0832,
+          "unit_si": "m",
+          "raw_value": 83.2,
+          "raw_unit": "mm"
+        }
+      },
+      "annotation_basis": "Manually checked original source table, header/row and numeric values; selected small factual excerpt, not source full text.",
+      "other_model_values": {}
+    },
+    {
+      "id": "yifang-0",
+      "manufacturer": "一方",
+      "file": "Yifang-MV-XLPE.pdf",
+      "sha256": "f9f8a907faa87b8f8d89b1c423dc31582f74cf06aae80e679e67e52fb5b633dd",
+      "url": "https://www.yifangcable.com/wp-content/uploads/2023/04/Medium-Voltage-XLPE-Cables-Catalogue3.pdf",
+      "model": {
+        "designation": "YJV",
+        "specification": "25",
+        "identity_note": "6/6 or 6/10 kV, single-core copper YJV column, left table only, printed p06"
+      },
+      "selections": [
+        {
+          "page": 5,
+          "region": [
+            20,
+            55,
+            595,
+            750
+          ]
+        }
+      ],
+      "truth": {
+        "insulation_thickness": {
+          "value_si": 0.0034,
+          "unit_si": "m",
+          "raw_value": 3.4,
+          "raw_unit": "mm"
+        },
+        "outer_diameter": {
+          "value_si": 0.020300000000000002,
+          "unit_si": "m",
+          "raw_value": 20.3,
+          "raw_unit": "mm"
+        },
+        "weight": {
+          "value_si": 0.611,
+          "unit_si": "kg/m",
+          "raw_value": 611,
+          "raw_unit": "kg/km"
+        }
+      },
+      "annotation_basis": "Manually checked original source table, header/row and numeric values; selected small factual excerpt, not source full text.",
+      "other_model_values": {}
+    },
+    {
+      "id": "yifang-1",
+      "manufacturer": "一方",
+      "file": "Yifang-MV-XLPE.pdf",
+      "sha256": "f9f8a907faa87b8f8d89b1c423dc31582f74cf06aae80e679e67e52fb5b633dd",
+      "url": "https://www.yifangcable.com/wp-content/uploads/2023/04/Medium-Voltage-XLPE-Cables-Catalogue3.pdf",
+      "model": {
+        "designation": "YJV",
+        "specification": "35",
+        "identity_note": "6/6 or 6/10 kV, single-core copper YJV column, left table only, printed p06"
+      },
+      "selections": [
+        {
+          "page": 5,
+          "region": [
+            20,
+            55,
+            595,
+            750
+          ]
+        }
+      ],
+      "truth": {
+        "insulation_thickness": {
+          "value_si": 0.0034,
+          "unit_si": "m",
+          "raw_value": 3.4,
+          "raw_unit": "mm"
+        },
+        "outer_diameter": {
+          "value_si": 0.0213,
+          "unit_si": "m",
+          "raw_value": 21.3,
+          "raw_unit": "mm"
+        },
+        "weight": {
+          "value_si": 0.729,
+          "unit_si": "kg/m",
+          "raw_value": 729,
+          "raw_unit": "kg/km"
+        }
+      },
+      "annotation_basis": "Manually checked original source table, header/row and numeric values; selected small factual excerpt, not source full text.",
+      "other_model_values": {}
+    },
+    {
+      "id": "chint-0",
+      "manufacturer": "正泰",
+      "file": "Chint-cables.pdf",
+      "sha256": "166c89615a4f1453659b6978a9d04c5312f0d710a3d1023c665c3be337179f80",
+      "url": "https://cabling.chint.com/upload/data/202510-31/正泰电线电缆选型手册.pdf",
+      "model": {
+        "designation": "YJV",
+        "specification": "1×10",
+        "identity_note": "0.6/1 kV single-core copper, YJV column; upper table, printed p14. R20 is not printed on this page and is not fabricated."
+      },
+      "selections": [
+        {
+          "page": 21,
+          "region": [
+            30,
+            85,
+            550,
+            390
+          ]
+        }
+      ],
+      "truth": {
+        "outer_diameter": {
+          "value_si": 0.0087,
+          "unit_si": "m",
+          "raw_value": 8.7,
+          "raw_unit": "mm"
+        },
+        "weight": {
+          "value_si": 0.141,
+          "unit_si": "kg/m",
+          "raw_value": 141,
+          "raw_unit": "kg/km"
+        }
+      },
+      "annotation_basis": "Manually checked original source table, header/row and numeric values; selected small factual excerpt, not source full text.",
+      "other_model_values": {}
+    },
+    {
+      "id": "chint-1",
+      "manufacturer": "正泰",
+      "file": "Chint-cables.pdf",
+      "sha256": "166c89615a4f1453659b6978a9d04c5312f0d710a3d1023c665c3be337179f80",
+      "url": "https://cabling.chint.com/upload/data/202510-31/正泰电线电缆选型手册.pdf",
+      "model": {
+        "designation": "YJV",
+        "specification": "1×16",
+        "identity_note": "0.6/1 kV single-core copper, YJV column; upper table, printed p14. R20 is not printed on this page and is not fabricated."
+      },
+      "selections": [
+        {
+          "page": 21,
+          "region": [
+            30,
+            85,
+            550,
+            390
+          ]
+        }
+      ],
+      "truth": {
+        "outer_diameter": {
+          "value_si": 0.009699999999999999,
+          "unit_si": "m",
+          "raw_value": 9.7,
+          "raw_unit": "mm"
+        },
+        "weight": {
+          "value_si": 0.199,
+          "unit_si": "kg/m",
+          "raw_value": 199,
+          "raw_unit": "kg/km"
+        }
+      },
+      "annotation_basis": "Manually checked original source table, header/row and numeric values; selected small factual excerpt, not source full text.",
+      "other_model_values": {}
+    },
+    {
+      "id": "cbi-0",
+      "manufacturer": "CBI Electric",
+      "file": "CBI-MV-XLPE.pdf",
+      "sha256": "f2cc9dc337331f0d5f4eef4d0bccf04506700e7eb85b4f6a00ef823ee978f032",
+      "url": "https://www.versalec.co.za/download-catalogue/xlpe-cables/6-6kv-mv-xlpe-copper-1-core-type-a-pvc.pdf",
+      "model": {
+        "designation": "F2EC",
+        "specification": "50",
+        "identity_note": "October 2016, 3800/6600 V copper 1-core Type A; PVC AWA variant, actual size column (not size code)"
+      },
+      "selections": [
+        {
+          "page": 1
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "value_si": 0.0085,
+          "unit_si": "m",
+          "raw_value": 8.5,
+          "raw_unit": "mm"
+        },
+        "insulation_diameter": {
+          "value_si": 0.015,
+          "unit_si": "m",
+          "raw_value": 15,
+          "raw_unit": "mm"
+        },
+        "outer_diameter": {
+          "value_si": 0.027,
+          "unit_si": "m",
+          "raw_value": 27,
+          "raw_unit": "mm"
+        },
+        "r20": {
+          "value_si": 0.00038700000000000003,
+          "unit_si": "ohm/m",
+          "raw_value": 0.387,
+          "raw_unit": "ohm/km"
+        },
+        "weight": {
+          "value_si": 1.263,
+          "unit_si": "kg/m",
+          "raw_value": 1.263,
+          "raw_unit": "kg/m"
+        }
+      },
+      "annotation_basis": "Manually checked original source table, header/row and numeric values; selected small factual excerpt, not source full text.",
+      "other_model_values": {}
+    },
+    {
+      "id": "cbi-1",
+      "manufacturer": "CBI Electric",
+      "file": "CBI-MV-XLPE.pdf",
+      "sha256": "f2cc9dc337331f0d5f4eef4d0bccf04506700e7eb85b4f6a00ef823ee978f032",
+      "url": "https://www.versalec.co.za/download-catalogue/xlpe-cables/6-6kv-mv-xlpe-copper-1-core-type-a-pvc.pdf",
+      "model": {
+        "designation": "F2EC",
+        "specification": "70",
+        "identity_note": "October 2016, 3800/6600 V copper 1-core Type A; PVC AWA variant, actual size column (not size code)"
+      },
+      "selections": [
+        {
+          "page": 1
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "value_si": 0.01,
+          "unit_si": "m",
+          "raw_value": 10,
+          "raw_unit": "mm"
+        },
+        "insulation_diameter": {
+          "value_si": 0.017,
+          "unit_si": "m",
+          "raw_value": 17,
+          "raw_unit": "mm"
+        },
+        "outer_diameter": {
+          "value_si": 0.029,
+          "unit_si": "m",
+          "raw_value": 29,
+          "raw_unit": "mm"
+        },
+        "r20": {
+          "value_si": 0.000268,
+          "unit_si": "ohm/m",
+          "raw_value": 0.268,
+          "raw_unit": "ohm/km"
+        },
+        "weight": {
+          "value_si": 1.496,
+          "unit_si": "kg/m",
+          "raw_value": 1.496,
+          "raw_unit": "kg/m"
+        }
+      },
+      "annotation_basis": "Manually checked original source table, header/row and numeric values; selected small factual excerpt, not source full text.",
+      "other_model_values": {}
+    },
+    {
+      "id": "expanded-0",
+      "manufacturer": "Helukabel",
+      "file": "Helukabel-N2XSH.pdf",
+      "sha256": "03dda6f470d2c38e68db76d1df8d3cdad778cff860096b3cae8712c589d9b60b",
+      "url": "https://assets-cdn.helukabel.com/suppliers/Helukabel/documents/db/HELUKABEL_M11023707_EN_GB.pdf",
+      "model": {
+        "designation": "N2XSH",
+        "specification": "11023707",
+        "identity_note": "6/10 kV, copper 1x35/16, outer diameter range23–28mm; no nominal OD"
+      },
+      "selections": [
+        {
+          "page": 1
+        }
+      ],
+      "truth": {
+        "weight": {
+          "raw_value": 900,
+          "raw_unit": "kg/km",
+          "value_si": 0.9,
+          "unit_si": "kg/m"
+        }
+      },
+      "annotation_basis": "Human inspected original rendered table and numeric/header row; selected numeric facts only. Native text original, not synthetic PDF.",
+      "expected_abstentions": {
+        "outer_diameter": "Source states range23–28mm, no single nominal outer diameter."
+      }
+    },
+    {
+      "id": "expanded-1",
+      "manufacturer": "Nexans",
+      "file": "Nexans-XKDT.pdf",
+      "sha256": "6e550e6d32ac22746950a0062e2b1d72a6b5e7e24aff80292125ca7bcc5eb296",
+      "url": "https://www.nexans.ch/.rest/catalog/v1/product/pdf/10152573",
+      "model": {
+        "designation": "XKDT",
+        "specification": "25",
+        "identity_note": "XKDT copper 1x25/10,12/20kV; version08/2026"
+      },
+      "selections": [
+        {
+          "page": 2
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "raw_value": 6,
+          "raw_unit": "mm",
+          "value_si": 0.006,
+          "unit_si": "m"
+        },
+        "insulation_thickness": {
+          "raw_value": 4.8,
+          "raw_unit": "mm",
+          "value_si": 0.0048,
+          "unit_si": "m"
+        },
+        "insulation_diameter": {
+          "raw_value": 16.6,
+          "raw_unit": "mm",
+          "value_si": 0.0166,
+          "unit_si": "m"
+        },
+        "oversheath_thickness": {
+          "raw_value": 1.8,
+          "raw_unit": "mm",
+          "value_si": 0.0018000000000000002,
+          "unit_si": "m"
+        },
+        "outer_diameter": {
+          "raw_value": 23.7,
+          "raw_unit": "mm",
+          "value_si": 0.0237,
+          "unit_si": "m"
+        },
+        "weight": {
+          "raw_value": 66.1,
+          "raw_unit": "kg/100m",
+          "value_si": 0.6609999999999999,
+          "unit_si": "kg/m"
+        },
+        "r20": {
+          "raw_value": 0.727,
+          "raw_unit": "ohm/km",
+          "value_si": 0.000727,
+          "unit_si": "ohm/m"
+        }
+      },
+      "annotation_basis": "Human inspected original rendered table and numeric/header row; selected numeric facts only. Native text original, not synthetic PDF."
+    },
+    {
+      "id": "expanded-2",
+      "manufacturer": "Prysmian",
+      "file": "Prysmian-N2XS2Y.pdf",
+      "sha256": "56ad95561372215a7690f98f579f60988bad6cabc6509dfb8e5311de32343825",
+      "url": "https://datasheet.prysmian.com/pdf/datasheet/en-GB/392821",
+      "model": {
+        "designation": "N2XS2Y",
+        "specification": "1x70RM/16",
+        "identity_note": "20.8/36 kV, copper, PE; product392821"
+      },
+      "selections": [
+        {
+          "page": 1
+        },
+        {
+          "page": 3
+        }
+      ],
+      "truth": {
+        "insulation_thickness": {
+          "raw_value": 8.8,
+          "raw_unit": "mm",
+          "value_si": 0.0088,
+          "unit_si": "m"
+        },
+        "insulation_diameter": {
+          "raw_value": 28.3,
+          "raw_unit": "mm",
+          "value_si": 0.028300000000000002,
+          "unit_si": "m"
+        },
+        "outer_diameter": {
+          "raw_value": 39,
+          "raw_unit": "mm",
+          "value_si": 0.039,
+          "unit_si": "m"
+        },
+        "weight": {
+          "raw_value": 1751,
+          "raw_unit": "kg/km",
+          "value_si": 1.7510000000000001,
+          "unit_si": "kg/m"
+        },
+        "r20": {
+          "raw_value": 0.268,
+          "raw_unit": "ohm/km",
+          "value_si": 0.000268,
+          "unit_si": "ohm/m"
+        }
+      },
+      "annotation_basis": "Human inspected original rendered table and numeric/header row; selected numeric facts only. Native text original, not synthetic PDF."
+    },
+    {
+      "id": "expanded-3",
+      "manufacturer": "Prysmian",
+      "file": "Prysmian-AXLJ.pdf",
+      "sha256": "b13f4960511cb37d714ec9fd9d1ad51df1b0955ba5721ae734849709dfef5126",
+      "url": "https://datasheet.prysmiangroup.com/pdf/datasheet/en/319827",
+      "model": {
+        "designation": "AXLJ-TTCLTSLF",
+        "specification": "1x50/16",
+        "identity_note": "12/20kV, aluminium, copper16 screen; product319827"
+      },
+      "selections": [
+        {
+          "page": 1
+        },
+        {
+          "page": 3
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "raw_value": 8,
+          "raw_unit": "mm",
+          "value_si": 0.008,
+          "unit_si": "m"
+        },
+        "insulation_diameter": {
+          "raw_value": 19.6,
+          "raw_unit": "mm",
+          "value_si": 0.019600000000000003,
+          "unit_si": "m"
+        },
+        "oversheath_thickness": {
+          "raw_value": 1.8,
+          "raw_unit": "mm",
+          "value_si": 0.0018000000000000002,
+          "unit_si": "m"
+        },
+        "outer_diameter": {
+          "raw_value": 28,
+          "raw_unit": "mm",
+          "value_si": 0.028,
+          "unit_si": "m"
+        },
+        "weight": {
+          "raw_value": 700,
+          "raw_unit": "kg/km",
+          "value_si": 0.7000000000000001,
+          "unit_si": "kg/m"
+        }
+      },
+      "annotation_basis": "Human inspected original rendered table and numeric/header row; selected numeric facts only. Native text original, not synthetic PDF."
+    },
+    {
+      "id": "expanded-4",
+      "manufacturer": "Keystone",
+      "file": "Keystone-MV.pdf",
+      "sha256": "97011d0ae2a8355a89207d2ed64eef668d70f4ba216585eb7c0e861109b359eb",
+      "url": "https://www.keystone-cable.com/wp-content/uploads/2025/04/Keystone-Medium-Voltage-Catalogue-Rev-2022.4.pdf",
+      "model": {
+        "designation": "CU/XLPE/CTS/PVC",
+        "specification": "25",
+        "identity_note": "3.6/6kV SINGLE CORE UNARMOURED; part13019015; excludeAWA/DATA columns"
+      },
+      "selections": [
+        {
+          "page": 11
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "raw_value": 6,
+          "raw_unit": "mm",
+          "value_si": 0.006,
+          "unit_si": "m"
+        },
+        "insulation_thickness": {
+          "raw_value": 2.5,
+          "raw_unit": "mm",
+          "value_si": 0.0025,
+          "unit_si": "m"
+        },
+        "outer_diameter": {
+          "raw_value": 19.7,
+          "raw_unit": "mm",
+          "value_si": 0.0197,
+          "unit_si": "m"
+        },
+        "weight": {
+          "raw_value": 610,
+          "raw_unit": "kg/km",
+          "value_si": 0.61,
+          "unit_si": "kg/m"
+        }
+      },
+      "annotation_basis": "Human inspected original rendered table and numeric/header row; selected numeric facts only. Native text original, not synthetic PDF."
+    },
+    {
+      "id": "expanded-5",
+      "manufacturer": "Keystone",
+      "file": "Keystone-MV.pdf",
+      "sha256": "97011d0ae2a8355a89207d2ed64eef668d70f4ba216585eb7c0e861109b359eb",
+      "url": "https://www.keystone-cable.com/wp-content/uploads/2025/04/Keystone-Medium-Voltage-Catalogue-Rev-2022.4.pdf",
+      "model": {
+        "designation": "CU/XLPE/CTS/PVC",
+        "specification": "35",
+        "identity_note": "3.6/6kV SINGLE CORE UNARMOURED; part14019015; excludeAWA/DATA columns"
+      },
+      "selections": [
+        {
+          "page": 11
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "raw_value": 7,
+          "raw_unit": "mm",
+          "value_si": 0.007,
+          "unit_si": "m"
+        },
+        "insulation_thickness": {
+          "raw_value": 2.5,
+          "raw_unit": "mm",
+          "value_si": 0.0025,
+          "unit_si": "m"
+        },
+        "outer_diameter": {
+          "raw_value": 20.7,
+          "raw_unit": "mm",
+          "value_si": 0.0207,
+          "unit_si": "m"
+        },
+        "weight": {
+          "raw_value": 725,
+          "raw_unit": "kg/km",
+          "value_si": 0.725,
+          "unit_si": "kg/m"
+        }
+      },
+      "annotation_basis": "Human inspected original rendered table and numeric/header row; selected numeric facts only. Native text original, not synthetic PDF."
+    },
+    {
+      "id": "expanded-6",
+      "manufacturer": "People",
+      "file": "People-MV.pdf",
+      "sha256": "c60b53c188478b55f424f49ca31506c5f7c100d2c876f91aab65622e86ddba4a",
+      "url": "https://www.chinapeople.com/pdf/sh/dxdl/8.7-10kV.pdf",
+      "model": {
+        "designation": "YJV22",
+        "specification": "300",
+        "identity_note": "8.7/15 kV THREE CORE copperPVC STEELTAPE; Table3 upper; rejectTable4 YJV32"
+      },
+      "selections": [
+        {
+          "page": 3,
+          "region": [
+            200,
+            140,
+            560,
+            325
+          ]
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "raw_value": 20.6,
+          "raw_unit": "mm",
+          "value_si": 0.0206,
+          "unit_si": "m"
+        },
+        "insulation_thickness": {
+          "raw_value": 4.5,
+          "raw_unit": "mm",
+          "value_si": 0.0045000000000000005,
+          "unit_si": "m"
+        },
+        "inner_sheath_thickness": {
+          "raw_value": 2,
+          "raw_unit": "mm",
+          "value_si": 0.002,
+          "unit_si": "m"
+        },
+        "oversheath_thickness": {
+          "raw_value": 3.7,
+          "raw_unit": "mm",
+          "value_si": 0.0037,
+          "unit_si": "m"
+        },
+        "outer_diameter": {
+          "raw_value": 88,
+          "raw_unit": "mm",
+          "value_si": 0.088,
+          "unit_si": "m"
+        },
+        "weight": {
+          "raw_value": 15622,
+          "raw_unit": "kg/km",
+          "value_si": 15.622,
+          "unit_si": "kg/m"
+        }
+      },
+      "annotation_basis": "Human inspected original rendered table and numeric/header row; selected numeric facts only. Native text original, not synthetic PDF."
+    }
+  ]
+}

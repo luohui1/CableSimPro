@@ -6,24 +6,44 @@ from fastapi.testclient import TestClient
 import pytest
 
 from backend.main import create_app
-from backend.workbench import Edit
+from backend.kernel.workspace import Edit
 from test_plugin_host import SYNTHETIC_IEC
 
 
 @pytest.fixture
 def client(tmp_path):
     with TestClient(create_app(tmp_path / 'workspace.sqlite')) as c:
+        from backend.plugin_host import Executor
+        c.app.state.research.executor=Executor()
         yield c
 
 
-def study(client, plugin='cablesim.thermal-network', driver=None):
+def study(client, plugin='cablesim.iec60287', driver=None):
+    from backend.domain.migration import convert
+    from backend.schemas import Scenario
+    from backend.kernel.scenarios import METHOD_DEFAULTS, system_models
+    from backend.kernel.candidates import apply
+    raw=Scenario().model_dump(mode='json');raw['cable']['r20_ohm_km']=.0754
+    converted=convert(raw)
+    model=system_models()[0]
+    payload={**model['payload'],'name':model['name'],'version':model['version'],
+             'sources':{'/cable_type':{'kind':'demo','reference':model['source'],'reviewed':False}}}
+    document=apply(converted['document'],{'id':model['id'],'state':'demo','digest':model['content_sha256'],'payload':payload})
+    document['circuits'][0]['bonding']['kind']='both_ends'
     w = client.post('/api/workspaces', json={}).json()
     item = next(m for m in client.get('/api/methods').json() if m['method']['plugin_id'] == plugin)
     payload = {'expected_revision': w['revision'], 'title': '合成研究',
-               'method': {**item['method'], 'capability': 'steady-rating'}}
-    if plugin == 'cablesim.iec60287':
-        payload.update(input_source='study', method_input=deepcopy(SYNTHETIC_IEC))
+               'method': {**item['method'], 'capability': 'steady-rating'},
+               'input_source':'study', 'method_input':document,
+               'parameters':deepcopy(METHOD_DEFAULTS[plugin])}
     if driver:
+        driver=deepcopy(driver)
+        for sample in driver.get('samples',[]):
+            if '/input/installation/depth_m' in sample.get('changes',{}):
+                value=sample['changes'].pop('/input/installation/depth_m')
+                sample['changes'].update({f'/input/sections/0/placements/{i}/z':-value for i in range(3)})
+            if '/input/operating_current_a' in sample.get('changes',{}):
+                sample['changes']['/input/load_cases/0/currents/circuit~1c1']=sample['changes'].pop('/input/operating_current_a')
         payload['driver'] = driver
     response = client.post(f'/api/workspaces/{w["id"]}/studies', json=payload)
     assert response.status_code == 201, response.text
@@ -37,6 +57,25 @@ def request(client, w, s):
     return root, {'request_id': str(uuid4()), 'expected_revision': w['revision'],
                   'expected_study_revision': s['revision'], 'scope_acknowledged': True,
                   'lock_digest': pre.json()['lock_digest']}
+
+
+def test_saved_study_lock_can_submit_without_get_preflight_and_still_checks_revision(client):
+    w, s = study(client)
+    root = f'/api/workspaces/{w["id"]}/studies/{s["id"]}'
+    body = {'request_id': str(uuid4()), 'expected_revision': w['revision'],
+            'expected_study_revision': s['revision'], 'scope_acknowledged': True,
+            'lock_digest': s['lock']['digest']}
+    run = client.post(root + '/runs', json=body)
+    assert run.status_code == 200, run.text
+    assert run.json()['integrity'] == 'verified'
+    assert run.json()['output']['preflight']['ready'] is True
+    edited = client.post(f'/api/workspaces/{w["id"]}/edit', json={
+        'expected_revision': w['revision'], 'changes': [{'path': 'installation.depth_m', 'value': 1.1}]})
+    assert edited.status_code == 200
+    body.update(request_id=str(uuid4()), expected_revision=edited.json()['revision'])
+    rejected = client.post(root + '/runs', json=body)
+    assert rejected.status_code == 409
+    assert len(client.get(root + '/runs').json()['items']) == 1
 
 
 @pytest.mark.parametrize('plugin', ['cablesim.thermal-network', 'cablesim.iec60287'])
@@ -58,7 +97,7 @@ def test_saved_execution_replay_and_report(client, plugin, monkeypatch):
     report = client.post(f'/api/workspaces/{w["id"]}/deliveries', json={'run_ids': [run['id']]})
     assert report.status_code == 201, report.text
     assert run['id'] in report.json()['html']
-    assert report.json()['renderer'] == 'cablesim.study-html/10'
+    assert report.json()['renderer'] == 'cablesim.study-html/13'
     assert '>case-0 · rating</td>' in report.json()['html']
     if plugin == 'cablesim.thermal-network':
         assert '>case-0 · operating</td>' in report.json()['html']
@@ -83,7 +122,7 @@ def test_edits_during_execution_do_not_rebind_input(client, monkeypatch):
     run = client.post(root + '/runs', json=body).json()
     assert run['status'] == 'succeeded', run
     assert run['freshness'] == 'historical'
-    assert run['snapshot']['cases'][0]['input']['installation']['depth_m'] == .8
+    assert run['snapshot']['cases'][0]['input']['sections'][0]['placements'][0]['z'] == -.8
 
 
 def test_input_sources_are_pinned_with_the_run_and_report(client):
@@ -108,8 +147,8 @@ def test_input_sources_are_pinned_with_the_run_and_report(client):
     report = client.post(f'/api/workspaces/{w["id"]}/deliveries', json={'run_ids': [run['id']]}).json()
     assert 'public synthetic input sha256:example' in report['html']
     assert 'later input' not in report['html']
-    assert '额定工况：IEC 计算过程' in report['html']
-    assert '护套损耗 / W/m' in report['html']
+    assert 'ac_resistance' in report['html']
+    assert 'losses.sheath' in report['html']
 
 
 def test_sweep_retains_failed_samples(client, monkeypatch):
@@ -210,7 +249,7 @@ def test_read_page_verifies_each_plugin_once_but_next_request_rechecks(client, m
         return original(plugin)
     monkeypatch.setattr(Plugin, 'verify', counted)
     assert len(client.get(root + '/runs').json()['items']) == 3
-    assert calls == ['cablesim.thermal-network']
+    assert calls == ['cablesim.iec60287']
     client.get(root + '/runs')
     assert len(calls) == 2
 
@@ -245,7 +284,7 @@ def test_invalid_domain_sample_is_retained_and_never_sent_to_the_plugin(client, 
     s = Scenario().model_dump(mode='json')
     s['cable']['r20_ohm_km'] = .0754
     conversion = convert(s)
-    w, saved = study(client)
+    w, saved = study(client,'cablesim.thermal-network')
     root = f'/api/workspaces/{w["id"]}/studies/{saved["id"]}'
     definition = {**saved['definition'], 'expected_revision': 1, 'expected_study_revision': 1,
                   'input_source': 'study', 'method_input': conversion['document'], 'parameters': conversion['method_parameters'],
@@ -288,17 +327,6 @@ def test_corrupt_result_blocks_delivery_and_cross_project_access(client):
     assert client.get(f'/api/workspaces/{other["id"]}/studies/{s["id"]}/runs/{run["id"]}').status_code == 404
 
 
-def test_selection_preserves_catalog_snapshot_and_does_not_apply_candidate(client):
-    driver = {'kind': 'selection', 'candidate_ids': ['demo-copper-240', 'demo-copper-400'], 'minimum': 500}
-    w, s = study(client, driver=driver)
-    root, body = request(client, w, s)
-    result = client.post(root + '/runs', json=body).json()
-    assert result['status'] == 'succeeded', result
-    assert len(result['output']['assessment']) == 2
-    assert all(c['state'] == 'demo' and c['digest'] for c in result['snapshot']['candidate_snapshots'])
-    assert client.get(f'/api/workspaces/{w["id"]}').json()['revision'] == 1
-
-
 def test_saved_selection_respects_requested_temperature_condition(client):
     driver = {'kind': 'selection', 'samples': [{'label': 'current', 'changes': {}}], 'minimum': 330,
               'target_key': 'conductor_temperature', 'target_entity': 'cable/c1-A',
@@ -330,10 +358,10 @@ def test_selection_preserves_the_unstable_operating_point_reason(client):
     w, s = study(client, driver=driver)
     root, body = request(client, w, s)
     run = client.post(root + '/runs', json=body).json()
-    assert run['status'] == 'succeeded', run
+    assert run['status'] == 'failed', run
     assessed = run['output']['assessment'][0]
     assert assessed['value'] is None and assessed['meets_target'] is None
-    assert assessed['reason']['code'] == 'OPERATING_POINT_UNSTABLE'
+    assert assessed['reason'] == run['output']['cases'][0]['error']
 
 
 @pytest.mark.parametrize('condition,unavailable,failed,code', [
@@ -377,7 +405,7 @@ def test_restart_marks_incomplete_run_interrupted_without_reexecution(client, mo
     with client.app.state.workspace_store.db(True) as db:
         db.execute('UPDATE study_runs SET status=?,output=NULL,output_digest=NULL WHERE id=?', (status, run['id']))
     previous = client.app.state.research
-    restarted = Research(previous.store, previous.plugins, previous.executor)
+    restarted = Research(previous.store, previous.executor)
     restarted.initialize()
     first = restarted.get_run(w['id'], run['id'])
     restarted.initialize()

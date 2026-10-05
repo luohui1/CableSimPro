@@ -122,8 +122,8 @@
     },
     {
       "path": "src/cablesim_cable_geometry/main.py",
-      "sha256": "12f546457d43d3319a0f6ac01ebeea73e045661d2419b9d62eed41638d1bc6fa",
-      "size_bytes": 37194
+      "sha256": "4f2239753fc0538928eda34c3a2b3ec75f74f702fb8a8fb1ff1a89ce283f1b99",
+      "size_bytes": 41996
     }
   ]
 }

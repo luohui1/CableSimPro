@@ -1,6 +1,7 @@
 """Operating and rated temperatures with explicit per-sample mesh convergence."""
 from copy import deepcopy
 from importlib.metadata import version
+import os
 import time
 from pydantic import Field, model_validator
 from .thermal_input import Strict, prepare
@@ -53,6 +54,8 @@ def calculate(value, parameters):
         'reason':None if converged else {'code':'MESH_NOT_CONVERGED',
             'message':'末两档网格差异超过声明容差；样本已保留，请细化网格后另行运行。'},
         'solver':{'name':'scikit-fem P1 thermal','version':version('scikit-fem'),
+            'license_source':'hpc-installation' if os.environ.get('SLURM_JOB_ID') else 'local-installation',
+            'license_type':'open-source','slurm_job_id':os.environ.get('SLURM_JOB_ID'),
             'packages':{p:version(p) for p in ('gmsh','numpy','scipy','scikit-fem')}},
         'mesh':{k:last[k] for k in ('nodes','elements','mesh_size_m','far_mesh_size_m','mesh_sha256')},
         'convergence':{'solver_status':'converged','mesh_status':'converged' if converged else 'nonconverged',

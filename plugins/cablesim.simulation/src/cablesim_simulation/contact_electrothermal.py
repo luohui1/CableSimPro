@@ -8,7 +8,7 @@ from pathlib import Path
 from math import pi,hypot
 import shutil
 import numpy as np
-from backend.foundation.contact_electrothermal import ContactElectrothermal
+from cablesim_sdk.contact_electrothermal import ContactElectrothermal
 from .triangular_fields import geometry,contact_thermal
 from .problem_mesh import package
 from .getdp_adapter import solve as magnetic_solve

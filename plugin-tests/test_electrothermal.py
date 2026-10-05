@@ -13,7 +13,7 @@ from backend.schemas import Scenario
 from backend.foundation.contracts import CircularRecipe,CircularLayer
 from cablesim_native.buried import buried_mesh
 from cablesim_native.electrothermal import ResponseModel, ElectrothermalError, electrothermal_reference, mesh_arguments
-from backend.plugins.electrothermal_contract import ElectrothermalArgs, validate_electrothermal
+from backend.plugin_host.electrothermal_contract import ElectrothermalArgs, validate_electrothermal
 
 
 def args(**changes):
@@ -152,28 +152,21 @@ def test_larger_domain_comparison_retains_two_valid_solutions(tmp_path,monkeypat
 def test_actual_plugin_rejects_missing_r20_then_runs_saved_snapshot(tmp_path):
     from fastapi.testclient import TestClient
     from backend.main import create_app
-    pid='cablesim.electrothermal-reference'
+    from native_workflow import create_study, execute, bundle, download
     with TestClient(create_app(tmp_path/'study.sqlite')) as c:
         w=c.post('/api/workspaces',json={}).json()
-        p=c.post('/api/plugins/install-plan',json={'plugin_id':pid,'version':'0.2.0'}).json()
-        approval={k:p[k] for k in ('plugin_id','version','plan_sha256','state_revision')} | {'approved':True,'license_acknowledged':True,'grants':{i['plugin_id']:i['permissions'] for i in p['plugins']}}
-        assert c.post('/api/plugins/install',json=approval).status_code==200
-        lock=c.get(f'/api/plugins/workspaces/{w["id"]}/lock').json()
-        enabled=c.post(f'/api/plugins/workspaces/{w["id"]}/enable',json={'plugin_id':pid,'expected_revision':1,'lock_revision':lock['lock']['lock_revision'],'enabled':True,'approved':True})
-        assert enabled.status_code==200,enabled.text
-        body=dict(plugin_id=pid,command='skfem.electrothermal-reference',request_id=str(uuid4()),expected_revision=1,lock_sha256=enabled.json()['lock_sha256'],arguments=args().model_dump(mode='json'),confirmed=True)
-        url=f'/api/plugins/workspaces/{w["id"]}/invoke'
-        r=c.post(url,json=body);assert r.status_code==422 and r.json()['detail']['code']=='ELECTROTHERMAL_INPUT'
-        assert c.get(f'/api/plugins/workspaces/{w["id"]}/jobs').json()['items']==[]
-        edit=c.post(f'/api/workspaces/{w["id"]}/edit',json={'expected_revision':1,'changes':[{'path':'cable.r20_ohm_km','value':.0754}]})
+        study,root=create_study(c,w,'electrothermal',args().model_dump(mode='json'))
+        pre=c.get(root+'/preflight',params={'expected_revision':1,'expected_study_revision':1})
+        assert pre.status_code==200 and not pre.json()['ready']
+        assert 'R20_REQUIRED' in pre.json()['cases'][0]['error']['message']
+        assert c.get(root+'/runs').json()['items']==[]
+        edit=c.post('/api/workspaces/'+w['id']+'/edit',json={'expected_revision':1,'changes':[{'path':'cable.r20_ohm_km','value':.0754}]})
         assert edit.status_code==200,edit.text
-        baseline=c.get(f'/api/workspaces/{w["id"]}').json()
-        lock=c.get(f'/api/plugins/workspaces/{w["id"]}/lock').json()
-        body.update(expected_revision=2,lock_sha256=lock['lock_sha256'])
-        result=c.post(url,json=body);assert result.status_code==200,result.text
-        out=result.json();assert out['status']=='succeeded' and out['result']['summary']['ampacity_a']>0
-        assert out['promoted_to_current_ampacity'] is False
-        assert c.post(url,json=body).json()['replayed'] is True
-        assert c.get(f'/api/workspaces/{w["id"]}').json()==baseline
+        w=edit.json();study,root=create_study(c,w,'electrothermal',args().model_dump(mode='json'))
+        result,body=execute(c,w,study,root)
+        assert bundle(result)['summary']['ampacity_a']>0
+        assert c.post(root+'/runs',json=body).json()['id']==result['id']
+        saved=c.get('/api/workspaces/'+w['id']).json()
+        assert saved['revision']==w['revision'] and saved['scenario']==w['scenario']
         other=c.post('/api/workspaces',json={}).json()
-        assert c.get(f'/api/plugins/workspaces/{other["id"]}/jobs/{out["job_id"]}/artifacts/field.json').status_code==404
+        assert download(c,other,result,'field.json').status_code==404

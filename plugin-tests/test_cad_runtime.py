@@ -4,7 +4,7 @@ from pathlib import Path
 import subprocess
 import sys
 import pytest
-from backend.plugins.service import safe_environment
+from backend.plugin_host.executor import minimal_environment as safe_environment
 
 
 @pytest.mark.parametrize('attempt', range(5))

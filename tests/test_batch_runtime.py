@@ -91,5 +91,15 @@ def test_missing_worker_output_is_preserved_as_failure(tmp_path):
     assert verify_row(row,tmp_path)==row
     assert failed_sample(tmp_path,0,'slurm','SLURM_TIMEOUT','wall limit')['valid']
     target=export_dataset(tmp_path)
+    metadata=json.loads((target/'metadata.json').read_text('utf-8'))
+    assert metadata['failure_reason_counts'].get('SLURM_TIMEOUT')==1
     (target/'valid.csv').write_text('corrupt','utf-8')
     with pytest.raises(ValueError,match='EXPORT_FILE_INTEGRITY_FAILED'):export_dataset(tmp_path)
+
+
+def test_unbracketed_ampacity_is_classified_without_losing_original_error():
+    from backend.kernel.batch_worker import failure_reason
+    error={'code':'ValueError','message':'给定上界未夹住温限；明确扩大搜索范围，不能返回假载流量。'}
+    row={'valid':False,'status':'failed','error':error}
+    assert failure_reason(row)=='ampacity_unbracketed_within_declared_current_range'
+    assert row['error']==error

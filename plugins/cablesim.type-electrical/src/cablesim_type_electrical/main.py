@@ -5,15 +5,17 @@ from math import isfinite, log, pi, sqrt
 from pathlib import Path
 import json
 import platform
+import sys
 
-VERSION = 'TYPE-ELECTRICAL-0.1.0'
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]/'cablesim.iec60287/src'))
+from cablesim_iec60287.electrical import skin, effect_x, proximity
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from cablesim_type_electrical.inputs import ElectricalParameters, ShortCircuitParameters
+
+VERSION = 'TYPE-ELECTRICAL-0.3.0'
+METHOD_VERSIONS = {'electrical':VERSION, 'short-circuit':'TYPE-SHORT-CIRCUIT-0.2.0'}
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
-NUMBERS = {'temperature_k': (223.15, 473.15), 'frequency_hz': (1, 100), 'phase_voltage_v': (1, 500000),
-           'ks': (0, 2), 'kp': (0, 2), 'spacing_m': (.0001, 10), 'core_lay_factor': (1, 1.5),
-           'duration_s': (.001, 100), 'initial_temperature_k': (223.15, 773.15), 'final_temperature_k': (223.15, 773.15),
-           'metal_initial_temperature_k': (223.15, 773.15), 'metal_final_temperature_k': (223.15, 773.15),
-           'contact_factor': (.01, 1), 'inner_thermal_resistivity': (.01, 100), 'outer_thermal_resistivity': (.01, 100),
-           'inner_volumetric_heat_capacity': (10000, 1e8), 'outer_volumetric_heat_capacity': (10000, 1e8)}
 CONSTANTS = {'copper_bare': (226, 234.5, 3.45e6), 'copper_coated': (226, 234.5, 3.45e6),
              'aluminium': (148, 228, 2.5e6), 'lead': (41, 230, 1.45e6)}
 
@@ -27,9 +29,6 @@ def checked(value, path, lower, upper):
 def prepare(document, parameters):
     if document.get('schema_version') != 'cablesim.domain/1':
         raise ValueError('schema_version：需要 cablesim.domain/1。')
-    permitted = {'cable_type_id', 'circuit_id', 'sources', 'r20_length_basis', 'arrangement', 'wire_contact', 'interest_times_s', *NUMBERS}
-    if set(parameters) - permitted:
-        raise ValueError('parameters：存在未声明的方法参数。')
     cable = next((c for c in document.get('cable_types', []) if c['id'] == parameters.get('cable_type_id')), None)
     if cable is None or cable.get('construction') not in ('single_core', 'three_core'):
         raise ValueError('parameters.cable_type_id：请选择单芯或三芯型号。')
@@ -37,23 +36,6 @@ def prepare(document, parameters):
         raise ValueError('cable_types.cores：芯数与结构不一致。')
     if parameters.get('circuit_id') is not None and not any(c['id'] == parameters['circuit_id'] and c['cable_type'] == cable['id'] for c in document.get('circuits', [])):
         raise ValueError('parameters.circuit_id：请选择引用当前型号的回路。')
-    for key, (lower, upper) in NUMBERS.items():
-        if parameters.get(key) is not None:
-            checked(parameters[key], 'parameters.' + key, lower, upper)
-    for key, choices in [('r20_length_basis', ('finished_cable', 'straight_core')), ('arrangement', ('trefoil', 'flat')), ('wire_contact', ('fully_embedded', 'air_spaces', 'touching'))]:
-        if parameters.get(key) is not None and parameters[key] not in choices:
-            raise ValueError('parameters.' + key + '：请选择明确的计算分支。')
-    if not isinstance(parameters.get('sources', {}), dict):
-        raise ValueError('parameters.sources：需要参数来源记录。')
-    times = parameters.get('interest_times_s', [])
-    if not isinstance(times, list) or len(times) > 20:
-        raise ValueError('parameters.interest_times_s：请输入不超过 20 个关注时间点。')
-    for time in times:
-        checked(time, 'parameters.interest_times_s', .1, 5)
-    for key in ('initial_temperature_k', 'metal_initial_temperature_k'):
-        final = key.replace('initial', 'final')
-        if parameters.get(key) is not None and parameters.get(final) is not None and parameters[final] <= parameters[key]:
-            raise ValueError('parameters.' + final + '：最终温度必须高于初始温度。')
     materials = {m['id']: m for m in document['materials']}
     for core in cable['cores']:
         c = core['conductor']
@@ -86,14 +68,6 @@ def layers(cable, core):
     return core['layers'] + (cable['common_layers'] if len(cable['cores']) == 1 else [])
 
 
-def skin(x):
-    if x <= 2.8:
-        return x**4 / (192 + .8*x**4)
-    if x <= 3.8:
-        return -.136 - .0177*x + .0563*x*x
-    return .354*x - .733
-
-
 def adiabatic(area_mm2, k, beta, initial_c, final_c, duration_s):
     return k * area_mm2 * sqrt(log((final_c + beta) / (initial_c + beta)) / duration_s)
 
@@ -109,12 +83,14 @@ def metal_factor(duration_s, thickness_m, heat_capacity, rho_inner, rho_outer, c
 
 
 def calculate(document, parameters, capability, *, _include_curve=True):
+    if capability not in ('electrical', 'short-circuit'):
+        raise ValueError('capability：未知计算能力。')
+    model = ElectricalParameters if capability == 'electrical' else ShortCircuitParameters
+    model.model_validate(parameters)
     cable, materials = prepare(document, parameters)
     circuits = [c for c in document.get('circuits', []) if c['cable_type'] == cable['id'] and (not parameters.get('circuit_id') or c['id'] == parameters['circuit_id'])]
     circuit = circuits[0] if len(circuits) == 1 else None
     topology = {'circuit_id': circuit['id'], 'electrical_topology': circuit.get('electrical_topology'), 'bonding': circuit.get('bonding')} if circuit else None
-    if capability not in ('electrical', 'short-circuit'):
-        raise ValueError('capability：未知计算能力。')
     rows = []
     def add(key, title, value, unit, clause, page, *, source='iec60287', formula=None, inputs=None, reason=None, status=None, core=None, role='conductor', basis='derived', input_source=None):
         if value is not None and not isfinite(value):
@@ -149,9 +125,17 @@ def calculate(document, parameters, capability, *, _include_curve=True):
             observation = measurement(document, cable, cid, 'conductor', 'r20')
             r20 = observation['value'] if observation else conductor.get('r20') if conductor.get('r20_basis') else None
             rbasis = observation['basis'] if observation else conductor.get('r20_basis')
-            src = observation['source'] if observation else None
+            escape_pointer = lambda value: value.replace('~', '~0').replace('/', '~1')
+            targets = [f'/cable_types/{document["cable_types"].index(cable)}/cores/{i}/conductor/r20',
+                       f'/cable_types/{escape_pointer(cable["id"])}/cores/{escape_pointer(cid)}/conductor/r20']
+            provenance = document.get('provenance', {})
+            pointers = [p for p in provenance if any(target == p or target.startswith(p.rstrip('/') + '/') for target in targets)]
+            src = observation['source'] if observation else provenance[max(pointers, key=len)] if pointers else None
             title = (f'芯 {i+1} · ' if len(cable['cores']) > 1 else '')
-            add('r20', title+'导体 R₂₀', r20, 'Ω/m', '5.1.2', 16, core=cid, basis=rbasis or 'unknown', input_source=src, reason='数据性质需明确；不从标称截面伪造实测电阻。')
+            resistance = add('r20', title+'导体 R₂₀', r20, 'Ω/m', '5.1.2', 16, core=cid, basis=rbasis or 'unknown', input_source=src, reason='设计输入、实测值和声明上限分别保留；标准限值不作为实测电阻。')
+            resistance['data_origin'] = {'design':'设计输入', 'measurement':'实测值', 'manufacturer_limit':'厂家声明上限'}.get(rbasis, '待明确输入性质')
+            if conductor.get('conductor_class') == 2:
+                resistance['reference_table'] = {**SOURCES['gbt3956'], 'table':'表 2', 'printed_pages':[4, 5], 'pdf_pages':[7, 8], 'semantics':'standard_limit_reference'}
             alpha = cm.get('temperature_coefficient_20') or (.00393 if kind in ('copper_bare', 'copper_coated') else .00403 if kind == 'aluminium' else None)
             rdc = r20*(1+alpha*(temperature-293.15)) if all(v is not None for v in (r20, alpha, temperature)) else None
             straight = rdc/(cll if basis == 'finished_cable' else 1) if rdc is not None and cll is not None and basis else None
@@ -160,16 +144,15 @@ def calculate(document, parameters, capability, *, _include_curve=True):
             circular = conductor['form'] in ('solid_round', 'stranded_round', 'stranded_round_compacted')
             ks, kp = parameter('ks'), parameter('kp')
             spacing = parameter('spacing_m')
-            xs = sqrt(8*pi*frequency/straight*1e-7*ks) if straight and frequency and ks is not None else None
-            xp = sqrt(8*pi*frequency/straight*1e-7*kp) if straight and frequency and kp is not None else None
+            xs = effect_x(frequency,straight,ks) if straight and frequency and ks is not None else None
+            xp = effect_x(frequency,straight,kp) if straight and frequency and kp is not None else None
             ys = skin(xs) if xs is not None and circular else None
             ratio = conductor['diameter']/spacing if spacing is not None else None
             if ratio is not None and ratio >= 1:
                 raise ValueError('parameters.spacing_m：导体中心距必须大于导体直径。')
             yp = None
             if xp is not None and xp <= 2.8 and ratio is not None and circular:
-                fp = xp**4/(192+.8*xp**4)
-                yp = fp*ratio**2*(.312*ratio**2+1.18/(fp+.27))
+                yp = proximity(xp,conductor['diameter'],spacing)
             add('ys', title+'集肤因数 yₛ', ys, '1', '5.1.3', 16, core=cid, formula='xₛ²=8πf kₛ·10⁻⁷/R′；yₛ 按 xₛ 分段', inputs={'x_s': xs, 'ks': ks}, status='uncovered' if not circular and conductor['form'] != 'unspecified' else None, reason='只覆盖圆实心 / 圆绞合 / 紧压圆导体。' if not circular else None)
             add('yp', title+'邻近因数 yₚ', yp, '1', '5.1.5.1', 17, core=cid, formula='F=xₚ⁴/(192+0.8xₚ⁴)；yₚ=F(dc/s)²[0.312(dc/s)²+1.18/(F+0.27)]', inputs={'x_p': xp, 'kp': kp, 'dc_m': conductor['diameter'], 's_m': spacing}, status='not_applicable' if xp is not None and xp > 2.8 else 'uncovered' if not circular and conductor['form'] != 'unspecified' else None, reason='xₚ > 2.8 的邻近公式明确拒算。' if xp is not None and xp > 2.8 else '需明确相间中心距和系数来源；型号不内置敷设间距。')
             ac = straight*(1+ys+yp)*cll if all(v is not None for v in (straight, ys, yp, cll)) else None
@@ -259,7 +242,7 @@ def calculate(document, parameters, capability, *, _include_curve=True):
             add(role+'-nonadiabatic', '金属组件非绝热允许电流', iad*eps if iad is not None and eps is not None else None, 'A', '第 2 章；5.3 / 6.1', 9, source='iec60949', core=cid, role=role, formula='I=ε I_AD', inputs={'I_AD_A': iad, 'epsilon': eps}, status=status, reason=reason)
         add('parallel-fault-sharing', '多个金属回路的总故障容量', None, 'A', 'AMD1:2008，第 4 章补充', 2, source='iec60949_amendment', status='uncovered', reason='缺少接地拓扑、阻抗分配与各组件初始温度；不直接累加各组件容量。')
     counts = dict(Counter(r['status'] for r in rows))
-    result = {'schema': 'cablesim.type-analysis/1', 'capability': capability, 'cable_type_id': cable['id'], 'label': cable['label'], 'method_version': VERSION, 'electrical_topology': topology, 'parameter_sources': parameters.get('sources', {}),
+    result = {'schema': 'cablesim.type-analysis/1', 'capability': capability, 'cable_type_id': cable['id'], 'label': cable['label'], 'method_version': METHOD_VERSIONS[capability], 'electrical_topology': topology, 'parameter_sources': parameters.get('sources', {}),
             'input_sha256': sha256(json.dumps({'document': document, 'parameters': parameters}, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()).hexdigest(),
             'rows': rows, 'counts': counts, 'sources': list(SOURCES.values()), 'scope': '数值按保存的输入与已核验分支计算；不批准型号、不替代出厂试验或接地拓扑。'}
     if capability == 'short-circuit' and _include_curve:
@@ -301,7 +284,7 @@ def short_circuit_curve(document, parameters, rows):
         'conditions': {k: parameters.get(k) for k in (
             'initial_temperature_k', 'final_temperature_k',
             'metal_initial_temperature_k', 'metal_final_temperature_k')},
-        'method_version': VERSION,
+        'method_version': METHOD_VERSIONS['short-circuit'],
     }
 
 
@@ -321,7 +304,7 @@ def main():
             cases.append(result)
         except (ValueError, KeyError, TypeError) as error:
             cases.append({'case_id': case['case_id'], 'status': 'not_applicable', 'error': {'code': 'TYPE_INPUT_INVALID', 'message': str(error)}})
-    Path('output/result.json').write_text(json.dumps({'protocol': 'cablesim.run/2', 'cases': cases, 'environment': {'python': platform.python_version(), 'method': VERSION}}, ensure_ascii=False, allow_nan=False), 'utf-8')
+    Path('output/result.json').write_text(json.dumps({'protocol': 'cablesim.run/2', 'cases': cases, 'environment': {'python': platform.python_version(), 'method': METHOD_VERSIONS[request['capability']]}}, ensure_ascii=False, allow_nan=False), 'utf-8')
 
 
 if __name__ == '__main__':

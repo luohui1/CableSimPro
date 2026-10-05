@@ -160,7 +160,7 @@ def radial_thermal(recipe, scenario, args):
     meshio.Mesh(points, [('triangle', triangles)], point_data={'temperature_c': temperature},
                 cell_data={'domain_id': [ids]}).write('temperature.vtu')
     write_json('thermal.json', dict(summary, schema_version='cablesim.thermal-reference/1'))
-    from backend.plugins.field_contract import ThermalField
+    from backend.plugin_host.field_contract import ThermalField
     field = ThermalField(points=points.tolist(), triangles=triangles.tolist(),
                          domain_ids=ids.tolist(), values=(temperature+273.15).tolist())
     write_json('field.json', field.model_dump(mode='json'))

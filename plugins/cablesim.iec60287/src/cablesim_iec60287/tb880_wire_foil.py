@@ -3,6 +3,7 @@ from math import pi,sqrt,log,acosh,isfinite
 from typing import Literal
 from pydantic import BaseModel,ConfigDict,Field,StrictInt,model_validator
 from .tb880_reference import COMMON,WIRE,Layer,layer_resistance
+from .electrical import ac_factors, sheath_reactance, circulating, sheath_thickness_terms, eddy_geometry
 
 FOIL={'conductor_ks','conductor_kp','foil_inner_diameter_m','foil_thickness_m',
       'foil_resistivity_ohm_m','foil_alpha_per_k','bedding_thermal_resistivity_k_m_w'}
@@ -49,11 +50,8 @@ class WireFoilRating(BaseModel):
 def electrical(d,temperatures):
     values=[]
     for temperature in temperatures:
-        r=d['conductor_r20_ohm_m']*(1+d['conductor_alpha_per_k']*(temperature-293.15));base=8*pi*d['frequency_hz']*1e-7/r
-        xs2=base*d['conductor_ks'];xp2=base*d['conductor_kp']
-        if sqrt(xs2)>2.8:raise ValueError('reference skin branch requires xs<=2.8')
-        ys=xs2**2/(192+.8*xs2**2);z=xp2**2/(192+.8*xp2**2);ratio=d['conductor_diameter_m']/d['core_spacing_m']
-        yp=z*ratio**2*(.312*ratio**2+1.18/(z+.27));values.append(r*(1+ys+yp))
+        r=d['conductor_r20_ohm_m']*(1+d['conductor_alpha_per_k']*(temperature-293.15))
+        values.append(ac_factors(r,d['frequency_hz'],d['conductor_ks'],d['conductor_kp'],d['conductor_diameter_m'],d['core_spacing_m'])[-1])
     return values
 
 
@@ -63,7 +61,7 @@ def rate(r:WireFoilRating):
     foil_outer=d['foil_inner_diameter_m']+2*d['foil_thickness_m'];foil_mean=foil_outer-d['foil_thickness_m']
     area=r.wire_count*pi*d['screen_wire_diameter_m']**2/4;lay=sqrt(1+(pi*screen_mean/d['screen_wire_lay_m'])**2)
     rs0=d['sheath_resistivity_ohm_m']/area*lay;rf0=d['foil_resistivity_ohm_m']/(pi*foil_mean*d['foil_thickness_m'])
-    mean=sqrt((screen_mean**2+foil_mean**2)/2);x=2*omega*1e-7*log(2*s/mean);xm=2*omega*1e-7*log(2);P=x+xm;Q=x-xm/3
+    mean=sqrt((screen_mean**2+foil_mean**2)/2);x=sheath_reactance(d['frequency_hz'],s,mean);xm=2*omega*1e-7*log(2);P=x+xm;Q=x-xm/3
     lengths=r.minor_section_ratios;msu=(sum(v*v for v in lengths)-sum(lengths[i]*lengths[j] for i,j in [(0,1),(1,2),(2,0)]))/sum(lengths)**2 if flat else 1.
     inner=layer_resistance(d['conductor_diameter_m'],r.inner_layers);t1=sum(inner)
     t2=d['bedding_thermal_resistivity_k_m_w']/(2*pi)*log(d['foil_inner_diameter_m']/screen_outer)
@@ -82,15 +80,11 @@ def rate(r:WireFoilRating):
             if flat:
                 if i==0:lc=parallel/rc[i]*Q*Q/(parallel**2+Q*Q)*msu
                 else:lc=parallel/rc[i]*(.75*P*P/(parallel**2+P*P)+.25*Q*Q/(parallel**2+Q*Q)+(1 if i==1 else -1)*2*parallel*P*Q*xm/(sqrt(3)*(parallel**2+P*P)*(parallel**2+Q*Q)))*msu
-            else:lc=parallel/rc[i]/(1+(parallel/x)**2)
-            m=omega/rf*1e-7;ratio=foil_mean/(2*s);l0=(6 if flat and i==0 else 1.5 if flat else 3)*m*m/(1+m*m)*ratio**2
-            if not flat:delta1=(1.14*m**2.45+.33)*ratio**(.92*m+1.66);delta2=0.
-            elif i==0:delta1=.86*m**3.08*ratio**(1.4*m+.7);delta2=0.
-            elif i==1:delta1=-.74*(m+2)*sqrt(m)/(2+(m-.3)**2)*ratio**(m+1);delta2=.92*m**3.7*ratio**(m+2)
-            else:delta1=4.7*m**.7*ratio**(.16*m+2);delta2=21*m**3.3*ratio**(1.47*m+5.06)
-            beta=sqrt(4*pi*omega/(1e7*d['foil_resistivity_ohm_m']*(1+d['foil_alpha_per_k']*(tf[i]-293.15))))
-            gs=1+(d['foil_thickness_m']/foil_outer)**1.74*(beta*foil_outer-1.6)
-            eddy=rf/rc[i]*(gs*l0*(1+delta1+delta2)+(beta*d['foil_thickness_m'])**4/12)
+            else:lc=circulating(parallel,rc[i],x)
+            m=omega/rf*1e-7;ratio=foil_mean/(2*s)
+            role='trefoil' if not flat else 'middle' if i==0 else 'outer_lagging' if i==1 else 'outer_leading'
+            gs,thickness_term=sheath_thickness_terms(d['foil_resistivity_ohm_m']*(1+d['foil_alpha_per_k']*(tf[i]-293.15)),d['foil_thickness_m'],foil_outer,d['frequency_hz'])
+            eddy=rf/rc[i]*(gs*eddy_geometry(m,ratio,role)+thickness_term)
             mn=parallel/x;factor=1. if flat else (4*mn**4+4*mn**2)/(4*(mn**2+1)**2)
             screen.append(lc*rf/(rs+rf));foil.append(lc*rs/(rs+rf)+factor*eddy)
             details.append({'screen_resistance_ohm_m':rs,'foil_resistance_ohm_m':rf,'parallel_resistance_ohm_m':parallel,'circulating_total':lc,'foil_eddy':eddy,'eddy_correction':factor})

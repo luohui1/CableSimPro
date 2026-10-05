@@ -11,7 +11,8 @@ import pytest
 from backend.domain.models import Layer, DomainDocument
 from backend.main import create_app
 from backend.plugin_host import Executor
-from design.workbench.scenarios import system_models, make_router
+from backend.plugin_host.executor import validate_domain_input
+from backend.kernel.scenarios import system_models, make_router
 
 ENTRY = Path(__file__).resolve().parents[1] / 'plugins/cablesim.standard-check/src/cablesim_standard_check/main.py'
 spec = importlib.util.spec_from_file_location('standard_check', ENTRY)
@@ -36,6 +37,7 @@ def example(u0=8700, u=15000, three=True, area=240):
 
 
 def run(document):
+    validate_domain_input(document)
     return plugin.check(document, {'cable_type_id': document['cable_types'][0]['id']})
 
 
@@ -147,31 +149,34 @@ def test_low_voltage_insulation_measurements_are_not_interchanged():
     assert item(run(document), 'insulation-mean')['verdict'] == 'failed'
 
 
-def test_thicker_declared_layers_raise_measurement_minimums():
+@pytest.mark.parametrize('scope,index,thickness,minimum,key,limit', [
+    ('core', 1, .005, .00396, 'insulation-minimum', 4.4),
+    ('common', 0, .0025, .0017, 'bedding-minimum', 1.8),
+    ('common', -1, .005, .003, 'oversheath-minimum', 3.8),
+])
+def test_thicker_declared_layers_raise_measurement_minimums(scope,index,thickness,minimum,key,limit):
     document = example()
     cable = document['cable_types'][0]
-    cable['cores'][0]['layers'][1].update(thickness=.005, minimum_thickness=.00396)
-    cable['common_layers'][0].update(thickness=.0025, minimum_thickness=.0017)
-    cable['common_layers'][-1].update(thickness=.005, minimum_thickness=.003)
+    layers = cable['cores'][0]['layers'] if scope == 'core' else cable['common_layers']
+    layers[index].update(thickness=thickness, minimum_thickness=minimum)
     result = run(document)
-    assert item(result, 'insulation-minimum')['limit'] == 4.4
-    assert item(result, 'bedding-minimum')['limit'] == 1.8
-    assert item(result, 'oversheath-minimum')['limit'] == 3.8
-    assert all(item(result, key)['verdict'] == 'failed' for key in ('insulation-minimum', 'bedding-minimum', 'oversheath-minimum'))
+    assert item(result, key)['limit'] == limit
+    assert item(result, key)['verdict'] == 'failed'
 
 
-def test_under_specified_nominal_does_not_relax_measurement_requirement():
+@pytest.mark.parametrize('scope,index,thickness,minimum,key,limit', [
+    ('core', 1, .0044, .0039, 'insulation-minimum', 3.95),
+    ('common', 0, .001, .001, 'bedding-minimum', 1.24),
+    ('common', -1, .003, .0023, 'oversheath-minimum', 2.44),
+])
+def test_under_specified_nominal_does_not_relax_measurement_requirement(scope,index,thickness,minimum,key,limit):
     document = example()
     cable = document['cable_types'][0]
-    for core in cable['cores']:
-        core['layers'][1].update(thickness=.0044, minimum_thickness=.0039)
-    cable['common_layers'][0].update(thickness=.001, minimum_thickness=.001)
-    cable['common_layers'][-1].update(thickness=.003, minimum_thickness=.0023)
+    layers = cable['cores'][0]['layers'] if scope == 'core' else cable['common_layers']
+    layers[index].update(thickness=thickness, minimum_thickness=minimum)
     result = run(document)
-    assert item(result, 'insulation-minimum')['limit'] == 3.95
-    assert item(result, 'bedding-minimum')['limit'] == 1.24
-    assert item(result, 'oversheath-minimum')['limit'] == 2.44
-    assert all(item(result, key)['verdict'] == 'failed' for key in ('insulation-minimum', 'bedding-minimum', 'oversheath-minimum'))
+    assert item(result, key)['limit'] == limit
+    assert item(result, key)['verdict'] == 'failed'
 
 
 def test_missing_screen_retains_dimension_requirement_and_correct_layer_target():

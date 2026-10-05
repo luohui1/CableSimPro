@@ -2,8 +2,8 @@
 import json
 from math import hypot, isfinite, atan2, degrees
 import numpy as np
-from backend.foundation.simulation import validate
-from backend.foundation.reproduction import digest
+from cablesim_sdk.simulation import validate
+from cablesim_sdk.reproduction import digest
 from .java_model import source
 from .runtime import execute, SolverFailure
 

@@ -40,6 +40,128 @@
   "capabilities": [
     {
       "kind": "method",
+      "id": "transient-temperature",
+      "title": "研究截面与负荷曲线暂态温升",
+      "method_version": "transient-temperature/0.1.0",
+      "analysis": "transient",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "conductor_temperature",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.simulation-bundle",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.temperature-history",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.temperature-field",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "analytic-benchmark",
+        "cases": [
+          "plugin-tests/test_research_simulation.py: homogeneous cylinder Bessel step superposition; every time step; field and source binding",
+          "plugin-tests/test_transient_history.py: independent slab Fourier solution"
+        ]
+      },
+      "limitations": [
+        "仅在 Slurm 执行；显式均匀初温和逐区体积热容，阶跃/周期/应急负荷。",
+        "恒定热物性与声明温度下冻结电阻；暂态不含 R(T) 双向反馈、辐射、隐式预负荷或初始场。",
+        "温限时刻由真实时间步线性插值并保存区间；不外推。单次求解不自动证明网格/时间步收敛。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "sheath-losses",
+      "title": "研究接地拓扑与护套损耗",
+      "method_version": "sheath-losses/0.1.0",
+      "analysis": "frequency_domain",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.sheath-loss",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.simulation-bundle",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.loss-coefficients",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.sheath-losses",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "plugin-tests/test_research_simulation.py: native GetDP topology, independent Faraday/Kirchhoff hand circuit, and saved temperature-table reference consumed by IEC",
+          "plugin-tests/test_reproduction_regressions.py: public GetDP electromagnetic benchmarks"
+        ]
+      },
+      "limitations": [
+        "仅在 Slurm 执行；完整三相单芯实心圆导体、明确光滑层、保存的相序与接地来源。",
+        "交叉互联为三个独立二维场切片加 GetDP 原生电路，记录实际小段电压长度；不含弯曲三维效应或大地回流。",
+        "固定点外部 λ1 不可供 IEC 变温迭代；单截面完整温度张量并通过独立中心点验证后才允许声明范围内迭代。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "electrothermal-steady",
+      "title": "研究截面双向稳态电热耦合",
+      "method_version": "electrothermal-steady/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.maximum-temperature",
+          "type": "quantity",
+          "per": "section",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.simulation-bundle",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.temperature-field",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "reference-benchmark",
+        "cases": [
+          "plugin-tests/test_research_simulation.py: saved-domain GetDP/P1 feedback and independent coaxial I-squared-R(T) hand verification; temperature/power/energy criteria",
+          "plugin-tests/test_simulation_coupled.py: independent coaxial analytic and COMSOL checks"
+        ]
+      },
+      "limitations": [
+        "仅在 Slurm 执行；单截面 GetDP σ(T) 与 P1 导热双向反馈，保存逐轮温度/功率/能量残差。",
+        "明确热导率、材料有效温区和环境温度；单点或两端接地，不含三小段电热反馈、暂态、辐射和接触热阻。",
+        "磁准静态焦耳/磁性损耗与恒定热导率模型，不替代完整 IEC 载流量或工程批准。"
+      ]
+    },
+    {
+      "kind": "method",
       "id": "thermal-dataset",
       "title": "稳态热场与允许电流数据样本",
       "method_version": "thermal-dataset/0.1.0",
@@ -456,8 +578,8 @@
     },
     {
       "path": "src/cablesim_simulation/artifacts.py",
-      "sha256": "cdb033e4a3d770b51c743b8d5e72d1b6193122291a243778f90e84a05a0b229f",
-      "size_bytes": 5872
+      "sha256": "d38d42d7d81df9afa0e397a0878dc4cd8700d41bf60c1b59843bdd0aef0ff080",
+      "size_bytes": 6957
     },
     {
       "path": "src/cablesim_simulation/bonded.py",
@@ -466,68 +588,63 @@
     },
     {
       "path": "src/cablesim_simulation/capacitive.py",
-      "sha256": "b47bc70b0602ba738f9c348895649026e999bfca2d26c76f3e91fd4273920250",
-      "size_bytes": 10112
+      "sha256": "80bd93008b4e95d29ac3a3a45d7a81f22134cb84bc2df9b6632fb13ccd21989b",
+      "size_bytes": 10106
     },
     {
       "path": "src/cablesim_simulation/contact_electrothermal.py",
-      "sha256": "68030a00e4c4d29e46975116db2781b09177d4594b74106ab5093c2ad7ea6b5e",
-      "size_bytes": 10921
+      "sha256": "e4f66f1f269c59f889f61900d9ac0f997d55b798b27f9d38f66c6f5e3298c421",
+      "size_bytes": 10915
     },
     {
       "path": "src/cablesim_simulation/discrete_fields.py",
-      "sha256": "e052bb15686c8f4c1b4e62317ce4701e6ea1e616ac554cd5fff01a456a10bf2e",
-      "size_bytes": 4513
+      "sha256": "aea0f22313cee52eabee085cdb2b0dc700163677fdabb760a3897965999cc071",
+      "size_bytes": 4507
+    },
+    {
+      "path": "src/cablesim_simulation/domain_coupled.py",
+      "sha256": "103c1b8224bd1b5955d0497b469e80b956800c6a69b4ea292f5cc932afb23058",
+      "size_bytes": 4147
     },
     {
       "path": "src/cablesim_simulation/electrothermal.py",
-      "sha256": "8d3238030d59bae36571d6d36687508cfe37f306917edca7a68e343798eed115",
-      "size_bytes": 8877
+      "sha256": "387f2714a974e7de834820e6b4b1a2b88f574169560d7322331f8e6672cc20ab",
+      "size_bytes": 9804
     },
     {
       "path": "src/cablesim_simulation/elmer_adapter.py",
-      "sha256": "3268992b0c3e2e43c9d00871a21f6243b29a0f68215408132c46971c7a8bf47d",
-      "size_bytes": 9522
+      "sha256": "f92fdcfc32d2b5b0a96441de0f09c4780da3459760259fddb7f2764cdea7396e",
+      "size_bytes": 12013
     },
     {
       "path": "src/cablesim_simulation/external.py",
-      "sha256": "bb3e2a8706687822c5cbea3c1f648945ff9631669b7fade4ea23d1619a376d5e",
-      "size_bytes": 11972
-    },
-    {
-      "path": "src/cablesim_simulation/external_replay.py",
-      "sha256": "df6c7c97f29fa3ef10d5a7bd8c73d98e8bdff6b06a78e8157b960509471ac5ba",
-      "size_bytes": 4537
+      "sha256": "14afa7591ed756a12a7ce0821b6ff88ca75532fdefab2db9fc4b32843f12e310",
+      "size_bytes": 12308
     },
     {
       "path": "src/cablesim_simulation/getdp_adapter.py",
-      "sha256": "dbf4cd62d1cdab4d2bbd40cabab9b9d56831dcb229150986a2c64a4473a42b22",
-      "size_bytes": 19017
-    },
-    {
-      "path": "src/cablesim_simulation/iec_compare.py",
-      "sha256": "fb67f6d5bb4f73ac499e47beace14156dc381fad447007171573566f5e4b1615",
-      "size_bytes": 6864
+      "sha256": "eb39e374e2d093f029504f3579dc950a445638b3de1b7565a4b9df0060e71798",
+      "size_bytes": 20790
     },
     {
       "path": "src/cablesim_simulation/loss_table.py",
-      "sha256": "6f4d04515235a2771b260de7c41b6d6f9ea7a7d5d051291acaae3e190f42f5e0",
-      "size_bytes": 6851
+      "sha256": "08229a384332c83dd52f0199128a98cb62e28d74160ba0268b682aa8417a0907",
+      "size_bytes": 6845
     },
     {
       "path": "src/cablesim_simulation/main.py",
-      "sha256": "d4e66361bf8c7d523c6006f155f6224d4601c240f86c49c9c0be22b579d8ba89",
-      "size_bytes": 9842
+      "sha256": "bc545ca8285602fceb2928621c2335dd284e89e010bdd29b40d0787c4026d4c6",
+      "size_bytes": 10447
     },
     {
       "path": "src/cablesim_simulation/problem.py",
-      "sha256": "7746d0f9db985e2f85866b56f108c403f4507944c4b5e25b1722c5fbc4fe4d52",
-      "size_bytes": 345
+      "sha256": "6f3e63b591d50d48e58c9603bd694e9125d82bd2aaec1104ce7014a95eca3fdf",
+      "size_bytes": 339
     },
     {
       "path": "src/cablesim_simulation/problem_domain.py",
-      "sha256": "e449880cce74acba7aac5777391c20ee941c07bc0e4cdad4f2a497a1f520ad50",
-      "size_bytes": 7848
+      "sha256": "e64239a830a48d188af851c8172c3d68141b58b0a1bda0469c258edd18e18271",
+      "size_bytes": 7972
     },
     {
       "path": "src/cablesim_simulation/problem_mesh.py",
@@ -535,44 +652,54 @@
       "size_bytes": 15331
     },
     {
-      "path": "src/cablesim_simulation/replay.py",
-      "sha256": "2372fac1f13754736fd5368a20995f63d6659878dd5d16011c8795b9dbc64464",
-      "size_bytes": 6313
+      "path": "src/cablesim_simulation/report.py",
+      "sha256": "a5a2a41fcd92b37b765648a005be0fb243fcd76b466c4f3127c643364626d76c",
+      "size_bytes": 4799
     },
     {
-      "path": "src/cablesim_simulation/report.py",
-      "sha256": "c025641e74b6f180c9a247ed724d95d690bdd415f4e004db1c887d5590bd3b98",
-      "size_bytes": 4805
+      "path": "src/cablesim_simulation/research_electromagnetic.py",
+      "sha256": "93165042a4d380cd620c2e11f594b9562d4818c2eef589a56546f5299eaafd54",
+      "size_bytes": 9184
+    },
+    {
+      "path": "src/cablesim_simulation/sheath.py",
+      "sha256": "d26e2997c1125fe2329b21453141982c187fab378602f80acb60762489a672cd",
+      "size_bytes": 6024
     },
     {
       "path": "src/cablesim_simulation/solver_runtime.py",
-      "sha256": "5d70c1f038adcd843d766dcc2a40c5331dfe7ee1927464999e541eda6a76e5d4",
-      "size_bytes": 6297
+      "sha256": "33a614dcebd7bab646866f3fab4ceb35bbfa83b6ea9fc03998412638d2f80625",
+      "size_bytes": 6838
     },
     {
       "path": "src/cablesim_simulation/thermal.py",
-      "sha256": "9863144bcdeea8a674af9b90c43a801e91d390688152442abbc454461a67e347",
-      "size_bytes": 17109
+      "sha256": "3a2732bba2d0ebbff506a52e2459b4f09dd87c43dd7a6a5854652a803a1e2d4a",
+      "size_bytes": 18126
     },
     {
       "path": "src/cablesim_simulation/thermal_dataset.py",
-      "sha256": "a2f887709a6c33a94a935d52a4d9cf213a9a754849cbf9171a35198c99bdfd92",
-      "size_bytes": 6213
+      "sha256": "089fcbfafbca76831f4185528552692c4d36eb5def0c62d9c09cf81b9fd6cc24",
+      "size_bytes": 6420
     },
     {
       "path": "src/cablesim_simulation/thermal_domain.py",
-      "sha256": "7b026884c44205e683759bc5301fedffe5450f97f2bbb848177571450e4fdfe1",
-      "size_bytes": 8622
+      "sha256": "7f1df2b1cb25fff196308a707bba469db5cb878c3c7794b758b9b2e8187909d5",
+      "size_bytes": 8620
     },
     {
       "path": "src/cablesim_simulation/thermal_input.py",
-      "sha256": "e993a352222cf403b3a2c7ca0a9f0c5bfca67208bca057a7863457bec6cde1ce",
-      "size_bytes": 9013
+      "sha256": "095ea98208d6c8795e449ee404fc9423753b2449d2218327182ca9c1f28a5ceb",
+      "size_bytes": 9362
     },
     {
       "path": "src/cablesim_simulation/thermal_mesh.py",
-      "sha256": "00426beb8fda312bc9829a12960eadfb05bb9d8e82f1db6b47223dbec3440ee5",
-      "size_bytes": 5343
+      "sha256": "c3f61b3aafd1c52b0056bc6547d64baefb8b5b5af9041967b20c0d06384728e0",
+      "size_bytes": 5567
+    },
+    {
+      "path": "src/cablesim_simulation/transient.py",
+      "sha256": "21d1753b4b4033598f9d5e7c442de51fa21892060c9147d6377e5c99fcaff86c",
+      "size_bytes": 15049
     },
     {
       "path": "src/cablesim_simulation/triangular_fields.py",
@@ -651,8 +778,8 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "aba393497cd4c1bd176f4ebb9b86323ea288008a67f9ea2c965193d349c15dd9",
-      "size_bytes": 3061
+      "sha256": "1cf1f6812a0b48fd470f745772372b6d259026c3da58289cef4d68d956c2197b",
+      "size_bytes": 1894
     }
   ]
 }

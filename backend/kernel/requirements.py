@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import Field, field_validator
 
 from ..schemas import StrictModel
-from ..workbench import fingerprint, stamp
+from .workspace import fingerprint, stamp
 
 
 class ReviewRequirements(StrictModel):

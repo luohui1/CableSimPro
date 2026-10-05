@@ -154,4 +154,4 @@ def test_unrepresentable_branch_is_refused_by_the_adapter():
     fixture['inputSi']['conductorResistance20OhmPerM'] = 2e-6  # pushes x_s above 2.8
     with pytest.raises(RatingRefused) as refused:
         rate(adapt(fixture))
-    assert refused.value.code == 'SKIN_PROXIMITY_OUT_OF_RANGE'
+    assert refused.value.code == 'PROXIMITY_OUT_OF_RANGE'

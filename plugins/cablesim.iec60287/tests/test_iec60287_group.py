@@ -7,7 +7,7 @@ import pytest
 from backend.domain.migration import convert
 from backend.domain.models import DomainDocument
 from backend.schemas import Scenario
-from design.workbench.scenarios import METHOD_DEFAULTS, apply_layout, system_models
+from backend.kernel.scenarios import METHOD_DEFAULTS, apply_layout, system_models
 from cablesim_iec60287.domain import prepare
 from cablesim_iec60287.group import _loss_factors, operating, rate_group
 from cablesim_iec60287.method import RatingRefused
@@ -114,6 +114,26 @@ def test_increasing_neighbour_load_heats_first_circuit_and_lowers_its_limit():
     assert high['operating']['cable_states'][0]['conductor_temperature_c'] > low['operating']['cable_states'][0]['conductor_temperature_c']
     contribution = next(c for c in high['heat_contributions'] if c['target'] == first['cables'][0]['id'] and c['source'] == other['cables'][0]['id'])
     assert contribution['temperature_rise_k'] > 0
+
+
+def test_simultaneous_balanced_current_matches_independent_frozen_heat_balance():
+    d = document('ducts_3x3')
+    p = parameters(d);p['rating_mode']='both'
+    for c in d['circuits']:
+        d['load_cases'][0]['currents'][c['id']]=200.
+    group = prepare(d,p);trace=rate_group(group);common=trace['simultaneous_rating']
+    assert common['ampacity_a'] < min(r['ampacity_a'] for r in trace['circuit_ratings'])
+    assert set(common['cable_currents_a'].values()) == {common['ampacity_a']}
+    assert common['held_currents_a']=={}
+    # Hand substitution of converged R, lambda and duct air in the IEC heat balance.
+    states=common['cable_states'];hand=[]
+    for i,s in enumerate(states):
+        weights=[(group.matrix[i][j] + (s['t3_k_m_w']+s['t4_air_gap_k_m_w']+s['t4_wall_k_m_w'] if i==j else 0)) for j in range(len(states))]
+        coefficient=s['ac_resistance_ohm_m']*s['t1_k_m_w']+sum(w*t['ac_resistance_ohm_m']*(1+t['lambda1']) for w,t in zip(weights,states))
+        dielectric=.5*s['t1_k_m_w']*s['dielectric_loss_w_m']+sum(w*t['dielectric_loss_w_m'] for w,t in zip(weights,states))
+        hand.append(sqrt((s['temperature_limit_c']-group.ambient-dielectric)/coefficient))
+    assert common['ampacity_a']==pytest.approx(min(hand),abs=2e-5)
+    assert min(s['margin_k'] for s in states)==pytest.approx(0.,abs=1e-3)
 
 
 def test_unavailable_rating_does_not_discard_valid_overtemperature_result():

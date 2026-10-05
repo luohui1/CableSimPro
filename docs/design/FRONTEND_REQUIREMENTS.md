@@ -34,7 +34,7 @@
 型号和研究使用同一个**工作区骨架**：
 
 ```
-┌ 顶栏：名称 · 类型 · 当前版本 / 方案 · 保存状态 · 运行记录 · Agent · 交付 · 主操作 ┐
+┌ 顶栏：对象名 · 可展开状态（版本 / 方案 / 保存详情） · 次按钮 · 主操作 ┐
 ├ 模块栏 ─────┬ 模块名  [页签 1] [页签 2] [页签 3]          显示选项 ┬ 属性 ─────┤
 │ 已添加的模块  │                                                │ 选中对象 │
 │ 当前模块展开  │   当前页签的内容：画布、表格或结果视图，占满主区   │ 的参数，  │
@@ -275,14 +275,17 @@
 | 控件高度 | 32 紧凑（工具栏、列表、表格内）· 36 标准（表单、主要操作）· 48 首页搜索（只此一处） |
 | 圆角 | 8 输入框与表格内控件 · 10 导航项与菜单项 · 12 卡片、浮层、画布框 · 16 工作面板与对话框 · 全圆 按钮、搜索框、分段选择、状态点 |
 | 间距 | 4 的倍数：4 8 12 16 24 32 48 |
-| 布局 | 导航直接放在底色上，无边框；工作区是一整块 16 圆角的白色面板，四周留 8；面板内只用 1 px 细线，不再层层套卡片 |
+| 布局 | 一级导航为 56 宽图标竖条，图标单色、文字 13；模块侧栏带图标，当前项悬停底色与 600 字重；导航直接放在底色上，无边框。工作区是一整块 16 圆角的白色面板，四周留 8；面板内只用 1 px 细线，不再层层套卡片 |
 | 层级 | 平面不用阴影；浮层 1 级（菜单、下拉、提示、通知、首页搜索）；对话框与抽屉 2 级，背后 40 % 遮罩 |
 | 颜色 | 零色偏灰阶构成界面；含义色：铜 = 运行计算动作；结论数值使用正文色，青 = Agent 与提案，绿 / 琥珀 / 红 = 满足 / 需注意 / 错误；不用蓝、紫作通用强调色 |
 | 按钮 | 全圆胶囊：线框（普通）· 实心文字色（主要，每屏最多一个）· 实心铜（运行计算）· 青色线框（Agent）· 文字按钮（取消、撤销） |
-| 交互状态 | 悬停 = 悬停灰底；当前位置（导航、目录）= 当前位置灰底；选中对象（表格行、画布对象）= 1 px 文字色墨线框；焦点 = 2 px 文字色外框；不可用 = 45 % 透明度；每种只有一种表现 |
+| 交互状态 | 悬停与导航当前项 = 悬停灰底；选中表格行 = fill 浅灰覆盖整行 + 左侧 2 px 文字色细条；画布选中对象 = 1 px 文字色墨线框；焦点 = 2 px 文字色外框；不可用 = 45 % 透明度 |
 | 输入 | 未保存编辑 = 需注意色虚线边框 + 浅底；错误 = 错误色边框 + 下方一行原因；推导 / 锁定 = 填充底、无边框、不可编辑 |
-| 表格 | 只有行间细线，无竖线、无斑马纹；数值列右对齐、等宽；来源单独一列 |
-| 状态表达 | 同心点 + 文字：实心带环 = 当前 / 已保存，空心 = 历史，虚线 = 草稿，斜线 = 失败，转动虚线 = 执行中，青色虚线 = 提案待审核；判据用小方块（满足 / 不满足 / 无法判断）；不用胶囊、徽章、带底色结论框堆叠 |
+| 表格 | 40 紧凑 / 44 标准行高；只有行间细线，无竖线、无斑马纹；表头和分组使用 fill，分组标题 13 / 600 加计数、可折叠；数值列右对齐、tabular-nums；来源单独一列；限制原因直接写出，满足显示“—” |
+| 状态表达 | 同心点 + 文字：实心带环 = 当前 / 已保存，空心 = 历史，虚线 = 草稿，斜线 = 失败，转动虚线 = 执行中，青色虚线 = 提案待审核；判据用 6 px 圆点 + 文字（满足 / 不满足 / 无法判断）；不用胶囊、徽章、带底色结论框堆叠 |
+| 顶栏与页签 | 顶栏只放对象名、一个可展开状态标记、次按钮与主按钮；演示只在页头状态标记中标一次，属性与表格标真实来源类别；开发五态切换在组件陈列页或仅开发模式的浮层。当前页签 2 px 下划线、距文字 6 px、600 字重；其他项次要文字；无含义不清的眼睛图标 |
+| 结论区 | 左侧推荐型号 20 / 600 与一行说明，右侧允许电流、目标电流、余量三个并排数值 28；单位与标签 13；白底，无灰色指标块或彩色竖条 |
+| 属性与校核 | 属性标题写完整型号，按组展示，行高 32、分组间距 16；标签左、数值右，单位和来源图标 / 13 号次要文字跟在数值后同一行。校核收起为一整行，左摘要、右展开图标在同一容器，展开 200 ms |
 | 数值 | 等宽数字；五位及以上用空格分组；单位紧随数值且较小；按物理量规则显示精度，不显示虚假精度；温度显示 °C，存储 SI |
 | 数据可视化 | 三相固定分类色并同时标相别文字；温度场用感知均匀顺序色图，差值用发散色图；材料识别色只用于辨认 |
 
@@ -318,7 +321,7 @@
 | 文字 | `#0D0D0D` | `#ECECEC` | 正文、主要按钮、选中墨线框、焦点框 |
 | 次要文字 | `#5D5D5D` | `#B4B4B4` | 说明、表头、来源 |
 | 弱文字 | `#8F8F8F` | `#8F8F8F` | 只用于占位符与不可用 |
-| 铜 · 运行 | `#B4612A`（字 `#FFF8F2`） | `#E08A4C`（字 `#1A0F08`） | 运行计算按钮；结果数字使用正文色 |
+| 铜 · 运行 | `#AA5827`（字 `#FFF8F2`） | `#E08A4C`（字 `#1A0F08`） | 运行计算按钮；正文尺寸文字对比度 ≥ 4.5；结果数字使用正文色 |
 | 青 · Agent | `#0F7C8A`，浅底 `#E6F3F5` | `#4FC3CF`，浅底 `#12302F` | Agent 入口、提案、待审核 |
 | 满足 / 需注意 / 错误 | `#2F7A4F` / `#A4560B` / `#B8352B` | `#4CC184` / `#EDA246` / `#F07468` | 判据、草稿、失败与校验错误 |
 | 阴影 1 级 / 2 级 | `0 1px 2px rgba(0,0,0,.05), 0 4px 16px rgba(0,0,0,.06)` / `0 2px 8px rgba(0,0,0,.08), 0 16px 48px rgba(0,0,0,.12)` | 透明度提高到 .35–.5 | 浮层 / 对话框 |
@@ -344,7 +347,7 @@
 | 线路 | 自上而下：里程轴（每 50 m 小刻度，每 500 m 标注 K 桩号）→ 分段带（按敷设方式用灰阶层次区分）→ 接地小段 → 纵断面（埋深折线用文字色）；局部对象（接头井、交叉、外部热源）为竖向引线 + 圆点 + 标签 |
 | 图内文字 | 12–13，数字等宽，中文用界面字体；标签避让，不与线条重叠 |
 | 颜色 | 图内同样不用铜色装饰；Agent 提出的对象用青色虚线；温度只用温度色图 |
-| 交互 | 图中选中与表格选中同步，表现相同（墨线框）；捕捉参考线即时出现 |
+| 交互 | 图中选中与表格选中同步；画布用墨线框，表格用整行悬停底色（§5）；捕捉参考线即时出现 |
 | 计算书 | 纸面固定浅色，版式含图纸式标题栏（型号或研究名称、图号、修订、设计 / 校核 / 审核、运行与摘要、日期） |
 
 ### 5.4 Agent 界面
@@ -444,3 +447,210 @@
 6. 后置：短路容量、电场 / 磁场界面、线路与感应电压，待插件与领域模型就绪。
 
 每一步先用截图与使用者确认方向，再铺开。
+
+## 11. 页面迁移清单
+
+本节保留第 1 步的只读盘点与调研，§11.6 记录组件，§11.7 记录真实数据迁移。样板是功能说明书，标记、样式和渲染后的文字补丁不迁移。正式工程位于 `frontend/`，已从正式 OpenAPI 生成客户端并接入首页、研究列表、工作区和两个结果模块。原 §10 为整体能力顺序，迁移主线为：首页 → 研究（客户问询选型）→ 型号 → 其他模块。
+
+### 11.1 口径、页面与状态
+
+样板使用 `http://127.0.0.1:8027/design/workbench/#<route>`；正式地址按 §2.2 使用路径路由。源码可辨认 **67 个内容视图**：7 个全局视图、20 个型号模块/页签、30 个研究模块/页签、5 个复现详情页签、1 类运行快照，以及 4 个独立仿真复现兼容视图。兼容视图在正式迁移中并入方法对比/复现库，不增设一级导航。对象实例、方法参数和 `snapshot` 查询不另计页面。资源详情和插件详情仅在 §2.2 规划，样板未实现，不混入已实现页面数。
+
+状态标记：空 E、加载 L、错误 F、成功 S、历史 H。`局部`表示已有分支或共用错误机制，不能等同页面五态验收；`缺`表示未找到独立表现；`—`表示该静态设置/输入视图不产生结果。以下为源码观察，浏览器脚本列仅代表既有覆盖，**本轮未重新运行这些计算场景**。
+
+优先级：P1 首页；P2 客户问询所需研究与交付；P3 型号主线；P4 其他模块/库；P5 后置与未接入能力。路由中的 `wid` 是型号承载工作区，`sid` 是研究 ID；正式前端不得把二者混为同一种对象。
+
+| 样板路由 | 对象 / 模块 | 页签（视图数） | 调用接口组（§11.2） | 状态观察 | `tests/browser/` 覆盖 | 优先级 |
+| --- | --- | --- | --- | --- | --- | --- |
+| `#/` | 首页 | 最近型号/研究与新建入口（1） | G、N | E/S；L缺；F共用；H旧草稿折叠区 | 无独立首页场景；被问询脚本经过 | P1 |
+| `#/types` | 型号列表 | 已发布型号、草稿与方案（1） | G、N | E/S；L缺；F共用；H旧草稿 | `type-versions.cjs` 涉及创建/版本 | P3 |
+| `#/studies` | 研究列表 | 当前是说明与占位（1） | G | E占位；L/S/H缺；F共用 | 无完整列表场景 | P2 |
+| `#/library` | 库 | 统一资产列表（1） | G、A | E/S；L缺；F共用；H缺 | 无独立资产库场景 | P4 |
+| `#/plugins` | 库 / 插件 | 能力、适用范围、验证信息（1） | G | S；E/L/H缺；F共用 | 无独立插件页场景 | P4 |
+| `#/settings` | 宿主设置 | 主题、减少动态、快捷键（1） | G（共用启动读取） | S；E/L/F/H— | 无独立设置场景 | P4 |
+| `#/library/reproductions` | 库 / 复现 | 检索、筛选与快照（1） | R | E/L/F/S/H有分支 | `reproduction-library.js`、`reproduction-library-states.js` | P4 |
+| `#/types/{wid}/structure/{tab}` | 型号 / 结构设计 | `section` 截面、`three` 三维、`table` 分层表、`quantities` 用料（4） | W、C | E/L/F局部；S编辑；H推导/引用局部，未统一五态 | 无独立完整结构场景；版本脚本涉及编辑 | P3 |
+| `#/types/{wid}/requirements` | 型号 / 要求与标准 | 要求账本与额定参数，未按正式三页签拆分（1） | W、Q、K | E/L/F/S局部；H待逐页验收 | 无完整五态浏览器场景 | P3 |
+| `#/types/{wid}/standard-check` | 型号 / 标准核对 | 判定与过滤器（1） | W、Q、K | E/L/F/S局部；H待逐页验收 | 无完整五态浏览器场景 | P3 |
+| `#/types/{wid}/electrical/{tab}` | 型号 / 电气参数 | `results`、`parameters`、`section`（3）；正式模板只保留结果/方法参数 | W、K | E/L/F/S/H，`data-analysis-state` | `type-rating.cjs` | P4 |
+| `#/types/{wid}/short-circuit/{tab}` | 型号 / 短路容量 | `results`、`parameters`、`section`（3）；正式模板按 §3 | W、K | E/L/F/S/H，`data-analysis-state` | `type-rating.cjs` | P4 |
+| `#/types/{wid}/rating-table` | 型号 / 载流量表 | 单页工况表，未按正式两页签拆分（1） | W、T、K | E/L/F/S/H，`data-rating-state` | `type-rating.cjs` | P4 |
+| `#/types/{wid}/comparison/{tab}` | 型号 / 方案对比 | `matrix` 结果矩阵、`parameters` 参数差异、`geometry` 截面对比（3） | W、V | E/L/F/S/H，`data-version-state` | `type-versions.cjs` | P3 |
+| `#/types/{wid}/specification/{tab}` | 型号 / 规格书 | `content`、`preview`、`review`、`revisions`（4） | W、V | E/L/F/S/H；保存/提交/批准/发布另有生命周期 | `type-versions.cjs` | P3 |
+| `#/studies/{sid}/cable/{tab}` | 研究 / 电缆 | `section`、`layers`、`references`（3） | W、S、C | 输入空/锁定/失败局部；H引用与运行局部；完整五态未覆盖 | 问询脚本涉及引用，未覆盖全部页签 | P2 |
+| `#/studies/{sid}/section/{tab}` | 研究 / 敷设截面 | `section`、`three-dimensional`、`coordinates`、`media`（4） | W、S、C | 编辑/缺对象局部；三维及介质接入按实际能力；五态未逐页验收 | 问询脚本涉及布置，未覆盖全部页签 | P2 |
+| `#/studies/{sid}/conditions` | 研究 / 工况 | 不分页签（1） | W、S | 输入/校验局部；五态未独立验收 | 问询脚本涉及工况 | P2 |
+| `#/studies/{sid}/ampacity/{tab}` | 研究 / 载流量 | `results`、`parameters`、`losses`、`diagnostics`（4） | W、S、K、D | E/L/F/S/H有分支；额定/运行工况不能混用 | `three-core-inquiry.js` 涉及计算与报告；完整页签五态未覆盖 | P2 |
+| `#/studies/{sid}/thermal-field/{tab}` | 研究 / 温度场 | `field`、`samples`、`parameters`、`diagnostics`（4） | W、S、K | 当前/历史/失败局部；场图与取样依实际工件，未接入保持缺项 | 无完整独立场图场景 | P4 |
+| `#/studies/{sid}/selection/{tab}` | 研究 / 问询选型 | `results`、`settings`（2） | W、S、J、K、D | 无结果/候选失败/不适用/当前/历史有分支；加载与全量五态待重验 | `customer-selection.js`、`three-core-inquiry.js` | P2 |
+| `#/studies/{sid}/sweep/{tab}` | 研究 / 参数扫描 | `curve`、`points`、`settings`（3） | W、S、K | 未运行/逐点失败/结果/历史局部；逐页五态未覆盖 | 无独立完整扫描浏览器场景 | P4 |
+| `#/studies/{sid}/batch/{tab}` | 研究 / 批量仿真 | `space`、`results`、`execution`（3） | W、S、B | E/L/F/S/H有分支；失败样本保留 | `batch-datasets.js` | P4 |
+| `#/studies/{sid}/method-compare/{tab}` | 研究 / 方法对比 | `results`、`inputs`、`evidence`（3） | W、S、K | 无比较/结果/历史局部；L/F共用；完整五态未覆盖 | 无独立完整比较场景 | P4 |
+| `#/studies/{sid}/report/{tab}` | 研究 / 计算书 | `content`、`sources`、`preview`（3） | W、S、D | 无交付/生成中/失败/成功有分支；历史运行限制需全页签重验 | 问询脚本覆盖报告与下载，未覆盖全部页签 | P2 |
+| `#/studies/{sid}/ampacity/{tab?}/runs/{rid}`，温度场/选型亦可带运行尾段 | 研究 / 只读运行快照 | 固定输入及工件（1 类） | W、S、K | 只读快照；失败/历史状态保留；缺记录不补猜 | 问询脚本涉及运行；无完整独立快照五态场景 | P2 |
+| `#/library/reproductions/{id}/{tab}` | 库 / 复现详情 | `results` 结果对照、`overlay` 曲线叠加、`convergence` 网格收敛、`sources` 输入来源、`scope` 覆盖与限制（5） | R | E/L/F/S/H有分支；原文/COMSOL缺项不填值 | `reproduction-library.js`、`reproduction-library-comparison.js`、`reproduction-library-states.js` | P4 |
+| `#/simulation` | 研究 / 仿真复现兼容列表 | 仿真问题导入与既有研究列表（1） | G、W、S | E/S列表；L/F共用；H由详情承担 | 无独立列表验收脚本 | P4，合并入口 |
+| `#/studies/{sid}/simulation/{tab}` | 研究 / 独立仿真复现适配器 | `results` 结果差异、`inputs` 输入与网格、`evidence` 验证证据（3） | W、S、K | E/L/F/S/H局部分支，完整性失败拒绝显示数值 | 无该适配器完整独立浏览器场景 | P4，迁入共用外壳 |
+
+尚未实现的规划页：`/library/{kind}/{id}`（资源详情）和 `/plugins/{id}`（插件详情）；研究电场/磁场与后置线路也未出现在样板共用模块注册表，不生成假页面内容或算作已完成。
+
+关键源码：`app.js:18–29,164–185,215–241,383–384`；`study-shell.js:9–19,37–82`；`type-workflow.js:22–24`；`type-electrical.js:39–45`；`type-rating.js:33`；`type-versions.js:70–91`；`reproduction-library.js:6,103–116`；`simulation-study.js:4–5,35–76`。这些出处位于 `design/workbench/`，只是迁移证据，不是代码复用入口。
+
+### 11.2 页面接口组
+
+以下列出样板实际调用，路径均包含 `/api`。列表只描述现状，不授权正式前端调用所有旧兼容路径。运行、比较与交付的主线统一走新内核；接口类型与请求代码在后续接入时从**正式宿主** OpenAPI 生成，不把本表当手写模型。
+
+| 组 | 方法 + 路径 | 用途 / 源码 |
+| --- | --- | --- |
+| G 共用启动 | `GET /api/methods`；`GET /api/presets`；`GET /api/workspaces`；`GET /api/foundation/assets`；`GET /api/design/type-workspaces`；`GET /api/types/library`；`GET /api/workspaces/{wid}/studies` | `app.js:214,383`；这些读取失败会影响多个页面，不能把同一个横幅当成各页错误实现 |
+| N 新建 | `POST /api/workspaces`；`POST /api/workspaces/{wid}/domain/conversion`；`POST /api/design/type-workspaces`；`POST /api/design/study-workspaces` | 旧预置转换与型号/研究新建；`app.js:243–245`、`type-workflow.js`、`ampacity.js` |
+| W 工作区 | `GET /api/workspaces/{wid}`；`GET /api/workspaces/{wid}/domain`；`PUT /api/workspaces/{wid}/domain`；`POST /api/workspaces/{wid}/history/undo`；`POST /api/workspaces/{wid}/history/redo`；`GET /api/workspaces/{wid}/studies` | 草稿、修订基准、锁、保存与撤销；`app.js:215–255` |
+| A 库 | `GET /api/foundation/assets` | 样板库列表；不等同已实现资源版本/引用者详情 |
+| C 型号/敷设引用与预览 | `GET /api/design/cable-models`；`GET /api/design/study-cable-models`；`GET /api/design/engineering-examples`；`GET /api/design/examples/cable`；`POST /api/design/workspaces/{wid}/section-template`；`POST /api/design/workspaces/{wid}/cable-reference`；`POST /api/design/workspaces/{wid}/geometry-preview` | `model.js:12,32,72`、`model.scene.js:88–100`、`section.js:210`、`ampacity.js:270,435–437`；几何显示不冒充工程运行 |
+| S 研究加载与保存 | `GET /api/design/input-contracts`；`GET /api/workspaces/{wid}/studies`；`POST /api/workspaces/{wid}/studies`；`PUT /api/workspaces/{wid}/studies/{sid}` | `ampacity.js:103–115,384–385,435`；领域输入与方法专用输入分开 |
+| K 运行与比较 | `GET /api/workspaces/{wid}/studies/{sid}/preflight`（修订和模块查询）；`POST /api/workspaces/{wid}/studies/{sid}/runs`；`GET /api/workspaces/{wid}/studies/{sid}/runs`（`after/limit`）；`GET /api/workspaces/{wid}/studies/{sid}/runs/{rid}`；`POST /api/workspaces/{wid}/study-comparisons` | `ampacity.js:102,115,403,410,501`；固定输入与插件版本；旧结果继续只读 |
+| Q 要求 | `GET /api/design/type-workspaces/{wid}/requirements`（可带 `run_id`）；`POST /api/design/type-workspaces/{wid}/requirements/reviews` | `type-requirements.js:12,15,49`；来源、要求批准与运行判定分别保留 |
+| T 载流量表 | `POST /api/design/workspaces/{wid}/rating-table-definition`；`GET /api/design/workspaces/{wid}/rating-table-runs/{rid}` | `type-rating.js:15,36`；另使用 K 的研究/运行链 |
+| V 型号方案与发布 | `GET /api/types/{wid}/comparison`；`GET /api/types/{wid}/specification`；`POST /api/types/{wid}/plans`；`POST /api/types/{wid}/adopt`；`POST /api/types/{wid}/submissions`；`POST /api/types/{wid}/approve`；`POST /api/types/{wid}/publish` | `type-versions.js:15,76–91`；保存、采纳为草稿、人工批准与发布不是同一动作；规格书下载还读取 `/design/tokens.css` |
+| J 问询候选 | `GET /api/domain-cable-models`；`POST /api/domain-cable-models` | `selection-study.js:13,44`；候选预检、逐候选运行和交付使用 K/D |
+| B 批量 | `GET/PUT /api/workspaces/{wid}/studies/{sid}/batch-configuration`；`POST /api/workspaces/{wid}/studies/{sid}/batch-preflight`；`GET/POST /api/workspaces/{wid}/studies/{sid}/datasets`；`GET /api/workspaces/{wid}/studies/{sid}/datasets/{did}`（`offset/limit/status`）；`POST /api/workspaces/{wid}/studies/{sid}/datasets/{did}/resume`；`POST /api/workspaces/{wid}/studies/{sid}/datasets/{did}/export` | `batch-study.js:19–23,38,109,121–124`；提交核时、失败/未收敛样本和历史输入单独保留 |
+| D 交付 | `POST /api/design/workspaces/{wid}/deliveries`；`GET /api/workspaces/{wid}/deliveries/{did}`；`GET /api/design/workspaces/{wid}/deliveries/{did}/file` | `ampacity.js:491`、`selection-study.js:60`、`serve.py:137–154`；样板仅接受当前有效引用，不能直接用另一接口绕过该约束 |
+| R 复现 | `GET /api/foundation/reproductions`；`GET /api/foundation/reproductions/{id}`（可带 `snapshot`） | `reproduction-library.js:111`；列表、结果、曲线、来源与限制共用同一详情，不重复保存真值 |
+
+### 11.3 正式宿主差异与运行现场
+
+正式宿主已挂载 scenario、requirements、rating-table，以及 `backend/kernel/host_api.py` 的六条输入、预览和交付接口。以下为现行映射；原 `/api/design/…` 路径作为弃用兼容别名保留，正式前端优先采用规范路径。前端不修改后端。
+
+| 样板端点 | 正式宿主差异 | 后续责任 / 决定 |
+| --- | --- | --- |
+| `POST /api/design/workspaces/{wid}/geometry-preview` | `POST /api/workspaces/{wid}/geometry-preview` 已挂载 | 研究敷设三维与型号几何使用正式预览地址，组件与插件支持范围分别验证 |
+| `GET /api/design/input-contracts` | `GET /api/input-contracts` 已挂载 | 表单按方法身份、能力、版本和发行摘要精确匹配参数模式 |
+| `GET /api/design/examples/iec` | `GET /api/examples/iec` 已挂载 | 合成示例不作为厂家参数或标准值默认填写 |
+| `GET /api/design/examples/cable` | `GET /api/examples/cable` 已挂载 | 绘图/型号线程使用统一示例；研究不自动替换引用型号 |
+| `GET /api/design/workspaces/{wid}/deliveries/{did}/file` | `GET /api/workspaces/{wid}/deliveries/{did}/file` 已挂载 | 导出重新核对源运行，并核验 `X-Artifact-SHA256` 与保存交付摘要 |
+| `POST /api/design/workspaces/{wid}/deliveries` | `POST /api/workspaces/{wid}/deliveries/current` 已挂载 | 强制仅当前结果；带请求身份，前端不使用宽松交付接口兜底 |
+
+正式宿主无 `/design` 静态挂载是预期差异，正式前端由 Vite/分发层承载。已删的 v0 `validate/calculate/sweep/report/projects` 接口不作为新前端依赖，不为样板恢复它们。
+
+截图脚本：`frontend/scripts/capture-handoff.mjs`（`npm run capture:handoff`）；Edge/Chrome `--headless=new` + CDP；每个注册模块/页签独立截图，只允许 GET/HEAD，阻止自动 POST 预览与写入，不点击计算或审批。文件在 `.data/frontend-handoff/pages/`，`manifest.json` 记录每张截图的 URL、实际错误、空白文档及被阻止写入。这些文件不入库。对缺对象/缺工件的视图，不造结果以凑截图。
+
+运行现场与源码必须区分：指定的 8027 服务仍返回 `GET /api/types/library` 404、`GET /api/design/study-cable-models` 404，造成共用启动失败；`GET /api/foundation/reproductions` 也为 404。这与最新源码已挂载路由不同，不能用源码检查宣布运行服务已完成迁移。`GET /api/design/input-contracts` 返回 409，曾为 `HOST_DEPENDENCIES_MISMATCH`，随后为 IEC 包未登记工程输入文件的 `PACKAGE_FILES_MISMATCH`；记录为并发后端/插件改动期间的实际环境限制。现有 8031 服务用于只读补充截图，保留独立 `pages-content/manifest.json`，不覆盖 8027 的受阻现场，不重启他人服务。
+
+截图覆盖：8027 已保存 64 个视图的实际受阻现场；8031 也采集这 64 个视图，包含部分可读内容与仍受接口/封签影响的页面。两个现有服务均无 `cablesim.simulation-problem/1` 类型的已保存研究，因此独立仿真适配器的 3 个详情页签记为**未覆盖**，不创建输入、不运行计算来凑截图。运行页优先引用已有运行；没有记录时仅保存明确的缺记录错误状态。截图数量不代表可用业务页面数量。
+
+### 11.4 界面参考调研（一页结论）
+
+依据官方文档与页面截图，选择最贴近本项目的 **Linear、Vercel、Onshape** 三个产品作为可见参考。Figma/ChatGPT 官方文字资料作补充；Figma 页面返回 404，ChatGPT 页面返回 403，shadcn 独立预览地址返回 404，其官方 blocks 代码已通过 Exa 读取。受阻截图在清单中明确标为 `blocked: true`，不当作界面参考。所有官方/仓库参考截图存 `.data/frontend-handoff/references/`，来源与访问状态记在该目录 `manifest.json`。Vercel 重设计文章的图片是历史官方样张，不声称是当前控制台像素布局。
+
+| 我们的区域 | 借鉴与理由 | 保留边界与官方依据 |
+| --- | --- | --- |
+| 全局外壳、型号/研究/库列表 | Linear 的导航与列表视图；将筛选、分组和显示列留在当前视图工具栏，状态和详情按需展开，减少解释段落 | 不引入看板作为型号/研究默认入口；[Display options](https://linear.app/docs/display-options)、[Custom views](https://linear.app/docs/custom-views) |
+| 对象上下文与运行详情 | Vercel 的对象级导航与运行列表；先知道自己在哪个对象、查看哪个运行，再看状态和详情，当前与历史运行分别保留 | 不复制指标卡与流量仪表盘；[Managing deployments](https://vercel.com/docs/deployments/managing-deployments)、[历史 Dashboard redesign](https://vercel.com/blog/dashboard-redesign) |
+| 工作区、画布与所选对象 | Onshape 的文档名/工作区、对象目录、主图形区和选择联动；固定骨架可使模块更换时保留位置感与对象上下文 | 参数在所属表格/属性中编辑；不把建模回滚栏搬为研究步骤；[User interface basics](https://cad.onshape.com/help/Content/Home/user_interface_basics.htm)、[Feature and part lists](https://cad.onshape.com/help/Content/PartStudio/features_and_parts_lists.htm) |
+| 属性面板补充依据 | Figma 按当前选择显示属性，面板可收起；支持“未选中不展示全项表单”的判断 | 未取得可用界面截图，只采用文字机制；[Navigating UI3](https://help.figma.com/hc/en-us/articles/23954856027159-Navigating-UI3) |
+| 结果阅读与 Agent | ChatGPT Canvas 将主体内容与按需工具并列；本项目结果页先回答推荐与负荷问题，再展开候选、来源和诊断 | “结论先行”是本项目 §6 的规则，不是官方 Canvas 文档对工程结果的承诺；不把研究做成聊天记录；[Introducing canvas](https://openai.com/index/introducing-canvas/) |
+| 可复用代码骨架 | shadcn `sidebar` 中的 Provider / Inset / AppSidebar 组合、页头与局部目录；`data-table` 的 Table + TanStack Table 分工，保留键盘、选择、排序/过滤职责 | 只借组件组合。默认 sidebar 宽度、内联 style、圆角/字号/颜色与图标要换成本项目令牌；`dashboard-01` 的指标卡/图表不适合本项目，不能整页搬入；[Sidebar blocks](https://ui.shadcn.com/blocks/sidebar)、[Data table](https://ui.shadcn.com/docs/components/data-table) |
+
+定稿方向：**56 宽一级导航竖条 + 带图标模块栏 + 一个工作面板 + 顶部页签 + 结果表主区 + 按选择展开属性 + 默认收起校核区**。视觉以仓库外只读参考 `kimi-vercel` 为底，结论采用 A 的横排版式；细则统一归入 §5。主操作只放一个，结论与候选表共用真值，运行/来源/细节按需展开。代码骨架从 shadcn 组合方式建设，页面组织依据 §2/§3，不移植外部产品或样板 CSS。
+
+### 11.5 第 1 步样稿与待决定事项
+
+三稿统一演示数据：“10 kV 3 回路排管每回 400 A 选型”，推荐 `YJV22-8.7/15 kV 3×300`、允许 `452 A`、余量 `13.0%`，候选含满足/不满足/不适用；所有数值只用于信息结构比较。由 `frontend/src/previews/selection-fixture.ts` 唯一提供，不读取库、不执行插件、不构成标准或工程判定。
+
+| 方向 | 组织方式 | 优点 | 代价 |
+| --- | --- | --- | --- |
+| A 工作表 | 顶部全局导航，结论横排，完整候选表 | 对象/任务/结论/下一操作最易辨认；主区宽；推荐作为后续基线 | 1366 高度下候选表使用主区内部滚动 |
+| B 侧边目录 | 一级导航常驻左侧文字目录，模块栏另属工作面板；结果更紧凑 | 适合频繁切换对象与模块，纵向工作空间较多 | 两级目录占横向宽度，属性展开后更依赖表格局部滚动 |
+| C 表内推荐 | 窄一级导航，推荐压入结果表上方 | 主区宽、界面高度利用率较高，比较集中 | 品牌与结论层级较弱；目标电流和三回路说明主要在任务标题/条件页；如采纳须补全结论处的信息 |
+
+截图：`.data/frontend-handoff/directions/<a|b|c>-light-1366.png`、`…-light-1920.png`、`…-dark-1920.png`，另有 `…-selected-1366.png` 和五态截图。样稿只建按钮、页签、对话框、表格等当前需要的基础控件，下一轮再建设公共组件集。工程规范在 `frontend/README.md`。
+
+方向已由用户授权的设计负责人确认：采用 kimi-vercel 视觉底与 A 横排结论。A/B/C 仅保留为第 1 步截图证据，工程已移除三方向入口。待决定：① 后端负责人安排上述 6 条适配端点的正式契约；② 确认正式 OpenAPI 与启动服务同步、插件封签稳定后再接入数据；③ 后续业务迁移补齐列表、模块页签和五态缺口。当前静态样稿的业务按钮、Agent、保存/撤销均明确未接入，不模拟成功。上轮遗留的临时目录与调试文件已由用户确认删除。
+
+第 1 步验收已通过；三稿截图保留作方向证据，上轮临时目录与调试文件已由用户确认删除。当前验收方法与截图以 `frontend/README.md` 为准，不把旧测试快照当作当前基线。
+
+### 11.6 公共组件与定稿静态页面
+
+工程规范、组件职责、唯一实现位置及动效封装统一见 `frontend/README.md`。`/gallery` 为组件陈列，浅深色共用实现；`/gallery/selection` 仅为静态布局样例，推荐数据与第 1 步相同。两页均有空、加载、错误、成功、历史表现；五态入口留在陈列页，开发浮层不进入构建产物。已替代的三方向页面代码和路由已删除；`/study/selection` 旧入口转至研究列表。
+
+参考版本 `D:/work/自建项目/前端多版/kimi-vercel`、`agy-linear` 只读，未复制其控件实现、样式或未经核验的工程来源。内置 imagegen 生成的概念图在 `.data/frontend-handoff/concepts/selection-open.png` 与 `selection-contained.png`；采用第二张的单工作面板区域组织，按 §5 去掉图中额外嵌套边框、大标题和编造来源。
+
+| 与 kimi-vercel 的比较 | 实际表现 |
+| --- | --- |
+| 一样 | 56 导航竖条、单色图标、白灰工作面板、下划线页签、紧凑分组表格与底部收起校核 |
+| 更清楚 | 推荐型号与三项关键数字独立横排；目标电流直接可见；整行选中无单元格胶囊框；属性数值、单位和来源同一行；业务顶部不含开发五态切换；来源明确是演示 |
+| 当前较弱 | 静态样例不具备工程含义；真实页面只显示源运行已有的结构/电气参数及来源。限制原因已经恢复直接列出 |
+| 空间取舍 | 模块栏较 kimi 更窄，主表宽度增加；1920 下仍存在较大的表列横向留白，后续真实字段接入后按内容调整 |
+
+规定截图位于 `.data/frontend-handoff/components/`：`gallery-<light|dark>-1366.png`；`selection-light-<1366|1920>.png`、`selection-dark-1366.png`；`selection-<empty|loading|error|success|historical>-1366.png`。补充完整陈列、1920 深色与陈列、并排对比、缩放模拟截图在同目录。并排图为 `selection-comparison-<light|dark>.png`，左侧只读原参考截图、右侧本次构建。浏览器验证细节保存在未入库的 `verification.json` 与 `comparison-verification.json`。
+
+前端构建含严格类型检查与样式门禁；门禁禁止字面颜色 / 字号 / 圆角 / 内联样式，并限制 Motion 只能由唯一封装入口导入。交互脚本验证五态、筛选、分组折叠、行选择与属性联动、输入范围 / 必填 / 无效数值、对话框焦点恢复、页签后退、常用快捷键、减少动态与已加载页面离线操作；检测无 API、外部资源请求、控制台运行错误。1366 与 1920 浅深色页面无文档越界，文字最低 13；125/150% 是 CDP 设备缩放模拟，不能替代 Windows 系统 DPI 实机验收。
+
+静态样例不执行工程保存、撤销、计算、交付或审批；真实迁移见下节。
+
+### 11.7 首页与研究真实数据迁移
+
+已迁移首页、研究列表、新建研究、按任务组织的研究工作区、问询候选结果与计算书预览；研究输入与仿真模块见 §11.8。模块/页签使用声明式路由，刷新、后退与固定运行深链接保留对象上下文；名称草稿跨模块保留，Ctrl+S 按首次编辑时修订保存，失败/冲突保留编辑，离开提醒统一在父路由。未迁移的模块显示明确状态并链接 8027 对应页面。历史运行只读，不能生成或导出当前计算书。
+
+既存三芯 350 A 问询中的 YJV22 3×300 保存结果为允许电流 381.4 A、余量 31.4 A（9.0%）；这些是原运行结果，不是新建问询的固定默认值。数值、判定与原因来自封存输出，型号来自固定候选快照。百分比仅换算已保存余量，不重新判定。型号版本显示人可读名称，内部标识放入悬停提示。完整性失败、未知判定或快照映射失败拒绝显示数值；最小满足截面排序不在前端求解或判阈值。当前有效研究优先，历史研究使用次要文字。新建问询选择厂家候选范围；缺工程师参数时补录值、来源、出处，参考输入只在显式采用后填写，保持未审核。保存并预检后仍须确认范围和运行，结果页直接生成本次计算书，再下载。
+
+正式客户端由 `frontend/scripts/generate-api.mjs` 从宿主 OpenAPI 生成；兼容 FastAPI 的 Input/Output 模型命名，类型别名从原 Schema 引用派生。未声明响应模型的字段运行时校验。六条适配接口已接入；报告生成、既存预览和正式下载均要求当前且完整性通过，身份与输入/输出摘要一致。研究版本撤销和交付列表仍缺，明确保留错误状态。
+
+验收脚本与输出统一见 `frontend/README.md`：组件回归、真实迁移流程、五态/计算书与并排对比三组脚本。成功和历史状态用既存工程记录，空响应、延迟、读取失败只在浏览器拦截层注入。规定的 1366/1920 浅深色截图、五态截图及四组 8027 并排图位于 `.data/frontend-handoff/migration/`，机器记录为 verification.json 与 states-verification.json。8027 的接口失败保留为实际环境状态，不用其他服务的页面冒充通过。
+
+概念图为 `.data/frontend-handoff/concepts/home-workspace.png` 与 `study-create.png`；采用第二张的先任务、后型号与方法的表单顺序，整体骨架继续遵守 §5。图中多余导航、嵌套容器和编造对象均未采纳。本轮不修改后端和插件。
+
+### 11.8 研究输入、温度场与原生任务
+
+电缆模块接入 CableSection，保留分层参数与引用；敷设截面接入 LayingSection，三维接入 CadViewport 场景模式，坐标/管径与介质仍用参数表。画布选择与属性联动，模板通过正式接口预览，手势和尺寸编辑提交页面草稿；本地撤销/重做与数字确认共用一份状态，保存后调用正式工程历史。引用型号和材料锁保持只读，几何约束失败保留草稿。工况提供现有负荷、电流、环境与温限；数值输入含只读温限均为 160–240 宽，两到三列网格，回路电流对齐。草稿与未确认文本跨模块保留，Ctrl+S 保存，Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y 撤销和重做；研究方法配置不借用工程历史。
+
+载流量与三个原生任务按正式输入契约显示参数，固定方法版本与发行摘要；缺项明确失败，不补造工程参数。三个原生任务创建前提供完整 SI 参数，复杂映射可编辑 JSON 并查看契约，缺必填项时不分配工程。预检冻结工程/研究修订、模块和 lock_digest，确认适用范围后运行只提交身份、修订、锁和幂等请求号。accepted/running/validating 轮询真实记录。`GET /api/study-tasks` 的暂态、护套损耗与电热耦合任务已接入新建、深链接和结果；仅由正式宿主决定本地或 Slurm 执行。宿主的 check 预检也可触发 Slurm 作业，验收报告须区分预检作业与实际求解 run，保留计费和封存记录。
+
+结果页先用 Conclusion 呈现保存输出的结论，载流量标题为一句话，共同来源只标一次；明细按温度/损耗/热阻/电气参数折叠，默认只展开温度。单位与精度统一由 `lib/format.ts` 和 EngineeringValue 处理，完整精度放入提示，SI 存储不改。温度场绘制已校验节点与三角单元，默认电缆群外扩 1 m 并裁到保存的计算域；敷设全景和热点放大为可选视野。坐标按 0.01 m 或 mm 显示，细小计算域的坐标轴改用 mm 避免重复刻度。色标使用真实场最小/最大值，电缆轮廓与领域快照中的地表、回填、土层边界叠加。暂态、护套损耗与电热耦合结论均来自保存工件；求解器收敛与网格核验分开，单网格不冒充已完成网格核验。
+
+浏览器验收通过 `isolated-e2e.mjs` 启动随机端口的服务与临时数据库，开发库仅以只读连接备份；退出时停止服务并删除准确的临时目录。真实原生证据由 `seed-research-fixtures.py` 原样复制到该临时库；不改原库、快照、输出和摘要，不为了页面测试运行原生求解。状态、键盘、两种尺寸和浅深色验证见 `verify-research.mjs`，输出在 `.data/frontend-handoff/research/`。概念图 `conditions-input.png`、`thermal-result.png` 采用前者的分组表单组织，场图按真实网格呈现，图中的虚构导航、日期和结果不采纳。
+
+RunRecordsDrawer 与 PreflightDialog 为公共组件，所有已迁移研究模块共用；缺项显示正式错误并链接到所属输入或方法参数。三个画布的接口契约保持由绘图线程维护，正式 `/gallery` 直接使用其陈列组件。问询流程计数、耗时、下载及五态截图使用隔离数据库，方法与文件说明见 `frontend/README.md`。
+
+待决定事项：CAD 插件的三芯支持、地下场景原生实体失败及固定运行未保存三维工件的处理；研究版本撤销与已保存交付的发现接口；温度场是否抽为公共结果画布。地下单芯示例实际报缺单丝数据或“场景原生实体无效”，前端保留错误；空气单芯包络场景可独立验证，不据此宣布地下场景成功。IEC 的部分 INPUT_INVALID 错误只保存 ValidationError.msg，未返回字段位置；页面明确标明位置未提供，保守链接当前输入，不编造缺项路径。研究线程需保留定位信息后再精确映射。既存原生结果的旧发行锁仍保持历史状态。
+
+### 11.9 正式页面迁移现状
+
+§11.1 的 67 视图保留为旧样板盘点。以下以同一口径说明正式路由和责任；合并页签不额外计页面，注册入口不等于通过生产验收。
+
+| 8027 样板内容 | 正式前端 | 当前状态 | 责任 |
+| --- | --- | --- | --- |
+| 首页、研究列表（2） | `/`、`/studies` | 已完成；共用导航更新 | 公共前端 |
+| 型号列表（1） | `/types` | 本步注册；功能验收由型号线程维护 | 型号 / 3D |
+| 库、插件、设置、复现库（4） | `/library`、`/plugins`、`/settings`、`/library/reproductions` | 本步接正式读取、筛选、草稿导入与本机偏好 | 公共前端 |
+| 型号结构（4） | `/types/:wid/structure/:tab` | 已有实现，本步接公共外壳 | 型号 / 3D |
+| 型号要求（1） | `/types/:wid/requirements` | 剩余；尚未注册模块 | 型号 / 3D |
+| 型号标准核对（1） | `/types/:wid/standard-check/:tab` | 已有实现，本步接公共外壳 | 型号 / 3D |
+| 型号电气、短路（6） | `/types/:wid/electrical/:tab`、`short-circuit/:tab` | 型号线程已接 0.3.0 契约、公共字段编辑与草稿撤销；验收按其目录记录 | 型号 / 3D |
+| 型号载流量表（1） | `/types/:wid/rating-table/:tab` | 本步共用方法字段；型号线程已完成真实 IEC 当前成功态验收 | 型号 / 3D；公共前端字段 |
+| 型号方案比较、规格书（7） | `/types/:wid/comparison/:tab`、`specification/:tab` | 型号线程已交付比较、八章内容、修订及摘要绑定 PDF；批准/发布仍为人工门禁 | 型号 / 3D |
+| 研究电缆（3） | `/studies/:sid/cable/:tab` | 已完成；引用和分层共用画布 | 公共前端；绘图 |
+| 研究敷设（4） | `/studies/:sid/section/:tab` | 已完成界面；三维以插件实际支持为准 | 公共前端；绘图 / CAD |
+| 工况（1） | `/studies/:sid/conditions/inputs` | 已完成 | 公共前端 |
+| 载流量（4） | `/studies/:sid/ampacity/:tab` | 已完成；损耗/诊断合并到结果分组，本步修标题与来源 | 公共前端 |
+| 温度场（4） | `/studies/:sid/thermal-field/:tab` | 已完成保存工件视图，本步修结论、坐标与默认视野 | 公共前端；仿真负责工件 |
+| 问询（2）、计算书（3） | `/studies/:sid/selection/:tab`、`report/:tab` | 已完成；内容/来源合并预览，交付列表仍缺接口 | 公共前端；研究宿主 |
+| 扫描（3） | `/studies/:sid/sweep/:tab` | 本步接通用 driver、明确采样、保存点/曲线与 CSV | 公共前端 |
+| 批量（3） | `/studies/:sid/batch/:tab` | 本步接八条现有接口；仅 Slurm，实际执行验收受 SSH 环境阻塞 | 公共前端；研究 / 仿真 |
+| 方法比较（3） | `/studies/:sid/method-compare/:tab` | 本步接已保存运行比较和同输入方法配置 | 公共前端；研究宿主 |
+| 固定运行快照（1 类） | 上述模块带 `?run=:rid` | 已完成；摘要不通过拒绝数值，历史只读 | 公共前端 |
+| 复现详情（5） | `/library/reproductions/:target/:tab` | 本步迁移五页签；原文/COMSOL缺项保持空 | 公共前端；仿真负责证据 |
+| 独立仿真兼容（4） | `/simulation` 转研究筛选；`/studies/:sid/simulation/:tab` | 本步迁入公共外壳；缺 `cablesim.simulation-problem/1` 精确输入契约，导入/成功运行未覆盖 | 公共前端；仿真 |
+
+公共新增 ContractFields / MethodParameterFields、QueryState、CatalogShell 与 SeriesChart。扫描与批量文本草稿跨模块保留并冻结首次编辑修订，未应用的范围不会被 Ctrl+S 误报为已保存。所有曲线使用保存点，未计算区间不用于判定。混合载流量沿用公共外壳，输入网格统一为两至三列、160–240 宽；预测能力与验证由仿真线程维护。
+
+型号部分以上述线程的 `frontend/src/features/type/README.md` 为交付依据，不重复运行其验收。已发布型号列表历史态仍缺真实数据；新建空白型号、文件导入和规格书固定修订读取保持明确缺项。
+
+明确宿主缺口：已保存研究配置的独立撤销/重做契约，以及 `GET /api/workspaces/{wid}/deliveries` 的交付发现列表。现有工程历史不能替代研究配置历史。方法比较已接 `POST /api/workspaces/{wid}/study-comparisons`；扫描、仿真导入使用通用研究契约，不为它们发明独立接口。
+
+| 补充迁移项 | 正式前端现状 | 接口同步要求 |
+| --- | --- | --- |
+| 型号规格书 PDF 导出 | 已接生成的 OpenAPI 客户端 | `/api/types/{wid}/specification/file`；修订和规格书摘要绑定，核对 PDF MIME 与工件 SHA256 |
+| 厂家 PDF 资料导入、提取、核对与提案 | **尚未迁移**；现有资源 JSON 导入不是该流程 | 按 `docs/architecture/datasheet-import.md`：rules/offline_ocr/llm/ocr/hybrid；外发同时展示 OCR 与提取地址、模型、内容类型；候选保留提取来源、原件/OCR 证据 SHA256、表头原文及 bbox；OCR 块不能冒称单元格；原始 kg/100m 保留并由插件换算。默认规则与离线 OCR，云端另行明确确认；不自动批准。生成客户端已同步这些字段。 |
+
+验收采用 `test:expansion` 与 `test:expansion-states`：临时库写入、已有工件只读、两尺寸/两主题自动断言，不逐态截图。每个改动页面只保存 1–2 张 1366 浅色截图。当前只改前端，执行构建、样式门禁和相关浏览器场景；不跑后端全量 pytest。原生求解、批量与 COMSOL 只准走超算；SSH 环境缺失不能写成执行成功。保留旧原型，待型号要求、各线程生产验收和真实批量执行收口后再安排删除。

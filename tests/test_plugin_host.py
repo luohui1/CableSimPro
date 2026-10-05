@@ -53,7 +53,7 @@ def test_first_party_plugins_are_discovered_and_sealed():
 def test_iec60287_runs_through_the_host_with_typed_results(host):
     from cablesim_iec60287 import Rating, rate
     direct = rate(Rating.model_validate(SYNTHETIC_IEC))
-    run = host.run('cablesim.iec60287', 'steady-rating', [{'case_id': 'base', 'input': SYNTHETIC_IEC}])
+    run = host.run('cablesim.iec60287', 'reference-rating', [{'case_id': 'base', 'input': SYNTHETIC_IEC}])
     case = run.cases[0]
     assert case.status == 'succeeded'
     # Same number in-process and through the executor: the transport adds nothing.
@@ -62,7 +62,7 @@ def test_iec60287_runs_through_the_host_with_typed_results(host):
     trace = case.artifacts['x-cablesim.iec60287-trace']
     assert trace['method_version'] == '0.1.0' and trace['iterations'] == direct.iterations
     assert len(case.artifact_digests['x-cablesim.iec60287-trace']) == 64
-    assert run.method_version == 'cablesim.iec60287.group/0.5.0' and len(run.request_sha256) == 64
+    assert run.method_version == '0.1.0' and len(run.request_sha256) == 64
 
 
 def test_refusal_is_a_failed_case_with_its_code_not_a_number(host):
@@ -70,7 +70,7 @@ def test_refusal_is_a_failed_case_with_its_code_not_a_number(host):
     refused['installation']['depth_m'] = 0.03
     invalid = json.loads(json.dumps(SYNTHETIC_IEC))
     del invalid['conductor']['ks']
-    run = host.run('cablesim.iec60287', 'steady-rating',
+    run = host.run('cablesim.iec60287', 'reference-rating',
                    [{'case_id': 'ok', 'input': SYNTHETIC_IEC}, {'case_id': 'shallow', 'input': refused},
                     {'case_id': 'no-ks', 'input': invalid}])
     ok, shallow, no_ks = run.cases
@@ -82,7 +82,10 @@ def test_refusal_is_a_failed_case_with_its_code_not_a_number(host):
 def test_thermal_network_unstable_operating_point_is_reported_unavailable(host):
     s = Scenario().model_dump(mode='json')
     s['operating_current_a'] = 3000
-    case = host.run('cablesim.thermal-network', 'steady-rating', [{'case_id': 'hot', 'input': s}]).cases[0]
+    from backend.domain.migration import convert
+    s['cable']['r20_ohm_km']=.0754
+    migrated=convert(s)
+    case = host.run('cablesim.thermal-network', 'steady-rating', [{'case_id': 'hot', 'input': migrated['document'],'parameters':migrated['method_parameters']}]).cases[0]
     assert case.status == 'succeeded'
     temps = [r for r in case.results if r['key'] == 'conductor_temperature']
     assert {r['status'] for r in temps} == {'unavailable'}
@@ -193,6 +196,33 @@ def test_host_contract_change_invalidates_the_plugin_seal(tmp_path):
     assert error.value.code == 'HOST_DEPENDENCIES_MISMATCH'
 
 
+def test_warm_dependency_syntax_cache_still_detects_new_symbol_module_and_changed_bytes(tmp_path):
+    from backend.plugin_host.dependencies import host_dependencies
+    from hashlib import sha256
+    directory = tmp_path / 'plugins/acme.test'
+    (directory / 'src').mkdir(parents=True)
+    (directory / 'src/main.py').write_text('from backend import extra\n', encoding='utf-8')
+    (tmp_path / 'backend').mkdir()
+    shared = tmp_path / 'backend/__init__.py'
+    shared.write_text('extra = 1\n', encoding='utf-8')
+    before = host_dependencies(directory)
+    assert [row['path'] for row in before] == ['backend/__init__.py']
+    assert host_dependencies(directory) == before
+    wrong_case = tmp_path / 'backend/Extra.py'
+    wrong_case.write_text('value = 2\n', encoding='utf-8')
+    assert host_dependencies(directory) == before
+    wrong_case.unlink()
+    # The importing bytes are unchanged: a new real module must be discovered.
+    added = tmp_path / 'backend/extra.py'
+    added.write_text('value = 2\n', encoding='utf-8')
+    after = host_dependencies(directory)
+    assert [row['path'] for row in after] == ['backend/__init__.py', 'backend/extra.py']
+    added.write_text('value = 3\n', encoding='utf-8')
+    changed = host_dependencies(directory)
+    assert changed != after
+    assert changed[-1]['sha256'] == sha256(added.read_bytes()).hexdigest()
+
+
 def test_release_change_after_resolution_cannot_execute_a_different_method(tmp_path):
     host = fault_host(tmp_path, result(GOOD))
     expected = host.registry.get('acme.fault').manifest
@@ -205,7 +235,7 @@ def test_release_change_after_resolution_cannot_execute_a_different_method(tmp_p
     assert error.value.code == 'RELEASE_CHANGED'
 
 
-@pytest.mark.parametrize('name,body,code', [
+FAULT_CASES = [
     ('crash', 'raise RuntimeError("boom")\n', 'PLUGIN_CRASHED'),
     ('no result', 'pass\n', 'PLUGIN_CRASHED'),
     ('nonzero exit after writing', result(GOOD) + 'sys.exit(3)\n', 'PLUGIN_CRASHED'),
@@ -237,12 +267,26 @@ def test_release_change_after_resolution_cannot_execute_a_different_method(tmp_p
     ('scalar artifact', result(GOOD.replace('"results":', '"artifacts": [1], "results":')), 'OUTPUT_CONTRACT_VIOLATION'),
     ('scalar warning', result(GOOD.replace('"results":', '"warnings": ["warning"], "results":')), 'OUTPUT_CONTRACT_VIOLATION'),
     ('array evidence', result(GOOD.replace('"results":', '"evidence": [1], "results":')), 'OUTPUT_CONTRACT_VIOLATION'),
-])
+]
+
+@pytest.mark.parametrize('name,body,code', FAULT_CASES[:5])
 def test_faulty_plugins_fail_closed(tmp_path, name, body, code):
     with pytest.raises(PluginHostError) as error:
         run_fault(tmp_path, body)
     assert error.value.code == code, name
     assert not any(tmp_path.glob('csp-job-*')), 'failed job directories must also be removed'
+
+
+@pytest.mark.parametrize('name,body,code', FAULT_CASES[5:])
+def test_result_contract_rejects_invalid_payloads_directly(tmp_path,name,body,code):
+    from backend.plugin_host.manifest import Capability
+    out=tmp_path/'output';out.mkdir()
+    # Fixed test payload builders only; exercise the production validator directly.
+    exec(body, {'out':out, 'json':json})
+    capability=Capability.model_validate(MANIFEST['capabilities'][0])
+    with pytest.raises(PluginHostError) as error:
+        Executor(verify=False)._accept(tmp_path,'acme.fault','1.0.0',capability,'unit',b'{}',out/'result.json',['a'])
+    assert error.value.code==code,name
 
 
 @pytest.mark.parametrize('status', ['succeeded', 'failed'])

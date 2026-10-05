@@ -1,0 +1,231 @@
+{
+  "schema": "cablesim.plugin/2",
+  "id": "cablesim.hybrid-rating",
+  "version": "0.1.0",
+  "name": "混合载流量研究",
+  "description": "IEC物理基线与有限元热场修正，带适用域、预测区间及训练来源；默认仅参考。",
+  "icon": "assets/icon.svg",
+  "publisher": {
+    "id": "cablesim",
+    "name": "CableSimPro"
+  },
+  "host_api": {
+    "major": 2,
+    "min_minor": 1
+  },
+  "license": {
+    "spdx": "LicenseRef-Project-Undeclared",
+    "review_required": true
+  },
+  "platforms": [
+    "windows-x64",
+    "linux-x64"
+  ],
+  "runtime": {
+    "kind": "python",
+    "python": ">=3.11,<3.14",
+    "entry": "src/cablesim_hybrid_rating/main.py"
+  },
+  "permissions": [
+    "project.read",
+    "study.run",
+    "artifact.write"
+  ],
+  "dependencies": [],
+  "resources": {
+    "timeout_s": 3600,
+    "memory_mb": 4096,
+    "network": "none"
+  },
+  "capabilities": [
+    {
+      "kind": "method",
+      "id": "training-sample",
+      "title": "收敛有限元与IEC配对样本",
+      "method_version": "hybrid-label/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.dataset-sample",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "仅Slurm；三档网格收敛；仅参考。",
+        "热场模式冻结IEC电损耗；显式选择电磁热模式时由GetDP逐工作点重算sigma(T)、邻近效应及护套损耗。",
+        "分层模型训练使用明确标记的均匀土壤IEC对照，另附同条件两层解析参照；默认仅参考。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "train-model",
+      "title": "CPU训练与独立留出验证",
+      "method_version": "hybrid-training/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.hybrid-training/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.training-samples",
+          "type": "quantity",
+          "per": "section",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.hybrid-model",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "仅Slurm CPU；只使用收敛配对标签；不读取任意文件或pickle。",
+        "仿真验证不等于独立实测验证，禁止自动工程批准。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "steady-rating",
+      "title": "IEC基线加有限元数据修正",
+      "method_version": "hybrid-rating/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        },
+        {
+          "key": "conductor_temperature",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.hybrid-prediction",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "只接受已登记的准确模型哈希；训练域外拒绝。",
+        "默认reference_only；区间为95%校准预测区间，未代表实测工程保证。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "physics-comparison",
+      "title": "标准与有限元物理对比",
+      "method_version": "hybrid-physics-comparison/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.physics-comparison",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "仅Slurm求解；温度和允许电流通过三档网格及能量门禁后才显示。",
+        "分层工况IEC列为均匀土壤对照；实际分层解析参照单独显示，不自动批准工程使用。"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "assets/icon.svg",
+      "sha256": "17b1cdd49a50f6aaff17aa589023f5db95108891841b47f0dd5f41bd5175984d",
+      "size_bytes": 298
+    },
+    {
+      "path": "src/cablesim_hybrid_rating/__init__.py",
+      "sha256": "4077840022ceffa507860a9479c451efae40b2c9f1e9c9a7af245030174e2763",
+      "size_bytes": 78
+    },
+    {
+      "path": "src/cablesim_hybrid_rating/comparison.py",
+      "sha256": "bf7499794b3fe71e2195d0345544555b90b54f46a0ef70f7aa1258bf739bc95d",
+      "size_bytes": 3901
+    },
+    {
+      "path": "src/cablesim_hybrid_rating/coupled.py",
+      "sha256": "31eade2c34e6d59d5fb744270b46384f0d63f5af62442044fa25d8dcd88af12b",
+      "size_bytes": 9455
+    },
+    {
+      "path": "src/cablesim_hybrid_rating/features.py",
+      "sha256": "2cd9d34db84eb95f5aec0f80f85e52a62b61888c6cc91cab952aa748838754ac",
+      "size_bytes": 8141
+    },
+    {
+      "path": "src/cablesim_hybrid_rating/inference.py",
+      "sha256": "f36ef838f7f567bdf04ece72d9dd86e248307486f1e52aaf6ca97b696d35137d",
+      "size_bytes": 10577
+    },
+    {
+      "path": "src/cablesim_hybrid_rating/labels.py",
+      "sha256": "eb3c836e5f6609e27e5f5c44030ea212097de266e3b9ab0d4a145ead0efbced5",
+      "size_bytes": 7643
+    },
+    {
+      "path": "src/cablesim_hybrid_rating/layered.py",
+      "sha256": "e1d9f4b9f25b8fe2156707483ceb28211f77ac3d532493e03213b1848fd1933c",
+      "size_bytes": 6104
+    },
+    {
+      "path": "src/cablesim_hybrid_rating/main.py",
+      "sha256": "23fc51bdce0c1cda0e5caa574ddb5a7816c773454771e4a8531b6ddb6040e616",
+      "size_bytes": 4726
+    },
+    {
+      "path": "src/cablesim_hybrid_rating/measurements.py",
+      "sha256": "022adef1c637dfbd948d17e1da971dd718615ea37fad1d6bc4dbe53bd23e6d11",
+      "size_bytes": 3012
+    },
+    {
+      "path": "src/cablesim_hybrid_rating/training.py",
+      "sha256": "fdd33387f0d3ead0cc1d7f9abb96b679d511be2d7f63fb2616bdb61bb18c64d0",
+      "size_bytes": 14560
+    },
+    {
+      "path": "src/host-dependencies.json",
+      "sha256": "b0c4c0248e43b7b4d3c704ee8512a80ad182793abe5a0c79c49c2c77b1120134",
+      "size_bytes": 6840
+    }
+  ]
+}

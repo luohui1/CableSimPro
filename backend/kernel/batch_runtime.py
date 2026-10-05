@@ -20,7 +20,7 @@ from ..schemas import StrictModel
 from .batch_budget import utc_now
 from .batch_files import atomic, digest, encoded, locked, read
 from .batch_inputs import ParameterSpace, materialize
-from .batch_worker import verify_row,failed_sample
+from .batch_worker import verify_row,failed_sample,failure_reason
 from ..plugin_host.process import run_process
 from ..plugin_host.registry import Registry
 
@@ -40,6 +40,7 @@ class Execution(StrictModel):
     slurm_parallelism: int=Field(default=32,ge=1,le=128,strict=True)
     slurm_wall_seconds: int=Field(default=360,ge=30,le=3600,strict=True)
     slurm_memory_mb: int=Field(default=2048,ge=512,le=8192,strict=True)
+    slurm_cpus_per_task: int=Field(default=1,ge=1,le=32,strict=True)
 
 
 def freeze_runtime(directory, plugin_id, repository=ROOT):
@@ -48,7 +49,11 @@ def freeze_runtime(directory, plugin_id, repository=ROOT):
     plugin=Registry(repository/'plugins',plugin_id=plugin_id).get(plugin_id)
     plugin.verify()
     paths=list((repository/'backend').rglob('*.py'))
+    paths.extend((repository/'cablesim_sdk').rglob('*.py'))
     paths += [plugin.directory/'plugin.json',*(plugin.directory/f.path for f in plugin.manifest.files)]
+    dependencies=plugin.directory/'src/host-dependencies.json'
+    if dependencies.is_file():
+        paths.extend(repository/item['path'] for item in read(dependencies))
     records={}
     for path in sorted(set(paths)):
         relative=path.relative_to(repository)
@@ -172,7 +177,7 @@ def rows(directory):
 def export_dataset(directory):
     directory=Path(directory);plan=read(directory/'plan.json');items=rows(directory)
     if digest(plan)!=read(directory/'integrity.json')['plan_sha256']:raise ValueError('PLAN_INTEGRITY_FAILED')
-    content_digest=digest({'plan':digest(plan),'rows':items})
+    content_digest=digest({'export_format':'csv-json/2','plan':digest(plan),'rows':items})
     target=directory/'exports'/content_digest
     if (target/'metadata.json').is_file():
         metadata=read(target/'metadata.json')
@@ -210,6 +215,8 @@ def export_dataset(directory):
     valid=sum(r['valid'] for r in items)
     completed=sum(r['status'] not in ('pending','running') for r in items)
     failures=sum(not r['valid'] and r['status'] not in ('pending','running') for r in items)
+    reasons=[failure_reason(row) for row in items]
+    reason_counts={reason:reasons.count(reason) for reason in sorted(set(reasons)-{None})}
     metadata={'schema_version':'cablesim.dataset/1','dataset_id':plan['id'],'generated_at':utc_now(),
         'content_sha256':content_digest,'plan_sha256':digest(plan),'source':plan['source'],
         'parameter_space':plan['parameter_space'],'sampling_engine':plan['sampling_engine'],
@@ -217,6 +224,8 @@ def export_dataset(directory):
         'sampling_subset':plan.get('sampling_subset'),
         'sample_count':len(items),'valid_count':valid,'completed_count':completed,'failure_count':failures,
         'failure_rate':failures/completed if completed else None,'status_counts':counts,
+        'failure_reason_counts':reason_counts,
+        'failure_classification':'Supplementary categories; original status/code/message and raw evidence are retained in samples.jsonl',
         'method':plan['method'],'runtime_sha256':plan['runtime_sha256'],'execution':plan['execution'],
         'remote_accounting':[read(p) for p in sorted((directory/'submissions').glob('*/accounting.json'))],
         'quantity_columns':[{'column':'result.'+'.'.join(q),'condition':q[0],'key':q[1],'entity':q[2],'unit':q[3]} for q in quantities],

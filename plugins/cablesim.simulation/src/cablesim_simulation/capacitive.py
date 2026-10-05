@@ -1,7 +1,7 @@
 """Axisymmetric frequency-current P1 FEM with explicit dielectric displacement current."""
 from math import pi
 import numpy as np
-from backend.foundation.capacitive import CapacitiveCable,CapacitiveMesh
+from cablesim_sdk.capacitive import CapacitiveCable,CapacitiveMesh
 from .report import digest
 
 EPS0=8.8541878128e-12

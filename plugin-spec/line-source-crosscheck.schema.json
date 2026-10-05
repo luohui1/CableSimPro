@@ -73,7 +73,10 @@
       "type": "string"
     },
     "source_plugin_id": {
-      "const": "cablesim.buried-reference",
+      "enum": [
+        "cablesim.buried-reference",
+        "cablesim.native-reference"
+      ],
       "title": "Source Plugin Id",
       "type": "string"
     },

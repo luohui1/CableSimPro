@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from cablesim_sdk.validation import FieldValueError
 
 
 class Strict(BaseModel):
@@ -63,7 +64,7 @@ class Duct(Strict):
     @model_validator(mode='after')
     def ordered(self):
         if self.inner_diameter_m >= self.outer_diameter_m:
-            raise ValueError('管道内径必须小于外径。')
+            raise FieldValueError('管道内径必须小于外径。', 'inner_diameter_m')
         return self
 
 
@@ -81,14 +82,14 @@ class Installation(Strict):
     def consistent(self):
         if self.environment == 'direct_buried':
             if self.t4_form is None:
-                raise ValueError('直埋必须明确选择 T4 公式形式（simplified 或 exact）。')
+                raise FieldValueError('直埋必须明确选择 T4 公式形式（simplified 或 exact）。', 't4_form')
             if self.duct is not None:
-                raise ValueError('直埋工况不能包含管道参数。')
+                raise FieldValueError('直埋工况不能包含管道参数。', 'duct')
         else:
             if self.duct is None:
-                raise ValueError('管道敷设必须提供管道参数。')
+                raise FieldValueError('管道敷设必须提供管道参数。', 'duct')
             if self.t4_form is not None:
-                raise ValueError('管道敷设的 T4 由管内空气、管壁与管外土壤三段组成，不选择 t4_form。')
+                raise FieldValueError('管道敷设的 T4 由管内空气、管壁与管外土壤三段组成，不选择 t4_form。', 't4_form')
         return self
 
 
@@ -105,7 +106,7 @@ class Bonding(Strict):
     @model_validator(mode='after')
     def meaningful(self):
         if self.scheme == 'single_point' and self.eddy == 'ignored':
-            raise ValueError('单点接地时护套损耗只来自涡流，不能忽略涡流。')
+            raise FieldValueError('单点接地时护套损耗只来自涡流，不能忽略涡流。', 'eddy')
         return self
 
 
@@ -132,5 +133,5 @@ class Rating(Strict):
     @model_validator(mode='after')
     def admissible(self):
         if self.installation.ambient_temperature_c >= self.max_conductor_temperature_c:
-            raise ValueError('环境温度必须低于导体允许最高温度。')
+            raise FieldValueError('环境温度必须低于导体允许最高温度。', 'installation', 'ambient_temperature_c')
         return self

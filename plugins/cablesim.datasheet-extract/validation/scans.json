@@ -1,0 +1,228 @@
+{
+  "schema": "cablesim.datasheet-labels/1",
+  "purpose": "Manual reading of original manufacturer image-only pages; separate from unchanged 76-field text-layer corpus.",
+  "samples": [
+    {
+      "id": "大山-3.5",
+      "file": "DahSan-catalogue.pdf",
+      "sha256": "46551c45b08c6b05ceeb78ec89de2d87a92cce2a10549435fc4c7d4934c621a2",
+      "manufacturer": "大山",
+      "url": "https://www.lelylink.com.tw/upload-files/download/DaShang_Wire_Catalog.pdf",
+      "source_kind": "manufacturer_image_only_original",
+      "model": {
+        "designation": "VV",
+        "specification": "3.5",
+        "identity_note": "600 V 三芯 VV 圆绞导体"
+      },
+      "selections": [
+        {
+          "page": 27
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "raw_value": 2.4,
+          "raw_unit": "mm",
+          "value_si": 0.0024,
+          "unit_si": "m"
+        },
+        "insulation_thickness": {
+          "raw_value": 0.8,
+          "raw_unit": "mm",
+          "value_si": 0.0008,
+          "unit_si": "m"
+        },
+        "oversheath_thickness": {
+          "raw_value": 1.5,
+          "raw_unit": "mm",
+          "value_si": 0.0015,
+          "unit_si": "m"
+        },
+        "outer_diameter": {
+          "raw_value": 12.5,
+          "raw_unit": "mm",
+          "value_si": 0.0125,
+          "unit_si": "m"
+        },
+        "r20": {
+          "raw_value": 5.3,
+          "raw_unit": "ohm/km",
+          "value_si": 0.0053,
+          "unit_si": "ohm/m"
+        },
+        "weight": {
+          "raw_value": 235,
+          "raw_unit": "kg/km",
+          "value_si": 0.23500000000000001,
+          "unit_si": "kg/m"
+        }
+      },
+      "expected_abstentions": {}
+    },
+    {
+      "id": "大山-5.5",
+      "file": "DahSan-catalogue.pdf",
+      "sha256": "46551c45b08c6b05ceeb78ec89de2d87a92cce2a10549435fc4c7d4934c621a2",
+      "manufacturer": "大山",
+      "url": "https://www.lelylink.com.tw/upload-files/download/DaShang_Wire_Catalog.pdf",
+      "source_kind": "manufacturer_image_only_original",
+      "model": {
+        "designation": "VV",
+        "specification": "5.5",
+        "identity_note": "600 V 三芯 VV 圆绞导体"
+      },
+      "selections": [
+        {
+          "page": 27
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "raw_value": 3.0,
+          "raw_unit": "mm",
+          "value_si": 0.003,
+          "unit_si": "m"
+        },
+        "insulation_thickness": {
+          "raw_value": 1.0,
+          "raw_unit": "mm",
+          "value_si": 0.001,
+          "unit_si": "m"
+        },
+        "oversheath_thickness": {
+          "raw_value": 1.5,
+          "raw_unit": "mm",
+          "value_si": 0.0015,
+          "unit_si": "m"
+        },
+        "outer_diameter": {
+          "raw_value": 14.5,
+          "raw_unit": "mm",
+          "value_si": 0.0145,
+          "unit_si": "m"
+        },
+        "r20": {
+          "raw_value": 3.4,
+          "raw_unit": "ohm/km",
+          "value_si": 0.0034,
+          "unit_si": "ohm/m"
+        },
+        "weight": {
+          "raw_value": 335,
+          "raw_unit": "kg/km",
+          "value_si": 0.335,
+          "unit_si": "kg/m"
+        }
+      },
+      "expected_abstentions": {}
+    },
+    {
+      "id": "宏泰-3.5",
+      "file": "HongTai-XLPE.pdf",
+      "sha256": "13ccfa8b547a1f9f5ebacf663adca7d3eb6745317c151be6764be27d2951edf0",
+      "manufacturer": "宏泰",
+      "url": "https://www.hong-tai.com.tw/Upload/202407/product_2024070317480205.pdf",
+      "source_kind": "manufacturer_image_only_original",
+      "model": {
+        "designation": "XLPE",
+        "specification": "3.5",
+        "identity_note": "600 V 单芯 XLPE，左上表；最小平均层厚不作为标称厚度"
+      },
+      "selections": [
+        {
+          "page": 1,
+          "region": [
+            0,
+            0,
+            300,
+            534
+          ]
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "raw_value": 2.4,
+          "raw_unit": "mm",
+          "value_si": 0.0024,
+          "unit_si": "m"
+        },
+        "outer_diameter": {
+          "raw_value": 4.9,
+          "raw_unit": "mm",
+          "value_si": 0.004900000000000001,
+          "unit_si": "m"
+        },
+        "r20": {
+          "raw_value": 5.2,
+          "raw_unit": "ohm/km",
+          "value_si": 0.005200000000000001,
+          "unit_si": "ohm/m"
+        },
+        "weight": {
+          "raw_value": 50,
+          "raw_unit": "kg/km",
+          "value_si": 0.05,
+          "unit_si": "kg/m"
+        }
+      },
+      "expected_abstentions": {
+        "insulation_thickness": "minimum average, not nominal",
+        "oversheath_thickness": "minimum average, not nominal"
+      }
+    },
+    {
+      "id": "宏泰-5.5",
+      "file": "HongTai-XLPE.pdf",
+      "sha256": "13ccfa8b547a1f9f5ebacf663adca7d3eb6745317c151be6764be27d2951edf0",
+      "manufacturer": "宏泰",
+      "url": "https://www.hong-tai.com.tw/Upload/202407/product_2024070317480205.pdf",
+      "source_kind": "manufacturer_image_only_original",
+      "model": {
+        "designation": "XLPE",
+        "specification": "5.5",
+        "identity_note": "600 V 单芯 XLPE，左上表；最小平均层厚不作为标称厚度"
+      },
+      "selections": [
+        {
+          "page": 1,
+          "region": [
+            0,
+            0,
+            300,
+            534
+          ]
+        }
+      ],
+      "truth": {
+        "conductor_diameter": {
+          "raw_value": 3.0,
+          "raw_unit": "mm",
+          "value_si": 0.003,
+          "unit_si": "m"
+        },
+        "outer_diameter": {
+          "raw_value": 5.5,
+          "raw_unit": "mm",
+          "value_si": 0.0055,
+          "unit_si": "m"
+        },
+        "r20": {
+          "raw_value": 3.33,
+          "raw_unit": "ohm/km",
+          "value_si": 0.00333,
+          "unit_si": "ohm/m"
+        },
+        "weight": {
+          "raw_value": 71,
+          "raw_unit": "kg/km",
+          "value_si": 0.07100000000000001,
+          "unit_si": "kg/m"
+        }
+      },
+      "expected_abstentions": {
+        "insulation_thickness": "minimum average, not nominal",
+        "oversheath_thickness": "minimum average, not nominal"
+      }
+    }
+  ]
+}

@@ -7,8 +7,8 @@ from math import log, pi, sqrt
 from pathlib import Path
 import json
 from .buried import buried_mesh, assemble_conduction
-from backend.plugins.buried_contract import BuriedField
-from backend.plugins.electrothermal_contract import ElectrothermalArgs, ElectrothermalSummary, preflight, validate_electrothermal
+from backend.plugin_host.buried_contract import BuriedField
+from backend.plugin_host.electrothermal_contract import ElectrothermalArgs, ElectrothermalSummary, preflight, validate_electrothermal
 
 
 class ElectrothermalError(ValueError):

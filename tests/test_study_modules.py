@@ -12,7 +12,7 @@ def setup(tmp_path):
     with TestClient(create_app(tmp_path/'module.sqlite')) as c:
         w=c.post('/api/workspaces',json={}).json()
         m=next(v for v in c.get('/api/methods').json() if v['method']['plugin_id']=='cablesim.iec60287')
-        config={'title':'合成模块测试','method':{**m['method'],'capability':'steady-rating'},'input_source':'study','method_input':deepcopy(SYNTHETIC_IEC)}
+        config={'title':'合成模块测试','method':{**m['method'],'capability':'reference-rating'},'input_source':'study','method_input':deepcopy(SYNTHETIC_IEC)}
         s=c.post(f'/api/workspaces/{w["id"]}/studies',json={**config,'expected_revision':1,'modules':{'thermal-field':config}})
         assert s.status_code==201,s.text
         yield c,w,s.json()
@@ -126,7 +126,7 @@ def test_editing_module_preserves_unchanged_historical_primary_pin(setup,monkeyp
 
 
 def field_record():
-    from backend.foundation.reproduction import digest
+    from cablesim_sdk.reproduction import digest
     mesh={'points':[[0.,0.],[1.,0.],[0.,1.]],'triangles':[[0,1,2]],'domain_ids':[1],'regions':[{'id':1,'uid':'region/test'}]}
     method={'plugin_id':'contract-test','version':'1','capability':'field'}
     field={'schema_version':'cablesim.temperature-field/1','source':{'run_id':'worker-test','case_id':'case-0','plugin_id':'contract-test','plugin_version':'1','capability':'field','input_sha256':digest(SYNTHETIC_IEC),'bundle_sha256':'b'*64,'manifest_sha256':'c'*64},

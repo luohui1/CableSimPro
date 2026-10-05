@@ -1,9 +1,12 @@
 """IEC-specific SI mapping; empirical parameters are always explicitly supplied."""
 from math import hypot, isclose
 from .inputs import Rating
+from cablesim_sdk.validation import FieldValueError
 
 
 def prepare(value, p):
+    if p.get('rating_mode', 'individual') not in ('individual', 'simultaneous', 'both'):
+        raise FieldValueError('rating_mode：请选择 individual、simultaneous 或 both。','parameters','rating_mode')
     if value.get('schema_version') != 'cablesim.domain/1':
         return Rating.model_validate(value)
     if any(t.get('construction') == 'three_core' for t in value.get('cable_types', [])):

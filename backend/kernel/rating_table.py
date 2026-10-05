@@ -1,7 +1,5 @@
 """Presentation of immutable type rating batches; no solver or mutable model reads."""
 from copy import deepcopy
-from html import escape
-import json
 from math import hypot
 
 
@@ -55,20 +53,3 @@ def rating_rows(run):
     return records
 
 
-def rating_section(run):
-    from .report import table
-    method = run['snapshot']['definition']['method']
-    reference = run['snapshot']['definition']['parameters'].get('reference_basis') == 'tb880_reference'
-    labels = {'trefoil': '直埋 · 品字', 'flat': '直埋 · 水平', 'ducts': '排管 · 品字', 'air': '空气'}
-    rows = []
-    for r in rating_rows(run):
-        c = r['condition']
-        rows.append([r['name'], labels[c['layout']], '—' if c['layout'] == 'air' else format(c['depth_m'], '.3g'),
-                     '—' if c['layout'] == 'air' else format(c['soil_rho_k_m_w'], '.3g'), format(c['ambient_temperature_c'], '.3g'),
-                     '—' if c['actual_spacing_m'] is None else format(c['actual_spacing_m']*1000, '.4g'),
-                     '—' if r['value_a'] is None else format(r['value_a'], '.3g'), r['status'], r['reason'] or c['source']])
-    scope = 'TB 880 旧版验证复现；不是 IEC 2023 工程结论。' if reference else 'IEC 2023 地下稳态；具体分支以保存工件为准。'
-    return ('<h2>载流量表</h2><p>典型工况设计条件；型号、方法及结果均来自指定保存运行。待补数据与范围拒绝不补值。</p><p>'+escape(scope)+'</p>'
-            + table(['工况','排列','中心埋深/m','土壤热阻率/K·m/W','环境温度/°C','中心距/mm','允许电流/A','状态','来源或原因'], rows)
-            + '<p>'+escape(method['plugin_id']+' '+method['version']+'；'+('CIGRE TB 880:2022 case 0-1 pp.62–75。' if reference else 'IEC 60287-1-1:2023 4.2.1 / 5.1.2；60287-2-1:2023 4.2.4 / 4.2.6。'))+'</p>'
-            + '<details><summary>载流量运行与完整精度</summary><pre>'+escape(json.dumps({'run': run['id'], 'method': method, 'snapshot': run['snapshot'], 'output': run['output']}, ensure_ascii=False, indent=2))+'</pre></details>')

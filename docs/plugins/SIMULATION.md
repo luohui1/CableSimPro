@@ -1,6 +1,6 @@
 # 数值仿真与论文复现
 
-cablesim.simulation 是宿主 API 2.1 的方法插件。算法位于插件，宿主负责固定输入、执行、输出校验和封存。入口遵守 cablesim.run/2，通过现有 backend.plugin_host.Executor 运行。论文来源见[复现目标清单](SIMULATION_TARGETS.md)，几何边界见[分析几何接口](../architecture/simulation-geometry.md)。
+cablesim.simulation 是宿主 API 2.1 的方法插件。算法位于插件，宿主负责固定输入、执行、输出校验和封存。入口遵守 cablesim.run/2，经冻结研究执行器提交 Slurm；插件共享数据契约在 `cablesim_sdk/`，生产源码不导入宿主。论文来源见[复现目标清单](SIMULATION_TARGETS.md)，几何边界见[分析几何接口](../architecture/simulation-geometry.md)，用户负荷曲线、护套接地和双向电热的参数/工件/API 见[研究调用接口](../architecture/simulation-research.md)。复现、对比与基准 CLI 均在各插件 `validation/`，pytest 原生回归在 `plugin-tests/`。
 
 ## 1. 方法与范围
 
@@ -8,7 +8,7 @@ cablesim.simulation 是宿主 API 2.1 的方法插件。算法位于插件，宿
 | --- | --- | --- |
 | multiregion-thermal | 领域文档或显式热模型 → 温度场、温限电流、复现报告 | 1–64根有正间隙同心圆单芯、回填/土层/每缆一管、常热物性 |
 | getdp-eddy | 领域文档或统一问题 → GetDP独立进程 → 复数场、损耗、电流与报告 | 2D磁准静态、集肤/邻近、理想互联护套；外部GetDP3.5.0 |
-| elmer-heat | 固定热模型或统一问题 → Elmer独立进程 → 温度场/时间序列与报告 | 常物性稳态/瞬态、固定/阶跃热源、均匀初态；外部Elmer26.1 |
+| elmer-heat | 固定热模型或统一问题 → Elmer独立进程 → 温度场/时间序列与报告 | 常物性稳态/瞬态、固定/阶跃热源、均匀初态；当前超算Elmer26.2 |
 | electrothermal | 显式磁问题、热边界和σ(T)定律 → GetDP/P1导热闭环、温度场 | 逐积分点温变电导率、实际焦耳/磁损传热；固定k/μ；有界温度范围 |
 | capacitive-cable | 同轴多层与轴向区段 → 复电势、电容、充电电流与护套损耗 | 含位移电流的轴对称频域场；单点、两端、三段交叉互联单支路等效 |
 | terminal-field | 显式SI三角网格、材料和等电势端子 → 完整Y/C矩阵 | 三相六端子复电势；接地与浮置护套消元 |
@@ -16,6 +16,9 @@ cablesim.simulation 是宿主 API 2.1 的方法插件。算法位于插件，宿
 | contact-electrothermal-field | 独立网格、σ(T)/k(T)、给定电流及Rac(T) → GetDP/接触热场闭环 | 包含被动损耗的均质绕组端口约束；完整06参考模型 |
 | insulated-wire | 完整双层圆柱参数 → FEM与解析误差 | B01官方数学基准，不是厂家电缆 |
 | solid-bonding-flat | 显式护套回路参数 → 电流与RMS磁场 | E05平排理想两端互联解析子模型，不是电磁FEM |
+| transient-temperature | 保存的领域截面/阶跃负荷 → 逐步导体温度、峰值与到限温时间 | Elmer P1 固定热物性；逐材料体积热容量与电阻参考温度必填 |
+| sheath-losses | 保存的相序/接地拓扑 → GetDP 护套环流、区域损耗与外部 λ1 工件 | 三相单芯；单点、两端、三个实际长度小段交叉互联；不含大地回流 |
+| electrothermal-steady | 保存的截面/材料 σ(T) → 双向稳态温度场与迭代残差 | 单截面 GetDP/P1 热场反馈；材料有效温区必填；分段电热反馈未覆盖 |
 
 多区域方法支持不同电缆层数、固定每米热源、导体温变电阻、指定芯温、地表恒温或给定h、侧底分别恒温/绝热/对流，以及孤立空气电缆的表面换热。回填为矩形区域，土层由水平界面划分。所有电缆沿轴向无限长。
 
@@ -157,12 +160,12 @@ T10原文Fig.5（PDF3/印刷539）给铜丝层外径58.03 mm、PVC厚2.8 mm，�
 
 数值环境沿用 plugins/requirements-native.txt 或 requirements-electrothermal.txt。基准环境为Windows x64、Python3.11.8、Gmsh4.15.2、scikit-fem12.0.2、NumPy2.3.5、SciPy1.17.0，其他平台另验。
 
-    .\.venv\Scripts\python.exe plugins/cablesim.simulation/src/cablesim_simulation/replay.py plugins/cablesim.simulation/src/cases/thermal-jorgens.json --output .data/simulation/thermal-jorgens
-    .\.venv\Scripts\python.exe plugins/cablesim.simulation/src/cablesim_simulation/replay.py plugins/cablesim.simulation/src/cases/thermal-cywinski.json --output .data/simulation/thermal-cywinski
-    .\.venv\Scripts\python.exe plugins/cablesim.simulation/src/cablesim_simulation/iec_compare.py
-    .\.venv\Scripts\python.exe plugins/cablesim.simulation/src/cablesim_simulation/replay.py plugins/cablesim.simulation/tests/cases/thermal-deleon.json --output .data/simulation/thermal-deleon
-    .\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/reproduce.py
-    .\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/reproduce_paper.py
+    .\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay.py plugins/cablesim.simulation/src/cases/thermal-jorgens.json --output .data/simulation/thermal-jorgens
+    .\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay.py plugins/cablesim.simulation/src/cases/thermal-cywinski.json --output .data/simulation/thermal-cywinski
+    .\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/iec_compare.py
+    .\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay.py plugins/cablesim.simulation/validation/cases/thermal-deleon.json --output .data/simulation/thermal-deleon
+    .\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/reproduce.py
+    .\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/reproduce_paper.py
     .\.venv\Scripts\python.exe -m pytest plugin-tests/test_simulation_thermal.py plugin-tests/test_simulation.py
 
 replay.py是统一案例入口，JSON变体和网格使用同一方法。tests/reproduce*.py只重放B01/E05既有回归，由本节引用。宿主作业位于.tmp/simulation-*；报告是本地忽略工件。精确包版本/封签绑定代码，不用文档内Git基线替代。
@@ -270,11 +273,11 @@ Python依赖沿用`plugins/requirements-native.txt`中Gmsh4.15.2、scikit-fem12.
 
 适配器仅给子进程设置Elmer的HOME/LIB及DLL搜索路径，使用参数数组、无shell、超时和退出码检查。未安装、版本不符或关键模块缺失返回`EnvironmentMissing`及官方安装地址；绝不退回解析或scikit-fem结果。GetDP采用GPL，Elmer组件采用GPL/LGPL；独立进程与不分发程序是实现方式，不构成未来产品分发的自动许可豁免。[GetDP许可](https://getdp.info/)、[Elmer许可](https://www.elmerfem.org/blog/license/)。
 
-    .\.venv\Scripts\python.exe plugins/cablesim.simulation/src/cablesim_simulation/external_replay.py plugins/cablesim.simulation/src/cases/eddy-lunca.json --solver getdp --output .data/simulation/eddy-lunca
-    .\.venv\Scripts\python.exe plugins/cablesim.simulation/src/cablesim_simulation/external_replay.py plugins/cablesim.simulation/src/cases/eddy-twin.json --solver getdp --output .data/simulation/eddy-twin
-    .\.venv\Scripts\python.exe plugins/cablesim.simulation/src/cablesim_simulation/external_replay.py plugins/cablesim.simulation/src/cases/eddy-induced.json --solver getdp --output .data/simulation/eddy-induced
-    .\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/verify_external.py
-    .\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/compare_eddy_iec.py
+    .\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/external_replay.py plugins/cablesim.simulation/src/cases/eddy-lunca.json --solver getdp --output .data/simulation/eddy-lunca
+    .\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/external_replay.py plugins/cablesim.simulation/src/cases/eddy-twin.json --solver getdp --output .data/simulation/eddy-twin
+    .\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/external_replay.py plugins/cablesim.simulation/src/cases/eddy-induced.json --solver getdp --output .data/simulation/eddy-induced
+    .\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/verify_external.py
+    .\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/compare_eddy_iec.py
     .\.venv\Scripts\python.exe -m pytest tests/test_simulation_external_contracts.py plugin-tests/test_simulation_external.py
 
 `verify_external.py`产生`.data/simulation/external-verification/`中的同网格热场、时步/网格和外域报告；`compare_eddy_iec.py`产生`.data/simulation/eddy-iec/report.json`。原始输入、网格、实际进程日志和结果随宿主运行工件保存；验证用临时目录只放`.tmp/`。
@@ -291,7 +294,7 @@ FEniCSx用于已有求解器不能满足的高阶、大规模或明确研究方�
 
 ### 10.1 输入、执行和结果
 
-两个插件共享 `backend/foundation/simulation.py` 和新增电热 SI 数据契约，宿主不包含求解算法。桥接支持二维谐波磁场、恒物性稳态热场以及显式σ(T)电热耦合，调用原生 Magnetic Fields / Heat Transfer / FrequencyStationary 接口；不把求解转移到 Python。暂态、孔洞翻译、非线性热边界及三维尚未翻译。轴对称电容教程目前由固定的只读本机复现脚本对照，不开放任意MPH或Java输入。
+两个插件共享 `cablesim_sdk/simulation.py` 和新增电热 SI 数据契约，宿主不包含求解算法。桥接支持二维谐波磁场、恒物性稳态热场以及显式σ(T)电热耦合，调用原生 Magnetic Fields / Heat Transfer / FrequencyStationary 接口；不把求解转移到 Python。暂态、孔洞翻译、非线性热边界及三维尚未翻译。轴对称电容教程目前由固定的只读本机复现脚本对照，不开放任意MPH或Java输入。
 
 管理员在忽略的 `.data/cablesim-solvers.json` 中添加 `comsol` 字段，指向 `E:/comsol/COMSOL62/Multiphysics/bin/win64/comsolbatch.exe`。案例不能提供执行路径、Java 表达式或任意 MPH 文件。启动前核验版本、编译器和所需模块/许可证；记录实测 **6.2.0.290**、模块检测、可执行文件、生成源、模型及日志 SHA256。通过命名互斥锁和系统进程枚举阻止另一 COMSOL 同时启动；超时由宿主 Job Object 终止整个子进程树。COMSOL 返回0仍可能失败，因此另检查编译错误、许可证状态、唯一新模型和 `BRIDGE_COMPLETE`。不修改 COMSOL 安全设置或系统 PATH。
 
@@ -359,12 +362,12 @@ IEC对拍已重跑，结果见§6和§9.3。IEC60853完整暂态仍缺可靠闭�
 ### 10.6 重放
 
 ```powershell
-.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/tests/compare_papers.py
-.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/tests/compare_open.py
-.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/tests/summarize_comparison.py
-.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/tests/compare_tutorial.py --solver getdp
-.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/tests/compare_tutorial.py --solver comsol
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/verify_raw_field.py
+.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/validation/compare_papers.py
+.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/validation/compare_open.py
+.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/validation/summarize_comparison.py
+.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/validation/compare_tutorial.py --solver getdp
+.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/validation/compare_tutorial.py --solver comsol
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/verify_raw_field.py
 .\.venv\Scripts\python.exe -m pytest tests/test_comsol_bridge.py plugin-tests/test_comsol_native.py
 ```
 
@@ -427,12 +430,12 @@ COMSOL03原教程明确采用护套径向σ=Spbs/Scab、轴向σ=Spbs的数值�
 ### 11.4 重放新增能力
 
 ```powershell
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_coupled.py --physics electrothermal
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_coupled.py --physics electrothermal --solver comsol
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_coupled.py --physics capacitive
-.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/tests/compare_capacitive.py
-.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/tests/summarize_coupling.py
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/diagnose_induced.py
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_coupled.py --physics electrothermal
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_coupled.py --physics electrothermal --solver comsol
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_coupled.py --physics capacitive
+.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/validation/compare_capacitive.py
+.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/validation/summarize_coupling.py
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/diagnose_induced.py
 .\.venv\Scripts\python.exe -m pytest plugin-tests/test_simulation_coupled.py plugin-tests/test_simulation_capacitive.py
 ```
 
@@ -510,29 +513,29 @@ Karahan2009重新读到300mm²三缆、层厚/间距和目标电流，但铜σ(T
 浏览器脚本为`tests/browser/reproduction-library.js`、`reproduction-library-states.js`、`reproduction-library-comparison.js`，通过BrowserOS neo的run执行；使用真实CDP键鼠和实际Blob导出，状态脚本只注入网络/空数据，不模拟数值。1366×768和1920×1080分别核对交互、键盘、空/加载/错误/恢复/成功/历史及新增叠加控制。
 
 ```powershell
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_loss_table.py
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_loss_table.py --consume-only
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/src/cablesim_simulation/external_replay.py plugins/cablesim.simulation/src/cases/eddy-two-round.json --solver getdp --output .data/simulation/eddy-two-round
-.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/tests/compare_two_round.py
-.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/tests/export_full_fields.py --mode 02 --levels 7 5 3
-.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/tests/export_full_fields.py --mode 06 --levels 7 5 3
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_full_fields.py --mode 02 --levels 7 5 3 --host
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_full_fields.py --mode 06 --levels 7 5 3 --host
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_double_flat.py --resume
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_submarine_capacitance.py
-.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/tests/export_tutorial_definition.py --mode 06
-.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/tests/compare_submarine_inductive.py --levels 7 5 3
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_submarine_inductive.py
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_submarine_inductive.py --branch series
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/compare_submarine_losses.py
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_submarine.py --sizes 0.003 --segments 64
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_submarine.py --sizes 0.002 0.0013 --segments 96
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/replay_submarine.py --sizes 0.001 --segments 128
-.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/tests/compare_submarine.py --levels 7 5 3
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/compare_submarine_geometry.py
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/compare_submarine_coupling.py
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_loss_table.py
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_loss_table.py --consume-only
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/external_replay.py plugins/cablesim.simulation/src/cases/eddy-two-round.json --solver getdp --output .data/simulation/eddy-two-round
+.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/validation/compare_two_round.py
+.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/validation/export_full_fields.py --mode 02 --levels 7 5 3
+.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/validation/export_full_fields.py --mode 06 --levels 7 5 3
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_full_fields.py --mode 02 --levels 7 5 3 --host
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_full_fields.py --mode 06 --levels 7 5 3 --host
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_double_flat.py --resume
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_submarine_capacitance.py
+.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/validation/export_tutorial_definition.py --mode 06
+.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/validation/compare_submarine_inductive.py --levels 7 5 3
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_submarine_inductive.py
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_submarine_inductive.py --branch series
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/compare_submarine_losses.py
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_submarine.py --sizes 0.003 --segments 64
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_submarine.py --sizes 0.002 0.0013 --segments 96
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_submarine.py --sizes 0.001 --segments 128
+.\.venv\Scripts\python.exe plugins/cablesim.comsol-bridge/validation/compare_submarine.py --levels 7 5 3
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/compare_submarine_geometry.py
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/compare_submarine_coupling.py
 .\.venv\Scripts\python.exe plugins/cablesim.iec60287/tests/replay_tb880_reference.py
-.\.venv\Scripts\python.exe plugins/cablesim.simulation/tests/build_reproduction_library.py
+.\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/build_reproduction_library.py
 ```
 
 COMSOL命令串行执行且不与全量pytest重叠。`--consume-only`验证保存输入及原始紧凑JSON工件摘要后只重跑IEC，不能把它当作新的GetDP生产运行。来源目录与注册表在[目标清单](SIMULATION_TARGETS.md)维护，界面只读取证据快照。
@@ -582,7 +585,13 @@ Slurm782266实际31836核秒，即8.843333核时。计划预留200核时在完�
 
 B01、GetDP感应涡流、Elmer暂态各三档网格，共9组本机/超算对照通过保存容差，报告在`.data/simulation/hpc-verification/comparison.json`，作业782913/782914/782918。实际双进程MPI热求解作业782907与串行150节点解最大节点差6.19e−10 K，最高温318.149118 K，手算318.15 K；报告`.data/hpc/mpi-heat-verification.json`。MPI初始化成功或`-v`输出单独不作为真实求解证明。
 
-COMSOL6.2在超算既有安装与许可证上串行运行，使用`batch -np 1`；每份工件记录完整版本、`license_source=hpc-installation`、Slurm作业号、节点和模型摘要。后续不再启动本机COMSOL。
+COMSOL6.2.0.339在超算既有安装与许可证上串行运行，使用`batch -np 1`；每份工件记录完整版本、`license_source=hpc-installation`、Slurm作业号、节点和模型摘要。后续不再启动本机COMSOL。
+
+作业783031在超算通过4项COMSOL原生接口测试：分层圆柱热手算、指定频率的双向温度反馈、非导电磁性材料损耗、暂态原生时间序列与Fourier手算。总墙时324.58 s，实际325核秒。HPC完整环境清单保存在`.data/hpc/environment-lock.json`和`python-packages.txt`；Linux glibc2.28不提供当前锁定的cadquery-ocp7.9.3.1.1兼容wheel，未擅自替换为8.x，CAD可选门禁单独保留这一环境缺口。
+
+其余原生集成测试在作业783042执行，58通过、6失败；六个失败均为CadQuery包缺失（五次CAD进程自然退出与一次STEP往返测试），没有把失败改成通过或删去测试。三次互补执行覆盖全部`plugin-tests`：合计77通过、6个CAD环境失败，不能称整个原生门禁全绿。批量API、直埋/线源、GetDP、Elmer、接触及电热耦合链路均取得实际结果。
+
+本轮全部超算记账合计11.673056核时，包含Elmer构建、失败尝试、MPI、2000样本、性能与回归以及用户提供的COMSOL验证作业782932（188核秒）；未结算预留为0。详细`sacct`分配行与账本快照在`.data/hpc/usage.json`，未将日志步骤重复计入。
 
 ### 13.4 性能基准
 
@@ -603,7 +612,9 @@ COMSOL6.2在超算既有安装与许可证上串行运行，使用`batch -np 1`�
 | 阶跃暂态 1 mm | 14.34 / 144.1 | 4.85 / 144.6 | 53.56 / 1169.7 | 0.001030 K；0.059002 K |
 | 阶跃暂态 0.5 mm | 25.25 / 146.8 | 8.15 / 150.1 | 56.86 / 1169.3 | 0.000374 K；0.003733 K |
 
-直埋与排管性能案例为各导体固定10 W/m，区别于§13.2的非线性载流量数据集。开源热为P1，COMSOL为原生曲边P2；外域和圆周离散也影响误差。两组稳态最细网格仍有0.24–0.28 K差异，此表为测量记录，未将它们判为0.1 K工程精度门禁通过。暂态两端均按保存的时间积分设置运行并核验实际输出时间。完整值、网格与原始求解器证据在`.data/simulation/performance/solvers/`；入口`plugins/cablesim.simulation/tests/benchmark_solvers.py slurm|comsol`。
+直埋与排管性能案例为各导体固定10 W/m，区别于§13.2的非线性载流量数据集。开源热为P1，COMSOL为原生曲边P2；外域和圆周离散也影响误差。两组稳态最细网格仍有0.24–0.28 K差异，此表为测量记录，未将它们判为0.1 K工程精度门禁通过。暂态两端均按保存的时间积分设置运行并核验实际输出时间。完整值、网格与原始求解器证据在`.data/simulation/performance/solvers/`；入口`plugins/cablesim.simulation/validation/benchmark_solvers.py slurm|comsol`。
+
+暂态另对整段101个共同输出时刻逐点比较，按量、位置、时刻匹配：三档网格的最大测点差分别为0.221504、0.132248、0.109012 K；最细网格最大差出现在450 s。整段最热点最大差分别为0.054638、0.096556、0.107078 K。末时刻的小差值不代表全程精度；本组未通过全程0.1 K门槛，也未完成独立时间步收敛研究。报告保存在`transient-accuracy.json`。
 
 100样本吞吐使用同一固定采样子集；每样本内部串行，进程数只控制样本并行。
 

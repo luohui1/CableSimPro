@@ -17,7 +17,7 @@ PARAMS={'section_id':'section/1','length_m':.4}
 
 
 def scene_document():
-    from design.workbench.scenarios import system_models
+    from backend.kernel.scenarios import system_models
     model=next(m for m in system_models() if m['id']=='system.yjq02-110kv-800')
     cable=deepcopy(model['payload']['cable_type']);cable['cores'][0]['conductor']['lay_factor']=1.02
     next(l for l in cable['common_layers'] if l['role']=='insulation')['thickness']=.017

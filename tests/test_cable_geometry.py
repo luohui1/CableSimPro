@@ -8,6 +8,7 @@ from base64 import b64decode
 from array import array
 import pytest
 from backend.plugin_host import Executor
+from backend.plugin_host.executor import validate_domain_input
 
 ROOT = Path(__file__).resolve().parents[1]
 ENTRY = ROOT / 'plugins/cablesim.cable-geometry/src/cablesim_cable_geometry/main.py'
@@ -38,6 +39,7 @@ def test_unsupported_or_invalid_geometry_is_refused(change):
     elif change == 'corrugated': t['common_layers'][0]['form'] = 'corrugated'
     else: t['common_layers'][0]['thickness'] = float('nan') if change == 'nan' else -.001
     with pytest.raises(ValueError):
+        validate_domain_input(d)
         cad.prepare(d, PARAMS)
 
 

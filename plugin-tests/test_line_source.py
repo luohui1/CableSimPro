@@ -8,7 +8,7 @@ from backend.schemas import Scenario
 from backend.foundation.contracts import CircularLayer, CircularRecipe
 from cablesim_native.buried import buried_mesh, solve_buried
 from cablesim_native.line_source import compare_line_source
-from backend.plugins.line_source_contract import validate_line_source
+from backend.plugin_host.line_source_contract import validate_line_source
 
 
 def recipe(s):
@@ -47,39 +47,22 @@ def test_finite_box_solution_approaches_half_space_reference(tmp_path,monkeypatc
 def test_real_plugin_chain_persists_an_independent_report_without_editing_project(tmp_path):
     from fastapi.testclient import TestClient
     from backend.main import create_app
+    from native_workflow import run, bundle, reference, download, create_study
     with TestClient(create_app(tmp_path/'crosscheck.sqlite')) as c:
-        w=c.post('/api/workspaces',json={}).json();baseline=c.get(f'/api/workspaces/{w["id"]}').json()
-        p=c.post('/api/plugins/install-plan',json={'plugin_id':'cablesim.line-source-crosscheck','version':'0.2.0'}).json()
-        assert [x['plugin_id'] for x in p['plugins']]==['cablesim.buried-reference','cablesim.line-source-crosscheck']
-        approval={k:p[k] for k in ('plugin_id','version','state_revision','plan_sha256')}|{'approved':True,'license_acknowledged':True,'grants':{x['plugin_id']:x['permissions'] for x in p['plugins']}}
-        installed=c.post('/api/plugins/install',json=approval);assert installed.status_code==200,installed.text
-        lock=c.get(f'/api/plugins/workspaces/{w["id"]}/lock').json()
-        enabled=c.post(f'/api/plugins/workspaces/{w["id"]}/enable',json={'plugin_id':'cablesim.line-source-crosscheck','expected_revision':1,'lock_revision':lock['lock']['lock_revision'],'enabled':True,'approved':True})
-        assert enabled.status_code==200,enabled.text
-        lock=enabled.json()
-        body={'plugin_id':'cablesim.line-source-crosscheck','command':'validation.line-source-buried','request_id':str(uuid4()),'expected_revision':1,'lock_sha256':lock['lock_sha256'],'arguments':{},'confirmed':True}
-        missing=c.post(f'/api/plugins/workspaces/{w["id"]}/invoke',json=body)
-        assert missing.status_code==409 and missing.json()['detail']['code']=='SOURCE_JOB'
-        assert not any(j['command']=='validation.line-source-buried' for j in c.get(f'/api/plugins/workspaces/{w["id"]}/jobs').json()['items'])
-        source_id=str(uuid4())
-        source=c.post(f'/api/plugins/workspaces/{w["id"]}/invoke',json={'plugin_id':'cablesim.buried-reference','command':'skfem.buried-reference','request_id':source_id,'expected_revision':1,'lock_sha256':lock['lock_sha256'],'arguments':arguments(8),'confirmed':True})
-        assert source.status_code==200,source.text
-        body['request_id']=str(uuid4())
-        checked=c.post(f'/api/plugins/workspaces/{w["id"]}/invoke',json=body);assert checked.status_code==200,checked.text
-        out=checked.json();report=validate_line_source(out['result']['summary'])
-        assert report.source_job_id==source_id and .4<report.maximum_absolute_difference_k<.7
-        assert out['promoted_to_current_ampacity'] is False
-        artifact=c.get(f'/api/plugins/workspaces/{w["id"]}/jobs/{out["job_id"]}/artifacts/line-source.json')
-        assert artifact.status_code==200 and validate_line_source(artifact.json())==report
-        assert c.get(f'/api/workspaces/{w["id"]}').json()==baseline
+        w=c.post('/api/workspaces',json={}).json()
+        source,_,_,_=run(c,w,'fixed-power',arguments(8))
+        result,study,root,body=run(c,w,'line-source-crosscheck',{'native_source_reference':reference(source)})
+        report=validate_line_source(bundle(result)['summary'])
+        assert report.source_job_id==source['id'] and .4<report.maximum_absolute_difference_k<.7
+        assert report.source_plugin_id=='cablesim.native-reference'
+        assert validate_line_source(download(c,w,result,'line-source.json').json())==report
+        assert c.post(root+'/runs',json=body).json()['id']==result['id']
+        saved=c.get('/api/workspaces/'+w['id']).json()
+        assert saved['revision']==w['revision'] and saved['scenario']==w['scenario']
         other=c.post('/api/workspaces',json={}).json()
-        assert c.get(f'/api/plugins/workspaces/{other["id"]}/jobs/{out["job_id"]}/artifacts/line-source.json').status_code==404
-        changed=c.post(f'/api/workspaces/{w["id"]}/edit',json={'expected_revision':1,'changes':[{'path':'installation.spacing_m','value':.2}]})
-        assert changed.status_code==200
-        replay=c.post(f'/api/plugins/workspaces/{w["id"]}/invoke',json=body)
-        assert replay.status_code==200 and replay.json()['replayed'] is True
-        assert replay.json()['job_id']==out['job_id']
-        new_lock=c.get(f'/api/plugins/workspaces/{w["id"]}/lock').json()
-        body.update(request_id=str(uuid4()),expected_revision=2,lock_sha256=new_lock['lock_sha256'])
-        stale=c.post(f'/api/plugins/workspaces/{w["id"]}/invoke',json=body)
-        assert stale.status_code==409 and stale.json()['detail']['code']=='STALE_SOURCE'
+        assert download(c,other,result,'line-source.json').status_code==404
+        changed=c.post('/api/workspaces/'+w['id']+'/edit',json={'expected_revision':1,'changes':[{'path':'installation.spacing_m','value':.2}]}).json()
+        assert c.post(root+'/runs',json=body).json()['id']==result['id']
+        study,root=create_study(c,changed,'line-source-crosscheck',{'native_source_reference':reference(source)})
+        stale=c.get(root+'/preflight',params={'expected_revision':changed['revision'],'expected_study_revision':study['revision']})
+        assert stale.status_code==409

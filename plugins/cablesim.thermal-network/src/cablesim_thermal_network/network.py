@@ -11,7 +11,7 @@ from math import acosh, log, pi, sqrt
 
 import numpy as np
 
-from .inputs import Scenario
+from backend.schemas import Scenario
 
 MODEL_VERSION = "MV-THERMAL-0.1.0"
 PHASES = ["A", "B", "C"]

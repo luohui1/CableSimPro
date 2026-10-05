@@ -1,0 +1,255 @@
+.input-module {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.input-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.input-section > h2 {
+  font-size: var(--text-subheading);
+}
+.input-form-grid,
+.parameter-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(calc(var(--space-12) * 4), 1fr));
+  gap: var(--space-4);
+  width: 100%;
+  max-width: calc(
+    (var(--space-12) * 5 + var(--space-6) + var(--space-2)) * 3 +
+      var(--space-4) * 2
+  );
+}
+.input-form-grid .number-field,
+.parameter-fields .number-field,
+.input-row-fields .number-field {
+  min-width: calc(var(--space-12) * 4);
+  max-width: calc(var(--space-12) * 5 + var(--space-6) + var(--space-2));
+}
+.input-form-grid .field-value-line,
+.parameter-fields .field-value-line,
+.input-row-fields .field-value-line {
+  display: grid;
+  grid-template-columns: minmax(calc(var(--space-8) * 5), 1fr) var(--space-6);
+  gap: var(--space-2);
+}
+.input-form-grid .source-badge span,
+.parameter-fields .source-badge span,
+.input-row-fields .source-badge span {
+  display: none;
+}
+.parameter-fields > .input-section,
+.parameter-fields > .text-field {
+  grid-column: 1/-1;
+  min-width: 0;
+}
+.input-row-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  padding-block: var(--space-2);
+  min-width: calc(var(--space-12) * 5);
+}
+.input-row-fields .number-field {
+  flex: 1;
+}
+.input-module .data-table .data-row {
+  height: auto;
+  min-height: var(--table-standard);
+}
+.drawing-mount {
+  min-height: calc(var(--space-12) * 7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-surface);
+  background: var(--fill);
+}
+.reference-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.reference-list > div {
+  display: grid;
+  grid-template-columns: calc(var(--space-12) * 2) minmax(0, 1fr);
+  gap: var(--space-4);
+}
+.reference-list dt {
+  color: var(--text-secondary);
+  font-size: var(--text-note);
+}
+.reference-list dd {
+  overflow-wrap: anywhere;
+}
+.run-checks {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.run-checks ul {
+  margin: 0;
+  padding-left: var(--space-6);
+}
+.run-ack {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+.parameter-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.parameter-form textarea {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  padding: var(--space-3);
+  min-height: calc(var(--space-12) * 2);
+  resize: vertical;
+}
+.parameter-form .field-default {
+  align-self: flex-start;
+}
+.parameter-fields > .parameter-field {
+  max-width: calc(var(--space-12) * 5 + var(--space-6) + var(--space-2));
+  min-width: 0;
+}
+.temperature-figure {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.temperature-plot {
+  display: block;
+  width: 100%;
+  height: calc(var(--space-12) * 6);
+  font: inherit;
+}
+.temperature-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-4);
+  font-size: var(--text-note);
+}
+.temperature-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.temperature-swatch {
+  width: var(--space-6);
+  height: var(--space-3);
+  display: inline-block;
+}
+.temperature-swatch-1 {
+  background: var(--temperature-1);
+}
+.temperature-swatch-2 {
+  background: var(--temperature-2);
+}
+.temperature-swatch-3 {
+  background: var(--temperature-3);
+}
+.temperature-swatch-4 {
+  background: var(--temperature-4);
+}
+.temperature-swatch-5 {
+  background: var(--temperature-5);
+}
+.temperature-swatch-6 {
+  background: var(--temperature-6);
+}
+@media (max-width: 1000px) {
+  .input-form-grid,
+  .parameter-fields {
+    grid-template-columns: 1fr;
+  }
+  .input-row-fields {
+    flex-direction: column;
+  }
+}
+.temperature-history-chart {
+  width: 100%;
+  max-height: calc(var(--space-12) * 6);
+  flex-shrink: 0;
+}
+.temperature-history-chart text {
+  fill: var(--text-secondary);
+  font-size: var(--text-body);
+}
+.history-axis {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.history-curve {
+  stroke: var(--text);
+  stroke-width: 2;
+}
+.contract-schema {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  font-size: var(--text-note);
+  color: var(--text-secondary);
+}
+.study-drawing {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.study-drawing .drawing-frame,
+.study-drawing .cad-viewport {
+  min-height: calc(var(--space-12) * 8);
+}
+.record-drawer {
+  position: absolute;
+  inset-block: var(--space-4);
+  right: var(--space-4);
+  max-height: none;
+  width: min(calc(var(--space-12) * 15), calc(100vw - var(--space-8)));
+}
+.inquiry-range {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.inquiry-range label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-input);
+}
+.engineering-completion {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.engineering-completion .input-section {
+  min-width: 0;
+}
+.engineering-completion input {
+  min-width: 0;
+  width: 100%;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  padding: var(--space-2);
+}
+.engineering-completion .source-line {
+  flex-wrap: wrap;
+}

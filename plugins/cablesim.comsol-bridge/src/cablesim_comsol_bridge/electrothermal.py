@@ -1,9 +1,9 @@
 """Independent native COMSOL FrequencyStationary reference for sigma(T)."""
 import json
 import numpy as np
-from backend.foundation.electrothermal import Electrothermal
-from backend.foundation.simulation import MeshControls
-from backend.foundation.reproduction import digest
+from cablesim_sdk.electrothermal import Electrothermal
+from cablesim_sdk.simulation import MeshControls
+from cablesim_sdk.reproduction import digest
 from .java_model import source
 from .runtime import execute,SolverFailure
 from .adapter import parse

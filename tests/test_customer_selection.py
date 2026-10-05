@@ -5,7 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 from backend.main import create_app
 from backend.kernel.drivers import assess
-from design.workbench.scenarios import system_models
+from backend.kernel.scenarios import system_models
 
 
 @pytest.fixture
@@ -62,7 +62,7 @@ def test_complete_candidates_independent_solver_and_conclusion_first(setup):
     assert len({v['evidence']['prepared_input_sha256'] for v in r['output']['cases']})==2
     d=c.post(f'/api/workspaces/{w["id"]}/deliveries',json={'run_ids':[r['id']]})
     assert d.status_code==201,d.text
-    html=d.json()['html'];assert html.index('推荐 ')<html.index('本次引用的共享输入')
+    html=d.json()['html'];assert html.index('data-result="selection"')<html.index('data-section="shared-input"')
     assert '满足的最小截面' in html and '余量 ' in html
     assert 'sha256' in html.lower()
 
@@ -132,7 +132,7 @@ def test_published_specification_does_not_invent_or_approve_a_solver_model(setup
     a=r.json()['output']['assessment'][0];assert a['status']=='not_applicable' and a['value'] is None
     report=c.post(f'/api/workspaces/{w["id"]}/deliveries',json={'run_ids':[r.json()['id']]})
     assert report.status_code==201,report.text
-    assert '本次候选均不适用' in report.json()['html'] and '填充材料热阻率' in report.json()['html']
+    assert 'data-result="selection"' in report.json()['html'] and 'CANDIDATE_DATA_MISSING' in report.json()['html']
     assert c.delete('/api/domain-cable-models/'+entry['id'],params={'expected_digest':entry['digest']}).status_code==409
 
 

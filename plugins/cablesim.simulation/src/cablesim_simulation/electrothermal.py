@@ -2,7 +2,7 @@
 from pathlib import Path
 from math import pi
 import numpy as np
-from backend.foundation.electrothermal import Electrothermal
+from cablesim_sdk.electrothermal import Electrothermal
 from .problem import MeshControls
 from .problem_mesh import build,package
 from .getdp_adapter import solve as magnetic_solve
@@ -10,6 +10,12 @@ from .report import digest
 
 
 def prepare(value,parameters):
+    if value.get('schema_version')=='cablesim.domain/1':
+        from .domain_coupled import prepare as domain_prepare
+        model,controls=domain_prepare(value,parameters)
+        if controls.field_order not in (None,1):
+            raise ValueError('mesh.field_order：电热耦合当前仅支持P1。')
+        return model,build(model.magnetic,controls)
     if set(parameters)!={'mesh'}:
         raise ValueError('parameters：耦合能力只接受mesh，材料/迭代范围写入已固定输入。')
     model=Electrothermal.model_validate(value)
@@ -36,7 +42,8 @@ def solve(model,mesh,work):
                 prescribed[n]=bc.value
     if not prescribed:raise ValueError('thermal_boundaries：至少需要一条给定温度边界。')
     D=np.array(sorted(prescribed));free=np.setdiff1d(np.arange(basis.N),D)
-    fixed=np.zeros(basis.N);fixed[D]=[prescribed[n] for n in D]
+    reference=min(prescribed.values())
+    fixed=np.zeros(basis.N);fixed[D]=[prescribed[n]-reference for n in D]
     k=np.zeros((len(cells),1))
     for r in mesh['regions']:k[ids==r['id']]=r['material']['k_w_m_k']
     @BilinearForm
@@ -44,7 +51,7 @@ def solve(model,mesh,work):
     @LinearForm
     def source(v,w):return w.q*v
     matrix=asm(conduction,basis,k=k)
-    temperatures=np.full(basis.N,model.initial_temperature_k);temperatures[D]=fixed[D]
+    temperatures=np.full(basis.N,model.initial_temperature_k);temperatures[D]=fixed[D]+reference
     laws={u:l.model_dump(mode='json') for u,l in model.resistivity_laws.items()}
     problem=model.magnetic.model_dump(mode='json');history=[];previous_power=None
     for iteration in range(1,model.maximum_iterations+1):
@@ -71,11 +78,17 @@ def solve(model,mesh,work):
         native_power=sum(r['joule_loss_w_m'] for r in result['regions'])+sum(r['magnetic_loss_w_m'] for r in result['magnetic_losses'])
         transfer_error=abs(power-native_power)/max(native_power,1e-12)
         if transfer_error>1e-5:raise ValueError(f'heat_source：场热源与GetDP原生积分不一致 ({transfer_error:.3g})。')
-        load=asm(source,basis,q=q);proposed=fem_solve(*condense(matrix,load,x=fixed,D=D))
+        electromagnetic_power=power
+        for region in mesh['regions']:
+            fixed_power=model.fixed_heat_w_m_by_region.get(region['uid'],0.)
+            if fixed_power:
+                mask=ids==region['id'];q[mask]+=fixed_power/float(basis.dx[mask].sum())
+        power=float(np.sum(q*basis.dx))
+        load=asm(source,basis,q=q);proposed=fem_solve(*condense(matrix,load,x=fixed,D=D))+reference
         if not np.isfinite(proposed).all() or proposed.min()<=0:raise ValueError('temperature_k：无有效稳态解。')
         delta=float(np.max(np.abs(proposed-temperatures)))
         power_delta=None if previous_power is None else abs(power-previous_power)/max(power,1e-12)
-        residual=matrix@temperatures-load
+        residual=matrix@(temperatures-reference)-load
         physical_residual=float(np.max(np.abs(residual[free]))) if len(free) else 0.
         balance_error=abs(power+float(residual[D].sum()))
         balance=balance_error/power if power>1e-12 else None
@@ -84,7 +97,8 @@ def solve(model,mesh,work):
                             thermal_residual_inf_w_m=physical_residual,energy_relative_residual=balance,
                             energy_absolute_residual_w_m=balance_error,
                             temperature_input_sha256=digest(temperatures.tolist()),magnetic_execution=result['execution']))
-        if delta<=model.temperature_tolerance_k and power_delta is not None and power_delta<=model.power_relative_tolerance and balance_error<=1e-8+1e-5*power and physical_residual<=1e-5:break
+        energy_ok=balance<=1e-7 if balance is not None else balance_error<=1e-12
+        if delta<=model.temperature_tolerance_k and power_delta is not None and power_delta<=model.power_relative_tolerance and energy_ok and physical_residual<=1e-5:break
         previous_power=power;temperatures+=model.relaxation*(proposed-temperatures)
     else:raise ValueError('maximum_iterations：电磁-热反馈未收敛；未输出最后试探值作为结果。')
     region_values=[]
@@ -96,7 +110,8 @@ def solve(model,mesh,work):
                 mesh_sha256=mesh['sha256'],input_sha256=digest(model.model_dump(mode='json')),
                 temperature_k=temperatures.tolist(),maximum_temperature_k=float(temperatures.max()),
                 region_temperatures=region_values,element_heat_w_m=np.sum(q*basis.dx,axis=1).tolist(),
-                source_heat_w_m=power,magnetic=result,iterations=history,engineering_approval=False)
+                source_heat_w_m=power,electromagnetic_heat_w_m=electromagnetic_power,
+                fixed_heat_w_m=sum(model.fixed_heat_w_m_by_region.values()),magnetic=result,iterations=history,engineering_approval=False)
 
 
 def host_case(request,case,job):

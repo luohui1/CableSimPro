@@ -6,7 +6,7 @@ import pytest
 from pydantic import ValidationError
 
 from cablesim_thermal_network.network import ModelError, ThermalNetwork, calculate
-from cablesim_thermal_network.inputs import Scenario
+from backend.schemas import Scenario
 
 
 def modified(**installation):

@@ -7,7 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def collect():
     sections = ['CableSimPro third-party notices. Licenses apply to their respective components, not an automatic license grant for the whole application.\n']
-    for name in ['scipy','pypdf','Pillow','python-multipart','fastapi','pydantic','numpy','uvicorn','httpx','langgraph','langchain-core','langgraph-checkpoint','langgraph-prebuilt','langgraph-sdk','langsmith']:
+    for name in ['scipy','pypdf','Pillow','python-multipart','fastapi','pydantic','numpy','uvicorn','httpx']:
         try:
             dist = metadata.distribution(name)
         except metadata.PackageNotFoundError:

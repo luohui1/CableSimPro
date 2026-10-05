@@ -3,6 +3,11 @@ from .models import DomainDocument
 from ..schemas import Scenario
 
 
+def convert_record(record):
+    """Convert exported v0 project/workspace records without altering the archive."""
+    return convert(record['scenario'])
+
+
 def convert(scenario):
     s = Scenario.model_validate(scenario)
     c, i = s.cable, s.installation

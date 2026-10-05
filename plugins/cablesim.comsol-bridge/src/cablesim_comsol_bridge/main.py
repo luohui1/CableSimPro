@@ -8,7 +8,7 @@ import platform
 import shutil
 from hashlib import sha256
 from pydantic import ValidationError
-from backend.foundation.reproduction import comparison
+from cablesim_sdk.reproduction import comparison
 from cablesim_comsol_bridge.adapter import prepare, solve, digest
 from cablesim_comsol_bridge.java_model import source
 from cablesim_comsol_bridge.runtime import execute

@@ -1,7 +1,7 @@
 """领域SI快照至多区域热模型；所有损耗/边界/缺失物性须显式绑定。"""
 from copy import deepcopy
 from math import isclose
-from backend.domain.models import DomainDocument
+from cablesim_sdk.domain import DomainDocument
 from .thermal_input import ThermalModel
 
 

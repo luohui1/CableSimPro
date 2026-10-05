@@ -57,6 +57,7 @@ def assess(definition, cases):
         matches = [r for r in case['results'] if r['key'] == driver['target_key']
                    and r['entity'] in entities and r.get('unit') == driver['target_unit']
                    and r['type'] == 'quantity'
+                   and (r.get('case') == 'rating-simultaneous' if driver.get('rating_basis') == 'simultaneous' else r.get('case') != 'rating-simultaneous')
                    and (driver.get('target_condition') is None or r.get('case') == driver['target_condition'])]
         value, reason = None, None
         if case['status'] != 'succeeded':
@@ -71,6 +72,8 @@ def assess(definition, cases):
             value = min(r['value'] for r in matches)
         record={'case_id': case['case_id'], 'value': value,
                 'meets_target': None if value is None else value >= driver['minimum'], 'reason': reason}
+        if driver['target_key']=='ampacity' and driver['target_unit']=='A':
+            record['rating_basis'] = driver.get('rating_basis', 'individual')
         if driver.get('candidate_ids') or driver.get('target_entities'):
             status=('not_satisfied' if reason and reason.get('code')=='NO_POSITIVE_RATING' else
                     'failed' if reason and case['status']!='succeeded' and case.get('evidence',{}).get('stage')!='preflight' else

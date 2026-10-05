@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 import pytest
 
 from backend.main import create_app
-from design.workbench.scenarios import make_router, system_models
+from backend.kernel.scenarios import make_router, system_models
 
 
 @pytest.fixture
@@ -251,7 +251,7 @@ def test_engineering_example_runs_real_plugin_and_report_has_each_cable_and_chec
     assert len(tr['operating']['cable_states']) == len(w['domain']['sections'][0]['placements'])
     assert len({g['id'] for g in tr['goal_checks']}) == len(tr['goal_checks'])
     report = client.app.state.research.deliver(w['id'],[run['id']],current_only=True)['html']
-    assert '手算核对表' in report and '互热贡献明细' in report
+    assert 'data-section="hand-check"' in report and 'data-section="mutual-heating"' in report
     assert '各回路上限不能同时使用' in report
     for circuit in w['domain']['circuits']:
         for cable in circuit['cables']:
