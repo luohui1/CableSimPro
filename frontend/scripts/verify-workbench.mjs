@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import { expect } from '@playwright/test';
-import { openHeadlessBrowser, settle } from './browser.mjs';
+import { openHeadlessBrowser, outputRoot, settle } from './browser.mjs';
 
 // Use the existing isolated database/CDP lifecycle, never a live engineering service.
 if (process.env.E2E_ISOLATED !== '1' || !process.env.FRONTEND_URL) {
@@ -10,8 +12,16 @@ const origin = new URL(process.env.FRONTEND_URL);
 if (origin.hostname !== '127.0.0.1' || origin.protocol !== 'http:') {
   throw new Error('验收只允许临时本机服务。');
 }
+const screenshotDir = path.join(outputRoot, 'github-workbench');
+await fs.mkdir(screenshotDir, { recursive: true });
+const manifest = [];
 const session = await openHeadlessBrowser();
 const { page, context } = session;
+async function shot(name) {
+  const file = `${name}.png`;
+  await page.screenshot({ path: path.join(screenshotDir, file), fullPage: false });
+  manifest.push({ name, file, url: page.url(), viewport: await page.viewportSize() });
+}
 const errors = [];
 const writes = [];
 page.on('pageerror', (error) => errors.push(error.message));
@@ -27,12 +37,14 @@ try {
       await page.goto(new URL(`/?theme=${theme}`, origin).href);
       await settle(page);
       await expect(page.locator('.workbench-shell')).toBeVisible();
+      await shot(`home-${width}x${height}-${theme}`);
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
       const launcher = page.getByRole('button', { name: '快速导航', exact: true });
       await launcher.click();
       const input = page.getByRole('searchbox', { name: '搜索工作区' });
       await expect(input).toBeFocused();
       await input.fill('ｍｏｄｅｌ');
+      if (width === 1366 && theme === 'light') await shot('command-search-model');
       await expect(page.locator('.wb-command-result')).toHaveCount(1);
       await expect(page.locator('.wb-command-result')).toContainText('型号');
       await input.fill('没有这样的入口');
@@ -53,19 +65,29 @@ try {
   await page.keyboard.press('Enter');
   await expect(page).toHaveURL(/\/studies(?:\?|$)/);
   await expect(page.getByRole('heading', { name: '研究', exact: true })).toBeVisible();
+  await shot('studies-light');
   await page.getByRole('button', { name: '收起模块导航', exact: true }).click();
   await expect(page.getByRole('button', { name: '展开模块导航', exact: true })).toHaveAttribute('aria-expanded', 'false');
   await expect(page.locator('.module-sidebar')).toBeHidden();
+  await shot('studies-sidebar-collapsed');
   await page.reload();
   await expect(page.locator('.module-sidebar')).toBeHidden();
   await page.getByRole('button', { name: '展开模块导航', exact: true }).click();
   await expect(page.locator('.module-sidebar')).toBeVisible();
+  for (const [name, route] of [['types','/types'], ['library','/library'], ['plugins','/plugins'], ['settings','/settings']]) {
+    await page.goto(new URL(`${route}?theme=light`, origin).href);
+    await settle(page);
+    await expect(page.locator('.workbench-shell')).toBeVisible();
+    await shot(`${name}-light`);
+  }
   await context.setOffline(true);
   await page.keyboard.press('Control+k');
   await expect(page.getByRole('searchbox', { name: '搜索工作区' })).toBeVisible();
   await page.keyboard.press('Escape');
   assert.deepEqual(writes, [], '导航、主题和侧栏操作不得触发工程写入或计算');
   assert.deepEqual(errors, [], '浏览器不能出现未处理的运行错误');
+  await fs.writeFile(path.join(screenshotDir, 'manifest.json'), JSON.stringify({ capturedAt: new Date().toISOString(), screenshots: manifest }, null, 2));
+  console.log(`GitHub 工作台截图：${manifest.length} 张 -> ${screenshotDir}`);
   console.log('通过：输入法、搜索、键盘导航、焦点恢复、侧栏持久化、离线菜单及零工程写入。');
 } finally {
   await context.setOffline(false).catch(() => {});
