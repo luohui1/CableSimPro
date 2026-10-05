@@ -80,8 +80,6 @@ jobs:
           cache-dependency-path: backend/requirements*.txt
       - run: npm ci
       - run: npm test
-      - name: Prepare gallery fixtures required by the shared production bundle
-        run: python src/features/cad/prepare-fixtures.py
       - run: npm run build
       - run: python -m pip install -r ../backend/requirements-dev.txt
       - run: npx playwright install --with-deps chromium
@@ -91,14 +89,62 @@ jobs:
         env:
           E2E_DATABASE_SOURCE: ${{ runner.temp }}/cablesim-empty.sqlite
         run: npm run test:workbench-browser
-      - name: Upload real GitHub runner screenshots
+  workbench-screenshots:
+    name: GitHub runner UI screenshots
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+      - run: npm ci
+        working-directory: frontend
+      - run: python -m pip install -r backend/requirements-dev.txt
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Create screenshot-only gallery placeholders
+        shell: bash
+        run: |
+          mkdir -p frontend/src/features/cad/node_modules/.cache/gallery
+          printf '%s' '{"sections":[],"cable_types":[],"circuits":[]}' > frontend/src/features/cad/node_modules/.cache/gallery/document.json
+          printf '%s' '{"layers":[]}' > frontend/src/features/cad/node_modules/.cache/gallery/model.json
+          printf '%s' '{"layers":[]}' > frontend/src/features/cad/node_modules/.cache/gallery/updated-model.json
+          printf '%s' '{"objects":[]}' > frontend/src/features/cad/node_modules/.cache/gallery/scene.json
+      - name: Run real workbench in GitHub VM and capture pages
+        shell: bash
+        run: |
+          DB="$RUNNER_TEMP/cablesim-screenshot.sqlite"
+          python -c "import sqlite3,sys; db=sqlite3.connect(sys.argv[1]); db.execute('VACUUM'); db.close()" "$DB"
+          CABLESIM_DB="$DB" python -m uvicorn backend.main:app --host 127.0.0.1 --port 8040 > "$RUNNER_TEMP/cablesim-backend.log" 2>&1 &
+          BACKEND_PID=$!
+          (cd frontend && BACKEND_URL=http://127.0.0.1:8040 npm run dev -- --host 127.0.0.1 --port 5173) > "$RUNNER_TEMP/cablesim-frontend.log" 2>&1 &
+          FRONTEND_PID=$!
+          cleanup() { kill "$FRONTEND_PID" "$BACKEND_PID" 2>/dev/null || true; }
+          trap cleanup EXIT
+          for i in {1..120}; do
+            curl -fsS http://127.0.0.1:8040/api/health >/dev/null && curl -fsS http://127.0.0.1:5173/ >/dev/null && break
+            sleep 0.5
+          done
+          curl -fsS http://127.0.0.1:8040/api/health >/dev/null
+          curl -fsS http://127.0.0.1:5173/ >/dev/null
+          E2E_ISOLATED=1 FRONTEND_URL=http://127.0.0.1:5173 node frontend/scripts/verify-workbench.mjs
+      - name: Upload GitHub VM screenshots
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: workbench-screenshots
           retention-days: 7
           path: .data/frontend-handoff/github-workbench/
-          if-no-files-found: warn
+          if-no-files-found: error
   native-plugins:
     name: Native plugins / Slurm dg83
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
