@@ -12,7 +12,8 @@ import { QueryState } from "@/components/query-state";
 import { DataTable } from "@/components/data-table";
 import { Toolbar } from "@/components/toolbar";
 import { EngineeringValue } from "@/components/engineering-value";
-import { SeriesChart } from "@/components/series-chart";
+import { deferredView } from '@/components/deferred-view';
+const SeriesChart = deferredView(() => import('@/components/series-chart').then(m => ({ default: m.SeriesChart })));
 import { EmptyState, StaleBanner } from "@/components/states";
 import { StatusMark } from "@/components/status-mark";
 import { Button } from "@/components/ui/button";
@@ -281,7 +282,7 @@ export function ReproductionPage() {
                 <DataTable
                   label="复现目标"
                   rowLabel={(row) => text(row.short_title) || text(row.title)}
-                  onSelect={(row) =>
+                  onActivate={(row) =>
                     void navigate({
                       to: "/library/reproductions/$target/$tab",
                       params: { target: row.id, tab: "results" },
@@ -438,6 +439,8 @@ export function ReproductionPage() {
                           }))}
                         />
                         <SeriesChart
+                          key={target + '/' + activeTab + '/' + metric}
+                          controls
                           quantity={quantity}
                           unit={unit}
                           xLabel={

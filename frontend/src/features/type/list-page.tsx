@@ -39,7 +39,7 @@ export function TypeListPage() {
           { id: 'version', label: '基准版本', render: row => row.version || '未提供' },
           { id: 'status', label: '状态', render: row => <StatusMark kind={row.status === 'published' ? 'historical' : 'draft'} label={row.status === 'published' ? '已发布 · 只读' : '设计草稿'} /> },
           { id: 'updated', label: '更新时间', render: row => row.updated ? new Date(row.updated).toLocaleString('zh-CN', { hour12: false }) : '未提供' },
-        ]} groups={['published', 'draft'].map(status => ({ id: status, label: status === 'published' ? '已发布型号' : '草稿与方案', rows: rows.filter(row => row.status === status) }))} rowLabel={row => row.name} onSelect={row => navigate(typePath(row.id, 'structure', 'section', location.theme))} />}
+        ]} groups={['published', 'draft'].map(status => ({ id: status, label: status === 'published' ? '已发布型号' : '草稿与方案', rows: rows.filter(row => row.status === status) }))} rowLabel={row => row.name} onActivate={row => navigate(typePath(row.id, 'structure', 'section', location.theme))} />}
     </div>
     <Dialog open={open} onOpenChange={value => { if (!create.isPending) setOpen(value); }} title="新建型号草稿" description="选择基准型号版本。保存草稿后再审核发布。" initialFocus="form"
       actions={<Button variant="primary" disabled={!selected || !models.data?.some(model => model.id === selected) || !!models.error} loading={create.isPending} onClick={() => create.mutate()}>建立型号草稿</Button>}>

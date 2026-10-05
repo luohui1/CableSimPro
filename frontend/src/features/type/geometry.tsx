@@ -12,6 +12,12 @@ import { chooseEvidence } from './evidence';
 import { typeEvidence } from './api';
 import { methodForArtifact } from './run-control';
 
+function matchesTarget(layer: CadModel['layers'][number], target: LayerTarget) {
+  const source = layer.source_target;
+  return source ? source.scope === target.scope && source.role === target.role
+    && (target.scope === 'common' || source.core_id === target.coreId) : layer.role === target.role;
+}
+
 export async function geometryMethod(signal?: AbortSignal): Promise<components['schemas']['Method']> {
   return methodForArtifact('x-cablesim.cad-model', signal, 'geometry');
 }
@@ -45,9 +51,9 @@ export function TypeGeometry({ cable, selected, onSelect }: { cable: CableType; 
     }, retry: false });
   const active = state.readOnly ? saved : preview;
   const rows = state.document ? layerRows(state.document, cable) : [];
-  const pickedLayer = selected ? active.data?.model.layers.find(layer => layer.role === selected.role) : undefined;
+  const pickedLayer = selected ? active.data?.model.layers.find(layer => matchesTarget(layer, selected)) : undefined;
   return <CadViewport geometry={active.data?.model || null} state={active.error ? 'error' : active.isPending ? 'loading' : state.workspace?.raw.historical ? 'historical' : 'success'} error={active.error ? message(active.error) : undefined}
-    selectedObject={pickedLayer ? { kind: 'layer', id: layerId(pickedLayer) } : null} onSelectionChange={selection => { const layer = selection ? active.data?.model.layers.find(layer => layerId(layer) === selection.id) : undefined; onSelect(layer ? rows.find(row => row.target.role === layer.role)?.target || null : null); }} onRetry={() => void active.refetch()}
+    selectedObject={pickedLayer ? { kind: 'layer', id: layerId(pickedLayer) } : null} onSelectionChange={selection => { const layer = selection ? active.data?.model.layers.find(layer => layerId(layer) === selection.id) : undefined; onSelect(layer ? rows.find(row => matchesTarget(layer, row.target))?.target || null : null); }} onRetry={() => void active.refetch()}
     loadExact={active.data && !state.workspace?.raw.historical ? async (_model, signal) => {
       const result = await responseData(api.POST('/api/workspaces/{wid}/geometry-preview', { params: { path: { wid: state.workspace!.id } }, body: { expected_revision: state.workspace!.revision, document: stable!, method: active.data!.method, parameters: { cable_type_id: cable.id, include_exact: true } }, signal }));
       if (!result) throw new ApiError(502, '精确几何未返回工件'); return previewModel(result.artifacts['x-cablesim.cad-model']);

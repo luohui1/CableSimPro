@@ -156,10 +156,10 @@ try {
   await expect(page.getByTitle("计算书预览")).toBeVisible();
   const downloaded = page.waitForEvent("download");
   await action("下载客户计算书", () =>
-    page.getByRole("button", { name: "导出计算书", exact: true }).click(),
+    page.getByRole("button", { name: "下载 PDF", exact: true }).click(),
   );
   const file = await downloaded;
-  await file.saveAs(path.join(out, "inquiry-report.html"));
+  await file.saveAs(path.join(out, "inquiry-report.pdf"));
   expect(await file.failure()).toBe(null);
   const elapsedMs = Math.round(performance.now() - started);
   await fs.writeFile(
@@ -173,7 +173,7 @@ try {
         actualCandidateIds: savedStudy.definition.driver.candidate_ids,
         study: sid,
         run: run.id,
-        reportBytes: (await fs.stat(path.join(out, "inquiry-report.html")))
+        reportBytes: (await fs.stat(path.join(out, "inquiry-report.pdf")))
           .size,
         sourcePolicy:
           "Backend reference values explicitly adopted; all sources unreviewed; demo laying and environment retained",

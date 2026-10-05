@@ -30,8 +30,15 @@
 | POST `/{did}/comparisons` | 同原件、同型号、同页/片段的两次成功提取逐字段对比 |
 | POST `/{did}/proposals`、GET `.../{pid}` | 生成／读取新版本草稿提案 |
 | POST `.../{pid}/approval` | 明确人工批准，保存新版本草稿 |
+| POST `/{did}/batches` | 冻结同一原件多个规格的已逐项核对提案；不写型号库 |
+| GET `/{did}/batches/{bid}` | 读取整批及逐项提案、摘要与批准状态 |
+| POST `/{did}/batches/{bid}/approval` | 人工批准准确整批摘要，原子生成多份草稿 |
 
 错误覆盖 PDF_INVALID/PDF_ENCRYPTED/PDF_PAGE_LIMIT、REGION_INVALID、UNIT_UNKNOWN、MODEL_IDENTITY_MISMATCH、OUTBOUND_CONFIRMATION_REQUIRED/CHANGED、PROVIDER_NOT_CONFIGURED/TIMEOUT/DISCONNECTED/HTTP_ERROR、REVIEW_INCOMPLETE/REVISION_CONFLICT、FIELD_CONFLICT、PROPOSAL_REVIEW_CHANGED、REQUEST_CONFLICT、PACKAGE_DIGEST_MISMATCH 等。网络失败不切服务、不伪造候选；重复点击复用原提取或版本。宿主重启把尚未完成提取标 interrupted，保留原件和已保存结果；明确新请求才重新调用。
+
+`ProposalRequest` 兼容原有 target_model_id/expected_model_sha256 分支，并增加互斥的 `new_model`：工程师明确给 name、manufacturer、designation、电压V、芯数、每芯截面m²、导体材料及 identity_reference；这些身份与所选原文型号/规格核对。新型号无需预建空壳记录，只有批准后才写入。`BatchProposalRequest{request_id,items:[ProposalRequest]}` 支持1–100规格，每项必须已独立提取并逐候选接受/修改/拒绝。整批SHA256绑定各单项提案SHA256；批准仍用 `ApprovalRequest` 的 literal true、approver、request_id、proposal_sha256。重复提交不会多建型号，任一核对版本改变、目标摘要冲突或型号版本重名即整批回滚。提案和批准复用单项实现，页码、坐标、原文、原件/结果/方法摘要进入每个型号来源。结果保持 incomplete 草稿，不自动发布或确认为完整工程型号。
+
+真实示例 `validation/batch-example.json` 标注 Bahra 原件PDF20–21页的185/240/300/400/500 mm²五规格、35字段。浏览器验收 `E2E_ISOLATED=1 HOST_API_URL=<独立宿主> node tests/browser/datasheet-batch.mjs` 走原件上传、五次规则提取、逐项核对、整批提案、明确批准、重试去重及来源回读；在隔离验收库模拟人工动作，不批准生产库资料。原件继续沿用已登记的三份存档，Mistral暂停。
 
 ## 外发与密钥
 

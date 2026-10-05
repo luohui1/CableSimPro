@@ -79,12 +79,14 @@ def from_domain(value,options):
             if e.contains != [placement.cable] or not isclose(e.x,placement.x,abs_tol=1e-10) or not isclose(e.z,placement.z,abs_tol=1e-10):
                 raise ValueError('IEC管内等效仅接受同心、每根一管。')
             supplied = options['duct_air'][e.id]
-            if set(supplied) != {'resistance_k_m_w','source'}:
+            if set(supplied)-{'resistance_k_m_w','source','air_law'} or not {'resistance_k_m_w','source'} <= set(supplied):
                 raise ValueError('管内等效必须给出热阻及IEC运行来源。')
             if e.inner_diameter is None or e.outer_diameter is None or e.material is None:
                 raise ValueError('管壁几何/材料缺失。')
             duct = {'uid':e.id,'inner_radius_m':e.inner_diameter/2,'outer_radius_m':e.outer_diameter/2,
                     'k_w_m_k':k(e.material),'air_resistance_k_m_w':supplied['resistance_k_m_w'],'source':supplied['source']}
+            if 'air_law' in supplied:
+                duct['air_law'] = supplied['air_law']
         limit = d.criteria.get('max_conductor_temperature',cable.rating.max_conductor_temperature.get('normal'))
         if limit is None:
             raise ValueError('缺少导体温度上限。')
@@ -118,4 +120,4 @@ def from_domain(value,options):
         'environment':environment,'provenance':{'domain':{'schema':'cablesim.domain/1','sources':{p:s.model_dump() for p,s in d.provenance.items()}},
                                                'method':{'source':options['source']}},
         'assumptions':['各电缆沿轴向无限长；各层为显式等效同心圆热域；常热导率',
-                       '管内空气按有来源的IEC热阻转为同心环等效导热率；固定该热阻，未求流体或温变h']})
+                       '管内空气按有来源的IEC热阻转为同心环等效导热率；声明air_law时按两侧表面平均温度更新，否则固定热阻；未求流体']})

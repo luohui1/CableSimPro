@@ -15,13 +15,6 @@ export function SiteSidebar({ theme }: { theme: "light" | "dark" }) {
         <Icon name="calc/thermal-field" />
         仿真复现
       </Link>
-      <Link
-        className="module-item"
-        to="/types" search={{ theme }}
-      >
-        <Icon name="nav/cable-type" />
-        型号工作区
-      </Link>
     </>
   );
 }

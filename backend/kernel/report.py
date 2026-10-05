@@ -2,7 +2,7 @@
 from html import escape
 import json
 
-RENDERER = 'cablesim.study-html/13'
+RENDERER = 'cablesim.study-html/17'
 
 
 def formatted(value, digits=1):
@@ -16,12 +16,15 @@ def task_answer(run):
     if definition['driver']['kind']=='selection' and definition['driver']['candidate_ids']:
         return selection_answer(run)
     if definition['driver']['kind'] == 'sweep':
-        return '<p class="answer">参数扫描：以下为逐点保存的真实结果；失败点不补值。</p>'
+        return sweep_answer(run)
     preferred = recommended_case(run)
     case = next((c for c in run['output']['cases'] if (not preferred or c['case_id']==preferred) and not c['case_id'].startswith('crosscheck-') and c['status'] == 'succeeded'), None)
     if case is None:
         return '<p class="answer">当前任务未取得可用结果。</p>'
     task = definition.get('task')
+    if task == 'iec-fem-comparison':
+        comparison=case.get('artifacts',{}).get('x-cablesim.iec-fem-comparison')
+        return '<p class="answer">'+escape(comparison['conclusion'] if comparison else '比较工件缺失，无法判断。')+'</p>'
     if task in ('transient-temperature', 'sheath-losses', 'electrothermal-steady'):
         label = {'transient-temperature':'暂态温升', 'sheath-losses':'护套损耗', 'electrothermal-steady':'电热耦合'}[task]
         return '<p class="answer">'+escape(label+'：结果来自保存的超算运行；温度、损耗与迭代证据见本章，来源工件摘要见运行记录。')+'</p>'
@@ -36,6 +39,9 @@ def task_answer(run):
     task = definition.get('task') or 'rating'
     if artifact.get('schema') == 'cablesim.iec60287.group-trace/1':
         state = artifact['operating']
+        if not state['cable_states']:
+            common=artifact.get('simultaneous_rating',{})
+            return '<p class="answer">'+escape('全回路等负荷允许电流 '+formatted(common.get('ampacity_a'))+' A；目标负荷下无有效稳态温度解，目标负荷不满足。')+'</p>'
         hot = next(s for s in state['cable_states'] if s['entity'] == state['hottest_cable'])
         passed = all(g['verdict'] == 'satisfied' for g in all_checks if g['key'] == ('conductor_temperature' if task == 'operating' else 'ampacity'))
         relevant = [g for g in all_checks if g['key'] == ('conductor_temperature' if task == 'operating' else 'ampacity')]
@@ -56,6 +62,8 @@ def task_answer(run):
         text = f"允许电流 {formatted(current['actual'])} A；限制相 {artifact.get('summary', {}).get('limiting_phase') or '方法未输出'}。"
     else:
         text = '此历史运行未输出所选任务的目标答复，保留原始物理量。'
+    if artifact.get('corrugated_sheaths'):
+        text += ' 结论依赖声明的波谷接触、缓冲/间隙物性及几何参考参数，详见皱纹护套参数节。'
     method = definition['method']
     label = {'cablesim.thermal-network': '交叉校核参考', 'cablesim.iec60287': 'IEC 60287 解析法'}.get(method['plugin_id'], method['plugin_id'])
     return '<p class="answer">'+escape(text+' '+label+' · '+method['version']+'。')+'</p>'
@@ -118,7 +126,7 @@ def selection_answer(run):
     method=definition['method']
     if qualified and qualified[0][4].get('engineering_parameters'):
         conclusion+=' 结论依赖工程师给定参数：'+'、'.join(qualified[0][4]['dependencies'])+'。'
-    basis = definition['driver'].get('rating_basis', 'individual')
+    basis = next((a['rating_basis'] for a in run['output'].get('assessment',[]) if a.get('value') is not None and 'rating_basis' in a),definition['driver'].get('rating_basis','individual'))
     conclusion += ' 选型口径：'+('全回路等负荷允许电流，所有回路同时采用相同平衡电流。' if basis == 'simultaneous' else '逐回路允许电流，其他回路维持保存负荷，各上限不能同时使用。')
     references=sorted({(s['kind'],s['reference']) for c in candidates for s in c['payload'].get('sources',{}).values()})
     evidence='<h3>型号来源依据</h3>'+table(['来源类型','出处与原文SHA256'],references) if references else ''
@@ -137,6 +145,34 @@ def artifact_sections(case):
     trace = artifacts.get('x-cablesim.iec60287-trace')
     network = artifacts.get('x-cablesim.thermal-network-rating')
     parts = []
+    comparison = artifacts.get('x-cablesim.iec-fem-comparison')
+    if comparison:
+        from cablesim_sdk.iec_fem import ComparisonArtifact
+        checked = ComparisonArtifact.model_validate(comparison)
+        basis={'uniform_soil_counterfactual':'均匀土壤对照','iec_saved_condition':'保存工况',
+               'saved_geometry_frozen_iec_coefficients':'保存几何；冻结损耗与管内热阻',
+               'saved_geometry_native_losses_temperature_dependent_duct_air':'保存几何；原生电磁损耗与温变管内热阻'}
+        assumptions={'homogeneous_soil':'均匀土壤','rectangular_backfill_equivalence':'回填区精确几何','resolved_duct_air_flow':'管内空气流动已求解'}
+        parts.append('<section data-section="iec-fem-comparison"><h3>IEC 与有限元对比</h3>'+table(
+            ['方法','允许电流/A','保存负荷峰温/°C','口径'],
+            [[name,formatted(value.ampacity_a,3),formatted(value.operating_temperature_k-273.15 if value.operating_temperature_k is not None else None,3),basis.get(value.basis,value.basis)]
+             for name,value in [('IEC',checked.iec),('FEM',checked.fem)]])+
+            table(['核验','状态','温度差/K','允许电流差/A'],
+                [[name,'已收敛' if checked.convergence[key+'_status']=='converged' else '未收敛',formatted(checked.convergence[key]['maximum_temperature_change_k'],5),formatted(checked.convergence[key]['ampacity_change_a'],5)]
+                 for key,name in [('mesh','网格细化'),('domain','计算域扩大')]])+
+            table(['假设','满足','原因'],[[assumptions.get(r['assumption'],r['assumption']),'是' if r['satisfied'] else '否',r['reason']] for r in checked.assumption_checks])+
+            '<p>'+escape('；'.join(checked.clauses))+'</p><p>'+escape('；'.join(checked.limitations))+'</p></section>')
+        if checked.decomposition:
+            attribution = checked.decomposition
+            if attribution.get('status') == 'available':
+                parts.append('<section data-section="iec-fem-attribution"><h3>偏差来源</h3>'+table(
+                    ['因素','贡献/百分点'],
+                    [[r['label'],formatted(r['percentage_points'],4)] for r in attribution['contributions']]+
+                    [['均匀基线残差',formatted(attribution['baseline_residual_percentage_points'],4)],
+                     ['更新后总偏差',formatted(attribution['updated_gap_percent'],4)]])+
+                    '<p>'+escape(attribution['meaning'])+'</p></section>')
+            else:
+                parts.append('<p>'+escape(attribution.get('reason','偏差分解不可用。'))+'</p>')
     history = artifacts.get('x-cablesim.temperature-history')
     if history:
         parts.append('<section data-section="transient-temperature"><h3>暂态温升</h3>'+table(
@@ -170,7 +206,7 @@ def artifact_sections(case):
             for g in goals]))
     if trace and trace.get('schema') == 'cablesim.iec60287.group-trace/1':
         parts.append('<h3>各回路允许电流</h3><p>'+escape(trace['rating_basis'])+'</p>'+table(
-            ['回路','允许电流 / A','限制电缆','不可用原因'], [[r['label'],formatted(r['ampacity_a'],3),r['limiting_cable'],r.get('error',{}).get('message') or '—'] for r in trace['circuit_ratings']]))
+            ['回路','允许电流 / A','口径','限制电缆','不可用原因'], [[r['label'],formatted(r['ampacity_a'],3),r.get('rating_basis',{}).get('display_name','历史口径见上文'),r['limiting_cable'],r.get('error',{}).get('message') or '—'] for r in trace['circuit_ratings']]))
         simultaneous = trace.get('simultaneous_rating')
         if simultaneous:
             parts.append('<h3 data-section="simultaneous-rating">全回路等负荷允许电流</h3><p>'+escape(trace['rating_modes']['simultaneous']['meaning'])+'</p>'+table(
@@ -178,6 +214,13 @@ def artifact_sections(case):
         if trace.get('external_loss_source'):
             source = trace['external_loss_source']
             parts.append('<h3 data-section="external-loss-source">IEC外部损耗来源</h3>'+table(['来源运行','工况','工件SHA256','来源输入SHA256','来源输出SHA256'],[[source['run_id'],source['case_id'],source['artifact_sha256'],source['source_input_digest'],source['source_output_digest']]]))
+        if trace.get('corrugated_sheaths'):
+            waves=trace['corrugated_sheaths']
+            parts.append('<h3 data-section="corrugated-sheath">皱纹护套与工程参考参数</h3>'+table(
+                ['电缆','波谷内径 / mm','波峰外径 / mm','平均直径 / mm','节距 / mm','R20 / Ω/m','缓冲与间隙热阻 / K·m/W'],
+                [[w['entity'],formatted(w['trough_inner_diameter_m']*1000,3),formatted(w['crest_outer_diameter_m']*1000,3),formatted(w['mean_diameter_m']*1000,3),formatted(w['pitch_m']*1000,3),f"{w['sheath_r20_ohm_m']:.8e}",formatted(w['buffer_and_gap_resistance_k_m_w'],6)] for w in waves]))
+            parts.append('<p>结论依赖下列工程参考参数；平均直径热路不表示波谷局部接触、放电或缓冲层烧蚀验证。</p>'+table(
+                ['几何出处','间隙有效热阻率出处','条款'], sorted({(w['geometry_source'],w['gap_source'],'；'.join(w['clauses'])) for w in waves})))
         parts.append('<h3>保存负荷下的逐电缆温度与损耗</h3>'+table(
             ['电缆','电流 / A','导体 / °C','温限余量 / K','总损耗 / W/m','互热温升 / K'],
             [[s['entity'],formatted(s['current_a']),formatted(s['conductor_temperature_c']),formatted(s['margin_k']),
@@ -238,7 +281,27 @@ def artifact_sections(case):
     return ''.join(parts)
 
 
+def sweep_answer(run):
+    driver = run['snapshot']['definition']['driver']
+    if driver['target_key'] != 'ampacity' or driver['target_unit'] != 'A':
+        return '<p class="answer">参数扫描：以下为逐点保存的真实结果；失败点不补值。</p>'
+    common = driver.get('rating_basis') == 'simultaneous'
+    condition = 'rating-simultaneous' if common else 'rating'
+    meaning = ('全回路等负荷允许电流：所有回路同时采用相同平衡电流。' if common else
+               '逐回路条件允许电流：其他回路保持保存负荷，任一电缆到达温限即限制该值，各上限不能同时使用。')
+    rows = []
+    for i, sample in enumerate(driver['samples']):
+        case = next((c for c in run['output']['cases'] if c['case_id'] == f'case-{i}'), None)
+        matches = [q for q in (case or {}).get('results', []) if q.get('type') == 'quantity'
+                   and q.get('key') == 'ampacity' and q.get('entity') == driver['target_entity']
+                   and q.get('case') == condition and q.get('unit') == 'A']
+        value = matches[0].get('value') if case and case['status'] == 'succeeded' and len(matches) == 1 and matches[0]['status'] == 'available' else None
+        rows.append([sample['label'], formatted(value, 3), driver['target_entity'], condition])
+    return '<p class="answer" data-section="sweep-basis">'+meaning+'</p>'+table(['采样','允许电流 / A','回路','结果口径'], rows)
+
+
 def render(runs):
+    from .version_status import cover_status
     from .rating_table import is_rating_table
     from .type_specification import render_run_specification
     ratings = [r for r in runs if is_rating_table(r)]
@@ -287,4 +350,23 @@ def render(runs):
             '<style>body{font:14px system-ui;max-width:1100px;margin:32px auto;padding:16px}table{border-collapse:collapse;width:100%}'
             'td,th{overflow-wrap:anywhere;font-variant-numeric:tabular-nums;border:1px solid #ccc;padding:8px;text-align:left}th{background:#f5f5f3;font-weight:500}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}.answer{font-size:20px;line-height:1.6;border-bottom:1px solid #ddd;padding-bottom:20px}section{break-before:page}details{margin-top:24px}h2{margin-top:36px}h3{margin-top:24px}</style>'
             '<h1>CableSimPro 研究计算书</h1><p>来源为指定运行的已保存结果；导出未重新计算。验证等级仅适用于声明范围，不构成设计签审认证。</p>'
-            + ''.join(blocks) + '</html>')
+            + ('<p data-version-status="stale">'+escape(cover_status(runs)['display_name'])+'</p>' if cover_status(runs)['status']=='stale' else '')
+            + pdf_downloads(runs) + ''.join(blocks) + '</html>')
+
+
+def pdf_downloads(runs):
+    """Both editions are frozen into the same integrity-checked HTML delivery.
+
+    Standalone exported HTML supports these download links. A sandboxed app
+    preview must delegate download to its parent; data-report-pdf identifies
+    the edition without introducing another run or mutable source endpoint.
+    """
+    from base64 import b64encode
+    from datetime import datetime, timezone
+    from .study_pdf import render_pdf
+    generated_at=datetime.now(timezone.utc).isoformat(timespec='seconds')
+    links=[]
+    for audience,label in [('customer','客户版'),('internal','内部审核版')]:
+        payload=b64encode(render_pdf(runs,audience,generated_at=generated_at)).decode('ascii')
+        links.append(f'<a data-report-pdf="{audience}" download="研究计算书-{label}.pdf" href="data:application/pdf;base64,{payload}">下载{label} PDF</a>')
+    return '<nav aria-label="计算书 PDF 下载">'+'　'.join(links)+'</nav>'

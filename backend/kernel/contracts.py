@@ -68,10 +68,17 @@ class Driver(StrictModel):
     target_entities: list[str] = Field(default_factory=list, max_length=100)
     target_unit: str = 'A'
     target_condition: str | None = Field(default=None, min_length=1, max_length=120)
-    rating_basis: Literal['individual', 'simultaneous'] = Field(default='individual', description='Ampacity selection basis: individual circuit increase with other saved loads held, or common balanced RMS current in all circuits simultaneously.')
+    rating_basis: Literal['individual', 'simultaneous'] = Field(default='individual', description='Ampacity selection/sweep basis. individual: vary one circuit while holding other saved currents (A), enforcing every cable temperature limit; these conditional limits cannot be used together. simultaneous: common balanced RMS current (A) in all circuits, independent of saved target loads. Read result case=rating or rating-simultaneous respectively; never select by result order.')
     minimum: float | None = None
     allow_demo_candidates: bool = Field(default=False,strict=True)
     candidate_filters: CandidateFilters = Field(default_factory=CandidateFilters)
+
+    @model_validator(mode='before')
+    @classmethod
+    def sweep_default_basis(cls, value):
+        if isinstance(value, dict) and value.get('kind') == 'sweep' and 'rating_basis' not in value:
+            return {**value, 'rating_basis':'simultaneous'}
+        return value
 
     @model_validator(mode='after')
     def complete(self):
@@ -127,10 +134,10 @@ class ThermalConvergence(StrictModel):
 
 class StudyConfiguration(StrictModel):
     title: str = Field(min_length=1, max_length=120)
-    task: Literal['rating', 'operating', 'target', 'transient-temperature', 'sheath-losses', 'electrothermal-steady'] | None = Field(default=None, description='Study objective; simulation tasks submit asynchronously to Slurm.')
+    task: Literal['rating', 'operating', 'target', 'transient-temperature', 'sheath-losses', 'electrothermal-steady', 'iec-fem-comparison'] | None = Field(default=None, description='Study objective; simulation tasks submit asynchronously to Slurm.')
     method: Method
     input_source: Literal['domain', 'study'] = 'domain'
-    method_input: dict | None = None
+    method_input: dict | None = Field(default=None,description='Saved standalone plugin input. For cablesim.simulation-problem/1 use the exact GET /api/simulation/problem-contract schema; all lengths m, absolute temperature K, RMS current A.')
     parameters: dict | TransientParameters | SheathLossParameters | CoupledParameters = Field(default_factory=dict, description='Saved capability parameters. Simulation task models are exposed in OpenAPI; other plugins use GET /api/input-contracts parameter_schema. SI lengths m, time s, temperature K, RMS current A.')
     input_sources: dict[str, Source] = Field(default_factory=dict)
     candidate_completions: dict[str,CandidateCompletion] = Field(default_factory=dict,max_length=100)
@@ -204,6 +211,19 @@ class RunArguments(StrictModel):
     @field_validator('scope_acknowledged', mode='before')
     @classmethod
     def explicit_acknowledgement(cls, value):
+        return RunStudy.explicit_acknowledgement(value)
+
+
+class RecalculateStudy(StrictModel):
+    expected_revision: int = Field(ge=1, description='Expected workspace revision; no unit. Mismatch returns 409.')
+    expected_study_revision: int = Field(ge=1, description='Expected study configuration revision; no unit.')
+    request_id: UUID = Field(description='Idempotency key for both version adoption and the new run; retry unchanged after a disconnect.')
+    module: str | None = Field(default=None, pattern=r'^[a-z][a-z0-9-]{0,63}$', description='Saved module to update and run; null selects the primary configuration.')
+    scope_acknowledged: Literal[True] = Field(description='Explicit user action adopts current versions and acknowledges method scope; preflight still runs.')
+
+    @field_validator('scope_acknowledged', mode='before')
+    @classmethod
+    def acknowledgement(cls, value):
         return RunStudy.explicit_acknowledgement(value)
 
 

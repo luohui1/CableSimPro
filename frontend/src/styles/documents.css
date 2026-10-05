@@ -1,0 +1,284 @@
+.documents-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.document-toolbar,
+.document-page-tools,
+.document-selections,
+.document-history,
+.document-decisions,
+.document-progress {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.document-batch-controls { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-3); }
+.document-batch { border-bottom: 1px solid var(--line); padding-bottom: var(--space-3); }
+.document-batch-item { padding-block: var(--space-2); }
+.document-history label { min-width: 0; max-width: 100%; }
+.document-history select { max-width: 100%; }
+.document-toolbar strong {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.document-toolbar,
+.document-history {
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line);
+}
+.document-review-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  min-width: 0;
+}
+.document-original {
+  min-width: 0;
+  align-self: start;
+  position: sticky;
+  top: 0;
+}
+.document-page-tools {
+  min-height: var(--control-standard);
+  padding: var(--space-2);
+  background: var(--fill);
+}
+.document-page-scroll {
+  overflow: auto;
+  max-height: 70vh;
+  background: var(--fill);
+  padding: var(--space-2);
+}
+.document-page-image {
+  position: relative;
+  min-width: 75%;
+  background: var(--panel);
+}
+.document-page-image img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.document-zoom-75 {
+  width: 75%;
+}
+.document-zoom-100 {
+  width: 100%;
+}
+.document-zoom-125 {
+  width: 125%;
+}
+.document-zoom-150 {
+  width: 150%;
+}
+.document-zoom-175 {
+  width: 175%;
+}
+.document-zoom-200 {
+  width: 200%;
+}
+.document-page-image svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: crosshair;
+}
+.evidence-highlight {
+  fill: none;
+  stroke: var(--attention);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.header-highlight {
+  fill: none;
+  stroke: var(--agent);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  vector-effect: non-scaling-stroke;
+}
+.region-highlight {
+  fill: var(--agent-fill);
+  fill-opacity: 0.35;
+  stroke: var(--agent);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.document-review-panel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.document-candidates h2,
+.document-review-field h2,
+.document-proposal h2,
+.document-proposal-form h2 {
+  font-size: var(--text-subheading);
+  margin: 0 0 var(--space-3);
+}
+.documents-workspace table,
+.document-catalog {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.documents-workspace th,
+.documents-workspace td,
+.document-catalog th,
+.document-catalog td {
+  text-align: left;
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--line);
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.documents-workspace th,
+.document-catalog th {
+  background: var(--fill);
+  color: var(--text-secondary);
+  font-weight: var(--weight-normal);
+}
+.document-candidates tr[data-selected="true"] {
+  background: var(--location);
+}
+.document-candidates .text-button {
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  border: 0;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+.document-evidence {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2) var(--space-3);
+  margin: var(--space-3) 0;
+}
+.document-evidence dt {
+  color: var(--text-secondary);
+}
+.document-evidence dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+.documents-workspace .digest {
+  overflow-wrap: anywhere;
+  font-size: var(--text-note);
+}
+.document-review-field,
+.document-proposal-form {
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-4);
+}
+.documents-workspace fieldset {
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.documents-workspace legend {
+  margin-bottom: var(--space-2);
+}
+.documents-workspace label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.documents-workspace input:not([type="checkbox"]):not([type="radio"]),
+.documents-workspace textarea,
+.documents-workspace select {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--control-standard);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-input);
+  padding: var(--space-2);
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+.documents-workspace textarea {
+  resize: vertical;
+}
+.documents-workspace input:focus-visible,
+.documents-workspace textarea:focus-visible,
+.documents-workspace select:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
+.documents-workspace .document-checkbox,
+.document-decisions label {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+}
+.document-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.document-extraction-config {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: var(--space-2);
+}
+.document-extraction-config form {
+  padding-top: var(--space-3);
+}
+.document-extraction-config summary,
+.documents-workspace details summary {
+  cursor: pointer;
+}
+.document-selections > label {
+  max-width: 100px;
+}
+.document-history > label {
+  flex: 1;
+  max-width: 440px;
+  flex-direction: row;
+  align-items: center;
+  white-space: nowrap;
+}
+.document-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--error);
+}
+.document-progress progress {
+  width: 160px;
+  accent-color: var(--text);
+}
+.documents-workspace .state-view {
+  min-height: 160px;
+}
+.documents-workspace .button {
+  align-self: start;
+}
+@media (max-width: 1050px) {
+  .document-review-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .document-original {
+    position: static;
+  }
+  .document-page-scroll {
+    max-height: 55vh;
+  }
+}

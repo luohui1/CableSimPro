@@ -1068,6 +1068,7 @@ export function StudyBatch({
         />
       )}
       <PreflightDialog
+        requireConfirmation
         open={open}
         onOpenChange={(value) => {
           if (!submit.isPending) setOpen(value);

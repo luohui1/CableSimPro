@@ -10,13 +10,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import Field, JsonValue
-from ..domain.guards import check_locks
 from ..domain.models import DomainDocument
+from ..domain.editing import DraftDomainDocument, resolve_edit
 from ..plugin_host import Executor, PluginHostError
 from ..plugin_host.resident import ResidentRunner
 from ..schemas import Scenario, StrictModel
 from .contracts import Method
+from .responses import VersionStatus
 from .workspace import fingerprint
+from .simulation_contract import ProblemContract, contract as problem_contract
 
 
 class ApiErrorDetail(StrictModel):
@@ -33,7 +35,7 @@ ERRORS = {code: {'model': ApiError} for code in (404, 409, 422, 503)}
 
 class GeometryPreview(StrictModel):
     expected_revision: int = Field(ge=1, description='Saved workspace revision; preview does not save input.')
-    document: DomainDocument = Field(description='Complete preview input; lengths m, temperatures K, RMS currents A.')
+    document: DraftDomainDocument = Field(description='Complete preview input; lengths m, temperatures K, RMS currents A. Dependent type coordinates follow the saved construction before full validation.')
     method: Method = Field(description='Exact geometry capability and sealed plugin release.')
     parameters: dict[str, JsonValue] = Field(description='Capability parameters from the installed input contract; SI units.')
     reuse_from: str | None = Field(default=None, pattern=r'^[0-9a-f]{64}$', description='Prior preview request SHA256; optional cache hint only.')
@@ -113,6 +115,21 @@ class DeliveryResult(StrictModel):
     html: str = Field(description='Saved HTML; export never reruns calculation.')
     digest: str = Field(pattern=r'^[0-9a-f]{64}$', description='SHA256 of renderer, sources and HTML.')
     created: str = Field(description='UTC creation timestamp.')
+    version_status: VersionStatus = Field(description='Current version status of source runs; saved HTML and its digest are not rewritten.')
+
+
+class DeliverySummary(StrictModel):
+    id: UUID = Field(description='Immutable delivery identity.')
+    workspace: UUID
+    kind: Literal['calculation','specification'] = Field(description='Saved calculation book or specification.')
+    version: int = Field(ge=1,description='One-based generation sequence within this workspace; no unit.')
+    renderer: str = Field(description='Exact renderer version used to create this delivery.')
+    created: str = Field(description='UTC generation time; ISO 8601.')
+    sources: list[DeliverySource] = Field(description='Saved source runs and input/output SHA256; export does not rerun them.')
+    digest: str = Field(pattern=r'^[0-9a-f]{64}$',description='Integrity digest of renderer, sources and content.')
+    download_url: str = Field(description='Relative API URL for integrity-checked saved HTML.')
+    media_type: Literal['text/html'] = 'text/html'
+    version_status: VersionStatus = Field(description='Dynamic source-version warning for an immutable historical delivery.')
 
 
 def fail(status, code, message):
@@ -144,10 +161,9 @@ class Previews:
         snapshot = self.research.store.snapshot(wid)
         if snapshot['revision'] != body.expected_revision:
             fail(409, 'WORKSPACE_REVISION_CONFLICT', '型号已更新，请重新打开后预览。')
-        document = body.document.model_dump(mode='json')
         if 'domain' not in snapshot:
             fail(422, 'DOMAIN_INPUT_REQUIRED', 'document：请先保存领域工程输入，再生成几何预览。')
-        check_locks(snapshot, document)
+        document = resolve_edit(snapshot, body.document)
         plugin, capability = self.research.resolve(body.method.model_dump(mode='json'))
         if capability.analysis != 'geometry' or capability.input_schema != 'cablesim.domain/1':
             fail(422, 'GEOMETRY_CAPABILITY_REQUIRED', '请选择接受领域输入的几何预览能力。')
@@ -188,6 +204,24 @@ class Previews:
 
 def make_router(research, previews):
     router = APIRouter(prefix='/api', tags=['Host inputs and delivery'])
+    from .database_ops import make_router as database_router
+    router.include_router(database_router(research.store))
+
+    @router.get('/simulation/problem-contract',response_model=ProblemContract,responses=ERRORS)
+    def simulation_problem_contract():
+        return problem_contract()
+
+    @router.get('/workspaces/{wid}/deliveries', response_model=list[DeliverySummary], responses=ERRORS)
+    def deliveries(wid:UUID):
+        with research.store.db() as db:
+            host_call(research.store.load,db,str(wid))
+            ids=[r['id'] for r in db.execute('SELECT id FROM deliveries WHERE workspace=? ORDER BY rowid',(str(wid),))]
+        results=[]
+        for version,did in enumerate(ids,1):
+            saved=host_call(research.delivery,str(wid),did)
+            results.append({k:saved[k] for k in ('id','workspace','renderer','created','sources','digest','version_status')})
+            results[-1].update(version=version,kind='specification' if 'data-specification-section=' in saved['html'] else 'calculation',download_url=f'/api/workspaces/{wid}/deliveries/{did}/file')
+        return results[::-1]
 
     @router.post('/design/workspaces/{wid}/geometry-preview', response_model=GeometryPreviewResult, responses=ERRORS, deprecated=True)
     @router.post('/workspaces/{wid}/geometry-preview', response_model=GeometryPreviewResult, responses=ERRORS)

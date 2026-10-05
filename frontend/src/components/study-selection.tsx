@@ -15,6 +15,8 @@ import { SourceBadge } from "./source-badge";
 import { EmptyState, StaleBanner } from "./states";
 import type { PropertyGroup } from "./property-panel";
 import { Tooltip } from "./ui/tooltip";
+import { savedDomain } from "@/lib/domain-fields";
+import { Link } from "@tanstack/react-router";
 
 export function selectedProperties(row?: SelectionRow): PropertyGroup[] {
   if (!row) return [];
@@ -109,11 +111,13 @@ export function StudySelection({
   selectedId,
   onSelect,
   dirty,
+  theme,
 }: {
   run: Record<string, unknown>;
   selectedId?: string;
   onSelect: (row: SelectionRow) => void;
   dirty: boolean;
+  theme: "light" | "dark";
 }) {
   const view = useMemo(() => selectionView(run), [run]);
   const [filter, setFilter] = useState("all");
@@ -214,6 +218,7 @@ export function StudySelection({
             },
           ]}
           historical={view.historical}
+          conditions={<SelectionConditions run={run} theme={theme} />}
         />
       ) : (
         <EmptyState
@@ -252,4 +257,27 @@ export function StudySelection({
       />
     </>
   );
+}
+
+function SelectionConditions({ run, theme }: { run: Record<string, unknown>; theme: "light" | "dark" }) {
+  const domain = savedDomain(run);
+  if (!domain?.sections.length) return <p className="muted">运行快照未提供敷设条件</p>;
+  function link(module: string, tab: string, label: string) {
+    return <Link to="/studies/$sid/$module/$tab" params={{ sid: text(run.study), module, tab }}
+      search={{ workspace: text(run.workspace), run: text(run.id), theme, delivery: "" }}>{label}</Link>;
+  }
+  return <div className="selection-conditions" aria-label="本次计算工况">
+    {domain.sections.map(section => {
+      const depths = [...new Set(section.placements.map(item => Number((-item.z).toFixed(3))))];
+      const soil = domain.materials.find(item => item.id === section.medium.material);
+      const temperature = numeric(section.kind === "ground" ? section.medium.surface_temperature : section.medium.air_temperature);
+      const depth = section.kind === "ground" && depths.length ? ` · 埋深 ${depths.join(" / ")} m` : "";
+      return <p key={section.id}>
+        <span className="muted">本次工况：</span>
+        {link("section", "coordinates", (section.label || "敷设截面") + depth)}
+        {section.kind === "ground" && <> · {link("section", "media", `土壤 ${formatNumber(numeric(soil?.thermal_resistivity), 1)} K·m/W`)}</>}
+        {" · "}{link("conditions", "inputs", temperature === null ? "环境温度未提供" : `${formatNumber(temperature - 273.15, 1)} °C`)}
+      </p>;
+    })}
+  </div>;
 }

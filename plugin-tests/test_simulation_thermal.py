@@ -131,3 +131,57 @@ def test_domain_and_explicit_model_share_identical_solver_input(tmp_path):
     assert a.evidence['prepared_input_sha256'] == b.evidence['prepared_input_sha256']
     assert [r['value'] for r in a.results] == pytest.approx([r['value'] for r in b.results],abs=1e-7)
     assert set(a.artifacts) == set(b.artifacts)
+
+
+@pytest.mark.parametrize('order',[1,2])
+def test_duct_temperature_feedback_matches_annular_heat_balance(order):
+    """Independent annular conservation plus IEC scalar hand calculation."""
+    model = circular();cable = model['cables'][0];cable['z_m'] = -.5
+    cable['duct'] = {'uid':'duct','inner_radius_m':.04,'outer_radius_m':.045,
+        'k_w_m_k':1/6,'air_resistance_k_m_w':1.,'source':'synthetic radial verification',
+        'air_law':{'u':5.2,'v':.91,'y_per_k':.01,'minimum_temperature_k':273.15,
+                   'maximum_temperature_k':423.15,'source':'IEC 60287-2-1:2023 4.2.6.1; explicit synthetic coefficients'}}
+    boundary = {'kind':'temperature','temperature_k':293.15,'h_w_m2_k':None,'emissivity':None}
+    model['environment'] = {'kind':'ground','background':{'uid':'soil','bounds_m':[-1,-1,1,0],'k_w_m_k':1.},
+        'soil_layers':[],'backfills':[],'boundaries':{name:boundary for name in ('top','bottom','left','right')}}
+    cfg = controls();cfg.update(element_order=order,mesh_size_m=.001,far_mesh_size_m=.1,mesh_transition_m=.2,max_nodes=90000)
+    result,field = solve_thermal(*prepare(model,{'controls':cfg}))
+    state = result['duct_air_states'][0]
+    mean_c = (state['surface_temperature_k']+state['duct_inner_temperature_k'])/2-273.15
+    expected_r = 5.2/(1+.1*(.91+.01*mean_c)*40)
+    assert state['resistance_k_m_w'] == pytest.approx(expected_r,rel=1e-10)
+    assert state['surface_temperature_k']-state['duct_inner_temperature_k'] == pytest.approx(10*expected_r,abs=.025)
+    assert result['energy_relative_residual'] < 1e-7
+    assert state['resistance_k_m_w'] != pytest.approx(1.,abs=.01)
+    air = next(r for r in field['regions'] if r['uid']=='duct/air')
+    assert air['k'] == pytest.approx(log(2)/(2*pi*expected_r))
+
+
+def test_overload_starts_from_nonuniform_steady_state_and_matches_cylinder_series():
+    from scipy.special import jn_zeros,j1
+    import numpy as np
+    from cablesim_simulation.thermal import ThermalSystem
+    from cablesim_simulation.thermal_overload import advance
+    model = circular();cable = model['cables'][0]
+    cable['layers'] = [{'uid':'layer/core','role':'conductor','outer_radius_m':.02,'k_w_m_k':.4,'fixed_heat_w_m':0.}]
+    cable['current_a'] = 10.
+    cable['electrical'] = {'r20_ohm_m':.1,'alpha20_per_k':0.,'ac_extra_factor':0.,
+        'sheath_loss_factor':0.,'sheath_layer_uid':None,'source':'constant-resistance cylinder analytic validation'}
+    model['environment']['boundaries']['surface'] = {'kind':'temperature','temperature_k':293.15,'h_w_m2_k':None,'emissivity':None}
+    cfg = controls();cfg.update(element_order=2,mesh_size_m=.001,tolerance_k=1e-8)
+    roots = jn_zeros(0,80)
+    fraction = 1-float(np.sum(8*np.exp(-(.4/2.4e6)*roots**2*600/.02**2)/(roots**3*j1(roots))))
+    exact = 293.15+2/(4*pi*.4)+8/(4*pi*.4)*fraction
+    errors = []
+    for step in (20.,10.):
+        system = ThermalSystem(*prepare(model,{'controls':cfg}))
+        result = advance(system,[np.sqrt(20.)],[10.],{'layer/core':2.4e6},step,600.,[300.],'circuit/one')
+        initial = result['curves'][0]['conductor_max_temperature_k']['cable/one']
+        assert initial == pytest.approx(293.15+2/(4*pi*.4),abs=.001)
+        actual = result['curves'][-1]['conductor_max_temperature_k']['cable/one']
+        errors.append(abs(actual-exact))
+        assert max(r['energy_relative_residual'] for r in result['time_history']) < 1e-7
+        assert result['crossings'][0]['status']=='not_reached_within_horizon'
+        assert result['crossings'][0]['safe_duration_s'] is None
+    assert errors[1] < .012
+    assert errors[1] < .65*errors[0]

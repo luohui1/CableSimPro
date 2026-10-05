@@ -8,6 +8,25 @@ import {
   displayUnit,
 } from "../src/lib/display-names.ts";
 import { internalTokens } from "./visible-names.mjs";
+import { matchingFieldPath, pointerParts } from '../src/lib/missing-input.ts';
+import { requestErrorPointer, requestFieldMatch } from '../src/features/documents/request-fields.ts';
+test('资料请求按完整路径定位，不混淆同名字段或数组元素', () => {
+  assert.equal(requestErrorPointer({loc:['body','new_model','u0_v']}), '/new_model/u0_v');
+  assert.equal(requestErrorPointer({loc:['body','selections',2,'region',0]}), '/selections/2/region/0');
+  assert.equal(requestErrorPointer({loc:['body','a/b','c~d']}), '/a~1b/c~0d');
+  assert.equal(requestFieldMatch('/new_model/name', ['/model/name','/new_model','/new_model/name']), '/new_model/name');
+  assert.equal(requestFieldMatch('/selections/2/region/0', ['/selections','/selections/0','/selections/2']), '/selections/2');
+  assert.equal(requestFieldMatch('/selections/2/page', ['/selections/0/page','/selections/1/page']), undefined);
+});
+test('预检位置按 RFC6901 解码，区分数组下标并支持方法参数根', () => {
+  assert.deepEqual(pointerParts('/load_cases/0/currents/circuit~1c1'), ['load_cases', '0', 'currents', 'circuit/c1']);
+  assert.deepEqual(pointerParts('/a~0b/c~1d'), ['a~b', 'c/d']);
+  assert.equal(matchingFieldPath('/parameters/values/core_lay_length', ['/values/core_lay_length']), '/values/core_lay_length');
+  assert.equal(matchingFieldPath('/load_cases/1/currents/circuit~1c1', ['/load_cases/0/currents/circuit~1c1']), undefined);
+  assert.equal(matchingFieldPath('缺少 core_lay_length', ['/values/core_lay_length']), undefined);
+  const input = {load_cases:[{id:'load/base',currents:{'circuit/c1':500}}]};
+  assert.equal(matchingFieldPath('/load_cases/0/currents/circuit~1c1', ['/load_cases/load~1base/currents/circuit~1c1'], input), '/load_cases/load~1base/currents/circuit~1c1');
+});
 test("工程刻度覆盖负数、常量和微小量；同轴精度一致", () => {
   assert.deepEqual(niceAxis(531, 648).ticks, [520, 560, 600, 640, 680]);
   for (const [low, high] of [
@@ -59,7 +78,43 @@ test("端点差与手算一致，缺点或转折不编造趋势", () => {
       "ampacity",
       "A",
     ),
-    /转折/,
+    /结果非单调\/突变，请检查/,
+  );
+});
+test("突变不被平均值掩盖；按间距归一化并覆盖平段和零值", () => {
+  const summary = (values) =>
+    sweepSummary(values, "土壤热阻率", "K*m/W", "ampacity", "A");
+  const anomaly = summary([
+    { x: 0.6, value: 451.9 },
+    { x: 0.8, value: 376.4 },
+    { x: 1, value: 181.3 },
+  ]);
+  assert.match(anomaly, /结果非单调\/突变，请检查/);
+  assert.doesNotMatch(anomaly, /平均|约降/);
+  // Hand check: 10% / 0.1 == 20% / 0.2, despite unequal intervals.
+  assert.match(
+    summary([
+      { x: 0, value: 100 },
+      { x: 0.1, value: 90 },
+      { x: 0.3, value: 72 },
+    ]),
+    /平均/,
+  );
+  assert.match(
+    summary([
+      { x: 0, value: 100 },
+      { x: 1, value: 100 },
+      { x: 2, value: 50 },
+    ]),
+    /请检查/,
+  );
+  assert.match(
+    summary([
+      { x: 0, value: 0 },
+      { x: 1, value: 0 },
+      { x: 2, value: 0 },
+    ]),
+    /保持不变/,
   );
 });
 test("显示名不改变内部身份；未知键让门禁继续报错", () => {

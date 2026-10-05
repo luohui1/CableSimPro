@@ -7,7 +7,7 @@ import math
 from pathlib import Path
 import platform
 
-VERSION = 'GB-DIMENSIONS-0.1.1'
+VERSION = 'GB-DIMENSIONS-0.2.0'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 DATA = json.loads(Path(__file__).with_name('dimensions.json').read_text('utf-8'))
 AREAS = DATA['areas_mm2']
@@ -85,7 +85,7 @@ def prepare(document, parameters):
             for key in (
                 'thickness', 'minimum_thickness', 'maximum_thickness', 'mean_thickness',
                 'nominal_tape_thickness', 'minimum_tape_thickness', 'wire_diameter',
-                'tape_width', 'screen_inner_diameter', 'reverse_binder_width',
+                'tape_width', 'screen_inner_diameter', 'reverse_binder_width', 'mean_wire_diameter',
             ):
                 if l.get(key) is not None:
                     number(l[key], p + '.' + key, .5)
@@ -97,6 +97,9 @@ def prepare(document, parameters):
                     number(l[key], p + '.' + key, .999999, zero=True)
             if l.get('reverse_binder_thickness') is not None:
                 number(l['reverse_binder_thickness'], p + '.reverse_binder_thickness', .05, zero=True)
+            for key in ('tape_gap','padding_thickness'):
+                if l.get(key) is not None:
+                    number(l[key],p+'.'+key,.2,zero=True)
             if l.get('minimum_thickness') is not None and l.get('maximum_thickness') is not None and l['minimum_thickness'] > l['maximum_thickness']:
                 raise ValueError(p + '.minimum_thickness：最薄点不得大于最大实测厚度。')
     return cable, root, family, materials
@@ -650,6 +653,7 @@ class _Check:
             diameter, why, limit = None, '需明确内衬层为挤包或绕包。', None
         if wrapped:
             limit = band(diameter, DATA['fictitious']['wrapped_bedding_bands_mm'])
+        self.bedding_basis = {'layer':layer,'path':lp,'diameter':diameter,'nominal':limit,'wrapped':wrapped}
         uncovered = family == 'mv1' or (family == 'mv3' and wrapped)
         row(
             'bedding-nominal',
@@ -662,7 +666,14 @@ class _Check:
             reason='第 1 部分成缆与省略内衬层分支未覆盖。' if family == 'mv1' else '第 3 部分只核验挤包内衬层。' if uncovered else why,
             rule_key='bedding-wrapped' if wrapped else None,
         )
-        if family != 'mv1' and not uncovered:
+        paired_tape = wrapped and family in DATA['armour'] and any(
+            candidate['role']=='armour' and candidate.get('form')=='tape' for candidate in self.cable['common_layers'])
+        if wrapped and family in DATA['armour'] and len(self.cable['cores'])>1 and all(
+            core['conductor']['form']!='sectoral' for core in self.cable['cores']):
+            row('bedding-filled','绕包内衬层下线芯间隙填充',lp+'.form',actual=int(any(
+                candidate['role']=='filler' for candidate in self.cable['common_layers'])),unit='1',
+                reason='圆形线芯采用绕包内衬层时，须先填充线芯间隙。')
+        if family != 'mv1' and not uncovered and not paired_tape:
             specified_bedding = max(limit or 0, layer['thickness'] * 1000)
             row(
                 'bedding-minimum',
@@ -742,41 +753,101 @@ class _Check:
         diameter = rounded(diameter + 2 * limit) if diameter is not None and limit is not None else None
         return diameter, why
 
-    def armour(self, layer, lp, diameter, why):
-        row = self.row
-        if layer.get('form') == 'tape' and layer.get('tape_count') == 2 and layer.get('nominal_tape_thickness') is not None:
-            diameter, why = None, '双带铠装的附加包带垫层分支未覆盖，不能省略其直径增量。'
-            row('armour-padding', '双带铠装附加包带垫层', lp + '.thickness', uncovered=True, reason=why)
-        elif layer.get('form') == 'wires' and layer.get('wire_diameter') is not None and layer.get('reverse_binder_thickness') is not None:
-            tw = layer['reverse_binder_thickness'] * 1000
-            diameter = (
-                rounded(
-                    diameter + 2 * rounded(layer['wire_diameter'] * 1000)
-                    + (
-                        2 * rounded(tw)
-                        if tw > DATA['fictitious']['reverse_binder_increment_minimum_mm'] else 0
-                    )
-                )
-                if diameter is not None
-                else None
-            )
-        else:
-            diameter, why = None, '铠装需明确双带及单带标称厚度，或金属丝径及反向扎带厚度。'
-        return diameter, why
+    def armour(self, common, layer, lp, diameter, why):
+        data = DATA['armour'].get(self.family)
+        form = data['forms'].get(layer.get('form')) if data else None
+        if form is None:
+            why = '此标准版本或铠装构造的尺寸分支未覆盖；不套用其他版本的数值。'
+            self.row('armour-padding','铠装尺寸覆盖',lp+'.form',uncovered=True,reason=why)
+            return None,why
+        material = self.materials[layer['material']].get('standard_kind')
+        substance = data['materials'].get(material)
+        self.row('armour-material','铠装材料类别',lp+'.material',unit='1',
+            actual=int(layer['form'] in substance['forms']) if substance else None,
+            reason=None if substance else '需明确材料标准类别；不按材料名称猜测钢、铝或铜。')
+        if len(self.cable['cores'])==1 and any(c.get('system',{}).get('kind','').startswith('ac_')
+                for c in self.document.get('circuits',[]) if c.get('cable_type')==self.cable['id']):
+            self.row('armour-nonmagnetic','交流单芯铠装非磁性要求',lp+'.material',unit='1',
+                actual=int(not substance['magnetic']) if substance else None,
+                reason='特殊磁性铠装结构未覆盖；普通交流单芯结构要求非磁性铠装。')
+        preceding = common[:common.index((layer,lp))]
+        underlayer, up = next(((value,path) for value,path in reversed(preceding)
+            if value['role'] in ('bedding','separator')),({},lp))
+        self.row('armour-underlayer','铠装下内衬层或挤包隔离套',up+'.form',unit='1',
+            actual=int(bool(underlayer) and underlayer.get('form') in ('smooth','tape')),
+            reason=None if underlayer else '铠装前须有内衬层；符合13.3.3的挤包隔离套可代替内衬层。')
+        declared = layer.get(form['field'])
+        declared_mm = declared*1000 if declared is not None else None
+        details = {'wires':self.armour_wires,'tape':self.armour_tapes}
+        diameter, why = details[layer['form']](layer,lp,diameter,why,form,underlayer,up,declared_mm)
+        bands = form.get('bands') or form.get('bands_by_material',{}).get((substance or {}).get('group'))
+        limit = band(diameter,bands) if bands else None
+        self.row(form['rule'],form['title'],lp+'.'+form['field'],limit,declared_mm,
+            inputs={'D_A_mm':diameter,'material_kind':material},reason=why or (None if bands else '缺少已核验的材料尺寸表分支。'))
+        nominal = max(limit or 0,declared_mm) if declared_mm is not None else limit
+        measured = layer.get(form['measured_field'])
+        self.row(form['measured_rule'],form['measured_title'],lp+'.'+form['measured_field'],
+            self.minimum(form['measured_rule'],nominal),measured*1000 if measured is not None else None,
+            basis='measurement',inputs={'t_nominal_mm':nominal},
+            reason='按17.7规定的测量方法取得平均值；不以标称尺寸代替实测。')
+        # Appendix A uses the declared armour gauge, independently of its compliance verdict.
+        diameter = rounded(diameter+form['diameter_multiplier']*declared_mm) if diameter is not None and declared_mm is not None else None
+        if layer['form']=='wires':
+            binder = layer.get('reverse_binder_thickness')
+            if binder is None:
+                return None,'需明确反向扎带厚度；无扎带时填写0，不自动推断。'
+            if diameter is not None and binder*1000>DATA['fictitious']['reverse_binder_increment_minimum_mm']:
+                diameter=rounded(diameter+2*binder*1000)
+        return diameter,why
+
+    def armour_wires(self, layer, lp, diameter, why, form, underlayer, up, declared):
+        if declared is not None and declared>=form['coarse_wire_mm']:
+            self.row('armour-coarse-bedding','粗圆丝铠装下内衬或隔离套厚度',up+'.thickness',
+                actual=underlayer['thickness']*1000 if underlayer else None)
+        return diameter,why
+
+    def armour_tapes(self, layer, lp, diameter, why, form, underlayer, up, declared):
+        self.row('armour-tape-count','铠装金属带层数',lp+'.tape_count',actual=layer.get('tape_count'),unit='1',comparison='=')
+        width,gap = layer.get('tape_width'),layer.get('tape_gap')
+        self.row('armour-tape-gap','铠装金属带最大间隙率',lp+'.tape_gap',
+            actual=gap/width if width is not None and gap is not None else None,unit='1',comparison='<=',
+            inputs={'tape_width_m':width,'maximum_gap_m':gap})
+        if layer.get('tape_application')!=form['application']:
+            why='需明确双层间隙绕包构造，外带中部覆盖内带间隙。'
+            self.rows[-1].update(verdict='missing',reason=why)
+        bedding = getattr(self,'bedding_basis',{})
+        if bedding.get('wrapped') and underlayer.get('role')=='bedding':
+            extra = band(declared,form['padding_bands_mm'])
+            nominal = bedding['nominal']+extra if bedding['nominal'] is not None and extra is not None else None
+            padding = underlayer.get('padding_thickness')
+            self.row('armour-padding','双带铠装附加包带垫层',up+'.padding_thickness',extra,
+                padding*1000 if padding is not None else None,
+                inputs={'t_AD_mm':declared},reason='附加垫层已计入内衬层总厚度，不另加到实际外径。')
+            self.row('armour-padding-total','绕包内衬及垫层总标称厚度',up+'.thickness',nominal,underlayer['thickness']*1000)
+            specified = max(nominal or 0,underlayer['thickness']*1000)
+            self.row('armour-padding-minimum','绕包内衬及垫层总实测厚度',up+'.minimum_thickness',
+                self.minimum('armour-padding-minimum',specified),
+                underlayer.get('minimum_thickness')*1000 if underlayer.get('minimum_thickness') is not None else None,
+                basis='measurement',inputs={'t_total_mm':specified})
+            if padding is None:
+                return None,'绕包内衬层的附加垫层输入缺项；不能默认为已提供。'
+            increment=band(diameter,form['padding_diameter_bands_mm'])
+            diameter=rounded(diameter+increment) if diameter is not None else None
+            self.trace.append({'stage':'附加垫层假定直径','clause':'附录 A.2.9，表 A.3；B.1',
+                               'D_mm':diameter,'increment_mm':increment})
+        return diameter,why
 
     def covering_layer(self, common, layer, lp, diameter, why):
         role = layer['role']
-        if role == 'bedding':
-            return self.bedding(layer, lp, diameter, why)
-        if role == 'metallic_sheath':
-            return self.lead(layer, lp, diameter, why)
-        if role == 'separator':
-            return self.separator(common, layer, lp, diameter, why)
-        if role == 'armour':
-            return self.armour(layer, lp, diameter, why)
+        handlers = {'bedding':self.bedding,'metallic_sheath':self.lead,
+            'separator':lambda *args:self.separator(common,*args),'armour':lambda *args:self.armour(common,*args)}
+        if role in handlers:
+            return handlers[role](layer,lp,diameter,why)
+        if role=='filler' and len(self.cable['cores'])==3:
+            return diameter,why  # Appendix A.2.3 bundle factor includes the laid-up core/filling space.
         if role == 'binder' and layer['thickness'] <= DATA['fictitious']['ignored_binder_maximum_m']:
             return diameter, why
-        return None, '附加包带垫层、填充或未知公共层的假定直径分支未覆盖。'
+        return None, '此附加公共层的假定直径分支未覆盖。'
 
     def mv_common(self, common, core_diameters):
         cable, root, family, materials = self.cable, self.root, self.family, self.materials

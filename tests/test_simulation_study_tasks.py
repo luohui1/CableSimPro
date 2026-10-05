@@ -21,7 +21,11 @@ def test_simulation_task_polling_duplicate_click_and_timeout_keep_input(tmp_path
     with TestClient(app) as client:
         w=client.post('/api/workspaces',json={}).json();root='/api/workspaces/'+w['id']
         tasks=client.get('/api/study-tasks').json()
-        assert {t['task'] for t in tasks}=={'transient-temperature','sheath-losses','electrothermal-steady'}
+        assert {t['task'] for t in tasks}=={'transient-temperature','sheath-losses','electrothermal-steady','iec-fem-comparison'}
+        comparison=next(t for t in tasks if t['task']=='iec-fem-comparison')
+        assert comparison['method']['capability']=='iec-fem-comparison'
+        assert comparison['analysis']=='steady_state'
+        assert comparison['required_artifacts']==['x-cablesim.iec-fem-comparison','x-cablesim.simulation-bundle']
         selected=next(t for t in tasks if t['task']=='transient-temperature')
         value=domain();config={'title':'Transient objective','task':selected['task'],'method':selected['method'],
             'input_source':'study','method_input':value,'parameters':transient_parameters(value)}

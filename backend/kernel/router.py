@@ -3,7 +3,9 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from .study_tasks import task_catalog
 from .responses import StudyResponse, RunResponse, RunPage, PreflightResponse, TaskOption
 
-from .contracts import Comparison, CreateStudy, DeliveryRequest, RunStudy, UpdateStudy
+from .contracts import Comparison, CreateStudy, DeliveryRequest, RunStudy, UpdateStudy, RecalculateStudy
+from .study_history import StudyHistoryRequest, restore
+from .host_api import ERRORS, host_call, DeliveryResult
 
 
 def make_router(research):
@@ -50,6 +52,21 @@ def make_router(research):
     def studies(wid: str):
         return research.list_studies(wid)
 
+    @router.get('/workspaces/{wid}/studies/{sid}', response_model=StudyResponse, responses=ERRORS)
+    def study_detail(wid: str, sid: str):
+        return host_call(research.study_detail, wid, sid)
+
+    @router.post('/workspaces/{wid}/studies/{sid}/recalculate', response_model=RunResponse,
+                 response_model_exclude_unset=True, responses={**ERRORS, 202: {'model': RunResponse, 'description': 'Accepted current-version run; poll Location.'}})
+    def recalculate(wid: str, sid: str, body: RecalculateStudy, response: Response):
+        from .recalculate import recalculate as apply
+        result = host_call(apply, research, wid, sid, body)
+        if result['status'] in ('accepted', 'running', 'validating'):
+            response.status_code = 202
+            response.headers['Location'] = f'/api/workspaces/{wid}/studies/{sid}/runs/{result["id"]}'
+            response.headers['Retry-After'] = '2'
+        return result
+
     @router.post('/workspaces/{wid}/studies', status_code=201, response_model=StudyResponse)
     def create(wid: str, body: CreateStudy):
         return research.save(wid, body)
@@ -58,12 +75,20 @@ def make_router(research):
     def update(wid: str, sid: str, body: UpdateStudy):
         return research.save(wid, body, sid)
 
-    @router.get('/workspaces/{wid}/studies/{sid}/preflight', response_model=PreflightResponse)
+    @router.post('/workspaces/{wid}/studies/{sid}/undo', response_model=StudyResponse, responses=ERRORS)
+    def undo(wid:str,sid:str,body:StudyHistoryRequest):
+        return host_call(restore,research,wid,sid,'undo',body)
+
+    @router.post('/workspaces/{wid}/studies/{sid}/redo', response_model=StudyResponse, responses=ERRORS)
+    def redo(wid:str,sid:str,body:StudyHistoryRequest):
+        return host_call(restore,research,wid,sid,'redo',body)
+
+    @router.get('/workspaces/{wid}/studies/{sid}/preflight', response_model=PreflightResponse, response_model_exclude_unset=True)
     def preflight(wid: str, sid: str, expected_revision: int, expected_study_revision: int,
                   module: str | None = Query(None, pattern=r'^[a-z][a-z0-9-]{0,63}$')):
         return research.preflight(wid, sid, expected_revision, expected_study_revision, module)
 
-    @router.post('/workspaces/{wid}/studies/{sid}/runs', response_model=RunResponse,
+    @router.post('/workspaces/{wid}/studies/{sid}/runs', response_model=RunResponse, response_model_exclude_unset=True,
                  responses={202: {'model': RunResponse, 'description': 'Accepted asynchronous simulation; poll the Location URL.'}})
     def execute(wid: str, sid: str, body: RunStudy, response: Response):
         result = research.execute(wid, sid, body, asynchronous=None)
@@ -73,11 +98,11 @@ def make_router(research):
             response.headers['Retry-After'] = '2'
         return result
 
-    @router.get('/workspaces/{wid}/studies/{sid}/runs', response_model=RunPage)
+    @router.get('/workspaces/{wid}/studies/{sid}/runs', response_model=RunPage, response_model_exclude_unset=True)
     def runs(wid: str, sid: str, after: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100)):
         return research.list_runs(wid, sid, after, limit)
 
-    @router.get('/workspaces/{wid}/studies/{sid}/runs/{rid}', response_model=RunResponse)
+    @router.get('/workspaces/{wid}/studies/{sid}/runs/{rid}', response_model=RunResponse, response_model_exclude_unset=True)
     def run(wid: str, sid: str, rid: str):
         value = research.get_run(wid, rid)
         if value['study'] != sid:
@@ -92,11 +117,11 @@ def make_router(research):
     def comparison(wid: str, body: Comparison):
         return research.comparison(wid, body.run_ids)
 
-    @router.post('/workspaces/{wid}/deliveries', status_code=201)
+    @router.post('/workspaces/{wid}/deliveries', status_code=201, response_model=DeliveryResult, responses=ERRORS)
     def deliver(wid: str, body: DeliveryRequest):
         return research.deliver(wid, body.run_ids)
 
-    @router.get('/workspaces/{wid}/deliveries/{did}')
+    @router.get('/workspaces/{wid}/deliveries/{did}', response_model=DeliveryResult, responses=ERRORS)
     def delivery(wid: str, did: str):
         return research.delivery(wid, did)
 

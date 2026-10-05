@@ -1,0 +1,7 @@
+{
+  "occt": "7.9.0",
+  "commit": "858dd02fed80c8ca68cf1d70a6e03ecf97f849ca",
+  "emscripten": "3.1.73",
+  "cmake": "3.31.6",
+  "ninja": "1.12.1"
+}

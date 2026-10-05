@@ -114,6 +114,93 @@ def system_models():
     compacted['payload']['cable_type']['cores'][0]['conductor']['form'] = 'stranded_round_compacted'
     compacted['source'] += ' 此独立演示版本显式采用紧压导体设计外径包络；未给单丝制造参数和绞入系数，不据包络计算铜量。'
     models.append(compacted)
+    specification = deepcopy(compacted)
+    specification.update(id='system.specification-cu-xlpe-al-400', version='1.0.0',
+                         name='YJL02-12/20 kV 1×400（规格书演示）')
+    specification['source'] = ('规格书教学设计输入：第2类紧压铜导体、1.02绞入系数，材料密度与电气、短路及地下工况条件明确给定。'
+                               '尺寸沿用系统结构演示；计算由已安装插件执行。非厂家实测、非完整产品认证，不自动批准发布。')
+    payload = specification['payload']
+    payload['cable_type']['label'] = specification['name']
+    payload['cable_type']['cores'][0]['conductor'].update(conductor_class=2, r20_basis='design', lay_factor=1.02)
+    payload['cable_type']['rating']['max_conductor_temperature']['short_circuit'] = 523.15
+    for material, kind, density in zip(payload['materials'], ['copper_bare','other','XLPE','aluminium','PVC'], [8900,1100,920,2700,1400]):
+        material.update(standard_kind=kind, density=density)
+    reference = '规格书教学设计条件；仅用于真实代数流程演示，非厂家试验或现场输入。'
+    electrical = {'temperature_k':363.15, 'frequency_hz':50, 'ks':1, 'kp':1,
+                  'spacing_m':.0452, 'phase_voltage_v':12000, 'r20_length_basis':'finished_cable', 'arrangement':'trefoil'}
+    short_circuit = {'duration_s':1, 'initial_temperature_k':363.15, 'final_temperature_k':523.15,
+                     'metal_initial_temperature_k':343.15, 'metal_final_temperature_k':473.15,
+                     'contact_factor':.7, 'inner_thermal_resistivity':2.5, 'outer_thermal_resistivity':3.5,
+                     'inner_volumetric_heat_capacity':2e6, 'outer_volumetric_heat_capacity':2e6}
+    for parameters in (electrical, short_circuit):
+        parameters['sources'] = {key:reference for key in parameters}
+    payload['specification_conditions'] = {
+        'electrical':electrical, 'short_circuit':short_circuit,
+        'rating':{'parameters':{**deepcopy(METHOD_DEFAULTS['cablesim.iec60287']), 'reference_basis':'iec2023', 'source':reference},
+                  'rows':[{'case_id':layout, 'name':name, 'layout':layout, 'depth_m':.8,
+                           'ambient_temperature_c':20, 'soil_rho_k_m_w':1, 'bonding':'both_ends', 'source':reference}
+                          for layout,name in [('trefoil','直埋品字形'),('flat','直埋水平排列'),('ducts','排管品字形')]]}}
+    models.append(specification)
+    # Independent teaching version: public YJV22 dimensions, explicitly given
+    # manufacturing/physical inputs. Never overwrite the manufacturer's candidate.
+    mv = deepcopy(specification)
+    mv.update(id='system.specification-yjv22-300', version='1.0.0', name='YJV22-8.7/15 3×300（规格书演示）')
+    mv['source'] = ('公开结构：江苏华远YJV22 8.7/15kV结构表3×300行，http://jshydlyxgs.com/showproduct.asp?id=49；'
+                    '2026-10-04下载，SHA256 e1eb8537ee1a836abbadb64415fd0838fe03d8d9a30e655bf3c0656b2b8bd957。'
+                    '铜带连续接触与15%搭盖、导体1.02绞入系数、材料密度及镀锌钢带材质为教学设计假设；'
+                    '成缆节距2.152m与钢带相对磁导率300分别参考TB880 Case2/10，非本型号实测；'
+                    'R20取GB/T3956表2的设计上限，非测量值；材料热电参数采用IEC60287参考输入。')
+    mats = [
+        {'id':'material/cu','label':'铜','category':'conductor','standard_kind':'copper_bare','density':8900,
+         'electrical_resistivity_20':1.7241e-8,'temperature_coefficient_20':.00393},
+        {'id':'material/semi','label':'半导电材料','category':'semiconductor','standard_kind':'other','density':1100,'thermal_resistivity':2.5},
+        {'id':'material/xlpe','label':'交联聚乙烯','category':'insulation','standard_kind':'XLPE','density':920,'thermal_resistivity':3.5,'relative_permittivity':2.5,'loss_tangent':.004},
+        {'id':'material/filler','label':'纤维填充料','category':'filler','standard_kind':'other','density':1100,'thermal_resistivity':6},
+        {'id':'material/pvc','label':'聚氯乙烯','category':'polymer','standard_kind':'PVC','density':1400,'thermal_resistivity':6},
+        {'id':'material/steel','label':'镀锌钢带','category':'metal','standard_kind':'steel_galvanized','density':7850,'relative_permeability':300},
+    ]
+    cores=[]
+    for index,(x,z) in enumerate([(0,.033/sqrt(3)),(-.0165,-.033/(2*sqrt(3))),(.0165,-.033/(2*sqrt(3)))]):
+        cores.append({'id':f'core/{index+1}','x':x,'z':z,
+            'conductor':{'material':'material/cu','form':'stranded_round_compacted','nominal_area':.0003,'diameter':.0206,
+                         'r20':6.01e-5,'r20_basis':'design','conductor_class':2,'lay_factor':1.02},
+            'layers':[{'role':role,'material':material,'thickness':thickness} for role,material,thickness in [
+                ('conductor_screen','material/semi',.0008),('insulation','material/xlpe',.0045),('insulation_screen','material/semi',.0007)]]+
+                [{'role':'metallic_screen','material':'material/cu','form':'tape','thickness':.0002,'nominal_tape_thickness':.0001,
+                  'tape_width':.04,'tape_count':1,'overlap':.15,'tape_application':'helical_overlap',
+                  'longitudinal_r20':.0014249338001803575,'longitudinal_resistance_basis':'dc'}]})
+    cable={'id':'cable_type/ct1','label':mv['name'],'construction':'three_core','core_lay_length':2.152,
+           'rating':{'u0':8700,'u':15000,'um':17500,'max_conductor_temperature':{'normal':363.15,'short_circuit':523.15}},
+           'cores':cores,'common_layers':[
+               {'role':'filler','material':'material/filler','thickness':.0002},
+               {'role':'bedding','material':'material/pvc','form':'smooth','thickness':.002},
+               {'role':'armour','material':'material/steel','form':'tape','thickness':.0016,'nominal_tape_thickness':.0008,
+                'tape_count':2,'tape_width':.06,'tape_gap':.03,'tape_application':'two_tape_gap'},
+               {'role':'oversheath','material':'material/pvc','form':'smooth','thickness':.0037}]}
+    mv['payload']={'cable_type':CableType.model_validate(cable).model_dump(mode='json'),
+                   'materials':[Material.model_validate(m).model_dump(mode='json') for m in mats],
+                   'specification_conditions':deepcopy(payload['specification_conditions'])}
+    conditions=mv['payload']['specification_conditions']
+    conditions['electrical'].update(spacing_m=.033,phase_voltage_v=8700,core_lay_factor=sqrt(1+(2*3.141592653589793*.033/sqrt(3)/2.152)**2))
+    conditions['electrical']['sources'].update({key:reference for key in ('spacing_m','phase_voltage_v','core_lay_factor')})
+    conditions['rating']['parameters']['solver']['max_iterations']=300
+    conditions['rating']['rows']=[{'case_id':kind,'name':name,'layout':kind,'depth_m':.8,'ambient_temperature_c':20,
+                                  'soil_rho_k_m_w':1,'bonding':'both_ends','rating_basis':'simultaneous','source':reference}
+        for kind,name in [('three_core_buried_single','三芯直埋单回'),('three_core_buried_horizontal','三芯直埋三回水平'),('three_core_ducts_horizontal','三芯排管三回水平')]]
+    models.append(mv)
+    # New system versions only: never rewrite saved user material facts/runs.
+    dielectric_reference='IEC 60287-1-1:2023 Table 3，PDF43/印刷41页：未填充XLPE，U0≤18 kV档，εr=2.5、tanδ=0.004；标准参考值，非厂家实测。'
+    for model in models:
+        if model['payload']['cable_type']['rating']['u0']<=18000:
+            changed=False
+            for material in model['payload']['materials']:
+                if material.get('category')=='insulation' and material.get('loss_tangent')==.001:
+                    material['loss_tangent']=.004;changed=True
+            if changed:
+                major,minor,patch=map(int,model['version'].split('.'))
+                model['version']=f'{major}.{minor}.{patch+1}'
+                model['dielectric_reference']=dielectric_reference
+                model['source']+='；'+dielectric_reference
     # Optional standards facts must not alter already named demo versions when
     # those facts are absent. Retain the pre-extension payload bytes/identities.
     for model in models:
@@ -124,11 +211,11 @@ def system_models():
             if material.get('standard_kind') is None:
                 material.pop('standard_kind', None)
         for core in payload['cable_type']['cores']:
-            for key in ('conductor_class', 'r20_basis'):
+            for key in ('conductor_class', 'r20_basis', 'sector_angle_deg', 'sector_rotation_deg'):
                 if core['conductor'].get(key) is None:
                     core['conductor'].pop(key, None)
         for layer in [*payload['cable_type']['common_layers'], *(l for c in payload['cable_type']['cores'] for l in c['layers'])]:
-            for key in ('minimum_thickness', 'maximum_thickness', 'mean_thickness', 'nominal_tape_thickness', 'tape_count', 'tape_application', 'minimum_overlap', 'reverse_binder_thickness', 'reverse_binder_width', 'reverse_binder_count', 'screen_inner_diameter', 'minimum_tape_thickness', 'longitudinal_r20', 'longitudinal_resistance_basis', 'longitudinal_resistance_frequency', 'tape_gap'):
+            for key in ('minimum_thickness', 'maximum_thickness', 'mean_thickness', 'nominal_tape_thickness', 'tape_count', 'tape_application', 'minimum_overlap', 'reverse_binder_thickness', 'reverse_binder_width', 'reverse_binder_count', 'screen_inner_diameter', 'minimum_tape_thickness', 'longitudinal_r20', 'longitudinal_resistance_basis', 'longitudinal_resistance_frequency', 'tape_gap', 'mean_wire_diameter', 'padding_thickness', 'corrugation_depth', 'corrugation_pitch'):
                 if layer.get(key) is None:
                     layer.pop(key, None)
         model['content_sha256'] = fingerprint(payload)
@@ -217,7 +304,7 @@ def leaf_paths(value, path):
         yield path
 
 
-def attach_model(state, model):
+def attach_model(state, model, *, preserve_layout=False):
     document = deepcopy(state['domain'])
     if len(document['cable_types']) != 1:
         raise HTTPException(422, '当前引用入口支持单型号研究；请新建独立研究。')
@@ -225,6 +312,8 @@ def attach_model(state, model):
     checked = {**state, 'locks': [p for p in state.get('locks', []) if p not in previous.get('locks', [])]}
     checked.pop('study_cable_reference', None)
     cable = deepcopy(model['payload']['cable_type'])
+    if preserve_layout and cable['construction'] != document['cable_types'][0]['construction']:
+        raise HTTPException(409, {'code': 'MODEL_LAYOUT_CHANGE_REQUIRED', 'message': '新版型号的芯数结构改变，请先核对截面布置再重算。'})
     cable['id'] = document['cable_types'][0]['id']
     document['cable_types'][0] = cable
     materials = {m['id']: m for m in document['materials']}
@@ -239,8 +328,12 @@ def attach_model(state, model):
     if model.get('conductor_diameter_source'):
         path = pointer('cable_types', cable['id'], 'cores', cable['cores'][0]['id'], 'conductor', 'diameter')
         document['provenance'][path] = {'kind': 'manufacturer', 'reference': model['conductor_diameter_source'], 'reviewed': False}
+    if model.get('dielectric_reference'):
+        for material in model['payload']['materials']:
+            if material.get('category')=='insulation':
+                document['provenance'][pointer('materials',material['id'],'loss_tangent')]={'kind':'standard','reference':model['dielectric_reference'],'reviewed':False}
     document['provenance'][pointer('cable_types', cable['id'])] = {'kind': 'asset', 'reference': reference+'；'+model['source'], 'reviewed': model['state']=='reviewed'}
-    if cable['construction']=='three_core':
+    if cable['construction']=='three_core' and not preserve_layout:
         if len(document['circuits'])!=1:
             raise HTTPException(422,'多回路单芯布置不能在引用型号时自动合并为三芯；请新建三芯研究并选择对应模板。')
         circuit=document['circuits'][0];old={c['id'] for c in circuit['cables']};cid=circuit['cables'][0]['id']
@@ -263,7 +356,7 @@ def apply_layout(document, kind, depth=0.8, spacing=None):
         return apply_three_core_layout(document,kind,depth,spacing)
     circuit, section = document['circuits'][0], document['sections'][0]
     cable = next(t for t in document['cable_types'] if t['id'] == circuit['cable_type'])
-    diameter = cable['cores'][0]['conductor']['diameter']+2*sum(l['thickness'] for l in cable['common_layers'])
+    diameter = 2*CableType.model_validate(cable).radius()
     spacing = (max(.15,diameter*1.5) if kind in ('flat','double_trefoil','double_flat','backfill') else diameter) if spacing is None else spacing
     section['enclosures'] = []
     section['backfill'] = None
@@ -513,6 +606,9 @@ def make_router(store,research=None):
             binding = state.pop('study_cable_reference')
             state['locks'] = []
             state['type_origin_reference'] = {k: binding[k] for k in ('id', 'version', 'name', 'source', 'content_sha256')}
+            declared = model_version(body.model_id, body.content_sha256, store)['payload'].get('specification_conditions')
+            if declared:
+                state['type_specification_conditions'] = deepcopy(declared)
             # A type draft is not a buried three-phase arrangement. Keep one
             # neutral occurrence so thickness edits cannot clash with old spacing.
             circuit, section = state['domain']['circuits'][0], state['domain']['sections'][0]

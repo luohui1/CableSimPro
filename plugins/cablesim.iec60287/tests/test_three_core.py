@@ -15,7 +15,7 @@ def document(armour='tape'):
     mats=[{'id':'material/cu','thermal_resistivity':.0025,'electrical_resistivity_20':1.7241e-8,'temperature_coefficient_20':.00393},
           {'id':'material/xlpe','thermal_resistivity':3.5,'relative_permittivity':2.5,'loss_tangent':.004},
           {'id':'material/semi','thermal_resistivity':2.5}, {'id':'material/fibre','thermal_resistivity':6.},
-          {'id':'material/pvc','thermal_resistivity':5.},
+          {'id':'material/pvc','thermal_resistivity':6.},
           {'id':'material/steel','relative_permeability':300,'temperature_coefficient_20':.0045},
           {'id':'material/soil','thermal_resistivity':1.2}, {'id':'material/duct','thermal_resistivity':6.}]
     cond={'material':'material/cu','form':'stranded_round_compacted','nominal_area':300e-6,'diameter':d,'r20':6.01e-5}
@@ -40,6 +40,76 @@ def document(armour='tape'):
 
 def parameters():
     return {'ks':1.,'kp':1.,'solver':{'initial_sheath_temperature_c':70,'max_iterations':300,'current_tolerance_a':1e-7},'duct':{'u':1.87,'v':.312,'y_per_k':.0037,'initial_mean_air_temperature_c':50.}}
+
+
+@pytest.mark.parametrize('rho,individual,common,limiter', [
+    (.6,434.994053841,417.384415865,0),
+    (.8,315.085220337,386.973172426,1),
+    (1.,None,362.238246202,1),
+])
+def test_three_duct_soil_sweep_distinguishes_conditional_and_common_capacity(rho,individual,common,limiter):
+    # Numeric regression of saved inquiry eeb471e6-7909-4b8c-a8ef-2a08a2c71b95;
+    # manufacturer dimensions plus declared engineering parameters, not a rating table.
+    doc=document(); typ=doc['cable_types'][0];typ['core_lay_length']=2.152
+    typ['common_layers']=[layer for layer in typ['common_layers'] if layer['role']!='binder']
+    typ['common_layers'][0]['thickness']=.0002
+    for core,(x,z) in zip(typ['cores'],[(0,.033/sqrt(3)),(-.0165,-.033/(2*sqrt(3))),(.0165,-.033/(2*sqrt(3)))]):
+        core.update(x=x,z=z);core['conductor']['diameter']=.0206
+        core['layers'][-1].update(thickness=.0002,longitudinal_r20=.0014249338001803575)
+    for mat in doc['materials']:
+        if mat['id']=='material/pvc':mat['thermal_resistivity']=6.
+        if mat['id']=='material/soil':mat['thermal_resistivity']=rho
+    circuit=doc['circuits'][0];section=doc['sections'][0]
+    doc['circuits']=[];section['placements']=[];section['enclosures']=[]
+    for index,x in enumerate([-.25,0.,.25]):
+        c=deepcopy(circuit);cid=f'cable/{index}';c['id']=f'circuit/{index}';c['cables'][0]['id']=cid
+        doc['circuits'].append(c)
+        section['placements'].append({'cable':cid,'x':x,'z':-1.2,'enclosure':f'enclosure/{index}'})
+        section['enclosures'].append({'id':f'enclosure/{index}','type':'duct','material':'material/duct','x':x,'z':-1.2,'inner_diameter':.14,'outer_diameter':.16,'contains':[cid]})
+    doc['load_cases'][0]['currents']={c['id']:400. for c in doc['circuits']}
+    result=rate_group(prepare(doc,{**parameters(),'rating_mode':'both'}))
+    individual_result=result['circuit_ratings'][0];rated=result['simultaneous_rating']
+    if individual is None:
+        assert individual_result['ampacity_a'] is None
+        assert not individual_result.get('cable_states')
+    else:
+        assert individual_result['ampacity_a']==pytest.approx(individual,abs=2e-5)
+    assert individual_result['limiting_cable']==f'cable/{limiter}'
+    assert rated['ampacity_a']==pytest.approx(common,abs=2e-5)
+    assert rated['limiting_cable']=='cable/1'
+    assert individual_result['rating_basis']['kind']=='conditional_fixed_load'
+    assert individual_result['rating_basis']['fixed_currents_a']=={'cable/1':400.,'cable/2':400.}
+    assert rated['rating_basis']['kind']=='common_balanced'
+    assert rated['rating_basis']['fixed_currents_a']=={}
+    # IEC 60287-2-1 image-source self/mutual paths rebuilt from geometry;
+    # IEC 60287-1-1 4.2.1 frozen electrical state, whole-cable power (3 cores).
+    states=rated['cable_states'];s=states[1]
+    self_soil=rho/(2*pi)*acosh(2*1.2/.16)
+    mutual=rho/(2*pi)*log(sqrt(.25**2+2.4**2)/.25)
+    wall=6/(2*pi)*log(.16/.14)
+    outer=.033*(1+2/sqrt(3))+2*(.0002+.002+.0016+.0037)
+    air=1.87/(1+.1*(.312+.0037*(s['surface_temperature_c']+s['duct_inner_temperature_c'])/2)*outer*1000)
+    cll=sqrt(1+(pi*1.29*.033/2.152)**2)
+    t1=(2.5*log(.0222/.0206)+3.5*log(.0312/.0222)+2.5*log(.0326/.0312))/(2*pi*cll)
+    x=.0022/.033
+    t2=2*(.0142108+1.17533*x-4.49737*x*x+10.6352*x**3)
+    t3=6/(2*pi)*log(outer/(outer-.0074))
+    assert [s['t1_k_m_w'],s['t2_k_m_w'],s['t3_k_m_w']]==pytest.approx([t1,t2,t3],abs=1e-12)
+    wd=3*2*pi*50*(2*pi*8.8541878128e-12*2.5*cll/log(.0312/.0222))*8700**2*.004
+    assert s['dielectric_loss_w_m']==pytest.approx(wd,abs=1e-12)
+    assert s['t4_self_soil_k_m_w']==pytest.approx(self_soil,abs=1e-12)
+    assert s['t4_wall_k_m_w']==pytest.approx(wall,abs=1e-12)
+    assert s['t4_air_gap_k_m_w']==pytest.approx(air,abs=1e-9)
+    coefficient=constant=0.
+    for j,q in enumerate(states):
+        path=self_soil+wall+air+s['t3_k_m_w'] if j==1 else mutual
+        coefficient+=3*q['ac_resistance_ohm_m']*(1+q['lambda1']+q['lambda2'])*path
+        constant+=q['dielectric_loss_w_m']*path
+        if j==1:
+            coefficient+=q['ac_resistance_ohm_m']*(q['t1_k_m_w']+3*(1+q['lambda1'])*q['t2_k_m_w'])
+            constant+=q['dielectric_loss_w_m']*(q['t2_k_m_w']+q['t1_k_m_w']/6)
+        assert q['total_loss_w_m']==pytest.approx(3*rated['ampacity_a']**2*q['ac_resistance_ohm_m']*(1+q['lambda1']+q['lambda2'])+q['dielectric_loss_w_m'])
+    assert rated['ampacity_a']==pytest.approx(sqrt((90-25-constant)/coefficient),abs=1e-5)
 
 
 @pytest.mark.parametrize('armour',[None,'tape','wires'])
@@ -74,6 +144,56 @@ def test_two_circuits_each_real_source_loss_and_other_current_held():
         other_id='cable/c2' if q['entity']=='circuit/c1' else 'cable/c1'
         assert q['held_currents_a'][other_id]==(200 if other_id=='cable/c2' else 300)
     assert result['heat_contributions'][1]['source_loss_w_m']!=result['heat_contributions'][0]['source_loss_w_m']
+
+
+def test_common_bedding_is_part_of_figure6_not_a_separate_annulus():
+    doc=document();layers=doc['cable_types'][0]['common_layers']
+    original=prepare(doc,parameters()).cables[0]['model']
+    # Same homogeneous region, same physical boundaries, different layer labels.
+    layers[0]['thickness']=sum(l['thickness'] for l in layers[:3])
+    del layers[1:3]
+    merged=prepare(doc,parameters()).cables[0]['model']
+    assert merged['t2']==pytest.approx(original['t2'],abs=1e-14)
+    assert merged['overall']==pytest.approx(original['overall'],abs=1e-14)
+    doc=document();next(m for m in doc['materials'] if m['id']=='material/pvc')['thermal_resistivity']=5.
+    with pytest.raises(ValueError) as failure:prepare(doc,parameters())
+    assert failure.value.code=='SL_FILLER_MATERIALS'
+    assert failure.value.path=='/cable_types/0/common_layers'
+
+
+@pytest.mark.parametrize('rho,expected',[(1.,565.476149321),(1.5,491.272366047)])
+def test_yjv22_300_buried_components_and_independent_heat_balance(rho,expected):
+    from backend.kernel.scenarios import system_models
+    payload=next(m['payload'] for m in system_models() if m['id']=='system.specification-yjv22-300')
+    doc=document();doc['cable_types']=[deepcopy(payload['cable_type'])]
+    materials={m['id']:m for m in doc['materials']};materials.update({m['id']:deepcopy(m) for m in payload['materials']})
+    materials['material/soil']['thermal_resistivity']=rho;doc['materials']=list(materials.values())
+    doc['circuits'][0]['cable_type']=doc['cable_types'][0]['id']
+    doc['provenance']={'/cable_types':{'reference':'Huayuan 3x300 public dimensions; declared engineering parameters; IEC 60287:2023'}}
+    doc['sections'][0]['medium']['surface_temperature']=293.15
+    doc['sections'][0]['placements'][0]['z']=-.8
+    rated=rate_group(prepare(doc,parameters()))['circuit_ratings'][0];s=rated['cable_states'][0]
+    assert rated['ampacity_a']==pytest.approx(expected,abs=2e-5)
+    # Independent dimensions and IEC 2-1 4.1.4.2/5.6 Figure 6; SI throughout.
+    x=.0022/.033;t2=2*(.0142108+1.17533*x-4.49737*x*x+10.6352*x**3)
+    outer=.033*(1+2/sqrt(3))+2*(.0022+.0016+.0037)
+    cll=sqrt(1+(pi*1.29*.033/2.152)**2)
+    t1=(2.5*log(.0222/.0206)+3.5*log(.0312/.0222)+2.5*log(.0326/.0312))/(2*pi*cll)
+    t3=6/(2*pi)*log(outer/(outer-.0074));t4=rho/(2*pi)*acosh(1.6/outer)
+    assert [s['t1_k_m_w'],s['t2_k_m_w'],s['t3_k_m_w'],s['t4_self_soil_k_m_w']]==pytest.approx([t1,t2,t3,t4],abs=1e-12)
+    # IEC 1-1 5.4.3.4, Eqs 17-20: lengths in mm in these two expressions.
+    rc=s['ac_resistance_ohm_m'];diameter=(outer-.0074-.0016)*1000;delta=2*.8*60/(60+30)
+    assert rc==pytest.approx(7.946448663834777e-5,abs=5e-13)
+    k=1/(1+diameter/(300*delta))
+    l2=33**2*k*k*1e-7/(rc*diameter*delta)+2.25*33**2*k*k*delta*1e-8/(rc*diameter)
+    assert s['lambda2']==pytest.approx(l2,abs=1e-12)
+    rs=.0014249338001803575*(1+.00393*(s['sheath_temperature_c']-20))
+    reactance=2*2*pi*50*1e-7*log(2*.033/.0328)*cll
+    l1=1.5*rs/rc/(1+(rs/reactance)**2)
+    assert s['lambda1']==pytest.approx(l1,abs=1e-10)
+    wd=s['dielectric_loss_per_core_w_m']
+    hand=sqrt((70-wd*(.5*t1+3*(t2+t3+t4)))/(rc*(t1+3*(1+l1)*t2+3*(1+l1+l2)*(t3+t4))))
+    assert rated['ampacity_a']==pytest.approx(hand,abs=2e-5)
 
 
 @pytest.mark.parametrize('change,reason',[
@@ -118,3 +238,36 @@ def test_tape_frequency_scaling_and_geometry_gate():
     assert b['total']==pytest.approx(a['total']*1.44)
     with pytest.raises(ValueError,match='0.3'):steel_tape_loss(*args,50.,.0002)
     with pytest.raises(ValueError,match='图6'):filler_factor(.16)
+
+
+def test_simultaneous_capacity_survives_runaway_target_and_is_load_independent():
+    doc=document()
+    for n in (2,3):
+        circuit=deepcopy(doc['circuits'][0]);circuit.update(id=f'circuit/c{n}',label=f'回路 {n}',cables=[{'id':f'cable/c{n}','phase':'L1L2L3'}])
+        doc['circuits'].append(circuit)
+        doc['sections'][0]['placements'].append({'cable':f'cable/c{n}','x':.25*(n-1),'z':-1.2})
+    params={**parameters(),'rating_mode':'both'}
+    values=[]
+    for target in (100.,1000.):
+        doc['load_cases'][0]['currents']={c['id']:target for c in doc['circuits']}
+        result=rate_group(prepare(doc,params));common=result['simultaneous_rating']
+        values.append(common['ampacity_a'])
+        assert common['ampacity_a']>0 and result['verification']['passed']
+        assert max(s['conductor_temperature_c'] for s in common['cable_states'])==pytest.approx(90,abs=1e-4)
+        if target==1000:
+            assert result['operating']['status']=='unavailable'
+            assert result['operating']['cable_states']==[]
+            assert all(r['ampacity_a'] is None for r in result['circuit_ratings'])
+    assert values[0]==values[1]
+
+
+def test_worker_keeps_capacity_when_target_has_no_temperature_solution(tmp_path):
+    from backend.plugin_host import Executor
+    doc=document();doc['load_cases'][0]['currents']['circuit/c1']=1000.
+    result=Executor(jobs_root=tmp_path).run('cablesim.iec60287','steady-rating',[
+        {'case_id':'overload','input':doc,'parameters':{**parameters(),'rating_mode':'both'}}])
+    case=result.cases[0]
+    assert case.status=='succeeded',case.error
+    assert next(r for r in case.results if r.get('case')=='rating-simultaneous')['value']>0
+    trace=case.artifacts['x-cablesim.iec60287-trace']
+    assert trace['operating']['status']=='unavailable' and trace['operating']['cable_states']==[]

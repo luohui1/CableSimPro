@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type RefObject } from "react";
 import { cn } from "@/lib/cn";
 import { SourceBadge, type SourceKind } from "@/components/source-badge";
 
@@ -23,6 +23,8 @@ export function NumberField({
   sourceDetail,
   path,
   fullPrecision,
+  inputRef,
+  submitOnEnter = false,
 }: {
   label: string;
   value: number | null;
@@ -44,6 +46,8 @@ export function NumberField({
   sourceDetail?: string;
   path?: string;
   fullPrecision?: string;
+  inputRef?: RefObject<HTMLInputElement | null>;
+  submitOnEnter?: boolean;
 }) {
   const id = useId();
   const fixed =
@@ -65,7 +69,7 @@ export function NumberField({
   }, [draftText, text]);
   const problem = localError || error;
   const dirty = externalDirty || draft !== text;
-  function commit() {
+  function commit(draft: string) {
     const blank = !draft.trim();
     const number =
       !touched.current &&
@@ -108,6 +112,7 @@ export function NumberField({
           )}
         >
           <input
+            ref={inputRef}
             id={id}
             type="text"
             inputMode="decimal"
@@ -123,19 +128,20 @@ export function NumberField({
                 ? "未提供"
                 : `完整精度：${value.toString()} ${unit}`)
             }
-            onChange={(event) => {
+            onInput={(event) => {
               touched.current = true;
-              setDraft(event.target.value);
-              onDraftChange?.(event.target.value);
+              setDraft(event.currentTarget.value);
+              onDraftChange?.(event.currentTarget.value);
               setLocalError("");
             }}
-            onBlur={() => {
-              if (!locked && !disabled && dirty) commit();
+            onChange={() => { /* onInput also covers native input/autofill events. */ }}
+            onBlur={(event) => {
+              if (!locked && !disabled && (dirty || event.currentTarget.value !== text)) commit(event.currentTarget.value);
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !locked) {
-                event.preventDefault();
-                commit();
+                if (!submitOnEnter) event.preventDefault();
+                commit(event.currentTarget.value);
               }
               if (event.key === "Escape") {
                 setDraft(text);

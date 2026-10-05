@@ -12,7 +12,7 @@ import { formatNumber } from '@/lib/format';
 import { useTypeWorkspace } from './provider';
 import { useTypeInspector } from './inspector';
 import { typePath, useTypeNavigation } from './navigation';
-import { artifactRows, chooseEvidence, currentEvidence, useTypeEvidence } from './evidence';
+import { chooseEvidence, currentEvidence, useTypeEvidence } from './evidence';
 import { standardDefinition } from './standard-check';
 import { TypeRunControl } from './run-control';
 import { EvidenceDigest } from './evidence-digest';
@@ -70,7 +70,7 @@ export function TypeRequirements({ tab }: { tab: string }) {
         { id: 'limit', label: '要求值', numeric: true, render: row => { const definition = optionalRecord(row.definition), value = numeric(definition.limit); return value === null ? '未定义' : formatNumber(value, 3) + (definition.unit === '1' ? '' : ' ' + text(definition.unit)); } },
         { id: 'state', label: '批准状态', render: row => <StatusMark {...states[text(row.state)]} /> },
       ]} />}
-      {saved.artifact.not_applicable && <details><summary>不适用条款</summary>{array(saved.artifact.not_applicable).map((value, index) => { const row = optionalRecord(value); return <p key={index}>{text(row.title)}：{text(row.reason)}</p>; })}</details>}
+      {Array.isArray(saved.artifact.not_applicable) && saved.artifact.not_applicable.length > 0 && <details><summary>不适用条款</summary>{array(saved.artifact.not_applicable).map((value, index) => { const row = optionalRecord(value); return <p key={index}>{text(row.title)}：{text(row.reason)}</p>; })}</details>}
     </>}
     <Dialog open={open} onOpenChange={value => { if (!approve.isPending) setOpen(value); }} title="批准所选要求" description="确认来源与判定绑定；此操作不批准计算结果或发布型号。" initialFocus="form" actions={<Button variant="primary" disabled={!current || !ack || !reviewer.trim() || !selected.size} loading={approve.isPending} onClick={() => approve.mutate()}>批准所选要求</Button>}>
       <div className="type-create-fields"><label className="type-form-label">审批人<input className="type-name-input" value={reviewer} disabled={approve.isPending} maxLength={120} onChange={event => { setReviewer(event.target.value); request.current = null; }} /></label><label><input type="checkbox" checked={ack} disabled={!current || approve.isPending} onChange={event => setAck(event.target.checked)} /> 本人已核对所选要求的来源和判定绑定</label></div>{approve.error && <p className="field-error" role="alert">{message(approve.error)}</p>}

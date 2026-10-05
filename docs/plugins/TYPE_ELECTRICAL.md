@@ -60,4 +60,4 @@ TB880使用旧版电容常数1/18；2023公式为`2πε0`，这里算得`2.11364
 
 ## 验证与范围
 
-`tests/test_type_electrical.py`覆盖TB880中间量、电容/充电电流/介质损耗与导体几何电感的独立手算、三个真实型号的缺项与短路手算、时间曲线、长度基准、适用范围拒算、来源/单位、出厂数据判定、隔离执行、快照与重复请求。`tests/browser/type-rating.cjs`覆盖新的合并结果、完整精度、关注时间点及键盘交互，并验证[型号载流量表](TYPE_RATING_TABLE.md)。浏览器流程调用实际API；超时、崩溃与环境缺失的页面检查采用注入响应，实际进程故障和超时由宿主测试核验。
+`tests/test_type_electrical.py`覆盖TB880中间量、电容/充电电流/介质损耗与导体几何电感的独立手算、三个真实型号的缺项与短路手算、时间曲线、长度基准、适用范围拒算、来源/单位、出厂数据判定、隔离执行、快照与重复请求。`frontend/src/features/type/tests/verify-analysis.mjs` 与 `frontend/scripts/verify-type-resilience.mjs`覆盖新的合并结果、完整精度、关注时间点及键盘交互，并验证[型号载流量表](TYPE_RATING_TABLE.md)。浏览器流程调用实际API；超时、崩溃与环境缺失的页面检查采用注入响应，实际进程故障和超时由宿主测试核验。

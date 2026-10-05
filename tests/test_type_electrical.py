@@ -82,6 +82,18 @@ def test_capacitance_charging_and_dielectric_loss_independent_hand_values():
     assert row(result, 'dielectric')['value'] == pytest.approx(.38566347204119383, rel=1e-12)
 
 
+def test_system_xlpe_dielectric_bands_create_new_versions_without_changing_hv():
+    for model in system_models():
+        u0=model['payload']['cable_type']['rating']['u0']
+        tangent=next(m['loss_tangent'] for m in model['payload']['materials'] if m['category']=='insulation')
+        assert tangent == (.004 if u0<=18000 else .001)
+        if u0==12000:
+            assert model['version'] in ('1.0.1','1.0.2')
+            assert 'Table 3' in model['dielectric_reference']
+        if u0==64000:
+            assert model['content_sha256']=='d0367ba83a9f2fbe3b4e18a968ca52d7cc56cc551c7659440bd58ac1fc8fee9f'
+
+
 def test_geometric_inductance_is_only_the_explicit_balanced_conductor_term():
     p = params(frequency_hz=50, spacing_m=.0944148)
     p['arrangement'] = 'trefoil'
@@ -213,6 +225,29 @@ def test_independent_lead_sheath_hand_calculation():
     assert row(result,'metallic_sheath-factor')['formula_inputs']['M_s_minus_half'] == pytest.approx(1400/2900)
     assert row(result,'metallic_sheath-factor')['value'] == pytest.approx(1.5285124277338144,abs=1e-10)
     assert row(result,'parallel-fault-sharing')['status'] == 'uncovered'
+
+
+def test_smooth_aluminium_design_area_and_short_circuit_match_decimal_hand_calculation():
+    from decimal import Decimal, localcontext
+    document = tb_document()
+    cable = document['cable_types'][0]
+    cable['cores'][0]['conductor'].update(diameter=.025, nominal_area=.0004)
+    for layer, thickness in zip(cable['common_layers'], [.0006,.0055,.0007,.0008,.0025]):
+        layer['thickness'] = thickness
+    document['measurements'] = []
+    parameters = params(duration_s=1, metal_initial_temperature_k=343.15, metal_final_temperature_k=473.15)
+    result = plugin.calculate(document, parameters, 'short-circuit')
+    actual = row(result, 'metallic_sheath-adiabatic')
+    with localcontext() as context:
+        context.prec = 45
+        area = Decimal('3.141592653589793238462643383279502884197169399') * (Decimal('40.2')**2-Decimal('38.6')**2)/4
+        current = 148 * area * (Decimal(428)/Decimal(298)).ln().sqrt()
+    assert actual['formula_inputs']['S_mm2'] == pytest.approx(float(area), rel=1e-12)
+    assert actual['value'] == pytest.approx(float(current), rel=1e-12)
+    assert actual['input_source']['kind'] == 'derived' and '非实测' in actual['input_source']['reference']
+    assert document['measurements'] == []
+    cable['common_layers'][3]['form'] = 'corrugated'
+    assert row(plugin.calculate(document, parameters, 'short-circuit'), 'metallic_sheath-adiabatic')['value'] is None
 
 
 def test_isolated_wires_use_per_wire_area_not_total_screen_area():

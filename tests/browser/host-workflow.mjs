@@ -22,12 +22,15 @@ try {
       if(!schema.paths[route])throw Error('Missing '+route);
     const contracts=await api('GET','/api/input-contracts');
     const tasks=await api('GET','/api/study-tasks');
-    if(tasks.length!==3)throw Error('Task catalog');
+    for(const id of ['transient-temperature','sheath-losses','electrothermal-steady'])if(!tasks.some(t=>t.task===id))throw Error('Task catalog');
+    const problem=await api('GET','/api/simulation/problem-contract');
+    if(problem.schema.properties.schema_version.const!=='cablesim.simulation-problem/1'||!problem.units['geometry[].values'])throw Error('Exact reproduction input contract');
     const methods=await api('GET','/api/methods');
     const sample=await api('GET','/api/examples/iec');
     const cable=await api('GET','/api/examples/cable');
     if(cable.document.schema_version!=='cablesim.domain/1')throw Error('Cable example');
     const w=await api('POST','/api/workspaces',{});const root='/api/workspaces/'+w.id;
+    if((await api('GET',root+'/deliveries')).length)throw Error('Empty delivery catalogue');
     const method={...methods.find(m=>m.method.plugin_id==='cablesim.iec60287').method,capability:'reference-rating'};
     const s=await api('POST',root+'/studies',{title:'Browser host workflow',expected_revision:w.revision,method,
       input_source:'study',method_input:sample.input});const url=root+'/studies/'+s.id;
@@ -41,9 +44,21 @@ try {
     const delivery=await api('POST',root+'/deliveries/current',request);
     const alias=await api('POST','/api/design/workspaces/'+w.id+'/deliveries',request);
     if(alias.id!==delivery.id)throw Error('Duplicate delivery');
+    const catalogue=await api('GET',root+'/deliveries');
+    if(catalogue.length!==1||catalogue[0].version!==1||catalogue[0].sources[0].run_id!==run.id)throw Error('Delivery provenance/catalogue');
+    const changed=await api('PUT',url,{...s.definition,title:'Changed configuration',expected_revision:w.revision,expected_study_revision:s.revision});
+    const undoRequest={expected_revision:w.revision,expected_study_revision:changed.revision,request_id:crypto.randomUUID()};
+    const undo=await api('POST',url+'/undo',undoRequest);
+    if(undo.definition.title!==s.definition.title||!undo.can_redo)throw Error('Study undo');
+    if((await api('POST',url+'/undo',undoRequest)).revision!==undo.revision)throw Error('Duplicate undo');
+    const stale=await fetch(url+'/redo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...undoRequest,request_id:crypto.randomUUID()})});
+    if(stale.status!==409)throw Error('Study history stale revision');
+    const redo=await api('POST',url+'/redo',{expected_revision:w.revision,expected_study_revision:undo.revision,request_id:crypto.randomUUID()});
+    if(redo.definition.title!==changed.definition.title||redo.revision!==4)throw Error('Study redo');
+    if((await api('GET',root)).revision!==w.revision)throw Error('Study history changed workspace');
     return {workspace:w.id,study:s.id,run:run.id,delivery:delivery.id,html:delivery.html,
       ampacity:run.output.cases[0].results.find(r=>r.key==='ampacity').value,taskCount:tasks.length,contractCount:contracts.length,
-      file:root+'/deliveries/'+delivery.id+'/file',input_sha256:run.input_digest,output_sha256:run.output_digest};
+      file:catalogue[0].download_url,input_sha256:run.input_digest,output_sha256:run.output_digest,study_history_revision:redo.revision};
   });
   const downloadPromise=page.waitForEvent('download');
   await page.evaluate(url=>{const a=document.createElement('a');a.href=url;a.textContent='Download saved report';document.body.append(a);a.click();},result.file);
@@ -52,7 +67,7 @@ try {
   for(const [width,height] of [[1366,768],[1920,1080]]){
     await page.setViewportSize({width,height});await page.goto(base+result.file.replace('/file',''));
     // The contract response is JSON; render the actual saved book for artifact QA.
-    await page.setContent(result.html);await page.screenshot({path:path.join(root,`report-${width}.png`),fullPage:true});
+    await page.setContent(result.html);
     const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);
     assert.equal(overflow,false);
   }

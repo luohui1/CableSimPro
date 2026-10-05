@@ -69,7 +69,8 @@ def seed_evidence(c, w, monkeypatch, *, bad_status=False, uncovered=False):
     definition = table_definition(w, RatingTableDefinition(expected_revision=w['revision'],rows=[RatingRow(case_id='buried',name='receipt fixture buried',layout='trefoil')]),method)
     sid,rid=str(uuid4()),str(uuid4())
     snapshot={'workspace_revision':w['revision'],'study_revision':1,'definition':definition,'cases':[{'case_id':'buried','input':definition['driver']['cases'][0]['input']}], 'lock':{'digest':'fixture-lock'}}
-    output={'cases':[{'case_id':'buried','status':'succeeded','results':[{'key':'ampacity','unit':'A','status':'available','value':777.125}]}]}
+    entity=snapshot['cases'][0]['input']['circuits'][0]['id']
+    output={'cases':[{'case_id':'buried','status':'succeeded','results':[{'key':'ampacity','type':'quantity','entity':entity,'case':'rating','unit':'A','status':'available','value':777.125}]}]}
     with research.store.db(True) as db:
         db.execute('INSERT INTO studies VALUES (?,?,1)',(sid,w['id']))
         db.execute('INSERT INTO study_versions VALUES (?,1,?,?)',(sid,json.dumps(definition),stamp()))
@@ -98,7 +99,7 @@ def submit(c,w):
     r=c.post(f"/api/types/{w['id']}/submissions",json=body)
     assert r.status_code==201,r.text
     assert c.post(f"/api/types/{w['id']}/submissions",json=body).json()['submission_id']==r.json()['submission_id']
-    return s,r.json()
+    return c.get(f"/api/types/{w['id']}/specification").json(),r.json()
 
 
 def test_branch_isolation_fixed_base_and_idempotence(client):
@@ -137,7 +138,8 @@ def test_local_identity_human_confirmation_and_immutable_release(client,monkeypa
     spec,submitted=submit(client,w)
     assert spec['ready']
     assert spec['html'].count('<section id="chapter-')==8
-    assert '777.125' in spec['html']
+    assert '<td>777</td>' in spec['html']
+    assert spec['payload']['results']['rating']['rows'][0]['value_a']==777.125
     approval={'request_id':str(uuid4()),'submission_id':submitted['submission_id'],'specification_digest':spec['digest'],'human_confirmed':True}
     for actor in ('ai','plugin','unknown'):
         assert client.post(f"/api/types/{w['id']}/approve",json=approval,headers={'X-CableSim-Actor':actor}).status_code==403
@@ -153,11 +155,11 @@ def test_local_identity_human_confirmation_and_immutable_release(client,monkeypa
     publish={'request_id':str(uuid4()),'submission_id':submitted['submission_id'],'specification_digest':spec['digest']}
     released=client.post(f"/api/types/{w['id']}/publish",json=publish,headers=human)
     assert released.status_code==200,released.text
-    assert released.json()['asset_reference']['version']=='1.0.2'
+    assert released.json()['asset_reference']['version']=='1.0.3'
     assert client.post(f"/api/types/{w['id']}/publish",json=publish,headers=human).json()==released.json()
     assert client.get('/api/types/library').json()['items'][0]['status']=='published'
     asset=client.get('/api/foundation/assets/'+released.json()['asset_id']).json()
-    assert client.post('/api/foundation/assets/'+asset['id']+'/derive',json={'expected_revision':asset['revision'],'content_sha256':asset['content_sha256'],'new_version':'1.0.3'}).status_code==409
+    assert client.post('/api/foundation/assets/'+asset['id']+'/derive',json={'expected_revision':asset['revision'],'content_sha256':asset['content_sha256'],'new_version':'1.0.4'}).status_code==409
     frozen=client.get(f"/api/types/{w['id']}/specification").json()
     assert frozen['digest']==spec['digest'] and frozen['payload']==spec['payload']
     assert frozen['lifecycle']['status']=='published'
@@ -182,6 +184,34 @@ def test_input_change_marks_comparison_and_rejects_old_submission(client,monkeyp
     assert values['outer_diameter']['state']=='historical'
     body={'request_id':str(uuid4()),'submission_id':submitted['submission_id'],'specification_digest':spec['digest'],'human_confirmed':True}
     assert client.post(f"/api/types/{w['id']}/approve",json=body,headers={'X-CableSim-Actor':'human'}).status_code==409
+
+
+def test_document_revisions_are_created_by_review_not_model_saves(client):
+    w = workspace(client)
+    adopt(client, w)
+    assert client.get(f"/api/types/{w['id']}/specification").json()['payload']['revisions'] == []
+    d = deepcopy(w['domain'])
+    layer = next(layer for layer in d['cable_types'][0]['common_layers'] if layer['role'] == 'insulation')
+    layer['thickness'] = .0058
+    response = client.put(f"/api/workspaces/{w['id']}/domain", json={'expected_revision':w['revision'],'document':d})
+    assert response.status_code == 200, response.text
+    w = client.get(f"/api/workspaces/{w['id']}").json()
+    current = client.get(f"/api/types/{w['id']}/specification").json()
+    assert current['payload']['revisions'] == []
+    assert current['revision_draft']['summary'] == '绝缘厚度 5.5→5.8 mm'
+    body = req(w, specification_digest=current['digest'], acknowledge_checks=True,
+               change_summary=current['revision_draft']['summary'], author='文档流程验证编制人')
+    submitted = client.post(f"/api/types/{w['id']}/submissions", json=body)
+    assert submitted.status_code == 201, submitted.text
+    assert client.post(f"/api/types/{w['id']}/submissions", json=body).json() == submitted.json()
+    reviewed = client.get(f"/api/types/{w['id']}/specification").json()
+    assert reviewed['digest'] == submitted.json()['digest'] and not reviewed['lifecycle']['stale']
+    records = reviewed['payload']['revisions']
+    assert len(records) == 1 and records[0]['summary'] == '绝缘厚度 5.5→5.8 mm'
+    assert records[0]['author'] == body['author'] and records[0]['version'].endswith('-r1')
+    d['name'] += ' 文档保存验证'
+    assert client.put(f"/api/workspaces/{w['id']}/domain", json={'expected_revision':w['revision'],'document':d}).status_code == 200
+    assert client.get(f"/api/types/{w['id']}/specification").json()['payload']['revisions'] == records
 
 
 def test_comparison_aligns_conditions_after_case_ids_and_order_change(client,monkeypatch):

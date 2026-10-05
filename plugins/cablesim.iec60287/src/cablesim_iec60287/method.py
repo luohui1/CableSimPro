@@ -114,13 +114,17 @@ def geometry(r: Rating) -> Geometry:
     d2 = d1 + 2 * ins.thickness_m
     d3 = d2 + 2 * ins.outer_screen_thickness_m
     ts = r.sheath.thickness_m
-    de = d3 + 2 * ts + 2 * r.oversheath.thickness_m
+    wave = r.sheath.corrugation
+    trough = d3 + 2*sum(layer.thickness_m for layer in wave.buffer_layers) if wave else d3
+    mean = trough + ts + (wave.depth_m if wave else 0.)
+    mean_outer = mean + ts
+    de = mean_outer + (wave.depth_m+2*sum(layer.thickness_m for layer in wave.outer_layers) if wave else 0.) + 2*r.oversheath.thickness_m
     duct = r.installation.duct
     if duct is not None and de >= duct.inner_diameter_m:
         raise RatingRefused('CABLE_DOES_NOT_FIT_DUCT', '电缆外径不小于管道内径。')
     # Touching trefoil: axis spacing is the cable diameter, or the duct diameter in ducts.
     spacing = de if duct is None else duct.outer_diameter_m
-    return Geometry(dc, d1, d2, d3, d3 + ts, d3 + 2 * ts, de, spacing)
+    return Geometry(dc, d1, d2, d3, mean, mean_outer, de, spacing)
 
 
 def electrical(r: Rating, g: Geometry) -> Electrical:
@@ -144,7 +148,39 @@ def t1(r: Rating, g: Geometry) -> float:
     ins = r.insulation
     return (_layer(ins.inner_screen_rho_k_m_w, g.over_inner_screen_m, g.conductor_m)
             + _layer(ins.rho_k_m_w, g.over_insulation_m, g.over_inner_screen_m)
-            + _layer(ins.outer_screen_rho_k_m_w, g.over_outer_screen_m, g.over_insulation_m))
+            + _layer(ins.outer_screen_rho_k_m_w, g.over_outer_screen_m, g.over_insulation_m)
+            + buffer_resistance(r, g))
+
+
+def buffer_resistance(r: Rating, g: Geometry) -> float:
+    wave = r.sheath.corrugation
+    if wave is None:
+        return 0.
+    diameter, value = g.over_outer_screen_m, 0.
+    for layer in wave.buffer_layers:
+        outer = diameter+2*layer.thickness_m
+        value += _layer(layer.rho_k_m_w, outer, diameter)
+        diameter = outer
+    # 2-1:2023 4.1.2.1 mean inner diameter = (Doc+Dit)/2-ts.
+    return value+_layer(wave.gap_rho_k_m_w, g.sheath_mean_m-r.sheath.thickness_m, diameter)
+
+
+def dielectric_path(r: Rating, g: Geometry) -> float:
+    # Buffer/gap lie outside the dielectric heat source; all Wd crosses them.
+    return .5*(t1(r,g)+buffer_resistance(r,g))
+
+
+def t3(r: Rating, g: Geometry) -> float:
+    wave = r.sheath.corrugation
+    if wave is None or not wave.outer_layers:
+        # 2-1:2023 4.1.5.1 corrugated serving: Doc+2t3 over mean outer diameter.
+        return _layer(r.oversheath.rho_k_m_w, g.overall_m, g.over_sheath_m)
+    diameter, value = g.over_sheath_m, 0.
+    for i,layer in enumerate(wave.outer_layers):
+        outer = diameter+2*layer.thickness_m+(wave.depth_m if i==0 else 0.)
+        value += _layer(layer.rho_k_m_w,outer,diameter)
+        diameter = outer
+    return value+_layer(r.oversheath.rho_k_m_w,g.overall_m,diameter)
 
 
 def sheath_loss(r: Rating, g: Geometry, e: Electrical, theta_s: float) -> SheathLoss:
@@ -195,7 +231,7 @@ def rate(r: Rating) -> Result:
     T1 = t1(r, g)
     inst = r.installation
     multiplier = T3_MULTIPLIER[inst.environment]
-    T3 = multiplier * _layer(r.oversheath.rho_k_m_w, g.overall_m, g.over_sheath_m)
+    T3 = multiplier * t3(r,g)
     duct = inst.duct
     T4_wall = _layer(duct.rho_k_m_w, duct.outer_diameter_m, duct.inner_diameter_m) if duct else None
     T4_ext = _t4_soil(r, g)
@@ -211,7 +247,7 @@ def rate(r: Rating) -> Result:
         T4 = T4_ext + (t4_gap + T4_wall if duct else 0.0)
         loss = sheath_loss(r, g, e, theta_s)
         lam = loss.total
-        numerator = d_theta - wd * (0.5 * T1 + T3 + T4)
+        numerator = d_theta - wd * (dielectric_path(r,g) + T3 + T4)
         denominator = R * T1 + R * (1 + lam) * (T3 + T4)
         if numerator <= 0:
             raise RatingRefused('NO_POSITIVE_RATING', '仅介质损耗已使导体达到允许温度，不存在正载流量。')
@@ -250,7 +286,7 @@ def rate(r: Rating) -> Result:
     limitations = [
         '仅三根等负荷单芯电缆接触品字形排列；均匀土壤、恒温地表、100 % 负荷率。',
         '无铠装（T2 = 0、λ2 = 0）；不计土壤干燥、外部热源与相邻回路。',
-        '仅光滑管状金属护套；铜丝屏蔽、皱纹护套、复合护套不适用。',
+        '管状金属护套；皱纹护套采用声明的平均直径、缓冲层和间隙有效热阻率，不计算局部接触热点。铜丝与复合护套不适用。',
         '集肤/邻近系数 ks、kp 及管道常数 U、V、Y 由使用者按标准表给定，本方法不内置标准表。',
     ]
     return Result(METHOD_ID, METHOD_VERSION, history[-1].current_a, converged, len(history), g, e,

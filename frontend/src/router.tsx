@@ -6,22 +6,23 @@ import {
   Navigate,
   Outlet,
   notFound,
+  lazyRouteComponent,
 } from "@tanstack/react-router";
-import { SelectionPage } from "./pages/selection-page";
-import { GalleryPage } from "./pages/gallery-page";
 import { ObjectListPage } from "./pages/object-list-page";
-import { StudyProvider } from "./components/study-provider";
-import { createTypeRoutes } from "./features/type";
-import { LibraryPage } from "./pages/library-page";
-import { PluginsPage } from "./pages/plugins-page";
-import { SettingsPage } from "./pages/settings-page";
-import { ReproductionPage } from "./pages/reproduction-page";
+import { createTypeRoutes } from "./features/type/routes";
 import { preferences } from "./lib/preferences";
-import {
-  StudyWorkspace,
-  StudyEntry,
-  moduleDefinitions,
-} from "./pages/study-workspace";
+import { moduleDefinitions } from "./pages/study-modules";
+const SelectionPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pages/selection-page'), 'SelectionPage') : undefined;
+const GalleryPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pages/gallery-page'), 'GalleryPage') : undefined;
+const LibraryPage = lazyRouteComponent(() => import('./pages/library-page'), 'LibraryPage');
+const DocumentsPage = lazyRouteComponent(() => import('./pages/documents-page'), 'DocumentsPage');
+const DeliveriesPage = lazyRouteComponent(() => import('./pages/deliveries-page'), 'DeliveriesPage');
+const PluginsPage = lazyRouteComponent(() => import('./pages/plugins-page'), 'PluginsPage');
+const SettingsPage = lazyRouteComponent(() => import('./pages/settings-page'), 'SettingsPage');
+const ReproductionPage = lazyRouteComponent(() => import('./pages/reproduction-page'), 'ReproductionPage');
+const StudyProvider = lazyRouteComponent(() => import('./components/study-provider'), 'StudyProvider');
+const StudyWorkspace = lazyRouteComponent(() => import('./pages/study-workspace'), 'StudyWorkspace');
+const StudyEntry = lazyRouteComponent(() => import('./pages/study-workspace'), 'StudyEntry');
 
 export type PageState =
   "empty" | "loading" | "error" | "success" | "historical";
@@ -47,6 +48,8 @@ const rootRoute = createRootRoute({
   ),
 });
 const libraryRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library", validateSearch: themeSearch, component: LibraryPage });
+const deliveriesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/deliveries", validateSearch: (search: Record<string, unknown>) => ({ ...themeSearch(search), workspace: typeof search.workspace === "string" ? search.workspace : "", delivery: typeof search.delivery === "string" ? search.delivery : "" }), component: DeliveriesPage });
+const documentsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/documents", validateSearch: (search: Record<string, unknown>): { theme: 'light' | 'dark'; document?: string; extraction?: string; proposal?: string; batch?:string } => ({ ...themeSearch(search), document: typeof search.document === 'string' ? search.document : '', extraction: typeof search.extraction === 'string' ? search.extraction : '', proposal: typeof search.proposal === 'string' ? search.proposal : '', batch:typeof search.batch === 'string' ? search.batch : '' }), component: DocumentsPage });
 const pluginsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/plugins", validateSearch: themeSearch, component: PluginsPage });
 const pluginDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/plugins/$pid", validateSearch: themeSearch, component: PluginsPage });
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings", validateSearch: themeSearch, component: SettingsPage });
@@ -160,13 +163,12 @@ const sampleEntryRoute = createRoute({
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     homeRoute,
-    libraryRoute, pluginsRoute, pluginDetailRoute, settingsRoute,
+    libraryRoute, documentsRoute, deliveriesRoute, pluginsRoute, pluginDetailRoute, settingsRoute,
     reproductionsRoute, reproductionDetailRoute,
     simulationListRoute,
     ...createTypeRoutes(rootRoute),
     studiesRoute,
-    selectionRoute,
-    galleryRoute,
+    ...(import.meta.env.DEV ? [selectionRoute, galleryRoute] : []),
     sampleEntryRoute,
     studyRootRoute.addChildren([
       studyEntryRoute,

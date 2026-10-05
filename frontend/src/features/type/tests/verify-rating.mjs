@@ -5,7 +5,7 @@ import { typeFixture, output, root } from './fixture.mjs';
 import { checkLayout } from './ui-checks.mjs';
 
 process.env.E2E_DATABASE_SOURCE ||= path.join(root, '.data/standard-check/validation.sqlite');
-const expect = baseExpect.configure({ timeout: 25000 }), fixture = await typeFixture(), { page, context } = fixture;
+const expect = baseExpect.configure({ timeout: 25000 }), fixture = await typeFixture({ main: process.env.TYPE_E2E_MAIN === '1' }), { page, context } = fixture;
 const result = { workflows: [], states: [], layouts: [], screenshots: [], errors: fixture.errors, localSolverRuns: 0, iecAlgebraRuns:0 };
 async function shot(name) { if (name !== 'rating-table-light-1366' && name !== 'rating-table-parameters' && !name.includes('failure')) return; await page.evaluate(() => document.fonts.ready); const file = path.join(output, 'screenshots', name + '.png'); await page.screenshot({ path: file }); result.screenshots.push(file); }
 async function layout() { result.layouts.push(await checkLayout(page)); }
@@ -16,6 +16,11 @@ try {
   const empty = await fixture.api('/api/design/type-workspaces', 'POST', { model_id: model.id, content_sha256: model.content_sha256 }), wid = empty.id;
   await page.setViewportSize({ width: 1366, height: 768 }); await page.goto(`${fixture.url}/types/${wid}/rating-table/results`);
   await expect(page.locator('[data-type-page=rating-table-results]')).toHaveAttribute('data-type-state', 'empty'); result.states.push('empty'); await shot('rating-table-empty');
+  for(const width of [1366,1920])for(const theme of ['light','dark']){
+    await page.setViewportSize({width,height:width===1366?768:1080});await page.goto(`${fixture.url}/types/${wid}/rating-table/results?theme=${theme}`);
+    await expect(page.locator('[data-type-page=rating-table-results]')).toHaveAttribute('data-type-state','empty');await layout();
+  }
+  await page.setViewportSize({width:1366,height:768});await page.goto(`${fixture.url}/types/${wid}/rating-table/results?theme=light`);
   await page.getByRole('button', { name: '添加工况', exact: true }).click();
   await page.getByRole('textbox', { name: '工况名称', exact: true }).fill('隔离验收直埋'); await page.keyboard.press('Enter');
   await expect(page.getByRole('table', { name: '载流量表', exact: true })).toBeVisible();
@@ -31,11 +36,11 @@ try {
   result.workflows.push({name:'真实编译响应迟到时不恢复已撤销工况草稿'});
   await page.getByRole('tab',{name:'方法参数',exact:true}).click();
   await expect(page.locator('.parameter-form')).toBeVisible({timeout:60000});
-  const ks=page.getByRole('textbox',{name:'集肤系数 kₛ',exact:true}),kp=page.getByRole('textbox',{name:'邻近系数 kₚ',exact:true});
+  const ks=page.getByRole('textbox',{name:'集肤效应系数',exact:true}),kp=page.getByRole('textbox',{name:'邻近效应系数',exact:true});
   await ks.fill('1');await kp.fill('1');
   await page.getByRole('combobox',{name:'外部热阻形式',exact:true}).click();await page.getByRole('option',{name:'精确形式',exact:true}).click();
-  await page.getByRole('combobox',{name:'涡流分支',exact:true}).click();await page.getByRole('option',{name:'忽略',exact:true}).click();
-  await page.getByRole('textbox',{name:'系数来源',exact:true}).fill('明确合成验收条件；ks=kp=1，未作为厂家默认值');
+  await page.getByRole('combobox',{name:'涡流损耗处理',exact:true}).click();await page.getByRole('option',{name:'忽略',exact:true}).click();
+  await page.getByRole('textbox',{name:'来源',exact:true}).fill('明确合成验收条件；ks=kp=1，未作为厂家默认值');
   await page.getByRole('textbox',{name:'初始护套温度',exact:true}).fill('70');
   await page.keyboard.press('Control+s');await expect(page.getByText('已保存型号与方法条件',{exact:true})).toBeVisible();
   const sourced=(await fixture.api(`/api/workspaces/${wid}/studies`)).find(item=>item.id===savedStudy.id);expect(sourced.definition.input_sources['/parameters/ks'].kind).toBe('user');expect(sourced.definition.input_sources['/parameters/ks'].reference).toContain('明确合成验收条件');
@@ -50,6 +55,11 @@ try {
   expect(realRun).toBeTruthy();const realRows=await fixture.api(`/api/design/workspaces/${wid}/rating-table-runs/${realRun.id}`);expect(realRows.rows[0].value_a).toBeGreaterThan(0);
   result.workflows.push({name:'本机真实IEC代数当前成功态',run:realRun.id,current:realRun.freshness,currentA:realRows.rows[0].value_a,method:realRun.snapshot.definition.method});
   await shot('rating-table-light-1366');
+  for(const width of [1366,1920])for(const theme of ['light','dark']){
+    await page.setViewportSize({width,height:width===1366?768:1080});await page.goto(`${fixture.url}/types/${wid}/rating-table/results?theme=${theme}`);
+    await expect(page.locator('[data-type-page=rating-table-results]')).toHaveAttribute('data-type-state','success');await layout();
+  }
+  await page.setViewportSize({width:1366,height:768});await page.goto(`${fixture.url}/types/${wid}/rating-table/results?theme=light`);
   result.workflows.push({ name: '宿主默认模板、正式工况编译与方法保存', study: savedStudy.id, condition });
   const field = page.getByRole('textbox', { name: '隔离验收直埋 中心埋深', exact: true }); await field.fill('0.9234567890123');
   await page.getByRole('button', { name: '标准核对', exact: true }).click(); await page.getByRole('button', { name: '载流量表', exact: true }).click();
@@ -81,7 +91,11 @@ try {
   await page.goto(`${fixture.url}/types/${chosen.wid}/rating-table/results?run=${chosen.run.id}`); await expect(page.getByRole('button', { name: '添加工况', exact: true })).toBeDisabled(); await expect(page.getByRole('textbox', { name: row.name + ' 中心埋深', exact: true })).toHaveAttribute('readonly', ''); await shot('rating-table-fixed-run');
   for (const kind of ['loading', 'error']) {
     const pattern = `**/api/workspaces/${chosen.wid}/studies`; await context.route(pattern, async route => { if (kind === 'loading') { await new Promise(resolve => setTimeout(resolve, 1800)); return route.continue(); } return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ detail: '验证载流量工况读取失败' }) }); });
-    await page.goto(`${fixture.url}/types/${chosen.wid}/rating-table/results`); await expect(page.locator('[data-type-page=rating-table-results]')).toHaveAttribute('data-type-state', kind); result.states.push(kind); await shot('rating-table-' + kind); await context.unroute(pattern);
+    for(const width of [1366,1920])for(const theme of ['light','dark']){
+      await page.setViewportSize({width,height:width===1366?768:1080});await page.goto(`${fixture.url}/types/${chosen.wid}/rating-table/results?theme=${theme}`);
+      await expect(page.locator('[data-type-page=rating-table-results]')).toHaveAttribute('data-type-state',kind);result.states.push(kind);await layout();
+    }
+    await context.unroute(pattern);
   }
   expect(fixture.errors).toEqual([]); expect(result.localSolverRuns).toBe(0);expect(result.iecAlgebraRuns).toBe(1);
 } catch (error) { result.failure = String(error.stack || error); result.failureUrl = page.url(); console.error(result.failure); console.error(page.url()); console.error((await page.locator('body').innerText()).slice(0, 2500)); await shot('rating-table-failure').catch(() => {}); process.exitCode = 1; }

@@ -14,13 +14,14 @@ import { useTypeWorkspace } from './provider';
 import { TypeGeometry } from './geometry';
 import { TypeQuantities } from './quantities';
 import { cleanLabel } from './labels';
+import { StructureActions } from './structure-actions';
 
 export function TypeNumericField({ row }: { row: LayerRow }) {
   const state = useTypeWorkspace(), doc = state.document!, provenance = fieldSource(doc, row.path);
   return <NumberField label={row.spec.label} value={displayed(doc, row.spec)} unit={row.spec.unit} precision={row.spec.precision} min={0} minExclusive required
     error={state.fieldError?.path === row.path ? state.fieldError.message : undefined}
     locked={state.locked(row.path)} disabled={state.busy} draftText={state.draft?.fields[row.path]?.value} onDraftChange={value => state.setField(row.spec, value)}
-    onCommit={value => { if (value !== null) state.edit(row.path, value / 1000); }} source={sourceKind(provenance)} sourceDetail={typeof provenance.reference === 'string' ? provenance.reference : undefined} />;
+    onCommit={value => { if (value !== null) state.edit(row.path, value / (row.spec.scale || 1)); }} source={sourceKind(provenance)} sourceDetail={typeof provenance.reference === 'string' ? provenance.reference : undefined} />;
 }
 export function LayerTable({ rows, selected, onSelect, compact = false }: { rows: LayerRow[]; selected: LayerTarget | null; onSelect: (target: LayerTarget | null) => void; compact?: boolean }) {
   const state = useTypeWorkspace();
@@ -28,8 +29,8 @@ export function LayerTable({ rows, selected, onSelect, compact = false }: { rows
     groups={[{ id: 'layers', label: '结构层', rows }]} columns={[
       { id: 'number', label: '序号', numeric: true, render: row => row.number },
       { id: 'name', label: '层次', render: row => row.label },
-      { id: 'material', label: '材料', render: row => cleanLabel(row.material.label) },
-      { id: 'dimension', label: '尺寸', unit: 'mm', numeric: true, render: row => <div className="type-layer-input" onClick={event => { event.stopPropagation(); onSelect(row.target); }} onFocusCapture={() => onSelect(row.target)}><span className="muted">{row.target.role === 'conductor' ? '直径' : '厚度'}</span><TypeNumericField row={row} /></div> },
+      ...(!compact ? [{ id: 'material', label: '材料', render: (row: LayerRow) => cleanLabel(row.material.label) }] : []),
+      { id: 'dimension', label: '尺寸', unit: 'mm', numeric: true, render: row => <div className="type-layer-input" onClick={event => { event.stopPropagation(); onSelect(row.target); }} onFocusCapture={() => onSelect(row.target)}><span className="muted">{row.target.role === 'conductor' ? row.spec.scale === 500 ? '扇高' : '直径' : '厚度'}</span><TypeNumericField row={row} /></div> },
       ...(!compact ? [{ id: 'outer', label: '绘图外径', unit: 'mm', numeric: true, render: (row: LayerRow) => <span className="type-readonly-value">{formatNumber(row.outerM === null ? null : row.outerM * 2000, 2)}{row.outerM !== null && <SourceBadge kind="derived" detail="当前结构尺寸逐层累加的截面绘图尺寸；原始实体与用料见保存的结构推导。" />}</span> }] : []),
       { id: 'source', label: '来源', render: row => { const source = fieldSource(state.document!, row.path), kind = sourceKind(source); return kind ? <span className={compact ? 'type-layer-source' : undefined}><SourceBadge kind={kind} detail={typeof source.reference === 'string' ? source.reference : undefined} /></span> : source.kind === 'demo' ? <span className="muted" title={typeof source.reference === 'string' ? source.reference : undefined}>系统输入</span> : <span className="muted">未提供</span>; } },
     ]} />;
@@ -40,12 +41,12 @@ export function TypeStructure({ tab, cable, selected, onSelect }: { tab: string;
   let rows: LayerRow[];
   try { rows = layerRows(state.document, cable); } catch (error) { return <ErrorState title="结构不可绘制" description={error instanceof Error ? error.message : String(error)} />; }
   if (tab === 'quantities') return <TypeQuantities cable={cable} />;
-  if (tab === 'three') return <TypeGeometry cable={cable} selected={selected} onSelect={onSelect} />;
+  if (tab === 'three') return <><StructureActions cable={cable} selected={selected} onSelect={onSelect} /><TypeGeometry cable={cable} selected={selected} onSelect={onSelect} /></>;
   const section = <CableSection cableType={cable} materials={state.document.materials} selectedObject={selected} onSelectionChange={onSelect}
     state={state.workspace?.raw.historical ? 'historical' : 'success'} editable={!state.readOnly && !state.busy} showDimensions onCommand={command => { if (command === 'save') void state.save(); if (command === 'undo') void state.undo(); }}
     isLocked={target => { const row = rows.find(row => row.id === targetId(target)); return !row || state.locked(row.path); }}
     onDimensionChange={edit => { const row = rows.find(row => row.id === targetId(edit.target)); if (!row) throw new Error('所选结构层已不存在'); state.edit(row.path, edit.valueM); }} />;
-  return <>{state.workspace?.raw.historical === true && tab === 'table' && <StaleBanner description="历史型号输入保持只读。" />}
+  return <><StructureActions cable={cable} selected={selected} onSelect={onSelect} />{state.workspace?.raw.historical === true && tab === 'table' && <StaleBanner description="历史型号输入保持只读。" />}
     {tab === 'table' ? <LayerTable rows={rows} selected={selected} onSelect={onSelect} /> : <div className="type-structure-split">{section}<LayerTable rows={rows} selected={selected} onSelect={onSelect} compact /></div>}
     {state.dirty && <p className="type-notice">结构修改待保存；已保存的外径、用料和校核结果已标为历史。</p>}
   </>;

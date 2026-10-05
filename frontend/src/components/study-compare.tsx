@@ -641,7 +641,7 @@ export function StudyCompare({
               {
                 id: "quantity",
                 label: "物理量",
-                render: (row) => text(row.key),
+                render: (row) => displayName(text(row.key)),
               },
               {
                 id: "entity",

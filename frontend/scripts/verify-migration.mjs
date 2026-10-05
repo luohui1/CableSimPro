@@ -158,9 +158,7 @@ try {
   await page.getByRole("tab", { name: "候选结果" }).focus();
   await page.keyboard.press("ArrowRight");
   await expect(page).toHaveURL(/selection\/settings/);
-  await expect(
-    page.getByRole("link", { name: "在旧版中打开" }),
-  ).toHaveAttribute("href", /127\.0\.0\.1:8027.*selection\/settings/);
+  await expect(page.getByRole("tab", { name: "问询条件", exact: true })).toHaveAttribute("data-state", "active");
   await page.goBack();
   await expect(page).toHaveURL(/selection\/results/);
   await page.reload();

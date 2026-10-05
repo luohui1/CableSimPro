@@ -1,13 +1,15 @@
 import { MotionValue } from "./motion";
 import { EngineeringValue } from "./engineering-value";
+import type { ReactNode } from "react";
 export function Conclusion({
   title = "推荐型号",
   model,
   description,
   metrics,
   historical,
+  conditions,
 }: {
-  title?: string;
+  title?: ReactNode;
   model: string;
   description: string;
   metrics: {
@@ -20,6 +22,7 @@ export function Conclusion({
     quantity?: string;
   }[];
   historical?: boolean;
+  conditions?: ReactNode;
 }) {
   return (
     <section
@@ -30,6 +33,7 @@ export function Conclusion({
         <span className="muted">{title}</span>
         <h2>{model}</h2>
         <p className="muted">{description}</p>
+        {conditions}
       </div>
       <dl className="conclusion-metrics">
         {metrics.map((metric) => (

@@ -93,15 +93,80 @@ def test_r20_material_coating_class_and_basis_are_explicit():
     assert item(run(document), 'r20')['verdict'] == 'uncovered'
 
 
-def test_missing_screen_data_and_double_tape_padding_stop_fictitious_chain():
+def test_missing_screen_data_and_unsupported_armour_material_remain_explicit():
     document = example()
     document['cable_types'][0]['cores'][0]['layers'][-1].pop('tape_width')
     assert item(run(document), 'oversheath-nominal')['limit'] is None
     document = example()
     document['cable_types'][0]['common_layers'].insert(1, {'role': 'armour', 'material': 'material/cu', 'thickness': .001, 'form': 'tape', 'nominal_tape_thickness': .0005, 'tape_count': 2})
     result = run(document)
-    assert item(result, 'oversheath-nominal')['verdict'] == 'uncovered'
-    assert item(result, 'oversheath-nominal')['limit'] is None
+    assert item(result,'armour-material')['verdict']=='failed'  # Copper tape is not a listed armour material.
+    assert item(result,'armour-tape-nominal')['limit'] is None
+    assert item(result,'armour-tape-gap')['verdict']=='missing'
+    assert result['conclusion']=='not_satisfied'
+
+
+def armoured_example(form='tape'):
+    document=example(area=300)
+    document['materials'].append({'id':'material/steel','label':'镀锌钢','category':'metal','standard_kind':'steel_galvanized'})
+    armour={'role':'armour','material':'material/steel','form':form,'thickness':.0016,
+        'nominal_tape_thickness':.0008,'tape_width':.06,'tape_gap':.03,'tape_count':2,'tape_application':'two_tape_gap'}
+    if form=='wires':
+        armour={'role':'armour','material':'material/steel','form':'wires','thickness':.00315,
+            'wire_diameter':.00315,'reverse_binder_thickness':0.}
+    document['cable_types'][0]['common_layers'].insert(1,armour)
+    return document
+
+
+def test_double_steel_tape_with_extruded_bedding_hand_calculation():
+    document=armoured_example();result=run(document)
+    # 300 mm2: Dc=19.5+9+3+0.5=32.0; Df=69.1; A.2.4 bedding=70.3.
+    # Extruded bedding has no added wrapping pad; table11 -> 0.8 mm.
+    # Dx=70.3+4*0.8=73.5; outer sheath round(0.035*73.5+1)=3.6 mm.
+    gauge=item(result,'armour-tape-nominal')
+    assert gauge['formula_inputs']['D_A_mm']==70.3
+    assert gauge['limit']==.8 and gauge['verdict']=='passed'
+    assert item(result,'armour-tape-gap')['actual']==.5
+    assert item(result,'armour-tape-gap')['verdict']=='passed'
+    assert item(result,'oversheath-nominal')['limit']==3.6
+    assert not any(row['id'].endswith(':armour-padding') for row in result['rows'])
+    assert item(result,'armour-tape-measured')['verdict']=='missing'
+    assert item(result,'armour-tape-measured')['limit']==.72
+    document['cable_types'][0]['common_layers'][1]['tape_gap']=.0301
+    assert item(run(document),'armour-tape-gap')['verdict']=='failed'
+
+
+def test_wrapped_bedding_requires_explicit_padding_and_filling():
+    document=armoured_example();common=document['cable_types'][0]['common_layers']
+    common[0].update(form='tape',thickness=.0014,padding_thickness=.0008,minimum_thickness=.00092)
+    common.insert(0,{'role':'filler','material':'material/pvc','thickness':.001})
+    result=run(document)
+    assert item(result,'bedding-filled')['verdict']=='passed'
+    assert item(result,'armour-padding')['limit']==.8
+    assert item(result,'armour-padding-total')['limit']==1.4
+    assert item(result,'armour-padding-minimum')['limit']==.92
+    assert item(result,'armour-padding-minimum')['verdict']=='passed'
+    assert item(result,'armour-tape-nominal')['formula_inputs']['D_A_mm']==71.9
+    assert item(result,'oversheath-nominal')['limit']==3.6
+    common[1].pop('padding_thickness')
+    assert item(run(document),'armour-padding')['verdict']=='missing'
+    assert item(run(document),'oversheath-nominal')['limit'] is None
+
+
+def test_wire_armour_uses_table10_and_measured_diameter_separately():
+    document=armoured_example('wires');result=run(document)
+    wire=item(result,'armour-wire-nominal')
+    assert wire['limit']==3.15 and wire['verdict']=='passed'
+    assert item(result,'armour-wire-measured')['limit']==2.99
+    assert item(result,'armour-wire-measured')['actual'] is None
+    armour=document['cable_types'][0]['common_layers'][1]
+    armour['mean_wire_diameter']=.002994
+    assert item(run(document),'armour-wire-measured')['verdict']=='passed'
+    armour['mean_wire_diameter']=.002984
+    assert item(run(document),'armour-wire-measured')['verdict']=='failed'
+    armour['wire_diameter']=.004
+    document['cable_types'][0]['common_layers'][0]['thickness']=.0018
+    assert item(run(document),'armour-coarse-bedding')['verdict']=='failed'
 
 
 def test_hv_primary_table_cells_and_missing_part_one():
@@ -259,10 +324,10 @@ def test_domain_rejects_inverted_measurements():
 
 def test_absent_standard_facts_preserve_named_demo_version_digests():
     expected = {
-        'system.cu-xlpe-al-240': 'e9f2eb5f4dd359842dc0e6158e2cca191571284802b9efc021ff4bf19d070b1c',
-        'system.cu-xlpe-al-400': 'c105a5e2d7f3905cb5676f18cf008992adf4cd3f84df4dd4efa34cfb62adfc51',
+        'system.cu-xlpe-al-240': '20d1dbb0aa92000838f99482727c87febd0f5fa88b3beafa0f256edbcc6f26e6',
+        'system.cu-xlpe-al-400': 'c01330910a3435222e583916db208e8646952764fe64b3de04aab5b5fba5060e',
         'system.yjq02-110kv-800': 'd0367ba83a9f2fbe3b4e18a968ca52d7cc56cc551c7659440bd58ac1fc8fee9f',
-        'system.cu-xlpe-10kv-240': '44da39f79c1df5d344f862bff0aac1718b36472b91ffa512af279cfd3fe82f07',
+        'system.cu-xlpe-10kv-240': 'f1e2231d9f9fee8124ed211d9ed8e90ab28b3682d635172ce2fe142c2d85403e',
     }
     actual = {m['id']: m['content_sha256'] for m in system_models()}
     assert {key: actual[key] for key in expected} == expected

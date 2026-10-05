@@ -8,6 +8,7 @@ from pydantic import Field, model_validator
 from .base import StrictModel
 from .environment import Backfill, SoilLayer
 from .validation import FieldValueError
+from .cross_sections import core_profile, profile_radius, profiles_overlap
 
 
 class Source(StrictModel):
@@ -22,7 +23,7 @@ class FactoryMeasurement(StrictModel):
     cable_type: str
     core: str | None = None
     role: Literal['conductor', 'insulation', 'conductor_screen', 'insulation_screen', 'metallic_screen', 'metallic_sheath', 'bedding', 'separator', 'armour', 'oversheath']
-    quantity: Literal['r20', 'minimum_thickness', 'maximum_thickness', 'mean_thickness', 'minimum_tape_thickness', 'screen_area']
+    quantity: Literal['r20', 'minimum_thickness', 'maximum_thickness', 'mean_thickness', 'minimum_tape_thickness', 'mean_wire_diameter', 'screen_area']
     value: float = Field(gt=0)
     unit: Literal['ohm/m', 'm', 'm2']
     basis: Literal['measurement', 'manufacturer_limit']
@@ -39,6 +40,8 @@ class FactoryMeasurement(StrictModel):
             raise ValueError('R20 数据只能关联导体；厚度或截面需关联结构层')
         if self.quantity == 'screen_area' and self.role not in ('metallic_screen', 'metallic_sheath', 'armour'):
             raise ValueError('金属截面数据必须关联屏蔽、金属护套或铠装')
+        if self.quantity == 'mean_wire_diameter' and self.role != 'armour':
+            raise ValueError('铠装丝径实测值必须关联铠装层')
         if self.basis == 'manufacturer_limit' and self.quantity != 'r20':
             raise ValueError('厂家声明上限只用于 R20；厚度和截面请录入有报告依据的实测值')
         if self.source.kind not in ('manufacturer', 'measurement') or not self.source.reference or not self.source.reference.strip():
@@ -63,7 +66,7 @@ class Material(StrictModel):
     id: str = Field(pattern=r'^material/[A-Za-z0-9_-]+$')
     label: str
     category: Literal['conductor', 'semiconductor', 'insulation', 'metal', 'polymer', 'filler', 'soil', 'backfill', 'concrete', 'duct', 'fluid']
-    standard_kind: Literal['copper_bare', 'copper_coated', 'aluminium', 'lead', 'XLPE', 'PVC', 'EPR', 'HEPR', 'other'] | None = None
+    standard_kind: Literal['copper_bare', 'copper_coated', 'aluminium', 'aluminium_alloy', 'steel_galvanized', 'steel_stainless_nonmagnetic', 'lead', 'XLPE', 'PVC', 'EPR', 'HEPR', 'other'] | None = None
     thermal_resistivity: float | None = Field(default=None, gt=0)
     volumetric_heat_capacity: float | None = Field(default=None, gt=0)
     electrical_resistivity_20: float | None = Field(default=None, gt=0)
@@ -82,7 +85,9 @@ class Conductor(StrictModel):
     material: str
     form: Literal['unspecified', 'solid_round', 'stranded_round', 'stranded_round_compacted', 'segmental', 'hollow', 'sectoral']
     nominal_area: float = Field(gt=0)
-    diameter: float = Field(gt=0)
+    diameter: float = Field(gt=0, description='圆形导体外径；扇形导体为圆弧直径，圆心由芯坐标确定，m')
+    sector_angle_deg: float | None = Field(default=None, gt=0, le=180, description='扇形导体夹角，°；不从标称截面反推')
+    sector_rotation_deg: float | None = Field(default=None, ge=-360, le=360, description='扇形角平分线从 +x 朝 +z 的转角，°')
     r20: float | None = Field(default=None, gt=0)
     conductor_class: Literal[1, 2, 5, 6] | None = None
     r20_basis: Literal['design', 'measurement', 'manufacturer_limit'] | None = None
@@ -95,16 +100,32 @@ class Conductor(StrictModel):
     lay_direction: Literal['left', 'right'] | None = None
     lay_factor: float | None = Field(default=None, ge=1, description='导体用料绞入系数；明确制造输入，未知时为空')
 
+    @model_validator(mode='after')
+    def sector_dimensions(self):
+        if self.form == 'sectoral':
+            # Persist old or incomplete drafts without inventing sector angles.
+            # Any geometry/radius operation still requires both explicit fields.
+            area = None if self.sector_angle_deg is None else self.diameter**2*self.sector_angle_deg*pi/1440
+            if area is not None and self.nominal_area > area+1e-12:
+                raise ValueError('conductor.nominal_area：标称截面超过所声明扇形轮廓面积，请核对圆弧直径及夹角')
+        elif self.sector_angle_deg is not None or self.sector_rotation_deg is not None:
+            raise ValueError('conductor.form：扇形夹角与朝向仅用于 sectoral 导体')
+        return self
+
 
 class Layer(StrictModel):
     role: Literal['conductor_screen', 'insulation', 'insulation_screen', 'metallic_screen', 'metallic_sheath', 'bedding', 'separator', 'filler', 'binder', 'armour', 'oversheath']
     material: str
     thickness: float = Field(gt=0)
     form: Literal['wires', 'tape', 'smooth', 'corrugated', 'unspecified'] | None = None
+    corrugation_depth: float | None = Field(default=None, gt=0, description='皱纹金属护套波峰至波谷的径向深度，m；不含金属壁厚 thickness。')
+    corrugation_pitch: float | None = Field(default=None, gt=0, description='相邻波峰的轴向节距，m；IEC 平均直径模型不据此推测纵向电阻修正。')
     wire_count: int | None = Field(default=None, ge=1)
     wire_diameter: float | None = Field(default=None, gt=0)
     lay_length: float | None = Field(default=None, gt=0)
     overlap: float | None = Field(default=None, ge=0, lt=1)
+    mean_wire_diameter: float | None = Field(default=None, gt=0, description='铠装单丝同截面正交两次测量的平均直径，m；非标称丝径')
+    padding_thickness: float | None = Field(default=None, ge=0, description='绕包内衬层所含附加垫层厚度，m；已计入本层 thickness，不另累加')
     tape_width: float | None = Field(default=None, gt=0)
     lay_direction: Literal['left', 'right'] | None = None
     minimum_thickness: float | None = Field(default=None, gt=0, description='最薄点实测值 / m；不以标称厚度代替')
@@ -122,13 +143,20 @@ class Layer(StrictModel):
     longitudinal_r20: float | None = Field(default=None, gt=0, description='金属层沿成品电缆轴向的20°C电阻，Ω/m；铜带接触电阻不能由单带截面代替')
     longitudinal_resistance_basis: Literal['dc', 'power_frequency_ac'] | None = None
     longitudinal_resistance_frequency: float | None = Field(default=None, gt=0, description='纵向交流电阻的测量频率，Hz；不能以直流值替代钢丝铠装工频电阻')
-    tape_gap: float | None = Field(default=None, ge=0, description='双带间隙绕包的轴向间隙，m')
+    tape_gap: float | None = Field(default=None, ge=0, description='双带间隙绕包的最大轴向间隙，m')
 
     @model_validator(mode='after')
     def measurements_valid(self):
+        if self.form != 'corrugated' and (self.corrugation_depth is not None or self.corrugation_pitch is not None):
+            raise ValueError('波纹深度和节距仅用于 corrugated 金属护套')
         if self.minimum_thickness is not None and self.maximum_thickness is not None and self.minimum_thickness > self.maximum_thickness:
             raise ValueError('最薄点不得大于最大实测厚度')
+        if self.padding_thickness is not None and (self.role != 'bedding' or self.form != 'tape' or self.padding_thickness >= self.thickness):
+            raise ValueError('padding_thickness：附加垫层仅用于绕包内衬层，且须小于包含它的总厚度')
         return self
+
+    def radial_thickness(self):
+        return self.thickness + (self.corrugation_depth or 0.)
 
 
 class Core(StrictModel):
@@ -156,7 +184,8 @@ class CableType(StrictModel):
     core_lay_length: float | None = Field(default=None, gt=0, description='三芯成缆完整绞合一周的轴向长度，m；区别于导体单丝绞距')
 
     def radius(self):
-        return max(hypot(c.x, c.z) + c.conductor.diameter / 2 + sum(l.thickness for l in c.layers) for c in self.cores) + sum(l.thickness for l in self.common_layers)
+        return max(profile_radius(core_profile(c.conductor.model_dump(), c.x, c.z,
+            sum(l.radial_thickness() for l in c.layers))) for c in self.cores) + sum(l.radial_thickness() for l in self.common_layers)
 
     @model_validator(mode='after')
     def construction_valid(self):
@@ -169,9 +198,10 @@ class CableType(StrictModel):
             raise ValueError('绝对温度必须以 K 表示且大于零')
         for i, a in enumerate(self.cores):
             for b in self.cores[i + 1:]:
-                ra = a.conductor.diameter / 2 + sum(l.thickness for l in a.layers)
-                rb = b.conductor.diameter / 2 + sum(l.thickness for l in b.layers)
-                if hypot(a.x-b.x, a.z-b.z) < ra+rb-1e-12:
+                if any(c.conductor.form=='sectoral' and (c.conductor.sector_angle_deg is None or c.conductor.sector_rotation_deg is None) for c in (a,b)):
+                    continue
+                if profiles_overlap(core_profile(a.conductor.model_dump(), a.x, a.z, sum(l.radial_thickness() for l in a.layers)),
+                                    core_profile(b.conductor.model_dump(), b.x, b.z, sum(l.radial_thickness() for l in b.layers))):
                     raise ValueError('电缆内部芯相互重叠；多芯必须给出明确位置')
         return self
 

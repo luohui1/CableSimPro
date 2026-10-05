@@ -79,7 +79,7 @@ export function PluginsPage() {
             <DataTable
               label="已安装插件"
               rowLabel={(row) => text(row.name)}
-              onSelect={(row) =>
+              onActivate={(row) =>
                 void navigate({
                   to: "/plugins/$pid",
                   params: { pid: row.id },

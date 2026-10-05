@@ -76,6 +76,24 @@ def conductor_factor(area_mm2, duration_s, x, y):
     return sqrt(1 + x*sqrt(duration_s/area_mm2) + y*duration_s/area_mm2)
 
 
+def smooth_sheath_area(cable, layer):
+    """Design area of a declared concentric smooth tube; never a measured area."""
+    if len(cable['cores']) != 1 or layer.get('form') != 'smooth' or layer['role'] != 'metallic_sheath':
+        return None, {}
+    core = cable['cores'][0]
+    if core['conductor']['form'] not in ('solid_round', 'stranded_round', 'stranded_round_compacted'):
+        return None, {}
+    diameter = core['conductor']['diameter'] * 1000
+    for previous in layers(cable, core):
+        if previous is layer:
+            outer = diameter + 2 * layer['thickness'] * 1000
+            return pi * (outer**2 - diameter**2) / 4, {
+                'area_basis':'concentric_design_geometry', 'inner_diameter_mm':diameter,
+                'outer_diameter_mm':outer, 'area_formula':'π(D_outer²−D_inner²)/4'}
+        diameter += 2 * previous['thickness'] * 1000
+    return None, {}
+
+
 def metal_factor(duration_s, thickness_m, heat_capacity, rho_inner, rho_outer, cv_inner, cv_outer, contact):
     m = (sqrt(cv_inner/rho_inner) + sqrt(cv_outer/rho_outer)) * contact / (2*heat_capacity*thickness_m)
     p = m*sqrt(duration_s)
@@ -208,13 +226,16 @@ def calculate(document, parameters, capability, *, _include_curve=True):
             const = CONSTANTS.get(kind)
             obs = measurement(document, cable, cid, role, 'screen_area')
             area = obs['value']*1e6 if obs else None
+            area_geometry = {}
+            if area is None:
+                area, area_geometry = smooth_sheath_area(cable, layer)
             if area is None and form == 'wires' and layer.get('wire_count') and layer.get('wire_diameter'):
                 area = layer['wire_count']*pi*(layer['wire_diameter']*1000)**2/4
             if area is None and form == 'tape' and layer.get('tape_width') and layer.get('nominal_tape_thickness') and layer.get('tape_count') and layer.get('tape_application') in ('helical_overlap', 'two_tape_gap'):
                 area = layer['tape_count']*layer['tape_width']*layer['nominal_tape_thickness']*1e6
             mi, mf = parameter('metal_initial_temperature_k'), parameter('metal_final_temperature_k')
             iad = adiabatic(area, const[0], const[1], mi-273.15, mf-273.15, duration) if const and all(v is not None for v in (area, mi, mf, duration)) else None
-            add(role+'-adiabatic', ('芯 '+str(next(i+1 for i,c in enumerate(cable['cores']) if c['id']==cid))+' · ' if cid else '')+'金属组件绝热允许电流', iad, 'A', '第 3 章；表 I；5.3 / 6.2 / 6.3', 9, source='iec60949', core=cid, role=role, formula='I_AD=K S √{ln[(θ_f+β)/(θ_i+β)]/t}', inputs={'S_mm2': area, 'K': const[0] if const else None, 'beta_K': const[1] if const else None, 'theta_i_K': mi, 'theta_f_K': mf, 't_s': duration}, status='uncovered' if not const else None, input_source=obs['source'] if obs else None, reason='金属组件容量单独列出；多个并联组件不能直接相加。')
+            add(role+'-adiabatic', ('芯 '+str(next(i+1 for i,c in enumerate(cable['cores']) if c['id']==cid))+' · ' if cid else '')+'金属组件绝热允许电流', iad, 'A', '第 3 章；表 I；5.3 / 6.2 / 6.3', 9, source='iec60949', core=cid, role=role, formula='I_AD=K S √{ln[(θ_f+β)/(θ_i+β)]/t}', inputs={'S_mm2': area, **area_geometry, 'K': const[0] if const else None, 'beta_K': const[1] if const else None, 'theta_i_K': mi, 'theta_f_K': mf, 't_s': duration}, status='uncovered' if not const else None, input_source=obs['source'] if obs else {'kind':'derived','reference':'同心光滑护套保存尺寸的环形设计截面；非实测截面。','reviewed':False} if area_geometry else None, reason='金属组件容量单独列出；多个并联组件不能直接相加。')
             eps, m = None, None
             rho_i, rho_o, cv_i, cv_o = (parameter(k) for k in ('inner_thermal_resistivity', 'outer_thermal_resistivity', 'inner_volumetric_heat_capacity', 'outer_volumetric_heat_capacity'))
             contact = parameter('contact_factor')

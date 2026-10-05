@@ -16,9 +16,10 @@ from cablesim_sdk.validation import FieldValueError, validation_error, pointer
 from cablesim_iec60287.inputs import Rating
 from cablesim_iec60287.domain import prepare
 from cablesim_iec60287.group_inputs import GroupRating
-from cablesim_iec60287.group import rate_group
-from cablesim_iec60287.method import METHOD_VERSION, RatingRefused, rate
+from cablesim_iec60287.group import rate_group, GROUP_METHOD_VERSION
+from cablesim_iec60287.method import METHOD_VERSION, RatingRefused, rate, dielectric_path
 from cablesim_iec60287.comparison import decompose
+from cablesim_iec60287.rating_basis import basis
 
 PROTOCOL = 'cablesim.run/2'
 PHASES = ('A', 'B', 'C')
@@ -55,6 +56,7 @@ def steady_rating(case: dict, out: Path) -> dict:
             results.append({'key': key, 'type': 'quantity', 'entity': entity, 'status': 'available', 'value': value, 'unit': unit})
     artifact = f"output/{case['case_id']}.trace.json"
     payload = result.as_dict()
+    payload['rating_basis'] = basis()
     payload['rating_components'] = {
         'schema': 'cablesim.rating-components/1', 'phase': '三相等效',
         'ampacity_a': result.ampacity_a,
@@ -64,7 +66,7 @@ def steady_rating(case: dict, out: Path) -> dict:
         't1_k_m_w': result.t1_k_m_w, 't2_k_m_w': 0.0,
         'metal_k_m_w': 0.0, 't3_k_m_w': result.t3_k_m_w,
         't4_k_m_w': last.t4_k_m_w,
-        'dielectric_rise_k': wd * (0.5 * result.t1_k_m_w + result.t3_k_m_w + last.t4_k_m_w),
+        'dielectric_rise_k': wd * (dielectric_path(rating,result.geometry) + result.t3_k_m_w + last.t4_k_m_w),
         'dielectric_loss_w_m': wd, 'temperature_c': rating.max_conductor_temperature_c,
         'notes': 'T4 为 IEC 品字形外部热阻；λ1 为已收敛护套损耗因子；无铠装，T2/λ2 为零。',
     }
@@ -100,6 +102,10 @@ def steady_rating(case: dict, out: Path) -> dict:
 
 
 def prepare_case(case):
+    if case['input'].get('schema_version')=='cablesim.iec60853-emergency/1':
+        from cablesim_iec60287.emergency import Emergency
+        if case.get('parameters'):raise ValueError('IEC60853应急子集使用完整SI输入，不接受额外参数。')
+        return Emergency.model_validate(case['input'])
     if case['input'].get('schema_version')=='cablesim.product-specification/1':
         from cablesim_iec60287.engineering import complete
         return complete(case['input'],case.get('parameters',{}))
@@ -120,6 +126,7 @@ def prepare_case(case):
 def armoured(case,out):
     from cablesim_iec60287.armour import armoured_rating
     value=armoured_rating(prepare_case(case));name=case['case_id']+'.armour.json'
+    value['rating_basis'] = basis()
     (out/name).write_text(json.dumps(value,ensure_ascii=False,allow_nan=False),'utf-8')
     return {'results':[{'key':key,'type':'quantity','entity':'circuit/c1','status':'available','value':value[field],'unit':unit} for key,field,unit in [('ampacity','ampacity_a','A'),('x-cablesim.iec60287.loss_factor.armour','lambda2','1'),('x-cablesim.iec60287.losses.armour','armour_loss_w_m','W/m')]],
             'artifacts':[{'path':'output/'+name,'type':'x-cablesim.iec60287-armour'}],
@@ -132,6 +139,7 @@ def tb880_reference(case,out):
     else:
         from cablesim_iec60287.tb880_reference import rate
     value=rate(prepare_case(case));name=case['case_id']+'.reference.json'
+    value['rating_basis'] = basis()
     (out/name).write_text(json.dumps(value,ensure_ascii=False,allow_nan=False),'utf-8')
     return {'results':[{'key':'ampacity','type':'quantity','entity':'circuit/c1','status':'available','value':value['ampacity_a'],'unit':'A'}],
             'artifacts':[{'path':'output/'+name,'type':'x-cablesim.iec60287-reference'}],
@@ -145,7 +153,17 @@ def model_completion(case,out):
             'artifacts':[{'type':'x-cablesim.engineering-model','path':'output/'+name}]}
 
 
-CAPABILITIES = {'model-completion':model_completion,'steady-rating': steady_rating,'reference-rating':steady_rating,'armoured-sl-rating':armoured,'tb880-reference-rating':tb880_reference,'tb880-wire-foil-rating':tb880_reference}
+def emergency_response(case,out):
+    from cablesim_iec60287.emergency import calculate
+    result = calculate(case['input']);name = case['case_id']+'.emergency.json'
+    (out/name).write_text(json.dumps(result,ensure_ascii=False,allow_nan=False),'utf-8')
+    return {'results':[{'key':'x-cablesim.emergency-current','type':'quantity','entity':case['input']['circuit_id'],
+        'value':row['permissible_current_a'],'unit':'A','case':f"duration-{row['time_s']:g}s",'status':'available'} for row in result['current_curve']],
+        'artifacts':[{'type':'x-cablesim.iec60853-emergency','path':'output/'+name}],
+        'warnings':[{'code':'IEC60853_SCOPE','message':'; '.join(result['limitations'])}]}
+
+
+CAPABILITIES = {'iec60853-emergency':emergency_response,'model-completion':model_completion,'steady-rating': steady_rating,'reference-rating':steady_rating,'armoured-sl-rating':armoured,'tb880-reference-rating':tb880_reference,'tb880-wire-foil-rating':tb880_reference}
 
 
 def group_rating(case, group, out):
@@ -161,10 +179,10 @@ def group_rating(case, group, out):
         raise ValueError('目标电流必须是非负有限数值。')
     for rated in payload['circuit_ratings']:
         entity = rated['entity']
-        result = {'key':'ampacity','type':'quantity','entity':entity,'case':'rating','unit':'A'}
+        result = {'key':'ampacity','type':'quantity','entity':entity,'case':'rating','unit':'A','rating_basis':rated['rating_basis']}
         result.update({'status':'unavailable','reason':rated['error']} if rated['ampacity_a'] is None else {'status':'available','value':rated['ampacity_a']})
         results.append(result)
-        load = max(s['current_a'] for s in payload['operating']['cable_states'] if s['circuit'] == entity)
+        load = max(c['current'] for c in group.cables if c['circuit'] == entity)
         required = target if entity == selected and target is not None else load
         margin = None if rated['ampacity_a'] is None else rated['ampacity_a']-required
         goals.append({'id':'research.current/'+entity,'entity':entity,'rule_version':'iec60287-goals/2','key':'ampacity','condition':'rating',
@@ -176,7 +194,7 @@ def group_rating(case, group, out):
     simultaneous = payload.get('simultaneous_rating')
     if simultaneous:
         for circuit in group.circuits:
-            result = {'key':'ampacity', 'type':'quantity', 'entity':circuit['id'], 'case':'rating-simultaneous', 'unit':'A'}
+            result = {'key':'ampacity', 'type':'quantity', 'entity':circuit['id'], 'case':'rating-simultaneous', 'unit':'A','rating_basis':simultaneous['rating_basis']}
             result.update({'status':'unavailable', 'reason':simultaneous['error']} if simultaneous['ampacity_a'] is None else
                           {'status':'available', 'value':simultaneous['ampacity_a']})
             results.append(result)
@@ -190,6 +208,14 @@ def group_rating(case, group, out):
         ('thermal_resistance.external','t4_self_soil_k_m_w','K·m/W'),
         ('x-cablesim.iec60287.thermal_resistance.duct_air','t4_air_gap_k_m_w','K·m/W'), ('x-cablesim.iec60287.thermal_resistance.duct_wall','t4_wall_k_m_w','K·m/W'),
         ('x-cablesim.iec60287.temperature_rise.mutual','mutual_temperature_rise_k','K'), ('x-cablesim.iec60287.current','current_a','A')]
+    if not payload['operating']['cable_states']:
+        for cable in group.cables:
+            results.extend({'key':key,'type':'quantity','entity':cable['id'],'case':'operating','unit':unit,
+                            'status':'unavailable','reason':payload['operating']['error']} for key,_,unit in fields)
+            goals.append({'id':'research.temperature/'+cable['id'],'entity':cable['id'],'rule_version':'iec60287-goals/2',
+                          'key':'conductor_temperature','condition':'operating','actual':None,
+                          'target':cable['rating'].max_conductor_temperature_c+273.15,'unit':'K','margin':None,
+                          'verdict':'unavailable','source':'共享导体温限','reason':payload['operating']['error']['message']})
     for state in payload['operating']['cable_states']:
         if group.soil.get('three_core'):
             for key,field,unit in [('x-cablesim.iec60287.loss_factor.armour','lambda2','1'),('x-cablesim.iec60287.losses.armour','armour_loss_w_m','W/m'),('x-cablesim.iec60287.thermal_resistance.bedding','t2_k_m_w','K·m/W')]:
@@ -222,14 +248,17 @@ def run_case(handler, case: dict, out: Path) -> dict:
     base = {'case_id': case['case_id']}
     try:
         result = handler(case, out)
+        prepared = prepare_case(case)
         for r in result.get('results', []):
             r.setdefault('case', 'rating')
-        if case['input'].get('schema_version') == 'cablesim.domain/1' and not isinstance(prepare(case['input'], case.get('parameters', {})), GroupRating):
+        if case['input'].get('schema_version') == 'cablesim.domain/1' and not isinstance(prepared, GroupRating):
             circuit = case['input']['circuits'][0]
             entities = {'circuit/c1': circuit['id'], **{f'cable/c1-{p}': c['id'] for p,c in zip('ABC',circuit['cables'])}}
             for r in result.get('results', []):
                 r['entity'] = entities.get(r['entity'], r['entity'])
-        prepared = prepare_case(case)
+        for r in result.get('results', []):
+            if r['key'] == 'ampacity':
+                r.setdefault('rating_basis', basis(entity=r['entity']))
         if not isinstance(prepared,dict):prepared=prepared.model_dump(mode='json')
         result.setdefault('evidence', {})['prepared_input_sha256'] = sha256(json.dumps(prepared, sort_keys=True, ensure_ascii=False, allow_nan=False).encode('utf-8')).hexdigest()
         return {**base, 'status': 'succeeded', **result}
@@ -265,14 +294,23 @@ def main() -> int:
             return {'results': [], 'artifacts': []}
     out = job / 'output'
     def invoke(case,out):
-        schema={'tb880-reference-rating':'cablesim.iec60287.tb880-reference/1','tb880-wire-foil-rating':'cablesim.iec60287.tb880-wire-foil/1'}.get(request['capability'])
+        schema={'iec60853-emergency':'cablesim.iec60853-emergency/1','tb880-reference-rating':'cablesim.iec60287.tb880-reference/1','tb880-wire-foil-rating':'cablesim.iec60287.tb880-wire-foil/1'}.get(request['capability'])
         if schema and case['input'].get('schema_version')!=schema:raise ValueError('input schema does not match the selected reference capability')
         return handler(case,out)
     cases = [run_case(invoke, case, out) for case in request['cases']]
     result = {'protocol': PROTOCOL, 'cases': cases,
-              'environment': {'python': platform.python_version(), 'method': {'armoured-sl-rating':'iec60287-armour/0.1.0','tb880-reference-rating':'iec60287-tb880-reference/0.1.0','tb880-wire-foil-rating':'iec60287-tb880-wire-foil/0.1.0'}.get(request['capability'],'iec60287-group/0.4.0'), 'legacy_method': METHOD_VERSION}}
+              'environment': {'python': platform.python_version(), 'method': {'iec60853-emergency':'iec60853-emergency/0.1.0','armoured-sl-rating':'iec60287-armour/0.1.0','tb880-reference-rating':'iec60287-tb880-reference/0.1.0','tb880-wire-foil-rating':'iec60287-tb880-wire-foil/0.1.0','reference-rating':METHOD_VERSION}.get(request['capability'],GROUP_METHOD_VERSION), 'legacy_method': METHOD_VERSION}}
     (out / 'result.json').write_text(json.dumps(result, ensure_ascii=False, allow_nan=False), 'utf-8')
     return 0
+
+
+def resident_warmup():
+    # Imports are already complete; each main() uses a fresh request and paths.
+    pass
+
+
+def resident_main():
+    return main()
 
 
 if __name__ == '__main__':

@@ -1,22 +1,11 @@
 """Draft CAD previews respect locks and never become saved engineering runs."""
 from copy import deepcopy
-import importlib.util
-from pathlib import Path
+from backend.main import create_app
 from fastapi.testclient import TestClient
-import pytest
 
 
 def test_draft_preview_is_pinned_readonly_and_respects_locks(tmp_path,monkeypatch):
-    pytest.importorskip('cadquery')
-    monkeypatch.setenv('CABLESIM_DESIGN_DB',str(tmp_path/'preview.sqlite'))
-    source=Path(__file__).resolve().parents[1]/'design/workbench/serve.py'
-    spec=importlib.util.spec_from_file_location('cad_preview_test_server',source)
-    server=importlib.util.module_from_spec(spec);spec.loader.exec_module(server)
-    with TestClient(server.app) as client:
-        css=client.get('/design/workbench/workbench.css')
-        assert css.status_code==200 and css.headers['cache-control']=='no-store'
-        fresh=client.get('/design/workbench/workbench.css',headers={'If-None-Match':css.headers['etag'],'If-Modified-Since':css.headers['last-modified']})
-        assert fresh.status_code==200 and '#workspace:has(>.type-work-area)' in fresh.text
+    with TestClient(create_app(tmp_path/'preview.sqlite')) as client:
         w=client.post('/api/workspaces',json={}).json()
         root='/api/workspaces/'+w['id']
         converted=client.post(root+'/domain/conversion',json={'expected_revision':w['revision']}).json()

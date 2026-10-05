@@ -6,6 +6,7 @@ cablesim.simulation 是宿主 API 2.1 的方法插件。算法位于插件，宿
 
 | 能力ID | 输入与输出 | 适用范围 |
 | --- | --- | --- |
+| iec-fem-comparison | 保存截面/负荷 → IEC、FEM、偏差结论与网格/加倍域证据 | 分层、矩形回填、每根一管；单芯光滑护套、明确电损耗；reference_only |
 | multiregion-thermal | 领域文档或显式热模型 → 温度场、温限电流、复现报告 | 1–64根有正间隙同心圆单芯、回填/土层/每缆一管、常热物性 |
 | getdp-eddy | 领域文档或统一问题 → GetDP独立进程 → 复数场、损耗、电流与报告 | 2D磁准静态、集肤/邻近、理想互联护套；外部GetDP3.5.0 |
 | elmer-heat | 固定热模型或统一问题 → Elmer独立进程 → 温度场/时间序列与报告 | 常物性稳态/瞬态、固定/阶跃热源、均匀初态；当前超算Elmer26.2 |
@@ -26,6 +27,16 @@ cablesim.simulation 是宿主 API 2.1 的方法插件。算法位于插件，宿
 
 ## 2. 输入与平台领域模型
 
+研究常规对比通过 `task=iec-fem-comparison`、`cablesim.simulation/iec-fem-comparison` 调用。参数契约为 `cablesim_sdk/iec_fem.py`，从 `/api/input-contracts` 获取：`section_id`、`load_id`、`iec`、`controls`、`bounds_m` 和网格/计算域门禁。分层须确认 `uniform_soil_counterfactual_acknowledged=true`；所有比较须确认 `frozen_coefficients_acknowledged=true`。不满足单芯同心光滑护套、完整回路、正间隙或缺损耗来源时拒绝，不能理解为任意几何都已覆盖。
+
+`x-cablesim.iec-fem-comparison` 为 `cablesim.iec-fem-comparison/1`：两方法的 `status/ampacity_a/operating_temperature_k/basis`，`iec_over_fem_percent=100*(I_IEC/I_FEM-1)`，`judgment`、`conclusion`、`assumption_checks`、`convergence`、条款及来源摘要。正值为 IEC 高估允许电流，负值为低估；数值差未超出离散变化估计时标为 `within_numerical_tolerance`。网格或计算域未收敛时 FEM 数值和偏差为 null，只保留原始诊断。计算书读取这些保存字段，不触发新求解。
+
+三回排管示例输入由 `python plugins/cablesim.simulation/validation/iec_fem_example.py` 输出；只是设计假设的10 kV热场研究结构，未冒充厂家样本。`controls.near_soil_mesh_size_m` 和 `near_soil_margin_m` 可明确分配近区土壤网格，远场与电缆界面网格独立约束；所有档位都重新求解。
+
+小批量干燥/交叉对照在 `plugins/cablesim.simulation/validation/iec_edge_pilots.py`，由 `python scripts/run_plugin_tests_hpc.py --test plugin-tests/test_iec_edge_pilots.py` 冻结提交和回收。干燥为温度相关两区土壤的 Kirchhoff 变换二维 FEM，交叉为三维半空间有限线源加一维导体轴向 P1 FEM；不是湿迁移求解或完整实体三维有限元。这两个试验尚未作为通用工程能力发布。
+
+已有验证工具保留：`python plugins/cablesim.simulation/validation/benchmark_hpc_batches.py <保存的性能设计目录>` 提交 Slurm 吞吐基准；`python plugins/cablesim.simulation/validation/compare_batch_backends.py <已有副本目录> <提交标识>` 只比较保存输入身份、温度与载流量，不启动本机求解。
+
 领域文档和案例JSON均经过 thermal_input.prepare()，生成相同 ThermalModel，再进入 thermal.solve_thermal()。领域适配复用 DomainDocument 校验，只读取选定截面/负荷、型号与材料，不读取当前画布或“最新运行”。
 
 显式模型包含：
@@ -40,7 +51,9 @@ cablesim.simulation 是宿主 API 2.1 的方法插件。算法位于插件，宿
 
     controls:
       operation: temperature | ampacity
+      element_order: 1 | 2
       mesh_size_m, far_mesh_size_m, mesh_transition_m, max_nodes
+      near_soil_mesh_size_m, near_soil_margin_m
       tolerance_k, max_iterations, relaxation
       current_upper_a, current_tolerance_a, rated_circuit
     domain_options:
@@ -60,6 +73,8 @@ cablesim.simulation 是宿主 API 2.1 的方法插件。算法位于插件，宿
 Gmsh OCC fragment保证背景、土层、回填、排管与电缆的材料界面共形。覆盖优先级为背景→土层→回填→管壁/等效空气→电缆外层至内层。同一语义UID被切成多个实体时累计其面积和源向量，不能覆盖前一个实体。
 
 网格核验区域范围、正间隙、退化单元、材料映射、外/内边界唯一归类和节点上限。局部和远场尺寸分别声明；复现入口细化时同步缩放两者。超限明确失败，不自动换粗网格。坐标、连接、域标签和温度保留在JSON场工件；宿主16 MiB单工件限制仍有效。
+
+`element_order` 默认 1，可显式选 2；`max_nodes` 限制求解自由度，P2 包含边中点，允许上限 500000。P2 场输出将每个六节点单元拆成四个显示三角形，`finite_elements` 与显示三角形数分别记录；IEC/FEM 比较仅导出逐档数值及网格身份，不导出完整场。
 
     −div(k grad(T)) = Q
     Rac(Tmean) = R20 [1 + α20 (Tmean − 293.15)] (1 + ac_extra_factor)
@@ -375,7 +390,7 @@ COMSOL按顺序运行；不要与全量pytest或另一COMSOL并发。`compare_pa
 
 ## 11. 温度场、外部损耗与新增耦合能力
 
-稳定工件接口见[温度场](../architecture/temperature-field.md)与[护套/铠装损耗](../architecture/electromagnetic-losses.md)，接地事实只引用[研究拓扑契约](../architecture/electrical-topology.md)。仿真线程仅维护插件、工件和契约，`design/workbench/simulation-study.*` 由研究线程整合，此次没有扩展页面。
+稳定工件接口见[温度场](../architecture/temperature-field.md)与[护套/铠装损耗](../architecture/electromagnetic-losses.md)，接地事实只引用[研究拓扑契约](../architecture/electrical-topology.md)。仿真线程仅维护插件、工件和契约，研究界面由正式前端线程整合，此次没有扩展页面。
 
 ### 11.1 逐点电热反馈
 
@@ -504,13 +519,13 @@ Karahan2009重新读到300mm²三缆、层厚/间距和目标电流，但铜σ(T
 
 ### 12.4 复现库页面与重放
 
-一级“库”入口为`#/library/reproductions`，详情按结果、网格、输入来源和覆盖限制分页。数据来自有SHA校验的不可变本地快照，切换历史不会覆盖当前结果；论文原文、标准印刷值、教程约值和COMSOL重新计算分别显示。没有证据时不生成数字或曲线。Ctrl+S导出当前已保存对照JSON，Ctrl+Z撤销筛选，Enter检索/打开，Esc取消检索或返回；空、加载、网络错误/恢复、成功及历史均有浏览器场景。
+一级“库”入口为`/library/reproductions`，详情按结果、网格、输入来源和覆盖限制分页。数据来自有SHA校验的不可变本地快照，切换历史不会覆盖当前结果；论文原文、标准印刷值、教程约值和COMSOL重新计算分别显示。没有证据时不生成数字或曲线。详情内Ctrl+S导出当前已保存对照JSON，Enter打开选中行，“全部复现目标”返回列表；空、加载、网络错误/恢复、成功及历史均有浏览器场景。
 
 导入器保存按内容摘要命名的原始报告副本；同输入三方对照优先采用已核验的`three-way.json`，不按同名测点跨外域拼接。相位只显示度数差、温度只显示K差，不将它们混入幅值百分比汇总。C04主表使用128段几何记录，h扫描和圆周离散分开。E05/E17/E18的历史P2直接调用记录缺宿主插件清单版本，界面明示这一追溯限制，不补造旧版本号。
 
-本次先生成`conclusion-first.png`和`chart-first.png`两张概念图，保存在`.data/simulation/reproduction-concepts/`；选择前者，在现有独立详情页顶部放结论，保留整行对照表宽度。实现了中文短名、三位小数（极小/极大数保留三位小数尾数的科学计数法）、单位换算和原SI值提示、状态总览快速筛选、原文/开源/COMSOL系列开关与叠加图。仅连线保存样本，不拟合或补造缺值。样式沿用tokens、正文≥13px。
+正式详情在结果表之前展示覆盖结论，采用中文短名、统一工程数值格式、单位换算和原SI精度提示。覆盖状态通过下拉控件筛选；原文/开源/COMSOL图例提供系列开关。仅连线保存样本，不拟合或补造缺值。样式沿用正式前端共享令牌。
 
-浏览器脚本为`tests/browser/reproduction-library.js`、`reproduction-library-states.js`、`reproduction-library-comparison.js`，通过BrowserOS neo的run执行；使用真实CDP键鼠和实际Blob导出，状态脚本只注入网络/空数据，不模拟数值。1366×768和1920×1080分别核对交互、键盘、空/加载/错误/恢复/成功/历史及新增叠加控制。
+浏览器回归使用 `frontend/scripts/verify-reproduction.mjs`，配合 `verify-expansion-states.mjs` 与 `verify-catalog-controls.mjs`；通过 `isolated-e2e.mjs` 启动独立数据库与端口。检索、键盘、实际JSON下载、真实证据数值、空目录恢复和曲线开关都有断言；状态只注入网络/空数据，不模拟数值。桌面浅深色与390px宽度检查曲线几何和溢出。
 
 ```powershell
 .\.venv\Scripts\python.exe plugins/cablesim.simulation/validation/replay_loss_table.py

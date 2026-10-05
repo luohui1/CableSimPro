@@ -78,8 +78,7 @@ async function go(route) {
   await page.goto("about:blank");
   await page.goto(base + route);
 }
-const checks = [],
-  comparisons = [];
+const checks = [];
 const faults = new Map();
 await page.route("**/api/**", async (route) => {
   const url = route.request().url();
@@ -213,10 +212,10 @@ try {
   await page.goto(base + target("report", selected, run, did));
   await expect(page.locator("iframe")).toBeVisible();
   const pendingDownload = page.waitForEvent("download");
-  await page.getByRole("button", { name: "导出计算书", exact: true }).click();
+  await page.getByRole("button", { name: "下载 PDF", exact: true }).click();
   const downloaded = await pendingDownload;
   expect(await downloaded.failure()).toBe(null);
-  await downloaded.saveAs(path.join(out, "selection-report.html"));
+  await downloaded.saveAs(path.join(out, "selection-report.pdf"));
   await capture("report-export-ready");
   // A mismatched stored document must never enter the preview iframe.
   await page.goto(base + target("report", selected, run, "不存在的交付"));
@@ -325,78 +324,15 @@ try {
     ).toBe(true);
     await capture("selection-selected-" + theme + "-1366");
   }
-  // Read-only comparison with the required 8027 service, preserving its actual failures.
-  for (const [route, name] of [
-    ["/", "home"],
-    ["/studies", "studies"],
-    [target("selection"), "selection"],
-    [target("report", selected, run, did), "report"],
-  ]) {
-    await page.goto(base + route);
-    await settle(page);
-    const own = await page.screenshot();
-    const oldUrl =
-      "http://127.0.0.1:8027/design/workbench/#" +
-      (name === "home"
-        ? "/"
-        : name === "studies"
-          ? "/studies"
-          : "/studies/" +
-            selected.id +
-            "/" +
-            name +
-            (name === "selection" ? "/results" : "/preview"));
-    await page.goto(oldUrl);
-    await settle(page);
-    await page.waitForTimeout(1500);
-    const text = await page.locator("body").innerText();
-    const original = await page.screenshot({
-      path: path.join(out, name + "-8027.png"),
-    });
-    comparisons.push({ name, oldUrl, oldText: text.slice(0, 1500) });
-    await page.evaluate(
-      ({ own, original }) => {
-        document.body.replaceChildren();
-        const host = document.createElement("div");
-        host.id = "comparison";
-        host.style.cssText = "display:flex;width:2732px;background:#fff";
-        for (const [label, data] of [
-          ["样板 8027：实际运行现场", original],
-          ["本次正式前端：真实保存数据", own],
-        ]) {
-          const figure = document.createElement("figure");
-          figure.style.cssText = "margin:0;width:1366px";
-          const caption = document.createElement("div");
-          caption.style.cssText = "font:14px sans-serif;height:32px;color:#000";
-          caption.textContent = label;
-          const img = document.createElement("img");
-          img.src = "data:image/png;base64," + data;
-          img.style.cssText = "display:block;width:1366px;height:768px";
-          figure.append(caption, img);
-          host.append(figure);
-        }
-        document.body.append(host);
-      },
-      { own: own.toString("base64"), original: original.toString("base64") },
-    );
-    await page.setViewportSize({ width: 2732, height: 800 });
-    await page
-      .locator("#comparison img")
-      .last()
-      .evaluate((img) => img.decode());
-    await page.screenshot({ path: path.join(out, name + "-comparison.png") });
-    await page.setViewportSize({ width: 1366, height: 768 });
-  }
   await fs.writeFile(
     path.join(out, "states-verification.json"),
     JSON.stringify(
       {
         checks,
-        comparisons,
         fixturePolicy:
           "仅注入空响应、延迟和读取错误；成功和历史数值均为已保存运行",
         reportPreview: "saved single current run verified",
-        download: "formal integrity checked HTML saved",
+        download: "customer PDF from integrity-checked saved delivery",
         creationHistorical: "不适用：对话框引用固定版本，不展示运行结果",
       },
       null,
@@ -404,7 +340,7 @@ try {
     ),
   );
   console.log(
-    "迁移五态、真实计算书预览与下载、历史交付拒绝、8027并排截图通过。",
+    "正式前端五态、真实计算书预览与下载、历史交付拒绝通过。",
   );
 } finally {
   await session.close();

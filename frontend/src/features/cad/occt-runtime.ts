@@ -17,6 +17,7 @@ export interface NativeViewer {
   finishUpdate(diameter: number, mode: string, selected: number, selection: string, section: number): void;
   configureScene(bounds: number[], groups: { bounds: number[]; kind: string; priority: number }[]): NativeResult;
   setScenePart(index: number, group: number, transform: Transform, opacity: number, selectable: boolean): NativeResult;
+  configureModelPart(index: number, outline: string, peelFraction: number): NativeResult;
   setSelectionMode(mode: string): void;
   setMode(mode: string): void;
   setSection(fraction: number): void;

@@ -48,6 +48,20 @@ export function CreateInquiryDialog({
     [values, setValues] = useState<Record<string, Given>>({}),
     [failure, setFailure] = useState("");
   const allocated = useRef<Record<string, unknown> | null>(null);
+  const targetInput = useRef<HTMLInputElement>(null);
+  function continueInquiry() {
+    const raw = targetInput.current?.value.trim() ?? "";
+    const current = Number(raw);
+    if (!raw || !Number.isFinite(current) || current <= 0) {
+      setFailure("请填写大于 0 A 的目标电流");
+      targetInput.current?.focus();
+      return;
+    }
+    if (loading || error || !candidates.length || !rating || !completion) return;
+    setTarget(current);
+    setFailure("");
+    setComplete(true);
+  }
   const models = useQuery({
     queryKey: ["model-versions"],
     queryFn: ({ signal }) => modelVersions(signal),
@@ -306,14 +320,7 @@ export function CreateInquiryDialog({
             disabled={
               loading || !!error || !candidates.length || !rating || !completion
             }
-            onClick={() => {
-              if (target === null || target <= 0) {
-                setFailure("请填写大于 0 A 的目标电流");
-                return;
-              }
-              setFailure("");
-              setComplete(true);
-            }}
+            onClick={continueInquiry}
           >
             建立研究
           </Button>
@@ -341,7 +348,7 @@ export function CreateInquiryDialog({
             className="create-study-form"
             onSubmit={(event) => {
               event.preventDefault();
-              if (target && candidates.length) setComplete(true);
+              continueInquiry();
             }}
           >
             <Select
@@ -359,6 +366,8 @@ export function CreateInquiryDialog({
               ]}
             />
             <NumberField
+              inputRef={targetInput}
+              submitOnEnter
               label="目标电流"
               value={target}
               onCommit={setTarget}
@@ -368,6 +377,7 @@ export function CreateInquiryDialog({
               required
               source="user"
             />
+            <button type="submit" className="visually-hidden" tabIndex={-1} aria-hidden="true">建立研究</button>
             <label className="text-field">
               研究名称
               <input

@@ -3,6 +3,7 @@ from pathlib import Path
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]/'plugins/cablesim.iec60287/src'))
 
 from hashlib import sha256
 from importlib import metadata, util
@@ -97,6 +98,12 @@ def run_case(request, case, job):
         if request['capability']=='thermal-dataset':
             from cablesim_simulation.thermal_dataset import host_case
             return host_case(request,case,job)
+        if request['capability']=='iec-fem-comparison':
+            from cablesim_simulation.iec_comparison import host_case
+            return host_case(request,case,job)
+        if request['capability']=='iec-thermal-field':
+            from cablesim_simulation.three_core_thermal import host_case
+            return host_case(request,case,job)
         if request['capability']=='contact-electrothermal-field':
             from cablesim_simulation.contact_electrothermal import host_case
             return host_case(request,case,job)
@@ -139,7 +146,12 @@ def run_case(request, case, job):
                 'artifacts': [{'path': name, 'type': 'x-cablesim.simulation-bundle'}], 'evidence': evidence,
                 'warnings': [{'code': 'REFERENCE_ONLY', 'message': '同心双材料稳态导热基准；输出为中心温度，不是载流量或 IEC 认证。'}]}
     except Exception as exc:
-        return {'case_id': case['case_id'], 'status': 'failed', 'error': {'code': type(exc).__name__, 'message': str(exc)}}
+        from pydantic import ValidationError
+        from cablesim_sdk.validation import validation_error,pointer
+        error = validation_error(exc) if isinstance(exc,ValidationError) else {
+            'code':getattr(exc,'code',type(exc).__name__),'message':str(exc),
+            'path':getattr(exc,'path',None) or pointer(getattr(exc,'field_path',('parameters',)))}
+        return {'case_id': case['case_id'], 'status': 'failed', 'error': error}
 
 
 def main():

@@ -22,6 +22,25 @@ def design():
     return DomainDocument.model_validate(d).model_dump(mode='json')
 
 
+def test_single_core_layout_includes_core_layers_and_corrugation_envelope():
+    from backend.kernel.scenarios import system_models
+    from backend.domain.migration import convert
+    from backend.kernel.presets import presets
+    d=convert(presets()[0]['scenario'])['document']
+    cable=d['cable_types'][0]
+    model=deepcopy(system_models()[0]['payload']['cable_type'])
+    model['id']=cable['id'];d['cable_types']=[model]
+    d['materials']+=system_models()[0]['payload']['materials']
+    d['materials']=list({m['id']:m for m in d['materials']}.values())
+    layers=model['common_layers'];model['common_layers']=[];model['cores'][0]['layers']=layers
+    layers[3].update(form='corrugated',corrugation_depth=.004,corrugation_pitch=.025)
+    expected=model['cores'][0]['conductor']['diameter']+2*(sum(l['thickness'] for l in layers)+.004)
+    result=apply_layout(d,'trefoil')
+    points=result['sections'][0]['placements']
+    from math import hypot
+    assert hypot(points[0]['x']-points[1]['x'],points[0]['z']-points[1]['z'])==pytest.approx(expected)
+
+
 @pytest.mark.parametrize('kind,count,ducts',[
     ('three_core_buried_single',1,0),('three_core_buried_horizontal',3,0),
     ('three_core_ducts_horizontal',3,3),('three_core_ducts_2x3',6,6),('three_core_ducts_3x3',9,9)])

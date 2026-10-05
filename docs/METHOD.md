@@ -1,4 +1,32 @@
-# 计算方法 · MV-THERMAL-0.1.0
+# 计算方法与载流量口径
+
+## 现行载流量结果契约
+
+IEC 新输出的每个 `ampacity` 数量及对应计算工件条目都有 `rating_basis`：
+
+| `kind` | 显示名 | 含义 |
+| --- | --- | --- |
+| `single_circuit` | 单回路能力 | 只有一个回路，内部三相互热仍参与，按该回路各电缆温限求上限。 |
+| `common_balanced` | 全回路共同能力 | 所有回路同时采用相同平衡 RMS 电流，任一电缆首先达到温限即限制共同电流；独立于原目标负荷。 |
+| `conditional_fixed_load` | 其他回路固定负荷下的条件上限 | 只调节目标回路，其余电缆保持保存负荷，检查全部电缆温限；各条件上限不能同时使用。 |
+
+对象还包含 `display_name`、`varied_circuits` 和 `fixed_currents_a`。最后一项按物理电缆 ID 保存固定 RMS 电流（A），不平均不平衡相负荷；条件上限的显示名同时列出这些负荷。单回路与共同能力的固定负荷字典为空。IEC 波形、电磁耦合及不平衡适用边界仍按插件契约执行，不因显示口径而扩大。
+
+`case=rating` 仍是逐回路结果，`case=rating-simultaneous` 为等负荷结果，不能合并。新的扫描请求未指定 `driver.rating_basis` 时采用 `simultaneous`；明确指定 `individual` 以及已保存的旧定义保持原口径。`output.default_result` 提供完整的 `key/entity/case/unit` 默认选择器，前端必须按四项匹配，不能取第一条 `ampacity`；失败采样点保留缺口。显示文案取数量自身的 `rating_basis.display_name`。旧运行/尚未声明的插件缺此字段时不补造口径，旧数据必须显式重跑才能取得新工件。
+
+IEC 0.9.1修正三芯公共内衬T2后，三回排管 YJV22 3×300 在土壤0.6/0.8/1.0 K·m/W下共同能力为417.384/386.973/362.238 A。旧0.9.0的428.635/395.847/369.460 A及固定400 A时181.274 A仅保留为历史口径核验；新热阻与损耗逐项核验见[IEC方法说明](plugins/IEC60287_SINGLE_CORE.md#三芯直埋与-xlpe-介质损耗核验)，历史对照见[选型契约](architecture/customer-selection.md)。
+
+接口路径不变：研究预检、提交运行、读取运行及运行列表的响应中，`cases[].results[]` 使用 OpenAPI `QuantityResult`，其可选 `rating_basis` 使用 `AmpacityBasis`；运行的 `output.default_result` 使用 `ResultSelector`。响应省略原工件未提供的可选字段，避免给历史输出补 `null` 而改变内容摘要。新数量示例：
+
+```json
+{"key":"ampacity","entity":"circuit/c1","case":"rating-simultaneous","unit":"A","value":369.459551573,"rating_basis":{"kind":"common_balanced","display_name":"全回路共同能力","varied_circuits":["circuit/c1","circuit/c2","circuit/c3"],"fixed_currents_a":{}}}
+```
+
+领域 `Layer` 新增 `corrugation_depth`（径向波峰至波谷深度，不含金属壁厚，m）与 `corrugation_pitch`（轴向节距，m）；均须为正值且只适用于 `form=corrugated`。IEC 另要求声明缓冲层物性和 `parameters.corrugated_gap[型号ID]` 的有效热阻率及来源，见[皱纹护套契约](plugins/IEC60287_SINGLE_CORE.md)。
+
+## 热网络交叉校核参考 · MV-THERMAL-0.1.0
+
+以下仅描述热网络参考方法，正式 IEC 能力及适用范围见[IEC 方法说明](plugins/IEC60287_SINGLE_CORE.md)，不将参考方法边界当成全平台边界。
 
 ## 1. 身份与范围
 

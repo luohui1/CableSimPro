@@ -39,8 +39,8 @@ export class CadRenderer {
 
   constructor(private native: NativeViewer, private host: HTMLElement) {}
 
-  private radialKey(length: number, layer: Pick<CadLayer, 'inner_radius_m' | 'outer_radius_m' | 'material' | 'category'>) {
-    return JSON.stringify([length, layer.inner_radius_m, layer.outer_radius_m, layer.material, layer.category]);
+  private radialKey(length: number, layer: CadLayer) {
+    return JSON.stringify([length, layer.inner_radius_m, layer.outer_radius_m, layer.material, layer.category, layer.center_m, layer.section_profile]);
   }
 
   private envelope(length: number, layer: CadLayer) {
@@ -133,6 +133,8 @@ export class CadRenderer {
         this.rendered[index] = { key, radial, appearance: palette, mesh: !!mesh };
         replacedParts += 1;
       }
+      checked(this.native.configureModelPart(index, layer.section_outline_brep || '',
+        layer.peel_fraction ?? 1 - index / Math.max(1, geometry.layers.length - 1) * .55));
       progress?.(index + 1, geometry.layers.length);
       if (index + 1 < geometry.layers.length && performance.now() - yieldedAt > 50) {
         await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));

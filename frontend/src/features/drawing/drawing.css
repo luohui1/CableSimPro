@@ -20,6 +20,7 @@
 .drawing-layer-numbers path{fill:none;stroke:var(--text-secondary);stroke-width:.75}
 .drawing-layer-numbers circle{fill:var(--panel);stroke:var(--border);stroke-width:1}
 .drawing-layer-numbers text{fill:var(--text);font:inherit}
+.drawing-layer-numbers .drawing-layer-name{paint-order:stroke;stroke:var(--panel);stroke-width:3}
 .drawing-layer-numbers g.is-selected circle,.drawing-layer-numbers g:focus-visible circle{stroke:var(--text);stroke-width:1.5;fill:var(--hover)}
 .drawing-dimensions path,.drawing-dimension-line{fill:none;stroke:var(--text);stroke-width:.75;vector-effect:non-scaling-stroke}
 .drawing-dimensions text,.drawing-dimension-chip text{fill:var(--text);font:inherit;font-variant-numeric:tabular-nums;paint-order:stroke;stroke:var(--panel);stroke-width:3}

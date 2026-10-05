@@ -30,7 +30,8 @@ class SlurmBackend:
         if self.configuration.get('ssh_config'):self.options=['-F',self.configuration['ssh_config'],*self.options]
         self.root=self.configuration['remote_root'].rstrip('/')
         self.python=self.configuration['python']
-        for value in (self.root,self.python):
+        self.control_python=self.configuration.get('control_python',self.python)
+        for value in (self.root,self.python,self.control_python):
             if not re.fullmatch(r'/[A-Za-z0-9_./-]+',value) or '..' in value.split('/'):raise ValueError('Invalid remote profile path')
         self.agent=self.root.rsplit('/',1)[0]+'/bin/cablesim-remote.py'
 
@@ -44,7 +45,7 @@ class SlurmBackend:
         return self._run(['ssh',*self.options,self.alias,' '.join(shlex.quote(str(a)) for a in arguments)],timeout)
 
     def remote_json(self,code,*arguments):
-        return json.loads(self.ssh([self.python,'-c',code,*arguments]))
+        return json.loads(self.ssh([self.control_python,'-c',code,*arguments]))
 
     def install_agent(self):
         with locked(self.ledger.path.parent/'agent-install.lock',blocking=True):
@@ -61,7 +62,7 @@ class SlurmBackend:
         # Result archives may contain thousands of small provenance files on
         # the shared filesystem. Keep ordinary control requests short while
         # allowing a bounded collection operation to finish without resubmission.
-        try:raw=self.ssh([self.python,self.agent,action,root,value,*extra],timeout=600 if action=='collect' else 120)
+        try:raw=self.ssh([self.control_python,self.agent,action,root,value,*extra],timeout=600 if action=='collect' else 120)
         except RemoteDisconnected as exc:
             try:response=json.loads(str(exc))
             except ValueError:raise exc
@@ -168,7 +169,7 @@ print(json.dumps(parts))'''
                 if saved.is_file():return read(saved)
                 raise ValueError('该提交已结算且未产生作业；重新运行须使用明确的新重试标识。')
             request={'token':token,'indices':indices,'task_groups':groups,'retry':retry,'profile':{k:v for k,v in self.configuration.items()
-                if k in ('python','getdp','elmer','elmer_build','comsol','library_paths','partition','modules')}}
+                if k in ('python','control_python','getdp','elmer','elmer_build','comsol','library_paths','partition','modules')}}
             atomic(folder/'request.json',request)
             try:
                 remote=self.stage(directory)

@@ -33,19 +33,22 @@ try {
   }
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.getByRole('button', { name: '要求与批准记录', exact: true }).click();
-  await expect(page.getByRole('table', { name: '要求批准', exact: true })).toBeVisible();
+  await expect(page.getByRole('table', { name: '要求清单', exact: true })).toBeVisible();
   const ledger = await fixture.api(`/api/design/type-workspaces/${wid}/requirements?run_id=${run.id}`);
   expect(ledger.items.length).toBe(artifact.rows.length);
   const bound = ledger.items.find(item => item.bindable); if (!bound) throw Error('真实要求目录没有可核对的定义');
   const checkbox = page.getByRole('checkbox', { name: '选择' + bound.definition.title, exact: true }); await checkbox.check();
-  await expect(page.getByRole('button', { name: '批准所选要求', exact: true })).toBeDisabled();
+  await page.getByRole('row', { name: bound.definition.title, exact: true }).click();
+  await page.getByRole('button', { name: '批准所选要求', exact: true }).click();
+  const approveDialog = page.getByRole('dialog', { name: '批准所选要求', exact: true });
+  await expect(approveDialog.getByRole('button', { name: '批准所选要求', exact: true })).toBeDisabled();
   // Test only the explicit human UI gate; no agent issues a real human approval.
   await page.getByRole('textbox', { name: '审批人', exact: true }).fill('隔离界面验收');
   await page.getByRole('checkbox', { name: '本人已核对所选要求的来源和判定绑定', exact: true }).check();
-  await expect(page.getByRole('button', { name: '批准所选要求', exact: true })).toBeEnabled();
+  await expect(approveDialog.getByRole('button', { name: '批准所选要求', exact: true })).toBeEnabled();
   const requests = [];
   await context.route('**/requirements/reviews', async route => { requests.push(route.request().postDataJSON()); await route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ detail: '隔离验收拒绝代替人工批准' }) }); });
-  await page.getByRole('button', { name: '批准所选要求', exact: true }).click(); await expect(page.getByRole('alert').filter({ hasText: '拒绝代替人工批准' })).toBeVisible();
+  await approveDialog.getByRole('button', { name: '批准所选要求', exact: true }).click(); await expect(page.getByRole('alert').filter({ hasText: '拒绝代替人工批准' })).toBeVisible();
   expect(requests).toHaveLength(1); expect(requests[0].human_confirmed).toBe(true); expect(requests[0].row_ids).toEqual([bound.row_id]);
   await context.unroute('**/requirements/reviews'); await page.keyboard.press('Escape');
   expect((await fixture.api(`/api/design/type-workspaces/${wid}/requirements?run_id=${run.id}`)).approved_count).toBe(0);

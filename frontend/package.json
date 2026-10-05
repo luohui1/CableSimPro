@@ -4,12 +4,23 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:version-status": "node scripts/isolated-e2e.mjs verify-version-status.mjs",
+    "test:reproduction": "node scripts/isolated-e2e.mjs verify-reproduction.mjs",
+    "test:type-resilience": "node scripts/isolated-e2e.mjs verify-type-resilience.mjs",
+    "test:selection-refusal": "node scripts/isolated-e2e.mjs verify-selection-refusal.mjs",
+    "test:report-pdf": "node scripts/isolated-e2e.mjs verify-report-pdf.mjs",
+    "test:host-connections": "node scripts/isolated-e2e.mjs verify-host-connections.mjs",
+    "test:inquiry": "node scripts/isolated-e2e.mjs verify-inquiry.mjs",
+    "test:accessibility": "node scripts/isolated-e2e.mjs verify-accessibility.mjs",
+    "test:document-batch": "node scripts/isolated-e2e.mjs verify-document-batch.mjs",
     "dev": "vite",
     "seed:demo": "python scripts/seed-engineering-demo.py",
     "test:names": "node scripts/isolated-e2e.mjs verify-display-names.mjs",
+    "test:documents": "node scripts/isolated-e2e.mjs verify-documents.mjs",
     "prepare:backend": "python scripts/prepare-backend.py",
     "generate:api": "node scripts/generate-api.mjs",
     "build": "npm run check:styles && tsc -b && vite build",
+    "build:release": "npm run check:styles && vite build",
     "preview": "vite preview",
     "check:styles": "node scripts/check-styles.mjs",
     "test": "node --test scripts/check-styles.test.mjs scripts/format.test.mjs scripts/domain-history.test.mjs scripts/chart-display.test.mjs",
@@ -28,10 +39,7 @@
     "test:hybrid": "node scripts/isolated-e2e.mjs verify-hybrid.mjs",
     "test:hybrid-families": "node scripts/isolated-e2e.mjs verify-hybrid-families.mjs",
     "test:physics-comparison": "node scripts/isolated-e2e.mjs verify-physics-comparison.mjs",
-    "capture:handoff": "node scripts/capture-handoff.mjs",
-    "capture:references": "node scripts/capture-handoff.mjs --references",
-    "capture:comparison": "node scripts/capture-comparison.mjs",
-    "capture:research-comparison": "node scripts/research-comparison.mjs"
+    "capture:handoff": "node scripts/capture-handoff.mjs"
   },
   "dependencies": {
     "@fontsource/ibm-plex-mono": "5.3.0",
@@ -52,6 +60,7 @@
     "tailwind-merge": "3.7.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "24.19.1",

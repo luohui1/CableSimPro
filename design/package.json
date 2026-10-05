@@ -2,8 +2,8 @@
   "name": "cablesim-visual-assets",
   "private": true,
   "scripts": {
-    "build:occt": "python workbench/build-occt.py",
-    "preview": "python workbench/serve.py",
+    "build:occt": "python ../frontend/src/features/cad/native/build.py",
+    "preview": "python -m http.server 8028 --bind 127.0.0.1 --directory ..",
     "brand": "python brand/build.py"
   },
   "dependencies": {

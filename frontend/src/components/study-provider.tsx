@@ -27,8 +27,10 @@ import {
 } from "@/api/client";
 import {
   studyIndex,
+  projectStudy,
   studyRuns,
   saveStudy,
+  restoreStudy,
   type StudyRow,
   type StudyDefinition,
 } from "@/api/research";
@@ -107,8 +109,16 @@ export function StudyProvider() {
   const location = useLocation();
   const queries = useQueryClient();
   const index = useQuery({
-    queryKey: ["study-index"],
-    queryFn: ({ signal }) => studyIndex(signal),
+    queryKey: ["study-context", search.workspace, sid],
+    queryFn: async ({ signal }) => {
+      if (!search.workspace) return studyIndex(signal);
+      const [study, workspace] = await Promise.all([
+        responseData(api.GET('/api/workspaces/{wid}/studies/{sid}', {params:{path:{wid:search.workspace,sid}},signal})),
+        responseData(api.GET('/api/workspaces/{wid}', {params:{path:{wid:search.workspace}},signal})),
+      ]);
+      const state = record(workspace, '工程');
+      return [projectStudy(study, state, record(state.study_cable_reference || {}, '引用型号'))];
+    },
   });
   const study = index.data?.find((item) => item.id === sid);
   const wid = study?.workspace || search.workspace;
@@ -121,8 +131,10 @@ export function StudyProvider() {
     enabled: !!study,
   });
   const runs = useQuery({
-    queryKey: ["runs", wid, sid],
-    queryFn: ({ signal }) => studyRuns(wid, sid, signal),
+    queryKey: ["runs", wid, sid, search.run || 'all'],
+    queryFn: async ({ signal }) => search.run
+      ? [record(await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/runs/{rid}', {params:{path:{wid,sid,rid:search.run}},signal})), '固定运行')]
+      : studyRuns(wid, sid, signal),
     enabled: !!study,
     refetchInterval: (query) =>
       query.state.data?.some((run) =>
@@ -149,6 +161,26 @@ export function StudyProvider() {
   }, [sid, wid]);
   const [notice, setNotice] = useState("");
   const writing = useRef(false);
+  const [restoring, setRestoring] = useState(false);
+  const historyRequest = useRef<{ key: string; id: string } | null>(null);
+  const restoreConfiguration = useCallback(async (direction: "undo" | "redo") => {
+    if (!study || !workspace.data || writing.current) return;
+    const revision = numeric(workspace.data.revision)!;
+    const key = [wid, sid, direction, revision, study.revision].join(":");
+    if (historyRequest.current?.key !== key) historyRequest.current = { key, id: crypto.randomUUID() };
+    writing.current = true;
+    setRestoring(true);
+    try {
+      await restoreStudy(wid, sid, direction, { expected_revision: revision, expected_study_revision: study.revision, request_id: historyRequest.current.id });
+      await Promise.all([
+        queries.invalidateQueries({ queryKey: ["study-index"] }),
+        queries.invalidateQueries({ queryKey: ["study-context"] }),
+        queries.invalidateQueries({ queryKey: ["runs", wid, sid] }),
+      ]);
+      historyRequest.current = null;
+    } catch (error) { setNotice(message(error)); }
+    finally { writing.current = false; setRestoring(false); }
+  }, [study, workspace.data, wid, sid, queries]);
   const mutation = useMutation({
     retry: false,
     mutationFn: async (pending: Draft | undefined) => {
@@ -168,6 +200,7 @@ export function StudyProvider() {
     onSuccess: async () => {
       await Promise.all([
         queries.invalidateQueries({ queryKey: ["study-index"] }),
+        queries.invalidateQueries({ queryKey: ["study-context"] }),
         queries.invalidateQueries({ queryKey: ["runs", wid, sid] }),
         queries.invalidateQueries({ queryKey: ["workspace", wid] }),
       ]);
@@ -204,6 +237,7 @@ export function StudyProvider() {
       await Promise.all([
         queries.invalidateQueries({ queryKey: ["workspace", wid] }),
         queries.invalidateQueries({ queryKey: ["study-index"] }),
+        queries.invalidateQueries({ queryKey: ["study-context"] }),
         queries.invalidateQueries({ queryKey: ["runs", wid, sid] }),
       ]);
       setDomainDraft(null);
@@ -252,7 +286,7 @@ export function StudyProvider() {
       dispatchDomain({ type: "undo" });
       return;
     }
-    if (draft || domainDraft) {
+    if (draft || domainDraft || Object.keys(moduleInputs).length) {
       setNotice("请先保存或放弃草稿，再撤销已保存版本。");
       return;
     }
@@ -261,7 +295,7 @@ export function StudyProvider() {
         location.pathname.split("/")[3],
       )
     ) {
-      setNotice("研究版本撤销接口尚未提供；当前配置保留。");
+      await restoreConfiguration("undo");
       return;
     }
     try {
@@ -269,6 +303,7 @@ export function StudyProvider() {
       queries.setQueryData(["workspace", wid], value);
       await Promise.all([
         queries.invalidateQueries({ queryKey: ["study-index"] }),
+        queries.invalidateQueries({ queryKey: ["study-context"] }),
         queries.invalidateQueries({ queryKey: ["runs", wid, sid] }),
       ]);
     } catch (error) {
@@ -284,6 +319,8 @@ export function StudyProvider() {
     queries,
     domainHistory.past.length,
     search.run,
+    moduleInputs,
+    restoreConfiguration,
   ]);
   const redo = useCallback(async () => {
     if (writing.current) return;
@@ -296,7 +333,11 @@ export function StudyProvider() {
         location.pathname.split("/")[3],
       )
     ) {
-      setNotice("研究版本重做接口尚未提供；当前配置保留。");
+      if (draft || domainDraft || Object.keys(moduleInputs).length) {
+        setNotice("请先保存或放弃草稿，再重做已保存版本。");
+        return;
+      }
+      await restoreConfiguration("redo");
       return;
     }
     if (domainHistory.future.length) {
@@ -312,6 +353,7 @@ export function StudyProvider() {
       queries.setQueryData(["workspace", wid], value);
       await Promise.all([
         queries.invalidateQueries({ queryKey: ["study-index"] }),
+        queries.invalidateQueries({ queryKey: ["study-context"] }),
         queries.invalidateQueries({ queryKey: ["runs", wid, sid] }),
       ]);
     } catch (error) {
@@ -327,6 +369,8 @@ export function StudyProvider() {
     sid,
     workspace.data,
     queries,
+    moduleInputs,
+    restoreConfiguration,
   ]);
   const blocker = useBlocker({
     shouldBlockFn: ({ next }) =>
@@ -425,7 +469,7 @@ export function StudyProvider() {
       domainMutation.reset();
     },
     save: saveInput,
-    saving: mutation.isPending || domainMutation.isPending,
+    saving: mutation.isPending || domainMutation.isPending || restoring,
     saveError: mutation.error || domainMutation.error,
     refresh: () => {
       index.refetch();
@@ -534,16 +578,18 @@ export function StudyProvider() {
     undo,
     redo,
     canUndo:
-      !search.run &&
+      !search.run && !restoring && !Object.keys(moduleInputs).length &&
       !!(
-        domainHistory.past.length ||
-        (!domainDraft && !draft && workspace.data.can_undo)
+        ["cable", "conditions", "section"].includes(location.pathname.split("/")[3])
+          ? domainHistory.past.length || (!domainDraft && !draft && workspace.data.can_undo)
+          : !domainDraft && !draft && study.raw.can_undo
       ),
     canRedo:
-      !search.run &&
+      !search.run && !restoring && !Object.keys(moduleInputs).length &&
       !!(
-        domainHistory.future.length ||
-        (!domainDraft && !draft && workspace.data.can_redo)
+        ["cable", "conditions", "section"].includes(location.pathname.split("/")[3])
+          ? domainHistory.future.length || (!domainDraft && !draft && workspace.data.can_redo)
+          : !domainDraft && !draft && study.raw.can_redo
       ),
   };
   return (

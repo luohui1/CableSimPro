@@ -41,8 +41,36 @@ def physical(value, p, circuit, cable, point, duct, materials, section):
         allowed_forms+=('solid_round',)
     if core['x'] or core['z'] or cond['form'] not in allowed_forms:
         raise FieldValueError('当前模型要求同心圆绞线导体；实心圆导体须提供已校验的变温电磁损耗表，分割或偏心结构请改用专门方法。','cable_types',ti,'cores',0,'conductor','form')
-    if [l['role'] for l in layers] != ['conductor_screen','insulation','insulation_screen','metallic_sheath','oversheath'] or layers[3]['form'] != 'smooth':
-        raise FieldValueError('需要明确光滑管状金属护套；铜丝屏蔽、铠装或皱纹护套请改用专门方法。','cable_types',ti,'cores',0,'layers')
+    metals=[i for i,l in enumerate(layers) if l['role']=='metallic_sheath']
+    if len(metals)!=1 or metals[0]<3 or [l['role'] for l in layers[:3]]!=['conductor_screen','insulation','insulation_screen'] or layers[-1]['role']!='oversheath':
+        raise FieldValueError('需要导体屏蔽、绝缘、绝缘屏蔽、单一管状金属护套和外护套。','cable_types',ti,'cores',0,'layers')
+    mi=metals[0];metal=layers[mi];wave=None
+    if metal.get('form')=='corrugated':
+        from .inputs import AnnularLayer
+        for key in ('corrugation_depth','corrugation_pitch'):
+            if metal.get(key) is None:
+                branch=('cores',0,'layers',mi) if mi<len(core['layers']) else ('common_layers',mi-len(core['layers']))
+                raise FieldValueError('皱纹铝护套缺 '+key+'（m）；请给出波峰/波谷尺寸、轴向节距和来源。','cable_types',ti,*branch,key)
+        if not layers[3:mi] or any(l['role'] not in ('bedding','separator','binder') for l in layers[3:mi]+layers[mi+1:-1]):
+            raise FieldValueError('皱纹护套需明确已安装缓冲层；内外附加层仅覆盖 bedding/separator/binder。','cable_types',ti,'cores',0,'layers')
+        gap=p.get('corrugated_gap',{}).get(cable['id'])
+        if not isinstance(gap,dict) or set(gap)!={'rho_k_m_w','source','geometry_source'}:
+            raise FieldValueError('请在 corrugated_gap 为该型号填写间隙有效热阻率 rho_k_m_w（K·m/W）、source 和 geometry_source；不自动采用缓冲带本体或空气参数。','parameters','corrugated_gap',cable['id'])
+        if isinstance(gap['rho_k_m_w'],bool) or not isinstance(gap['rho_k_m_w'],(int,float)) or not isfinite(gap['rho_k_m_w']) or gap['rho_k_m_w']<=0:
+            raise FieldValueError('填写正的有限间隙有效热阻率（K·m/W）。','parameters','corrugated_gap',cable['id'],'rho_k_m_w')
+        for key in ('source','geometry_source'):
+            if not isinstance(gap[key],str) or not gap[key].strip():
+                raise FieldValueError('填写具体出处并区分厂家值与工程参考。','parameters','corrugated_gap',cable['id'],key)
+        def annular(layer):
+            material=materials[layer['material']];rho=material.get('thermal_resistivity')
+            if isinstance(rho,bool) or not isinstance(rho,(int,float)) or not isfinite(rho) or rho<=0:
+                raise FieldValueError('缓冲或涂敷层需要正的有限热阻率（K·m/W）。','materials',value['materials'].index(material),'thermal_resistivity')
+            return AnnularLayer(thickness_m=layer['thickness'],rho_k_m_w=rho).model_dump()
+        wave={'depth_m':metal['corrugation_depth'],'pitch_m':metal['corrugation_pitch'],
+              'buffer_layers':[annular(l) for l in layers[3:mi]],'outer_layers':[annular(l) for l in layers[mi+1:-1]],
+              'gap_rho_k_m_w':gap['rho_k_m_w'],'gap_source':gap['source'],'source':gap['geometry_source']}
+    elif metal.get('form')!='smooth' or len(layers)!=5:
+        raise FieldValueError('光滑金属套仅覆盖五层同心结构；铜丝、铠装等请使用对应方法。','cable_types',ti,'cores',0,'layers')
     cm, lm = materials[cond['material']], [materials[l['material']] for l in layers]
     dp = None
     if duct:
@@ -60,8 +88,9 @@ def physical(value, p, circuit, cable, point, duct, materials, section):
         'insulation': {'inner_screen_thickness_m': layers[0]['thickness'], 'thickness_m': layers[1]['thickness'], 'outer_screen_thickness_m': layers[2]['thickness'],
                        'relative_permittivity': lm[1]['relative_permittivity'], 'tan_delta': lm[1]['loss_tangent'],
                        'inner_screen_rho_k_m_w': lm[0]['thermal_resistivity'], 'rho_k_m_w': lm[1]['thermal_resistivity'], 'outer_screen_rho_k_m_w': lm[2]['thermal_resistivity']},
-        'sheath': {'thickness_m': layers[3]['thickness'], 'resistivity20_ohm_m': lm[3]['electrical_resistivity_20'], 'alpha20_per_k': lm[3]['temperature_coefficient_20']},
-        'oversheath': {'thickness_m': layers[4]['thickness'], 'rho_k_m_w': lm[4]['thermal_resistivity']},
+        'sheath': {'geometry':'corrugated_tube' if wave else 'smooth_tube','corrugation':wave,
+                   'thickness_m': metal['thickness'], 'resistivity20_ohm_m': lm[mi]['electrical_resistivity_20'], 'alpha20_per_k': lm[mi]['temperature_coefficient_20']},
+        'oversheath': {'thickness_m': layers[-1]['thickness'], 'rho_k_m_w': lm[-1]['thermal_resistivity']},
         'installation': {'environment': 'buried_ducts' if duct else 'direct_buried', 'depth_m': -point['z'],
                          'soil_rho_k_m_w': materials[section['medium']['material']]['thermal_resistivity'],
                          'ambient_temperature_c': section['medium']['surface_temperature']-273.15,

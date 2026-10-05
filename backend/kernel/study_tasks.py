@@ -1,6 +1,7 @@
 """Study objectives and their declared plugin capabilities, without physics."""
 
 SIMULATION_TASKS = {
+    'iec-fem-comparison': ('steady_state', 'IEC 与有限元对比', ['x-cablesim.iec-fem-comparison', 'x-cablesim.simulation-bundle']),
     'transient-temperature': ('transient', '暂态温升', ['x-cablesim.temperature-history', 'x-cablesim.temperature-field']),
     'sheath-losses': ('frequency_domain', '护套损耗', ['x-cablesim.sheath-losses', 'x-cablesim.loss-coefficients']),
     'electrothermal-steady': ('steady_state', '电热耦合', ['x-cablesim.temperature-field', 'x-cablesim.simulation-bundle']),

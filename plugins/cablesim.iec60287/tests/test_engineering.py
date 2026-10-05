@@ -74,6 +74,42 @@ def test_source_and_dimension_closure_fail_closed():
     with pytest.raises(ValueError,match='screen_radial_factor'):complete(source,parameters())
 
 
+@pytest.mark.parametrize('area,dc,bedding,outer,diameter',[(70,10.,1.5,2.8,59.2),(150,14.6,1.7,3.2,70.3),(240,18.5,1.9,3.5,79.7)])
+def test_public_rounding_and_manufacturing_allowance_restore_candidates(area,dc,bedding,outer,diameter):
+    source=specification();spec=source['specification'];spec['area_m2']=area*1e-6
+    spec['values']['r20']['value']={70:.268,150:.124,240:.0754}[area]/1000
+    for key,value in {'conductor_diameter':dc,'bedding_thickness':bedding,'armour_tape_thickness':.5,
+                      'oversheath_thickness':outer,'outer_diameter':diameter}.items():
+        spec['values'][key]['value']=value/1000
+    reference=f'江苏华远 YJV22 公开网页 四、结构尺寸 3×{area} 行；HTML无PDF页码'
+    source['sources']['/fixture']={'kind':'asset','reference':reference,'reviewed':False}
+    original=deepcopy(source)
+    core=dc+2*(.8+4.5+.7+.1*2)
+    derived=core*(1+2/sqrt(3))+2*(.2+bedding+1.+outer)
+    result=complete(source,parameters())
+    assert result['derived']['model_outer_diameter_m']==pytest.approx(derived/1000)
+    assert result['derived']['diameter_closure_tolerance_m']==pytest.approx(.00005+max(.0005,.01*diameter/1000))
+    assert result['derived']['reported_outer_diameter_m']==diameter/1000
+    assert source==original
+    # Completion must restore a runnable candidate, not merely suppress the error.
+    from test_three_core import document, parameters as rating_parameters
+    from cablesim_iec60287.three_core import prepare
+    from cablesim_iec60287.group import rate_group
+    domain=document();cable=deepcopy(result['cable_type']);cable['id']=domain['cable_types'][0]['id']
+    domain['cable_types']=[cable]
+    domain['materials']=list({m['id']:m for m in [*domain['materials'],*result['materials']]}.values())
+    domain['load_cases'][0]['currents']={'circuit/c1':0.}
+    assert rate_group(prepare(domain,rating_parameters()))['circuit_ratings'][0]['ampacity_a']>0
+
+
+def test_true_radial_conflict_is_still_rejected():
+    from cablesim_iec60287.electrical import RatingRefused
+    source=specification();source['specification']['values']['outer_diameter']['value']=.07
+    with pytest.raises(RatingRefused) as error:complete(source,parameters())
+    assert error.value.code=='RADIAL_DIMENSIONS_CONFLICT'
+    assert error.value.path=='/parameters/values/screen_radial_factor/value'
+
+
 def test_unarmoured_model_needs_no_steel_parameters():
     source=specification();source['specification']['designation']='YJV'
     given=parameters()
@@ -107,7 +143,7 @@ def test_three_core_common_load_uses_all_heat_sources_and_matches_hand_current()
     p=deepcopy(METHOD_DEFAULTS['cablesim.iec60287']);p.update(rating_mode='both')
     p['solver']['max_iterations']=300
     group=prepare(d,p);trace=rate_group(group);common=trace['simultaneous_rating']
-    assert min(r['ampacity_a'] for r in trace['circuit_ratings'])==pytest.approx(381.448418,abs=1e-5)
-    assert common['ampacity_a']==pytest.approx(369.459554,abs=1e-5)
+    assert min(r['ampacity_a'] for r in trace['circuit_ratings'])==pytest.approx(369.491512,abs=1e-5)
+    assert common['ampacity_a']==pytest.approx(362.238246,abs=1e-5)
     hand=verify(group,trace['operating'],[{**common,'entity':'all-circuits'}])
     assert hand['passed'] and abs(hand['rows'][-1]['difference'])<1e-5

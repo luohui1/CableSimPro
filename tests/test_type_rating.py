@@ -1,6 +1,6 @@
 """Saved condition batches: actual IEC results, explicit refusals and immutable exports."""
 from copy import deepcopy
-from decimal import Decimal, localcontext
+from decimal import Decimal, ROUND_HALF_UP, localcontext
 import json
 from pathlib import Path
 from uuid import uuid4
@@ -91,11 +91,41 @@ def test_condition_batch_reuses_real_iec_and_archives_air_refusal(client):
     assert rows[0]['value_a'] == pytest.approx(float(hand), rel=1e-7)
     html = render([run])
     assert 'data-specification-section="rating"' in html
-    # Customer documents round display values; saved results retain full precision.
-    displayed_current = format(Decimal(str(rows[0]['value_a'])).quantize(Decimal('0.001')), 'f').rstrip('0').rstrip('.')
+    # Customer documents show whole amperes; saved results retain full precision.
+    displayed_current = format(Decimal(str(rows[0]['value_a'])).quantize(Decimal('1'), rounding=ROUND_HALF_UP), 'f')
     assert f'<td>{displayed_current}</td>' in html
     assert str(rows[0]['value_a']) not in html
     assert run['input_digest'] in html and run['output_digest'] in html
+
+
+def test_three_core_rating_keeps_one_physical_cable_per_circuit(client):
+    model=next(m for m in system_models() if m['id']=='system.specification-yjv22-300')
+    response=client.post('/api/design/type-workspaces',json={'model_id':model['id'],'content_sha256':model['content_sha256']})
+    assert response.status_code==201,response.text
+    w=response.json();original=deepcopy(w['domain'])
+    rows=model['payload']['specification_conditions']['rating']['rows']
+    params=model['payload']['specification_conditions']['rating']['parameters']
+    study=save_table(client,w,rows,params)
+    for case,count in zip(study['definition']['driver']['cases'],(1,3,3)):
+        d=case['input'];assert len(d['circuits'])==len(d['sections'][0]['placements'])==count
+        assert all(len(c['cables'])==1 and c['cables'][0]['phase']=='L1L2L3' for c in d['circuits'])
+    run,_,_=execute(client,w,study)
+    assert run['status']=='succeeded',[(r['status'],r['reason']) for r in rating_rows(run)]
+    results=rating_rows(run)
+    assert [r['condition']['layout'] for r in results]==[r['layout'] for r in rows]
+    assert all(r['value_a']>0 for r in results)
+    assert results[0]['value_a']>results[1]['value_a']>results[2]['value_a']
+    for row,case in zip(results[1:],run['output']['cases'][1:]):
+        common=[r['value'] for r in case['results'] if r['key']=='ampacity' and r['case']=='rating-simultaneous' and r['status']=='available']
+        assert len(common)==3 and row['value_a']==min(common)
+        assert row['condition']['rating_basis_name']=='全回路等负荷允许电流'
+    incomplete=deepcopy(run)
+    incomplete['output']['cases'][1]['results']=[r for r in incomplete['output']['cases'][1]['results'] if r.get('case')!='rating-simultaneous']
+    assert rating_rows(incomplete)[1]['value_a'] is None
+    assert '共同负荷' in rating_rows(incomplete)[1]['reason']
+    assert client.get(f"/api/workspaces/{w['id']}").json()['domain']==original
+    with pytest.raises(ValueError,match='三芯'):
+        condition_input(original,RatingRow(case_id='bad',name='bad',layout='trefoil'))
 
 
 def test_batch_inputs_are_saved_not_runtime_overrides_and_deep_copied():
@@ -143,7 +173,8 @@ def test_two_real_types_keep_unsupported_or_missing_rows_without_fabrication(cli
     r = client.put(f"/api/workspaces/{w['id']}/domain", json={'expected_revision': w['revision'], 'document': fixture['input']})
     assert r.status_code == 200, r.text
     w = client.get(f"/api/workspaces/{w['id']}").json()
-    study = save_table(client, w)
+    rows = [RatingRow(case_id='buried',name='三芯直埋',layout='three_core_buried_single').model_dump()] if w['domain']['cable_types'][0]['construction']=='three_core' else None
+    study = save_table(client, w, rows)
     run, _, _ = execute(client, w, study)
     rows = rating_rows(run)
     assert all(r['value_a'] is None for r in rows)

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   api,
   record,
@@ -7,11 +7,14 @@ import {
   text,
   numeric,
   ApiError,
+  optionalRecord,
 } from "@/api/client";
 import { moduleConfiguration } from "./study-method-form";
 import { useStudy } from "./study-provider";
 import { Button } from "./ui/button";
-import { PreflightDialog } from "./preflight-dialog";
+import { PreflightDialog, needsScopeConfirmation } from "./preflight-dialog";
+import { modelVersions } from "@/api/research";
+import { displayName } from "@/lib/display-names";
 import { missingInputDestination } from "@/lib/missing-input";
 import type { components } from "@/api/generated/schema";
 
@@ -45,6 +48,7 @@ export function StudyRunControl({
     lock: string;
   } | null>(null);
   const configuration = moduleConfiguration(context.study.definition, module);
+  const models = useQuery({ queryKey: ["model-versions"], queryFn: ({ signal }) => modelVersions(signal), enabled: open && configuration?.driver?.kind === "selection" });
   const configuredModule = context.study.definition.modules?.[module]
     ? module
     : undefined;
@@ -87,7 +91,7 @@ export function StudyRunControl({
   const execution = useMutation({
     retry: false,
     mutationFn: async () => {
-      if (context.dirty || !ack || !preflight.data)
+      if (context.dirty || !preflight.data?.ready || (needsScopeConfirmation(preflight.data) && !ack))
         throw new ApiError(409, "需保存输入并确认预检范围");
       const source = accepted.current;
       if (
@@ -151,6 +155,15 @@ export function StudyRunControl({
         预检并运行
       </Button>
       <PreflightDialog
+        caseLabel={(id, index) => {
+          const match = /case-(\d+)$/.exec(id);
+          const n = match ? Number(match[1]) : index;
+          const driver = optionalRecord(configuration?.driver);
+          const candidate = Array.isArray(driver.candidate_ids) ? driver.candidate_ids[n] : undefined;
+          const model = models.data?.find(item => text(item.id) === `candidate:${candidate}`);
+          const label = text(model?.name) || (driver.kind === "selection" ? `候选型号 ${n + 1}` : `工况 ${n + 1}`);
+          return id.startsWith("crosscheck-") ? `${label} · 交叉核对` : label;
+        }}
         missingLabel={(field) =>
           missingInputDestination(field, module, currentInput).label
         }
@@ -160,7 +173,7 @@ export function StudyRunControl({
         }}
         method={
           configuration
-            ? configuration.method.plugin_id +
+            ? displayName(configuration.method.plugin_id) +
               " · " +
               configuration.method.version
             : ""

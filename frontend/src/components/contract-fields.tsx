@@ -109,6 +109,7 @@ export function ContractFields({
           return (
             <Select
               key={path}
+              path={path}
               label={label}
               value={typeof value === "string" ? value : undefined}
               disabled={readOnly}

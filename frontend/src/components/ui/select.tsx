@@ -11,6 +11,7 @@ export function Select({
   disabled,
   loading,
   error,
+  path,
   placeholder = "请选择",
 }: {
   label: string;
@@ -20,13 +21,14 @@ export function Select({
   disabled?: boolean;
   loading?: boolean;
   error?: string;
+  path?: string;
   placeholder?: string;
 }) {
   const id = useId();
   const emptyChoice = id + "-empty";
   const hasEmptyChoice = options.some((option) => option.value === "");
   return (
-    <div className="select-field">
+    <div className="select-field" data-field-path={path}>
       <label htmlFor={id}>{label}</label>
       <Primitive.Root
         value={value === "" && hasEmptyChoice ? emptyChoice : value}

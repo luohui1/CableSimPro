@@ -2,6 +2,7 @@
 from uuid import uuid5
 
 from fastapi import HTTPException
+from ..plugin_host.registry import PluginHostError
 
 from .contracts import CreateStudy, UpdateStudy, RunStudy
 from .rating_conditions import RatingRow, RatingTableDefinition, table_definition
@@ -58,12 +59,31 @@ def _study(service, wid, revision, channel, methods):
             if any(case['metadata'].get('type_revision') != revision or
                    case['metadata'].get('type_sha256') != fingerprint(state['domain']) for case in definition['driver']['cases']):
                 body = RatingTableDefinition(expected_revision=revision,
-                    rows=[RatingRow.model_validate(case['metadata']['condition']) for case in definition['driver']['cases']],
+                    rows=[RatingRow.model_validate({'rating_basis':definition['driver'].get('rating_basis','individual'),
+                        **case['metadata']['condition']}) for case in definition['driver']['cases']],
                     parameters=definition['parameters'], selected_case_ids=definition['driver'].get('selected_case_ids'))
                 updated = table_definition(state, body, definition['method'])
                 study = service.research.save(wid, UpdateStudy(**updated, expected_revision=revision,
                     expected_study_revision=study['revision']), study['id'])
         return study
+    state = service.store.snapshot(wid)
+    declared = state.get('type_specification_conditions', {}).get(channel)
+    if declared and channel in ('electrical', 'short_circuit', 'rating'):
+        for entry in methods:
+            for capability in entry['capabilities']:
+                matches = capability.get('input_schema') == 'cablesim.domain/1' and any(
+                    artifact['type'] == 'x-cablesim.iec60287-trace' for artifact in capability.get('artifacts', [])) if channel == 'rating' else any(
+                    artifact['type'] == CHANNELS[channel] for artifact in capability.get('artifacts', []))
+                if not matches or not entry['platform_supported'] or entry['execution_policy']['backend'] != 'local':
+                    continue
+                method = {**entry['method'], 'capability':capability['id']}
+                if channel == 'rating':
+                    definition = table_definition(state, RatingTableDefinition(expected_revision=revision, **declared), method)
+                else:
+                    parameters = {**declared, 'cable_type_id':state['domain']['cable_types'][0]['id']}
+                    definition = {'title':CHANNEL_NAMES[channel], 'input_source':'domain', 'method':method, 'parameters':parameters,
+                        'input_sources':{'/parameters':{'kind':'demo','reference':'型号版本中显式保存的规格书教学条件。','reviewed':False}}}
+                return service.research.save(wid, CreateStudy(expected_revision=revision, **definition))
     if channel not in ('geometry', 'standards'):
         raise HTTPException(422, '请先保存'+CHANNEL_NAMES[channel]+'的方法条件；生成时会自动预检并计算。')
     with service.store.db() as db:
@@ -82,6 +102,12 @@ def _study(service, wid, revision, channel, methods):
 
 
 def generate(service, wid, body):
+    from .verified_executor import verification_scope
+    with verification_scope():
+        return _generate(service,wid,body)
+
+
+def _generate(service, wid, body):
     # Short, synchronous algebra calls retain each Run's existing idempotency.
     # A disconnected caller retries the same request; accepted runs are not repeated.
     if not service.generation_lock.acquire(blocking=False):
@@ -116,7 +142,7 @@ def generate(service, wid, body):
                     raise HTTPException(422, (failed.get('error') or {}).get('message') if failed else '没有通过预检的工况。')
                 run = service.research.execute(wid, study['id'], RunStudy(request_id=uuid5(body.request_id, channel),
                     expected_revision=body.expected_revision, expected_study_revision=study['revision'],
-                    lock_digest=checked['lock_digest'], scope_acknowledged=body.scope_acknowledged))
+                    lock_digest=checked['lock_digest'], scope_acknowledged=body.scope_acknowledged),checked_preflight=checked)
                 if run['status'] != 'succeeded' or run.get('integrity') != 'verified':
                     raise HTTPException(422, (run.get('error') or {}).get('message') or '运行没有完整成功，已保存诊断结果。')
                 _, _, channels, _ = service.evidence(wid)
@@ -124,9 +150,9 @@ def generate(service, wid, body):
                 if gap:
                     raise HTTPException(422, gap)
                 steps.append({'channel':channel, 'status':'calculated', 'run_id':run['id']})
-            except HTTPException as failure:
-                detail = failure.detail
-                message = detail if isinstance(detail, str) else detail.get('message', '输入校验未通过。')
+            except (HTTPException, PluginHostError, ValueError, OSError) as failure:
+                detail = failure.detail if isinstance(failure, HTTPException) else str(failure)
+                message = detail if isinstance(detail, str) else detail.get('message', '输入校验未通过。') if isinstance(detail, dict) else '输入校验未通过。'
                 return {'status':'blocked', 'channel':channel, 'message':CHANNEL_NAMES[channel]+'：'+message,
                         'details':detail, 'steps':steps, 'revision':body.expected_revision}
         with service.store.db() as db:

@@ -3,6 +3,7 @@ from copy import deepcopy
 from math import pi, sqrt
 from backend.domain.models import CableType, Material
 from .engineering_contract import EngineeringParameters
+from .electrical import RatingRefused
 
 GB='GB/T12706.2-2020 10.2.3/13.5表11/13.7/附录A；sha256:3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d'
 THERMAL='IEC60287-2-1:2023 表1，PDF41/印刷39页；sha256:a273d784ccf13b73915557c22ce3642c6c1bef94be6034ebd8237e8a7d997f52'
@@ -61,8 +62,18 @@ def complete(value,parameters):
     outer=fact('oversheath_thickness');reported=fact('outer_diameter')
     base=pack+2*(binder+bedding+outer+(armour['thickness'] if armour else 0))
     residual=(reported-base)/2
-    if residual<0 and -2*residual>given('diameter_rounding'):
-        raise ValueError('screen_radial_factor：径向构造与厂家参考外径不能闭合，请核对铜带包络和尺寸；不能缩减厂家层厚')
+    # Published rounding plus the explicitly adopted engineering manufacturing
+    # allowance. This is not a GB/IEC manufacturing acceptance limit.
+    manufacturing=max(.0005,.01*reported)
+    tolerance=given('diameter_rounding')+manufacturing
+    if residual<0 and -2*residual>tolerance:
+        origin=sources[facts['outer_diameter']['source']]['reference']
+        raise RatingRefused('RADIAL_DIMENSIONS_CONFLICT',
+            f"径向尺寸冲突：厂家参考外径 {reported*1000:g} mm，按给定 screen_radial_factor={given('screen_radial_factor'):g} 与层厚推得 {base*1000:.6f} mm，"
+            f"超出 {tolerance*1000:g} mm 闭合容差（列示半单位加 max(0.5 mm,厂家外径1%)）；芯包络 {core_d*1000:g} mm，三芯成缆 {pack*1000:.6f} mm，"
+            f"包带/内衬/铠装/外护套径向厚度分别 {binder*1000:g}/{bedding*1000:g}/{(armour['thickness'] if armour else 0)*1000:g}/{outer*1000:g} mm。"
+            '请核对厂家外径与铜带径向包络依据，不能缩减厂家层厚或自动放宽容差。来源：'+origin,
+            '/parameters/values/screen_radial_factor/value')
     filler=binder+max(0,residual)
     common=[{'role':'filler','material':'material/filler','thickness':filler}]
     if bedding:common.append({'role':'bedding','material':'material/pvc','thickness':bedding})
@@ -84,6 +95,8 @@ def complete(value,parameters):
                 'screen_resistance_formula':'R20=ρ20 C_LL/[π d_mean t/(1-overlap)]；仅连续接触等效分支',
                 'nominal_overlap':overlap,'filler_cover_thickness_m':filler,'model_outer_diameter_m':base+2*max(0,residual),
                 'reported_outer_diameter_m':reported,'armour_tape_thickness_m':armour['nominal_tape_thickness'] if armour else None,
+                'diameter_rounding_m':given('diameter_rounding'),'diameter_manufacturing_allowance_m':manufacturing,
+                'diameter_closure_tolerance_m':tolerance,'diameter_closure_policy':'published rounding + max(0.5 mm, 1%); engineering acceptance, not a standard manufacturing limit',
                 'armour_tape_basis':('manufacturer' if 'armour_tape_thickness' in facts else 'standard_nominal') if armour else 'unarmoured',
                 'basis':'standard_derived','reference':GB+'；'+ELECTRICAL},
             'dependencies':['导体构造模型','成缆节距','铜带接触/电阻模型与径向包络','填充与包带材料',*(['钢带间隙及磁导率'] if armoured else []),'参考外径列示精度']}

@@ -110,5 +110,7 @@ class CoupledParameters(StrictModel):
     relaxation: float = Field(default=.7,gt=0,le=1, description='Dimensionless relaxation factor in (0,1].')
 
 
-SIMULATION_PARAMETER_MODELS = {'transient-temperature': TransientParameters,
+from cablesim_sdk.iec_fem import ComparisonParameters
+
+SIMULATION_PARAMETER_MODELS = {'iec-fem-comparison': ComparisonParameters, 'transient-temperature': TransientParameters,
     'sheath-losses': SheathLossParameters, 'electrothermal-steady': CoupledParameters}

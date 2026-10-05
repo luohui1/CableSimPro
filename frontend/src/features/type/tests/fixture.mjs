@@ -20,6 +20,9 @@ async function run(command, args, options = {}) {
 }
 export async function typeFixture({ main = false } = {}) {
   const python = process.env.PYTHON || path.join(root, process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python');
+  const backendRoot=process.env.E2E_BACKEND_ROOT ? path.resolve(process.env.E2E_BACKEND_ROOT) : root;
+  if(backendRoot!==root && (!backendRoot.startsWith(path.resolve(root,'.tmp')+path.sep)
+      || !await fs.stat(path.join(backendRoot,'runtime-manifest.json')).then(()=>true,()=>false)))throw Error('冻结后端须为本仓库临时目录内带源码清单的运行时');
   const scratchRoot = path.resolve(root, '.tmp/frontend-e2e'), scratch = path.join(scratchRoot, 'type-' + randomUUID());
   if (!scratch.startsWith(scratchRoot + path.sep)) throw Error('临时目录越界');
   const owned = []; let backendOutput = '', browser;
@@ -35,7 +38,7 @@ export async function typeFixture({ main = false } = {}) {
     await run(python, ['-c', "import sqlite3,sys;from pathlib import Path;a=Path(sys.argv[1]).resolve();b=Path(sys.argv[2]).resolve();assert a!=b;s=sqlite3.connect(a.as_uri()+'?mode=ro',uri=True);t=sqlite3.connect(b);s.backup(t);t.close();s.close()", process.env.E2E_DATABASE_SOURCE || path.join(root, '.data/frontend-integration/engineering.sqlite'), database], { stdio: 'inherit' });
     const backendPort = await freePort(), frontendPort = await freePort();
     const environment = { ...process.env, CABLESIM_DB: database, CABLESIM_DATASETS_DIR: path.join(scratch, 'datasets'), TEMP: scratch, TMP: scratch, BACKEND_URL: 'http://127.0.0.1:' + backendPort };
-    const backend = spawn(python, ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(backendPort)], { cwd: root, env: environment, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }); backend.on('error', error => { backendOutput += String(error); }); owned.push(backend);
+    const backend = spawn(python, ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(backendPort)], { cwd: backendRoot, env: environment, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }); backend.on('error', error => { backendOutput += String(error); }); owned.push(backend);
     for (const stream of [backend.stdout, backend.stderr]) stream.on('data', data => { backendOutput = (backendOutput + data.toString()).slice(-12000); });
     async function ready(url, child) { for (let i = 0; i < 120; i++) { if (child.exitCode !== null || child.pid === undefined) throw Error(backendOutput.slice(-3000)); try { if ((await fetch(url, { signal: AbortSignal.timeout(1500) })).ok) return; } catch {} await delay(250); } throw Error('服务启动超时：' + url + '\n' + backendOutput.slice(-3000)); }
     await ready(environment.BACKEND_URL + '/api/health', backend);

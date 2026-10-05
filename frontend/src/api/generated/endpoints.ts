@@ -79,7 +79,17 @@ export const endpoints = {
     "post"
   ],
   "/api/workspaces/{wid}/studies/{sid}": [
+    "get",
     "put"
+  ],
+  "/api/workspaces/{wid}/studies/{sid}/recalculate": [
+    "post"
+  ],
+  "/api/workspaces/{wid}/studies/{sid}/undo": [
+    "post"
+  ],
+  "/api/workspaces/{wid}/studies/{sid}/redo": [
+    "post"
   ],
   "/api/workspaces/{wid}/studies/{sid}/preflight": [
     "get"
@@ -98,9 +108,30 @@ export const endpoints = {
     "post"
   ],
   "/api/workspaces/{wid}/deliveries": [
-    "post"
+    "post",
+    "get"
   ],
   "/api/workspaces/{wid}/deliveries/{did}": [
+    "get"
+  ],
+  "/api/database/version": [
+    "get"
+  ],
+  "/api/database/backups": [
+    "get",
+    "post"
+  ],
+  "/api/database/backups/{identifier}/file": [
+    "get"
+  ],
+  "/api/database/restores": [
+    "post"
+  ],
+  "/api/database/restores/current": [
+    "get",
+    "delete"
+  ],
+  "/api/simulation/problem-contract": [
     "get"
   ],
   "/api/workspaces/{wid}/geometry-preview": [
@@ -207,6 +238,15 @@ export const endpoints = {
   "/api/documents/{did}/proposals/{pid}/approval": [
     "post"
   ],
+  "/api/documents/{did}/batches": [
+    "post"
+  ],
+  "/api/documents/{did}/batches/{bid}": [
+    "get"
+  ],
+  "/api/documents/{did}/batches/{bid}/approval": [
+    "post"
+  ],
   "/api/workspaces/{wid}/domain": [
     "get",
     "put"
@@ -229,6 +269,9 @@ export const endpoints = {
   ],
   "/api/types/{wid}/specification": [
     "get"
+  ],
+  "/api/types/{wid}/specification/generate": [
+    "post"
   ],
   "/api/types/{wid}/specification/file": [
     "get"

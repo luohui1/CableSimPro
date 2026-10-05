@@ -4,6 +4,7 @@ The offline plugin owns parsing/conversion/provider prompts and result grounding
 The host owns storage, scoped outbound consent, transport, history and approval.
 """
 import base64
+from contextlib import nullcontext
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from hashlib import sha256
@@ -16,7 +17,8 @@ from . import candidates
 from .workspace import fingerprint,stamp
 from .datasheet_contracts import (DocumentResponse,PageResponse,ExtractionScope,DisclosureResponse,
  ExtractionRequest,ExtractionResponse,ReviewRequest,ProposalRequest,ProposalResponse,ApprovalRequest,
- ExtractionComparisonRequest,ExtractionComparisonResponse,DocumentErrorResponse,InputFieldErrorResponse)
+ ExtractionComparisonRequest,ExtractionComparisonResponse,DocumentErrorResponse,InputFieldErrorResponse,
+ BatchProposalRequest,BatchProposalResponse)
 from backend.plugin_host import Executor,PluginHostError
 from backend.plugin_host.registry import Registry
 from . import datasheet_provider
@@ -39,6 +41,7 @@ class Documents:
    db.execute('CREATE TABLE IF NOT EXISTS document_disclosures(id TEXT PRIMARY KEY,document TEXT,payload TEXT,digest TEXT)')
    db.execute('CREATE TABLE IF NOT EXISTS document_proposals(id TEXT PRIMARY KEY,document TEXT,payload TEXT,digest TEXT,status TEXT,new_model TEXT,approval TEXT)')
    db.execute('CREATE TABLE IF NOT EXISTS document_actions(scope TEXT,request_id TEXT,digest TEXT,result TEXT,PRIMARY KEY(scope,request_id))')
+   db.execute('CREATE TABLE IF NOT EXISTS document_batches(id TEXT PRIMARY KEY,document TEXT,payload TEXT,digest TEXT,status TEXT,approval TEXT)')
    db.execute("UPDATE document_extractions SET status='interrupted',error=? WHERE status IN ('accepted','running')",(encoded({'code':'HOST_INTERRUPTED','message':'宿主重启，原件和候选历史保留；请明确重新发起提取。'}),))
  def close(self):self.pool.shutdown(wait=True,cancel_futures=False)
  def original(self,did):
@@ -225,23 +228,32 @@ class Documents:
    db.execute('UPDATE document_extractions SET reviews=?,revision=revision+1 WHERE id=?',(encoded(list(reviews.values())),eid))
    result={**record,'reviews':list(reviews.values()),'revision':record['revision']+1};self.remember(db,eid+'/review',body,result)
   return result
- def propose(self,did,body):
+ def propose(self,did,body,*,_db=None):
   record=self.get(did,body.extraction_id)
   if record['snapshot_integrity']!='verified':fail('EXTRACTION_UNSEALED','此历史开发记录没有输入封签；原件保留，请重新提取后生成提案。',409)
   if record['status']!='succeeded' or record['revision']!=body.expected_review_revision:fail('REVIEW_REVISION_CONFLICT','请核对当前成功候选及核对修订。',409)
   items={c['id']:c for c in record['result']['candidates']};decisions={r['candidate_id']:r for r in record['reviews']}
   if not items or set(items)!=set(decisions):fail('REVIEW_INCOMPLETE','请逐项接受、修改或拒绝全部候选后生成提案。')
-  with self.store.db(True) as db:
+  with nullcontext(_db) if _db is not None else self.store.db(True) as db:
    prior=self.replay(db,did+'/proposal',body)
    if prior:return prior
-   base=candidates.read(db,body.target_model_id)
-   if base['digest']!=body.expected_model_sha256:fail('MODEL_REVISION_CONFLICT','目标型号摘要已变化，请重新选择准确版本。',409)
-   payload=deepcopy(base['payload']);spec=payload.get('specification')
-   if body.version==payload['version']:fail('MODEL_VERSION_REQUIRED','请填写不同的新版本标签，原始型号不能覆盖。')
+   if body.new_model is not None:
+    identity=body.new_model.model_dump();reference=identity.pop('identity_reference');name=identity.pop('name')
+    payload={'name':name,'version':body.version,'confirmed':False,'materials':[],
+     'specification':{**identity,'values':{},'missing':['完整结构和材料物性需另行核对']},
+     'sources':{'identity':{'kind':'user','reference':encoded({'document_id':did,'original_sha256':record['document_sha256'],'reference':reference,'selections':record['request']['selections']}),'reviewed':True}}}
+    base={'digest':None}
+   else:
+    base=candidates.read(db,body.target_model_id)
+    if base['digest']!=body.expected_model_sha256:fail('MODEL_REVISION_CONFLICT','目标型号摘要已变化，请重新选择准确版本。',409)
+    payload=deepcopy(base['payload'])
+    if body.version==payload['version']:fail('MODEL_VERSION_REQUIRED','请填写不同的新版本标签，原始型号不能覆盖。')
+   spec=payload.get('specification')
    # Chosen identity must agree with target; nominal area compares the exact row
    # label after explicit human selection, not an inferred cable row.
    model=record['result']['model']
    from re import sub
+   if body.new_model and sub(r'\s+','',spec['designation']).casefold()!=sub(r'\s+','',model['designation']).casefold():fail('MODEL_IDENTITY_MISMATCH','新型号系列须与选定的原文型号完全一致。')
    if spec and spec['designation'].lower() not in model['designation'].lower():fail('MODEL_IDENTITY_MISMATCH','选定型号与目标型号系列不符，请重新选择。')
    label=sub(r'\s+','',model['specification']).replace('×','x').lower()
    area=spec['area_m2'] if spec else payload['cable_type']['cores'][0]['conductor']['nominal_area']
@@ -306,9 +318,9 @@ class Documents:
   payload=json.loads(row['payload'])
   if fingerprint(payload)!=row['digest']:fail('PROPOSAL_CORRUPT','提案摘要不一致，已阻止批准。',409)
   return {**{k:v for k,v in payload.items() if k not in ('extraction_id','review_revision','review_sha256')},'sha256':row['digest'],'status':row['status'],'new_model_id':row['new_model'],'approval':json.loads(row['approval']) if row['approval'] else None}
- def approve(self,did,pid,body):
+ def approve(self,did,pid,body,*,_db=None):
   proposal=self.proposal(did,pid)
-  with self.store.db(True) as db:
+  with nullcontext(_db) if _db is not None else self.store.db(True) as db:
    prior=self.replay(db,pid+'/approve',body)
    if prior:return prior
    if body.human_approved is not True or proposal['sha256']!=body.proposal_sha256:fail('APPROVAL_REQUIRED','请人工核对并明确批准当前摘要的提案。',409)
@@ -316,8 +328,9 @@ class Documents:
    row=db.execute('SELECT payload FROM document_proposals WHERE id=?',(pid,)).fetchone();saved=json.loads(row['payload'])
    extraction=self.get(did,saved['extraction_id'])
    if extraction['revision']!=saved['review_revision'] or fingerprint(extraction['reviews'])!=saved['review_sha256']:fail('PROPOSAL_REVIEW_CHANGED','核对记录已变化，请重新生成提案后批准。',409)
-   base=candidates.read(db,proposal['target_model_id'])
-   if base['digest']!=proposal['base_sha256']:fail('MODEL_REVISION_CONFLICT','原始型号摘要不符，已阻止批准。',409)
+   if proposal['target_model_id'] is not None:
+    base=candidates.read(db,proposal['target_model_id'])
+    if base['digest']!=proposal['base_sha256']:fail('MODEL_REVISION_CONFLICT','原始型号摘要不符，已阻止批准。',409)
    payload=proposal['draft'];model=candidates.CableModelVersion.model_validate(payload)
    if any(json.loads(r['payload'])['name']==model.name and json.loads(r['payload'])['version']==model.version for r in db.execute('SELECT payload FROM domain_cable_models')):fail('MODEL_VERSION_EXISTS','相同型号版本已存在，请换用新的版本标签。',409)
    cid=str(uuid4());db.execute('INSERT INTO domain_cable_models VALUES(?,?,?,?,?)',(cid,encoded(payload),fingerprint(payload),'incomplete' if model.specification else 'draft',stamp()))
@@ -325,6 +338,44 @@ class Documents:
    db.execute("UPDATE document_proposals SET status='approved',new_model=?,approval=? WHERE id=? AND status='proposed'",(cid,encoded(approval),pid))
    result={**proposal,'status':'approved','new_model_id':cid,'approval':approval};self.remember(db,pid+'/approve',body,result)
   return result
+
+ def batch_propose(self,did,body):
+  with self.store.db(True) as db:
+   prior=self.replay(db,did+'/batch-proposal',body)
+   if prior:return prior
+   proposals=[self.propose(did,item,_db=db) for item in body.items]
+   identities=[(p['draft']['name'],p['draft']['version']) for p in proposals]
+   if len(set(identities))!=len(identities):fail('BATCH_MODEL_DUPLICATE','同一批次不能重复生成相同型号版本。')
+   bid=str(uuid4());payload={'id':bid,'document_id':did,'proposals':[{'id':p['id'],'sha256':p['sha256']} for p in proposals]}
+   digest=fingerprint(payload)
+   db.execute('INSERT INTO document_batches VALUES(?,?,?,?,?,?)',(bid,did,encoded(payload),digest,'proposed',None))
+   result={**payload,'sha256':digest,'status':'proposed','proposals':proposals,'approval':None}
+   self.remember(db,did+'/batch-proposal',body,result)
+   return result
+
+ def batch(self,did,bid):
+  self.original(did)
+  with self.store.db() as db:row=db.execute('SELECT * FROM document_batches WHERE id=? AND document=?',(bid,did)).fetchone()
+  if row is None:fail('BATCH_NOT_FOUND','批量型号提案不存在。',404)
+  payload=json.loads(row['payload'])
+  if fingerprint(payload)!=row['digest']:fail('PROPOSAL_CORRUPT','批量提案摘要不一致。',409)
+  proposals=[self.proposal(did,p['id']) for p in payload['proposals']]
+  if any(p['sha256']!=saved['sha256'] for p,saved in zip(proposals,payload['proposals'])):fail('PROPOSAL_CORRUPT','单项提案与批量摘要不一致。',409)
+  return {**payload,'sha256':row['digest'],'status':row['status'],'proposals':proposals,'approval':json.loads(row['approval']) if row['approval'] else None}
+
+ def batch_approve(self,did,bid,body):
+  batch=self.batch(did,bid)
+  with self.store.db(True) as db:
+   prior=self.replay(db,bid+'/batch-approve',body)
+   if prior:return prior
+   if body.proposal_sha256!=batch['sha256']:fail('APPROVAL_REQUIRED','请人工核对并批准当前整批摘要。',409)
+   if batch['status']!='proposed':fail('PROPOSAL_ALREADY_APPROVED','批量提案已批准，请打开已保存型号。',409)
+   proposals=[self.approve(did,p['id'],body.model_copy(update={'proposal_sha256':p['sha256']}),_db=db) for p in batch['proposals']]
+   approval={'approver':body.approver,'approved_at':stamp(),'proposal_sha256':batch['sha256'],'effect':'create_new_version_drafts','authority':'local_human_operator'}
+   db.execute("UPDATE document_batches SET status='approved',approval=? WHERE id=?",(encoded(approval),bid))
+   result={**batch,'status':'approved','proposals':proposals,'approval':approval}
+   self.remember(db,bid+'/batch-approve',body,result)
+   return result
 
 def make_router(documents):
  router=APIRouter(prefix='/api/documents',tags=['Manufacturer documents'])
@@ -362,4 +413,10 @@ def make_router(documents):
  def proposal(did:str,pid:str):return documents.proposal(did,pid)
  @router.post('/{did}/proposals/{pid}/approval',response_model=ProposalResponse,responses=errors)
  def approve(did:str,pid:str,body:ApprovalRequest):return documents.approve(did,pid,body)
+ @router.post('/{did}/batches',response_model=BatchProposalResponse,status_code=201,responses=errors)
+ def batch_propose(did:str,body:BatchProposalRequest):return documents.batch_propose(did,body)
+ @router.get('/{did}/batches/{bid}',response_model=BatchProposalResponse,responses=errors)
+ def batch(did:str,bid:str):return documents.batch(did,bid)
+ @router.post('/{did}/batches/{bid}/approval',response_model=BatchProposalResponse,responses=errors)
+ def batch_approve(did:str,bid:str,body:ApprovalRequest):return documents.batch_approve(did,bid,body)
  return router

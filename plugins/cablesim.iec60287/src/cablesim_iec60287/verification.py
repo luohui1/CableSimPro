@@ -68,14 +68,26 @@ def verify_balance(group, operating_state, ratings, *, external_coefficients=Non
         inner = r.insulation.inner_screen_rho_k_m_w/(2*pi)*log(g.over_inner_screen_m/g.conductor_m)
         ins = r.insulation.rho_k_m_w/(2*pi)*log(g.over_insulation_m/g.over_inner_screen_m)
         outer = r.insulation.outer_screen_rho_k_m_w/(2*pi)*log(g.over_outer_screen_m/g.over_insulation_m)
-        cover = r.oversheath.rho_k_m_w/(2*pi)*log(g.overall_m/g.over_sheath_m)
+        buffer=0.;wave=r.sheath.corrugation
+        diameter=g.over_outer_screen_m
+        if wave:
+            for layer in wave.buffer_layers:
+                buffer+=layer.rho_k_m_w/(2*pi)*log((diameter+2*layer.thickness_m)/diameter)
+                diameter+=2*layer.thickness_m
+            buffer+=wave.gap_rho_k_m_w/(2*pi)*log((diameter+wave.depth_m)/diameter)
+        diameter=g.over_sheath_m;cover=0.
+        for i,layer in enumerate(wave.outer_layers if wave else []):
+            delta=2*layer.thickness_m+(wave.depth_m if i==0 else 0.)
+            cover+=layer.rho_k_m_w/(2*pi)*log((diameter+delta)/diameter)
+            diameter+=delta
+        cover += r.oversheath.rho_k_m_w/(2*pi)*log(g.overall_m/diameter)
         if group.soil.get('contact_trefoil') and not c['duct']:
             cover *= 1.6
         d = r.installation.duct
         wall = d.rho_k_m_w/(2*pi)*log(d.outer_diameter_m/d.inner_diameter_m) if d else 0.0
         mean = (s['surface_temperature_c']+s['duct_inner_temperature_c'])/2
         gap = d.u/(1+.1*(d.v+d.y_per_k*mean)*g.overall_m*1000) if d else 0.0
-        return inner+ins+outer, .5*(inner+ins+outer), cover+wall+gap, wall, gap
+        return inner+ins+outer+buffer, .5*(inner+ins+outer)+buffer, cover+wall+gap, wall, gap
     states = operating_state['cable_states']
     for i,(c,s) in enumerate(zip(group.cables,states)):
         t1,tdiel,outside,wall,gap = paths(c,s)

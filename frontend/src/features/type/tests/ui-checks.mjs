@@ -33,9 +33,9 @@ export async function checkLayout(page) {
       const size=parseFloat(style.fontSize), large=size>=24 || size>=18.66 && Number(style.fontWeight)>=700;
       if(ratio < (large?3:4.5)-.02)contrast.push({text:node.textContent.trim().slice(0,60),ratio:Number(ratio.toFixed(2))});
     }
-    return { width:innerWidth,height:innerHeight,overflow:document.documentElement.scrollWidth>innerWidth || document.documentElement.scrollHeight>innerHeight,minimumFont,overlap,contrast };
+    return { width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth,scrollHeight:document.documentElement.scrollHeight,overflow:document.documentElement.scrollWidth>innerWidth || document.documentElement.scrollHeight>innerHeight,minimumFont,overlap,contrast };
   });
-  assert.equal(result.overflow,false,'页面越界'); assert.ok(result.minimumFont>=13,'字号小于13');
+  assert.equal(result.overflow,false,'页面越界：'+JSON.stringify(result)); assert.ok(result.minimumFont>=13,'字号小于13');
   assert.deepEqual(result.overlap,[],'交互控件重叠'); assert.deepEqual(result.contrast,[],'文字对比度不足');
   return result;
 }

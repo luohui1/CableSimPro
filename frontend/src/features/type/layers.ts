@@ -16,11 +16,12 @@ export function layerRows(document: DomainDocument, cable: CableType): LayerRow[
       : target.role === 'conductor' ? pointer('cable_types', cable.id, 'cores', target.coreId, 'conductor')
         : pointer('cable_types', cable.id, 'cores', target.coreId, 'layers', target.role);
     const field = target.role === 'conductor' ? 'diameter' : 'thickness';
+    const sector = target.scope === 'core' && cable.cores.find(core => core.id === target.coreId)?.conductor.form === 'sectoral';
     const materialPath = root + '/material';
     const material = document.materials.find(material => material.id === at(document, materialPath));
     if (!material) throw new ApiError(422, name + '缺少材料引用');
     const label = target.scope === 'core' && cable.cores.length > 1 ? document.cable_types.find(type => type.id === cable.id)?.cores.findIndex(core => core.id === target.coreId) : undefined;
     return { id: targetId(target), label: label === undefined ? name : `芯 ${label + 1} · ${name}`, target, number: index + 1, path: root + '/' + field, materialPath, material,
-      spec: { path: root + '/' + field, label: name + (field === 'diameter' ? '直径' : '厚度'), unit: 'mm', scale: 1000, precision: 3, required: true, min: 0, minExclusive: true }, innerM: ring?.innerM ?? null, outerM: ring?.outerM ?? null };
+      spec: { path: root + '/' + field, label: name + (field === 'diameter' ? sector ? '扇形高度' : '直径' : '厚度'), unit: 'mm', scale: sector && field === 'diameter' ? 500 : 1000, precision: 3, required: true, min: 0, minExclusive: true }, innerM: ring?.innerM ?? null, outerM: sector ? null : ring?.outerM ?? null };
   });
 }

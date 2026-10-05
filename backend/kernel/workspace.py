@@ -52,6 +52,9 @@ class Lock(Revision):
 class WorkspaceStore:
     def __init__(self, path):
         self.path = Path(path)
+        # Router/service construction may open the library before lifespan starts.
+        from .database_ops import check_existing
+        check_existing(self.path)
 
     @contextmanager
     def db(self, write=False):
@@ -62,6 +65,8 @@ class WorkspaceStore:
             yield db
 
     def initialize(self):
+        from .database_ops import prepare_startup, SCHEMA_VERSION
+        prepare_startup(self.path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.db() as db:
             db.execute('PRAGMA journal_mode=WAL')
@@ -78,6 +83,7 @@ class WorkspaceStore:
             # Only current states are knowable at upgrade time. Never invent old revisions.
             for row in db.execute('SELECT id,revision,state FROM workspaces').fetchall():
                 self.archive(db, row['id'], row['revision'], json.loads(row['state']))
+            db.execute(f'PRAGMA user_version={SCHEMA_VERSION}')
 
     @staticmethod
     def archive(db, wid, revision, state):

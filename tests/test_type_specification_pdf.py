@@ -11,6 +11,24 @@ from backend.main import create_app
 from backend.kernel.scenarios import system_models
 from backend.kernel.specification_pdf import render_pdf
 from backend.kernel.type_versions import check_results
+from backend.kernel.type_specification import combined_core_rows, structure_rows
+
+
+def test_customer_core_groups_preserve_different_unrounded_values_and_sources():
+    rows=[{'title':f'芯 {i} · 交流电阻','value':.123456,'unit':'Ω/m','standard':'Example','clause':'1',
+           'target':{'scope':'core','core_id':f'core/{i}','role':'conductor'},'source_digest':'a'*64,
+           'formula_inputs':{'temperature_k':363.15}} for i in (1,2,3)]
+    original=deepcopy(rows);ids=['core/1','core/2','core/3']
+    combined=combined_core_rows(rows,ids)
+    assert len(combined)==1 and combined[0]['title']=='各芯 · 交流电阻' and rows==original
+    rows[1]['value']+=1e-10
+    assert len(combined_core_rows(rows,ids))==3
+    rows[1]['value']=original[1]['value'];rows[1]['source_digest']='b'*64
+    assert len(combined_core_rows(rows,ids))==3
+    model=next(m for m in system_models() if m['id']=='system.specification-yjv22-300')['payload']
+    assert len(structure_rows(model['cable_type'],model['materials'],True))==9
+    model['cable_type']['cores'][1]['layers'][1]['thickness']+=.0001
+    assert len(structure_rows(model['cable_type'],model['materials'],True))==19
 
 
 def test_export_pdf_contains_version_and_saved_clause_sources(tmp_path):
@@ -39,7 +57,7 @@ def test_export_pdf_contains_version_and_saved_clause_sources(tmp_path):
         })
         assert run.status_code == 200, run.text
         spec = client.get(f'/api/types/{wid}/specification').json()
-        response = client.get(f'/api/types/{wid}/specification/file', params={'expected_revision':revision, 'specification_digest':spec['digest']})
+        response = client.get(f'/api/types/{wid}/specification/file', params={'expected_revision':revision, 'specification_digest':spec['digest'], 'audience':'internal'})
         assert response.status_code == 200, response.text
         assert response.content.startswith(b'%PDF-')
         assert response.headers['x-artifact-sha256'] == sha256(response.content).hexdigest()
@@ -102,10 +120,11 @@ def test_long_rating_tables_repeat_headers_without_splitting_rows(tmp_path):
                       'actual_spacing_m':.04,'bonding':'both_ends','source':'排版压力数据，不是工程计算结果'}}
         for index in range(48)]}
     with fitz.open(stream=render_pdf(spec), filetype='pdf') as pdf:
-        pages = [page.get_text() for page in pdf if '123.456' in page.get_text()]
+        pages = [page.get_text() for page in pdf if any(word[4]=='123' for word in page.get_text('words'))]
         assert len(pages) >= 2
         assert all(all(header in text for header in ('工况','排列','允许电流','状态与说明')) for text in pages)
-        assert ''.join(page.get_text() for page in pdf).count('123.456') == 48
+        assert sum(word[4]=='123' for page in pdf for word in page.get_text('words')) == 48
+        assert all(row['value_a']==123.456 for row in spec['payload']['results']['rating']['rows'])
         for page in pdf:
             assert all(25 <= word[0] < word[2] <= page.rect.width-25 and 10 <= word[1] < word[3] < page.rect.height-10 for word in page.get_text('words'))
 
@@ -115,3 +134,10 @@ def test_empty_saved_artifacts_block_publication():
         checks = []
         check_results({channel:{'run':{'freshness':'current','status':'succeeded'},'artifact':{'rows':[]},'rows':[]}}, checks)
         assert any(item['id'] == channel+'/empty' and item['blocking'] for item in checks)
+
+
+def test_selected_rating_scope_refusal_blocks_publication():
+    checks = []
+    check_results({'rating':{'run':{'freshness':'current','status':'partial'},
+        'rows':[{'case_id':'air','name':'空气工况','value_a':None,'status':'超出范围','reason':'当前方法只覆盖地下稳态。'}]}}, checks)
+    assert any(item['id'] == 'rating/air' and item['blocking'] for item in checks)

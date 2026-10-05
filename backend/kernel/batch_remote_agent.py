@@ -114,7 +114,7 @@ def submit(root,request_path):
         accounting_cpus=max(workers,-(-resources['slurm_memory_mb']//6500))
         if len(groups)*task_wall*accounting_cpus>2000*3600:raise ValueError('SINGLE_BUDGET_EXCEEDED')
         profile=request['profile'];python=profile['python']
-        for key in ('python','getdp','elmer'):
+        for key in ('python','getdp','elmer',*(['control_python'] if 'control_python' in profile else [])):
             if not re.fullmatch(r'/[A-Za-z0-9_./-]+',profile[key]) or '..' in Path(profile[key]).parts:
                 raise ValueError('Invalid administrator executable path')
         modules=profile.get('modules',[])
@@ -131,7 +131,7 @@ def submit(root,request_path):
         script='#!/bin/bash\nset -euo pipefail\n'
         if modules:script+='module load '+' '.join(shlex.quote(m) for m in modules)+'\n'
         script+='export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 PYTHONDONTWRITEBYTECODE=1\n'
-        arguments=[python,'-I',str(folder/'agent.py'),'run-group',str(root),token]
+        arguments=[profile.get('control_python',python),'-I',str(folder/'agent.py'),'run-group',str(root),token]
         script+='exec '+' '.join(shlex.quote(a) for a in arguments)+'\n'
         (folder/'worker.sh').write_text(script,encoding='utf-8')
         saved={'token':token,'state':'submitting','created':now(),'request':request,'job_id':None,'job_name':name,

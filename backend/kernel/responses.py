@@ -3,10 +3,28 @@ from typing import Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, JsonValue
 from .contracts import Method, StudyDefinition
+from cablesim_sdk.ampacity import AmpacityBasis
 
 
 class PublicResponse(BaseModel):
     model_config = ConfigDict(extra='allow')
+
+
+class VersionChange(PublicResponse):
+    kind: Literal['method', 'model'] = Field(description='Changed installed method or referenced model family; no unit.')
+    code: str = Field(description='METHOD_VERSION_CHANGED, METHOD_UNAVAILABLE or MODEL_VERSION_CHANGED.')
+    id: str = Field(description='Stable plugin ID or model family ID, never a display-name match.')
+    from_version: str = Field(description='Version frozen in the source run.')
+    to_version: str | None = Field(description='Installed plugin or latest published model version; null if unavailable.')
+    from_digest: str = Field(description='Frozen release/content SHA256.')
+    to_digest: str | None = Field(description='Current release/content SHA256; detects changes even at the same version.')
+    message: str = Field(description='Display-ready version difference.')
+
+
+class VersionStatus(PublicResponse):
+    status: Literal['current', 'stale', 'empty'] = Field(description='Version comparison only; execution status and input freshness are separate.')
+    reasons: list[VersionChange] = Field(default_factory=list)
+    display_name: str = Field(description='One combined status message for the result or document cover.')
 
 
 class StudyResponse(PublicResponse):
@@ -15,6 +33,10 @@ class StudyResponse(PublicResponse):
     revision: int = Field(ge=1, description='Study configuration revision.')
     definition: StudyDefinition
     created: str = Field(description='UTC configuration timestamp.')
+    can_undo: bool = Field(default=False, description='Earlier study configuration exists; separate from workspace structure history.')
+    can_redo: bool = Field(default=False, description='Later configuration on the active history branch exists.')
+    latest_run_id: UUID | None = Field(default=None, description='Most recently accepted run; null before first execution.')
+    version_status: VersionStatus | None = Field(default=None, description='Version status of latest_run_id, computed at read time.')
 
 
 class TaskOption(PublicResponse):
@@ -40,10 +62,22 @@ class PreflightError(PreflightIssue):
     issues: list[PreflightIssue] = Field(default_factory=list, description='Individual invalid fields, each independently navigable.')
 
 
+class QuantityResult(PublicResponse):
+    key: str = Field(description='Stable physical quantity key declared by the plugin.')
+    type: str = Field(description='Plugin result type; quantity for scalar engineering values.')
+    entity: str = Field(description='Domain object ID to which this quantity belongs; no unit.')
+    unit: str = Field(description='Physical unit of value; ampacity uses A (balanced RMS unless its basis states otherwise).')
+    status: Literal['available', 'unavailable'] = Field(description='Whether the producer supplied a valid value; unavailable is never zero.')
+    value: int | float | None = Field(default=None, description='Numeric result in the declared unit; absent when unavailable.')
+    case: str | None = Field(default=None, description='Result condition identity; rating versus rating-simultaneous must not be merged.')
+    reason: dict[str, JsonValue] | None = Field(default=None, description='Producer error code, explanation and field location for an unavailable quantity.')
+    rating_basis: AmpacityBasis | None = Field(default=None, description='Producer-declared ampacity meaning and fixed loads. Absent in historical outputs; do not infer a common rating from an unlabelled value.')
+
+
 class CheckCase(PublicResponse):
     case_id: str
     status: str
-    results: list[dict[str, JsonValue]]
+    results: list[QuantityResult]
     artifacts: dict[str, JsonValue]
     error: PreflightError | None = None
     evidence: dict[str, JsonValue] = Field(default_factory=dict)
@@ -65,6 +99,32 @@ class PreflightResponse(PublicResponse):
     input_digest: str = Field(pattern=r'^[0-9a-f]{64}$')
 
 
+class RemoteExecution(PublicResponse):
+    backend: Literal['slurm']
+    state: str = Field(description='Cached scheduler phase: preparing/submitted/queued/running/collecting, then the saved run terminal state. Not inferred from host running status.')
+    job_id: str | None = None
+    plan_id: str | None = None
+    slurm_states: list[str] = Field(default_factory=list)
+    actual_cpu_seconds: float | None = Field(default=None,ge=0)
+    updated: str | None = None
+
+
+class RunCase(CheckCase):
+    error: dict[str, JsonValue] | None = None
+
+
+class ResultSelector(PublicResponse):
+    key: str = Field(description='Physical quantity key to select, such as ampacity.')
+    entity: str = Field(description='Exact domain object ID to select; no unit.')
+    unit: str = Field(description='Exact quantity unit to match, such as A.')
+    case: str | None = Field(default=None, description='Exact producer result condition; omitted only when the producer has no condition identifier.')
+
+
+class RunOutput(PublicResponse):
+    cases: list[RunCase]
+    default_result: ResultSelector | None = Field(default=None, description='Default sweep quantity identity; match all four keys, never choose the first ampacity. Missing results remain gaps.')
+
+
 class RunResponse(PublicResponse):
     id: UUID
     workspace: UUID
@@ -75,18 +135,20 @@ class RunResponse(PublicResponse):
     input_digest: str = Field(description='SHA256 of immutable accepted snapshot.')
     snapshot: dict[str, JsonValue] = Field(description='Saved domain/SI input, selected module, exact method, parameters and source bindings.')
     status: Literal['accepted', 'running', 'validating', 'succeeded', 'partial', 'failed', 'interrupted']
-    output: dict[str, JsonValue] | None = Field(description='Saved typed quantities and verified artifacts; absent while running.')
+    output: RunOutput | None = Field(description='Saved typed quantities and verified artifacts; absent while running.')
     output_digest: str | None
     error: dict[str, JsonValue] | None
     created: str
     finished: str | None
     integrity: Literal['verified', 'corrupt']
     freshness: Literal['current', 'historical', 'unknown']
+    version_status: VersionStatus | None = Field(default=None, description='Dynamic method/model version differences, outside the immutable result digest.')
     artifact_status: dict[str, JsonValue] = Field(default_factory=dict, description='Presentation contract verification by case and artifact type.')
     owner_epoch: str = Field(description='Host owner epoch at admission; not an authentication token.')
     execution_nonce: str = Field(description='Internal attempt identity; does not authorize execution.')
     method_availability: dict[str, JsonValue] | None = Field(default=None, description='Availability of the exact saved method release.')
     convergence: dict[str, JsonValue] | None = Field(default=None, description='Saved mesh/domain convergence gate; unconverged fields cannot enter a calculation book.')
+    execution: RemoteExecution | None = None
 
 
 class RunPage(PublicResponse):

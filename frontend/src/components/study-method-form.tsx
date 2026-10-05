@@ -178,7 +178,7 @@ export function StudyMethodForm({
         <DataTable
           label="保存的方法参数"
           columns={[
-            { id: "name", label: "参数", render: (row) => row.id },
+            { id: "name", label: "参数", render: (row) => displayName(row.id) },
             {
               id: "value",
               label: "保存值",
@@ -195,7 +195,7 @@ export function StudyMethodForm({
               ),
             },
           ]}
-          rowLabel={(row) => row.id}
+          rowLabel={(row) => displayName(row.id)}
           showGroups={false}
         />
       )}

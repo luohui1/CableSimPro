@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { exactContract, inputContracts } from "@/api/input-contracts";
-import { optionalRecord, text, numeric, message } from "@/api/client";
+import { api, responseData, optionalRecord, text, numeric, message } from "@/api/client";
 import { moduleConfiguration } from "@/lib/study-config";
 import { useStudy } from "./study-provider";
 import { DataTable } from "./data-table";
 import { EngineeringValue } from "./engineering-value";
-import { EmptyState, ErrorState } from "./states";
+import { EmptyState, ErrorState, LoadingState } from "./states";
 import { Toolbar } from "./toolbar";
 import { Button } from "./ui/button";
 import { Select } from "./ui/select";
@@ -15,6 +15,7 @@ import { StudyMethodForm } from "./study-method-form";
 import { downloadJson } from "@/lib/download";
 import type { CatalogRow } from "@/api/catalogs";
 import type { StudyDefinition } from "@/api/research";
+import { displayName } from "@/lib/display-names";
 export function StudySimulation({
   run,
   tab,
@@ -41,6 +42,11 @@ export function StudySimulation({
     [error, setError] = useState(""),
     [method, setMethod] = useState(""),
     [filename, setFilename] = useState("");
+  const problemContract = useQuery({
+    queryKey: ["simulation-problem-contract"],
+    queryFn: ({ signal }) => responseData(api.GET("/api/simulation/problem-contract", { signal })),
+    enabled: open,
+  });
   const form = optionalRecord(context.moduleInputs.simulation?.value),
     raw = text(form.raw),
     reference = text(form.reference);
@@ -57,12 +63,16 @@ export function StudySimulation({
   function adopt() {
     try {
       if (readOnly) throw Error("固定运行输入只读，请返回当前研究。");
+      if (!problemContract.data || problemContract.isError) throw Error("请先读取宿主输入格式，再采用算例。");
       if (new TextEncoder().encode(raw).length > 120 * 1024)
         throw Error("仿真输入超过 120 KB，请缩小定义。");
       const parsed = JSON.parse(raw),
         input = optionalRecord(parsed.method_input || parsed.problem || parsed);
-      if (input.schema_version !== "cablesim.simulation-problem/1")
+      if (input.schema_version !== problemContract.data.schema_version)
         throw Error("文件不是已声明的仿真问题格式；请使用对应的算例输入。");
+      const required = problemContract.data.schema.required;
+      const missing = Array.isArray(required) ? required.filter(field => typeof field === "string" && !(field in input)) : [];
+      if (missing.length) throw Error("算例缺少输入格式要求的字段：" + missing.map(field => displayName(String(field))).join("、"));
       const chosen = methods.find((value) => key(value.method) === method);
       if (!chosen) throw Error("请选择声明支持该问题的准确方法版本。");
       exactContract(query.data!, chosen.method);
@@ -294,13 +304,24 @@ export function StudySimulation({
         actions={
           <Button
             variant="primary"
-            disabled={!raw || !reference || !method || !!query.error}
+            disabled={!raw || !reference || !method || query.isPending || !!query.error || !problemContract.data || problemContract.isFetching || problemContract.isError}
             onClick={adopt}
           >
             采用输入草稿
           </Button>
         }
       >
+        {problemContract.isPending ? <LoadingState title="正在读取宿主输入格式" /> : problemContract.error ?
+          <ErrorState description={message(problemContract.error)} action={<Button onClick={() => problemContract.refetch()}>重新读取输入格式</Button>} /> : problemContract.data &&
+          <section className="input-section" aria-label="宿主仿真输入格式">
+            <div className="report-toolbar"><span>输入格式已读取 · 长度 m / 温度 K / 电流 A</span><Button size="compact" onClick={() => downloadJson(problemContract.data, "simulation-problem-contract.json")}>下载输入格式</Button></div>
+            <details><summary>查看字段单位与格式依据</summary>
+              <dl className="report-sources">{Object.entries(problemContract.data.units).map(([field, unit]) => <div key={field}><dt>{field}</dt><dd>{unit}</dd></div>)}</dl>
+              <p className="digest">格式摘要：{problemContract.data.schema_sha256}</p>
+              <p className="muted">{problemContract.data.source} · {problemContract.data.source_sha256}</p>
+            </details>
+          </section>}
+        {!!query.error && <ErrorState description={message(query.error)} action={<Button onClick={() => query.refetch()}>重新读取方法</Button>} />}
         <label className="text-field">
           算例 JSON
           <input
@@ -329,7 +350,7 @@ export function StudySimulation({
           onChange={setMethod}
           options={methods.map((value) => ({
             value: key(value.method),
-            label: value.method.plugin_id + " · " + value.method.version,
+            label: displayName(value.method.plugin_id) + " · " + displayName(value.method.capability) + " · " + value.method.version,
           }))}
         />
         <label className="text-field">

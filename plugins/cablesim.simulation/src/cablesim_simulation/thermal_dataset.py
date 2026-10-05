@@ -31,7 +31,8 @@ def calculate(value, parameters):
     started=time.perf_counter()
     for scale in verification.mesh_scales:
         cfg=controls.model_copy(update={'mesh_size_m':controls.mesh_size_m*scale,
-            'far_mesh_size_m':controls.far_mesh_size_m*scale})
+            'far_mesh_size_m':controls.far_mesh_size_m*scale,
+            'near_soil_mesh_size_m':controls.near_soil_mesh_size_m*scale if controls.near_soil_mesh_size_m is not None else None})
         system=ThermalSystem(model,cfg)
         operating=system.state([c.current_a for c in model.cables])
         operating.pop('temperature_k')
@@ -53,7 +54,7 @@ def calculate(value, parameters):
         'valid':converged,'status':'succeeded' if converged else 'nonconverged',
         'reason':None if converged else {'code':'MESH_NOT_CONVERGED',
             'message':'末两档网格差异超过声明容差；样本已保留，请细化网格后另行运行。'},
-        'solver':{'name':'scikit-fem P1 thermal','version':version('scikit-fem'),
+        'solver':{'name':f'scikit-fem P{controls.element_order} thermal','version':version('scikit-fem'),
             'license_source':'hpc-installation' if os.environ.get('SLURM_JOB_ID') else 'local-installation',
             'license_type':'open-source','slurm_job_id':os.environ.get('SLURM_JOB_ID'),
             'packages':{p:version(p) for p in ('gmsh','numpy','scipy','scikit-fem')}},

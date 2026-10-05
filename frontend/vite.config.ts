@@ -2,13 +2,29 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const tokensPath = fileURLToPath(new URL('../design/tokens.css', import.meta.url));
 const proxy = { '/api': { target: process.env.BACKEND_URL || 'http://127.0.0.1:8040', changeOrigin: true } };
 
 export default defineConfig({
   plugins: [
+    {
+      name: 'cablesim-production-cad-assets',
+      apply: 'build',
+      async buildStart() {
+        const checker = fileURLToPath(new URL('./src/features/cad/prepare-runtime.mjs', import.meta.url));
+        const cache = fileURLToPath(new URL('./src/features/cad/node_modules/.cache/cablesim-occt/', import.meta.url));
+        try {
+          const { validateRuntime } = await import(pathToFileURL(checker).href);
+          await validateRuntime(cache);
+        } catch (error) {
+          this.error('OCCT 发布资产缺失或校验失败。请在仓库根目录运行：\n'
+            + 'python frontend/src/features/cad/native/prepare.py --jobs 4\n'
+            + '完成后重新运行 python scripts/run_demo.py。\n' + String(error));
+        }
+      },
+    },
     {
       name: 'cablesim-design-tokens',
       enforce: 'pre',

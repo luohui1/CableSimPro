@@ -5,6 +5,11 @@
     "size_bytes": 81
   },
   {
+    "path": "cablesim_sdk/ampacity.py",
+    "sha256": "52febe9c3d4f96b6aca728f240a0d13ef4f2476f6f678a2f2c29965a345f2149",
+    "size_bytes": 1516
+  },
+  {
     "path": "cablesim_sdk/base.py",
     "sha256": "65ad67798ef624e21b2c17ba5735b74d0f796048e24edda5be6baed0b92ebbf4",
     "size_bytes": 242
@@ -20,14 +25,19 @@
     "size_bytes": 5033
   },
   {
+    "path": "cablesim_sdk/cross_sections.py",
+    "sha256": "c9a97fe6ba7040a8d4ea05794862fa458ffd88c5a8d2d3836b610797d15201d0",
+    "size_bytes": 3551
+  },
+  {
     "path": "cablesim_sdk/discrete_fields.py",
     "sha256": "0446303c9a24dfa6b11d37ad659ea570c67335c49f7aa1310d1b5faa96d95d1e",
     "size_bytes": 5960
   },
   {
     "path": "cablesim_sdk/domain.py",
-    "sha256": "da05192cb20b38c5af17ca0ed4af88e7caabc76ef1f313d02588eec8f9038114",
-    "size_bytes": 24563
+    "sha256": "fd72aeb0156b049588847d25161d6d25bff22ad0fc0ba572e9c38b5cc7fc89f2",
+    "size_bytes": 27548
   },
   {
     "path": "cablesim_sdk/electrothermal.py",
@@ -38,6 +48,16 @@
     "path": "cablesim_sdk/environment.py",
     "sha256": "299ceb35de56925b8604b5437ae17ecaeb476c322e23537ada0c82260ac5532f",
     "size_bytes": 924
+  },
+  {
+    "path": "cablesim_sdk/iec_fem.py",
+    "sha256": "c4f463ae0830bb487acca2a111c6861c09cf3be89003b6b4d3eb7a2b1374b983",
+    "size_bytes": 5541
+  },
+  {
+    "path": "cablesim_sdk/iec_thermal.py",
+    "sha256": "1eceac85f09ace8bdd4055fb1371cd994533f1e5d17462081a8096036b0a6249",
+    "size_bytes": 1320
   },
   {
     "path": "cablesim_sdk/reproduction.py",
@@ -58,5 +78,70 @@
     "path": "cablesim_sdk/validation.py",
     "sha256": "106aaed828610dbaa5cea6ba72cb8ba8da0f1befa0be04678501414d2ab7cd11",
     "size_bytes": 906
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/__init__.py",
+    "sha256": "84390f2e1363f74a79fc27d7e7f4630c0de8f47176578c65e44f1d82ca2bf2bf",
+    "size_bytes": 277
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/domain.py",
+    "sha256": "69f331f57296b003ac577c0e8eef6ecdedba9d5d16aa8785d35681e679c14961",
+    "size_bytes": 6510
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/double_flat.py",
+    "sha256": "a50dc8553911a13fb26fbcca489ebb3c6a56e32aad255f15431331f44b57561f",
+    "size_bytes": 6804
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/electrical.py",
+    "sha256": "f4fbd642ac7e61b8f926a54c57a659b840b17b4f0ababc62650a61390ce078b8",
+    "size_bytes": 3158
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/group.py",
+    "sha256": "9b0f92ed22bd70d4c15ab22dd8562ed1879363b1a8aa4464ca1a17e6013702da",
+    "size_bytes": 27649
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/group_inputs.py",
+    "sha256": "91d88e0daf1f13264564e7853d711e1cf92a82d529db564cb6056547b2c3058e",
+    "size_bytes": 22592
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/inputs.py",
+    "sha256": "313a8ec8ae5ac9c61c75ccab4b9f33c396ab2003abc7ca7cbb5a72bea41a526d",
+    "size_bytes": 7595
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/loss_table.py",
+    "sha256": "5ddc7998802af6c49a76b3ac92785db9cd6951730ecb30c028ea9873b0262c9e",
+    "size_bytes": 7462
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/method.py",
+    "sha256": "3840ca460708c7e7f1c4bac8f0d0208261af0db3adf83249b3365e0645e7106f",
+    "size_bytes": 13289
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/rating_basis.py",
+    "sha256": "078c991346e070f398d2cacdc5689004f0bffd18bf77e938b19d467d8141898a",
+    "size_bytes": 1056
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/soil.py",
+    "sha256": "e73beab2f800b3bc17a25852ea494bf84477000a26fa6be28e937906b780d263",
+    "size_bytes": 9315
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/three_core.py",
+    "sha256": "f2352eda305d243608fe9d701382e87115b73ca8b23fb0f106beb567f4e3073f",
+    "size_bytes": 27296
+  },
+  {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/verification.py",
+    "sha256": "a80d003395dc1c4c78bc0d87b409ae9e3cb2ec58bc5a3c90b6c02732dc622dfa",
+    "size_bytes": 7743
   }
 ]

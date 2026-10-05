@@ -1,0 +1,18 @@
+{
+  "emscripten": {
+    "url": "https://storage.googleapis.com/webassembly/emscripten-releases-builds/win/b363a836e75a245c548b7a6a021822d8c9e4c6df/wasm-binaries.zip",
+    "sha256": "d76003fad2146ad1f2289e8b251fbc359406ced0857f141a41f15149c2138302",
+    "strip_components": 1,
+    "prefix": "upstream"
+  },
+  "cmake": {
+    "url": "https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-windows-x86_64.zip",
+    "sha256": "d163cd3ab4959b0a53fa8988f2ddbd2e6c501658201e6a154386bad9dbe4f836",
+    "strip_components": 1
+  },
+  "ninja": {
+    "url": "https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-win.zip",
+    "sha256": "f550fec705b6d6ff58f2db3c374c2277a37691678d6aba463adcbb129108467a",
+    "strip_components": 0
+  }
+}

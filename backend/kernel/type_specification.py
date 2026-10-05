@@ -19,7 +19,9 @@ CHANNELS = {
     'geometry': 'x-cablesim.cad-model', 'electrical': 'x-cablesim.type-electrical',
     'short_circuit': 'x-cablesim.type-short-circuit', 'standards': 'x-cablesim.standard-check',
 }
-LAYOUT_NAMES = {'trefoil': '直埋 · 品字', 'flat': '直埋 · 水平', 'ducts': '排管 · 品字', 'air': '空气'}
+LAYOUT_NAMES = {'trefoil': '直埋 · 品字', 'flat': '直埋 · 水平', 'ducts': '排管 · 品字', 'air': '空气',
+                'three_core_buried_single':'三芯直埋 · 单回', 'three_core_buried_horizontal':'三芯直埋 · 三回水平',
+                'three_core_ducts_horizontal':'三芯排管 · 三回水平'}
 LAYER_NAMES = {'conductor':'导体', 'conductor_screen':'导体屏蔽', 'insulation':'绝缘',
                'insulation_screen':'绝缘屏蔽', 'metallic_screen':'金属屏蔽', 'metallic_sheath':'金属护套',
                'bedding':'内衬层', 'separator':'隔离层', 'filler':'填充层', 'binder':'绑扎层',
@@ -95,13 +97,17 @@ def material_name(materials, identity, conductor=None):
     return label
 
 
-def structure_rows(cable, materials):
+def structure_rows(cable, materials, combine_identical=False):
     rows = []
-    for index, core in enumerate(cable['cores'], 1):
+    cores = cable['cores']
+    shared = combine_identical and len(cores)>1 and all(
+        core['conductor']==cores[0]['conductor'] and core['layers']==cores[0]['layers'] for core in cores[1:])
+    for index, core in enumerate(cores[:1] if shared else cores, 1):
         conductor = core['conductor']
-        rows.append([f'芯 {index}', '导体', material_name(materials, conductor['material'], conductor),
+        label = f'芯 1–{len(cores)}' if shared else f'芯 {index}'
+        rows.append([label, '导体', material_name(materials, conductor['material'], conductor),
                      '直径 ' + number(conductor.get('diameter'), 1, 1000), number(conductor.get('nominal_area'), 1, 1e6, trim=True)])
-        rows.extend([f'芯 {index}', LAYER_NAMES.get(layer['role'], '结构层'), material_name(materials, layer['material']),
+        rows.extend([label, LAYER_NAMES.get(layer['role'], '结构层'), material_name(materials, layer['material']),
                      '厚度 ' + number(layer['thickness'], 1, 1000), '—'] for layer in core['layers'])
     rows.extend(['共同层', LAYER_NAMES.get(layer['role'], '结构层'), material_name(materials, layer['material']),
                  '厚度 ' + number(layer['thickness'], 1, 1000), '—'] for layer in cable['common_layers'])
@@ -116,8 +122,8 @@ def quantity(value, unit, short_circuit=False):
     units = {'Ω/m':(1000,'Ω/km',5), 'F/m':(1e9,'μF/km',4), 'H/m':(1e6,'mH/km',4),
              'W/m':(1000,'W/km',2), 'A/m':(1000,'A/km',3), 'm':(1000,'mm',1),
              'm²':(1e6,'mm²',1), 'kg/km':(1,'kg/km',0), 'V':(.001,'kV',3), '1':(1,'—',3)}
-    scale, label, digits = (.001,'kA',3) if short_circuit and unit == 'A' else units.get(unit, (1,unit or '',3))
-    return number(value, digits, scale, trim=label not in ('mm','kg/km')), label
+    scale, label, digits = (.001,'kA',1) if short_circuit and unit == 'A' else units.get(unit, (1,unit or '',3))
+    return number(value, digits, scale, trim=label not in ('mm','kg/km','kA')), label
 
 
 def human_note(value):
@@ -145,7 +151,7 @@ def parameter_table(rows, empty, short_circuit=False):
 def geometry_tables(payload, audience='internal'):
     cable = payload['document']['cable_types'][0]
     geometry = payload['results'].get('geometry', {}).get('artifact', {})
-    rows = structure_rows(cable, payload['document']['materials'])
+    rows = structure_rows(cable, payload['document']['materials'], audience=='customer')
     single = len(cable['cores']) == 1
     body = table(['结构层', '材料', '尺寸 / mm', '截面 / mm²'] if single else ['对象', '结构层', '材料', '尺寸 / mm', '截面 / mm²'],
                  [row[1:] for row in rows] if single else rows,
@@ -182,24 +188,32 @@ def check_tables(standards, checks):
 
 def rating_tables(item, empty, audience='internal'):
     rows = item.get('rows', [])
-    body = table(
+    body = table(['敷设工况','允许电流 / A','负荷口径'],
+        [[row['name'],number(row.get('value_a'),0),row.get('condition',{}).get('rating_basis_name') or '见保存工况'] for row in rows],
+        empty,[2,1.3,3.7]) if audience=='customer' else table(
         ['工况', '排列', '允许电流 / A', '状态与说明'],
         [[row['name'], LAYOUT_NAMES.get(row.get('condition', {}).get('layout'), '排列未提供'),
-          number(row.get('value_a'), 3, trim=True), '；'.join(filter(None, [row['status'], human_note(row.get('reason'))]))]
+          number(row.get('value_a'), 0), '；'.join(filter(None, [row['status'], human_note(row.get('reason'))]))]
          for row in rows], empty, [1.8,1.5,1.4,3.3],
     )
     if rows:
         bonding = {'both_ends':'两端接地', 'single_point':'单点接地', 'unspecified':'未提供'}
         conditions = []
+        sources = {}
         for row in rows:
             condition = row.get('condition', {})
             detail = '；'.join([f"环境温度 {number(condition.get('ambient_temperature_c'), 1)} °C",
                 f"中心埋深 {number(condition.get('depth_m'), 3, trim=True)} m",
                 f"土壤热阻率 {number(condition.get('soil_rho_k_m_w'), 3, trim=True)} K·m/W",
-                f"实际中心距 {number(condition.get('actual_spacing_m'), 3, trim=True)} m",
+                *([f"实际中心距 {number(condition['actual_spacing_m'], 3, trim=True)} m"] if condition.get('actual_spacing_m') is not None else []),
+                *([f"管内径 / 外径 {number(condition.get('duct_inner_m'),1,1000)} / {number(condition.get('duct_outer_m'),1,1000)} mm",
+                   f"管材热阻率 {number(condition.get('duct_rho_k_m_w'),3,trim=True)} K·m/W"] if condition.get('layout') in ('ducts','three_core_ducts_horizontal') else []),
                 bonding.get(condition.get('bonding'), '接地方式未提供')])
-            conditions.append([row['name'], detail, condition.get('source') or '来源待提供'])
-        body += '<h3>对应敷设与环境条件</h3>' + table(['工况','保存条件','条件来源'], conditions, widths=[1.5,4,2.5])
+            conditions.append([row['name'], detail])
+            sources.setdefault(condition.get('source') or '来源待提供',[]).append(row['name'])
+        body += '<h3>对应敷设与环境条件</h3>' + table(['工况','保存条件'], conditions, widths=[1.5,6.5])
+        body += ''.join('<p>条件来源'+('（'+text('、'.join(names))+'）' if len(sources)>1 else '')+'：'+text(source)+'</p>'
+                        for source,names in sources.items())
     parameters = item.get('parameters', {})
     if audience == 'internal' and parameters.get('source'):
         body += '<p>方法条件来源：' + text(parameters['source']) + '</p>'
@@ -217,12 +231,63 @@ def document_revisions(payload):
     return [row for row in payload.get('revisions', []) if all(key in row for key in ('version','summary','author','created'))]
 
 
-def declaration_table(rows, empty, short_circuit=False):
+def combined_core_rows(rows, core_ids):
+    """Combine only identical unrounded declarations covering every saved core."""
+    expected=set(core_ids)
+    if len(expected)<2:return rows
+    groups={}
+    keys=('value','actual','limit','comparison','unit','status','verdict','standard','clause','formula',
+          'formula_inputs','source_digest','basis','input_source')
+    for row in rows:
+        target=row.get('target',{})
+        if target.get('scope')!='core' or target.get('core_id') not in expected:continue
+        title=re.sub(r'^芯\s*\d+\s*·\s*','',row['title'])
+        key=fingerprint({'title':title,'role':target.get('role'),**{k:row.get(k) for k in keys}})
+        groups.setdefault(key,[]).append(row)
+    merged={};hidden=set()
+    for group in groups.values():
+        if len(group)==len(expected) and {row['target']['core_id'] for row in group}==expected:
+            merged[id(group[0])]={**group[0],'title':f'各芯 · '+re.sub(r'^芯\s*\d+\s*·\s*','',group[0]['title'])}
+            hidden.update(id(row) for row in group[1:])
+    return [merged.get(id(row),row) for row in rows if id(row) not in hidden]
+
+
+def declaration_table(rows, empty, short_circuit=False, core_ids=()):
+    rows=combined_core_rows(rows,core_ids)
     return table(['声明参数', '声明值', '单位', '计算依据'],
         [[row['title'], *quantity(row.get('value'), row.get('unit'), short_circuit),
           '；'.join(filter(None, [row.get('standard'), row.get('clause')]))]
          for row in rows if row.get('status') == 'available' and row.get('value') is not None],
         empty, [2.4,1.1,1,3.5])
+
+
+def calculation_conditions(rows, short_circuit=False):
+    """Show physical conditions from the same saved formula inputs as the values."""
+    def inputs(suffix):
+        return next((row.get('formula_inputs', {}) for row in rows if row['id'].endswith(':'+suffix)), {})
+    def temperature(value):
+        return number(Decimal(str(value))-Decimal('273.15'), 1)+' °C'
+    conditions = []
+    if short_circuit:
+        conductor = inputs('conductor-adiabatic')
+        if conductor.get('t_s') is not None:
+            conditions.append('短路持续时间 '+number(conductor['t_s'],3,trim=True)+' s')
+        components = [('导体',conductor), ('金属组件', next((row.get('formula_inputs', {}) for row in rows
+            if row['id'].endswith('-adiabatic') and not row['id'].endswith(':conductor-adiabatic')), {}))]
+        for label, values in components:
+            for key, name in (('theta_i_K','初始温度'), ('theta_f_K','最终温度')):
+                if values.get(key) is not None:
+                    conditions.append(label+name+' '+temperature(values[key]))
+    else:
+        dc, charging, geometric = inputs('dc'), inputs('charging'), inputs('geometric-inductance')
+        if dc.get('temperature_k') is not None:
+            conditions.append('导体工作温度 '+temperature(dc['temperature_k']))
+        for values, key, label, factor, unit, digits in (
+            (charging,'f_hz','频率',1,'Hz',1), (charging,'U_phase_V','运行相电压',.001,'kV',3),
+            (geometric,'s_m','相间中心距',1000,'mm',1)):
+            if values.get(key) is not None:
+                conditions.append(label+' '+number(values[key],digits,factor,trim=unit!='mm')+' '+unit)
+    return '<p class="spec-conditions">'+text('；'.join(conditions))+'。</p>' if conditions else ''
 
 
 def inapplicable_list(payload):
@@ -233,11 +298,26 @@ def inapplicable_list(payload):
         '<p>' + text(row['title']) + '：' + text(row.get('reason')) + '</p>' for row in rows) + '</details>'
 
 
+def standard_declaration(row, document):
+    """Show verified material/structure facts instead of internal boolean sentinels."""
+    key=row['id'].rsplit(':',1)[-1]
+    layers=document['cable_types'][0]['common_layers']
+    armour=next((index for index,layer in enumerate(layers) if layer['role']=='armour'),None)
+    if key=='armour-material' and armour is not None:
+        return material_name(document['materials'],layers[armour]['material'])
+    if key=='armour-underlayer' and armour is not None and armour>0:
+        under=layers[armour-1]
+        return ('绕包' if under.get('form')=='tape' else '挤包')+LAYER_NAMES.get(under['role'],'保护层')
+    return number(row.get('actual'),6,trim=True)
+
+
 def chapter_bodies(payload, lifecycle, audience='internal'):
     cable, results = payload['document']['cable_types'][0], payload['results']
     internal = audience == 'internal'
     standards = artifact_rows(results, 'standards')
     declared = [row for row in standards if row.get('verdict') == 'passed']
+    core_ids=[core['id'] for core in cable['cores']]
+    if not internal:declared=combined_core_rows(declared,core_ids)
     groups = {}
     for row in standards if internal else declared:
         if row.get('standard'):
@@ -252,9 +332,9 @@ def chapter_bodies(payload, lifecycle, audience='internal'):
     cover += table(['文件项目','内容'], [
         ['型号规格', payload['name']], ['额定电压 U0/U', voltage(cable)],
         ['执行标准', '；'.join(groups) or '待标准核对确认'], ['编制单位','待填写'],
-        ['编制日期',latest], ['编制人',revision.get('author') or '待填写'],
+        ['编制日期（UTC）',latest], ['编制人',revision.get('author') or '待填写'],
         ['文件版本',revision.get('version') or '编制草稿'], ['基准型号版本',payload['base_reference']['version']],
-        ['文件状态',STATUS_NAMES.get(lifecycle['status'], '待核对')]], widths=[1.5,4.5])
+        ['文件状态',STATUS_NAMES.get(lifecycle['status'], '待核对') + ('；'+lifecycle['version_status']['display_name'] if lifecycle.get('version_status', {}).get('status')=='stale' else '')]], widths=[1.5,4.5])
     cover += '<h3>编制与审核签字</h3>' + table(['职责','签字','日期'],
         [['编制','________________','________________'],['审核','________________','________________'],['批准','________________','________________']], widths=[1,2.5,2.5])
     cover += '<p class="spec-note">签字栏供人工填写；电子批准及发布状态以系统记录为准。</p>'
@@ -266,13 +346,13 @@ def chapter_bodies(payload, lifecycle, audience='internal'):
               ['导体标称截面',' / '.join(number(core['conductor']['nominal_area'],1,1e6,trim=True) for core in cable['cores'])+' mm²']], widths=[1.5,4.5])
         + table(['执行标准','相关条款'], standard_rows, missing_reason(payload,'standards'), [1.7,4.3]),
         geometry_tables(payload, audience),
-        (parameter_table if internal else declaration_table)(artifact_rows(results, 'electrical'), missing_reason(payload,'electrical')),
+        calculation_conditions(artifact_rows(results,'electrical')) + (parameter_table(artifact_rows(results,'electrical'),missing_reason(payload,'electrical')) if internal else declaration_table(artifact_rows(results,'electrical'),missing_reason(payload,'electrical'),core_ids=core_ids)),
         rating_tables(results.get('rating', {}), missing_reason(payload,'rating'), audience),
-        (parameter_table if internal else declaration_table)(artifact_rows(results, 'short_circuit'), missing_reason(payload,'short_circuit'), True),
+        calculation_conditions(artifact_rows(results,'short_circuit'), True) + (parameter_table(artifact_rows(results,'short_circuit'),missing_reason(payload,'short_circuit'),True) if internal else declaration_table(artifact_rows(results,'short_circuit'),missing_reason(payload,'short_circuit'),True,core_ids)),
         check_tables(standards, payload['checks']) + inapplicable_list(payload) if internal else
-            '<p>以下仅声明已核对满足的条款，不作为完整产品认证。</p>' + table(
+            '<p class="spec-conditions">以下仅声明已核对满足的条款，不作为完整产品认证。</p>' + table(
                 ['声明项目','声明值','单位','满足的标准条款'],
-                [[row['title'],number(row.get('actual'),6,trim=True),'—' if row.get('unit') == '1' else row.get('unit') or '—',
+                [[row['title'],standard_declaration(row,payload['document']),'—' if row.get('unit') == '1' else row.get('unit') or '—',
                   row.get('standard','')+' '+row.get('clause','')] for row in declared],
                 '尚无可声明的标准条款。', [2,1,1,4]),
         table(['文件版本', '变更摘要', '编制人', '日期（UTC）'],
@@ -357,5 +437,6 @@ def payload_from_runs(runs):
 
 
 def render_run_specification(runs):
+    from .version_status import cover_status
     payload = payload_from_runs(runs)
-    return render_specification(payload, fingerprint(payload), {'status': 'draft', 'approval': None})
+    return render_specification(payload, fingerprint(payload), {'status': 'draft', 'approval': None, 'version_status': cover_status(runs)})

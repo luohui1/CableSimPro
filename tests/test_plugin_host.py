@@ -301,6 +301,22 @@ def test_preflight_retains_plugin_evidence_and_warnings(tmp_path, status):
     assert case.warnings == cases[0]['warnings']
 
 
+@pytest.mark.parametrize('basis',[
+    {'kind':'conditional_fixed_load','display_name':'Conditional','varied_circuits':['circuit/c1'],'fixed_currents_a':{}},
+    {'kind':'single_circuit','display_name':'Single','varied_circuits':['circuit/c1'],'fixed_currents_a':{'cable/c2-A':400.}},
+    {'kind':'conditional_fixed_load','display_name':'Conditional','varied_circuits':['circuit/c1'],'fixed_currents_a':{'cable/c2-A':-1.}},
+])
+def test_invalid_ampacity_interpretation_is_rejected_without_launching_plugin(tmp_path,basis):
+    from backend.plugin_host.manifest import Capability
+    cases=json.loads(GOOD);cases[0]['results'][0]['rating_basis']=basis
+    out=tmp_path/'output';out.mkdir()
+    exec(result(repr(cases)),{'out':out,'json':json})
+    capability=Capability.model_validate(MANIFEST['capabilities'][0])
+    with pytest.raises(PluginHostError) as error:
+        Executor(verify=False)._accept(tmp_path,'acme.fault','1.0.0',capability,'unit',b'{}',out/'result.json',['a'])
+    assert error.value.code=='OUTPUT_CONTRACT_VIOLATION'
+
+
 @pytest.mark.skipif(os.name != 'nt', reason='Windows Job Object lifecycle')
 @pytest.mark.parametrize('mode', ['timeout', 'host-exit'])
 def test_worker_descendants_exit_with_their_host_or_timeout(tmp_path, mode):

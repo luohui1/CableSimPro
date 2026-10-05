@@ -1,9 +1,10 @@
 import { useEffect } from 'react';
-import { createRoute, Outlet, useNavigate, useParams, useSearch, type AnyRootRoute } from '@tanstack/react-router';
+import { createRoute, Outlet, useNavigate, useParams, useSearch, lazyRouteComponent, type AnyRootRoute } from '@tanstack/react-router';
 import { TypeNavigationContext, type TypeLocation } from './navigation';
-import { TypeListPage } from './list-page';
-import { TypeProvider } from './provider';
-import { TypeWorkspace } from './workspace';
+import { typeModules } from './module-definitions';
+const TypeListPage = lazyRouteComponent(() => import('./list-page'), 'TypeListPage');
+const TypeProvider = lazyRouteComponent(() => import('./provider'), 'TypeProvider');
+const TypeWorkspace = lazyRouteComponent(() => import('./workspace'), 'TypeWorkspace');
 
 export function typeSearch(value: Record<string, unknown>) { return { theme: value.theme === 'dark' ? 'dark' as const : 'light' as const,
   revision: Number.isInteger(Number(value.revision)) && Number(value.revision) >= 1 ? Number(value.revision) : undefined,
@@ -26,11 +27,13 @@ export function createTypeRoutes(root: AnyRootRoute) {
   const parent = createRoute({ getParentRoute: () => root, path: '/types/$wid', validateSearch: typeSearch, component: function TypeWorkspaceRoute() {
     const params = useParams({ strict: false }) as Record<string, string | undefined>;
     const search = typeSearch(useSearch({ strict: false }) as Record<string, unknown>);
-    const location = { wid: params.wid, module: params.module || 'structure', tab: params.tab || 'section', ...search };
+    const module = params.module || 'structure';
+    const location = { wid: params.wid, module, tab: params.tab || typeModules.find(item => item.id === module)?.tabs[0][0] || 'section', ...search };
     document.documentElement.dataset.theme = location.theme;
     return <Navigation location={location}><TypeProvider key={params.wid + '/' + String(search.revision) + '/' + String(search.run)} wid={params.wid!}><Outlet /></TypeProvider></Navigation>;
   } });
   const content = createRoute({ getParentRoute: () => parent, path: '$module/$tab', component: () => <TypeWorkspace /> });
+  const moduleEntry = createRoute({ getParentRoute: () => parent, path: '$module', component: () => <TypeWorkspace /> });
   const entry = createRoute({ getParentRoute: () => parent, path: '/', component: () => <TypeWorkspace /> });
-  return [list, parent.addChildren([content, entry])] as const;
+  return [list, parent.addChildren([content, moduleEntry, entry])] as const;
 }

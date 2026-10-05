@@ -8,13 +8,20 @@ from hashlib import sha256
 from collections import OrderedDict
 from array import array
 from base64 import b64encode
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
+from cablesim_sdk.cross_sections import core_profile, profile_radius, profiles_overlap
 
 PROTOCOL = 'cablesim.run/2'
-VERSION = 'CAD-CONCENTRIC-0.5.0'
-SCENE_VERSION = 'CAD-INSTALLATION-0.5.0'
+VERSION = 'CAD-CABLE-0.6.0'
+SCENE_VERSION = 'CAD-INSTALLATION-0.6.0'
 RESIDENT = False
 SHAPE_CACHE = OrderedDict()
 SCENE_CACHE = OrderedDict()
+LAYER_LABELS = {'conductor':'导体','conductor_screen':'导体屏蔽','insulation':'绝缘',
+    'insulation_screen':'绝缘屏蔽','metallic_screen':'金属屏蔽','metallic_sheath':'金属护套',
+    'bedding':'内衬层','separator':'隔离套','filler':'填充','binder':'包带','armour':'铠装','oversheath':'外护套'}
 
 
 def positive(value, name, maximum):
@@ -31,48 +38,82 @@ def prepare(document, parameters):
     if cable is None:
         raise ValueError('必须选择当前文档中的型号')
     cores = cable.get('cores', [])
-    if cable.get('construction') != 'single_core' or len(cores) != 1 or cores[0].get('layers'):
-        raise ValueError('当前仅支持单芯同心公共层结构')
-    core = cores[0]
-    if core.get('x', 0) or core.get('z', 0):
-        raise ValueError('偏心结构尚未接入')
-    conductor = core['conductor']
-    if conductor.get('form') not in (
-        'unspecified',
-        'solid_round',
-        'stranded_round',
-        'stranded_round_compacted',
-        'segmental',
-    ) or conductor.get('inner_diameter'):
-        raise ValueError('扇形与中空导体尚未接入')
-    layers = cable.get('common_layers', [])
-    if not 1 <= len(layers) <= 16 or len({l['role'] for l in layers}) != len(layers):
-        raise ValueError('公共层应为 1–16 层，角色不可重复')
-    if any(l.get('form') == 'corrugated' for l in layers):
-        raise ValueError('波纹结构尚未接入')
+    construction = cable.get('construction')
+    if construction not in ('single_core', 'three_core', 'multi_core') or not 1 <= len(cores) <= 16:
+        raise ValueError('cable_types.cores：当前 CAD 支持 1–16 个明确定位的线芯')
+    if construction == 'single_core' and len(cores) != 1 or construction == 'three_core' and len(cores) != 3:
+        raise ValueError('cable_types.construction：电缆类型与芯数不一致')
+    if len({core['id'] for core in cores}) != len(cores):
+        raise ValueError('cable_types.cores：芯标识重复')
     length = positive(parameters.get('length_m', .18), '展示长度', 1)
-    radius = positive(conductor['diameter'], '导体直径', .2) / 2
     materials = {m['id']: m for m in document.get('materials', [])}
-    if conductor.get('form') in ('stranded_round_compacted', 'segmental'):
-        area = positive(conductor.get('nominal_area'), '导体标称截面积', .1)
-        if area > math.pi*radius**2 + 1e-12:
-            raise ValueError('导体标称截面积超过设计外径包络')
-        if conductor.get('lay_factor') is not None:
-            if positive(conductor['lay_factor'], '导体绞入系数', 1e6) < 1:
-                raise ValueError('导体绞入系数不得小于 1')
-    rows = [{'role': 'conductor', 'material': conductor['material'], 'inner_radius_m': 0., 'outer_radius_m': radius,
-             'construction': conductor}]
-    for layer in layers:
+    rows, core_profiles = [], []
+
+    def add(role, material, inner, outer, spec, target, profile, inner_profile=None, holes=None):
+        suffix = (target['core_id']+'/' if target['scope'] == 'core' and len(cores) > 1 else '')+role
+        if material not in materials:
+            raise ValueError(suffix+'.material：材料引用缺失')
+        rows.append({'role':role, 'material':material, 'inner_radius_m':inner, 'outer_radius_m':outer,
+            'construction':spec, 'source_target':target, 'entity':cable['id']+'/'+suffix,
+            'label':(('芯 '+str(next(i+1 for i,core in enumerate(cores) if core['id']==target['core_id']))+' · ')
+                     if target['scope']=='core' and len(cores)>1 else '')+LAYER_LABELS[role],
+            'center_m':{'x':profile['x'], 'z':profile['z']},
+            'section_profile':{'outer':profile, 'inner':inner_profile, 'holes':holes or []},
+            'category':materials[material]['category']})
+
+    def stack(layers, field):
+        if len(layers) > 16 or len({layer['role'] for layer in layers}) != len(layers):
+            raise ValueError(field+'：每组最多 16 层，层角色不得重复')
+        if any(layer.get('form') == 'corrugated' for layer in layers):
+            raise ValueError(field+'：波纹层需专用轮廓，当前 CAD 未覆盖')
+        return layers
+
+    for core in cores:
+        conductor, cid = core['conductor'], core['id']
+        x, z = finite_coordinate(core.get('x',0),cid+'.x'), finite_coordinate(core.get('z',0),cid+'.z')
+        if conductor.get('form') not in ('unspecified','solid_round','stranded_round','stranded_round_compacted','segmental','sectoral') or conductor.get('inner_diameter'):
+            raise ValueError(cid+'.conductor.form：当前 CAD 不支持中空导体')
+        radius = positive(conductor['diameter'], cid+'.conductor.diameter', .2)/2
+        profile = core_profile(conductor,x,z)
+        if conductor.get('form') in ('stranded_round_compacted','segmental','sectoral'):
+            area = positive(conductor.get('nominal_area'),cid+'.conductor.nominal_area',.1)
+            envelope_area = radius**2*(profile['angle']/2 if profile['kind']=='sector' else math.pi)
+            if area > envelope_area+1e-12:
+                raise ValueError(cid+'.conductor.nominal_area：标称截面超过设计轮廓面积')
+            if conductor.get('lay_factor') is not None and positive(conductor['lay_factor'],cid+'.conductor.lay_factor（绞入系数）',1e6) < 1:
+                raise ValueError(cid+'.conductor.lay_factor：绞入系数不得小于 1')
+        target = {'scope':'core','core_id':cid,'role':'conductor'}
+        add('conductor',conductor['material'],0.,radius,conductor,target,profile)
+        offset = 0.
+        for layer in stack(core.get('layers',[]),cid+'.layers'):
+            inner_profile = core_profile(conductor,x,z,offset)
+            offset += positive(layer['thickness'],cid+'.'+layer['role']+'.thickness',.05)
+            if profile['kind']=='sector' and (layer.get('form')=='wires' or layer.get('form')=='tape' and layer.get('tape_application')!='helical_overlap' and layer.get('overlap') is None):
+                raise ValueError(cid+'.'+layer['role']+'.form：扇形线芯的离散金属绕包轮廓尚未覆盖，请提供连续层或专用模型')
+            target = {'scope':'core','core_id':cid,'role':layer['role']}
+            add(layer['role'],layer['material'],radius+inner_profile['offset'],radius+offset,layer,target,
+                core_profile(conductor,x,z,offset),inner_profile)
+        outer_profile = core_profile(conductor,x,z,offset)
+        for other in core_profiles:
+            if profiles_overlap(other,outer_profile):
+                raise ValueError(cid+'.x / z：绝缘线芯轮廓相互重叠，请核对芯坐标和层厚')
+        core_profiles.append(outer_profile)
+    radius = max(profile_radius(profile) for profile in core_profiles)
+    for index, layer in enumerate(stack(cable.get('common_layers',[]),'common_layers')):
         inner = radius
-        radius += positive(layer['thickness'], '层厚', .05)
-        rows.append({'role': layer['role'], 'material': layer['material'], 'inner_radius_m': inner, 'outer_radius_m': radius,
-                     'construction': layer})
-    if radius > .25:
-        raise ValueError('外径超出此建模方法范围')
+        radius += positive(layer['thickness'],'common_layers.'+layer['role']+'.thickness',.05)
+        profile = {'kind':'circle','x':0.,'z':0.,'radius':radius,'offset':0.}
+        fill = layer['role']=='filler' and len(cores)>1 and index==0
+        if layer['role']=='filler' and len(cores)>1 and not fill:
+            raise ValueError('common_layers.filler：间隙填充必须位于公共层最内侧')
+        add(layer['role'],layer['material'],0. if fill else inner,radius,layer,
+            {'scope':'common','role':layer['role']},profile,
+            None if fill else {**profile,'radius':inner},core_profiles if fill else None)
+    if radius > .25 or len(rows)>128:
+        raise ValueError('电缆外径不得超过 0.5 m，CAD 结构层不得超过 128 层')
     for row in rows:
         if materials[row['material']].get('density') is not None:
             positive(materials[row['material']]['density'], '材料密度', 1e6)
-        row.update(entity=cable['id'] + '/' + row['role'], category=materials[row['material']]['category'])
         spec = row['construction']
         if spec.get('form') == 'stranded_round' or spec.get('form') == 'wires':
             count = spec.get('wire_count')
@@ -86,7 +127,7 @@ def prepare(document, parameters):
                 rings = next((n for n in range(1, 7) if 1 + 3*n*(n+1) == count), None)
                 if rings is None:
                     raise ValueError('圆绞合支持 1+6+12…完整同心绞层，请核对根数')
-                step = (rows[0]['outer_radius_m'] - wire / 2) / rings
+                step = (row['outer_radius_m'] - wire / 2) / rings
                 if step < wire or any(2*(step*k)*math.sin(math.pi/(6*k))/math.sqrt(1+(2*math.pi*step*k/pitch)**2) < wire for k in range(1, rings+1)):
                     raise ValueError('单丝直径、外径和节距造成绞线重叠，请核对制造参数')
             else:
@@ -96,8 +137,18 @@ def prepare(document, parameters):
                 if count > 1 and 2*orbit*math.sin(math.pi/count)/math.sqrt(1+(2*math.pi*orbit/pitch)**2) < wire:
                     raise ValueError(row['role'] + '丝数、丝径和节距造成重叠')
         if spec.get('form') == 'tape':
-            positive(spec.get('tape_width'), row['role'] + '带宽', .2)
-            positive(spec.get('lay_length'), row['role'] + '绕包节距', 10)
+            tape_parameters(row)
+    core_levels = max(1+len(core.get('layers',[])) for core in cores)
+    common_roles = [layer['role'] for layer in cable.get('common_layers',[])]
+    maximum_rank = max(1,core_levels+len(common_roles)-1)
+    for row in rows:
+        target = row['source_target']
+        if target['scope']=='core':
+            core = next(core for core in cores if core['id']==target['core_id'])
+            rank = 0 if row['role']=='conductor' else 1+next(i for i,layer in enumerate(core['layers']) if layer['role']==row['role'])
+        else:
+            rank = core_levels+common_roles.index(row['role'])
+        row['peel_fraction'] = 1-.55*rank/maximum_rank
     return cable, rows, length
 
 
@@ -106,6 +157,94 @@ def shell(cq, inner, outer, length):
     if inner:
         profile = profile.circle(inner)
     return profile.extrude(length).val()
+
+
+def profile_wire(cq, profile):
+    radius, offset = profile['radius']*1000, profile['offset']*1000
+    if profile['kind']=='circle':
+        wire = cq.Workplane('XY').circle(radius+offset).val()
+    else:
+        half = profile['angle']/2
+        path = cq.Workplane('XY').moveTo(0,0).lineTo(radius*math.cos(half),-radius*math.sin(half))
+        wire = path.threePointArc((radius,0),(radius*math.cos(half),radius*math.sin(half))).close().wire().val()
+        if offset:
+            wires = wire.offset2D(offset,kind='arc')
+            if len(wires)!=1:
+                raise ValueError('扇形平行轮廓未形成唯一闭合边界，请核对圆弧直径、夹角和层厚')
+            wire = wires[0]
+        wire = wire.rotate((0,0,0),(0,0,1),math.degrees(profile['rotation']))
+    return wire.translate((profile['x']*1000,profile['z']*1000,0))
+
+
+def profile_solid(cq, profile, length):
+    return cq.Solid.extrudeLinear(profile_wire(cq,profile),[],cq.Vector(0,0,length))
+
+
+def mean_profile_perimeter(row):
+    profiles = row['section_profile']
+    def perimeter(profile):
+        base = profile['radius']*(2+profile['angle']) if profile['kind']=='sector' else 2*math.pi*profile['radius']
+        return base+2*math.pi*profile['offset']
+    return (perimeter(profiles['inner'])+perimeter(profiles['outer']))/2
+
+
+def tape_parameters(row):
+    """Resolve only a supplied pitch or a pitch fixed by width and wrap/gap facts."""
+    spec = row['construction']
+    application = spec.get('tape_application')
+    if spec.get('tape_width') is None and spec.get('overlap') is not None:
+        return {'application':'envelope', 'reason':'金属带带宽及绕包参数缺项'}
+    width = positive(spec.get('tape_width'),row['entity']+'.tape_width',.2)*1000
+    if application=='two_tape_gap':
+        thickness = positive(spec.get('nominal_tape_thickness'),row['entity']+'.nominal_tape_thickness',.01)*1000
+        if spec.get('tape_count')!=2 or not math.isclose(row['outer_radius_m']-row['inner_radius_m'],2*thickness/1000,abs_tol=1e-12):
+            raise ValueError(row['entity']+'：双带铠装需两层，径向厚度应等于单带标称厚度的两倍')
+        gap = spec.get('tape_gap')
+        if isinstance(gap,bool) or not isinstance(gap,(int,float)) or not 0 <= gap <= spec['tape_width']/2:
+            raise ValueError(row['entity']+'.tape_gap：双带最大轴向间隙须为 0 至带宽的一半')
+        # Fix the shared pitch by the outer tape, which has the largest axial gap.
+        circumference = 2*math.pi*(row['outer_radius_m']*1000-thickness/2)
+        ratio = width/circumference
+        if ratio>=1:
+            raise ValueError(row['entity']+'.tape_width：带宽不得达到铠装圆周长')
+        g = gap*1000
+        pitch = (g+math.sqrt(g*g*ratio*ratio+width*width*(1-ratio*ratio)))/(1-ratio*ratio)
+        if spec.get('lay_length') is not None and not math.isclose(spec['lay_length']*1000,pitch,rel_tol=1e-6,abs_tol=1e-6):
+            raise ValueError(row['entity']+'.lay_length：节距与带宽、间隙不一致，请核对制造参数')
+        return {'application':application,'pitch':pitch,'width':width,'thickness':thickness}
+    if application=='helical_overlap' or spec.get('overlap') is not None:
+        thickness = positive(spec.get('nominal_tape_thickness'),row['entity']+'.nominal_tape_thickness',.01)*1000
+        overlap = spec.get('overlap')
+        if isinstance(overlap,bool) or not isinstance(overlap,(int,float)) or not 0 <= overlap < 1:
+            raise ValueError(row['entity']+'.overlap：重叠绕包需明确 0–1 的搭盖率')
+        if spec.get('tape_count') not in (None,1):
+            raise ValueError(row['entity']+'.tape_count：重叠铜带当前仅支持单带')
+        circumference = mean_profile_perimeter(row)*1000
+        effective = width*(1-overlap)
+        if effective>=circumference:
+            raise ValueError(row['entity']+'.tape_width：有效带宽不得达到金属层圆周长')
+        pitch = effective/math.sqrt(1-(effective/circumference)**2)
+        if spec.get('lay_length') is not None and not math.isclose(spec['lay_length']*1000,pitch,rel_tol=1e-6,abs_tol=1e-6):
+            raise ValueError(row['entity']+'.lay_length：节距与带宽、搭盖率不一致')
+        return {'application':'helical_overlap','pitch':pitch,'width':width,'thickness':thickness,'overlap':overlap}
+    return {'application':'single_gap','width':width,
+            'pitch':positive(spec.get('lay_length'),row['entity']+'.lay_length',10)*1000}
+
+
+def tape_shape(cq, inner, outer, width, pitch, length, left=False, phase=0.):
+    radius = (inner+outer)/2
+    axial_width = width*math.sqrt(pitch*pitch+(2*math.pi*radius)**2)/(2*math.pi*radius)
+    if axial_width >= pitch:
+        raise ValueError('带宽与节距造成单带自重叠，请核对带宽、节距和间隙')
+    paths = [cq.Wire.makeHelix(pitch,length+4*axial_width,r,
+        center=(0,0,-2*axial_width+z+phase),lefthand=left)
+        for r,z in [(inner,-axial_width/2),(outer,-axial_width/2),(outer,axial_width/2),(inner,axial_width/2)]]
+    faces = [cq.Face.makeRuledSurface(paths[i].Edges()[0],paths[(i+1)%4].Edges()[0]) for i in range(4)]
+    faces.extend(cq.Face.makeFromWires(cq.Wire.makePolygon([getattr(p,end)() for p in paths],close=True))
+                 for end in ('startPoint','endPoint'))
+    body = cq.Solid.makeSolid(cq.Shell.makeShell(faces))
+    clip = cq.Workplane('XY').box(2*(outer+1),2*(outer+1),length,centered=(True,True,False)).val()
+    return body.intersect(clip)
 
 
 def helix(cq, radius, wire_radius, pitch, length, left=False):
@@ -121,6 +260,16 @@ def layer_shape(cq, row, length, proof=None):
     spec = row['construction']
     form = spec.get('form')
     inner, outer = row['inner_radius_m']*1000, row['outer_radius_m']*1000
+    profile = row['section_profile']
+    if profile['outer']['kind']=='sector' or profile['holes']:
+        body = profile_solid(cq,profile['outer'],length)
+        for hole in ([profile['inner']] if profile['inner'] else [])+profile['holes']:
+            body = body.cut(profile_solid(cq,hole,length))
+        if proof is not None:
+            proof.append((body,1))
+        if form=='tape':
+            return body, '扇形搭盖带设计包络 · 用料按展开周长、单带厚度及搭盖率', False
+        return body, '显式扇形轮廓及等厚平行层' if profile['outer']['kind']=='sector' else '线芯间隙填充实体', True
     if form == 'stranded_round':
         count, wr = spec['wire_count'], spec['wire_diameter']*500
         rings = next(n for n in range(1,7) if 1+3*n*(n+1)==count)
@@ -141,21 +290,20 @@ def layer_shape(cq, row, length, proof=None):
             proof.append((master,count))
         return cq.Compound.makeCompound([master.moved(cq.Location((0,0,0),(0,0,1),i*360/count)) for i in range(count)]), '螺旋单丝', True
     if form == 'tape':
-        width, pitch = spec['tape_width']*1000, spec['lay_length']*1000
-        # Width is measured normal to the helix on the unrolled cylinder.
-        radius=(inner+outer)/2
-        axial_width=width*math.sqrt(pitch*pitch+(2*math.pi*radius)**2)/(2*math.pi*radius)
-        if axial_width >= pitch:
-            raise ValueError(row['role'] + '带宽与节距造成绕包自重叠，当前不支持重叠带')
-        paths=[cq.Wire.makeHelix(pitch,length+2*axial_width,r,
-            center=(0,0,-axial_width+z),lefthand=spec.get('lay_direction')=='left')
-            for r,z in [(inner,-axial_width/2),(outer,-axial_width/2),(outer,axial_width/2),(inner,axial_width/2)]]
-        faces=[cq.Face.makeRuledSurface(paths[i].Edges()[0],paths[(i+1)%4].Edges()[0]) for i in range(4)]
-        faces.extend(cq.Face.makeFromWires(cq.Wire.makePolygon([getattr(p,end)() for p in paths],close=True))
-                     for end in ('startPoint','endPoint'))
-        body=cq.Solid.makeSolid(cq.Shell.makeShell(faces))
-        clip=cq.Workplane('XY').box(2*(outer+1),2*(outer+1),length,centered=(True,True,False)).val()
-        body=body.intersect(clip)
+        tape = tape_parameters(row)
+        if tape['application'] in ('envelope','helical_overlap'):
+            body = shell(cq,inner,outer,length)
+            if proof is not None:
+                proof.append((body,1))
+            return body, '搭盖金属带设计包络 · 用料按单带厚度及搭盖率' if tape['application']=='helical_overlap' else tape['reason'], False
+        width, pitch = tape['width'], tape['pitch']
+        if tape['application']=='two_tape_gap':
+            parts = [tape_shape(cq,inner+i*tape['thickness'],inner+(i+1)*tape['thickness'],width,pitch,length,
+                spec.get('lay_direction')=='left',pitch*i/2) for i in range(2)]
+            if proof is not None:
+                proof.extend((part,1) for part in parts)
+            return cq.Compound.makeCompound(parts), '双层金属带螺旋实体 · 外带错开半个节距覆盖内带间隙', True
+        body = tape_shape(cq,inner,outer,width,pitch,length,spec.get('lay_direction')=='left')
         if proof is not None:
             proof.append((body,1))
         return body, '同源螺旋带实体', True
@@ -217,9 +365,10 @@ def display_mesh(solid):
 def native_layer(cq, row, length, out, case_id, previous):
     reused = 0
     spec = row['construction']
-    dimensions = {k:spec.get(k) for k in ('form','wire_count','wire_diameter','lay_length','lay_direction','tape_width')}
+    dimensions = {k:spec.get(k) for k in ('form','wire_count','wire_diameter','lay_length','lay_direction','tape_width',
+        'nominal_tape_thickness','tape_count','tape_application','tape_gap','overlap')}
     geometry_key = sha256(json.dumps(
-        [VERSION, row['role'],row['inner_radius_m'],row['outer_radius_m'],length,dimensions],
+        [VERSION, row['role'],row['inner_radius_m'],row['outer_radius_m'],length,dimensions,row['section_profile']],
         sort_keys=True,
     ).encode()).hexdigest()
     row['geometry_key'] = geometry_key
@@ -241,6 +390,9 @@ def native_layer(cq, row, length, out, case_id, previous):
         reused = 1
     else:
         solid, representation, known = layer_shape(cq,row,length*1000,proof=proof)
+        profile = row['section_profile']
+        if profile['outer']['kind']=='circle' and not profile['holes']:
+            solid = solid.moved(cq.Location((profile['outer']['x']*1000,profile['outer']['z']*1000,0)))
     shape_ms = (perf_counter()-shape_started)*1000
     validate_started = perf_counter()
     if not resident_cached:
@@ -259,8 +411,10 @@ def layer_quantities(document, row, length, solid, representation, known, volume
     spec = row['construction']
     row['volume_m3'] = volume
     row['envelope_volume_m3'] = math.pi*(row['outer_radius_m']**2-row['inner_radius_m']**2)*length
+    if row['section_profile']['outer']['kind']=='sector' or row['section_profile']['holes']:
+        row['envelope_volume_m3'] = volume
     row['representation'] = representation
-    nominal_quantity = row['role']=='conductor' and spec.get('form') in ('stranded_round_compacted','segmental')
+    nominal_quantity = row['role']=='conductor' and spec.get('form') in ('stranded_round_compacted','segmental','sectoral')
     if nominal_quantity:
         known=True
     factor = spec.get('lay_factor')
@@ -268,6 +422,11 @@ def layer_quantities(document, row, length, solid, representation, known, volume
     row['material_volume_m3'] = material_volume
     row['quantity_basis'] = (f'标称截面 × 展示长度 × 绞入系数（{factor:g}）；包络体积不作铜量' if factor is not None else
         '标称截面 × 展示长度 × 绞入系数；缺少绞入系数') if nominal_quantity else '原始实体体积积分'
+    if spec.get('form')=='tape' and tape_parameters(row)['application']=='helical_overlap':
+        material_volume = mean_profile_perimeter(row)*spec['nominal_tape_thickness']*length/(1-spec['overlap'])
+        row['material_volume_m3'] = material_volume
+        row['quantity_basis'] = '设计平均轮廓周长 × 单带标称厚度 × 展示长度 / (1−搭盖率)；径向包络体积不作金属量'
+        known = True
     density = next(m for m in document['materials'] if m['id']==row['material']).get('density')
     row['mass_kg'] = material_volume*density if material_volume is not None and density is not None else None
     row['mass_kg_per_km'] = row['mass_kg']/length*1000 if row['mass_kg'] is not None else None
@@ -279,7 +438,7 @@ def layer_quantities(document, row, length, solid, representation, known, volume
         row['quantity_missing'].append('材料密度')
     row['inner_diameter_m'] = row['inner_radius_m']*2
     row['outer_diameter_m'] = row['outer_radius_m']*2
-    row['thickness_m'] = row['outer_radius_m']-row['inner_radius_m']
+    row['thickness_m'] = spec.get('thickness',row['outer_radius_m']-row['inner_radius_m'])
     row['solid_count'] = len(solid.Solids())
     return known
 
@@ -337,6 +496,13 @@ def build(document, parameters, out, case_id, reuse_artifacts=None, native_layer
         validation_ms = (perf_counter()-validate_started)*1000
         brep_text, mesh, mesh_ms, serialize_ms, display_mesh_ms = layer_display(
             row, solid, proof, cached, resident_cached, include_exact, out, case_id)
+        profile = row['section_profile']
+        contours = [profile['outer'],*([profile['inner']] if profile['inner'] else []),*profile['holes']]
+        outline = cq.Compound.makeCompound([profile_wire(cq,contour) for contour in contours])
+        outline_file = out/(case_id+'.outline.brep')
+        outline.exportBrep(str(outline_file))
+        row['section_outline_brep'] = outline_file.read_text('utf-8')
+        outline_file.unlink()
         solids.append(solid)
         if native_layers is not None:
             native_layers.append(solid)
@@ -353,7 +519,7 @@ def build(document, parameters, out, case_id, reuse_artifacts=None, native_layer
         cq.exporters.export(cq.Compound.makeCompound(solids), str(step), exportType='STEP')
     step_ms = (perf_counter()-step_started)*1000
     payload = {'schema': 'cablesim.cad-model/1', 'cable_type_id': cable['id'], 'label': cable['label'],
-               'length_m': length, 'outer_diameter_m': rows[-1]['outer_radius_m'] * 2,
+               'length_m': length, 'outer_diameter_m': max(profile_radius(row['section_profile']['outer']) for row in rows) * 2,
                'geometry_unit': 'm', 'step_unit': 'mm', 'brep_unit': 'mm', 'axis': '+Z',
                'representation': 'parameterized_cable_solids', 'layers': rows,
                'build_stats': {'reused_layers':reused,'generated_layers':len(rows)-reused,
@@ -361,7 +527,7 @@ def build(document, parameters, out, case_id, reuse_artifacts=None, native_layer
                'mass_kg_per_km': sum(r['mass_kg_per_km'] for r in rows) if all(r['mass_kg_per_km'] is not None for r in rows) else None,
                'quantity_missing_layers': [r['role'] for r in rows if r['mass_kg_per_km'] is None],
                'display_approximation': 'OCCT 显示缓存：绝对弦差 0.08 mm、角度 0.35 rad；共享单丝细分，原始 BRep 曲面不简化，STEP 导出同源精确实体。',
-               'geometry_approximation': '圆丝为理想螺旋扫掠；紧压与分割导体按设计外径建包络，未建单丝压实或分割缝，用料按标称截面及明确绞入系数计算，包络体积不代表铜量；螺旋带按展开圆柱面法向带宽建模，不支持重叠绕包；不含接触形变与制造公差。',
+               'geometry_approximation': '线芯按明确截面位置直线拉伸；扇形使用明确圆弧直径、夹角和朝向，不从截面积猜轮廓。圆丝为理想螺旋，双带按带宽及最大轴向间隙建模。紧压、分割及扇形导体用料按标称截面和明确绞入系数计算；搭盖金属带显示径向包络，用料另按单带厚度和搭盖率计算。不含成缆扭转、接触形变及制造公差。',
                'exact_pending': not include_exact, 'material_sources': document.get('materials', []),
                'input_sha256': sha256(json.dumps(document, sort_keys=True, ensure_ascii=False).encode()).hexdigest()}
     if include_exact:
@@ -406,7 +572,7 @@ def prepare_scene(document, parameters):
         circuit,instance=instances[p['cable']]
         t=types[circuit['cable_type']]
         _,rows,_=prepare(document,{'cable_type_id':t['id'],'length_m':length})
-        radius=rows[-1]['outer_radius_m']
+        radius=max(profile_radius(row['section_profile']['outer']) for row in rows)
         x,z=finite_coordinate(p['x'],'电缆 x'),finite_coordinate(p['z'],'电缆 z')
         if section['kind']=='ground' and z+radius>1e-12:
             raise ValueError('电缆超出地表')
@@ -598,7 +764,13 @@ class _SceneBuild:
         box, asset, identity = self._box, self._asset, self.identity
         voids=enclosure_tools+[t for t,c in zip(tools,cables) if not c['placement'].get('enclosure')]
         void_key=[[(c['placement']['cable'],c['x'],c['z'],c['radius']) for c in cables],enclosure_keys]
-        def cut_voids(body):return body.cut(cq.Compound.makeCompound(voids)) if voids else body
+        def cut_voids(body):
+            # A compound of mutually tangent cutters can leave a non-manifold
+            # soil shell in OCCT. Sequential regularized differences retain the
+            # same circles and coordinates, without opening an artificial gap.
+            for void in voids:
+                body=body.cut(void)
+            return body.clean()
         bf=section.get('backfill')
         backfill_box=None
         if bf:
@@ -712,13 +884,14 @@ def main():
         dependency_error = None
     except ImportError:
         cq = None
-        dependency_error = '运行 Python 缺少 CadQuery / Open CASCADE；请安装 plugins/requirements-native.txt 中的 CAD 依赖'
+        dependency_error = '几何环境缺失或 CadQuery / Open CASCADE 无法加载；请运行 python scripts/prepare_plugin_environment.py cablesim.cable-geometry'
     import_ms = (perf_counter()-import_started)*1000
     for case in request['cases']:
         base = {'case_id': case['case_id']}
+        if dependency_error:
+            cases.append({**base, 'status':'failed', 'error':{'code':'CAD_ENVIRONMENT_MISSING','message':dependency_error}})
+            continue
         try:
-            if dependency_error:
-                raise ValueError(dependency_error)
             scene=request['capability']=='installation-scene'
             (prepare_scene if scene else prepare)(case['input'], case.get('parameters', {}))
             reuse=None
@@ -750,7 +923,10 @@ def main():
 
 def resident_warmup():
     global RESIDENT
-    import cadquery
+    try:
+        import cadquery
+    except ImportError as error:
+        raise RuntimeError('几何环境缺失或原生库无法加载；请运行 python scripts/prepare_plugin_environment.py cablesim.cable-geometry。'+str(error)) from error
     RESIDENT=True
 
 

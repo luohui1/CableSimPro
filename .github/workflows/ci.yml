@@ -49,7 +49,7 @@ jobs:
           path: .data/hpc/native-tests/
   backend:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -62,7 +62,14 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements*.txt
       - run: pip install -r backend/requirements-dev.txt
+      - name: Prepare the declared geometry environment separately from the host Python
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1 libxrender1
+          python scripts/prepare_plugin_environment.py cablesim.cable-geometry --with-tests
       - run: python -m pytest --junitxml=artifacts/backend-${{ matrix.python }}.xml
+      - name: Run direct CAD assertions in the declared geometry environment
+        run: .venv/bin/python -m pytest tests/test_cable_geometry.py tests/test_installation_scene.py tests/test_geometry_preview.py --junitxml=artifacts/cad-${{ matrix.python }}.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:

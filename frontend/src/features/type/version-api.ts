@@ -19,9 +19,7 @@ export async function typeComparison(wid: string, signal?: AbortSignal) {
 export type SpecificationAudience = 'customer' | 'internal';
 export type Specification = { payload: Record<string, unknown>; digest: string; lifecycle: Record<string, unknown>; ready: boolean; html: string; audience: SpecificationAudience; revisionDraft: Record<string, unknown>; exportEndpoint?: string; generationEndpoint?: string };
 export async function typeSpecification(wid: string, signal?: AbortSignal, audience: SpecificationAudience = 'customer'): Promise<Specification> {
-  const response = await fetch('/api/types/' + encodeURIComponent(wid) + '/specification?audience=' + audience, { signal, credentials: 'same-origin', cache: 'no-store' });
-  const value: unknown = await response.json();
-  const data = record(await responseData(Promise.resolve({ response, ...(response.ok ? { data: value } : { error: value }) })), '型号规格书'), payload = record(data.payload, '规格书内容'), lifecycle = record(data.lifecycle, '规格书状态');
+  const data = record(await responseData(api.GET('/api/types/{wid}/specification', {params:{path:{wid},query:{audience}},signal})), '型号规格书'), payload = record(data.payload, '规格书内容'), lifecycle = record(data.lifecycle, '规格书状态');
   if (payload.schema !== 'cablesim.type-specification/1' || payload.workspace_id !== wid || numeric(payload.revision) === null || !/^[a-f0-9]{64}$/.test(text(data.digest)) || !['draft', 'submitted', 'approved', 'published'].includes(text(lifecycle.status)) || typeof data.ready !== 'boolean' || !text(data.html).startsWith('<!doctype html>')) throw new ApiError(502, '规格书缺少版本、摘要、状态或正式渲染内容');
   for (const key of ['chapters', 'checks', 'sources', 'revisions']) array(payload[key], key);
   const exported = optionalRecord(data.export), endpoint = text(exported.endpoint);
@@ -33,10 +31,7 @@ export async function typeSpecification(wid: string, signal?: AbortSignal, audie
 
 export async function generateSpecification(wid: string, spec: Specification, revision: number, requestId: string) {
   if (!spec.generationEndpoint || spec.generationEndpoint !== '/api/types/' + encodeURIComponent(wid) + '/specification/generate') throw new ApiError(501, '当前宿主没有提供规格书生成操作');
-  const response = await fetch(spec.generationEndpoint, { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ expected_revision: revision, request_id: requestId, audience: spec.audience, scope_acknowledged: true }) });
-  const value: unknown = await response.json();
-  const result = record(await responseData(Promise.resolve({ response, ...(response.ok ? { data: value } : { error: value }) })), '规格书生成结果');
+  const result = record(await responseData(api.POST('/api/types/{wid}/specification/generate', {params:{path:{wid}},body:{expected_revision:revision,request_id:requestId,audience:spec.audience,scope_acknowledged:true}})), '规格书生成结果');
   if (!['generated', 'blocked'].includes(text(result.status)) || numeric(result.revision) !== revision || !Array.isArray(result.steps)) throw new ApiError(502, '规格书生成结果缺少状态或绑定修订');
   return result;
 }
@@ -54,7 +49,7 @@ export async function exportSpecification(wid: string, spec: Specification) {
   if (!spec.exportEndpoint) throw new ApiError(501, '当前宿主尚未提供规格书 PDF 导出引用');
   if (spec.exportEndpoint !== '/api/types/' + encodeURIComponent(wid) + '/specification/file') throw new ApiError(409, '规格书导出引用与当前型号身份不一致');
   const { data, error, response } = await api.GET('/api/types/{wid}/specification/file', {
-    params: { path: { wid }, query: { ...{ audience: spec.audience }, expected_revision: Number(spec.payload.revision), specification_digest: spec.digest } }, parseAs: 'arrayBuffer',
+    params: { path: { wid }, query: { audience: spec.audience, expected_revision: Number(spec.payload.revision), specification_digest: spec.digest } }, parseAs: 'arrayBuffer',
   });
   if (!response.ok) { const failure = optionalRecord(error), detail = optionalRecord(failure.detail); throw new ApiError(response.status, text(failure.detail) || text(detail.message) || '规格书导出失败'); }
   if (response.headers.get('X-Specification-SHA256') !== spec.digest || response.headers.get('X-Specification-Audience') !== spec.audience || !response.headers.get('Content-Type')?.startsWith('application/pdf')) throw new ApiError(409, '导出内容未绑定当前规格书摘要与版本');

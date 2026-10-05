@@ -102,6 +102,8 @@ input { caret-color: var(--text); }
 .main-content { min-width: 0; overflow: auto; padding: var(--space-6); }
 .conclusion { display: flex; justify-content: space-between; align-items: center; gap: var(--space-6); padding-block: var(--space-2) var(--space-6); border-bottom: 1px solid var(--line); }
 .conclusion-copy { min-width: 0; }
+.selection-conditions { margin-top: var(--space-2); }
+.selection-conditions a { text-decoration: underline; text-underline-offset: var(--space-1); }
 .conclusion-copy > span, .conclusion-copy p { font-size: var(--text-note); }
 .conclusion-copy h2 { font-size: var(--text-heading); line-height: 1.5; margin-block: var(--space-1); overflow-wrap: anywhere; }
 .conclusion-metrics { display: flex; align-items: center; gap: var(--space-6); flex: none; }
@@ -229,6 +231,7 @@ summary { color: var(--text-secondary); cursor: pointer; margin-block: var(--spa
 .series-1 .series-line, .series-line.series-1 { stroke-dasharray: 8 4; }
 .series-2 .series-line, .series-line.series-2 { stroke-dasharray: 2 4; }
 .series-legend { display: flex; flex-wrap: wrap; gap: var(--space-4); font-size: var(--text-note); }
+.version-notice { display: inline-flex; align-items: center; flex-wrap: wrap; gap: var(--space-1); }
 .series-legend > span { display: flex; align-items: center; gap: var(--space-2); }
 .evidence-summary { display: flex; flex-direction: column; gap: var(--space-2); border-bottom: 1px solid var(--line); padding-block: var(--space-2) var(--space-4); }
 .evidence-summary h2 { font-size: var(--text-heading); }

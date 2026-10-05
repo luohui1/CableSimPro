@@ -34,10 +34,11 @@ class Research:
         self.resident_runner = None
         if executor is None:
             from .hpc_executor import HpcExecutor
+            from .verified_executor import VerifiedExecutor
             from ..plugin_host.resident import ResidentRunner
             from pathlib import Path
             self.resident_runner=ResidentRunner(Path(__file__).resolve().parents[2]/'.tmp/study-workers')
-            executor=HpcExecutor(Executor(process_runner=self.resident_runner))
+            executor=HpcExecutor(VerifiedExecutor(process_runner=self.resident_runner))
         self.executor = executor
         self.owner_epoch = str(uuid4())
         self.prepared_candidates = {}
@@ -73,6 +74,8 @@ class Research:
               workspace TEXT NOT NULL, request_id TEXT NOT NULL, run_ids TEXT NOT NULL, delivery TEXT NOT NULL,
               PRIMARY KEY(workspace,request_id));
             ''')
+            from .study_history import initialize
+            initialize(db)
             # Called only after the application has acquired its exclusive owner lock.
             db.execute("UPDATE study_runs SET status='interrupted',finished=?,error=? "
                        "WHERE owner_epoch<>? AND status IN ('accepted','running','validating')",
@@ -86,7 +89,13 @@ class Research:
                                       'memory_limit_enforced': False, 'network_isolation_enforced': False,
                                       'parent_death_enforced': os.name == 'nt', 'process_tree_cleanup_enforced': os.name == 'nt'},
                  'capabilities': [c.model_dump(mode='json') for c in p.manifest.capabilities]}
-                for p in Registry(self.executor.registry.root).plugins.values()]
+                for p in self.registry().plugins.values()]
+
+    def registry(self, plugin_id=None):
+        try:
+            return Registry(self.executor.registry.root,plugin_id=plugin_id)
+        except (ValueError,OSError) as exc:
+            raise PluginHostError('PLUGIN_MANIFEST_INVALID','插件清单不可读或格式错误；请完成安装/封签后重试。'+str(exc),409) from None
 
     @staticmethod
     def pin(plugin):
@@ -101,17 +110,20 @@ class Research:
         registries = cache.setdefault('registries', {})
         plugin_id = method['plugin_id']
         if plugin_id not in registries:
-            registries[plugin_id] = Registry(self.executor.registry.root, plugin_id=plugin_id)
+            registries[plugin_id] = self.registry(plugin_id)
         plugin = registries[plugin_id].get(plugin_id)
         if self.pin(plugin) != {k: method[k] for k in ('plugin_id', 'version', 'release_digest')}:
             raise HTTPException(409, '方法发行已变化，请明确选择新版本并保存研究。')
         verified = cache.setdefault('verified', {})
         if plugin.manifest.id not in verified:
             try:
-                plugin.verify()
+                verifier=getattr(self.executor,'verify_release',None)
+                verifier(plugin) if verifier else plugin.verify()
                 verified[plugin.manifest.id] = None
-            except (PluginHostError, ValueError, OSError) as exc:
+            except PluginHostError as exc:
                 verified[plugin.manifest.id] = exc
+            except (ValueError,OSError) as exc:
+                verified[plugin.manifest.id] = PluginHostError('PLUGIN_SEAL_INVALID',f'{plugin_id}：源码或封签无法验证，请完成安装/封签后重试。{exc}',409)
         if verified[plugin.manifest.id] is not None:
             raise verified[plugin.manifest.id]
         try:
@@ -129,7 +141,8 @@ class Research:
         version = db.execute('SELECT * FROM study_versions WHERE study=? AND revision=?', (sid, row['revision'])).fetchone()
         definition = json.loads(version['definition'])
         revision = db.execute('SELECT revision FROM workspaces WHERE id=?', (wid,)).fetchone()['revision']
-        return {**dict(row), 'definition': definition, 'created': version['created'],
+        from .study_history import state
+        return {**dict(row), **state(db,sid), 'definition': definition, 'created': version['created'],
                 'lock': self.lock(db, wid, revision, definition['method'])}
 
     def save(self, wid, body, sid=None):
@@ -142,6 +155,14 @@ class Research:
             if previous is not None and config.model_dump()==previous.model_dump():
                 return  # Preserve an unchanged historical pin while editing another module.
             _,capability=self.resolve(config.method.model_dump())
+            if config.input_source=='study' and capability.input_schema=='cablesim.simulation-problem/1':
+                from .simulation_contract import validate_input, StandaloneParameters
+                validate_input(config.method_input,config.method.capability)
+                try:
+                    StandaloneParameters.model_validate_json(json.dumps(config.parameters),strict=True)
+                except ValidationError as exc:
+                    from cablesim_sdk.validation import validation_error
+                    raise HTTPException(422,validation_error(exc,'SIMULATION_PARAMETERS_INVALID',prefix=('parameters',))) from None
             from .study_tasks import validate_task
             validate_task(config, capability)
             if config.driver.kind=='selection' and capability.analysis=='crosscheck':
@@ -168,13 +189,26 @@ class Research:
                 revision = current['revision'] + 1
                 db.execute('UPDATE studies SET revision=? WHERE id=?', (revision, sid))
             db.execute('INSERT INTO study_versions VALUES (?,?,?,?)', (sid, revision, encoded, stamp()))
+            from .study_history import record
+            record(db,sid,revision)
             self.store.audit(db, wid, body.expected_revision, '保存研究', sid)
             return self.definition(db, wid, sid)
 
     def list_studies(self, wid):
         with self.store.db() as db:
             self.store.load(db, wid)
-            return [self.definition(db, wid, r[0]) for r in db.execute('SELECT id FROM studies WHERE workspace=? ORDER BY rowid', (wid,))]
+            ids = [r[0] for r in db.execute('SELECT id FROM studies WHERE workspace=? ORDER BY rowid', (wid,))]
+        cache = {}
+        return [self.study_detail(wid, sid, cache) for sid in ids]
+
+    def study_detail(self, wid, sid, cache=None):
+        with self.store.db() as db:
+            value = self.definition(db, wid, sid)
+            latest = db.execute('SELECT id FROM study_runs WHERE workspace=? AND study=? ORDER BY sequence DESC LIMIT 1', (wid, sid)).fetchone()
+        value['latest_run_id'] = latest['id'] if latest else None
+        value['version_status'] = (self.get_run(wid, latest['id'], cache).get('version_status') if latest else
+                                   {'status': 'empty', 'reasons': [], 'display_name': '尚无运行'})
+        return value
 
     def lock(self, db, wid, revision, method):
         value = {'schema':'cablesim.method-lock/2', 'workspace_id':wid,
@@ -255,13 +289,14 @@ class Research:
                                        'workspace_revision':source['snapshot']['workspace_revision'],
                                        'parameters':deepcopy(next(c['parameters'] for c in source['snapshot']['cases'] if c['case_id']==ref['case_id']))}
 
-    def complete_candidate(self,item,completion):
+    def complete_candidate(self,item,completion,prepared_result=None):
         """A plugin prepares source-bound input facts; host never derives physics."""
         plugin,capability=self.resolve(completion['method'])
         if capability.analysis!='model_preparation':raise HTTPException(422,'候选补参数须选择模型准备能力。')
         inputs={'schema_version':'cablesim.product-specification/1',**deepcopy(item['payload'])}
         case={'case_id':'candidate','input':inputs,'parameters':deepcopy(completion['parameters'])}
         identity=fingerprint({'method':completion['method'],'input':inputs,'parameters':completion['parameters']})
+        if prepared_result is not None and prepared_result.status!='succeeded':return None,prepared_result.error
         if identity not in self.prepared_candidates:
             result=self.executor.run(plugin.manifest.id,capability.id,[case],expected_manifest=plugin.manifest).cases[0]
             if result.status!='succeeded':return None,result.error
@@ -279,7 +314,37 @@ class Research:
                 'origin':deepcopy(item),'engineering_parameters':deepcopy(artifact['engineering_parameters']),
                 'derived':deepcopy(artifact['derived']),'dependencies':artifact['dependencies'],
                 'preparation':{'method':completion['method'],'input_digest':identity,
+                               'seal_verification':result.evidence.get('seal_verification'),
                                'artifact_sha256':result.artifact_digests['x-cablesim.engineering-model']}},None
+
+    def prepare_candidates(self,db,definition):
+        """Group uncached model preparation by the exact pinned capability."""
+        from .candidates import read, matches
+        if len(self.prepared_candidates)>256:self.prepared_candidates.clear()
+        groups={};prepared={}
+        for cid in definition['driver']['candidate_ids']:
+            completion=definition.get('candidate_completions',{}).get(cid)
+            item=read(db,cid)
+            if not matches(item,definition['driver'].get('candidate_filters',{})):
+                raise HTTPException(422,'候选不在保存的电压、材料或截面范围内：'+cid)
+            if not completion or item['state']!='incomplete':continue
+            inputs={'schema_version':'cablesim.product-specification/1',**deepcopy(item['payload'])}
+            identity=fingerprint({'method':completion['method'],'input':inputs,'parameters':completion['parameters']})
+            if identity in self.prepared_candidates:continue
+            group=groups.setdefault(fingerprint(completion['method']),{'method':completion['method'],'cases':[],'identities':[],'ids':[]})
+            group['ids'].append(cid)
+            group['identities'].append(identity)
+            group['cases'].append({'case_id':f'candidate-{len(group["cases"])}','input':inputs,'parameters':deepcopy(completion['parameters'])})
+        for group in groups.values():
+            plugin,capability=self.resolve(group['method'])
+            if capability.analysis!='model_preparation':raise HTTPException(422,'候选补参数须选择模型准备能力。')
+            results=self.executor.run(plugin.manifest.id,capability.id,group['cases'],expected_manifest=plugin.manifest)
+            indexed={result.case_id:result for result in results.cases}
+            for cid,identity,case in zip(group['ids'],group['identities'],group['cases']):
+                result=indexed[case['case_id']]
+                prepared[cid]=result
+                if result.status=='succeeded':self.prepared_candidates[identity]=result
+        return prepared
 
     def prepare(self, db, wid, sid, revision, study_revision, module=None):
         row, state = self.store.load(db, wid, revision, allow_domain=True)
@@ -310,6 +375,8 @@ class Research:
                     check_locks(state, case['input'], item['parameters'])
         candidates = []
         if definition['driver']['candidate_ids']:
+            if source!='domain':raise HTTPException(422,'型号候选须使用保存的领域输入。')
+            preparation_results=self.prepare_candidates(db,definition)
             cases = []
             for index, cid in enumerate(definition['driver']['candidate_ids']):
                 if source == 'domain':
@@ -321,7 +388,7 @@ class Research:
                     completion=definition.get('candidate_completions',{}).get(cid)
                     preparation_error=None
                     if completion and item['state']=='incomplete':
-                        prepared,preparation_error=self.complete_candidate(item,completion)
+                        prepared,preparation_error=self.complete_candidate(item,completion,preparation_results.get(cid))
                         if prepared is not None:item=prepared
                     if item['state']=='incomplete':
                         spec=item['payload']['specification']
@@ -347,7 +414,9 @@ class Research:
                     candidates.append(item)
                     continue
                 raise HTTPException(422,'型号候选须使用保存的领域输入。')
-        if definition['driver']['kind'] == 'selection' and definition['driver'].get('rating_basis') == 'simultaneous':
+        if definition['driver'].get('target_key') == 'ampacity' and (
+                definition['driver']['kind'] in ('selection', 'sweep') and definition['driver'].get('rating_basis') == 'simultaneous'
+                or definition['driver']['kind'] == 'selection' and definition['driver'].get('candidate_ids')):
             for case in cases:
                 case['parameters']['rating_mode'] = 'both'
         result = {'workspace_id': wid, 'workspace_revision': row['revision'], 'study_id': sid,
@@ -391,6 +460,8 @@ class Research:
             output['executions']=[{'method':method,'environment':output['environment'],
                 'request_sha256':output['request_sha256'],'executed':True,
                 'validation':capability.validation.model_dump(mode='json'),'limitations':capability.limitations}]
+            from .drivers import default_result
+            output['default_result']=default_result(definition,output['cases'])
             output['assessment']=assess(definition,output['cases'])
             output['crosscheck']=crosscheck_differences(output['cases'])
             output['validation']=capability.validation.model_dump(mode='json');output['limitations']=capability.limitations
@@ -418,6 +489,11 @@ class Research:
             try:
                 if case['input'].get('schema_version') == 'cablesim.domain/1':
                     DomainDocument.model_validate(case['input'])
+                elif case['input'].get('schema_version')=='cablesim.simulation-problem/1':
+                    from .simulation_contract import validate_input
+                    validate_input(case['input'],getattr(capability,'id',None))
+            except HTTPException as exc:
+                checked[case['case_id']]=CaseResult(case['case_id'],'failed',error=exc.detail)
             except ValidationError as exc:
                 from cablesim_sdk.validation import validation_error
                 checked[case['case_id']] = CaseResult(case['case_id'], 'failed',
@@ -433,6 +509,11 @@ class Research:
         return [checked[c['case_id']] for c in cases]
 
     def preflight(self, wid, sid, revision, study_revision, module=None):
+        from .verified_executor import verification_scope
+        with verification_scope():
+            return self._preflight(wid,sid,revision,study_revision,module)
+
+    def _preflight(self, wid, sid, revision, study_revision, module=None):
         with self.store.db() as db:
             db.execute('BEGIN')
             snapshot = self.prepare(db, wid, sid, revision, study_revision, module)
@@ -462,7 +543,7 @@ class Research:
                 'validation': capability.validation.model_dump(), 'lock_digest': snapshot['lock']['digest'],
                 'input_digest': fingerprint(snapshot)}
 
-    def execute(self, wid, sid, body, *, asynchronous=False):
+    def execute(self, wid, sid, body, *, asynchronous=False, checked_preflight=None):
         request = {'study_id': sid, **body.model_dump(mode='json', exclude={'module'} if body.module is None else set())}
         request_digest = fingerprint(request)
         # Cheap replay check comes before reading mutable state or resolving packages.
@@ -473,7 +554,7 @@ class Research:
                 if old['request_digest'] != request_digest:
                     raise HTTPException(409, '同一请求标识不能用于不同研究或参数。')
                 return self.get_run(wid, old['id'])
-        check = self.preflight(wid, sid, body.expected_revision, body.expected_study_revision, body.module)
+        check = checked_preflight if checked_preflight is not None else self.preflight(wid, sid, body.expected_revision, body.expected_study_revision, body.module)
         with self.store.db() as db:
             saved_definition=self.module_definition(self.definition(db,wid,sid)['definition'],body.module)
         selection=saved_definition['driver']['kind']=='selection' and bool(saved_definition['driver']['candidate_ids'])
@@ -553,6 +634,8 @@ class Research:
                     output['cases'].append(entry)
                 output['executions'].append({'method': item['method'], 'environment': additional['environment'], 'request_sha256': additional['request_sha256'],
                                              'validation': other_capability.validation.model_dump(mode='json'), 'limitations': other_capability.limitations})
+            from .drivers import default_result
+            output['default_result'] = default_result(snapshot['definition'], output['cases'])
             output['assessment'] = assess(snapshot['definition'], output['cases'])
             output['crosscheck'] = crosscheck_differences(output['cases'])
             output['validation'] = capability.validation.model_dump(mode='json')
@@ -624,9 +707,17 @@ class Research:
             current = False
             availability = {'status': 'unavailable', 'error': {
                 'code': getattr(exc, 'code', 'METHOD_UNAVAILABLE'), 'message': str(exc)}}
+        from .version_status import inspect
+        value['version_status'] = inspect(self, snapshot, cache)
+        current = current and value['version_status']['status'] == 'current'
         value['freshness'] = 'current' if current else 'historical'
         value['integrity'] = 'verified'
         value['method_availability'] = availability
+        if hasattr(self.executor,'execution_status'):
+            method=snapshot['definition']['method']
+            value['execution']=self.executor.execution_status(rid,method['plugin_id'],method['capability'])
+            if value['execution'] and value['status'] in ('succeeded','partial','failed','interrupted'):
+                value['execution']={**value['execution'],'state':value['status']}
         value['artifact_status'] = self.artifact_status(value)
         from .convergence import has_temperature_field, temperature_convergence
         if has_temperature_field(value):
@@ -640,6 +731,36 @@ class Research:
         from cablesim_sdk.reproduction import digest
         statuses = {}
         for case in (run.get('output') or {}).get('cases',[]):
+            comparison=case.get('artifacts',{}).get('x-cablesim.iec-fem-comparison')
+            if comparison is not None:
+                try:
+                    from cablesim_sdk.iec_fem import ComparisonArtifact,ComparisonParameters
+                    result=ComparisonArtifact.model_validate(comparison)
+                    original_id=case['case_id'].split('-',2)[-1] if case['case_id'].startswith('crosscheck-') else case['case_id']
+                    saved_case=next(c for c in run['snapshot']['cases'] if c['case_id']==original_id)
+                    inputs=saved_case['input']
+                    saved_parameters=saved_case['parameters']
+                    if case['case_id'].startswith('crosscheck-'):
+                        index=int(case['case_id'].split('-',2)[1])
+                        if index<1:raise ValueError('对照方法序号无效。')
+                        saved_parameters=run['snapshot']['definition']['crosschecks'][index-1]['parameters']
+                    parameters=ComparisonParameters.model_validate(saved_parameters).model_dump(mode='json')
+                    bundle=case['artifacts'].get('x-cablesim.simulation-bundle',{})
+                    method=case.get('method') or run['snapshot']['definition']['method']
+                    hashes=case.get('artifact_digests',{})
+                    if (result.source.case_id!=original_id or result.source.input_sha256!=digest(inputs)
+                        or result.source.plugin_id!=method['plugin_id'] or result.source.plugin_version!=method['version']
+                        or result.source.capability!=method['capability'] or not hashes.get('x-cablesim.iec-fem-comparison')
+                        or result.source.bundle_sha256!=hashes.get('x-cablesim.simulation-bundle')
+                        or result.parameters_sha256!=digest(parameters)
+                        or bundle.get('prepared_input',{}).get('parameters')!=parameters
+                        or result.section_id!=parameters['section_id'] or result.load_id!=parameters['load_id']
+                        or result.rated_circuit!=parameters['controls']['rated_circuit']):
+                        raise ValueError('比较工件与保存输入、方法或原始计算证据不匹配。')
+                    state={'status':'verified','reason':None}
+                except (ValueError,KeyError,TypeError,IndexError,StopIteration) as exc:
+                    state={'status':'unavailable','reason':str(exc)}
+                statuses.setdefault(case['case_id'],{})['x-cablesim.iec-fem-comparison']=state
             for kind,source_key,schema_key,schema in (
                 ('x-cablesim.loss-coefficients','producer','schema','cablesim.loss-coefficients/1'),
                 ('x-cablesim.sheath-losses','source','schema_version','cablesim.sheath-losses/1')):
@@ -739,6 +860,15 @@ class Research:
         from .convergence import has_temperature_field
         if any(has_temperature_field(r) and r.get('convergence',{}).get('status') != 'converged' for r in runs):
             raise HTTPException(422, '温度场未收敛：须完成至少三档网格及计算域加倍，热点变化小于 0.1 K 后才能纳入计算书。')
+        for run in runs:
+            for case in run['output']['cases']:
+                comparison=case.get('artifacts',{}).get('x-cablesim.iec-fem-comparison')
+                if comparison is None:continue
+                status=run['artifact_status'].get(case['case_id'],{}).get('x-cablesim.iec-fem-comparison',{})
+                if status.get('status')!='verified':
+                    raise HTTPException(409,'IEC/FEM 比较工件来源校验失败，不能纳入计算书。')
+                if not comparison['valid']:
+                    raise HTTPException(422,'IEC/FEM 比较未通过网格与计算域收敛，不能纳入计算书。')
         if current_only and any(r['freshness'] != 'current' for r in runs):
             raise HTTPException(409, '计算书只能纳入当前保存输入的运行；请重新计算或重新选择。')
         html = render(runs)
@@ -780,4 +910,6 @@ class Research:
             raise HTTPException(409, '计算书完整性校验失败。') from None
         if digest != result['digest']:
             raise HTTPException(409, '计算书完整性校验失败。')
+        from .version_status import cover_status
+        result['version_status'] = cover_status([self.get_run(wid, s['run_id']) for s in result['sources']])
         return result

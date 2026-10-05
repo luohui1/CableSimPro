@@ -40,6 +40,81 @@
   "capabilities": [
     {
       "kind": "method",
+      "id": "iec-thermal-field",
+      "title": "三芯IEC损耗与有限元温度反馈",
+      "method_version": "iec-thermal-field/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "conductor_temperature",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.temperature-field",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.simulation-bundle",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "analytic-benchmark",
+        "cases": [
+          "Resolved three-core conductor/screen/armour heat-source conservation and IEC scalar loss crosscheck"
+        ]
+      },
+      "limitations": [
+        "平衡三芯独立屏蔽、两端接地，电损耗适用范围由IEC60287三芯分支校验；金属平均温度与损耗迭代。",
+        "实际三芯与公共层热域；绞线与丝带采用明确的热层等效，未求三维电磁场。",
+        "一管一缆同心圆管；IEC管内热阻随两侧界面温度更新；结果为reference_only。"
+      ]
+    },
+    {
+      "kind": "method",
+      "id": "iec-fem-comparison",
+      "title": "研究敷设截面 IEC 与收敛有限元对比",
+      "method_version": "iec-fem-comparison/0.1.0",
+      "analysis": "steady_state",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.iec-fem-comparison",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.simulation-bundle",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "analytic-benchmark",
+        "cases": [
+          "plugin-tests/test_iec_fem_comparison.py: homogeneous half-space hand reference and mesh/domain convergence"
+        ]
+      },
+      "limitations": [
+        "Slurm 二维单芯同心光滑护套热场；逐回路反求，其他回路保持保存负荷。",
+        "分层、回填和每根一管按保存几何；分层 IEC 列须明确确认均匀土壤对照口径。",
+        "多回路电损耗须有独立来源；FEM 使用温变导体电阻及冻结的 IEC 额定点 AC/护套/管内系数。",
+        "网格和加倍域均通过后才输出偏差结论；reference_only，未自动批准。"
+      ]
+    },
+    {
+      "kind": "method",
       "id": "transient-temperature",
       "title": "研究截面与负荷曲线暂态温升",
       "method_version": "transient-temperature/0.1.0",
@@ -592,6 +667,11 @@
       "size_bytes": 10106
     },
     {
+      "path": "src/cablesim_simulation/constitutive_losses.py",
+      "sha256": "293210b9ca91cba5107c4e05236faeaed470ed9ae88ca6e50fae516b7e6a3f45",
+      "size_bytes": 8863
+    },
+    {
       "path": "src/cablesim_simulation/contact_electrothermal.py",
       "sha256": "e4f66f1f269c59f889f61900d9ac0f997d55b798b27f9d38f66c6f5e3298c421",
       "size_bytes": 10915
@@ -627,14 +707,24 @@
       "size_bytes": 20790
     },
     {
+      "path": "src/cablesim_simulation/iec_attribution.py",
+      "sha256": "eb54b46dcc0d488a614f8ae477a384ac04cf346b50ea66f35a6934b29f50f52e",
+      "size_bytes": 1940
+    },
+    {
+      "path": "src/cablesim_simulation/iec_comparison.py",
+      "sha256": "ac9a93f1019dfa815235389ac7a870512a71e6d2a1d6bdb5012e346a4c0b3e2a",
+      "size_bytes": 17885
+    },
+    {
       "path": "src/cablesim_simulation/loss_table.py",
       "sha256": "08229a384332c83dd52f0199128a98cb62e28d74160ba0268b682aa8417a0907",
       "size_bytes": 6845
     },
     {
       "path": "src/cablesim_simulation/main.py",
-      "sha256": "bc545ca8285602fceb2928621c2335dd284e89e010bdd29b40d0787c4026d4c6",
-      "size_bytes": 10447
+      "sha256": "f3f5c0d705e6b8f2c1834aa6e5ad949bdbe306fd951ff7494ead3aadf5491cb4",
+      "size_bytes": 11214
     },
     {
       "path": "src/cablesim_simulation/problem.py",
@@ -673,28 +763,38 @@
     },
     {
       "path": "src/cablesim_simulation/thermal.py",
-      "sha256": "3a2732bba2d0ebbff506a52e2459b4f09dd87c43dd7a6a5854652a803a1e2d4a",
-      "size_bytes": 18126
+      "sha256": "d87a2b2dc3c536941f13ed6ce30012ff204239a6069072cc6ee06da6575962cf",
+      "size_bytes": 24000
     },
     {
       "path": "src/cablesim_simulation/thermal_dataset.py",
-      "sha256": "089fcbfafbca76831f4185528552692c4d36eb5def0c62d9c09cf81b9fd6cc24",
-      "size_bytes": 6420
+      "sha256": "5bcf92059e28148782702f3f3774f8f67d2a8c08e7015f0d2da314106a43f6d8",
+      "size_bytes": 6574
     },
     {
       "path": "src/cablesim_simulation/thermal_domain.py",
-      "sha256": "7f1df2b1cb25fff196308a707bba469db5cb878c3c7794b758b9b2e8187909d5",
-      "size_bytes": 8620
+      "sha256": "5d651684da0c027791b01af4f837e92abca89e3c3b50ea2118fb150e40dedf19",
+      "size_bytes": 8818
     },
     {
       "path": "src/cablesim_simulation/thermal_input.py",
-      "sha256": "095ea98208d6c8795e449ee404fc9423753b2449d2218327182ca9c1f28a5ceb",
-      "size_bytes": 9362
+      "sha256": "b3d42334a2075090b2fcc2195064a422dd3b1991dc8d58d570dd211524c54c64",
+      "size_bytes": 10979
     },
     {
       "path": "src/cablesim_simulation/thermal_mesh.py",
-      "sha256": "c3f61b3aafd1c52b0056bc6547d64baefb8b5b5af9041967b20c0d06384728e0",
-      "size_bytes": 5567
+      "sha256": "125c6d4120f5599bed2c8f37a80930b50f97592b2cf1c4869763a903657a561b",
+      "size_bytes": 6865
+    },
+    {
+      "path": "src/cablesim_simulation/thermal_overload.py",
+      "sha256": "3578ef34b8685ba1c93e26c7fcedb6d03310a9f11c192118e946cb3cf6e2bf1d",
+      "size_bytes": 7968
+    },
+    {
+      "path": "src/cablesim_simulation/three_core_thermal.py",
+      "sha256": "bc6667251d386b560ffbcb776c964afaf56e3a1531b1560b2223e9ea6adf26e2",
+      "size_bytes": 16501
     },
     {
       "path": "src/cablesim_simulation/transient.py",
@@ -778,8 +878,8 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "1cf1f6812a0b48fd470f745772372b6d259026c3da58289cef4d68d956c2197b",
-      "size_bytes": 1894
+      "sha256": "7a60488ee1c24a9bc339bb64f8a2454ad885a78d142d450f6340bf6e874f9882",
+      "size_bytes": 4986
     }
   ]
 }

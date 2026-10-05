@@ -16,12 +16,12 @@ from .registry import PluginHostError
 
 
 class ResidentWorker:
-    def __init__(self, entry, root, environment):
+    def __init__(self, entry, root, environment, python_executable):
         self.entry=entry
         self.allowed_root=Path(root).resolve();self.closed=False
         self.mailbox=Path(tempfile.mkdtemp(prefix='csp-worker-',dir=root))
         self.stop=Event();self.completed=Event();self.lock=Lock();self.error=None
-        self.args=[sys.executable,'-I',str(Path(__file__).with_name('resident_worker.py')),str(entry),str(self.mailbox)]
+        self.args=[str(python_executable),'-I',str(Path(__file__).with_name('resident_worker.py')),str(entry),str(self.mailbox)]
         self.environment={**environment,**{k:str(self.mailbox) for k in ('HOME','USERPROFILE','TMP','TEMP','TMPDIR')}}
         self.thread=Thread(target=self._run,daemon=True,name='cablesim-preview-worker')
         self.thread.start()
@@ -92,23 +92,23 @@ class ResidentRunner:
         return {'resident_main','resident_warmup'}<=functions
 
     def __call__(self,arguments,*,cwd,env,timeout,stderr_limit):
-        worker=self._worker(Path(arguments[-1]),env)
+        worker=self._worker(Path(arguments[-1]),env,arguments[0])
         if worker is None:return run_process(arguments,cwd=cwd,env=env,timeout=timeout,stderr_limit=stderr_limit)
         return worker.run(arguments,cwd,env,timeout)
 
-    def warmup(self,entry,*,env,timeout):
+    def warmup(self,entry,*,env,timeout,python_executable=None):
         """Load an opt-in worker without creating or executing an engineering job."""
-        worker=self._worker(Path(entry),env)
+        worker=self._worker(Path(entry),env,python_executable or sys.executable)
         if worker is None:return False
         worker._wait(worker.mailbox/'ready.json',monotonic()+timeout)
         return True
 
-    def _worker(self,entry,env):
+    def _worker(self,entry,env,python_executable):
         entry=entry.resolve();raw=entry.read_bytes()
         functions={n.name for n in ast.parse(raw).body if isinstance(n,ast.FunctionDef)}
         if not {'resident_main','resident_warmup'}<=functions:
             return None
-        key=(str(entry),sha256(raw).hexdigest(),env.get('CABLESIM_WORKER_RELEASE',''))
+        key=(str(entry),sha256(raw).hexdigest(),env.get('CABLESIM_WORKER_RELEASE',''),str(python_executable))
         with self.lock:
             worker=self.workers.get(key)
             if worker and worker.completed.is_set():worker.close();del self.workers[key];worker=None
@@ -116,7 +116,7 @@ class ResidentRunner:
                 for old_key in list(self.workers):
                     if old_key[0]==key[0] or len(self.workers)>=2:self.workers.pop(old_key).close()
                 self.root.mkdir(parents=True,exist_ok=True)
-                worker=ResidentWorker(entry,self.root,env);self.workers[key]=worker
+                worker=ResidentWorker(entry,self.root,env,python_executable);self.workers[key]=worker
         return worker
 
     def close(self):

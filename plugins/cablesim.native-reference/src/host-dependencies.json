@@ -31,8 +31,8 @@
   },
   {
     "path": "backend/plugin_host/__init__.py",
-    "sha256": "0fae30ea48a3b91522d371cc95bbfa6500b2495a24961b9c695475e60128d0ed",
-    "size_bytes": 265
+    "sha256": "c8619e7107c8bcb2736e3c1378e640bf9adb412720537e068d647124aed9519d",
+    "size_bytes": 260
   },
   {
     "path": "backend/plugin_host/buried_contract.py",
@@ -51,8 +51,8 @@
   },
   {
     "path": "backend/plugin_host/executor.py",
-    "sha256": "e4125db6ff400c8c5dcb9b4ef4d74a713a888656dbed8146ee66fdab1fc113b1",
-    "size_bytes": 20797
+    "sha256": "c6badba3f34bec50ef16236dd986f1dc55fb42c3cf29a503c43ed0f944c733dd",
+    "size_bytes": 21097
   },
   {
     "path": "backend/plugin_host/field_contract.py",
@@ -66,8 +66,8 @@
   },
   {
     "path": "backend/plugin_host/manifest.py",
-    "sha256": "e360c1a70fd3ab07ac740ee0de04948a6562450a6ec8833011340aa6ecabd00e",
-    "size_bytes": 7236
+    "sha256": "4b7a8a468ccba0139723b91e186fd02407a2ca897b4dd272035a70e05f2020e6",
+    "size_bytes": 7061
   },
   {
     "path": "backend/plugin_host/native_arguments.py",
@@ -81,8 +81,13 @@
   },
   {
     "path": "backend/plugin_host/registry.py",
-    "sha256": "ebe38c90b7fd75badf9cb3009a295717ce51cbbf929364752984688a617f24d4",
-    "size_bytes": 4513
+    "sha256": "674eaa668e5a7fe28fb453157142a126d95b7b0a0c18331cb8e4fd58864faa51",
+    "size_bytes": 4418
+  },
+  {
+    "path": "backend/plugin_host/runtime.py",
+    "sha256": "6c9218f4b8f94c5a42be5505b89ee015f8ec9d88d1e04c6bc22c3d97af48cb68",
+    "size_bytes": 4481
   },
   {
     "path": "backend/schemas.py",
@@ -95,14 +100,24 @@
     "size_bytes": 81
   },
   {
+    "path": "cablesim_sdk/ampacity.py",
+    "sha256": "52febe9c3d4f96b6aca728f240a0d13ef4f2476f6f678a2f2c29965a345f2149",
+    "size_bytes": 1516
+  },
+  {
     "path": "cablesim_sdk/base.py",
     "sha256": "65ad67798ef624e21b2c17ba5735b74d0f796048e24edda5be6baed0b92ebbf4",
     "size_bytes": 242
   },
   {
+    "path": "cablesim_sdk/cross_sections.py",
+    "sha256": "c9a97fe6ba7040a8d4ea05794862fa458ffd88c5a8d2d3836b610797d15201d0",
+    "size_bytes": 3551
+  },
+  {
     "path": "cablesim_sdk/domain.py",
-    "sha256": "da05192cb20b38c5af17ca0ed4af88e7caabc76ef1f313d02588eec8f9038114",
-    "size_bytes": 24563
+    "sha256": "fd72aeb0156b049588847d25161d6d25bff22ad0fc0ba572e9c38b5cc7fc89f2",
+    "size_bytes": 27548
   },
   {
     "path": "cablesim_sdk/environment.py",

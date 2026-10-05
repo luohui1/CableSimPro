@@ -25,6 +25,30 @@ class Electrical(Strict):
     source: str = Field(min_length=1)
 
 
+class DuctAirLaw(Strict):
+    """IEC 60287-2-1:2023 4.2.6.1, with explicit Table 2 coefficients."""
+    u: float = Field(gt=0)
+    v: float = Field(ge=0)
+    y_per_k: float = Field(ge=0)
+    minimum_temperature_k: float = Field(gt=0)
+    maximum_temperature_k: float = Field(gt=0)
+    source: str = Field(min_length=1)
+
+    @model_validator(mode='after')
+    def ordered(self):
+        if self.maximum_temperature_k <= self.minimum_temperature_k:
+            raise ValueError('管内空气经验式有效温度上限须大于下限，单位 K。')
+        return self
+
+    def resistance(self, mean_temperature_k, cable_diameter_m):
+        if not self.minimum_temperature_k <= mean_temperature_k <= self.maximum_temperature_k:
+            raise ValueError('duct.air_law：平均表面温度越出声明有效范围；未外推。')
+        denominator = 1 + .1*(self.v+self.y_per_k*(mean_temperature_k-273.15))*cable_diameter_m*1000
+        if not isfinite(denominator) or denominator <= 0 or cable_diameter_m <= 0:
+            raise ValueError('duct.air_law：直径或管内空气经验式分母无效。')
+        return self.u/denominator
+
+
 class Duct(Strict):
     uid: str
     inner_radius_m: float = Field(gt=0)
@@ -32,6 +56,7 @@ class Duct(Strict):
     k_w_m_k: float = Field(gt=0)
     air_resistance_k_m_w: float = Field(gt=0)
     source: str = Field(min_length=1)
+    air_law: DuctAirLaw | None = None
 
 
 class Cable(Strict):
@@ -167,11 +192,14 @@ class ThermalModel(Strict):
 
 class Controls(Strict):
     operation: Literal['temperature','ampacity']
+    element_order: Literal[1,2] = 1
     mesh_size_m: float = Field(gt=0)
     far_mesh_size_m: float = Field(gt=0)
     mesh_transition_m: float = Field(gt=0)
     fine_mesh_band_m: float | None = Field(default=None,ge=0)
-    max_nodes: int = Field(ge=100,le=200000)
+    near_soil_mesh_size_m: float | None = Field(default=None,gt=0)
+    near_soil_margin_m: float = Field(default=.5,gt=0)
+    max_nodes: int = Field(ge=100,le=500000)
     tolerance_k: float = Field(gt=0,le=.01)
     max_iterations: int = Field(ge=2,le=500)
     relaxation: float = Field(gt=0,le=1)
@@ -198,6 +226,8 @@ def prepare(value, parameters):
         model = ThermalModel.model_validate(value)
     if controls.far_mesh_size_m < controls.mesh_size_m:
         raise ValueError('远场网格尺寸不能小于局部网格。')
+    if controls.near_soil_mesh_size_m is not None and not controls.mesh_size_m <= controls.near_soil_mesh_size_m <= controls.far_mesh_size_m:
+        raise ValueError('near_soil_mesh_size_m：近区土壤网格须介于电缆局部和远场网格尺寸之间，单位 m。')
     if controls.operation == 'ampacity':
         selected = [c for c in model.cables if c.circuit == controls.rated_circuit]
         if not selected or any(c.electrical is None or c.prescribed_core_temperature_k is not None for c in selected):

@@ -73,10 +73,13 @@ def render_pdf(specification, audience='internal'):
         'h3':ParagraphStyle('Section', parent=normal, fontSize=12, leading=18, spaceBefore=14, spaceAfter=8, keepWithNext=True),
         'model':ParagraphStyle('Model', parent=normal, fontSize=16, leading=24, spaceAfter=18),
         'cell':ParagraphStyle('Cell', parent=normal, leading=15, spaceAfter=0),
+        'conditions':ParagraphStyle('Conditions', parent=normal, keepWithNext=True),
     }
 
     def paragraph(value, style):
-        value = escape(str(value)).replace('\n','<br/>').replace('₀','<sub>0</sub>')
+        value = escape(str(value)).replace('\n','<br/>')
+        for symbol, plain in {'₀':'0','₁':'1','₂':'2','₃':'3','ₛ':'s','ₚ':'p'}.items():
+            value = value.replace(symbol,'<sub>'+plain+'</sub>')
         # Explicit word boundaries also keep copied hexadecimal digests exact.
         value = re.sub(r'[0-9a-f]{64}', lambda match: '<font name="Courier" size="10">' +
                        ' '.join(match[0][start:start+16] for start in range(0,64,16)) + '</font>', value)
@@ -86,7 +89,7 @@ def render_pdf(specification, audience='internal'):
         result = []
         for block in _Blocks(html).blocks:
             if block['kind'] != 'table':
-                style = styles['model'] if block.get('class') == 'spec-model' else styles[block['kind']]
+                style = styles['model'] if block.get('class') == 'spec-model' else styles['conditions'] if block.get('class') == 'spec-conditions' else styles[block['kind']]
                 result.append(paragraph(block['text'], style))
                 continue
             rows = block['rows']

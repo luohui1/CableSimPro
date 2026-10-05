@@ -1,4 +1,8 @@
-import { message, text } from "@/api/client";
+import { message, optionalRecord, text } from "@/api/client";
+import { VersionNotice } from './version-notice';
+import { isVersionStale } from '@/lib/version-status';
+import { useQuery } from '@tanstack/react-query';
+import { studyRuns } from '@/api/research';
 import { Dialog } from "./ui/dialog";
 import { DataTable } from "./data-table";
 import { Button } from "./ui/button";
@@ -12,6 +16,9 @@ export function RunRecordsDrawer({
   loading,
   error,
   onRetry,
+  workspace,
+  studyId,
+  disabledReason,
 }: {
   open: boolean;
   onOpenChange: (value: boolean) => void;
@@ -21,8 +28,12 @@ export function RunRecordsDrawer({
   loading?: boolean;
   error?: unknown;
   onRetry?: () => void;
+  workspace?: string;
+  studyId?: string;
+  disabledReason?: string;
 }) {
-  const rows: (Record<string, unknown> & { id: string })[] = runs.map(
+  const history = useQuery({ queryKey: ['run-history', workspace, studyId], queryFn: ({signal}) => studyRuns(workspace!, studyId!, signal), enabled: open && !!workspace && !!studyId });
+  const rows: (Record<string, unknown> & { id: string })[] = (history.data || runs).map(
     (run) => ({ ...run, id: text(run.id) }),
   );
   return (
@@ -37,26 +48,26 @@ export function RunRecordsDrawer({
       <DataTable
         label="研究运行记录"
         selectedId={selectedId}
-        loading={loading}
-        error={error ? message(error) : undefined}
+        loading={loading || !!workspace && !!studyId && history.isPending}
+        error={error || history.error ? message(error || history.error) : undefined}
         groups={[
           {
             id: "current",
             label: "当前",
-            rows: rows.filter((run) => run.freshness !== "historical"),
+            rows: rows.filter((run) => run.freshness !== "historical" && !isVersionStale(run)),
           },
           {
             id: "historical",
             label: "历史",
             defaultCollapsed: false,
-            rows: rows.filter((run) => run.freshness === "historical"),
+            rows: rows.filter((run) => run.freshness === "historical" || isVersionStale(run)),
           },
         ]}
         rowClassName={(row) =>
           row.freshness === "historical" ? "historical-row" : ""
         }
         rowLabel={(row) => "查看运行 " + row.id}
-        onSelect={(row) => {
+        onActivate={(row) => {
           onSelect(row.id);
           onOpenChange(false);
         }}
@@ -82,7 +93,7 @@ export function RunRecordsDrawer({
           {
             id: "status",
             label: "状态",
-            render: (row) => (
+            render: (row) => isVersionStale(row) && workspace && studyId ? <VersionNotice value={row} target={{ wid: workspace, sid: studyId, module: text(optionalRecord(row.snapshot).module) || undefined }} disabledReason={disabledReason} onComplete={run => { onSelect(text(run.id)); onOpenChange(false); }} /> : (
               <StatusMark
                 kind={
                   row.freshness === "historical"
@@ -123,7 +134,7 @@ export function RunRecordsDrawer({
           },
         ]}
       />
-      {!!error && onRetry && <Button onClick={onRetry}>重新读取</Button>}
+      {(!!error || !!history.error) && <Button onClick={() => { onRetry?.(); void history.refetch(); }}>重新读取</Button>}
     </Dialog>
   );
 }

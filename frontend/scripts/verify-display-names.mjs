@@ -42,7 +42,7 @@ async function save() {
   await fs.writeFile(
     path.join(
       output,
-      process.env.NAMES_FLOWS_ONLY === "1" ? "flows.json" : "verification.json",
+      process.env.NAMES_RECHECK ? "recheck.json" : process.env.NAMES_FLOWS_ONLY === "1" ? "flows.json" : "verification.json",
     ),
     JSON.stringify(report, null, 2),
   );
@@ -85,6 +85,10 @@ try {
     "五个工程研究须真实存在",
   );
   assert.equal(studies.length, 5);
+  for(const study of [inquiry,sweep,compare]){
+    const saved=(await get(`/api/workspaces/${study.wid}/studies/${study.id}/runs`)).items;
+    assert.ok(saved.some(run=>run.freshness==='current'&&run.integrity==='verified'&&['succeeded','partial'].includes(run.status)),study.definition.title+'：成功态验收必须有匹配当前输入和发行的真实运行');
+  }
   const types = await get("/api/design/type-workspaces");
   assert.equal(types.length, 2);
   assert.ok(types.some((t) => t.name === "YJV22-8.7/15 3×300"));
@@ -168,26 +172,24 @@ try {
   }))
     for (const tab of tabs) routes.push(`/types/${type.id}/${module}/${tab}`);
   if (process.env.NAMES_FLOWS_ONLY !== "1")
-    for (const url of routes) await scan(url);
+    for (const url of routes.filter(url=>!process.env.NAMES_RECHECK || url.includes(process.env.NAMES_RECHECK))) {await scan(url);if(process.env.NAMES_RECHECK){await variants('定向复核');await shot('method-compare');}}
+  if (!process.env.NAMES_RECHECK) {
   await go(`/types/${type.id}/specification/preview`);
-  await expect(
-    page.getByRole("button", { name: "导出 PDF", exact: true }),
-  ).toBeEnabled();
+  await page.getByRole('combobox',{name:'文档版本',exact:true}).click();
+  await page.getByRole('option',{name:'内部审核版',exact:true}).click();
+  await expect(page.getByRole('button',{name:'导出内部审核稿',exact:true})).toBeEnabled();
+  const pdf = page.waitForEvent('download',{timeout:60000});
   const pdfResponse = page.waitForResponse((r) =>
     r.url().includes("/specification/file"),
   );
-  await page.getByRole("button", { name: "导出 PDF", exact: true }).click();
+  await page.getByRole("button", { name: "导出内部审核稿", exact: true }).click();
   const reply = await pdfResponse;
-  assert.equal(reply.status(), 422, "未计算型号必须拒绝客户PDF导出");
-  assert.equal((await reply.json()).detail.channel, "geometry");
-  await expect(page.locator('[role="alert"]')).toContainText(
-    "尚无当前修订的完整运行",
-  );
-  await assertVisibleNames(page, "规格书缺项拒绝");
-  report.checks.push(
-    "生成OpenAPI客户端请求PDF；真实缺项422保留并显示具体原因，无批准或伪造导出",
-  );
+  assert.equal(reply.status(),200,'内部审核稿应可下载');assert.equal(reply.headers()['x-specification-audience'],'internal');
+  const file=await pdf, stream=await file.createReadStream(), chunks=[];for await(const chunk of stream)chunks.push(chunk);assert.equal(Buffer.concat(chunks).subarray(0,5).toString(),'%PDF-');
+  await assertVisibleNames(page, "内部审核规格书");
+  report.checks.push("生成OpenAPI客户端下载真实内部审核PDF；版本、内容类型、摘要验证通过，未发布客户版");
   await go(route(sweep, "sweep", "curve"));
+  await expect(page.locator('[data-module-state="success"]')).toBeVisible();
   await expect(page.locator(".evidence-summary h2")).toContainText(
     "土壤热阻率",
   );
@@ -204,6 +206,7 @@ try {
   assert.ok((await download).suggestedFilename().endsWith(".csv"));
   report.checks.push("真实扫描、中文结果选择、统一单位精度、端点结论和CSV");
   await go(route(inquiry, "selection", "results"));
+  await expect(page.locator('.conclusion')).not.toHaveClass(/is-historical/);
   await expect(page.getByRole("table", { name: "真实选型候选" })).toBeVisible();
   assert.equal(
     await page.getByRole("columnheader", { name: "来源", exact: true }).count(),
@@ -233,9 +236,8 @@ try {
   ).items;
   const saved = runs.find((r) => r.integrity === "verified");
   await go(route(sweep, "sweep", "curve") + "&run=" + saved.id);
-  await expect(
-    page.getByText("历史结果", { exact: true }).first(),
-  ).toBeVisible();
+  assert.equal(saved.freshness,'historical');
+  await expect(page.getByRole('button',{name:/历史结果/}).first()).toBeVisible();
   await variants("扫描历史");
   const inquiryRuns = (
     await get(`/api/workspaces/${inquiry.wid}/studies/${inquiry.id}/runs`)
@@ -249,10 +251,10 @@ try {
   // Transport faults / empty collections only; never manufacture successful physics data.
   for (const target of [sweep, inquiry])
     for (const state of ["empty", "loading", "error"]) {
+      let release; const gate = new Promise(resolve => {release=resolve;});
       await page.route("**/api/workspaces/*/studies/*/runs*", async (r) => {
         if (r.request().method() !== "GET") return r.fallback();
-        if (state === "loading")
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+        if (state === "loading") await gate;
         await r.fulfill({
           status: state === "error" ? 503 : 200,
           contentType: "application/json",
@@ -280,9 +282,14 @@ try {
         await expect(
           page.locator('.provider-state [aria-busy="true"]'),
         ).toHaveCount(0);
+      if(state==='empty')await expect(page.getByRole('heading',{name:target===sweep?'尚无扫描运行':'尚无选型运行',exact:true})).toBeVisible();
+      if(state==='error')await expect(page.getByText('网络暂时不可用，请重试',{exact:false}).first()).toBeVisible();
       await variants((target === sweep ? "扫描" : "选型") + state);
+      release();
+      if(state==='loading')await expect(page.locator('.provider-state [aria-busy="true"]')).toHaveCount(0);
       await page.unroute("**/api/workspaces/*/studies/*/runs*");
     }
+  }
   await save();
   const violations = report.pages.flatMap((p) =>
     p.violations.map((v) => ({ ...v, route: p.route })),

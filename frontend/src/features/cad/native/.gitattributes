@@ -1,0 +1,2 @@
+# Source digests must survive checkout even when core.autocrlf=true.
+* text eol=lf

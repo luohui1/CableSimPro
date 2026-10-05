@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standard-check",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "name": "产品标准尺寸核对",
   "icon": "assets/icon.svg",
   "description": "按已核验 GB 产品标准核对结构尺寸和导体 R₂₀，逐条记录条款、余量、数据缺项与未覆盖范围。",
@@ -43,7 +43,7 @@
       "kind": "method",
       "id": "dimensions",
       "title": "GB 产品标准结构尺寸与电阻核对",
-      "method_version": "GB-DIMENSIONS-0.1.1",
+      "method_version": "GB-DIMENSIONS-0.2.0",
       "analysis": "standard_check",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -80,13 +80,13 @@
     },
     {
       "path": "src/cablesim_standard_check/dimensions.json",
-      "sha256": "5ea326e21c2a549777810281bcc2e62b04555303cee25b3d2ee102c63f6300b7",
-      "size_bytes": 17321
+      "sha256": "c334665b7e09f8ab5b5e1ec417555d2a810d65e1dc873d632835f9a8695d0284",
+      "size_bytes": 20369
     },
     {
       "path": "src/cablesim_standard_check/main.py",
-      "sha256": "d15e3f2eea629435c6380d0d285681cd7925fc141d008377746875ea492a0eec",
-      "size_bytes": 47536
+      "sha256": "69039e8049a44cf6b74a8d11afee200a65064ffd42e49cdfc6813e8715692232",
+      "size_bytes": 53865
     },
     {
       "path": "src/cablesim_standard_check/sources.json",

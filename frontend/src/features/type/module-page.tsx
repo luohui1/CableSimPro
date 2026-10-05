@@ -4,7 +4,9 @@ import { TypeAnalysis } from './analysis';
 import { TypeRatingTable } from './rating-table';
 import { TypeComparison } from './comparison';
 import { TypeSpecification } from './specification';
+import { TypeRequirements } from './requirements';
 export function TypeModulePage({ module, tab }: { module: string; tab: string }) {
+  if (module === 'requirements') return <TypeRequirements tab={tab} />;
   if (module === 'standard-check') return <TypeStandardCheck />;
   if (module === 'electrical' || module === 'short-circuit') return <TypeAnalysis key={module} module={module} tab={tab} />;
   if (module === 'rating-table') return <TypeRatingTable tab={tab} />;

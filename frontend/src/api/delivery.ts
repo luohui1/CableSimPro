@@ -1,4 +1,30 @@
 import { api, record, responseData, requireEndpoint, ApiError } from "./client";
+import type { components } from "./generated/schema";
+export type DeliverySummary = components["schemas"]["DeliverySummary"];
+export type ReportAudience = "customer" | "internal";
+// The sandboxed preview delegates downloads to the toolbar. Stored/exported HTML stays untouched.
+export function deliveryPreview(html: string): string {
+  const document = new DOMParser().parseFromString(html, "text/html");
+  for (const link of document.querySelectorAll("a[data-report-pdf]")) link.remove();
+  return document.documentElement.outerHTML;
+}
+export function deliveryPdf(book: Record<string, unknown>, audience: ReportAudience): Blob {
+  if (typeof book.html !== "string") throw new ApiError(502, "交付缺少保存的正文");
+  const document = new DOMParser().parseFromString(book.html, "text/html");
+  const links = document.querySelectorAll(`a[data-report-pdf="${audience}"]`);
+  if (links.length !== 1) throw new ApiError(422, `此存档未提供${audience === "customer" ? "客户版" : "内部版"} PDF，可下载 HTML 存档`);
+  const href = links[0].getAttribute("href") || "";
+  const match = /^data:application\/pdf;base64,([A-Za-z0-9+/=\r\n]+)$/.exec(href);
+  if (!match) throw new ApiError(409, "PDF 链接不是交付内保存的 PDF，拒绝下载");
+  let bytes: Uint8Array<ArrayBuffer>;
+  try { bytes = Uint8Array.from(atob(match[1]), char => char.charCodeAt(0)); }
+  catch { throw new ApiError(409, "保存的 PDF 编码无效"); }
+  if (new TextDecoder().decode(bytes.subarray(0, 5)) !== "%PDF-") throw new ApiError(409, "保存工件不是有效 PDF 文件");
+  return new Blob([bytes], { type: "application/pdf" });
+}
+export async function deliveries(wid: string, signal?: AbortSignal): Promise<DeliverySummary[]> {
+  return responseData(api.GET("/api/workspaces/{wid}/deliveries", { params: { path: { wid } }, signal }));
+}
 
 // These optional adapters share the generated DeliveryRequest/path parameters with the kernel API.
 // The generated endpoint catalogue blocks them before any request until the formal host exposes them.

@@ -4,6 +4,21 @@ from backend.kernel.batch_files import atomic,read
 from backend.kernel.batch_slurm import SlurmBackend
 
 
+def test_container_python_keeps_scheduler_control_on_host(tmp_path,monkeypatch):
+    profile={'ssh_alias':'fixture','remote_root':'/home/fixture/cablesim/jobs',
+        'python':'/cad/bin/python','control_python':'/host/bin/python','partition':'dg83'}
+    remote=SlurmBackend(profile,tmp_path/'ledger.sqlite')
+    commands=[]
+    def ssh(args,**kwargs):
+        commands.append(args)
+        return '{"ok":true,"result":{"state":"running"}}' if remote.agent in args else '{"ready":true}'
+    monkeypatch.setattr(remote,'ssh',ssh)
+    assert remote.remote_json('print(1)')=={'ready':True}
+    assert remote.call('poll','/root','token')=={'state':'running'}
+    assert all(command[0]=='/host/bin/python' for command in commands)
+    assert remote.configuration['python']=='/cad/bin/python'
+
+
 def test_memory_derived_cpu_reservation_and_historical_replay(tmp_path,monkeypatch):
     directory=tmp_path/'dataset';identifier=str(uuid4())
     atomic(directory/'plan.json',{'id':identifier,'samples':[{'case_id':'sample'}],

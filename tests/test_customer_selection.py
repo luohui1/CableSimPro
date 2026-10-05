@@ -78,7 +78,7 @@ def test_unreviewed_candidate_not_in_engineering_selection(setup):
 
 
 def test_all_not_applicable_is_preserved_without_solver_or_fake_numbers(setup,monkeypatch):
-    c,w,m,models=setup;model=deepcopy(models[0]);model['payload']['cable_type']['cores'][0]['conductor']['form']='sectoral'
+    c,w,m,models=setup;model=deepcopy(models[0]);model['payload']['cable_type']['cores'][0]['conductor'].update(form='sectoral',diameter=.04,sector_angle_deg=120.,sector_rotation_deg=0.)
     entry=candidate(c,model)
     root,p=run(c,w,definition(m,[entry['id']],True))
     assert p.status_code==200 and not p.json()['ready']
@@ -154,3 +154,12 @@ def test_temperature_reason_uses_saved_kelvin_goals_hand_check():
     assert '450 A 下' in assess(definition,[case])[0]['reason']['message']
     del case['artifacts']['trace']['goal_checks'][0]['current_a']
     assert '保存负荷下' in assess(definition,[case])[0]['reason']['message']
+
+
+def test_candidate_selection_uses_independent_common_rating_when_held_loads_fail():
+    d={'driver':{'kind':'selection','candidate_ids':['x'],'target_key':'ampacity','target_entity':'c1','target_entities':['c1','c2'],'target_unit':'A','target_condition':'rating','rating_basis':'individual','minimum':400}}
+    results=[{'type':'quantity','key':'ampacity','unit':'A','entity':e,'case':'rating','status':'unavailable','reason':{'code':'NO_POSITIVE_RATING'}} for e in ('c1','c2')]
+    results += [{'type':'quantity','key':'ampacity','unit':'A','entity':e,'case':'rating-simultaneous','status':'available','value':182.} for e in ('c1','c2')]
+    row=assess(d,[{'case_id':'case-0','status':'succeeded','results':results}])[0]
+    assert row['value']==182 and row['status']=='not_satisfied' and row['margin']==-218
+    assert row['rating_basis']=='simultaneous' and row['reason']['code']=='AMPACITY_BELOW_TARGET'

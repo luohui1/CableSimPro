@@ -37,12 +37,34 @@ class Insulation(Strict):
     outer_screen_rho_k_m_w: float = Field(gt=0, le=20)
 
 
+class AnnularLayer(Strict):
+    thickness_m: float = Field(gt=0, description='Effective installed radial layer thickness, m; not uncompressed tape gauge.')
+    rho_k_m_w: float = Field(gt=0, description='Thermal resistivity, K·m/W; explicit sourced material/equivalent value.')
+
+
+class Corrugation(Strict):
+    depth_m: float = Field(gt=0, description='Crest-to-trough radial depth excluding metal wall, m.')
+    pitch_m: float = Field(gt=0, description='Axial peak-to-peak pitch, m; recorded geometry, not an empirical resistance correction.')
+    buffer_layers: list[AnnularLayer] = Field(min_length=1, description='Installed concentric layers between insulation screen and sheath trough.')
+    gap_rho_k_m_w: float = Field(gt=0, description='Sourced effective thermal resistivity of the corrugation gap up to mean inner diameter, K·m/W; never assumed equal to solid buffer.')
+    gap_source: str = Field(min_length=1, description='Measurement, validated simulation or declared engineering-reference source for the effective gap property.')
+    outer_layers: list[AnnularLayer] = Field(default_factory=list, description='Coatings between metal crest and outer serving; actual radial m.')
+    source: str = Field(min_length=1, description='Geometry source, including depth and pitch; distinguishes engineering reference from manufacturer data.')
+
+
 class Sheath(Strict):
-    """Smooth tubular metallic sheath. Wire screens and corrugated sheaths are refused."""
-    geometry: Literal['smooth_tube'] = 'smooth_tube'
+    """Smooth or explicitly defined corrugated metallic tube."""
+    geometry: Literal['smooth_tube','corrugated_tube'] = 'smooth_tube'
     thickness_m: float = Field(gt=0, le=0.01)
     resistivity20_ohm_m: float = Field(gt=0, le=1e-6)
     alpha20_per_k: float = Field(gt=0, lt=0.01)
+    corrugation: Corrugation | None = None
+
+    @model_validator(mode='after')
+    def matching_geometry(self):
+        if (self.geometry == 'corrugated_tube') != (self.corrugation is not None):
+            raise FieldValueError('皱纹护套须填写波纹、缓冲层和间隙有效热阻率及来源；光滑护套不能带波纹参数。','corrugation')
+        return self
 
 
 class Oversheath(Strict):

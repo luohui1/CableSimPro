@@ -48,10 +48,12 @@ def test_nonconverged_mesh_preserves_diagnostics_but_no_available_label(tmp_path
     assert all(r['status']=='unavailable' and 'value' not in r for r in result.results)
 
 
-def test_constant_matrix_reuse_matches_unmodified_full_assembly():
+@pytest.mark.parametrize('order',[1,2])
+def test_constant_matrix_reuse_matches_unmodified_full_assembly(order):
     from cablesim_simulation.thermal_input import prepare
     from cablesim_simulation.thermal import ThermalSystem
     value=case();value['parameters']['controls']['tolerance_k']=1e-10
+    value['parameters']['controls']['element_order']=order
     model,cfg=prepare(value['input'],value['parameters'])
     fast=ThermalSystem(model,cfg);full=ThermalSystem(model,cfg);full._constant_matrix=False
     for current in (100.,300.,450.):

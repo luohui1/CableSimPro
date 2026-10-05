@@ -628,6 +628,19 @@
         "printed_page": 11
       }
     },
+    "armour-material": {"mv2":{"clause":"13.2","printed_page":11,"limit":1}},
+    "armour-underlayer": {"mv2":{"clause":"13.3.1 / 13.3.2 / 13.3.3","printed_page":11,"limit":1}},
+    "armour-nonmagnetic": {"mv2":{"clause":"13.2","printed_page":11,"limit":1}},
+    "armour-wire-nominal": {"mv2":{"clause":"13.5，表 10","printed_page":12,"precision":2,"formula":"d_A ≥ table(D_A)"}},
+    "armour-tape-nominal": {"mv2":{"clause":"13.5，表 11","printed_page":13,"precision":2,"formula":"t_AD ≥ table(D_A, material)"}},
+    "armour-wire-measured": {"mv2":{"clause":"17.7.1 / 17.7.3；附录 B 表 B.1","printed_page":19,"precision":2,"factor":0.95,"offset":0,"formula":"d_measured ≥ 0.95 d_nominal"}},
+    "armour-tape-measured": {"mv2":{"clause":"17.7.2 / 17.7.3；附录 B 表 B.1","printed_page":19,"precision":2,"factor":0.9,"offset":0,"formula":"t_measured ≥ 0.90 t_nominal"}},
+    "armour-tape-count": {"mv2":{"clause":"13.7","printed_page":13,"limit":2}},
+    "armour-tape-gap": {"mv2":{"clause":"13.7","printed_page":13,"limit":0.5,"formula":"maximum axial gap / tape width ≤ 0.5"}},
+    "armour-coarse-bedding": {"mv2":{"clause":"13.6","printed_page":13,"limit":2,"precision":2}},
+    "armour-padding-total": {"mv2":{"clause":"13.7","printed_page":13,"precision":2,"formula":"t_total ≥ t_B + additional padding"}},
+    "armour-padding-minimum": {"mv2":{"clause":"13.7；附录 B 表 B.1","printed_page":13,"precision":2,"factor":0.8,"offset":-0.2,"formula":"t_min ≥ 0.8 t_total − 0.2"}},
+    "bedding-filled": {"mv2":{"clause":"8.2.1","printed_page":8,"limit":1}},
     "bedding-missing": {
       "mv1": {
         "clause": "7.2 / 7.3 / 7.4",
@@ -717,6 +730,28 @@
         "printed_page": 7,
         "factor": 0.8,
         "offset": -0.2
+      }
+    }
+  },
+  "armour": {
+    "mv2": {
+      "materials": {
+        "steel_galvanized":{"group":"steel","magnetic":true,"forms":["wires","tape"]},
+        "steel_stainless_nonmagnetic":{"group":"steel","magnetic":false,"forms":["wires","tape"]},
+        "aluminium":{"group":"aluminium","magnetic":false,"forms":["wires","tape"]},
+        "aluminium_alloy":{"group":"aluminium","magnetic":false,"forms":["wires","tape"]},
+        "copper_bare":{"group":"copper","magnetic":false,"forms":["wires"]}
+      },
+      "forms": {
+        "wires": {"field":"wire_diameter","title":"铠装圆金属丝标称直径","rule":"armour-wire-nominal",
+          "bands":[[10,0.8],[15,1.25],[25,1.6],[35,2.0],[60,2.5],[null,3.15]],
+          "measured_field":"mean_wire_diameter","measured_title":"铠装圆金属丝实测直径","measured_rule":"armour-wire-measured",
+          "diameter_multiplier":2,"coarse_wire_mm":4.0},
+        "tape": {"field":"nominal_tape_thickness","title":"铠装单带标称厚度","rule":"armour-tape-nominal",
+          "bands_by_material":{"steel":[[30,0.2],[70,0.5],[null,0.8]],"aluminium":[[70,0.5],[null,0.8]]},
+          "measured_field":"minimum_tape_thickness","measured_title":"铠装金属带实测厚度","measured_rule":"armour-tape-measured",
+          "diameter_multiplier":4,"tape_count":2,"application":"two_tape_gap",
+          "padding_bands_mm":[[0.2,0.5],[null,0.8]],"padding_diameter_bands_mm":[[29,1.0],[null,1.6]]}
       }
     }
   },

@@ -1,0 +1,319 @@
+"""Customer/internal calculation books from immutable runs; never invoke a solver.
+
+render_pdf(runs, audience='customer', generated_at=None) returns PDF bytes.
+The host remains responsible for run ownership/freshness; source digests are
+checked here as well. CLI: python -m backend.kernel.study_pdf --source run.json
+--output report.pdf [--audience internal].
+"""
+from datetime import datetime, timezone
+from decimal import Decimal, ROUND_HALF_UP
+from html import escape
+from io import BytesIO
+import math
+import re
+
+from .specification_pdf import _Blocks, _font_lock
+from .workspace import fingerprint
+
+RENDERER = 'cablesim.study-pdf/1'
+PLUGIN_NAMES = {'cablesim.iec60287':'IEC 60287 稳态载流量', 'cablesim.thermal-network':'热网络交叉校核',
+    'cablesim.simulation':'数值仿真', 'cablesim.hybrid-rating':'混合载流量参考',
+    'cablesim.native-reference':'原生算法参考', 'cablesim.comsol-bridge':'COMSOL 仿真'}
+PARAMETERS = {'core_lay_length':'成缆节距', 'filler_rho':'填充材料热阻率', 'screen_model':'铜带导电接触模型',
+    'screen_radial_factor':'铜带径向包络系数', 'armour_gap_ratio':'钢带间隙率',
+    'steel_relative_permeability':'钢带相对磁导率', 'conductor_form':'导体构造', 'diameter_rounding':'外径舍入容差'}
+VALUES = {'continuous_contact':'连续导电接触', 'stranded_round_compacted':'紧压圆绞导体'}
+QUANTITIES = {'ampacity':'允许电流', 'conductor_temperature':'导体温度', 'sheath_temperature':'金属屏蔽温度',
+    'surface_temperature':'表面温度', 'losses.conductor':'导体损耗', 'losses.sheath':'金属屏蔽损耗',
+    'losses.dielectric':'介质损耗', 'losses.total':'总损耗', 'loss_factor.sheath':'屏蔽损耗因数',
+    'ac_resistance':'交流电阻', 'capacitance':'每相电容', 'thermal_resistance.insulation':'绝缘热阻',
+    'thermal_resistance.oversheath':'外护套热阻', 'thermal_resistance.external':'外部热阻',
+    'x-cablesim.iec60287.loss_factor.armour':'铠装损耗因数', 'x-cablesim.iec60287.losses.armour':'铠装损耗',
+    'x-cablesim.iec60287.thermal_resistance.bedding':'内衬层热阻',
+    'x-cablesim.iec60287.thermal_resistance.duct_air':'管内空气热阻',
+    'x-cablesim.iec60287.thermal_resistance.duct_wall':'管壁热阻',
+    'x-cablesim.iec60287.temperature_rise.mutual':'互热温升', 'x-cablesim.iec60287.current':'运行电流'}
+
+
+def number(value, digits=1):
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+        return '未输出'
+    return format(Decimal(str(value)).quantize(Decimal(1).scaleb(-digits), rounding=ROUND_HALF_UP), f'.{digits}f')
+
+
+def clean(value):
+    return re.sub(r'\s+', ' ', str(value or '')).strip()
+
+
+def human_name(value, fallback):
+    value=clean(value)
+    return fallback if not value or value.lower().startswith('v0 ') else value
+
+
+def engineering_value(key, given):
+    value,unit=given['value'],given['unit']
+    if not isinstance(value,(int,float)):return VALUES.get(str(value),str(value)), '—' if unit=='1' else unit
+    if key=='diameter_rounding' and unit=='m':return number(value*1000,2),'mm'
+    if key=='armour_gap_ratio':return number(value*100,1),'%'
+    digits=3 if key=='core_lay_length' else 0 if key in ('steel_relative_permeability','screen_radial_factor') else 2
+    return number(value,digits),{'1':'—','K*m/W':'K·m/W'}.get(unit,unit)
+
+
+def table(headers, rows, widths):
+    return '<table data-widths="'+','.join(map(str,widths))+'"><tr>'+''.join('<th>'+escape(h)+'</th>' for h in headers)+'</tr>'+''.join(
+        '<tr>'+''.join('<td>'+escape(str(v if v is not None else '未输出'))+'</td>' for v in row)+'</tr>' for row in rows)+'</table>'
+
+
+def paragraph(text):
+    return '<p>'+escape(str(text))+'</p>'
+
+
+def _names(document):
+    names={}
+    for index,circuit in enumerate(document.get('circuits',[]),1):
+        label=human_name(circuit.get('label'),f'回路 {index}')
+        names[circuit['id']]=label
+        for cable in circuit.get('cables',[]):
+            names[cable['id']]=label+(' · 三相整缆' if cable.get('phase')=='L1L2L3' else ' · '+str(cable.get('phase','电缆')))
+    return names
+
+
+def _input(run, case_id=None):
+    cases=run['snapshot'].get('cases',[])
+    return next((c.get('input',{}) for c in cases if c['case_id']==case_id),cases[0].get('input',{}) if cases else {})
+
+
+def _basis(run):
+    driver=run['snapshot']['definition']['driver']
+    return driver.get('rating_basis','individual')
+
+
+def _condition_rows(document):
+    rows=[];materials={m['id']:m for m in document.get('materials',[])}
+    for section in document.get('sections',[]):
+        label=section.get('label') or {'ground':'地下敷设','air':'空气敷设','tunnel':'隧道敷设'}.get(section.get('kind'),'敷设截面')
+        rows.append(['敷设方式',label])
+        places=section.get('placements',[])
+        depths=sorted(set(round(-p['z'],8) for p in places))
+        rows.append(['电缆中心埋深',' / '.join(number(v,3) for v in depths)+' m' if depths else '未提供'])
+        if len(places)>1:
+            distances=[math.hypot(a['x']-b['x'],a['z']-b['z']) for i,a in enumerate(places) for b in places[i+1:]]
+            rows.append(['最近电缆中心距',number(min(distances),3)+' m'])
+        medium=section.get('medium',{});soil=materials.get(medium.get('material'),{})
+        rows.append(['环境介质 / 热阻率',human_name(soil.get('label'),'土壤' if section.get('kind')=='ground' else '环境介质')+' / '+number(soil.get('thermal_resistivity'),2)+' K·m/W'])
+        ambient=medium.get('surface_temperature')
+        if ambient is None:ambient=medium.get('air_temperature')
+        rows.append(['环境温度',number(ambient-273.15 if isinstance(ambient,(int,float)) else None)+' °C'])
+        ducts=section.get('enclosures',[])
+        for inside,outside,rho in sorted({(d.get('inner_diameter'),d.get('outer_diameter'),materials.get(d.get('material'),{}).get('thermal_resistivity')) for d in ducts if d.get('type')=='duct'},key=str):
+            rows.append(['管道内径 / 外径 / 管材热阻率',number(inside*1000 if inside else None)+' / '+number(outside*1000 if outside else None)+' mm；'+number(rho,2)+' K·m/W'])
+    for index,circuit in enumerate(document.get('circuits',[]),1):
+        label=human_name(circuit.get('label'),f'回路 {index}')
+        bonding={'both_ends':'两端接地','single_point':'单点接地','cross_bonded':'交叉互联'}.get(circuit.get('bonding',{}).get('kind'),'未提供')
+        rows.append([label+'接地方式',bonding])
+    for load in document.get('load_cases',[]):
+        currents=load.get('currents',{});names=_names(document)
+        rows.extend([names.get(key,'负荷对象')+'负荷',number(value,0)+' A'] for key,value in currents.items() if isinstance(value,(int,float)))
+    return rows or [['输入状态','旧格式输入；明细仅见内部版来源摘要']]
+
+
+def _selection(run):
+    from collections import Counter
+    from .report import recommended_case
+    candidates=run['snapshot'].get('candidate_snapshots',[]);rows=[];recommended=recommended_case(run)
+    selected=None
+    for assessment in run['output'].get('assessment',[]):
+        index=int(assessment['case_id'].rsplit('-',1)[-1]);candidate=candidates[index];payload=candidate['payload']
+        cable=payload.get('cable_type') or {};cores=cable.get('cores',[])
+        area=cores[0]['conductor']['nominal_area']*1e6 if cores else (payload.get('specification') or {}).get('area_m2',0)*1e6 or (payload.get('cable') or {}).get('area_mm2')
+        status=assessment.get('status','unavailable');name=payload.get('name') or cable.get('label') or '未命名型号'
+        status_name={'satisfied':'满足','not_satisfied':'不满足','not_applicable':'不适用','failed':'计算失败'}.get(status,'无法判断')
+        reason=(assessment.get('reason') or {}).get('message') or ('温限校核满足' if status=='satisfied' else '未取得有效结果')
+        reason=reason.replace('screen_radial_factor：','铜带径向包络：')
+        detail=assessment.get('reason') or {}
+        if detail.get('actual_k') is not None and detail.get('limit_k') is not None:
+            reason='目标负荷下导体 '+number(detail['actual_k']-273.15)+' °C，超过 '+number(detail['limit_k']-273.15)+' °C。'
+        rows.append([name,number(area,0),number(assessment['value'],0) if assessment.get('value') is not None else '—',
+            number(assessment['margin'],0) if assessment.get('margin') is not None else '—',status_name,reason])
+        if assessment['case_id']==recommended:selected=(assessment,candidate)
+    driver=run['snapshot']['definition']['driver'];target=driver.get('minimum')
+    if selected:
+        a,c=selected;conclusion='推荐 '+c['payload']['name']+'；目标 '+number(target,0)+' A，允许电流 '+number(a.get('value'),0)+' A，余量 '+number(a.get('margin'),0)+' A。'
+        conclusion+='推荐按满足条件的最小标称截面排序，不包含价格比较。'
+    elif driver.get('allow_demo_candidates'):
+        conclusion='候选尚需完成型号核对，本次不作工程型号推荐。'
+    else:conclusion='本次未取得可推荐候选；不满足、不适用及计算失败的原因见比较表。'
+    counts=Counter(row[-1] for row in rows)
+    notes={reason:index+1 for index,reason in enumerate(reason for reason,count in counts.items() if count>1)}
+    for row in rows:
+        if row[-1] in notes:row[-1]='见说明 '+str(notes[row[-1]])
+    comparison=table(['候选型号','截面 / mm²','允许电流 / A','余量 / A','判定','说明'],rows,[2.2,.75,.95,.75,1.05,2.6])
+    comparison+=''.join(paragraph(f'说明 {index}：{reason}') for reason,index in notes.items())
+    return recommended, selected, conclusion, comparison
+
+
+def _metric(row):
+    value=row.get('value');unit=row.get('unit','')
+    if row.get('status')!='available':return (row.get('reason') or {}).get('message','未输出'),unit
+    if unit=='K' and 'temperature' in row['key'] and 'rise' not in row['key']:return number(value-273.15), '°C'
+    if unit=='F/m':return number(value*1e9,4),'μF/km'
+    if unit=='Ω/m':return number(value*1000,5),'Ω/km'
+    return number(value,0 if unit=='A' else 2 if unit=='W/m' else 4), '—' if unit=='1' else unit
+
+
+def chapters(runs, audience):
+    """Human-facing chapters; customer text never includes hashes or raw JSON."""
+    from .report import recommended_case, task_answer
+    sections=[]
+    for run in runs:
+        definition=run['snapshot']['definition'];selection=definition['driver']['kind']=='selection'
+        preferred,selected,answer,comparison=_selection(run) if selection else (recommended_case(run),None,None,None)
+        if answer is None:
+            parsed=_Blocks(task_answer(run)).blocks
+            answer=next((p['text'] for p in parsed if p['kind']=='p'),'未取得可用结论。')
+        document=_input(run,preferred);names=_names(document)
+        if run.get('freshness')!='current':answer='历史运行结论：'+answer
+        body='<h2>1. 计算结论</h2>'+paragraph(answer)
+        body+=paragraph('载流量口径：'+('全回路同时等负荷。' if _basis(run)=='simultaneous' else '逐回路条件允许电流，其他回路保持保存负荷；各回路上限不能同时使用。'))
+        if run.get('freshness')!='current':body+=paragraph('该运行与当前输入或已安装方法版本不同。本文仅复现保存工况，不能作为当前版本的重新校核。')
+        body+='<h2>2. 工况与输入</h2>'+table(['输入项目','保存值'],_condition_rows(document),[1.25,3.75])
+        engineering_html=''
+        if selected:
+            engineering=selected[1].get('engineering_parameters',{}).get('values',{})
+            if engineering:
+                engineering_html='<h3>采用的工程设计参数</h3>'+paragraph('以下为保存的工程师给定参数，不是厂家实测声明。')
+                engineering_html+=table(['参数','采用值','单位'],[[PARAMETERS.get(k,'工程参数'),*engineering_value(k,v)] for k,v in engineering.items()],[2,1.6,1.4])
+        sections.append(body)
+        body='<h2>3. '+('候选比较与推荐' if selection else '结果表')+'</h2>'
+        if comparison:body+=comparison
+        else:
+            rows=[]
+            for case in run['output'].get('cases',[]):
+                label=case.get('label') or next((x.get('label') for x in run['snapshot'].get('cases',[]) if x['case_id']==case['case_id']),None) or '保存工况'
+                if case['status']!='succeeded':rows.append([label,'工况状态',(case.get('error') or {}).get('message','未取得结果'),'—']);continue
+                for row in case.get('results',[]):
+                    if row['key'] not in QUANTITIES and audience=='customer':continue
+                    value,unit=_metric(row);rows.append([label+' · '+names.get(row.get('entity'),'计算对象'),QUANTITIES.get(row['key'],row['key']),value,unit])
+            body+=table(['对象 / 工况','物理量','数值','单位'],rows or [['研究','结果','未输出','—']],[1.3,2.0,1.2,1])
+        cases=[c for c in run['output'].get('cases',[]) if c['status']=='succeeded' and (not preferred or c['case_id']==preferred)]
+        trace=next((c.get('artifacts',{}).get('x-cablesim.iec60287-trace') for c in cases if c.get('artifacts',{}).get('x-cablesim.iec60287-trace')), {})
+        if selection and selected and trace:
+            body+='<h3>推荐型号：保存负荷下的温度与损耗</h3>'
+            states=trace.get('operating',{}).get('cable_states',[])
+            body+=table(['回路','负荷 / A','导体 / °C','温限余量 / K','总损耗 / W/m'],[[names.get(s['entity'],'电缆'),number(s['current_a'],0),number(s['conductor_temperature_c']),number(s['margin_k']),number(s['total_loss_w_m'],2)] for s in states],[1.8,1,1,1.2,1.2])
+        sections.append(body)
+        method=definition['method'];clauses=list(dict.fromkeys(trace.get('sources',[])))
+        for case in cases:
+            for artifact in case.get('artifacts',{}).values():
+                if isinstance(artifact,dict):clauses.extend(c for c in artifact.get('clauses',[]) if c not in clauses)
+        body='<h2>4. 计算依据与方法版本</h2>'+table(['项目','采用版本'],[
+            ['计算方法',PLUGIN_NAMES.get(method['plugin_id'],'已保存插件方法')],['插件标识',method['plugin_id']],
+            ['插件版本',method['version']],['方法能力',{'steady-rating':'稳态载流量','steady':'稳态计算'}.get(method['capability'],method['capability'])],['运行时间（UTC）',clean(run.get('finished') or run.get('created')).replace('T',' ').replace('+00:00','')],
+            ['输入 / 研究修订',str(run['snapshot'].get('workspace_revision','未记录'))+' / '+str(run['snapshot'].get('study_revision','未记录'))]], [1.3,3.7])
+        body+='<h3>标准条款</h3>'+''.join(paragraph(c) for c in clauses or ['该保存运行未提供可引用条款；不补写推测依据。'])
+        if trace.get('electrical_basis'):body+='<h3>方法适用口径</h3>'+paragraph(trace['electrical_basis'])
+        body+=engineering_html
+        sections.append(body)
+        if audience=='internal':
+            body='<h2>附录：来源摘要</h2>'+table(['证据','保存记录'],[['源运行',run['id']],['输入 SHA256',run['input_digest']],['输出 SHA256',run['output_digest']],['方法发行 SHA256',method.get('release_digest','未记录')],['结果完整性',run.get('integrity','未记录')],['运行状态',run.get('status')],['时效状态',run.get('freshness')]], [1.1,3.9])
+            body+=table(['输入位置','来源及核对状态'],[[p,clean(s.get('reference'))+'；'+('已核对' if s.get('reviewed') else '未核对')] for p,s in definition.get('input_sources',{}).items()] or [['来源','未记录']],[1.3,3.7])
+            for candidate in run['snapshot'].get('candidate_snapshots',[]):
+                body+='<h3>'+escape(candidate['payload']['name'])+'</h3>'+table(['证据','摘要'],[['候选内容 SHA256',candidate['digest']],['候选状态',candidate['state']],['原始记录 SHA256',candidate.get('origin',{}).get('digest','未记录')],['补全工件 SHA256',candidate.get('preparation',{}).get('artifact_sha256','未记录')]], [1.3,3.7])
+                references=list(dict.fromkeys(s['reference'] for s in candidate['payload'].get('sources',{}).values()))
+                body+=''.join(paragraph(s) for s in references)
+            sections.append(body)
+    return sections
+
+
+def render_pdf(runs, audience='customer', *, generated_at=None):
+    if audience not in ('customer','internal'):raise ValueError('文档版本须为 customer 或 internal。')
+    if not runs:raise ValueError('请选择至少一个已保存运行。')
+    for run in runs:
+        if run.get('integrity')!='verified' or fingerprint(run['snapshot'])!=run['input_digest'] or fingerprint(run['output'])!=run['output_digest']:
+            raise ValueError('计算书源运行完整性校验失败。')
+    import fitz
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.pdfgen import canvas
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, LongTable, TableStyle, PageBreak, KeepTogether
+
+    font='CableChinese'
+    with _font_lock:
+        if font not in pdfmetrics.getRegisteredFontNames():pdfmetrics.registerFont(TTFont(font,BytesIO(fitz.Font('cjk').buffer)))
+    timestamp=(generated_at or datetime.now(timezone.utc).isoformat(timespec='seconds')).replace('T',' ').replace('+00:00','')
+    first=runs[0];definition=first['snapshot']['definition'];study=definition.get('title','研究计算书')
+    project=first['snapshot'].get('workspace_state',{}).get('domain',{}).get('name') or '未记录工程名称'
+    version='输入修订 '+str(first['snapshot'].get('workspace_revision','—'))+' / 研究修订 '+str(first['snapshot'].get('study_revision','—'))
+    historical=any(r.get('freshness')!='current' for r in runs)
+    edition='客户版' if audience=='customer' else '内部审核版'
+    output=BytesIO();width,height=A4
+    doc=SimpleDocTemplate(output,pagesize=A4,leftMargin=42,rightMargin=42,topMargin=58,bottomMargin=52,
+        title=study+' · 研究计算书',subject=edition,creator='CableSimPro',author='')
+    normal=ParagraphStyle('Body',fontName=font,fontSize=10.5,leading=16,wordWrap='CJK',spaceAfter=10)
+    styles={'p':normal,'h1':ParagraphStyle('Title',parent=normal,fontSize=27,leading=36,spaceBefore=12,spaceAfter=18,keepWithNext=True),
+        'h2':ParagraphStyle('Chapter',parent=normal,fontSize=16,leading=23,spaceBefore=18,spaceAfter=12,keepWithNext=True),
+        'h3':ParagraphStyle('Section',parent=normal,fontSize=12,leading=18,spaceBefore=14,spaceAfter=8,keepWithNext=True),
+        'cell':ParagraphStyle('Cell',parent=normal,leading=15,spaceAfter=0)}
+    def p(value,style):
+        value=escape(str(value)).replace('\n','<br/>')
+        value=re.sub(r'[a-f0-9]{64}',lambda m:'<font name="Courier" size="9">'+' '.join(m[0][i:i+16] for i in range(0,64,16))+'</font>',value)
+        return Paragraph(value,style)
+    def flow(html):
+        out=[]
+        for block in _Blocks(html).blocks:
+            if block['kind']!='table':out.append(p(block['text'],styles[block['kind']]));continue
+            rows=block['rows'];weights=block['widths'] or [1]*len(rows[0])
+            t=LongTable([[p(c,styles['cell']) for c in row] for row in rows],colWidths=[doc.width*w/sum(weights) for w in weights],repeatRows=1,splitByRow=1,spaceAfter=14,hAlign='LEFT')
+            t.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('BACKGROUND',(0,0),(-1,0),colors.HexColor('#eeeeee')),
+                ('GRID',(0,0),(-1,-1),.25,colors.HexColor('#cccccc')),('LINEBELOW',(0,0),(-1,0),.6,colors.HexColor('#808080')),
+                ('LEFTPADDING',(0,0),(-1,-1),7),('RIGHTPADDING',(0,0),(-1,-1),7),('TOPPADDING',(0,0),(-1,-1),7),('BOTTOMPADDING',(0,0),(-1,-1),7)]))
+            out.append(t)
+        return out
+    class NumberedCanvas(canvas.Canvas):
+        def __init__(self,*args,**kwargs):super().__init__(*args,**kwargs);self.saved=[]
+        def showPage(self):
+            if len(self.saved)>=100:raise ValueError('计算书超过100页，请缩小交付范围。')
+            self.saved.append(dict(self.__dict__));self._startPage()
+        def save(self):
+            total=len(self.saved)
+            for state in self.saved:
+                self.__dict__.update(state);self.setFont(font,10)
+                self.drawString(42,height-31,'研究计算书');self.drawRightString(width-42,height-31,edition+' · '+version)
+                self.setStrokeColor(colors.HexColor('#a0a0a0'));self.setLineWidth(.45);self.line(42,height-40,width-42,height-40);self.line(42,39,width-42,39)
+                self.drawString(42,24,('历史运行复现 · ' if historical else '')+'待人工审核');self.drawRightString(width-42,24,f'第 {self._pageNumber} 页 / 共 {total} 页')
+                super().showPage()
+            super().save()
+    version_labels=list(dict.fromkeys(clean((run.get('version_status') or {}).get('display_name')) for run in runs))
+    version_labels=[label for label in version_labels if label]
+    cover_rows=[
+        ['工程名称',project],['研究名称',study],['版本号',version],['生成时间（UTC）',timestamp],['文档版本',edition],
+        ['文件状态','历史运行复现 · 待人工审核' if historical else '待人工审核']]
+    if version_labels:cover_rows.append(['版本状态','；'.join(version_labels)])
+    cover='<h1>研究计算书</h1><h2>'+escape(study)+'</h2>'+table(['文件项目','内容'],cover_rows,[1.2,3.8])
+    cover+='<h3>编制与审核签字</h3>'+table(['职责','签字','日期'],[[name,'________________','________________'] for name in ['编制','审核','批准']],[1,2,2])
+    cover+=paragraph('签字栏供人工填写；本文由指定运行的保存结果编制，导出未重新计算。')
+    cover+=paragraph('本文为设计计算资料，不代替厂家试验、完整产品认证或现场校核。')
+    story=flow(cover)
+    for body in chapters(runs,audience):story.append(PageBreak());story.extend(flow(body))
+    arranged=[]
+    for item in story:
+        if isinstance(item,LongTable) and item.wrap(doc.width,doc.height)[1]<doc.height-45:
+            headings=[]
+            while arranged and isinstance(arranged[-1],Paragraph) and arranged[-1].getKeepWithNext():headings.insert(0,arranged.pop())
+            arranged.append(KeepTogether([*headings,item]))
+        else:arranged.append(item)
+    doc.build(arranged,canvasmaker=NumberedCanvas)
+    return output.getvalue()
+
+
+if __name__=='__main__':
+    import argparse,json
+    from pathlib import Path
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--source',type=Path,required=True);parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--audience',choices=['customer','internal'],default='customer');args=parser.parse_args()
+    data=json.loads(args.source.read_text(encoding='utf-8'));runs=data if isinstance(data,list) else [data]
+    args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_bytes(render_pdf(runs,args.audience))

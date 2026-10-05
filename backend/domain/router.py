@@ -2,13 +2,13 @@
 from fastapi import APIRouter, HTTPException
 
 from ..kernel.workspace import Revision
-from .guards import check_locks, describe_locks, validate_lock
+from .guards import describe_locks, validate_lock
 from .migration import convert
-from .models import DomainDocument
+from .editing import DraftDomainDocument, resolve_edit
 
 
 class SaveDomain(Revision):
-    document: DomainDocument
+    document: DraftDomainDocument
 
 
 def make_router(store):
@@ -46,8 +46,7 @@ def make_router(store):
             row, state = store.load(db, wid, body.expected_revision, allow_domain=True)
             if 'domain' not in state:
                 raise HTTPException(409, '请先显式转换工程。')
-            document = body.document.model_dump(mode='json')
-            check_locks(state, document)
+            document = resolve_edit(state, body.document)
             state['domain'] = document
             store.commit(db, row, state, '保存领域文档')
         return get(wid)

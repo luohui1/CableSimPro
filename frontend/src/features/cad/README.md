@@ -12,18 +12,20 @@
 
 `DrawingCommand` 为 `undo/redo/save`。父页面管理研究草稿、保存与撤销记录，组件不创建另一份已保存领域状态。输入框保留浏览器文本撤销。历史图纸可选择和查看，尺寸与位置只读。`onObjectCommand` 让父页面处理实例复制/删除及布置操作；`objectCommands` 指定当前已接入的操作，未接入按钮保持禁用。`canUndo/canRedo` 由页面提供。
 
-电缆参数截面保持圆形层的真实比例与原始芯坐标，不据标称面积反推导体直径。扇形/分割导体明确拒绝。空心导体需要明确内径；三芯位置重叠、材料缺项和无效尺寸报到具体字段。敷设视图仅转换 SI 坐标与显示包络，不给标准间距、载流量、质量或热学结果。拖动提交前检查几何重叠、地表、管内边界、土层边界和字段锁定；页面仍负责正式领域校验。
+电缆参数截面保持圆形 / 扇形层的真实比例与原始芯坐标，不据标称面积反推外轮廓。扇形须给圆弧直径、夹角及朝向，分割导体显示声明的设计包络；填充扣除各芯外轮廓。三芯同名层以芯 ID 区分，中文标注展开所选芯。材料缺项、碰撞和无效尺寸报到具体字段。敷设视图仅转换 SI 坐标与显示包络，不给标准间距、载流量、质量或热学结果。拖动提交前检查几何重叠、地表、管内边界、土层边界和字段锁定；页面仍负责正式领域校验。
 
 模板默认展示 `single/double/duct/backfill/three-core` 五个陈列标识。生产页面应通过 `templates` 传入正式接口实际接受的 ID，再由 `onTemplateRequest` 请求；组件不猜接口路径或模板工程参数。开启管缆联动时，移动电缆可带动所属管道及关联成员；也可关闭联动。缩略窗和局部放大不改变主图比例；窄画布的缩略窗移到主图下方，避开尺寸和编辑器。
 
 ## 原生运行资产
 
-`prepare-runtime.mjs` 从现有、锁定的 OCCT 构建读取并核对哈希，复制到本目录被忽略的 `node_modules/.cache/cablesim-occt/`。Vite 按内容哈希分发 JS/WASM；不读取 CDN。每个视口拥有独立原生实例、画布和 WebGL 上下文，只共享已编译的 `WebAssembly.Module`；卸载关闭监听器、观察器、动画、精确工件请求，移除原生实体并释放 WebGL 上下文。编译失败不留失败缓存，后续重试可重新加载。精确替换同时核对输入摘要、展示长度、外径、各层半径、材料和已声明构造；没有 geometry_key 也不接受尺寸错配。
+原生源码、构建入口与版本锁位于 [native/](native/README.md)。`prepare-runtime.mjs` 从 `.data/occt-toolchain/viewer/` 读取产物，核对版本、源码、JS/WASM 和许可摘要后写入本目录被忽略的 `node_modules/.cache/cablesim-occt/`。Vite 按内容哈希分发 JS/WASM；不读取 CDN。每个视口拥有独立原生实例、画布和 WebGL 上下文，只共享已编译的 `WebAssembly.Module`；卸载关闭监听器、观察器、动画、精确工件请求，移除原生实体并释放 WebGL 上下文。编译失败不留失败缓存，后续重试可重新加载。精确替换同时核对输入摘要、展示长度、外径、各层半径、材料和已声明构造；没有 geometry_key 也不接受尺寸错配。
 
 `prepare-fixtures.py` 仅为陈列生成少量真实原生几何，不运行求解器。原始工件位于本目录被忽略的 `node_modules/.cache/gallery/`；示例参数全部标为演示，正式组件不引用它们。
 
 ```sh
 # 仓库根目录；使用已有 CAD 虚拟环境
+python frontend/src/features/cad/native/prepare.py --jobs 4
+python frontend/src/features/cad/tests/test_runtime_bootstrap.py
 .venv/Scripts/python.exe frontend/src/features/cad/prepare-fixtures.py
 
 # frontend 目录
@@ -31,7 +33,7 @@ node src/features/cad/prepare-runtime.mjs
 npm run check:styles
 npx tsc -p src/features/cad/tsconfig.json
 npx vite build --config src/features/cad/gallery.config.ts --logLevel warn
-node --test src/features/cad/tests/geometry.test.mjs src/features/cad/tests/component.test.mjs
+node --test src/features/cad/tests/runtime-assets.test.mjs src/features/cad/tests/geometry.test.mjs src/features/cad/tests/component.test.mjs
 node src/features/cad/tests/verify-browser.mjs
 ```
 
@@ -55,4 +57,4 @@ node src/features/cad/tests/verify-browser.mjs
 
 `onReady.elapsedMs` 从工件到达客户端开始计时，到原生更新后的下一动画帧；首挂载计入运行加载/编译，不包含插件求解、服务端计算与传输等待。单根更新与场景首显要求小于 3000 ms，结果记录实际环境的样本，不作为求解器性能基准。WASM 编译复用与卸载后原生实例归零在组件测试中检查。
 
-桌面检查 1366×768、1920×1080，浅/深色及 100/125/150% CDP 模拟；直接由 CDP 截图并核对像素尺寸，避免截图工具恢复默认视口。另查 390 px 移动宽度。Windows 系统 DPI 尚未实机核验。超算 CAD 回归等待仿真线程完成锁定 CadQuery/OCP 环境后再复验。
+桌面检查 1366×768、1920×1080，浅/深色及 100/125/150% CDP 模拟；直接由 CDP 截图并核对像素尺寸，避免截图工具恢复默认视口。另查 390 px 移动宽度。Windows 系统 DPI 尚未实机核验。超算 CAD 回归使用 `.data/hpc/cad-config.json` 提交 dg83，保存源码快照、测试日志及实际核时。

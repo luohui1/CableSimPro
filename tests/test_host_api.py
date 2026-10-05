@@ -31,7 +31,16 @@ def test_six_formal_routes_have_models_and_compatible_aliases(client):
         assert formal.json()==old.json()
     contracts=client.get('/api/input-contracts').json()
     simulation=[c for c in contracts if c['method']['plugin_id']=='cablesim.simulation']
-    assert {c['tasks'][0] for c in simulation}=={'transient-temperature','sheath-losses','electrothermal-steady'}
+    assert {c['tasks'][0] for c in simulation}=={'transient-temperature','sheath-losses','electrothermal-steady','iec-fem-comparison','iec-thermal-field','getdp-eddy','elmer-heat'}
+    comparison=next(c for c in simulation if c['tasks']==['iec-fem-comparison'])
+    assert comparison['method']['capability']=='iec-fem-comparison'
+    assert {'section_id','load_id','iec','controls','bounds_m','source'}<=set(comparison['parameter_schema']['required'])
+    # Frozen and feedback comparisons have mutually exclusive acknowledgements.
+    assert {'frozen_coefficients_acknowledged','feedback'}<=set(comparison['parameter_schema']['properties'])
+    thermal=next(c for c in simulation if c['tasks']==['iec-thermal-field'])
+    assert thermal['method']['capability']=='iec-thermal-field'
+    assert {'domain_options','iec','mesh'}<=set(thermal['parameter_schema']['required'])
+    assert 'material_thermal_resistivity' in thermal['parameter_schema']['properties']
     assert all(info.get('description') for c in simulation for info in c['parameter_schema']['properties'].values())
 
 
@@ -70,6 +79,7 @@ def test_duplicate_preview_admission_reuses_one_successful_execution(client,monk
 
 def test_current_delivery_download_integrity_idempotency_and_history(client):
     w=client.post('/api/workspaces',json={}).json();root='/api/workspaces/'+w['id']
+    assert client.get(root+'/deliveries').json()==[]
     sample=client.get('/api/examples/iec').json()['input']
     method={**next(m['method'] for m in client.get('/api/methods').json() if m['method']['plugin_id']=='cablesim.iec60287'), 'capability':'reference-rating'}
     config={'expected_revision':1,'title':'Public hand fixture','input_source':'study','method_input':sample,'method':method}
@@ -80,6 +90,11 @@ def test_current_delivery_download_integrity_idempotency_and_history(client):
     request={'run_ids':[run['id']],'request_id':str(uuid4())}
     response=client.post(root+'/deliveries/current',json=request);assert response.status_code==201,response.text
     delivery=response.json()
+    listing=client.get(root+'/deliveries');assert listing.status_code==200,listing.text
+    entry=listing.json()[0]
+    assert entry['id']==delivery['id'] and entry['version']==1 and entry['kind']=='calculation'
+    assert entry['sources'][0]['run_id']==run['id'] and entry['created']==delivery['created']
+    assert client.get(entry['download_url']).text==delivery['html']
     assert client.post('/api/design/workspaces/'+w['id']+'/deliveries',json=request).json()['id']==delivery['id']
     file=client.get(root+'/deliveries/'+delivery['id']+'/file')
     assert file.text==delivery['html'] and 'attachment' in file.headers['content-disposition']
@@ -91,3 +106,30 @@ def test_current_delivery_download_integrity_idempotency_and_history(client):
     with client.app.state.workspace_store.db(True) as db:
         db.execute('UPDATE deliveries SET html=? WHERE id=?',('tampered',delivery['id']))
     assert client.get(root+'/deliveries/'+delivery['id']+'/file').status_code==409
+    assert client.get(root+'/deliveries').status_code==409
+
+
+def test_exact_simulation_problem_contract_and_import_validation(client):
+    from cablesim_sdk.simulation import Problem
+    contract=client.get('/api/simulation/problem-contract')
+    assert contract.status_code==200,contract.text
+    assert contract.json()['schema']==Problem.model_json_schema()
+    contracts=client.get('/api/input-contracts').json()
+    entry=next(c for c in contracts if c['method']['capability']=='elmer-heat')
+    assert entry['standalone_schema']==contract.json()['schema']
+    assert entry['input_sources']==['study']  # Domain adapters require different parameter contracts.
+    w=client.post('/api/workspaces',json={}).json();root='/api/workspaces/'+w['id']
+    problem={'schema_version':'cablesim.simulation-problem/1','physics':'steady_heat',
+      'geometry':[{'uid':'square','kind':'rectangle','values':[0,0,1,1],'material':{'k_w_m_k':1,'source':'Synthetic SI validation'}}],
+      'boundaries':[{'uid':'outer','selector':'outer','values':[],'kind':'temperature','value':293.15}],
+      'excitations':[{'regions':['square'],'kind':'heat_w_m','value':[1],'source':'Synthetic 1 W/m source'}],
+      'provenance':{'kind':'test'},'assumptions':['2D, fixed thermal properties']}
+    body={'expected_revision':1,'title':'Explicit reproduction','input_source':'study','method_input':problem,'method':entry['method'],'parameters':{'mesh':{'size_m':.1,'far_size_m':.2,'transition_m':.3}}}
+    response=client.post(root+'/studies',json=body);assert response.status_code==201,response.text
+    assert response.json()['definition']['method_input']==problem
+    bad=deepcopy(body);bad['method_input']['geometry'][0]['values'][0]='0'
+    response=client.post(root+'/studies',json=bad)
+    assert response.status_code==422 and response.json()['detail']['path']=='/method_input/geometry/0/values/0'
+    bad=deepcopy(body);bad['method']['capability']='getdp-eddy'
+    response=client.post(root+'/studies',json=bad)
+    assert response.status_code==422 and response.json()['detail']['code']=='SIMULATION_PHYSICS_MISMATCH'

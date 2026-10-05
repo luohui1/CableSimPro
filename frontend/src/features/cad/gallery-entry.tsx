@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
-import { CadViewport } from './cad-viewport';
+import { CadViewport } from './index';
 import { demoModel, demoScene, envelopeModel, previewModel, updatedModel } from './gallery-fixtures';
 import { runtimeDiagnostics } from './occt-runtime';
 import type { GalleryEntry } from './gallery-support';

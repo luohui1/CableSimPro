@@ -25,6 +25,7 @@ export type StudyRow = {
   method: string;
   updated: string;
   revision: number;
+  workspaceRevision?: number;
   definition: StudyDefinition;
   raw: Record<string, unknown>;
 };
@@ -91,6 +92,7 @@ export function projectStudy(
     id,
     workspace: wid,
     revision,
+    workspaceRevision: numeric(workspace.revision) ?? undefined,
     title: text(def.title),
     task:
       (
@@ -188,4 +190,9 @@ export async function saveStudy(
       body,
     }),
   );
+}
+
+export async function restoreStudy(wid: string, sid: string, direction: "undo" | "redo", body: components["schemas"]["StudyHistoryRequest"]) {
+  const path = direction === "undo" ? "/api/workspaces/{wid}/studies/{sid}/undo" : "/api/workspaces/{wid}/studies/{sid}/redo";
+  return responseData(api.POST(path, { params: { path: { wid, sid } }, body }));
 }

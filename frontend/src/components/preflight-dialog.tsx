@@ -4,6 +4,10 @@ import { Button } from "./ui/button";
 import { ErrorState, LoadingState } from "./states";
 import { StatusMark } from "./status-mark";
 import type { ReactNode } from "react";
+export function needsScopeConfirmation(data?: Record<string, unknown>) {
+  return data?.partial === true || [data?.cases, data?.crosschecks].some(rows =>
+    Array.isArray(rows) && rows.some(raw => optionalRecord(raw).status !== "succeeded"));
+}
 export function PreflightDialog({
   open,
   onOpenChange,
@@ -21,6 +25,8 @@ export function PreflightDialog({
   missingLabel = () => "工程输入",
   summary,
   onCheck,
+  caseLabel,
+  requireConfirmation = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -38,8 +44,14 @@ export function PreflightDialog({
   missingLabel?: (field: string) => string;
   summary?: ReactNode;
   onCheck?: () => void;
+  caseLabel?: (id: string, index: number) => string;
+  requireConfirmation?: boolean;
 }) {
   const cases = data && Array.isArray(data.cases) ? array(data.cases, "预检工况").map(optionalRecord) : [];
+  const checks = [...cases, ...(Array.isArray(data?.crosschecks) ? data.crosschecks.map(optionalRecord) : [])];
+  const failed = checks.filter(item => item.status !== "succeeded");
+  const outOfScope = failed.filter(item => item.status === "not_applicable" || text(optionalRecord(item.error).code).includes("APPLICAB"));
+  const confirm = requireConfirmation || !!onCheck || needsScopeConfirmation(data);
   return (
     <Dialog
       open={open}
@@ -50,7 +62,7 @@ export function PreflightDialog({
         <Button
           variant="run"
           loading={running}
-          disabled={disabled || !ack || (!onCheck && data?.ready !== true) || loading}
+          disabled={disabled || (confirm && !ack) || (!onCheck && data?.ready !== true) || loading || !!error}
           onClick={onCheck || onRun}
         >
           {onCheck ? "核对后预检" : "确认并运行"}
@@ -72,47 +84,35 @@ export function PreflightDialog({
         />
       ) : (
         <div className="run-checks">
+          {data && <StatusMark kind={failed.length || data.ready !== true ? "error" : "current"} label={
+            failed.length ? (outOfScope.length === failed.length ? `有 ${failed.length} 项超出范围` : `有 ${failed.length} 项需要修正`) :
+            data.ready === true ? "你的工况在适用范围内 ✓" : "当前没有可运行工况"
+          } />}
           {cases.some(
             (item) =>
               optionalRecord(item.error).code === "INPUT_INVALID" &&
               !optionalRecord(item.error).field &&
               !optionalRecord(item.error).path,
           ) && <span className="muted">具体缺项位置未提供，请检查输入。</span>}
-          {cases.map((item, index) => (
+          {checks.map((item, index) => (
             <div key={text(item.case_id) || index}>
               <StatusMark
                 kind={item.status === "succeeded" ? "current" : "error"}
-                label={text(item.case_id)}
+                label={text(item.name) || text(item.label) || caseLabel?.(text(item.case_id), index) || `工况 ${index + 1}`}
               />
               {item.status !== "succeeded" && (
                 <>
-                  <p>
-                    {text(optionalRecord(item.error).message) ||
-                      text(item.status)}
-                  </p>
-                  <Button
-                    variant="ghost"
-                    size="compact"
-                    onClick={() =>
-                      onMissing(
-                        text(optionalRecord(item.error).field) ||
-                          text(optionalRecord(item.error).path) ||
-                          JSON.stringify(item.error),
-                      )
-                    }
-                  >
-                    前往
-                    {missingLabel(
-                      text(optionalRecord(item.error).field) ||
-                        text(optionalRecord(item.error).path) ||
-                        JSON.stringify(item.error),
-                    )}
-                  </Button>
+                  {(Array.isArray(optionalRecord(item.error).issues) && (optionalRecord(item.error).issues as unknown[]).length
+                    ? (optionalRecord(item.error).issues as unknown[])
+                    : [item.error]).map((raw, issueIndex) => {
+                      const issue = optionalRecord(raw), path = text(issue.path) || text(optionalRecord(item.error).path);
+                      return <div key={issueIndex}><p>{text(issue.message) || '输入不符合当前方法要求'}</p><Button variant="ghost" size="compact" onClick={() => onMissing(path)}>修正{missingLabel(path)}后重新预检</Button></div>;
+                    })}
                 </>
               )}
             </div>
           ))}
-          {Array.isArray(data?.method_scopes) &&
+          {Array.isArray(data?.method_scopes) && <details><summary>查看方法适用范围</summary>{
             data.method_scopes.map((scope, index) => (
               <ul key={index}>
                 {(Array.isArray(optionalRecord(scope).limitations)
@@ -124,16 +124,16 @@ export function PreflightDialog({
                   </li>
                 ))}
               </ul>
-            ))}
-          <label className="run-ack">
+            ))}</details>}
+          {confirm && <label className="run-ack">
             <input
               type="checkbox"
               checked={ack}
               onChange={(event) => onAck(event.target.checked)}
               disabled={(!onCheck && data?.ready !== true) || running || loading}
             />
-            {onCheck ? "已核对保存输入与采样范围，执行预检" : "已核对适用范围，按已保存版本运行"}
-          </label>
+            {onCheck || requireConfirmation ? "已核对保存输入与采样范围" : data?.ready === true ? "已知悉上述限制，仅运行通过预检的工况" : "请先修正上述问题，再重新预检"}
+          </label>}
           {!!runError && (
             <ErrorState title="运行未完成" description={message(runError)} />
           )}

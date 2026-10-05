@@ -4,6 +4,14 @@
 
 ## 开发与验收
 
+干净检出后，在仓库根目录先准备生产 CAD 运行资产（Windows x64、Python 3.11+、Node.js、Git）：
+
+```sh
+python frontend/src/features/cad/native/prepare.py --jobs 4
+```
+
+该命令先校验现有产物；缺失或源码已变化时，取得固定提交的 OCCT 源码，并下载 SHA256 锁定的 Emscripten、CMake 和 Ninja，从源码编译并再次校验 JS/WASM 与许可证，再准备 Vite 缓存。首次需要联网且耗时较长，后续命中有效缓存无需联网或编译。`run_demo.py` 可在 `npm run build` 前以仓库根目录为工作目录调用这条命令，非零退出即停止构建。下载和工具链保存在被忽略的 `.data/`，构建中间文件在 `.tmp/occt-build/`；详细版本、许可和重建入口见 [原生构建说明](src/features/cad/native/README.md)。此命令只准备生产运行时，不生成或复制 gallery fixture JSON。
+
 ```sh
 cd frontend
 npm ci
@@ -14,7 +22,7 @@ npm run build                   # 样式门禁、严格类型检查、构建
 npm test                        # 样式门禁反例、数值与单位格式化
 npm run test:browser             # 临时数据库与服务自动启动/清理
 npm run test:migration           # 真实列表、选型、新建、保存、路由、离开提醒
-npm run test:migration-states    # 五态、真实计算书/下载与 8027 并排截图
+npm run test:migration-states    # 正式前端五态、真实计算书与下载
 npm run test:research            # 输入保存/撤销、IEC运行、原生结果视图、五态/键盘/主题/尺寸
 npm run test:research-preflight  # 读取三项原生任务真实预检响应，验证错误时禁止运行
 npm run test:research-navigation # 取样键盘、后退/刷新、热点缩放与属性不溢出
@@ -25,14 +33,23 @@ npm run test:expansion           # 公共导航、复现五页签、扫描保存
 npm run test:expansion-states    # 状态断言、资源导入、偏好保存、批量配置、真实运行对比
 npm run test:catalog-controls    # 复现历史选择、批量根/模块基准、固定运行缺项
 npm run seed:demo                # 独立中文工程演示库，已有完整库不会重复计算
+npm run test:reproduction        # 固定复现证据、检索/导出/空目录恢复与曲线开关
+npm run test:type-resilience     # 保存运行故障恢复和隔离审批状态；不执行求解
+npm run test:selection-refusal   # 全候选拒算无推荐、默认折叠与缺项显示
 npm run test:names               # 全局显示名、扫描结论/刻度、来源分组、PDF下载；隔离数据库
-npm run capture:handoff          # 只读样板，不运行计算、不修改输入
-npm run capture:references       # 官方页面与仓库样张的参考截图
-npm run capture:comparison       # kimi-vercel 并排对比与缩放模拟
-npm run capture:research-comparison # 八个研究模块：已验收截图与 8027 实际现场
+npm run test:documents           # 真实PDF/OCR、核对/提案/批准、断线重放、单位对拍；隔离数据库
+npm run test:document-batch      # 五个真实规格、快捷核对、批量提案/批准与断线幂等
+npm run test:accessibility       # 全路由WCAG、可见焦点/表格键盘与首屏冷缓存测量
+npm run test:inquiry             # 问询数字输入、简明预检、冻结工况与历史跳转
+npm run test:version-status      # 版本过期、确认重算/轮询、冲突与温度场缺项；隔离演示库
+npm run test:host-connections    # 交付存档下载、研究撤销/重做、仿真问题格式导入；不启动求解
+npm run test:report-pdf           # 客户/内部 PDF、HTML 次入口、存档下载与新前端截图
+npm run capture:handoff          # 只读截取正式前端，可加 -- --route=/studies
 ```
 
-浏览器使用隔离的 Edge/Chrome `--headless=new`，Playwright 仅通过 CDP 驱动。所有业务验收由 `isolated-e2e.mjs` 复制开发库到 `.tmp/frontend-e2e/<随机身份>/`，自动启动随机端口的后端与预览，结束时停止服务、删除临时数据库和目录。`E2E_DATABASE_SOURCE` 可指定只读备份来源，禁止把业务验收直接指向开发服务。截图在 `.data/frontend-handoff/`；浏览器配置在 `.tmp/frontend/`，退出时关闭全部任务标签页、核对数量并删除配置目录。只读截图脚本仍可用 `FRONTEND_URL`/`WORKBENCH_URL` 指定已有服务。
+浏览器使用隔离的 Edge/Chrome `--headless=new`，Playwright 仅通过 CDP 驱动。验收优先使用项目 `.venv`，可用 `PYTHON` 显式指定解释器。所有业务验收由 `isolated-e2e.mjs` 复制开发库到 `.tmp/frontend-e2e/<随机身份>/`，自动启动随机端口的后端与预览，结束时停止服务、删除临时数据库和目录。`E2E_DATABASE_SOURCE` 可指定只读备份来源，禁止把业务验收直接指向开发服务。截图在 `.data/frontend-handoff/`；浏览器配置在 `.tmp/frontend/`，退出时关闭全部任务标签页、核对数量并删除配置目录。只读截图脚本用 `FRONTEND_URL` 指定正式前端服务。
+
+`test:version-status` 默认执行真实 IEC 重算。发布资产阻塞构建时，`E2E_DEV=1` 使用隔离的 Vite 开发服务；`VERSION_UI_ONLY=1` 只注入运行传输状态，复用真实保存数值检验确认、轮询和错误处理，不代表真实求解通过。演示温度场没有保存温限判定或超出量时显示“无法判断”，不在前端从温度和材料上限推导结论。
 
 ## 代码职责
 
@@ -75,9 +92,9 @@ npm run capture:research-comparison # 八个研究模块：已验收截图与 80
 
 `formatNumber` 处理缺项、精度、负号和五位以上空格分组；`engineeringQuantity` / `engineeringInputPrecision` 统一展示换算与精度：电阻 Ω/km、电容 μF/km、电感 mH/km；损耗与热阻三位有效数字、绝对温度 0.1 °C；无量纲单位为“—”，温差保留 K。EngineeringValue 与数值输入提示完整精度，存储保持 SI 与原始数值。方法参数优先采用契约单位，复合 SI 单位不截断。NumberField 编辑文本不分组，Enter 或失焦确认，Esc 恢复；未改输入不因显示舍入改写原值。
 
-组件验收使用 `scripts/verify-components.mjs`，仅陈列/静态页面必须无 API 请求。业务验收使用 `verify-migration.mjs`、`verify-migration-states.mjs`、`verify-research.mjs`。当前 IEC 结果在临时库显式选择安装发行并实际运行，原生历史证据原样复制；空、延迟、网络错误仅在浏览器拦截层注入，不编造数值。截图与机器结果位于 `.data/frontend-handoff/components/`、`migration/`、`research/`；8027 并排截图保留服务实际失败。研究概念图采用 `concepts/conditions-input.png` 的分组表单组织，另存 `thermal-result.png` 供方向比较，场图按真实网格实现。
+组件验收使用 `scripts/verify-components.mjs`，仅陈列/静态页面必须无 API 请求。业务验收使用 `verify-migration.mjs`、`verify-migration-states.mjs`、`verify-research.mjs`。当前 IEC 结果在临时库显式选择安装发行并实际运行，原生历史证据原样复制；空、延迟、网络错误仅在浏览器拦截层注入，不编造数值。截图与机器结果位于 `.data/frontend-handoff/components/`、`migration/`、`research/`；验收与截图仅访问正式前端。研究概念图采用 `concepts/conditions-input.png` 的分组表单组织，另存 `thermal-result.png` 供方向比较，场图按真实网格实现。
 
-计算书通过正式 `/deliveries/current` 生成，`/deliveries/:did/file` 下载。要求单个源运行，身份与输入/输出摘要完全一致；生成和导出前重新核对 current/verified，历史和未保存输入拒绝交付，文件响应摘要须匹配交付摘要。现无交付列表接口，既存计算书可通过 `delivery` 深链接打开。
+计算书通过正式 `/deliveries/current` 生成，并默认下载客户版 PDF；研究页和交付历史可切换内部审核版。PDF 从已校验交付正文的 `data-report-pdf` 链接提取，只接受内嵌 `application/pdf`，核对 PDF 文件头，不重新计算。HTML 存档为次要下载入口，仍校验文件响应摘要；没有 PDF 链接的旧存档明确提示并保留 HTML。生成当前计算书要求单个 current/verified 源运行，身份与输入/输出摘要完全一致；历史运行和未保存输入不能生成当前交付。“库 → 交付历史”支持 `workspace`/`delivery` 深链接、独立预览与保存版本下载。
 
 公共运行记录抽屉为 RunRecordsDrawer，预检对话框为 PreflightDialog；缺项按领域路径跳到敷设、工况、电缆或方法参数。研究模块共用 StudyRunControl 冻结预检身份。新建的“保存并预检”和结果页的“生成客户计算书”仅传递一次性的明确操作意图，确认范围与运行仍需用户点击。问询补录、结论/分组、场图全景和紧凑表单的概念图与截图在 `.data/frontend-handoff/concepts/`、`refinement/`；操作计数与耗时写入 `inquiry-flow.json`。
 
@@ -85,10 +102,14 @@ CAD 验收使用已锁定的本地 OCCT 资产；可执行 `node src/features/ca
 
 原生任务创建前须提供匹配契约的完整 SI 参数，复杂映射提供 JSON 编辑与契约查看；缺必填项时不分配工程。参数形状由正式宿主再次校验，物理适用性由预检确认。原生预检沿用真实宿主策略；配置超算时 `check` 也会进入 Slurm，不能把“没有求解 run 请求”写成“没有超算作业”。检查作业的计费与封存记录保留用于追溯。
 
-ContractFields 不依赖研究 Provider；MethodParameterFields 根据精确发行读取契约，研究和型号各自持有草稿与修订。扫描与批量未确认文本保留在研究父路由，保存失败不会丢失；批量配置独立保存并只提供 Slurm，预检后再次人工确认核时预算。SeriesChart 仅连接已经保存的点，缺失和失败样本留空。QueryState 在断网时保留读取缓存并标为历史，资源导入只创建未审核草稿。研究配置的已保存撤销/重做和交付列表仍等待正式宿主契约。
+ContractFields 不依赖研究 Provider；MethodParameterFields 根据精确发行读取契约，研究和型号各自持有草稿与修订。扫描与批量未确认文本保留在研究父路由，保存失败不会丢失；批量配置独立保存并只提供 Slurm，预检后再次人工确认核时预算。SeriesChart 仅连接已经保存的点，缺失和失败样本留空。QueryState 在断网时保留读取缓存并标为历史，资源导入只创建未审核草稿。研究计算模块的 Ctrl+Z/Ctrl+Y 调用正式研究 undo/redo，携带工程修订、研究修订及幂等请求编号；草稿和固定运行禁止恢复保存版本，电缆/敷设/工况仍使用独立结构历史。仿真复现导入读取 `/api/simulation/problem-contract` 的完整格式、单位和摘要，支持格式下载；导入仅建立有出处的草稿，保存时由宿主校验完整结构。
 
 显示名称统一经过 `src/lib/display-names.ts`，结果量、方法、参数、对象和单位与存储身份分开；未知键保持可检测，不用空白或通用名称掩盖。表格、下拉、属性、来源和错误状态共用该表。`visible-names.mjs` 检查各页面及文档 iframe 的实际可见文字，并接入公共布局断言；合法标准编号、型号额定电压和工程单位精确豁免。SeriesChart 使用整齐刻度，同轴精度一致；扫描结论只描述已保存点的端点变化，缺失点不计算趋势，转折不宣称单调变化。
 
 `seed-engineering-demo.py` 仅创建 `.data/engineering-demo/engineering.sqlite`：复用有来源的厂家候选和显式工程补参数，经正式接口创建两个型号草稿和五项中文研究。选型、扫描及 IEC 外部热阻公式对照重新执行标准代数；不复制测试运行、批准资料或补造原生结果。110 kV 型号仅录入已知厂家尺寸，缺失结构/物性与标准 R20 上限保持缺项；温度场等待完整方法输入和超算运行。旧开发库保留，`test:names` 从演示库只读备份到临时库后才写入历史测试。
 
-规格书 PDF 使用生成的 `/api/types/{wid}/specification/file` 客户端，核对修订、规格书摘要、PDF MIME 和文件摘要。厂家 PDF 资料导入工作流尚未迁移；资源库的 JSON 资产导入不等于 PDF 提取。最新生成类型已包含 hybrid/offline_ocr、OCR 外发地址/模型/内容类型、候选证据及表头坐标和 kg/100m；页面迁移要求见[厂家资料导入契约](../docs/architecture/datasheet-import.md)。
+已存在的演示库默认不重复生成；插件发行变化后，显式运行 `npm run seed:demo -- --refresh` 通过本机服务选择当前 IEC 发行并重新预检、计算，保留旧运行。全局验收在开头确认真实当前运行，不能用历史结果冒充成功态。
+
+规格书 PDF 使用生成的 `/api/types/{wid}/specification/file` 客户端，核对修订、规格书摘要、PDF MIME 和文件摘要。厂家资料入口为 `/library/documents`：上传原件、默认规则/离线OCR、页级原文与候选高亮、逐项核对、提案、人工批准生成型号草稿。hybrid须先查看披露并勾选外发确认；不会自动切换服务或重试收费请求。写入复用请求编号及核对修订，断线保留填写内容；历史提取只读，原件下载核对SHA256。证据坐标统一PDF点，OCR证据范围不冒称单元格，kg/100m由插件转换。契约见[厂家资料导入](../docs/architecture/datasheet-import.md)。
+
+`npm run seed:demo -- --supplement-hv` 核对独立演示库的110kV公开来源：人民电器长期温限90℃来自PDF7；该副本电阻表止于500mm²，800mm² R20保持缺项。起帆ZC-YJLW03-Z的公开转载规格作为独立资料候选，保留原件SHA256，不混入人民电器尺寸。单带厚度不能充当缓冲层压缩后径向厚度；当前IEC只支持光滑金属护套，预检拒绝不写为成功。求解结果仍需研究线程补齐皱纹护套方法和闭合结构后运行。

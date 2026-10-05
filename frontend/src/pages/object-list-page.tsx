@@ -24,6 +24,8 @@ import {
 import { Toolbar } from "@/components/toolbar";
 import { Icon } from "@/components/icon";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
+import { VersionNotice } from '@/components/version-notice';
+import { isVersionStale } from '@/lib/version-status';
 
 export function ObjectListPage({ home = false }: { home?: boolean }) {
   const search = useSearch({ strict: false });
@@ -46,6 +48,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
       queryKey: ["runs", row.workspace, row.id],
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         studyRuns(row.workspace, row.id, signal),
+      enabled: !isVersionStale(row.raw),
     })),
   });
   useEffect(() => {
@@ -86,6 +89,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
       label: "最近运行",
       render: (row) => {
         const query = statuses.get(row.id);
+        if (isVersionStale(row.raw)) return <VersionNotice value={row.raw} target={{ wid: row.workspace, sid: row.id, revision: row.workspaceRevision, studyRevision: row.revision, title: row.title }} />;
         if (query?.isPending)
           return <StatusMark kind="queued" label="读取中" />;
         if (query?.isError)
@@ -97,6 +101,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
             />
           );
         const latest = query?.data?.at(-1);
+        if (isVersionStale(row.raw) || isVersionStale(latest)) return <VersionNotice value={isVersionStale(row.raw) ? row.raw : latest} target={{ wid: row.workspace, sid: row.id, revision: row.workspaceRevision, studyRevision: row.revision, title: row.title }} />;
         return latest ? (
           <StatusMark
             kind={
@@ -172,7 +177,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
       <AppShell
         title={home ? "CableSimPro" : search.kind === "simulation" ? "仿真复现研究" : "研究"}
         status={
-          <StatusMark
+          (studies.isError || studies.isFetching) && <StatusMark
             kind={
               studies.isError && studies.data
                 ? "historical"
@@ -189,7 +194,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
                   ? "读取失败"
                   : studies.isFetching
                     ? "读取中"
-                    : "已保存"
+                    : ""
             }
             detail={
               studies.isError
@@ -272,7 +277,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
               <span className="muted">{rows.length} 项</span>
             </Toolbar>
           )}
-          {studies.isPending || runQueries.some((query) => query.isPending) ? (
+          {studies.isPending ? (
             <LoadingState title="正在读取研究" />
           ) : studies.isError && !studies.data ? (
             <ErrorState
@@ -345,7 +350,9 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
                   {
                     id: "updated",
                     label: "更新时间",
-                    render: (row) => text(row.updated_at),
+                    render: (row) => new Date(text(row.updated_at)).toLocaleString("zh-CN", {
+                      month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+                    }),
                   },
                 ]}
                 groups={[

@@ -17,12 +17,14 @@ from .scenarios import apply_layout
 class RatingRow(StrictModel):
     case_id: str = Field(pattern=r'^[A-Za-z0-9][A-Za-z0-9_-]{0,119}$')
     name: str = Field(min_length=1, max_length=100)
-    layout: Literal['trefoil', 'flat', 'ducts', 'air']
+    layout: Literal['trefoil', 'flat', 'ducts', 'air', 'three_core_buried_single',
+                    'three_core_buried_horizontal', 'three_core_ducts_horizontal']
     depth_m: float = Field(default=.8, gt=0, le=20)
     soil_rho_k_m_w: float = Field(default=1, gt=0, le=100)
     ambient_temperature_c: float = Field(default=20, ge=-50, le=100)
     spacing_m: float | None = Field(default=None, gt=0, le=10)
     bonding: Literal['both_ends', 'single_point', 'unspecified'] = 'both_ends'
+    rating_basis: Literal['simultaneous', 'individual'] = Field(default='simultaneous', description='多回路共同等负荷，或首回路变化而其他回路保持保存负荷；不同口径不可混用')
     duct_inner_m: float = Field(default=.14, gt=0, le=10)
     duct_outer_m: float = Field(default=.16, gt=0, le=10)
     duct_rho_k_m_w: float = Field(default=6, gt=0, le=100)
@@ -31,13 +33,13 @@ class RatingRow(StrictModel):
     @field_validator('duct_outer_m')
     @classmethod
     def pipe_outer(cls, value, info):
-        if info.data.get('layout') == 'ducts' and value <= info.data.get('duct_inner_m', .14):
+        if info.data.get('layout') in ('ducts', 'three_core_ducts_horizontal') and value <= info.data.get('duct_inner_m', .14):
             raise ValueError('管外径必须大于管内径，单位 m')
         return value
 
     @model_validator(mode='after')
     def pipe(self):
-        if self.layout == 'ducts' and self.duct_inner_m >= self.duct_outer_m:
+        if self.layout in ('ducts', 'three_core_ducts_horizontal') and self.duct_inner_m >= self.duct_outer_m:
             raise ValueError('duct_inner_m：管内径必须小于外径，单位 m')
         if not self.source.strip() or not self.name.strip():
             raise ValueError('工况名称与来源不能仅包含空格')
@@ -74,8 +76,12 @@ def condition_input(document, row):
             d['provenance'][pointer('cable_types', cable['id'], 'cores', core['id'], 'conductor', 'r20')] = deepcopy(observed['source'])
     circuit, section = d['circuits'][0], d['sections'][0]
     d['circuits'], d['sections'] = [circuit], [section]
+    three_core = cable['construction'] == 'three_core'
+    if three_core != row.layout.startswith('three_core_'):
+        raise ValueError('layout：三芯型号请选择三芯工况，单芯型号请选择单芯排列。')
     circuit['system']['kind'] = 'ac_three_phase'
-    circuit['cables'] = [{'id': 'cable/rating-'+p, 'phase': p, 'parallel_index': 1} for p in ('A', 'B', 'C')]
+    circuit['cables'] = [{'id': 'cable/rating-ABC', 'phase': 'L1L2L3'}] if three_core else [
+        {'id': 'cable/rating-'+p, 'phase': p, 'parallel_index': 1} for p in ('A', 'B', 'C')]
     source = {'kind': 'user', 'reference': row.source, 'reviewed': False}
     circuit['bonding'] = {'kind': row.bonding, 'source': source}
     circuit['electrical_topology'] = None
@@ -83,13 +89,17 @@ def condition_input(document, row):
     # the maximum permissible rating. No product operating current is inferred.
     d['load_cases'] = [{'id': 'load/rating', 'kind': 'steady', 'currents': {circuit['id']: 0.0}}]
     diameter = CableType.model_validate(cable).radius()*2
-    spacing = row.spacing_m if row.spacing_m is not None else max(.15, diameter*1.5) if row.layout == 'flat' else diameter
-    if row.layout == 'ducts':
+    spacing = row.spacing_m if row.spacing_m is not None else max(.25, diameter*1.5) if three_core else max(.15, diameter*1.5) if row.layout == 'flat' else diameter
+    ducted = row.layout in ('ducts', 'three_core_ducts_horizontal')
+    if ducted:
         spacing = max(spacing, row.duct_outer_m) if row.spacing_m is None else spacing
     # Use the existing arrangement adapter; duct dimensions are explicitly supplied.
-    d = apply_layout(d, 'flat' if row.layout == 'flat' else 'tray' if row.layout == 'air' else 'trefoil', row.depth_m, spacing)
+    # Build the three-core placements first; the declared pipe sizes below replace
+    # the generic template dimensions, so no hidden 140 mm fit limit is imposed.
+    template = ('three_core_buried_horizontal' if ducted else row.layout) if three_core else 'flat' if row.layout == 'flat' else 'tray' if row.layout == 'air' else 'trefoil'
+    d = apply_layout(d, template, row.depth_m, spacing)
     section = d['sections'][0]
-    if row.layout == 'ducts':
+    if ducted:
         section['enclosures'] = []
         d['materials'] = [m for m in d['materials'] if m['id'] != 'material/rating-duct']
         d['materials'].append({'id': 'material/rating-duct', 'label': '工况管材', 'category': 'duct', 'thermal_resistivity': row.duct_rho_k_m_w})
@@ -131,8 +141,10 @@ def table_definition(state, body, method):
         try:
             inputs = condition_input(document, row)
         except (ValueError, KeyError, TypeError) as exc:
-            raise HTTPException(422, {'message': f'{row.name}：{exc}', 'field': f'rows.{i}.spacing_m'}) from None
-        cases.append({'case_id': row.case_id, 'label': row.name, 'input': inputs, 'parameters': {},
+            field = 'layout' if str(exc).startswith('layout：') else 'spacing_m'
+            raise HTTPException(422, {'message': f'{row.name}：{exc}', 'field': f'rows.{i}.{field}'}) from None
+        cases.append({'case_id': row.case_id, 'label': row.name, 'input': inputs,
+                      'parameters': {'rating_mode':row.rating_basis},
                       'metadata': {'kind': 'type-rating-table', 'condition': row.model_dump(),
                                    'type_revision': state['revision'], 'type_sha256': fingerprint(document)}})
     return {'title': document['cable_types'][0]['label'][:90]+' · 载流量表', 'task': 'rating',

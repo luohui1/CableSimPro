@@ -14,6 +14,10 @@ from backend.domain.models import DomainDocument
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS = {
+    ('cablesim.simulation', 'getdp-eddy'): ('backend.kernel.simulation_contract', 'StandaloneParameters'),
+    ('cablesim.simulation', 'elmer-heat'): ('backend.kernel.simulation_contract', 'StandaloneParameters'),
+    ('cablesim.simulation', 'iec-fem-comparison'): ('cablesim_sdk.iec_fem', 'ComparisonParameters'),
+    ('cablesim.simulation', 'iec-thermal-field'): ('cablesim_sdk.iec_thermal', 'ThreeCoreThermalParameters'),
     ('cablesim.hybrid-rating', 'physics-comparison'): ('cablesim_hybrid_rating', 'Settings'),
     ('cablesim.iec60287', 'steady-rating'): ('cablesim_iec60287', 'Rating'),
     ('cablesim.iec60287', 'armoured-sl-rating'): ('cablesim_iec60287', 'ArmouredRating'),
@@ -28,6 +32,15 @@ MODELS = {
 
 
 def model_for(plugin_id, capability):
+    if plugin_id == 'cablesim.simulation' and capability == 'iec-thermal-field':
+        from cablesim_sdk.iec_thermal import ThreeCoreThermalParameters
+        return ThreeCoreThermalParameters,ROOT/'cablesim_sdk/iec_thermal.py'
+    if plugin_id=='cablesim.simulation' and capability in ('getdp-eddy','elmer-heat'):
+        from .simulation_contract import StandaloneParameters
+        return StandaloneParameters,ROOT/'backend/kernel/simulation_contract.py'
+    if plugin_id == 'cablesim.simulation' and capability == 'iec-fem-comparison':
+        from cablesim_sdk.iec_fem import ComparisonParameters
+        return ComparisonParameters, ROOT/'cablesim_sdk/iec_fem.py'
     if plugin_id == 'cablesim.hybrid-rating':
         source=ROOT/'plugins'/plugin_id/'src'
         dependencies=[source,ROOT/'plugins/cablesim.iec60287/src',ROOT/'plugins/cablesim.simulation/src']
@@ -62,6 +75,14 @@ def model_for(plugin_id, capability):
 
 
 def contracts(research):
+    from backend.plugin_host import PluginHostError
+    try:
+        return verified_contracts(research)
+    except (OSError,ValueError,SyntaxError,ImportError,AttributeError) as exc:
+        raise PluginHostError('PLUGIN_INPUT_CONTRACT_INVALID','插件输入契约无法读取；源码可能正在更新，请完成安装和封签后重试。'+str(exc),409) from None
+
+
+def verified_contracts(research):
     result = []
     for entry in research.methods():
         for cap in entry['capabilities']:
@@ -88,7 +109,7 @@ def contracts(research):
                 continue
             if key[0] == 'cablesim.simulation':
                 from .simulation_parameters import SIMULATION_PARAMETER_MODELS
-                schema = SIMULATION_PARAMETER_MODELS[cap['id']].model_json_schema()
+                schema = SIMULATION_PARAMETER_MODELS.get(cap['id'],model).model_json_schema()
                 units = {'domain_options': 'Saved section/load and thermal boundary/source options; lengths m, temperatures K, heat W/m.',
                          'electromagnetic_options': 'Saved section/load, finite bounds m, material temperature K and conductivity S/m; sources required.',
                          'time': 'Initial temperature K, fixed time step s, step count and BDF order.',
@@ -111,6 +132,13 @@ def contracts(research):
                                'parameter_source_sha256':sha256((ROOT/'backend/kernel/simulation_parameters.py').read_bytes()).hexdigest(),
                                'source':path.relative_to(ROOT).as_posix(), 'source_sha256':sha256(path.read_bytes()).hexdigest(),
                                'schema_digest':sha256(json.dumps(schema,sort_keys=True).encode()).hexdigest()})
+                if cap['input_schema']=='cablesim.simulation-problem/1':
+                    from .simulation_contract import contract
+                    exact=contract()
+                    result[-1].update(schema=exact['schema'],standalone_schema=exact['schema'],
+                                      source=exact['source'],source_sha256=exact['source_sha256'],schema_digest=exact['schema_sha256'],
+                                      parameter_source=path.relative_to(ROOT).as_posix(),parameter_source_sha256=sha256(path.read_bytes()).hexdigest(),
+                                      input_sources=['study'])
                 continue
             if cap['id']=='model-completion':
                 result.append({'method':pin,'input_schema':cap['input_schema'],'schema':schema,
@@ -152,12 +180,18 @@ def contracts(research):
                 fields['rating_mode'] = {'type':'string','enum':['individual','simultaneous','both'],'default':'individual',
                     'description':'individual: one circuit varies, other saved loads held; simultaneous: all circuits share one balanced RMS current (A); both: publish both bases.'}
                 fields['double_flat_tables'] = {'type':'object','additionalProperties':True}
+                fields['corrugated_gap'] = {'type':'object','description':'By cable type ID; explicit effective corrugation-gap material and geometry sources.',
+                    'additionalProperties':{'type':'object','properties':{
+                        'rho_k_m_w':{'type':'number','exclusiveMinimum':0,'description':'Effective thermal resistivity of the gap to mean inner sheath diameter, K·m/W.'},
+                        'source':{'type':'string','minLength':1,'description':'Reference or measured source for gap thermal property.'},
+                        'geometry_source':{'type':'string','minLength':1,'description':'Depth/pitch source; label engineering assumptions separately.'}},
+                        'required':['rho_k_m_w','source','geometry_source'],'additionalProperties':False}}
                 fields['external_loss_reference'] = {'type':'object','properties':{
                     'run_id':{'type':'string'},'case_id':{'type':'string'},
                     'artifact_type':{'const':'x-cablesim.loss-coefficients','type':'string'},
                     'artifact_sha256':{'type':'string','pattern':'^[0-9a-f]{64}$'}},
                     'required':['run_id','case_id','artifact_type','artifact_sha256'],'additionalProperties':False}
-                optional = ('source','duct','per_cable_losses','loss_input_source','target_circuit_id','reference_basis','operation','rating_mode','double_flat_tables','external_loss_reference')
+                optional = ('source','duct','per_cable_losses','loss_input_source','target_circuit_id','reference_basis','operation','rating_mode','double_flat_tables','external_loss_reference','corrugated_gap')
                 parameters.update(properties=fields, required=[k for k in fields if k not in optional], **{'$defs': schema['$defs']})
             primary = DomainDocument.model_json_schema()
             encoded = json.dumps(primary, sort_keys=True, ensure_ascii=False).encode()

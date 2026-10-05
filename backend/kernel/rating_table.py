@@ -14,8 +14,20 @@ def rating_rows(run):
     records = []
     for saved in run['snapshot']['definition']['driver']['cases']:
         out = outputs.get(saved['case_id'], {})
-        result = next((r for r in out.get('results', []) if r['key'] == 'ampacity' and r.get('unit') == 'A' and r['status'] == 'available'), None)
-        reason = (out.get('error') or {}).get('message') or next(((r.get('reason') or {}).get('message') for r in out.get('results', []) if r['key'] == 'ampacity'), None)
+        document = inputs[saved['case_id']]
+        condition = deepcopy(saved['metadata']['condition'])
+        # Old archived conditions keep their original individual interpretation.
+        requested = condition.get('rating_basis', run['snapshot']['definition']['driver'].get('rating_basis','individual'))
+        multiple = len(document['circuits']) > 1
+        case = 'rating-simultaneous' if multiple and requested == 'simultaneous' else 'rating'
+        entities = {c['id'] for c in document['circuits']} if case == 'rating-simultaneous' else {document['circuits'][0]['id']}
+        candidates = [r for r in out.get('results', []) if r['key'] == 'ampacity' and r.get('unit') == 'A'
+                      and r.get('case','rating') == case and r['entity'] in entities]
+        available = [r for r in candidates if r['status']=='available']
+        result = min(available,key=lambda r:r['value']) if {r['entity'] for r in available} == entities else None
+        reason = (out.get('error') or {}).get('message') or next(((r.get('reason') or {}).get('message') for r in candidates if r.get('reason')), None)
+        if result is None and not reason and out.get('status')=='succeeded':
+            reason = '未返回完整的多回路共同负荷结果；不采用逐回路条件上限。' if case=='rating-simultaneous' else '未返回所选回路的条件上限。'
         if out.get('status') == 'not_run':
             status = '未运行'
         elif result:
@@ -28,9 +40,10 @@ def rating_rows(run):
             status = '输入错误'
         else:
             status = '超出范围'
-        document = inputs[saved['case_id']]
         section = document['sections'][0]
-        condition = deepcopy(saved['metadata']['condition'])
+        condition['rating_basis'] = requested
+        condition['rating_basis_name'] = '单回路能力' if not multiple else '全回路等负荷允许电流' if requested=='simultaneous' else '首回路条件上限（其他回路保持保存负荷）'
+        condition['circuit_count'] = len(document['circuits'])
         places = section['placements']
         materials = {m['id']: m for m in document['materials']}
         # Display actual archived physical inputs even if optional descriptive
@@ -41,10 +54,13 @@ def rating_rows(run):
                          bonding=document['circuits'][0]['bonding']['kind'])
         distances = [hypot(a['x']-b['x'], a['z']-b['z']) for i,a in enumerate(places) for b in places[i+1:]]
         condition['actual_spacing_m'] = min(distances) if distances else None
+        three_core = document['cable_types'][0]['construction'] == 'three_core'
         if section['kind'] == 'air':
             condition['layout'] = 'air'
         elif section['enclosures'] and all(e['type'] == 'duct' for e in section['enclosures']):
-            condition['layout'] = 'ducts'
+            condition['layout'] = 'three_core_ducts_horizontal' if three_core else 'ducts'
+        elif three_core:
+            condition['layout'] = 'three_core_buried_single' if len(places) == 1 else 'three_core_buried_horizontal'
         elif len(distances) == 3:
             condition['layout'] = 'trefoil' if max(distances)-min(distances)<1e-8 else 'flat'
         records.append({'case_id': saved['case_id'], 'name': saved['label'], 'condition': condition,

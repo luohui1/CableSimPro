@@ -7,9 +7,11 @@ Every source contributes its actual converged W/m, not a mean group load.
 from dataclasses import asdict, replace
 from math import isfinite, log, pi, sqrt
 
-from .method import RatingRefused, _layer, electrical, sheath_loss, t1
+from .method import RatingRefused, _layer, electrical, sheath_loss, t1, t3, dielectric_path as dielectric_resistance
 from .electrical import (ac_factors, resistance, sheath_reactance, circulating as circulating_loss,
                          sheath_thickness_terms, eddy_geometry)
+
+GROUP_METHOD_VERSION = 'cablesim.iec60287.group/0.8.0'
 
 
 def _resistance(c, temperature, spacing):
@@ -128,10 +130,10 @@ def operating(group, currents=None):
         r, g = c['rating'], c['geometry']
         T1.append(t1(r,g))
         multiplier = 1.6 if group.soil.get('contact_trefoil') and not c['duct'] else 1.0
-        T3.append(multiplier*_layer(r.oversheath.rho_k_m_w,g.overall_m,g.over_sheath_m))
+        T3.append(multiplier*t3(r,g))
         # IEC 60287-1-1:2023 4.2.1, Eq. (1): Wd traverses half of T1.
         # T1 includes both semiconducting layers (TB 880 pp. 70 and 74).
-        dielectric_path.append(.5*T1[-1])
+        dielectric_path.append(dielectric_resistance(r,g))
         cap_coefficient = 1e-9/18 if group.parameters.get('reference_basis') == 'tb880_reference' else 2*pi*8.8541878128e-12
         capacitance.append(cap_coefficient*r.insulation.relative_permittivity/log(g.over_insulation_m/g.over_inner_screen_m))
         wd.append(2*pi*r.frequency_hz*capacitance[-1]*r.phase_voltage_v**2*r.insulation.tan_delta)
@@ -209,7 +211,7 @@ def simultaneous_rating(group):
     if min(s['margin_k'] for s in zero['cable_states']) <= 0:
         return {'ampacity_a': None, 'limiting_cable': zero['limiting_cable'],
                 'error': {'code': 'NO_POSITIVE_RATING', 'message': '全部回路零电流时仍超温；不存在正共同允许电流。'}}
-    lo, hi, safe, boundary = 0., max(100., max(c['current'] for c in group.cables)), zero, None
+    lo, hi, safe, boundary = 0., 100., zero, None
     for _ in range(30):
         try:
             state = solve(hi)
@@ -248,7 +250,15 @@ def simultaneous_rating(group):
 
 
 def rate_group(group, *, verification_coefficients=None):
-    saved = operating(group)
+    temperature_only = group.parameters.get('operation') == 'temperature'
+    common = simultaneous_rating(group) if not temperature_only and group.parameters.get('rating_mode') in ('simultaneous','both') else None
+    try:
+        saved = operating(group)
+    except RatingRefused as exc:
+        if common is None or exc.code != 'THERMAL_RUNAWAY':
+            raise
+        saved = {'status':'unavailable','error':{'code':exc.code,'message':str(exc)},
+                 'cable_states':[],'iterations':None,'residual_k':None,'hottest_cable':None,'limiting_cable':None}
     ratings = []
     base = [c['current'] for c in group.cables]
     for circuit in group.circuits:
@@ -266,7 +276,15 @@ def rate_group(group, *, verification_coefficients=None):
             for i,ratio in zip(indices,ratios):
                 loads[i] = current*ratio
             return operating(group,loads)
-        zero = solve(0.0)
+        try:
+            zero = solve(0.0)
+        except RatingRefused as exc:
+            if exc.code != 'THERMAL_RUNAWAY':
+                raise
+            ratings.append({'entity':circuit['id'],'label':circuit['label'],'ampacity_a':None,
+                            'limiting_cable':None,'error':{'code':'NO_POSITIVE_RATING',
+                            'message':'其他回路维持目标负荷时无有效稳态，逐回路条件上限不存在；请查看全回路等负荷允许电流。'}})
+            continue
         if min(s['margin_k'] for s in zero['cable_states']) <= 0:
             ratings.append({'entity':circuit['id'],'label':circuit['label'],'ampacity_a':None,
                             'limiting_cable':zero['limiting_cable'], 'error':{'code':'NO_POSITIVE_RATING',
@@ -319,13 +337,15 @@ def rate_group(group, *, verification_coefficients=None):
                       'backfill_correction_k_m_w': group.matrix[i][j]-group.soil['base_matrix_k_m_w'][i][j],
                       'source_loss_w_m': saved['cable_states'][j]['total_loss_w_m'],
                       'temperature_rise_k': group.matrix[i][j]*saved['cable_states'][j]['total_loss_w_m']}
-                     for i,target in enumerate(group.cables) for j,source in enumerate(group.cables)]
+                     for i,target in enumerate(group.cables) for j,source in enumerate(group.cables)] if saved['cable_states'] else []
     from .verification import verify_balance
     if group.soil.get('three_core'):
         from .three_core import verify as verify_three_core
-        verification = verify_three_core(group,saved,ratings)
+        verification = verify_three_core(group,saved,ratings+([{**common,'entity':'circuit/group'}] if common and common['ampacity_a'] is not None else []))
     else:
-        verification = verify_balance(group, saved, ratings, external_coefficients=verification_coefficients)
+        verification = verify_balance(group, saved if saved['cable_states'] else {'cable_states':common['cable_states']}, ratings, external_coefficients=verification_coefficients)
+        if not saved['cable_states']:
+            verification['checked_temperature_state'] = 'simultaneous-rating'
     components = None
     if group.soil.get('contact_trefoil') and len(ratings) == 1 and ratings[0]['ampacity_a'] is not None:
         s = ratings[0]['cable_states'][0]
@@ -340,7 +360,7 @@ def rate_group(group, *, verification_coefficients=None):
                       'dielectric_loss_w_m':s['dielectric_loss_w_m'],'temperature_c':s['temperature_limit_c'],
                       'notes':'单回路接触品字形等效组；Rac、λ1、T4 取额定收敛状态，保留同输入分项对比。'}
     reference = group.parameters.get('reference_basis') == 'tb880_reference'
-    payload = {'schema': 'cablesim.iec60287.group-trace/1','method_version': 'iec60287-group/0.6.0',
+    payload = {'schema': 'cablesim.iec60287.group-trace/1','method_version': GROUP_METHOD_VERSION,
             'reference_basis': 'tb880_reference' if reference else 'iec2023',
             'result_scope': '旧版 TB880 参考复现，不能作为 IEC 2023 工程结论' if reference else 'IEC 2023 地下稳态；电损耗须满足声明范围',
             'operating': saved, 'circuit_ratings': ratings,'heat_contributions': contributions,'soil': group.soil, 'verification': verification,
@@ -349,7 +369,7 @@ def rate_group(group, *, verification_coefficients=None):
                 'legacy_assumption':None if c['electrical_topology'] else '旧输入未给相序/相角，沿用原单回路 ABC 假设'}} for c in group.circuits],
             'external_loss_source':(group.parameters.get('external_loss_artifact') or {}).get('resolved_source'),
             'external_loss_interpolation_error':((group.parameters.get('external_loss_artifact') or {}).get('temperature_table') or {}).get('error'),
-            'rating_basis': '逐回路求允许电流；其他回路保持已保存负荷。各回路上限不能同时使用。',
+            'rating_basis': '单回路能力；同回路各相共同变化，按最先达到温限的电缆确定上限。' if len(group.circuits)==1 else '逐回路求允许电流；其他回路保持已保存负荷。各回路上限不能同时使用。',
             'electrical_basis': '双回平排按 IEC 60287-1-2:2023，仅同负荷、无显著环流的温度工况；表1–11在声明范围内插值。' if group.soil.get('double_flat') else '单回路按 IEC 60287-1-1:2023（含已知段长交叉互联）；其余多回路仅接受有来源、有效范围匹配的外部损耗系数。旧输入未声明相序时沿用原 ABC 假设。',
             'sources': (['CIGRE TB 880:2022 Cases 0-1 / 0-2 / 0-3, pp. 62–101; reference conventions only'] if reference else
                         ['IEC 60287-1-1:2023 4.2.1 / 5.1.2 / 5.1.5.1 / 5.2 / 5.3.2–5.3.4 / 5.3.7.1–5.3.7.2; IEC 60287-1-2:2023 4–7 (double-flat only)',
@@ -363,11 +383,31 @@ def rate_group(group, *, verification_coefficients=None):
         from .three_core import SOURCES
         payload.update(sources=SOURCES,electrical_basis='平衡圆形三芯独立金属屏蔽；每芯环流按SL分支，公共磁性钢带/钢丝铠装按对应条款。')
         payload['decisions'].append('T1、Rc及电容按每芯；导体、屏蔽、介质及铠装损耗按整根三芯电缆W/m输出；芯明细单独保留。')
-    mode = group.parameters.get('rating_mode', 'individual')
     payload['rating_modes'] = {
         'individual': {'name': '逐回路允许电流', 'meaning': payload['rating_basis']},
         'simultaneous': {'name': '全回路等负荷允许电流', 'meaning': '全部回路同时采用相同的平衡RMS电流，最先到达各自温限的电缆限制共同电流；其他电缆可低于温限。'},
     }
-    if mode in ('simultaneous', 'both') and group.parameters.get('operation') != 'temperature':
-        payload['simultaneous_rating'] = simultaneous_rating(group)
+    if common is not None:
+        payload['simultaneous_rating'] = common
+    from .rating_basis import basis
+    for rated in ratings:
+        rated['rating_basis'] = basis(group, rated['entity'])
+    if common is not None:
+        common['rating_basis'] = basis(group, common=True)
+    if not group.soil.get('three_core'):
+        from .method import buffer_resistance
+        waves=[]
+        for c in group.cables:
+            r,g=c['rating'],c['geometry'];wave=r.sheath.corrugation
+            if wave is None:continue
+            waves.append({'entity':c['id'],'depth_m':wave.depth_m,'pitch_m':wave.pitch_m,
+                'trough_inner_diameter_m':g.sheath_mean_m-r.sheath.thickness_m-wave.depth_m,
+                'crest_outer_diameter_m':g.over_sheath_m+wave.depth_m,'mean_diameter_m':g.sheath_mean_m,
+                'mean_inner_diameter_m':g.sheath_mean_m-r.sheath.thickness_m,'mean_outer_diameter_m':g.over_sheath_m,
+                'sheath_r20_ohm_m':r.sheath.resistivity20_ohm_m/(pi*g.sheath_mean_m*r.sheath.thickness_m),
+                'buffer_and_gap_resistance_k_m_w':buffer_resistance(r,g),'dielectric_path_k_m_w':dielectric_resistance(r,g),
+                'gap_rho_k_m_w':wave.gap_rho_k_m_w,'gap_source':wave.gap_source,'geometry_source':wave.source,
+                'pitch_role':'记录几何；IEC平均直径表达式不使用节距经验修正',
+                'clauses':['IEC 60287-1-1:2023 5.3.1/5.3.2/5.3.7.1','IEC 60287-2-1:2023 4.1.2.1/4.1.3/4.1.5.1']})
+        if waves:payload['corrugated_sheaths']=waves
     return payload

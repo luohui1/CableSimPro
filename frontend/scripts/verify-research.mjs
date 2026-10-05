@@ -4,7 +4,6 @@ import path from "node:path";
 import { openHeadlessBrowser, outputRoot, settle } from "./browser.mjs";
 import { currentSelection, request } from "./research-fixtures.mjs";
 import { checkNativeTasks } from "./native-task-check.mjs";
-import { captureResearchComparisons } from "./research-comparison.mjs";
 
 if (process.env.E2E_ISOLATED !== "1") throw Error("研究验收只能使用临时数据库");
 const base = process.env.FRONTEND_URL;
@@ -18,8 +17,7 @@ const { page, context } = session;
 const captures = [],
   checks = [],
   errors = [],
-  writes = [],
-  comparisons = [];
+  writes = [];
 page.on("pageerror", (error) => errors.push(error.message));
 page.on("request", (value) => {
   if (
@@ -263,11 +261,11 @@ try {
     .click();
   await expect(page.getByTitle("计算书预览")).toBeVisible();
   const download = page.waitForEvent("download");
-  await page.getByRole("button", { name: "导出计算书", exact: true }).click();
+  await page.getByRole("button", { name: "下载 PDF", exact: true }).click();
   const file = await download;
-  await file.saveAs(path.join(out, "ampacity-report.html"));
+  await file.saveAs(path.join(out, "ampacity-report.pdf"));
   expect(await file.failure()).toBe(null);
-  checks.push("当前计算书生成、同次源摘要验证、正式下载接口实际保存HTML");
+  checks.push("当前计算书生成、同次源摘要验证、实际保存客户版 PDF");
   await checkNativeTasks({ base, page, expect, go, capture });
   checks.push(
     "三项原生任务正式创建、方法契约读取、缺物理输入的预检拒绝；无原生运行请求",
@@ -459,20 +457,6 @@ try {
       .every((value) => value.url.includes(`/studies/${sid}/`)),
   ).toBe(true);
 
-  // Required side-by-side captures retain the actual legacy service state.
-  await page.setViewportSize({ width: 1366, height: 768 });
-  for (const [study, module, tab] of [
-    [selected, "cable", "layers"],
-    [selected, "conditions", "inputs"],
-    [selected, "section", "coordinates"],
-    [rating, "ampacity", "results"],
-    [fields, "thermal-field", "field"],
-    ...native.map((value) => [value, value.module, value.tab]),
-  ]) {
-    const oldUrl = `http://127.0.0.1:8027/design/workbench/#/studies/${study.id}/${module}${module === "conditions" ? "" : "/" + tab}`;
-    comparisons.push({ module, oldUrl });
-  }
-  await captureResearchComparisons(page, comparisons);
   await fs.writeFile(
     path.join(out, "verification.json"),
     JSON.stringify(
@@ -481,7 +465,6 @@ try {
         captures,
         errors,
         writes,
-        comparisons,
         fixturePolicy:
           "开发数据库只读复制；历史原生求解证据逐行原样复制；仅实际运行IEC；无本地原生求解、无新的原生求解run请求；宿主check预检可通过Slurm执行。",
         fieldState: "已保存原生结果成功展示；方法版本过期时保持历史状态",

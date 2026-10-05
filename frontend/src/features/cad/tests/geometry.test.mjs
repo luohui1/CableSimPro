@@ -4,11 +4,12 @@ import fs from 'node:fs/promises';
 import { loadSources } from './load-source.mjs';
 
 const source = await loadSources([
-  'src/features/drawing/cable-geometry.ts', 'src/features/drawing/coordinates.ts', 'src/features/drawing/section-geometry.ts',
+  'src/features/drawing/cable-geometry.ts', 'src/features/drawing/cross-section-profile.ts', 'src/features/drawing/coordinates.ts', 'src/features/drawing/section-geometry.ts',
   'src/features/cad/geometry-contract.ts', 'src/features/cad/display-mesh.ts',
 ]);
 after(() => source.close());
 const cable = await source.import('src/features/drawing/cable-geometry.ts');
+const profiles = await source.import('src/features/drawing/cross-section-profile.ts');
 const coordinates = await source.import('src/features/drawing/coordinates.ts');
 const laying = await source.import('src/features/drawing/section-geometry.ts');
 const contract = await source.import('src/features/cad/geometry-contract.ts');
@@ -48,6 +49,22 @@ test('LayingSection: z-positive-up transforms, cursor zoom and 1 mm snap round t
   close(coordinates.snapCoordinate(.12349, true, .001), .123);
   assert.throws(() => coordinates.snapCoordinate(1, true, 0), /步长/);
 });
+test('CableSection: sector profiles use arc radius, offset layers and actual separating edges', () => {
+  const type=structuredClone(document.cable_types[0]);type.construction='three_core';
+  type.cores=[0,120,240].map((angle,index)=>({id:`core/${index+1}`,x:.004*Math.cos(angle*Math.PI/180),z:.004*Math.sin(angle*Math.PI/180),
+    conductor:{...type.cores[0].conductor,form:'sectoral',diameter:.04,nominal_area:.0003,sector_angle_deg:120,sector_rotation_deg:angle},
+    layers:[{role:'insulation',material:document.materials.find(m=>m.category==='insulation').id,thickness:.003}]}));
+  type.common_layers=[{role:'filler',material:document.materials.find(m=>m.category==='insulation').id,thickness:.001}];
+  const shape=cable.cableShape(type,document.materials);close(shape.radiusM,.028);
+  // R=20 mm, angle=120 degrees: local height=20, width=20*sqrt(3), not a 40 mm diameter.
+  for(const ring of shape.rings.filter(row=>row.target.role==='conductor')){
+    const size=profiles.sectorSize(ring.profile);close(size.heightM,.020);close(size.widthM,.020*Math.sqrt(3));
+  }
+  assert.equal(shape.rings.filter(row=>row.profile.kind==='sector').length,6);
+  assert.equal(shape.rings.find(row=>row.target.role==='filler').holes.length,3);
+  type.cores[1].conductor.sector_rotation_deg=0;assert.throws(()=>cable.cableShape(type,document.materials),/重叠/);
+  delete type.cores[1].conductor.sector_angle_deg;assert.throws(()=>cable.cableShape(type,document.materials),/扇形/);
+});
 test('LayingSection: linked duct move is atomic, preserves offsets, and rejects locked fields', () => {
   const section = document.sections[0], original = structuredClone(section);
   const result = laying.moveSelection(section, { kind: 'cable', id: 'cable/A' }, { x: -.025, z: -.03 }, true);
@@ -79,9 +96,9 @@ test('CadViewport: exact replacement without geometry keys still requires the sa
   contract.matchingExactModel(previous, exact);
   assert.throws(() => contract.matchingExactModel(previous, { ...exact, length_m: .14 }), /展示长度或层尺寸/);
   assert.throws(() => contract.matchingExactModel(previous, { ...exact, outer_diameter_m: .04 }), /层尺寸/);
-  for (const field of ['inner_radius_m', 'outer_radius_m', 'material', 'category']) {
+  for (const field of ['inner_radius_m', 'outer_radius_m', 'material', 'category', 'center_m']) {
     const changed = structuredClone(exact);
-    changed.layers[2][field] = typeof changed.layers[2][field] === 'number' ? changed.layers[2][field] + .0001 : 'different';
+    changed.layers[2][field] = field==='center_m' ? {x:.001,z:0} : typeof changed.layers[2][field] === 'number' ? changed.layers[2][field] + .0001 : 'different';
     assert.throws(() => contract.matchingExactModel(previous, changed), /层尺寸/);
   }
   previous.layers[0].construction = { wire_diameter: .001, nested: { lay_length: .2, direction: 'left' } };
@@ -89,6 +106,13 @@ test('CadViewport: exact replacement without geometry keys still requires the sa
   contract.matchingExactModel(previous, exact);
   exact.layers[0].construction.nested.lay_length = .3;
   assert.throws(() => contract.matchingExactModel(previous, exact), /层尺寸/);
+});
+test('CadViewport: core identity is retained when an artifact omits its optional entity', () => {
+  const first={...nativeModel.layers[0],entity:undefined,source_target:{scope:'core',core_id:'core/1',role:'conductor'}};
+  const second={...first,source_target:{...first.source_target,core_id:'core/2'}};
+  assert.notEqual(contract.layerId(first),contract.layerId(second));
+  const model={...nativeModel,layers:[first,second]};contract.validateGeometry(model);
+  assert.equal(contract.selectionIndex(model,{kind:'layer',id:contract.layerId(second)}),1);
 });
 test('CadViewport: envelope and decoded display mesh retain mm geometry and cache identity', () => {
   const envelope = mesh.annulusMesh(.1, { inner_radius_m: .01, outer_radius_m: .015 });

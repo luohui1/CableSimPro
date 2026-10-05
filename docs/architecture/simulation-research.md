@@ -2,6 +2,12 @@
 
 三项能力由 `cablesim.simulation` 提供，输入均为保存的 `cablesim.domain/1` SI 文档。宿主保存输入、发行锁、运行状态、工件及摘要，并按管理员配置提交 Slurm；不实现热、电磁或电热算法。共享数据模型放在根目录 `cablesim_sdk/`，插件源码不导入 `backend`。宿主和插件封签记录共享 SDK 的依赖摘要。
 
+## 独立问题复现导入
+
+`GET /api/simulation/problem-contract` 发布 `cablesim_sdk/simulation.py::Problem` 的准确JSON Schema，附 `schema_version/source/source_sha256/schema_sha256/units`，不维护宿主平行物理模型。`GET /api/input-contracts` 中 `getdp-eddy/elmer-heat` 的 `schema/standalone_schema` 采用该模型；研究模块的领域输入契约保持原状。独立导入使用 `input_source=study`、完整 `method_input`、相应发行锁及 `parameters.mesh`；`parameters` 模型为 `StandaloneParameters`，可带 reproduction 和显式 loss_export。保存和历史预检都验证原问题，非法字段/数值返回422 `SIMULATION_PROBLEM_INVALID` 并附 `/method_input/...` 路径；电磁/热能力不匹配返回 `SIMULATION_PHYSICS_MISMATCH`。输入正文及其原有来源原样进入冻结快照和输入摘要，验证不调用求解器、不自动补物性。
+
+顶层准确字段：`schema_version, physics, geometry, boundaries, excitations, frequency_hz, time, probes_m, current_probes, temperature_regions, axial_lengths_m, electrical_networks, provenance, assumptions`。拒绝额外字段和非有限数。physics 为 steady_heat / transient_heat / magnetic_harmonic；热问题不能带频率，磁场必须有正Hz频率，只有暂态可带time。geometry为1–256个rectangle/disk，values分别为 `[x0,z0,x1,z1]` / `[x,z,r]`，单位m；材料显式给导热率W/(m·K)、暂态体积热容J/(m³·K)，或电导率S/m和无量纲磁导率。boundaries的坐标为m，温度为K、换热系数W/(m²·K)、磁矢势Wb/m；热源W/m、电流RMS A、电压梯度V/m，复数用实/虚部分量。schedule为 `[时间s,无量纲倍率]`，time含初温K、步长s、步数和BDF阶数。探针为m，轴向长度为m，网络节点为无单位正整数；区域、激励、网络和测点引用由SDK校验。磁场导电区必须显式指定电流/电压或互联约束，不能猜零电流。稳态热不能全绝热。完整嵌套字段及上下限以发布Schema及同源校验器为准，验证入口 `tests/test_host_api.py::test_exact_simulation_problem_contract_and_import_validation`。
+
 ## 能力与工件
 
 | capability | 分析 | 必需工件 | 用户可读结果 |
@@ -67,6 +73,16 @@ GetDP 按当前温度更新逐点电导率与焦耳损耗，热场按该损耗�
 5. 网络中断保存原输入、运行与 Slurm 标识。单工况或自动收敛数组且没有交叉对照时，调用 `POST .../runs/{rid}/resume` 回收原冻结作业；恢复不创建新求解。其他扫描/批量使用既有数据集恢复入口。已完成运行恢复直接返回历史结果。当前跨多个方法中途断网的单一 resume 尚未覆盖。
 
 管理员 `.data/hpc/config.json` 的 `remote_plugins` 控制宿主路由，当前仿真与 COMSOL 在名单中；插件还拒绝非 Slurm 求解环境。研究执行将源码、SDK、发行和输入冻结到 `.data/hpc/research-runs/`，传输及结果均校验摘要。运行 environment 的 `remote_execution` 保存 plan/runtime/result SHA256、job_id、节点记账及实际 CPU 秒。超时和崩溃清理计算进程树；失败工件不混入成功结果，历史研究保持可读。
+
+## IEC 与有限元对比
+
+新增 `task=iec-fem-comparison`，通过同名仿真插件能力调用，保持既有研究保存、预检、运行、恢复和计算书端点。前端从任务清单选择完整发行锁，从 `/api/input-contracts` 获取 `cablesim_sdk/iec_fem.py` 的参数契约。`section_id`、`load_id` 选择保存工况；`controls.rated_circuit` 指定反求回路，其余回路保持保存负荷。支持范围、冻结系数确认和偏差定义见 [仿真插件说明](../plugins/SIMULATION.md)。
+
+`x-cablesim.iec-fem-comparison` 的 `conclusion` 可直接显示；`iec`、`fem` 分别有 `status/ampacity_a/operating_temperature_k/basis`。分层工况的 IEC 为明确确认的均匀土壤对照；`iec_over_fem_percent` 的分母是 FEM 电流。`valid=false` 时 FEM 和偏差为 null，界面显示收敛原因；`judgment` 为 `conservative/nonconservative/within_numerical_tolerance/unavailable`。`assumption_checks` 提供不满足的假设及输入位置。工件的 `source` 绑定保存输入、方法版本与原始计算记录；只消费 `artifact_status=verified` 的结果。
+
+此能力在插件内部保存至少三档网格及加倍域，末两档与加倍域均须满足温度≤0.1 K、允许电流≤0.5 A（可收紧）；未通过不得导出客户计算书。`x-cablesim.simulation-bundle` 保留逐档温度/电流/残差、网格摘要、IEC 过程与完整重放参数；比较工件不传输节点温度场。渲染器 `/14` 的 `data-section="iec-fem-comparison"` 读取这些封存结果。
+
+运行对象新增可选 `execution`：`backend=slurm`、`state`、`job_id`、`plan_id`、`slurm_states`、`actual_cpu_seconds`、`updated`。提交前为 `preparing/submitted`，Slurm 实际 PENDING 为 `queued`，RUNNING/COMPLETING 为 `running`，终态回收为 `collecting`；结束后跟随研究 `succeeded/partial/failed/interrupted`。外层 `status=running` 表示宿主执行流程进行中，不能作为已在计算节点运行的证据。GET 只读调度缓存，不新增 SSH 查询或求解。
 
 ## 验证入口
 

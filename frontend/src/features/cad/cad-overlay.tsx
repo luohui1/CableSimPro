@@ -3,6 +3,7 @@ import { formatNumber } from '@/lib/format';
 import { clamp, selectionIndex } from './geometry-contract';
 import type { CadController } from './cad-controller';
 import type { CadCamera, CadGeometry, CadPick, CadSelection } from './types';
+import { layerNames } from '@/features/drawing/cable-geometry';
 
 type Point = { x: number; y: number };
 interface Plane { origin: Point; end: Point; position: Point; corners: Point[] }
@@ -33,15 +34,20 @@ function LayerDimensions({ geometry, selected, camera, controller, height }: {
   if (!layer) return null;
   const outer = layer.outer_radius_m * 1000;
   const inner = layer.inner_radius_m * 1000;
-  const center = controller.project(0, 0, 0);
-  const a = controller.project(-outer * Math.cos(camera.yaw), outer * Math.sin(camera.yaw), 0);
-  const b = controller.project(outer * Math.cos(camera.yaw), -outer * Math.sin(camera.yaw), 0);
+  const cx = (layer.center_m?.x || 0) * 1000, cy = (layer.center_m?.z || 0) * 1000;
+  const center = controller.project(cx, cy, 0);
+  if (layer.section_profile?.outer.kind === 'sector') return <g className="cad-layer-dimensions" data-cad-layer-dimensions>
+    <text x={center.x} y={height - 76} textAnchor="middle">圆弧半径 R {formatNumber(outer, 1)} mm</text>
+    <text x={center.x} y={height - 54} textAnchor="middle">夹角 {formatNumber(layer.section_profile.outer.angle! * 180 / Math.PI, 1)}°</text>
+  </g>;
+  const a = controller.project(cx - outer * Math.cos(camera.yaw), cy + outer * Math.sin(camera.yaw), 0);
+  const b = controller.project(cx + outer * Math.cos(camera.yaw), cy - outer * Math.sin(camera.yaw), 0);
   const y = Math.min(height - 64, center.y + Math.abs(a.x - center.x) + 32);
   return <g className="cad-layer-dimensions" data-cad-layer-dimensions>
     <path d={`M${a.x} ${center.y}V${y + 6}M${b.x} ${center.y}V${y + 6}M${a.x} ${y}H${b.x}`} />
     <text x={center.x} y={y + 22} textAnchor="middle">本层外径 Ø {formatNumber(outer * 2, 1)} mm</text>
     <text x={center.x} y={Math.max(24, center.y - Math.abs(a.x - center.x) - 24)} textAnchor="middle">
-      内径 Ø {formatNumber(inner * 2, 1)} mm · 厚度 {formatNumber(outer - inner, 1)} mm
+      内径 Ø {formatNumber(inner * 2, 1)} mm · 厚度 {formatNumber(typeof layer.construction?.thickness === 'number' ? layer.construction.thickness * 1000 : outer - inner, 1)} mm
     </text>
   </g>;
 }
@@ -55,7 +61,10 @@ export function CadOverlay({ geometry, selected, camera, controller, width, heig
   const path = cut ? `M${cut.corners.map(point => `${point.x} ${point.y}`).join('L')}Z` : '';
   const projected = points.filter(point => [point.x_mm, point.y_mm, point.z_mm].every(Number.isFinite))
     .map(point => controller.project(point.x_mm!, point.y_mm!, point.z_mm!));
+  const selectedLayer = geometry.schema === 'cablesim.cad-model/1' ? geometry.layers[selectionIndex(geometry, selected)] : null;
   return <svg className="cad-overlay" viewBox={`0 0 ${width} ${height}`} aria-label="几何尺寸和剖切面">
+    {selectedLayer && <g className="cad-layer-dimensions" data-cad-layer-label><text x="16" y="28">
+      {selectedLayer.label || layerNames[selectedLayer.role] || '结构层'}</text></g>}
     {cut && <path className="cad-cut-outline" d={path} />}
     <LayerDimensions geometry={geometry} selected={selected} camera={camera} controller={controller} height={height} />
     {!!projected.length && <g className="cad-point-measurement" data-cad-point-measurement>

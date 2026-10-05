@@ -97,7 +97,8 @@ def test_saved_execution_replay_and_report(client, plugin, monkeypatch):
     report = client.post(f'/api/workspaces/{w["id"]}/deliveries', json={'run_ids': [run['id']]})
     assert report.status_code == 201, report.text
     assert run['id'] in report.json()['html']
-    assert report.json()['renderer'] == 'cablesim.study-html/13'
+    from backend.kernel.report import RENDERER
+    assert report.json()['renderer'] == RENDERER
     assert '>case-0 · rating</td>' in report.json()['html']
     if plugin == 'cablesim.thermal-network':
         assert '>case-0 · operating</td>' in report.json()['html']
@@ -149,6 +150,44 @@ def test_input_sources_are_pinned_with_the_run_and_report(client):
     assert 'later input' not in report['html']
     assert 'ac_resistance' in report['html']
     assert 'losses.sheath' in report['html']
+
+
+@pytest.mark.parametrize('basis,condition', [('individual','rating'), ('simultaneous','rating-simultaneous')])
+def test_sweep_rating_basis_is_executed_and_reported(client, basis, condition):
+    w, s = study(client, driver={'kind':'sweep', 'rating_basis':basis,
+                                'samples':[{'label':'saved input','changes':{}}]})
+    root, body = request(client, w, s)
+    response = client.post(root+'/runs', json=body)
+    assert response.status_code == 200, response.text
+    run = response.json()
+    assert run['status'] == 'succeeded', run
+    if basis == 'simultaneous':
+        assert run['snapshot']['cases'][0]['parameters']['rating_mode'] == 'both'
+    quantity = next(q for q in run['output']['cases'][0]['results'] if q['key']=='ampacity' and q['case']==condition)
+    assert quantity['rating_basis']['kind']=='single_circuit'
+    assert quantity['rating_basis']['fixed_currents_a']=={}
+    assert run['output']['default_result']['case']==condition
+    from backend.kernel.report import task_answer, formatted
+    answer = task_answer(run)
+    assert 'data-section="sweep-basis"' in answer
+    assert formatted(quantity['value'], 3) in answer
+    assert condition in answer
+
+
+def test_new_sweep_defaults_to_common_capacity_but_retains_explicit_choice():
+    from backend.kernel.contracts import Driver
+    args={'kind':'sweep','samples':[{'label':'one','changes':{}}]}
+    assert Driver(**args).rating_basis=='simultaneous'
+    assert Driver(**args,rating_basis='individual').rating_basis=='individual'
+
+
+def test_typed_run_response_preserves_saved_result_bytes():
+    from backend.kernel.responses import RunOutput
+    from backend.kernel.batch_files import digest
+    saved={'cases':[{'case_id':'case-0','status':'succeeded','results':[
+        {'key':'ampacity','type':'quantity','entity':'circuit/c1','unit':'A','status':'unavailable','reason':{'code':'test','message':'test'}}],
+        'artifacts':{}}]}
+    assert digest(RunOutput.model_validate(saved).model_dump(mode='json',exclude_unset=True))==digest(saved)
 
 
 def test_sweep_retains_failed_samples(client, monkeypatch):

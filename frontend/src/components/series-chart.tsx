@@ -14,15 +14,18 @@ export function SeriesChart({
   yLabel,
   quantity,
   unit,
+  controls = false,
 }: {
   series: ChartSeries[];
   xLabel: string;
   yLabel: string;
   quantity: string;
   unit: string;
+  controls?: boolean;
 }) {
   const host = useRef<HTMLDivElement>(null),
     [width, setWidth] = useState(900);
+  const [hidden, setHidden] = useState<string[]>([]);
   useEffect(() => {
     if (!host.current) return;
     const resize = new ResizeObserver((entries) =>
@@ -77,7 +80,7 @@ export function SeriesChart({
                 y2="6"
               />
             </svg>
-            {item.label}
+            {controls ? <label><input type="checkbox" checked={!hidden.includes(item.id)} onChange={() => setHidden(current => current.includes(item.id) ? current.filter(id => id !== item.id) : [...current, item.id])} /> {item.label}</label> : item.label}
           </span>
         ))}
       </div>
@@ -109,7 +112,7 @@ export function SeriesChart({
         {series.map((item, index) => {
           let previous: { x: number; y: number } | null = null;
           return (
-            <g key={item.id} className={`series-${index % 3}`}>
+            <g key={item.id} className={`series-${index % 3}`} data-series={item.id} visibility={controls && hidden.includes(item.id) ? 'hidden' : undefined}>
               {item.points.map((point, sample) => {
                 if (point.y === null || !Number.isFinite(point.y)) {
                   previous = null;

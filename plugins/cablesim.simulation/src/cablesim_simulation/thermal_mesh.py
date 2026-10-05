@@ -45,11 +45,14 @@ def build(model, controls):
                 if dim == 2:
                     assignment[tag] = desc
         removed = []
+        prescribed_curves=set()
         for tag,desc in assignment.items():
             if desc['kind'] == 'layer' and desc['layer'] == 0 and model.cables[desc['cable']].prescribed_core_temperature_k is not None:
                 removed.append(tag)
         # 给定芯温时仅保留芯表面，未知芯热导率不被补值。
         if removed:
+            for tag in removed:
+                prescribed_curves.update(t for d,t in gmsh.model.getBoundary([(2,tag)],oriented=False) if d==1)
             occ.remove([(2,t) for t in removed],recursive=False)
             occ.synchronize()
             for t in removed:
@@ -62,7 +65,7 @@ def build(model, controls):
             region_data.append({**desc,'id':group})
             domain_surfaces.append(tag)
         # 限制芯附近和每条材料界面；远场按距离渐变。
-        near_curves = set()
+        near_curves = set(prescribed_curves)
         for tag,desc in assignment.items():
             if desc['kind'] != 'environment':
                 near_curves.update(t for d,t in gmsh.model.getBoundary([(2,tag)],oriented=False) if d == 1)
@@ -77,7 +80,19 @@ def build(model, controls):
         for key,v in [('InField',distance),('SizeMin',controls.mesh_size_m),('SizeMax',controls.far_mesh_size_m),
                       ('DistMin',band),('DistMax',controls.mesh_transition_m)]:
             gmsh.model.mesh.field.setNumber(threshold,key,v)
-        gmsh.model.mesh.field.setAsBackgroundMesh(threshold)
+        background=threshold
+        if controls.near_soil_mesh_size_m is not None:
+            box=gmsh.model.mesh.field.add('Box');margin=controls.near_soil_margin_m
+            radii=[c.duct.outer_radius_m if c.duct else c.layers[-1].outer_radius_m for c in model.cables]
+            for key,value in [('VIn',controls.near_soil_mesh_size_m),('VOut',controls.far_mesh_size_m),
+                ('XMin',min(c.x_m-r for c,r in zip(model.cables,radii))-margin),
+                ('XMax',max(c.x_m+r for c,r in zip(model.cables,radii))+margin),
+                ('YMin',min(c.z_m-r for c,r in zip(model.cables,radii))-margin),
+                ('YMax',max(c.z_m+r for c,r in zip(model.cables,radii))+margin),('ZMin',-1.),('ZMax',1.)]:
+                gmsh.model.mesh.field.setNumber(box,key,value)
+            background=gmsh.model.mesh.field.add('Min')
+            gmsh.model.mesh.field.setNumbers(background,'FieldsList',[threshold,box])
+        gmsh.model.mesh.field.setAsBackgroundMesh(background)
         for option in ('MeshSizeFromPoints','MeshSizeFromCurvature','MeshSizeExtendFromBoundary'):
             gmsh.option.setNumber('Mesh.'+option,0)
         gmsh.option.setNumber('Mesh.ElementOrder',1)
@@ -95,7 +110,8 @@ def build(model, controls):
         cells = np.asarray(cells,dtype=int)
         used = np.unique(cells)
         if len(used) > controls.max_nodes:
-            raise ValueError('网格超过显式节点上限；未自动降精度。')
+            from cablesim_sdk.validation import FieldValueError
+            raise FieldValueError(f'网格含 {len(used)} 节点，超过显式上限 {controls.max_nodes}；请调整网格分配，未自动降精度。','parameters','controls','max_nodes')
         reindex = np.full(len(tags),-1,dtype=int); reindex[used] = np.arange(len(used))
         points = np.asarray(coords).reshape(-1,3)[used,:2]
         if not len(cells) or not np.isfinite(points).all():

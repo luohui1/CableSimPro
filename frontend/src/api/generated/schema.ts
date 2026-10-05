@@ -441,10 +441,62 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Study Detail */
+        get: operations["study_detail_api_workspaces__wid__studies__sid__get"];
         /** Update */
         put: operations["update_api_workspaces__wid__studies__sid__put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{wid}/studies/{sid}/recalculate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Recalculate */
+        post: operations["recalculate_api_workspaces__wid__studies__sid__recalculate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{wid}/studies/{sid}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Undo */
+        post: operations["undo_api_workspaces__wid__studies__sid__undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/workspaces/{wid}/studies/{sid}/redo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Redo */
+        post: operations["redo_api_workspaces__wid__studies__sid__redo_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -544,7 +596,8 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /** Deliveries */
+        get: operations["deliveries_api_workspaces__wid__deliveries_get"];
         put?: never;
         /** Deliver */
         post: operations["deliver_api_workspaces__wid__deliveries_post"];
@@ -563,6 +616,110 @@ export interface paths {
         };
         /** Delivery */
         get: operations["delivery_api_workspaces__wid__deliveries__did__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/database/version": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Version */
+        get: operations["version_api_database_version_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/database/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listing */
+        get: operations["listing_api_database_backups_get"];
+        put?: never;
+        /** Create */
+        post: operations["create_api_database_backups_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/database/backups/{identifier}/file": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Download */
+        get: operations["download_api_database_backups__identifier__file_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/database/restores": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Request Restore */
+        post: operations["request_restore_api_database_restores_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/database/restores/current": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Restore Status */
+        get: operations["restore_status_api_database_restores_current_get"];
+        put?: never;
+        post?: never;
+        /** Cancel Restore */
+        delete: operations["cancel_restore_api_database_restores_current_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/simulation/problem-contract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Simulation Problem Contract */
+        get: operations["simulation_problem_contract_api_simulation_problem_contract_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1158,6 +1315,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/documents/{did}/batches": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch Propose */
+        post: operations["batch_propose_api_documents__did__batches_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{did}/batches/{bid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Batch */
+        get: operations["batch_api_documents__did__batches__bid__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/documents/{did}/batches/{bid}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Batch Approve */
+        post: operations["batch_approve_api_documents__did__batches__bid__approval_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/workspaces/{wid}/domain": {
         parameters: {
             query?: never;
@@ -1273,6 +1481,23 @@ export interface paths {
         get: operations["specification_api_types__wid__specification_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/types/{wid}/specification/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Generate Specification */
+        post: operations["generate_specification_api_types__wid__specification_generate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1613,6 +1838,32 @@ export interface components {
              */
             source: string;
         };
+        /** AmpacityBasis */
+        AmpacityBasis: {
+            /**
+             * Kind
+             * @description Single circuit capability, common balanced current in all circuits, or conditional limit with other cable loads fixed.
+             * @enum {string}
+             */
+            kind: "single_circuit" | "common_balanced" | "conditional_fixed_load";
+            /**
+             * Display Name
+             * @description Display name including fixed load values where applicable.
+             */
+            display_name: string;
+            /**
+             * Varied Circuits
+             * @description Circuit IDs whose currents vary during the rating search.
+             */
+            varied_circuits: string[];
+            /**
+             * Fixed Currents A
+             * @description Fixed RMS currents by physical cable ID, in A; preserves unequal phase loads.
+             */
+            fixed_currents_a?: {
+                [key: string]: number;
+            };
+        };
         /** ApiError */
         ApiError: {
             /**
@@ -1794,6 +2045,43 @@ export interface components {
             metadata?: {
                 [key: string]: unknown;
             };
+        };
+        /** BatchProposalRequest */
+        BatchProposalRequest: {
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Idempotency key for the complete batch.
+             */
+            request_id: string;
+            /**
+             * Items
+             * @description One completely reviewed extraction and explicit target identity per specification.
+             */
+            items: components["schemas"]["ProposalRequest"][];
+        };
+        /** BatchProposalResponse */
+        BatchProposalResponse: {
+            /** Id */
+            id: string;
+            /** Document Id */
+            document_id: string;
+            /**
+             * Sha256
+             * @description Digest binding all individual proposal IDs and digests.
+             */
+            sha256: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "proposed" | "approved";
+            /** Proposals */
+            proposals: components["schemas"]["ProposalResponse"][];
+            /** Approval */
+            approval?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** BindModel */
         BindModel: {
@@ -2154,7 +2442,7 @@ export interface components {
             quote: string;
             /**
              * Bbox Pt
-             * @description Source evidence rectangle [left,top,right,bottom], PDF points, top-left origin. Original text uses numeric cells/glyphs; OCR uses the containing table block, not invented cell coordinates.
+             * @description Source evidence rectangle [left,top,right,bottom], PDF points, top-left origin. Native text cites cells/glyphs; local OCR cites recovered cells, Mistral OCR cites its containing table block.
              */
             bbox_pt: number[];
             /**
@@ -2238,9 +2526,7 @@ export interface components {
             /** Status */
             status: string;
             /** Results */
-            results: {
-                [key: string]: components["schemas"]["JsonValue"];
-            }[];
+            results: components["schemas"]["QuantityResult"][];
             /** Artifacts */
             artifacts: {
                 [key: string]: components["schemas"]["JsonValue"];
@@ -2399,8 +2685,21 @@ export interface components {
             form: "unspecified" | "solid_round" | "stranded_round" | "stranded_round_compacted" | "segmental" | "hollow" | "sectoral";
             /** Nominal Area */
             nominal_area: number;
-            /** Diameter */
+            /**
+             * Diameter
+             * @description 圆形导体外径；扇形导体为圆弧直径，圆心由芯坐标确定，m
+             */
             diameter: number;
+            /**
+             * Sector Angle Deg
+             * @description 扇形导体夹角，°；不从标称截面反推
+             */
+            sector_angle_deg?: number | null;
+            /**
+             * Sector Rotation Deg
+             * @description 扇形角平分线从 +x 朝 +z 的转角，°
+             */
+            sector_rotation_deg?: number | null;
             /** R20 */
             r20?: number | null;
             /** Conductor Class */
@@ -2545,7 +2844,7 @@ export interface components {
              * Task
              * @description Study objective; simulation tasks submit asynchronously to Slurm.
              */
-            task?: ("rating" | "operating" | "target" | "transient-temperature" | "sheath-losses" | "electrothermal-steady") | null;
+            task?: ("rating" | "operating" | "target" | "transient-temperature" | "sheath-losses" | "electrothermal-steady" | "iec-fem-comparison") | null;
             method: components["schemas"]["Method"];
             /**
              * Input Source
@@ -2553,7 +2852,10 @@ export interface components {
              * @enum {string}
              */
             input_source?: "domain" | "study";
-            /** Method Input */
+            /**
+             * Method Input
+             * @description Saved standalone plugin input. For cablesim.simulation-problem/1 use the exact GET /api/simulation/problem-contract schema; all lengths m, absolute temperature K, RMS current A.
+             */
             method_input?: {
                 [key: string]: unknown;
             } | null;
@@ -2620,6 +2922,31 @@ export interface components {
              * @description Retry identity; reuse with identical source runs.
              */
             request_id?: string | null;
+        };
+        /** DatabaseError */
+        DatabaseError: {
+            /**
+             * Detail
+             * @description Stable code/message, or request field validation errors.
+             */
+            detail: {
+                [key: string]: string;
+            } | {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[];
+        };
+        /** DatabaseVersion */
+        DatabaseVersion: {
+            /**
+             * Database Schema Version
+             * @description Current SQLite user_version; no unit.
+             */
+            database_schema_version: number;
+            /**
+             * Supported Schema Version
+             * @description Maximum schema version this host supports; no unit.
+             */
+            supported_schema_version: number;
         };
         /** Decision */
         Decision: {
@@ -2688,6 +3015,8 @@ export interface components {
              * @description UTC creation timestamp.
              */
             created: string;
+            /** @description Current version status of source runs; saved HTML and its digest are not rewritten. */
+            version_status: components["schemas"]["VersionStatus"];
         };
         /** DeliverySource */
         DeliverySource: {
@@ -2700,6 +3029,64 @@ export interface components {
             input_digest: string;
             /** Output Digest */
             output_digest: string;
+        };
+        /** DeliverySummary */
+        DeliverySummary: {
+            /**
+             * Id
+             * Format: uuid
+             * @description Immutable delivery identity.
+             */
+            id: string;
+            /**
+             * Workspace
+             * Format: uuid
+             */
+            workspace: string;
+            /**
+             * Kind
+             * @description Saved calculation book or specification.
+             * @enum {string}
+             */
+            kind: "calculation" | "specification";
+            /**
+             * Version
+             * @description One-based generation sequence within this workspace; no unit.
+             */
+            version: number;
+            /**
+             * Renderer
+             * @description Exact renderer version used to create this delivery.
+             */
+            renderer: string;
+            /**
+             * Created
+             * @description UTC generation time; ISO 8601.
+             */
+            created: string;
+            /**
+             * Sources
+             * @description Saved source runs and input/output SHA256; export does not rerun them.
+             */
+            sources: components["schemas"]["DeliverySource"][];
+            /**
+             * Digest
+             * @description Integrity digest of renderer, sources and content.
+             */
+            digest: string;
+            /**
+             * Download Url
+             * @description Relative API URL for integrity-checked saved HTML.
+             */
+            download_url: string;
+            /**
+             * Media Type
+             * @default text/html
+             * @constant
+             */
+            media_type?: "text/html";
+            /** @description Dynamic source-version warning for an immutable historical delivery. */
+            version_status: components["schemas"]["VersionStatus"];
         };
         /** DeriveAsset */
         DeriveAsset: {
@@ -2909,6 +3296,59 @@ export interface components {
             /** Measurements */
             measurements?: components["schemas"]["FactoryMeasurement"][];
         };
+        /** DraftCableType */
+        DraftCableType: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Construction
+             * @enum {string}
+             */
+            construction: "single_core" | "three_core" | "multi_core";
+            rating: components["schemas"]["Rating"];
+            /** Cores */
+            cores: components["schemas"]["Core"][];
+            /** Common Layers */
+            common_layers: components["schemas"]["Layer"][];
+            /**
+             * Core Lay Length
+             * @description 三芯成缆完整绞合一周的轴向长度，m；区别于导体单丝绞距
+             */
+            core_lay_length?: number | null;
+        };
+        /** DraftDomainDocument */
+        DraftDomainDocument: {
+            /**
+             * Schema Version
+             * @default cablesim.domain/1
+             * @constant
+             */
+            schema_version?: "cablesim.domain/1";
+            /** Name */
+            name: string;
+            /** Materials */
+            materials: components["schemas"]["Material"][];
+            /** Cable Types */
+            cable_types: components["schemas"]["DraftCableType"][];
+            /** Circuits */
+            circuits: components["schemas"]["Circuit-Input"][];
+            /** Sections */
+            sections: components["schemas"]["Section-Input"][];
+            /** Load Cases */
+            load_cases: components["schemas"]["Load"][];
+            /** Criteria */
+            criteria?: {
+                [key: string]: number;
+            };
+            /** Provenance */
+            provenance?: {
+                [key: string]: components["schemas"]["Source"];
+            };
+            /** Measurements */
+            measurements?: components["schemas"]["FactoryMeasurement"][];
+        };
         /** Driver */
         Driver: {
             /**
@@ -2946,7 +3386,7 @@ export interface components {
             target_condition?: string | null;
             /**
              * Rating Basis
-             * @description Ampacity selection basis: individual circuit increase with other saved loads held, or common balanced RMS current in all circuits simultaneously.
+             * @description Ampacity selection/sweep basis. individual: vary one circuit while holding other saved currents (A), enforcing every cable temperature limit; these conditional limits cannot be used together. simultaneous: common balanced RMS current (A) in all circuits, independent of saved target loads. Read result case=rating or rating-simultaneous respectively; never select by result order.
              * @default individual
              * @enum {string}
              */
@@ -3341,7 +3781,7 @@ export interface components {
              * Quantity
              * @enum {string}
              */
-            quantity: "r20" | "minimum_thickness" | "maximum_thickness" | "mean_thickness" | "minimum_tape_thickness" | "screen_area";
+            quantity: "r20" | "minimum_thickness" | "maximum_thickness" | "mean_thickness" | "minimum_tape_thickness" | "mean_wire_diameter" | "screen_area";
             /** Value */
             value: number;
             /**
@@ -3356,6 +3796,27 @@ export interface components {
             basis: "measurement" | "manufacturer_limit";
             source: components["schemas"]["Source"];
         };
+        /** GenerateSpecification */
+        GenerateSpecification: {
+            /** Expected Revision */
+            expected_revision: number;
+            /**
+             * Request Id
+             * Format: uuid
+             */
+            request_id: string;
+            /**
+             * Audience
+             * @default customer
+             * @enum {string}
+             */
+            audience?: "customer" | "internal";
+            /**
+             * Scope Acknowledged
+             * @constant
+             */
+            scope_acknowledged: true;
+        };
         /** GeometryPreview */
         GeometryPreview: {
             /**
@@ -3363,8 +3824,8 @@ export interface components {
              * @description Saved workspace revision; preview does not save input.
              */
             expected_revision: number;
-            /** @description Complete preview input; lengths m, temperatures K, RMS currents A. */
-            document: components["schemas"]["DomainDocument-Input"];
+            /** @description Complete preview input; lengths m, temperatures K, RMS currents A. Dependent type coordinates follow the saved construction before full validation. */
+            document: components["schemas"]["DraftDomainDocument"];
             /** @description Exact geometry capability and sealed plugin release. */
             method: components["schemas"]["Method"];
             /**
@@ -3584,6 +4045,16 @@ export interface components {
             thickness: number;
             /** Form */
             form?: ("wires" | "tape" | "smooth" | "corrugated" | "unspecified") | null;
+            /**
+             * Corrugation Depth
+             * @description 皱纹金属护套波峰至波谷的径向深度，m；不含金属壁厚 thickness。
+             */
+            corrugation_depth?: number | null;
+            /**
+             * Corrugation Pitch
+             * @description 相邻波峰的轴向节距，m；IEC 平均直径模型不据此推测纵向电阻修正。
+             */
+            corrugation_pitch?: number | null;
             /** Wire Count */
             wire_count?: number | null;
             /** Wire Diameter */
@@ -3592,6 +4063,16 @@ export interface components {
             lay_length?: number | null;
             /** Overlap */
             overlap?: number | null;
+            /**
+             * Mean Wire Diameter
+             * @description 铠装单丝同截面正交两次测量的平均直径，m；非标称丝径
+             */
+            mean_wire_diameter?: number | null;
+            /**
+             * Padding Thickness
+             * @description 绕包内衬层所含附加垫层厚度，m；已计入本层 thickness，不另累加
+             */
+            padding_thickness?: number | null;
             /** Tape Width */
             tape_width?: number | null;
             /** Lay Direction */
@@ -3646,7 +4127,7 @@ export interface components {
             longitudinal_resistance_frequency?: number | null;
             /**
              * Tape Gap
-             * @description 双带间隙绕包的轴向间隙，m
+             * @description 双带间隙绕包的最大轴向间隙，m
              */
             tape_gap?: number | null;
         };
@@ -3752,7 +4233,7 @@ export interface components {
              */
             category: "conductor" | "semiconductor" | "insulation" | "metal" | "polymer" | "filler" | "soil" | "backfill" | "concrete" | "duct" | "fluid";
             /** Standard Kind */
-            standard_kind?: ("copper_bare" | "copper_coated" | "aluminium" | "lead" | "XLPE" | "PVC" | "EPR" | "HEPR" | "other") | null;
+            standard_kind?: ("copper_bare" | "copper_coated" | "aluminium" | "aluminium_alloy" | "steel_galvanized" | "steel_stainless_nonmagnetic" | "lead" | "XLPE" | "PVC" | "EPR" | "HEPR" | "other") | null;
             /** Thermal Resistivity */
             thermal_resistivity?: number | null;
             /** Volumetric Heat Capacity */
@@ -3884,6 +4365,48 @@ export interface components {
              * @description Sealed release manifest SHA256.
              */
             release_digest: string;
+        };
+        /** NewModelIdentity */
+        NewModelIdentity: {
+            /**
+             * Name
+             * @description Human-selected new cable model name.
+             */
+            name: string;
+            /** Manufacturer */
+            manufacturer: string;
+            /** Designation */
+            designation: string;
+            /**
+             * Voltage V
+             * @description Rated phase-to-phase voltage, V.
+             */
+            voltage_v: number;
+            /**
+             * U0 V
+             * @description Rated phase-to-earth voltage, V.
+             */
+            u0_v: number;
+            /**
+             * Cores
+             * @description Conductor core count, dimensionless.
+             */
+            cores: number;
+            /**
+             * Area M2
+             * @description Nominal cross-sectional area per core, m².
+             */
+            area_m2: number;
+            /**
+             * Conductor
+             * @enum {string}
+             */
+            conductor: "copper_bare" | "copper_coated" | "aluminium";
+            /**
+             * Identity Reference
+             * @description Human-reviewed original page/fragment establishing manufacturer, designation, voltage, cores and material.
+             */
+            identity_reference: string;
         };
         /** PageResponse */
         PageResponse: {
@@ -4024,29 +4547,25 @@ export interface components {
              * Issues
              * @description Individual invalid fields, each independently navigable.
              */
-            issues?: components["schemas"]["PreflightIssue"][];
+            issues?: components["schemas"]["backend__kernel__responses__PreflightIssue"][];
         } & {
             [key: string]: unknown;
         };
         /** PreflightIssue */
         PreflightIssue: {
-            /**
-             * Code
-             * @description Stable validation code.
-             */
+            /** Code */
             code: string;
             /**
-             * Message
-             * @description Human-readable correction.
+             * Severity
+             * @enum {string}
              */
+            severity: "error" | "warning" | "info";
+            /** Object Path */
+            object_path: string;
+            /** Message */
             message: string;
-            /**
-             * Path
-             * @description RFC 6901 JSON Pointer relative to the domain input; /parameters addresses method parameters. Array indices are zero-based, object keys escape ~ and /. No physical unit.
-             */
-            path: string;
-        } & {
-            [key: string]: unknown;
+            /** Remediation */
+            remediation: string;
         };
         /** PreflightReport */
         PreflightReport: {
@@ -4071,7 +4590,7 @@ export interface components {
              */
             solver_executed?: false;
             /** Issues */
-            issues: components["schemas"]["backend__foundation__study__PreflightIssue"][];
+            issues: components["schemas"]["PreflightIssue"][];
         };
         /** PreflightResponse */
         PreflightResponse: {
@@ -4120,6 +4639,37 @@ export interface components {
              */
             server_ms: number;
         };
+        /** ProblemContract */
+        ProblemContract: {
+            /**
+             * Schema Version
+             * @constant
+             */
+            schema_version: "cablesim.simulation-problem/1";
+            /**
+             * Schema
+             * @description Exact Problem JSON Schema; no separate host physics model.
+             */
+            schema: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * Source
+             * @description Repository-relative authoritative SDK module.
+             */
+            source: string;
+            /** Source Sha256 */
+            source_sha256: string;
+            /** Schema Sha256 */
+            schema_sha256: string;
+            /**
+             * Units
+             * @description Units and positional meanings of fields; identifiers and flags have no physical units.
+             */
+            units: {
+                [key: string]: string;
+            };
+        };
         /** ProposalRequest */
         ProposalRequest: {
             /**
@@ -4136,11 +4686,13 @@ export interface components {
             expected_review_revision: number;
             /**
              * Target Model Id
-             * @description Existing immutable cable-model version to branch.
+             * @description Existing immutable version to branch; omit when creating a new model.
              */
-            target_model_id: string;
+            target_model_id?: string | null;
             /** Expected Model Sha256 */
-            expected_model_sha256: string;
+            expected_model_sha256?: string | null;
+            /** @description Explicit new-model identity; creates no library record until human approval. */
+            new_model?: components["schemas"]["NewModelIdentity"] | null;
             /**
              * Version
              * @description New draft version label; original model remains unchanged.
@@ -4168,9 +4720,9 @@ export interface components {
             /** Sha256 */
             sha256: string;
             /** Target Model Id */
-            target_model_id: string;
+            target_model_id: string | null;
             /** Base Sha256 */
-            base_sha256: string;
+            base_sha256: string | null;
             /** @description Proposed immutable new model version; creation happens only after approval. */
             draft: components["schemas"]["CableModelVersion-Output"];
             /**
@@ -4308,6 +4860,56 @@ export interface components {
              */
             dimension: "length" | "area" | "absolute_temperature" | "temperature_difference" | "linear_resistance" | "thermal_resistivity" | "thermal_conductivity" | "current" | "frequency";
         };
+        /** QuantityResult */
+        QuantityResult: {
+            /**
+             * Key
+             * @description Stable physical quantity key declared by the plugin.
+             */
+            key: string;
+            /**
+             * Type
+             * @description Plugin result type; quantity for scalar engineering values.
+             */
+            type: string;
+            /**
+             * Entity
+             * @description Domain object ID to which this quantity belongs; no unit.
+             */
+            entity: string;
+            /**
+             * Unit
+             * @description Physical unit of value; ampacity uses A (balanced RMS unless its basis states otherwise).
+             */
+            unit: string;
+            /**
+             * Status
+             * @description Whether the producer supplied a valid value; unavailable is never zero.
+             * @enum {string}
+             */
+            status: "available" | "unavailable";
+            /**
+             * Value
+             * @description Numeric result in the declared unit; absent when unavailable.
+             */
+            value?: number | null;
+            /**
+             * Case
+             * @description Result condition identity; rating versus rating-simultaneous must not be merged.
+             */
+            case?: string | null;
+            /**
+             * Reason
+             * @description Producer error code, explanation and field location for an unavailable quantity.
+             */
+            reason?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** @description Producer-declared ampacity meaning and fixed loads. Absent in historical outputs; do not infer a common rating from an unlabelled value. */
+            rating_basis?: components["schemas"]["AmpacityBasis"] | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** Rating */
         Rating: {
             /** U0 */
@@ -4331,7 +4933,7 @@ export interface components {
              * Layout
              * @enum {string}
              */
-            layout: "trefoil" | "flat" | "ducts" | "air";
+            layout: "trefoil" | "flat" | "ducts" | "air" | "three_core_buried_single" | "three_core_buried_horizontal" | "three_core_ducts_horizontal";
             /**
              * Depth M
              * @default 0.8
@@ -4355,6 +4957,13 @@ export interface components {
              * @enum {string}
              */
             bonding?: "both_ends" | "single_point" | "unspecified";
+            /**
+             * Rating Basis
+             * @description 多回路共同等负荷，或首回路变化而其他回路保持保存负荷；不同口径不可混用
+             * @default simultaneous
+             * @enum {string}
+             */
+            rating_basis?: "simultaneous" | "individual";
             /**
              * Duct Inner M
              * @default 0.14
@@ -4389,6 +4998,36 @@ export interface components {
             /** Selected Case Ids */
             selected_case_ids?: string[] | null;
         };
+        /** RecalculateStudy */
+        RecalculateStudy: {
+            /**
+             * Expected Revision
+             * @description Expected workspace revision; no unit. Mismatch returns 409.
+             */
+            expected_revision: number;
+            /**
+             * Expected Study Revision
+             * @description Expected study configuration revision; no unit.
+             */
+            expected_study_revision: number;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Idempotency key for both version adoption and the new run; retry unchanged after a disconnect.
+             */
+            request_id: string;
+            /**
+             * Module
+             * @description Saved module to update and run; null selects the primary configuration.
+             */
+            module?: string | null;
+            /**
+             * Scope Acknowledged
+             * @description Explicit user action adopts current versions and acknowledges method scope; preflight still runs.
+             * @constant
+             */
+            scope_acknowledged: true;
+        };
         /** ReleasePin */
         ReleasePin: {
             /**
@@ -4407,6 +5046,31 @@ export interface components {
              */
             release_digest: string;
         };
+        /** RemoteExecution */
+        RemoteExecution: {
+            /**
+             * Backend
+             * @constant
+             */
+            backend: "slurm";
+            /**
+             * State
+             * @description Cached scheduler phase: preparing/submitted/queued/running/collecting, then the saved run terminal state. Not inferred from host running status.
+             */
+            state: string;
+            /** Job Id */
+            job_id?: string | null;
+            /** Plan Id */
+            plan_id?: string | null;
+            /** Slurm States */
+            slurm_states?: string[];
+            /** Actual Cpu Seconds */
+            actual_cpu_seconds?: number | null;
+            /** Updated */
+            updated?: string | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** ResistivityLaw */
         ResistivityLaw: {
             /** Reference Temperature K */
@@ -4419,6 +5083,90 @@ export interface components {
             maximum_temperature_k: number;
             /** Source */
             source: string;
+        };
+        /** RestoreInfo */
+        RestoreInfo: {
+            /**
+             * Status
+             * @description Restore phase; pending_restart has not replaced the active database.
+             * @enum {string}
+             */
+            status: "pending_restart" | "restored" | "none";
+            /**
+             * Request Id
+             * @description Restore request identity; no unit.
+             */
+            request_id?: string | null;
+            /**
+             * Backup Id
+             * @description Selected backup identity; no unit.
+             */
+            backup_id?: string | null;
+            /**
+             * Sha256
+             * @description Selected backup SHA256.
+             */
+            sha256?: string | null;
+            /**
+             * Safety Snapshot
+             * @description Pre-restore safety snapshot, recorded after the restart restore.
+             */
+            safety_snapshot?: string | null;
+            /**
+             * Finished
+             * @description UTC restore completion timestamp.
+             */
+            finished?: string | null;
+        };
+        /** RestoreRequest */
+        RestoreRequest: {
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Idempotency key; repeat to reuse the same completed backup. No unit.
+             */
+            request_id: string;
+            /**
+             * Backup Id
+             * Format: uuid
+             * @description Backup ID returned by the backup endpoint; no unit.
+             */
+            backup_id: string;
+            /**
+             * Sha256
+             * @description Reviewed SHA256 of the backup to restore.
+             */
+            sha256: string;
+            /**
+             * Confirm Replace
+             * @description Explicit acknowledgement that restart will replace the entire current engineering library.
+             */
+            confirm_replace: boolean;
+        };
+        /** ResultSelector */
+        ResultSelector: {
+            /**
+             * Key
+             * @description Physical quantity key to select, such as ampacity.
+             */
+            key: string;
+            /**
+             * Entity
+             * @description Exact domain object ID to select; no unit.
+             */
+            entity: string;
+            /**
+             * Unit
+             * @description Exact quantity unit to match, such as A.
+             */
+            unit: string;
+            /**
+             * Case
+             * @description Exact producer result condition; omitted only when the producer has no condition identifier.
+             */
+            case?: string | null;
+        } & {
+            [key: string]: unknown;
         };
         /** ResumeDataset */
         ResumeDataset: {
@@ -4487,6 +5235,50 @@ export interface components {
             /** Expected Revision */
             expected_revision: number;
         };
+        /** RunCase */
+        RunCase: {
+            /** Case Id */
+            case_id: string;
+            /** Status */
+            status: string;
+            /** Results */
+            results: components["schemas"]["QuantityResult"][];
+            /** Artifacts */
+            artifacts: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /** Error */
+            error?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            } | null;
+            /** Evidence */
+            evidence?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            };
+            /**
+             * Artifact Digests
+             * @description Original output file SHA256 by artifact type.
+             */
+            artifact_digests?: {
+                [key: string]: string;
+            };
+            /** Warnings */
+            warnings?: {
+                [key: string]: components["schemas"]["JsonValue"];
+            }[];
+            method?: components["schemas"]["Method"] | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /** RunOutput */
+        RunOutput: {
+            /** Cases */
+            cases: components["schemas"]["RunCase"][];
+            /** @description Default sweep quantity identity; match all four keys, never choose the first ampacity. Missing results remain gaps. */
+            default_result?: components["schemas"]["ResultSelector"] | null;
+        } & {
+            [key: string]: unknown;
+        };
         /** RunPage */
         RunPage: {
             /** Items */
@@ -4540,13 +5332,8 @@ export interface components {
              * @enum {string}
              */
             status: "accepted" | "running" | "validating" | "succeeded" | "partial" | "failed" | "interrupted";
-            /**
-             * Output
-             * @description Saved typed quantities and verified artifacts; absent while running.
-             */
-            output: {
-                [key: string]: components["schemas"]["JsonValue"];
-            } | null;
+            /** @description Saved typed quantities and verified artifacts; absent while running. */
+            output: components["schemas"]["RunOutput"] | null;
             /** Output Digest */
             output_digest: string | null;
             /** Error */
@@ -4567,6 +5354,8 @@ export interface components {
              * @enum {string}
              */
             freshness: "current" | "historical" | "unknown";
+            /** @description Dynamic method/model version differences, outside the immutable result digest. */
+            version_status?: components["schemas"]["VersionStatus"] | null;
             /**
              * Artifact Status
              * @description Presentation contract verification by case and artifact type.
@@ -4598,6 +5387,7 @@ export interface components {
             convergence?: {
                 [key: string]: components["schemas"]["JsonValue"];
             } | null;
+            execution?: components["schemas"]["RemoteExecution"] | null;
         } & {
             [key: string]: unknown;
         };
@@ -4648,7 +5438,7 @@ export interface components {
         SaveDomain: {
             /** Expected Revision */
             expected_revision: number;
-            document: components["schemas"]["DomainDocument-Input"];
+            document: components["schemas"]["DraftDomainDocument"];
         };
         /** Scenario */
         Scenario: {
@@ -4797,6 +5587,48 @@ export interface components {
             /** @description Explicit native temperature tensor, °C axes and dimensionless current scale; no extrapolation. */
             temperature_table?: components["schemas"]["LossTemperatureTable"] | null;
         };
+        /** SnapshotInfo */
+        SnapshotInfo: {
+            /**
+             * Id
+             * @description Backup identity; not a filesystem path.
+             */
+            id: string;
+            /**
+             * Schema Version
+             * @description SQLite user_version supported by this host; no unit.
+             */
+            schema_version: number;
+            /**
+             * Sha256
+             * @description SHA256 of the standalone SQLite snapshot.
+             */
+            sha256: string;
+            /**
+             * Size Bytes
+             * @description Snapshot file size, bytes.
+             */
+            size_bytes: number;
+            /**
+             * Created
+             * @description UTC creation timestamp.
+             */
+            created: string;
+            /**
+             * Download Url
+             * @description Host URL for the verified snapshot download.
+             */
+            download_url: string;
+        };
+        /** SnapshotRequest */
+        SnapshotRequest: {
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Idempotency key; repeat to reuse the same completed backup. No unit.
+             */
+            request_id: string;
+        };
         /** SoilLayer */
         SoilLayer: {
             /** Id */
@@ -4845,7 +5677,7 @@ export interface components {
              * Task
              * @description Study objective; simulation tasks submit asynchronously to Slurm.
              */
-            task?: ("rating" | "operating" | "target" | "transient-temperature" | "sheath-losses" | "electrothermal-steady") | null;
+            task?: ("rating" | "operating" | "target" | "transient-temperature" | "sheath-losses" | "electrothermal-steady" | "iec-fem-comparison") | null;
             method: components["schemas"]["Method"];
             /**
              * Input Source
@@ -4853,7 +5685,10 @@ export interface components {
              * @enum {string}
              */
             input_source?: "domain" | "study";
-            /** Method Input */
+            /**
+             * Method Input
+             * @description Saved standalone plugin input. For cablesim.simulation-problem/1 use the exact GET /api/simulation/problem-contract schema; all lengths m, absolute temperature K, RMS current A.
+             */
             method_input?: {
                 [key: string]: unknown;
             } | null;
@@ -4885,7 +5720,7 @@ export interface components {
              * Task
              * @description Study objective; simulation tasks submit asynchronously to Slurm.
              */
-            task?: ("rating" | "operating" | "target" | "transient-temperature" | "sheath-losses" | "electrothermal-steady") | null;
+            task?: ("rating" | "operating" | "target" | "transient-temperature" | "sheath-losses" | "electrothermal-steady" | "iec-fem-comparison") | null;
             method: components["schemas"]["Method"];
             /**
              * Input Source
@@ -4893,7 +5728,10 @@ export interface components {
              * @enum {string}
              */
             input_source?: "domain" | "study";
-            /** Method Input */
+            /**
+             * Method Input
+             * @description Saved standalone plugin input. For cablesim.simulation-problem/1 use the exact GET /api/simulation/problem-contract schema; all lengths m, absolute temperature K, RMS current A.
+             */
             method_input?: {
                 [key: string]: unknown;
             } | null;
@@ -4925,7 +5763,7 @@ export interface components {
              * Task
              * @description Study objective; simulation tasks submit asynchronously to Slurm.
              */
-            task?: ("rating" | "operating" | "target" | "transient-temperature" | "sheath-losses" | "electrothermal-steady") | null;
+            task?: ("rating" | "operating" | "target" | "transient-temperature" | "sheath-losses" | "electrothermal-steady" | "iec-fem-comparison") | null;
             method: components["schemas"]["Method"];
             /**
              * Input Source
@@ -4933,7 +5771,10 @@ export interface components {
              * @enum {string}
              */
             input_source?: "domain" | "study";
-            /** Method Input */
+            /**
+             * Method Input
+             * @description Saved standalone plugin input. For cablesim.simulation-problem/1 use the exact GET /api/simulation/problem-contract schema; all lengths m, absolute temperature K, RMS current A.
+             */
             method_input?: {
                 [key: string]: unknown;
             } | null;
@@ -4963,6 +5804,25 @@ export interface components {
             modules?: {
                 [key: string]: components["schemas"]["StudyConfiguration-Output"];
             };
+        };
+        /** StudyHistoryRequest */
+        StudyHistoryRequest: {
+            /**
+             * Expected Revision
+             * @description Workspace revision; no unit. Structure is not changed.
+             */
+            expected_revision: number;
+            /**
+             * Expected Study Revision
+             * @description Current study revision; restores create a new monotonic revision.
+             */
+            expected_study_revision: number;
+            /**
+             * Request Id
+             * Format: uuid
+             * @description Idempotency key; retries with the same body return the original restore.
+             */
+            request_id: string;
         };
         /** StudyPackage */
         StudyPackage: {
@@ -5043,6 +5903,25 @@ export interface components {
              * @description UTC configuration timestamp.
              */
             created: string;
+            /**
+             * Can Undo
+             * @description Earlier study configuration exists; separate from workspace structure history.
+             * @default false
+             */
+            can_undo?: boolean;
+            /**
+             * Can Redo
+             * @description Later configuration on the active history branch exists.
+             * @default false
+             */
+            can_redo?: boolean;
+            /**
+             * Latest Run Id
+             * @description Most recently accepted run; null before first execution.
+             */
+            latest_run_id?: string | null;
+            /** @description Version status of latest_run_id, computed at read time. */
+            version_status?: components["schemas"]["VersionStatus"] | null;
         } & {
             [key: string]: unknown;
         };
@@ -5059,6 +5938,10 @@ export interface components {
             specification_digest: string;
             /** Acknowledge Checks */
             acknowledge_checks: boolean;
+            /** Change Summary */
+            change_summary?: string | null;
+            /** Author */
+            author?: string | null;
         };
         /** SubmitDataset */
         SubmitDataset: {
@@ -5357,7 +6240,7 @@ export interface components {
              * Task
              * @description Study objective; simulation tasks submit asynchronously to Slurm.
              */
-            task?: ("rating" | "operating" | "target" | "transient-temperature" | "sheath-losses" | "electrothermal-steady") | null;
+            task?: ("rating" | "operating" | "target" | "transient-temperature" | "sheath-losses" | "electrothermal-steady" | "iec-fem-comparison") | null;
             method: components["schemas"]["Method"];
             /**
              * Input Source
@@ -5365,7 +6248,10 @@ export interface components {
              * @enum {string}
              */
             input_source?: "domain" | "study";
-            /** Method Input */
+            /**
+             * Method Input
+             * @description Saved standalone plugin input. For cablesim.simulation-problem/1 use the exact GET /api/simulation/problem-contract schema; all lengths m, absolute temperature K, RMS current A.
+             */
             method_input?: {
                 [key: string]: unknown;
             } | null;
@@ -5413,21 +6299,89 @@ export interface components {
             /** Context */
             ctx?: Record<string, never>;
         };
-        /** PreflightIssue */
-        backend__foundation__study__PreflightIssue: {
-            /** Code */
-            code: string;
+        /** VersionChange */
+        VersionChange: {
             /**
-             * Severity
+             * Kind
+             * @description Changed installed method or referenced model family; no unit.
              * @enum {string}
              */
-            severity: "error" | "warning" | "info";
-            /** Object Path */
-            object_path: string;
-            /** Message */
+            kind: "method" | "model";
+            /**
+             * Code
+             * @description METHOD_VERSION_CHANGED, METHOD_UNAVAILABLE or MODEL_VERSION_CHANGED.
+             */
+            code: string;
+            /**
+             * Id
+             * @description Stable plugin ID or model family ID, never a display-name match.
+             */
+            id: string;
+            /**
+             * From Version
+             * @description Version frozen in the source run.
+             */
+            from_version: string;
+            /**
+             * To Version
+             * @description Installed plugin or latest published model version; null if unavailable.
+             */
+            to_version: string | null;
+            /**
+             * From Digest
+             * @description Frozen release/content SHA256.
+             */
+            from_digest: string;
+            /**
+             * To Digest
+             * @description Current release/content SHA256; detects changes even at the same version.
+             */
+            to_digest: string | null;
+            /**
+             * Message
+             * @description Display-ready version difference.
+             */
             message: string;
-            /** Remediation */
-            remediation: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** VersionStatus */
+        VersionStatus: {
+            /**
+             * Status
+             * @description Version comparison only; execution status and input freshness are separate.
+             * @enum {string}
+             */
+            status: "current" | "stale" | "empty";
+            /** Reasons */
+            reasons?: components["schemas"]["VersionChange"][];
+            /**
+             * Display Name
+             * @description One combined status message for the result or document cover.
+             */
+            display_name: string;
+        } & {
+            [key: string]: unknown;
+        };
+        /** PreflightIssue */
+        backend__kernel__responses__PreflightIssue: {
+            /**
+             * Code
+             * @description Stable validation code.
+             */
+            code: string;
+            /**
+             * Message
+             * @description Human-readable correction.
+             */
+            message: string;
+            /**
+             * Path
+             * @description RFC 6901 JSON Pointer relative to the domain input; /parameters addresses method parameters. Array indices are zero-based, object keys escape ~ and /. No physical unit.
+             */
+            path: string;
+        } & {
+            [key: string]: unknown;
         };
         CableModelVersion: components["schemas"]["CableModelVersion-Input"];
         CableType: components["schemas"]["CableType-Input"];
@@ -6303,6 +7257,65 @@ export interface operations {
             };
         };
     };
+    study_detail_api_workspaces__wid__studies__sid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                wid: string;
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     update_api_workspaces__wid__studies__sid__put: {
         parameters: {
             query?: never;
@@ -6335,6 +7348,204 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recalculate_api_workspaces__wid__studies__sid__recalculate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                wid: string;
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecalculateStudy"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunResponse"];
+                };
+            };
+            /** @description Accepted current-version run; poll Location. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RunResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    undo_api_workspaces__wid__studies__sid__undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                wid: string;
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudyHistoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    redo_api_workspaces__wid__studies__sid__redo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                wid: string;
+                sid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StudyHistoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StudyResponse"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };
@@ -6556,6 +7767,64 @@ export interface operations {
             };
         };
     };
+    deliveries_api_workspaces__wid__deliveries_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                wid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliverySummary"][];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
     deliver_api_workspaces__wid__deliveries_post: {
         parameters: {
             query?: never;
@@ -6577,16 +7846,43 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DeliveryResult"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };
@@ -6609,16 +7905,501 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["DeliveryResult"];
                 };
             };
-            /** @description Validation Error */
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+        };
+    };
+    version_api_database_version_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseVersion"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+        };
+    };
+    listing_api_database_backups_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnapshotInfo"][];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+        };
+    };
+    create_api_database_backups_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SnapshotRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SnapshotInfo"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+        };
+    };
+    download_api_database_backups__identifier__file_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                identifier: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.sqlite3": string;
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+        };
+    };
+    request_restore_api_database_restores_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreInfo"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+        };
+    };
+    restore_status_api_database_restores_current_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreInfo"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+        };
+    };
+    cancel_restore_api_database_restores_current_delete: {
+        parameters: {
+            query: {
+                request_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseError"];
+                };
+            };
+        };
+    };
+    simulation_problem_contract_api_simulation_problem_contract_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemContract"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiError"];
                 };
             };
         };
@@ -8795,6 +10576,271 @@ export interface operations {
             };
         };
     };
+    batch_propose_api_documents__did__batches_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                did: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchProposalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchProposalResponse"];
+                };
+            };
+            /** @description Original/run/proposal not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Revision/idempotency/consent conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Specific field, PDF format, unit or review error. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"] | components["schemas"]["InputFieldErrorResponse"];
+                };
+            };
+            /** @description Extraction queue full; original preserved. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Provider/plugin result rejected. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Provider or plugin environment missing. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Provider/plugin timeout; original preserved. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+        };
+    };
+    batch_api_documents__did__batches__bid__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                did: string;
+                bid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchProposalResponse"];
+                };
+            };
+            /** @description Original/run/proposal not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Revision/idempotency/consent conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Specific field, PDF format, unit or review error. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"] | components["schemas"]["InputFieldErrorResponse"];
+                };
+            };
+            /** @description Extraction queue full; original preserved. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Provider/plugin result rejected. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Provider or plugin environment missing. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Provider/plugin timeout; original preserved. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+        };
+    };
+    batch_approve_api_documents__did__batches__bid__approval_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                did: string;
+                bid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApprovalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchProposalResponse"];
+                };
+            };
+            /** @description Original/run/proposal not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Revision/idempotency/consent conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Specific field, PDF format, unit or review error. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"] | components["schemas"]["InputFieldErrorResponse"];
+                };
+            };
+            /** @description Extraction queue full; original preserved. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Provider/plugin result rejected. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Provider or plugin environment missing. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+            /** @description Provider/plugin timeout; original preserved. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocumentErrorResponse"];
+                };
+            };
+        };
+    };
     get_api_workspaces__wid__domain_get: {
         parameters: {
             query?: never;
@@ -9050,7 +11096,9 @@ export interface operations {
     };
     specification_api_types__wid__specification_get: {
         parameters: {
-            query?: never;
+            query?: {
+                audience?: "customer" | "internal";
+            };
             header?: never;
             path: {
                 wid: string;
@@ -9079,11 +11127,47 @@ export interface operations {
             };
         };
     };
+    generate_specification_api_types__wid__specification_generate_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                wid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GenerateSpecification"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     specification_file_api_types__wid__specification_file_get: {
         parameters: {
             query: {
                 expected_revision: number;
                 specification_digest: string;
+                audience?: "customer" | "internal";
             };
             header?: never;
             path: {

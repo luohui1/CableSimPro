@@ -118,19 +118,15 @@ def physical(cable, materials, p, circuit, criteria, duct):
     armour_at=roles.index('armour') if 'armour' in roles else len(common)-1
     before=common[:armour_at]
     if not before or any(l['role']=='armour' for l in common[armour_at+1:]):raise ValueError(base+'/common_layers：缺填充和内衬层。')
-    # Figure6 accounts for the common filler region. Further concentric bedding
-    # is evaluated separately; different materials are not averaged.
-    pack=2*radius+core_outer; diameter=pack; t2=jacket/3; filler_layers=[]
-    while before and before[0]['role'] in ('filler','binder'):
-        filler_layers.append(before.pop(0))
-    if not filler_layers:raise ValueError(base+'/common_layers/filler：必须给出填充层与材料。')
-    rho=positive(materials[filler_layers[0]['material']].get('thermal_resistivity'),base+'/filler/material/thermal_resistivity')
-    if any(materials[l['material']].get('thermal_resistivity') != rho for l in filler_layers):
-        raise RatingRefused('SL_FILLER_MATERIALS', base+'：图6的填充和包带需相同热阻率；多种填料使用数值方法。')
-    filler_thickness=sum(l['thickness'] for l in filler_layers); factor=filler_factor(filler_thickness/core_outer)
-    t2 += rho*factor/(6*pi);diameter+=2*filler_thickness
-    for l in before:
-        outer=diameter+2*l['thickness'];t2+=annular(materials[l['material']].get('thermal_resistivity'),diameter,outer);diameter=outer
+    # 2-1 4.1.4.2 / 5.6: G covers fillers AND common bedding up to armour.
+    # A separate annular bedding assumes a non-existent isothermal boundary.
+    pack=2*radius+core_outer; t2=jacket/3
+    if before[0]['role'] not in ('filler','binder'):raise ValueError(base+'/common_layers/filler：必须给出填充层与材料。')
+    rho=positive(materials[before[0]['material']].get('thermal_resistivity'),base+'/filler/material/thermal_resistivity')
+    if any(materials[l['material']].get('thermal_resistivity') != rho for l in before):
+        raise RatingRefused('SL_FILLER_MATERIALS', base+'：图6要求填充、包带和公共内衬采用相同热阻率；不同物性组合未验证，请用数值传热方法，不取平均值。')
+    filler_thickness=sum(l['thickness'] for l in before); factor=filler_factor(filler_thickness/core_outer)
+    t2 += rho*factor/(6*pi);diameter=pack+2*filler_thickness
     armour=None
     if armour_at < len(common)-1:
         layer=common[armour_at];am=materials[layer['material']];outer=diameter+2*layer['thickness'];armour={'layer':layer,'mean':(diameter+outer)/2,'material':am}

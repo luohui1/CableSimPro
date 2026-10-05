@@ -11,6 +11,8 @@ export function internalTokens(text) {
     return [text.trim()];
   const stripped = text
     .replace(/https?:\/\/[^\s<>]+/g, "")
+    .replace(/\b[A-Za-z0-9_.-]+\.pdf\b/gi, "原件文件名")
+    .replace(/\bkg\/(?:100m|km)\b/g, "质量单位")
     .replace(/\bGB\s*\/\s*T(?=\d|\b)/g, "国标")
     .replace(/K[·*]m\/W/g, "热阻率单位")
     .replace(/\b(?:MS\/m|Rc\/Rs|YJV\/YJV22|U0\/U|F\/km)\b/g, "工程记号");
@@ -22,9 +24,9 @@ export function internalTokens(text) {
     ),
   ].filter((value) => !allowed.test(value));
 }
-export async function inspectVisibleNames(page) {
+export async function inspectVisibleNames(page, { includeFrames = true } = {}) {
   const violations = [];
-  for (const frame of page.frames()) {
+  for (const frame of includeFrames ? page.frames() : [page.mainFrame()]) {
     const texts = await frame
       .evaluate(() => {
         const result = [],
@@ -73,8 +75,8 @@ export async function inspectVisibleNames(page) {
   }
   return violations;
 }
-export async function assertVisibleNames(page, label) {
-  const violations = await inspectVisibleNames(page);
+export async function assertVisibleNames(page, label, options) {
+  const violations = await inspectVisibleNames(page, options);
   assert.deepEqual(
     violations,
     [],

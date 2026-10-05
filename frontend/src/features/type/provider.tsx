@@ -36,7 +36,7 @@ export function TypeProvider({ wid, children }: { wid: string; children: ReactNo
   function edit(path: string, value: unknown) {
     setFieldError(null);
     if (isLocked(workspace?.raw.locks, path) || readOnly) { setError('此字段已锁定，请从型号列表建立独立草稿'); return; }
-    setDraft(previous => { const next = previous || initial(); if (at(next.document, path) === value) return previous; const changed = change(next.document, path, value); changed.provenance = { ...changed.provenance, [path]: { kind: 'user', reference: '工程师在型号工作区填写', reviewed: false } }; return { ...next, document: changed }; }); setError(''); setNotice('');
+    setDraft(previous => { const next = previous || initial(); if (at(next.document, path) === value) return previous; const changed = change(next.document, path, value); changed.provenance = { ...changed.provenance, [path]: { kind: 'user', reference: '工程师在型号工作区填写', reviewed: false } }; const fields = value && typeof value === 'object' ? Object.fromEntries(Object.entries(next.fields).filter(([key]) => !key.startsWith(path + '/'))) : next.fields; return { ...next, document: changed, fields }; }); setError(''); setNotice('');
   }
   function setField(spec: NumericInput, value: string | undefined) {
     setFieldError(null);

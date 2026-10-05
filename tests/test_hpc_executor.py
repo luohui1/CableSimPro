@@ -57,6 +57,45 @@ def test_disconnect_then_collect_preserves_allocation_and_result(tmp_path,monkey
     assert remote.submissions==1 and value.environment['remote_execution']['job_id']=='999'
 
 
+def test_progress_comes_from_scheduler_before_collection(tmp_path,monkeypatch):
+    executor,directory,_,_,_,_,remote=fixture(tmp_path,monkeypatch)
+    states=iter(['PENDING','RUNNING','COMPLETED']);observed=[]
+    def poll(self,*args):
+        state=next(states)
+        return {'terminal':state=='COMPLETED','actual_cpu_seconds':2,
+                'accounting':[{'JobID':'999_0','State':state}]}
+    monkeypatch.setattr(remote,'poll',poll)
+    monkeypatch.setattr('backend.kernel.hpc_executor.time.sleep',lambda seconds:observed.append(read(directory/'execution.json')['state']))
+    executor.collect(directory)
+    assert observed==['queued','running']
+    assert read(directory/'execution.json')['state']=='collecting'
+
+
+@pytest.mark.skipif(__import__('os').name!='nt',reason='Windows staging rename race')
+def test_transient_staging_rename_permission_error_does_not_repeat_freeze(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from backend.plugin_host.registry import Registry
+    repository=Path(__file__).resolve().parents[1]
+    plugin=Registry(repository/'plugins',plugin_id='cablesim.simulation').get('cablesim.simulation')
+    profile=tmp_path/'profile.json';atomic(profile,{'remote_plugins':['cablesim.simulation']})
+    executor=HpcExecutor(SimpleNamespace(registry=SimpleNamespace(root=repository/'plugins')),profile=profile,root=tmp_path/'research')
+    freezes=[];attempts=[];rename=Path.rename
+    def freeze(directory,*args):
+        freezes.append(directory);(directory/'runtime').mkdir()
+        return 'a'*64,plugin.manifest.model_dump(mode='json',by_alias=True)
+    def transient(path,target):
+        if path.name.startswith('prepare-'):
+            attempts.append(path)
+            if len(attempts)==1:raise PermissionError('brief scanner lock')
+        return rename(path,target)
+    monkeypatch.setattr('backend.kernel.hpc_executor.freeze_runtime',freeze)
+    monkeypatch.setattr(Path,'rename',transient)
+    monkeypatch.setattr('backend.kernel.hpc_executor.time.sleep',lambda seconds:None)
+    monkeypatch.setattr(executor,'collect',lambda directory:read(directory/'plan.json'))
+    result=executor.check('cablesim.simulation','iec-fem-comparison',[{'case_id':'one','input':{},'parameters':{}}])
+    assert result['phase']=='check' and len(freezes)==1 and len(attempts)==2
+
+
 @pytest.mark.parametrize('change',['bytes','request','method','case','plan','runtime'])
 def test_remote_tampering_is_rejected(tmp_path,monkeypatch,change):
     executor,directory,plan,result,record,seal,remote=fixture(tmp_path,monkeypatch)

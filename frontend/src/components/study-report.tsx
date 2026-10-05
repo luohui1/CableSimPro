@@ -1,6 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useRef, useEffect } from "react";
-import { createCurrentDelivery, delivery, deliveryFile } from "@/api/delivery";
+import { useRef, useEffect, useState, useMemo } from "react";
+import { createCurrentDelivery, delivery, deliveryFile, deliveryPdf, deliveryPreview, type ReportAudience } from "@/api/delivery";
+import { Select } from "./ui/select";
 import {
   api,
   array,
@@ -13,8 +14,16 @@ import {
 import { Button } from "./ui/button";
 import { EmptyState, ErrorState, LoadingState, StaleBanner } from "./states";
 import { StatusMark } from "./status-mark";
+import { Link, useSearch } from "@tanstack/react-router";
+import type { ComponentProps } from "react";
+import { downloadBlob } from "@/lib/download";
+import { isVersionStale } from '@/lib/version-status';
 
-export function StudyReport({
+export function StudyReport(props: ComponentProps<typeof CurrentReport>) {
+  const search = useSearch({ strict: false });
+  return <><div className="report-toolbar"><Link to="/library/deliveries" search={{ workspace: props.wid, delivery: props.did, theme: search.theme === "dark" ? "dark" : "light" }}>交付历史 · 计算书与规格书</Link></div><CurrentReport {...props} /></>;
+}
+function CurrentReport({
   wid,
   sid,
   run,
@@ -35,10 +44,12 @@ export function StudyReport({
   autoGenerate?: boolean;
   onGenerateConsumed?: () => void;
 }) {
+  const [audience, setAudience] = useState<ReportAudience>("customer");
   const current =
     !!run &&
     run.freshness === "current" &&
     run.integrity === "verified" &&
+    !isVersionStale(run) &&
     !dirty;
   const document = useQuery({
     queryKey: ["delivery", wid, did],
@@ -46,6 +57,7 @@ export function StudyReport({
     enabled: !!did && !!run,
   });
   const request = useRef({ run: "", id: "" });
+  const preview = useMemo(() => document.data ? deliveryPreview(text(document.data.html)) : "", [document.data]);
   async function fresh() {
     if (!run || dirty)
       throw new ApiError(409, "未保存修改或缺少源运行，不能交付");
@@ -57,7 +69,7 @@ export function StudyReport({
       ),
       "源运行",
     );
-    if (saved.freshness !== "current" || saved.integrity !== "verified")
+    if (saved.freshness !== "current" || saved.integrity !== "verified" || isVersionStale(saved))
       throw new ApiError(
         409,
         "源运行已经变为历史或完整性失败，请重新选择当前运行",
@@ -67,29 +79,29 @@ export function StudyReport({
   const create = useMutation({
     retry: false,
     mutationFn: async () => {
-      await fresh();
-      const rid = text(run?.id);
+      const source = await fresh();
+      const rid = text(source.id);
       if (request.current.run !== rid)
         request.current = { run: rid, id: crypto.randomUUID() };
-      return createCurrentDelivery(wid, rid, request.current.id);
+      const book = await createCurrentDelivery(wid, rid, request.current.id);
+      verify(book, source);
+      return book;
     },
-    onSuccess: (value) => onDelivery(text(value.id)),
+    onSuccess: (value) => {
+      onDelivery(text(value.id));
+      downloadBlob(deliveryPdf(value, "customer"), "客户计算书.pdf");
+    },
   });
   const download = useMutation({
     retry: false,
-    mutationFn: async () => {
+    mutationFn: async ({format, audience}: {format: "pdf" | "html"; audience: ReportAudience}) => {
       const source = await fresh();
       const book = await delivery(wid, did);
       verify(book, source);
-      return deliveryFile(wid, did, text(book.digest));
+      return format === "pdf" ? deliveryPdf(book, audience) : deliveryFile(wid, did, text(book.digest));
     },
-    onSuccess: (blob) => {
-      const url = URL.createObjectURL(blob);
-      const link = window.document.createElement("a");
-      link.href = url;
-      link.download = "客户计算书.html";
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    onSuccess: (blob, {format, audience}) => {
+      downloadBlob(blob, format === "html" ? "计算书存档.html" : `${audience === "customer" ? "客户" : "内部"}计算书.pdf`);
     },
   });
   const generated = useRef(false);
@@ -148,13 +160,18 @@ export function StudyReport({
         <StatusMark kind="current" label="仅当前运行" />
         <div className="spacer" />
         {did ? (
+          <>
+          <Select label="PDF 版本" value={audience} disabled={download.isPending} onChange={value => setAudience(value as ReportAudience)} options={[{value:"customer",label:"客户版"},{value:"internal",label:"内部审核版"}]} />
           <Button
+            variant="primary"
             size="compact"
-            onClick={() => download.mutate()}
+            onClick={() => download.mutate({format:"pdf",audience})}
             loading={download.isPending}
           >
-            导出计算书
+            下载 PDF
           </Button>
+          <Button variant="ghost" size="compact" disabled={download.isPending} onClick={() => download.mutate({format:"html",audience})}>HTML 存档</Button>
+          </>
         ) : (
           <Button
             variant="run"
@@ -196,7 +213,7 @@ export function StudyReport({
             className="report-frame"
             title="计算书预览"
             sandbox=""
-            srcDoc={text(document.data.html)}
+            srcDoc={preview}
           />
         )
       ) : null}

@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { existsSync } from 'node:fs';
 import path from "node:path";
 import net from "node:net";
 import { spawn } from "node:child_process";
@@ -8,18 +9,20 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const frontend = path.join(root, "frontend");
+const python = process.env.PYTHON || [path.join(root,'.venv','Scripts','python.exe'),path.join(root,'.venv','bin','python')].find(existsSync) || 'python';
 const script = process.argv[2];
 if (!script || path.dirname(script) !== ".")
   throw Error("只能执行 frontend/scripts 中的验收脚本");
 const source = path.resolve(
   process.env.E2E_DATABASE_SOURCE ||
-    path.join(root, script === 'verify-display-names.mjs' ? '.data/engineering-demo/engineering.sqlite' : ".data/frontend-integration/engineering.sqlite"),
+    path.join(root, script === 'verify-type-resilience.mjs' ? '.data/standard-check/validation.sqlite' : ['verify-version-status.mjs','verify-host-connections.mjs','verify-inquiry.mjs','verify-display-names.mjs','verify-documents.mjs','verify-document-batch.mjs','verify-accessibility.mjs'].includes(script) ? '.data/engineering-demo/engineering.sqlite' : ".data/frontend-integration/engineering.sqlite"),
 );
 const scratchRoot = path.resolve(root, ".tmp/frontend-e2e");
 const scratch = path.join(scratchRoot, randomUUID());
 if (!scratch.startsWith(scratchRoot + path.sep)) throw Error("临时目录越界");
 const database = path.join(scratch, "workspace.sqlite");
 const owned = [];
+const servicePorts = [];
 let backendOutput = "";
 let previewShutdownUrl;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -56,7 +59,7 @@ async function ready(url, child) {
 try {
   await fs.mkdir(scratch, { recursive: true });
   await run(
-    process.env.PYTHON || "python",
+    python,
     [
       "-c",
       "import sqlite3,sys; from pathlib import Path; source=Path(sys.argv[1]).resolve(); target=Path(sys.argv[2]).resolve(); assert source!=target; a=sqlite3.connect(source.as_uri()+'?mode=ro',uri=True); b=sqlite3.connect(target); a.backup(b); b.close(); a.close()",
@@ -67,6 +70,7 @@ try {
   );
   const backendPort = await port(),
     frontendPort = await port();
+  servicePorts.push(backendPort, frontendPort);
   const environment = {
     ...process.env,
     CABLESIM_DB: database,
@@ -89,11 +93,11 @@ try {
     ].includes(script)
   )
     await run(
-      process.env.PYTHON || "python",
+      python,
       [path.join(frontend, "scripts/seed-research-fixtures.py")],
       { env: environment, stdio: "inherit" },
     );
-  const isolatedCad = ["verify-research-refinement.mjs", "verify-expansion.mjs", "verify-expansion-states.mjs", "verify-display-names.mjs"].includes(script);
+  const isolatedCad = ["verify-accessibility.mjs", "verify-research-refinement.mjs", "verify-expansion.mjs", "verify-expansion-states.mjs", "verify-display-names.mjs"].includes(script);
   const launchArgs = isolatedCad
     ? [
         "-c",
@@ -124,7 +128,7 @@ try {
       ];
   if (isolatedCad)
     previewShutdownUrl = environment.BACKEND_URL + "/__e2e/close-previews";
-  const backend = spawn(process.env.PYTHON || "python", launchArgs, {
+  const backend = spawn(python, launchArgs, {
     cwd: root,
     env: environment,
     windowsHide: true,
@@ -140,7 +144,7 @@ try {
     process.execPath,
     [
       path.join(frontend, "node_modules/vite/bin/vite.js"),
-      "preview",
+      ...(process.env.E2E_DEV === '1' ? [] : ['preview']),
       "--host",
       "127.0.0.1",
       "--port",
@@ -150,6 +154,7 @@ try {
     { cwd: frontend, env: environment, windowsHide: true, stdio: "ignore" },
   );
   owned.push(preview);
+  console.log(`隔离服务：后端 PID ${backend.pid} / ${backendPort}；预览 PID ${preview.pid} / ${frontendPort}`);
   const url = "http://127.0.0.1:" + frontendPort;
   await ready(url, preview);
   console.log("独立临时验收数据库已启动；开发数据库仅作为只读备份来源。");
@@ -169,10 +174,24 @@ try {
   for (const child of owned.reverse()) {
     if (child.exitCode === null) {
       const closed = once(child, "exit");
-      child.kill();
+      if (process.platform === 'win32') {
+        try { await run('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {stdio:'ignore'}); }
+        catch (error) { if (child.exitCode === null) throw error; }
+      } else child.kill();
       await Promise.race([closed, delay(4000)]);
     }
   }
+  for (const servicePort of servicePorts) {
+    const open = await new Promise(resolve => {
+      const socket = net.createConnection({host:'127.0.0.1',port:servicePort});
+      socket.setTimeout(800);
+      socket.once('connect',()=>{socket.destroy();resolve(true);});
+      socket.once('error',()=>resolve(false));
+      socket.once('timeout',()=>{socket.destroy();resolve(false);});
+    });
+    if(open)throw Error('本任务服务端口未关闭：'+servicePort);
+  }
+  console.log('本任务服务与子进程退出、端口关闭已核对。');
   if (path.resolve(scratch).startsWith(scratchRoot + path.sep)) {
     await fs.rm(scratch, {
       recursive: true,

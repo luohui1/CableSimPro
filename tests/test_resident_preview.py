@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import venv
 
 import pytest
 
@@ -78,4 +79,24 @@ def test_warmup_loads_no_engineering_job_and_next_job_uses_the_same_worker(tmp_p
         proc=run(runner,path,tmp_path/'job')
         assert proc.profiling['startup_ms']==0 and proc.profiling['worker_pid']==pid
         assert json.loads((tmp_path/'job/output/result.json').read_text())['count']==1
+    finally:runner.close()
+
+
+def test_resident_worker_honors_selected_python_and_does_not_reuse_another_environment(tmp_path):
+    from backend.plugin_host.runtime import environment_python
+    environment=tmp_path/'environment'
+    venv.EnvBuilder(with_pip=False).create(environment)
+    selected=environment_python(environment)
+    path=entry(tmp_path,"    import sys\n    Path('output/result.json').write_text(json.dumps({'prefix':sys.prefix}))\n")
+    runner=ResidentRunner(tmp_path/'workers')
+    try:
+        assert runner.warmup(path,env=minimal_environment(tmp_path),timeout=10,python_executable=selected)
+        old_pid=json.loads(next(iter(runner.workers.values())).mailbox.joinpath('ready.json').read_text())['pid']
+        job=tmp_path/'isolated';job.mkdir();(job/'input').mkdir();(job/'output').mkdir()
+        proc=runner([str(selected),'-I',str(path)],cwd=job,env=minimal_environment(job),timeout=10,stderr_limit=8000)
+        assert Path(json.loads((job/'output/result.json').read_text())['prefix'])==environment
+        assert proc.profiling['worker_pid']==old_pid
+        other=run(runner,path,tmp_path/'host',timeout=10)
+        assert other.profiling['worker_pid']!=old_pid
+        assert Path(json.loads((tmp_path/'host/output/result.json').read_text())['prefix'])==Path(sys.prefix)
     finally:runner.close()

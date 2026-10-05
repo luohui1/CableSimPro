@@ -28,13 +28,12 @@ def document():
 PARAMS = {'cable_type_id': 'cable_type/test', 'length_m': .1}
 
 
-@pytest.mark.parametrize('change', ['multi_core', 'hollow', 'offset', 'missing-material', 'nan', 'negative', 'corrugated'])
+@pytest.mark.parametrize('change', ['multi_core', 'hollow', 'missing-material', 'nan', 'negative', 'corrugated'])
 def test_unsupported_or_invalid_geometry_is_refused(change):
     d = document()
     t = d['cable_types'][0]
     if change == 'multi_core': t['construction'] = 'three_core'
     elif change == 'hollow': t['cores'][0]['conductor']['form'] = 'hollow'
-    elif change == 'offset': t['cores'][0]['x'] = .001
     elif change == 'missing-material': t['common_layers'][0]['material'] = 'material/missing'
     elif change == 'corrugated': t['common_layers'][0]['form'] = 'corrugated'
     else: t['common_layers'][0]['thickness'] = float('nan') if change == 'nan' else -.001
@@ -123,7 +122,7 @@ def test_missing_manufacturing_facts_and_bad_density_are_not_invented():
 
 def test_strands_screen_reverse_tape_armour_and_step_share_solids(tmp_path):
     cq=pytest.importorskip('cadquery')
-    from design.workbench.cable_example import example
+    from backend.kernel.cable_example import example
     d=example()['document']
     params={'cable_type_id':d['cable_types'][0]['id'],'length_m':.18}
     cad.build(d,params,tmp_path,'stranded')
@@ -286,7 +285,7 @@ def test_reuse_only_unchanged_layers_and_recompute_material_quantities(tmp_path,
 
 
 def test_standard_nominals_in_cad_example():
-    from design.workbench.cable_example import example
+    from backend.kernel.cable_example import example
     d=example()['document'];t=d['cable_types'][0];layers={l['role']:l for l in t['common_layers']}
     assert layers['insulation']['thickness']==.0045
     assert layers['bedding']['thickness']==.0012

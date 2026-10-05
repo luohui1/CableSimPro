@@ -297,7 +297,7 @@ class Types:
                 'input_digest': run['input_digest'], 'output_digest': run['output_digest'],
                 'workspace_revision': run['snapshot']['workspace_revision'],
                 'study_revision': run['snapshot']['study_revision'], 'method': run['snapshot']['definition']['method'],
-                'freshness': run['freshness'], 'status': run['status']}
+                'freshness': run['freshness'], 'status': run['status'], 'version_status': run.get('version_status')}
 
     def specification(self, wid, audience='customer'):
         row, state, channels, checks = self.evidence(wid)
@@ -338,6 +338,8 @@ class Types:
                 'stale': False,
             }
         lifecycle['operator'] = {'username': getpass.getuser(), 'authority': 'local_manual_confirmation'}
+        from .version_status import cover_status
+        lifecycle['version_status'] = cover_status([self.research.get_run(wid, s['run_id']) for s in payload['sources']])
         return {
             'payload': payload,
             'digest': digest,
@@ -725,7 +727,7 @@ def check_results(channels, checks):
                         'id': 'rating/'+result['case_id'],
                         'channel': key,
                         'message': result['name']+'：'+str(result['reason'] or result['status'])+'。',
-                        'blocking': result['status'] != '超出范围',
+                        'blocking': True,
                     })
 
 

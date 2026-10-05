@@ -51,9 +51,16 @@ export function CatalogShell({
         sidebar ||
         (active === "库" ? (
           <>
-            <Link className="module-item" to="/library" search={{ theme }}>
+            <Link className="module-item" to="/library" search={{ theme }} activeOptions={{ exact: true, includeSearch: false }}>
               <Icon name="nav/library" />
               资源库
+            </Link>
+            <Link className="module-item" to="/library/documents" search={{ theme }} activeOptions={{ exact: true, includeSearch: false }}>
+              <Icon name="module/datasheet" />
+              资料导入
+            </Link>
+            <Link className="module-item" to="/library/deliveries" search={{ theme, workspace: "", delivery: "" }} activeOptions={{ exact: true, includeSearch: false }}>
+              <Icon name="module/datasheet" />交付历史
             </Link>
             <Link
               className="module-item"

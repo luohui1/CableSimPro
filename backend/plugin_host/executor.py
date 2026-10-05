@@ -31,6 +31,7 @@ from ..domain.models import FactoryMeasurement
 from .manifest import CUSTOM, KEY_UNITS
 from .registry import PluginHostError, Registry
 from .process import run_process
+from .runtime import resolve_python
 
 PROTOCOL = 'cablesim.run/2'
 MAX_RESULT_BYTES = 16 * 1024 * 1024
@@ -151,6 +152,7 @@ class Executor:
             raise PluginHostError('PHASE_INVALID', '未知执行阶段。')
         if self.verify:
             plugin.verify()
+        interpreter, runtime_environment = resolve_python(plugin)
         ids = [c['case_id'] for c in cases]
         if not cases or len(cases) > 100 or len(set(ids)) != len(ids) or any(not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', i) for i in ids):
             raise PluginHostError('CASES_INVALID', '请求至少包含一个工况，且 case_id 唯一。')
@@ -182,7 +184,7 @@ class Executor:
             process_environment=minimal_environment(job)
             process_environment['CABLESIM_WORKER_RELEASE']=sha256(manifest.model_dump_json().encode()).hexdigest()
             try:
-                proc = self.process_runner([sys.executable, '-I', str(plugin.entry)], cwd=job, env=process_environment,
+                proc = self.process_runner([interpreter, '-I', str(plugin.entry)], cwd=job, env=process_environment,
                                    timeout=limit, stderr_limit=STDERR_LIMIT)
             except subprocess.TimeoutExpired:
                 raise PluginHostError('TIMEOUT', f'{plugin_id} 超过 {limit} s 时间上限，进程已终止。', 504) from None
@@ -201,6 +203,7 @@ class Executor:
                 'total_ms':(perf_counter()-execution_started)*1000}
             if hasattr(proc,'profiling'):accepted.environment['resident_profiling']=proc.profiling
             accepted.environment['host_execution'] = {
+                'runtime': runtime_environment,
                 'platform': current_platform(), 'isolation': 'process', 'os_sandbox': False,
                 'timeout_enforced': True, 'memory_limit_enforced': False, 'network_isolation_enforced': False,
                 'parent_death_enforced': os.name == 'nt', 'process_tree_cleanup_enforced': os.name == 'nt',
@@ -292,6 +295,14 @@ class Executor:
                 if 'case' in r and (not isinstance(r['case'], str) or not r['case'].strip()):
                     raise violation(f'{case_id}: 输出工况必须是非空字符串，未指定时省略该字段')
                 key, rtype = r.get('key'), r.get('type')
+                if 'rating_basis' in r:
+                    from cablesim_sdk.ampacity import AmpacityBasis
+                    if key != 'ampacity':
+                        raise violation(f'{case_id}: rating_basis 仅用于载流量')
+                    try:
+                        AmpacityBasis.model_validate(r['rating_basis'], strict=True)
+                    except ValueError as exc:
+                        raise violation(f'{case_id}: 载流量口径或固定负荷无效') from exc
                 if (key, rtype) not in declared:
                     raise violation(f'{case_id}: 未声明的输出 {key}/{rtype}')
                 ident = (key, rtype, r.get('entity'), r.get('case'))

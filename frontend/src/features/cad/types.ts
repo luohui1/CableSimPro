@@ -1,4 +1,5 @@
 /** Display artifact contracts. These are renderer inputs, not handwritten HTTP models. */
+import type { CrossSectionProfile } from '@/features/drawing/cross-section-profile';
 export type CanvasState = 'empty' | 'loading' | 'error' | 'success' | 'historical';
 export type CadMode = 'peel' | 'section' | 'transparent' | 'scene';
 export type CadView = 'iso' | 'front' | 'top' | 'end';
@@ -25,6 +26,12 @@ export interface DisplayMesh {
 export interface CadLayer {
   entity?: string;
   role: string;
+  label?: string;
+  source_target?: { scope: 'core' | 'common'; core_id?: string; role: string };
+  center_m?: { x: number; z: number };
+  section_profile?: { outer: CrossSectionProfile; inner?: CrossSectionProfile | null; holes: CrossSectionProfile[] };
+  section_outline_brep?: string;
+  peel_fraction?: number;
   material: string;
   category: string;
   inner_radius_m: number;

@@ -1,0 +1,6 @@
+# CAD binary dependencies used by the geometry plugin; not a complete wheel lock.
+cadquery==2.8.0
+cadquery-ocp==7.9.3.1.1
+vtk==9.6.2
+casadi==3.7.2
+nlopt==2.11.0

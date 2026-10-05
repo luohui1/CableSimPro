@@ -3,7 +3,8 @@ import { message, optionalRecord, text, numeric } from "@/api/client";
 import { temperatureView, type FieldSample } from "@/lib/temperature-view";
 import { entityLabel, savedDomain } from "@/lib/domain-fields";
 import { formatNumber, parameterUnit, engineeringQuantity } from "@/lib/format";
-import { TemperaturePlot } from "./temperature-plot";
+import { deferredView } from './deferred-view';
+const TemperaturePlot = deferredView(() => import('./temperature-plot').then(m => ({ default: m.TemperaturePlot })));
 import { DataTable } from "./data-table";
 import { Toolbar } from "./toolbar";
 import { EmptyState, ErrorState } from "./states";
@@ -14,6 +15,7 @@ import { Tooltip } from "./ui/tooltip";
 import { Conclusion } from "./conclusion";
 import { EngineeringValue } from "./engineering-value";
 import type { InputSelection } from "./study-inputs";
+import { StatusMark } from './status-mark';
 export function StudyTemperature({
   run,
   tab,
@@ -44,6 +46,11 @@ export function StudyTemperature({
   const data = parsed.view;
   if (!data) return <EmptyState description="" title="该运行没有温度场工件" />;
   const domain = savedDomain(run);
+  const summaryEntry = Object.entries(optionalRecord(data.case.artifacts)).find(([, value]) => optionalRecord(value).schema_version === 'cablesim.electrothermal-reference/1');
+  const thermalSummary = optionalRecord(summaryEntry?.[1]);
+  const checked = summaryEntry && optionalRecord(optionalRecord(optionalRecord(run.artifact_status)[text(data.case.case_id)])[summaryEntry[0]]).status === 'verified';
+  const limit = numeric(thermalSummary.temperature_limit_c), savedMaximum = numeric(thermalSummary.maximum_temperature_c);
+  const verdict = checked && limit !== null && savedMaximum !== null && typeof thermalSummary.within_temperature_limit === 'boolean' ? thermalSummary.within_temperature_limit : undefined;
   function select(sample: FieldSample) {
     setSelected(sample.id);
     onSelect({
@@ -97,9 +104,9 @@ export function StudyTemperature({
   }
   const conclusion = (
     <Conclusion
-      title="温度场结论"
-      model={`最高温度 ${engineeringQuantity("temperature", data.maximum, "K").text} °C`}
-      description={`位于 x ${engineeringQuantity("coordinate", data.hotspot.point[0], "m").text} ${engineeringQuantity("coordinate", data.hotspot.point[0], "m").unit}，z ${engineeringQuantity("coordinate", data.hotspot.point[1], "m").text} ${engineeringQuantity("coordinate", data.hotspot.point[1], "m").unit}`}
+      title={<StatusMark kind={verdict === undefined ? 'unknown' : verdict ? 'satisfied' : 'unsatisfied'} label={verdict === undefined ? '无法判断' : verdict ? '满足温限' : '超温'} />}
+      model={`最高温度 ${verdict === undefined ? engineeringQuantity("temperature", data.maximum, "K").text : formatNumber(savedMaximum, 1)} °C`}
+      description={verdict === undefined ? '保存工件未提供温限判定与超出量；最高温度不代表满足温限。' : `保存温限 ${formatNumber(limit, 1)} °C。${verdict ? '判定来自已校验的插件工件。' : '插件已判定超温，但工件未提供超出量。'}`}
       historical={run.freshness === "historical"}
       metrics={[
         {

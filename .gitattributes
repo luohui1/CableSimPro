@@ -1,9 +1,10 @@
 # Sealed source payloads must have identical bytes on every checkout platform.
-/backend/*.py text eol=lf
-/backend/plugins/*.py text eol=lf
-/backend/foundation/*.py text eol=lf
+# Includes plugin_host and every transitive backend dependency sealed by plugins.
+/backend/** text eol=lf
+/cablesim_sdk/** text eol=lf
 /plugins/*.json text eol=lf
 /plugins/*/plugin.json text eol=lf
 /plugins/*/src/** text eol=lf
+/plugins/*/assets/** text=auto eol=lf
 /plugin-spec/*.json text eol=lf
 /plugins/releases/*.json text eol=lf

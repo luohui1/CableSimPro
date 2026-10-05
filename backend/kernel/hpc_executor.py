@@ -31,6 +31,10 @@ class HpcExecutor:
     def for_operation(self,identifier):
         return HpcExecutor(self.local,profile=self.profile,root=self.root,ledger=self.ledger,operation=str(UUID(identifier)))
 
+    def verify_release(self,plugin):
+        verifier=getattr(self.local,'verify_release',None)
+        return verifier(plugin) if verifier else plugin.verify()
+
     def required(self,plugin_id,capability=None):
         if os.environ.get('SLURM_JOB_ID') or not self.profile.is_file():return False
         profile=read(self.profile)
@@ -80,7 +84,15 @@ class HpcExecutor:
                     atomic(candidate/'plan.json',plan);atomic(candidate/'integrity.json',{'plan_sha256':digest(plan)})
                     if directory.exists():
                         raise PluginHostError('REMOTE_PREPARATION_INCOMPLETE','存在尚未封存的旧准备目录，已保留；未提交计算。',409)
-                    candidate.rename(directory)
+                    # Windows scanners can briefly hold freshly frozen files.
+                    # Retry only staging rename, before any remote submission.
+                    for attempt in range(6):
+                        try:
+                            candidate.rename(directory)
+                            break
+                        except PermissionError:
+                            if os.name!='nt' or attempt==5 or directory.exists():raise
+                            time.sleep(.2)
             if digest(plan)!=read(directory/'integrity.json')['plan_sha256']:
                 raise PluginHostError('REMOTE_PLAN_CORRUPT','远端研究计划完整性不符；保留输入并拒绝运行。',409)
         return self.collect(directory)
@@ -96,6 +108,12 @@ class HpcExecutor:
                 raise PluginHostError('REMOTE_'+submission['state'].upper(),submission.get('message','远端提交尚未确认，输入与预留保留。'),503)
             while True:
                 accounting=remote.poll(directory,submission['token'])
+                states=sorted({r['State'].split()[0].rstrip('+') for r in accounting.get('accounting',[])
+                               if r.get('State') and '.' not in r.get('JobID','')})
+                state='collecting' if accounting.get('terminal') else 'running' if any(s in ('RUNNING','COMPLETING') for s in states) else 'queued' if states and all(s in ('PENDING','REQUEUED','REQUEUE_HOLD') for s in states) else 'submitted'
+                atomic(directory/'execution.json',{'state':state,'backend':'slurm','job_id':submission['job_id'],
+                    'plan_id':plan['id'],'slurm_states':states,'actual_cpu_seconds':accounting.get('actual_cpu_seconds',0),
+                    'updated':accounting.get('updated')})
                 if accounting.get('terminal'):break
                 time.sleep(5)
             collected=remote.collect(directory,submission['token'])
@@ -154,6 +172,21 @@ class HpcExecutor:
         if not (directory/'plan.json').is_file():
             raise PluginHostError('REMOTE_JOB_MISSING','此运行没有已冻结的超算作业；不会自动创建替代计算。',409)
         return directory,read(directory/'plan.json')
+
+    def execution_status(self,operation,plugin_id,capability):
+        """Read cached scheduler evidence; page polling never contacts SSH."""
+        identifier=str(uuid5(UUID(operation),plugin_id+'/'+capability+'/run'))
+        directory=self.root/identifier
+        if not (directory/'plan.json').is_file():return None
+        plan=read(directory/'plan.json')
+        if plan.get('operation_id')!=operation or plan.get('plugin_id')!=plugin_id or plan.get('capability')!=capability:
+            return {'backend':'slurm','state':'unavailable','error':'REMOTE_PROGRESS_BINDING_INVALID'}
+        value=read(directory/'execution.json') if (directory/'execution.json').is_file() else {'backend':'slurm','state':'preparing'}
+        value.setdefault('plan_id',identifier)
+        if not value.get('job_id') and value.get('token'):
+            submission=directory/'submissions'/str(UUID(value['token']))/'submission.json'
+            if submission.is_file():value['job_id']=read(submission).get('job_id')
+        return value
 
 
 def read_gzip(path):

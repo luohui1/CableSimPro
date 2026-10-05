@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { assertVisibleNames } from './visible-names.mjs';
-export async function assertLayout(page, label) {
-  await assertVisibleNames(page, label);
+export async function assertLayout(page, label, nameOptions) {
+  await assertVisibleNames(page, label, nameOptions);
   const result = await page.evaluate(() => {
     const seen = [
       ...document.querySelectorAll(

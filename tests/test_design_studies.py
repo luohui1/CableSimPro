@@ -252,7 +252,8 @@ def test_engineering_example_runs_real_plugin_and_report_has_each_cable_and_chec
     assert len({g['id'] for g in tr['goal_checks']}) == len(tr['goal_checks'])
     report = client.app.state.research.deliver(w['id'],[run['id']],current_only=True)['html']
     assert 'data-section="hand-check"' in report and 'data-section="mutual-heating"' in report
-    assert '各回路上限不能同时使用' in report
+    ratings=[r for r in case['results'] if r['key']=='ampacity']
+    assert ratings and all(r['rating_basis']['kind']=='single_circuit' and not r['rating_basis']['fixed_currents_a'] for r in ratings)
     for circuit in w['domain']['circuits']:
         for cable in circuit['cables']:
             assert cable['id'] in report

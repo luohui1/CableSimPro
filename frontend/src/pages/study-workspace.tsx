@@ -6,9 +6,11 @@ import { useStudy } from "@/components/study-provider";
 import { AppShell } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { RunRecordsDrawer } from "@/components/run-records-drawer";
-import { missingInputDestination } from "@/lib/missing-input";
+import { VersionNotice } from '@/components/version-notice';
+import { isVersionStale } from '@/lib/version-status';
+import { missingInputDestination, focusPreflightField } from "@/lib/missing-input";
 import { StatusMark } from "@/components/status-mark";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { PropertyPanel } from "@/components/property-panel";
@@ -22,7 +24,7 @@ import { StudyHybrid } from "@/components/study-hybrid";
 import { Icon } from "@/components/icon";
 import { message, optionalRecord, text } from "@/api/client";
 import { selectionView, type SelectionRow } from "@/lib/selection-view";
-import { rootModule } from "@/lib/study-config";
+import { rootModule, studyEntryTab } from "@/lib/study-config";
 import {
   CableInputs,
   ConditionsInputs,
@@ -49,146 +51,8 @@ import { sourceKind } from "@/lib/selection-view";
 import { formatNumber } from "@/lib/format";
 import type { StudyDefinition } from "@/api/research";
 
-export const moduleDefinitions: Record<
-  string,
-  { label: string; icon: string; tabs: { id: string; label: string }[] }
-> = {
-  cable: {
-    label: "电缆",
-    icon: "object/cable",
-    tabs: [
-      { id: "section", label: "截面" },
-      { id: "layers", label: "分层" },
-      { id: "references", label: "引用" },
-    ],
-  },
-  section: {
-    label: "敷设截面",
-    icon: "object/section",
-    tabs: [
-      { id: "section", label: "截面" },
-      { id: "three-dimensional", label: "三维" },
-      { id: "coordinates", label: "坐标" },
-      { id: "media", label: "介质" },
-    ],
-  },
-  conditions: {
-    label: "工况",
-    icon: "object/conditions",
-    tabs: [{ id: "inputs", label: "工况" }],
-  },
-  ampacity: {
-    label: "载流量",
-    icon: "calc/ampacity",
-    tabs: [
-      { id: "results", label: "结果" },
-      { id: "parameters", label: "方法参数" },
-    ],
-  },
-  hybrid: {
-    label: "混合载流量",
-    icon: "calc/ampacity",
-    tabs: [
-      { id: "results", label: "预测结果" },
-      { id: "validation", label: "模型验证" },
-      { id: "sources", label: "来源" },
-    ],
-  },
-  "thermal-field": {
-    label: "温度场",
-    icon: "calc/thermal-field",
-    tabs: [
-      { id: "field", label: "场图" },
-      { id: "samples", label: "取样" },
-      { id: "parameters", label: "方法参数" },
-      { id: "diagnostics", label: "诊断" },
-      { id: "convergence", label: "收敛" },
-    ],
-  },
-  selection: {
-    label: "问询选型",
-    icon: "calc/selection",
-    tabs: [
-      { id: "results", label: "候选结果" },
-      { id: "settings", label: "问询条件" },
-    ],
-  },
-  sweep: {
-    label: "参数扫描",
-    icon: "calc/sweep",
-    tabs: [
-      { id: "curve", label: "曲线" },
-      { id: "points", label: "扫描点" },
-      { id: "settings", label: "设置" },
-    ],
-  },
-  batch: {
-    label: "批量仿真",
-    icon: "module/rating-table",
-    tabs: [
-      { id: "space", label: "工况空间" },
-      { id: "results", label: "结果" },
-      { id: "execution", label: "执行" },
-    ],
-  },
-  "method-compare": {
-    label: "方法对比",
-    icon: "module/method-compare",
-    tabs: [
-      { id: "results", label: "结果" },
-      { id: "inputs", label: "输入差异" },
-      { id: "evidence", label: "证据" },
-    ],
-  },
-  simulation: {
-    label: "仿真复现",
-    icon: "calc/thermal-field",
-    tabs: [{ id: "results", label: "结果" }, { id: "inputs", label: "输入与网格" }, { id: "evidence", label: "证据" }],
-  },
-  report: {
-    label: "计算书",
-    icon: "module/datasheet",
-    tabs: [
-      { id: "content", label: "内容" },
-      { id: "sources", label: "来源" },
-      { id: "preview", label: "预览" },
-    ],
-  },
-  transient: {
-    label: "暂态温度",
-    icon: "calc/thermal-field",
-    tabs: [
-      { id: "results", label: "结果" },
-      { id: "history", label: "时间序列" },
-      { id: "field", label: "场图" },
-      { id: "samples", label: "取样" },
-      { id: "diagnostics", label: "诊断" },
-      { id: "convergence", label: "收敛" },
-      { id: "parameters", label: "方法参数" },
-    ],
-  },
-  "sheath-losses": {
-    label: "护套损耗",
-    icon: "calc/ampacity",
-    tabs: [
-      { id: "results", label: "结果" },
-      { id: "losses", label: "损耗系数" },
-      { id: "parameters", label: "方法参数" },
-    ],
-  },
-  electrothermal: {
-    label: "电热耦合",
-    icon: "calc/thermal-field",
-    tabs: [
-      { id: "results", label: "结果" },
-      { id: "field", label: "场图" },
-      { id: "samples", label: "取样" },
-      { id: "parameters", label: "方法参数" },
-      { id: "diagnostics", label: "诊断" },
-      { id: "convergence", label: "收敛" },
-    ],
-  },
-};
+import { moduleDefinitions } from "./study-modules";
+export { moduleDefinitions } from "./study-modules";
 export function StudyEntry() {
   const { study } = useStudy();
   const search = studyRootRoute.useSearch();
@@ -270,7 +134,7 @@ export function StudyWorkspace() {
   const selectedRow =
     selected && view?.rows.find((row) => row.id === selected.id);
   const historical =
-    run?.freshness === "historical" &&
+    (run?.freshness === "historical" || isVersionStale(run)) &&
     (!["cable", "conditions", "section"].includes(module) || !!search.run);
   const inputModule = ["cable", "conditions", "section"].includes(module);
   const snapshotInput = inputModule && !!search.run;
@@ -362,7 +226,7 @@ export function StudyWorkspace() {
         <AppShell
           title={title}
           status={
-            <StatusMark
+            isVersionStale(run) || isVersionStale(study.raw) ? <VersionNotice value={isVersionStale(run) ? run : study.raw} target={{ wid: study.workspace, sid, module: (search.run || module === 'report' ? text(optionalRecord(run?.snapshot).module) : configuredModule) || undefined }} disabledReason={context.dirty ? '请先保存修改' : undefined} onComplete={next => { const resultModule = text(optionalRecord(next.snapshot).module) || calculatedModule; return navigate({ params: { sid, module: resultModule, tab: studyEntryTab(resultModule) }, search: { ...currentSearch(), run: text(next.id), delivery: '', generate: false } }); }} /> : <StatusMark
               kind={status}
               label={
                 context.dirty
@@ -391,6 +255,10 @@ export function StudyWorkspace() {
           }
           actions={
             <>
+              {!inputModule && <>
+                <Button variant="ghost" size="compact" disabled={!context.canUndo || context.saving} onClick={() => void context.undo()} title="Ctrl+Z">撤销研究</Button>
+                <Button variant="ghost" size="compact" disabled={!context.canRedo || context.saving} onClick={() => void context.redo()} title="Ctrl+Y">重做研究</Button>
+              </>}
               <Button size="compact" onClick={() => setRecords(true)}>
                 运行记录
               </Button>
@@ -457,24 +325,7 @@ export function StudyWorkspace() {
                     navigate({
                       params: { sid, module: destination, tab: nextTab },
                       search: { ...currentSearch(), run: "", delivery: "" },
-                    }).then(() => {
-                      setTimeout(
-                        () =>
-                          Array.from(
-                            document.querySelectorAll<HTMLInputElement>(
-                              "[data-field-path]",
-                            ),
-                          )
-                            .find((input) =>
-                              field.includes(
-                                input.dataset.fieldPath || "\u0000",
-                              ),
-                            )
-                            ?.querySelector<HTMLInputElement>("input")
-                            ?.focus(),
-                        300,
-                      );
-                    });
+                    }).then(() => focusPreflightField(field, workspace.domain));
                   }}
                   onResult={(id, outputModule) =>
                     navigate({
@@ -598,6 +449,7 @@ export function StudyWorkspace() {
             })
           }
         >
+          <TabsContent value={tab}>
           {!!context.saveError && (
             <ErrorState
               title="保存失败，编辑保留"
@@ -678,6 +530,7 @@ export function StudyWorkspace() {
               />
             ) : run ? (
               <StudySelection
+                theme={theme}
                 run={run}
                 selectedId={selectedRow?.id}
                 onSelect={(row) => {
@@ -729,6 +582,7 @@ export function StudyWorkspace() {
               description="当前模块没有可用的呈现能力。"
             />
           )}
+          </TabsContent>
         </AppShell>
       </Tabs>
       <Dialog
@@ -764,6 +618,9 @@ export function StudyWorkspace() {
         </label>
       </Dialog>
       <RunRecordsDrawer
+        workspace={study.workspace}
+        studyId={sid}
+        disabledReason={context.dirty ? '请先保存修改' : undefined}
         open={records}
         onOpenChange={setRecords}
         runs={runs}

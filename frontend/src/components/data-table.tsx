@@ -24,6 +24,7 @@ export function DataTable<T extends { id: string }>({
   groups,
   selectedId,
   onSelect,
+  onActivate,
   rowLabel,
   density = "compact",
   loading,
@@ -36,6 +37,7 @@ export function DataTable<T extends { id: string }>({
   groups: RowGroup<T>[];
   selectedId?: string;
   onSelect?: (row: T) => void;
+  onActivate?: (row: T) => void;
   rowLabel: (row: T) => string;
   density?: "compact" | "standard";
   loading?: boolean;
@@ -144,14 +146,14 @@ export function DataTable<T extends { id: string }>({
                       aria-selected={
                         onSelect ? selectedId === row.id : undefined
                       }
-                      tabIndex={onSelect ? 0 : undefined}
-                      onClick={() => onSelect?.(row)}
+                      tabIndex={onSelect || onActivate ? 0 : undefined}
+                      onClick={() => onActivate ? onActivate(row) : onSelect?.(row)}
                       onKeyDown={(event) => {
-                        if (!onSelect) return;
+                        if (!onSelect && !onActivate) return;
             if(event.target instanceof HTMLElement && event.target!==event.currentTarget && event.target.closest("input,button,select,textarea,[role=combobox]"))return;
                         if (["Enter", " "].includes(event.key)) {
                           event.preventDefault();
-                          onSelect(row);
+                          if (onActivate) onActivate(row); else onSelect?.(row);
                         }
                         if (["ArrowDown", "ArrowUp"].includes(event.key)) {
                           event.preventDefault();

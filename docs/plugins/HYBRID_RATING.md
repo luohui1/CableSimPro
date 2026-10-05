@@ -13,6 +13,8 @@
 
 原生求解、训练和数值性能测量均在超算执行。本机仅准备输入、开发、轻量测试及浏览器验证；缺少远端环境时不回退求解。
 
+当前模型冻结为 `reference_only`；不继续扩充训练集或追逐页面 1 秒指标。研究中的通用截面对比使用仿真插件 `iec-fem-comparison`，见 [仿真插件](SIMULATION.md)，不受这里的双回特征域约束。
+
 ## 标签物理与数值门禁
 
 热场模式为二维常热物性 FEM，含线性 R(T)。交流/护套损耗因子和排管空气热阻冻结在 IEC 额定点。双回给定损耗系数场景是独立热路子模型，不能宣称为电磁计算。
@@ -44,6 +46,8 @@ python plugins/cablesim.hybrid-rating/validation/train_model.py <域内目录> <
 ```
 
 批次按[批量数据集契约](../architecture/BATCH_DATASETS.md)封存及记账。训练输出目录绑定同一数据/参数，恢复复用原操作身份。训练库只需装在超算环境，预测宿主不依赖机器学习运行库。
+
+`plugins/cablesim.hybrid-rating/validation/training_input.py` 是 `train_model.py` 调用的输入组装模块：核验逐条批量工件、来源哈希和训练划分。`plugins/cablesim.hybrid-rating/validation/register_model.py` 是训练完成后的登记模块：校验 Slurm 产物并以哈希保存至模型目录；两者不是独立 CLI，均不批准工程使用。
 
 ## 页面与执行
 

@@ -170,14 +170,31 @@ class PageResponse(StrictModel):
  tables:list[PageTable]
  text_source:Literal['original','none']
  requires_ocr:bool=Field(default=False,description='No usable parameter text layer: empty or image-dominant page containing only a few native labels/page numbers. Rules use local CPU OCR without outbound requests.')
+class NewModelIdentity(StrictModel):
+ name:str=Field(min_length=1,max_length=120,description='Human-selected new cable model name.')
+ manufacturer:str=Field(min_length=1,max_length=120)
+ designation:str=Field(min_length=1,max_length=40)
+ voltage_v:float=Field(gt=0,le=1000000,strict=True,description='Rated phase-to-phase voltage, V.')
+ u0_v:float=Field(gt=0,le=1000000,strict=True,description='Rated phase-to-earth voltage, V.')
+ cores:int=Field(ge=1,le=100,strict=True,description='Conductor core count, dimensionless.')
+ area_m2:float=Field(gt=0,le=.01,strict=True,description='Nominal cross-sectional area per core, m².')
+ conductor:Literal['copper_bare','copper_coated','aluminium']
+ identity_reference:str=Field(min_length=1,max_length=2000,description='Human-reviewed original page/fragment establishing manufacturer, designation, voltage, cores and material.')
+
+
 class ProposalRequest(StrictModel):
  request_id:UUID
  extraction_id:str=Field(description='Successfully extracted and completely human-reviewed record.')
  expected_review_revision:int=Field(ge=1)
- target_model_id:str=Field(description='Existing immutable cable-model version to branch.')
- expected_model_sha256:str=Field(pattern='^[0-9a-f]{64}$')
+ target_model_id:str|None=Field(default=None,description='Existing immutable version to branch; omit when creating a new model.')
+ expected_model_sha256:str|None=Field(default=None,pattern='^[0-9a-f]{64}$')
+ new_model:NewModelIdentity|None=Field(default=None,description='Explicit new-model identity; creates no library record until human approval.')
  version:str=Field(min_length=1,max_length=32,description='New draft version label; original model remains unchanged.')
  field_bindings:dict[str,list[str]]=Field(default_factory=dict,max_length=20,description='For a complete structural target only: canonical field -> explicit JSON pointer(s) under /cable_type. Matching conductor quantity/layer role and SI unit are required; no geometry inference.')
+ @model_validator(mode='after')
+ def target(self):
+  if (self.new_model is None)==(self.target_model_id is None) or (self.target_model_id is not None)!=(self.expected_model_sha256 is not None):raise ValueError('请选择已有型号及摘要，或提供新型号身份，不能同时填写。')
+  return self
 class ApprovalRequest(StrictModel):
  request_id:UUID
  proposal_sha256:str=Field(pattern='^[0-9a-f]{64}$',description='Exact proposal contents acknowledged by the human.')
@@ -193,11 +210,25 @@ class ProposalResponse(StrictModel):
  document_id:str
  status:Literal['proposed','approved']
  sha256:str
- target_model_id:str
- base_sha256:str
+ target_model_id:str|None
+ base_sha256:str|None
  draft:CableModelVersion=Field(description='Proposed immutable new model version; creation happens only after approval.')
  changes:list[dict]=Field(description='Before/after SI values, source evidence and human decisions.')
  new_model_id:str|None=None
+ approval:dict|None=None
+
+
+class BatchProposalRequest(StrictModel):
+ request_id:UUID=Field(description='Idempotency key for the complete batch.')
+ items:list[ProposalRequest]=Field(min_length=1,max_length=100,description='One completely reviewed extraction and explicit target identity per specification.')
+
+
+class BatchProposalResponse(StrictModel):
+ id:str
+ document_id:str
+ sha256:str=Field(description='Digest binding all individual proposal IDs and digests.')
+ status:Literal['proposed','approved']
+ proposals:list[ProposalResponse]
  approval:dict|None=None
 class ExtractionComparisonRequest(StrictModel):
  extraction_ids:list[str]=Field(min_length=2,max_length=2,description='Two completed runs on exactly the same document/model/pages/regions.')

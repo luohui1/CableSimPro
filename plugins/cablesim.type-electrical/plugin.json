@@ -116,8 +116,8 @@
     },
     {
       "path": "src/cablesim_type_electrical/main.py",
-      "sha256": "3b900881fec505a7f17ce2156f31ea551eb36a628696438b7e23724c582ce237",
-      "size_bytes": 28971
+      "sha256": "dd2d460d7138bf85b852304a0f9802a05237597ecc37cb8c6357a4c78650812d",
+      "size_bytes": 30162
     },
     {
       "path": "src/cablesim_type_electrical/sources.json",
@@ -126,7 +126,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "6b9653d6894e72e4a52a2b2d29cc84eb794c6bc5ae584655e0b331e96cd2dadb",
+      "sha256": "c7ebb9a3e33598bc0278d57dbcee62eafbbc39e2c3677970280c877b2a0b230e",
       "size_bytes": 1064
     }
   ]
