@@ -8,9 +8,16 @@
 
 - 产品需求：`docs/product/PRD.md`
 - 架构与实施细则：`docs/design/SYSTEM_ARCHITECTURE.md`、`docs/design/MODULE_DESIGN.md`
+- 前端技术栈与开源组件准入：[FRONTEND_STACK.md](docs/design/FRONTEND_STACK.md)
 - 插件规范：[唯一现行规范](https://github.com/luohui1/CableSimPro-Plugins/blob/main/SPEC.md)，v2 清单 `plugins/<id>/plugin.json`；`plugins/registry.json` 仅为这些清单生成的发布索引。
 
 工程底线：不产生假结果（缺数据就明确失败，不用编造公式兜底）；每个结果可追溯到输入、方法和版本；AI 与插件只提提案，不能自行批准。
+
+## 前端开源组件与框架迁移
+
+允许主动引入、替换和二次开发成熟开源组件，不以当前已安装依赖为上限。目标主栈为 Next.js、Vercel AI SDK、AI Elements 与 shadcn/ui；专业表格、表单、图表、工作流、PDF 与检索按 `FRONTEND_STACK.md` 的职责边界集成。该目标不代表依赖已经安装、迁移完成或兼容性已经验证。
+
+此前前端规范中对新增组件来源的限制，不得解释成禁止本次已授权的开源选型。统一设计令牌、组件入口、领域契约、版本身份、人工审批和真实验收要求仍然有效；引入组件时同步调整具体规范与测试，不关闭样式门禁或复制第二套工程状态。Next.js 迁移不替换 FastAPI 工程宿主，不授权云部署、外发私有资料或购买商业扩展。
 
 ## 目录
 
