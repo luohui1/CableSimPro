@@ -1,0 +1,34 @@
+name: Preserve verified dependency lock
+on:
+  pull_request:
+    types: [synchronize]
+permissions:
+  contents: read
+jobs:
+  preserve-lock:
+    if: github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.number == 34
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - name: Read the exact private dependency artifact and create a content blob only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          gh api "repos/$REPOSITORY/actions/artifacts/11330206252/zip" > "$RUNNER_TEMP/dependency.zip"
+          echo "83e602ab5cbe5df439bacf48593bb3733d0edf04a091a305f998f880a2b307bf  $RUNNER_TEMP/dependency.zip" | sha256sum --check
+          python - <<'PY'
+          import hashlib,json,os,zipfile,urllib.request
+          with zipfile.ZipFile(os.environ['RUNNER_TEMP']+'/dependency.zip') as archive:
+              content=archive.read('package-lock.json')
+          assert hashlib.sha256(content).hexdigest() == '149d542ba192b409f7aac5c112ddd644ff6ae90bec5da1517dcc84b872f567b0'
+          payload=json.dumps({'content':content.decode('utf-8'),'encoding':'utf-8'}).encode()
+          request=urllib.request.Request('https://api.github.com/repos/'+os.environ['REPOSITORY']+'/git/blobs',data=payload,headers={'Authorization':'Bearer '+os.environ['GH_TOKEN'],'Accept':'application/vnd.github+json','Content-Type':'application/json'},method='POST')
+          with urllib.request.urlopen(request) as response:
+              result=json.load(response)
+          assert result['sha']=='1a58b542d055bf32e1b24923595c357900419bf8'
+          print('Verified npm lock blob: '+result['sha'])
+          PY
