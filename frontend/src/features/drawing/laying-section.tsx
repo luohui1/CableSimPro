@@ -39,7 +39,10 @@ export function LayingSection(props: LayingSectionProps) {
     try { return { geometry: sectionGeometry(props.document, section), error: '' }; }
     catch (error) { return { geometry: null, error: error instanceof Error ? error.message : String(error) }; }
   }, [props.document, section]);
-  const camera = view || (calculated.geometry ? fitBounds(calculated.geometry.bounds, size) : { x: 0, z: -.5, widthM: 2 });
+  // 全览时顶部留出浮动工具条的高度，地表线与标高不被遮挡
+  const toolbarReserve = 56;
+  const fitted = calculated.geometry ? fitBounds(calculated.geometry.bounds, { width: size.width, height: Math.max(1, size.height - toolbarReserve) }) : null;
+  const camera = view || (fitted ? { ...fitted, z: fitted.z + toolbarReserve / 2 * fitted.widthM / Math.max(1, size.width) } : { x: 0, z: -.5, widthM: 2 });
   const report = (error: unknown) => setProblem(error instanceof Error ? error.message : String(error));
   async function commit(next: Section, edit: SectionEdit) {
     if (pending.current) throw new Error('上一项改动正在提交，请稍后再试。');
