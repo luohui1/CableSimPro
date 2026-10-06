@@ -66,6 +66,20 @@ function HomeAreas({ theme, studies, types, succeeded }: { theme: "light" | "dar
   );
 }
 
+/** 工程概要：研究数、已有结果、未运行与引用型号，全部由研究列表与运行记录统计。 */
+function ProjectSummary({ studies, succeeded }: { studies: StudyRow[]; succeeded: (rows: StudyRow[]) => number }) {
+  const done = succeeded(studies);
+  const models = [...new Set(studies.map((row) => row.model).filter(Boolean))];
+  return (
+    <dl className="project-summary" aria-label="工程概要">
+      <div><dt>研究</dt><dd>{studies.length}</dd></div>
+      <div><dt>已有结果</dt><dd>{done}</dd></div>
+      <div><dt>未运行或失败</dt><dd>{studies.length - done}</dd></div>
+      <div className="project-summary-models"><dt>引用型号</dt><dd>{models.join("、") || "—"}</dd></div>
+    </dl>
+  );
+}
+
 export function ObjectListPage({ home = false }: { home?: boolean }) {
   const search = useSearch({ strict: false });
   const theme = search.theme === "dark" ? "dark" : "light";
@@ -202,6 +216,12 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
     (a, b) => rank(a) - rank(b) || b.updated.localeCompare(a.updated),
   );
   const rows = home ? matching.slice(0, 6) : matching;
+  const isSimulation = (row: StudyRow) => SIMULATION_MODULES.includes(rootModule(row.definition));
+  const succeededIn = (list: StudyRow[]) => list.filter((row) => ["succeeded", "partial"].includes(text(statuses.get(row.id)?.data?.at(-1)?.status))).length;
+  // 工程页按核心领域分组：载流量计算在前，电缆仿真在后；其他列表保持单组
+  const tableGroups = projectTitle
+    ? [{ id: "ampacity", label: "载流量计算", rows: rows.filter((row) => !isSimulation(row)) }, { id: "simulation", label: "电缆仿真", rows: rows.filter(isSimulation) }].filter((group) => group.rows.length)
+    : [{ id: "studies", label: "研究", rows }];
   function global(label: string) {
     if (label === "首页") navigate({ to: "/", search: { theme } });
     else if (label === "研究") navigate({ to: "/studies", search: { theme } });
@@ -273,6 +293,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
         }
       >
         {home && <HomeAreas theme={theme} studies={studies.data || []} types={types.data?.length} succeeded={(studies.data || []).filter((row) => ["succeeded", "partial"].includes(text(statuses.get(row.id)?.data?.at(-1)?.status))).length} />}
+        {projectTitle && !studies.isPending && <ProjectSummary studies={(studies.data || []).filter((row) => row.workspace === search.workspace)} succeeded={succeededIn} />}
         {studies.isError && studies.data && (
           <StaleBanner description="连接中断，保留上次读取的列表。" />
         )}
@@ -311,9 +332,9 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
             <DataTable
               label={home ? "最近研究" : "研究列表"}
               columns={columns}
-              groups={[{ id: "studies", label: "研究", rows }]}
+              groups={tableGroups}
               rowLabel={(row) => row.title}
-              showGroups={false}
+              showGroups={tableGroups.length > 1}
               rowClassName={(row) =>
                 statuses.get(row.id)?.data?.at(-1)?.freshness === "historical"
                   ? "is-historical"
