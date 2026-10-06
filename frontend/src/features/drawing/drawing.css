@@ -52,7 +52,7 @@
 .drawing-overview-window{fill:none;stroke:var(--text);stroke-width:1;pointer-events:none}
 .drawing-detail-frame{fill:var(--panel);stroke:var(--border);stroke-width:1;rx:var(--radius-surface)}
 .drawing-detail-leader{fill:none;stroke:var(--text-secondary);stroke-width:.75;stroke-dasharray:5 4}
-.drawing-object-tools{display:flex;gap:var(--space-1);padding:var(--space-1);border-bottom:1px solid var(--line);align-items:center;flex-wrap:wrap}
+.drawing-object-tools{display:flex;gap:var(--space-1);align-items:center;flex-wrap:wrap}
 .drawing-object-tools .spacer{flex:1}
 .drawing-error{padding:var(--space-2) var(--space-3);color:var(--error);border-bottom:1px solid var(--line);overflow-wrap:anywhere}
 .drawing-stage[data-tool=pan] .drawing-svg{cursor:grab}

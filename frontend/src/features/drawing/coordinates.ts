@@ -23,7 +23,9 @@ export function zoomView(view: DrawingView, factor: number, pointer: ScreenPoint
   return { ...next, x: view.x + anchor.x - after.x, z: view.z + anchor.z - after.z };
 }
 
-export function fitBounds(bounds: { left: number; right: number; bottom: number; top: number }, size: PixelSize): DrawingView {
-  const width = Math.max(bounds.right - bounds.left, (bounds.top - bounds.bottom) * size.width / Math.max(1, size.height), .02);
-  return { x: (bounds.left + bounds.right) / 2, z: (bounds.top + bounds.bottom) / 2, widthM: width * 1.32 };
+/** 全览：对象四周各留固定像素边距（放得下标注文字），矮画布里也不会把对象挤到边上。 */
+export function fitBounds(bounds: { left: number; right: number; bottom: number; top: number }, size: PixelSize, marginPx = Math.min(56, size.height / 5)): DrawingView {
+  const usableWidth = Math.max(1, size.width - marginPx * 2), usableHeight = Math.max(1, size.height - marginPx * 2);
+  const metresPerPixel = Math.max((bounds.right - bounds.left) / usableWidth, (bounds.top - bounds.bottom) / usableHeight, .02 / Math.max(1, size.width));
+  return { x: (bounds.left + bounds.right) / 2, z: (bounds.top + bounds.bottom) / 2, widthM: metresPerPixel * size.width };
 }

@@ -162,6 +162,8 @@
 .status-dot { width: var(--space-2); height: var(--space-2); border-radius: var(--radius-pill); }
 .status-dot.is-ok { background: var(--success); }
 .status-dot.is-off { background: var(--control-border); }
+.status-dot.is-error { background: var(--error); }
+.status-dot.is-running { background: var(--attention); }
 .plugin-detail { display: flex; flex-direction: column; gap: var(--space-8); min-width: 0; }
 .plugin-hero { display: flex; gap: var(--space-6); align-items: flex-start; }
 .plugin-hero img { width: calc(var(--space-12) * 3); height: calc(var(--space-12) * 3); border-radius: var(--radius-panel); object-fit: cover; flex: none; }
@@ -301,3 +303,49 @@
 .project-summary dt { color: var(--text-secondary); font-size: var(--text-note); }
 .project-summary dd { font-size: var(--text-heading); font-weight: var(--weight-strong); font-variant-numeric: tabular-nums; }
 .project-summary .project-summary-models dd { font-size: var(--text-body); font-weight: var(--weight-normal); line-height: 1.6; padding-top: var(--space-1); }
+
+/* 工程工作窗口：上为模型画布，下为结果停靠栏，右为检查器（专业软件布局，一屏完成建模—计算—看结果） */
+.main-content:has(> .workbench) { padding: 0; overflow: hidden; display: flex; }
+.workbench { flex: 1; display: grid; grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr); min-width: 0; min-height: 0; }
+.workbench-no-canvas, .workbench[data-dock="max"] { grid-template-rows: minmax(0, 1fr); }
+.workbench[data-dock="max"] .workbench-canvas { display: none; }
+.workbench-canvas { display: flex; flex-direction: column; gap: var(--space-1); min-height: 0; padding: var(--space-2) var(--space-2) 0; border-bottom: 1px solid var(--line); }
+.workbench-views { display: flex; gap: var(--space-1); flex: none; }
+.workbench-views button { display: inline-flex; align-items: center; gap: var(--space-1); height: var(--control-compact); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--text-note); cursor: pointer; }
+.workbench-views button:hover { background: var(--hover); color: var(--text); }
+.workbench-views button[aria-pressed="true"] { background: var(--fill); color: var(--text); font-weight: var(--weight-strong); }
+.workbench-canvas .study-drawing { flex: 1; min-height: 0; gap: 0; }
+.workbench-canvas .study-drawing .drawing-frame, .workbench-canvas .study-drawing .cad-viewport { height: 100%; min-height: 0; border: 0; }
+.workbench-canvas .drawing-overview, .workbench-canvas .drawing-status { display: none; }
+.workbench-dock { display: flex; flex-direction: column; min-height: 0; }
+.workbench-dock-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: 0 var(--space-3) 0 var(--space-4); border-bottom: 1px solid var(--line); flex: none; background: var(--panel); }
+.workbench-dock-body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-4) var(--space-6) var(--space-6); }
+
+/* 检查器 */
+.workbench-inspector { display: flex; flex-direction: column; min-height: 0; overflow: auto; border-left: 1px solid var(--line); background: var(--panel); }
+.inspector-note { margin: var(--space-3) var(--space-4) 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-surface); background: var(--fill); color: var(--attention); font-size: var(--text-note); line-height: 1.6; }
+.inspector-block { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border-bottom: 1px solid var(--line); }
+.inspector-block > header { display: flex; align-items: center; gap: var(--space-2); }
+.inspector-block > header h2 { font-size: var(--text-body); font-weight: var(--weight-strong); }
+.inspector-block > header .icon { color: var(--text-secondary); }
+.inspector-empty { color: var(--text-secondary); line-height: 1.6; }
+.inspector-list { display: flex; flex-direction: column; margin: 0; }
+.inspector-list > div { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-1) 0; }
+.inspector-list dt { color: var(--text-secondary); }
+.inspector-list dd { display: inline-flex; align-items: center; gap: var(--space-1); text-align: right; font-variant-numeric: tabular-nums; }
+.inspector-fields, .inspector-conditions .input-form-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-3); }
+.inspector-conditions .input-module { gap: var(--space-3); padding: 0; }
+.inspector-conditions .input-section { gap: var(--space-2); padding: 0; border: 0; }
+.inspector-conditions .input-section h2 { font-size: var(--text-note); color: var(--text-secondary); font-weight: var(--weight-normal); }
+
+/* 侧栏工程树：工程 → 模型 / 计算 / 交付，每类节点有图标 */
+.tree-caption .icon, .tree-row .icon, .tree-group .icon { flex: none; width: var(--space-4); height: var(--space-4); color: var(--text-secondary); }
+.tree-caption { align-items: center; }
+.tree-group { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-2) var(--space-1); color: var(--text-secondary); font-size: var(--text-note); }
+.tree-group .icon { width: var(--space-3); height: var(--space-3); }
+.tree-leaf { gap: var(--space-2); padding-left: var(--space-3); }
+.tree-leaf[aria-current] .icon { color: var(--text); }
+.tree-add { width: 100%; border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--text-note); cursor: pointer; text-align: left; }
+.tree-add:hover { color: var(--text); }
+.tree-count { flex: none; color: var(--text-secondary); font-size: var(--text-note); font-weight: var(--weight-normal); font-variant-numeric: tabular-nums; }
+.tree-row .status-dot { flex: none; }

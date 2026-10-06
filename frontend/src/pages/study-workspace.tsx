@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { workspaces } from "@/api/research";
+import { methodCatalog, workspaces } from "@/api/research";
 import { displayName } from '@/lib/display-names';
-import { Link, Navigate } from "@tanstack/react-router";
+import { Navigate } from "@tanstack/react-router";
 import { studyModuleRoute, studyRootRoute } from "@/router";
 import { useStudy } from "@/components/study-provider";
 import { AppShell } from "@/components/app-shell";
@@ -15,8 +15,8 @@ import { isVersionStale } from '@/lib/version-status';
 import { missingInputDestination, focusPreflightField } from "@/lib/missing-input";
 import { StatusMark } from "@/components/status-mark";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
-import { PropertyPanel } from "@/components/property-panel";
-import { CheckArea } from "@/components/check-area";
+import { WorkbenchInspector } from "@/components/workbench-inspector";
+import { StudyDrawing } from "@/components/study-drawing";
 import {
   StudySelection,
   selectedProperties,
@@ -46,14 +46,7 @@ import { StudyBatch } from "@/components/study-batch";
 import { StudyCompare } from "@/components/study-compare";
 import { StudyPhysicsComparison } from "@/components/study-physics-comparison";
 import { StudySimulation } from "@/components/study-simulation";
-import {
-  displayed,
-  fieldSource,
-  savedDomain,
-  type DomainDocument,
-} from "@/lib/domain-fields";
-import { sourceKind } from "@/lib/selection-view";
-import { formatNumber } from "@/lib/format";
+import { savedDomain, type DomainDocument } from "@/lib/domain-fields";
 import type { StudyDefinition } from "@/api/research";
 
 import { moduleDefinitions } from "./study-modules";
@@ -83,16 +76,21 @@ export function StudyWorkspace() {
   const theme = search.theme;
   const projectIndex = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
   const [selected, setSelected] = useState<SelectionRow | undefined>();
-  const [collapsed, setCollapsed] = useState(true);
+  // 以曲线、场图为主的计算默认放大结果栏；选型、载流量默认模型与结果各半
+  const plotFirst = (key: string) => ["sweep", "batch", "method-compare", "simulation", "hybrid", "thermal-field", "electrothermal", "transient"].includes(key);
+  const [dockMax, setDockMax] = useState(plotFirst(module));
+  const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
   const [edit, setEdit] = useState(false);
   const [records, setRecords] = useState(false);
   const [inputSelection, setInputSelection] = useState<
     InputSelection | undefined
   >();
   useEffect(() => {
+    setDockMax(plotFirst(module));
+  }, [module]);
+  useEffect(() => {
     setInputSelection(undefined);
     setSelected(undefined);
-    setCollapsed(true);
   }, [module, search.run]);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -153,35 +151,8 @@ export function StudyWorkspace() {
     historical: snapshotInput,
     onSelect: (value: InputSelection) => {
       setInputSelection(value);
-      setCollapsed(false);
     },
   };
-  const inputGroups =
-    inputSelection?.fields && inputDocument
-      ? [
-          {
-            label: "参数",
-            items: inputSelection.fields.map((spec) => {
-              const source = fieldSource(inputDocument, spec.path),
-                pending = snapshotInput
-                  ? undefined
-                  : context.domainDraft?.fields[spec.path];
-              return {
-                label: spec.label,
-                value: pending
-                  ? pending.value
-                  : formatNumber(
-                      displayed(inputDocument, spec),
-                      spec.precision ?? 1,
-                    ),
-                unit: spec.unit,
-                source: pending ? ("user" as const) : sourceKind(source),
-                sourceDetail: text(source.reference),
-              };
-            }),
-          },
-        ]
-      : inputSelection?.groups || [];
   const provenance = optionalRecord(
     optionalRecord(
       study.definition.input_source === "study"
@@ -192,6 +163,17 @@ export function StudyWorkspace() {
   const demo = Object.values(provenance).some(
     (value) => optionalRecord(value).kind === "demo",
   );
+  // 工作窗口：模型画布（历史运行显示当时保存的模型）、右侧检查器的方法信息
+  const canvasDocument = (search.run ? (run ? savedDomain(run) : undefined) : context.domain) as DomainDocument | undefined;
+  const showCanvas = module !== "report" && !!canvasDocument && study.definition.input_source !== "study";
+  const canvasView = search.view || "section";
+  const methodPin = optionalRecord(study.definition.method);
+  const pluginEntry = (catalog.data || []).map(optionalRecord).find((row) => text(optionalRecord(row.method).plugin_id) === text(methodPin.plugin_id));
+  const methodInfo = {
+    name: text(pluginEntry?.name) || displayName(text(methodPin.plugin_id)),
+    version: text(methodPin.version),
+    hpc: text(optionalRecord(pluginEntry?.execution_policy).backend) === "slurm",
+  };
   const status = context.dirty
     ? "draft"
     : context.runError
@@ -203,36 +185,19 @@ export function StudyWorkspace() {
           : "saved";
   const title = draft?.title || study.title;
   const projectName = text((projectIndex.data || []).find((space) => text(space.id) === study.workspace)?.name);
-  // 侧栏按“输入 → 计算 → 扩展分析 → 交付”分组：计算 = 本研究已配置的方法，扩展分析 = 尚未配置、可从这里开始的模块
-  const inputKeys = ["cable", "section", "conditions"];
-  const configured = (key: string) => key === calculatedModule || !!study.definition.modules?.[key];
-  const groups: [string, string[]][] = [
-    ["输入", enabled.filter((key) => inputKeys.includes(key))],
-    ["计算", enabled.filter((key) => !inputKeys.includes(key) && key !== "report" && configured(key))],
-    ["扩展分析", enabled.filter((key) => !inputKeys.includes(key) && key !== "report" && !configured(key))],
-    ["交付", enabled.filter((key) => key === "report")],
-  ];
-  const sidebar = groups.filter(([, keys]) => keys.length).map(([label, keys]) => (
-    <div key={label} className="sidebar-group" role="group" aria-label={label}>
-      <span className="sidebar-group-label">{label}</span>
-      {keys.map((key) => (
-        <Link
-          key={key}
-          className="module-item"
-          to="/studies/$sid/$module/$tab"
-          params={{ sid, module: key, tab: moduleDefinitions[key].tabs[0].id }}
-          search={{ ...search, workspace: study.workspace }}
-          aria-current={key === module ? "page" : undefined}
-        >
-          <Icon name={moduleDefinitions[key].icon} />
-          {moduleDefinitions[key].label}
-        </Link>
-      ))}
-    </div>
-  ));
   function currentSearch() {
     return { ...search, workspace: study.workspace };
   }
+  // 电缆、截面、工况不再是单独页面：并入当前计算的工作窗口，画布切到对应视图
+  if (inputModule)
+    return (
+      <Navigate
+        to="/studies/$sid/$module/$tab"
+        params={{ sid, module: calculatedModule, tab: studyEntryTab(calculatedModule) }}
+        search={{ ...search, workspace: study.workspace, view: module === "cable" ? "cable" : "section" }}
+        replace
+      />
+    );
   return (
     <>
       <Tabs
@@ -381,77 +346,16 @@ export function StudyWorkspace() {
               )}
             </>
           }
-          sidebar={<>{sidebar}</>}
-          tabs={
-            <TabsList aria-label={`${definition.label}页签`}>
-              {definition.tabs.map((item) => (
-                <TabsTrigger key={item.id} value={item.id}>
-                  {item.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          }
-          property={
-            module === "selection" ||
-            inputModule ||
-            [
-              "ampacity",
-              "thermal-field",
-              "transient",
-              "sheath-losses",
-              "electrothermal",
-              "sweep",
-              "batch",
-            ].includes(module) ? (
-              <PropertyPanel
-                title={
-                  module === "selection"
-                    ? selectedRow?.name || "候选属性"
-                    : inputSelection?.title || "对象属性"
-                }
-                groups={
-                  module === "selection"
-                    ? selectedProperties(selectedRow)
-                    : inputGroups
-                }
-                collapsed={collapsed}
-                empty={module === "selection" ? !selectedRow : !inputSelection}
-                onToggle={() => setCollapsed(!collapsed)}
-              />
-            ) : undefined
-          }
-          propertyCollapsed={collapsed}
-          checks={
-            <CheckArea
-              summary={
-                view
-                  ? `候选 ${view.rows.length} 项 · ${view.rows.filter((row) => row.verdict === "inapplicable").length} 项不适用${historical ? " · 历史" : ""}`
-                  : draft
-                    ? "研究有未保存修改"
-                    : "已保存研究"
-              }
-            >
-              <div className="check-list">
-                <span>
-                  {demo
-                    ? "敷设与部分工况采用模板，应按实际条件核对。"
-                    : "输入来自所选研究及固定型号版本。"}
-                </span>
-                {selectedRow && selectedRow.dependencies.length > 0 && (
-                  <span>
-                    依赖工程师给定参数：{selectedRow.dependencies.join("、")}
-                  </span>
-                )}
-                <Button
-                  variant="ghost"
-                  size="compact"
-                  onClick={() => setEdit(true)}
-                >
-                  研究名称
-                </Button>
-              </div>
-            </CheckArea>
-          }
+          property={module === "report" ? undefined : (
+            <WorkbenchInspector
+              document={canvasDocument}
+              historical={!!search.run}
+              selection={inputSelection}
+              candidate={module === "selection" && selectedRow ? { title: selectedRow.name, groups: selectedProperties(selectedRow) } : undefined}
+              method={methodInfo}
+              demo={demo}
+            />
+          )}
           onGlobalNavigate={(label) =>
             label === "首页"
               ? navigate({ to: "/", search: { theme } })
@@ -471,7 +375,31 @@ export function StudyWorkspace() {
             })
           }
         >
-          <TabsContent value={tab}>
+          <div className={`workbench ${showCanvas ? "" : "workbench-no-canvas"}`} data-dock={dockMax ? "max" : undefined}>
+          {showCanvas && (
+            <section className="workbench-canvas" aria-label="模型">
+              <div className="workbench-views" role="group" aria-label="模型视图">
+                {([["section", "object/section", "敷设截面"], ["cable", "object/cable", "电缆截面"], ["three", "result/field", "三维"]] as const).map(([value, icon, label]) => (
+                  <button key={value} type="button" aria-pressed={canvasView === value} onClick={() => navigate({ search: { ...currentSearch(), view: value }, replace: true })}>
+                    <Icon name={icon} />{label}
+                  </button>
+                ))}
+              </div>
+              <StudyDrawing document={canvasDocument!} historical={!!search.run} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} onSelect={inputProps.onSelect} />
+            </section>
+          )}
+          <section className="workbench-dock" aria-label="计算结果">
+            <div className="workbench-dock-bar">
+              <TabsList aria-label={`${definition.label}页签`}>
+                {definition.tabs.map((item) => (
+                  <TabsTrigger key={item.id} value={item.id}>
+                    {item.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+              {showCanvas && <IconButton variant="ghost" icon={dockMax ? "action/chevron-down" : "action/chevron-up"} label={dockMax ? "还原结果面板" : "放大结果面板"} onClick={() => setDockMax(!dockMax)} />}
+            </div>
+          <TabsContent value={tab} className="workbench-dock-body">
           {!!context.saveError && (
             <ErrorState
               title="保存失败，编辑保留"
@@ -568,8 +496,7 @@ export function StudyWorkspace() {
                 selectedId={selectedRow?.id}
                 onSelect={(row) => {
                   setSelected(row);
-                  setCollapsed(false);
-                }}
+                            }}
                 dirty={context.dirty}
               />
             ) : (
@@ -616,6 +543,8 @@ export function StudyWorkspace() {
             />
           )}
           </TabsContent>
+          </section>
+          </div>
         </AppShell>
       </Tabs>
       <Dialog

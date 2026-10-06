@@ -97,14 +97,15 @@ export function LayingSection(props: LayingSectionProps) {
       <Select label="模板" value={template} options={(props.templates || defaultTemplates).map(option => ({ value: option.id, label: option.label, disabled: option.disabled }))}
         onChange={setTemplate} disabled={!editable || !props.onTemplateRequest} />
       <Button size="compact" onClick={() => void applyTemplate()} disabled={!editable || !props.onTemplateRequest} loading={busy}>应用模板</Button>
-    </div>
-    <div className="drawing-object-tools" role="toolbar" aria-label="所选敷设对象操作">
-      <span className="drawing-selected-label">{selected?.id || '未选择对象'}</span>
-      {(['duplicate', 'delete', 'parallel', 'trefoil', 'align'] as const).map(command => <Button key={command} size="compact"
-        disabled={!selected || !editable || !props.onObjectCommand || !!props.objectCommands && !props.objectCommands.includes(command)
-          || ['parallel', 'trefoil'].includes(command) && selected.kind !== 'cable'}
-        onClick={() => props.onObjectCommand?.(command, selected)}>{({ duplicate: '复制', delete: '删除', parallel: '平排', trefoil: '品字', align: '对齐' })[command]}</Button>)}
       <span className="spacer" />
+      {/* 对象操作只在选中对象时出现，避免一排灰按钮占位 */}
+      {selected && <div className="drawing-object-tools" role="toolbar" aria-label="所选敷设对象操作">
+        <span className="drawing-selected-label">{selected.id}</span>
+        {(['duplicate', 'delete', 'parallel', 'trefoil', 'align'] as const).map(command => <Button key={command} size="compact"
+          disabled={!editable || !props.onObjectCommand || !!props.objectCommands && !props.objectCommands.includes(command)
+            || ['parallel', 'trefoil'].includes(command) && selected.kind !== 'cable'}
+          onClick={() => props.onObjectCommand?.(command, selected)}>{({ duplicate: '复制', delete: '删除', parallel: '平排', trefoil: '品字', align: '对齐' })[command]}</Button>)}
+      </div>}
       <IconButton icon="action/undo" label="撤销 Ctrl+Z" disabled={!props.canUndo || !props.onCommand || state === 'historical'} onClick={() => props.onCommand?.('undo')} />
       <IconButton icon="action/redo" label="重做 Ctrl+Y" disabled={!props.canRedo || !props.onCommand || state === 'historical'} onClick={() => props.onCommand?.('redo')} />
     </div>

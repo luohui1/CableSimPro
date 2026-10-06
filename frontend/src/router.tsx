@@ -108,6 +108,7 @@ export const studyRootRoute = createRoute({
     generate?: boolean;
     dataset?: string;
     compare?: string;
+    view?: "section" | "cable" | "three";
   } => ({
     theme: search.theme === "dark" ? ("dark" as const) : ("light" as const),
     workspace: typeof search.workspace === "string" ? search.workspace : "",
@@ -117,6 +118,8 @@ export const studyRootRoute = createRoute({
     generate: search.generate === true || search.generate === "true",
     dataset: typeof search.dataset === "string" ? search.dataset : "",
     compare: typeof search.compare === "string" ? search.compare : "",
+    // 工作窗口中间画布显示的模型视图；不写时由计算类型决定
+    view: search.view === "cable" || search.view === "three" || search.view === "section" ? search.view : undefined,
   }),
   loaderDeps: ({ search }) => ({ workspace: search.workspace, run: search.run }),
   // 悬停或进入前并行预取研究、工程和运行；失败交给页面的错误状态。
