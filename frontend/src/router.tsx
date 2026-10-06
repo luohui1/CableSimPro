@@ -15,6 +15,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { ShellLayout, RouteSkeleton } from "./components/shell-layout";
 import { queryClient } from "./lib/query-client";
 import { prefetchStudy } from "./lib/study-queries";
+import { EmptyState } from "./components/states";
 const SelectionPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pages/selection-page'), 'SelectionPage') : undefined;
 const GalleryPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pages/gallery-page'), 'GalleryPage') : undefined;
 const LibraryPage = lazyRouteComponent(() => import('./pages/library-page'), 'LibraryPage');
@@ -44,12 +45,10 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   // 常驻外壳：侧栏只挂载一次，换页只替换右侧内容面板。
   component: ShellLayout,
   notFoundComponent: () => (
-    <main className="not-found">
-      <h1>页面不存在</h1>
-      <Link to="/studies" search={{ theme: "light" }}>
-        返回研究列表
-      </Link>
-    </main>
+    <section className="work-panel not-found">
+      <EmptyState art="no-results" title="页面不存在" description="链接可能已失效，或对象已被删除。"
+        action={<Link className="button button-secondary button-compact" to="/studies" search={{ theme: preferences().theme }}>返回研究列表</Link>} />
+    </section>
   ),
 });
 const libraryRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library", validateSearch: themeSearch, component: LibraryPage });

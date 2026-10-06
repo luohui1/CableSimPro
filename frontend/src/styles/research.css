@@ -211,6 +211,8 @@
 .study-drawing .drawing-frame,
 .study-drawing .cad-viewport {
   min-height: calc(var(--space-12) * 8);
+  /* 画布占满一屏可用高度（顶栏、页签、检查栏与页头之外），不随内容变矮 */
+  height: calc(100dvh - var(--space-12) * 6.5);
 }
 .record-drawer {
   position: absolute;

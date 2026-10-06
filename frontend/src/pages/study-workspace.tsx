@@ -203,10 +203,13 @@ export function StudyWorkspace() {
           : "saved";
   const title = draft?.title || study.title;
   const projectName = text((projectIndex.data || []).find((space) => text(space.id) === study.workspace)?.name);
-  // 侧栏按“输入 → 计算 → 交付”分三组，组内保持模块启用顺序
+  // 侧栏按“输入 → 计算 → 扩展分析 → 交付”分组：计算 = 本研究已配置的方法，扩展分析 = 尚未配置、可从这里开始的模块
+  const inputKeys = ["cable", "section", "conditions"];
+  const configured = (key: string) => key === calculatedModule || !!study.definition.modules?.[key];
   const groups: [string, string[]][] = [
-    ["输入", enabled.filter((key) => ["cable", "section", "conditions"].includes(key))],
-    ["计算", enabled.filter((key) => !["cable", "section", "conditions", "report"].includes(key))],
+    ["输入", enabled.filter((key) => inputKeys.includes(key))],
+    ["计算", enabled.filter((key) => !inputKeys.includes(key) && key !== "report" && configured(key))],
+    ["扩展分析", enabled.filter((key) => !inputKeys.includes(key) && key !== "report" && !configured(key))],
     ["交付", enabled.filter((key) => key === "report")],
   ];
   const sidebar = groups.filter(([, keys]) => keys.length).map(([label, keys]) => (
