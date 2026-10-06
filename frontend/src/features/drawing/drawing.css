@@ -71,3 +71,7 @@
 .drawing-layer-numbers circle.drawing-layer-anchor{fill:var(--text-secondary);stroke:none}
 .drawing-layer-numbers g.is-selected path{stroke:var(--text);stroke-width:1.25}
 .drawing-layer-numbers g.is-selected circle.drawing-layer-anchor{fill:var(--text)}
+.drawing-annotation rect{fill:var(--panel);stroke:var(--line)}
+.drawing-annotation text{fill:var(--text);font-size:var(--text-note);font-variant-numeric:tabular-nums}
+.drawing-annotation.is-emphasis rect{fill:var(--attention);stroke:var(--attention)}
+.drawing-annotation.is-emphasis text{fill:var(--panel);font-weight:var(--weight-strong)}

@@ -86,11 +86,13 @@ export function StudyDrawing({
   historical,
   kind,
   onSelect,
+  annotations,
 }: {
   document: DomainDocument;
   historical: boolean;
   kind: "cable" | "section" | "scene";
   onSelect: (selection: InputSelection) => void;
+  annotations?: Record<string, { text: string; emphasis?: boolean }>;
 }) {
   const context = useStudy();
   const current = useRef(context);
@@ -240,6 +242,7 @@ export function StudyDrawing({
       ) : (
         <LayingSection
           key={section?.id}
+          annotations={annotations}
           document={document}
           sectionId={section?.id || ""}
           state={historical ? "historical" : section ? "success" : "empty"}

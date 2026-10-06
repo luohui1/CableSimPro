@@ -17,6 +17,7 @@ import { StatusMark } from "@/components/status-mark";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { WorkbenchInspector } from "@/components/workbench-inspector";
 import { StudyDrawing } from "@/components/study-drawing";
+import { conductorAnnotations } from "@/lib/result-annotations";
 import {
   StudySelection,
   selectedProperties,
@@ -167,6 +168,8 @@ export function StudyWorkspace() {
   const canvasDocument = (search.run ? (run ? savedDomain(run) : undefined) : context.domain) as DomainDocument | undefined;
   const showCanvas = module !== "report" && !!canvasDocument && study.definition.input_source !== "study";
   const canvasView = search.view || "section";
+  // 运行后把导体温度直接标在截面电缆上：选型取当前选中或推荐的候选工况
+  const annotations = run && !pendingRun ? conductorAnnotations(run, module === "selection" ? selectedRow?.id || view?.recommendation?.id : undefined) : undefined;
   const methodPin = optionalRecord(study.definition.method);
   const pluginEntry = (catalog.data || []).map(optionalRecord).find((row) => text(optionalRecord(row.method).plugin_id) === text(methodPin.plugin_id));
   const methodInfo = {
@@ -385,7 +388,7 @@ export function StudyWorkspace() {
                   </button>
                 ))}
               </div>
-              <StudyDrawing document={canvasDocument!} historical={!!search.run} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} onSelect={inputProps.onSelect} />
+              <StudyDrawing document={canvasDocument!} historical={!!search.run} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} onSelect={inputProps.onSelect} annotations={annotations} />
             </section>
           )}
           <section className="workbench-dock" aria-label="计算结果">

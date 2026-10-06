@@ -37,6 +37,8 @@ export interface CableSectionProps {
   onCommand?: (command: DrawingCommand) => void;
   className?: string;
   label?: string;
+  /** 运行结果标注：电缆放置 id → 文本（如导体温度），emphasis 标出最热的一根。只显示，不参与编辑。 */
+  annotations?: Readonly<Record<string, { text: string; emphasis?: boolean }>>;
 }
 
 export interface SectionEdit {
@@ -71,4 +73,6 @@ export interface LayingSectionProps {
   showDimensions?: boolean;
   className?: string;
   label?: string;
+  /** 运行结果标注：电缆放置 id → 文本（如导体温度），emphasis 标出最热的一根。只显示，不参与编辑。 */
+  annotations?: Readonly<Record<string, { text: string; emphasis?: boolean }>>;
 }

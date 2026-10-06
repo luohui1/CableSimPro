@@ -127,6 +127,16 @@ export function LayingSection(props: LayingSectionProps) {
                 <SectionGrid view={camera} size={size} />
                 <SectionObjects section={displayed} geometry={currentGeometry} view={camera} size={size} selected={selected}
                   onSelect={props.onSelectionChange} onPointer={gesture.begin} editable={editable} />
+                {props.annotations && [...currentGeometry.cables].sort((a, b) => a.x - b.x).filter(cable => props.annotations?.[cable.id]).map((cable, index) => {
+                  // 相邻电缆的标注一下一上错开（上方有对象标签，留出距离），排管间距小时也不重叠
+                  const note = props.annotations![cable.id];
+                  const below = index % 2 === 0;
+                  const at = worldToScreen({ x: cable.x, z: below ? cable.z - cable.shape.radiusM : cable.z + cable.shape.radiusM }, camera, size);
+                  const width = note.text.length * 8 + 16;
+                  return <g key={cable.id} className={`drawing-annotation ${note.emphasis ? 'is-emphasis' : ''}`} transform={`translate(${at.x} ${below ? at.y + 40 : at.y - 44})`}>
+                    <rect x={-width / 2} y={-11} width={width} height={22} rx={11} /><text textAnchor="middle" dominantBaseline="central">{note.text}</text>
+                  </g>;
+                })}
                 {gesture.guides && <path className="drawing-snap-guide" d={`M0 ${worldToScreen(gesture.guides, camera, size).y}H${size.width}M${worldToScreen(gesture.guides, camera, size).x} 0V${size.height}`} />}
                 <SectionDimensions dimensions={dimensions} geometry={currentGeometry} view={camera} size={size} editable={editable} onEdit={setEditing} />
                 {selected?.kind === 'cable' && currentGeometry.cables.find(cable => cable.id === selected.id) && <CableDetail
