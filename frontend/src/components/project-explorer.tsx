@@ -94,7 +94,7 @@ export function ProjectExplorer({ workspaceId, projectName, document, activeStud
         const module = rootModule(study.definition), kind = calculationKind(study, plugins);
         const name = head && study.title.startsWith(head + " · ") ? study.title.slice(head.length + 3) : study.title;
         return <Link key={study.id} className="explorer-item explorer-calc" {...at(study, module, studyEntryTab(module))} aria-current={study.id === activeStudy ? "page" : undefined} title={study.title}>
-          <Icon name={kind.icon} /><span><b>{name}</b><small>{kind.label}{kind.hpc ? " · 超算" : ""}</small></span><RunDot study={study} />
+          <Icon name={kind.icon} /><span><b>{name}</b><small>{study.task || kind.label}{kind.hpc ? " · 超算" : ""}</small></span><RunDot study={study} />
         </Link>;
       })}
       <button type="button" className="explorer-item explorer-add" onClick={onCreate}><Icon name="action/add" /><span>新建研究</span></button>
