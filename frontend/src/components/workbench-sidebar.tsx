@@ -18,11 +18,12 @@ type Slot = (element: HTMLElement | null) => void;
  * 当前对象的模块导航由页面经插槽（onSlot）以 portal 放入它所在的树节点下。
  */
 export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse }: { theme: 'light' | 'dark'; onTheme: () => void; onSlot: Slot; collapsed: boolean; onCollapse: () => void }) {
-  const [mode, setMode] = useState('workbench');
   const [create, setCreate] = useState(false);
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { workspace?: string };
   const pathname = useLocation({ select: location => location.pathname });
+  const mode = pathname.startsWith('/agent') ? 'agent' : 'workbench';
+  const setMode = (next: string) => { if (next !== mode) void navigate({ to: next === 'agent' ? '/agent' : '/studies', search: { theme } }); };
   const spaces = useQuery({ queryKey: ['workspace-index'], queryFn: ({ signal }) => workspaces(signal) });
   const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal) });
   const studies = useQuery({ queryKey: ['study-index'], queryFn: ({ signal }) => studyIndex(signal) });
@@ -44,16 +45,14 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
       <ToggleGroupItem value="workbench">工作台</ToggleGroupItem><ToggleGroupItem value="agent">Agent</ToggleGroupItem>
     </ToggleGroup>
     <DropdownMenu>
-      <DropdownMenuTrigger asChild><Button variant="primary" className="sidebar-new"><Icon name="action/add" /><span>新建</span></Button></DropdownMenuTrigger>
+      <DropdownMenuTrigger asChild><Button variant="secondary" className="sidebar-new"><Icon name="action/add" /><span>新建</span></Button></DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         <DropdownMenuItem onSelect={() => setCreate(true)}>新建研究</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => void navigate({ to: '/types', search: { theme } })}>新建型号</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
     <div className="sidebar-scroll">
-      {mode === 'agent'
-        ? <section className="sidebar-agent" aria-label="Agent 任务"><Icon name="agent/agent" /><span>Agent 尚未连接模型，任务会按工程列在这里。</span></section>
-        : <>
+      <>
           <div className="tree-caption">工程</div>
           {spaces.isPending ? <div className="tree-empty">读取中</div> : spaces.isError ? <div className="tree-empty">工程读取失败</div> : projects.map(project => (
             <ProjectNode key={text(project.id)} id={text(project.id)} name={text(project.name) || '未命名工程'} theme={theme}
@@ -72,7 +71,7 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
             </div>;
           })}
           {inGallery && <nav ref={onSlot} className="sidebar-modules" aria-label="陈列导航" />}
-        </>}
+      </>
     </div>
     <nav className="sidebar-foot" aria-label="资源">
       <Link className="module-item" to="/library" search={{ theme }} aria-current={inLibrary ? 'page' : undefined}><Icon name="nav/library" /><span>库</span></Link>

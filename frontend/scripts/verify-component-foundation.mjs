@@ -23,7 +23,7 @@ try{verification:{
   assert.equal(await page.getByText('读取中',{exact:true}).count(),0,'Runs must resolve or give an error within the timeout');
   await variants('研究列表');report.checks.push('运行列表不永久读取中');console.log('研究列表完成');
   if(process.env.COMPONENT_BUNDLE_ONLY==='1')break verification;
-  await page.getByRole('radio',{name:'Agent',exact:true}).click();await expect(page.getByText('待接入',{exact:true})).toBeVisible();await page.getByRole('radio',{name:'工作台',exact:true}).click();
+  await page.getByRole('radio',{name:'Agent',exact:true}).click();await expect(page.locator('[data-page="agent"]')).toBeVisible();await expect(page.getByText('未连接模型',{exact:true}).first()).toBeVisible();await page.getByRole('radio',{name:'工作台',exact:true}).click();await expect(page).toHaveURL(/\/studies/);
   const all=[];for(const w of await request(base,'/api/workspaces'))for(const s of await request(base,`/api/workspaces/${w.id}/studies`))all.push({w,s});
   const single=all.find(({s})=>s.definition.title.includes('城南')&&s.definition.driver.kind==='single');assert.ok(single,'Existing single study');
   const {w,s}=single,prefix=`/api/workspaces/${w.id}/studies/${s.id}`,url=tab=>`/studies/${s.id}/${tab}?workspace=${w.id}`;

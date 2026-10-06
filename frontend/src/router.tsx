@@ -22,6 +22,7 @@ const DocumentsPage = lazyRouteComponent(() => import('./pages/documents-page'),
 const DeliveriesPage = lazyRouteComponent(() => import('./pages/deliveries-page'), 'DeliveriesPage');
 const PluginsPage = lazyRouteComponent(() => import('./pages/plugins-page'), 'PluginsPage');
 const SettingsPage = lazyRouteComponent(() => import('./pages/settings-page'), 'SettingsPage');
+const AgentPage = lazyRouteComponent(() => import('./pages/agent-page'), 'AgentPage');
 const ReproductionPage = lazyRouteComponent(() => import('./pages/reproduction-page'), 'ReproductionPage');
 const StudyProvider = lazyRouteComponent(() => import('./components/study-provider'), 'StudyProvider');
 const StudyWorkspace = lazyRouteComponent(() => import('./pages/study-workspace'), 'StudyWorkspace');
@@ -57,6 +58,7 @@ const documentsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/li
 const pluginsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/plugins", validateSearch: themeSearch, component: PluginsPage });
 const pluginDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/plugins/$pid", validateSearch: themeSearch, component: PluginsPage });
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings", validateSearch: themeSearch, component: SettingsPage });
+const agentRoute = createRoute({ getParentRoute: () => rootRoute, path: "/agent", validateSearch: themeSearch, component: AgentPage });
 const reproductionSearch = (search: Record<string, unknown>) => ({ ...themeSearch(search), snapshot: typeof search.snapshot === "string" ? search.snapshot : "" });
 const reproductionsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/reproductions", validateSearch: reproductionSearch, component: ReproductionPage });
 const reproductionDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/reproductions/$target/$tab", validateSearch: reproductionSearch, beforeLoad: ({ params }) => { if (!["results", "overlay", "convergence", "sources", "scope"].includes(params.tab)) throw notFound(); }, component: ReproductionPage });
@@ -170,7 +172,7 @@ const sampleEntryRoute = createRoute({
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     homeRoute,
-    libraryRoute, documentsRoute, deliveriesRoute, pluginsRoute, pluginDetailRoute, settingsRoute,
+    libraryRoute, documentsRoute, deliveriesRoute, pluginsRoute, pluginDetailRoute, settingsRoute, agentRoute,
     reproductionsRoute, reproductionDetailRoute,
     simulationListRoute,
     ...createTypeRoutes(rootRoute),
