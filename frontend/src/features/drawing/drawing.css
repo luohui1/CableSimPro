@@ -68,3 +68,6 @@
   .laying-section>.drawing-overview svg{width:calc(var(--space-12)*3);height:calc(var(--space-12)*1.5);margin-left:auto}
   .laying-section>.drawing-overview .drawing-overview-label{margin-bottom:0;white-space:nowrap}
 }
+.drawing-layer-numbers circle.drawing-layer-anchor{fill:var(--text-secondary);stroke:none}
+.drawing-layer-numbers g.is-selected path{stroke:var(--text);stroke-width:1.25}
+.drawing-layer-numbers g.is-selected circle.drawing-layer-anchor{fill:var(--text)}

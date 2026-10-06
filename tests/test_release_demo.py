@@ -79,14 +79,14 @@ def test_frontend_routes_and_missing_assets_do_not_mask_api_errors(tmp_path, mon
     monkeypatch.setenv('CABLESIM_REPRODUCTION_LIBRARY', str(tmp_path / 'library'))
     monkeypatch.setenv('CABLESIM_FRONTEND_DIST', str(dist))
     with TestClient(run_demo.create_release_app()) as client:
-        for route in ('/', '/studies/example/sweep/results?workspace=sample'):
+        for route in ('/', '/studies/example/sweep/results?workspace=sample', '/plugins/cablesim.iec60287'):
             response = client.get(route)
             assert response.status_code == 200 and 'id="root"' in response.text
         script = client.get('/assets/app.js')
         assert script.status_code == 200 and 'javascript' in script.headers['content-type']
         assert client.get('/api/health').json()['status'] == 'ok'
         assert client.get('/api/workspaces').json() == []
-        for route in ('/api/not-an-endpoint', '/api', '/assets/missing.js', '/assets/missing', '/gallery', '/gallery/selection'):
+        for route in ('/api/not-an-endpoint', '/api', '/assets/missing.js', '/assets/missing', '/gallery', '/gallery/selection', '/missing.css'):
             response = client.get(route)
             assert response.status_code == 404 and 'id="root"' not in response.text, route
 

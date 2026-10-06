@@ -6,6 +6,7 @@ import type { components } from "@/api/generated/schema";
 import { CatalogShell } from "@/components/catalog-shell";
 import { QueryState } from "@/components/query-state";
 import { DataTable } from "@/components/data-table";
+import { CableShelf } from "@/components/cable-shelf";
 import { PropertyPanel } from "@/components/property-panel";
 import { StatusMark } from "@/components/status-mark";
 import { Toolbar } from "@/components/toolbar";
@@ -88,10 +89,10 @@ export function LibraryPage() {
     release = optionalRecord(detail.data?.release);
   return (
     <CatalogShell
-      title="资源库"
+      title="库"
       active="库"
       status={
-        <span className="muted">{numeric(query.data?.total) ?? 0} 项</span>
+        <span className="muted">其他资源 {numeric(query.data?.total) ?? 0} 项</span>
       }
       actions={
         <Button
@@ -151,6 +152,7 @@ export function LibraryPage() {
         ) : undefined
       }
     >
+      <CableShelf />
       <Toolbar label="资源筛选">
         <label className="search-field">
           检索

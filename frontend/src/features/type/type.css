@@ -8,10 +8,10 @@
 .type-create-fields{display:grid;gap:var(--space-4);padding-block:var(--space-3)}
 .type-notice{padding:var(--space-2) var(--space-4);font-size:var(--text-note);color:var(--text-secondary);border-bottom:1px solid var(--line);overflow-wrap:anywhere}
 .type-notice.is-error{color:var(--error)}
-.type-structure-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr);flex:1;min-height:0;min-width:0}
+.type-structure-split{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);grid-template-rows:minmax(0,1fr);flex:none;height:calc(100dvh - var(--space-12) * 6.5);min-height:calc(var(--space-12) * 9);min-width:0}
 .type-structure-split>.drawing-frame{border:0;border-radius:unset;min-height:0}
 .type-structure-split .drawing-stage{min-height:0}
-.type-structure-split>.table-scroll{border-left:1px solid var(--line);min-height:0}
+.type-structure-split>.table-scroll{border-left:1px solid var(--line);min-height:0;overflow:auto}
 .type-page>.cad-viewport{border:0;border-radius:unset;flex:1}
 .type-name-row{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-3) var(--space-4);border-bottom:1px solid var(--line)}
 .type-name-input{flex:1;max-width:calc(var(--space-12)*12)}

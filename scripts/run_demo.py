@@ -54,6 +54,10 @@ def create_release_app():
     from starlette.exceptions import HTTPException
     from starlette.staticfiles import StaticFiles
 
+    # Only real asset suffixes are files; ids such as /plugins/cablesim.iec60287 are page routes.
+    asset_suffixes = {".js", ".mjs", ".css", ".map", ".json", ".svg", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico",
+                      ".woff", ".woff2", ".ttf", ".wasm", ".mp4", ".txt", ".pdf"}
+
     class Frontend(StaticFiles):
         async def get_response(self, path, scope):
             path = path.replace("\\", "/")
@@ -62,7 +66,7 @@ def create_release_app():
             try:
                 return await super().get_response(path, scope)
             except HTTPException as error:
-                if error.status_code != 404 or Path(path).suffix or path.startswith("assets/"):
+                if error.status_code != 404 or Path(path).suffix.lower() in asset_suffixes or path.startswith("assets/"):
                     raise
                 return await super().get_response("index.html", scope)
 

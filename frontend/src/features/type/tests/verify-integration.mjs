@@ -16,7 +16,7 @@ try {
     result.layouts.push(await checkLayout(page));
     if(width===1366&&theme==='light'){const file=path.join(output,'screenshots/structure-dimensions.png');await page.screenshot({path:file});result.screenshots.push(file);}
   }
-  await page.getByRole('button',{name:'设置',exact:true}).click();await expect(page.locator('[data-page=settings]')).toBeVisible();await page.getByRole('combobox',{name:'主题',exact:true}).click();await page.getByRole('option',{name:'浅色',exact:true}).click();await page.getByRole('button',{name:'保存偏好',exact:true}).click();await expect(page.locator('html')).toHaveAttribute('data-theme','light');await page.goto(`${fixture.url}/types/${workspace.id}/structure/table?theme=light`);
+  await page.getByRole('button',{name:'设置',exact:true}).click();await expect(page.locator('[data-page=settings]')).toBeVisible();await page.getByRole('radio',{name:'浅色',exact:true}).click();await expect(page.locator('html')).toHaveAttribute('data-theme','light');await page.goto(`${fixture.url}/types/${workspace.id}/structure/table?theme=light`);
   await page.getByRole('tab',{name:'外径与用料',exact:true}).click();await page.getByRole('button',{name:'更新结构推导',exact:true}).click();await expect(page.getByRole('dialog',{name:'更新结构推导 · 预检',exact:true})).toBeVisible();await page.getByRole('checkbox',{name:'已核对输入来源与方法适用范围',exact:true}).check();await page.getByRole('button',{name:'确认并运行',exact:true}).click();
   await expect(page.locator('[data-type-page=quantities]')).toHaveAttribute('data-type-state','success',{timeout:90000});await expect(page.getByRole('table',{name:'外径与用料',exact:true})).toBeVisible();
   result.workflows.push('正式主入口、分层尺寸、设置主题、复用运行控件的真实CAD结构推导');
