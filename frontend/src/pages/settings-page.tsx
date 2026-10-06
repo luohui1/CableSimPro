@@ -82,7 +82,7 @@ export function SettingsPage() {
           </dl>
         </Section>
 
-        <Section art="backup" title="数据备份" lead="备份包含整个工程数据库：原件、输入版本、运行结果与计算书。恢复会在下次启动时替换当前数据库，并先保留一份替换前的副本。">
+        <Section art="data" title="数据备份" lead="备份包含整个工程数据库：原件、输入版本、运行结果与计算书。恢复会在下次启动时替换当前数据库，并先保留一份替换前的副本。">
           {restoreState === "pending_restart" && <p className="settings-banner" role="status">已安排恢复，重启宿主后生效。</p>}
           <div className="settings-actions">
             <Button size="compact" variant="primary" loading={createBackup.isPending} onClick={() => createBackup.mutate()}>立即备份</Button>
