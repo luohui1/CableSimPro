@@ -12,7 +12,8 @@ import { ErrorState, LoadingState, EmptyState, StaleBanner } from "./states";
 import { SourceBadge } from "./source-badge";
 import { DataTable } from "./data-table";
 import { moduleConfiguration, withConfiguration } from "@/lib/study-config";
-import { Suspense } from 'react';
+import { entityLabel } from "@/lib/domain-fields";
+import { Suspense, useMemo } from 'react';
 import { contractFields } from '@/lib/heavy-components';
 const ContractFields = contractFields.Component;
 export { rootModule, moduleConfiguration } from "@/lib/study-config";
@@ -32,6 +33,17 @@ export function StudyMethodForm({
   const definition =
     snapshot || context.draft?.definition || context.study.definition;
   const configuration = moduleConfiguration(definition, module);
+  const domain = context.domain;
+  const references = useMemo(() => {
+    if (!domain) return undefined;
+    const option = (id: string) => ({ value: id, label: entityLabel(domain, id) });
+    return {
+      section_id: domain.sections.map((item) => option(item.id)),
+      load_id: domain.load_cases.map((item) => option(item.id)),
+      load_case_id: domain.load_cases.map((item) => option(item.id)),
+      cable_type_id: domain.cable_types.map((item) => option(item.id)),
+    };
+  }, [domain]);
   const contracts = useQuery({
     queryKey: ["input-contracts"],
     queryFn: ({ signal }) => inputContracts(signal),
@@ -143,6 +155,7 @@ export function StudyMethodForm({
             draftFields={context.draft?.parameterFields}
             onDraftChange={context.editParameterText}
             sources={configuration.input_sources || {}}
+            references={references}
             readOnly={historical || context.saving}
             onChange={(path, value) => {
               const parameters = structuredClone(

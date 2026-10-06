@@ -59,6 +59,8 @@ export function ContractFields({
   onDraftChange = () => {},
   sources = {},
 }: {
+  /** 工程模型里可引用的对象（键名 → 选项），如 section_id → 敷设截面；有选项时参数改为下拉选择。 */
+  references?: Record<string, { value: string; label: string }[]>;
   module: string;
   schema: unknown;
   root: unknown;

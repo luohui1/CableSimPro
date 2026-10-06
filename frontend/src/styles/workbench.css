@@ -402,3 +402,15 @@
 .type-canvas > .type-result-toolbar { position: absolute; z-index: 4; left: var(--space-3); bottom: var(--space-3); gap: var(--space-2); padding: 0; border: 0; background: transparent; }
 .workbench-canvas .laying-section > .drawing-toolbar > .select-field, .workbench-canvas .laying-section > .drawing-toolbar > .select-field + .button { display: none; }
 .workbench-canvas .laying-section > .drawing-toolbar > .spacer { display: none; }
+
+/* 方法参数：按契约层次分组的属性表（名称 | 数值），约束只作占位提示与错误提示 */
+.buzzform-contract { display: flex; flex-direction: column; gap: var(--space-6); }
+.parameter-group > h4 { padding-bottom: var(--space-2); margin-bottom: var(--space-1); border-bottom: 1px solid var(--line); color: var(--text-secondary); font-size: var(--text-note); font-weight: var(--weight-strong); }
+.parameter-group .parameter-fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--space-12) * 6), 1fr)); column-gap: var(--space-8); row-gap: 0; max-width: none; }
+.parameter-group [data-slot="field"] { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: center; column-gap: var(--space-3); row-gap: var(--space-1); padding: var(--space-1) 0; min-width: 0; }
+.parameter-group [data-slot="field"] > [data-slot="field-label"] { grid-column: 1; color: var(--text-secondary); font-weight: var(--weight-normal); }
+.parameter-group [data-slot="field"] > :not([data-slot="field-label"]) { grid-column: 2; min-width: 0; }
+.parameter-group [data-slot="field-description"] { grid-column: 1 / -1 !important; }
+.parameter-group .number-field { min-width: 0; max-width: none; }
+.parameter-group [data-field] > .select-field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: center; column-gap: var(--space-3); padding: var(--space-1) 0; }
+.parameter-group [data-field] > .select-field > :first-child { color: var(--text-secondary); }
