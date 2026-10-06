@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
+  workspaces,
   studyIndex,
   studyRuns,
   typeIndex,
@@ -22,6 +23,7 @@ import {
 } from "@/components/states";
 import { Toolbar } from "@/components/toolbar";
 import { Icon } from "@/components/icon";
+import { illustration } from "@/lib/illustrations";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { VersionNotice } from '@/components/version-notice';
 import { isVersionStale } from '@/lib/version-status';
@@ -38,9 +40,17 @@ function HomeAreas({ theme, studies, types, succeeded }: { theme: "light" | "dar
   ];
   return (
     <section className="home-hero" aria-label="工作台概况">
-      <div className="home-greeting">
-        <h2>电缆设计与计算工作台</h2>
-        <p className="muted">每个结果都能追溯到输入、方法和版本。{studies.length ? `已有 ${studies.length} 个研究，其中 ${succeeded} 个已有计算结果。` : ""}</p>
+      <div className="home-banner">
+        <div className="home-greeting">
+          <h2>电缆设计与计算工作台</h2>
+          <p>载流量计算、电缆设计与电缆仿真都由插件完成；每个结果都能追溯到输入、方法和版本。</p>
+          <dl className="home-stats">
+            <div><dt>研究</dt><dd>{studies.length}</dd></div>
+            <div><dt>已有结果</dt><dd>{succeeded}</dd></div>
+            <div><dt>型号</dt><dd>{types ?? "—"}</dd></div>
+          </dl>
+        </div>
+        {illustration("cable-section-hero") && <img className="home-banner-art" src={illustration("cable-section-hero")} alt="三芯电缆截面" />}
       </div>
       <div className="home-areas">
         {areas.map((area) => (
@@ -83,6 +93,8 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+  const projects = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
+  const projectTitle = search.workspace ? text((projects.data || []).find((space) => text(space.id) === search.workspace)?.name) : "";
   const statuses = new Map(
     (studies.data || []).map((row, index) => [row.id, runQueries[index]]),
   );
@@ -200,7 +212,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
   return (
     <>
       <AppShell
-        title={home ? "首页" : search.kind === "simulation" ? "仿真复现研究" : "研究"}
+        title={home ? "首页" : projectTitle || (search.kind === "simulation" ? "电缆仿真研究" : "研究")}
         status={
           (studies.isError || studies.isFetching) && <StatusMark
             kind={

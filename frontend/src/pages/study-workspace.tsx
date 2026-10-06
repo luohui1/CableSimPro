@@ -27,6 +27,7 @@ import { Icon } from "@/components/icon";
 import { message, optionalRecord, text } from "@/api/client";
 import { selectionView, type SelectionRow } from "@/lib/selection-view";
 import { StudyHeatDetail } from "@/components/study-heat-detail";
+import { StudyValidation } from "@/components/study-validation";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import {
   CableInputs,
@@ -520,6 +521,8 @@ export function StudyWorkspace() {
                   : undefined
               }
             />
+          ) : ["selection", "ampacity", "sweep"].includes(module) && tab === "validation" ? (
+            <StudyValidation run={run} />
           ) : ["selection", "ampacity"].includes(module) && tab === "detail" ? (
             <StudyHeatDetail
               key={`${run?.id || "none"}-${selectedRow?.id || ""}`}

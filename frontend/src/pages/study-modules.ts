@@ -32,6 +32,7 @@ export const moduleDefinitions: Record<
     tabs: [
       { id: "results", label: "结果" },
       { id: "detail", label: "结果详情" },
+      { id: "validation", label: "验证与范围" },
       { id: "parameters", label: "方法参数" },
     ],
   },
@@ -61,6 +62,7 @@ export const moduleDefinitions: Record<
     tabs: [
       { id: "results", label: "候选结果" },
       { id: "detail", label: "结果详情" },
+      { id: "validation", label: "验证与范围" },
       { id: "settings", label: "问询条件" },
     ],
   },
@@ -71,6 +73,7 @@ export const moduleDefinitions: Record<
       { id: "curve", label: "曲线" },
       { id: "points", label: "扫描点" },
       { id: "settings", label: "设置" },
+      { id: "validation", label: "验证与范围" },
     ],
   },
   batch: {
