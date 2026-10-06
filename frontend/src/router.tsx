@@ -109,7 +109,7 @@ export const studyRootRoute = createRoute({
     generate?: boolean;
     dataset?: string;
     compare?: string;
-    view?: "section" | "cable" | "three";
+    view?: "section" | "cable" | "three" | "field";
     inspector?: "input" | "method";
   } => ({
     theme: search.theme === "dark" ? ("dark" as const) : ("light" as const),
@@ -121,7 +121,7 @@ export const studyRootRoute = createRoute({
     dataset: typeof search.dataset === "string" ? search.dataset : "",
     compare: typeof search.compare === "string" ? search.compare : "",
     // 工作窗口中间画布显示的模型视图；不写时由计算类型决定
-    view: search.view === "cable" || search.view === "three" || search.view === "section" ? search.view : undefined,
+    view: search.view === "cable" || search.view === "three" || search.view === "section" || search.view === "field" ? search.view : undefined,
     // 右侧属性区显示“输入”还是“方法”（方法参数、问询条件、扫描设置）
     inspector: search.inspector === "method" ? "method" : search.inspector === "input" ? "input" : undefined,
   }),

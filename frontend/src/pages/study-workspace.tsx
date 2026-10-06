@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { methodCatalog, workspaces } from "@/api/research";
 import { displayName } from '@/lib/display-names';
@@ -20,6 +20,8 @@ import { ProjectExplorer } from "@/components/project-explorer";
 import { CreateStudyDialog } from "@/components/create-study-dialog";
 import { StudyDrawing } from "@/components/study-drawing";
 import { conductorAnnotations } from "@/lib/result-annotations";
+import { temperatureView } from "@/lib/temperature-view";
+import { FieldView } from "@/features/field/field-view";
 import {
   StudySelection,
   selectedProperties,
@@ -27,7 +29,7 @@ import {
 import { StudyReport } from "@/components/study-report";
 import { StudyHybrid } from "@/components/study-hybrid";
 import { Icon } from "@/components/icon";
-import { message, optionalRecord, text } from "@/api/client";
+import { message, numeric, optionalRecord, text } from "@/api/client";
 import { selectionView, type SelectionRow } from "@/lib/selection-view";
 import { StudyHeatDetail } from "@/components/study-heat-detail";
 import { StudyValidation } from "@/components/study-validation";
@@ -133,6 +135,11 @@ export function StudyWorkspace() {
   const pendingRun =
     !!run &&
     ["accepted", "queued", "running", "validating"].includes(text(run.status));
+  // 运行若带温度场工件（有限元，或插件输出的 IEC 土壤温度场），画布默认显示真实温度场
+  const fieldView = useMemo(() => {
+    if (!run || pendingRun) return undefined;
+    try { return temperatureView(run); } catch { return undefined; }
+  }, [run, pendingRun]);
   if (run && !pendingRun && module === "selection")
     try {
       view = selectionView(run);
@@ -172,7 +179,9 @@ export function StudyWorkspace() {
   const viewingOldInput = !!search.run && (run?.freshness === "historical" || isVersionStale(run));
   const canvasDocument = (viewingOldInput ? (run ? savedDomain(run) : undefined) : context.domain) as DomainDocument | undefined;
   const showCanvas = module !== "report" && !!canvasDocument && study.definition.input_source !== "study";
-  const canvasView = search.view || "section";
+  const conductorLimits = (canvasDocument?.cable_types || []).map((cable) => numeric(optionalRecord(optionalRecord(cable.rating).max_conductor_temperature).normal)).filter((value): value is number => value !== null);
+  const conductorLimit = conductorLimits.length ? Math.min(...conductorLimits) - 273.15 : undefined;
+  const canvasView = search.view || (fieldView ? "field" : "section");
   // 运行后把导体温度直接标在截面电缆上：选型取当前选中或推荐的候选工况
   const annotations = run && !pendingRun ? conductorAnnotations(run, module === "selection" ? selectedRow?.id || view?.recommendation?.id : undefined) : undefined;
   const methodPin = optionalRecord(study.definition.method);
@@ -363,13 +372,26 @@ export function StudyWorkspace() {
           {showCanvas && (
             <section className="workbench-canvas" aria-label="模型">
               <div className="workbench-views" role="group" aria-label="模型视图">
-                {([["section", "object/section", "敷设截面"], ["cable", "object/cable", "电缆截面"], ["three", "result/field", "三维"]] as const).map(([value, icon, label]) => (
+                {([...(fieldView ? [["field", "calc/thermal-field", "温度场"]] : []), ["section", "object/section", "敷设截面"], ["cable", "object/cable", "电缆截面"], ...(["thermal-field", "electrothermal", "transient", "sheath-losses", "simulation"].includes(module) ? [["three", "result/field", "三维"]] : [])] as ["field" | "section" | "cable" | "three", string, string][]).map(([value, icon, label]) => (
                   <button key={value} type="button" aria-pressed={canvasView === value} onClick={() => navigate({ search: { ...currentSearch(), view: value }, replace: true })}>
                     <Icon name={icon} />{label}
                   </button>
                 ))}
               </div>
-              <StudyDrawing document={canvasDocument!} historical={viewingOldInput} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} onSelect={inputProps.onSelect} annotations={annotations} />
+              {canvasView === "field" && fieldView ? (
+                <FieldView
+                  label="温度场"
+                  points={fieldView.points}
+                  triangles={fieldView.triangles}
+                  values={fieldView.temperatures.map((kelvin) => kelvin - 273.15)}
+                  circles={(fieldView.geometry?.cables || []).map((cable) => ({ x: cable.x, z: cable.z, r: cable.shape.radiusM, label: cable.label }))}
+                  groundZ={fieldView.geometry ? 0 : undefined}
+                  hotspot={{ point: fieldView.hotspot.point, value: fieldView.hotspot.temperature - 273.15, label: "最高" }}
+                  limit={conductorLimit === undefined ? undefined : { value: conductorLimit, label: `${conductorLimit.toFixed(0)} 限值` }}
+                />
+              ) : (
+                <StudyDrawing document={canvasDocument!} historical={viewingOldInput} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} onSelect={inputProps.onSelect} annotations={annotations} />
+              )}
             </section>
           )}
           <section className="workbench-dock" aria-label="计算结果">
