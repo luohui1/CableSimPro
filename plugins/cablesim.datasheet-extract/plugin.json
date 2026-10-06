@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.datasheet-extract",
-  "version": "0.1.1",
+  "version": "1.0.0",
   "name": "厂家资料参数提取",
   "icon": "assets/icon.svg",
   "description": "PDF 文字层与表格优先；保留型号、页码、原文坐标和单位，模型输出只作为待人工核对候选。",
@@ -44,7 +44,7 @@
       "id": "inspect",
       "kind": "method",
       "title": "检查 PDF 页数与文字层",
-      "method_version": "DATASHEET-0.1.0",
+      "method_version": "1.0.0",
       "analysis": "extraction",
       "input_schema": "cablesim.datasheet/1",
       "outputs": [
@@ -59,6 +59,10 @@
         {
           "type": "x-cablesim.datasheet",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -71,13 +75,151 @@
         "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。",
         "PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
         "无法唯一定位型号、字段或单位时标歧义；不推测缺项。"
-      ]
+      ],
+      "category": "data-standard",
+      "description": "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。；PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
+      "parameter_schema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "study"
+        ],
+        "standalone_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "type": "string",
+              "const": "cablesim.datasheet/1",
+              "title": "输入契约版本",
+              "description": "只接受该能力声明的输入结构版本，不自动猜测数据格式。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "model",
+              "x-order": 0,
+              "x-level": "advanced"
+            },
+            "pdf_base64": {
+              "type": "string",
+              "minLength": 1,
+              "title": "原始PDF内容",
+              "description": "由宿主绑定不可变原件的准确字节，用户不填写或编辑编码正文。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "model",
+              "x-order": 1,
+              "x-level": "expert",
+              "x-bind": {
+                "type": "source_document",
+                "scope": "workspace",
+                "multiple": false,
+                "keyed": false,
+                "read_only": true
+              },
+              "x-editor-reason": "原件二进制正文由宿主绑定，专家仅可核验摘要，不提供编码或JSON编辑器。",
+              "x-range-basis": {
+                "kind": "engineering",
+                "reference": "plugins/cablesim.datasheet-extract/src 的 inspect 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+              }
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "工件摘要",
+              "description": "绑定原始工件的SHA-256摘要，由宿主核验实际内容。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "evidence",
+              "x-order": 2,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "engineering",
+                "reference": "plugins/cablesim.datasheet-extract/src 的 inspect 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+              }
+            }
+          },
+          "required": [
+            "schema_version",
+            "pdf_base64",
+            "sha256"
+          ]
+        },
+        "binding": {
+          "type": "source_document",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.datasheet.count",
+          "title": "原件页数",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.datasheet"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "id": "page",
       "kind": "method",
       "title": "读取原文页面与证据坐标",
-      "method_version": "DATASHEET-0.1.0",
+      "method_version": "1.0.0",
       "analysis": "extraction",
       "input_schema": "cablesim.datasheet/1",
       "outputs": [
@@ -92,6 +234,10 @@
         {
           "type": "x-cablesim.datasheet",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -104,13 +250,221 @@
         "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。",
         "PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
         "无法唯一定位型号、字段或单位时标歧义；不推测缺项。"
-      ]
+      ],
+      "category": "data-standard",
+      "description": "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。；PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
+      "parameter_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "title": "原件页码",
+            "description": "从一开始的PDF页码，须在原件实际页数内。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 0,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.datasheet-extract/src 的 page 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "render": {
+            "type": "boolean",
+            "default": false,
+            "title": "生成页图像",
+            "description": "生成原页图像供人工复核，不能改变PDF原件内容。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 1,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.datasheet-extract/src 的 page 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "region_m": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "number"
+            },
+            "minItems": 4,
+            "maxItems": 4,
+            "x-runtime": {
+              "key": "region",
+              "scale": 2834.645669291339
+            },
+            "title": "原件裁选区域",
+            "description": "按左、上、右、下指定纸面SI坐标，内核显式换为PDF点单位。",
+            "x-unit": {
+              "si": "m",
+              "display": "mm",
+              "scale": 1000,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 2,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.datasheet-extract/src 的 page 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        }
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "study"
+        ],
+        "standalone_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "type": "string",
+              "const": "cablesim.datasheet/1",
+              "title": "输入契约版本",
+              "description": "只接受该能力声明的输入结构版本，不自动猜测数据格式。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "model",
+              "x-order": 0,
+              "x-level": "advanced"
+            },
+            "pdf_base64": {
+              "type": "string",
+              "minLength": 1,
+              "title": "原始PDF内容",
+              "description": "由宿主绑定不可变原件的准确字节，用户不填写或编辑编码正文。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "model",
+              "x-order": 1,
+              "x-level": "expert",
+              "x-bind": {
+                "type": "source_document",
+                "scope": "workspace",
+                "multiple": false,
+                "keyed": false,
+                "read_only": true
+              },
+              "x-editor-reason": "原件二进制正文由宿主绑定，专家仅可核验摘要，不提供编码或JSON编辑器。",
+              "x-range-basis": {
+                "kind": "engineering",
+                "reference": "plugins/cablesim.datasheet-extract/src 的 page 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+              }
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "工件摘要",
+              "description": "绑定原始工件的SHA-256摘要，由宿主核验实际内容。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "evidence",
+              "x-order": 2,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "engineering",
+                "reference": "plugins/cablesim.datasheet-extract/src 的 page 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+              }
+            }
+          },
+          "required": [
+            "schema_version",
+            "pdf_base64",
+            "sha256"
+          ]
+        },
+        "binding": {
+          "type": "source_document",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.datasheet.count",
+          "title": "原文字符数",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.datasheet"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "id": "rules",
       "kind": "method",
       "title": "离线规则与扫描页参数提取",
-      "method_version": "DATASHEET-0.1.0",
+      "method_version": "1.0.0",
       "analysis": "extraction",
       "input_schema": "cablesim.datasheet/1",
       "outputs": [
@@ -125,6 +479,10 @@
         {
           "type": "x-cablesim.datasheet",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -137,13 +495,354 @@
         "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。",
         "PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
         "无法唯一定位型号、字段或单位时标歧义；不推测缺项。"
-      ]
+      ],
+      "category": "data-standard",
+      "description": "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。；PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
+      "parameter_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "selections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "page": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "title": "原件页码",
+                  "description": "从一开始的PDF页码，须在原件实际页数内。",
+                  "x-unit": {
+                    "si": "1",
+                    "display": "1",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "physics",
+                  "x-order": 0,
+                  "x-level": "advanced",
+                  "x-range-basis": {
+                    "kind": "engineering",
+                    "reference": "plugins/cablesim.datasheet-extract/src 的 rules 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                  }
+                },
+                "region_m": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "x-runtime": {
+                    "key": "region",
+                    "scale": 2834.645669291339
+                  },
+                  "title": "原件裁选区域",
+                  "description": "按左、上、右、下指定纸面SI坐标，内核显式换为PDF点单位。",
+                  "x-unit": {
+                    "si": "m",
+                    "display": "mm",
+                    "scale": 1000,
+                    "offset": 0
+                  },
+                  "x-group": "materials",
+                  "x-order": 1,
+                  "x-level": "advanced",
+                  "x-range-basis": {
+                    "kind": "engineering",
+                    "reference": "plugins/cablesim.datasheet-extract/src 的 rules 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                  }
+                }
+              },
+              "required": [
+                "page"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 4,
+            "title": "资料页与片段",
+            "description": "逐项选择原件页码及可选裁选区域，保持原件摘要绑定。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 0,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.datasheet-extract/src 的 rules 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "model": {
+            "additionalProperties": false,
+            "properties": {
+              "designation": {
+                "description": "使用原件明确印刷的型号或系列，不从其他型号推断。",
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "厂家型号标识",
+                "type": "string",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.datasheet-extract/src 的 rules 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "specification": {
+                "description": "选择原件的确切规格行或列，保留原文芯数及截面积语义。",
+                "maxLength": 40,
+                "minLength": 1,
+                "title": "厂家规格标识",
+                "type": "string",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.datasheet-extract/src 的 rules 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "identity_note": {
+                "description": "明确所选电压、导体、护套变体及厂家，避免相邻表列串用。",
+                "maxLength": 300,
+                "minLength": 1,
+                "title": "型号身份说明",
+                "type": "string",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 2,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.datasheet-extract/src 的 rules 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              }
+            },
+            "required": [
+              "designation",
+              "specification",
+              "identity_note"
+            ],
+            "title": "厂家型号文本",
+            "type": "object",
+            "description": "使用资料原件中的实际型号文本定位候选值，不据此生成缺失数据。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 1,
+            "x-level": "basic"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "rules",
+              "offline_ocr"
+            ],
+            "title": "资料提取策略",
+            "description": "选择规则、离线OCR或当前能力支持的提供方提取流程。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 2,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.datasheet-extract/src 的 rules 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ocr": {
+            "type": "boolean",
+            "default": false,
+            "title": "启用OCR图像提取",
+            "description": "需要图像识别时生成页图像并保留原件证据。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 3,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.datasheet-extract/src 的 rules 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        }
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "study"
+        ],
+        "standalone_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "type": "string",
+              "const": "cablesim.datasheet/1",
+              "title": "输入契约版本",
+              "description": "只接受该能力声明的输入结构版本，不自动猜测数据格式。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "model",
+              "x-order": 0,
+              "x-level": "advanced"
+            },
+            "pdf_base64": {
+              "type": "string",
+              "minLength": 1,
+              "title": "原始PDF内容",
+              "description": "由宿主绑定不可变原件的准确字节，用户不填写或编辑编码正文。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "model",
+              "x-order": 1,
+              "x-level": "expert",
+              "x-bind": {
+                "type": "source_document",
+                "scope": "workspace",
+                "multiple": false,
+                "keyed": false,
+                "read_only": true
+              },
+              "x-editor-reason": "原件二进制正文由宿主绑定，专家仅可核验摘要，不提供编码或JSON编辑器。",
+              "x-range-basis": {
+                "kind": "engineering",
+                "reference": "plugins/cablesim.datasheet-extract/src 的 rules 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+              }
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "工件摘要",
+              "description": "绑定原始工件的SHA-256摘要，由宿主核验实际内容。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "evidence",
+              "x-order": 2,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "engineering",
+                "reference": "plugins/cablesim.datasheet-extract/src 的 rules 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+              }
+            }
+          },
+          "required": [
+            "schema_version",
+            "pdf_base64",
+            "sha256"
+          ]
+        },
+        "binding": {
+          "type": "source_document",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.datasheet.count",
+          "title": "已提取条目数",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.datasheet"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "id": "provider-request",
       "kind": "method",
       "title": "准备模型识别请求与所选原文",
-      "method_version": "DATASHEET-0.1.0",
+      "method_version": "1.0.0",
       "analysis": "extraction",
       "input_schema": "cablesim.datasheet/1",
       "outputs": [
@@ -158,6 +857,10 @@
         {
           "type": "x-cablesim.datasheet",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -170,13 +873,355 @@
         "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。",
         "PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
         "无法唯一定位型号、字段或单位时标歧义；不推测缺项。"
-      ]
+      ],
+      "category": "data-standard",
+      "description": "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。；PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
+      "parameter_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "selections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "page": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "title": "原件页码",
+                  "description": "从一开始的PDF页码，须在原件实际页数内。",
+                  "x-unit": {
+                    "si": "1",
+                    "display": "1",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "physics",
+                  "x-order": 0,
+                  "x-level": "advanced",
+                  "x-range-basis": {
+                    "kind": "engineering",
+                    "reference": "plugins/cablesim.datasheet-extract/src 的 provider-request 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                  }
+                },
+                "region_m": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "x-runtime": {
+                    "key": "region",
+                    "scale": 2834.645669291339
+                  },
+                  "title": "原件裁选区域",
+                  "description": "按左、上、右、下指定纸面SI坐标，内核显式换为PDF点单位。",
+                  "x-unit": {
+                    "si": "m",
+                    "display": "mm",
+                    "scale": 1000,
+                    "offset": 0
+                  },
+                  "x-group": "materials",
+                  "x-order": 1,
+                  "x-level": "advanced",
+                  "x-range-basis": {
+                    "kind": "engineering",
+                    "reference": "plugins/cablesim.datasheet-extract/src 的 provider-request 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                  }
+                }
+              },
+              "required": [
+                "page"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 4,
+            "title": "资料页与片段",
+            "description": "逐项选择原件页码及可选裁选区域，保持原件摘要绑定。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 0,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.datasheet-extract/src 的 provider-request 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "model": {
+            "additionalProperties": false,
+            "properties": {
+              "designation": {
+                "description": "使用原件明确印刷的型号或系列，不从其他型号推断。",
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "厂家型号标识",
+                "type": "string",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.datasheet-extract/src 的 provider-request 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "specification": {
+                "description": "选择原件的确切规格行或列，保留原文芯数及截面积语义。",
+                "maxLength": 40,
+                "minLength": 1,
+                "title": "厂家规格标识",
+                "type": "string",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.datasheet-extract/src 的 provider-request 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "identity_note": {
+                "description": "明确所选电压、导体、护套变体及厂家，避免相邻表列串用。",
+                "maxLength": 300,
+                "minLength": 1,
+                "title": "型号身份说明",
+                "type": "string",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 2,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.datasheet-extract/src 的 provider-request 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              }
+            },
+            "required": [
+              "designation",
+              "specification",
+              "identity_note"
+            ],
+            "title": "厂家型号文本",
+            "type": "object",
+            "description": "使用资料原件中的实际型号文本定位候选值，不据此生成缺失数据。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 1,
+            "x-level": "basic"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "hybrid",
+              "ocr"
+            ],
+            "title": "资料提取策略",
+            "description": "选择规则、离线OCR或当前能力支持的提供方提取流程。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 2,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.datasheet-extract/src 的 provider-request 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ocr": {
+            "type": "boolean",
+            "default": false,
+            "title": "启用OCR图像提取",
+            "description": "需要图像识别时生成页图像并保留原件证据。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 3,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.datasheet-extract/src 的 provider-request 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        }
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "study"
+        ],
+        "standalone_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "type": "string",
+              "const": "cablesim.datasheet/1",
+              "title": "输入契约版本",
+              "description": "只接受该能力声明的输入结构版本，不自动猜测数据格式。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "model",
+              "x-order": 0,
+              "x-level": "advanced"
+            },
+            "pdf_base64": {
+              "type": "string",
+              "minLength": 1,
+              "title": "原始PDF内容",
+              "description": "由宿主绑定不可变原件的准确字节，用户不填写或编辑编码正文。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "model",
+              "x-order": 1,
+              "x-level": "expert",
+              "x-bind": {
+                "type": "source_document",
+                "scope": "workspace",
+                "multiple": false,
+                "keyed": false,
+                "read_only": true
+              },
+              "x-editor-reason": "原件二进制正文由宿主绑定，专家仅可核验摘要，不提供编码或JSON编辑器。",
+              "x-range-basis": {
+                "kind": "engineering",
+                "reference": "plugins/cablesim.datasheet-extract/src 的 provider-request 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+              }
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "工件摘要",
+              "description": "绑定原始工件的SHA-256摘要，由宿主核验实际内容。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "evidence",
+              "x-order": 2,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "engineering",
+                "reference": "plugins/cablesim.datasheet-extract/src 的 provider-request 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+              }
+            }
+          },
+          "required": [
+            "schema_version",
+            "pdf_base64",
+            "sha256"
+          ]
+        },
+        "binding": {
+          "type": "source_document",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.datasheet.count",
+          "title": "待识别目标字段数",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.datasheet"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "id": "provider-response",
       "kind": "method",
       "title": "核验模型提取结果与原文证据",
-      "method_version": "DATASHEET-0.1.0",
+      "method_version": "1.0.0",
       "analysis": "extraction",
       "input_schema": "cablesim.datasheet/1",
       "outputs": [
@@ -191,6 +1236,10 @@
         {
           "type": "x-cablesim.datasheet",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -203,13 +1252,403 @@
         "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。",
         "PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
         "无法唯一定位型号、字段或单位时标歧义；不推测缺项。"
-      ]
+      ],
+      "category": "data-standard",
+      "description": "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。；PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
+      "parameter_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "selections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "page": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "title": "原件页码",
+                  "description": "从一开始的PDF页码，须在原件实际页数内。",
+                  "x-unit": {
+                    "si": "1",
+                    "display": "1",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "physics",
+                  "x-order": 0,
+                  "x-level": "advanced",
+                  "x-range-basis": {
+                    "kind": "engineering",
+                    "reference": "plugins/cablesim.datasheet-extract/src 的 provider-response 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                  }
+                },
+                "region_m": {
+                  "type": [
+                    "array",
+                    "null"
+                  ],
+                  "items": {
+                    "type": "number"
+                  },
+                  "minItems": 4,
+                  "maxItems": 4,
+                  "x-runtime": {
+                    "key": "region",
+                    "scale": 2834.645669291339
+                  },
+                  "title": "原件裁选区域",
+                  "description": "按左、上、右、下指定纸面SI坐标，内核显式换为PDF点单位。",
+                  "x-unit": {
+                    "si": "m",
+                    "display": "mm",
+                    "scale": 1000,
+                    "offset": 0
+                  },
+                  "x-group": "materials",
+                  "x-order": 1,
+                  "x-level": "advanced",
+                  "x-range-basis": {
+                    "kind": "engineering",
+                    "reference": "plugins/cablesim.datasheet-extract/src 的 provider-response 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                  }
+                }
+              },
+              "required": [
+                "page"
+              ]
+            },
+            "minItems": 1,
+            "maxItems": 4,
+            "title": "资料页与片段",
+            "description": "逐项选择原件页码及可选裁选区域，保持原件摘要绑定。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 0,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.datasheet-extract/src 的 provider-response 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "model": {
+            "additionalProperties": false,
+            "properties": {
+              "designation": {
+                "description": "使用原件明确印刷的型号或系列，不从其他型号推断。",
+                "maxLength": 80,
+                "minLength": 1,
+                "title": "厂家型号标识",
+                "type": "string",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.datasheet-extract/src 的 provider-response 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "specification": {
+                "description": "选择原件的确切规格行或列，保留原文芯数及截面积语义。",
+                "maxLength": 40,
+                "minLength": 1,
+                "title": "厂家规格标识",
+                "type": "string",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.datasheet-extract/src 的 provider-response 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "identity_note": {
+                "description": "明确所选电压、导体、护套变体及厂家，避免相邻表列串用。",
+                "maxLength": 300,
+                "minLength": 1,
+                "title": "型号身份说明",
+                "type": "string",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 2,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.datasheet-extract/src 的 provider-response 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              }
+            },
+            "required": [
+              "designation",
+              "specification",
+              "identity_note"
+            ],
+            "title": "厂家型号文本",
+            "type": "object",
+            "description": "使用资料原件中的实际型号文本定位候选值，不据此生成缺失数据。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 1,
+            "x-level": "basic"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "llm",
+              "hybrid",
+              "ocr"
+            ],
+            "title": "资料提取策略",
+            "description": "选择规则、离线OCR或当前能力支持的提供方提取流程。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 2,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.datasheet-extract/src 的 provider-response 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ocr": {
+            "type": "boolean",
+            "default": false,
+            "title": "启用OCR图像提取",
+            "description": "需要图像识别时生成页图像并保留原件证据。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 3,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.datasheet-extract/src 的 provider-response 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "response": {
+            "type": "string",
+            "title": "提供方响应证据",
+            "description": "宿主绑定提供方返回的原始JSON文本证据，内核解析并与原页逐项对照；不提供自由文本编辑器。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 4,
+            "x-level": "expert",
+            "x-bind": {
+              "type": "evidence",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            },
+            "x-editor-reason": "提供方响应结构随服务变化，保留原始证据供专家核对，仅通过证据绑定读取。"
+          },
+          "ocr_evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            },
+            "title": "OCR证据工件",
+            "description": "绑定已有OCR页证据；结构随提供方变化，仅专家查看且不得替代原页。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 5,
+            "x-level": "expert",
+            "x-bind": {
+              "type": "evidence",
+              "scope": "run",
+              "multiple": true,
+              "keyed": false,
+              "read_only": false
+            },
+            "x-editor-reason": "OCR证据含页图与识别器专有字段，绑定已保存证据，不给普通用户JSON输入。"
+          }
+        }
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "study"
+        ],
+        "standalone_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "type": "string",
+              "const": "cablesim.datasheet/1",
+              "title": "输入契约版本",
+              "description": "只接受该能力声明的输入结构版本，不自动猜测数据格式。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "model",
+              "x-order": 0,
+              "x-level": "advanced"
+            },
+            "pdf_base64": {
+              "type": "string",
+              "minLength": 1,
+              "title": "原始PDF内容",
+              "description": "由宿主绑定不可变原件的准确字节，用户不填写或编辑编码正文。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "model",
+              "x-order": 1,
+              "x-level": "expert",
+              "x-bind": {
+                "type": "source_document",
+                "scope": "workspace",
+                "multiple": false,
+                "keyed": false,
+                "read_only": true
+              },
+              "x-editor-reason": "原件二进制正文由宿主绑定，专家仅可核验摘要，不提供编码或JSON编辑器。",
+              "x-range-basis": {
+                "kind": "engineering",
+                "reference": "plugins/cablesim.datasheet-extract/src 的 provider-response 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+              }
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "工件摘要",
+              "description": "绑定原始工件的SHA-256摘要，由宿主核验实际内容。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "evidence",
+              "x-order": 2,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "engineering",
+                "reference": "plugins/cablesim.datasheet-extract/src 的 provider-response 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+              }
+            }
+          },
+          "required": [
+            "schema_version",
+            "pdf_base64",
+            "sha256"
+          ]
+        },
+        "binding": {
+          "type": "source_document",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.datasheet.count",
+          "title": "已提取条目数",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.datasheet"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "id": "normalize",
       "kind": "method",
       "title": "人工编辑值的 SI 单位归一",
-      "method_version": "DATASHEET-0.1.0",
+      "method_version": "1.0.0",
       "analysis": "extraction",
       "input_schema": "cablesim.datasheet/1",
       "outputs": [
@@ -224,6 +1663,10 @@
         {
           "type": "x-cablesim.datasheet",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -236,14 +1679,229 @@
         "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。",
         "PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
         "无法唯一定位型号、字段或单位时标歧义；不推测缺项。"
-      ]
+      ],
+      "category": "data-standard",
+      "description": "仅候选；逐项人工核对和人工批准后才生成型号新版本草稿。；PDF 文本层优先；扫描页默认离线 CPU OCR，可选云端须明确外发确认。",
+      "parameter_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "values": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "title": "资料字段",
+                  "description": "选择已支持的厂家资料字段，规范化按该字段的明确物理单位执行。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "physics",
+                  "x-order": 0,
+                  "x-level": "advanced"
+                },
+                "value": {
+                  "type": "number",
+                  "title": "给定数值",
+                  "description": "来自人工核对记录的原值，原单位见同项unit；原始证据保留原单位，规范化输出单独采用SI。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "physics",
+                  "x-order": 1,
+                  "x-level": "advanced"
+                },
+                "unit": {
+                  "type": "string",
+                  "title": "证据数值单位",
+                  "description": "显式声明证据原值单位；工程参数在规范化后统一存储SI。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "physics",
+                  "x-order": 2,
+                  "x-level": "advanced"
+                }
+              },
+              "required": [
+                "field",
+                "value",
+                "unit"
+              ]
+            },
+            "title": "给定参数集",
+            "description": "结构化保存逐项工程参数及来源，不接受任意键名的自由输入。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 0,
+            "x-level": "advanced"
+          }
+        }
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "study"
+        ],
+        "standalone_schema": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "type": "string",
+              "const": "cablesim.datasheet/1",
+              "title": "输入契约版本",
+              "description": "只接受该能力声明的输入结构版本，不自动猜测数据格式。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "model",
+              "x-order": 0,
+              "x-level": "advanced"
+            },
+            "pdf_base64": {
+              "type": "string",
+              "minLength": 1,
+              "title": "原始PDF内容",
+              "description": "由宿主绑定不可变原件的准确字节，用户不填写或编辑编码正文。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "model",
+              "x-order": 1,
+              "x-level": "expert",
+              "x-bind": {
+                "type": "source_document",
+                "scope": "workspace",
+                "multiple": false,
+                "keyed": false,
+                "read_only": true
+              },
+              "x-editor-reason": "原件二进制正文由宿主绑定，专家仅可核验摘要，不提供编码或JSON编辑器。",
+              "x-range-basis": {
+                "kind": "engineering",
+                "reference": "plugins/cablesim.datasheet-extract/src 的 normalize 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+              }
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "title": "工件摘要",
+              "description": "绑定原始工件的SHA-256摘要，由宿主核验实际内容。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "evidence",
+              "x-order": 2,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "engineering",
+                "reference": "plugins/cablesim.datasheet-extract/src 的 normalize 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+              }
+            }
+          },
+          "required": [
+            "schema_version"
+          ]
+        },
+        "binding": {
+          "type": "source_document",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.datasheet.count",
+          "title": "规范化数值数",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.datasheet"
+        }
+      ],
+      "study_tasks": []
     }
   ],
   "files": [
     {
+      "path": "assets/cover.webp",
+      "sha256": "a2a5cc194b241ac572b9ea71d92fee8c5821e205f0161c02d7e421bbc9369975",
+      "size_bytes": 7218
+    },
+    {
       "path": "assets/icon.svg",
       "sha256": "da4b2d4bdaaea5b1035c943edf53546eb399cabe9942c01893583e2638854fa6",
       "size_bytes": 307
+    },
+    {
+      "path": "assets/method.svg",
+      "sha256": "0a39284f24cad11cd9f8a25f3dd470236a40076fb36977fdc9f31ea72457226f",
+      "size_bytes": 3210
     },
     {
       "path": "src/cablesim_datasheet_extract/__init__.py",
@@ -252,8 +1910,34 @@
     },
     {
       "path": "src/cablesim_datasheet_extract/main.py",
-      "sha256": "da3a6d700e9b5607fc4628cd15a45021013b0a88b7d772f13b2d352bb4e12060",
-      "size_bytes": 43627
+      "sha256": "e59a2f1925dff8e9871f9668ba3f01d6883b2a4d8bc452a500589d8356d24bd7",
+      "size_bytes": 44256
+    },
+    {
+      "path": "src/host-dependencies.json",
+      "sha256": "35e8ae8bf4a9ad0e10f253fad4ee89428786f821c08d0b6e0e7977867cccf923",
+      "size_bytes": 791
     }
-  ]
+  ],
+  "presentation": {
+    "category": "data-standard",
+    "category_title": "数据与标准",
+    "assets": [
+      {
+        "role": "cover",
+        "path": "assets/cover.webp",
+        "title": "厂家资料参数提取封面",
+        "description": "仓库既有插件封面，随发行包封签。",
+        "media_type": "image/webp"
+      },
+      {
+        "role": "method",
+        "path": "assets/method.svg",
+        "title": "厂家资料参数提取方法示意",
+        "description": "按实际模型手工绘制的示意图；不包含虚构结果。",
+        "media_type": "image/svg+xml"
+      }
+    ],
+    "validation_note": "无参考算例可发布数值数据；已声明的源码测试与适用范围见各能力validation，不据此生成验证图。"
+  }
 }

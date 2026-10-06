@@ -1,10 +1,31 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.thermal-network",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "name": "交叉校核参考",
   "description": "简化热网络用于同输入方法对比；附加损耗系数须显式给定。",
   "icon": "assets/icon.svg",
+  "presentation": {
+    "category": "calculation",
+    "category_title": "计算方法",
+    "assets": [
+      {
+        "role": "cover",
+        "path": "assets/cover.webp",
+        "title": "交叉校核参考封面",
+        "description": "仓库既有插件封面，随发行包封签。",
+        "media_type": "image/webp"
+      },
+      {
+        "role": "method",
+        "path": "assets/method.svg",
+        "title": "交叉校核参考方法示意",
+        "description": "按实际模型手工绘制的示意图；不包含虚构结果。",
+        "media_type": "image/svg+xml"
+      }
+    ],
+    "validation_note": "无参考算例可发布数值数据；已声明的源码测试与适用范围见各能力validation，不据此生成验证图。"
+  },
   "publisher": {
     "id": "cablesim",
     "name": "CableSimPro"
@@ -43,7 +64,7 @@
       "kind": "method",
       "id": "steady-rating",
       "title": "简化热网络交叉校核参考",
-      "method_version": "MV-THERMAL-0.1.0",
+      "method_version": "1.0.0",
       "analysis": "crosscheck",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -70,6 +91,10 @@
         {
           "type": "x-cablesim.thermal-network-rating",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -80,19 +105,257 @@
         "单回路三根相同无铠装单芯电缆，均匀土壤、恒温地表。",
         "交流附加系数与屏蔽损耗系数为输入假设，不自动计算集肤、邻近或护套环流。",
         "不是完整 IEC 60287 实现；经 TB 880 验证的方法见 cablesim.iec60287。"
-      ]
+      ],
+      "category": "calculation",
+      "description": "单回路三根相同无铠装单芯电缆，均匀土壤、恒温地表。；交流附加系数与屏蔽损耗系数为输入假设，不自动计算集肤、邻近或护套环流。",
+      "parameter_schema": {
+        "type": "object",
+        "properties": {
+          "conductor_kind": {
+            "default": "copper",
+            "enum": [
+              "copper",
+              "aluminium"
+            ],
+            "title": "导体材料",
+            "type": "string",
+            "description": "选择模型支持的铜或铝导体，与型号材料事实一致。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 0,
+            "x-level": "basic",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.thermal-network/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.thermal-network/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ac_extra_factor": {
+            "default": 0.05,
+            "maximum": 1,
+            "minimum": 0,
+            "title": "交流附加损耗系数",
+            "type": "number",
+            "description": "导体交流电阻相对直流电阻的附加比例，采用有来源的电损耗计算结果。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 1,
+            "x-level": "basic",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.thermal-network/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.thermal-network/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "screen_loss_factor": {
+            "default": 0.05,
+            "maximum": 2,
+            "minimum": 0,
+            "title": "屏蔽损耗系数",
+            "type": "number",
+            "description": "屏蔽损耗与导体损耗之比，须有接地方式及温度适用依据。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 2,
+            "x-level": "basic",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.thermal-network/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.thermal-network/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "target_current_a": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "title": "校核目标电流",
+            "description": "用于余量或允许运行判断的研究目标电流，缺省沿用保存负荷。",
+            "x-unit": {
+              "si": "A",
+              "display": "A",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "operating",
+            "x-order": 3,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.thermal-network/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "fill_factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "readOnly": true,
+            "title": "导体填充率",
+            "description": "领域模型导体标称面积与外径面积之比，由领域几何绑定；兼容迁移记录中的旧值，计算时仍从几何重新取得。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "model",
+            "x-order": 5,
+            "x-level": "expert",
+            "x-bind": {
+              "type": "cable_type",
+              "scope": "workspace",
+              "read_only": true
+            },
+            "x-range-basis": {
+              "kind": "binding",
+              "reference": "domain.py:46 从保存导体面积及外径取得；迁移记录值不覆盖几何事实。"
+            }
+          },
+          "include_field": {
+            "type": "boolean",
+            "default": false,
+            "title": "输出热路场视图",
+            "description": "生成当前热网络支持的参考温度视图，不能声明为收敛有限元。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 4,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.thermal-network/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "conductor_kind",
+          "ac_extra_factor",
+          "screen_loss_factor"
+        ]
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain",
+          "study"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": true,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "ampacity",
+          "title": "允许电流",
+          "unit": {
+            "si": "A",
+            "display": "A",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "minimum",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.thermal-network-rating"
+        },
+        {
+          "key": "conductor_temperature",
+          "title": "最高导体温度",
+          "unit": {
+            "si": "K",
+            "display": "°C",
+            "scale": 1,
+            "offset": -273.15
+          },
+          "aggregate": "maximum",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.thermal-network-rating"
+        }
+      ],
+      "study_tasks": []
     }
   ],
   "files": [
+    {
+      "path": "assets/cover.webp",
+      "sha256": "468d36bdc4269b5ae7dbbbaf1147b1916aa83fbc55f992476ca6309f914b887b",
+      "size_bytes": 5788
+    },
     {
       "path": "assets/icon.svg",
       "sha256": "464c57fed25f9308cf4755f408c58222206db84d107c5dfca6044fb767358eab",
       "size_bytes": 469
     },
     {
+      "path": "assets/method.svg",
+      "sha256": "a6a0a0dc3e1a75abfbf09a6d12fdd21148fffbfc2def3536e2a5e4719d73e202",
+      "size_bytes": 4162
+    },
+    {
       "path": "src/cablesim_thermal_network/__init__.py",
-      "sha256": "493d4fe40ff9fa9d7302d624dcd6ab764d7e4f3674b8fe4f2e1fa9b2a04d9968",
-      "size_bytes": 86
+      "sha256": "1b69d3fff58ccb020e979d48b4bfaa89a9d3a2b59d1dfde0dfe4a19b5ef7d8bc",
+      "size_bytes": 75
     },
     {
       "path": "src/cablesim_thermal_network/domain.py",
@@ -101,13 +364,13 @@
     },
     {
       "path": "src/cablesim_thermal_network/main.py",
-      "sha256": "21aa984c22e33747b2f3a04e3e9f7564aec06fdd6f7d08d36bbf9b9ff27486fa",
-      "size_bytes": 7050
+      "sha256": "d9b70dc1712deab21073767c87327c8850d0c5adcc8bd6decd505137ed6bf555",
+      "size_bytes": 7347
     },
     {
       "path": "src/cablesim_thermal_network/network.py",
-      "sha256": "7a0553493e4c03b0d5266b08972854c074372267793cb2ea08e1555f90a3cd5f",
-      "size_bytes": 12286
+      "sha256": "d57c42de410cdf7898d999f626fba7d30da79e8f381bc35b58104501d31343cd",
+      "size_bytes": 12275
     },
     {
       "path": "src/cablesim_thermal_network/properties.py",
@@ -126,8 +389,8 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "f5c2f96b56bfca201ee89b89c03d462789fdce48febbe1dc729714a6381380f1",
-      "size_bytes": 299
+      "sha256": "6f49ad3ba2e38b504579cc2d5a50105106d4c69329fe6111db3ffc50f884fc12",
+      "size_bytes": 1087
     }
   ]
 }

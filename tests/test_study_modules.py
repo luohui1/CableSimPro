@@ -56,7 +56,7 @@ def test_other_module_edit_preserves_freshness_but_selected_edit_invalidates(set
     saved=c.put(root,json=body).json()
     assert c.get(root+'/runs/'+r['id']).json()['freshness']=='current'
     body={**saved['definition'],'expected_revision':1,'expected_study_revision':saved['revision']}
-    body['modules']['thermal-field']['method_input']['installation']['ambient_temperature_c']+=1
+    body['modules']['thermal-field']['method_input']['installation']['ambient_temperature_k']+=1
     assert c.put(root,json=body).status_code==200
     assert c.get(root+'/runs/'+r['id']).json()['freshness']=='historical'
 

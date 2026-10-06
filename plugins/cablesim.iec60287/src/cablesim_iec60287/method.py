@@ -27,7 +27,7 @@ from .electrical import (RatingRefused, ac_factors, resistance, sheath_reactance
                          circulating, sheath_thickness_terms, eddy_geometry)
 
 METHOD_ID = 'cablesim.iec60287.single-core-trefoil-buried'
-METHOD_VERSION = '0.1.0'
+METHOD_VERSION = '1.0.0'
 # Oversheath T3 of touching single-core cables buried in trefoil is increased by 1.6
 # (IEC 60287-2-1); a single cable inside its own duct is not.
 T3_MULTIPLIER = {'direct_buried': 1.6, 'buried_ducts': 1.0}

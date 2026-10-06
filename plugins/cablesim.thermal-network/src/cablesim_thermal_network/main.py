@@ -109,6 +109,8 @@ def run_case(handler, case: dict, out: Path) -> dict:
 def main() -> int:
     job = Path.cwd()
     request = json.loads((job / 'input/request.json').read_text('utf-8'))
+    from cablesim_sdk.parameter_units import decode_request
+    request = decode_request(request, Path(__file__).resolve().parents[2]/'plugin.json')
     if request.get('protocol') != PROTOCOL or request.get('phase') not in ('run', 'check'):
         raise SystemExit('unsupported protocol or phase')
     handler = CAPABILITIES[request['capability']]
@@ -121,6 +123,8 @@ def main() -> int:
     result = {'protocol': PROTOCOL, 'cases': cases,
               'environment': {'python': platform.python_version(), 'packages': {'numpy': np.__version__},
                               'method': MODEL_VERSION}}
+    from cablesim_sdk.result_answers import attach_witnesses
+    attach_witnesses(request,result,Path(__file__).resolve().parents[2]/'plugin.json')
     (out / 'result.json').write_text(json.dumps(result, ensure_ascii=False, allow_nan=False), 'utf-8')
     return 0
 

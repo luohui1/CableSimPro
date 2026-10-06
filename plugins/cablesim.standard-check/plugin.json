@@ -1,9 +1,30 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standard-check",
-  "version": "0.2.0",
+  "version": "1.0.0",
   "name": "产品标准尺寸核对",
   "icon": "assets/icon.svg",
+  "presentation": {
+    "category": "data-standard",
+    "category_title": "数据与标准",
+    "assets": [
+      {
+        "role": "cover",
+        "path": "assets/cover.webp",
+        "title": "产品标准尺寸核对封面",
+        "description": "仓库既有插件封面，随发行包封签。",
+        "media_type": "image/webp"
+      },
+      {
+        "role": "method",
+        "path": "assets/method.svg",
+        "title": "产品标准尺寸核对方法示意",
+        "description": "按实际模型手工绘制的示意图；不包含虚构结果。",
+        "media_type": "image/svg+xml"
+      }
+    ],
+    "validation_note": "无参考算例可发布数值数据；已声明的源码测试与适用范围见各能力validation，不据此生成验证图。"
+  },
   "description": "按已核验 GB 产品标准核对结构尺寸和导体 R₂₀，逐条记录条款、余量、数据缺项与未覆盖范围。",
   "publisher": {
     "id": "cablesim",
@@ -43,7 +64,7 @@
       "kind": "method",
       "id": "dimensions",
       "title": "GB 产品标准结构尺寸与电阻核对",
-      "method_version": "GB-DIMENSIONS-0.2.0",
+      "method_version": "1.0.0",
       "analysis": "standard_check",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -58,6 +79,10 @@
         {
           "type": "x-cablesim.standard-check",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -69,14 +94,114 @@
         "GB/T 11017.1—2024 和 11017.2—2014 原文缺失；其最薄点与中压铜丝间隙算法不由其他版本代替。",
         "第 1 部分内衬层、护套、最薄点及成缆分支尚未覆盖；附加包带和未知构造阻止完整假定直径链。",
         "设计输入、厂家上限与实测值分别标记；缺少短路故障要求时金属屏蔽截面不作合格判定。本核对不批准要求、型号或产品认证。"
-      ]
+      ],
+      "category": "data-standard",
+      "description": "仅已核验的 XLPE 表内额定电压及单芯 / 三芯结构；第 2 类导体 R₂₀ 已核验条目，其他材料、导体类别或表外值保留未覆盖。；GB/T 11017.1—2024 和 11017.2—2014 原文缺失；其最薄点与中压铜丝间隙算法不由其他版本代替。",
+      "parameter_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "cable_type_id": {
+            "type": "string",
+            "title": "电缆型号",
+            "description": "从工程型号库选择已有型号，禁止自由填写不存在的编号。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "model",
+            "x-order": 0,
+            "x-level": "basic",
+            "x-bind": {
+              "type": "cable_type",
+              "scope": "workspace",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            }
+          }
+        }
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain",
+          "study"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": true,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.standard-failed-count",
+          "title": "不满足项数",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.standard-check"
+        }
+      ],
+      "study_tasks": []
     }
   ],
   "files": [
     {
+      "path": "assets/cover.webp",
+      "sha256": "584c48e3b8b842809a86079302196d5136b1b781af1a4ed1cd548f613e46a57f",
+      "size_bytes": 10640
+    },
+    {
       "path": "assets/icon.svg",
       "sha256": "a66fe11c418b7301313e9cf084c6832305f84039c6c0860831cfb9282985c9c9",
       "size_bytes": 243
+    },
+    {
+      "path": "assets/method.svg",
+      "sha256": "85e64e3849816f5cfbfb0cdf41affa0ba70fabd0c9eeea3cf712922d05f60688",
+      "size_bytes": 2599
     },
     {
       "path": "src/cablesim_standard_check/dimensions.json",
@@ -85,13 +210,18 @@
     },
     {
       "path": "src/cablesim_standard_check/main.py",
-      "sha256": "69039e8049a44cf6b74a8d11afee200a65064ffd42e49cdfc6813e8715692232",
-      "size_bytes": 53865
+      "sha256": "c1e73632018c6a197a0562a9ca0aecf3b0a300440413922abf57bb254e3b1292",
+      "size_bytes": 54229
     },
     {
       "path": "src/cablesim_standard_check/sources.json",
       "sha256": "229b09e8921bb3605c3230e9ed48974a7d98ebb5a4a7a3c1a4007128ad1921ff",
       "size_bytes": 1607
+    },
+    {
+      "path": "src/host-dependencies.json",
+      "sha256": "35e8ae8bf4a9ad0e10f253fad4ee89428786f821c08d0b6e0e7977867cccf923",
+      "size_bytes": 791
     }
   ]
 }

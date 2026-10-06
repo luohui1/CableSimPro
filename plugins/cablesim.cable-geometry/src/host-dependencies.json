@@ -8,5 +8,25 @@
     "path": "cablesim_sdk/cross_sections.py",
     "sha256": "c9a97fe6ba7040a8d4ea05794862fa458ffd88c5a8d2d3836b610797d15201d0",
     "size_bytes": 3551
+  },
+  {
+    "path": "cablesim_sdk/parameter_units.py",
+    "sha256": "5b95c5984c4e19547cb1a81c71be2c3af3e6eff7a126bafa23eb6ed19993ead3",
+    "size_bytes": 4472
+  },
+  {
+    "path": "cablesim_sdk/reproduction.py",
+    "sha256": "dedd26ded610c9420c42450196d1e465a382850d13d3cee23a6069084e5e6120",
+    "size_bytes": 4014
+  },
+  {
+    "path": "cablesim_sdk/result_answers.py",
+    "sha256": "d088f85c5040431a8c20c9300342e33521e118d08944891dc52c16bdb1a3dc7a",
+    "size_bytes": 4227
+  },
+  {
+    "path": "cablesim_sdk/simulation.py",
+    "sha256": "d21873f6fd02caa297ecfc9b3938f0ce694b1e9a62ac435e81fe6278dfea4ec1",
+    "size_bytes": 10469
   }
 ]

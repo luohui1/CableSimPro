@@ -1,10 +1,31 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.native-reference",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "name": "有限元与线源参考",
   "description": "领域输入的CAD、网格、有限元、电热与线源参考；来源工件由宿主绑定并验证哈希。",
   "icon": "assets/icon.svg",
+  "presentation": {
+    "category": "simulation",
+    "category_title": "仿真",
+    "assets": [
+      {
+        "role": "cover",
+        "path": "assets/cover.webp",
+        "title": "有限元与线源参考封面",
+        "description": "仓库既有插件封面，随发行包封签。",
+        "media_type": "image/webp"
+      },
+      {
+        "role": "method",
+        "path": "assets/method.svg",
+        "title": "有限元与线源参考方法示意",
+        "description": "按实际模型手工绘制的示意图；不包含虚构结果。",
+        "media_type": "image/svg+xml"
+      }
+    ],
+    "validation_note": "无参考算例可发布数值数据；已声明的源码测试与适用范围见各能力validation，不据此生成验证图。"
+  },
   "publisher": {
     "id": "cablesim",
     "name": "CableSimPro"
@@ -42,7 +63,7 @@
       "kind": "method",
       "id": "fixed-power",
       "title": "直埋有限元温度",
-      "method_version": "native-reference/0.1.0",
+      "method_version": "1.0.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -57,6 +78,10 @@
         {
           "type": "x-cablesim.native-bundle",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -66,13 +91,393 @@
       "limitations": [
         "固定功率温度参考研究，不反求载流量；有限元网格要求电缆之间存在间隙。",
         "接受 SI 领域输入，旧工况须显式迁移；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。"
-      ]
+      ],
+      "category": "simulation",
+      "description": "固定功率温度参考研究，不反求载流量；有限元网格要求电缆之间存在间隙。；接受 SI 领域输入，旧工况须显式迁移；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "conductor_powers_w_m": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "number"
+              }
+            ],
+            "title": "三相导体线热源",
+            "type": "array",
+            "description": "按A、B、C顺序给定三相导体单位长度热量，不反求电流。",
+            "x-unit": {
+              "si": "W/m",
+              "display": "W/m",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 0,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 fixed-power 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "conductor_k_w_m_k": {
+            "exclusiveMinimum": 1,
+            "maximum": 500,
+            "title": "导体热导率",
+            "type": "number",
+            "description": "原生热参考模型的导体热导率，须与领域材料事实一致。",
+            "x-unit": {
+              "si": "W/(m·K)",
+              "display": "W/(m·K)",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 1,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 fixed-power 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "metal_screen_k_w_m_k": {
+            "exclusiveMinimum": 1,
+            "maximum": 500,
+            "title": "金属屏蔽热导率",
+            "type": "number",
+            "description": "原生参考模型中屏蔽金属的热导率，须与领域材料一致。",
+            "x-unit": {
+              "si": "W/(m·K)",
+              "display": "W/(m·K)",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 2,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 fixed-power 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "domain_scale": {
+            "default": 8,
+            "enum": [
+              4,
+              8,
+              16
+            ],
+            "title": "计算域放大倍数",
+            "type": "integer",
+            "description": "有限边界相对电缆埋深或群宽的放大倍数，用于域收敛检查。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 3,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 fixed-power 输入校验；离散或资源限制，不是材料设计限值。"
+            },
+            "x-range-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 fixed-power 输入校验；离散或资源限制，不是材料设计限值。"
+            }
+          },
+          "resolution": {
+            "default": 16,
+            "enum": [
+              16,
+              24,
+              32
+            ],
+            "title": "圆周离散分辨率",
+            "type": "integer",
+            "description": "原生参考网格支持的圆周细化档位，需独立收敛校核。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 4,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 fixed-power 输入校验；离散或资源限制，不是材料设计限值。"
+            },
+            "x-range-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 fixed-power 输入校验；离散或资源限制，不是材料设计限值。"
+            }
+          },
+          "conductor_kind": {
+            "type": "string",
+            "enum": [
+              "copper",
+              "aluminium"
+            ],
+            "title": "导体材料",
+            "description": "选择模型支持的铜或铝导体，与型号材料事实一致。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 5,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 fixed-power 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ac_extra_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "交流附加损耗系数",
+            "description": "导体交流电阻相对直流电阻的附加比例，采用有来源的电损耗计算结果。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 6,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 fixed-power 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "screen_loss_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "屏蔽损耗系数",
+            "description": "屏蔽损耗与导体损耗之比，须有接地方式及温度适用依据。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 7,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 fixed-power 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "native_source_reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "artifact_type": {
+                "type": "string",
+                "const": "x-cablesim.native-bundle",
+                "title": "原生工件类型",
+                "description": "固定引用同工程已封存的原生来源束，由宿主选择器取得。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 3,
+                "x-level": "expert",
+                "readOnly": true,
+                "x-range-basis": {
+                  "kind": "binding",
+                  "reference": "backend/kernel/contracts.py NativeArtifactReference；来源必须为x-cablesim.native-bundle。"
+                }
+              },
+              "run_id": {
+                "type": "string",
+                "title": "来源运行",
+                "description": "从工程保存运行选择来源，历史运行不可改写。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced"
+              },
+              "case_id": {
+                "type": "string",
+                "title": "来源工况",
+                "description": "从选定来源运行中选择同一计算工况。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced"
+              },
+              "artifact_sha256": {
+                "type": "string",
+                "title": "来源工件摘要",
+                "description": "绑定已保存工件的SHA-256摘要，防止引用内容被替换。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 2,
+                "x-level": "advanced"
+              }
+            },
+            "required": [
+              "run_id",
+              "case_id",
+              "artifact_type",
+              "artifact_sha256"
+            ],
+            "title": "原生来源运行",
+            "description": "从已保存且摘要已校验的原生运行选择来源工况，宿主自动装配工件。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 8,
+            "x-level": "advanced",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            }
+          },
+          "fill_factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "readOnly": true,
+            "description": "导体标称面积与外径面积之比，由保存领域几何取得；兼容迁移记录，不能用旧值覆盖几何事实。",
+            "title": "导体填充率",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 9,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 fixed-power 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        },
+        "required": [
+          "conductor_powers_w_m",
+          "conductor_k_w_m_k",
+          "metal_screen_k_w_m_k"
+        ],
+        "title": "BuriedArgs",
+        "type": "object"
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "conductor_temperature",
+          "title": "最高导体温度",
+          "unit": {
+            "si": "K",
+            "display": "°C",
+            "scale": 1,
+            "offset": -273.15
+          },
+          "aggregate": "maximum",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.native-bundle"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "kind": "method",
       "id": "electrothermal",
       "title": "直埋电热耦合",
-      "method_version": "native-reference/0.1.0",
+      "method_version": "1.0.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -111,6 +516,10 @@
         {
           "type": "x-cablesim.native-bundle",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -120,13 +529,538 @@
       "limitations": [
         "显式系数损耗与线性电阻温变的有限元参考；支持运行温度和载流量反求，不等于完整 IEC 或电磁场求解。电缆之间须存在间隙。",
         "接受 SI 领域输入，旧工况须显式迁移；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。"
-      ]
+      ],
+      "category": "simulation",
+      "description": "显式系数损耗与线性电阻温变的有限元参考；支持运行温度和载流量反求，不等于完整 IEC 或电磁场求解。电缆之间须存在间隙。；接受 SI 领域输入，旧工况须显式迁移；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "enum": [
+              "operating-point",
+              "ampacity"
+            ],
+            "title": "热参考任务",
+            "type": "string",
+            "description": "选择保存电流下的运行温度或载流量反求。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 0,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "alpha20_per_k": {
+            "maximum": 0.01,
+            "minimum": 0,
+            "title": "二十摄氏度电阻温度系数",
+            "type": "number",
+            "description": "以293.15 K为参考点的电阻率线性温度系数，取材料或标准来源。",
+            "x-unit": {
+              "si": "1/K",
+              "display": "1/K",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 1,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "conductor_k_w_m_k": {
+            "exclusiveMinimum": 1,
+            "maximum": 500,
+            "title": "导体热导率",
+            "type": "number",
+            "description": "原生热参考模型的导体热导率，须与领域材料事实一致。",
+            "x-unit": {
+              "si": "W/(m·K)",
+              "display": "W/(m·K)",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 2,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "metal_screen_k_w_m_k": {
+            "exclusiveMinimum": 1,
+            "maximum": 500,
+            "title": "金属屏蔽热导率",
+            "type": "number",
+            "description": "原生参考模型中屏蔽金属的热导率，须与领域材料一致。",
+            "x-unit": {
+              "si": "W/(m·K)",
+              "display": "W/(m·K)",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 3,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "coefficient_basis": {
+            "maxLength": 500,
+            "minLength": 5,
+            "title": "损耗系数依据",
+            "type": "string",
+            "description": "记录交流附加与屏蔽损耗系数的资料和温度适用范围。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 4,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "acknowledged_coefficient_model": {
+            "const": true,
+            "title": "确认系数损耗模型",
+            "type": "boolean",
+            "description": "确认当前采用系数损耗近似，不表示电磁场或工程批准。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 5,
+            "x-level": "advanced"
+          },
+          "domain_scale": {
+            "default": 8,
+            "enum": [
+              4,
+              8,
+              16
+            ],
+            "title": "计算域放大倍数",
+            "type": "integer",
+            "description": "有限边界相对电缆埋深或群宽的放大倍数，用于域收敛检查。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 6,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；离散或资源限制，不是材料设计限值。"
+            },
+            "x-range-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；离散或资源限制，不是材料设计限值。"
+            }
+          },
+          "resolution": {
+            "default": 16,
+            "enum": [
+              16,
+              24,
+              32
+            ],
+            "title": "圆周离散分辨率",
+            "type": "integer",
+            "description": "原生参考网格支持的圆周细化档位，需独立收敛校核。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 7,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；离散或资源限制，不是材料设计限值。"
+            },
+            "x-range-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；离散或资源限制，不是材料设计限值。"
+            }
+          },
+          "compare_domain_scale": {
+            "anyOf": [
+              {
+                "enum": [
+                  8,
+                  16
+                ],
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "对照计算域倍数",
+            "description": "额定反求的对照有限域必须大于主计算域。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 8,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；离散或资源限制，不是材料设计限值。"
+            },
+            "x-range-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；离散或资源限制，不是材料设计限值。"
+            }
+          },
+          "domain_current_tolerance": {
+            "default": 0.005,
+            "maximum": 0.05,
+            "minimum": 0.0001,
+            "title": "域校核电流相对容差",
+            "type": "number",
+            "description": "两个有限域反求电流差的相对阈值，存储比例，内核显式转换为百分数。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 9,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；离散或资源限制，不是材料设计限值。"
+            },
+            "x-range-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；离散或资源限制，不是材料设计限值。"
+            },
+            "x-runtime": {
+              "key": "domain_current_tolerance_percent",
+              "scale": 100,
+              "offset": 0
+            }
+          },
+          "maximum_search_current_a": {
+            "default": 3000.0,
+            "exclusiveMinimum": 0,
+            "maximum": 3000,
+            "title": "电流反求搜索上限",
+            "type": "number",
+            "description": "原生系数损耗模型的反求上限，未找到括区时明确失败。",
+            "x-unit": {
+              "si": "A",
+              "display": "A",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 10,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；离散或资源限制，不是材料设计限值。"
+            },
+            "x-range-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；离散或资源限制，不是材料设计限值。"
+            }
+          },
+          "conductor_kind": {
+            "type": "string",
+            "enum": [
+              "copper",
+              "aluminium"
+            ],
+            "title": "导体材料",
+            "description": "选择模型支持的铜或铝导体，与型号材料事实一致。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 11,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ac_extra_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "交流附加损耗系数",
+            "description": "导体交流电阻相对直流电阻的附加比例，采用有来源的电损耗计算结果。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 12,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "screen_loss_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "屏蔽损耗系数",
+            "description": "屏蔽损耗与导体损耗之比，须有接地方式及温度适用依据。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 13,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "native_source_reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "artifact_type": {
+                "type": "string",
+                "const": "x-cablesim.native-bundle",
+                "title": "原生工件类型",
+                "description": "固定引用同工程已封存的原生来源束，由宿主选择器取得。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 3,
+                "x-level": "expert",
+                "readOnly": true,
+                "x-range-basis": {
+                  "kind": "binding",
+                  "reference": "backend/kernel/contracts.py NativeArtifactReference；来源必须为x-cablesim.native-bundle。"
+                }
+              },
+              "run_id": {
+                "type": "string",
+                "title": "来源运行",
+                "description": "从工程保存运行选择来源，历史运行不可改写。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced"
+              },
+              "case_id": {
+                "type": "string",
+                "title": "来源工况",
+                "description": "从选定来源运行中选择同一计算工况。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced"
+              },
+              "artifact_sha256": {
+                "type": "string",
+                "title": "来源工件摘要",
+                "description": "绑定已保存工件的SHA-256摘要，防止引用内容被替换。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 2,
+                "x-level": "advanced"
+              }
+            },
+            "required": [
+              "run_id",
+              "case_id",
+              "artifact_type",
+              "artifact_sha256"
+            ],
+            "title": "原生来源运行",
+            "description": "从已保存且摘要已校验的原生运行选择来源工况，宿主自动装配工件。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 14,
+            "x-level": "advanced",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            }
+          },
+          "fill_factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "readOnly": true,
+            "description": "导体标称面积与外径面积之比，由保存领域几何取得；兼容迁移记录，不能用旧值覆盖几何事实。",
+            "title": "导体填充率",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 15,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 electrothermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        },
+        "required": [
+          "mode",
+          "alpha20_per_k",
+          "conductor_k_w_m_k",
+          "metal_screen_k_w_m_k",
+          "coefficient_basis",
+          "acknowledged_coefficient_model"
+        ],
+        "title": "ElectrothermalArgs",
+        "type": "object"
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "ampacity",
+          "title": "允许电流",
+          "unit": {
+            "si": "A",
+            "display": "A",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "minimum",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.native-bundle"
+        },
+        {
+          "key": "conductor_temperature",
+          "title": "最高导体温度",
+          "unit": {
+            "si": "K",
+            "display": "°C",
+            "scale": 1,
+            "offset": -273.15
+          },
+          "aggregate": "maximum",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.native-bundle"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "kind": "method",
       "id": "line-source",
       "title": "线源交叉校核",
-      "method_version": "native-reference/0.1.0",
+      "method_version": "1.0.0",
       "analysis": "crosscheck",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -141,6 +1075,10 @@
         {
           "type": "x-cablesim.native-bundle",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -150,13 +1088,393 @@
       "limitations": [
         "范围限定的参考研究；固定功率温度不等于载流量。",
         "接受 SI 领域输入，旧工况须显式迁移；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。"
-      ]
+      ],
+      "category": "simulation",
+      "description": "范围限定的参考研究；固定功率温度不等于载流量。；接受 SI 领域输入，旧工况须显式迁移；仅支持以 x=0 为中心的六层单芯三相平排或等边品字形直埋，不支持多回路、排管或时变边界。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "conductor_powers_w_m": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "maximum": 1000,
+                "minimum": 0,
+                "type": "number"
+              }
+            ],
+            "title": "三相导体线热源",
+            "type": "array",
+            "description": "按A、B、C顺序给定三相导体单位长度热量，不反求电流。",
+            "x-unit": {
+              "si": "W/m",
+              "display": "W/m",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 0,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "conductor_k_w_m_k": {
+            "exclusiveMinimum": 1,
+            "maximum": 500,
+            "title": "导体热导率",
+            "type": "number",
+            "description": "原生热参考模型的导体热导率，须与领域材料事实一致。",
+            "x-unit": {
+              "si": "W/(m·K)",
+              "display": "W/(m·K)",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 1,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "metal_screen_k_w_m_k": {
+            "exclusiveMinimum": 1,
+            "maximum": 500,
+            "title": "金属屏蔽热导率",
+            "type": "number",
+            "description": "原生参考模型中屏蔽金属的热导率，须与领域材料一致。",
+            "x-unit": {
+              "si": "W/(m·K)",
+              "display": "W/(m·K)",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 2,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "domain_scale": {
+            "default": 8,
+            "enum": [
+              4,
+              8,
+              16
+            ],
+            "title": "计算域放大倍数",
+            "type": "integer",
+            "description": "有限边界相对电缆埋深或群宽的放大倍数，用于域收敛检查。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 3,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source 输入校验；离散或资源限制，不是材料设计限值。"
+            },
+            "x-range-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source 输入校验；离散或资源限制，不是材料设计限值。"
+            }
+          },
+          "resolution": {
+            "default": 16,
+            "enum": [
+              16,
+              24,
+              32
+            ],
+            "title": "圆周离散分辨率",
+            "type": "integer",
+            "description": "原生参考网格支持的圆周细化档位，需独立收敛校核。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 4,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source 输入校验；离散或资源限制，不是材料设计限值。"
+            },
+            "x-range-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source 输入校验；离散或资源限制，不是材料设计限值。"
+            }
+          },
+          "conductor_kind": {
+            "type": "string",
+            "enum": [
+              "copper",
+              "aluminium"
+            ],
+            "title": "导体材料",
+            "description": "选择模型支持的铜或铝导体，与型号材料事实一致。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 5,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ac_extra_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "交流附加损耗系数",
+            "description": "导体交流电阻相对直流电阻的附加比例，采用有来源的电损耗计算结果。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 6,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "screen_loss_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "屏蔽损耗系数",
+            "description": "屏蔽损耗与导体损耗之比，须有接地方式及温度适用依据。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 7,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "native_source_reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "artifact_type": {
+                "type": "string",
+                "const": "x-cablesim.native-bundle",
+                "title": "原生工件类型",
+                "description": "固定引用同工程已封存的原生来源束，由宿主选择器取得。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 3,
+                "x-level": "expert",
+                "readOnly": true,
+                "x-range-basis": {
+                  "kind": "binding",
+                  "reference": "backend/kernel/contracts.py NativeArtifactReference；来源必须为x-cablesim.native-bundle。"
+                }
+              },
+              "run_id": {
+                "type": "string",
+                "title": "来源运行",
+                "description": "从工程保存运行选择来源，历史运行不可改写。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced"
+              },
+              "case_id": {
+                "type": "string",
+                "title": "来源工况",
+                "description": "从选定来源运行中选择同一计算工况。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced"
+              },
+              "artifact_sha256": {
+                "type": "string",
+                "title": "来源工件摘要",
+                "description": "绑定已保存工件的SHA-256摘要，防止引用内容被替换。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 2,
+                "x-level": "advanced"
+              }
+            },
+            "required": [
+              "run_id",
+              "case_id",
+              "artifact_type",
+              "artifact_sha256"
+            ],
+            "title": "原生来源运行",
+            "description": "从已保存且摘要已校验的原生运行选择来源工况，宿主自动装配工件。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 8,
+            "x-level": "advanced",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            }
+          },
+          "fill_factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "readOnly": true,
+            "description": "导体标称面积与外径面积之比，由保存领域几何取得；兼容迁移记录，不能用旧值覆盖几何事实。",
+            "title": "导体填充率",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 9,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        },
+        "required": [
+          "conductor_powers_w_m",
+          "conductor_k_w_m_k",
+          "metal_screen_k_w_m_k"
+        ],
+        "title": "BuriedArgs",
+        "type": "object"
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "conductor_temperature",
+          "title": "最高导体温度",
+          "unit": {
+            "si": "K",
+            "display": "°C",
+            "scale": 1,
+            "offset": -273.15
+          },
+          "aggregate": "maximum",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.native-bundle"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "kind": "method",
       "id": "cable-step",
       "title": "圆电缆CAD参考",
-      "method_version": "native-adapters/0.1.0",
+      "method_version": "1.0.0",
       "analysis": "geometry",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -171,6 +1489,10 @@
         {
           "type": "x-cablesim.native-bundle",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -180,13 +1502,280 @@
       "limitations": [
         "单回路六层圆电缆的参考适配；不代表制造或工程认证。",
         "上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。"
-      ]
+      ],
+      "category": "simulation",
+      "description": "单回路六层圆电缆的参考适配；不代表制造或工程认证。；上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "preview_length_m": {
+            "default": 0.25,
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "title": "原生展示段长",
+            "type": "number",
+            "description": "STEP实体的展示轴向长度，资源上限不代表产品长度限制。",
+            "x-unit": {
+              "si": "m",
+              "display": "mm",
+              "scale": 1000,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 0,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 cable-step 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 cable-step 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "conductor_kind": {
+            "type": "string",
+            "enum": [
+              "copper",
+              "aluminium"
+            ],
+            "title": "导体材料",
+            "description": "选择模型支持的铜或铝导体，与型号材料事实一致。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 1,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 cable-step 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ac_extra_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "交流附加损耗系数",
+            "description": "导体交流电阻相对直流电阻的附加比例，采用有来源的电损耗计算结果。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 2,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 cable-step 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "screen_loss_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "屏蔽损耗系数",
+            "description": "屏蔽损耗与导体损耗之比，须有接地方式及温度适用依据。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 3,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 cable-step 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "native_source_reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "artifact_type": {
+                "type": "string",
+                "const": "x-cablesim.native-bundle",
+                "title": "原生工件类型",
+                "description": "固定引用同工程已封存的原生来源束，由宿主选择器取得。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 3,
+                "x-level": "expert",
+                "readOnly": true,
+                "x-range-basis": {
+                  "kind": "binding",
+                  "reference": "backend/kernel/contracts.py NativeArtifactReference；来源必须为x-cablesim.native-bundle。"
+                }
+              },
+              "run_id": {
+                "type": "string",
+                "title": "来源运行",
+                "description": "从工程保存运行选择来源，历史运行不可改写。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced"
+              },
+              "case_id": {
+                "type": "string",
+                "title": "来源工况",
+                "description": "从选定来源运行中选择同一计算工况。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced"
+              },
+              "artifact_sha256": {
+                "type": "string",
+                "title": "来源工件摘要",
+                "description": "绑定已保存工件的SHA-256摘要，防止引用内容被替换。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 2,
+                "x-level": "advanced"
+              }
+            },
+            "required": [
+              "run_id",
+              "case_id",
+              "artifact_type",
+              "artifact_sha256"
+            ],
+            "title": "原生来源运行",
+            "description": "从已保存且摘要已校验的原生运行选择来源工况，宿主自动装配工件。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 4,
+            "x-level": "advanced",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            }
+          },
+          "fill_factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "readOnly": true,
+            "description": "导体标称面积与外径面积之比，由保存领域几何取得；兼容迁移记录，不能用旧值覆盖几何事实。",
+            "title": "导体填充率",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 5,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 cable-step 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        },
+        "title": "CadArgs",
+        "type": "object"
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.native-artifact-count",
+          "title": "原生工件数量",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.native-bundle"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "kind": "method",
       "id": "section-mesh",
       "title": "圆截面网格参考",
-      "method_version": "native-adapters/0.1.0",
+      "method_version": "1.0.0",
       "analysis": "mesh",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -201,6 +1790,10 @@
         {
           "type": "x-cablesim.native-bundle",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -210,13 +1803,283 @@
       "limitations": [
         "单回路六层圆电缆的参考适配；不代表制造或工程认证。",
         "上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。"
-      ]
+      ],
+      "category": "simulation",
+      "description": "单回路六层圆电缆的参考适配；不代表制造或工程认证。；上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "resolution": {
+            "default": 16,
+            "enum": [
+              16,
+              24,
+              32
+            ],
+            "title": "圆周离散分辨率",
+            "type": "integer",
+            "description": "原生参考网格支持的圆周细化档位，需独立收敛校核。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 0,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 section-mesh 输入校验；离散或资源限制，不是材料设计限值。"
+            },
+            "x-range-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.native-reference/src 的 section-mesh 输入校验；离散或资源限制，不是材料设计限值。"
+            }
+          },
+          "conductor_kind": {
+            "type": "string",
+            "enum": [
+              "copper",
+              "aluminium"
+            ],
+            "title": "导体材料",
+            "description": "选择模型支持的铜或铝导体，与型号材料事实一致。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 1,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 section-mesh 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ac_extra_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "交流附加损耗系数",
+            "description": "导体交流电阻相对直流电阻的附加比例，采用有来源的电损耗计算结果。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 2,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 section-mesh 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "screen_loss_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "屏蔽损耗系数",
+            "description": "屏蔽损耗与导体损耗之比，须有接地方式及温度适用依据。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 3,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 section-mesh 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "native_source_reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "artifact_type": {
+                "type": "string",
+                "const": "x-cablesim.native-bundle",
+                "title": "原生工件类型",
+                "description": "固定引用同工程已封存的原生来源束，由宿主选择器取得。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 3,
+                "x-level": "expert",
+                "readOnly": true,
+                "x-range-basis": {
+                  "kind": "binding",
+                  "reference": "backend/kernel/contracts.py NativeArtifactReference；来源必须为x-cablesim.native-bundle。"
+                }
+              },
+              "run_id": {
+                "type": "string",
+                "title": "来源运行",
+                "description": "从工程保存运行选择来源，历史运行不可改写。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced"
+              },
+              "case_id": {
+                "type": "string",
+                "title": "来源工况",
+                "description": "从选定来源运行中选择同一计算工况。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced"
+              },
+              "artifact_sha256": {
+                "type": "string",
+                "title": "来源工件摘要",
+                "description": "绑定已保存工件的SHA-256摘要，防止引用内容被替换。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 2,
+                "x-level": "advanced"
+              }
+            },
+            "required": [
+              "run_id",
+              "case_id",
+              "artifact_type",
+              "artifact_sha256"
+            ],
+            "title": "原生来源运行",
+            "description": "从已保存且摘要已校验的原生运行选择来源工况，宿主自动装配工件。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 4,
+            "x-level": "advanced",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            }
+          },
+          "fill_factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "readOnly": true,
+            "description": "导体标称面积与外径面积之比，由保存领域几何取得；兼容迁移记录，不能用旧值覆盖几何事实。",
+            "title": "导体填充率",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 5,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 section-mesh 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        },
+        "title": "MeshArgs",
+        "type": "object"
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.native-artifact-count",
+          "title": "原生工件数量",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.native-bundle"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "kind": "method",
       "id": "mesh-vtu",
       "title": "网格格式转换",
-      "method_version": "native-adapters/0.1.0",
+      "method_version": "1.0.0",
       "analysis": "postprocess",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -231,6 +2094,10 @@
         {
           "type": "x-cablesim.native-bundle",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -240,13 +2107,305 @@
       "limitations": [
         "单回路六层圆电缆的参考适配；不代表制造或工程认证。",
         "上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。"
-      ]
+      ],
+      "category": "simulation",
+      "description": "单回路六层圆电缆的参考适配；不代表制造或工程认证。；上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "source_bundle": {
+            "additionalProperties": true,
+            "title": "宿主装配来源束",
+            "type": "object",
+            "description": "来源二进制束由宿主依据保存运行绑定，用户不得填写或覆盖。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 0,
+            "x-level": "expert",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": true
+            },
+            "x-editor-reason": "由宿主绑定原始二进制工件束，不提供自由文本编辑器。"
+          },
+          "source_metadata": {
+            "additionalProperties": true,
+            "title": "宿主装配来源身份",
+            "type": "object",
+            "description": "来源方法、输入、版本与工况由宿主绑定并核验。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 1,
+            "x-level": "expert",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": true
+            },
+            "x-editor-reason": "由宿主从保存运行装配身份与输入摘要，不接受调用者改写。"
+          },
+          "conductor_kind": {
+            "type": "string",
+            "enum": [
+              "copper",
+              "aluminium"
+            ],
+            "title": "导体材料",
+            "description": "选择模型支持的铜或铝导体，与型号材料事实一致。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 2,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 mesh-vtu 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ac_extra_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "交流附加损耗系数",
+            "description": "导体交流电阻相对直流电阻的附加比例，采用有来源的电损耗计算结果。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 3,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 mesh-vtu 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "screen_loss_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "屏蔽损耗系数",
+            "description": "屏蔽损耗与导体损耗之比，须有接地方式及温度适用依据。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 4,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 mesh-vtu 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "native_source_reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "artifact_type": {
+                "type": "string",
+                "const": "x-cablesim.native-bundle",
+                "title": "原生工件类型",
+                "description": "固定引用同工程已封存的原生来源束，由宿主选择器取得。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 3,
+                "x-level": "expert",
+                "readOnly": true,
+                "x-range-basis": {
+                  "kind": "binding",
+                  "reference": "backend/kernel/contracts.py NativeArtifactReference；来源必须为x-cablesim.native-bundle。"
+                }
+              },
+              "run_id": {
+                "type": "string",
+                "title": "来源运行",
+                "description": "从工程保存运行选择来源，历史运行不可改写。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced"
+              },
+              "case_id": {
+                "type": "string",
+                "title": "来源工况",
+                "description": "从选定来源运行中选择同一计算工况。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced"
+              },
+              "artifact_sha256": {
+                "type": "string",
+                "title": "来源工件摘要",
+                "description": "绑定已保存工件的SHA-256摘要，防止引用内容被替换。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 2,
+                "x-level": "advanced"
+              }
+            },
+            "required": [
+              "run_id",
+              "case_id",
+              "artifact_type",
+              "artifact_sha256"
+            ],
+            "title": "原生来源运行",
+            "description": "从已保存且摘要已校验的原生运行选择来源工况，宿主自动装配工件。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 5,
+            "x-level": "advanced",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            }
+          },
+          "fill_factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "readOnly": true,
+            "description": "导体标称面积与外径面积之比，由保存领域几何取得；兼容迁移记录，不能用旧值覆盖几何事实。",
+            "title": "导体填充率",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 6,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 mesh-vtu 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        },
+        "required": [
+          "source_bundle",
+          "source_metadata"
+        ],
+        "title": "SourceArgs",
+        "type": "object"
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.native-artifact-count",
+          "title": "原生工件数量",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.native-bundle"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "kind": "method",
       "id": "radial-thermal",
       "title": "定表温径向传热参考",
-      "method_version": "native-adapters/0.1.0",
+      "method_version": "1.0.0",
       "analysis": "crosscheck",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -261,6 +2420,10 @@
         {
           "type": "x-cablesim.native-bundle",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -270,13 +2433,394 @@
       "limitations": [
         "单回路六层圆电缆的参考适配；不代表制造或工程认证。",
         "上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。"
-      ]
+      ],
+      "category": "simulation",
+      "description": "单回路六层圆电缆的参考适配；不代表制造或工程认证。；上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "source_bundle": {
+            "additionalProperties": true,
+            "title": "宿主装配来源束",
+            "type": "object",
+            "description": "来源二进制束由宿主依据保存运行绑定，用户不得填写或覆盖。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 0,
+            "x-level": "expert",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": true
+            },
+            "x-editor-reason": "由宿主绑定原始二进制工件束，不提供自由文本编辑器。"
+          },
+          "source_metadata": {
+            "additionalProperties": true,
+            "title": "宿主装配来源身份",
+            "type": "object",
+            "description": "来源方法、输入、版本与工况由宿主绑定并核验。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 1,
+            "x-level": "expert",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": true
+            },
+            "x-editor-reason": "由宿主从保存运行装配身份与输入摘要，不接受调用者改写。"
+          },
+          "heat_w_m": {
+            "exclusiveMinimum": 0,
+            "maximum": 1000,
+            "title": "给定线热源",
+            "type": "number",
+            "description": "径向参考热模型的导体单位长度发热量。",
+            "x-unit": {
+              "si": "W/m",
+              "display": "W/m",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 2,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 radial-thermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "surface_temperature_k": {
+            "maximum": 383.15,
+            "minimum": 253.14999999999998,
+            "title": "电缆表面温度",
+            "type": "number",
+            "description": "径向参考热模型的外表面定温边界，SI存储为K。",
+            "x-unit": {
+              "si": "K",
+              "display": "°C",
+              "scale": 1,
+              "offset": -273.15
+            },
+            "x-group": "physics",
+            "x-order": 3,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 radial-thermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-runtime": {
+              "key": "surface_temperature_c",
+              "scale": 1,
+              "offset": -273.15
+            }
+          },
+          "conductor_k_w_m_k": {
+            "exclusiveMinimum": 1,
+            "maximum": 500,
+            "title": "导体热导率",
+            "type": "number",
+            "description": "原生热参考模型的导体热导率，须与领域材料事实一致。",
+            "x-unit": {
+              "si": "W/(m·K)",
+              "display": "W/(m·K)",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 4,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 radial-thermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "metal_screen_k_w_m_k": {
+            "exclusiveMinimum": 1,
+            "maximum": 500,
+            "title": "金属屏蔽热导率",
+            "type": "number",
+            "description": "原生参考模型中屏蔽金属的热导率，须与领域材料一致。",
+            "x-unit": {
+              "si": "W/(m·K)",
+              "display": "W/(m·K)",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 5,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 radial-thermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "conductor_kind": {
+            "type": "string",
+            "enum": [
+              "copper",
+              "aluminium"
+            ],
+            "title": "导体材料",
+            "description": "选择模型支持的铜或铝导体，与型号材料事实一致。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 6,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 radial-thermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ac_extra_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "交流附加损耗系数",
+            "description": "导体交流电阻相对直流电阻的附加比例，采用有来源的电损耗计算结果。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 7,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 radial-thermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "screen_loss_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "屏蔽损耗系数",
+            "description": "屏蔽损耗与导体损耗之比，须有接地方式及温度适用依据。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 8,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 radial-thermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "native_source_reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "artifact_type": {
+                "type": "string",
+                "const": "x-cablesim.native-bundle",
+                "title": "原生工件类型",
+                "description": "固定引用同工程已封存的原生来源束，由宿主选择器取得。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 3,
+                "x-level": "expert",
+                "readOnly": true,
+                "x-range-basis": {
+                  "kind": "binding",
+                  "reference": "backend/kernel/contracts.py NativeArtifactReference；来源必须为x-cablesim.native-bundle。"
+                }
+              },
+              "run_id": {
+                "type": "string",
+                "title": "来源运行",
+                "description": "从工程保存运行选择来源，历史运行不可改写。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced"
+              },
+              "case_id": {
+                "type": "string",
+                "title": "来源工况",
+                "description": "从选定来源运行中选择同一计算工况。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced"
+              },
+              "artifact_sha256": {
+                "type": "string",
+                "title": "来源工件摘要",
+                "description": "绑定已保存工件的SHA-256摘要，防止引用内容被替换。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 2,
+                "x-level": "advanced"
+              }
+            },
+            "required": [
+              "run_id",
+              "case_id",
+              "artifact_type",
+              "artifact_sha256"
+            ],
+            "title": "原生来源运行",
+            "description": "从已保存且摘要已校验的原生运行选择来源工况，宿主自动装配工件。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 9,
+            "x-level": "advanced",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            }
+          },
+          "fill_factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "readOnly": true,
+            "description": "导体标称面积与外径面积之比，由保存领域几何取得；兼容迁移记录，不能用旧值覆盖几何事实。",
+            "title": "导体填充率",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 10,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 radial-thermal 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        },
+        "required": [
+          "source_bundle",
+          "source_metadata",
+          "heat_w_m",
+          "surface_temperature_k",
+          "conductor_k_w_m_k",
+          "metal_screen_k_w_m_k"
+        ],
+        "title": "ThermalArgs",
+        "type": "object"
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.native-artifact-count",
+          "title": "原生工件数量",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.native-bundle"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "kind": "method",
       "id": "field-summary",
       "title": "温度场统计与等温线",
-      "method_version": "native-adapters/0.1.0",
+      "method_version": "1.0.0",
       "analysis": "postprocess",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -291,6 +2835,10 @@
         {
           "type": "x-cablesim.native-bundle",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -300,13 +2848,305 @@
       "limitations": [
         "单回路六层圆电缆的参考适配；不代表制造或工程认证。",
         "上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。"
-      ]
+      ],
+      "category": "simulation",
+      "description": "单回路六层圆电缆的参考适配；不代表制造或工程认证。；上游网格与温度场必须引用同工程、同输入的已封存运行，逐文件核验SHA256。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "source_bundle": {
+            "additionalProperties": true,
+            "title": "宿主装配来源束",
+            "type": "object",
+            "description": "来源二进制束由宿主依据保存运行绑定，用户不得填写或覆盖。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 0,
+            "x-level": "expert",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": true
+            },
+            "x-editor-reason": "由宿主绑定原始二进制工件束，不提供自由文本编辑器。"
+          },
+          "source_metadata": {
+            "additionalProperties": true,
+            "title": "宿主装配来源身份",
+            "type": "object",
+            "description": "来源方法、输入、版本与工况由宿主绑定并核验。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 1,
+            "x-level": "expert",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": true
+            },
+            "x-editor-reason": "由宿主从保存运行装配身份与输入摘要，不接受调用者改写。"
+          },
+          "conductor_kind": {
+            "type": "string",
+            "enum": [
+              "copper",
+              "aluminium"
+            ],
+            "title": "导体材料",
+            "description": "选择模型支持的铜或铝导体，与型号材料事实一致。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 2,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 field-summary 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ac_extra_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "交流附加损耗系数",
+            "description": "导体交流电阻相对直流电阻的附加比例，采用有来源的电损耗计算结果。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 3,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 field-summary 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "screen_loss_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "屏蔽损耗系数",
+            "description": "屏蔽损耗与导体损耗之比，须有接地方式及温度适用依据。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 4,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 field-summary 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "native_source_reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "artifact_type": {
+                "type": "string",
+                "const": "x-cablesim.native-bundle",
+                "title": "原生工件类型",
+                "description": "固定引用同工程已封存的原生来源束，由宿主选择器取得。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 3,
+                "x-level": "expert",
+                "readOnly": true,
+                "x-range-basis": {
+                  "kind": "binding",
+                  "reference": "backend/kernel/contracts.py NativeArtifactReference；来源必须为x-cablesim.native-bundle。"
+                }
+              },
+              "run_id": {
+                "type": "string",
+                "title": "来源运行",
+                "description": "从工程保存运行选择来源，历史运行不可改写。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced"
+              },
+              "case_id": {
+                "type": "string",
+                "title": "来源工况",
+                "description": "从选定来源运行中选择同一计算工况。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced"
+              },
+              "artifact_sha256": {
+                "type": "string",
+                "title": "来源工件摘要",
+                "description": "绑定已保存工件的SHA-256摘要，防止引用内容被替换。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 2,
+                "x-level": "advanced"
+              }
+            },
+            "required": [
+              "run_id",
+              "case_id",
+              "artifact_type",
+              "artifact_sha256"
+            ],
+            "title": "原生来源运行",
+            "description": "从已保存且摘要已校验的原生运行选择来源工况，宿主自动装配工件。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 5,
+            "x-level": "advanced",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            }
+          },
+          "fill_factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "readOnly": true,
+            "description": "导体标称面积与外径面积之比，由保存领域几何取得；兼容迁移记录，不能用旧值覆盖几何事实。",
+            "title": "导体填充率",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 6,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 field-summary 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        },
+        "required": [
+          "source_bundle",
+          "source_metadata"
+        ],
+        "title": "SourceArgs",
+        "type": "object"
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.native-artifact-count",
+          "title": "原生工件数量",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.native-bundle"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "kind": "method",
       "id": "line-source-crosscheck",
       "title": "有限域与半空间线源交叉校核",
-      "method_version": "native-crosscheck/0.1.0",
+      "method_version": "1.0.0",
       "analysis": "crosscheck",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -321,6 +3161,10 @@
         {
           "type": "x-cablesim.native-bundle",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -330,14 +3174,316 @@
       "limitations": [
         "仅引用相同领域输入的已封存固定功率有限元运行，不重算来源有限元。",
         "差值为信息，不作为工程认证或通过判据。"
-      ]
+      ],
+      "category": "simulation",
+      "description": "仅引用相同领域输入的已封存固定功率有限元运行，不重算来源有限元。；差值为信息，不作为工程认证或通过判据。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "source_bundle": {
+            "additionalProperties": true,
+            "title": "宿主装配来源束",
+            "type": "object",
+            "description": "来源二进制束由宿主依据保存运行绑定，用户不得填写或覆盖。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 0,
+            "x-level": "expert",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": true
+            },
+            "x-editor-reason": "由宿主绑定原始二进制工件束，不提供自由文本编辑器。"
+          },
+          "source_metadata": {
+            "additionalProperties": true,
+            "title": "宿主装配来源身份",
+            "type": "object",
+            "description": "来源方法、输入、版本与工况由宿主绑定并核验。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 1,
+            "x-level": "expert",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": true
+            },
+            "x-editor-reason": "由宿主从保存运行装配身份与输入摘要，不接受调用者改写。"
+          },
+          "conductor_kind": {
+            "type": "string",
+            "enum": [
+              "copper",
+              "aluminium"
+            ],
+            "title": "导体材料",
+            "description": "选择模型支持的铜或铝导体，与型号材料事实一致。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 2,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source-crosscheck 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ac_extra_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "交流附加损耗系数",
+            "description": "导体交流电阻相对直流电阻的附加比例，采用有来源的电损耗计算结果。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 3,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source-crosscheck 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "screen_loss_factor": {
+            "type": "number",
+            "minimum": 0,
+            "title": "屏蔽损耗系数",
+            "description": "屏蔽损耗与导体损耗之比，须有接地方式及温度适用依据。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 4,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source-crosscheck 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "native_source_reference": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "artifact_type": {
+                "type": "string",
+                "const": "x-cablesim.native-bundle",
+                "title": "原生工件类型",
+                "description": "固定引用同工程已封存的原生来源束，由宿主选择器取得。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 3,
+                "x-level": "expert",
+                "readOnly": true,
+                "x-range-basis": {
+                  "kind": "binding",
+                  "reference": "backend/kernel/contracts.py NativeArtifactReference；来源必须为x-cablesim.native-bundle。"
+                }
+              },
+              "run_id": {
+                "type": "string",
+                "title": "来源运行",
+                "description": "从工程保存运行选择来源，历史运行不可改写。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced"
+              },
+              "case_id": {
+                "type": "string",
+                "title": "来源工况",
+                "description": "从选定来源运行中选择同一计算工况。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced"
+              },
+              "artifact_sha256": {
+                "type": "string",
+                "title": "来源工件摘要",
+                "description": "绑定已保存工件的SHA-256摘要，防止引用内容被替换。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 2,
+                "x-level": "advanced"
+              }
+            },
+            "required": [
+              "run_id",
+              "case_id",
+              "artifact_type",
+              "artifact_sha256"
+            ],
+            "title": "原生来源运行",
+            "description": "从已保存且摘要已校验的原生运行选择来源工况，宿主自动装配工件。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 5,
+            "x-level": "advanced",
+            "x-bind": {
+              "type": "artifact",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            }
+          },
+          "fill_factor": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "readOnly": true,
+            "description": "导体标称面积与外径面积之比，由保存领域几何取得；兼容迁移记录，不能用旧值覆盖几何事实。",
+            "title": "导体填充率",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 6,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.native-reference/src 的 line-source-crosscheck 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        },
+        "required": [
+          "source_bundle",
+          "source_metadata"
+        ],
+        "title": "SourceArgs",
+        "type": "object"
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.native-difference",
+          "title": "最大温度差",
+          "unit": {
+            "si": "K",
+            "display": "K",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "maximum",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.native-bundle"
+        }
+      ],
+      "study_tasks": []
     }
   ],
   "files": [
     {
+      "path": "assets/cover.webp",
+      "sha256": "4c0d48e15720eafcb91e018b5f4520d02fb6c1c534887d8afd9396e15944870f",
+      "size_bytes": 9852
+    },
+    {
       "path": "assets/icon.svg",
       "sha256": "e52dedfd6570cb19c7993a869ac3a3d13aa68909d252ed907f7cc4bee1871a26",
       "size_bytes": 342
+    },
+    {
+      "path": "assets/method.svg",
+      "sha256": "31961a13a2d8320f693919573f98e8617811d0bc1061dd5da59c029589a2a900",
+      "size_bytes": 2774
     },
     {
       "path": "src/cablesim_native/__init__.py",
@@ -371,13 +3517,13 @@
     },
     {
       "path": "src/cablesim_native/main.py",
-      "sha256": "0fbb3a352c7c307fae0d03810bb385857299f0cb18aad2de723a41bacddc47f2",
-      "size_bytes": 9305
+      "sha256": "f7d5ea09b272d160e833eb20af21661830a5f67dad5c1edc7485c382acbc9b31",
+      "size_bytes": 9602
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "24f67b9dd73b8eaea29e1dd8b19e8ef7774be74c8a2360cd964da64c316dc664",
-      "size_bytes": 4146
+      "sha256": "873861f1b01ba9e0db4dafee8d8788a72401cdc6d4d567aa41d60b68e07129a6",
+      "size_bytes": 5111
     }
   ]
 }

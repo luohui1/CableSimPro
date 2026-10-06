@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.cable-geometry",
-  "version": "0.6.0",
+  "version": "1.0.0",
   "name": "电缆实体建模",
   "icon": "assets/icon.svg",
   "description": "单芯及多芯电缆实体、显式扇形轮廓、间隙填充、内衬、双带与丝铠装；结构推导外径和理论用料；同源 OCCT 实体与 STEP。",
@@ -43,7 +43,7 @@
       "kind": "method",
       "id": "concentric-model",
       "title": "电缆结构 CAD 实体",
-      "method_version": "CAD-CABLE-0.6.0",
+      "method_version": "1.0.0",
       "analysis": "geometry",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -70,6 +70,10 @@
         {
           "type": "x-cablesim.cad-model",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -80,13 +84,147 @@
         "支持最多16芯、128层；圆形及明确圆弧直径、夹角、朝向的扇形轮廓，芯坐标必须明确且不重叠。不支持波纹与中空结构；扇形离散丝/带层须专用轮廓。",
         "圆绞合与丝层需要根数、丝径和节距；紧压与分割导体按设计外径生成包络，未建单丝压实或分割缝。用料按标称截面、密度及明确绞入系数计算，缺系数时不提供导体用料。",
         "质量只在结构与材料密度齐全时提供；双带需单带厚度、带宽与最大轴向间隙。搭盖金属带用料按单带厚度及搭盖率，径向显示包络体积不作为金属量。线芯按截面直线拉伸，不含成缆扭转、接触形变与制造公差。"
-      ]
+      ],
+      "category": "modeling",
+      "description": "支持最多16芯、128层；圆形及明确圆弧直径、夹角、朝向的扇形轮廓，芯坐标必须明确且不重叠。不支持波纹与中空结构；扇形离散丝/带层须专用轮廓。；圆绞合与丝层需要根数、丝径和节距；紧压与分割导体按设计外径生成包络，未建单丝压实或分割缝。用料按标称截面、密度及明确绞入系数计算，缺系数时不提供导体用料。",
+      "parameter_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "cable_type_id": {
+            "type": "string",
+            "title": "电缆型号",
+            "description": "从工程型号库选择已有型号，禁止自由填写不存在的编号。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "model",
+            "x-order": 0,
+            "x-level": "basic",
+            "x-bind": {
+              "type": "cable_type",
+              "scope": "workspace",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            }
+          },
+          "length_m": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "default": 0.18,
+            "title": "建模长度",
+            "description": "轴向几何或电场模型的长度，几何展示长度不代表订单长度。",
+            "x-unit": {
+              "si": "m",
+              "display": "m",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 1,
+            "x-level": "basic",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.cable-geometry/src 的 concentric-model 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.cable-geometry/src 的 concentric-model 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "include_exact": {
+            "type": "boolean",
+            "default": true,
+            "title": "生成精确实体",
+            "description": "请求原生几何实体；实际构造缺失时仍保留明确的包络限制。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 2,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.cable-geometry/src 的 concentric-model 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        }
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain",
+          "study"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.outer-diameter",
+          "title": "电缆外径",
+          "unit": {
+            "si": "m",
+            "display": "mm",
+            "scale": 1000,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.cad-model"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "kind": "method",
       "id": "installation-scene",
       "title": "敷设截面三维场景",
-      "method_version": "CAD-INSTALLATION-0.6.0",
+      "method_version": "1.0.0",
       "analysis": "geometry",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -101,6 +239,10 @@
         {
           "type": "x-cablesim.cad-scene",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -111,29 +253,217 @@
         "复用声明支持的单芯或多芯型号实体；支持最多 32 根电缆、32 个容纳结构和 16 层土壤，不生成不支持的型号替代几何。",
         "截面 x/z 使用 SI 输入，沿 +Y 展示长度拉伸；有限土壤显示窗口不是数值远场边界。",
         "排管内外径、回填与土壤边界必须明确；矩形容纳结构缺壁厚时只作外包络，管内空腔不补材料。"
-      ]
+      ],
+      "category": "modeling",
+      "description": "复用声明支持的单芯或多芯型号实体；支持最多 32 根电缆、32 个容纳结构和 16 层土壤，不生成不支持的型号替代几何。；截面 x/z 使用 SI 输入，沿 +Y 展示长度拉伸；有限土壤显示窗口不是数值远场边界。",
+      "parameter_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "section_id": {
+            "type": "string",
+            "title": "敷设截面",
+            "description": "从工程选择已有敷设截面，采用其几何和材料事实。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "model",
+            "x-order": 0,
+            "x-level": "basic",
+            "x-bind": {
+              "type": "section",
+              "scope": "workspace",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            }
+          },
+          "length_m": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1,
+            "default": 0.4,
+            "title": "建模长度",
+            "description": "轴向几何或电场模型的长度，几何展示长度不代表订单长度。",
+            "x-unit": {
+              "si": "m",
+              "display": "m",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 1,
+            "x-level": "basic",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.cable-geometry/src 的 installation-scene 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.cable-geometry/src 的 installation-scene 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "include_exact": {
+            "type": "boolean",
+            "default": true,
+            "title": "生成精确实体",
+            "description": "请求原生几何实体；实际构造缺失时仍保留明确的包络限制。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 2,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.cable-geometry/src 的 installation-scene 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "crop_bounds_m": {
+            "type": "array",
+            "minItems": 6,
+            "maxItems": 6,
+            "items": {
+              "type": "number"
+            },
+            "title": "场景显示边界",
+            "description": "六个SI坐标定义显示窗口，必须包含全部截面对象及完整展示段。",
+            "x-unit": {
+              "si": "m",
+              "display": "mm",
+              "scale": 1000,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 3,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.cable-geometry/src 的 installation-scene 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        }
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain",
+          "study"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.scene-extrusion-length",
+          "title": "场景展示段长",
+          "unit": {
+            "si": "m",
+            "display": "mm",
+            "scale": 1000,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.cad-scene"
+        }
+      ],
+      "study_tasks": []
     }
   ],
   "files": [
+    {
+      "path": "assets/cover.webp",
+      "sha256": "da5bd3ca217ebab021ddd823421c09061ea267002723a5f246216f06ec5244c3",
+      "size_bytes": 10224
+    },
     {
       "path": "assets/icon.svg",
       "sha256": "3f19fd99db3b9c31144520f8dfb67d943f30b18c8253a5d232c3c96824e6ab86",
       "size_bytes": 279
     },
     {
+      "path": "assets/method.svg",
+      "sha256": "64d90dffd0cce64ebe24ba3f84f9d7243ad9ada7c74a1f60b4fbc6d4a51e132f",
+      "size_bytes": 2101
+    },
+    {
       "path": "src/cablesim_cable_geometry/main.py",
-      "sha256": "8d408148d0cb169a8afdff1b826d80ec287198d1c07b8347169dade39f91915b",
-      "size_bytes": 54495
+      "sha256": "489c649c2476ca08d8b88d76b2293277edb6b3ec76a6e4f68b8d99e7991d806d",
+      "size_bytes": 54774
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "4b49714d85add8cd77ae2df6e76e763a407f7a1ad5f110e89f1416568330453e",
-      "size_bytes": 315
+      "sha256": "7426eba687ef4482a370d604d6a38c8563978d9ef42733d52b56252b9a727394",
+      "size_bytes": 951
     },
     {
       "path": "src/requirements.txt",
       "sha256": "9e13b38bca96747f07e0998d19470c39fe316806f73e8dab8fe6364b12a84280",
       "size_bytes": 161
     }
-  ]
+  ],
+  "presentation": {
+    "category": "modeling",
+    "category_title": "建模",
+    "assets": [
+      {
+        "role": "cover",
+        "path": "assets/cover.webp",
+        "title": "电缆实体建模封面",
+        "description": "仓库既有插件封面，随发行包封签。",
+        "media_type": "image/webp"
+      },
+      {
+        "role": "method",
+        "path": "assets/method.svg",
+        "title": "电缆实体建模方法示意",
+        "description": "按实际模型手工绘制的示意图；不包含虚构结果。",
+        "media_type": "image/svg+xml"
+      }
+    ],
+    "validation_note": "无参考算例可发布数值数据；已声明的源码测试与适用范围见各能力validation，不据此生成验证图。"
+  }
 }

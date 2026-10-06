@@ -83,4 +83,8 @@ def temperature_convergence(run):
 
 
 def has_temperature_field(run):
-    return run['snapshot'].get('module')=='thermal-field' or bool(run['snapshot']['definition'].get('verification')) or any('x-cablesim.temperature-field' in c.get('artifacts',{}) for c in (run.get('output') or {}).get('cases',[]))
+    return run['snapshot'].get('module')=='thermal-field' or bool(run['snapshot']['definition'].get('verification')) or any(
+        'x-cablesim.temperature-field' in c.get('artifacts',{}) and not (
+            c['artifacts']['x-cablesim.temperature-field'].get('source',{}).get('binding')=='iec-trace'
+            and run.get('artifact_status',{}).get(c['case_id'],{}).get('x-cablesim.temperature-field',{}).get('status')=='verified')
+        for c in (run.get('output') or {}).get('cases',[]))

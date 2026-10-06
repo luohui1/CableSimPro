@@ -31,7 +31,8 @@ def test_six_formal_routes_have_models_and_compatible_aliases(client):
         assert formal.json()==old.json()
     contracts=client.get('/api/input-contracts').json()
     simulation=[c for c in contracts if c['method']['plugin_id']=='cablesim.simulation']
-    assert {c['tasks'][0] for c in simulation}=={'transient-temperature','sheath-losses','electrothermal-steady','iec-fem-comparison','iec-thermal-field','getdp-eddy','elmer-heat'}
+    assert len(simulation)==16
+    assert {c['tasks'][0] for c in simulation if c['tasks']}=={'transient-temperature','sheath-losses','electrothermal-steady','iec-fem-comparison','iec-thermal-field','getdp-eddy','elmer-heat'}
     comparison=next(c for c in simulation if c['tasks']==['iec-fem-comparison'])
     assert comparison['method']['capability']=='iec-fem-comparison'
     assert {'section_id','load_id','iec','controls','bounds_m','source'}<=set(comparison['parameter_schema']['required'])
@@ -116,7 +117,6 @@ def test_exact_simulation_problem_contract_and_import_validation(client):
     assert contract.json()['schema']==Problem.model_json_schema()
     contracts=client.get('/api/input-contracts').json()
     entry=next(c for c in contracts if c['method']['capability']=='elmer-heat')
-    assert entry['standalone_schema']==contract.json()['schema']
     assert entry['input_sources']==['study']  # Domain adapters require different parameter contracts.
     w=client.post('/api/workspaces',json={}).json();root='/api/workspaces/'+w['id']
     problem={'schema_version':'cablesim.simulation-problem/1','physics':'steady_heat',
@@ -124,6 +124,11 @@ def test_exact_simulation_problem_contract_and_import_validation(client):
       'boundaries':[{'uid':'outer','selector':'outer','values':[],'kind':'temperature','value':293.15}],
       'excitations':[{'regions':['square'],'kind':'heat_w_m','value':[1],'source':'Synthetic 1 W/m source'}],
       'provenance':{'kind':'test'},'assumptions':['2D, fixed thermal properties']}
+    from jsonschema import Draft202012Validator
+    for schema in (contract.json()['schema'],entry['standalone_schema']):
+        Draft202012Validator(schema).validate(problem)
+        malformed=deepcopy(problem);malformed['geometry'][0]['values'][0]='0'
+        assert not Draft202012Validator(schema).is_valid(malformed)
     body={'expected_revision':1,'title':'Explicit reproduction','input_source':'study','method_input':problem,'method':entry['method'],'parameters':{'mesh':{'size_m':.1,'far_size_m':.2,'transition_m':.3}}}
     response=client.post(root+'/studies',json=body);assert response.status_code==201,response.text
     assert response.json()['definition']['method_input']==problem

@@ -33,7 +33,7 @@ def test_input_contracts_refuse_live_source_or_manifest_drift(tmp_path,monkeypat
 
 def test_contract_read_race_returns_409(tmp_path,monkeypatch):
     from backend.kernel import input_contracts
-    monkeypatch.setattr(input_contracts,'model_for',lambda *args:(_ for _ in ()).throw(FileNotFoundError('source changed')))
+    monkeypatch.setattr(input_contracts,'verified_contracts',lambda *args:(_ for _ in ()).throw(FileNotFoundError('source changed')))
     with TestClient(create_app(tmp_path/'library.sqlite')) as client:
         response=client.get('/api/input-contracts')
         assert response.status_code==409,response.text

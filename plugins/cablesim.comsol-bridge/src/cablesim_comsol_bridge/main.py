@@ -75,10 +75,14 @@ def coupled_case(request,case,job,work):
 
 def main():
     job=Path.cwd();request=json.loads((job/'input/request.json').read_text('utf-8'))
+    from cablesim_sdk.parameter_units import decode_request
+    request = decode_request(request, Path(__file__).resolve().parents[2]/'plugin.json')
     if request.get('protocol')!='cablesim.run/2' or request.get('phase') not in ('check','run'):
         raise ValueError('不支持的运行协议。')
     result={'protocol':'cablesim.run/2','cases':[run_case(request,c,job) for c in request['cases']],
             'environment':{'python':platform.python_version(),'platform':platform.platform(),'reference_solver':'COMSOL external; user-owned commercial license'}}
+    from cablesim_sdk.result_answers import attach_witnesses
+    attach_witnesses(request,result,Path(__file__).resolve().parents[2]/'plugin.json')
     (job/'output/result.json').write_text(json.dumps(result,ensure_ascii=False,allow_nan=False),'utf-8')
 
 

@@ -72,6 +72,7 @@ class InputContract(StrictModel):
     schema_: dict[str, JsonValue] = Field(alias='schema', description='Complete input JSON Schema with field unit descriptions.')
     parameter_schema: dict[str, JsonValue] = Field(description='Capability parameter JSON Schema; SI units.')
     standalone_schema: dict[str, JsonValue] | None = None
+    standalone_parameter_schema: dict[str, JsonValue] | None = None
     schema_digest: str | None = Field(default=None, description='Published input schema SHA256.')
     source: str | None = Field(default=None, description='Repository-relative contract source.')
     source_sha256: str | None = None
@@ -81,6 +82,11 @@ class InputContract(StrictModel):
     reference_only: bool = False
     tasks: list[str] = Field(description='Supported study task identities.')
     engineering_fields: list[dict[str, JsonValue]] | None = None
+    parameter_groups: list[dict[str, JsonValue]] = Field(default_factory=list, alias='x-groups')
+    headlines: list[dict[str, JsonValue]] = Field(default_factory=list, alias='x-headline', max_length=3)
+    input_binding: dict[str, JsonValue] | None = None
+    preview: bool = False
+    preview_timeout_s: int | None = None
 
 
 class IecExample(StrictModel):

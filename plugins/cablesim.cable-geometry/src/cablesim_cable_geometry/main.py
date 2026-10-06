@@ -14,8 +14,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 from cablesim_sdk.cross_sections import core_profile, profile_radius, profiles_overlap
 
 PROTOCOL = 'cablesim.run/2'
-VERSION = 'CAD-CABLE-0.6.0'
-SCENE_VERSION = 'CAD-INSTALLATION-0.6.0'
+VERSION = '1.0.0'
+SCENE_VERSION = '1.0.0'
 RESIDENT = False
 SHAPE_CACHE = OrderedDict()
 SCENE_CACHE = OrderedDict()
@@ -872,6 +872,8 @@ def build_scene(document, parameters, out, case_id):
 
 def main():
     request = json.loads(Path('input/request.json').read_text('utf-8'))
+    from cablesim_sdk.parameter_units import decode_request
+    request = decode_request(request, Path(__file__).resolve().parents[2]/'plugin.json')
     if request.get('protocol') != PROTOCOL or request.get('capability') not in (
         'concentric-model',
         'installation-scene',
@@ -912,6 +914,8 @@ def main():
             cases.append({**base, 'status': 'not_applicable', 'error': {'code': 'CAD_INPUT_UNSUPPORTED', 'message': str(exc)}})
         except Exception:
             cases.append({**base, 'status': 'failed', 'error': {'code': 'CAD_BUILD_FAILED', 'message': 'CAD 内核生成失败，未返回替代几何或数值'}})
+    from cablesim_sdk.result_answers import attach_witnesses
+    attach_witnesses(request,{'cases':cases},Path(__file__).resolve().parents[2]/'plugin.json')
     Path('output/result.json').write_text(json.dumps({'protocol': PROTOCOL, 'cases': cases,
             'environment': {
                 'python': platform.python_version(),

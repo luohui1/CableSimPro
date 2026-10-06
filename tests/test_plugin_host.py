@@ -60,9 +60,9 @@ def test_iec60287_runs_through_the_host_with_typed_results(host):
     assert case.value('ampacity', 'circuit/c1') == direct.ampacity_a
     assert case.value('conductor_temperature', 'cable/c1-B') == pytest.approx(363.15)
     trace = case.artifacts['x-cablesim.iec60287-trace']
-    assert trace['method_version'] == '0.1.0' and trace['iterations'] == direct.iterations
+    assert trace['method_version'] == '1.0.0' and trace['iterations'] == direct.iterations
     assert len(case.artifact_digests['x-cablesim.iec60287-trace']) == 64
-    assert run.method_version == '0.1.0' and len(run.request_sha256) == 64
+    assert run.method_version == '1.0.0' and len(run.request_sha256) == 64
 
 
 def test_refusal_is_a_failed_case_with_its_code_not_a_number(host):

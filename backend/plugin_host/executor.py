@@ -35,7 +35,7 @@ from .runtime import resolve_python
 
 PROTOCOL = 'cablesim.run/2'
 MAX_RESULT_BYTES = 16 * 1024 * 1024
-MAX_OUTPUT_FILES = 200
+MAX_OUTPUT_FILES = 400  # up to 100 cases, including one bounded answer witness per case
 STDERR_LIMIT = 8000
 STATUSES = {'succeeded', 'failed', 'not_applicable'}
 
@@ -150,12 +150,33 @@ class Executor:
             raise PluginHostError('CAPABILITY_UNKNOWN', f'{plugin_id} 没有能力 {capability_id}', 404) from None
         if phase not in ('check', 'run'):
             raise PluginHostError('PHASE_INVALID', '未知执行阶段。')
+        if capability.kind!='method' or manifest.runtime is None:
+            raise PluginHostError('PLUGIN_RUNTIME_NOT_IMPLEMENTED','报告模板和Agent技能目前只有声明规范，没有执行运行时。',422)
         if self.verify:
             plugin.verify()
         interpreter, runtime_environment = resolve_python(plugin)
         ids = [c['case_id'] for c in cases]
         if not cases or len(cases) > 100 or len(set(ids)) != len(ids) or any(not re.fullmatch(r'[A-Za-z0-9_-]{1,80}', i) for i in ids):
             raise PluginHostError('CASES_INVALID', '请求至少包含一个工况，且 case_id 唯一。')
+        if manifest.presentation is not None:
+            from .parameter_contracts import validate_case
+            rejected={}
+            for case in cases:
+                try:validate_case(capability,case)
+                except PluginHostError as error:
+                    rejected[case['case_id']]=CaseResult(case['case_id'],'failed',error={
+                        'code':'INPUT_INVALID','message':str(error),'path':getattr(error,'path','/parameters')})
+            if rejected:
+                accepted=[case for case in cases if case['case_id'] not in rejected]
+                if accepted:
+                    result=self.run(plugin_id,capability_id,accepted,timeout_s,phase=phase,
+                                    expected_manifest=expected_manifest,reuse_artifacts=reuse_artifacts)
+                    indexed={case.case_id:case for case in result.cases}
+                    result.cases=[rejected.get(case['case_id']) or indexed[case['case_id']] for case in cases]
+                    return result
+                identity=sha256(json.dumps(cases,sort_keys=True,ensure_ascii=False,allow_nan=False).encode()).hexdigest()
+                return RunResult(str(uuid4()),plugin_id,manifest.version,capability_id,capability.method_version,
+                                 identity,{'executed':False,'reason':'input-contract-rejected'},[rejected[key] for key in ids])
         if capability.input_schema == 'cablesim.domain/1':
             for case in cases:
                 try:

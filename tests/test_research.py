@@ -308,7 +308,9 @@ def test_converted_project_sweeps_unlocked_facts_and_rejects_locked_temperature(
     saved = client.post(workspace_root + '/studies', json=definition)
     assert saved.status_code == 201, saved.text
     root, body = request(client, {**w, 'revision': 2}, saved.json())
-    run = client.post(root + '/runs', json=body).json()
+    response=client.post(root+'/runs',json=body)
+    assert response.status_code==200,response.text
+    run=response.json()
     assert run['status'] == 'succeeded', run
     assert client.get(workspace_root + '/domain').json()['document'] == domain['document']
     definition['driver']['samples'][0]['changes'] = {'/input/criteria/max_conductor_temperature': 370}
@@ -338,7 +340,9 @@ def test_invalid_domain_sample_is_retained_and_never_sent_to_the_plugin(client, 
         return original(plugin, capability, cases, **kw)
     monkeypatch.setattr(executor, 'run', only_valid)
     root, body = request(client, w, saved)
-    run = client.post(root + '/runs', json=body).json()
+    response=client.post(root+'/runs',json=body)
+    assert response.status_code==200,response.text
+    run=response.json()
     assert run['status'] == 'partial', run
     bad = run['output']['cases'][1]
     assert bad['error']['code'] == 'DOMAIN_INVALID' and not bad['results']

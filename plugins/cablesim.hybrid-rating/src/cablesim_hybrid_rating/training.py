@@ -116,7 +116,7 @@ def train(value,parameters):
         lo,hi=float(x[training,j].min()),float(x[training,j].max())
         supplied=value.get('feature_ranges',{}).get(NAMES[j])
         ranges.append(supplied if supplied is not None else [lo-(hi-lo)*.02,hi+(hi-lo)*.02])
-    bundle={'schema_version':'cablesim.hybrid-model/1','model_version':parameters.get('model_version','0.1.0'),
+    bundle={'schema_version':'cablesim.hybrid-model/1','model_version':parameters.get('model_version','1.0.0'),
         'feature_version':VERSION,'feature_names':NAMES,'feature_units':UNITS,'family':family,
         'domain':{'construction_sha256':groups,'feature_ranges':ranges,'policy':'reject'},
         'dataset':{'sha256':value['dataset_sha256'],'valid_samples':len(rows),'sources':value['sources'],

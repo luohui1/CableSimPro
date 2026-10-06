@@ -6,6 +6,7 @@ the canonical stored payload has its own integrity digest.
 """
 from dataclasses import asdict
 from copy import deepcopy
+from hashlib import sha256
 import json
 import os
 import platform
@@ -115,13 +116,16 @@ class Research:
                        (stamp(), encode({'code': 'HOST_RESTART', 'message': '旧执行未能确认完成；不会自动重算。'}), self.owner_epoch))
 
     def methods(self):
+        from ..plugin_host.presentation import resources
         return [{'method': self.pin(p), 'name': p.manifest.name, 'description': p.manifest.description,
+                 'presentation': p.manifest.presentation.model_dump(mode='json') if p.manifest.presentation else None,
+                 'resources': resources(p),
                  'platforms': p.manifest.platforms, 'platform_supported': current_platform() in p.manifest.platforms,
                  'execution_policy': {'backend':'slurm' if hasattr(self.executor,'required') and self.executor.required(p.manifest.id) else 'local',
                                       'isolation': 'process', 'os_sandbox': False, 'timeout_enforced': True,
                                       'memory_limit_enforced': False, 'network_isolation_enforced': False,
                                       'parent_death_enforced': os.name == 'nt', 'process_tree_cleanup_enforced': os.name == 'nt'},
-                 'capabilities': [c.model_dump(mode='json') for c in p.manifest.capabilities]}
+                 'capabilities': [c.model_dump(mode='json', by_alias=True, exclude_none=True) for c in p.manifest.capabilities]}
                 for p in self.registry().plugins.values()]
 
     def registry(self, plugin_id=None):
@@ -188,6 +192,15 @@ class Research:
             if previous is not None and config.model_dump()==previous.model_dump():
                 return  # Preserve an unchanged historical pin while editing another module.
             _,capability=self.resolve(config.method.model_dump())
+            from .method_adoption import normalize_configuration
+            normalized=config.model_dump(mode='json')
+            normalize_configuration(self,normalized)
+            config.parameters=normalized['parameters']
+            config.method_input=normalized['method_input']
+            from .contracts import Driver, CrosscheckMethod, CandidateCompletion
+            config.driver=Driver.model_validate(normalized['driver'])
+            config.crosschecks=[CrosscheckMethod.model_validate(item) for item in normalized['crosschecks']]
+            config.candidate_completions={key:CandidateCompletion.model_validate(item) for key,item in normalized['candidate_completions'].items()}
             if config.input_source=='study' and capability.input_schema=='cablesim.simulation-problem/1':
                 from .simulation_contract import validate_input, StandaloneParameters
                 validate_input(config.method_input,config.method.capability)
@@ -207,6 +220,8 @@ class Research:
         primary = StudyConfiguration.model_validate(definition.model_dump(exclude={'modules'}))
         previous = StudyConfiguration.model_validate(prior.model_dump(exclude={'modules'})) if prior else None
         verify_changed(primary,previous)
+        for field in StudyConfiguration.model_fields:
+            setattr(definition,field,getattr(primary,field))
         for name,config in definition.modules.items():
             verify_changed(config,prior.modules.get(name) if prior else None)
         value = definition.model_dump(mode='json')
@@ -459,7 +474,8 @@ class Research:
                     candidates.append(item)
                     continue
                 raise HTTPException(422,'型号候选须使用保存的领域输入。')
-        if definition['driver'].get('target_key') == 'ampacity' and (
+        primary_plugin, primary_capability = self.resolve(definition['method'])
+        if 'rating_mode' in primary_capability.parameter_schema.properties and definition['driver'].get('target_key') == 'ampacity' and (
                 definition['driver']['kind'] in ('selection', 'sweep') and definition['driver'].get('rating_basis') == 'simultaneous'
                 or definition['driver']['kind'] == 'selection' and definition['driver'].get('candidate_ids')):
             for case in cases:
@@ -468,6 +484,13 @@ class Research:
                 'study_revision': study['revision'], 'definition': definition, 'workspace_state': state,
                 'lock': lock, 'cases': cases, 'candidate_snapshots': candidates, 'host_version': __version__,
                 'planned_environment': {'python': platform.python_version(), 'platform': platform.system()}}
+        result['headline_contract'] = [value.model_dump(mode='json') for value in primary_capability.headlines]
+        result['artifact_source_contracts'] = {}
+        for method in [definition['method'], *(item['method'] for item in definition['crosschecks'])]:
+            plugin, capability = self.resolve(method)
+            result['artifact_source_contracts'][fingerprint(method)] = {
+                'manifest_sha256': sha256((plugin.directory/'plugin.json').read_bytes()).hexdigest(),
+                'temperature_field_binding': capability.temperature_field_binding.model_dump(mode='json') if capability.temperature_field_binding else None}
         from .automatic_convergence import expand
         result['cases'], automatic = expand(definition, cases)
         if automatic is not None:
@@ -532,6 +555,9 @@ class Research:
                 checked[case['case_id']]=CaseResult(case['case_id'],'failed',error=deepcopy(case['preflight_error']))
                 continue
             try:
+                if capability is not None and plugin is not None and plugin.manifest.presentation is not None:
+                    from ..plugin_host.parameter_contracts import validate_case
+                    validate_case(capability,case)
                 if case['input'].get('schema_version') == 'cablesim.domain/1':
                     DomainDocument.model_validate(case['input'])
                 elif case['input'].get('schema_version')=='cablesim.simulation-problem/1':
@@ -539,6 +565,9 @@ class Research:
                     validate_input(case['input'],getattr(capability,'id',None))
             except HTTPException as exc:
                 checked[case['case_id']]=CaseResult(case['case_id'],'failed',error=exc.detail)
+            except PluginHostError as exc:
+                checked[case['case_id']]=CaseResult(case['case_id'],'failed',error={
+                    'code':exc.code,'message':str(exc),'path':getattr(exc,'path',None)})
             except ValidationError as exc:
                 from cablesim_sdk.validation import validation_error
                 checked[case['case_id']] = CaseResult(case['case_id'], 'failed',
@@ -776,6 +805,9 @@ class Research:
         from cablesim_sdk.reproduction import digest
         statuses = {}
         for case in (run.get('output') or {}).get('cases',[]):
+            if 'x-cablesim.headline-witness' in case.get('artifacts',{}):
+                from .answer_witnesses import status
+                statuses.setdefault(case['case_id'],{})['x-cablesim.headline-witness']=status(run,case)
             comparison=case.get('artifacts',{}).get('x-cablesim.iec-fem-comparison')
             if comparison is not None:
                 try:
@@ -861,7 +893,30 @@ class Research:
                         or field.source.capability != method['capability']):
                     raise ValueError('source：温度场与本次保存输入、工况或插件版本不一致。')
                 digests = case.get('artifact_digests',{})
-                if not isinstance(case.get('artifacts',{}).get('x-cablesim.simulation-bundle'),dict) or not digests.get('x-cablesim.temperature-field') or field.source.bundle_sha256 != digests.get('x-cablesim.simulation-bundle'):
+                if not digests.get('x-cablesim.temperature-field'):
+                    raise ValueError('温度场缺少封存摘要。')
+                if field.source.binding == 'iec-trace':
+                    source_contract=run['snapshot'].get('artifact_source_contracts',{}).get(fingerprint(method),{})
+                    declaration=source_contract.get('temperature_field_binding')
+                    trace=case.get('artifacts',{}).get('x-cablesim.iec60287-trace')
+                    if not declaration or declaration.get('binding')!='iec-trace' or field.source.manifest_sha256!=source_contract.get('manifest_sha256'):
+                        raise ValueError('解析土壤场来源没有匹配本次封存清单的声明。')
+                    if not isinstance(trace,dict) or field.source.trace_sha256!=digests.get('x-cablesim.iec60287-trace'):
+                        raise ValueError('source.trace_sha256：温度场没有绑定同工况IEC轨迹。')
+                    identity=field.source.model_dump(exclude={'binding','bundle_sha256','trace_sha256'})
+                    if trace.get('source')!=identity or trace.get('soil_view',{}).get('status')!='available':
+                        raise ValueError('解析土壤场与IEC轨迹执行身份或可用状态不一致。')
+                    view=field.analytical_soil_view
+                    if view.condition!=declaration['condition'] or view.model!=declaration['model'] or view.surface_check_tolerance_k!=declaration['tolerance_k']:
+                        raise ValueError('解析土壤场模型、自检阈值或工况不匹配清单。')
+                    states={row['entity']:row for row in trace['operating']['cable_states']}
+                    for check in view.surface_checks:
+                        if abs(check.reference_temperature_k-(states[check.entity]['duct_outer_temperature_c']+273.15))>1e-9:
+                            raise ValueError('表面自检参考温度不是本次IEC外部温升。')
+                    if [row.model_dump() for row in view.surface_checks]!=trace['soil_view']['surface_checks']:
+                        raise ValueError('表面自检与IEC轨迹不一致。')
+                    statuses.setdefault(case['case_id'],{})['x-cablesim.iec60287-trace']={'status':'verified','reason':None}
+                elif not isinstance(case.get('artifacts',{}).get('x-cablesim.simulation-bundle'),dict) or field.source.bundle_sha256 != digests.get('x-cablesim.simulation-bundle'):
                     raise ValueError('source.bundle_sha256：温度场没有绑定同次封存的原始场工件。')
                 if field.mesh.sha256 != digest({k:artifact['mesh'][k] for k in ('points','triangles','domain_ids','regions')}):
                     raise ValueError('mesh.sha256：网格摘要与节点、连接和区域不一致。')

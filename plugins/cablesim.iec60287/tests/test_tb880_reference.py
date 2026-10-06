@@ -48,4 +48,5 @@ def test_host_refuses_cross_capability_schema(tmp_path):
     run=Executor(jobs_root=tmp_path).run('cablesim.iec60287','tb880-reference-rating',[{'case_id':'wrong-capability','input':fixture,'parameters':{}}])
     assert run.cases[0].status!='succeeded'
     assert not run.cases[0].artifacts
-    assert 'schema' in run.cases[0].error['message']
+    assert run.cases[0].error['code']=='INPUT_INVALID'
+    assert run.cases[0].error['path'].startswith('/input/')

@@ -6,8 +6,11 @@ import json
 import math
 from pathlib import Path
 import platform
+import sys
 
-VERSION = 'GB-DIMENSIONS-0.2.0'
+sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
+
+VERSION = '1.0.0'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 DATA = json.loads(Path(__file__).with_name('dimensions.json').read_text('utf-8'))
 AREAS = DATA['areas_mm2']
@@ -952,6 +955,8 @@ def check(document, parameters):
 
 def main():
     request = json.loads(Path('input/request.json').read_text('utf-8'))
+    from cablesim_sdk.parameter_units import decode_request
+    request = decode_request(request, Path(__file__).resolve().parents[2]/'plugin.json')
     if request.get('protocol') != 'cablesim.run/2' or request.get('capability') != 'dimensions' or request.get('phase') not in ('check', 'run'):
         raise ValueError('不支持的执行协议。')
     cases = []
@@ -974,6 +979,8 @@ def main():
             cases.append({**base, 'status': 'succeeded', **result})
         except (KeyError, ValueError, TypeError) as exc:
             cases.append({**base, 'status': 'not_applicable', 'error': {'code': 'STANDARD_INPUT_INVALID', 'message': str(exc)}})
+    from cablesim_sdk.result_answers import attach_witnesses
+    attach_witnesses(request,{'cases':cases},Path(__file__).resolve().parents[2]/'plugin.json')
     Path('output/result.json').write_text(
         json.dumps(
             {'protocol': 'cablesim.run/2', 'cases': cases,

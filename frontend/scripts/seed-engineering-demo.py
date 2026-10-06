@@ -360,8 +360,6 @@ def build_release_seed(staged, database, identity):
                 print(title+'：真实计算完成',flush=True)
             for title, module, driver in definitions:
                 save_study(workspace,title,module,driver)
-            save_study(workspace,'排管段 · 外部热阻精确式与近似式对比','method-compare',{'kind':'crosscheck'},
-                       crosschecks=[{'method':method,'parameters':{**deepcopy(parameters),'t4_form':'approximate'}}])
             save_study(hv_workspace,'城南线路 · 110 kV 直埋单回校核（待补厂家参数）','rating',
                        {'kind':'single'},required=False)
             contracts = api('/api/input-contracts')
@@ -586,9 +584,6 @@ def main():
         field = f'/input/materials/{soil_index}/thermal_resistivity'
         meta = {'path':field,'minimum':'0.6','maximum':'1.0','step':'0.2','source':'演示敏感性范围；非现场土壤实测值'}
         study(inquiry,'排管段 · 土壤热阻率敏感性',{'kind':'sweep','samples':[{'label':str(v)+' K*m/W','changes':{field:v}} for v in (.6,.8,1.)]},module='sweep',input_sources={'/driver/samples':{'kind':'user','reference':'扫描设置：'+json.dumps(meta,ensure_ascii=False),'reviewed':False}})
-        # Same IEC method, two explicitly recorded T4 forms; no second solver is implied.
-        comparison = {**parameters,'t4_form':'approximate'}
-        study(inquiry,'排管段 · 外部热阻精确式与近似式对比',{'kind':'crosscheck'},module='method-compare',crosschecks=[{'method':rating_pin,'parameters':comparison}])
         ensure_temperature(client, result)
         if args.supplement_hv: supplement_hv(api,result)
         if args.supplement_mv: supplement_mv(api,result)

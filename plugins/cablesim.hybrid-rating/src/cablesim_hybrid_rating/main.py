@@ -60,6 +60,8 @@ def run_case(request,case,job):
 
 def main():
     job=Path.cwd();request=json.loads((job/'input/request.json').read_text('utf-8'))
+    from cablesim_sdk.parameter_units import decode_request
+    request = decode_request(request, Path(__file__).resolve().parents[2]/'plugin.json')
     if request.get('protocol')!='cablesim.run/2' or request.get('phase') not in ('check','run'):
         raise SystemExit('unsupported protocol or phase')
     (job/'output').mkdir(exist_ok=True)
@@ -67,6 +69,8 @@ def main():
     response={'protocol':'cablesim.run/2','cases':cases,
         'environment':{'python':platform.python_version(),'platform':platform.platform(),
             'slurm_job_id':os.environ.get('SLURM_JOB_ID')}}
+    from cablesim_sdk.result_answers import attach_witnesses
+    attach_witnesses(request,response,Path(__file__).resolve().parents[2]/'plugin.json')
     (job/'output/result.json').write_text(json.dumps(response,ensure_ascii=False,allow_nan=False),encoding='utf-8')
 
 

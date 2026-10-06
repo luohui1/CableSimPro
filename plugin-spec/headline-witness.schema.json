@@ -1,0 +1,143 @@
+{
+  "$defs": {
+    "AnswerProducer": {
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "case_id": {
+          "minLength": 1,
+          "title": "Case Id",
+          "type": "string"
+        },
+        "plugin_id": {
+          "minLength": 1,
+          "title": "Plugin Id",
+          "type": "string"
+        },
+        "plugin_version": {
+          "minLength": 1,
+          "title": "Plugin Version",
+          "type": "string"
+        },
+        "capability": {
+          "minLength": 1,
+          "title": "Capability",
+          "type": "string"
+        },
+        "input_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Input Sha256",
+          "type": "string"
+        },
+        "manifest_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Manifest Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "case_id",
+        "plugin_id",
+        "plugin_version",
+        "capability",
+        "input_sha256",
+        "manifest_sha256"
+      ],
+      "title": "AnswerProducer",
+      "type": "object"
+    },
+    "AnswerQuantity": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "entity": {
+          "minLength": 1,
+          "title": "Entity",
+          "type": "string"
+        },
+        "condition": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condition"
+        },
+        "value": {
+          "title": "Value",
+          "type": "number"
+        },
+        "unit": {
+          "minLength": 1,
+          "title": "Unit",
+          "type": "string"
+        },
+        "artifact_type": {
+          "minLength": 1,
+          "title": "Artifact Type",
+          "type": "string"
+        },
+        "artifact_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Artifact Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "key",
+        "entity",
+        "value",
+        "unit",
+        "artifact_type",
+        "artifact_sha256"
+      ],
+      "title": "AnswerQuantity",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "cablesim.headline-witness/1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "producer": {
+      "$ref": "#/$defs/AnswerProducer"
+    },
+    "quantities": {
+      "items": {
+        "$ref": "#/$defs/AnswerQuantity"
+      },
+      "maxItems": 1000,
+      "title": "Quantities",
+      "type": "array"
+    },
+    "engineering_approval": {
+      "const": false,
+      "default": false,
+      "title": "Engineering Approval",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "producer",
+    "quantities"
+  ],
+  "title": "HeadlineWitness",
+  "type": "object"
+}

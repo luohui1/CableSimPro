@@ -12,6 +12,8 @@ from backend.plugin_host.buried_contract import BuriedField, BuriedSummary
 from backend.plugin_host.electrothermal_contract import ElectrothermalSummary
 from backend.plugin_host.line_source_contract import LineSourceComparison
 from backend.kernel.workspace import fingerprint
+from cablesim_sdk.simulation_artifacts import TemperatureField
+from cablesim_sdk.result_answers import HeadlineWitness
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,6 +36,8 @@ def synchronize(write=False):
          'release_digest':fingerprint(p.manifest.model_dump(mode='json',by_alias=True))}
         for p in registry.plugins.values()]}
     schemas = {'manifest':Manifest.model_json_schema(),
+               'temperature-field':TemperatureField.model_json_schema(),
+               'headline-witness':HeadlineWitness.model_json_schema(),
                'buried-field':BuriedField.model_json_schema(), 'buried-summary':BuriedSummary.model_json_schema(),
                'electrothermal-summary':ElectrothermalSummary.model_json_schema(),
                'line-source-crosscheck':LineSourceComparison.model_json_schema()}

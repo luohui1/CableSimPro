@@ -51,7 +51,7 @@ def test_run_summary_default_compatibility_pagination_and_live_state(client, mon
     assert response.status_code == 200, response.text
     value = response.json()['items'][0]
     assert set(value) == {'id','workspace','study','sequence','status','created','finished',
-                          'freshness','integrity','version_status','snapshot','method','error'}
+                          'freshness','integrity','version_status','snapshot','method','error','headlines'}
     for field in ('id','sequence','status','created','finished','freshness','integrity','version_status'):
         assert value[field] == saved[field]
     assert value['snapshot'] == {'module': saved['snapshot'].get('module')}

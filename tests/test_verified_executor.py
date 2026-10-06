@@ -82,7 +82,12 @@ def test_resident_iec_keeps_results_and_records_cache_hits(tmp_path):
         assert executor.check('cablesim.iec60287','reference-rating',bad).cases[0].status=='failed'
         second=executor.run('cablesim.iec60287','reference-rating',cases)
         assert first.cases[0].results==second.cases[0].results==baseline.cases[0].results
-        assert first.cases[0].artifacts==second.cases[0].artifacts==baseline.cases[0].artifacts
+        engineering=lambda run:{key:value for key,value in run.cases[0].artifacts.items() if key!='x-cablesim.headline-witness'}
+        assert engineering(first)==engineering(second)==engineering(baseline)
+        witnesses=[run.cases[0].artifacts['x-cablesim.headline-witness'] for run in (first,second,baseline)]
+        assert witnesses[0]['quantities']==witnesses[1]['quantities']==witnesses[2]['quantities']
+        for run,witness in zip((first,second,baseline),witnesses):
+            assert witness['producer']['run_id']==run.run_id
         assert first.environment['resident_profiling']['worker_pid']==second.environment['resident_profiling']['worker_pid']
         receipt=second.environment['seal_verification']
         assert receipt['status']=='verified' and receipt['cache_hit'] and len(receipt['release_digest'])==64

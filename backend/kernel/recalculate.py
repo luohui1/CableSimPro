@@ -30,10 +30,8 @@ def recalculate(research, wid, sid, body):
                 raise HTTPException(409, {'code': 'REQUEST_CONFLICT', 'message': '请求标识已用于另一次运行。'})
             definition = deepcopy(current['definition'])
             config = research.module_definition(definition, body.module)
-            for method in methods(config):
-                plugin = research.registry(method['plugin_id']).get(method['plugin_id'])
-                method.update(research.pin(plugin))
-                research.resolve(method)  # Verify seals/capability before adopting anything.
+            from .method_adoption import adopt_configuration
+            adopt_configuration(research,config)
             if config['input_source'] == 'domain':
                 reference = state.get('study_cable_reference') or state.get('type_origin_reference')
                 if reference:

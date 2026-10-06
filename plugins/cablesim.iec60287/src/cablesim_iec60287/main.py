@@ -236,9 +236,15 @@ def group_rating(case, group, out):
             payload['rating_attribution'] = {**decompose(reference,payload['rating_components']), 'source':context.get('source')}
         except (ValueError,KeyError,TypeError) as exc:
             payload['rating_attribution'] = {'status':'unavailable','reason':str(exc)}
-    artifact = f"output/{case['case_id']}.trace.json"
-    (out/Path(artifact).name).write_text(json.dumps(payload,ensure_ascii=False,allow_nan=False),'utf-8')
-    return {'results':results,'artifacts':[{'path':artifact,'type':'x-cablesim.iec60287-trace'}],
+    execution=case.get('_execution_source')
+    if execution:
+        from cablesim_iec60287.soil_view import attach
+        artifacts=attach(execution,case,group,payload,out)
+    else:
+        artifact = f"output/{case['case_id']}.trace.json"
+        (out/Path(artifact).name).write_text(json.dumps(payload,ensure_ascii=False,allow_nan=False),'utf-8')
+        artifacts=[{'path':artifact,'type':'x-cablesim.iec60287-trace'}]
+    return {'results':results,'artifacts':artifacts,
             'warnings':[{'code':'ELECTRICAL_SCOPE','message':payload['electrical_basis']}],
             'evidence':{'iterations':payload['operating']['iterations'],'residual_k':payload['operating']['residual_k'],
                         'decisions':payload['decisions']}}
@@ -276,6 +282,8 @@ def run_case(handler, case: dict, out: Path) -> dict:
 def main() -> int:
     job = Path.cwd()
     request = json.loads((job / 'input/request.json').read_text('utf-8'))
+    from cablesim_sdk.parameter_units import decode_request
+    request = decode_request(request, Path(__file__).resolve().parents[2]/'plugin.json')
     if request.get('protocol') != PROTOCOL or request.get('phase') not in ('run', 'check'):
         raise SystemExit('unsupported protocol or phase')
     handler = CAPABILITIES[request['capability']]
@@ -294,12 +302,15 @@ def main() -> int:
             return {'results': [], 'artifacts': []}
     out = job / 'output'
     def invoke(case,out):
+        case['_execution_source']={'run_id':request['run_id'],'capability':request['capability']}
         schema={'iec60853-emergency':'cablesim.iec60853-emergency/1','tb880-reference-rating':'cablesim.iec60287.tb880-reference/1','tb880-wire-foil-rating':'cablesim.iec60287.tb880-wire-foil/1'}.get(request['capability'])
         if schema and case['input'].get('schema_version')!=schema:raise ValueError('input schema does not match the selected reference capability')
         return handler(case,out)
     cases = [run_case(invoke, case, out) for case in request['cases']]
     result = {'protocol': PROTOCOL, 'cases': cases,
-              'environment': {'python': platform.python_version(), 'method': {'iec60853-emergency':'iec60853-emergency/0.1.0','armoured-sl-rating':'iec60287-armour/0.1.0','tb880-reference-rating':'iec60287-tb880-reference/0.1.0','tb880-wire-foil-rating':'iec60287-tb880-wire-foil/0.1.0','reference-rating':METHOD_VERSION}.get(request['capability'],GROUP_METHOD_VERSION), 'legacy_method': METHOD_VERSION}}
+              'environment': {'python': platform.python_version(), 'method': {'iec60853-emergency':'1.0.0','armoured-sl-rating':'1.0.0','tb880-reference-rating':'1.0.0','tb880-wire-foil-rating':'1.0.0','reference-rating':METHOD_VERSION}.get(request['capability'],GROUP_METHOD_VERSION), 'legacy_method': METHOD_VERSION}}
+    from cablesim_sdk.result_answers import attach_witnesses
+    attach_witnesses(request,result,Path(__file__).resolve().parents[2]/'plugin.json')
     (out / 'result.json').write_text(json.dumps(result, ensure_ascii=False, allow_nan=False), 'utf-8')
     return 0
 

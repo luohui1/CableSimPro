@@ -21,7 +21,9 @@ def test_new_inquiry_completion_snapshot_report_and_replay(tmp_path):
         completion={'method':{**entry['method'],'capability':'model-completion'},'parameters':parameters}
         chosen={'model_id':'candidate:'+item['id'],'content_sha256':item['digest'],'three_core_layout':'three_core_ducts_horizontal','target_current_a':250}
         bad=client.post('/api/design/study-workspaces',json={**chosen,'candidate_completion':{**completion,'parameters':{'values':{}}}})
-        assert bad.status_code==422 and 'core_lay_length' in bad.text
+        assert bad.status_code==422
+        assert bad.json()['detail']['code']=='INPUT_INVALID'
+        assert bad.json()['detail']['path']=='/parameters/values/conductor_form'
         response=client.post('/api/design/study-workspaces',json={**chosen,'candidate_completion':completion})
         assert response.status_code==201,response.text
         w=response.json();d=w['domain'];rating={**entry['method'],'capability':'steady-rating'}

@@ -11,7 +11,7 @@ def source(request, case, bundle_bytes):
     manifest = json.loads(path.read_text('utf-8'))
     return dict(run_id=request['run_id'], case_id=case['case_id'], plugin_id=manifest['id'],
                 plugin_version=manifest['version'], capability=request['capability'],
-                input_sha256=digest(case['input']), bundle_sha256=sha256(bundle_bytes).hexdigest(),
+                input_sha256=case.get('_source_input_sha256') or digest(case['input']), bundle_sha256=sha256(bundle_bytes).hexdigest(),
                 manifest_sha256=sha256(path.read_bytes()).hexdigest())
 
 

@@ -13,8 +13,8 @@ from cablesim_iec60287.electrical import skin, effect_x, proximity
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cablesim_type_electrical.inputs import ElectricalParameters, ShortCircuitParameters
 
-VERSION = 'TYPE-ELECTRICAL-0.3.0'
-METHOD_VERSIONS = {'electrical':VERSION, 'short-circuit':'TYPE-SHORT-CIRCUIT-0.2.0'}
+VERSION = '1.0.0'
+METHOD_VERSIONS = {'electrical':VERSION, 'short-circuit':'1.0.0'}
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 CONSTANTS = {'copper_bare': (226, 234.5, 3.45e6), 'copper_coated': (226, 234.5, 3.45e6),
              'aluminium': (148, 228, 2.5e6), 'lead': (41, 230, 1.45e6)}
@@ -311,6 +311,8 @@ def short_circuit_curve(document, parameters, rows):
 
 def main():
     request = json.loads(Path('input/request.json').read_text('utf-8'))
+    from cablesim_sdk.parameter_units import decode_request
+    request = decode_request(request, Path(__file__).resolve().parents[2]/'plugin.json')
     if request.get('protocol') != 'cablesim.run/2' or request.get('phase') not in ('check', 'run') or request.get('capability') not in ('electrical', 'short-circuit'):
         raise ValueError('不支持的执行协议。')
     cases = []
@@ -325,6 +327,8 @@ def main():
             cases.append(result)
         except (ValueError, KeyError, TypeError) as error:
             cases.append({'case_id': case['case_id'], 'status': 'not_applicable', 'error': {'code': 'TYPE_INPUT_INVALID', 'message': str(error)}})
+    from cablesim_sdk.result_answers import attach_witnesses
+    attach_witnesses(request,{'cases':cases},Path(__file__).resolve().parents[2]/'plugin.json')
     Path('output/result.json').write_text(json.dumps({'protocol': 'cablesim.run/2', 'cases': cases, 'environment': {'python': platform.python_version(), 'method': METHOD_VERSIONS[request['capability']]}}, ensure_ascii=False, allow_nan=False), 'utf-8')
 
 

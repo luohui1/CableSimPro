@@ -26,13 +26,13 @@ def test_installed_type_contracts_match_plugin_pins(tmp_path):
         contracts = [item for item in response.json() if item['method']['plugin_id'] == 'cablesim.type-electrical']
         assert {item['method']['capability'] for item in contracts} == {'electrical', 'short-circuit'}
         for item in contracts:
-            assert item['method']['version'] == '0.3.0'
+            assert item['method']['version'] == '1.0.0'
             assert len(item['method']['release_digest']) == 64
             assert item['parameter_source_sha256'] == sha256((ROOT/item['parameter_source']).read_bytes()).hexdigest()
             assert item['parameter_schema']['additionalProperties'] is False
             assert 'cable_type_id' in item['parameter_schema']['required']
         temperature = next(item for item in contracts if item['method']['capability'] == 'electrical')['parameter_schema']['properties']['temperature_k']
-        assert temperature['x-unit'] == 'K'
+        assert temperature['x-unit'] == {'si':'K','display':'°C','scale':1.0,'offset':-273.15}
         assert temperature['x-source-required'] is True
         assert temperature['default'] is None
 

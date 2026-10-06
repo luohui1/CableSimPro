@@ -1,1 +1,1 @@
-"""Simplified steady-state thermal network (MV-THERMAL-0.1.0), first-party plugin."""
+"""Simplified steady-state thermal network (1.0.0), first-party plugin."""

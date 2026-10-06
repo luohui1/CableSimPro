@@ -11,7 +11,7 @@ from .method import RatingRefused, _layer, electrical, sheath_loss, t1, t3, diel
 from .electrical import (ac_factors, resistance, sheath_reactance, circulating as circulating_loss,
                          sheath_thickness_terms, eddy_geometry)
 
-GROUP_METHOD_VERSION = 'cablesim.iec60287.group/0.8.0'
+GROUP_METHOD_VERSION = '1.0.0'
 
 
 def _resistance(c, temperature, spacing):

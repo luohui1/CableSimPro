@@ -12,8 +12,11 @@ from math import isfinite
 from pathlib import Path
 import platform
 import re
+import sys
 
-VERSION='DATASHEET-0.1.0'
+sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
+
+VERSION='1.0.0'
 # Ordered specific aliases avoid confusing insulation diameter with thickness.
 FIELDS={
  'conductor_diameter': (r'导体(?:外径|直径)|导电线芯直径|diameter.*conductor|conductor.*diameter', 'm'),
@@ -599,17 +602,25 @@ def operation(document,parameters,capability):
 
 def main():
  request=json.loads(Path('input/request.json').read_text('utf-8'));cases=[]
+ from cablesim_sdk.parameter_units import decode_request
+ request=decode_request(request,Path(__file__).resolve().parents[2]/'plugin.json')
  for case in request['cases']:
   try:
    artifact=operation(case['input'],case.get('parameters',{}),request['capability'])
    result={'case_id':case['case_id'],'status':'succeeded'}
    if request['phase']=='run':
     name=case['case_id']+'.json';Path('output',name).write_text(json.dumps(artifact,ensure_ascii=False,allow_nan=False),'utf-8')
-    result.update(results=[{'key':'x-cablesim.datasheet.count','type':'quantity','entity':'document','status':'available','value':len(artifact.get('candidates',artifact.get('pages',[]))),'unit':'1'}],artifacts=[{'type':'x-cablesim.datasheet','path':'output/'+name}])
+    capability=request['capability']
+    count=(artifact['page_count'] if capability=='inspect' else len(artifact['text']) if capability=='page'
+           else len(artifact['values']) if capability=='normalize' else len(artifact['target_fields']) if capability=='provider-request'
+           else len(artifact['candidates']))
+    result.update(results=[{'key':'x-cablesim.datasheet.count','type':'quantity','entity':'document','status':'available','value':count,'unit':'1'}],artifacts=[{'type':'x-cablesim.datasheet','path':'output/'+name}])
    cases.append(result)
   except Exception as e:
    # Never expose provider bodies, credentials or PDF bytes in errors.
    cases.append({'case_id':case['case_id'],'status':'failed','error':{'code':getattr(e,'code','PDF_PARSE_FAILED'),'message':str(e) if isinstance(e,Invalid) else 'PDF 解析失败；原件保留，请核对格式和页／片段。'}})
+ from cablesim_sdk.result_answers import attach_witnesses
+ attach_witnesses(request,{'cases':cases},Path(__file__).resolve().parents[2]/'plugin.json')
  Path('output/result.json').write_text(json.dumps({'protocol':'cablesim.run/2','cases':cases,'environment':{'python':platform.python_version(),'method':VERSION}},ensure_ascii=False),'utf-8')
 
 if __name__=='__main__':main()

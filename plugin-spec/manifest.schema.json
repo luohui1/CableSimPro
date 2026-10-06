@@ -1,5 +1,64 @@
 {
   "$defs": {
+    "AgentSkill": {
+      "additionalProperties": false,
+      "properties": {
+        "context_schema": {
+          "const": "cablesim.workflow-context/1",
+          "title": "Context Schema",
+          "type": "string"
+        },
+        "steps": {
+          "items": {
+            "$ref": "#/$defs/SkillStep"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Steps",
+          "type": "array"
+        },
+        "effects": {
+          "items": {
+            "enum": [
+              "read",
+              "calculate",
+              "propose"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Effects",
+          "type": "array"
+        },
+        "engineering_approval": {
+          "const": false,
+          "default": false,
+          "title": "Engineering Approval",
+          "type": "boolean"
+        },
+        "human_approval_required_for": {
+          "items": {
+            "enum": [
+              "workspace.change",
+              "engineering.accept",
+              "external.send"
+            ],
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 3,
+          "title": "Human Approval Required For",
+          "type": "array"
+        }
+      },
+      "required": [
+        "context_schema",
+        "steps",
+        "effects"
+      ],
+      "title": "AgentSkill",
+      "type": "object"
+    },
     "ArtifactSpec": {
       "additionalProperties": false,
       "properties": {
@@ -24,7 +83,11 @@
       "additionalProperties": false,
       "properties": {
         "kind": {
-          "const": "method",
+          "enum": [
+            "method",
+            "report-template",
+            "agent-skill"
+          ],
           "title": "Kind",
           "type": "string"
         },
@@ -61,7 +124,6 @@
             "$ref": "#/$defs/Output"
           },
           "maxItems": 100,
-          "minItems": 1,
           "title": "Outputs",
           "type": "array"
         },
@@ -84,6 +146,114 @@
           "minItems": 1,
           "title": "Limitations",
           "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "maxLength": 700,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "parameter_schema": {
+          "$ref": "#/$defs/ParameterSchema"
+        },
+        "input_contract": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/InputContract"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "x-groups": {
+          "items": {
+            "$ref": "#/$defs/ParameterGroup"
+          },
+          "title": "X-Groups",
+          "type": "array"
+        },
+        "x-headline": {
+          "items": {
+            "$ref": "#/$defs/Headline"
+          },
+          "maxItems": 3,
+          "title": "X-Headline",
+          "type": "array"
+        },
+        "preview": {
+          "default": false,
+          "title": "Preview",
+          "type": "boolean"
+        },
+        "preview_timeout_s": {
+          "default": 8,
+          "maximum": 15,
+          "minimum": 1,
+          "title": "Preview Timeout S",
+          "type": "integer"
+        },
+        "study_tasks": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 12,
+          "title": "Study Tasks",
+          "type": "array"
+        },
+        "category": {
+          "anyOf": [
+            {
+              "maxLength": 40,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Category"
+        },
+        "x-temperature-field-binding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TemperatureFieldBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "report_template": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ReportTemplate"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "agent_skill": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/AgentSkill"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -93,11 +263,82 @@
         "method_version",
         "analysis",
         "input_schema",
-        "outputs",
         "validation",
         "limitations"
       ],
       "title": "Capability",
+      "type": "object"
+    },
+    "Headline": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "unit": {
+          "$ref": "#/$defs/UnitDisplay"
+        },
+        "aggregate": {
+          "default": "first",
+          "enum": [
+            "minimum",
+            "maximum",
+            "first"
+          ],
+          "title": "Aggregate",
+          "type": "string"
+        },
+        "condition": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Condition"
+        },
+        "artifact": {
+          "description": "Same-case validated artifact required for this answer.",
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Artifact",
+          "type": "string"
+        },
+        "source_artifact": {
+          "anyOf": [
+            {
+              "maxLength": 120,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exact engineering artifact accompanied by the answer witness.",
+          "title": "Source Artifact"
+        }
+      },
+      "required": [
+        "key",
+        "title",
+        "unit",
+        "artifact"
+      ],
+      "title": "Headline",
       "type": "object"
     },
     "HostApi": {
@@ -118,6 +359,61 @@
         "min_minor"
       ],
       "title": "HostApi",
+      "type": "object"
+    },
+    "InputContract": {
+      "additionalProperties": false,
+      "properties": {
+        "input_sources": {
+          "items": {
+            "enum": [
+              "domain",
+              "study"
+            ],
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Input Sources",
+          "type": "array"
+        },
+        "binding": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParameterBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "standalone_schema": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParameterSchema"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "standalone_parameter_schema": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParameterSchema"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "input_sources"
+      ],
+      "title": "InputContract",
       "type": "object"
     },
     "License": {
@@ -180,7 +476,7 @@
       "additionalProperties": false,
       "properties": {
         "path": {
-          "pattern": "^(src/[A-Za-z0-9_./-]+|assets/icon\\.svg)$",
+          "pattern": "^(src/[A-Za-z0-9_./-]+|assets/[A-Za-z0-9_-]+\\.(svg|webp|html|css|json))$",
           "title": "Path",
           "type": "string"
         },
@@ -204,6 +500,416 @@
       "title": "PackageFile",
       "type": "object"
     },
+    "ParameterBasis": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "standard",
+            "method",
+            "numerical",
+            "engineering",
+            "source",
+            "binding"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "reference": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Reference",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "reference"
+      ],
+      "title": "ParameterBasis",
+      "type": "object"
+    },
+    "ParameterBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "domain",
+            "section",
+            "load",
+            "cable_type",
+            "circuit",
+            "cable",
+            "core",
+            "layer",
+            "material",
+            "duct",
+            "artifact",
+            "source_document",
+            "model",
+            "reference_case",
+            "mesh",
+            "region",
+            "node",
+            "standard",
+            "evidence"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "multiple": {
+          "default": false,
+          "title": "Multiple",
+          "type": "boolean"
+        },
+        "keyed": {
+          "default": false,
+          "title": "Keyed",
+          "type": "boolean"
+        },
+        "read_only": {
+          "default": false,
+          "title": "Read Only",
+          "type": "boolean"
+        },
+        "scope": {
+          "default": "workspace",
+          "enum": [
+            "workspace",
+            "input",
+            "library",
+            "run"
+          ],
+          "title": "Scope",
+          "type": "string"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "title": "ParameterBinding",
+      "type": "object"
+    },
+    "ParameterGroup": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "order": {
+          "minimum": 0,
+          "title": "Order",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "order"
+      ],
+      "title": "ParameterGroup",
+      "type": "object"
+    },
+    "ParameterMetadata": {
+      "additionalProperties": true,
+      "description": "JSON Schema keywords are retained; UI extension keywords are typed here.",
+      "properties": {
+        "title": {
+          "maxLength": 100,
+          "minLength": 1,
+          "pattern": "[\\u3400-\\u9fff]",
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 700,
+          "minLength": 1,
+          "pattern": "[\\u3400-\\u9fff]",
+          "title": "Description",
+          "type": "string"
+        },
+        "x-unit": {
+          "$ref": "#/$defs/UnitDisplay"
+        },
+        "x-unit-by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParameterUnitCases"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "x-group": {
+          "maxLength": 60,
+          "minLength": 1,
+          "title": "X-Group",
+          "type": "string"
+        },
+        "x-order": {
+          "minimum": 0,
+          "title": "X-Order",
+          "type": "integer"
+        },
+        "x-level": {
+          "enum": [
+            "basic",
+            "advanced",
+            "expert"
+          ],
+          "title": "X-Level",
+          "type": "string"
+        },
+        "x-bind": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParameterBinding"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "x-default-basis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParameterBasis"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "x-range-basis": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ParameterBasis"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "x-editor-reason": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "X-Editor-Reason"
+        },
+        "x-enum-labels": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "type": "string"
+              },
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "X-Enum-Labels"
+        },
+        "x-runtime": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RuntimeUnit"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "title",
+        "description",
+        "x-unit",
+        "x-group",
+        "x-order",
+        "x-level"
+      ],
+      "title": "ParameterMetadata",
+      "type": "object"
+    },
+    "ParameterSchema": {
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "object",
+          "default": "object",
+          "title": "Type",
+          "type": "string"
+        },
+        "properties": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/ParameterMetadata"
+          },
+          "title": "Properties"
+        },
+        "$defs": {
+          "additionalProperties": true,
+          "title": "$Defs",
+          "type": "object"
+        },
+        "additionalProperties": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "additionalProperties": true,
+              "type": "object"
+            }
+          ],
+          "default": false,
+          "title": "Additionalproperties"
+        }
+      },
+      "title": "ParameterSchema",
+      "type": "object"
+    },
+    "ParameterUnitCases": {
+      "additionalProperties": false,
+      "properties": {
+        "selector": {
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+          "title": "Selector",
+          "type": "string"
+        },
+        "cases": {
+          "additionalProperties": {
+            "$ref": "#/$defs/UnitDisplay"
+          },
+          "minProperties": 1,
+          "title": "Cases",
+          "type": "object"
+        }
+      },
+      "required": [
+        "selector",
+        "cases"
+      ],
+      "title": "ParameterUnitCases",
+      "type": "object"
+    },
+    "Presentation": {
+      "additionalProperties": false,
+      "properties": {
+        "category": {
+          "enum": [
+            "calculation",
+            "modeling",
+            "simulation",
+            "data-standard",
+            "report",
+            "agent-skill"
+          ],
+          "title": "Category",
+          "type": "string"
+        },
+        "category_title": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Category Title",
+          "type": "string"
+        },
+        "assets": {
+          "items": {
+            "$ref": "#/$defs/PresentationAsset"
+          },
+          "maxItems": 6,
+          "minItems": 2,
+          "title": "Assets",
+          "type": "array"
+        },
+        "validation_note": {
+          "maxLength": 400,
+          "minLength": 1,
+          "title": "Validation Note",
+          "type": "string"
+        }
+      },
+      "required": [
+        "category",
+        "category_title",
+        "assets",
+        "validation_note"
+      ],
+      "title": "Presentation",
+      "type": "object"
+    },
+    "PresentationAsset": {
+      "additionalProperties": false,
+      "properties": {
+        "role": {
+          "enum": [
+            "cover",
+            "method",
+            "validation"
+          ],
+          "title": "Role",
+          "type": "string"
+        },
+        "path": {
+          "pattern": "^assets/[a-z][a-z0-9-]*\\.(webp|svg)$",
+          "title": "Path",
+          "type": "string"
+        },
+        "title": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Title",
+          "type": "string"
+        },
+        "description": {
+          "maxLength": 400,
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "media_type": {
+          "enum": [
+            "image/webp",
+            "image/svg+xml"
+          ],
+          "title": "Media Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "role",
+        "path",
+        "title",
+        "description",
+        "media_type"
+      ],
+      "title": "PresentationAsset",
+      "type": "object"
+    },
     "Publisher": {
       "additionalProperties": false,
       "properties": {
@@ -224,6 +930,88 @@
         "name"
       ],
       "title": "Publisher",
+      "type": "object"
+    },
+    "ReportSection": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "pattern": "[\\u3400-\\u9fff]",
+          "title": "Title",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "inputs",
+            "results",
+            "artifacts",
+            "provenance",
+            "limitations"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "source"
+      ],
+      "title": "ReportSection",
+      "type": "object"
+    },
+    "ReportTemplate": {
+      "additionalProperties": false,
+      "properties": {
+        "context_schema": {
+          "const": "cablesim.report-context/1",
+          "title": "Context Schema",
+          "type": "string"
+        },
+        "format": {
+          "const": "html",
+          "title": "Format",
+          "type": "string"
+        },
+        "entry": {
+          "pattern": "^assets/[a-z][a-z0-9-]*\\.html$",
+          "title": "Entry",
+          "type": "string"
+        },
+        "sections": {
+          "items": {
+            "$ref": "#/$defs/ReportSection"
+          },
+          "maxItems": 20,
+          "minItems": 1,
+          "title": "Sections",
+          "type": "array"
+        },
+        "engineering_approval": {
+          "const": false,
+          "default": false,
+          "title": "Engineering Approval",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "context_schema",
+        "format",
+        "entry",
+        "sections"
+      ],
+      "title": "ReportTemplate",
       "type": "object"
     },
     "Resources": {
@@ -279,6 +1067,206 @@
         "entry"
       ],
       "title": "Runtime",
+      "type": "object"
+    },
+    "RuntimeUnit": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "description": "Reviewed internal-kernel field name; never supplied by the caller.",
+          "maxLength": 120,
+          "minLength": 1,
+          "title": "Key",
+          "type": "string"
+        },
+        "scale": {
+          "default": 1,
+          "description": "internal_value = SI_value * scale + offset.",
+          "exclusiveMinimum": 0,
+          "title": "Scale",
+          "type": "number"
+        },
+        "offset": {
+          "default": 0,
+          "title": "Offset",
+          "type": "number"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "title": "RuntimeUnit",
+      "type": "object"
+    },
+    "SkillCapabilityReference": {
+      "additionalProperties": false,
+      "properties": {
+        "plugin_id": {
+          "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+          "title": "Plugin Id",
+          "type": "string"
+        },
+        "capability": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Capability",
+          "type": "string"
+        },
+        "version": {
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "plugin_id",
+        "capability",
+        "version"
+      ],
+      "title": "SkillCapabilityReference",
+      "type": "object"
+    },
+    "SkillInputBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "target": {
+          "pattern": "^/(parameters|input)(/[^\\s]+)?$",
+          "title": "Target",
+          "type": "string"
+        },
+        "source": {
+          "pattern": "^/(inputs|steps)/[^\\s]+$",
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "target",
+        "source"
+      ],
+      "title": "SkillInputBinding",
+      "type": "object"
+    },
+    "SkillStep": {
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "pattern": "^[a-z][a-z0-9-]*$",
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "minLength": 1,
+          "pattern": "[\\u3400-\\u9fff]",
+          "title": "Title",
+          "type": "string"
+        },
+        "capability": {
+          "$ref": "#/$defs/SkillCapabilityReference"
+        },
+        "parameters_template": {
+          "additionalProperties": true,
+          "description": "Static JSON values; validate against the referenced sealed capability before any future execution. No expressions, shell or hidden defaults.",
+          "title": "Parameters Template",
+          "type": "object"
+        },
+        "bindings": {
+          "items": {
+            "$ref": "#/$defs/SkillInputBinding"
+          },
+          "maxItems": 100,
+          "title": "Bindings",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "capability"
+      ],
+      "title": "SkillStep",
+      "type": "object"
+    },
+    "TemperatureFieldBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "binding": {
+          "const": "iec-trace",
+          "title": "Binding",
+          "type": "string"
+        },
+        "artifact": {
+          "const": "x-cablesim.iec60287-trace",
+          "title": "Artifact",
+          "type": "string"
+        },
+        "model": {
+          "const": "kennelly-image-line-sources",
+          "title": "Model",
+          "type": "string"
+        },
+        "condition": {
+          "const": "operating",
+          "title": "Condition",
+          "type": "string"
+        },
+        "tolerance_k": {
+          "const": 0.1,
+          "title": "Tolerance K",
+          "type": "number"
+        }
+      },
+      "required": [
+        "binding",
+        "artifact",
+        "model",
+        "condition",
+        "tolerance_k"
+      ],
+      "title": "TemperatureFieldBinding",
+      "type": "object"
+    },
+    "UnitDisplay": {
+      "additionalProperties": false,
+      "properties": {
+        "si": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SI storage unit; null for non-physical text or object references.",
+          "title": "Si"
+        },
+        "display": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Display"
+        },
+        "scale": {
+          "default": 1,
+          "description": "display_value = SI_value * scale + offset.",
+          "exclusiveMinimum": 0,
+          "title": "Scale",
+          "type": "number"
+        },
+        "offset": {
+          "default": 0,
+          "title": "Offset",
+          "type": "number"
+        }
+      },
+      "title": "UnitDisplay",
       "type": "object"
     },
     "Validation": {
@@ -361,6 +1349,17 @@
       "default": null,
       "title": "Icon"
     },
+    "presentation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Presentation"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "publisher": {
       "$ref": "#/$defs/Publisher"
     },
@@ -379,7 +1378,15 @@
       "type": "array"
     },
     "runtime": {
-      "$ref": "#/$defs/Runtime"
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Runtime"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "permissions": {
       "items": {
@@ -433,7 +1440,6 @@
     "host_api",
     "license",
     "platforms",
-    "runtime",
     "permissions",
     "dependencies",
     "resources",

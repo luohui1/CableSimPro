@@ -1,0 +1,467 @@
+{
+  "$defs": {
+    "AnalyticalSoilView": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "const": "kennelly-image-line-sources",
+          "title": "Model",
+          "type": "string"
+        },
+        "condition": {
+          "const": "operating",
+          "title": "Condition",
+          "type": "string"
+        },
+        "soil_thermal_resistivity_k_m_w": {
+          "exclusiveMinimum": 0,
+          "title": "Soil Thermal Resistivity K M W",
+          "type": "number"
+        },
+        "limitations": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Limitations",
+          "type": "array"
+        },
+        "excluded_regions": {
+          "items": {
+            "$ref": "#/$defs/ExcludedCircle"
+          },
+          "minItems": 1,
+          "title": "Excluded Regions",
+          "type": "array"
+        },
+        "surface_check_method": {
+          "const": "mean-of-64-equal-angle-exterior-samples",
+          "title": "Surface Check Method",
+          "type": "string"
+        },
+        "surface_check_tolerance_k": {
+          "const": 0.1,
+          "title": "Surface Check Tolerance K",
+          "type": "number"
+        },
+        "surface_checks": {
+          "items": {
+            "$ref": "#/$defs/SurfaceMeanCheck"
+          },
+          "minItems": 1,
+          "title": "Surface Checks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "model",
+        "condition",
+        "soil_thermal_resistivity_k_m_w",
+        "limitations",
+        "excluded_regions",
+        "surface_check_method",
+        "surface_check_tolerance_k",
+        "surface_checks"
+      ],
+      "title": "AnalyticalSoilView",
+      "type": "object"
+    },
+    "ArtifactSource": {
+      "additionalProperties": false,
+      "properties": {
+        "run_id": {
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "case_id": {
+          "minLength": 1,
+          "title": "Case Id",
+          "type": "string"
+        },
+        "plugin_id": {
+          "minLength": 1,
+          "title": "Plugin Id",
+          "type": "string"
+        },
+        "plugin_version": {
+          "minLength": 1,
+          "title": "Plugin Version",
+          "type": "string"
+        },
+        "capability": {
+          "minLength": 1,
+          "title": "Capability",
+          "type": "string"
+        },
+        "input_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Input Sha256",
+          "type": "string"
+        },
+        "binding": {
+          "default": "simulation-bundle",
+          "enum": [
+            "simulation-bundle",
+            "iec-trace"
+          ],
+          "title": "Binding",
+          "type": "string"
+        },
+        "bundle_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bundle Sha256"
+        },
+        "trace_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[a-f0-9]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Trace Sha256"
+        },
+        "manifest_sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Manifest Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "run_id",
+        "case_id",
+        "plugin_id",
+        "plugin_version",
+        "capability",
+        "input_sha256",
+        "manifest_sha256"
+      ],
+      "title": "ArtifactSource",
+      "type": "object"
+    },
+    "ExcludedCircle": {
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "minLength": 1,
+          "title": "Entity",
+          "type": "string"
+        },
+        "center_m": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Center M",
+          "type": "array"
+        },
+        "radius_m": {
+          "exclusiveMinimum": 0,
+          "title": "Radius M",
+          "type": "number"
+        },
+        "kind": {
+          "enum": [
+            "cable-interior",
+            "duct-interior"
+          ],
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "center_m",
+        "radius_m",
+        "kind"
+      ],
+      "title": "ExcludedCircle",
+      "type": "object"
+    },
+    "FieldMesh": {
+      "additionalProperties": false,
+      "properties": {
+        "length_unit": {
+          "const": "m",
+          "default": "m",
+          "title": "Length Unit",
+          "type": "string"
+        },
+        "coordinates": {
+          "const": "section-x-z; z-up",
+          "default": "section-x-z; z-up",
+          "title": "Coordinates",
+          "type": "string"
+        },
+        "points": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "type": "array"
+          },
+          "minItems": 3,
+          "title": "Points",
+          "type": "array"
+        },
+        "triangles": {
+          "items": {
+            "maxItems": 3,
+            "minItems": 3,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "type": "array"
+          },
+          "minItems": 1,
+          "title": "Triangles",
+          "type": "array"
+        },
+        "domain_ids": {
+          "items": {
+            "type": "integer"
+          },
+          "title": "Domain Ids",
+          "type": "array"
+        },
+        "regions": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Regions",
+          "type": "array"
+        },
+        "sha256": {
+          "pattern": "^[a-f0-9]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "representation": {
+          "minLength": 1,
+          "title": "Representation",
+          "type": "string"
+        }
+      },
+      "required": [
+        "points",
+        "triangles",
+        "domain_ids",
+        "regions",
+        "sha256",
+        "representation"
+      ],
+      "title": "FieldMesh",
+      "type": "object"
+    },
+    "SurfaceMeanCheck": {
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "minLength": 1,
+          "title": "Entity",
+          "type": "string"
+        },
+        "reference_temperature_k": {
+          "exclusiveMinimum": 0,
+          "title": "Reference Temperature K",
+          "type": "number"
+        },
+        "mean_temperature_k": {
+          "exclusiveMinimum": 0,
+          "title": "Mean Temperature K",
+          "type": "number"
+        },
+        "absolute_error_k": {
+          "minimum": 0,
+          "title": "Absolute Error K",
+          "type": "number"
+        },
+        "surface_minimum_k": {
+          "exclusiveMinimum": 0,
+          "title": "Surface Minimum K",
+          "type": "number"
+        },
+        "surface_maximum_k": {
+          "exclusiveMinimum": 0,
+          "title": "Surface Maximum K",
+          "type": "number"
+        }
+      },
+      "required": [
+        "entity",
+        "reference_temperature_k",
+        "mean_temperature_k",
+        "absolute_error_k",
+        "surface_minimum_k",
+        "surface_maximum_k"
+      ],
+      "title": "SurfaceMeanCheck",
+      "type": "object"
+    },
+    "TemperatureSample": {
+      "additionalProperties": false,
+      "properties": {
+        "entity": {
+          "minLength": 1,
+          "title": "Entity",
+          "type": "string"
+        },
+        "point_m": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "title": "Point M",
+          "type": "array"
+        },
+        "temperature_k": {
+          "exclusiveMinimum": 0,
+          "title": "Temperature K",
+          "type": "number"
+        },
+        "time_s": {
+          "minimum": 0,
+          "title": "Time S",
+          "type": "number"
+        },
+        "method": {
+          "minLength": 1,
+          "title": "Method",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entity",
+        "point_m",
+        "temperature_k",
+        "time_s",
+        "method"
+      ],
+      "title": "TemperatureSample",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "cablesim.temperature-field/1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source": {
+      "$ref": "#/$defs/ArtifactSource"
+    },
+    "mesh": {
+      "$ref": "#/$defs/FieldMesh"
+    },
+    "association": {
+      "const": "node",
+      "default": "node",
+      "title": "Association",
+      "type": "string"
+    },
+    "temperature_unit": {
+      "const": "K",
+      "default": "K",
+      "title": "Temperature Unit",
+      "type": "string"
+    },
+    "temperature_k": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Temperature K",
+      "type": "array"
+    },
+    "time_s": {
+      "minimum": 0,
+      "title": "Time S",
+      "type": "number"
+    },
+    "samples": {
+      "items": {
+        "$ref": "#/$defs/TemperatureSample"
+      },
+      "title": "Samples",
+      "type": "array"
+    },
+    "hotspot": {
+      "$ref": "#/$defs/TemperatureSample"
+    },
+    "convergence": {
+      "additionalProperties": true,
+      "title": "Convergence",
+      "type": "object"
+    },
+    "analytical_soil_view": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AnalyticalSoilView"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "engineering_approval": {
+      "const": false,
+      "default": false,
+      "title": "Engineering Approval",
+      "type": "boolean"
+    }
+  },
+  "required": [
+    "schema_version",
+    "source",
+    "mesh",
+    "temperature_k",
+    "time_s",
+    "samples",
+    "hotspot",
+    "convergence"
+  ],
+  "title": "TemperatureField",
+  "type": "object"
+}

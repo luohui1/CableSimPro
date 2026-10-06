@@ -59,7 +59,7 @@ def scenario(patch: dict) -> Scenario:
 
 
 def test_golden_values_belong_to_this_method_version():
-    assert MODEL_VERSION == 'MV-THERMAL-0.1.0'
+    assert MODEL_VERSION == '1.0.0'
 
 
 @pytest.fixture(scope='module')

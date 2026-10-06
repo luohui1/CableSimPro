@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.hybrid-rating",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "name": "混合载流量研究",
   "description": "IEC物理基线与有限元热场修正，带适用域、预测区间及训练来源；默认仅参考。",
   "icon": "assets/icon.svg",
@@ -42,7 +42,7 @@
       "kind": "method",
       "id": "training-sample",
       "title": "收敛有限元与IEC配对样本",
-      "method_version": "hybrid-label/0.1.0",
+      "method_version": "1.0.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -57,6 +57,10 @@
         {
           "type": "x-cablesim.dataset-sample",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -67,13 +71,1475 @@
         "仅Slurm；三档网格收敛；仅参考。",
         "热场模式冻结IEC电损耗；显式选择电磁热模式时由GetDP逐工作点重算sigma(T)、邻近效应及护套损耗。",
         "分层模型训练使用明确标记的均匀土壤IEC对照，另附同条件两层解析参照；默认仅参考。"
-      ]
+      ],
+      "category": "calculation",
+      "description": "仅Slurm；三档网格收敛；仅参考。；热场模式冻结IEC电损耗；显式选择电磁热模式时由GetDP逐工作点重算sigma(T)、邻近效应及护套损耗。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "iec": {
+            "type": "object",
+            "properties": {
+              "ks": {
+                "description": "IEC60287-1-1集肤效应系数，依据导体构造与适用公式选择。",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "title": "集肤效应构造系数",
+                "type": "number",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "kp": {
+                "description": "IEC60287-1-1邻近效应系数，依据导体构造与布置选择。",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "title": "邻近效应构造系数",
+                "type": "number",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "t4_form": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "simplified",
+                      "exact"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "外部热阻公式",
+                "description": "IEC60287-2-1均匀土外部热阻的精确或近似形式。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 2,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "eddy": {
+                "enum": [
+                  "ignored",
+                  "trefoil"
+                ],
+                "title": "护套涡流模型",
+                "type": "string",
+                "description": "明确是否计入实现支持的护套涡流分量。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 3,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "solver": {
+                "$ref": "#/$defs/contract_properties_iec_Solver",
+                "title": "IEC数值迭代",
+                "description": "护套温度迭代和载流量反求的数值控制。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 4,
+                "x-level": "advanced"
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "title": "参数来源",
+                "description": "引用厂家、试验、标准条款或已验证工件，缺少来源不生成工程结果。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 5,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "duct": {
+                "type": "object",
+                "properties": {
+                  "u": {
+                    "exclusiveMinimum": 0,
+                    "title": "管内热阻经验系数甲",
+                    "type": "number",
+                    "description": "IEC60287-2-1空气隙公式分子热阻，采用所选管道标准表；须与乙、温度系数配套。",
+                    "x-unit": {
+                      "si": "K·m/W",
+                      "display": "K·m/W",
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "materials",
+                    "x-order": 0,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    }
+                  },
+                  "v_per_m": {
+                    "minimum": 0.0,
+                    "title": "管内热阻直径系数",
+                    "type": "number",
+                    "description": "空气隙SI式为U/[1+(V+Y×(T−273.15 K))×D]；表中毫米制系数乘100换成每米。",
+                    "x-unit": {
+                      "si": "1/m",
+                      "display": "1/m",
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "physics",
+                    "x-order": 1,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    },
+                    "x-runtime": {
+                      "key": "v",
+                      "scale": 0.01,
+                      "offset": 0
+                    }
+                  },
+                  "y_per_m_k": {
+                    "minimum": 0.0,
+                    "title": "管内热阻温径系数",
+                    "type": "number",
+                    "description": "空气隙SI式中的温度与直径联合系数；温度相对于273.15 K，表中毫米制系数乘100换成SI。",
+                    "x-unit": {
+                      "si": "1/(m·K)",
+                      "display": "1/(m·K)",
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "physics",
+                    "x-order": 2,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    },
+                    "x-runtime": {
+                      "key": "y_per_k",
+                      "scale": 0.01,
+                      "offset": 0
+                    }
+                  },
+                  "initial_mean_air_temperature_k": {
+                    "maximum": 393.15,
+                    "minimum": 253.14999999999998,
+                    "title": "管内平均空气初温",
+                    "type": "number",
+                    "description": "IEC排管空气隙迭代的起始平均温度，仅为数值初值。",
+                    "x-unit": {
+                      "si": "K",
+                      "display": "°C",
+                      "scale": 1,
+                      "offset": -273.15
+                    },
+                    "x-group": "physics",
+                    "x-order": 3,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    },
+                    "x-runtime": {
+                      "key": "initial_mean_air_temperature_c",
+                      "scale": 1,
+                      "offset": -273.15
+                    }
+                  }
+                },
+                "required": [
+                  "u",
+                  "v_per_m",
+                  "y_per_m_k",
+                  "initial_mean_air_temperature_k"
+                ],
+                "title": "排管结构",
+                "description": "单管单缆的管壁几何、热阻率与空气隙经验式。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 6,
+                "x-level": "advanced"
+              },
+              "per_cable_losses": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "ac_extra_factor": {
+                      "type": "number",
+                      "minimum": 0,
+                      "title": "交流附加损耗系数",
+                      "description": "导体交流电阻相对直流电阻的附加比例，采用有来源的电损耗计算结果。",
+                      "x-unit": {
+                        "si": "1",
+                        "display": "1",
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "physics",
+                      "x-order": 0,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    },
+                    "lambda1": {
+                      "type": "number",
+                      "minimum": 0,
+                      "title": "护套损耗因数",
+                      "description": "IEC60287-1-1 护套损耗与导体损耗之比。",
+                      "x-unit": {
+                        "si": "1",
+                        "display": "1",
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "physics",
+                      "x-order": 1,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    },
+                    "lambda2": {
+                      "type": "number",
+                      "minimum": 0,
+                      "default": 0,
+                      "title": "铠装损耗因数",
+                      "description": "IEC60287-1-1 铠装损耗与导体损耗之比。",
+                      "x-unit": {
+                        "si": "1",
+                        "display": "1",
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "physics",
+                      "x-order": 2,
+                      "x-level": "advanced",
+                      "x-default-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      },
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    }
+                  },
+                  "required": [
+                    "ac_extra_factor",
+                    "lambda1"
+                  ],
+                  "additionalProperties": false
+                },
+                "title": "逐缆电损耗",
+                "description": "按电缆对象绑定外部损耗系数与来源，供非平衡或多回路输入。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "model",
+                "x-order": 7,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "cable",
+                  "scope": "workspace",
+                  "multiple": false,
+                  "keyed": true,
+                  "read_only": false
+                }
+              },
+              "loss_input_source": {
+                "type": "string",
+                "title": "电损耗来源类型",
+                "description": "选择标准公式或有来源的外部损耗工件，适用范围分别校验。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 8,
+                "x-level": "advanced"
+              },
+              "target_circuit_id": {
+                "type": "string",
+                "title": "目标回路",
+                "description": "选择需要反求或校核的已保存回路，其余回路按声明工况运行。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "model",
+                "x-order": 9,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "circuit",
+                  "scope": "workspace",
+                  "multiple": false,
+                  "keyed": false,
+                  "read_only": false
+                }
+              },
+              "reference_basis": {
+                "type": "string",
+                "enum": [
+                  "iec2023",
+                  "tb880_reference"
+                ],
+                "default": "iec2023",
+                "title": "计算依据",
+                "description": "结构化记录当前方法的标准、输入及适用范围依据。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 10,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "both",
+                  "temperature"
+                ],
+                "default": "both",
+                "title": "计算任务",
+                "description": "明确本次是额定反求、保存负荷温度还是二者联合计算。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "operating",
+                "x-order": 11,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "rating_mode": {
+                "type": "string",
+                "enum": [
+                  "individual",
+                  "simultaneous",
+                  "both"
+                ],
+                "default": "individual",
+                "description": "选择逐回路额定或同时增载，结果不得混用工况。",
+                "title": "额定工况口径",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "operating",
+                "x-order": 12,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "double_flat_tables": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "双回路平形表系数",
+                "description": "结构化引用IEC支持的双回路平形系数表及其适用几何。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 13,
+                "x-level": "expert",
+                "x-editor-reason": "IEC双回路表的现有内部来源格式未形成通用结构；仅专家引用有来源的原始表。"
+              },
+              "corrugated_gap": {
+                "type": "object",
+                "description": "显式声明波纹空隙等效热路，不自动填补未知构造。",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "rho_k_m_w": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "材料热导率的倒数，采用材料试验或适用标准表。",
+                      "title": "材料热阻率",
+                      "x-unit": {
+                        "si": "K·m/W",
+                        "display": "K·m/W",
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "materials",
+                      "x-order": 0,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    },
+                    "source": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "引用厂家、试验、标准条款或已验证工件，缺少来源不生成工程结果。",
+                      "title": "参数来源",
+                      "x-unit": {
+                        "si": null,
+                        "display": null,
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "evidence",
+                      "x-order": 1,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    },
+                    "geometry_source": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "绑定构建几何的设计事实或原始文件。",
+                      "title": "几何来源",
+                      "x-unit": {
+                        "si": null,
+                        "display": null,
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "evidence",
+                      "x-order": 2,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    }
+                  },
+                  "required": [
+                    "rho_k_m_w",
+                    "source",
+                    "geometry_source"
+                  ],
+                  "additionalProperties": false
+                },
+                "title": "波纹护套间隙模型",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "model",
+                "x-order": 14,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "cable_type",
+                  "scope": "workspace",
+                  "multiple": false,
+                  "keyed": true,
+                  "read_only": false
+                }
+              },
+              "external_loss_reference": {
+                "type": "object",
+                "properties": {
+                  "run_id": {
+                    "type": "string",
+                    "title": "来源运行",
+                    "description": "从工程保存运行选择来源，历史运行不可改写。",
+                    "x-unit": {
+                      "si": null,
+                      "display": null,
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "physics",
+                    "x-order": 0,
+                    "x-level": "advanced"
+                  },
+                  "case_id": {
+                    "type": "string",
+                    "title": "来源工况",
+                    "description": "从选定来源运行中选择同一计算工况。",
+                    "x-unit": {
+                      "si": null,
+                      "display": null,
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "physics",
+                    "x-order": 1,
+                    "x-level": "advanced"
+                  },
+                  "artifact_type": {
+                    "const": "x-cablesim.loss-coefficients",
+                    "type": "string",
+                    "title": "来源工件类型",
+                    "description": "绑定宿主支持且已校验的物理工件类型。",
+                    "x-unit": {
+                      "si": null,
+                      "display": null,
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "evidence",
+                    "x-order": 2,
+                    "x-level": "advanced"
+                  },
+                  "artifact_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "来源工件摘要",
+                    "description": "绑定已保存工件的SHA-256摘要，防止引用内容被替换。",
+                    "x-unit": {
+                      "si": null,
+                      "display": null,
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "evidence",
+                    "x-order": 3,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    }
+                  }
+                },
+                "required": [
+                  "run_id",
+                  "case_id",
+                  "artifact_type",
+                  "artifact_sha256"
+                ],
+                "additionalProperties": false,
+                "title": "外部损耗工件引用",
+                "description": "由宿主绑定同输入、同工况且已校验的电磁损耗工件。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 15,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "artifact",
+                  "scope": "run",
+                  "multiple": false,
+                  "keyed": false,
+                  "read_only": false
+                }
+              },
+              "target_current_a": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "title": "校核目标电流",
+                "description": "用于余量或允许运行判断的研究目标电流，缺省沿用保存负荷。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "operating",
+                "x-order": 16,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "ks",
+              "kp",
+              "t4_form",
+              "eddy",
+              "solver"
+            ],
+            "title": "IEC基线参数",
+            "description": "引用IEC60287基线的结构化参数，基线适用范围仍独立校验。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 0,
+            "x-level": "advanced"
+          },
+          "controls": {
+            "additionalProperties": false,
+            "properties": {
+              "operation": {
+                "enum": [
+                  "temperature",
+                  "ampacity"
+                ],
+                "title": "计算任务",
+                "type": "string",
+                "description": "temperature 为给定负荷温度正算，ampacity 为指定回路反求允许电流；仅选择此字段枚举实际支持的任务。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "operating",
+                "x-order": 0,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "element_order": {
+                "default": 1,
+                "enum": [
+                  1,
+                  2
+                ],
+                "title": "单元阶次",
+                "type": "integer",
+                "description": "网格单元的几何或形函数阶次，须与求解器支持一致。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 1,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                },
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "mesh_size_m": {
+                "exclusiveMinimum": 0,
+                "title": "网格尺寸",
+                "type": "number",
+                "description": "网格单元目标尺寸，必须经网格收敛核验。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "materials",
+                "x-order": 2,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "far_mesh_size_m": {
+                "exclusiveMinimum": 0,
+                "title": "远场单元尺寸",
+                "type": "number",
+                "description": "远离热源区域的目标单元尺寸，影响有限域离散误差。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "materials",
+                "x-order": 3,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "mesh_transition_m": {
+                "exclusiveMinimum": 0,
+                "title": "网格过渡宽度",
+                "type": "number",
+                "description": "近场细网格逐渐过渡到远场网格的宽度。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "materials",
+                "x-order": 4,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "fine_mesh_band_m": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "近缆细化带宽",
+                "description": "电缆外表面附近的网格细化带宽度。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "materials",
+                "x-order": 5,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "near_soil_mesh_size_m": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "近场土壤尺寸",
+                "description": "电缆周围土壤区域的目标单元尺寸。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "materials",
+                "x-order": 6,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "near_soil_margin_m": {
+                "default": 0.5,
+                "exclusiveMinimum": 0,
+                "title": "近场土壤外扩宽度",
+                "type": "number",
+                "description": "电缆群外侧近场土壤细化区域的外扩距离。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "materials",
+                "x-order": 7,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "max_nodes": {
+                "maximum": 500000,
+                "minimum": 100,
+                "title": "最大节点数",
+                "type": "integer",
+                "description": "网格资源上限，超过即拒绝，属于内存保护。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 8,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "tolerance_k": {
+                "exclusiveMinimum": 0,
+                "maximum": 0.01,
+                "title": "温度收敛容差",
+                "type": "number",
+                "description": "反馈迭代温度变化的停止阈值，不是工程实测误差。",
+                "x-unit": {
+                  "si": "K",
+                  "display": "K",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 9,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "max_iterations": {
+                "maximum": 500,
+                "minimum": 2,
+                "title": "最大迭代次数",
+                "type": "integer",
+                "description": "数值迭代次数上限，达到上限仍未收敛时明确失败。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 10,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "relaxation": {
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "title": "反馈松弛系数",
+                "type": "number",
+                "description": "新旧迭代状态的加权比例，取零至一之间以改善稳定性。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 11,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "current_upper_a": {
+                "exclusiveMinimum": 0,
+                "title": "电流搜索上界",
+                "type": "number",
+                "description": "载流量反求的数值搜索上界，须包围可行解。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 12,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "current_maximum_a": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "电流搜索上限",
+                "description": "数值反求可搜索的最高电流，不是电缆额定值。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 13,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "current_tolerance_a": {
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "title": "电流迭代容差",
+                "type": "number",
+                "description": "载流量反求的电流变化停止阈值，属于数值控制。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 14,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "rated_circuit": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "反求回路",
+                "description": "选择热场模型中具有完整电阻和材料参数的回路；ampacity 模式必须选择，temperature 模式可传 null。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "model",
+                "x-order": 15,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "circuit",
+                  "scope": "workspace",
+                  "multiple": false,
+                  "keyed": false,
+                  "read_only": false
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "mesh_size_m",
+              "far_mesh_size_m",
+              "mesh_transition_m",
+              "max_nodes",
+              "tolerance_k",
+              "max_iterations",
+              "relaxation",
+              "current_upper_a",
+              "current_tolerance_a",
+              "rated_circuit"
+            ],
+            "title": "数值控制",
+            "type": "object",
+            "description": "声明离散与反求控制，数值收敛不等于工程验证。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 1,
+            "x-level": "advanced"
+          },
+          "bounds_m": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "截面计算边界",
+            "type": "array",
+            "description": "按左、下、右、上顺序声明二维截面边界，坐标采用z向上约定。",
+            "x-unit": {
+              "si": "m",
+              "display": "m",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 2,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "dataset": {
+            "additionalProperties": false,
+            "properties": {
+              "mesh_scales": {
+                "default": [
+                  1.5,
+                  1.0,
+                  0.75
+                ],
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 6,
+                "minItems": 3,
+                "title": "多档网格比例",
+                "type": "array",
+                "description": "网格收敛校核的逐档尺寸倍率，必须有独立细化档位。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 0,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                },
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "temperature_tolerance_k": {
+                "default": 0.1,
+                "exclusiveMinimum": 0,
+                "maximum": 0.1,
+                "title": "温度迭代容差",
+                "type": "number",
+                "description": "相邻迭代温度变化的停止阈值，不代表模型准确度。",
+                "x-unit": {
+                  "si": "K",
+                  "display": "°C",
+                  "scale": 1,
+                  "offset": -273.15
+                },
+                "x-group": "numerical",
+                "x-order": 1,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                },
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "ampacity_tolerance_a": {
+                "default": 0.5,
+                "exclusiveMinimum": 0,
+                "maximum": 1.0,
+                "title": "载流量校核容差",
+                "type": "number",
+                "description": "IEC与有限元载流量差异的允许绝对误差，属于用户声明的校核门槛。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 2,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              }
+            },
+            "title": "训练标签校核设置",
+            "type": "object",
+            "description": "声明热场样本的网格、计算域及载流量反求校核参数。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 3,
+            "x-level": "advanced"
+          },
+          "source": {
+            "minLength": 1,
+            "title": "参数来源",
+            "type": "string",
+            "description": "引用厂家、试验、标准条款或已验证工件，缺少来源不生成工程结果。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 4,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "physics": {
+            "default": "thermal",
+            "enum": [
+              "thermal",
+              "electromagnetic_thermal"
+            ],
+            "title": "训练物理路径",
+            "type": "string",
+            "description": "选择热场或电磁热反馈路径，训练标签必须使用对应真实求解结果。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 5,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "electromagnetic_mesh": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "电磁网格控制",
+            "description": "电磁区域的离散参数，必须满足该反馈路径的网格限制。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 6,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+            }
+          }
+        },
+        "required": [
+          "iec",
+          "controls",
+          "bounds_m",
+          "source"
+        ],
+        "title": "Settings",
+        "type": "object",
+        "$defs": {
+          "contract_properties_iec_Solver": {
+            "additionalProperties": false,
+            "properties": {
+              "initial_sheath_temperature_k": {
+                "maximum": 423.15,
+                "minimum": 253.14999999999998,
+                "title": "护套迭代初温",
+                "type": "number",
+                "description": "IEC护套电阻与损耗迭代的起始温度，仅为数值初值。",
+                "x-unit": {
+                  "si": "K",
+                  "display": "°C",
+                  "scale": 1,
+                  "offset": -273.15
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-runtime": {
+                  "key": "initial_sheath_temperature_c",
+                  "scale": 1,
+                  "offset": -273.15
+                }
+              },
+              "current_tolerance_a": {
+                "default": 0.001,
+                "exclusiveMinimum": 0,
+                "maximum": 10,
+                "title": "电流迭代容差",
+                "type": "number",
+                "description": "载流量反求的电流变化停止阈值，属于数值控制。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 1,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                },
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "max_iterations": {
+                "default": 50,
+                "maximum": 500,
+                "minimum": 1,
+                "title": "最大迭代次数",
+                "type": "integer",
+                "description": "数值迭代次数上限，达到上限仍未收敛时明确失败。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 2,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                },
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 training-sample 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              }
+            },
+            "required": [
+              "initial_sheath_temperature_k"
+            ],
+            "title": "Solver",
+            "type": "object"
+          }
+        }
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain",
+          "study"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "ampacity",
+          "title": "允许电流",
+          "unit": {
+            "si": "A",
+            "display": "A",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "minimum",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.dataset-sample"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "kind": "method",
       "id": "train-model",
       "title": "CPU训练与独立留出验证",
-      "method_version": "hybrid-training/0.1.0",
+      "method_version": "1.0.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.hybrid-training/1",
       "outputs": [
@@ -88,6 +1554,10 @@
         {
           "type": "x-cablesim.hybrid-model",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -97,13 +1567,120 @@
       "limitations": [
         "仅Slurm CPU；只使用收敛配对标签；不读取任意文件或pickle。",
         "仿真验证不等于独立实测验证，禁止自动工程批准。"
-      ]
+      ],
+      "category": "calculation",
+      "description": "仅Slurm CPU；只使用收敛配对标签；不读取任意文件或pickle。；仿真验证不等于独立实测验证，禁止自动工程批准。",
+      "parameter_schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "seed": {
+            "type": "integer",
+            "default": 42,
+            "title": "训练随机种子",
+            "description": "固定训练随机过程以便复现；42是实现约定，不是物理经验值。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 0,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 train-model 输入校验；离散或资源限制，不是材料设计限值。"
+            }
+          },
+          "model_version": {
+            "type": "string",
+            "const": "1.0.0",
+            "default": "1.0.0",
+            "title": "训练模型版本",
+            "description": "当前初版模型的声明版本，模型工件保留独立摘要。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 1,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 train-model 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        }
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "study"
+        ],
+        "binding": {
+          "type": "artifact",
+          "scope": "run",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.training-samples",
+          "title": "训练样本数",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.hybrid-model"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "kind": "method",
       "id": "steady-rating",
       "title": "IEC基线加有限元数据修正",
-      "method_version": "hybrid-rating/0.1.0",
+      "method_version": "1.0.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -124,6 +1701,10 @@
         {
           "type": "x-cablesim.hybrid-prediction",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -133,13 +1714,933 @@
       "limitations": [
         "只接受已登记的准确模型哈希；训练域外拒绝。",
         "默认reference_only；区间为95%校准预测区间，未代表实测工程保证。"
-      ]
+      ],
+      "category": "calculation",
+      "description": "只接受已登记的准确模型哈希；训练域外拒绝。；默认reference_only；区间为95%校准预测区间，未代表实测工程保证。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "iec": {
+            "type": "object",
+            "properties": {
+              "ks": {
+                "description": "IEC60287-1-1集肤效应系数，依据导体构造与适用公式选择。",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "title": "集肤效应构造系数",
+                "type": "number",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "kp": {
+                "description": "IEC60287-1-1邻近效应系数，依据导体构造与布置选择。",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "title": "邻近效应构造系数",
+                "type": "number",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "t4_form": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "simplified",
+                      "exact"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "外部热阻公式",
+                "description": "IEC60287-2-1均匀土外部热阻的精确或近似形式。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 2,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "eddy": {
+                "enum": [
+                  "ignored",
+                  "trefoil"
+                ],
+                "title": "护套涡流模型",
+                "type": "string",
+                "description": "明确是否计入实现支持的护套涡流分量。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 3,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "solver": {
+                "$ref": "#/$defs/contract_properties_iec_Solver",
+                "title": "IEC数值迭代",
+                "description": "护套温度迭代和载流量反求的数值控制。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 4,
+                "x-level": "advanced"
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "title": "参数来源",
+                "description": "引用厂家、试验、标准条款或已验证工件，缺少来源不生成工程结果。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 5,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "duct": {
+                "type": "object",
+                "properties": {
+                  "u": {
+                    "exclusiveMinimum": 0,
+                    "title": "管内热阻经验系数甲",
+                    "type": "number",
+                    "description": "IEC60287-2-1空气隙公式分子热阻，采用所选管道标准表；须与乙、温度系数配套。",
+                    "x-unit": {
+                      "si": "K·m/W",
+                      "display": "K·m/W",
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "materials",
+                    "x-order": 0,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    }
+                  },
+                  "v_per_m": {
+                    "minimum": 0.0,
+                    "title": "管内热阻直径系数",
+                    "type": "number",
+                    "description": "空气隙SI式为U/[1+(V+Y×(T−273.15 K))×D]；表中毫米制系数乘100换成每米。",
+                    "x-unit": {
+                      "si": "1/m",
+                      "display": "1/m",
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "physics",
+                    "x-order": 1,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    },
+                    "x-runtime": {
+                      "key": "v",
+                      "scale": 0.01,
+                      "offset": 0
+                    }
+                  },
+                  "y_per_m_k": {
+                    "minimum": 0.0,
+                    "title": "管内热阻温径系数",
+                    "type": "number",
+                    "description": "空气隙SI式中的温度与直径联合系数；温度相对于273.15 K，表中毫米制系数乘100换成SI。",
+                    "x-unit": {
+                      "si": "1/(m·K)",
+                      "display": "1/(m·K)",
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "physics",
+                    "x-order": 2,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    },
+                    "x-runtime": {
+                      "key": "y_per_k",
+                      "scale": 0.01,
+                      "offset": 0
+                    }
+                  },
+                  "initial_mean_air_temperature_k": {
+                    "maximum": 393.15,
+                    "minimum": 253.14999999999998,
+                    "title": "管内平均空气初温",
+                    "type": "number",
+                    "description": "IEC排管空气隙迭代的起始平均温度，仅为数值初值。",
+                    "x-unit": {
+                      "si": "K",
+                      "display": "°C",
+                      "scale": 1,
+                      "offset": -273.15
+                    },
+                    "x-group": "physics",
+                    "x-order": 3,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    },
+                    "x-runtime": {
+                      "key": "initial_mean_air_temperature_c",
+                      "scale": 1,
+                      "offset": -273.15
+                    }
+                  }
+                },
+                "required": [
+                  "u",
+                  "v_per_m",
+                  "y_per_m_k",
+                  "initial_mean_air_temperature_k"
+                ],
+                "title": "排管结构",
+                "description": "单管单缆的管壁几何、热阻率与空气隙经验式。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 6,
+                "x-level": "advanced"
+              },
+              "per_cable_losses": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "ac_extra_factor": {
+                      "type": "number",
+                      "minimum": 0,
+                      "title": "交流附加损耗系数",
+                      "description": "导体交流电阻相对直流电阻的附加比例，采用有来源的电损耗计算结果。",
+                      "x-unit": {
+                        "si": "1",
+                        "display": "1",
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "physics",
+                      "x-order": 0,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    },
+                    "lambda1": {
+                      "type": "number",
+                      "minimum": 0,
+                      "title": "护套损耗因数",
+                      "description": "IEC60287-1-1 护套损耗与导体损耗之比。",
+                      "x-unit": {
+                        "si": "1",
+                        "display": "1",
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "physics",
+                      "x-order": 1,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    },
+                    "lambda2": {
+                      "type": "number",
+                      "minimum": 0,
+                      "default": 0,
+                      "title": "铠装损耗因数",
+                      "description": "IEC60287-1-1 铠装损耗与导体损耗之比。",
+                      "x-unit": {
+                        "si": "1",
+                        "display": "1",
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "physics",
+                      "x-order": 2,
+                      "x-level": "advanced",
+                      "x-default-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      },
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    }
+                  },
+                  "required": [
+                    "ac_extra_factor",
+                    "lambda1"
+                  ],
+                  "additionalProperties": false
+                },
+                "title": "逐缆电损耗",
+                "description": "按电缆对象绑定外部损耗系数与来源，供非平衡或多回路输入。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "model",
+                "x-order": 7,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "cable",
+                  "scope": "workspace",
+                  "multiple": false,
+                  "keyed": true,
+                  "read_only": false
+                }
+              },
+              "loss_input_source": {
+                "type": "string",
+                "title": "电损耗来源类型",
+                "description": "选择标准公式或有来源的外部损耗工件，适用范围分别校验。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 8,
+                "x-level": "advanced"
+              },
+              "target_circuit_id": {
+                "type": "string",
+                "title": "目标回路",
+                "description": "选择需要反求或校核的已保存回路，其余回路按声明工况运行。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "model",
+                "x-order": 9,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "circuit",
+                  "scope": "workspace",
+                  "multiple": false,
+                  "keyed": false,
+                  "read_only": false
+                }
+              },
+              "reference_basis": {
+                "type": "string",
+                "enum": [
+                  "iec2023",
+                  "tb880_reference"
+                ],
+                "default": "iec2023",
+                "title": "计算依据",
+                "description": "结构化记录当前方法的标准、输入及适用范围依据。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 10,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "both",
+                  "temperature"
+                ],
+                "default": "both",
+                "title": "计算任务",
+                "description": "明确本次是额定反求、保存负荷温度还是二者联合计算。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "operating",
+                "x-order": 11,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "rating_mode": {
+                "type": "string",
+                "enum": [
+                  "individual",
+                  "simultaneous",
+                  "both"
+                ],
+                "default": "individual",
+                "description": "选择逐回路额定或同时增载，结果不得混用工况。",
+                "title": "额定工况口径",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "operating",
+                "x-order": 12,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "double_flat_tables": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "双回路平形表系数",
+                "description": "结构化引用IEC支持的双回路平形系数表及其适用几何。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 13,
+                "x-level": "expert",
+                "x-editor-reason": "IEC双回路表的现有内部来源格式未形成通用结构；仅专家引用有来源的原始表。"
+              },
+              "corrugated_gap": {
+                "type": "object",
+                "description": "显式声明波纹空隙等效热路，不自动填补未知构造。",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "rho_k_m_w": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "材料热导率的倒数，采用材料试验或适用标准表。",
+                      "title": "材料热阻率",
+                      "x-unit": {
+                        "si": "K·m/W",
+                        "display": "K·m/W",
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "materials",
+                      "x-order": 0,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    },
+                    "source": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "引用厂家、试验、标准条款或已验证工件，缺少来源不生成工程结果。",
+                      "title": "参数来源",
+                      "x-unit": {
+                        "si": null,
+                        "display": null,
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "evidence",
+                      "x-order": 1,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    },
+                    "geometry_source": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "绑定构建几何的设计事实或原始文件。",
+                      "title": "几何来源",
+                      "x-unit": {
+                        "si": null,
+                        "display": null,
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "evidence",
+                      "x-order": 2,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    }
+                  },
+                  "required": [
+                    "rho_k_m_w",
+                    "source",
+                    "geometry_source"
+                  ],
+                  "additionalProperties": false
+                },
+                "title": "波纹护套间隙模型",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "model",
+                "x-order": 14,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "cable_type",
+                  "scope": "workspace",
+                  "multiple": false,
+                  "keyed": true,
+                  "read_only": false
+                }
+              },
+              "external_loss_reference": {
+                "type": "object",
+                "properties": {
+                  "run_id": {
+                    "type": "string",
+                    "title": "来源运行",
+                    "description": "从工程保存运行选择来源，历史运行不可改写。",
+                    "x-unit": {
+                      "si": null,
+                      "display": null,
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "physics",
+                    "x-order": 0,
+                    "x-level": "advanced"
+                  },
+                  "case_id": {
+                    "type": "string",
+                    "title": "来源工况",
+                    "description": "从选定来源运行中选择同一计算工况。",
+                    "x-unit": {
+                      "si": null,
+                      "display": null,
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "physics",
+                    "x-order": 1,
+                    "x-level": "advanced"
+                  },
+                  "artifact_type": {
+                    "const": "x-cablesim.loss-coefficients",
+                    "type": "string",
+                    "title": "来源工件类型",
+                    "description": "绑定宿主支持且已校验的物理工件类型。",
+                    "x-unit": {
+                      "si": null,
+                      "display": null,
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "evidence",
+                    "x-order": 2,
+                    "x-level": "advanced"
+                  },
+                  "artifact_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "来源工件摘要",
+                    "description": "绑定已保存工件的SHA-256摘要，防止引用内容被替换。",
+                    "x-unit": {
+                      "si": null,
+                      "display": null,
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "evidence",
+                    "x-order": 3,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    }
+                  }
+                },
+                "required": [
+                  "run_id",
+                  "case_id",
+                  "artifact_type",
+                  "artifact_sha256"
+                ],
+                "additionalProperties": false,
+                "title": "外部损耗工件引用",
+                "description": "由宿主绑定同输入、同工况且已校验的电磁损耗工件。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 15,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "artifact",
+                  "scope": "run",
+                  "multiple": false,
+                  "keyed": false,
+                  "read_only": false
+                }
+              },
+              "target_current_a": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "title": "校核目标电流",
+                "description": "用于余量或允许运行判断的研究目标电流，缺省沿用保存负荷。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "operating",
+                "x-order": 16,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "ks",
+              "kp",
+              "t4_form",
+              "eddy",
+              "solver"
+            ],
+            "title": "IEC基线参数",
+            "description": "引用IEC60287基线的结构化参数，基线适用范围仍独立校验。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 0,
+            "x-level": "advanced"
+          },
+          "rated_circuit": {
+            "minLength": 1,
+            "title": "反求回路",
+            "type": "string",
+            "description": "选择混合模型反求的已保存回路，必须处于训练适用范围。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "model",
+            "x-order": 1,
+            "x-level": "basic",
+            "x-bind": {
+              "type": "circuit",
+              "scope": "workspace",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "model_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "混合模型摘要",
+            "type": "string",
+            "description": "选择已登记且哈希验证通过的模型，超出训练域时明确拒绝。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "model",
+            "x-order": 2,
+            "x-level": "advanced",
+            "x-bind": {
+              "type": "model",
+              "scope": "run",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        },
+        "required": [
+          "iec",
+          "rated_circuit",
+          "model_sha256"
+        ],
+        "title": "Prediction",
+        "type": "object",
+        "$defs": {
+          "contract_properties_iec_Solver": {
+            "additionalProperties": false,
+            "properties": {
+              "initial_sheath_temperature_k": {
+                "maximum": 423.15,
+                "minimum": 253.14999999999998,
+                "title": "护套迭代初温",
+                "type": "number",
+                "description": "IEC护套电阻与损耗迭代的起始温度，仅为数值初值。",
+                "x-unit": {
+                  "si": "K",
+                  "display": "°C",
+                  "scale": 1,
+                  "offset": -273.15
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-runtime": {
+                  "key": "initial_sheath_temperature_c",
+                  "scale": 1,
+                  "offset": -273.15
+                }
+              },
+              "current_tolerance_a": {
+                "default": 0.001,
+                "exclusiveMinimum": 0,
+                "maximum": 10,
+                "title": "电流迭代容差",
+                "type": "number",
+                "description": "载流量反求的电流变化停止阈值，属于数值控制。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 1,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；离散或资源限制，不是材料设计限值。"
+                },
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "max_iterations": {
+                "default": 50,
+                "maximum": 500,
+                "minimum": 1,
+                "title": "最大迭代次数",
+                "type": "integer",
+                "description": "数值迭代次数上限，达到上限仍未收敛时明确失败。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 2,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；离散或资源限制，不是材料设计限值。"
+                },
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 steady-rating 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              }
+            },
+            "required": [
+              "initial_sheath_temperature_k"
+            ],
+            "title": "Solver",
+            "type": "object"
+          }
+        }
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain",
+          "study"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "ampacity",
+          "title": "允许电流",
+          "unit": {
+            "si": "A",
+            "display": "A",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "minimum",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.hybrid-prediction"
+        },
+        {
+          "key": "conductor_temperature",
+          "title": "最高导体温度",
+          "unit": {
+            "si": "K",
+            "display": "°C",
+            "scale": 1,
+            "offset": -273.15
+          },
+          "aggregate": "maximum",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.hybrid-prediction"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "kind": "method",
       "id": "physics-comparison",
       "title": "标准与有限元物理对比",
-      "method_version": "hybrid-physics-comparison/0.1.0",
+      "method_version": "1.0.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -154,6 +2655,10 @@
         {
           "type": "x-cablesim.physics-comparison",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -163,14 +2668,1486 @@
       "limitations": [
         "仅Slurm求解；温度和允许电流通过三档网格及能量门禁后才显示。",
         "分层工况IEC列为均匀土壤对照；实际分层解析参照单独显示，不自动批准工程使用。"
-      ]
+      ],
+      "category": "calculation",
+      "description": "仅Slurm求解；温度和允许电流通过三档网格及能量门禁后才显示。；分层工况IEC列为均匀土壤对照；实际分层解析参照单独显示，不自动批准工程使用。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "iec": {
+            "type": "object",
+            "properties": {
+              "ks": {
+                "description": "IEC60287-1-1集肤效应系数，依据导体构造与适用公式选择。",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "title": "集肤效应构造系数",
+                "type": "number",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "kp": {
+                "description": "IEC60287-1-1邻近效应系数，依据导体构造与布置选择。",
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "title": "邻近效应构造系数",
+                "type": "number",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 1,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "t4_form": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      "simplified",
+                      "exact"
+                    ],
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "外部热阻公式",
+                "description": "IEC60287-2-1均匀土外部热阻的精确或近似形式。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 2,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "eddy": {
+                "enum": [
+                  "ignored",
+                  "trefoil"
+                ],
+                "title": "护套涡流模型",
+                "type": "string",
+                "description": "明确是否计入实现支持的护套涡流分量。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 3,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "solver": {
+                "$ref": "#/$defs/contract_properties_iec_Solver",
+                "title": "IEC数值迭代",
+                "description": "护套温度迭代和载流量反求的数值控制。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 4,
+                "x-level": "advanced"
+              },
+              "source": {
+                "type": "string",
+                "minLength": 1,
+                "title": "参数来源",
+                "description": "引用厂家、试验、标准条款或已验证工件，缺少来源不生成工程结果。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 5,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "duct": {
+                "type": "object",
+                "properties": {
+                  "u": {
+                    "exclusiveMinimum": 0,
+                    "title": "管内热阻经验系数甲",
+                    "type": "number",
+                    "description": "IEC60287-2-1空气隙公式分子热阻，采用所选管道标准表；须与乙、温度系数配套。",
+                    "x-unit": {
+                      "si": "K·m/W",
+                      "display": "K·m/W",
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "materials",
+                    "x-order": 0,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    }
+                  },
+                  "v_per_m": {
+                    "minimum": 0.0,
+                    "title": "管内热阻直径系数",
+                    "type": "number",
+                    "description": "空气隙SI式为U/[1+(V+Y×(T−273.15 K))×D]；表中毫米制系数乘100换成每米。",
+                    "x-unit": {
+                      "si": "1/m",
+                      "display": "1/m",
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "physics",
+                    "x-order": 1,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    },
+                    "x-runtime": {
+                      "key": "v",
+                      "scale": 0.01,
+                      "offset": 0
+                    }
+                  },
+                  "y_per_m_k": {
+                    "minimum": 0.0,
+                    "title": "管内热阻温径系数",
+                    "type": "number",
+                    "description": "空气隙SI式中的温度与直径联合系数；温度相对于273.15 K，表中毫米制系数乘100换成SI。",
+                    "x-unit": {
+                      "si": "1/(m·K)",
+                      "display": "1/(m·K)",
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "physics",
+                    "x-order": 2,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    },
+                    "x-runtime": {
+                      "key": "y_per_k",
+                      "scale": 0.01,
+                      "offset": 0
+                    }
+                  },
+                  "initial_mean_air_temperature_k": {
+                    "maximum": 393.15,
+                    "minimum": 253.14999999999998,
+                    "title": "管内平均空气初温",
+                    "type": "number",
+                    "description": "IEC排管空气隙迭代的起始平均温度，仅为数值初值。",
+                    "x-unit": {
+                      "si": "K",
+                      "display": "°C",
+                      "scale": 1,
+                      "offset": -273.15
+                    },
+                    "x-group": "physics",
+                    "x-order": 3,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    },
+                    "x-runtime": {
+                      "key": "initial_mean_air_temperature_c",
+                      "scale": 1,
+                      "offset": -273.15
+                    }
+                  }
+                },
+                "required": [
+                  "u",
+                  "v_per_m",
+                  "y_per_m_k",
+                  "initial_mean_air_temperature_k"
+                ],
+                "title": "排管结构",
+                "description": "单管单缆的管壁几何、热阻率与空气隙经验式。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 6,
+                "x-level": "advanced"
+              },
+              "per_cable_losses": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "ac_extra_factor": {
+                      "type": "number",
+                      "minimum": 0,
+                      "title": "交流附加损耗系数",
+                      "description": "导体交流电阻相对直流电阻的附加比例，采用有来源的电损耗计算结果。",
+                      "x-unit": {
+                        "si": "1",
+                        "display": "1",
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "physics",
+                      "x-order": 0,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    },
+                    "lambda1": {
+                      "type": "number",
+                      "minimum": 0,
+                      "title": "护套损耗因数",
+                      "description": "IEC60287-1-1 护套损耗与导体损耗之比。",
+                      "x-unit": {
+                        "si": "1",
+                        "display": "1",
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "physics",
+                      "x-order": 1,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    },
+                    "lambda2": {
+                      "type": "number",
+                      "minimum": 0,
+                      "default": 0,
+                      "title": "铠装损耗因数",
+                      "description": "IEC60287-1-1 铠装损耗与导体损耗之比。",
+                      "x-unit": {
+                        "si": "1",
+                        "display": "1",
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "physics",
+                      "x-order": 2,
+                      "x-level": "advanced",
+                      "x-default-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      },
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    }
+                  },
+                  "required": [
+                    "ac_extra_factor",
+                    "lambda1"
+                  ],
+                  "additionalProperties": false
+                },
+                "title": "逐缆电损耗",
+                "description": "按电缆对象绑定外部损耗系数与来源，供非平衡或多回路输入。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "model",
+                "x-order": 7,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "cable",
+                  "scope": "workspace",
+                  "multiple": false,
+                  "keyed": true,
+                  "read_only": false
+                }
+              },
+              "loss_input_source": {
+                "type": "string",
+                "title": "电损耗来源类型",
+                "description": "选择标准公式或有来源的外部损耗工件，适用范围分别校验。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 8,
+                "x-level": "advanced"
+              },
+              "target_circuit_id": {
+                "type": "string",
+                "title": "目标回路",
+                "description": "选择需要反求或校核的已保存回路，其余回路按声明工况运行。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "model",
+                "x-order": 9,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "circuit",
+                  "scope": "workspace",
+                  "multiple": false,
+                  "keyed": false,
+                  "read_only": false
+                }
+              },
+              "reference_basis": {
+                "type": "string",
+                "enum": [
+                  "iec2023",
+                  "tb880_reference"
+                ],
+                "default": "iec2023",
+                "title": "计算依据",
+                "description": "结构化记录当前方法的标准、输入及适用范围依据。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 10,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "operation": {
+                "type": "string",
+                "enum": [
+                  "both",
+                  "temperature"
+                ],
+                "default": "both",
+                "title": "计算任务",
+                "description": "明确本次是额定反求、保存负荷温度还是二者联合计算。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "operating",
+                "x-order": 11,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "rating_mode": {
+                "type": "string",
+                "enum": [
+                  "individual",
+                  "simultaneous",
+                  "both"
+                ],
+                "default": "individual",
+                "description": "选择逐回路额定或同时增载，结果不得混用工况。",
+                "title": "额定工况口径",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "operating",
+                "x-order": 12,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "double_flat_tables": {
+                "type": "object",
+                "additionalProperties": true,
+                "title": "双回路平形表系数",
+                "description": "结构化引用IEC支持的双回路平形系数表及其适用几何。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 13,
+                "x-level": "expert",
+                "x-editor-reason": "IEC双回路表的现有内部来源格式未形成通用结构；仅专家引用有来源的原始表。"
+              },
+              "corrugated_gap": {
+                "type": "object",
+                "description": "显式声明波纹空隙等效热路，不自动填补未知构造。",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "rho_k_m_w": {
+                      "type": "number",
+                      "exclusiveMinimum": 0,
+                      "description": "材料热导率的倒数，采用材料试验或适用标准表。",
+                      "title": "材料热阻率",
+                      "x-unit": {
+                        "si": "K·m/W",
+                        "display": "K·m/W",
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "materials",
+                      "x-order": 0,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    },
+                    "source": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "引用厂家、试验、标准条款或已验证工件，缺少来源不生成工程结果。",
+                      "title": "参数来源",
+                      "x-unit": {
+                        "si": null,
+                        "display": null,
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "evidence",
+                      "x-order": 1,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    },
+                    "geometry_source": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "绑定构建几何的设计事实或原始文件。",
+                      "title": "几何来源",
+                      "x-unit": {
+                        "si": null,
+                        "display": null,
+                        "scale": 1,
+                        "offset": 0
+                      },
+                      "x-group": "evidence",
+                      "x-order": 2,
+                      "x-level": "advanced",
+                      "x-range-basis": {
+                        "kind": "engineering",
+                        "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                      }
+                    }
+                  },
+                  "required": [
+                    "rho_k_m_w",
+                    "source",
+                    "geometry_source"
+                  ],
+                  "additionalProperties": false
+                },
+                "title": "波纹护套间隙模型",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "model",
+                "x-order": 14,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "cable_type",
+                  "scope": "workspace",
+                  "multiple": false,
+                  "keyed": true,
+                  "read_only": false
+                }
+              },
+              "external_loss_reference": {
+                "type": "object",
+                "properties": {
+                  "run_id": {
+                    "type": "string",
+                    "title": "来源运行",
+                    "description": "从工程保存运行选择来源，历史运行不可改写。",
+                    "x-unit": {
+                      "si": null,
+                      "display": null,
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "physics",
+                    "x-order": 0,
+                    "x-level": "advanced"
+                  },
+                  "case_id": {
+                    "type": "string",
+                    "title": "来源工况",
+                    "description": "从选定来源运行中选择同一计算工况。",
+                    "x-unit": {
+                      "si": null,
+                      "display": null,
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "physics",
+                    "x-order": 1,
+                    "x-level": "advanced"
+                  },
+                  "artifact_type": {
+                    "const": "x-cablesim.loss-coefficients",
+                    "type": "string",
+                    "title": "来源工件类型",
+                    "description": "绑定宿主支持且已校验的物理工件类型。",
+                    "x-unit": {
+                      "si": null,
+                      "display": null,
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "evidence",
+                    "x-order": 2,
+                    "x-level": "advanced"
+                  },
+                  "artifact_sha256": {
+                    "type": "string",
+                    "pattern": "^[0-9a-f]{64}$",
+                    "title": "来源工件摘要",
+                    "description": "绑定已保存工件的SHA-256摘要，防止引用内容被替换。",
+                    "x-unit": {
+                      "si": null,
+                      "display": null,
+                      "scale": 1,
+                      "offset": 0
+                    },
+                    "x-group": "evidence",
+                    "x-order": 3,
+                    "x-level": "advanced",
+                    "x-range-basis": {
+                      "kind": "engineering",
+                      "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                    }
+                  }
+                },
+                "required": [
+                  "run_id",
+                  "case_id",
+                  "artifact_type",
+                  "artifact_sha256"
+                ],
+                "additionalProperties": false,
+                "title": "外部损耗工件引用",
+                "description": "由宿主绑定同输入、同工况且已校验的电磁损耗工件。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "evidence",
+                "x-order": 15,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "artifact",
+                  "scope": "run",
+                  "multiple": false,
+                  "keyed": false,
+                  "read_only": false
+                }
+              },
+              "target_current_a": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "title": "校核目标电流",
+                "description": "用于余量或允许运行判断的研究目标电流，缺省沿用保存负荷。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "operating",
+                "x-order": 16,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              }
+            },
+            "additionalProperties": false,
+            "required": [
+              "ks",
+              "kp",
+              "t4_form",
+              "eddy",
+              "solver"
+            ],
+            "title": "IEC基线参数",
+            "description": "引用IEC60287基线的结构化参数，基线适用范围仍独立校验。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 0,
+            "x-level": "advanced"
+          },
+          "controls": {
+            "additionalProperties": false,
+            "properties": {
+              "operation": {
+                "enum": [
+                  "temperature",
+                  "ampacity"
+                ],
+                "title": "计算任务",
+                "type": "string",
+                "description": "temperature 为给定负荷温度正算，ampacity 为指定回路反求允许电流；仅选择此字段枚举实际支持的任务。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "operating",
+                "x-order": 0,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "element_order": {
+                "default": 1,
+                "enum": [
+                  1,
+                  2
+                ],
+                "title": "单元阶次",
+                "type": "integer",
+                "description": "网格单元的几何或形函数阶次，须与求解器支持一致。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 1,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                },
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "mesh_size_m": {
+                "exclusiveMinimum": 0,
+                "title": "网格尺寸",
+                "type": "number",
+                "description": "网格单元目标尺寸，必须经网格收敛核验。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "materials",
+                "x-order": 2,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "far_mesh_size_m": {
+                "exclusiveMinimum": 0,
+                "title": "远场单元尺寸",
+                "type": "number",
+                "description": "远离热源区域的目标单元尺寸，影响有限域离散误差。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "materials",
+                "x-order": 3,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "mesh_transition_m": {
+                "exclusiveMinimum": 0,
+                "title": "网格过渡宽度",
+                "type": "number",
+                "description": "近场细网格逐渐过渡到远场网格的宽度。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "materials",
+                "x-order": 4,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "fine_mesh_band_m": {
+                "anyOf": [
+                  {
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "近缆细化带宽",
+                "description": "电缆外表面附近的网格细化带宽度。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "materials",
+                "x-order": 5,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "near_soil_mesh_size_m": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "近场土壤尺寸",
+                "description": "电缆周围土壤区域的目标单元尺寸。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "materials",
+                "x-order": 6,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "near_soil_margin_m": {
+                "default": 0.5,
+                "exclusiveMinimum": 0,
+                "title": "近场土壤外扩宽度",
+                "type": "number",
+                "description": "电缆群外侧近场土壤细化区域的外扩距离。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "materials",
+                "x-order": 7,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "max_nodes": {
+                "maximum": 500000,
+                "minimum": 100,
+                "title": "最大节点数",
+                "type": "integer",
+                "description": "网格资源上限，超过即拒绝，属于内存保护。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 8,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "tolerance_k": {
+                "exclusiveMinimum": 0,
+                "maximum": 0.01,
+                "title": "温度收敛容差",
+                "type": "number",
+                "description": "反馈迭代温度变化的停止阈值，不是工程实测误差。",
+                "x-unit": {
+                  "si": "K",
+                  "display": "K",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 9,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "max_iterations": {
+                "maximum": 500,
+                "minimum": 2,
+                "title": "最大迭代次数",
+                "type": "integer",
+                "description": "数值迭代次数上限，达到上限仍未收敛时明确失败。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 10,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "relaxation": {
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "title": "反馈松弛系数",
+                "type": "number",
+                "description": "新旧迭代状态的加权比例，取零至一之间以改善稳定性。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 11,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "current_upper_a": {
+                "exclusiveMinimum": 0,
+                "title": "电流搜索上界",
+                "type": "number",
+                "description": "载流量反求的数值搜索上界，须包围可行解。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 12,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "current_maximum_a": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "电流搜索上限",
+                "description": "数值反求可搜索的最高电流，不是电缆额定值。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 13,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              },
+              "current_tolerance_a": {
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "title": "电流迭代容差",
+                "type": "number",
+                "description": "载流量反求的电流变化停止阈值，属于数值控制。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 14,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "rated_circuit": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "反求回路",
+                "description": "选择热场模型中具有完整电阻和材料参数的回路；ampacity 模式必须选择，temperature 模式可传 null。",
+                "x-unit": {
+                  "si": null,
+                  "display": null,
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "model",
+                "x-order": 15,
+                "x-level": "advanced",
+                "x-bind": {
+                  "type": "circuit",
+                  "scope": "workspace",
+                  "multiple": false,
+                  "keyed": false,
+                  "read_only": false
+                }
+              }
+            },
+            "required": [
+              "operation",
+              "mesh_size_m",
+              "far_mesh_size_m",
+              "mesh_transition_m",
+              "max_nodes",
+              "tolerance_k",
+              "max_iterations",
+              "relaxation",
+              "current_upper_a",
+              "current_tolerance_a",
+              "rated_circuit"
+            ],
+            "title": "数值控制",
+            "type": "object",
+            "description": "声明离散与反求控制，数值收敛不等于工程验证。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 1,
+            "x-level": "advanced"
+          },
+          "bounds_m": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ],
+            "title": "截面计算边界",
+            "type": "array",
+            "description": "按左、下、右、上顺序声明二维截面边界，坐标采用z向上约定。",
+            "x-unit": {
+              "si": "m",
+              "display": "m",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 2,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "dataset": {
+            "additionalProperties": false,
+            "properties": {
+              "mesh_scales": {
+                "default": [
+                  1.5,
+                  1.0,
+                  0.75
+                ],
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 6,
+                "minItems": 3,
+                "title": "多档网格比例",
+                "type": "array",
+                "description": "网格收敛校核的逐档尺寸倍率，必须有独立细化档位。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 0,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                },
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "temperature_tolerance_k": {
+                "default": 0.1,
+                "exclusiveMinimum": 0,
+                "maximum": 0.1,
+                "title": "温度迭代容差",
+                "type": "number",
+                "description": "相邻迭代温度变化的停止阈值，不代表模型准确度。",
+                "x-unit": {
+                  "si": "K",
+                  "display": "°C",
+                  "scale": 1,
+                  "offset": -273.15
+                },
+                "x-group": "numerical",
+                "x-order": 1,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                },
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "ampacity_tolerance_a": {
+                "default": 0.5,
+                "exclusiveMinimum": 0,
+                "maximum": 1.0,
+                "title": "载流量校核容差",
+                "type": "number",
+                "description": "IEC与有限元载流量差异的允许绝对误差，属于用户声明的校核门槛。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "physics",
+                "x-order": 2,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                }
+              }
+            },
+            "title": "训练标签校核设置",
+            "type": "object",
+            "description": "声明热场样本的网格、计算域及载流量反求校核参数。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 3,
+            "x-level": "advanced"
+          },
+          "source": {
+            "minLength": 1,
+            "title": "参数来源",
+            "type": "string",
+            "description": "引用厂家、试验、标准条款或已验证工件，缺少来源不生成工程结果。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 4,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "physics": {
+            "default": "thermal",
+            "enum": [
+              "thermal",
+              "electromagnetic_thermal"
+            ],
+            "title": "训练物理路径",
+            "type": "string",
+            "description": "选择热场或电磁热反馈路径，训练标签必须使用对应真实求解结果。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 5,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "electromagnetic_mesh": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "电磁网格控制",
+            "description": "电磁区域的离散参数，必须满足该反馈路径的网格限制。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "numerical",
+            "x-order": 6,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+            }
+          }
+        },
+        "required": [
+          "iec",
+          "controls",
+          "bounds_m",
+          "source"
+        ],
+        "title": "Settings",
+        "type": "object",
+        "$defs": {
+          "contract_properties_iec_Solver": {
+            "additionalProperties": false,
+            "properties": {
+              "initial_sheath_temperature_k": {
+                "maximum": 423.15,
+                "minimum": 253.14999999999998,
+                "title": "护套迭代初温",
+                "type": "number",
+                "description": "IEC护套电阻与损耗迭代的起始温度，仅为数值初值。",
+                "x-unit": {
+                  "si": "K",
+                  "display": "°C",
+                  "scale": 1,
+                  "offset": -273.15
+                },
+                "x-group": "physics",
+                "x-order": 0,
+                "x-level": "advanced",
+                "x-range-basis": {
+                  "kind": "engineering",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+                },
+                "x-runtime": {
+                  "key": "initial_sheath_temperature_c",
+                  "scale": 1,
+                  "offset": -273.15
+                }
+              },
+              "current_tolerance_a": {
+                "default": 0.001,
+                "exclusiveMinimum": 0,
+                "maximum": 10,
+                "title": "电流迭代容差",
+                "type": "number",
+                "description": "载流量反求的电流变化停止阈值，属于数值控制。",
+                "x-unit": {
+                  "si": "A",
+                  "display": "A",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 1,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                },
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              },
+              "max_iterations": {
+                "default": 50,
+                "maximum": 500,
+                "minimum": 1,
+                "title": "最大迭代次数",
+                "type": "integer",
+                "description": "数值迭代次数上限，达到上限仍未收敛时明确失败。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "numerical",
+                "x-order": 2,
+                "x-level": "advanced",
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                },
+                "x-range-basis": {
+                  "kind": "numerical",
+                  "reference": "plugins/cablesim.hybrid-rating/src 的 physics-comparison 输入校验；离散或资源限制，不是材料设计限值。"
+                }
+              }
+            },
+            "required": [
+              "initial_sheath_temperature_k"
+            ],
+            "title": "Solver",
+            "type": "object"
+          }
+        }
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain",
+          "study"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": false,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "ampacity",
+          "title": "允许电流",
+          "unit": {
+            "si": "A",
+            "display": "A",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "minimum",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.physics-comparison"
+        }
+      ],
+      "study_tasks": []
     }
   ],
   "files": [
     {
+      "path": "assets/cover.webp",
+      "sha256": "f876f6c66ac169d5f4d104a570e2fde81b9d4b940a61d72d5a923d082142d172",
+      "size_bytes": 11562
+    },
+    {
       "path": "assets/icon.svg",
       "sha256": "17b1cdd49a50f6aaff17aa589023f5db95108891841b47f0dd5f41bd5175984d",
       "size_bytes": 298
+    },
+    {
+      "path": "assets/method.svg",
+      "sha256": "1c0ff329bb0e05f22ad781ab9e79300b12b5bffdc95a6bad36f22ddbcb93c14c",
+      "size_bytes": 3275
     },
     {
       "path": "src/cablesim_hybrid_rating/__init__.py",
@@ -209,8 +4186,8 @@
     },
     {
       "path": "src/cablesim_hybrid_rating/main.py",
-      "sha256": "23fc51bdce0c1cda0e5caa574ddb5a7816c773454771e4a8531b6ddb6040e616",
-      "size_bytes": 4726
+      "sha256": "84db67b1ca6621696ad97fd54a26fc6487a82102296c298e840fea9ee2aee00c",
+      "size_bytes": 5025
     },
     {
       "path": "src/cablesim_hybrid_rating/measurements.py",
@@ -219,13 +4196,34 @@
     },
     {
       "path": "src/cablesim_hybrid_rating/training.py",
-      "sha256": "fdd33387f0d3ead0cc1d7f9abb96b679d511be2d7f63fb2616bdb61bb18c64d0",
+      "sha256": "d9e75b1233014cafcbd53fa9240bcc93e5b5ffbb262b9d205eb575cb6ada7c81",
       "size_bytes": 14560
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "282ec11d76d3ddfdb1ab0e67476648668655fac0f6ed4728b0b79006e789bb5a",
-      "size_bytes": 7348
+      "sha256": "cb6c1debc9dfabfc5136f76127192d11f57962bf72c782507482524a2df8bdfc",
+      "size_bytes": 7670
     }
-  ]
+  ],
+  "presentation": {
+    "category": "calculation",
+    "category_title": "计算方法",
+    "assets": [
+      {
+        "role": "cover",
+        "path": "assets/cover.webp",
+        "title": "混合载流量研究封面",
+        "description": "仓库既有插件封面，随发行包封签。",
+        "media_type": "image/webp"
+      },
+      {
+        "role": "method",
+        "path": "assets/method.svg",
+        "title": "混合载流量研究方法示意",
+        "description": "按实际模型手工绘制的示意图；不包含虚构结果。",
+        "media_type": "image/svg+xml"
+      }
+    ],
+    "validation_note": "无参考算例可发布数值数据；已声明的源码测试与适用范围见各能力validation，不据此生成验证图。"
+  }
 }

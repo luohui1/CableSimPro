@@ -9,6 +9,8 @@ import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from cablesim_sdk.plugin_ui import (ParameterSchema, ParameterGroup, Headline, Presentation,
+                                   InputContract, TemperatureFieldBinding, ReportTemplate, AgentSkill, validate_parameter_schema, HAN)
 
 HOST_API = (2, 1)
 ID = r'^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$'
@@ -27,7 +29,7 @@ RESULT_TYPES = {'quantity'}
 
 
 class Strict(BaseModel):
-    model_config = ConfigDict(extra='forbid', frozen=True)
+    model_config = ConfigDict(extra='forbid', frozen=True, populate_by_name=True)
 
 
 class Publisher(Strict):
@@ -89,27 +91,62 @@ class Validation(Strict):
 
 
 class Capability(Strict):
-    kind: Literal['method']
+    kind: Literal['method', 'report-template', 'agent-skill']
     id: str = Field(pattern=r'^[a-z][a-z0-9-]*$')
     title: str = Field(min_length=1, max_length=200)
     method_version: str = Field(min_length=1, max_length=80)
     analysis: str = Field(pattern=r'^[a-z_]+$')
     input_schema: str = Field(min_length=1, max_length=120)
-    outputs: list[Output] = Field(min_length=1, max_length=100)
+    outputs: list[Output] = Field(default_factory=list, max_length=100)
     artifacts: list[ArtifactSpec] = Field(default_factory=list, max_length=20)
     validation: Validation
     limitations: list[str] = Field(min_length=1, max_length=40)
+    description: str | None = Field(default=None, max_length=700)
+    parameter_schema: ParameterSchema = Field(default_factory=ParameterSchema)
+    input_contract: InputContract | None = None
+    parameter_groups: list[ParameterGroup] = Field(default_factory=list, alias='x-groups')
+    headlines: list[Headline] = Field(default_factory=list, alias='x-headline', max_length=3)
+    preview: bool = False
+    preview_timeout_s: int = Field(default=8, ge=1, le=15)
+    study_tasks: list[str] = Field(default_factory=list, max_length=12)
+    category: str | None = Field(default=None, max_length=40)
+    temperature_field_binding: TemperatureFieldBinding | None = Field(default=None, alias='x-temperature-field-binding')
+    report_template: ReportTemplate | None = None
+    agent_skill: AgentSkill | None = None
 
     @model_validator(mode='after')
     def unique(self):
+        if self.kind=='method' and (not self.outputs or self.report_template or self.agent_skill):
+            raise ValueError('计算能力须声明输出，不能混入报告或技能声明。')
+        if self.kind=='report-template' and (not self.report_template or self.agent_skill or self.outputs or self.preview):
+            raise ValueError('报告模板仅声明模板，不提供运行输出或预览。')
+        if self.kind=='agent-skill' and (not self.agent_skill or self.report_template or self.outputs or self.preview):
+            raise ValueError('Agent技能仅声明可复用流程，不提供新运行时。')
         keys = [(o.key, o.type) for o in self.outputs]
         if len(set(keys)) != len(keys):
             raise ValueError('输出键与类型重复')
+        basic=0
+        if self.parameter_schema.properties:
+            basic+=validate_parameter_schema(self.parameter_schema.model_dump(mode='json', by_alias=True, exclude_none=True), self.parameter_groups)
+        if self.input_contract and self.input_contract.standalone_schema:
+            basic+=validate_parameter_schema(self.input_contract.standalone_schema.model_dump(mode='json', by_alias=True, exclude_none=True), self.parameter_groups)
+        if self.input_contract and self.input_contract.standalone_parameter_schema:
+            basic+=validate_parameter_schema(self.input_contract.standalone_parameter_schema.model_dump(mode='json', by_alias=True, exclude_none=True), self.parameter_groups)
+        if basic>8:raise ValueError('能力的参数与独立输入合计最多8个 basic 字段。')
+        if len({value.key for value in self.headlines})!=len(self.headlines):raise ValueError('关键结论量不得重复声明。')
+        declared = {output.key for output in self.outputs}
+        artifacts = {artifact.type for artifact in self.artifacts}
+        if self.temperature_field_binding and not {self.temperature_field_binding.artifact, 'x-cablesim.temperature-field'} <= artifacts:
+            raise ValueError('解析场来源与温度场必须同时声明为工件。')
+        if any(value.key not in declared or value.artifact not in artifacts or value.source_artifact is not None and value.source_artifact not in artifacts for value in self.headlines):
+            raise ValueError('关键结论必须引用已声明的结果和同工况工件')
+        if any(not HAN.search(value.title) for value in self.headlines):
+            raise ValueError('关键结论名称必须为中文')
         return self
 
 
 class PackageFile(Strict):
-    path: str = Field(pattern=r'^(src/[A-Za-z0-9_./-]+|assets/icon\.svg)$')
+    path: str = Field(pattern=r'^(src/[A-Za-z0-9_./-]+|assets/[A-Za-z0-9_-]+\.(svg|webp|html|css|json))$')
     sha256: str = Field(pattern=r'^[0-9a-f]{64}$')
     size_bytes: int = Field(ge=0, le=20 * 1024 * 1024)
 
@@ -127,11 +164,12 @@ class Manifest(Strict):
     name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, min_length=1, max_length=120)
     icon: Literal['assets/icon.svg'] | None = None
+    presentation: Presentation | None = None
     publisher: Publisher
     host_api: HostApi
     license: License
     platforms: list[str] = Field(min_length=1)
-    runtime: Runtime
+    runtime: Runtime | None = None
     permissions: list[Literal['project.read', 'study.run', 'artifact.read', 'artifact.write', 'project.propose']]
     dependencies: list[dict] = Field(max_length=0)  # inter-plugin dependencies are not part of the minimal protocol yet
     resources: Resources
@@ -144,7 +182,12 @@ class Manifest(Strict):
             raise ValueError('插件 ID 前缀必须等于发布者 ID')
         if self.host_api.major != HOST_API[0] or self.host_api.min_minor > HOST_API[1]:
             raise ValueError(f'需要宿主插件 API {self.host_api.major}.{self.host_api.min_minor}，当前 {HOST_API[0]}.{HOST_API[1]}')
-        if 'study.run' not in self.permissions:
+        executable=any(cap.kind=='method' for cap in self.capabilities)
+        if executable and self.runtime is None:
+            raise ValueError('计算插件必须声明已实现的运行时。')
+        if not executable and self.runtime is not None:
+            raise ValueError('报告模板和Agent技能本轮只接受声明，不启用运行时。')
+        if executable and 'study.run' not in self.permissions:
             raise ValueError('method 能力需要 study.run 权限')
         if any(c.artifacts for c in self.capabilities) and 'artifact.write' not in self.permissions:
             raise ValueError('产出工件需要 artifact.write 权限')
@@ -154,8 +197,19 @@ class Manifest(Strict):
         paths = [f.path for f in self.files]
         if len(set(paths)) != len(paths):
             raise ValueError('文件清单重复')
-        if self.runtime.entry not in paths:
+        if self.runtime is not None and self.runtime.entry not in paths:
             raise ValueError('入口程序必须在文件清单中')
+        if any(cap.report_template and cap.report_template.entry not in paths for cap in self.capabilities):
+            raise ValueError('报告模板入口必须纳入包内封签。')
+        if self.presentation:
+            roles = [asset.role for asset in self.presentation.assets]
+            if len(roles) != len(set(roles)) or not {'cover', 'method'} <= set(roles):
+                raise ValueError('展示资源必须有唯一封面和方法图')
+            if any(asset.path not in paths for asset in self.presentation.assets):
+                raise ValueError('展示资源必须纳入文件封签')
+            if any(not HAN.search(cap.title) or not cap.description or not HAN.search(cap.description)
+                   or cap.kind=='method' and not cap.headlines for cap in self.capabilities):
+                raise ValueError('自描述插件每项能力必须有中文标题、说明及1–3个关键结论')
         if self.host_api.min_minor >= 1 or self.description is not None or self.icon is not None:
             if self.host_api.min_minor < 1:
                 raise ValueError('展示信息需要宿主插件 API 2.1')

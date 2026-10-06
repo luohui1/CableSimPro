@@ -128,14 +128,14 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     database = tmp_path / 'release/engineering.sqlite'
     seed.seed_release(database)
     receipt = json.loads(database.with_suffix('.seed.json').read_text(encoding='utf-8'))
-    assert receipt['complete'] and len(receipt['studies']) == 5 and len(receipt['types']) == 2
+    assert receipt['complete'] and len(receipt['studies']) == 4 and len(receipt['types']) == 2
     assert receipt['identity'] == seed.release_identity()
-    assert sum(bool(row.get('run')) for row in receipt['studies']) == 3
+    assert sum(bool(row.get('run')) for row in receipt['studies']) == 2
     assert any('需在超算运行' in row['title'] and not row.get('run') for row in receipt['studies'])
     assert any('110 kV' in row['title'] and not row.get('run') and not row['ready'] for row in receipt['studies'])
     with closing(sqlite3.connect(database)) as connection:
         assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == 4
-        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status='succeeded'").fetchone()[0] == 3
+        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status='succeeded'").fetchone()[0] == 2
         candidates=[json.loads(r[0]) for r in connection.execute('SELECT payload FROM domain_cable_models')]
         public=[c for c in candidates if c.get('specification')]
         assert len(public)==10 and len(candidates)==12

@@ -227,6 +227,21 @@ class RecalculateStudy(StrictModel):
         return RunStudy.explicit_acknowledgement(value)
 
 
+class PreviewStudy(StrictModel):
+    expected_revision: int = Field(ge=1)
+    expected_study_revision: int = Field(ge=1)
+    module: str | None = Field(default=None, pattern=r'^[a-z][a-z0-9-]{0,63}$')
+    domain: dict | None = Field(default=None, description='Unsaved SI domain draft. Never saved or approved by this operation.')
+    parameters: dict | None = None
+    method_input: dict | None = None
+
+
+class UpgradeStudyMethods(StrictModel):
+    expected_revision: int = Field(ge=1)
+    expected_study_revision: int = Field(ge=1)
+    module: str | None = Field(default=None, pattern=r'^[a-z][a-z0-9-]{0,63}$', description='Null upgrades primary and all modules, including crosschecks and candidate completions; never creates a run.')
+
+
 class Comparison(StrictModel):
     run_ids: list[UUID] = Field(min_length=2, max_length=10)
 

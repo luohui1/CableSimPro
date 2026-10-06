@@ -1,0 +1,84 @@
+{
+  "schema": "cablesim.plugin/2",
+  "id": "example.report-template",
+  "version": "1.0.0",
+  "name": "结果与来源报告模板",
+  "description": "未发布的声明示例，供审阅插件规范。",
+  "icon": "assets/icon.svg",
+  "publisher": {
+    "id": "example",
+    "name": "规范示例"
+  },
+  "host_api": {
+    "major": 2,
+    "min_minor": 1
+  },
+  "license": {
+    "spdx": "CC0-1.0",
+    "review_required": false
+  },
+  "platforms": [
+    "windows-x64",
+    "linux-x64"
+  ],
+  "permissions": [],
+  "dependencies": [],
+  "resources": {
+    "timeout_s": 8,
+    "memory_mb": 64,
+    "network": "none"
+  },
+  "capabilities": [
+    {
+      "kind": "report-template",
+      "id": "results-report",
+      "title": "结果与来源报告模板",
+      "description": "仅供规范审阅的未发布声明示例。",
+      "method_version": "1.0.0",
+      "analysis": "declaration",
+      "input_schema": "cablesim.report-context/1",
+      "outputs": [],
+      "artifacts": [],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "本轮仅定义声明，不启用运行时，不代表工程批准。"
+      ],
+      "category": "report",
+      "report_template": {
+        "context_schema": "cablesim.report-context/1",
+        "format": "html",
+        "entry": "assets/template.html",
+        "sections": [
+          {
+            "id": "results",
+            "title": "工程结果",
+            "source": "results",
+            "required": true
+          },
+          {
+            "id": "provenance",
+            "title": "来源与局限",
+            "source": "provenance",
+            "required": true
+          }
+        ],
+        "engineering_approval": false
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "assets/icon.svg",
+      "sha256": "9f24fcde59dc7d46d0e08077c0f2cd571a2b4d6fab99b6f35445ea7d027bca04",
+      "size_bytes": 147
+    },
+    {
+      "path": "assets/template.html",
+      "sha256": "11253cca44c748dffb361949c2e5755b25ba5eaa89b93411ae14a8d72f7713ca",
+      "size_bytes": 242
+    }
+  ]
+}

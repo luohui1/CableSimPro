@@ -49,6 +49,8 @@ python scripts/workspace_db.py restore --database .data/cablesim.sqlite --source
 
 仿真验证工具：`plugins/cablesim.simulation/validation/benchmark_hpc_batches.py` 从已保存设计提交 Slurm 吞吐评测；`plugins/cablesim.simulation/validation/compare_batch_backends.py` 对比已有副本的输入身份、温度与载流量，不启动本机求解。混合模型验证辅助模块 `plugins/cablesim.hybrid-rating/validation/training_input.py` 核验批量工件并组装训练输入，`plugins/cablesim.hybrid-rating/validation/register_model.py` 登记已验证 Slurm 训练产物，保留 `reference_only`，不自动批准。
 
+IEC 展示验证图由 `python plugins/cablesim.iec60287/validation/presentation.py` 重生成；`--check` 只核对图内记录与已声明四热源解析算例的数据，不运行原生求解器或提交作业。更新图后重新封签。
+
 ## 仓库卫生规则（CI 强制，`scripts/check_hygiene.py`）
 
 1. **文件名不带版本号或临时字样。** 禁止 `_v04`、`V073`、`_r3`、`20260908`、`legacy/old/new/final/tmp/backup` 等。版本只写在 git tag 和提交记录里。

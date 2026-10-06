@@ -1,0 +1,95 @@
+{
+  "schema": "cablesim.plugin/2",
+  "id": "example.agent-skill",
+  "version": "1.0.0",
+  "name": "型号电气核验技能",
+  "description": "未发布的声明示例，供审阅插件规范。",
+  "icon": "assets/icon.svg",
+  "publisher": {
+    "id": "example",
+    "name": "规范示例"
+  },
+  "host_api": {
+    "major": 2,
+    "min_minor": 1
+  },
+  "license": {
+    "spdx": "CC0-1.0",
+    "review_required": false
+  },
+  "platforms": [
+    "windows-x64",
+    "linux-x64"
+  ],
+  "permissions": [],
+  "dependencies": [],
+  "resources": {
+    "timeout_s": 8,
+    "memory_mb": 64,
+    "network": "none"
+  },
+  "capabilities": [
+    {
+      "kind": "agent-skill",
+      "id": "type-check",
+      "title": "型号电气核验技能",
+      "description": "仅供规范审阅的未发布声明示例。",
+      "method_version": "1.0.0",
+      "analysis": "declaration",
+      "input_schema": "cablesim.workflow-context/1",
+      "outputs": [],
+      "artifacts": [],
+      "validation": {
+        "level": "unverified",
+        "cases": []
+      },
+      "limitations": [
+        "本轮仅定义声明，不启用运行时，不代表工程批准。"
+      ],
+      "category": "agent-skill",
+      "agent_skill": {
+        "context_schema": "cablesim.workflow-context/1",
+        "effects": [
+          "read",
+          "calculate",
+          "propose"
+        ],
+        "engineering_approval": false,
+        "human_approval_required_for": [
+          "workspace.change",
+          "engineering.accept",
+          "external.send"
+        ],
+        "steps": [
+          {
+            "id": "electrical",
+            "title": "核验所选型号电气参数",
+            "capability": {
+              "plugin_id": "cablesim.type-electrical",
+              "capability": "electrical",
+              "version": "1.0.0"
+            },
+            "parameters_template": {},
+            "bindings": [
+              {
+                "target": "/parameters/cable_type_id",
+                "source": "/inputs/selected_cable_type_id"
+              },
+              {
+                "target": "/input",
+                "source": "/inputs/domain"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "assets/icon.svg",
+      "sha256": "9f24fcde59dc7d46d0e08077c0f2cd571a2b4d6fab99b6f35445ea7d027bca04",
+      "size_bytes": 147
+    }
+  ]
+}

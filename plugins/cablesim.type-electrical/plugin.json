@@ -1,9 +1,30 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.type-electrical",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "name": "型号电气参数与短路容量",
   "icon": "assets/icon.svg",
+  "presentation": {
+    "category": "calculation",
+    "category_title": "计算方法",
+    "assets": [
+      {
+        "role": "cover",
+        "path": "assets/cover.webp",
+        "title": "型号电气参数与短路容量封面",
+        "description": "仓库既有插件封面，随发行包封签。",
+        "media_type": "image/webp"
+      },
+      {
+        "role": "method",
+        "path": "assets/method.svg",
+        "title": "型号电气参数与短路容量方法示意",
+        "description": "按实际模型手工绘制的示意图；不包含虚构结果。",
+        "media_type": "image/svg+xml"
+      }
+    ],
+    "validation_note": "无参考算例可发布数值数据；已声明的源码测试与适用范围见各能力validation，不据此生成验证图。"
+  },
   "description": "按原文核验的 IEC 60287 与 IEC 60949 分支计算，缺项和未覆盖保留；使用不可变宿主运行快照。",
   "publisher": {
     "id": "cablesim",
@@ -43,7 +64,7 @@
       "id": "electrical",
       "kind": "method",
       "title": "型号电气参数（IEC 60287 原文分支）",
-      "method_version": "TYPE-ELECTRICAL-0.3.0",
+      "method_version": "1.0.0",
       "analysis": "properties",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -58,6 +79,10 @@
         {
           "type": "x-cablesim.type-electrical",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -68,13 +93,466 @@
         "只覆盖单芯或三芯的明确圆导体；R20、工作温度、系数、排列和运行电压必须有来源，缺项不推测。",
         "三芯电阻和电容按明确的长度基准与成缆绞入系数换算；邻近公式 x_p > 2.8 拒算。",
         "复用领域接地拓扑契约；完整电感、正序与零序阻抗的求解尚未覆盖；几何电感明确不含金属回路及大地返回。"
-      ]
+      ],
+      "category": "calculation",
+      "description": "只覆盖单芯或三芯的明确圆导体；R20、工作温度、系数、排列和运行电压必须有来源，缺项不推测。；三芯电阻和电容按明确的长度基准与成缆绞入系数换算；邻近公式 x_p > 2.8 拒算。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "cable_type_id": {
+            "description": "从工程型号库选择已有型号，禁止自由填写不存在的编号。",
+            "minLength": 1,
+            "title": "电缆型号",
+            "type": "string",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "model",
+            "x-order": 0,
+            "x-level": "basic",
+            "x-bind": {
+              "type": "cable_type",
+              "scope": "workspace",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "circuit_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "从保存工程选择已有回路，须与电缆型号一致。",
+            "title": "回路",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "model",
+            "x-order": 1,
+            "x-level": "basic",
+            "x-bind": {
+              "type": "circuit",
+              "scope": "workspace",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            },
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "sources": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "为补充工程参数逐项注明资料或规范来源，防止来源混用。",
+            "title": "逐参数来源",
+            "type": "object",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 2,
+            "x-level": "advanced"
+          },
+          "temperature_k": {
+            "anyOf": [
+              {
+                "maximum": 473.15,
+                "minimum": 223.15,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "材料电阻或电性能计算使用的绝对温度。",
+            "title": "计算温度",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "K",
+              "display": "°C",
+              "scale": 1,
+              "offset": -273.15
+            },
+            "x-group": "operating",
+            "x-order": 3,
+            "x-level": "basic",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "frequency_hz": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 1,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "时谐或交流计算频率，采用实际系统频率。",
+            "title": "电源频率",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "Hz",
+              "display": "Hz",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "operating",
+            "x-order": 4,
+            "x-level": "basic",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "phase_voltage_v": {
+            "anyOf": [
+              {
+                "maximum": 500000,
+                "minimum": 1,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "介质损耗与电场计算的相对地有效值电压。",
+            "title": "相对地电压",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "V",
+              "display": "V",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "operating",
+            "x-order": 5,
+            "x-level": "basic",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "ks": {
+            "anyOf": [
+              {
+                "maximum": 2,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "IEC60287-1-1集肤效应系数，依据导体构造与适用公式选择。",
+            "title": "集肤效应构造系数",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 6,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "kp": {
+            "anyOf": [
+              {
+                "maximum": 2,
+                "minimum": 0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "IEC60287-1-1邻近效应系数，依据导体构造与布置选择。",
+            "title": "邻近效应构造系数",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 7,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "spacing_m": {
+            "anyOf": [
+              {
+                "maximum": 10,
+                "minimum": 0.0001,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "相邻电缆或导体中心距离，须与实际布置一致。",
+            "title": "相间中心距",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "m",
+              "display": "mm",
+              "scale": 1000,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 8,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "core_lay_factor": {
+            "anyOf": [
+              {
+                "maximum": 1.5,
+                "minimum": 1,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "金属实际路径长度与电缆轴向长度之比，由真实节距与芯线位置计算。",
+            "title": "成缆绞合长度系数",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 9,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "r20_length_basis": {
+            "anyOf": [
+              {
+                "enum": [
+                  "finished_cable",
+                  "straight_core"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "声明直流电阻按导体路径长度或电缆轴向长度计，避免重复绞合修正。",
+            "title": "直流电阻长度口径",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 10,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "arrangement": {
+            "anyOf": [
+              {
+                "enum": [
+                  "trefoil",
+                  "flat"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "按实际平形或品字形布置选择，与领域几何一致。",
+            "title": "相间布置",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 11,
+            "x-level": "basic",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        },
+        "required": [
+          "cable_type_id"
+        ],
+        "title": "ElectricalParameters",
+        "type": "object"
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain",
+          "study"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": true,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.type-analysis.available-count",
+          "title": "可用结论数",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.type-electrical"
+        }
+      ],
+      "study_tasks": []
     },
     {
       "id": "short-circuit",
       "kind": "method",
       "title": "组件绝热与非绝热短路容量（IEC 60949）",
-      "method_version": "TYPE-SHORT-CIRCUIT-0.2.0",
+      "method_version": "1.0.0",
       "analysis": "short_circuit",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -89,6 +567,10 @@
         {
           "type": "x-cablesim.type-short-circuit",
           "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
         }
       ],
       "validation": {
@@ -100,14 +582,567 @@
         "导体非绝热修正仅覆盖铜 / 铝与 XLPE；金属组件需截面、实际构造、接触条件与两侧介质热参数。",
         "隔离铜丝只覆盖完全嵌入且间隔至少一个丝径；反向扎带容量、未核实的接触分支与并联金属回路的总容量未覆盖。",
         "IEC 60949:1988 英文公开原文页摘录及 AMD1:2008 已逐图核验；未持有完整双语出版物，不作完整产品认证。"
-      ]
+      ],
+      "category": "calculation",
+      "description": "初始、最终温度与持续时间明确给定且带来源；计算条件不代表产品获准达到该温度。；导体非绝热修正仅覆盖铜 / 铝与 XLPE；金属组件需截面、实际构造、接触条件与两侧介质热参数。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "cable_type_id": {
+            "description": "从工程型号库选择已有型号，禁止自由填写不存在的编号。",
+            "minLength": 1,
+            "title": "电缆型号",
+            "type": "string",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "model",
+            "x-order": 0,
+            "x-level": "basic",
+            "x-bind": {
+              "type": "cable_type",
+              "scope": "workspace",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "circuit_id": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "从保存工程选择已有回路，须与电缆型号一致。",
+            "title": "回路",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "model",
+            "x-order": 1,
+            "x-level": "basic",
+            "x-bind": {
+              "type": "circuit",
+              "scope": "workspace",
+              "multiple": false,
+              "keyed": false,
+              "read_only": false
+            },
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "sources": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "为补充工程参数逐项注明资料或规范来源，防止来源混用。",
+            "title": "逐参数来源",
+            "type": "object",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 2,
+            "x-level": "advanced"
+          },
+          "duration_s": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 0.001,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "短路电流持续时间，按保护动作或设计要求给定。",
+            "title": "短路持续时间",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "s",
+              "display": "s",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "operating",
+            "x-order": 3,
+            "x-level": "basic",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "initial_temperature_k": {
+            "anyOf": [
+              {
+                "maximum": 773.15,
+                "minimum": 223.15,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "暂态初始状态或耦合迭代初值，必须在材料有效温区内。",
+            "title": "初始温度",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "K",
+              "display": "°C",
+              "scale": 1,
+              "offset": -273.15
+            },
+            "x-group": "operating",
+            "x-order": 4,
+            "x-level": "basic",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "final_temperature_k": {
+            "anyOf": [
+              {
+                "maximum": 773.15,
+                "minimum": 223.15,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "短路持续时间结束时导体允许温度上限。",
+            "title": "导体短路终温",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "K",
+              "display": "°C",
+              "scale": 1,
+              "offset": -273.15
+            },
+            "x-group": "operating",
+            "x-order": 5,
+            "x-level": "basic",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "metal_initial_temperature_k": {
+            "anyOf": [
+              {
+                "maximum": 773.15,
+                "minimum": 223.15,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "护套或屏蔽金属短路前的温度。",
+            "title": "金属短路初温",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "K",
+              "display": "°C",
+              "scale": 1,
+              "offset": -273.15
+            },
+            "x-group": "physics",
+            "x-order": 6,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "metal_final_temperature_k": {
+            "anyOf": [
+              {
+                "maximum": 773.15,
+                "minimum": 223.15,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "护套或屏蔽金属短路后的允许终温。",
+            "title": "金属短路终温",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "K",
+              "display": "°C",
+              "scale": 1,
+              "offset": -273.15
+            },
+            "x-group": "physics",
+            "x-order": 7,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "contact_factor": {
+            "anyOf": [
+              {
+                "maximum": 1,
+                "minimum": 0.01,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "短路热量向邻接材料传递的接触模型系数，须有方法依据。",
+            "title": "非绝热接触系数",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 8,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "inner_thermal_resistivity": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 0.01,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "短路非绝热校核中金属内侧相邻材料的热阻率。",
+            "title": "金属内侧热阻率",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "K·m/W",
+              "display": "K·m/W",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 9,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "outer_thermal_resistivity": {
+            "anyOf": [
+              {
+                "maximum": 100,
+                "minimum": 0.01,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "短路非绝热校核中金属外侧相邻材料的热阻率。",
+            "title": "金属外侧热阻率",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "K·m/W",
+              "display": "K·m/W",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 10,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "inner_volumetric_heat_capacity": {
+            "anyOf": [
+              {
+                "maximum": 100000000.0,
+                "minimum": 10000,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "短路非绝热计算中内侧相邻材料的体积热容量。",
+            "title": "金属内侧体积热容量",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "J/(m³·K)",
+              "display": "J/(m³·K)",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 11,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "outer_volumetric_heat_capacity": {
+            "anyOf": [
+              {
+                "maximum": 100000000.0,
+                "minimum": 10000,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "短路非绝热计算中外侧相邻材料的体积热容量。",
+            "title": "金属外侧体积热容量",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "J/(m³·K)",
+              "display": "J/(m³·K)",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "materials",
+            "x-order": 12,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "wire_contact": {
+            "anyOf": [
+              {
+                "enum": [
+                  "fully_embedded",
+                  "air_spaces",
+                  "touching"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "声明金属丝与相邻材料接触方式，短路非绝热计算据此选择热交换模型。",
+            "title": "单丝接触模型",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 13,
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "interest_times_s": {
+            "description": "需要给出非绝热短路结果的时间点，必须位于声明时间范围。",
+            "items": {
+              "maximum": 5,
+              "minimum": 0.1,
+              "type": "number"
+            },
+            "maxItems": 20,
+            "title": "输出时刻",
+            "type": "array",
+            "x-unit": {
+              "si": "s",
+              "display": "s",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-order": 14,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          }
+        },
+        "required": [
+          "cable_type_id"
+        ],
+        "title": "ShortCircuitParameters",
+        "type": "object"
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "模型与对象",
+          "order": 0
+        },
+        {
+          "id": "operating",
+          "title": "工况与目标",
+          "order": 1
+        },
+        {
+          "id": "materials",
+          "title": "材料与构造",
+          "order": 2
+        },
+        {
+          "id": "physics",
+          "title": "物理方法",
+          "order": 3
+        },
+        {
+          "id": "numerical",
+          "title": "数值与离散",
+          "order": 4
+        },
+        {
+          "id": "evidence",
+          "title": "来源与证据",
+          "order": 5
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain",
+          "study"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace",
+          "read_only": true
+        }
+      },
+      "preview": true,
+      "preview_timeout_s": 8,
+      "x-headline": [
+        {
+          "key": "x-cablesim.type-analysis.available-count",
+          "title": "可用结论数",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.type-short-circuit"
+        }
+      ],
+      "study_tasks": []
     }
   ],
   "files": [
     {
+      "path": "assets/cover.webp",
+      "sha256": "bfbd69f41f9acada1850a5c5e632ad53d19c1c33d51ee41c193041c8e89d64a6",
+      "size_bytes": 9882
+    },
+    {
       "path": "assets/icon.svg",
       "sha256": "4f478fe6124939221b8e23215f2ffabc51eef974449c9e7ed87a3229018ba591",
       "size_bytes": 227
+    },
+    {
+      "path": "assets/method.svg",
+      "sha256": "9239527f28b7f19fe9f063f07ae543a9ab9fd1d6404b022edc6ec4ab8c00a445",
+      "size_bytes": 2998
     },
     {
       "path": "src/cablesim_type_electrical/inputs.py",
@@ -116,8 +1151,8 @@
     },
     {
       "path": "src/cablesim_type_electrical/main.py",
-      "sha256": "dd2d460d7138bf85b852304a0f9802a05237597ecc37cb8c6357a4c78650812d",
-      "size_bytes": 30162
+      "sha256": "869b01e52863565e4a42e4a8b1c832423d47f71070783675e884b0a8c8f28b98",
+      "size_bytes": 30433
     },
     {
       "path": "src/cablesim_type_electrical/sources.json",
@@ -126,8 +1161,8 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "c7ebb9a3e33598bc0278d57dbcee62eafbbc39e2c3677970280c877b2a0b230e",
-      "size_bytes": 1064
+      "sha256": "c350f27b29cb4911ae1323086848ef6be5fd7c9deacafec8de0b89f53f55a97a",
+      "size_bytes": 1700
     }
   ]
 }

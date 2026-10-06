@@ -13,7 +13,7 @@ import numpy as np
 
 from backend.schemas import Scenario
 
-MODEL_VERSION = "MV-THERMAL-0.1.0"
+MODEL_VERSION = "1.0.0"
 PHASES = ["A", "B", "C"]
 COLORS = ["#ce9451", "#434d5c", "#ece6d6", "#5a6572", "#b9cad1", "#293c55"]
 LAYER_NAMES = ["导体", "导体屏蔽", "XLPE 绝缘", "绝缘屏蔽", "金属屏蔽（等效层）", "外护套"]

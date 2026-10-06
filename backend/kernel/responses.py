@@ -183,6 +183,8 @@ class RunSummary(BaseModel):
     snapshot: RunSummarySnapshot
     method: Method | None = Field(description='Exact saved method release; null when the snapshot integrity cannot be established.')
     error: dict[str, str] | None = Field(description='Saved run-level error code and message, each limited to 512 characters; full detail remains at GET runs/{rid}.')
+    headlines: list[dict[str, JsonValue]] = Field(default_factory=list, max_length=3,
+        description='Up to three producer-declared answers from verified sealed output; SI value and display conversion, entity, condition and same-case artifact digest. Empty when unavailable; no defaults.')
 
 
 class RunSummaryPage(BaseModel):

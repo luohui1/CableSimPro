@@ -16,14 +16,23 @@ def historical_method(client, wid, sid, rid):
     """Seed an older accepted release identity, leaving the numerical fixture alone."""
     store=client.app.state.workspace_store
     with store.db(True) as db:
-        row=db.execute('SELECT snapshot FROM study_runs WHERE id=?',(rid,)).fetchone()
+        row=db.execute('SELECT snapshot,output FROM study_runs WHERE id=?',(rid,)).fetchone()
         snapshot=json.loads(row['snapshot'])
+        output=json.loads(row['output'])
+        # Releases before 1.0 did not publish the optional soil view or bounded
+        # answer witness. Keep their numerical quantities and engineering trace.
+        snapshot.pop('headline_contract',None)
+        snapshot.pop('artifact_source_contracts',None)
+        for case in output['cases']:
+            for artifact in ('x-cablesim.temperature-field','x-cablesim.headline-witness'):
+                case.get('artifacts',{}).pop(artifact,None)
+                case.get('artifact_digests',{}).pop(artifact,None)
         old={**snapshot['definition']['method'],'version':'0.9.0','release_digest':'0'*64}
         snapshot['definition']['method']=old
         snapshot['lock']['method']=old
         snapshot['lock']['digest']=fingerprint({k:v for k,v in snapshot['lock'].items() if k!='digest'})
-        db.execute('UPDATE study_runs SET snapshot=?,input_digest=? WHERE id=?',
-                   (json.dumps(snapshot),fingerprint(snapshot),rid))
+        db.execute('UPDATE study_runs SET snapshot=?,input_digest=?,output=?,output_digest=? WHERE id=?',
+                   (json.dumps(snapshot),fingerprint(snapshot),json.dumps(output),fingerprint(output),rid))
         db.execute('UPDATE study_versions SET definition=? WHERE study=? AND revision=1',
                    (json.dumps(snapshot['definition']),sid))
         return dict(db.execute('SELECT snapshot,output,input_digest,output_digest FROM study_runs WHERE id=?',(rid,)).fetchone())

@@ -38,5 +38,5 @@ def test_emergency_plugin_check_run_and_exact_version(tmp_path):
     result = host.run('cablesim.iec60287','iec60853-emergency',cases)
     assert result.cases[0].status=='succeeded',result.cases[0].error
     assert result.cases[0].results[0]['value']==pytest.approx(2131.,abs=1.)
-    assert result.environment['method']=='iec60853-emergency/0.1.0'
+    assert result.environment['method']=='1.0.0'
     assert result.cases[0].artifacts['x-cablesim.iec60853-emergency']['engineering_approval'] is False

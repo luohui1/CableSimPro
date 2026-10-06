@@ -35,9 +35,19 @@
     "size_bytes": 924
   },
   {
+    "path": "cablesim_sdk/parameter_units.py",
+    "sha256": "5b95c5984c4e19547cb1a81c71be2c3af3e6eff7a126bafa23eb6ed19993ead3",
+    "size_bytes": 4472
+  },
+  {
     "path": "cablesim_sdk/reproduction.py",
     "sha256": "dedd26ded610c9420c42450196d1e465a382850d13d3cee23a6069084e5e6120",
     "size_bytes": 4014
+  },
+  {
+    "path": "cablesim_sdk/result_answers.py",
+    "sha256": "d088f85c5040431a8c20c9300342e33521e118d08944891dc52c16bdb1a3dc7a",
+    "size_bytes": 4227
   },
   {
     "path": "cablesim_sdk/simulation.py",
@@ -46,8 +56,8 @@
   },
   {
     "path": "cablesim_sdk/simulation_artifacts.py",
-    "sha256": "f95e77c720d38a3377843f5e12b76e9cee3ad4a3bb8d1b498d7bf23f88ad794f",
-    "size_bytes": 9900
+    "sha256": "87a76c20e572143d7a0c25e555389b1a1f58c61fd2534f3b4f4ee3db28b0bb1b",
+    "size_bytes": 13387
   },
   {
     "path": "cablesim_sdk/validation.py",
@@ -76,8 +86,8 @@
   },
   {
     "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/group.py",
-    "sha256": "9b0f92ed22bd70d4c15ab22dd8562ed1879363b1a8aa4464ca1a17e6013702da",
-    "size_bytes": 27649
+    "sha256": "aad5fc771d9a07b25f4dee527976823094d070bb2eaee894fca862a4165e61a9",
+    "size_bytes": 27625
   },
   {
     "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/group_inputs.py",
@@ -96,7 +106,7 @@
   },
   {
     "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/method.py",
-    "sha256": "3840ca460708c7e7f1c4bac8f0d0208261af0db3adf83249b3365e0645e7106f",
+    "sha256": "d1833b7179d52461b8077f7a0288d3132b9dd06c4127bda57da174a8cfcb4c2b",
     "size_bytes": 13289
   },
   {
@@ -126,8 +136,8 @@
   },
   {
     "path": "plugins/cablesim.simulation/src/cablesim_simulation/artifacts.py",
-    "sha256": "d38d42d7d81df9afa0e397a0878dc4cd8700d41bf60c1b59843bdd0aef0ff080",
-    "size_bytes": 6957
+    "sha256": "926275798be1cf8181e84111511c2ea22f0b81de9b256ceb2a9bdca25fa61d1a",
+    "size_bytes": 6993
   },
   {
     "path": "plugins/cablesim.simulation/src/cablesim_simulation/domain_coupled.py",

@@ -4,7 +4,7 @@ from typing import Literal
 from .study_tasks import task_catalog
 from .responses import StudyResponse, RunResponse, RunPage, RunSummaryPage, PreflightResponse, TaskOption
 
-from .contracts import Comparison, CreateStudy, DeliveryRequest, RunStudy, UpdateStudy, RecalculateStudy
+from .contracts import Comparison, CreateStudy, DeliveryRequest, RunStudy, UpdateStudy, RecalculateStudy, PreviewStudy, UpgradeStudyMethods
 from .study_history import StudyHistoryRequest, restore
 from .host_api import ERRORS, host_call, DeliveryResult
 from .read_responses import read_response
@@ -17,6 +17,15 @@ def make_router(research):
     @router.get('/methods')
     def methods():
         return research.methods()
+
+    @router.get('/plugins/{plugin_id}/assets/{role}')
+    def plugin_asset(plugin_id: str, role: Literal['cover', 'method', 'validation'], sha256: str | None = None):
+        from ..plugin_host.presentation import asset_bytes
+        plugin = research.registry(plugin_id).get(plugin_id)
+        data, resource = host_call(asset_bytes, plugin, role, sha256)
+        return Response(data, media_type=resource['media_type'], headers={
+            'ETag': '"' + resource['sha256'] + '"', 'X-Content-SHA256': resource['sha256'],
+            'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'private, max-age=3600, must-revalidate'})
 
     @router.get('/study-tasks', response_model=list[TaskOption])
     def tasks():
@@ -70,6 +79,11 @@ def make_router(research):
             response.headers['Retry-After'] = '2'
         return result
 
+    @router.post('/workspaces/{wid}/studies/{sid}/preview', responses=ERRORS)
+    def preview(wid: str, sid: str, body: PreviewStudy):
+        from .preview import preview as calculate
+        return host_call(calculate, research, wid, sid, body)
+
     @router.post('/workspaces/{wid}/studies', status_code=201, response_model=StudyResponse)
     def create(wid: str, body: CreateStudy):
         return research.save(wid, body)
@@ -77,6 +91,11 @@ def make_router(research):
     @router.put('/workspaces/{wid}/studies/{sid}', response_model=StudyResponse)
     def update(wid: str, sid: str, body: UpdateStudy):
         return research.save(wid, body, sid)
+
+    @router.post('/workspaces/{wid}/studies/{sid}/upgrade-methods', response_model=StudyResponse, responses=ERRORS)
+    def upgrade_methods(wid:str,sid:str,body:UpgradeStudyMethods):
+        from .method_adoption import upgrade
+        return host_call(upgrade,research,wid,sid,body)
 
     @router.post('/workspaces/{wid}/studies/{sid}/undo', response_model=StudyResponse, responses=ERRORS)
     def undo(wid:str,sid:str,body:StudyHistoryRequest):

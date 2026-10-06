@@ -51,8 +51,8 @@
   },
   {
     "path": "backend/plugin_host/executor.py",
-    "sha256": "c6badba3f34bec50ef16236dd986f1dc55fb42c3cf29a503c43ed0f944c733dd",
-    "size_bytes": 21097
+    "sha256": "6d7802ec1ab3124441d4546b8b7a6d64959c3f37627d43efc324f706812d2d75",
+    "size_bytes": 22762
   },
   {
     "path": "backend/plugin_host/field_contract.py",
@@ -66,13 +66,18 @@
   },
   {
     "path": "backend/plugin_host/manifest.py",
-    "sha256": "4b7a8a468ccba0139723b91e186fd02407a2ca897b4dd272035a70e05f2020e6",
-    "size_bytes": 7061
+    "sha256": "9abbc83deebde964c2af3bac334c94a86731e94eb2452f0cbdf34909f7689ec6",
+    "size_bytes": 11935
   },
   {
     "path": "backend/plugin_host/native_arguments.py",
     "sha256": "1b637d5e28658db13c8e18fdbf5da7ffba034662b5e443e29c8566c28cafdf8c",
     "size_bytes": 1148
+  },
+  {
+    "path": "backend/plugin_host/parameter_contracts.py",
+    "sha256": "0879cc4c0e0a1439e8bd581a7e45bf33de18b15154913affa165783b91d942b2",
+    "size_bytes": 2385
   },
   {
     "path": "backend/plugin_host/process.py",
@@ -123,6 +128,31 @@
     "path": "cablesim_sdk/environment.py",
     "sha256": "299ceb35de56925b8604b5437ae17ecaeb476c322e23537ada0c82260ac5532f",
     "size_bytes": 924
+  },
+  {
+    "path": "cablesim_sdk/parameter_units.py",
+    "sha256": "5b95c5984c4e19547cb1a81c71be2c3af3e6eff7a126bafa23eb6ed19993ead3",
+    "size_bytes": 4472
+  },
+  {
+    "path": "cablesim_sdk/plugin_ui.py",
+    "sha256": "42baeb72bf1cd0dae120b15797e416db9c6b80e2dae515cb7713a57bfdfbddab",
+    "size_bytes": 12296
+  },
+  {
+    "path": "cablesim_sdk/reproduction.py",
+    "sha256": "dedd26ded610c9420c42450196d1e465a382850d13d3cee23a6069084e5e6120",
+    "size_bytes": 4014
+  },
+  {
+    "path": "cablesim_sdk/result_answers.py",
+    "sha256": "d088f85c5040431a8c20c9300342e33521e118d08944891dc52c16bdb1a3dc7a",
+    "size_bytes": 4227
+  },
+  {
+    "path": "cablesim_sdk/simulation.py",
+    "sha256": "d21873f6fd02caa297ecfc9b3938f0ce694b1e9a62ac435e81fe6278dfea4ec1",
+    "size_bytes": 10469
   },
   {
     "path": "cablesim_sdk/validation.py",

@@ -13,8 +13,18 @@ class ArtifactSource(Strict):
     plugin_version: str = Field(min_length=1)
     capability: str = Field(min_length=1)
     input_sha256: str = Field(pattern=r'^[a-f0-9]{64}$')
-    bundle_sha256: str = Field(pattern=r'^[a-f0-9]{64}$')
+    binding: Literal['simulation-bundle', 'iec-trace'] = 'simulation-bundle'
+    bundle_sha256: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
+    trace_sha256: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
     manifest_sha256: str = Field(pattern=r'^[a-f0-9]{64}$')
+
+    @model_validator(mode='after')
+    def bound_source(self):
+        if self.binding == 'simulation-bundle' and (not self.bundle_sha256 or self.trace_sha256 is not None):
+            raise ValueError('source：原始场绑定必须提供bundle_sha256，不能混入IEC轨迹摘要。')
+        if self.binding == 'iec-trace' and (not self.trace_sha256 or self.bundle_sha256 is not None):
+            raise ValueError('source：IEC解析场必须提供trace_sha256，不伪造原始场束。')
+        return self
 
 
 class FieldMesh(Strict):
@@ -48,6 +58,44 @@ class TemperatureSample(Strict):
     method: str = Field(min_length=1)
 
 
+class ExcludedCircle(Strict):
+    entity: str = Field(min_length=1)
+    center_m: tuple[float, float]
+    radius_m: float = Field(gt=0)
+    kind: Literal['cable-interior', 'duct-interior']
+
+
+class SurfaceMeanCheck(Strict):
+    entity: str = Field(min_length=1)
+    reference_temperature_k: float = Field(gt=0)
+    mean_temperature_k: float = Field(gt=0)
+    absolute_error_k: float = Field(ge=0)
+    surface_minimum_k: float = Field(gt=0)
+    surface_maximum_k: float = Field(gt=0)
+
+
+class AnalyticalSoilView(Strict):
+    model: Literal['kennelly-image-line-sources']
+    condition: Literal['operating']
+    soil_thermal_resistivity_k_m_w: float = Field(gt=0)
+    limitations: list[str] = Field(min_length=1)
+    excluded_regions: list[ExcludedCircle] = Field(min_length=1)
+    surface_check_method: Literal['mean-of-64-equal-angle-exterior-samples']
+    surface_check_tolerance_k: Literal[0.1]
+    surface_checks: list[SurfaceMeanCheck] = Field(min_length=1)
+
+    @model_validator(mode='after')
+    def checked(self):
+        if {row.entity for row in self.surface_checks} != {region.entity for region in self.excluded_regions}:
+            raise ValueError('解析土壤场：每个排除区域必须有对应外表面校核。')
+        if any(row.absolute_error_k > self.surface_check_tolerance_k or
+               abs(abs(row.mean_temperature_k-row.reference_temperature_k)-row.absolute_error_k) > 1e-9
+               or not row.surface_minimum_k <= row.mean_temperature_k <= row.surface_maximum_k
+               for row in self.surface_checks):
+            raise ValueError('解析土壤场：外表面平均温度未通过0.1 K自检。')
+        return self
+
+
 class TemperatureField(Strict):
     schema_version: Literal['cablesim.temperature-field/1']
     source: ArtifactSource
@@ -59,14 +107,20 @@ class TemperatureField(Strict):
     samples: list[TemperatureSample]
     hotspot: TemperatureSample
     convergence: dict
+    analytical_soil_view: AnalyticalSoilView | None = None
     engineering_approval: Literal[False] = False
 
     @model_validator(mode='after')
     def consistent(self):
-        if len(self.temperature_k) != len(self.mesh.points) or any(t <= 0 for t in self.temperature_k):
+        if len(self.temperature_k) != len(self.mesh.points) or any(not isfinite(t) or t <= 0 for t in self.temperature_k):
             raise ValueError('temperature_k：温度必须为正K并与节点一一对应。')
         if self.hotspot.temperature_k != max(self.temperature_k):
             raise ValueError('hotspot：必须是输出节点场的实际最大值。')
+        if not any(tuple(point) == self.hotspot.point_m and value == self.hotspot.temperature_k
+                   for point, value in zip(self.mesh.points, self.temperature_k)):
+            raise ValueError('hotspot.point_m：必须指向最高温度的实际输出节点。')
+        if (self.source.binding == 'iec-trace') != (self.analytical_soil_view is not None):
+            raise ValueError('解析土壤场与来源绑定类型必须一致。')
         return self
 
 
@@ -144,6 +198,18 @@ class LossTemperatureAxis(Strict):
     state: Literal['conductor_temperature_c', 'sheath_temperature_c']
     regions: list[str] = Field(min_length=1)
     values_c: list[float] = Field(min_length=2, max_length=16)
+
+    @model_validator(mode='before')
+    @classmethod
+    def si_temperature_axis(cls,value):
+        if isinstance(value,dict) and 'values_k' in value:
+            if 'values_c' in value:raise ValueError('不能同时提供SI和旧摄氏温度轴。')
+            value=dict(value)
+            temperatures=value.pop('values_k')
+            if not isinstance(temperatures,list) or any(type(t) not in (int,float) for t in temperatures):
+                raise ValueError('values_k：使用SI数值温度轴。')
+            value['values_c']=[t-273.15 for t in temperatures]
+        return value
 
     @model_validator(mode='after')
     def ordered(self):
