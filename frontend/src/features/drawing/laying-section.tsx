@@ -101,8 +101,8 @@ export function LayingSection(props: LayingSectionProps) {
         onChange={setTemplate} disabled={!editable || !props.onTemplateRequest} />
       <Button size="compact" onClick={() => void applyTemplate()} disabled={!editable || !props.onTemplateRequest} loading={busy}>应用模板</Button>
       <span className="spacer" />
-      {/* 对象操作只在选中对象时出现，避免一排灰按钮占位 */}
-      {selected && <div className="drawing-object-tools" role="toolbar" aria-label="所选敷设对象操作">
+      {/* 对象操作只在选中对象且宿主提供命令时出现，避免一排灰按钮占位 */}
+      {selected && !!props.onObjectCommand && (!props.objectCommands || props.objectCommands.length > 0) && <div className="drawing-object-tools" role="toolbar" aria-label="所选敷设对象操作">
         <span className="drawing-selected-label">{selected.id}</span>
         {(['duplicate', 'delete', 'parallel', 'trefoil', 'align'] as const).map(command => <Button key={command} size="compact"
           disabled={!editable || !props.onObjectCommand || !!props.objectCommands && !props.objectCommands.includes(command)

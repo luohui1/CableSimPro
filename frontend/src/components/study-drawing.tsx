@@ -1,3 +1,4 @@
+import { entityLabel } from "@/lib/domain-fields";
 import { useRef, useState } from "react";
 import { api, ApiError, numeric, record, responseData } from "@/api/client";
 import type { components } from "@/api/generated/schema";
@@ -117,35 +118,33 @@ export function StudyDrawing({
   function selectSection(value: SectionSelection) {
     setSelection(value);
     if (!value || !section) return;
-    const fields: NumericInput[] =
-      value.kind === "cable"
-        ? ["x", "z"].map((axis) => ({
-            path: pointer("sections", section.id, "placements", value.id, axis),
-            label: axis + " 坐标",
-            unit: "m",
-            precision: 3,
-          }))
-        : [];
+    // 检查器里可直接修改的字段：都来自截面里该对象真实存在的尺寸，没有的不显示
+    const at = (...parts: string[]) => pointer("sections", section.id, ...parts);
+    const coordinate = (root: string[], axis: "x" | "z"): NumericInput => ({ path: at(...root, axis), label: axis === "x" ? "水平位置 x" : "高程 z", unit: "m", precision: 3, required: true });
+    const size = (root: string[], key: string, label: string, millimetres = true): NumericInput => ({ path: at(...root, key), label, unit: millimetres ? "mm" : "m", scale: millimetres ? 1000 : 1, precision: millimetres ? 1 : 3, min: 0, minExclusive: true });
+    const material = (id?: string | null): NumericInput[] => id ? [{ path: pointer("materials", id, "thermal_resistivity"), label: "热阻率", unit: "K·m/W", precision: 3, min: 0, minExclusive: true }] : [];
+    let title = entityLabel(document, value.id), fields: NumericInput[] = [];
+    if (value.kind === "cable") fields = [coordinate(["placements", value.id], "x"), coordinate(["placements", value.id], "z")];
+    else if (value.kind === "enclosure") {
+      const item = (section.enclosures || []).find((entry) => entry.id === value.id);
+      const root = ["enclosures", value.id];
+      title = item?.type === "duct" ? `排管 ${(section.enclosures || []).filter((entry) => entry.type === "duct").indexOf(item) + 1}` : title;
+      fields = [coordinate(root, "x"), coordinate(root, "z"),
+        ...(item?.inner_diameter != null ? [size(root, "inner_diameter", "内径")] : []), ...(item?.outer_diameter != null ? [size(root, "outer_diameter", "外径")] : []),
+        ...(item?.width != null ? [size(root, "width", "宽度", false)] : []), ...(item?.height != null ? [size(root, "height", "高度", false)] : []), ...material(item?.material)];
+    } else if (value.kind === "backfill" && section.backfill) {
+      title = "回填区";
+      fields = [coordinate(["backfill"], "x"), coordinate(["backfill"], "z"), size(["backfill"], "width", "宽度", false), size(["backfill"], "height", "高度", false), ...material(section.backfill.material)];
+    } else if (value.kind === "soil") {
+      const layer = (section.soil_layers || []).find((entry) => entry.id === value.id);
+      title = "土层";
+      fields = [{ path: at("soil_layers", value.id, "top_z"), label: "上边界 z", unit: "m", precision: 3 }, { path: at("soil_layers", value.id, "bottom_z"), label: "下边界 z", unit: "m", precision: 3 }, ...material(layer?.material)];
+    }
     onSelect({
       id: value.id,
-      title: value.id,
+      title,
       fields: fields.length ? fields : undefined,
-      groups: [
-        {
-          label: "敷设对象",
-          items: [
-            {
-              label: "类型",
-              value: {
-                cable: "电缆",
-                enclosure: "构筑物",
-                backfill: "回填",
-                soil: "土壤层",
-              }[value.kind],
-            },
-          ],
-        },
-      ],
+      groups: [{ label: "敷设对象", items: [{ label: "类型", value: { cable: "电缆", enclosure: "构筑物", backfill: "回填", soil: "土壤层" }[value.kind] }] }],
     });
   }
   const templates: {
