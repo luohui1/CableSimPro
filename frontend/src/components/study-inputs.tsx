@@ -1,5 +1,6 @@
-import { lazy, Suspense, type ReactNode } from "react";
-const CableLayerGrid = lazy(() => import('./cable-layer-grid'));
+import { Suspense, type ReactNode } from "react";
+import { cableLayerGrid } from '@/lib/heavy-components';
+const CableLayerGrid = cableLayerGrid.Component;
 import { optionalRecord, text, numeric } from "@/api/client";
 import {
   displayed,

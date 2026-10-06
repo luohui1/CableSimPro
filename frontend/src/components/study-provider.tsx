@@ -11,26 +11,16 @@ import {
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Link,
   Outlet,
   useBlocker,
   useParams,
   useSearch,
   useLocation,
 } from "@tanstack/react-router";
+import { message, numeric, text } from "@/api/client";
+import { studyContextQuery, studyRunsQuery, workspaceQuery } from "@/lib/study-queries";
 import {
-  api,
-  ApiError,
-  optionalRecord,
-  message,
-  numeric,
-  record,
-  responseData,
-  text,
-} from "@/api/client";
-import {
-  studyIndex,
-  projectStudy,
-  studyRuns,
   saveStudy,
   restoreStudy,
   type StudyRow,
@@ -46,6 +36,7 @@ import {
   type NumericInput,
 } from "@/lib/domain-fields";
 import { commitParameters, type ParameterDraft } from "@/lib/study-config";
+import { preferences } from "@/lib/preferences";
 import {
   domainDraftReducer,
   emptyDomainHistory,
@@ -110,40 +101,12 @@ export function StudyProvider() {
   const search = useSearch({ from: "/studies/$sid" });
   const location = useLocation();
   const queries = useQueryClient();
-  const index = useQuery({
-    queryKey: ["study-context", search.workspace, sid],
-    queryFn: async ({ signal }) => {
-      if (!search.workspace) return studyIndex(signal);
-      const [study, workspace] = await Promise.all([
-        responseData(api.GET('/api/workspaces/{wid}/studies/{sid}', {params:{path:{wid:search.workspace,sid}},signal})).catch(async error => {
-          // Older running hosts expose the formal list route but not the single-study GET.
-          if (!(error instanceof ApiError) || error.status !== 404) throw error;
-          const rows = await responseData(api.GET('/api/workspaces/{wid}/studies', {params:{path:{wid:search.workspace}},signal}));
-          const found = Array.isArray(rows) ? rows.find(row => optionalRecord(row).id === sid) : undefined;
-          if (!found) throw error;
-          return found;
-        }),
-        responseData(api.GET('/api/workspaces/{wid}', {params:{path:{wid:search.workspace}},signal})),
-      ]);
-      const state = record(workspace, '工程');
-      return [projectStudy(study, state, record(state.study_cable_reference || {}, '引用型号'))];
-    },
-  });
+  const index = useQuery(studyContextQuery(queries, search.workspace, sid));
   const study = index.data?.find((item) => item.id === sid);
   const wid = study?.workspace || search.workspace;
-  const workspace = useQuery({
-    queryKey: ["workspace", wid],
-    queryFn: ({ signal }) =>
-      responseData(
-        api.GET("/api/workspaces/{wid}", { params: { path: { wid } }, signal }),
-      ).then((value) => record(value, "工程")),
-    enabled: !!study,
-  });
+  const workspace = useQuery({ ...workspaceQuery(wid), enabled: !!study });
   const runs = useQuery({
-    queryKey: ["runs", wid, sid, search.run || 'all'],
-    queryFn: async ({ signal }) => search.run
-      ? [record(await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/runs/{rid}', {params:{path:{wid,sid,rid:search.run}},signal})), '固定运行')]
-      : studyRuns(wid, sid, signal),
+    ...studyRunsQuery(wid, sid, search.run),
     enabled: !!study,
     refetchInterval: (query) =>
       query.state.data?.some((run) =>
@@ -654,11 +617,12 @@ export function StudyProvider() {
     </Context.Provider>
   );
 }
+/** 研究读取中或出错时只占内容区，常驻侧栏不动。 */
 function ProviderState({ children }: { children: ReactNode }) {
   return (
-    <main className="provider-state">
-      <a href="/studies">返回研究列表</a>
+    <section className="work-panel provider-state">
+      <Link to="/studies" search={{ theme: preferences().theme }}>返回研究列表</Link>
       {children}
-    </main>
+    </section>
   );
 }

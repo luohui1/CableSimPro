@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { workspaces } from "@/api/research";
 import { displayName } from '@/lib/display-names';
 import { Link, Navigate } from "@tanstack/react-router";
 import { studyModuleRoute, studyRootRoute } from "@/router";
@@ -24,6 +26,7 @@ import { StudyHybrid } from "@/components/study-hybrid";
 import { Icon } from "@/components/icon";
 import { message, optionalRecord, text } from "@/api/client";
 import { selectionView, type SelectionRow } from "@/lib/selection-view";
+import { StudyHeatDetail } from "@/components/study-heat-detail";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import {
   CableInputs,
@@ -76,6 +79,7 @@ export function StudyWorkspace() {
   const context = useStudy();
   const { study, workspace, runs, draft } = context;
   const theme = search.theme;
+  const projectIndex = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
   const [selected, setSelected] = useState<SelectionRow | undefined>();
   const [collapsed, setCollapsed] = useState(true);
   const [edit, setEdit] = useState(false);
@@ -196,6 +200,7 @@ export function StudyWorkspace() {
           ? "running"
           : "saved";
   const title = draft?.title || study.title;
+  const projectName = text((projectIndex.data || []).find((space) => text(space.id) === study.workspace)?.name);
   // 侧栏按“输入 → 计算 → 交付”分三组，组内保持模块启用顺序
   const groups: [string, string[]][] = [
     ["输入", enabled.filter((key) => ["cable", "section", "conditions"].includes(key))],
@@ -235,7 +240,8 @@ export function StudyWorkspace() {
         }
       >
         <AppShell
-          title={title}
+          title={projectName && title.startsWith(projectName.split(" · ")[0] + " · ") ? title.slice(projectName.split(" · ")[0].length + 3) : title}
+          path={projectName}
           status={
             isVersionStale(run) || isVersionStale(study.raw) ? <VersionNotice value={isVersionStale(run) ? run : study.raw} target={{ wid: study.workspace, sid, module: (search.run || module === 'report' ? text(optionalRecord(run?.snapshot).module) : configuredModule) || undefined }} disabledReason={context.dirty ? '请先保存修改' : undefined} onComplete={next => { const resultModule = text(optionalRecord(next.snapshot).module) || calculatedModule; return navigate({ params: { sid, module: resultModule, tab: studyEntryTab(resultModule) }, search: { ...currentSearch(), run: text(next.id), delivery: '', generate: false } }); }} /> : <StatusMark
               kind={status}
@@ -513,6 +519,13 @@ export function StudyWorkspace() {
                         .definition) as StudyDefinition)
                   : undefined
               }
+            />
+          ) : ["selection", "ampacity"].includes(module) && tab === "detail" ? (
+            <StudyHeatDetail
+              key={`${run?.id || "none"}-${selectedRow?.id || ""}`}
+              run={run}
+              cases={(view?.rows || []).map((row) => ({ id: row.id, label: row.name }))}
+              initialCase={selectedRow?.id || view?.recommendation?.id}
             />
           ) : module === "transient" && tab === "history" ? (
             <StudyNativeArtifact run={run} kind="history" />

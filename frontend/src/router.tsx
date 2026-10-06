@@ -1,10 +1,9 @@
 import {
-  createRootRoute,
+  createRootRouteWithContext,
   createRoute,
   createRouter,
   Link,
   Navigate,
-  Outlet,
   notFound,
   lazyRouteComponent,
 } from "@tanstack/react-router";
@@ -12,6 +11,10 @@ import { ObjectListPage } from "./pages/object-list-page";
 import { createTypeRoutes } from "./features/type/routes";
 import { preferences } from "./lib/preferences";
 import { moduleDefinitions } from "./pages/study-modules";
+import type { QueryClient } from "@tanstack/react-query";
+import { ShellLayout, RouteSkeleton } from "./components/shell-layout";
+import { queryClient } from "./lib/query-client";
+import { prefetchStudy } from "./lib/study-queries";
 const SelectionPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pages/selection-page'), 'SelectionPage') : undefined;
 const GalleryPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pages/gallery-page'), 'GalleryPage') : undefined;
 const LibraryPage = lazyRouteComponent(() => import('./pages/library-page'), 'LibraryPage');
@@ -36,8 +39,9 @@ const themeSearch = (
 ): { theme: "light" | "dark" } => ({
   theme: search.theme === "dark" ? "dark" : search.theme === "light" ? "light" : preferences().theme,
 });
-const rootRoute = createRootRoute({
-  component: Outlet,
+const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
+  // 常驻外壳：侧栏只挂载一次，换页只替换右侧内容面板。
+  component: ShellLayout,
   notFoundComponent: () => (
     <main className="not-found">
       <h1>页面不存在</h1>
@@ -113,6 +117,9 @@ export const studyRootRoute = createRoute({
     dataset: typeof search.dataset === "string" ? search.dataset : "",
     compare: typeof search.compare === "string" ? search.compare : "",
   }),
+  loaderDeps: ({ search }) => ({ workspace: search.workspace, run: search.run }),
+  // 悬停或进入前并行预取研究、工程和运行；失败交给页面的错误状态。
+  loader: ({ context, params, deps }) => prefetchStudy(context.queryClient, deps.workspace, params.sid, deps.run),
   component: StudyProvider,
 });
 const studyEntryRoute = createRoute({
@@ -176,7 +183,15 @@ export const router = createRouter({
       moduleEntryRoute,
     ]),
   ]),
+  context: { queryClient },
+  // 参考 TanStack Router basic-react-query 示例与 LobeChat 的延迟骨架：悬停即预取；
+  // 200 ms 内完成就不显示等待界面，显示后至少保留 400 ms，避免一闪。
   defaultPreload: "intent",
+  defaultPreloadStaleTime: 0,
+  defaultPendingMs: 200,
+  defaultPendingMinMs: 400,
+  defaultPendingComponent: RouteSkeleton,
+  scrollRestoration: true,
 });
 declare module "@tanstack/react-router" {
   interface Register {

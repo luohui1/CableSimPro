@@ -31,6 +31,7 @@ export const moduleDefinitions: Record<
     icon: "calc/ampacity",
     tabs: [
       { id: "results", label: "结果" },
+      { id: "detail", label: "结果详情" },
       { id: "parameters", label: "方法参数" },
     ],
   },
@@ -59,6 +60,7 @@ export const moduleDefinitions: Record<
     icon: "calc/selection",
     tabs: [
       { id: "results", label: "候选结果" },
+      { id: "detail", label: "结果详情" },
       { id: "settings", label: "问询条件" },
     ],
   },

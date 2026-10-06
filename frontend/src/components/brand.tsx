@@ -36,9 +36,9 @@ export function BrandWordmark() {
 let introPlayed = false;
 
 /** 侧栏头部标志。浅色主题下本次会话首次进入播放一次片头并停在末帧；深色或减少动态时用矢量标志。 */
-export function BrandLogo({ theme }: { theme: 'light' | 'dark' }) {
+export function BrandLogo({ theme, compact = false }: { theme: 'light' | 'dark'; compact?: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
-  const still = theme === 'dark' || preferences().reducedMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const still = compact || theme === 'dark' || preferences().reducedMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   useEffect(() => {
     const element = video.current;
     if (!element) return;
@@ -51,6 +51,6 @@ export function BrandLogo({ theme }: { theme: 'light' | 'dark' }) {
     element.play().catch(toEnd);
   }, [still]);
   return <Link to="/" search={{ theme }} className="brand-logo" aria-label="CableSimPro 首页">
-    {still ? <><BrandMark /><BrandWordmark /></> : <video ref={video} src={intro} muted playsInline preload="auto" aria-hidden="true" />}
+    {still ? <><BrandMark />{!compact && <BrandWordmark />}</> : <video ref={video} src={intro} muted playsInline preload="auto" aria-hidden="true" />}
   </Link>;
 }

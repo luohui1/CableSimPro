@@ -12,8 +12,9 @@ import { ErrorState, LoadingState, EmptyState, StaleBanner } from "./states";
 import { SourceBadge } from "./source-badge";
 import { DataTable } from "./data-table";
 import { moduleConfiguration, withConfiguration } from "@/lib/study-config";
-import { lazy, Suspense } from 'react';
-const ContractFields = lazy(() => import('./buzzform-contract-fields').then(module => ({default: module.BuzzformContractFields})));
+import { Suspense } from 'react';
+import { contractFields } from '@/lib/heavy-components';
+const ContractFields = contractFields.Component;
 export { rootModule, moduleConfiguration } from "@/lib/study-config";
 
 type Method = components["schemas"]["Method"];

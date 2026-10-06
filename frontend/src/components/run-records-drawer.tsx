@@ -1,11 +1,12 @@
-import { lazy, Suspense } from 'react';
+import { Suspense } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { studyRuns } from '@/api/research';
 import { message } from '@/api/client';
 import { Dialog } from './ui/dialog';
 import { Button } from './ui/button';
 import { LoadingState, ErrorState, EmptyState } from './states';
-const Content = lazy(() => import('./run-records-content'));
+import { runRecordsContent } from '@/lib/heavy-components';
+const Content = runRecordsContent.Component;
 
 export function RunRecordsDrawer({open, onOpenChange, runs, selectedId, onSelect, loading, error, onRetry, workspace, studyId, disabledReason}: {
   open: boolean; onOpenChange: (value: boolean) => void; runs: Record<string, unknown>[]; selectedId?: string; onSelect: (id: string) => void; loading?: boolean; error?: unknown; onRetry?: () => void; workspace?: string; studyId?: string; disabledReason?: string;
