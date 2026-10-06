@@ -31,6 +31,7 @@ type ResultRow = {
   unit: string;
   status: string;
   case: string;
+  reason: string;
 };
 export function StudyResults({
   run,
@@ -89,6 +90,7 @@ export function StudyResults({
       unit,
       status: text(result.status),
       case: text(result.case),
+      reason: text(optionalRecord(result.reason).message),
     };
   });
   const ratings = rows.filter(
@@ -142,6 +144,9 @@ export function StudyResults({
     .map(optionalRecord)
     .find((row) => row.entity === rating?.entityId);
   const limitingCable = text(circuitRating?.limiting_cable);
+  // 多回路：所选回路的条件额定（其他回路负荷固定）可能不存在；同时额定（各回路同电流）单独给出
+  const simultaneous = rows.find((row) => row.key === "ampacity" && row.case === "rating-simultaneous" && row.entityId === rating?.entityId && row.value !== null);
+  const noRating = !!rating && rating.value === null;
   const load = numeric(operating?.current_a),
     limit = numeric(temperatureGoal?.target),
     margin = numeric(temperatureGoal?.margin);
@@ -200,17 +205,19 @@ export function StudyResults({
       <Conclusion
       title={rating ? "载流量结论" : "保存结果结论"}
       model={
-        rating
+        noRating
+          ? rating!.entity + " 在其他回路当前负荷下没有正允许电流" + (simultaneous ? "；同时额定 " + show("ampacity", simultaneous.value, simultaneous.unit) : "")
+          : rating
           ? "允许电流 " + show("ampacity", rating.value, rating.unit) +
             (limitingCable
               ? "，受限于 " + entityLabel(domain, limitingCable).replace(/ · ([ABC])$/, " 的 $1 相")
               : "；限制电缆未提供")
           : hottest?.entity || "该运行未提供温度结论"
       }
-      description={description}
+      description={noRating ? [rating!.reason, description].filter(Boolean).join(" ") : description}
       historical={run.freshness === "historical" || isVersionStale(run)}
       metrics={[
-        ...(rating
+        ...(rating && !noRating
           ? [
               {
                 label: "允许电流",
@@ -219,6 +226,9 @@ export function StudyResults({
                 quantity: "ampacity",
               },
             ]
+          : []),
+        ...(simultaneous && (noRating || simultaneous.value !== rating?.value)
+          ? [{ label: "同时额定", value: simultaneous.value, unit: simultaneous.unit, quantity: "ampacity" }]
           : []),
         {
           label: "最热导体",

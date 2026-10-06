@@ -522,3 +522,6 @@
 .cell-number input[aria-invalid="true"] { border-color: var(--error); }
 .cell-number .unit, .number-chip .unit { color: var(--text-secondary); font-size: var(--text-note); }
 .structured-add { width: auto; }
+/* 参数说明不逐项挂小字：标签带虚线下划线，悬停显示说明与默认值依据 */
+.buzzform-contract [data-slot="field-description"] { display: none; }
+.buzzform-contract [data-slot="field-label"][title], .parameter-structured-label[title] { text-decoration: underline dotted var(--text-weak); text-underline-offset: var(--space-1); cursor: help; }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { message, numeric, optionalRecord, text } from "@/api/client";
 import { commitFields } from "@/lib/domain-fields";
-import { formatNumber } from "@/lib/format";
+import { formatNumber, significantNumber } from "@/lib/format";
 import { moduleConfiguration } from "@/lib/study-config";
 import { Icon } from "./icon";
 import { useStudy } from "./study-provider";
@@ -44,7 +44,8 @@ export function useStudyPreview({ module, available }: { module: string; availab
         body: JSON.stringify({
           expected_revision: domainDraft?.revision ?? numeric(workspace.revision),
           expected_study_revision: study.revision,
-          module,
+          // 只有研究为该模块单独保存了配置时才指定模块；主定义上的方法不传
+          ...(study.definition.modules?.[module] ? { module } : {}),
           ...(domain ? { domain } : {}),
           ...(configuration?.parameters ? { parameters: configuration.parameters } : {}),
         }),
@@ -59,7 +60,7 @@ export function useStudyPreview({ module, available }: { module: string; availab
     } finally {
       if (controller.current === abort) setRunning(false);
     }
-  }, [available, domainDraft, draft?.definition, module, study.id, study.revision, study.workspace, workspace.revision]);
+  }, [available, domainDraft, draft?.definition, module, study.definition.modules, study.id, study.revision, study.workspace, workspace.revision]);
 
   // 实时：草稿变化后 600 ms 自动试算；关闭时不再请求
   useEffect(() => {
@@ -92,11 +93,11 @@ export function PreviewStrip({ preview, saved }: { preview: ReturnType<typeof us
         const before = savedRows.find((item) => item.key === row.key && item.condition === row.condition);
         const delta = before ? row.display_value - before.display_value : null;
         return <span key={row.key + (row.condition || "")} className="preview-value">
-          <small>{row.title}</small><b>{formatNumber(row.display_value, 4)}</b>{row.display_unit && <span className="unit">{row.display_unit}</span>}
-          {delta !== null && Math.abs(delta) > 1e-9 && <span className="preview-delta" title="相对已保存结果">{delta > 0 ? "+" : ""}{formatNumber(delta, 3)}</span>}
+          <small>{row.title}</small><b>{significantNumber(row.display_value, 4)}</b>{row.display_unit && <span className="unit">{row.display_unit}</span>}
+          {delta !== null && Math.abs(delta) > 1e-9 && <span className="preview-delta" title="相对已保存结果">{delta > 0 ? "+" : ""}{significantNumber(delta, 3)}</span>}
         </span>;
       }) : <span className="muted">{preview.result!.status === "failed" ? "插件未得出结果，见运行明细。" : "插件没有声明关键结论。"}</span>}
-    {preview.result && <span className="muted">{formatNumber(preview.result.elapsed_ms, 3)} ms</span>}
+    {preview.result && <span className="muted">{formatNumber(preview.result.elapsed_ms)} ms</span>}
     <span className="spacer" />
     <Button size="compact" variant="ghost" onClick={preview.clear}>清除</Button>
   </div>;

@@ -420,7 +420,7 @@ export function NumberField() {
     >
       <Field data-invalid={isInvalid} data-disabled={isDisabled}>
         {label && (
-          <FieldLabel htmlFor={fieldApi.name}>
+          <FieldLabel title={typeof description === "string" && description ? description : undefined} htmlFor={fieldApi.name}>
             {isRequired && ui?.asterisk !== false && (
               <span className="text-destructive mr-0.5">*</span>
             )}

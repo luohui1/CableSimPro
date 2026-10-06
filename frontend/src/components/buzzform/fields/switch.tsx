@@ -61,7 +61,7 @@ export function SwitchField() {
   const contentElement = (
     <FieldContent className={alignment === "between" ? "flex-1" : undefined}>
       {label && (
-        <FieldLabel
+        <FieldLabel title={typeof description === "string" && description ? description : undefined}
           htmlFor={fieldApi.name}
           className="cursor-pointer m-0 font-normal flex-none gap-1 items-baseline"
         >

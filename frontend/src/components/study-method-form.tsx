@@ -154,7 +154,7 @@ export function StudyMethodForm({
           <Suspense fallback={<LoadingState title="正在读取参数表单" />}><ContractFields
             module={module}
             schema={contract.parameter_schema}
-            root={contract.parameter_schema}
+            root={{ ...contract.parameter_schema, "x-groups": (contract as unknown as Record<string, unknown>)["x-groups"] }}
             values={configuration.parameters || {}}
             prefix=""
             draftFields={context.draft?.parameterFields}

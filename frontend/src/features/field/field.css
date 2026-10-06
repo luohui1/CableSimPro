@@ -10,6 +10,7 @@
 .field-scale path { fill: none; stroke: var(--text); stroke-width: 1.5; }
 .field-hotspot circle { fill: var(--panel); stroke: var(--text); stroke-width: 2; }
 .field-hotspot text { font-weight: var(--weight-strong); }
+.field-hotspot line { stroke: var(--text); stroke-width: 1; }
 .field-colorbar text { fill: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .field-colorbar-unit { font-weight: var(--weight-strong); }
 .field-limit line { stroke: var(--text); stroke-width: 2; }

@@ -53,7 +53,7 @@ export function TextField() {
     >
       <Field data-invalid={isInvalid} data-disabled={isDisabled}>
         {label && (
-          <FieldLabel htmlFor={fieldApi.name} className="gap-1 items-baseline">
+          <FieldLabel title={typeof description === "string" && description ? description : undefined} htmlFor={fieldApi.name} className="gap-1 items-baseline">
             {label}
             {isRequired && ui?.asterisk !== false ? (
               <span className="text-destructive">*</span>

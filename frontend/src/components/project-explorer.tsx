@@ -5,7 +5,7 @@ import { methodCatalog, studyIndex, studyRuns, typeIndex, workspaces, type Study
 import { deliveries } from "@/api/delivery";
 import { optionalRecord, text } from "@/api/client";
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
-import { formatNumber } from "@/lib/format";
+import { significantNumber } from "@/lib/format";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { Icon } from "./icon";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
@@ -45,7 +45,7 @@ export const singleAnswer = (study: StudyRow) => !study.definition.driver?.kind 
 /** 关键结论文字：数值 + 显示单位；多于一项时带名称（提示与表格）。 */
 export function headlineText(value: unknown, limit = 3): string {
   return (Array.isArray(value) ? value : []).map(optionalRecord).filter((row) => typeof row.display_value === "number").slice(0, limit)
-    .map((row) => `${limit > 1 ? text(row.title) + " " : ""}${formatNumber(row.display_value as number, 4)}${text(row.display_unit) ? " " + text(row.display_unit) : ""}`).join(" · ");
+    .map((row) => `${limit > 1 ? text(row.title) + " " : ""}${significantNumber(row.display_value as number, 4)}${text(row.display_unit) ? " " + text(row.display_unit) : ""}`).join(" · ");
 }
 
 function Section({ icon, title, count, children }: { icon: string; title: string; count?: number; children: ReactNode }) {

@@ -164,6 +164,9 @@ void main() { float t = clamp((v_value - u_min) / (u_max - u_min), 0.0, 1.0); if
   const yOf = (value: number) => scaleBar.top + scaleBar.height * (1 - (value - range.minimum) / (range.maximum - range.minimum));
   const bandCount = bands || 48;
   const hot = hotspot && toScreen(hotspot.point[0], hotspot.point[1]);
+  const screenCircles = circles.map((circle) => ({ center: toScreen(circle.x, circle.z), r: Math.max(2, circle.r * camera.scale) }));
+  const spacing = screenCircles.reduce((closest, a, i) => Math.min(closest, ...screenCircles.slice(i + 1).map((b) => Math.hypot(a.center[0] - b.center[0], a.center[1] - b.center[1]))), Infinity);
+  const objectsRight = screenCircles.reduce((right, item) => Math.max(right, item.center[0] + item.r), -Infinity);
 
   return <div ref={host} className="field-view" role="img" aria-label={label}
     onPointerDown={(event) => { const [x, y] = local(event); drag.current = { x, y, view: camera }; event.currentTarget.setPointerCapture(event.pointerId); }}
@@ -179,9 +182,9 @@ void main() { float t = clamp((v_value - u_min) / (u_max - u_min), 0.0, 1.0); if
       })}
       {groundZ !== undefined && (() => { const [, y] = toScreen(bounds.x0, groundZ); return <line className="field-ground" x1={0} x2={plotWidth} y1={y} y2={y} />; })()}
       {[...circles].sort((a, b) => a.x - b.x).map((circle, index) => {
-        // 电缆本体实心显示（内部不属于土壤场）；相邻标签上下交替，排列紧密时也不重叠
+        // 电缆本体实心显示（内部不属于土壤场）；相邻标签上下交替；挤在一起时不画标签，放大后再显示
         const [x, y] = toScreen(circle.x, circle.z), r = Math.max(2, circle.r * camera.scale), above = index % 2 === 0;
-        return <g key={index} className="field-object"><circle cx={x} cy={y} r={r} />{circle.label && <text x={x} y={above ? y - r - 6 : y + r + 14} textAnchor="middle">{circle.label}</text>}</g>;
+        return <g key={index} className="field-object"><circle cx={x} cy={y} r={r} />{circle.label && spacing >= 36 && <text x={x} y={above ? y - r - 6 : y + r + 14} textAnchor="middle">{circle.label}</text>}</g>;
       })}
       {(() => {
         // 比例尺：取 1/2/5×10ⁿ m，长度约为画面宽度的 1/6
@@ -190,7 +193,10 @@ void main() { float t = clamp((v_value - u_min) / (u_max - u_min), 0.0, 1.0); if
         const length = metres * camera.scale, y = size.height - 18;
         return <g className="field-scale"><path d={`M16 ${y - 5}V${y}H${16 + length}V${y - 5}`} /><text x={16 + length + 6} y={y + 4}>{metres >= 1 ? `${metres} m` : `${Math.round(metres * 1000)} mm`}</text></g>;
       })()}
-      {hot && hotspot && <g className="field-hotspot"><circle cx={hot[0]} cy={hot[1]} r={5} /><text x={hot[0] + 10} y={hot[1] - 8}>{hotspot.label} {fixed(hotspot.value)} °C</text></g>}
+      {hot && hotspot && <g className="field-hotspot"><circle cx={hot[0]} cy={hot[1]} r={5} />
+        {/* 热点在电缆群里时，标签引到电缆群右侧，避免压住电缆 */}
+        {objectsRight > hot[0] ? <><line x1={hot[0]} y1={hot[1]} x2={objectsRight + 16} y2={hot[1] - 18} /><text x={objectsRight + 20} y={hot[1] - 14}>{hotspot.label} {fixed(hotspot.value)} °C</text></>
+          : <text x={hot[0] + 10} y={hot[1] - 8}>{hotspot.label} {fixed(hotspot.value)} °C</text>}</g>}
       <g className="field-colorbar" aria-label="温度色标">
         {Array.from({ length: bandCount }, (_, index) => <rect key={index} x={scaleBar.x} width={14} y={scaleBar.top + scaleBar.height * (1 - (index + 1) / bandCount)} height={scaleBar.height / bandCount + 0.5} fill={hex((index + 0.5) / bandCount)} />)}
         <text className="field-colorbar-unit" x={scaleBar.x} y={scaleBar.top - 12}>°C</text>

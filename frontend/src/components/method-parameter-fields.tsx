@@ -66,7 +66,7 @@ export function MethodParameterFields({
       <Suspense fallback={<LoadingState title="正在读取参数表单" />}><ContractFields
         module={namespace}
         schema={contract.parameter_schema}
-        root={contract.parameter_schema}
+        root={{ ...contract.parameter_schema, "x-groups": (contract as unknown as Record<string, unknown>)["x-groups"] }}
         values={values}
         prefix=""
         readOnly={readOnly}
