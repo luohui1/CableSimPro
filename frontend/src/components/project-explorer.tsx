@@ -5,6 +5,7 @@ import { methodCatalog, studyIndex, studyRuns, typeIndex, workspaces, type Study
 import { deliveries } from "@/api/delivery";
 import { optionalRecord, text } from "@/api/client";
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
+import { formatNumber } from "@/lib/format";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { Icon } from "./icon";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
@@ -25,12 +26,20 @@ export function calculationKind(study: StudyRow, catalog: Plugin[]) {
   return { icon, label: (text(capability?.title) || study.task).replace(/\s*[（(][^（）()]*[）)]\s*$/, ""), hpc };
 }
 
-/** 运行状态点：来自运行摘要，不读结果正文。 */
+/** 运行状态：来自运行摘要，不读结果正文。有插件声明的关键结论时直接显示答案（如允许电流），否则显示状态点。 */
 function RunDot({ study }: { study: StudyRow }) {
   const runs = useQuery({ queryKey: ["runs", study.workspace, study.id, "summary"], queryFn: ({ signal }) => studyRuns(study.workspace, study.id, signal, "summary") });
-  const status = text(runs.data?.at(-1)?.status);
+  const latest = runs.data?.at(-1), status = text(latest?.status);
   const kind = ["succeeded", "partial"].includes(status) ? "is-ok" : ["failed", "rejected", "cancelled"].includes(status) ? "is-error" : status ? "is-running" : "is-off";
+  const answer = kind === "is-ok" && latest?.freshness !== "historical" ? headlineText(latest?.headlines, 1) : "";
+  if (answer) return <span className="explorer-answer" title={headlineText(latest?.headlines)}>{answer}</span>;
   return <span className={`status-dot ${kind}`} title={kind === "is-ok" ? "已有结果" : kind === "is-error" ? "运行失败" : kind === "is-running" ? "运行中" : "未运行"} />;
+}
+
+/** 关键结论文字：数值 + 显示单位；多于一项时带名称（提示与表格）。 */
+export function headlineText(value: unknown, limit = 3): string {
+  return (Array.isArray(value) ? value : []).map(optionalRecord).filter((row) => typeof row.display_value === "number").slice(0, limit)
+    .map((row) => `${limit > 1 ? text(row.title) + " " : ""}${formatNumber(row.display_value as number, 4)}${text(row.display_unit) ? " " + text(row.display_unit) : ""}`).join(" · ");
 }
 
 function Section({ icon, title, count, children }: { icon: string; title: string; count?: number; children: ReactNode }) {

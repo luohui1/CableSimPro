@@ -8,7 +8,7 @@ import { Conclusion } from "@/components/conclusion";
 import { AddStudyDialog } from "@/components/add-study-dialog";
 import { DataTable, type Column } from "@/components/data-table";
 import { Icon } from "@/components/icon";
-import { calculationKind, ProjectExplorer } from "@/components/project-explorer";
+import { calculationKind, headlineText, ProjectExplorer } from "@/components/project-explorer";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { StatusMark, type StatusKind } from "@/components/status-mark";
 import { Button } from "@/components/ui/button";
@@ -90,8 +90,8 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
     } },
     { id: "kind", label: "任务", render: (row) => row.task || calculationKind(row, catalog.data || []).label },
     { id: "method", label: "插件", wrap: true, render: (row) => `${displayName(text(row.definition.method?.plugin_id))} ${text(row.definition.method?.version)} · ${calculationKind(row, catalog.data || []).hpc ? "超算" : "本机"}` },
+    { id: "answer", label: "结论", wrap: true, numeric: true, render: (row) => { const run = latest.get(row.id); return run?.freshness !== "historical" && headlineText(run?.headlines, 2) || "—"; } },
     { id: "state", label: "状态", render: (row) => { const [kind, label] = runStatus(latest.get(row.id), isVersionStale(row.raw)); return <StatusMark kind={kind} label={label} />; } },
-    { id: "updated", label: "更新", render: (row) => new Date(row.updated).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) },
   ];
 
   const facts = document ? [

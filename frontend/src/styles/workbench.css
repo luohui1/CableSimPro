@@ -487,3 +487,5 @@
 .preview-delta { color: var(--text-secondary); font-size: var(--text-note); }
 .preview-error { color: var(--error); font-size: var(--text-note); }
 .preview-strip .spacer { flex: 1; }
+/* 浏览器里研究的关键结论：替代状态点，等宽数字 */
+.explorer-answer { flex: none; margin-left: auto; color: var(--text-secondary); font-size: var(--text-note); font-variant-numeric: tabular-nums; white-space: nowrap; }
