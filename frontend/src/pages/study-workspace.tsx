@@ -165,7 +165,9 @@ export function StudyWorkspace() {
     (value) => optionalRecord(value).kind === "demo",
   );
   // 工作窗口：模型画布（历史运行显示当时保存的模型）、右侧检查器的方法信息
-  const canvasDocument = (search.run ? (run ? savedDomain(run) : undefined) : context.domain) as DomainDocument | undefined;
+  // 只有查看已过期的运行时才显示当时保存的模型并只读；刚运行完的当前结果仍可直接继续编辑
+  const viewingOldInput = !!search.run && (run?.freshness === "historical" || isVersionStale(run));
+  const canvasDocument = (viewingOldInput ? (run ? savedDomain(run) : undefined) : context.domain) as DomainDocument | undefined;
   const showCanvas = module !== "report" && !!canvasDocument && study.definition.input_source !== "study";
   const canvasView = search.view || "section";
   // 运行后把导体温度直接标在截面电缆上：选型取当前选中或推荐的候选工况
@@ -352,7 +354,7 @@ export function StudyWorkspace() {
           property={module === "report" ? undefined : (
             <WorkbenchInspector
               document={canvasDocument}
-              historical={!!search.run}
+              historical={viewingOldInput}
               selection={inputSelection}
               candidate={module === "selection" && selectedRow ? { title: selectedRow.name, groups: selectedProperties(selectedRow) } : undefined}
               method={methodInfo}
@@ -388,7 +390,7 @@ export function StudyWorkspace() {
                   </button>
                 ))}
               </div>
-              <StudyDrawing document={canvasDocument!} historical={!!search.run} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} onSelect={inputProps.onSelect} annotations={annotations} />
+              <StudyDrawing document={canvasDocument!} historical={viewingOldInput} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} onSelect={inputProps.onSelect} annotations={annotations} />
             </section>
           )}
           <section className="workbench-dock" aria-label="计算结果">
