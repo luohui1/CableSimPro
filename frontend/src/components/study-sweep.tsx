@@ -496,22 +496,23 @@ export function StudySweep({
               />
             ),
           },
-          {
+          // 插件给出判定或原因时才显示这两列；全部为空时不占位
+          ...(rows.some((row) => row.verdict) ? [{
             id: "verdict",
             label: "插件判定",
-            render: (row) =>
+            render: (row: (typeof rows)[number]) =>
               ({
                 satisfied: "满足",
                 not_satisfied: "不满足",
                 unavailable: "无法判断",
-              })[row.verdict] || "未提供",
-          },
-          {
+              } as Record<string, string>)[row.verdict] || "未提供",
+          }] : []),
+          ...(rows.some((row) => row.reason) ? [{
             id: "reason",
             label: "原因",
             wrap: true,
-            render: (row) => row.reason || "—",
-          },
+            render: (row: (typeof rows)[number]) => row.reason || "—",
+          }] : []),
         ]}
       />
     </div>

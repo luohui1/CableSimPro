@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { optionalRecord, numeric, text } from '@/api/client';
 import { EmptyState } from './states';
 import { Select } from './ui/select';
+import { displayName } from '@/lib/display-names';
 
 type Row = Record<string, unknown>;
 const K = 273.15;
@@ -120,7 +121,7 @@ export function StudyHeatDetail({ run, cases, initialCase }: { run?: Row; cases:
         <div><dt>迭代</dt><dd>{numeric(evidence.iterations) ?? '—'} 次</dd></div>
         <div><dt>热平衡残差</dt><dd>{numeric(evidence.residual_k)?.toExponential(1) ?? '—'} K</dd></div>
         <div><dt>交流电阻</dt><dd>{v('ac_resistance') === undefined ? '—' : (v('ac_resistance')! * 1e3).toFixed(4)} Ω/km</dd></div>
-        <div><dt>方法</dt><dd>{text(output.plugin_id)} {text(output.plugin_version)}</dd></div>
+        <div><dt>方法</dt><dd>{displayName(text(output.plugin_id))} {text(output.plugin_version)}</dd></div>
       </dl>
       {!!sources.length && <ul className="heat-sources">{sources.map(s => <li key={s}>{s}</li>)}</ul>}
     </section>

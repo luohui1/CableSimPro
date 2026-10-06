@@ -44,7 +44,7 @@ export function DeliveriesPage() {
       <Select label="PDF 版本" value={audience} disabled={download.isPending} onChange={value => setAudience(value as ReportAudience)} options={[{value:"customer",label:"客户版"},{value:"internal",label:"内部审核版"}]} />
     </Toolbar>
     {spaces.error ? <ErrorState description={message(spaces.error)} action={<Button onClick={() => spaces.refetch()}>重新读取</Button>} />
-      : !wid ? <EmptyState title="选择工程或型号查看交付历史" description="包含已保存的计算书与规格书；存档内容不会随当前输入变化。" />
+      : !wid ? <EmptyState art="report" title="选择工程或型号查看交付历史" description="包含已保存的计算书与规格书；存档内容不会随当前输入变化。" />
       : list.isPending ? <LoadingState title="正在读取交付历史" />
       : list.error ? <ErrorState description={message(list.error)} action={<Button onClick={() => list.refetch()}>重新读取</Button>} />
       : !list.data?.length ? <EmptyState title="尚无交付存档" description="生成计算书或规格书后，可在这里查看和下载各版存档。" />

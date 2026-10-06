@@ -136,6 +136,7 @@ export function DocumentsPage() {
             />
           ) : !catalog.data?.length ? (
             <EmptyState
+              art="report"
               title="尚无厂家资料"
               description="上传 PDF 原件，离线提取后逐项核对。"
             />
