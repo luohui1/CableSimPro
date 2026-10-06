@@ -1,4 +1,5 @@
 import { message, numeric, optionalRecord, record, text, array } from '@/api/client';
+import { CommandAction } from './command-slot';
 import { DataTable } from '@/components/data-table';
 import { EmptyState, ErrorState, LoadingState, StaleBanner } from '@/components/states';
 import { SourceBadge } from '@/components/source-badge';
@@ -23,7 +24,7 @@ export function TypeQuantities({ cable }: { cable: CableType }) {
   const source = saved ? methodLabel(saved.run) + '；已保存原始实体与输入快照' : '';
   const layers: (Record<string, unknown> & { id: string })[] = saved ? array(saved.artifact.layers, '结构推导层').map((value, index) => ({ ...record(value, '结构推导层'), id: String(index) })) : [];
   return <div className="type-page" data-type-page="quantities" data-type-state={saved ? current ? 'success' : 'historical' : 'empty'}>
-    <div className="type-result-toolbar"><TypeRunControl channel="geometry" label="更新结构推导" definition={async () => ({ title: state.document!.name + ' · 结构推导', input_source: 'domain', method: await geometryMethod(), parameters: { cable_type_id: cable.id } })} /></div>
+    <CommandAction><TypeRunControl channel="geometry" label="更新结构推导" definition={async () => ({ title: state.document!.name + ' · 结构推导', input_source: 'domain', method: await geometryMethod(), parameters: { cable_type_id: cable.id } })} /></CommandAction>
     {saved && !current && <StaleBanner description="结构输入或方法已变化；此处保留原运行结果。" />}
     {!saved ? <EmptyState title="尚无保存的结构推导" description="更新结构推导后查看原始实体外径、体积与用料。" /> : <>
       <div className="type-result-summary"><span>成品外径 <strong>{formatNumber(numeric(saved.artifact.outer_diameter_m) === null ? null : numeric(saved.artifact.outer_diameter_m)! * 1000, 2)}</strong><span className="unit">mm</span></span>

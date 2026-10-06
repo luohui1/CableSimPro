@@ -499,3 +499,9 @@
 .capability-description { color: var(--text-secondary); line-height: 1.6; }
 .capability-headlines { display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-note); }
 .capability-headlines > span:not(.muted) { padding: 0 var(--space-2); border-radius: var(--radius-item); background: var(--fill); }
+/* 型号命令栏“计算”组：模块的主运行按钮挂在这里；当前模块没有运行动作时整组隐藏 */
+.command-slot { display: contents; }
+.command-group-slot:has(.command-slot:empty) { display: none; }
+.command-group .type-run-control { flex-wrap: nowrap; gap: var(--space-2); }
+.command-group .type-run-control .muted { font-size: var(--text-note); white-space: nowrap; }
+.command-group .type-run-control .field-error { margin: 0; font-size: var(--text-note); }

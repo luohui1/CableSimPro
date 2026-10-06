@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
+import { TypeCommandSlot } from './command-slot';
 import { message, text } from '@/api/client';
 import { AppShell } from '@/components/app-shell';
 import { Icon } from '@/components/icon';
@@ -33,6 +34,12 @@ export function TypeWorkspace() {
   const [cableId, setCableId] = useState(''), [selected, setSelected] = useState<LayerTarget | null>(null), [collapsed, setCollapsed] = useState(false), [info, setInfo] = useState('');
   const [view, setView] = useState<'section' | 'three'>(location.tab === 'three' ? 'three' : 'section'), [dockMax, setDockMax] = useState(['specification', 'requirements', 'comparison'].includes(location.module));
   const [resultProperty, setResultProperty] = useState<{ title: string; groups: PropertyGroup[] } | null>(null);
+  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  // 电气参数、短路容量的方法参数属于“改输入”，放在右侧方法页；数据区只留结果
+  const methodModule = location.module === 'electrical' || location.module === 'short-circuit';
+  const [inspectorView, setInspectorView] = useState<'input' | 'method'>(methodModule && location.tab === 'parameters' ? 'method' : 'input');
+  // 地址指向方法参数页签（如结果空状态里的“在方法页填写参数”）时打开右侧方法页
+  useEffect(() => { if (methodModule && location.tab === 'parameters') setInspectorView('method'); }, [methodModule, location.tab]);
   const showProperty = useCallback((title: string, groups: PropertyGroup[]) => { setResultProperty({ title, groups }); setCollapsed(false); }, []);
   const clearProperty = useCallback(() => setResultProperty(null), []);
   const document = state.document, cable = document?.cable_types.find(cable => cable.id === cableId) || document?.cable_types[0] || null;
@@ -66,8 +73,8 @@ export function TypeWorkspace() {
     : resultProperty ? <PropertyPanel title={resultProperty.title} groups={resultProperty.groups} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} />
       : <section className="inspector-block" aria-label="所选结果"><header><Icon name="result/table" /><h2>所选结果</h2></header><p className="inspector-empty">选择结果表中的一行，在这里查看依据、条款与来源。</p></section>;
   // 型号工作窗口：画布 = 电缆截面 / 三维剥切；下方停靠栏 = 当前模块的页签；右侧 = 型号名称 + 所选结构层或结果
-  const dockTabs = module?.id === 'structure' ? module.tabs.filter(([id]) => id === 'table' || id === 'quantities') : module?.tabs || [];
-  const dockTab = module?.id === 'structure' ? (location.tab === 'quantities' ? 'quantities' : 'table') : activeTab;
+  const dockTabs = module?.id === 'structure' ? module.tabs.filter(([id]) => id === 'table' || id === 'quantities') : methodModule ? module!.tabs.filter(([id]) => id !== 'parameters') : module?.tabs || [];
+  const dockTab = module?.id === 'structure' ? (location.tab === 'quantities' ? 'quantities' : 'table') : methodModule && activeTab === 'parameters' ? 'results' : activeTab;
   const groups: [string, string, string[]][] = [['结构', 'module/structure', ['structure']], ['要求', 'module/standard-check', ['requirements', 'standard-check']], ['分析', 'calc/electrical-params', ['electrical', 'short-circuit', 'rating-table', 'comparison']], ['交付', 'module/datasheet', ['specification']]];
   // 型号浏览器：侧栏右侧第二层。结构下列出型号里真实的电缆结构，其余为型号的设计与分析环节
   const explorer = <nav className="project-explorer" aria-label="型号浏览器">
@@ -89,13 +96,27 @@ export function TypeWorkspace() {
       <Button size="compact" variant={state.dirty ? 'primary' : 'ghost'} loading={state.busy} disabled={!state.dirty || state.readOnly || !state.workspace} onClick={() => void state.save()}><Icon name="action/save" />{state.dirty ? '保存修改' : '已保存'}</Button>
       <IconButton variant="ghost" icon="action/undo" label="撤销" disabled={state.busy || state.readOnly || !state.dirty && state.workspace?.raw.can_undo !== true} onClick={() => void state.undo()} />
     </div>
+    <div className="command-group command-group-slot" role="group" aria-label="计算">
+      <span className="command-caption">计算</span>
+      <span className="command-slot" ref={setSlot} />
+    </div>
     {specification && <div className="command-group" role="group" aria-label="交付">
       <span className="command-caption">交付</span>
       <Button size="compact" variant="ghost" disabled={state.dirty} onClick={() => go('specification', specification.tabs[0][0])}><Icon name="result/report" />规格书</Button>
     </div>}
     <span className="command-state" role="status">{state.readOnly ? '只读' : state.dirty ? '结构有未保存修改' : '已保存'}</span>
   </div>;
-  const inspector = <div className="type-property-wrapper">
+  const inspector = methodModule && inspectorView === 'method' ? <div className="type-property-wrapper">
+    <div className="inspector-switch" role="tablist" aria-label="属性分页">
+      <button type="button" role="tab" aria-selected={false} onClick={() => setInspectorView('input')}><Icon name="object/conditions" />输入</button>
+      <button type="button" role="tab" aria-selected onClick={() => setInspectorView('method')}><Icon name="nav/plugin" />方法</button>
+    </div>
+    <div className="inspector-method">{document && <TypeModulePage module={location.module} tab="parameters" />}</div>
+  </div> : <div className="type-property-wrapper">
+    {methodModule && <div className="inspector-switch" role="tablist" aria-label="属性分页">
+      <button type="button" role="tab" aria-selected onClick={() => setInspectorView('input')}><Icon name="object/conditions" />输入</button>
+      <button type="button" role="tab" aria-selected={false} onClick={() => setInspectorView('method')}><Icon name="nav/plugin" />方法</button>
+    </div>}
     {document && <section className="inspector-block" aria-label="型号">
       <header><Icon name="nav/cable-type" /><h2>型号</h2></header>
       <label className="text-field">型号名称<input className="type-name-input" value={cleanLabel(document.name)} disabled={state.busy || state.readOnly} onChange={event => state.edit('/name', event.target.value)} /></label>
@@ -103,7 +124,7 @@ export function TypeWorkspace() {
     </section>}
     {property}
   </div>;
-  return <TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<><StatusMark kind={status} label={location.run ? state.workspace?.raw.historical ? '历史运行快照 · 只读' : '运行快照 · 只读' : status === 'locked' ? '已发布 · 只读' : undefined} />{demo && <SourceBadge kind="demo" detail="型号基准与部分物性来自系统演示版本；各字段来源独立保留。" />}</>}
+  return <TypeCommandSlot.Provider value={slot}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<><StatusMark kind={status} label={location.run ? state.workspace?.raw.historical ? '历史运行快照 · 只读' : '运行快照 · 只读' : status === 'locked' ? '已发布 · 只读' : undefined} />{demo && <SourceBadge kind="demo" detail="型号基准与部分物性来自系统演示版本；各字段来源独立保留。" />}</>}
     activeNavigation="型号" theme={location.theme} onTheme={onTheme} onUnavailable={name => setInfo(name + '入口尚未接入')}
     actions={null}
     property={inspector}>
@@ -128,10 +149,10 @@ export function TypeWorkspace() {
           {!document || state.loading ? null : !module ? <ErrorState title="型号模块不存在" description="此地址未注册为型号模块。" />
             : location.module === 'structure' ? (dockTab === 'quantities' ? <TypeStructure tab="quantities" cable={cable} selected={selected} onSelect={choose} /> : <LayerTable rows={rows} selected={selected} onSelect={choose} />)
               : location.tab !== activeTab ? <ErrorState title="页签不存在" description="选择此模块的有效页签继续。" action={<Button onClick={() => go(location.module, activeTab)}>打开默认页签</Button>} />
-                : <TypeModulePage module={location.module} tab={location.tab} />}
+                : <TypeModulePage module={location.module} tab={methodModule ? dockTab : location.tab} />}
         </div></TabsContent>
       </section>
     </div>
     </div>
-  </AppShell></Tabs></TypeInspectorContext.Provider>;
+  </AppShell></Tabs></TypeInspectorContext.Provider></TypeCommandSlot.Provider>;
 }

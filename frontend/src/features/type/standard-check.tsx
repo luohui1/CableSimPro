@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { CommandAction } from './command-slot';
 import { api, ApiError, array, message, numeric, optionalRecord, record, responseData, text } from '@/api/client';
 import { DataTable } from '@/components/data-table';
 import { EmptyState, ErrorState, LoadingState, StaleBanner } from '@/components/states';
@@ -63,7 +64,7 @@ export function TypeStandardCheck() {
   const counts = resultCounts(rows);
   const bodyState = running || evidence.isPending ? 'loading' : error || evidence.error ? 'error' : !saved ? 'empty' : current ? 'success' : 'historical';
   return <div className="type-page" data-type-page="standard-check-results" data-type-state={bodyState}>
-    <div className="type-result-toolbar"><TypeRunControl channel="standard-check" label="执行标准核对" definition={definition} onBusy={setRunning} /><Button size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, 'requirements', 'list', navigation.location.theme))}>要求与批准记录</Button>
+    <div className="type-result-toolbar"><CommandAction><TypeRunControl channel="standard-check" label="执行标准核对" definition={definition} onBusy={setRunning} /></CommandAction><Button size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, 'requirements', 'list', navigation.location.theme))}>要求与批准记录</Button>
       {saved && <Select label="要求状态" value={filter} onChange={setFilter} options={[{ value: 'all', label: '全部要求' }, ...Object.entries(verdicts).map(([value, item]) => ({ value, label: item.label }))]} />}</div>
     {bodyState === 'loading' ? <LoadingState title="正在读取或核对型号要求" /> : bodyState === 'error' ? <ErrorState title="标准核对不可用" description={error || message(evidence.error)} action={<Button onClick={() => void evidence.refetch()}>重新读取</Button>} /> : !saved ? <EmptyState art="standard-check" title="尚无标准核对结果" description="保存型号输入后，执行已安装产品标准插件的覆盖核对。" /> : <>
       {!current && <StaleBanner description="输入或方法已变化；保留原要求与判定，人工批准保持关闭。" />}

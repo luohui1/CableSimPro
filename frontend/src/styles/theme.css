@@ -246,6 +246,8 @@ input { caret-color: var(--text); }
 .tooltip-arrow { fill: var(--panel); }
 .state-view { display: flex; align-items: flex-start; flex-direction: column; gap: var(--space-3); padding-block: var(--space-8); min-width: 0; }
 .state-view h2 { font-size: var(--text-subheading); }
+/* 说明文字可能带宿主原文（长路径、校验明细）：断行并限制在 6 行，完整内容见日志 */
+.state-view p { max-width: 100%; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 6; overflow: hidden; }
 .skeleton-lines { width: 100%; display: grid; gap: var(--space-3); }
 .skeleton-lines > div { height: var(--space-8); background: var(--fill); border-radius: var(--radius-input); }
 .skeleton-lines > div:last-child { width: 65%; }

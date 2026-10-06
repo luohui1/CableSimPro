@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { CommandAction } from './command-slot';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, array, message, numeric, optionalRecord, record, responseData, text } from '@/api/client';
 import type { components } from '@/api/generated/schema';
@@ -58,7 +59,7 @@ export function TypeRequirements({ tab }: { tab: string }) {
   const definition = () => standardDefinition(state.workspace!.id, state.document!.name, state.document!.cable_types[0].id, current ? runId : undefined);
   return <div className="type-page" data-type-page="requirements-results" data-type-state={bodyState}>
     <div className="type-result-toolbar">{saved && <Button variant="primary" size="compact" disabled={!current || !selected.size || !!parseError || !!ledger.error || ledger.isPending || running} loading={approve.isPending} onClick={() => { setReviewer(''); setAck(false); request.current = null; approve.reset(); setOpen(true); }}>批准所选要求</Button>}
-      <TypeRunControl channel="standard-check" label={saved ? '更新要求目录' : '生成要求目录'} primary={!saved} definition={definition} onBusy={setRunning} />
+      <CommandAction><TypeRunControl channel="standard-check" label={saved ? '更新要求目录' : '生成要求目录'} primary={!saved} definition={definition} onBusy={setRunning} /></CommandAction>
       {saved && tab === 'list' && <Select label="批准状态" value={filter} onChange={setFilter} options={[{ value: 'all', label: '全部要求' }, ...Object.entries(states).map(([value, item]) => ({ value, label: item.label }))]} />}
     </div>
     {bodyState === 'loading' ? <LoadingState title="正在读取或更新要求目录" /> : bodyState === 'error' ? <ErrorState title="要求目录不可用" description={parseError || message(evidence.error || ledger.error)} action={<Button onClick={() => void Promise.all([evidence.refetch(), runId ? ledger.refetch() : Promise.resolve()])}>重新读取</Button>} /> : !saved ? <EmptyState title="尚无要求目录" description="保存型号后生成条款，再核对来源与批准状态。" /> : <>

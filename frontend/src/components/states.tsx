@@ -18,7 +18,7 @@ export function LoadingState({ title = '正在读取选型结果', description =
   return <div className="state-view" role="status" aria-busy="true"><StatusMark kind="running" label={title} /><p className="muted">{description}</p><div className="skeleton-lines" aria-hidden="true"><div /><div /><div /></div></div>;
 }
 export function ErrorState({ title = '结果读取失败', description, action }: { title?: string; description: string; action?: ReactNode }) {
-  return <div className="state-view" role="alert"><StatusMark kind="error" label={title} /><p className="muted">{displayText(description)}</p>{action}</div>;
+  return <div className="state-view" role="alert"><StatusMark kind="error" label={title} /><p className="muted" title={displayText(description)}>{displayText(description)}</p>{action}</div>;
 }
 export function StaleBanner({ description = '输入已变化，以下为历史结果。', action }: { description?: string; action?: ReactNode }) {
   return <div className="stale-banner" role="status"><StatusMark kind="historical" /><span>{description}</span>{action}</div>;
