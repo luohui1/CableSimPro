@@ -82,8 +82,8 @@ export function StudyWorkspace() {
   const theme = search.theme;
   const projectIndex = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
   const [selected, setSelected] = useState<SelectionRow | undefined>();
-  // 以曲线、场图为主的计算默认放大结果栏；选型、载流量默认模型与结果各半
-  const plotFirst = (key: string) => ["sweep", "batch", "method-compare", "simulation", "hybrid", "thermal-field", "electrothermal", "transient"].includes(key);
+  // 以曲线为主的研究默认放大数据区；选型、载流量和温度场类研究默认模型与结果各半（温度场画在画布上）
+  const plotFirst = (key: string) => ["sweep", "batch", "method-compare", "simulation", "hybrid"].includes(key);
   const [dockMax, setDockMax] = useState(plotFirst(module));
   const [creating, setCreating] = useState(false);
   const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
