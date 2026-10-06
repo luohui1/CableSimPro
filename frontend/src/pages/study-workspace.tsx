@@ -4,7 +4,7 @@ import { Link, Navigate } from "@tanstack/react-router";
 import { studyModuleRoute, studyRootRoute } from "@/router";
 import { useStudy } from "@/components/study-provider";
 import { AppShell } from "@/components/app-shell";
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { RunRecordsDrawer } from "@/components/run-records-drawer";
@@ -196,18 +196,29 @@ export function StudyWorkspace() {
           ? "running"
           : "saved";
   const title = draft?.title || study.title;
-  const sidebar = enabled.map((key) => (
-    <Link
-      key={key}
-      className="module-item"
-      to="/studies/$sid/$module/$tab"
-      params={{ sid, module: key, tab: moduleDefinitions[key].tabs[0].id }}
-      search={{ ...search, workspace: study.workspace }}
-      aria-current={key === module ? "page" : undefined}
-    >
-      <Icon name={moduleDefinitions[key].icon} />
-      {moduleDefinitions[key].label}
-    </Link>
+  // 侧栏按“输入 → 计算 → 交付”分三组，组内保持模块启用顺序
+  const groups: [string, string[]][] = [
+    ["输入", enabled.filter((key) => ["cable", "section", "conditions"].includes(key))],
+    ["计算", enabled.filter((key) => !["cable", "section", "conditions", "report"].includes(key))],
+    ["交付", enabled.filter((key) => key === "report")],
+  ];
+  const sidebar = groups.filter(([, keys]) => keys.length).map(([label, keys]) => (
+    <div key={label} className="sidebar-group" role="group" aria-label={label}>
+      <span className="sidebar-group-label">{label}</span>
+      {keys.map((key) => (
+        <Link
+          key={key}
+          className="module-item"
+          to="/studies/$sid/$module/$tab"
+          params={{ sid, module: key, tab: moduleDefinitions[key].tabs[0].id }}
+          search={{ ...search, workspace: study.workspace }}
+          aria-current={key === module ? "page" : undefined}
+        >
+          <Icon name={moduleDefinitions[key].icon} />
+          {moduleDefinitions[key].label}
+        </Link>
+      ))}
+    </div>
   ));
   function currentSearch() {
     return { ...search, workspace: study.workspace };
@@ -256,8 +267,8 @@ export function StudyWorkspace() {
           actions={
             <>
               {!inputModule && <>
-                <Button variant="ghost" size="compact" disabled={!context.canUndo || context.saving} onClick={() => void context.undo()} title="Ctrl+Z">撤销研究</Button>
-                <Button variant="ghost" size="compact" disabled={!context.canRedo || context.saving} onClick={() => void context.redo()} title="Ctrl+Y">重做研究</Button>
+                <IconButton variant="ghost" icon="action/undo" label="撤销研究" disabled={!context.canUndo || context.saving} onClick={() => void context.undo()} />
+                <IconButton variant="ghost" icon="action/redo" label="重做研究" disabled={!context.canRedo || context.saving} onClick={() => void context.redo()} />
               </>}
               <Button size="compact" onClick={() => setRecords(true)}>
                 运行记录

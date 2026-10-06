@@ -5,6 +5,7 @@ import { studyIndex, workspaces } from '@/api/research';
 import { text } from '@/api/client';
 import { rootModule, studyEntryTab } from '@/lib/study-config';
 import { Icon } from './icon';
+import { BrandLogo } from './brand';
 import { Button } from './ui/button';
 import { Select } from './ui/select';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
@@ -27,6 +28,7 @@ export function WorkbenchSidebar({ theme, onTheme, activeNavigation, sidebar, ga
     { id: 'simulation', label: '电缆仿真', icon: 'nav/simulation', to: '/studies' },
   ];
   return <aside className="workbench-sidebar" aria-label="工作空间与导航">
+    <BrandLogo theme={theme} />
     <Select label="工作空间" placeholder={spaces.isError ? '工作空间读取失败' : '选择工作空间'} value={selectedSpace} loading={spaces.isPending}
       options={(spaces.data || []).map(space => ({ value: text(space.id), label: text(space.name) || '未命名工程' }))}
       onChange={workspace => {

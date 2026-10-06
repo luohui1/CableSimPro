@@ -10,7 +10,7 @@ import {
 } from "@buildnbuzz/form-react";
 import { useDataField } from "@buildnbuzz/form-react";
 import { Input } from "@/components/ui/input";
-import { CopyButton } from "../components/copy-button";
+import { CopyButton } from "../components/clipboard-button";
 import {
   InputGroup,
   InputGroupAddon,

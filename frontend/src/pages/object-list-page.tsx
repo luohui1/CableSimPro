@@ -9,7 +9,6 @@ import {
 } from "@/api/research";
 import { message, text } from "@/api/client";
 import { AppShell } from "@/components/app-shell";
-import { SiteSidebar } from "@/components/site-sidebar";
 import { CreateStudyDialog } from "@/components/create-study-dialog";
 import { DataTable, type Column } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
@@ -26,6 +25,36 @@ import { Icon } from "@/components/icon";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { VersionNotice } from '@/components/version-notice';
 import { isVersionStale } from '@/lib/version-status';
+
+const SIMULATION_MODULES = ["simulation", "electrothermal", "transient", "sheath-losses", "thermal-field", "batch"];
+
+/** 首页三个核心领域入口：数字全部来自宿主列表，读不到时显示“—”。 */
+function HomeAreas({ theme, studies, types, succeeded }: { theme: "light" | "dark"; studies: StudyRow[]; types?: number; succeeded: number }) {
+  const simulation = studies.filter((row) => SIMULATION_MODULES.includes(rootModule(row.definition))).length;
+  const areas = [
+    { id: "ampacity", icon: "calc/ampacity", title: "载流量计算", copy: "IEC 60287 选型、参数扫描与方法对比", count: studies.length - simulation, unit: "个研究", to: "/studies" as const, search: { theme, kind: "ampacity" } },
+    { id: "design", icon: "nav/cable-type", title: "电缆设计", copy: "结构、标准核对、电气参数与规格书", count: types, unit: "个型号", to: "/types" as const, search: { theme } },
+    { id: "simulation", icon: "calc/thermal-field", title: "电缆仿真", copy: "有限元温度场、电热耦合与论文复现", count: simulation, unit: "个研究", to: "/studies" as const, search: { theme, kind: "simulation" } },
+  ];
+  return (
+    <section className="home-hero" aria-label="工作台概况">
+      <div className="home-greeting">
+        <h2>电缆设计与计算工作台</h2>
+        <p className="muted">每个结果都能追溯到输入、方法和版本。{studies.length ? `已有 ${studies.length} 个研究，其中 ${succeeded} 个已有计算结果。` : ""}</p>
+      </div>
+      <div className="home-areas">
+        {areas.map((area) => (
+          <Link key={area.id} className="home-area" to={area.to} search={area.search}>
+            <span className="home-area-icon"><Icon name={area.icon} /></span>
+            <strong>{area.title}</strong>
+            <span className="muted">{area.copy}</span>
+            <span className="home-area-count"><b>{area.count ?? "—"}</b> {area.unit}<Icon name="action/arrow-right" /></span>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 export function ObjectListPage({ home = false }: { home?: boolean }) {
   const search = useSearch({ strict: false });
@@ -171,7 +200,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
   return (
     <>
       <AppShell
-        title={home ? "CableSimPro" : search.kind === "simulation" ? "仿真复现研究" : "研究"}
+        title={home ? "首页" : search.kind === "simulation" ? "仿真复现研究" : "研究"}
         status={
           (studies.isError || studies.isFetching) && <StatusMark
             kind={
@@ -220,7 +249,6 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
           </>
         }
         activeNavigation={home ? "首页" : "研究"}
-        sidebar={<SiteSidebar theme={theme} />}
         onGlobalNavigate={global}
         onUnavailable={setNotice}
         theme={theme}
@@ -232,22 +260,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
           })
         }
       >
-        {home && (
-          <div className="object-entries">
-            <Link to="/types" search={{ theme }}>
-              <Icon name="nav/cable-type" />
-              <strong>型号</strong>
-              <span className="muted">结构设计与规格书</span>
-              <Icon name="action/chevron-right" />
-            </Link>
-            <Link to="/studies" search={{ theme }}>
-              <Icon name="nav/study" />
-              <strong>研究</strong>
-              <span className="muted">问询选型与计算书</span>
-              <Icon name="action/chevron-right" />
-            </Link>
-          </div>
-        )}
+        {home && <HomeAreas theme={theme} studies={studies.data || []} types={types.data?.length} succeeded={(studies.data || []).filter((row) => ["succeeded", "partial"].includes(text(statuses.get(row.id)?.data?.at(-1)?.status))).length} />}
         {studies.isError && studies.data && (
           <StaleBanner description="连接中断，保留上次读取的列表。" />
         )}

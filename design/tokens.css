@@ -34,6 +34,13 @@
   --phase-a: #B38F00;
   --phase-b: #2E8B57;
   --phase-c: #C0392B;
+  --brand-ink: #12283A;
+  --brand-primary: #0064BC;
+  --brand-signal: #00A6E4;
+  --brand-insulation: #A3ABB3;
+  --brand-insulation-edge: #CDD2D7;
+  --brand-core: #182838;
+  --brand-strand-edge: #B56A40;
   --temperature-1: #FBF3E4;
   --temperature-2: #F2C98A;
   --temperature-3: #E58B47;
@@ -103,4 +110,11 @@
   --phase-a: #E3C02E;
   --phase-b: #52B37A;
   --phase-c: #F07468;
+  --brand-ink: #D7E2EC;
+  --brand-primary: #4FA3E8;
+  --brand-signal: #4CC8F4;
+  --brand-insulation: #6C747C;
+  --brand-insulation-edge: #8A929A;
+  --brand-core: #0B0C0E;
+  --brand-strand-edge: #8C4E2C;
 }

@@ -16,7 +16,7 @@ page.on('pageerror',e=>report.errors.push(e.message));
 page.on('request',r=>{if(r.method()==='POST'&&/\/(undo|redo|runs)$/.test(new URL(r.url()).pathname))report.requests.push({url:r.url(),body:r.postDataJSON()});});
 const api=(p,m,b)=>request(base,p,m,b);
 async function go(p){await page.goto('about:blank');await page.goto(base+p);await settle(page);}
-async function variants(label){for(const size of [{width:1366,height:768},{width:1920,height:1080}]){await page.setViewportSize(size);for(const theme of ['light','dark']){await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);await assertLayout(page,label,{includeFrames:label!=='交付历史'});report.states.push({label,...size,theme});}}}
+async function variants(label){for(const size of [{width:1366,height:768},{width:1920,height:1080}]){await page.setViewportSize(size);for(const theme of ['light','dark']){await page.evaluate(t=>document.documentElement.dataset.theme=t,theme);await page.waitForTimeout(250);await assertLayout(page,label,{includeFrames:label!=='交付历史'});report.states.push({label,...size,theme});}}}
 async function shot(name){await page.setViewportSize({width:1366,height:768});await page.evaluate(()=>document.documentElement.dataset.theme='light');await page.screenshot({path:path.join(out,name+'.png')});}
 async function downloaded(promise){const file=await promise,stream=await file.createReadStream(),chunks=[];for await(const chunk of stream)chunks.push(chunk);return{name:file.suggestedFilename(),bytes:Buffer.concat(chunks)};}
 try{
