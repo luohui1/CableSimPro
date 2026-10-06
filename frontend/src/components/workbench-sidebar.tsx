@@ -67,7 +67,7 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
               <Link className="tree-row" to="/types/$wid/$module/$tab" params={{ wid, module: 'structure', tab: 'section' }} search={{ theme }} aria-current={active ? 'page' : undefined}>
                 <span className="tree-twist" aria-hidden="true">{active ? '▾' : '▸'}</span><Icon name="object/cable" /><span className="tree-label">{text(row.name)}</span>
               </Link>
-              {active && <nav ref={onSlot} className="sidebar-modules" aria-label="型号模块" />}
+              {active && <nav ref={onSlot} className="tree-children" aria-label="型号模块" />}
             </div>;
           })}
           {inGallery && <nav ref={onSlot} className="sidebar-modules" aria-label="陈列导航" />}

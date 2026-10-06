@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
 import { message, text } from '@/api/client';
 import { AppShell } from '@/components/app-shell';
-import { CheckArea } from '@/components/check-area';
 import { Icon } from '@/components/icon';
 import { PropertyPanel, type PropertyGroup } from '@/components/property-panel';
 import { SourceBadge } from '@/components/source-badge';
 import { StatusMark } from '@/components/status-mark';
-import { Button } from '@/components/ui/button';
+import { Button, IconButton } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
@@ -15,7 +14,7 @@ import { sourceKind } from '@/lib/selection-view';
 import { formatNumber } from '@/lib/format';
 import type { LayerTarget } from '@/features/drawing/types';
 import { targetId } from '@/features/drawing/cable-geometry';
-import { TypeStructure, TypeNumericField, nominalArea } from './structure';
+import { TypeStructure, TypeNumericField, TypeCanvas, LayerTable, nominalArea } from './structure';
 import { layerRows } from './layers';
 import { useTypeWorkspace } from './provider';
 import { typePath, useTypeNavigation } from './navigation';
@@ -32,6 +31,7 @@ export function TypeWorkspace() {
   const module = typeModules.find(module => module.id === location.module);
   const activeTab = module?.tabs.some(([id]) => id === location.tab) ? location.tab : module?.tabs[0][0] || location.tab;
   const [cableId, setCableId] = useState(''), [selected, setSelected] = useState<LayerTarget | null>(null), [collapsed, setCollapsed] = useState(false), [info, setInfo] = useState('');
+  const [view, setView] = useState<'section' | 'three'>(location.tab === 'three' ? 'three' : 'section'), [dockMax, setDockMax] = useState(false);
   const [resultProperty, setResultProperty] = useState<{ title: string; groups: PropertyGroup[] } | null>(null);
   const showProperty = useCallback((title: string, groups: PropertyGroup[]) => { setResultProperty({ title, groups }); setCollapsed(false); }, []);
   const clearProperty = useCallback(() => setResultProperty(null), []);
@@ -49,7 +49,7 @@ export function TypeWorkspace() {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !(event.target as HTMLElement).closest('input,textarea,[contenteditable=true]')) { event.preventDefault(); void state.undo(); }
     if (event.key === 'Escape' && !(event.target as HTMLElement).closest('input,textarea,[role=dialog],[role=combobox]')) { choose(null); setInfo(''); }
   }
-  useEffect(() => { setInfo(''); setResultProperty(null); setCollapsed(location.module !== 'structure' || location.tab === 'table' && !selected); }, [location.module, location.tab, selected]);
+  useEffect(() => { setInfo(''); setResultProperty(null); setCollapsed(false); }, [location.module, location.tab, selected]);
   useEffect(() => { if (location.module === 'structure' && location.layer) { const row = rows.find(row => row.id === location.layer); if (row) { setSelected(row.target); setCollapsed(false); } } }, [location.module, location.layer, cable?.id]);
   const property = location.module === 'structure' && document && row ? <div className="type-property-wrapper">
     <PropertyPanel title={row.label} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} groups={[{ label: '结构输入', items: [
@@ -61,20 +61,50 @@ export function TypeWorkspace() {
       <Select label="材料引用" value={row.material.id} disabled={state.busy || state.locked(row.materialPath)} options={document.materials.filter(item => item.category === row.material.category).map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={material => state.edit(row.materialPath, material)} />
       {!sourceKind(source) && source.kind !== 'demo' && <p className="muted">此尺寸未提供来源。</p>}<StructurePropertyInputs row={row} /></div>}
   </div> : location.module === 'structure' ? <PropertyPanel title="所选结构层" groups={[{ label: '未选择结构层', items: [{ label: '提示', value: '选择截面编号或分层表中的行' }] }]} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} /> : <PropertyPanel title={resultProperty?.title || '所选结果'} groups={resultProperty?.groups || [{ label: '未选择结果', items: [{ label: '提示', value: '选择结果行查看依据与来源' }] }]} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} />;
-  return <TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={activeTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<><StatusMark kind={status} label={location.run ? state.workspace?.raw.historical ? '历史运行快照 · 只读' : '运行快照 · 只读' : status === 'locked' ? '已发布 · 只读' : undefined} />{demo && <SourceBadge kind="demo" detail="型号基准与部分物性来自系统演示版本；各字段来源独立保留。" />}</>}
+  // 型号工作窗口：画布 = 电缆截面 / 三维剥切；下方停靠栏 = 当前模块的页签；右侧 = 型号名称 + 所选结构层或结果
+  const dockTabs = module?.id === 'structure' ? module.tabs.filter(([id]) => id === 'table' || id === 'quantities') : module?.tabs || [];
+  const dockTab = module?.id === 'structure' ? (location.tab === 'quantities' ? 'quantities' : 'table') : activeTab;
+  const groups: [string, string, string[]][] = [['结构', 'module/structure', ['structure']], ['要求', 'module/standard-check', ['requirements', 'standard-check']], ['分析', 'calc/electrical-params', ['electrical', 'short-circuit', 'rating-table', 'comparison']], ['交付', 'module/datasheet', ['specification']]];
+  const sidebar = <>{groups.map(([label, icon, ids]) => <div key={label} role="group" aria-label={label}>
+    <div className="tree-group"><Icon name={icon} />{label}</div>
+    {ids.map(id => { const item = typeModules.find(entry => entry.id === id)!; return <button key={id} type="button" className="tree-row tree-leaf" aria-current={location.module === id ? 'page' : undefined} onClick={() => go(id, id === 'structure' ? 'table' : item.tabs[0][0])}><Icon name={item.icon} /><span className="tree-label">{item.label}</span></button>; })}
+  </div>)}</>;
+  const inspector = <div className="type-property-wrapper">
+    {document && <section className="inspector-block" aria-label="型号">
+      <header><Icon name="nav/cable-type" /><h2>型号</h2></header>
+      <label className="text-field">型号名称<input className="type-name-input" value={cleanLabel(document.name)} disabled={state.busy || state.readOnly} onChange={event => state.edit('/name', event.target.value)} /></label>
+      {document.cable_types.length > 1 && <Select label="电缆结构" value={cable?.id} disabled={state.busy} options={document.cable_types.map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={value => { setCableId(value); choose(null); }} />}
+    </section>}
+    {property}
+  </div>;
+  return <TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<><StatusMark kind={status} label={location.run ? state.workspace?.raw.historical ? '历史运行快照 · 只读' : '运行快照 · 只读' : status === 'locked' ? '已发布 · 只读' : undefined} />{demo && <SourceBadge kind="demo" detail="型号基准与部分物性来自系统演示版本；各字段来源独立保留。" />}</>}
     activeNavigation="型号" theme={location.theme} onTheme={onTheme} onUnavailable={name => setInfo(name + '入口尚未接入')}
-    sidebar={<><button className="module-item" type="button" onClick={() => navigate('/types?theme=' + location.theme)}><Icon name="nav/cable-type" /><span>型号列表</span></button>{typeModules.map(module => <button key={module.id} className="module-item" type="button" aria-current={location.module === module.id ? 'page' : undefined} onClick={() => go(module.id, module.tabs[0][0])}><Icon name={module.icon} /><span>{module.label}</span></button>)}</>}
+    sidebar={sidebar}
     actions={<><Button variant="ghost" size="compact" onClick={() => void state.undo()} disabled={state.busy || state.readOnly || !state.dirty && state.workspace?.raw.can_undo !== true}>撤销</Button>
-      <Button variant={location.module === 'structure' ? 'primary' : 'default'} size="compact" loading={state.busy} disabled={!state.dirty || state.readOnly || !state.workspace} onClick={() => void state.save()}>保存</Button></>}
-    tabs={module && module.tabs.length > 1 ? <TabsList aria-label={module.label + '页签'}>{module.tabs.map(([id, label]) => <TabsTrigger key={id} value={id}>{label}</TabsTrigger>)}</TabsList> : undefined}
-    property={property} propertyCollapsed={collapsed}
-    checks={<CheckArea summary={state.error ? '输入保存失败' : state.dirty ? '输入待保存 · 原结果已失效' : state.readOnly ? '只读型号版本' : '输入已保存 · 标准判定见标准核对'}><p>{structureError || '尺寸与材料由宿主校验；标准判定从保存的插件结果读取。'}</p></CheckArea>}>
-    <TabsContent asChild value={activeTab}><div className="type-page" aria-label={module?.label || '型号模块'} data-type-page={location.module} data-type-state={state.loading ? 'loading' : !document && state.error ? 'error' : !document || !document.cable_types.length ? 'empty' : state.workspace?.raw.historical ? 'historical' : 'success'}>
-      {state.error && document && <p className="type-notice is-error" role="alert">{state.error}</p>}{(info || state.notice) && <p className="type-notice" role="status">{info || state.notice}</p>}
-      {state.loading ? <LoadingState title="正在读取型号输入" /> : !document && state.error ? <ErrorState title="型号读取失败" description={state.error} action={<Button onClick={state.reload}>重新读取</Button>} /> : !document ? <EmptyState title="尚无型号输入" description="从型号列表选择型号。" /> : !module ? <ErrorState title="型号模块不存在" description="此地址未注册为型号模块。" /> : <>
-        {location.module === 'structure' && !state.readOnly && <div className="type-name-row"><label htmlFor="type-name">型号名称</label><input id="type-name" className="type-name-input" value={cleanLabel(document.name)} disabled={state.busy} onChange={event => state.edit('/name', event.target.value)} />{document.cable_types.length > 1 && <Select label="电缆结构" value={cable?.id} disabled={state.busy} options={document.cable_types.map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={value => { setCableId(value); choose(null); }} />}</div>}
-        {location.tab !== activeTab ? <ErrorState title="页签不存在" description="选择此模块的有效页签继续。" action={<Button onClick={() => go(location.module, activeTab)}>打开默认页签</Button>} /> : location.module === 'structure' ? <TypeStructure tab={location.tab} cable={cable} selected={selected} onSelect={choose} /> : <TypeModulePage module={location.module} tab={location.tab} />}
-      </>}
-    </div></TabsContent>
+      <Button variant="primary" size="compact" loading={state.busy} disabled={!state.dirty || state.readOnly || !state.workspace} onClick={() => void state.save()}>保存</Button></>}
+    property={inspector}>
+    <div className="workbench" data-dock={dockMax ? 'max' : undefined}>
+      <section className="workbench-canvas type-canvas" aria-label="电缆模型">
+        <div className="workbench-views" role="group" aria-label="模型视图">
+          {([['section', 'object/cable', '电缆截面'], ['three', 'result/field', '三维剥切']] as const).map(([value, icon, label]) => <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)}><Icon name={icon} />{label}</button>)}
+        </div>
+        {state.loading ? <LoadingState title="正在读取型号输入" /> : !document && state.error ? <ErrorState title="型号读取失败" description={state.error} action={<Button onClick={state.reload}>重新读取</Button>} /> : !document ? <EmptyState title="尚无型号输入" description="从型号列表选择型号。" /> : <TypeCanvas view={view} cable={cable} selected={selected} onSelect={choose} />}
+        {structureError && <p className="type-notice is-error" role="alert">{structureError}</p>}
+      </section>
+      <section className="workbench-dock" aria-label={module?.label || '型号模块'}>
+        <div className="workbench-dock-bar">
+          {dockTabs.length > 1 ? <TabsList aria-label={(module?.label || '') + '页签'}>{dockTabs.map(([id, label]) => <TabsTrigger key={id} value={id}>{label}</TabsTrigger>)}</TabsList> : <span className="workbench-dock-title">{module?.label}</span>}
+          <IconButton variant="ghost" icon={dockMax ? 'action/chevron-down' : 'action/chevron-up'} label={dockMax ? '还原结果面板' : '放大结果面板'} onClick={() => setDockMax(!dockMax)} />
+        </div>
+        <TabsContent asChild value={dockTab}><div className="type-page workbench-dock-body" aria-label={module?.label || '型号模块'} data-type-page={location.module} data-type-state={state.loading ? 'loading' : !document && state.error ? 'error' : !document || !document.cable_types.length ? 'empty' : state.workspace?.raw.historical ? 'historical' : 'success'}>
+          {state.error && document && <p className="type-notice is-error" role="alert">{state.error}</p>}{(info || state.notice) && <p className="type-notice" role="status">{info || state.notice}</p>}
+          {state.dirty && <p className="type-notice">结构修改待保存；已保存的外径、用料和校核结果已标为历史。</p>}
+          {!document || state.loading ? null : !module ? <ErrorState title="型号模块不存在" description="此地址未注册为型号模块。" />
+            : location.module === 'structure' ? (dockTab === 'quantities' ? <TypeStructure tab="quantities" cable={cable} selected={selected} onSelect={choose} /> : <LayerTable rows={rows} selected={selected} onSelect={choose} />)
+              : location.tab !== activeTab ? <ErrorState title="页签不存在" description="选择此模块的有效页签继续。" action={<Button onClick={() => go(location.module, activeTab)}>打开默认页签</Button>} />
+                : <TypeModulePage module={location.module} tab={location.tab} />}
+        </div></TabsContent>
+      </section>
+    </div>
   </AppShell></Tabs></TypeInspectorContext.Provider>;
 }

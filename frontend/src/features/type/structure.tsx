@@ -51,4 +51,18 @@ export function TypeStructure({ tab, cable, selected, onSelect }: { tab: string;
     {state.dirty && <p className="type-notice">结构修改待保存；已保存的外径、用料和校核结果已标为历史。</p>}
   </>;
 }
+/** 工作窗口画布：电缆截面（可直接拖改尺寸）或三维剥切，上方是增删结构层的操作。 */
+export function TypeCanvas({ view, cable, selected, onSelect }: { view: 'section' | 'three'; cable: CableType | null; selected: LayerTarget | null; onSelect: (target: LayerTarget | null) => void }) {
+  const state = useTypeWorkspace();
+  if (!state.document || !cable) return <EmptyState title="型号没有结构" description="当前型号未提供电缆与结构层。" />;
+  let rows: LayerRow[];
+  try { rows = layerRows(state.document, cable); } catch (error) { return <ErrorState title="结构不可绘制" description={error instanceof Error ? error.message : String(error)} />; }
+  return <>
+    <StructureActions cable={cable} selected={selected} onSelect={onSelect} />
+    {view === 'three' ? <TypeGeometry cable={cable} selected={selected} onSelect={onSelect} /> : <CableSection cableType={cable} materials={state.document.materials} selectedObject={selected} onSelectionChange={onSelect}
+      state={state.workspace?.raw.historical ? 'historical' : 'success'} editable={!state.readOnly && !state.busy} showDimensions onCommand={command => { if (command === 'save') void state.save(); if (command === 'undo') void state.undo(); }}
+      isLocked={target => { const row = rows.find(row => row.id === targetId(target)); return !row || state.locked(row.path); }}
+      onDimensionChange={edit => { const row = rows.find(row => row.id === targetId(edit.target)); if (!row) throw new Error('所选结构层已不存在'); state.edit(row.path, edit.valueM); }} />}
+  </>;
+}
 export function nominalArea(document: unknown, row: LayerRow): number | null { return row.target.scope === 'core' && row.target.role === 'conductor' ? numeric(at(document, row.path.replace(/diameter$/, 'nominal_area'))) : null; }
