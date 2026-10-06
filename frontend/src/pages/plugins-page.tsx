@@ -13,17 +13,21 @@ import { Tooltip } from "@/components/ui/tooltip";
 
 type Row = Record<string, unknown>;
 
-/** 插件归类：按清单里声明的分析类型与运行位置判断，不按插件编号写死；新安装的插件自动进入对应分组。 */
-const GROUP_ORDER = ["计算方法", "建模", "仿真", "数据与标准"] as const;
-function pluginGroup(row: Row): (typeof GROUP_ORDER)[number] {
+/** 插件类别：以清单 presentation.category 为准；早期清单没有声明时按分析类型与运行位置推断。 */
+const CATEGORIES: [string, string][] = [["calculation", "计算方法"], ["modeling", "建模"], ["simulation", "仿真"], ["data-standard", "数据与标准"], ["report", "报告"], ["agent-skill", "Agent 技能"]];
+function pluginGroup(row: Row): string {
+  const declared = text(optionalRecord(row.presentation).category);
+  if (CATEGORIES.some(([id]) => id === declared)) return declared;
   const analyses = (Array.isArray(row.capabilities) ? row.capabilities : []).map((cap) => text(optionalRecord(cap).analysis));
-  if (analyses.some((kind) => kind === "extraction" || kind === "standard_check")) return "数据与标准";
-  if (text(optionalRecord(row.execution_policy).backend) === "slurm" || analyses.some((kind) => kind === "mesh" || kind === "frequency_domain" || kind === "postprocess")) return "仿真";
-  if (analyses.length && analyses.every((kind) => kind === "geometry")) return "建模";
-  return "计算方法";
+  if (analyses.some((kind) => kind === "extraction" || kind === "standard_check")) return "data-standard";
+  if (text(optionalRecord(row.execution_policy).backend) === "slurm" || analyses.some((kind) => kind === "mesh" || kind === "frequency_domain" || kind === "postprocess")) return "simulation";
+  if (analyses.length && analyses.every((kind) => kind === "geometry")) return "modeling";
+  return "calculation";
 }
 const list = (value: unknown) => (Array.isArray(value) ? value : []);
 const pluginId = (row: Row) => text(optionalRecord(row.method).plugin_id);
+/** 插件封签内的展示资源（封面、方法图、验证图），由宿主核验摘要后提供。 */
+const resource = (row: Row, role: string) => list(row.resources).map(optionalRecord).find((item) => text(item.role) === role);
 
 /** 插件：左侧按领域分组的已安装插件，右侧逐项剖析选中插件（能力、验证、范围、运行策略、被谁使用）。 */
 export function PluginsPage() {
@@ -32,7 +36,7 @@ export function PluginsPage() {
   const { theme } = usePageTheme();
   const { pid } = useParams({ strict: false }) as { pid?: string };
   const rows = (catalog.data || []) as Row[];
-  const groups: [string, Row[]][] = GROUP_ORDER.map((label) => [label, rows.filter((row) => pluginGroup(row) === label)] as [string, Row[]]).filter(([, items]) => items.length);
+  const groups: [string, Row[]][] = CATEGORIES.map(([id, label]) => [text(optionalRecord(rows.find((row) => pluginGroup(row) === id)?.presentation).category_title) || label, rows.filter((row) => pluginGroup(row) === id)] as [string, Row[]]).filter(([, items]) => items.length);
   const selected = rows.find((row) => pluginId(row) === pid) || groups[0]?.[1][0];
 
   return (
@@ -45,7 +49,7 @@ export function PluginsPage() {
               <h2>{label}</h2>
               {items.map((row) => {
                 const id = pluginId(row);
-                const art = pluginArt(id);
+                const art = text(resource(row, "cover")?.url) || pluginArt(id);
                 const policy = optionalRecord(row.execution_policy);
                 return <Link key={id} className="plugin-item" to="/plugins/$pid" params={{ pid: id }} search={{ theme }} aria-current={row === selected ? "page" : undefined}>
                   {art ? <img src={art} alt="" /> : <span className="plugin-item-art" />}
@@ -75,13 +79,15 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
   const policy = optionalRecord(row.execution_policy);
   const caps = list(row.capabilities).map(optionalRecord);
   const platforms = list(row.platforms).map(text).map((p) => p.replace("windows", "Windows").replace("linux", "Linux").replace("darwin", "macOS").replace("-x64", " x64").replace("-arm64", " arm64"));
-  const art = pluginArt(id);
+  const art = text(resource(row, "cover")?.url) || pluginArt(id);
+  const figure = resource(row, "method"), validationFigure = resource(row, "validation");
+  const presentation = optionalRecord(row.presentation);
   const enforced = [policy.timeout_enforced && "强制超时", policy.parent_death_enforced && "宿主退出即终止", policy.process_tree_cleanup_enforced && "清理子进程", policy.memory_limit_enforced && "内存上限", policy.network_isolation_enforced && "断网运行"].filter(Boolean) as string[];
   return <article className="plugin-detail" aria-label={text(row.name)}>
     <header className="plugin-hero">
       {art && <img src={art} alt="" />}
       <div>
-        <h1>{text(row.name)}</h1>
+        <h1>{text(row.name)}{text(presentation.category_title) && <span className="tag">{text(presentation.category_title)}</span>}</h1>
         <p className="plugin-id"><code>{id}</code><span>{text(method.version)}</span></p>
         <p className="plugin-description">{text(row.description)}</p>
       </div>
@@ -94,6 +100,11 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
       <div><dt>被研究使用</dt><dd>{studies.length} 个</dd></div>
     </dl>
 
+    {figure && <section className="plugin-section">
+      <h2>方法</h2>
+      <figure className="plugin-figure"><img src={text(figure.url)} alt={text(figure.title)} /><figcaption><b>{text(figure.title)}</b>{text(figure.description)}</figcaption></figure>
+    </section>}
+
     <section className="plugin-section">
       <h2>能力 <span className="muted">{caps.length}</span></h2>
       <ol className="capability-list">
@@ -102,21 +113,33 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
           const cases = list(validation.cases).map(text).filter(Boolean);
           const limits = list(cap.limitations).map(text).filter(Boolean);
           const outputs = list(cap.outputs).map((o) => text(optionalRecord(o).key)).filter(Boolean);
+          const parameters = Object.values(optionalRecord(optionalRecord(cap.parameter_schema).properties)).map(optionalRecord);
+          const basic = parameters.filter((item) => !item["x-level"] || item["x-level"] === "basic").length;
+          const headlines = list(cap["x-headline"]).map(optionalRecord);
           return <li key={text(cap.id)} className="capability">
             <div className="capability-head">
               <h3>{text(cap.title)}</h3>
               <span className="capability-tags">
                 {text(cap.analysis) && <span className="tag">{ANALYSIS_KINDS[text(cap.analysis)] || text(cap.analysis)}</span>}
+                {cap.preview === true && <span className="tag">支持试算</span>}
                 <span className={`tag ${isBenchmarked(text(validation.level)) ? "tag-good" : ""}`}>{text(validation.level) ? validationLevel(text(validation.level)) : "未声明验证"}</span>
               </span>
             </div>
-            <p className="capability-meta"><code>{text(cap.id)}</code>{text(cap.method_version) && <span>{text(cap.method_version)}</span>}{!!outputs.length && <span>输出 {outputs.length} 项</span>}</p>
+            {text(cap.description) && <p className="capability-description">{text(cap.description)}</p>}
+            {!!headlines.length && <p className="capability-headlines"><span className="muted">关键结论</span>{headlines.map((item) => <span key={text(item.key)}>{text(item.title)}{text(optionalRecord(item.unit).display) && ` / ${text(optionalRecord(item.unit).display)}`}</span>)}</p>}
+            <p className="capability-meta"><code>{text(cap.id)}</code>{text(cap.method_version) && <span>{text(cap.method_version)}</span>}{!!outputs.length && <span>输出 {outputs.length} 项</span>}{!!parameters.length && <span>参数 {parameters.length} 项（常用 {basic}）</span>}</p>
             {!!cases.length && <details><summary>参考算例 {cases.length}</summary><ul>{cases.map((c) => <li key={c}>{c}</li>)}</ul></details>}
             {!!limits.length && <details><summary>适用范围 {limits.length}</summary><ul>{limits.map((c) => <li key={c}>{c}</li>)}</ul></details>}
           </li>;
         })}
       </ol>
     </section>
+
+    {(validationFigure || text(presentation.validation_note)) && <section className="plugin-section">
+      <h2>验证</h2>
+      {validationFigure && <figure className="plugin-figure"><img src={text(validationFigure.url)} alt={text(validationFigure.title)} /><figcaption><b>{text(validationFigure.title)}</b>{text(validationFigure.description)}</figcaption></figure>}
+      {text(presentation.validation_note) && <p className="muted">{text(presentation.validation_note)}</p>}
+    </section>}
 
     {!!studies.length && <section className="plugin-section">
       <h2>使用它的研究</h2>

@@ -489,3 +489,13 @@
 .preview-strip .spacer { flex: 1; }
 /* 浏览器里研究的关键结论：替代状态点，等宽数字 */
 .explorer-answer { flex: none; margin-left: auto; color: var(--text-secondary); font-size: var(--text-note); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* 插件页统一模板：类别标签、方法 / 验证插图（插件封签内资源）、能力说明与关键结论 */
+.plugin-hero h1 { display: flex; align-items: center; gap: var(--space-3); }
+.plugin-hero h1 .tag { font-size: var(--text-note); font-weight: var(--weight-normal); }
+.plugin-figure { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; }
+.plugin-figure img { width: 100%; max-height: calc(var(--space-12) * 8); object-fit: contain; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--panel); }
+.plugin-figure figcaption { display: flex; flex-direction: column; gap: var(--space-1); color: var(--text-secondary); font-size: var(--text-note); line-height: 1.6; }
+.plugin-figure figcaption b { color: var(--text); }
+.capability-description { color: var(--text-secondary); line-height: 1.6; }
+.capability-headlines { display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-note); }
+.capability-headlines > span:not(.muted) { padding: 0 var(--space-2); border-radius: var(--radius-item); background: var(--fill); }
