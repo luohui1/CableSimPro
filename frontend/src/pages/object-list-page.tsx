@@ -67,20 +67,6 @@ function HomeAreas({ theme, studies, types, succeeded }: { theme: "light" | "dar
   );
 }
 
-/** 工程概要：研究数、已有结果、未运行与引用型号，全部由研究列表与运行记录统计。 */
-function ProjectSummary({ studies, succeeded }: { studies: StudyRow[]; succeeded: (rows: StudyRow[]) => number }) {
-  const done = succeeded(studies);
-  const models = [...new Set(studies.map((row) => row.model).filter(Boolean))];
-  return (
-    <dl className="project-summary" aria-label="工程概要">
-      <div><dt>研究</dt><dd>{studies.length}</dd></div>
-      <div><dt>已有结果</dt><dd>{done}</dd></div>
-      <div><dt>未运行或失败</dt><dd>{studies.length - done}</dd></div>
-      <div className="project-summary-models"><dt>引用型号</dt><dd>{models.join("、") || "—"}</dd></div>
-    </dl>
-  );
-}
-
 export function ObjectListPage({ home = false }: { home?: boolean }) {
   const search = useSearch({ strict: false });
   const theme = search.theme === "dark" ? "dark" : "light";
@@ -111,7 +97,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
   const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
   const pluginNames = new Map((catalog.data || []).map((row) => [text(optionalRecord(row.method).plugin_id), text(row.name)]));
   const projects = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
-  const projectTitle = search.workspace ? text((projects.data || []).find((space) => text(space.id) === search.workspace)?.name) : "";
+  const projectName = (wid: string) => text((projects.data || []).find((space) => text(space.id) === wid)?.name) || "未命名工程";
   const statuses = new Map(
     (studies.data || []).map((row, index) => [row.id, runQueries[index]]),
   );
@@ -205,7 +191,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
     },
   ];
   const matching = (studies.data || []).filter((row) =>
-    (!search.workspace || row.workspace === search.workspace) && (search.kind !== "simulation" || ['simulation','electrothermal','transient','sheath-losses','thermal-field','batch'].includes(rootModule(row.definition))) && (search.kind !== 'ampacity' || !['simulation','electrothermal','transient','sheath-losses','thermal-field','batch'].includes(rootModule(row.definition))) && [row.title, row.task, row.model].some((value) =>
+    (!search.workspace || row.workspace === search.workspace) && (search.kind !== "simulation" || SIMULATION_MODULES.includes(rootModule(row.definition))) && (search.kind !== "ampacity" || !SIMULATION_MODULES.includes(rootModule(row.definition))) && [row.title, row.task, row.model].some((value) =>
       value.toLowerCase().includes(filter.toLowerCase()),
     ),
   );
@@ -223,12 +209,10 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
     (a, b) => rank(a) - rank(b) || b.updated.localeCompare(a.updated),
   );
   const rows = home ? matching.slice(0, 6) : matching;
-  const isSimulation = (row: StudyRow) => SIMULATION_MODULES.includes(rootModule(row.definition));
-  const succeededIn = (list: StudyRow[]) => list.filter((row) => ["succeeded", "partial"].includes(text(statuses.get(row.id)?.data?.at(-1)?.status))).length;
-  // 工程页按核心领域分组：载流量计算在前，电缆仿真在后；其他列表保持单组
-  const tableGroups = projectTitle
-    ? [{ id: "ampacity", label: "载流量计算", rows: rows.filter((row) => !isSimulation(row)) }, { id: "simulation", label: "电缆仿真", rows: rows.filter(isSimulation) }].filter((group) => group.rows.length)
-    : [{ id: "studies", label: "研究", rows }];
+  // 全部研究按所属工程分组（工程 → 研究）；首页的最近研究保持单组
+  const tableGroups = home
+    ? [{ id: "studies", label: "研究", rows }]
+    : [...new Set(rows.map((row) => row.workspace))].map((wid) => ({ id: wid, label: projectName(wid), rows: rows.filter((row) => row.workspace === wid) }));
   function global(label: string) {
     if (label === "首页") navigate({ to: "/", search: { theme } });
     else if (label === "研究") navigate({ to: "/studies", search: { theme } });
@@ -239,7 +223,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
   return (
     <>
       <AppShell
-        title={home ? "首页" : projectTitle || (search.kind === "simulation" ? "电缆仿真研究" : "研究")}
+        title={home ? "首页" : search.kind === "simulation" ? "电缆仿真研究" : "研究"}
         status={
           (studies.isError || studies.isFetching) && <StatusMark
             kind={
@@ -300,7 +284,6 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
         }
       >
         {home && <HomeAreas theme={theme} studies={studies.data || []} types={types.data?.length} succeeded={(studies.data || []).filter((row) => ["succeeded", "partial"].includes(text(statuses.get(row.id)?.data?.at(-1)?.status))).length} />}
-        {projectTitle && !studies.isPending && <ProjectSummary studies={(studies.data || []).filter((row) => row.workspace === search.workspace)} succeeded={succeededIn} />}
         {studies.isError && studies.data && (
           <StaleBanner description="连接中断，保留上次读取的列表。" />
         )}
