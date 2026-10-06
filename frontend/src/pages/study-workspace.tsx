@@ -38,6 +38,7 @@ import {
 import { StudyMethodForm } from "@/components/study-method-form";
 import { StudyResults } from "@/components/study-results";
 import { StudyTemperature } from "@/components/study-temperature";
+import { SimulationSetup } from "@/components/simulation-setup";
 import { StudyRunControl } from "@/components/study-run-control";
 import { StudyNativeArtifact } from "@/components/study-native-artifact";
 import { StudySweep } from "@/components/study-sweep";
@@ -534,6 +535,8 @@ export function StudyWorkspace() {
             <StudyNativeArtifact run={run} kind="history" />
           ) : module === "sheath-losses" && tab === "losses" ? (
             <StudyNativeArtifact run={run} kind="losses" />
+          ) : ["thermal-field", "electrothermal", "transient"].includes(module) && !run ? (
+            <SimulationSetup module={module} />
           ) : ["thermal-field", "electrothermal", "transient"].includes(
               module,
             ) && tab !== "results" ? (

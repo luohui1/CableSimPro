@@ -236,7 +236,7 @@ export function ReproductionPage() {
               !data
                 ? "尚无复现记录"
                 : !target && !items.length
-                  ? "没有匹配的复现目标"
+                  ? (catalog.data?.items || []).length ? "没有匹配的复现目标" : "尚无复现记录：在研究里运行「仿真复现」后，结果与证据保存在这里"
                   : false
             }
           >

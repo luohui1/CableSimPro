@@ -4,6 +4,7 @@ import { methodCatalog, studyIndex } from "@/api/research";
 import { optionalRecord, text } from "@/api/client";
 import { downloadJson } from "@/lib/download";
 import { pluginArt } from "@/lib/illustrations";
+import { ANALYSIS_KINDS, isBenchmarked, validationLevel } from "@/lib/plugin-labels";
 import { CatalogShell, usePageTheme } from "@/components/catalog-shell";
 import { QueryState } from "@/components/query-state";
 import { EmptyState } from "@/components/states";
@@ -12,18 +13,6 @@ import { Tooltip } from "@/components/ui/tooltip";
 
 type Row = Record<string, unknown>;
 
-const LEVELS: Record<string, string> = {
-  unverified: "未验证",
-  "interface-tested": "接口测试",
-  interface_tested: "接口测试",
-  "analytic-benchmark": "解析基准",
-  analytic_benchmark: "解析基准",
-  "reference-benchmark": "参考基准",
-  reference_benchmark: "参考基准",
-  "cross-validated": "交叉验证",
-  cross_validated: "交叉验证",
-};
-const ANALYSIS: Record<string, string> = { steady_state: "稳态", transient: "暂态", frequency_domain: "频域", geometry: "几何建模", mesh: "网格", model_preparation: "模型准备", postprocess: "后处理", properties: "参数计算", short_circuit: "短路", standard_check: "标准核对", crosscheck: "交叉校核", extraction: "资料提取" };
 const GROUPS: [string, string[]][] = [
   ["计算方法", ["cablesim.iec60287", "cablesim.type-electrical", "cablesim.thermal-network", "cablesim.hybrid-rating"]],
   ["建模", ["cablesim.cable-geometry"]],
@@ -118,8 +107,8 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
             <div className="capability-head">
               <h3>{text(cap.title)}</h3>
               <span className="capability-tags">
-                {text(cap.analysis) && <span className="tag">{ANALYSIS[text(cap.analysis)] || text(cap.analysis)}</span>}
-                <span className={`tag ${text(validation.level).includes("benchmark") || text(validation.level).includes("validated") ? "tag-good" : ""}`}>{LEVELS[text(validation.level)] || "未声明验证"}</span>
+                {text(cap.analysis) && <span className="tag">{ANALYSIS_KINDS[text(cap.analysis)] || text(cap.analysis)}</span>}
+                <span className={`tag ${isBenchmarked(text(validation.level)) ? "tag-good" : ""}`}>{text(validation.level) ? validationLevel(text(validation.level)) : "未声明验证"}</span>
               </span>
             </div>
             <p className="capability-meta"><code>{text(cap.id)}</code>{text(cap.method_version) && <span>{text(cap.method_version)}</span>}{!!outputs.length && <span>输出 {outputs.length} 项</span>}</p>

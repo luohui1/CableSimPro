@@ -1,9 +1,9 @@
 import { optionalRecord, text } from '@/api/client';
 import { EmptyState } from './states';
+import { validationLevel } from '@/lib/plugin-labels';
 
 type Row = Record<string, unknown>;
 const list = (value: unknown) => (Array.isArray(value) ? value : []);
-const LEVELS: Record<string, string> = { 'reference-benchmark': '参考基准', 'analytic-benchmark': '解析基准', 'interface-tested': '接口测试', 'cross-validated': '交叉验证', unverified: '未验证' };
 
 /**
  * 验证与范围：这次运行所用插件的参考算例、声明的适用范围、发行封签校验，以及交叉校核的口径。
@@ -41,7 +41,7 @@ export function StudyValidation({ run }: { run?: Row }) {
         <h2>{text(method.plugin_id)} · {text(method.capability)} <span className="muted">{text(method.version)}</span></h2>
         <div className="validation-columns">
           <div>
-            <h3>参考算例 <span className="muted">{cases.length} · {LEVELS[text(validation.level)] || text(validation.level) || '未声明'}</span></h3>
+            <h3>参考算例 <span className="muted">{cases.length} · {validationLevel(text(validation.level))}</span></h3>
             {cases.length ? <ul className="validation-list is-ok">{cases.map((c) => <li key={c}>{c}</li>)}</ul> : <p className="muted">插件未声明参考算例。</p>}
           </div>
           <div>

@@ -349,7 +349,7 @@ export function StudyCompare({
             {
               id: "created",
               label: "计算时间",
-              render: (row) => text(row.created),
+              render: (row) => text(row.created) ? new Date(text(row.created)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—",
             },
             {
               id: "method",

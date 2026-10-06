@@ -271,3 +271,24 @@
 .agent-tools li b { font-weight: var(--weight-strong); }
 .agent-tools li span { color: var(--text-secondary); font-size: var(--text-note); }
 @media (max-width: 860px) { .agent-page { grid-template-columns: minmax(0, 1fr); } .agent-tools { padding-left: 0; border-left: 0; } }
+
+/* 仿真运行前：输入 → 求解参数 → 运行位置 → 产出 */
+.sim-setup { display: flex; flex-direction: column; gap: var(--space-6); max-width: calc(var(--space-12) * 18); }
+.sim-setup-head { display: flex; flex-direction: column; gap: var(--space-1); }
+.sim-setup-head h2 { font-size: var(--text-subheading); }
+.sim-setup-head p { color: var(--text-secondary); }
+.sim-steps { list-style: none; margin: 0; padding: 0; counter-reset: sim-step; display: flex; flex-direction: column; }
+.sim-steps > li { counter-increment: sim-step; position: relative; display: flex; flex-direction: column; gap: var(--space-2); padding: 0 0 var(--space-6) calc(var(--space-8) + var(--space-2)); border-left: 1px solid var(--line); margin-left: var(--space-3); }
+.sim-steps > li:last-child { border-left-color: transparent; padding-bottom: 0; }
+.sim-steps > li::before { content: counter(sim-step); position: absolute; left: calc(var(--space-3) * -1); top: 0; width: var(--space-6); height: var(--space-6); display: grid; place-items: center; border-radius: var(--radius-pill); background: var(--fill); color: var(--text-secondary); font-size: var(--text-note); font-weight: var(--weight-strong); }
+.sim-steps h3 { display: flex; align-items: baseline; gap: var(--space-3); font-size: var(--text-body); min-height: var(--space-6); }
+.sim-steps h3 a, .sim-links a { font-size: var(--text-note); font-weight: var(--weight-normal); color: var(--text-secondary); text-decoration: underline; text-underline-offset: 3px; }
+.sim-links { display: flex; gap: var(--space-4); }
+.sim-params { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--space-12) * 5), 1fr)); gap: 0 var(--space-6); }
+.sim-params > div { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--line); }
+.sim-params dt { color: var(--text-secondary); }
+.sim-params dd { font-variant-numeric: tabular-nums; }
+.sim-outputs { margin: 0; padding-left: var(--space-4); line-height: 1.8; }
+.sim-scope { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-surface); }
+.sim-scope h3 { font-size: var(--text-body); display: flex; gap: var(--space-2); align-items: baseline; }
+.sim-scope ul { margin: 0; padding-left: var(--space-4); color: var(--text-secondary); font-size: var(--text-note); line-height: 1.8; }
