@@ -6,9 +6,11 @@ import { cableLayerGrid, contractFields, runRecordsContent } from './heavy-compo
  */
 export function preloadCommonChunks() {
   const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-  if (connection?.saveData) return;
-  void import('@/components/study-provider');
-  void import('@/pages/study-workspace');
+  if (!navigator.onLine || connection?.saveData) return;
+  // Speculative downloads may lose the network after this check. The actual
+  // page load still owns its error state; idle work must not reject globally.
+  void import('@/components/study-provider').catch(() => {});
+  void import('@/pages/study-workspace').catch(() => {});
   void contractFields.preload();
   void cableLayerGrid.preload();
   void runRecordsContent.preload();

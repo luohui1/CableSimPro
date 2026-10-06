@@ -24,6 +24,21 @@ def test_missing_real_candidates_is_a_release_failure_not_a_synthetic_fallback()
     assert failure.value.detail['code']=='RELEASE_MANUFACTURER_SOURCE_MISSING'
 
 
+def test_completed_workspace_model_cannot_extend_or_replace_the_manufacturer_series():
+    catalogue=[candidate(area) for area in AREAS]
+    completed=deepcopy(candidate(300));completed['id']='prepared-workspace-model'
+    completed['payload'].pop('specification')
+    completed['payload']['cable_type']={'rating':{'u0':8700},'cores':[
+        {'conductor':{'nominal_area':.0003}} for _ in range(3)]}
+    assert identity(completed)==identity(candidate(300))
+    before=deepcopy(catalogue+[completed])
+    assert [row['id'] for row in real_candidates(catalogue+[completed])]==[str(area) for area in AREAS]
+    assert catalogue+[completed]==before
+    with pytest.raises(GateFailure) as failure:
+        real_candidates([row for row in catalogue if row['id']!='300']+[completed])
+    assert failure.value.detail['missing_areas_mm2']==[300]
+
+
 def test_stop_on_first_failed_api_and_record_failure_owner(tmp_path):
     class Response:
         status_code=409;is_success=False;text='stale input'

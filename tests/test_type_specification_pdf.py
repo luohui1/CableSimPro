@@ -11,7 +11,12 @@ from backend.main import create_app
 from backend.kernel.scenarios import system_models
 from backend.kernel.specification_pdf import render_pdf
 from backend.kernel.type_versions import check_results
-from backend.kernel.type_specification import combined_core_rows, structure_rows
+from backend.kernel.type_specification import combined_core_rows, structure_rows, human_note
+
+
+def test_document_notes_show_method_names_and_preserve_versions_and_missing_data():
+    note = '基于旧版本方法 0.9.0（cablesim.iec60287）；当前安装版本 0.9.2；旧结构方法 0.6.0（cablesim.cable-geometry）；t_n 为该层规定标称厚度；最薄点必须录入实测值。'
+    assert human_note(note) == '基于旧版本方法 0.9.0（IEC 60287 载流量计算）；当前安装版本 0.9.2；旧结构方法 0.6.0（电缆结构与用料推导）；标称厚度 为该层规定标称厚度；最薄点必须录入实测值。'
 
 
 def test_customer_core_groups_preserve_different_unrounded_values_and_sources():

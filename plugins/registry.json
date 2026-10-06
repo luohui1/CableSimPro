@@ -15,9 +15,9 @@
     },
     {
       "plugin_id": "cablesim.datasheet-extract",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "manifest": "plugins/cablesim.datasheet-extract/plugin.json",
-      "release_digest": "cd4e9219ffb93d60710c436ac11c2ec1b8e33453f9db19aba4b5eec182a1633f"
+      "release_digest": "b1a883964d7229e41e067ff5b563a8953974ef0b94f6e274016e5c6e7ed6c4d5"
     },
     {
       "plugin_id": "cablesim.hybrid-rating",

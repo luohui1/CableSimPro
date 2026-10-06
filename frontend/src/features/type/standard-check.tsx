@@ -7,6 +7,7 @@ import { StatusMark, type StatusKind } from '@/components/status-mark';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { formatNumber } from '@/lib/format';
+import { displayText } from '@/lib/display-names';
 import { useTypeWorkspace } from './provider';
 import { useTypeNavigation, typePath } from './navigation';
 import { artifactRows, chooseEvidence, currentEvidence, methodLabel, useTypeEvidence } from './evidence';
@@ -54,7 +55,7 @@ export function TypeStandardCheck() {
     const target = optionalRecord(row.target);
     const located = text(target.role) ? target.scope === 'core' ? `${text(target.core_id)}/${text(target.role)}` : `common/${text(target.role)}` : '';
     inspector.show(text(row.title), [
-      { label: '要求与结果', items: [ { label: '要求', value: requirement(row), source: 'standard', sourceDetail: text(row.standard) + ' · ' + text(row.clause) }, { label: '实际值', value: resultValue(row.actual, row), source: 'calculation', sourceDetail: methodLabel(saved!.run) }, { label: '余量', value: resultValue(row.margin, row), source: 'calculation' }, { label: '判定', value: verdicts[text(row.verdict)].label }, { label: '原因', value: text(row.reason) || '—' } ] },
+      { label: '要求与结果', items: [ { label: '要求', value: requirement(row), source: 'standard', sourceDetail: text(row.standard) + ' · ' + text(row.clause) }, { label: '实际值', value: resultValue(row.actual, row), source: 'calculation', sourceDetail: methodLabel(saved!.run) }, { label: '余量', value: resultValue(row.margin, row), source: 'calculation' }, { label: '判定', value: verdicts[text(row.verdict)].label }, { label: '原因', value: displayText(text(row.reason)) || '—' } ] },
       { label: '依据', items: [ { label: '标准', value: text(row.standard) || '未提供' }, { label: '条款', value: text(row.clause) || '未提供' }, { label: '正文页码', value: numeric(row.printed_page) ?? '未核验' }, { label: 'PDF 页码', value: numeric(row.pdf_page) ?? '未核验' }, { label: '原文', value: row.source_status === 'original-verified' ? '已核验' : '未核验' }, { label: '输入来源', value: text(optionalRecord(row.input_source).reference) || '未提供' }, { label: '完整精度', value: row.actual === null || row.actual === undefined ? '未提供' : String(row.actual), unit: text(row.unit) } ] },
       ...(located ? [{ label: '关联结构', items: [{ label: '对象', value: <Button variant="ghost" size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, 'structure', 'table', navigation.location.theme) + '&layer=' + encodeURIComponent(located))}>定位结构层</Button> }] }] : []),
     ]);
@@ -71,7 +72,7 @@ export function TypeStandardCheck() {
       <DataTable label="标准核对" selectedId={selected} onSelect={choose} rowLabel={row => text(row.title)} showGroups={false} groups={[{ id: 'requirements', label: '要求', rows: rows.filter(row => filter === 'all' || row.verdict === filter) }]} columns={[
         { id: 'title', label: '要求', render: row => text(row.title) }, { id: 'limit', label: '标准值', numeric: true, render: requirement }, { id: 'actual', label: '实际值', numeric: true, render: row => resultValue(row.actual, row) },
         { id: 'margin', label: '余量', numeric: true, render: row => resultValue(row.margin, row) }, { id: 'verdict', label: '判定', render: row => <StatusMark {...verdicts[text(row.verdict)]} /> },
-        { id: 'reason', label: '原因', wrap: true, render: row => text(row.reason) || '—' }, { id: 'source', label: '依据', render: row => <SourceBadge kind="standard" detail={[text(row.standard), text(row.clause), numeric(row.printed_page) === null ? '页码未核验' : '正文第 ' + numeric(row.printed_page) + ' 页'].join(' · ')} /> },
+        { id: 'reason', label: '原因', wrap: true, render: row => displayText(text(row.reason)) || '—' }, { id: 'source', label: '依据', render: row => <SourceBadge kind="standard" detail={[text(row.standard), text(row.clause), numeric(row.printed_page) === null ? '页码未核验' : '正文第 ' + numeric(row.printed_page) + ' 页'].join(' · ')} /> },
       ]} />
     </>}
   </div>;

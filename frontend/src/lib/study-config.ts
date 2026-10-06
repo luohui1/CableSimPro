@@ -20,7 +20,8 @@ export function rootModule(definition: StudyDefinition): string {
   if (cap === "transient-temperature") return "transient";
   if (cap === "sheath-losses") return "sheath-losses";
   if (cap === "electrothermal-steady") return "electrothermal";
-  if (cap.includes("temperature-field") || cap === "thermal-field")
+  if (cap.includes("temperature-field") || cap === "thermal-field" ||
+      cap === "iec-thermal-field" || cap === "multiregion-thermal")
     return "thermal-field";
   return (
     (

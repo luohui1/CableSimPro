@@ -12,8 +12,9 @@ export default function RunRecordsContent({runs, selectedId, onSelect, workspace
 }) {
   const items: BackgroundRun[] = [...runs].reverse().map(run => {
     const status = text(run.status), historical = run.freshness === 'historical' || isVersionStale(run);
+    const method = optionalRecord(run.method || optionalRecord(optionalRecord(run.snapshot).definition).method);
     return { id: text(run.id), label: time(run.created), status: ['accepted','queued'].includes(status) ? 'queued' : ['running','validating'].includes(status) ? 'running' : ['succeeded','partial'].includes(status) ? 'complete' : 'failed',
-      detail: [historical ? '历史结果' : '', statusLabels[status] || '未知状态', displayName(text(optionalRecord(optionalRecord(run.snapshot).definition).method && optionalRecord(optionalRecord(optionalRecord(run.snapshot).definition).method).plugin_id))].filter(Boolean).join(' · '),
+      detail: [historical ? '历史结果' : '', statusLabels[status] || '未知状态', displayName(text(method.plugin_id))].filter(Boolean).join(' · '),
       updatedAt: run.finished ? time(run.finished) : undefined };
   });
   const selected = runs.find(run => run.id === selectedId) || runs.at(-1);

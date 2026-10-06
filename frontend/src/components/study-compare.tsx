@@ -355,12 +355,12 @@ export function StudyCompare({
               id: "method",
               label: "方法",
               render: (row) =>
-                text(
+                displayName(text(
                   optionalRecord(
-                    optionalRecord(optionalRecord(row.snapshot).definition)
+                    row.method || optionalRecord(optionalRecord(row.snapshot).definition)
                       .method,
                   ).plugin_id,
-                ),
+                )),
             },
             {
               id: "status",

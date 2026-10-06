@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.datasheet-extract",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "name": "厂家资料参数提取",
   "icon": "assets/icon.svg",
   "description": "PDF 文字层与表格优先；保留型号、页码、原文坐标和单位，模型输出只作为待人工核对候选。",
@@ -43,7 +43,7 @@
     {
       "id": "inspect",
       "kind": "method",
-      "title": "inspect",
+      "title": "检查 PDF 页数与文字层",
       "method_version": "DATASHEET-0.1.0",
       "analysis": "extraction",
       "input_schema": "cablesim.datasheet/1",
@@ -76,7 +76,7 @@
     {
       "id": "page",
       "kind": "method",
-      "title": "page",
+      "title": "读取原文页面与证据坐标",
       "method_version": "DATASHEET-0.1.0",
       "analysis": "extraction",
       "input_schema": "cablesim.datasheet/1",
@@ -109,7 +109,7 @@
     {
       "id": "rules",
       "kind": "method",
-      "title": "rules",
+      "title": "离线规则与扫描页参数提取",
       "method_version": "DATASHEET-0.1.0",
       "analysis": "extraction",
       "input_schema": "cablesim.datasheet/1",
@@ -142,7 +142,7 @@
     {
       "id": "provider-request",
       "kind": "method",
-      "title": "provider-request",
+      "title": "准备模型识别请求与所选原文",
       "method_version": "DATASHEET-0.1.0",
       "analysis": "extraction",
       "input_schema": "cablesim.datasheet/1",
@@ -175,7 +175,7 @@
     {
       "id": "provider-response",
       "kind": "method",
-      "title": "provider-response",
+      "title": "核验模型提取结果与原文证据",
       "method_version": "DATASHEET-0.1.0",
       "analysis": "extraction",
       "input_schema": "cablesim.datasheet/1",

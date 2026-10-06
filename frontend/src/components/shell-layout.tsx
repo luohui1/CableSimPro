@@ -66,7 +66,7 @@ export function ShellLayout() {
     const startX = event.clientX, start = width.current, target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
     document.documentElement.dataset.resizing = 'true';
-    const move = (next: PointerEvent) => { width.current = clampWidth(start + next.clientX - startX); applyWidth(width.current); };
+    const move = (next: PointerEvent) => { width.current = clampWidth(start + next.clientX - startX); applyWidth(width.current); target.setAttribute('aria-valuenow', String(width.current)); };
     const end = () => {
       target.removeEventListener('pointermove', move);
       delete document.documentElement.dataset.resizing;
@@ -81,12 +81,13 @@ export function ShellLayout() {
     if (!step) return;
     event.preventDefault();
     width.current = clampWidth(width.current + step); applyWidth(width.current); store(WIDTH_KEY, String(width.current));
+    event.currentTarget.setAttribute('aria-valuenow', String(width.current));
   };
   return <div className="app-shell shell-workbench" data-collapsed={collapsed || undefined} data-animating={animating || undefined}>
     {/* 换页时旧页面保留到新页面就绪；顶部细进度条给出即时反馈（延迟 150 ms 出现，快的跳转看不到）。 */}
     <div className="route-progress" data-active={loading || undefined} aria-hidden="true" />
     <WorkbenchSidebar theme={theme} onTheme={onTheme} onSlot={setSlot} collapsed={collapsed} onCollapse={toggle} />
-    {!collapsed && <div className="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="调整侧栏宽度" tabIndex={0} onPointerDown={startResize} onKeyDown={resizeByKey} onDoubleClick={() => { width.current = DEFAULT_WIDTH; applyWidth(DEFAULT_WIDTH); store(WIDTH_KEY, String(DEFAULT_WIDTH)); }} />}
+    {!collapsed && <div className="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="调整侧栏宽度" aria-valuemin={MIN_WIDTH} aria-valuemax={MAX_WIDTH} aria-valuenow={width.current} tabIndex={0} onPointerDown={startResize} onKeyDown={resizeByKey} onDoubleClick={(event) => { width.current = DEFAULT_WIDTH; applyWidth(DEFAULT_WIDTH); store(WIDTH_KEY, String(DEFAULT_WIDTH)); event.currentTarget.setAttribute('aria-valuenow', String(DEFAULT_WIDTH)); }} />}
     <ShellSlot.Provider value={slot}><Outlet /></ShellSlot.Provider>
   </div>;
 }

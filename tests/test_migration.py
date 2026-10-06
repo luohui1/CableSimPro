@@ -15,6 +15,7 @@ def test_archived_project_and_workspace_migrate_without_inventing_facts(tmp_path
     archive = {'id':'old-project', 'scenario':deepcopy(original)}
     converted = convert_record(archive)
     assert archive['scenario'] == original
+    assert converted['document']['circuits'][0]['label'] == '回路 1'
     db_path = tmp_path/'engineering.sqlite'
     payload = json.dumps(original, ensure_ascii=False)
     with sqlite3.connect(db_path) as db:
@@ -30,6 +31,7 @@ def test_archived_project_and_workspace_migrate_without_inventing_facts(tmp_path
         domain = saved.json()['document']
         assert domain['cable_types'][0]['cores'][0]['conductor']['r20'] == pytest.approx(.0000754,rel=1e-14)
         assert domain['circuits'][0]['bonding']['kind'] == 'unspecified'
+        assert domain['circuits'][0]['label'] == '回路 1'
         assert client.get(root+'/revisions/1').json()['state']['scenario'] == original
         assert client.post('/api/calculate',json=original).status_code == 404
         with sqlite3.connect(db_path) as db:

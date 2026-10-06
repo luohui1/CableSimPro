@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/select';
 import { formatNumber } from '@/lib/format';
+import { displayName } from '@/lib/display-names';
 import { useTypeWorkspace } from './provider';
 import { useTypeNavigation } from './navigation';
 import { currentEvidence, methodLabel, useTypeEvidence } from './evidence';
@@ -58,7 +59,7 @@ export function TypeRatingTable({ tab }: { tab: string }) {
     inspector.show(row.name, [
       { label: '真实结果与范围', items: [{ label: '完整电流精度', value: numeric(result?.value_a) === null ? '—' : String(result!.value_a), unit: 'A', source: result && numeric(result.value_a) !== null ? 'calculation' : undefined, sourceDetail: saved ? methodLabel(saved.run) : undefined }, { label: '状态', value: text(result?.status) || '未运行' }, { label: '原因', value: text(result?.reason) || '—' }] },
       { label: '保存的实际工况', items: Object.entries(condition).filter(([key]) => key !== 'case_id' && key !== 'name' && key !== 'rating_basis' && (condition.layout === 'ducts' || condition.layout === 'three_core_ducts_horizontal' || !key.startsWith('duct_'))).map(([key, value]) => { const [label, unit] = conditionLabels[key] || [key]; const display = key === 'layout' ? layouts[text(value) as keyof typeof layouts] || text(value) : key === 'bonding' ? ({ both_ends: '两端接地', single_point: '单点接地', unspecified: '待明确' }[text(value)] || text(value)) : numeric(value) === null ? value === null ? '未提供' : String(value) : formatNumber(numeric(value), 6); return { label, value: <span title={value === null ? undefined : String(value)}>{display}</span>, unit, source: numeric(value) === null ? undefined : 'user' as const, sourceDetail: text(condition.source) || undefined }; }) },
-      { label: '方法与工件', items: [{ label: '方法', value: saved ? methodLabel(saved.run) : '未运行' }, { label: '运行', value: saved ? text(saved.run.id) : '未运行' }, { label: '工件摘要', value: result ? JSON.stringify(result.artifact_digests) : '未运行' }] },
+      { label: '方法与工件', items: [{ label: '方法', value: saved ? methodLabel(saved.run) : '未运行' }, { label: '运行', value: saved ? text(saved.run.id) : '未运行' }, { label: '工件摘要', value: result ? Object.entries(optionalRecord(result.artifact_digests)).map(([key, value]) => displayName(key) + ' · ' + text(value)).join('；') : '未运行' }] },
     ]);
   }
   async function definition() { if (!savedStudy) throw Error('请先保存工况表'); return compileRating(state.workspace!.id, state.workspace!.revision, ratingBody(savedStudy)); }

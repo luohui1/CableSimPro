@@ -3,6 +3,7 @@ import { array, numeric, optionalRecord, record, text } from '@/api/client';
 import { EmptyState, ErrorState } from '@/components/states';
 import { Select } from '@/components/ui/select';
 import { analysisValue, type AnalysisRow } from './analysis';
+import { displayName } from '@/lib/display-names';
 
 export function ShortCircuitCurve({ artifact, rows, onSelect }: { artifact: Record<string, unknown>; rows: AnalysisRow[]; onSelect: (row: AnalysisRow) => void }) {
   const [chosen, setChosen] = useState(''), [point, setPoint] = useState('');
@@ -17,6 +18,11 @@ export function ShortCircuitCurve({ artifact, rows, onSelect }: { artifact: Reco
   } catch (failure) { return <ErrorState title="短路曲线不可用" description={String(failure)} />; }
   const components = [...new Set(series.map(item => { const target = optionalRecord(item.target); return (text(target.core_id) || 'common') + '/' + text(target.role); }))];
   const selected = components.includes(chosen) ? chosen : components[0];
+  const componentLabel = (value: string) => {
+    const item = series.find(item => { const target = optionalRecord(item.target); return (text(target.core_id) || 'common') + '/' + text(target.role) === value; })!;
+    const target = optionalRecord(item.target), core = rows.find(row => row.id === item.row_id)?.title.split(' · ')[0];
+    return (target.scope === 'core' ? core || '电缆芯' : '共同层') + ' · ' + displayName(text(target.role));
+  };
   const displayed = series.filter(item => { const target = optionalRecord(item.target); return (text(target.core_id) || 'common') + '/' + text(target.role) === selected; });
   const values = displayed.flatMap(item => array(item.values_a, '曲线电流').filter((value): value is number => numeric(value) !== null));
   if (!values.length) return <EmptyState title="所选组件未生成有效时间曲线" description="查看组件的缺项与方法适用范围。" />;
@@ -25,7 +31,7 @@ export function ShortCircuitCurve({ artifact, rows, onSelect }: { artifact: Reco
   const y = (value: number) => top + height - value / (maximum || 1) * height;
   const active = point === '' ? -1 : Number(point);
   return <section className="type-curve" aria-label="短路电流持续时间曲线">
-    <div className="type-result-toolbar"><strong>电流—持续时间</strong><Select label="曲线组件" value={selected} options={components.map(value => ({ value, label: value }))} onChange={value => { setChosen(value); setPoint(''); }} /><Select label="采样时间" value={point || undefined} placeholder="选择采样点" options={times.map((time, index) => ({ value: String(index), label: String(time) + ' s' }))} onChange={setPoint} /></div>
+    <div className="type-result-toolbar"><strong>电流—持续时间</strong><Select label="曲线组件" value={selected} options={components.map(value => ({ value, label: componentLabel(value) }))} onChange={value => { setChosen(value); setPoint(''); }} /><Select label="采样时间" value={point || undefined} placeholder="选择采样点" options={times.map((time, index) => ({ value: String(index), label: String(time) + ' s' }))} onChange={setPoint} /></div>
     <svg viewBox="0 0 760 240" role="img" aria-label="短路电流随持续时间变化；横轴对数时间，纵轴 kA">
       {[0, .25, .5, .75, 1].map(factor => <g key={factor}><line className="type-curve-grid" x1={left} x2={left + width} y1={y(maximum * factor)} y2={y(maximum * factor)} /><text x={left - 9} y={y(maximum * factor) + 5} textAnchor="end">{(maximum * factor * .001).toFixed(2)}</text></g>)}
       {[times[0], ...times.filter(time => [0.2, 0.5, 1, 2].includes(time)), times[times.length - 1]].map(time => <text key={time} x={x(time)} y="224" textAnchor="middle">{time}</text>)}

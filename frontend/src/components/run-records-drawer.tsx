@@ -11,7 +11,7 @@ const Content = runRecordsContent.Component;
 export function RunRecordsDrawer({open, onOpenChange, runs, selectedId, onSelect, loading, error, onRetry, workspace, studyId, disabledReason}: {
   open: boolean; onOpenChange: (value: boolean) => void; runs: Record<string, unknown>[]; selectedId?: string; onSelect: (id: string) => void; loading?: boolean; error?: unknown; onRetry?: () => void; workspace?: string; studyId?: string; disabledReason?: string;
 }) {
-  const history = useQuery({queryKey:['run-history',workspace,studyId], queryFn:({signal}) => studyRuns(workspace!,studyId!,signal), enabled:open && !!workspace && !!studyId,
+  const history = useQuery({queryKey:['run-history',workspace,studyId], queryFn:({signal}) => studyRuns(workspace!,studyId!,signal,'summary'), enabled:open && !!workspace && !!studyId,
     refetchInterval: query => query.state.data?.some(run => ['accepted','queued','running','validating'].includes(String(run.status))) ? 2000 : false });
   const rows = history.data || runs;
   const problem = history.error || error;

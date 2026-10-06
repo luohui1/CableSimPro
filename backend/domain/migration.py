@@ -29,7 +29,7 @@ def convert(scenario):
                                     'r20': None if c.r20_ohm_km is None else c.r20_ohm_km / 1000}, 'layers': []}],
                          'common_layers': [{'role': role, 'material': 'material/' + material, 'thickness': thickness / 1000,
                                             **({'form': 'unspecified'} if role == 'metallic_screen' else {})} for role, material, thickness in layers]}],
-        'circuits': [{'id': 'circuit/c1', 'label': 'v0 circuit', 'system': {'kind': 'ac_three_phase', 'frequency': c.frequency_hz, 'voltage': None},
+        'circuits': [{'id': 'circuit/c1', 'label': '回路 1', 'system': {'kind': 'ac_three_phase', 'frequency': c.frequency_hz, 'voltage': None},
                       'cable_type': 'cable_type/ct1', 'cables': [{'id': 'cable/c1-' + phase, 'phase': phase} for phase in 'ABC'],
                       'bonding': {'kind': 'unspecified'}}],
         'sections': [{'id': 'section/s1', 'label': 'v0 buried section', 'kind': 'ground', 'length': s.circuit_length_m,

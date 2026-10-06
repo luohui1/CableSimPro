@@ -40,9 +40,17 @@ export function workspaceQuery(wid: string | undefined) {
 export function studyRunsQuery(wid: string | undefined, sid: string, run: string) {
   return queryOptions({
     queryKey: ["runs", wid, sid, run || 'all'],
-    queryFn: async ({ signal }) => run
-      ? [record(await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/runs/{rid}', { params: { path: { wid: wid!, sid, rid: run } }, signal })), '固定运行')]
-      : studyRuns(wid!, sid, signal),
+    queryFn: async ({ signal }) => {
+      const detail = async (rid: string) => record(await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/runs/{rid}', { params: { path: { wid: wid!, sid, rid } }, signal })), '运行详情');
+      if (run) return [await detail(run)];
+      const summaries = await studyRuns(wid!, sid, signal, 'summary');
+      // Keep every history identity/status, but load result arrays only for the
+      // latest run of each configured module. Fixed history uses its detail URL.
+      const latest = new Map<string, unknown>();
+      for (const item of summaries) latest.set(String(optionalRecord(item.snapshot).module || ''), item.id);
+      return Promise.all(summaries.map(item => latest.get(String(optionalRecord(item.snapshot).module || '')) === item.id
+        ? detail(String(item.id)) : item));
+    },
   });
 }
 

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { methodCatalog } from "@/api/research";
 import { optionalRecord, text } from "@/api/client";
-import { displayName } from "@/lib/display-names";
+import { displayName, displayText } from "@/lib/display-names";
 import { moduleConfiguration } from "@/lib/study-config";
 import { illustration } from "@/lib/illustrations";
 import { ARTIFACT_KINDS, validationLevel } from "@/lib/plugin-labels";
@@ -67,7 +67,7 @@ export function SimulationSetup({ module }: { module: string }) {
     </ol>
     {capability && <section className="sim-scope" aria-label="方法验证与适用范围">
       <h3>方法验证 <span className="muted">{validationLevel(text(validation.level))} · 参考算例 {list(validation.cases).length}</span></h3>
-      {!!limits.length && <ul>{limits.map((item) => <li key={item}>{item}</li>)}</ul>}
+      {!!limits.length && <ul>{limits.map((item) => <li key={item}>{displayText(item)}</li>)}</ul>}
     </section>}
   </div>;
 }

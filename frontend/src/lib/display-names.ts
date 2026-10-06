@@ -86,6 +86,9 @@ export const displayNames: Readonly<Record<string, string>> = {
   electromagnetic_options: "电磁场设置",
   initial_temperature_k: "初始绝对温度",
   temperature_tolerance_k: "温度更新容差",
+  tolerance_k: "温度收敛容差",
+  material_thermal_resistivity: "材料热阻率",
+  reference_only: "仅供参考",
   power_relative_tolerance: "功率相对容差",
   maximum_iterations: "最大耦合迭代次数",
   relaxation: "松弛系数",
@@ -266,6 +269,13 @@ export const displayNames: Readonly<Record<string, string>> = {
   both_ends: "两端接地",
   single_point: "单点接地",
   cross_bonded: "交叉互联",
+  conductor: "导体",
+  "x-cablesim.iec60287-trace": "IEC 60287 计算追溯",
+  S_mm2: "导体截面 / mm²",
+  beta_K: "材料温度常数 / K",
+  t_s: "短路持续时间 / s",
+  theta_f_K: "最终温度 / K",
+  theta_i_K: "初始温度 / K",
   conductor_screen: "导体屏蔽",
   insulation: "绝缘",
   insulation_screen: "绝缘屏蔽",
@@ -381,7 +391,7 @@ export function displayName(key: string, fallback?: string): string {
 export function displayText(value: string): string {
   if (/Traceback \(most recent call last\):/.test(value))
     return "计算组件启动失败。请检查运行环境与依赖后重试；已保存的输入和结果仍保留。";
-  return value.replace(
+  return value.replace(/\bt_n\b/g, '标称厚度').replace(
     /[A-Za-z][A-Za-z0-9]*(?:[._/-][A-Za-z0-9]+)+|\b(?:ampacity|rating|operating|succeeded|failed|queued|running|available|unavailable|steady|transient|crosscheck)\b/g,
     (key) => displayName(key),
   );

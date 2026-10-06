@@ -73,6 +73,8 @@ async function shot(name) {
 try {
   const ws = await get("/api/workspaces"),
     studies = [];
+  const seed = JSON.parse(await fs.readFile(process.env.E2E_SEED_RECEIPT, 'utf8'));
+  assert.equal(seed.complete, true, '必须采用完整的真实工程种子');
   for (const w of ws)
     for (const s of await get("/api/workspaces/" + w.id + "/studies"))
       studies.push({ ...s, wid: w.id });
@@ -84,13 +86,21 @@ try {
     inquiry && sweep && compare && temperature,
     "五个工程研究须真实存在",
   );
-  assert.equal(studies.length, 5);
+  const typeWorkspaces = new Set(seed.types.map(item => item.workspace));
+  const engineeringStudies = studies.filter(item => !typeWorkspaces.has(item.wid));
+  const seedStudies = seed.studies.filter(item => item.study);
+  assert.equal(engineeringStudies.length, seedStudies.length);
+  assert.deepEqual(engineeringStudies.map(item => [item.id,item.wid,item.definition.title]).sort(),
+    seedStudies.map(item => [item.study,item.workspace,item.title]).sort(),
+    '工程研究与种子定义逐项一致；型号内部计算研究属于型号工作区');
   for(const study of [inquiry,sweep,compare]){
     const saved=(await get(`/api/workspaces/${study.wid}/studies/${study.id}/runs`)).items;
     assert.ok(saved.some(run=>run.freshness==='current'&&run.integrity==='verified'&&['succeeded','partial'].includes(run.status)),study.definition.title+'：成功态验收必须有匹配当前输入和发行的真实运行');
   }
   const types = await get("/api/design/type-workspaces");
-  assert.equal(types.length, 2);
+  assert.equal(types.length, seed.types.length);
+  assert.deepEqual(types.map(item => [item.id,item.name]).sort(),
+    seed.types.map(item => [item.workspace,item.name]).sort());
   assert.ok(types.some((t) => t.name === "YJV22-8.7/15 3×300"));
   assert.ok(types.some((t) => t.name === "YJLW03-64/110 1×800"));
   const route = (s, module, tab) =>

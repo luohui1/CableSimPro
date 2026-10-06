@@ -128,7 +128,9 @@ def quantity(value, unit, short_circuit=False):
 
 def human_note(value):
     result = str(value or '')
-    for key, label in {**STATUS_NAMES, **CHANNEL_NAMES}.items():
+    names = {**STATUS_NAMES, **CHANNEL_NAMES, **METHOD_NAMES, 't_n': '标称厚度'}
+    for key in sorted(names, key=len, reverse=True):
+        label = names[key]
         result = re.sub(r'(?<![A-Za-z_])' + re.escape(key) + r'(?![A-Za-z_])', label, result)
     return re.sub(r'。\s*。', '。', result)
 
@@ -334,7 +336,7 @@ def chapter_bodies(payload, lifecycle, audience='internal'):
         ['执行标准', '；'.join(groups) or '待标准核对确认'], ['编制单位','待填写'],
         ['编制日期（UTC）',latest], ['编制人',revision.get('author') or '待填写'],
         ['文件版本',revision.get('version') or '编制草稿'], ['基准型号版本',payload['base_reference']['version']],
-        ['文件状态',STATUS_NAMES.get(lifecycle['status'], '待核对') + ('；'+lifecycle['version_status']['display_name'] if lifecycle.get('version_status', {}).get('status')=='stale' else '')]], widths=[1.5,4.5])
+        ['文件状态',STATUS_NAMES.get(lifecycle['status'], '待核对') + ('；'+human_note(lifecycle['version_status']['display_name']) if lifecycle.get('version_status', {}).get('status')=='stale' else '')]], widths=[1.5,4.5])
     cover += '<h3>编制与审核签字</h3>' + table(['职责','签字','日期'],
         [['编制','________________','________________'],['审核','________________','________________'],['批准','________________','________________']], widths=[1,2.5,2.5])
     cover += '<p class="spec-note">签字栏供人工填写；电子批准及发布状态以系统记录为准。</p>'

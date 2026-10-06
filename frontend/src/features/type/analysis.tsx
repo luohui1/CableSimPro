@@ -8,6 +8,7 @@ import { StatusMark, type StatusKind } from '@/components/status-mark';
 import { EmptyState, ErrorState, LoadingState, StaleBanner } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { engineeringQuantity, formatNumber } from '@/lib/format';
+import { displayName } from '@/lib/display-names';
 import { chooseEvidence, currentEvidence, methodLabel, useTypeEvidence } from './evidence';
 import { useTypeWorkspace } from './provider';
 import { useTypeInspector } from './inspector';
@@ -31,6 +32,12 @@ export function analysisValue(row: Record<string, unknown>, full = false) {
   return full ? display.complete : display.text + (display.unit === '—' ? '' : ' ' + display.unit);
 }
 function savedValue(value: unknown) { return value === undefined || value === null ? '未提供' : typeof value === 'object' ? JSON.stringify(value) : String(value); }
+function formulaValue(value: string) {
+  return value.split(/([A-Za-zθ]+_[A-Za-z0-9]+)/g).map((part, index) => {
+    const subscript = /^([A-Za-zθ]+)_([A-Za-z0-9]+)$/.exec(part);
+    return subscript ? <span key={index}>{subscript[1]}<sub>{subscript[2]}</sub></span> : part;
+  });
+}
 export function TypeAnalysis({ module, tab }: { module: 'electrical' | 'short-circuit'; tab: string }) {
   const state = useTypeWorkspace(), evidence = useTypeEvidence(), navigation = useTypeNavigation(), inspector = useTypeInspector();
   const [selected, setSelected] = useState(''), [running, setRunning] = useState(false);
@@ -71,7 +78,7 @@ export function TypeAnalysis({ module, tab }: { module: 'electrical' | 'short-ci
     setSelected(row.id); const target = optionalRecord(row.target), layer = text(target.role) ? (target.scope === 'core' ? text(target.core_id) : 'common') + '/' + text(target.role) : '';
     inspector.show(row.title, [
       { label: '计算结果', items: [{ label: '完整显示精度', value: analysisValue(row, true), source: 'calculation', sourceDetail: methodLabel(saved!.run) }, { label: '原始 SI 数值', value: savedValue(row.value), unit: text(row.unit) }, { label: '性质', value: basis[text(row.basis)] || '未声明' }, { label: '状态', value: statuses[text(row.status)].label }, { label: '原因', value: text(row.reason) || '—' }] },
-      { label: '条款与依据', items: [{ label: '标准', value: text(row.standard) || '未提供' }, { label: '条款', value: text(row.clause) || '未提供' }, { label: '正文页码', value: numeric(row.printed_page) ?? '未核验' }, { label: 'PDF 页码', value: numeric(row.pdf_page) ?? '未核验' }, ...(text(row.formula) ? [{ label: '公式', value: text(row.formula) }] : row.id.endsWith(':r20') ? [{ label: '数据依据', value: text(row.data_origin) || basis[text(row.basis)] || '待明确输入性质' }] : []), ...(text(optionalRecord(row.reference_table).table) ? [{ label: '标准限值参照', value: text(optionalRecord(row.reference_table).standard) + ' · ' + text(optionalRecord(row.reference_table).table) + ' · 正文 4–5 / PDF 7–8' }] : []), ...Object.entries(optionalRecord(row.formula_inputs)).map(([label, value]) => ({ label, value: savedValue(value), source: 'calculation' as const }))] },
+      { label: '条款与依据', items: [{ label: '标准', value: text(row.standard) || '未提供' }, { label: '条款', value: text(row.clause) || '未提供' }, { label: '正文页码', value: numeric(row.printed_page) ?? '未核验' }, { label: 'PDF 页码', value: numeric(row.pdf_page) ?? '未核验' }, ...(text(row.formula) ? [{ label: '公式', value: formulaValue(text(row.formula)) }] : row.id.endsWith(':r20') ? [{ label: '数据依据', value: text(row.data_origin) || basis[text(row.basis)] || '待明确输入性质' }] : []), ...(text(optionalRecord(row.reference_table).table) ? [{ label: '标准限值参照', value: text(optionalRecord(row.reference_table).standard) + ' · ' + text(optionalRecord(row.reference_table).table) + ' · 正文 4–5 / PDF 7–8' }] : []), ...Object.entries(optionalRecord(row.formula_inputs)).map(([label, value]) => ({ label: displayName(label), value: savedValue(value), source: 'calculation' as const }))] },
       { label: '来源与运行', items: [{ label: '输入来源', value: text(optionalRecord(row.input_source).reference) || '见保存的方法条件' }, { label: '原文摘要', value: <EvidenceDigest value={row.source_digest} /> }, { label: '输入摘要', value: <EvidenceDigest value={saved!.artifact.input_sha256} /> }, { label: '方法', value: methodLabel(saved!.run) }, { label: '运行', value: <EvidenceDigest value={saved!.run.id} /> }, ...(layer ? [{ label: '结构对象', value: <Button variant="ghost" size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, 'structure', 'table', navigation.location.theme) + '&layer=' + encodeURIComponent(layer))}>定位结构对象</Button> }] : [])] },
     ]);
   }

@@ -68,6 +68,9 @@ try {
     ],
     { stdio: "inherit" },
   );
+  const sourceReceipt = path.join(path.dirname(source), path.parse(source).name + '.seed.json');
+  const seedReceipt = path.join(scratch, 'seed.json');
+  if (script === 'verify-display-names.mjs') await fs.copyFile(sourceReceipt, seedReceipt);
   const backendPort = await port(),
     frontendPort = await port();
   servicePorts.push(backendPort, frontendPort);
@@ -78,6 +81,7 @@ try {
     TEMP: scratch,
     TMP: scratch,
     BACKEND_URL: "http://127.0.0.1:" + backendPort,
+    E2E_SEED_RECEIPT: seedReceipt,
   };
   if (
     [
@@ -140,6 +144,20 @@ try {
       backendOutput = (backendOutput + chunk.toString()).slice(-12000);
     });
   await ready(environment.BACKEND_URL + "/api/health", backend);
+  if (script === 'verify-display-names.mjs') {
+    // Refresh installed IEC releases only in the private backup. Preserve
+    // historical runs and the source demonstration database.
+    await run(python, ['-c', [
+      'import importlib.util,json,sys',
+      'from pathlib import Path',
+      "path=Path('frontend/scripts/seed-engineering-demo.py')",
+      "spec=importlib.util.spec_from_file_location('isolated_engineering_seed',path)",
+      'seed=importlib.util.module_from_spec(spec);spec.loader.exec_module(seed)',
+      "receipt=json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))",
+      "assert receipt['complete']",
+      'seed.refresh_saved_demo(sys.argv[1],receipt)',
+    ].join('\n'), environment.BACKEND_URL, seedReceipt], {env:environment,stdio:'inherit'});
+  }
   const preview = spawn(
     process.execPath,
     [

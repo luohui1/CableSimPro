@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useState, type ReactNode } from "react";
-import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
+import { getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './ui/table';
 import { Icon } from "./icon";
 import { cn } from "@/lib/cn";
@@ -183,7 +183,12 @@ export function DataTable<T extends { id: string }>({
                             column.wrap && "cell-wrap",
                           )}
                         >
-                          {(() => { const cell = tableRows.get(row)?.getVisibleCells()[index]; return cell ? flexRender(cell.column.columnDef.cell, cell.getContext()) : null; })()}
+                          {(() => {
+                            const cell = tableRows.get(row)?.getVisibleCells()[index], render = cell?.column.columnDef.cell;
+                            // These are render callbacks, not component types. Calling the
+                            // callback preserves the returned controls across parent updates.
+                            return cell && typeof render === 'function' ? render(cell.getContext()) : null;
+                          })()}
                         </TableCell>
                       ))}
                     </TableRow>

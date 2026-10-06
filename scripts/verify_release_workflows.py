@@ -95,7 +95,11 @@ def identity(item):
 
 
 def real_candidates(catalogue):
-    selected = [c for c in catalogue if identity(c)[:3] == ('YJV22', 8700, 3)]
+    # The bundled series consists of original manufacturer specification records.
+    # A completed 3x300 workspace model is a derived draft, not an eleventh row
+    # of that series and must not replace a missing original specification.
+    selected = [c for c in catalogue if isinstance(c['payload'].get('specification'), dict)
+                and identity(c)[:3] == ('YJV22', 8700, 3)]
     areas = sorted({identity(c)[3] for c in selected})
     require(set(AREAS) <= set(areas), 'RELEASE_CANDIDATES_MISSING',
             '发布种子未提供完整 YJV22-8.7/15 kV 三芯35–400 mm²系列，停止真实询价验收。',
