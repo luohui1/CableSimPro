@@ -10,6 +10,7 @@ import importlib
 import json
 from pathlib import Path
 import sys
+from copy import deepcopy
 from backend.domain.models import DomainDocument
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -74,34 +75,67 @@ def model_for(plugin_id, capability):
     return getattr(sys.modules[module_name], name), path
 
 
-def contracts(research):
+def contracts(research, *, encoded=False):
     from backend.plugin_host import PluginHostError
+    from .verified_executor import verification_scope
     try:
-        return verified_contracts(research)
+        # A hit still verifies installed bytes. It never trusts mtime or a TTL.
+        with research.contract_read_lock, verification_scope():
+            registry = research.registry()
+            entries = [{'method':research.pin(plugin), 'capabilities':[
+                capability.model_dump(mode='json') for capability in plugin.manifest.capabilities
+            ]} for plugin in registry.plugins.values()]
+            resolve_cache = {'registries':{pid:registry for pid in registry.plugins}}
+            pins = []
+            for entry in entries:
+                for cap in entry['capabilities']:
+                    if (entry['method']['plugin_id'], cap['id']) not in MODELS:
+                        continue
+                    pin = {**entry['method'], 'capability': cap['id']}
+                    research.resolve(pin, resolve_cache)
+                    pins.append(pin)
+            sources = [Path(__file__), ROOT/'backend/domain/models.py', ROOT/'backend/kernel/simulation_parameters.py']
+            key = sha256(json.dumps({'methods': pins, 'adapter_sources': [
+                (path.relative_to(ROOT).as_posix(), sha256(path.read_bytes()).hexdigest()) for path in sources
+            ]}, sort_keys=True).encode()).hexdigest()
+            if key not in research.contract_read_cache:
+                result = verified_contracts(research, entries, resolve_cache)
+                from pydantic import TypeAdapter
+                from .host_api import InputContract
+                adapter = TypeAdapter(list[InputContract])
+                validated = adapter.validate_python(result)
+                research.contract_read_cache[key] = (result, adapter.dump_json(validated, by_alias=True))
+                while len(research.contract_read_cache) > 4:
+                    research.contract_read_cache.popitem(last=False)
+            research.contract_read_cache.move_to_end(key)
+            result, payload = research.contract_read_cache[key]
+            return payload if encoded else deepcopy(result)
     except (OSError,ValueError,SyntaxError,ImportError,AttributeError) as exc:
         raise PluginHostError('PLUGIN_INPUT_CONTRACT_INVALID','插件输入契约无法读取；源码可能正在更新，请完成安装和封签后重试。'+str(exc),409) from None
 
 
-def verified_contracts(research):
+def verified_contracts(research, entries=None, resolve_cache=None):
     result = []
-    for entry in research.methods():
+    resolve_cache = {} if resolve_cache is None else resolve_cache
+    domain_schema = DomainDocument.model_json_schema()
+    for entry in research.methods() if entries is None else entries:
         for cap in entry['capabilities']:
             key = (entry['method']['plugin_id'], cap['id'])
             if key not in MODELS:
                 continue
             pin = {**entry['method'], 'capability': cap['id']}
-            research.resolve(pin)  # The form must refer to the verified release.
+            research.resolve(pin, resolve_cache)  # One verified release for all its capabilities.
             model, path = model_for(*key)
             schema = model.model_json_schema()
             if key[0] == 'cablesim.hybrid-rating':
-                result.append({'method':pin,'input_schema':cap['input_schema'],'schema':DomainDocument.model_json_schema(),
+                result.append({'method':pin,'input_schema':cap['input_schema'],'schema':domain_schema,
                     'parameter_schema':schema,'input_sources':['domain','study'],'tasks':['rating'],
                     'source':path.relative_to(ROOT).as_posix(),'source_sha256':sha256(path.read_bytes()).hexdigest(),
                     'parameter_source':path.relative_to(ROOT).as_posix(),'parameter_source_sha256':sha256(path.read_bytes()).hexdigest(),
                     'schema_digest':sha256(json.dumps(schema,sort_keys=True).encode()).hexdigest()})
                 continue
             if key[0] == 'cablesim.type-electrical':
-                result.append({'method':pin, 'input_schema':cap['input_schema'], 'schema':DomainDocument.model_json_schema(),
+                result.append({'method':pin, 'input_schema':cap['input_schema'], 'schema':domain_schema,
                     'parameter_schema':schema, 'input_sources':['domain', 'study'], 'tasks':[cap['id']],
                     'source':path.relative_to(ROOT).as_posix(), 'source_sha256':sha256(path.read_bytes()).hexdigest(),
                     'parameter_source':path.relative_to(ROOT).as_posix(), 'parameter_source_sha256':sha256(path.read_bytes()).hexdigest(),
@@ -126,7 +160,7 @@ def verified_contracts(research):
                          'relaxation': 'Dimensionless under-relaxation in (0,1].'}
                 for field, info in schema['properties'].items():
                     info['description'] = units.get(field, info.get('description', field))
-                result.append({'method':pin, 'input_schema':cap['input_schema'], 'schema':DomainDocument.model_json_schema(),
+                result.append({'method':pin, 'input_schema':cap['input_schema'], 'schema':domain_schema,
                                'parameter_schema':schema, 'input_sources':['domain', 'study'], 'tasks':[cap['id']],
                                'parameter_source':'backend/kernel/simulation_parameters.py',
                                'parameter_source_sha256':sha256((ROOT/'backend/kernel/simulation_parameters.py').read_bytes()).hexdigest(),
@@ -193,7 +227,7 @@ def verified_contracts(research):
                     'required':['run_id','case_id','artifact_type','artifact_sha256'],'additionalProperties':False}
                 optional = ('source','duct','per_cable_losses','loss_input_source','target_circuit_id','reference_basis','operation','rating_mode','double_flat_tables','external_loss_reference','corrugated_gap')
                 parameters.update(properties=fields, required=[k for k in fields if k not in optional], **{'$defs': schema['$defs']})
-            primary = DomainDocument.model_json_schema()
+            primary = domain_schema
             encoded = json.dumps(primary, sort_keys=True, ensure_ascii=False).encode()
             result.append({'method': pin, 'input_schema': cap['input_schema'], 'schema': primary,
                            'standalone_schema': schema,

@@ -4366,6 +4366,26 @@ export interface components {
              */
             release_digest: string;
         };
+        /** ModelReference */
+        ModelReference: {
+            /**
+             * Id
+             * @description Saved model identity or local cable type ID; not inferred from its name.
+             */
+            id: string | null;
+            /** Name */
+            name: string | null;
+            /**
+             * Version
+             * @description Saved referenced model version; null for an unversioned local domain model.
+             */
+            version: string | null;
+            /**
+             * Content Sha256
+             * @description Saved referenced model digest; null when there is no version binding.
+             */
+            content_sha256: string | null;
+        };
         /** NewModelIdentity */
         NewModelIdentity: {
             /**
@@ -5412,6 +5432,71 @@ export interface components {
              */
             scope_acknowledged: true;
         };
+        /** RunSummary */
+        RunSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Workspace
+             * Format: uuid
+             */
+            workspace: string;
+            /**
+             * Study
+             * Format: uuid
+             */
+            study: string;
+            /** Sequence */
+            sequence: number;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "accepted" | "running" | "validating" | "succeeded" | "partial" | "failed" | "interrupted";
+            /** Created */
+            created: string;
+            /** Finished */
+            finished: string | null;
+            /**
+             * Freshness
+             * @enum {string}
+             */
+            freshness: "current" | "historical" | "unknown";
+            /**
+             * Integrity
+             * @enum {string}
+             */
+            integrity: "verified" | "corrupt";
+            version_status: components["schemas"]["VersionStatus"] | null;
+            snapshot: components["schemas"]["RunSummarySnapshot"];
+            /** @description Exact saved method release; null when the snapshot integrity cannot be established. */
+            method: components["schemas"]["Method"] | null;
+            /**
+             * Error
+             * @description Saved run-level error code and message, each limited to 512 characters; full detail remains at GET runs/{rid}.
+             */
+            error: {
+                [key: string]: string;
+            } | null;
+        };
+        /** RunSummaryPage */
+        RunSummaryPage: {
+            /** Items */
+            items: components["schemas"]["RunSummary"][];
+            /** Next Cursor */
+            next_cursor: number | null;
+        };
+        /** RunSummarySnapshot */
+        RunSummarySnapshot: {
+            /**
+             * Module
+             * @description Saved selected module; null means the root study configuration.
+             */
+            module: string | null;
+        };
         /** Sample */
         Sample: {
             /** Label */
@@ -5922,6 +6007,13 @@ export interface components {
             latest_run_id?: string | null;
             /** @description Version status of latest_run_id, computed at read time. */
             version_status?: components["schemas"]["VersionStatus"] | null;
+            /**
+             * Workspace Revision
+             * @description Current workspace revision for this read.
+             */
+            readonly workspace_revision?: number | null;
+            /** @description Model display identity from the saved workspace binding or local domain; null for standalone study input. Does not load the complete workspace payload. */
+            readonly model_reference?: components["schemas"]["ModelReference"] | null;
         } & {
             [key: string]: unknown;
         };
@@ -7591,6 +7683,8 @@ export interface operations {
             query?: {
                 after?: number;
                 limit?: number;
+                /** @description full preserves the complete saved output and snapshot. summary returns list metadata, method identity and snapshot.module only; pagination and integrity/currentness semantics are unchanged. */
+                view?: "full" | "summary";
             };
             header?: never;
             path: {
@@ -7607,7 +7701,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RunPage"];
+                    "application/json": components["schemas"]["RunPage"] | components["schemas"]["RunSummaryPage"];
                 };
             };
             /** @description Validation Error */

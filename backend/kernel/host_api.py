@@ -230,9 +230,11 @@ def make_router(research, previews):
 
     @router.get('/design/input-contracts', response_model=list[InputContract], responses=ERRORS, deprecated=True)
     @router.get('/input-contracts', response_model=list[InputContract], responses=ERRORS)
-    def input_contracts():
+    async def input_contracts():
         from .input_contracts import contracts
-        return contracts(research)
+        from .read_responses import read_response
+        return await read_response(research, ('input-contracts',), None,
+            lambda: contracts(research, encoded=True), uses_database=False)
 
     @router.get('/design/examples/iec', response_model=IecExample, deprecated=True)
     @router.get('/examples/iec', response_model=IecExample)

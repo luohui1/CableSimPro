@@ -50,18 +50,8 @@ export async function studyIndex(signal?: AbortSignal): Promise<StudyRow[]> {
         ),
         "研究",
       );
-      if (!studies.length) return [];
-      const state = record(
-        await responseData(
-          api.GET("/api/workspaces/{wid}", {
-            params: { path: { wid } },
-            signal,
-          }),
-        ),
-        "工程快照",
-      );
-      const reference = optionalRecord(state.study_cable_reference);
-      return studies.map((value) => projectStudy(value, state, reference));
+      // 研究响应自带只读型号引用；工程修订与更新时间来自工程列表项，不再为型号名读取整份工程快照。
+      return studies.map((value) => projectStudy(value, workspace, optionalRecord(optionalRecord(value).model_reference)));
     }),
   );
   return results.flat().sort((a, b) => b.updated.localeCompare(a.updated));
@@ -145,10 +135,12 @@ export async function typeIndex(signal?: AbortSignal) {
     "型号",
   ).map((value) => record(value, "型号"));
 }
+/** 运行记录；view=summary 只取状态、当前性、完整性与方法身份（列表用），不含结果正文。 */
 export async function studyRuns(
   wid: string,
   sid: string,
   signal?: AbortSignal,
+  view: "full" | "summary" = "full",
 ) {
   const deadline = AbortSignal.timeout(15000);
   const requestSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
@@ -159,7 +151,7 @@ export async function studyRuns(
     const data = record(
       await responseData(
         api.GET("/api/workspaces/{wid}/studies/{sid}/runs", {
-          params: { path: { wid, sid }, query: { after, limit: 100 } },
+          params: { path: { wid, sid }, query: { after, limit: 100, view } },
           signal: requestSignal,
         }),
       ),

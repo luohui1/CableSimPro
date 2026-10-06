@@ -11,6 +11,8 @@ import os
 import platform
 from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor
+from collections import OrderedDict
+from threading import RLock
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -42,12 +44,43 @@ class Research:
         self.executor = executor
         self.owner_epoch = str(uuid4())
         self.prepared_candidates = {}
+        self.run_read_cache = OrderedDict()
+        self.run_read_lock = RLock()
+        self.contract_read_cache = OrderedDict()
+        self.contract_read_lock = RLock()
+        from .read_responses import ReadResponses
+        self.read_responses = ReadResponses(self)
         self.background = ThreadPoolExecutor(max_workers=2, thread_name_prefix='study-run')
 
     def close(self):
         self.background.shutdown(wait=False)
+        self.read_responses.close()
         if self.resident_runner is not None:
             self.resident_runner.close()
+        seals=getattr(getattr(self.executor,'local',self.executor),'seals',None)
+        if seals is not None:seals.close()
+
+    def warm_reads(self):
+        """Validate a small existing library at startup; never run a method."""
+        from .responses import StudyResponse, RunSummaryPage
+        import logging
+        with self.store.db() as db:
+            count=db.execute('SELECT COUNT(*) FROM studies').fetchone()[0]
+            if count == 0 or count > 64:return
+            rows=db.execute('SELECT workspace,id FROM studies ORDER BY rowid').fetchall()
+        tasks=[]
+        for wid in dict.fromkeys(row['workspace'] for row in rows):
+            tasks.append((('studies',wid),list[StudyResponse],lambda wid=wid:self.list_studies(wid)))
+        for row in rows:
+            wid,sid=row['workspace'],row['id']
+            tasks.extend([
+                (('study',wid,sid),StudyResponse,lambda wid=wid,sid=sid:self.study_detail(wid,sid)),
+                (('runs',wid,sid,0,50),RunSummaryPage,lambda wid=wid,sid=sid:self.list_runs(wid,sid,view='summary')),
+            ])
+        for key,model,load in tasks:
+            try:self.read_responses.build(key,model,load,True)
+            except (HTTPException,PluginHostError,ValueError,TypeError,KeyError):
+                logging.getLogger(__name__).debug('Read cache warm-up skipped for %s',key,exc_info=True)
 
     def initialize(self):
         with self.store.db(True) as db:
@@ -195,19 +228,31 @@ class Research:
             return self.definition(db, wid, sid)
 
     def list_studies(self, wid):
+        from .read_models import model_reference
         with self.store.db() as db:
-            self.store.load(db, wid)
+            revision, model = model_reference(db, wid)
             ids = [r[0] for r in db.execute('SELECT id FROM studies WHERE workspace=? ORDER BY rowid', (wid,))]
-        cache = {}
-        return [self.study_detail(wid, sid, cache) for sid in ids]
+            cache = {}
+            return [self._study_detail(db, wid, sid, revision, model, cache) for sid in ids]
 
     def study_detail(self, wid, sid, cache=None):
+        from .read_models import model_reference
         with self.store.db() as db:
-            value = self.definition(db, wid, sid)
-            latest = db.execute('SELECT id FROM study_runs WHERE workspace=? AND study=? ORDER BY sequence DESC LIMIT 1', (wid, sid)).fetchone()
+            revision, model = model_reference(db, wid)
+            return self._study_detail(db, wid, sid, revision, model, {} if cache is None else cache)
+
+    def _study_detail(self, db, wid, sid, revision, model, cache):
+        from .read_models import run_facts, RUN_COLUMNS
+        from .version_status import inspect
+        value = self.definition(db, wid, sid)
+        latest = db.execute('SELECT '+RUN_COLUMNS+' FROM study_runs WHERE workspace=? AND study=? ORDER BY sequence DESC LIMIT 1', (wid, sid)).fetchone()
         value['latest_run_id'] = latest['id'] if latest else None
-        value['version_status'] = (self.get_run(wid, latest['id'], cache).get('version_status') if latest else
-                                   {'status': 'empty', 'reasons': [], 'display_name': '尚无运行'})
+        value['version_status'] = {'status': 'empty', 'reasons': [], 'display_name': '尚无运行'}
+        if latest:
+            facts = run_facts(self, latest)
+            value['version_status'] = inspect(self, facts['snapshot'], cache) if facts['integrity'] == 'verified' else None
+        value['workspace_revision'] = revision
+        value['model_reference'] = model if value['definition'].get('input_source') == 'domain' else None
         return value
 
     def lock(self, db, wid, revision, method):
@@ -826,7 +871,20 @@ class Research:
             statuses.setdefault(case['case_id'],{})['x-cablesim.temperature-field'] = state
         return statuses
 
-    def list_runs(self, wid, sid, after=0, limit=50):
+    def list_runs(self, wid, sid, after=0, limit=50, *, view='full'):
+        if view == 'summary':
+            from .read_models import summary, RUN_COLUMNS
+            from .verified_executor import verification_scope
+            with self.store.db() as db:
+                db.execute('BEGIN')
+                study = self.definition(db, wid, sid)
+                revision = db.execute('SELECT revision FROM workspaces WHERE id=?', (wid,)).fetchone()['revision']
+                rows = db.execute('SELECT '+RUN_COLUMNS+' FROM study_runs WHERE workspace=? AND study=? AND sequence>? ORDER BY sequence LIMIT ?',
+                                  (wid, sid, after, limit + 1)).fetchall()
+            page, cache = rows[:limit], {}
+            with verification_scope():
+                items = [summary(self, row, revision, study, cache) for row in page]
+            return {'items': items, 'next_cursor': page[-1]['sequence'] if len(rows) > limit else None}
         with self.store.db() as db:
             self.definition(db, wid, sid)
             rows = db.execute('SELECT id,sequence FROM study_runs WHERE workspace=? AND study=? AND sequence>? ORDER BY sequence LIMIT ?',

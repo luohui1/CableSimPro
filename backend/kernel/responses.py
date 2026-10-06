@@ -27,6 +27,13 @@ class VersionStatus(PublicResponse):
     display_name: str = Field(description='One combined status message for the result or document cover.')
 
 
+class ModelReference(BaseModel):
+    id: str | None = Field(description='Saved model identity or local cable type ID; not inferred from its name.')
+    name: str | None
+    version: str | None = Field(description='Saved referenced model version; null for an unversioned local domain model.')
+    content_sha256: str | None = Field(description='Saved referenced model digest; null when there is no version binding.')
+
+
 class StudyResponse(PublicResponse):
     id: UUID
     workspace: UUID
@@ -37,6 +44,8 @@ class StudyResponse(PublicResponse):
     can_redo: bool = Field(default=False, description='Later configuration on the active history branch exists.')
     latest_run_id: UUID | None = Field(default=None, description='Most recently accepted run; null before first execution.')
     version_status: VersionStatus | None = Field(default=None, description='Version status of latest_run_id, computed at read time.')
+    workspace_revision: int | None = Field(default=None, description='Current workspace revision for this read.', json_schema_extra={'readOnly': True})
+    model_reference: ModelReference | None = Field(default=None, description='Model display identity from the saved workspace binding or local domain; null for standalone study input. Does not load the complete workspace payload.', json_schema_extra={'readOnly': True})
 
 
 class TaskOption(PublicResponse):
@@ -153,4 +162,29 @@ class RunResponse(PublicResponse):
 
 class RunPage(PublicResponse):
     items: list[RunResponse]
+    next_cursor: int | None
+
+
+class RunSummarySnapshot(BaseModel):
+    module: str | None = Field(description='Saved selected module; null means the root study configuration.')
+
+
+class RunSummary(BaseModel):
+    id: UUID
+    workspace: UUID
+    study: UUID
+    sequence: int
+    status: Literal['accepted', 'running', 'validating', 'succeeded', 'partial', 'failed', 'interrupted']
+    created: str
+    finished: str | None
+    freshness: Literal['current', 'historical', 'unknown']
+    integrity: Literal['verified', 'corrupt']
+    version_status: VersionStatus | None
+    snapshot: RunSummarySnapshot
+    method: Method | None = Field(description='Exact saved method release; null when the snapshot integrity cannot be established.')
+    error: dict[str, str] | None = Field(description='Saved run-level error code and message, each limited to 512 characters; full detail remains at GET runs/{rid}.')
+
+
+class RunSummaryPage(BaseModel):
+    items: list[RunSummary]
     next_cursor: int | None

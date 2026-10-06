@@ -6,6 +6,8 @@ from urllib.parse import urlsplit
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.requests import Request
+from starlette.datastructures import MutableHeaders
 from . import __version__
 from .kernel.presets import presets
 from .kernel.workspace import make_router as workspace_router
@@ -25,6 +27,40 @@ from .kernel.requirements import make_router as requirements_router
 from .kernel.rating_conditions import make_router as rating_table_router
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+class LocalBoundary:
+    """Keep local-request checks without BaseHTTPMiddleware task/stream overhead."""
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http':
+            return await self.app(scope, receive, send)
+        request = Request(scope, receive)
+        allowed = {'localhost', '127.0.0.1', '::1', 'testserver'} | {h.strip() for h in os.getenv('CABLESIM_TRUSTED_HOSTS', '').split(',') if h.strip()}
+        problem = None
+        if request.url.hostname not in allowed:
+            problem = JSONResponse({'detail':'此预览版只接受受信任本机 Host。'}, status_code=403)
+        elif request.method not in ('GET','HEAD','OPTIONS'):
+            origin = request.headers.get('origin')
+            if origin and urlsplit(origin).hostname not in allowed:
+                problem = JSONResponse({'detail':'拒绝不受信任的跨站写入。'}, status_code=403)
+            else:
+                length = request.headers.get('content-length')
+                maximum = 65*1024*1024 if request.url.path == '/api/documents' else 11*1024*1024
+                if length and (not length.isdigit() or int(length)>maximum):
+                    problem = JSONResponse({'detail':{'code':'REQUEST_SIZE_LIMIT','message':'请求体超过上传上限。'}}, status_code=413)
+        if problem is not None:
+            return await problem(scope, receive, send)
+
+        async def send_response(message):
+            if message['type'] == 'http.response.start' and request.url.path.startswith('/api/'):
+                headers = MutableHeaders(scope=message)
+                headers['Cache-Control'] = 'no-store'
+                headers['X-Content-Type-Options'] = 'nosniff'
+            await send(message)
+        await self.app(scope, receive, send_response)
 
 
 def create_app(db_path: str | Path | None = None) -> FastAPI:
@@ -53,6 +89,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             from .kernel.candidates import initialize
             with workspace_store.db(True) as db:
                 initialize(db)
+            research.warm_reads()
             yield
         finally:
             documents.close()
@@ -96,24 +133,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     async def invalid_request(request, exc):
         return JSONResponse({'detail':[{'loc':e['loc'],'msg':e['msg'],'type':e['type']} for e in exc.errors()]},status_code=422)
 
-    @app.middleware('http')
-    async def local_boundary(request, call_next):
-        allowed = {'localhost', '127.0.0.1', '::1', 'testserver'} | {h.strip() for h in os.getenv('CABLESIM_TRUSTED_HOSTS', '').split(',') if h.strip()}
-        if request.url.hostname not in allowed:
-            return JSONResponse({'detail':'此预览版只接受受信任本机 Host。'}, status_code=403)
-        if request.method not in ('GET','HEAD','OPTIONS'):
-            origin = request.headers.get('origin')
-            if origin and urlsplit(origin).hostname not in allowed:
-                return JSONResponse({'detail':'拒绝不受信任的跨站写入。'}, status_code=403)
-            length = request.headers.get('content-length')
-            maximum = 65*1024*1024 if request.url.path == '/api/documents' else 11*1024*1024
-            if length and (not length.isdigit() or int(length)>maximum):
-                return JSONResponse({'detail':{'code':'REQUEST_SIZE_LIMIT','message':'请求体超过上传上限。'}}, status_code=413)
-        response = await call_next(request)
-        if request.url.path.startswith('/api/'):
-            response.headers['Cache-Control'] = 'no-store'
-            response.headers['X-Content-Type-Options'] = 'nosniff'
-        return response
+    app.add_middleware(LocalBoundary)
 
     @app.get('/api/health')
     def health():

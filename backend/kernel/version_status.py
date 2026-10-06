@@ -17,7 +17,7 @@ def summarize(reasons):
 def latest_model(db, reference):
     """Use stable system ID or published family; never guess identity from a name."""
     from .scenarios import system_models, METHOD_DEFAULTS
-    model = next((m for m in system_models() if m['id'] == reference['id']), None)
+    model = next((m for m in system_models() if m['id'] == reference['id']), None) if reference['id'].startswith('system.') else None
     if model:
         return model
     tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
@@ -65,7 +65,8 @@ def inspect(research, snapshot, cache=None):
         pid = old['plugin_id']
         try:
             if pid not in pins:
-                pins[pid] = research.pin(research.registry(pid).get(pid))
+                registry = cache.get('registries', {}).get(pid)
+                pins[pid] = research.pin((registry if registry is not None else research.registry(pid)).get(pid))
             new = pins[pid]
             if (old['version'], old['release_digest']) == (new['version'], new['release_digest']):
                 continue
@@ -85,7 +86,10 @@ def inspect(research, snapshot, cache=None):
         old = state.get('study_cable_reference') or state.get('type_origin_reference')
         if old:
             with research.store.db() as db:
-                latest = latest_model(db, old)
+                models = cache.setdefault('version_models', {})
+                if old['id'] not in models:
+                    models[old['id']] = latest_model(db, old)
+                latest = models[old['id']]
                 # A release's own runs retain their parent lineage, not a stale
                 # external binding to the version they themselves just published.
                 own_release = latest and latest.get('published_workspace') == snapshot.get('workspace_id')

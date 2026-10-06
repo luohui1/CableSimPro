@@ -1,11 +1,14 @@
 """The saved-study API; existing workspace/run endpoints keep their v0 semantics."""
 from fastapi import APIRouter, HTTPException, Query, Response
+from typing import Literal
 from .study_tasks import task_catalog
-from .responses import StudyResponse, RunResponse, RunPage, PreflightResponse, TaskOption
+from .responses import StudyResponse, RunResponse, RunPage, RunSummaryPage, PreflightResponse, TaskOption
 
 from .contracts import Comparison, CreateStudy, DeliveryRequest, RunStudy, UpdateStudy, RecalculateStudy
 from .study_history import StudyHistoryRequest, restore
 from .host_api import ERRORS, host_call, DeliveryResult
+from .read_responses import read_response
+from starlette.concurrency import run_in_threadpool
 
 
 def make_router(research):
@@ -49,12 +52,12 @@ def make_router(research):
             return {**dict(r), 'state': json.loads(r['state'])}
 
     @router.get('/workspaces/{wid}/studies', response_model=list[StudyResponse])
-    def studies(wid: str):
-        return research.list_studies(wid)
+    async def studies(wid: str):
+        return await read_response(research, ('studies',wid), list[StudyResponse], lambda: research.list_studies(wid))
 
     @router.get('/workspaces/{wid}/studies/{sid}', response_model=StudyResponse, responses=ERRORS)
-    def study_detail(wid: str, sid: str):
-        return host_call(research.study_detail, wid, sid)
+    async def study_detail(wid: str, sid: str):
+        return await read_response(research, ('study',wid,sid), StudyResponse, lambda: host_call(research.study_detail, wid, sid))
 
     @router.post('/workspaces/{wid}/studies/{sid}/recalculate', response_model=RunResponse,
                  response_model_exclude_unset=True, responses={**ERRORS, 202: {'model': RunResponse, 'description': 'Accepted current-version run; poll Location.'}})
@@ -98,9 +101,13 @@ def make_router(research):
             response.headers['Retry-After'] = '2'
         return result
 
-    @router.get('/workspaces/{wid}/studies/{sid}/runs', response_model=RunPage, response_model_exclude_unset=True)
-    def runs(wid: str, sid: str, after: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100)):
-        return research.list_runs(wid, sid, after, limit)
+    @router.get('/workspaces/{wid}/studies/{sid}/runs', response_model=RunPage | RunSummaryPage, response_model_exclude_unset=True)
+    async def runs(wid: str, sid: str, after: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100),
+             view: Literal['full', 'summary'] = Query('full', description='full preserves the complete saved output and snapshot. summary returns list metadata, method identity and snapshot.module only; pagination and integrity/currentness semantics are unchanged.')):
+        if view == 'summary':
+            return await read_response(research, ('runs',wid,sid,after,limit), RunSummaryPage,
+                lambda: research.list_runs(wid,sid,after,limit,view='summary'))
+        return await run_in_threadpool(research.list_runs, wid, sid, after, limit)
 
     @router.get('/workspaces/{wid}/studies/{sid}/runs/{rid}', response_model=RunResponse, response_model_exclude_unset=True)
     def run(wid: str, sid: str, rid: str):

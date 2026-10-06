@@ -25,6 +25,22 @@
 
 研究响应 `StudyResponse`、`PreflightResponse`、`RunResponse`、`RunPage` 明确公开身份、修订、生命周期、完整性、当前性和工件状态；插件扩展正文用 JSON 值映射保留声明类型，具体物理字段由工件 schema 定义，不手写每个插件的平行 DTO。
 
+### 列表投影与输入契约缓存
+
+`GET /api/workspaces/{wid}/studies/{sid}/runs?view=summary` 返回 `RunSummaryPage`，保持既有 `after/limit/next_cursor` 分页。每项只有 `id/workspace/study/sequence/status/created/finished/freshness/integrity/version_status`、`snapshot.module`、保存的方法四项身份 `method`，以及至多512字符的运行级 `error.code/message`；没有 `output`、完整快照和数值工件。错误详情、物理结果与工件仍从 `GET .../runs/{rid}` 获取。省略 `view` 或传 `view=full` 保持原来的完整 `RunPage`；非法模式返回422。
+
+研究列表及单个研究新增只读 `workspace_revision`、`model_reference{id,name,version,content_sha256}`。引用身份来自当前保存的 `study_cable_reference` 或 `type_origin_reference`，没有版本绑定时可显示本地域文档首个电缆的真实ID和标签，此时version/digest为空；独立 `input_source=study` 返回null，不冒用工程型号。前端可直接显示这些字段，减少为一个型号名称请求完整工程快照。研究读取不再为取得 `version_status` 调用完整运行/工件展示校验。
+
+完整性投影最多保留64条进程内记录。缓存身份包含工程/运行ID、已声明输入与输出摘要，以及重建时从数据库读取的snapshot/output/error原始字节SHA256；输入摘要绑定保存的插件发行封签。首次读取内容需解析并验证规范摘要，摘要没改而正文被篡改也会失效。这里只缓存不可变证据的校验和小型投影；重建响应时重新检查当前工程/研究修订、安装方法封签及已发布型号版本。新运行、正文或摘要变化、进程重启、LRU淘汰均须重建；损坏返回 `corrupt/unknown`，不沿用旧的“有效”状态。读取不回写旧运行。
+
+输入契约目录按完整方法发行身份（包含同版本号的release_digest）及宿主契约源文件内容摘要缓存，最多保留4份；已校验的响应JSON可直接复用。同一请求中的能力共享一次目录和封签检查、一次领域Schema生成；文件读取最多4个线程，读取任务完成后才返回，宿主关闭时收回线程池。Windows只读核验通过原生目录变更通知复用已校验内容，监控backend、cablesim_sdk及plugins的新增、删除、改写和目录替换，忽略不进入封签的pyc/__pycache__；不依赖mtime或TTL。通知不可用、失败或溢出时停用响应缓存并重新读取实际字节验证，其他平台也采用逐次内容核验。插件新增、删除、封签或契约源变化、重启/淘汰导致重建；未封签源码改动和损坏清单返回409，不返回旧缓存。真正执行插件前仍独立重验实际字节，不能借用先前只读请求的验证结果。
+
+研究列表、详情、运行摘要及输入契约另有已验证JSON响应缓存，最多64条、总计8MiB。条目保留上述实际输入/输出摘要与方法发行身份，查找还要求路由参数、数据库提交代次和来源通知代次相同。数据库代次来自同一持久只读SQLite连接的PRAGMA data_version；任何其他连接的提交都使研究响应失效，包含工程、研究、运行正文及型号发布变更。输入契约不依赖数据库。生成前后代次不同的响应只服务当前请求，不进入缓存；全量运行列表不走该缓存。宿主关闭时取消并等待目录通知I/O，再释放缓冲区、句柄与数据库连接。
+
+启动完成数据库初始化后，对至多64个现有研究预热列表、详情及首50条运行摘要；只读取和验证已保存证据，不运行计算方法。超过此数量不预热，首次请求承担完整性核验；输入契约始终按需首次构建。预热增加的启动时间单独报告，不计入请求热缓存耗时。
+
+回归见 `tests/test_read_projections.py`、`tests/test_live_seal_errors.py`、`tests/test_verified_executor.py`，覆盖默认兼容、摘要分页/字段、型号显示身份、原始正文篡改、封签变化与恢复mtime后的源码变化。
+
 ## 交付目录与研究撤销
 
 `GET /api/workspaces/{wid}/deliveries` 返回 `DeliverySummary[]`，最新在前；空工程返回空数组。字段为 `id/workspace/kind/version/renderer/created/sources/digest/download_url/media_type`。`kind` 为 calculation 或 specification，`version` 为工程内从1开始的生成序号；`renderer` 单独保存渲染器版本，时间为UTC，`sources` 包含源运行ID及输入/输出SHA256。目录只列已封存计算书/规格书HTML，不把尚未封存的规格书预览当成交付。查询和下载均校验归属与摘要，损坏记录返回409，历史文件不会重算。

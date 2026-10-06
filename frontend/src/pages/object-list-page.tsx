@@ -6,9 +6,10 @@ import {
   studyIndex,
   studyRuns,
   typeIndex,
+  methodCatalog,
   type StudyRow,
 } from "@/api/research";
-import { message, text } from "@/api/client";
+import { message, optionalRecord, text } from "@/api/client";
 import { AppShell } from "@/components/app-shell";
 import { CreateStudyDialog } from "@/components/create-study-dialog";
 import { DataTable, type Column } from "@/components/data-table";
@@ -98,15 +99,17 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
   });
   const runQueries = useQueries({
     queries: (studies.data || []).map((row) => ({
-      queryKey: ["runs", row.workspace, row.id],
+      queryKey: ["runs", row.workspace, row.id, "summary"],
       queryFn: ({ signal }: { signal: AbortSignal }) =>
-        studyRuns(row.workspace, row.id, signal),
+        studyRuns(row.workspace, row.id, signal, "summary"),
       enabled: !isVersionStale(row.raw),
     })),
   });
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
+  const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
+  const pluginNames = new Map((catalog.data || []).map((row) => [text(optionalRecord(row.method).plugin_id), text(row.name)]));
   const projects = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
   const projectTitle = search.workspace ? text((projects.data || []).find((space) => text(space.id) === search.workspace)?.name) : "";
   const statuses = new Map(
@@ -137,7 +140,11 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
     {
       id: "method",
       label: "方法",
-      render: (row) => row.method.replace("cablesim.", ""),
+      // 插件名以已安装插件清单为准；插件未安装时用研究里保存的身份
+      render: (row) => {
+        const name = pluginNames.get(text(row.definition.method?.plugin_id));
+        return name ? `${name} ${text(row.definition.method?.version)}` : row.method.replace("cablesim.", "");
+      },
     },
     {
       id: "state",
