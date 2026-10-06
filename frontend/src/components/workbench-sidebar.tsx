@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { studyIndex, typeIndex, workspaces } from '@/api/research';
@@ -28,6 +28,14 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
   const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal) });
   const studies = useQuery({ queryKey: ['study-index'], queryFn: ({ signal }) => studyIndex(signal) });
 
+  // 进入工程或型号的工作窗口时，左栏自动收成图标栏，把空间让给工程浏览器；离开时恢复
+  const inWorkbench = /^\/(studies|types)\/[^/]+\//.test(pathname);
+  const autoCollapsed = useRef(false);
+  useEffect(() => {
+    if (inWorkbench && !collapsed) { autoCollapsed.current = true; onCollapse(); }
+    else if (!inWorkbench && collapsed && autoCollapsed.current) { autoCollapsed.current = false; onCollapse(); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inWorkbench]);
   const activeStudy = pathname.match(/^\/studies\/([^/]+)/)?.[1] || '';
   const activeType = pathname.match(/^\/types\/([^/]+)/)?.[1] || '';
   const inLibrary = pathname.startsWith('/library');
@@ -76,6 +84,8 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
       {inGallery && <nav ref={onSlot} className="sidebar-modules" aria-label="陈列导航" />}
     </div>
     <nav className="sidebar-foot" aria-label="资源">
+      <Link className="module-item rail-only" to="/studies" search={{ theme }}><Icon name="object/folder" /><span>工程</span></Link>
+      <Link className="module-item rail-only" to="/types" search={{ theme }}><Icon name="nav/cable-type" /><span>型号</span></Link>
       <Link className="module-item" to="/library" search={{ theme }} aria-current={inLibrary ? 'page' : undefined}><Icon name="nav/library" /><span>库</span></Link>
       {inLibrary && <nav ref={onSlot} className="sidebar-modules" aria-label="库导航" />}
       <Link className="module-item" to="/plugins" search={{ theme }}><Icon name="nav/plugin" /><span>插件</span></Link>

@@ -418,3 +418,27 @@
 .workbench-dock-body :not(.conclusion-copy, .state-view) > h2 { font-size: var(--text-body); font-weight: var(--weight-strong); }
 .workbench-dock-body h3 { font-size: var(--text-note); }
 .workbench-canvas .drawing-svg:focus-visible { outline: 1px solid var(--control-border); outline-offset: -1px; }
+
+/* 命令栏：工程窗口里所有可做的操作，按 模型 → 计算 → 交付 分组，右侧显示当前状态 */
+.main-content:has(> .workbench-frame) { flex-direction: column; }
+.main-content > .workbench-frame { flex: 1; min-height: 0; }
+.command-bar { display: flex; align-items: center; gap: var(--space-2); flex: none; min-height: calc(var(--space-12) - var(--space-1)); padding: var(--space-1) var(--space-4); border-bottom: 1px solid var(--line); background: var(--panel); overflow-x: auto; }
+.command-group { display: flex; align-items: center; gap: var(--space-1); padding-right: var(--space-3); border-right: 1px solid var(--line); }
+.command-group:last-of-type { border-right: 0; }
+.command-caption { padding: 0 var(--space-2) 0 var(--space-1); color: var(--text-weak); font-size: var(--text-note); }
+.command-bar .button-compact { gap: var(--space-1); white-space: nowrap; }
+.command-bar .button-compact .icon { width: var(--space-4); height: var(--space-4); }
+.command-state { margin-left: auto; padding-left: var(--space-4); color: var(--text-secondary); font-size: var(--text-note); white-space: nowrap; }
+/* 三维视口在工作窗口里不显示底部状态字 */
+.workbench-canvas .cad-status { display: none; }
+.workbench-canvas .cad-viewport:focus-within, .workbench-canvas .cad-stage:focus-visible { outline: 0; }
+.workbench-sidebar .rail-only { display: none; }
+[data-collapsed] .workbench-sidebar .rail-only { display: flex; }
+.explorer-switch { display: flex; align-items: center; gap: var(--space-1); width: 100%; padding: var(--space-1) 0; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.explorer-switch strong { flex: 1; min-width: 0; font-size: var(--text-body); line-height: 1.5; }
+.explorer-switch .icon { flex: none; color: var(--text-secondary); }
+.explorer-switch:hover strong { text-decoration: underline; text-underline-offset: 3px; }
+.command-caption { white-space: nowrap; flex: none; }
+.inspector-list dt { flex: none; white-space: nowrap; }
+.inspector-list dd { min-width: 0; }
+.inspector-lead { color: var(--text); line-height: 1.6; }

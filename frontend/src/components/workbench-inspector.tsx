@@ -35,7 +35,7 @@ export function WorkbenchInspector({ document, historical, selection, candidate,
   historical: boolean;
   selection?: InputSelection;
   candidate?: { title: string; groups: PropertyGroup[] };
-  method: { name: string; version: string; hpc: boolean };
+  method: { name: string; version: string; hpc: boolean; kind: string; run: string };
   demo: boolean;
 }) {
   return <aside className="workbench-inspector" aria-label="属性">
@@ -45,17 +45,17 @@ export function WorkbenchInspector({ document, historical, selection, candidate,
         {selection.fields?.length && document
           ? <div className="inspector-fields">{selection.fields.map((spec) => <DomainNumber key={spec.path} spec={spec} document={document} scope={scopeOf(spec.path)} readOnly={historical} />)}</div>
           : <Groups groups={selection.groups} />}
-      </Block>
-        : <Block icon="object/section" title="所选对象"><p className="inspector-empty">在截面中点选电缆、排管或土层，在这里修改尺寸与参数。</p></Block>}
+      </Block> : null}
+    <Block icon="calc/ampacity" title="本次计算">
+      {method.kind && <p className="inspector-lead">{method.kind}</p>}
+      <dl className="inspector-list">
+        <div><dt>插件</dt><dd>{method.name} {method.version}</dd></div>
+        <div><dt>运行位置</dt><dd>{method.hpc ? "超算（Slurm）" : "本机"}</dd></div>
+        <div><dt>状态</dt><dd>{method.run}</dd></div>
+      </dl>
+    </Block>
     {document && <Block icon="object/conditions" title="工况" id="inspector-conditions">
       <div className="inspector-conditions"><ConditionsInputs document={document} historical={historical} tab="inputs" onSelect={() => {}} /></div>
     </Block>}
-    <Block icon="nav/plugin" title="计算方法">
-      <dl className="inspector-list">
-        <div><dt>插件</dt><dd>{method.name}</dd></div>
-        <div><dt>版本</dt><dd>{method.version}</dd></div>
-        <div><dt>运行位置</dt><dd>{method.hpc ? "超算（Slurm）" : "本机"}</dd></div>
-      </dl>
-    </Block>
   </aside>;
 }

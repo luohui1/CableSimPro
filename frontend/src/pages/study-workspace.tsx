@@ -177,10 +177,14 @@ export function StudyWorkspace() {
   const annotations = run && !pendingRun ? conductorAnnotations(run, module === "selection" ? selectedRow?.id || view?.recommendation?.id : undefined) : undefined;
   const methodPin = optionalRecord(study.definition.method);
   const pluginEntry = (catalog.data || []).map(optionalRecord).find((row) => text(optionalRecord(row.method).plugin_id) === text(methodPin.plugin_id));
+  const capabilityEntry = (Array.isArray(pluginEntry?.capabilities) ? pluginEntry!.capabilities : []).map(optionalRecord).find((cap) => text(cap.id) === text(methodPin.capability));
+  const lastRun = runs.at(-1);
   const methodInfo = {
     name: text(pluginEntry?.name) || displayName(text(methodPin.plugin_id)),
     version: text(methodPin.version),
     hpc: text(optionalRecord(pluginEntry?.execution_policy).backend) === "slurm",
+    kind: text(capabilityEntry?.title),
+    run: !lastRun ? "尚未运行" : `${["succeeded", "partial"].includes(text(lastRun.status)) ? "已有结果" : ["failed", "rejected"].includes(text(lastRun.status)) ? "运行失败" : "运行中"} · ${new Date(text(lastRun.created)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`,
   };
   const status = context.dirty
     ? "draft"
@@ -206,6 +210,67 @@ export function StudyWorkspace() {
         replace
       />
     );
+  // 命令栏：按“模型 → 计算 → 交付”列出这里能做的全部操作，最右侧给出当前状态
+  const runnable = ["ampacity", "thermal-field", "transient", "sheath-losses", "electrothermal", "sweep", "simulation", "selection"].includes(module) ||
+    (module === "method-compare" && (!!study.definition.modules?.["method-compare"] || calculatedModule === "method-compare") && !search.compare);
+  const parameterTab = definition.tabs.find((item) => item.id === "parameters" || item.id === "settings")?.id;
+  const latestRun = runs.at(-1);
+  const runState = !latestRun ? "尚未运行" : `最近运行 ${new Date(text(latestRun.created)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} · ${["succeeded", "partial"].includes(text(latestRun.status)) ? "成功" : ["failed", "rejected"].includes(text(latestRun.status)) ? "失败" : "进行中"}`;
+  const commandBar = (
+    <div className="command-bar" role="toolbar" aria-label="工程命令">
+      <div className="command-group" role="group" aria-label="模型">
+        <span className="command-caption">模型</span>
+        <Button size="compact" variant={context.dirty ? "primary" : "ghost"} disabled={!context.dirty} loading={context.saving} onClick={() => void context.save()}><Icon name="action/save" />{context.dirty ? "保存修改" : "已保存"}</Button>
+        <IconButton variant="ghost" icon="action/undo" label="撤销" disabled={!context.canUndo || context.saving} onClick={() => void context.undo()} />
+        <IconButton variant="ghost" icon="action/redo" label="重做" disabled={!context.canRedo || context.saving} onClick={() => void context.redo()} />
+      </div>
+      <div className="command-group" role="group" aria-label="计算">
+        <span className="command-caption">计算</span>
+        <Button size="compact" variant="ghost" onClick={() => setCreating(true)}><Icon name="action/add" />新建计算</Button>
+        {parameterTab && <Button size="compact" variant="ghost" onClick={() => navigate({ params: { sid, module, tab: parameterTab }, search: currentSearch() })}><Icon name="action/edit" />方法参数</Button>}
+        <Button size="compact" variant="ghost" onClick={() => setRecords(true)}><Icon name="action/history" />运行记录</Button>
+        {runnable && !snapshotInput && <StudyRunControl
+                        key={sid + module}
+                        module={inputModule ? calculatedModule : module}
+                        currentInput={inputModule ? module : undefined}
+                        autoPreflight={search.preflight}
+                        onPreflightConsumed={() =>
+                          navigate({
+                            search: { ...currentSearch(), preflight: false },
+                            replace: true,
+                          })
+                        }
+                        onMissing={(field) => {
+                          const { module: destination, tab: nextTab } =
+                            missingInputDestination(
+                              field,
+                              inputModule ? calculatedModule : module,
+                              inputModule ? module : undefined,
+                            );
+                          navigate({
+                            params: { sid, module: destination, tab: nextTab },
+                            search: { ...currentSearch(), run: "", delivery: "" },
+                          }).then(() => focusPreflightField(field, workspace.domain));
+                        }}
+                        onResult={(id, outputModule) =>
+                          navigate({
+                            params: {
+                              sid,
+                              module: outputModule,
+                              tab: moduleDefinitions[outputModule].tabs[0].id,
+                            },
+                            search: { ...currentSearch(), run: id, delivery: "" },
+                          })
+                        }
+                      />}
+      </div>
+      <div className="command-group" role="group" aria-label="交付">
+        <span className="command-caption">交付</span>
+        <Button size="compact" variant="ghost" disabled={!run || context.dirty} onClick={() => navigate({ params: { sid, module: "report", tab: "preview" }, search: { ...currentSearch(), generate: true } })}><Icon name="result/report" />生成计算书</Button>
+      </div>
+      <span className="command-state" role="status">{context.dirty ? "模型有未保存修改" : runState}</span>
+    </div>
+  );
   return (
     <>
       <Tabs
@@ -248,112 +313,7 @@ export function StudyWorkspace() {
               }
             />
           }
-          actions={
-            <>
-              {!inputModule && <>
-                <IconButton variant="ghost" icon="action/undo" label="撤销研究" disabled={!context.canUndo || context.saving} onClick={() => void context.undo()} />
-                <IconButton variant="ghost" icon="action/redo" label="重做研究" disabled={!context.canRedo || context.saving} onClick={() => void context.redo()} />
-              </>}
-              <Button size="compact" onClick={() => setRecords(true)}>
-                运行记录
-              </Button>
-              {context.dirty ? (
-                <Button
-                  variant="primary"
-                  size="compact"
-                  loading={context.saving}
-                  onClick={() => context.save()}
-                >
-                  {context.domainDraft && !draft
-                    ? "保存" +
-                      (
-                        {
-                          cable: "电缆",
-                          conditions: "工况",
-                          section: "敷设",
-                        } as Record<string, string>
-                      )[context.domainDraft.scope]
-                    : "保存修改"}
-                </Button>
-              ) : snapshotInput ? (
-                <Button
-                  variant="primary"
-                  size="compact"
-                  onClick={() =>
-                    navigate({
-                      search: { ...currentSearch(), run: "", delivery: "" },
-                    })
-                  }
-                >
-                  编辑当前输入
-                </Button>
-              ) : [
-                  "ampacity",
-                  "thermal-field",
-                  "transient",
-                  "sheath-losses",
-                  "electrothermal",
-                  "sweep",
-                  "simulation",
-                ].includes(module) ||
-                inputModule ||
-                (module === "selection" && (!run || historical)) ||
-                (module === "method-compare" && (!!study.definition.modules?.["method-compare"] || calculatedModule === "method-compare") && !search.compare) ? (
-                <StudyRunControl
-                  key={sid + module}
-                  module={inputModule ? calculatedModule : module}
-                  currentInput={inputModule ? module : undefined}
-                  autoPreflight={search.preflight}
-                  onPreflightConsumed={() =>
-                    navigate({
-                      search: { ...currentSearch(), preflight: false },
-                      replace: true,
-                    })
-                  }
-                  onMissing={(field) => {
-                    const { module: destination, tab: nextTab } =
-                      missingInputDestination(
-                        field,
-                        inputModule ? calculatedModule : module,
-                        inputModule ? module : undefined,
-                      );
-                    navigate({
-                      params: { sid, module: destination, tab: nextTab },
-                      search: { ...currentSearch(), run: "", delivery: "" },
-                    }).then(() => focusPreflightField(field, workspace.domain));
-                  }}
-                  onResult={(id, outputModule) =>
-                    navigate({
-                      params: {
-                        sid,
-                        module: outputModule,
-                        tab: moduleDefinitions[outputModule].tabs[0].id,
-                      },
-                      search: { ...currentSearch(), run: id, delivery: "" },
-                    })
-                  }
-                />
-              ) : module === "selection" ? (
-                <Button
-                  variant="primary"
-                  size="compact"
-                  disabled={!run}
-                  onClick={() =>
-                    navigate({
-                      params: { sid, module: "report", tab: "preview" },
-                      search: { ...currentSearch(), generate: true },
-                    })
-                  }
-                >
-                  生成客户计算书
-                </Button>
-              ) : (
-                <Button size="compact" onClick={context.refresh}>
-                  刷新
-                </Button>
-              )}
-            </>
-          }
+          actions={null}
           property={module === "report" ? undefined : (
             <WorkbenchInspector
               document={canvasDocument}
@@ -383,6 +343,7 @@ export function StudyWorkspace() {
             })
           }
         >
+          {commandBar}
           <div className="workbench-frame">
           <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={context.domain} activeStudy={sid} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
           <div className={`workbench ${showCanvas ? "" : "workbench-no-canvas"}`} data-dock={dockMax ? "max" : undefined}>

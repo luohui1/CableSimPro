@@ -1,12 +1,13 @@
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
-import { methodCatalog, studyIndex, studyRuns, type StudyRow } from "@/api/research";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { methodCatalog, studyIndex, studyRuns, typeIndex, workspaces, type StudyRow } from "@/api/research";
 import { deliveries } from "@/api/delivery";
 import { optionalRecord, text } from "@/api/client";
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { Icon } from "./icon";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 
 type Theme = "light" | "dark";
 type Plugin = Record<string, unknown>;
@@ -48,7 +49,18 @@ export function ProjectExplorer({ workspaceId, projectName, document, activeStud
   const studies = useQuery({ queryKey: ["study-index"], queryFn: ({ signal }) => studyIndex(signal) });
   const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
   const books = useQuery({ queryKey: ["deliveries", workspaceId], queryFn: ({ signal }) => deliveries(workspaceId, signal) });
+  const projects = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
+  const types = useQuery({ queryKey: ["type-index"], queryFn: ({ signal }) => typeIndex(signal) });
+  const typeIds = new Set((types.data || []).map((row) => text(row.id)));
+  const navigate = useNavigate();
   const rows = (studies.data || []).filter((row) => row.workspace === workspaceId);
+  // 切换工程：打开该工程最近的计算；没有计算的工程打开工程页
+  const openProject = (id: string) => {
+    const entry = (studies.data || []).find((row) => row.workspace === id);
+    if (!entry) return void navigate({ to: "/studies", search: { theme, workspace: id } });
+    const module = rootModule(entry.definition);
+    void navigate({ to: "/studies/$sid/$module/$tab", params: { sid: entry.id, module, tab: studyEntryTab(module) }, search: { workspace: id, theme, run: "", delivery: "" } });
+  };
   const current = rows.find((row) => row.id === activeStudy) || rows[0];
   const plugins = (catalog.data || []).map(optionalRecord);
   const at = (study: StudyRow, module: string, tab: string, extra: Record<string, string> = {}) => ({
@@ -60,7 +72,12 @@ export function ProjectExplorer({ workspaceId, projectName, document, activeStud
   return <nav className="project-explorer" aria-label="工程浏览器">
     <header>
       <span className="explorer-kicker"><Icon name="object/folder" />工程</span>
-      <strong title={projectName}>{projectName}</strong>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild><button type="button" className="explorer-switch" title="切换工程"><strong>{projectName}</strong><Icon name="action/chevrons-up-down" /></button></DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {(projects.data || []).filter((row) => !typeIds.has(text(row.id))).map((row) => <DropdownMenuItem key={text(row.id)} onSelect={() => openProject(text(row.id))}>{text(row.name)}</DropdownMenuItem>)}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </header>
     {current && document && <Section icon="object/overview" title="模型">
       {document.sections.map((section) => <Link key={section.id} className="explorer-item" {...at(current, calc, studyEntryTab(calc), { view: "section" })} aria-current={view === "section" ? "true" : undefined}>
