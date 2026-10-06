@@ -505,3 +505,20 @@
 .command-group .type-run-control { flex-wrap: nowrap; gap: var(--space-2); }
 .command-group .type-run-control .muted { font-size: var(--text-note); white-space: nowrap; }
 .command-group .type-run-control .field-error { margin: 0; font-size: var(--text-note); }
+/* 结构化参数：数值列表（标签）、对象数组与按对象分项（小表格），单元格内直接编辑，单位来自清单 */
+.parameter-structured { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) 0; min-width: 0; }
+.parameter-structured-label { color: var(--text-secondary); }
+.number-list { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
+.number-chip { display: inline-flex; align-items: baseline; gap: var(--space-1); padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--fill); font-variant-numeric: tabular-nums; }
+.number-chip button { border: 0; background: none; color: var(--text-secondary); font: inherit; cursor: pointer; padding: 0; }
+.number-list input { width: calc(var(--space-12) * 2); padding: var(--space-1) var(--space-2); border: 1px solid var(--control-border); border-radius: var(--radius-item); background: var(--panel); color: var(--text); font: inherit; }
+.structured-table { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); max-width: 100%; overflow-x: auto; }
+.structured-table table { border-collapse: collapse; font-size: var(--text-note); }
+.structured-table th { padding: var(--space-1) var(--space-2) var(--space-1) 0; color: var(--text-secondary); font-weight: var(--weight-normal); text-align: left; white-space: nowrap; }
+.structured-table td { padding: var(--space-1) var(--space-2) var(--space-1) 0; }
+.cell-number { display: inline-flex; align-items: center; gap: var(--space-1); }
+.cell-number input, .cell-text, .cell-select { min-width: 0; width: calc(var(--space-12) * 2); padding: var(--space-1) var(--space-2); border: 1px solid var(--control-border); border-radius: var(--radius-item); background: var(--panel); color: var(--text); font: inherit; font-variant-numeric: tabular-nums; }
+.cell-number input { text-align: right; }
+.cell-number input[aria-invalid="true"] { border-color: var(--error); }
+.cell-number .unit, .number-chip .unit { color: var(--text-secondary); font-size: var(--text-note); }
+.structured-add { width: auto; }

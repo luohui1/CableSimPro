@@ -8,9 +8,13 @@ import { displayName } from '@/lib/display-names';
 import { engineeringQuantity, parameterUnit } from '@/lib/format';
 import { parseInput, type NumericInput } from '@/lib/domain-fields';
 import { EmptyState } from './states';
+import { expand } from '@/lib/contract-schema';
+import { KeyedMapEditor, NumberListEditor, RowsEditor } from './structured-parameter';
 
 type Props = ComponentProps<typeof ContractFields>;
-type Entry = { name: string; path: string; label: string; group: string; groupOrder: number; level: 'basic' | 'advanced' | 'expert'; order: number; field: CoreField; source: Record<string, unknown>; spec?: NumericInput; integer?: boolean; json?: boolean };
+type Entry = { name: string; path: string; label: string; ownLabel: string; group: string; groupOrder: number; level: 'basic' | 'advanced' | 'expert'; order: number; field?: CoreField; source: Record<string, unknown>; spec?: NumericInput; integer?: boolean; json?: boolean;
+  /** 结构化参数：数值列表、对象数组、按模型对象分项的映射；不进入表单引擎，直接按 SI 写回。 */
+  structure?: 'list' | 'rows' | 'map'; keys?: { value: string; label: string }[] };
 /**
  * 插件清单的参数界面元数据：x-group / x-order / x-level 决定分组、顺序与折叠，x-unit 给显示单位与换算，
  * x-bind 声明引用的工程模型对象，x-enum-labels 给选项中文名，x-default-basis 写默认值依据。
@@ -18,24 +22,13 @@ type Entry = { name: string; path: string; label: string; group: string; groupOr
  */
 const levelOf = (source: Record<string, unknown>): Entry['level'] => source['x-level'] === 'advanced' || source['x-level'] === 'expert' ? source['x-level'] : 'basic';
 /** x-bind 绑定类型 → 宿主提供的模型对象选项键（兼容早期的字符串写法）。 */
-const BIND_KEYS: Record<string, string> = { section: 'section_id', load: 'load_case_id', cable_type: 'cable_type_id', 'domain.section': 'section_id', 'domain.load_case': 'load_case_id', 'domain.cable_type': 'cable_type_id' };
+const BIND_KEYS: Record<string, string> = { section: 'section_id', load: 'load_case_id', cable_type: 'cable_type_id', material: 'material', cable: 'cable', circuit: 'circuit', duct: 'duct', 'domain.section': 'section_id', 'domain.load_case': 'load_case_id', 'domain.cable_type': 'cable_type_id' };
 const bindKey = (value: unknown) => BIND_KEYS[typeof value === 'string' ? value : text(optionalRecord(value).type)];
 /** 分组标题与顺序：x-groups 可以是 [{id, title, order}] 或 {id: {title, order}}。 */
 function groupTable(value: unknown): Map<string, { title: string; order: number }> {
   const rows = Array.isArray(value) ? value.map(optionalRecord).map((row, index) => [text(row.id), { title: text(row.title), order: numeric(row.order) ?? index }] as const)
     : Object.entries(optionalRecord(value)).map(([id, row], index) => [id, { title: text(optionalRecord(row).title), order: numeric(optionalRecord(row).order) ?? index }] as const);
   return new Map(rows.filter(([id]) => id));
-}
-function expand(raw: unknown, root: unknown): Record<string, unknown> {
-  let field = optionalRecord(raw);
-  const ref = text(field.$ref);
-  if (ref.startsWith('#/')) {
-    let value = root;
-    for (const key of ref.slice(2).split('/')) value = optionalRecord(value)[key];
-    field = { ...optionalRecord(value), ...field };
-  }
-  if (Array.isArray(field.anyOf)) field = { ...expand(field.anyOf.find(item => optionalRecord(item).type !== 'null'), root), ...field };
-  return field;
 }
 function compile(schema: unknown, root: unknown, prefix: string, module: string, readOnly: boolean, references: Record<string, { value: string; label: string }[]> = {}, entries: Entry[] = [], parent = '', declared = groupTable(optionalRecord(schema)['x-groups'] ?? optionalRecord(root)['x-groups'])): Entry[] {
   const model = expand(schema, root);
@@ -52,10 +45,15 @@ function compile(schema: unknown, root: unknown, prefix: string, module: string,
     const description = [text(source.description), text(basis.reference) && '默认值依据：' + text(basis.reference), reason].filter((line) => /[\u4e00-\u9fff]/.test(line)).join('\n');
     const binding = optionalRecord(source['x-bind']);
     const base = { name, label: ownLabel.split(' · ').pop() || ownLabel, required, readOnly: readOnly || source.const !== undefined || binding.read_only === true, meta: {path}, description };
-    let field: CoreField, spec: NumericInput | undefined, integer = false, json = false;
+    let field: CoreField | undefined, spec: NumericInput | undefined, integer = false, json = false, structure: Entry['structure'], keys: Entry['keys'];
     const bound = references[bindKey(source['x-bind']) || key];
     const enumLabels = optionalRecord(source['x-enum-labels']), declaredUnit = optionalRecord(source['x-unit']);
-    if (source.type === 'string' && bound?.length) {
+    const items = source.type === 'array' ? expand(source.items, root) : {}, mapped = source.type === 'object' && !source.properties ? expand(source.additionalProperties, root) : {};
+    if (source.type === 'array' && (items.type === 'number' || items.type === 'integer')) structure = 'list';
+    else if (source.type === 'array' && items.type === 'object' && items.properties) structure = 'rows';
+    else if (source.type === 'object' && !source.properties && Object.keys(mapped).length) { structure = 'map'; keys = bound || []; }
+    if (structure) { /* 结构化编辑器在分组里单独渲染 */ }
+    else if (source.type === 'string' && bound?.length) {
       // 引用工程模型里的对象：从真实的截面、负荷、电缆结构中选，不手填编号
       field = { ...base, type: 'select', options: bound };
     } else if (Array.isArray(source.enum) && source.enum.every(value => typeof value === 'string')) {
@@ -76,8 +74,8 @@ function compile(schema: unknown, root: unknown, prefix: string, module: string,
     } else if (source.type === 'boolean') field = {...base, type: 'switch'};
     else { json = source.type !== 'string'; field = {...base, type: 'text', ...(json ? { placeholder: 'JSON（按方法契约）' } : { minLength: numeric(source.minLength) ?? undefined, maxLength: numeric(source.maxLength) ?? undefined, pattern: text(source.pattern) || undefined })}; }
     const declaredGroup = text(source['x-group']), group = declared.get(declaredGroup);
-    const entry: Entry = { name, path, label, group: group?.title || declaredGroup || parent || '基本参数', groupOrder: group?.order ?? Number.MAX_SAFE_INTEGER, level: levelOf(source), order: numeric(source['x-order']) ?? entries.length, source, spec, integer, json, field };
-    field.validate = { onChange: { checks: [{type: 'hostParameter', args: {index: entries.length}, message: `${label}不符合参数契约，请检查必填项、范围或格式。`}] } };
+    const entry: Entry = { name, path, label, ownLabel: base.label, group: group?.title || declaredGroup || parent || '基本参数', groupOrder: group?.order ?? Number.MAX_SAFE_INTEGER, level: levelOf(source), order: numeric(source['x-order']) ?? entries.length, source, spec, integer, json, field, structure, keys };
+    if (field) field.validate = { onChange: { checks: [{type: 'hostParameter', args: {index: entries.length}, message: `${label}不符合参数契约，请检查必填项、范围或格式。`}] } };
     entries.push(entry);
   }
   return entries;
@@ -90,7 +88,7 @@ function stored(entry: Entry, value: unknown): unknown {
     return result === null && !entry.spec.required ? undefined : result;
   }
   if (entry.json) return value === '' || value === undefined ? undefined : JSON.parse(String(value));
-  if (entry.field.required && (value === undefined || value === '')) throw new Error('必填');
+  if (entry.field?.required && (value === undefined || value === '')) throw new Error('必填');
   if (entry.source.const !== undefined && value !== entry.source.const) throw new Error('固定值');
   if (Array.isArray(entry.source.enum) && value !== undefined && value !== '' && !entry.source.enum.includes(value)) throw new Error('请选择契约中的选项');
   if (typeof value === 'string' && (entry.source.minLength !== undefined && value.length < Number(entry.source.minLength) || entry.source.maxLength !== undefined && value.length > Number(entry.source.maxLength))) throw new Error('文本长度不符合契约');
@@ -100,9 +98,9 @@ function stored(entry: Entry, value: unknown): unknown {
 export function BuzzformContractFields(props: Props) {
   const { module, schema, root, prefix, values, readOnly, onChange, onDraftChange = () => {}, draftFields = {}, references } = props;
   const entries = useMemo(() => compile(schema, root, prefix, module, readOnly, references), [schema, root, prefix, module, readOnly, references]);
-  const defaults = Object.fromEntries(entries.map(entry => {
-    let value: unknown = values;
-    for (const part of entry.path.slice(prefix.length).split('/').filter(Boolean)) value = optionalRecord(value)[part];
+  const valueAt = (entry: Entry) => { let value: unknown = values; for (const part of entry.path.slice(prefix.length).split('/').filter(Boolean)) value = optionalRecord(value)[part]; return value; };
+  const defaults = Object.fromEntries(entries.filter(entry => entry.field).map(entry => {
+    const value = valueAt(entry);
     const draft = draftFields[module + entry.path]?.text;
     return [entry.name, draft !== undefined ? entry.spec ? draft === '' ? undefined : Number(draft) : draft : entry.spec ? numeric(value) === null ? undefined : Number(value) * (entry.spec.scale ?? 1) + (entry.spec.offset ?? 0) : entry.json ? (value === undefined || value === null ? '' : JSON.stringify(value)) : value];
   }));
@@ -125,12 +123,25 @@ export function BuzzformContractFields(props: Props) {
     try { onChange(entry.path, stored(entry, fieldApi.state.value)); onDraftChange(undefined, module + entry.path); } catch { /* Keep invalid text in the formal draft; Save also validates it. */ }
   } };
   // 一组参数 = 标题 + 名称/数值两列的属性表；高级与专家参数收进折叠区（普通渲染函数，避免每次重绘重新挂载表单）
-  const parameterGroup = ({ group, entries: items }: { group: string; entries: Entry[] }) => <section key={group} className="parameter-group" aria-label={group}>
-    <h4>{group}</h4>
-    <Form schema={{fields: items.map(entry => entry.field)}} defaultValues={Object.fromEntries(items.map(entry => [entry.name, defaults[entry.name]]))} registries={registries} listeners={listeners}>
-      <FormContent as="div"><FormFields className="parameter-fields" /></FormContent>
-    </Form>
-  </section>;
+  const structured = (entry: Entry) => {
+    const props = { field: entry.source, root, value: valueAt(entry), readOnly: readOnly || optionalRecord(entry.source['x-bind']).read_only === true, label: entry.ownLabel };
+    return <div key={entry.name} className="parameter-structured">
+      <span className="parameter-structured-label" title={text(entry.source.description) || undefined}>{entry.ownLabel}</span>
+      {entry.structure === 'list' ? <NumberListEditor {...props} onChange={value => onChange(entry.path, value)} />
+        : entry.structure === 'rows' ? <RowsEditor {...props} onChange={value => onChange(entry.path, value)} />
+          : <KeyedMapEditor {...props} keys={entry.keys || []} onChange={value => onChange(entry.path, value)} />}
+    </div>;
+  };
+  const parameterGroup = ({ group, entries: items }: { group: string; entries: Entry[] }) => {
+    const plain = items.filter(entry => entry.field);
+    return <section key={group} className="parameter-group" aria-label={group}>
+      <h4>{group}</h4>
+      {plain.length > 0 && <Form schema={{fields: plain.map(entry => entry.field!)}} defaultValues={Object.fromEntries(plain.map(entry => [entry.name, defaults[entry.name]]))} registries={registries} listeners={listeners}>
+        <FormContent as="div"><FormFields className="parameter-fields" /></FormContent>
+      </Form>}
+      {items.filter(entry => entry.structure).map(structured)}
+    </section>;
+  };
   // 按契约层次分组：每组一个标题 + 名称/数值两列的属性表
   return <div className="buzzform-contract" data-contract-form={module}>
     {groups.map(parameterGroup)}

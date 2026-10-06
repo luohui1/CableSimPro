@@ -42,6 +42,11 @@ export function StudyMethodForm({
       load_id: domain.load_cases.map((item) => option(item.id)),
       load_case_id: domain.load_cases.map((item) => option(item.id)),
       cable_type_id: domain.cable_types.map((item) => option(item.id)),
+      // 按对象分项的参数（逐材料、逐电缆、逐回路、逐排管）的行
+      material: domain.materials.map((item) => option(item.id)),
+      circuit: domain.circuits.map((item) => option(item.id)),
+      cable: domain.circuits.flatMap((circuit) => circuit.cables.map((item) => option(item.id))),
+      duct: domain.sections.flatMap((section) => (section.enclosures || []).filter((item) => item.type === "duct").map((item) => option(item.id))),
     };
   }, [domain]);
   const contracts = useQuery({

@@ -30,13 +30,18 @@ export type TemperatureView = {
   hotspot: FieldSample;
   case: Record<string, unknown>;
   field: Record<string, unknown>;
+  /** 有限元原始场束；IEC 解析土壤场没有场束，为空对象。 */
   bundle: Record<string, unknown>;
+  /** fem：有限元求解的完整截面场；iec：IEC 60287 计算轨迹叠加 Kennelly 镜像得到的土壤场（电缆与排管内部不出值）。 */
+  kind: "fem" | "iec";
+  limitations: string[];
   section?: DomainDocument["sections"][number];
   geometry?: SectionGeometry;
   geometryError?: string;
 };
 export function temperatureView(
   run: Record<string, unknown>,
+  preferredCase?: string,
 ): TemperatureView | undefined {
   if (run.integrity !== "verified")
     throw new ApiError(409, "运行完整性未通过，拒绝绘制温度场");
@@ -48,7 +53,7 @@ export function temperatureView(
   const chosen =
     cases.find(
       (value) =>
-        value.case_id === reference &&
+        (value.case_id === preferredCase || value.case_id === reference) &&
         optionalRecord(value.artifacts)["x-cablesim.temperature-field"],
     ) ||
     cases.find(
@@ -141,17 +146,24 @@ export function temperatureView(
   const hotspot = sample(field.hotspot, "hotspot");
   if (hotspot.temperature !== maximum)
     throw new ApiError(502, "热点与保存节点场的最大值不一致");
-  const bundle = record(
+  // 来源绑定：有限元场核对同工况原始场束；IEC 解析场核对同工况 IEC 计算轨迹，不要求场束
+  const source = record(field.source, "工件来源"),
+    digests = record(chosen.artifact_digests, "工件摘要");
+  if (!digests["x-cablesim.temperature-field"])
+    throw new ApiError(409, "温度场工件缺少摘要");
+  const iec = source.binding === "iec-trace";
+  if (iec) {
+    if (!text(source.trace_sha256) || source.bundle_sha256 || source.trace_sha256 !== digests["x-cablesim.iec60287-trace"] || !field.analytical_soil_view)
+      throw new ApiError(409, "土壤温度场未绑定同工况 IEC 计算轨迹");
+  } else if (source.bundle_sha256 !== digests["x-cablesim.simulation-bundle"])
+    throw new ApiError(409, "温度场未绑定同次原始场束");
+  const bundle = iec ? {} : record(
     optionalRecord(chosen.artifacts)["x-cablesim.simulation-bundle"],
     "原始温度场束",
   );
-  const source = record(field.source, "工件来源"),
-    digests = record(chosen.artifact_digests, "工件摘要");
-  if (
-    source.bundle_sha256 !== digests["x-cablesim.simulation-bundle"] ||
-    !digests["x-cablesim.temperature-field"]
-  )
-    throw new ApiError(409, "温度场未绑定同次原始场束");
+  const limitations = iec
+    ? array(optionalRecord(field.analytical_soil_view).limitations, "适用限制").map(text).filter(Boolean)
+    : [];
   let section: DomainDocument["sections"][number] | undefined;
   let geometry: SectionGeometry | undefined;
   let geometryError: string | undefined;
@@ -163,6 +175,7 @@ export function temperatureView(
   if (input.schema_version === "cablesim.domain/1") {
     const document = input as unknown as DomainDocument;
     const sectionId =
+      text(optionalRecord(savedCase?.parameters).section_id) ||
       text(
         optionalRecord(optionalRecord(savedCase?.parameters).domain_options)
           .section_id,
@@ -195,6 +208,8 @@ export function temperatureView(
     case: chosen,
     field,
     bundle,
+    kind: iec ? "iec" : "fem",
+    limitations,
     section,
     geometry,
     geometryError,

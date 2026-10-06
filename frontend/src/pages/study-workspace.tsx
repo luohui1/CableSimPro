@@ -16,7 +16,7 @@ import { missingInputDestination, focusPreflightField } from "@/lib/missing-inpu
 import { StatusMark } from "@/components/status-mark";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { WorkbenchInspector } from "@/components/workbench-inspector";
-import { ProjectExplorer } from "@/components/project-explorer";
+import { ProjectExplorer, singleAnswer } from "@/components/project-explorer";
 import { PreviewControls, PreviewStrip, useStudyPreview } from "@/components/study-preview";
 import { AddStudyDialog } from "@/components/add-study-dialog";
 import { StudyDrawing } from "@/components/study-drawing";
@@ -137,11 +137,6 @@ export function StudyWorkspace() {
   const pendingRun =
     !!run &&
     ["accepted", "queued", "running", "validating"].includes(text(run.status));
-  // 运行若带温度场工件（有限元，或插件输出的 IEC 土壤温度场），画布默认显示真实温度场
-  const fieldView = useMemo(() => {
-    if (!run || pendingRun) return undefined;
-    try { return temperatureView(run); } catch { return undefined; }
-  }, [run, pendingRun]);
   if (run && !pendingRun && module === "selection")
     try {
       view = selectionView(run);
@@ -150,6 +145,12 @@ export function StudyWorkspace() {
     }
   const selectedRow =
     selected && view?.rows.find((row) => row.id === selected.id);
+  // 运行若带温度场工件（有限元，或插件输出的 IEC 土壤温度场），画布默认显示真实温度场；选型显示所选或推荐候选的工况
+  const fieldCase = module === "selection" ? selectedRow?.id || view?.recommendation?.id : undefined;
+  const fieldView = useMemo(() => {
+    if (!run || pendingRun) return undefined;
+    try { return temperatureView(run, fieldCase); } catch { return undefined; }
+  }, [run, pendingRun, fieldCase]);
   const historical =
     (run?.freshness === "historical" || isVersionStale(run)) &&
     (!["cable", "conditions", "section"].includes(module) || !!search.run);
@@ -197,8 +198,8 @@ export function StudyWorkspace() {
     kind: text(capabilityEntry?.title),
     run: !lastRun ? "尚未运行" : `${["succeeded", "partial"].includes(text(lastRun.status)) ? "已有结果" : ["failed", "rejected"].includes(text(lastRun.status)) ? "运行失败" : "运行中"} · ${new Date(text(lastRun.created)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`,
   };
-  // 快速试算：插件声明 preview 且在本机运行的能力，查看当前输入时开放（固定的历史运行不试算）
-  const preview = useStudyPreview({ module, available: capabilityEntry?.preview === true && !methodInfo.hpc && !search.run });
+  // 快速试算：插件声明 preview 且在本机运行的能力，单次计算的研究查看当前输入时开放（选型、扫描的答案跨候选或样本，不用单工况试算代替）
+  const preview = useStudyPreview({ module, available: capabilityEntry?.preview === true && !methodInfo.hpc && !search.run && singleAnswer(study) });
   const status = context.dirty
     ? "draft"
     : context.runError
@@ -378,7 +379,7 @@ export function StudyWorkspace() {
           {showCanvas && (
             <section className="workbench-canvas" aria-label="模型">
               <div className="workbench-views" role="group" aria-label="模型视图">
-                {([...(fieldView ? [["field", "calc/thermal-field", "温度场"]] : []), ["section", "object/section", "敷设截面"], ["cable", "object/cable", "电缆截面"], ...(["thermal-field", "electrothermal", "transient", "sheath-losses", "simulation"].includes(module) ? [["three", "result/field", "三维"]] : [])] as ["field" | "section" | "cable" | "three", string, string][]).map(([value, icon, label]) => (
+                {([...(fieldView ? [["field", "calc/thermal-field", fieldView.kind === "iec" ? "土壤温度场" : "温度场"]] : []), ["section", "object/section", "敷设截面"], ["cable", "object/cable", "电缆截面"], ...(["thermal-field", "electrothermal", "transient", "sheath-losses", "simulation"].includes(module) ? [["three", "result/field", "三维"]] : [])] as ["field" | "section" | "cable" | "three", string, string][]).map(([value, icon, label]) => (
                   <button key={value} type="button" aria-pressed={canvasView === value} onClick={() => navigate({ search: { ...currentSearch(), view: value }, replace: true })}>
                     <Icon name={icon} />{label}
                   </button>
@@ -386,18 +387,20 @@ export function StudyWorkspace() {
               </div>
               {canvasView === "field" && fieldView ? (
                 <FieldView
-                  label="温度场"
+                  label={fieldView.kind === "iec" ? "土壤温度场（IEC 解析）" : "温度场"}
                   points={fieldView.points}
                   triangles={fieldView.triangles}
                   values={fieldView.temperatures.map((kelvin) => kelvin - 273.15)}
                   circles={(fieldView.geometry?.cables || []).map((cable) => ({ x: cable.x, z: cable.z, r: cable.shape.radiusM, label: cable.label }))}
                   groundZ={fieldView.geometry ? 0 : undefined}
-                  hotspot={{ point: fieldView.hotspot.point, value: fieldView.hotspot.temperature - 273.15, label: "最高" }}
-                  limit={conductorLimit === undefined ? undefined : { value: conductorLimit, label: `${conductorLimit.toFixed(0)} 限值` }}
+                  hotspot={{ point: fieldView.hotspot.point, value: fieldView.hotspot.temperature - 273.15, label: fieldView.kind === "iec" ? "土壤最高" : "最高" }}
+                  // IEC 解析场只有土壤区域，导体温限画在色标上没有意义
+                  limit={conductorLimit === undefined || fieldView.kind === "iec" ? undefined : { value: conductorLimit, label: `${conductorLimit.toFixed(0)} 限值` }}
                 />
               ) : (
                 <StudyDrawing document={canvasDocument!} historical={viewingOldInput} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} onSelect={inputProps.onSelect} annotations={annotations} />
               )}
+              {canvasView === "field" && fieldView?.kind === "iec" && <p className="field-basis" title={fieldView.limitations.join("；")}>{fieldView.limitations[0]}</p>}
             </section>
           )}
           <section className="workbench-dock" aria-label="计算结果">
