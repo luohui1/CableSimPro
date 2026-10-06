@@ -24,7 +24,7 @@
     "build:release": "npm run check:styles && vite build",
     "preview": "vite preview",
     "check:styles": "node scripts/check-styles.mjs",
-    "test": "node --test scripts/check-styles.test.mjs scripts/format.test.mjs scripts/domain-history.test.mjs scripts/chart-display.test.mjs",
+    "test": "node --test scripts/check-styles.test.mjs scripts/format.test.mjs scripts/domain-history.test.mjs scripts/chart-display.test.mjs scripts/field-geometry.test.mjs",
     "test:browser": "node scripts/isolated-e2e.mjs verify-components.mjs",
     "test:migration": "node scripts/isolated-e2e.mjs verify-migration.mjs",
     "test:migration-states": "node scripts/isolated-e2e.mjs verify-migration-states.mjs",

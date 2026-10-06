@@ -1,4 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
+import { FieldView } from "@/features/field/field-view";
+import { syntheticKennellyField } from "@/features/field/gallery-fixture";
 const AgentGallery = lazy(() => import('@/components/agent-gallery'));
 import { Link } from "@tanstack/react-router";
 import { galleryRoute, type PageState } from "@/router";
@@ -75,6 +77,7 @@ function Section({
   );
 }
 
+const syntheticField = syntheticKennellyField();
 export function GalleryPage() {
   const { theme } = galleryRoute.useSearch();
   const navigate = galleryRoute.useNavigate();
@@ -167,7 +170,10 @@ export function GalleryPage() {
               <StaleBanner description="当前展示上次组件样例。" />
             )}
             <div className="gallery-grid">
-              <Section title="开源组件" wide><Tabs defaultValue="foundation"><TabsList><TabsTrigger value="foundation">组件底座</TabsTrigger><TabsTrigger value="agent-demo">Agent · 演示</TabsTrigger></TabsList><TabsContent value="foundation"><p className="muted">Radix 控件、BuzzForm 参数表单、TanStack 结果表、gridcn 分层表和运行记录组件已接入正式界面。</p></TabsContent><TabsContent value="agent-demo"><Suspense fallback={<LoadingState title="正在读取演示组件" />}><AgentGallery /></Suspense></TabsContent></Tabs></Section>
+              <Section title="温度场视图（合成场，仅陈列）" wide>
+            <div className="gallery-field"><FieldView {...syntheticField} groundZ={0} limit={{ value: 90, label: "90 限值" }} label="合成土壤温度场" /></div>
+          </Section>
+          <Section title="开源组件" wide><Tabs defaultValue="foundation"><TabsList><TabsTrigger value="foundation">组件底座</TabsTrigger><TabsTrigger value="agent-demo">Agent · 演示</TabsTrigger></TabsList><TabsContent value="foundation"><p className="muted">Radix 控件、BuzzForm 参数表单、TanStack 结果表、gridcn 分层表和运行记录组件已接入正式界面。</p></TabsContent><TabsContent value="agent-demo"><Suspense fallback={<LoadingState title="正在读取演示组件" />}><AgentGallery /></Suspense></TabsContent></Tabs></Section>
               {[...drawingEntries, ...cadEntries].map(
                 ({ id, title, Component }) => (
                   <Section key={id} title={title} wide>

@@ -442,3 +442,4 @@
 .inspector-list dt { flex: none; white-space: nowrap; }
 .inspector-list dd { min-width: 0; }
 .inspector-lead { color: var(--text); line-height: 1.6; }
+.gallery-field { height: calc(var(--space-12) * 11); border: 1px solid var(--line); border-radius: var(--radius-surface); overflow: hidden; }
