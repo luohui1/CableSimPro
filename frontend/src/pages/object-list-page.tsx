@@ -91,14 +91,10 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
         const query = statuses.get(row.id);
         if (isVersionStale(row.raw)) return <VersionNotice value={row.raw} target={{ wid: row.workspace, sid: row.id, revision: row.workspaceRevision, studyRevision: row.revision, title: row.title }} />;
         if (query?.isPending)
-          return <StatusMark kind="queued" label="读取中" />;
+          return <StatusMark kind="queued" label={query.fetchStatus === 'paused' ? '等待网络连接' : '读取中'} />;
         if (query?.isError)
           return (
-            <StatusMark
-              kind="error"
-              label="读取失败"
-              detail={message(query.error)}
-            />
+            <span className="status-actions"><span className="field-error">{message(query.error)}</span><Button size="compact" variant="ghost" onClick={() => void query.refetch()}>重试</Button></span>
           );
         const latest = query?.data?.at(-1);
         if (isVersionStale(row.raw) || isVersionStale(latest)) return <VersionNotice value={isVersionStale(row.raw) ? row.raw : latest} target={{ wid: row.workspace, sid: row.id, revision: row.workspaceRevision, studyRevision: row.revision, title: row.title }} />;
@@ -147,7 +143,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
     },
   ];
   const matching = (studies.data || []).filter((row) =>
-    (search.kind !== "simulation" || rootModule(row.definition) === "simulation") && [row.title, row.task, row.model].some((value) =>
+    (!search.workspace || row.workspace === search.workspace) && (search.kind !== "simulation" || ['simulation','electrothermal','transient','sheath-losses','thermal-field','batch'].includes(rootModule(row.definition))) && (search.kind !== 'ampacity' || !['simulation','electrothermal','transient','sheath-losses','thermal-field','batch'].includes(rootModule(row.definition))) && [row.title, row.task, row.model].some((value) =>
       value.toLowerCase().includes(filter.toLowerCase()),
     ),
   );

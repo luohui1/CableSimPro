@@ -23,7 +23,7 @@
 .cross-section .insulation { stroke: var(--text-secondary); }
 .cross-section .conductor { fill: var(--conductor); }
 .cross-section .wave { stroke: var(--copper); opacity: 0; }
-.conduct-track { stroke: var(--border); stroke-width: 1; }
+.conduct-track { stroke: var(--control-border); stroke-width: 1; }
 .conduct-lead { stroke: var(--copper); stroke-width: 1.5; stroke-dasharray: 1; stroke-dashoffset: 1; opacity: 0; }
 .run-button { position: relative; flex: none; }
 .run-glyph { display: inline-flex; width: 16px; height: 16px; }
@@ -50,7 +50,7 @@
 .snap-target { position: absolute; left: calc(50% - 20px); top: 8px; width: 40px; border-top: 1px solid var(--text-secondary); }
 .snap-hint { position: absolute; bottom: 8px; left: 16px; font-size: var(--text-note); color: var(--text-secondary); }
 .drawer-stage { overflow: hidden; justify-content: flex-end; }
-.drawer-content { border-left: 1px solid var(--border); width: 240px; padding-left: var(--space-4); opacity: 0; transform: translateX(4px); }
+.drawer-content { border-left: 1px solid var(--control-border); width: 240px; padding-left: var(--space-4); opacity: 0; transform: translateX(4px); }
 .drawer-content p { margin-top: var(--space-2); }
 .anchor-stage { display: grid; grid-template-columns: 100px minmax(0,1fr); gap: var(--space-4); }
 .anchor-list { align-self: start; display: grid; gap: var(--space-1); }

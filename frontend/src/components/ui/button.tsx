@@ -15,11 +15,16 @@ const buttonVariants = cva('button', {
       run: 'button-run',
       agent: 'button-agent',
       ghost: 'button-ghost',
+      outline: 'button-outline',
+      secondary: 'button-secondary',
+      destructive: 'button-destructive',
+      link: 'button-link',
     },
-    size: { default: 'button-standard', compact: 'button-compact', icon: 'button-icon' },
+    size: { default: 'button-standard', compact: 'button-compact', icon: 'button-icon', sm: 'button-compact', xs: 'button-compact', lg: 'button-standard', 'icon-sm': 'button-icon', 'icon-xs': 'button-icon', 'icon-lg': 'button-icon' },
   },
   defaultVariants: { variant: 'default', size: 'default' },
 });
+export { buttonVariants };
 
 type ButtonProps = React.ComponentProps<'button'> & VariantProps<typeof buttonVariants> & { asChild?: boolean; loading?: boolean; previewState?: 'hover' | 'focus' | 'active' | 'error' };
 

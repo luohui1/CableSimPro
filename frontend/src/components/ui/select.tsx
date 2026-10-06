@@ -1,9 +1,9 @@
 import * as Primitive from "@radix-ui/react-select";
-import { useId } from "react";
+import { useId, type ComponentProps } from "react";
 import { Icon } from "@/components/icon";
 import { displayText } from "@/lib/display-names";
 
-export function Select({
+function LabeledSelect({
   label,
   value,
   onChange,
@@ -82,4 +82,21 @@ export function Select({
       )}
     </div>
   );
+}
+
+export function Select(props: ComponentProps<typeof LabeledSelect> | ComponentProps<typeof Primitive.Root>) {
+  return 'options' in props ? <LabeledSelect {...props} /> : <Primitive.Root {...props} />;
+}
+export const SelectValue = Primitive.Value;
+export const SelectGroup = Primitive.Group;
+export const SelectLabel = Primitive.Label;
+export const SelectSeparator = Primitive.Separator;
+export function SelectTrigger({ className = '', children, ...props }: ComponentProps<typeof Primitive.Trigger> & { size?: 'sm' | 'default' }) {
+  return <Primitive.Trigger className={`select-trigger ${className}`} {...props}>{children}<Primitive.Icon><Icon name="action/chevron-down" /></Primitive.Icon></Primitive.Trigger>;
+}
+export function SelectContent({ className = '', children, ...props }: ComponentProps<typeof Primitive.Content>) {
+  return <Primitive.Portal><Primitive.Content className={`select-content ${className}`} position="popper" sideOffset={4} {...props}><Primitive.Viewport>{children}</Primitive.Viewport></Primitive.Content></Primitive.Portal>;
+}
+export function SelectItem({ className = '', children, ...props }: ComponentProps<typeof Primitive.Item>) {
+  return <Primitive.Item className={`select-item ${className}`} {...props}><Primitive.ItemText>{children}</Primitive.ItemText><Primitive.ItemIndicator><Icon name="action/check" /></Primitive.ItemIndicator></Primitive.Item>;
 }

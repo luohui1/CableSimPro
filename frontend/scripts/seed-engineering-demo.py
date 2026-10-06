@@ -219,28 +219,57 @@ def ensure_temperature(client, result):
     result['studies'].append({'title':title,'workspace':workspace['id'],'study':saved['id'],'module':'thermal-field','status':'已保存输入；待补方法参数与超算预检','ready':False})
 
 
-def seed_release(database):
-    """Bundled public series and sourced inquiry inputs; no donor DB or approvals."""
-    from tempfile import TemporaryDirectory
-    marker = database.with_suffix('.seed.json')
-    if database.exists():
-        if not marker.exists() or not json.loads(marker.read_text(encoding='utf-8')).get('complete'):
-            raise SystemExit('发布库已存在但缺少完成标记；保留数据，请检查后再启动。')
-        print('保留发布演示库：' + str(database), flush=True)
-        return
-    database.parent.mkdir(parents=True, exist_ok=True)
-    # A failed first seed cannot leave a half-created default database.
-    with TemporaryDirectory(prefix='seed-', dir=database.parent) as scratch:
-        staged = Path(scratch) / database.name
-        os.environ['CABLESIM_DB'] = str(staged)
-        os.environ['CABLESIM_DATASETS_DIR'] = str(Path(scratch) / 'datasets')
-        os.environ['CABLESIM_REPRODUCTION_LIBRARY'] = str(database.parent / 'library')
-        from fastapi.testclient import TestClient
-        from backend.main import create_app
-        from backend.kernel.scenarios import system_models, METHOD_DEFAULTS
-        models = system_models()
-        result = {'database':str(database), 'complete':False, 'types':[], 'studies':[],
-                  'source':'仓库内带来源的教学设计输入；非客户项目、非实测认证。计算由当前插件执行。'}
+def release_hv_model():
+    """The same People catalogue facts as the development demo, bundled offline."""
+    reference = ('人民电器64/110kV交联电缆产品样本；PDF4/印刷065页800行、PDF7/印刷069页90℃温限；'
+                 'https://www.chinapeople.com/pdf/sh/dxdl/64-110kV.pdf；下载2026-10-04；'
+                 'sha256:5f1e3af4c35d474ab69120bea4b66534b6cd3bed9860712205038239babbd3b3；'
+                 '缺少半导电屏蔽、缓冲径向尺寸、波纹、材料物性及设计R20；不跨厂家拼接。')
+    return {'name':'YJLW03-64/110 1×800', 'version':'公开尺寸待补齐', 'confirmed':False,
+            'materials':[{'id':'material/'+key,'label':label,'category':category,'standard_kind':kind}
+                         for key,label,category,kind in [('cu','铜','conductor','copper_bare'),
+                         ('xlpe','交联聚乙烯','insulation','XLPE'),('al','皱纹铝护套','metal','aluminium'),
+                         ('pe','聚乙烯外护套','polymer','other')]],
+            'cable_type':{'id':'cable_type/ct1','label':'YJLW03-64/110 1×800','construction':'single_core',
+                'rating':{'u0':64000,'u':110000,'max_conductor_temperature':{'normal':363.15}},
+                'cores':[{'id':'core/1','conductor':{'material':'material/cu','form':'unspecified',
+                          'nominal_area':.0008,'diameter':.034,'r20':None},'layers':[]}],
+                'common_layers':[{'role':role,'material':'material/'+material,'thickness':thickness,'form':form}
+                                 for role,material,thickness,form in [('insulation','xlpe',.016,None),
+                                 ('metallic_sheath','al',.002,'corrugated'),('oversheath','pe',.004,None)]]},
+            'sources':{'factory':{'kind':'manufacturer','reference':reference,'reviewed':False}}}
+
+
+def release_identity():
+    """Pin installed releases and the bundled model/input versions, not local edits."""
+    from backend.plugin_host.registry import Registry
+    from backend.kernel.research import Research
+    from backend.kernel.scenarios import system_models
+    from backend.kernel.model_series import bundled_series
+    from backend.kernel.workspace import fingerprint
+    registry = Registry()
+    for plugin in registry.plugins.values():
+        plugin.verify()
+    series, digest = bundled_series()
+    return {'seed_revision':2,
+            'plugins':{key:Research.pin(plugin) for key,plugin in sorted(registry.plugins.items())},
+            'models':{item['id']:{'version':item['version'],'sha256':item['content_sha256']} for item in system_models()},
+            'manufacturer_series':{'id':series['id'],'version':series['version'],'sha256':digest},
+            'hv_model':{'version':release_hv_model()['version'],'sha256':fingerprint(release_hv_model())}}
+
+
+def build_release_seed(staged, database, identity):
+    """Create sourced engineering examples using current host APIs and real IEC runs."""
+    from fastapi.testclient import TestClient
+    from backend.main import create_app
+    from backend.kernel.scenarios import METHOD_DEFAULTS
+    environment = {'CABLESIM_DB':str(staged), 'CABLESIM_DATASETS_DIR':str(staged.parent/'datasets'),
+                   'CABLESIM_REPRODUCTION_LIBRARY':str(database.parent/'library')}
+    previous = {key:os.environ.get(key) for key in environment}
+    result = {'database':str(database), 'complete':False, 'identity':identity,
+              'types':[], 'studies':[], 'native_core_hours':0}
+    os.environ.update(environment)
+    try:
         with TestClient(create_app(staged)) as client:
             def api(path, method='GET', body=None):
                 response = client.request(method, path, json=body)
@@ -256,68 +285,162 @@ def seed_release(database):
             result['series'] = {k:series[k] for k in ('id','version','sha256','engineering_scope')}
             result['source'] = '江苏华远公开YJV22结构尺寸、GB/T3956 R20标准上限；'+series['engineering_scope']
             base = next(c for c in series['candidates'] if round(c['payload']['specification']['area_m2']*1e6)==300)
-            workspace = api('/api/design/study-workspaces', 'POST', {
-                'model_id':'candidate:'+base['id'], 'content_sha256':base['digest'], 'target_current_a':400,
-                'three_core_layout':'three_core_ducts_horizontal',
-                'candidate_completion':series['candidate_completions'][base['id']]})
+            prepared, error = client.app.state.research.complete_candidate(base, series['candidate_completions'][base['id']])
+            if error:
+                raise RuntimeError('型号工程参数补录失败：'+str(error))
+            payload = deepcopy(prepared['payload'])
+            payload['name'] = payload['cable_type']['label'] = 'YJV22-8.7/15 3×300'
+            payload['confirmed'] = False
+            mv = api('/api/domain-cable-models','POST',payload)
+            hv = api('/api/domain-cable-models','POST',release_hv_model())
+
+            def create_workspace(model, name, *, type_draft=False, **extra):
+                endpoint = '/api/design/type-workspaces' if type_draft else '/api/design/study-workspaces'
+                created = api(endpoint,'POST',{'model_id':'candidate:'+model['id'],
+                              'content_sha256':model['digest'],**extra})
+                document = deepcopy(created['domain'])
+                document['name'] = name
+                api('/api/workspaces/'+created['id']+'/domain','PUT',{
+                    'expected_revision':created['revision'],'document':document})
+                return api('/api/workspaces/'+created['id'])
+
+            for model, status in ((mv,'公开尺寸与有来源的工程参数草稿，未批准'),
+                                  (hv,'厂家尺寸草稿；电阻、波纹和材料参数待补齐，未批准')):
+                draft = create_workspace(model,model['payload']['name'],type_draft=True)
+                result['types'].append({'name':model['payload']['name'],'workspace':draft['id'],'status':status})
+            workspace = create_workspace(mv,'城北变电站 · 10 kV 三回排管',
+                                         target_current_a=400,three_core_layout='three_core_ducts_horizontal')
+            hv_workspace = create_workspace(hv,'城南线路 · 110 kV 直埋单回',target_current_a=600)
             parameters = {**deepcopy(METHOD_DEFAULTS['cablesim.iec60287']), 'rating_mode':'both'}
             parameters['solver']['max_iterations'] = 300
             circuit = workspace['domain']['circuits'][0]['id']
-            prefix = '/api/workspaces/' + workspace['id'] + '/studies'
             soil = next(i for i,m in enumerate(workspace['domain']['materials'])
                         if m['id'] == workspace['domain']['sections'][0]['medium']['material'])
             field = f'/input/materials/{soil}/thermal_resistivity'
             definitions = [
-                ('客户询价 · 10 kV三回排管400 A', 'selection',
+                ('城北变电站 · 10 kV 三回排管询价', 'selection',
                  {'kind':'selection','candidate_ids':candidates,'minimum':400,'allow_demo_candidates':False,
                   'target_entity':circuit,'target_entities':[c['id'] for c in workspace['domain']['circuits']],
                   'rating_basis':'simultaneous','target_condition':'rating-simultaneous'}),
-                ('参数扫描 · YJV22 3×300土壤热阻率', 'sweep',
+                ('排管段 · 土壤热阻率扫描', 'sweep',
                  {'kind':'sweep','rating_basis':'simultaneous','target_entity':circuit,'target_condition':'rating-simultaneous',
                   'samples':[{'label':f'{v} K*m/W','changes':{field:v}} for v in (.6,.8,1.,1.2,1.4,1.6,1.8,2.)]}),
             ]
-            for title, module, driver in definitions:
+            def save_study(target, title, module, driver, *, required=True, **extra):
+                prefix = '/api/workspaces/' + target['id'] + '/studies'
                 config = {'title':title,'task':'rating','input_source':'domain','method':method,
                           'parameters':parameters,'driver':driver,
                           'candidate_completions':series['candidate_completions'] if module=='selection' else {},
-                          'input_sources':{'/driver':{'kind':'user','reference':result['source']+'；敷设参考：三回水平一管一缆、中心深1.2 m、间距0.25 m、地表25°C、土壤1 K·m/W；不是现场实测。','reviewed':False}}}
-                study = api(prefix,'POST',{**config,'modules':{module:deepcopy(config)},'expected_revision':workspace['revision']})
+                          'input_sources':{'/driver':{'kind':'user','reference':result['source']+'；工程场景为参考设计条件，非现场实测；具体敷设、负荷和来源保存在领域输入中。','reviewed':False}},**extra}
+                study = api(prefix,'POST',{**config,'modules':{module:deepcopy(config)},'expected_revision':target['revision']})
                 root = prefix + '/' + study['id']
-                check = api(root + f'/preflight?expected_revision={workspace["revision"]}&expected_study_revision={study["revision"]}&module={module}')
+                check = api(root + f'/preflight?expected_revision={target["revision"]}&expected_study_revision={study["revision"]}&module={module}')
+                item = {'title':title,'workspace':target['id'],'study':study['id'],'module':module,'ready':check['ready']}
                 if not check['ready']:
-                    raise RuntimeError('发布演示预检未通过：'+json.dumps(check,ensure_ascii=False))
-                run = api(root+'/runs','POST',{'expected_revision':workspace['revision'],
+                    if required:
+                        raise RuntimeError('发布演示预检未通过：'+json.dumps(check,ensure_ascii=False))
+                    item.update(status='缺项待补；未生成结果',preflight=check)
+                    result['studies'].append(item)
+                    print(title+'：缺项待补，未生成结果',flush=True)
+                    return
+                run = api(root+'/runs','POST',{'expected_revision':target['revision'],
                     'expected_study_revision':study['revision'],'request_id':str(uuid4()),
                     'scope_acknowledged':True,'lock_digest':check['lock_digest'],'module':module})
                 deadline = time.monotonic()+180
                 while run['status'] in ('accepted','running','validating') and time.monotonic()<deadline:
                     time.sleep(.2)
                     run = api(root+'/runs/'+run['id'])
-                if run['status']!='succeeded' or run['integrity']!='verified':
+                if (run['status']!='succeeded' or run['integrity']!='verified'
+                        or run['freshness']!='current' or run.get('version_status',{}).get('status')!='current'):
                     raise RuntimeError('发布演示计算未完成：'+json.dumps({
                         'status':run['status'],'integrity':run.get('integrity'),'error':run.get('error'),
                         'cases':[{k:case.get(k) for k in ('case_id','status','error')} for case in (run.get('output') or {}).get('cases',[])]},ensure_ascii=False))
-                result['studies'].append({'title':title,'workspace':workspace['id'],'study':study['id'],
-                                          'module':module,'run':run['id'],'status':run['status']})
+                item.update(run=run['id'],status=run['status'])
+                result['studies'].append(item)
                 print(title+'：真实计算完成',flush=True)
-            model = next(m for m in models if m['id']=='system.specification-yjv22-300')
-            draft = api('/api/design/type-workspaces','POST',{'model_id':model['id'],'content_sha256':model['content_sha256']})
-            result['types'].append({'name':model['name'],'workspace':draft['id'],'status':'教学设计草稿，未批准；规格书条件已保存'})
-        # All SQLite connections are closed/checkpointed before publishing the seed.
+            for title, module, driver in definitions:
+                save_study(workspace,title,module,driver)
+            save_study(workspace,'排管段 · 外部热阻精确式与近似式对比','method-compare',{'kind':'crosscheck'},
+                       crosschecks=[{'method':method,'parameters':{**deepcopy(parameters),'t4_form':'approximate'}}])
+            save_study(hv_workspace,'城南线路 · 110 kV 直埋单回校核（待补厂家参数）','rating',
+                       {'kind':'single'},required=False)
+            contracts = api('/api/input-contracts')
+            contract = next(item for item in contracts if item['method']['capability']=='electrothermal-steady')
+            title = '城北变电站 · 排管段温度场（需在超算运行）'
+            configuration = {'title':title,'task':'operating','method':contract['method'],'input_source':'domain',
+                             'parameters':{key:value['default'] for key,value in contract['parameter_schema'].get('properties',{}).items() if 'default' in value},
+                             'driver':{'kind':'single'}}
+            thermal = api('/api/workspaces/'+workspace['id']+'/studies','POST',{
+                **configuration,'modules':{'thermal-field':deepcopy(configuration)},'expected_revision':workspace['revision']})
+            result['studies'].append({'title':title,'workspace':workspace['id'],'study':thermal['id'],
+                                      'module':'thermal-field','status':'需在超算运行；补齐参数并预检后提交','ready':False})
+            # Later seed operations must not silently age an earlier result.
+            for item in result['studies']:
+                if item.get('run'):
+                    run = api(f'/api/workspaces/{item["workspace"]}/studies/{item["study"]}/runs/{item["run"]}')
+                    if run['freshness']!='current' or run['version_status']['status']!='current':
+                        raise RuntimeError('发布种子出现过期结果：'+item['title'])
+        return result
+    finally:
+        for key,value in previous.items():
+            if value is None: os.environ.pop(key,None)
+            else: os.environ[key] = value
+
+
+def seed_release(database):
+    """Keep current data; rebuild changed releases only after a verified backup."""
+    from contextlib import closing
+    from datetime import datetime, timezone
+    import sqlite3
+    from tempfile import TemporaryDirectory
+    from backend.kernel.database_ops import atomic_json, snapshot, validate
+    from backend.kernel.ownership import OwnerLock
+    database = Path(database).resolve()
+    marker = database.with_suffix('.seed.json')
+    owner = OwnerLock(database)
+    owner.acquire()
+    try:
+        previous = None
         if database.exists():
-            raise RuntimeError('发布库在生成期间被其他进程创建；保留双方数据。')
-        staged.rename(database)
-        result['complete'] = True
-        temporary = marker.with_suffix('.part')
-        temporary.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
-        temporary.replace(marker)
-    print('发布演示库已生成：'+str(database),flush=True)
+            if not marker.exists() or not (previous := json.loads(marker.read_text(encoding='utf-8'))).get('complete'):
+                raise SystemExit('发布库已存在但缺少完成标记；保留数据，请检查后再启动。')
+            validate(database)
+        identity = release_identity()
+        if previous and previous.get('identity') == identity:
+            print('发布插件与型号版本未变化，保留已有数据：'+str(database),flush=True)
+            return
+        print('发布插件、型号或演示输入版本已变化，准备重建。' if previous else '首次生成发布工程示例。',flush=True)
+        with TemporaryDirectory(prefix='seed-',dir=database.parent) as scratch:
+            staged = Path(scratch)/database.name
+            result = build_release_seed(staged,database,identity)
+            validate(staged)
+            if identity != release_identity():
+                raise RuntimeError('生成期间插件或型号版本发生变化；保留旧库，请重新启动。')
+            if previous:
+                name = 'engineering-'+datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'-'+uuid4().hex[:8]+'.sqlite'
+                backup = database.parent/'backups'/name
+                snapshot(database,backup)
+                atomic_json(backup.with_suffix('.seed.json'),previous)
+                # No host can acquire this library while OwnerLock is held.
+                with closing(sqlite3.connect(database,timeout=20)) as old:
+                    if old.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()[0] != 0:
+                        raise RuntimeError('旧库仍在使用，已保留备份且未替换。')
+                    if old.execute('PRAGMA journal_mode=DELETE').fetchone()[0] != 'delete':
+                        raise RuntimeError('旧库尚未关闭，已保留备份且未替换。')
+                result['previous_backup'] = str(backup)
+                print('旧发布库已备份：'+str(backup),flush=True)
+            staged.replace(database)
+            result['complete'] = True
+            atomic_json(marker,result)
+        print('发布工程示例已就绪：'+str(database),flush=True)
+    finally:
+        owner.close()
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source', default='http://127.0.0.1:8040')
-    parser.add_argument('--release', action='store_true', help='从仓库教学输入创建独立发布库；不读取来源服务或开发库')
+    parser.add_argument('--release', action='store_true', help='从随附工程输入创建发布库；版本变化时先备份再重建，不读取开发库')
     parser.add_argument('--database', type=Path, default=ROOT / '.data/engineering-demo/engineering.sqlite')
     parser.add_argument('--refresh', action='store_true', help='通过本机服务显式更新已过时的 IEC 发行并重算；旧运行保留')
     parser.add_argument('--supplement-hv', action='store_true', help='补入110kV公开原文事实并记录真实预检；不平滑皱纹护套、不猜缺项')

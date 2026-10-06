@@ -19,6 +19,8 @@ import {
 } from "@tanstack/react-router";
 import {
   api,
+  ApiError,
+  optionalRecord,
   message,
   numeric,
   record,
@@ -113,7 +115,14 @@ export function StudyProvider() {
     queryFn: async ({ signal }) => {
       if (!search.workspace) return studyIndex(signal);
       const [study, workspace] = await Promise.all([
-        responseData(api.GET('/api/workspaces/{wid}/studies/{sid}', {params:{path:{wid:search.workspace,sid}},signal})),
+        responseData(api.GET('/api/workspaces/{wid}/studies/{sid}', {params:{path:{wid:search.workspace,sid}},signal})).catch(async error => {
+          // Older running hosts expose the formal list route but not the single-study GET.
+          if (!(error instanceof ApiError) || error.status !== 404) throw error;
+          const rows = await responseData(api.GET('/api/workspaces/{wid}/studies', {params:{path:{wid:search.workspace}},signal}));
+          const found = Array.isArray(rows) ? rows.find(row => optionalRecord(row).id === sid) : undefined;
+          if (!found) throw error;
+          return found;
+        }),
         responseData(api.GET('/api/workspaces/{wid}', {params:{path:{wid:search.workspace}},signal})),
       ]);
       const state = record(workspace, '工程');
@@ -209,6 +218,12 @@ export function StudyProvider() {
   });
   const save = useCallback(async () => {
     if (!draft || writing.current) return false;
+    const invalid = document.querySelector<HTMLElement>('.buzzform-contract :is(input, textarea, button)[aria-invalid="true"]');
+    if (invalid) {
+      invalid.focus();
+      invalid.scrollIntoView({block:'nearest'});
+      return false;
+    }
     writing.current = true;
     try {
       await mutation.mutateAsync(draft);

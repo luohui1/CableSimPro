@@ -150,6 +150,9 @@ export async function studyRuns(
   sid: string,
   signal?: AbortSignal,
 ) {
+  const deadline = AbortSignal.timeout(15000);
+  const requestSignal = signal ? AbortSignal.any([signal, deadline]) : deadline;
+  try {
   const items: Record<string, unknown>[] = [];
   let after = 0;
   for (let page = 0; page < 20; page++) {
@@ -157,7 +160,7 @@ export async function studyRuns(
       await responseData(
         api.GET("/api/workspaces/{wid}/studies/{sid}/runs", {
           params: { path: { wid, sid }, query: { after, limit: 100 } },
-          signal,
+          signal: requestSignal,
         }),
       ),
       "运行",
@@ -171,6 +174,10 @@ export async function studyRuns(
     after = cursor;
   }
   throw new ApiError(502, "运行记录过多，请缩小查询范围");
+  } catch (error) {
+    if (deadline.aborted && !signal?.aborted) throw new ApiError(504, '运行记录读取超时，服务尚未返回结果，请稍后重试。');
+    throw error;
+  }
 }
 export async function saveStudy(
   study: StudyRow,

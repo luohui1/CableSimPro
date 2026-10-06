@@ -43,6 +43,7 @@ npm run test:accessibility       # 全路由WCAG、可见焦点/表格键盘与�
 npm run test:inquiry             # 问询数字输入、简明预检、冻结工况与历史跳转
 npm run test:version-status      # 版本过期、确认重算/轮询、冲突与温度场缺项；隔离演示库
 npm run test:host-connections    # 交付存档下载、研究撤销/重做、仿真问题格式导入；不启动求解
+E2E_DATABASE_SOURCE=/absolute/path/to/engineering.sqlite npm run test:component-foundation # 组件接入、契约保存、分层编辑、运行记录；隔离库
 npm run test:report-pdf           # 客户/内部 PDF、HTML 次入口、存档下载与新前端截图
 npm run capture:handoff          # 只读截取正式前端，可加 -- --route=/studies
 ```
@@ -81,6 +82,10 @@ npm run capture:handoff          # 只读截取正式前端，可加 -- --route=
 禁止页面中的字面颜色、字号、圆角、内联 `style`；禁止使用 Tailwind 默认色阶/字号/圆角与非令牌任意值。`npm run check:styles` 检查整个 `src/`，`build` 必须先通过。禁止移植样板标记/样式、嵌套卡片、伪结果、宿主公式、前端阈值判定、从演示数据补缺项。禁止远程字体/图片/脚本、提交 `node_modules` / `dist` / 截图、改后端与插件或自行提交 Git。
 
 基础控件依据 [shadcn/ui](https://ui.shadcn.com/docs/components/button) 的开放源码组合方式改造；shadcn/ui、Radix、Motion 为 MIT，Noto Sans SC 与 IBM Plex Mono 为 SIL OFL，字体和库由锁定 npm 依赖本地分发。正式安装包需保留对应许可。
+
+官方 CLI 使用 `components.json` 中的 Radix/new-york 配置。第三方注册表源码在 `components/ai`（pastaui）、`components/ai-elements`、`components/buzzform`、`components/data-grid` 和 `components/data-grid-fill`，安装时不覆盖已改装的基础控件。gridcn fill 上游的旧依赖名需改成 `@gridcn/data-grid` 后交给同一 CLI 安装。表格固定使用 TanStack Table v8；分层网格、Buzzform 和 Agent 陈列组件按需加载。网格动态坐标由 `grid-layout.tsx` 写入组件持有的样式表，卸载时删除规则，颜色仍来自角色令牌。
+
+shadcn 语义变量统一映射在 `theme.css`；项目灰底和控件边框使用 `--ground`、`--control-border`。`lucide-react` 在 Vite 和 TypeScript 中均指向显式命名导出的自研图标适配，未映射名称会类型报错。方法参数按匹配发行的真实输入契约生成，显示单位换算后以 SI 保存；运行记录读取正式快照，领域表保留后端锁和推导来源的只读规则。Agent 工作模式保持“待接入”，示范内容仅在开发陈列页。
 
 ## 公共组件与动效
 

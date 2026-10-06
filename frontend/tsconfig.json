@@ -14,7 +14,7 @@
     "noEmit": true,
     "types": ["vite/client"],
     "baseUrl": ".",
-    "paths": { "@/*": ["./src/*"] }
+    "paths": { "@/*": ["./src/*"], "lucide-react": ["./src/icons/lucide-shim.tsx"] }
   },
   "include": ["src", "vite.config.ts"]
 }

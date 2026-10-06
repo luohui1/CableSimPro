@@ -1,9 +1,9 @@
 @import url('./tokens.css');
 * { box-sizing: border-box; }
-body { margin: 0; color: var(--text); background: var(--background); font: var(--weight-normal) var(--text-body)/1.6 var(--font-ui); }
+body { margin: 0; color: var(--text); background: var(--ground); font: var(--weight-normal) var(--text-body)/1.6 var(--font-ui); }
 button, input, select { font: inherit; }
 button, a { -webkit-tap-highlight-color: transparent; }
-button, .button { min-height: var(--control-compact); padding: var(--space-1) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--panel); color: var(--text); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); text-decoration: none; }
+button, .button { min-height: var(--control-compact); padding: var(--space-1) var(--space-4); border: 1px solid var(--control-border); border-radius: var(--radius-pill); background: var(--panel); color: var(--text); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2); text-decoration: none; }
 button:hover, .button:hover { background: var(--hover); }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
 button:disabled { opacity: .45; cursor: default; }
@@ -11,7 +11,7 @@ button.primary { background: var(--text); border-color: var(--text); color: var(
 button.copper { background: var(--copper); border-color: var(--copper); color: var(--on-copper); }
 button.agent { color: var(--agent); border-color: var(--agent); }
 button svg { width: 16px; height: 16px; flex: none; }
-input, select { color: var(--text); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-input); min-height: var(--control-standard); padding: var(--space-1) var(--space-3); }
+input, select { color: var(--text); background: var(--panel); border: 1px solid var(--control-border); border-radius: var(--radius-input); min-height: var(--control-standard); padding: var(--space-1) var(--space-3); }
 input[type="checkbox"] { min-height: 0; accent-color: var(--text); }
 a { color: inherit; text-underline-offset: 3px; }
 h1, h2, h3, p { margin: 0; }

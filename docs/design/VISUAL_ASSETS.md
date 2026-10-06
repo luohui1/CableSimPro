@@ -37,22 +37,23 @@
 
 ### 3.1 图标清单
 
-全量清单共 117 个图标，覆盖 12 个分组。★ 标记高频基础项；完整体系还覆盖模块、来源、计算、建模、线路、资源和结果，不以通用操作图标代替领域含义。
+全量清单共 152 个图标，覆盖 13 个分组。★ 标记高频基础项；完整体系还覆盖模块、来源、计算、建模、线路、资源和结果，不以通用操作图标代替领域含义。
 
 | 分组 | 名称 · 含义 |
 | --- | --- |
-| `nav` ★ | `home` 首页 · `cable-type` 型号 · `study` 研究 · `library` 库 · `plugin` 插件 · `settings` 设置 · `recent` 最近 |
+| `nav` ★ | `home` 首页 · `cable-type` 型号 · `study` 研究 · `library` 库 · `plugin` 插件 · `settings` 设置 · `recent` 最近 · `workbench` 工作台 · `simulation` 电缆仿真 · `sidebar` 侧栏 · `theme` 深色 |
 | `module` | `structure` 结构设计 · `standard-check` 标准核对 · `electrical` 电气参数 · `rating-table` 载流量表 · `short-circuit` 短路容量 · `sweep` 参数扫描 · `method-compare` 方法对比 · `datasheet` 规格书 · `add-module` 添加模块 |
-| `object` ★ | `overview` 概况 · `cable` 电缆结构 · `section` 敷设截面 · `route` 线路 · `conditions` 工况与判据 · `study` 计算 · `delivery` 交付 |
-| `action` ★ | `add` · `edit` · `delete` · `duplicate` · `undo` · `redo` · `save` · `import` · `export` · `search` · `filter` · `more` · `close` · `chevron-down` · `chevron-right` · `external` · `copy` · `history` · `compare` · `refresh` · `publish` 发布到库 · `detach` 脱离引用 · `replace` 替换引用 · `locate` 定位对象 · `sort-ascending` 升序 · `sort-descending` 降序 · `visible` 显示对象 · `hidden` 隐藏对象 |
+| `object` ★ | `overview` 概况 · `cable` 电缆结构 · `section` 敷设截面 · `route` 线路 · `conditions` 工况与判据 · `study` 计算 · `delivery` 交付 · `file` 文件 · `folder` 文件夹 |
+| `action` ★ | `add` · `edit` · `delete` · `duplicate` · `undo` · `redo` · `save` · `import` · `export` · `search` · `filter` · `more` · `close` · `chevron-down` · `chevron-right` · `external` · `copy` · `history` · `compare` · `refresh` · `publish` 发布到库 · `detach` 脱离引用 · `replace` 替换引用 · `locate` 定位对象 · `sort-ascending` 升序 · `sort-descending` 降序 · `visible` 显示对象 · `hidden` 隐藏对象 · `check` 勾选 · `clear` 清除 · `minus` 减少 · `percent` 百分比 · `cut` 剪切 · `paste` 粘贴 · `code` 代码 · `pin` 固定 · `unpin` 取消固定 · `grip` 拖动 · `resize-horizontal` 调整宽度 · `arrow-up` 向上 · `arrow-down` 向下 · `arrow-left` 返回 · `arrow-right` 前进 · `chevron-up` 收起 · `chevron-left` 向左 · `chevrons-up-down` 展开收起 |
 | `run` ★ | `run` 运行 · `stop` 停止 · `preflight` 预检 |
-| `agent` ★ | `agent` Agent · `proposal` 提案 · `approve` 批准 · `reject` 拒绝 · `retry` 重试 · `branch` 分支 · `send` 发送 · `attach` 附加资料 · `step-read` 已读取 · `step-run` 已运行 |
+| `agent` ★ | `agent` Agent · `proposal` 提案 · `approve` 批准 · `reject` 拒绝 · `retry` 重试 · `branch` 分支 · `send` 发送 · `attach` 附加资料 · `step-read` 已读取 · `step-run` 已运行 · `message` 消息 · `reasoning` 思考 · `checkpoint` 检查点 · `commit` 提交 |
 | `source` | `from-library` 库引用 · `from-standard` 标准值 · `from-document` 资料 · `from-user` 用户录入 · `derived` 推导 · `locked` 锁定 · `unlocked` 解锁 |
 | `calc` | `ampacity` 载流量 · `thermal-field` 温度场 · `electric-field` 电场 · `magnetic-field` 磁场 · `short-circuit` 短路热稳定 · `induced-voltage` 感应电压与环流 · `electrical-params` 电气参数 · `voltage-drop` 电压降 · `selection` 选型 · `cross-check` 交叉校核 · `sweep` 参数扫描 |
-| `tool` | `select` 选择 · `pan` 平移 · `zoom-in` · `zoom-out` · `fit` 适应窗口 · `place-cable` 放置电缆 · `duct-bank` 排管 · `medium-zone` 介质分区 · `dimension` 标注 · `measure` 测量 · `snap` 捕捉 · `align` 对齐 · `section-cut` 剖切 · `view-3d` 三维查看 |
+| `tool` | `select` 选择 · `pan` 平移 · `zoom-in` · `zoom-out` · `fit` 适应窗口 · `place-cable` 放置电缆 · `duct-bank` 排管 · `medium-zone` 介质分区 · `dimension` 标注 · `measure` 测量 · `snap` 捕捉 · `align` 对齐 · `section-cut` 剖切 · `view-3d` 三维查看 · `terminal` 终端 |
 | `route` | `segment` 分段 · `joint` 接头 / 接头井 · `crossing` 交叉 · `heat-source` 外部热源 · `bonding` 接地方式 · `profile` 纵断面 |
 | `resource` | `material` 材料 · `cable-type` 电缆型号 · `section-template` 截面模板 · `route-template` 线路模板 · `condition-set` 工况与判据 · `calc-scheme` 计算方案 · `delivery-template` 交付模板 |
 | `result` | `scalar` 数值结论 · `table` 数值表 · `curve` 曲线 · `field` 场分布 · `radial` 径向分布 · `snapshot` 运行快照 · `report` 计算书 · `evidence` 验证依据 |
+| `status` | `current` 当前 · `pending` 待处理 · `spinner` 执行中 · `info` 说明 · `warning` 需注意 · `error` 错误 |
 
 `design/plugin-system/icons/` 与 `plugins/<id>/assets/icon.svg` 是现有参考，按本规格重画后替换。
 

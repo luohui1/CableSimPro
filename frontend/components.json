@@ -9,6 +9,13 @@
     "baseColor": "neutral",
     "cssVariables": true
   },
+  "registries": {
+    "@ai-elements": "https://ai-sdk.dev/elements/api/registry/{name}.json",
+    "@pastaui": "https://pastaui.com/r/{name}.json",
+    "@gridcn": "https://gridcn.vercel.app/r/{name}.json",
+    "@buzzform": "https://form.buildnbuzz.com/r/{name}.json",
+    "@kinetic": "https://kinetic.itsjay.in/r/{name}.json"
+  },
   "aliases": {
     "components": "@/components",
     "utils": "@/lib/cn",

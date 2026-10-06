@@ -1,5 +1,6 @@
 """Release isolation and API/static routing, without installing or building packages."""
 import importlib.util
+from contextlib import closing
 import json
 from pathlib import Path
 import sqlite3
@@ -90,17 +91,26 @@ def test_frontend_routes_and_missing_assets_do_not_mask_api_errors(tmp_path, mon
             assert response.status_code == 404 and 'id="root"' not in response.text, route
 
 
-def test_completed_release_seed_keeps_user_data_and_unfinished_seed_is_refused(tmp_path):
+def test_completed_release_seed_keeps_user_data_and_unfinished_seed_is_refused(tmp_path, monkeypatch):
     path = Path(__file__).resolve().parents[1] / 'frontend/scripts/seed-engineering-demo.py'
     spec = importlib.util.spec_from_file_location('release_seed', path)
     seed = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(seed)
     database = tmp_path / 'engineering.sqlite'
-    database.write_bytes(b'existing user data must not be opened or changed')
+    with closing(sqlite3.connect(database)) as connection, connection:
+        connection.execute('CREATE TABLE user_data (value TEXT)')
+        connection.execute("INSERT INTO user_data VALUES ('user changes')")
     before = database.read_bytes()
     with pytest.raises(SystemExit, match='保留数据'):
         seed.seed_release(database)
-    database.with_suffix('.seed.json').write_text(json.dumps({'complete':True}), encoding='utf-8')
+    assert database.read_bytes() == before
+    monkeypatch.setenv('CABLESIM_DATASETS_DIR',str(tmp_path/'datasets'))
+    from backend.main import create_app
+    with TestClient(create_app(database)):
+        pass
+    before = database.read_bytes()
+    database.with_suffix('.seed.json').write_text(json.dumps({'complete':True,'identity':seed.release_identity()}), encoding='utf-8')
+    monkeypatch.setattr(seed,'build_release_seed',lambda *_a: pytest.fail('Unchanged release must preserve user edits'))
     seed.seed_release(database)
     assert database.read_bytes() == before
 
@@ -118,15 +128,76 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     database = tmp_path / 'release/engineering.sqlite'
     seed.seed_release(database)
     receipt = json.loads(database.with_suffix('.seed.json').read_text(encoding='utf-8'))
-    assert receipt['complete'] and len(receipt['studies']) == 2 and len(receipt['types']) == 1
-    with sqlite3.connect(database) as connection:
-        assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == 2
-        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status='succeeded'").fetchone()[0] == 2
+    assert receipt['complete'] and len(receipt['studies']) == 5 and len(receipt['types']) == 2
+    assert receipt['identity'] == seed.release_identity()
+    assert sum(bool(row.get('run')) for row in receipt['studies']) == 3
+    assert any('需在超算运行' in row['title'] and not row.get('run') for row in receipt['studies'])
+    assert any('110 kV' in row['title'] and not row.get('run') and not row['ready'] for row in receipt['studies'])
+    with closing(sqlite3.connect(database)) as connection:
+        assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == 4
+        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status='succeeded'").fetchone()[0] == 3
         candidates=[json.loads(r[0]) for r in connection.execute('SELECT payload FROM domain_cable_models')]
-        assert len(candidates)==10
-        assert all(c['specification']['designation']=='YJV22' and c['specification']['u0_v']==8700 for c in candidates)
+        public=[c for c in candidates if c.get('specification')]
+        assert len(public)==10 and len(candidates)==12
+        assert all(c['specification']['designation']=='YJV22' and c['specification']['u0_v']==8700 for c in public)
         assert not any(c['confirmed'] for c in candidates)
     before = database.read_bytes()
     seed.seed_release(database)
     assert database.read_bytes() == before
     assert development.read_bytes() == b'development database sentinel'
+
+
+@pytest.mark.parametrize('change', ['plugins', 'models'])
+def test_release_version_change_backs_up_user_data_before_replacement(tmp_path, monkeypatch, change):
+    spec=importlib.util.spec_from_file_location('upgraded_seed',Path(__file__).resolve().parents[1]/'frontend/scripts/seed-engineering-demo.py')
+    seed=importlib.util.module_from_spec(spec);spec.loader.exec_module(seed)
+    from backend.main import create_app
+    monkeypatch.setenv('CABLESIM_DATASETS_DIR',str(tmp_path/'datasets'))
+    database=tmp_path/'engineering.sqlite'
+    with TestClient(create_app(database)):
+        pass
+    with closing(sqlite3.connect(database)) as db, db:
+        db.execute('CREATE TABLE user_data (value TEXT)')
+        db.execute("INSERT INTO user_data VALUES ('keep in backup')")
+    identity=seed.release_identity()
+    old=json.loads(json.dumps(identity));old[change]={}
+    receipt={'complete':True,'identity':old,'user_note':'keep this too'}
+    database.with_suffix('.seed.json').write_text(json.dumps(receipt),encoding='utf-8')
+    def build(staged, target, versions):
+        with TestClient(create_app(staged)):
+            pass
+        return {'identity':versions,'database':str(target)}
+    monkeypatch.setattr(seed,'build_release_seed',build)
+    seed.seed_release(database)
+    current=json.loads(database.with_suffix('.seed.json').read_text(encoding='utf-8'))
+    backup=Path(current['previous_backup'])
+    assert backup.parent == tmp_path/'backups'
+    from backend.kernel.database_ops import validate
+    metadata=json.loads(Path(str(backup)+'.json').read_text(encoding='utf-8'))
+    validate(backup,metadata['sha256'])
+    with closing(sqlite3.connect(backup)) as db:
+        assert db.execute('SELECT value FROM user_data').fetchone()[0]=='keep in backup'
+    assert json.loads(backup.with_suffix('.seed.json').read_text(encoding='utf-8'))==receipt
+    assert current['identity']==identity and current['complete']
+    with closing(sqlite3.connect(database)) as db:
+        assert db.execute("SELECT name FROM sqlite_master WHERE name='user_data'").fetchone() is None
+
+
+def test_failed_release_rebuild_preserves_database_and_receipt(tmp_path, monkeypatch):
+    spec=importlib.util.spec_from_file_location('failed_seed',Path(__file__).resolve().parents[1]/'frontend/scripts/seed-engineering-demo.py')
+    seed=importlib.util.module_from_spec(spec);spec.loader.exec_module(seed)
+    from backend.main import create_app
+    monkeypatch.setenv('CABLESIM_DATASETS_DIR',str(tmp_path/'datasets'))
+    database=tmp_path/'engineering.sqlite'
+    with TestClient(create_app(database)):
+        pass
+    marker=database.with_suffix('.seed.json')
+    marker.write_text(json.dumps({'complete':True}),encoding='utf-8')
+    before,receipt=database.read_bytes(),marker.read_bytes()
+    def fail(*_args):
+        raise RuntimeError('calculation failed')
+    monkeypatch.setattr(seed,'build_release_seed',fail)
+    with pytest.raises(RuntimeError,match='calculation failed'):
+        seed.seed_release(database)
+    assert database.read_bytes()==before and marker.read_bytes()==receipt
+    assert not list(tmp_path.glob('seed-*')) and not (tmp_path/'backups').exists()

@@ -121,6 +121,8 @@ def main() -> int:
             run([npm, "install", "--no-package-lock", "--no-audit", "--no-fund"], cwd=frontend, env=environment)
 
     run([npm, "run", "build:release", "--", "--outDir", str(RELEASE / "frontend"), "--emptyOutDir", "--logLevel", "warn"], cwd=ROOT / "frontend", env=environment)
+    print("Checking release plugin/model versions; changed data is backed up under "
+          + str(RELEASE / "backups") + " before replacement.", flush=True)
     run([python, str(ROOT / "frontend/scripts/seed-engineering-demo.py"), "--release",
          "--database", str(RELEASE / "engineering.sqlite")], env=environment)
 

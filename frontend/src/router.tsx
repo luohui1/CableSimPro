@@ -65,7 +65,7 @@ export const homeRoute = createRoute({
 export const studiesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/studies",
-  validateSearch: (search: Record<string, unknown>): { theme: "light" | "dark"; kind?: string } => ({ ...themeSearch(search), kind: search.kind === "simulation" ? "simulation" : undefined }),
+  validateSearch: (search: Record<string, unknown>): { theme: "light" | "dark"; kind?: string; workspace?: string } => ({ ...themeSearch(search), kind: ['simulation','ampacity'].includes(String(search.kind)) ? String(search.kind) : undefined, workspace: typeof search.workspace === 'string' ? search.workspace : undefined }),
   component: ObjectListPage,
 });
 const simulationListRoute = createRoute({ getParentRoute: () => rootRoute, path: "/simulation", validateSearch: themeSearch, component: () => <Navigate to="/studies" search={{ theme: preferences().theme, kind: "simulation" }} replace /> });

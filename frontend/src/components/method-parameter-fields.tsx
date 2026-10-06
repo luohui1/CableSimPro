@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import type { components } from "@/api/generated/schema";
 import { exactContract, inputContracts } from "@/api/input-contracts";
-import { message, text } from "@/api/client";
+import { message } from "@/api/client";
 import type { ParameterDraft } from "@/lib/study-config";
-import { ContractFields } from "./contract-fields";
+import { lazy, Suspense } from 'react';
+const ContractFields = lazy(() => import('./buzzform-contract-fields').then(module => ({default: module.BuzzformContractFields})));
 import { EmptyState, ErrorState, LoadingState } from "./states";
 import { Button } from "./ui/button";
 import { SourceBadge } from "./source-badge";
@@ -56,14 +57,12 @@ export function MethodParameterFields({
         <SourceBadge
           kind="library"
           detail={
-            text(contract.parameter_source || contract.source) +
-            " · " +
-            text(contract.parameter_source_sha256 || contract.source_sha256)
+            '已安装方法的参数契约'
           }
         />
         <span className="muted">{method.version}</span>
       </div>
-      <ContractFields
+      <Suspense fallback={<LoadingState title="正在读取参数表单" />}><ContractFields
         module={namespace}
         schema={contract.parameter_schema}
         root={contract.parameter_schema}
@@ -74,7 +73,7 @@ export function MethodParameterFields({
         draftFields={draftFields}
         onDraftChange={onDraftChange}
         sources={sources}
-      />
+      /></Suspense>
     </div>
   );
 }

@@ -108,7 +108,7 @@
   font: inherit;
   color: var(--text);
   background: var(--panel);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius-input);
   padding: var(--space-3);
   min-height: calc(var(--space-12) * 2);
@@ -246,7 +246,7 @@
   font: inherit;
   color: var(--text);
   background: var(--panel);
-  border: 1px solid var(--border);
+  border: 1px solid var(--control-border);
   border-radius: var(--radius-input);
   padding: var(--space-2);
 }

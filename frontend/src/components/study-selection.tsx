@@ -249,6 +249,7 @@ export function StudySelection({
       </Toolbar>
       <DataTable
         label="真实选型候选"
+        historical={view.historical}
         columns={columns}
         groups={groups}
         selectedId={selectedId}

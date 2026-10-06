@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState, type ReactNode } from "react";
+const AgentGallery = lazy(() => import('@/components/agent-gallery'));
 import { Link } from "@tanstack/react-router";
 import { galleryRoute, type PageState } from "@/router";
 import { AppShell } from "@/components/app-shell";
@@ -166,6 +167,7 @@ export function GalleryPage() {
               <StaleBanner description="当前展示上次组件样例。" />
             )}
             <div className="gallery-grid">
+              <Section title="开源组件" wide><Tabs defaultValue="foundation"><TabsList><TabsTrigger value="foundation">组件底座</TabsTrigger><TabsTrigger value="agent-demo">Agent · 演示</TabsTrigger></TabsList><TabsContent value="foundation"><p className="muted">Radix 控件、BuzzForm 参数表单、TanStack 结果表、gridcn 分层表和运行记录组件已接入正式界面。</p></TabsContent><TabsContent value="agent-demo"><Suspense fallback={<LoadingState title="正在读取演示组件" />}><AgentGallery /></Suspense></TabsContent></Tabs></Section>
               {[...drawingEntries, ...cadEntries].map(
                 ({ id, title, Component }) => (
                   <Section key={id} title={title} wide>

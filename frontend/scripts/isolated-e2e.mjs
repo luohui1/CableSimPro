@@ -15,7 +15,7 @@ if (!script || path.dirname(script) !== ".")
   throw Error("只能执行 frontend/scripts 中的验收脚本");
 const source = path.resolve(
   process.env.E2E_DATABASE_SOURCE ||
-    path.join(root, script === 'verify-type-resilience.mjs' ? '.data/standard-check/validation.sqlite' : ['verify-version-status.mjs','verify-host-connections.mjs','verify-inquiry.mjs','verify-display-names.mjs','verify-documents.mjs','verify-document-batch.mjs','verify-accessibility.mjs'].includes(script) ? '.data/engineering-demo/engineering.sqlite' : ".data/frontend-integration/engineering.sqlite"),
+    path.join(root, script === 'verify-type-resilience.mjs' ? '.data/standard-check/validation.sqlite' : ['verify-component-foundation.mjs','verify-version-status.mjs','verify-host-connections.mjs','verify-inquiry.mjs','verify-display-names.mjs','verify-documents.mjs','verify-document-batch.mjs','verify-accessibility.mjs'].includes(script) ? '.data/engineering-demo/engineering.sqlite' : ".data/frontend-integration/engineering.sqlite"),
 );
 const scratchRoot = path.resolve(root, ".tmp/frontend-e2e");
 const scratch = path.join(scratchRoot, randomUUID());

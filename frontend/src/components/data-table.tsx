@@ -1,4 +1,6 @@
-import { Fragment, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { flexRender, getCoreRowModel, useReactTable, type ColumnDef } from '@tanstack/react-table';
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './ui/table';
 import { Icon } from "./icon";
 import { cn } from "@/lib/cn";
 import { displayText, displayUnit } from "@/lib/display-names";
@@ -31,6 +33,7 @@ export function DataTable<T extends { id: string }>({
   error,
   showGroups = true,
   rowClassName,
+  historical = false,
 }: {
   label: string;
   columns: Column<T>[];
@@ -44,7 +47,15 @@ export function DataTable<T extends { id: string }>({
   error?: string;
   showGroups?: boolean;
   rowClassName?: (row: T) => string | undefined;
+  historical?: boolean;
 }) {
+  const data = useMemo(() => groups.flatMap(group => group.rows), [groups]);
+  const tableColumns = useMemo<ColumnDef<T>[]>(() => columns.map(column => ({
+    id: column.id,
+    cell: ({ row }) => { const value = column.render(row.original); return typeof value === 'string' ? displayText(value) : value; },
+  })), [columns]);
+  const table = useReactTable({ data, columns: tableColumns, getCoreRowModel: getCoreRowModel() });
+  const tableRows = new Map(table.getRowModel().rows.map(row => [row.original, row]));
   const [collapsed, setCollapsed] = useState(
     () =>
       new Set(
@@ -67,48 +78,48 @@ export function DataTable<T extends { id: string }>({
   }
   return (
     <div className="table-scroll">
-      <table
-        className={cn("data-table", `density-${density}`)}
+      <Table
+        className={cn("data-table", `density-${density}`, historical && 'table-history')}
         aria-label={label}
         aria-busy={loading || undefined}
       >
-        <thead>
-          <tr>
+        <TableHeader>
+          <TableRow>
             {columns.map((column) => (
-              <th
+              <TableHead
                 key={column.id}
                 scope="col"
                 className={column.numeric ? "numeric" : undefined}
               >
                 {displayText(column.label)}
                 {column.unit && <span className="unit"> / {displayUnit(column.unit)}</span>}
-              </th>
+              </TableHead>
             ))}
-          </tr>
-        </thead>
-        <tbody>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {loading ? (
-            <tr>
-              <td colSpan={columns.length}>正在加载…</td>
-            </tr>
+            <TableRow>
+              <TableCell colSpan={columns.length}>正在加载…</TableCell>
+            </TableRow>
           ) : error ? (
-            <tr>
-              <td colSpan={columns.length} className="field-error" role="alert">
+            <TableRow>
+              <TableCell colSpan={columns.length} className="field-error" role="alert">
                 {error}
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ) : !groups.some((group) => group.rows.length) ? (
-            <tr>
-              <td colSpan={columns.length} className="muted">
+            <TableRow>
+              <TableCell colSpan={columns.length} className="muted">
                 暂无记录
-              </td>
-            </tr>
+              </TableCell>
+            </TableRow>
           ) : (
             groups.map((group) => (
               <Fragment key={group.id}>
                 {showGroups && (
-                  <tr className="group-row">
-                    <th colSpan={columns.length} scope="rowgroup">
+                  <TableRow className="group-row">
+                    <TableHead colSpan={columns.length} scope="rowgroup">
                       <button
                         type="button"
                         aria-label={`${collapsed.has(group.id) ? "展开" : "收起"}${group.label}`}
@@ -132,12 +143,12 @@ export function DataTable<T extends { id: string }>({
                         <strong>{displayText(group.label)}</strong>
                         <span className="muted">{group.rows.length} 项</span>
                       </button>
-                    </th>
-                  </tr>
+                    </TableHead>
+                  </TableRow>
                 )}
                 {!collapsed.has(group.id) &&
                   group.rows.map((row) => (
-                    <tr
+                    <TableRow
                       key={row.id}
                       id={`row-${label}-${row.id}`}
                       className={cn("data-row", rowClassName?.(row))}
@@ -164,24 +175,24 @@ export function DataTable<T extends { id: string }>({
                         }
                       }}
                     >
-                      {columns.map((column) => (
-                        <td
+                      {columns.map((column, index) => (
+                        <TableCell
                           key={column.id}
                           className={cn(
                             column.numeric && "numeric",
                             column.wrap && "cell-wrap",
                           )}
                         >
-                          {(() => { const value = column.render(row); return typeof value === 'string' ? displayText(value) : value; })()}
-                        </td>
+                          {(() => { const cell = tableRows.get(row)?.getVisibleCells()[index]; return cell ? flexRender(cell.column.columnDef.cell, cell.getContext()) : null; })()}
+                        </TableCell>
                       ))}
-                    </tr>
+                    </TableRow>
                   ))}
               </Fragment>
             ))
           )}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   );
 }

@@ -246,7 +246,7 @@ export function TemperaturePlot({
           }
         context.restore();
       }
-      context.strokeStyle = style.getPropertyValue("--border").trim();
+      context.strokeStyle = style.getPropertyValue("--control-border").trim();
       context.strokeRect(X(x0), Y(z1), (x1 - x0) * scale, (z1 - z0) * scale);
       context.fillStyle = style.getPropertyValue("--text").trim();
       context.font =

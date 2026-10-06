@@ -1,0 +1,13 @@
+export { defaultCompareText } from "./default-compare-text";
+export { matchesFilter, createFilterMatcher } from "./matches-filter";
+export { buildViewIndex, isEmptyCell, makeFilterTest, type CellAccessor, type ViewIndexOptions } from "./build-view-index";
+export { findSearchMatches, type SearchMatch } from "./find-search-matches";
+export {
+  updateViewIndex,
+  makeViewComparator,
+  makeFilterPredicate,
+  lowerBound,
+  INCREMENTAL_PATCH_LIMIT,
+  type IncrementalBailReason,
+  type IncrementalViewIndexResult,
+} from "./incremental-view-index";

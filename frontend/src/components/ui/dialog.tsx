@@ -1,9 +1,9 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { useRef, type ReactNode } from "react";
+import { useRef, type ReactNode, type ComponentProps } from "react";
 import { Button } from "./button";
 import { MotionReveal } from "@/components/motion";
 
-export function Dialog({
+function AppDialog({
   open,
   onOpenChange,
   title,
@@ -90,3 +90,16 @@ export function Dialog({
     </DialogPrimitive.Root>
   );
 }
+
+export function Dialog(props: ComponentProps<typeof AppDialog> | ComponentProps<typeof DialogPrimitive.Root>) {
+  return 'title' in props ? <AppDialog {...props} /> : <DialogPrimitive.Root {...props} />;
+}
+export const DialogTrigger = DialogPrimitive.Trigger;
+export const DialogClose = DialogPrimitive.Close;
+export const DialogTitle = DialogPrimitive.Title;
+export const DialogDescription = DialogPrimitive.Description;
+export function DialogContent({ className = '', children, ...props }: ComponentProps<typeof DialogPrimitive.Content> & { showCloseButton?: boolean }) {
+  return <DialogPrimitive.Portal><div className="dialog-stage"><DialogPrimitive.Overlay className="dialog-overlay" /><DialogPrimitive.Content className={`dialog-content ${className}`} {...props}>{children}</DialogPrimitive.Content></div></DialogPrimitive.Portal>;
+}
+export function DialogHeader(props: ComponentProps<'div'>) { return <div {...props} />; }
+export function DialogFooter(props: ComponentProps<'div'>) { return <div className="dialog-actions" {...props} />; }

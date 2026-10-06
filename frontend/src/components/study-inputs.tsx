@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { lazy, Suspense, type ReactNode } from "react";
+const CableLayerGrid = lazy(() => import('./cable-layer-grid'));
 import { optionalRecord, text, numeric } from "@/api/client";
 import {
   displayed,
@@ -15,7 +16,7 @@ import { NumberField } from "./ui/number-field";
 import { Tooltip } from "./ui/tooltip";
 import { Toolbar } from "./toolbar";
 import { DataTable, type Column } from "./data-table";
-import { EmptyState, StaleBanner } from "./states";
+import { EmptyState, StaleBanner, LoadingState } from "./states";
 import {
   formatNumber,
   engineeringInputPrecision,
@@ -36,7 +37,7 @@ type InputProps = {
   historical: boolean;
   onSelect: (selection: InputSelection) => void;
 };
-type InputRow = {
+export type InputRow = {
   id: string;
   label: string;
   fields: NumericInput[];
@@ -350,14 +351,7 @@ export function CableInputs({
           </InputSection>
         </>
       ) : tab === "layers" ? (
-        <InputTable
-          label="电缆分层"
-          rows={rows}
-          document={document}
-          scope="cable"
-          historical={historical}
-          onSelect={onSelect}
-        />
+        <Suspense fallback={<LoadingState title="正在读取分层表" />}><CableLayerGrid rows={rows} document={document} historical={historical} onSelect={row => onSelect(selected(row,document))} /></Suspense>
       ) : (
         <InputSection title="固定引用">
           <dl className="reference-list">

@@ -7,13 +7,15 @@
 
 :root, [data-theme="light"] {
   color-scheme: light;
-  --background: #F9F9F9;
+  --ground: #F9F9F9;
   --panel: #FFFFFF;
   --fill: #F4F4F4;
   --hover: #ECECEC;
   --location: #ECECEC;
   --line: #ECECEC;
-  --border: #D9D9D9;
+  --control-border: #D9D9D9;
+  /* 兼容后端规格书的独立样式；正式前端在 theme.css 映射 shadcn 的 --border。 */
+  --border: var(--control-border);
   --text: #0D0D0D;
   --text-secondary: #5D5D5D;
   --text-weak: #8F8F8F;
@@ -52,6 +54,7 @@
   --weight-normal: 400;
   --weight-strong: 600;
   --radius-input: 8px;
+  --radius-flat: 0px;
   --radius-item: 10px;
   --radius-surface: 12px;
   --radius-panel: 16px;
@@ -77,13 +80,13 @@
   --shadow-float: 0 2px 12px rgba(0,0,0,.4);
   --shadow-dialog: 0 12px 48px rgba(0,0,0,.5);
   color-scheme: dark;
-  --background: #181818;
+  --ground: #181818;
   --panel: #212121;
   --fill: #2A2A2A;
   --hover: #2F2F2F;
   --location: #303030;
   --line: #2F2F2F;
-  --border: #424242;
+  --control-border: #424242;
   --text: #ECECEC;
   --text-secondary: #B4B4B4;
   --text-weak: #8F8F8F;

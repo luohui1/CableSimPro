@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { displayName } from "@/lib/display-names";
+import { isVersionStale } from '@/lib/version-status';
 import {
   optionalRecord,
   record,
@@ -205,7 +206,7 @@ export function StudyResults({
             : hottest?.entity || "该运行未提供温度结论"
         }
         description={description}
-        historical={run.freshness === "historical"}
+        historical={run.freshness === "historical" || isVersionStale(run)}
         metrics={[
           ...(rating
             ? [
@@ -264,6 +265,7 @@ export function StudyResults({
       <DataTable
         key={text(run.id) + text(selected.case_id)}
         label="研究物理量结果"
+        historical={run.freshness === "historical" || isVersionStale(run)}
         columns={columns}
         groups={[
           ["temperature", "温度"],

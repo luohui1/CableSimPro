@@ -12,7 +12,8 @@ import { ErrorState, LoadingState, EmptyState, StaleBanner } from "./states";
 import { SourceBadge } from "./source-badge";
 import { DataTable } from "./data-table";
 import { moduleConfiguration, withConfiguration } from "@/lib/study-config";
-import { ContractFields } from "./contract-fields";
+import { lazy, Suspense } from 'react';
+const ContractFields = lazy(() => import('./buzzform-contract-fields').then(module => ({default: module.BuzzformContractFields})));
 export { rootModule, moduleConfiguration } from "@/lib/study-config";
 
 type Method = components["schemas"]["Method"];
@@ -119,17 +120,12 @@ export function StudyMethodForm({
             <SourceBadge
               kind="library"
               detail={
-                (contract.parameter_source || contract.source) +
-                " · " +
-                (contract.parameter_source_sha256 || contract.source_sha256)
+                '已安装方法的参数契约'
               }
             />
             <Tooltip
               content={
-                contract.parameter_source_sha256 ||
-                contract.schema_digest ||
-                contract.source_sha256 ||
-                "未提供摘要"
+                '参数单位和范围来自匹配的方法版本'
               }
             >
               <span tabIndex={0} className="muted">
@@ -137,7 +133,7 @@ export function StudyMethodForm({
               </span>
             </Tooltip>
           </div>
-          <ContractFields
+          <Suspense fallback={<LoadingState title="正在读取参数表单" />}><ContractFields
             module={module}
             schema={contract.parameter_schema}
             root={contract.parameter_schema}
@@ -171,7 +167,7 @@ export function StudyMethodForm({
                 },
               });
             }}
-          />
+          /></Suspense>
         </>
       )}
       {!contract && (

@@ -8,6 +8,7 @@ import '@fontsource/ibm-plex-mono/400.css';
 import 'virtual:design-tokens.css';
 import './styles/theme.css';
 import './styles/research.css';
+import './styles/workbench.css';
 import { router } from './router';
 import { preferences } from './lib/preferences';
 

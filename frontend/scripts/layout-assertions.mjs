@@ -72,7 +72,7 @@ export async function assertLayout(page, label, nameOptions) {
           background: bg,
         });
     }
-    const zones = [".nav-rail", ".module-sidebar", ".work-panel"].map(
+    const zones = [".nav-rail", ".module-sidebar", ".workbench-sidebar", ".work-panel"].map(
       (selector) => ({
         selector,
         box: document.querySelector(selector)?.getBoundingClientRect(),
