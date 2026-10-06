@@ -81,6 +81,20 @@ export function TypeWorkspace() {
       </div>
     </section>)}
   </nav>;
+  // 命令栏与计算工作台一致：模型（保存 / 撤销）、交付（规格书）；分析在各模块里运行
+  const specification = typeModules.find(entry => entry.id === 'specification');
+  const commandBar = <div className="command-bar" role="toolbar" aria-label="型号命令">
+    <div className="command-group" role="group" aria-label="模型">
+      <span className="command-caption">模型</span>
+      <Button size="compact" variant={state.dirty ? 'primary' : 'ghost'} loading={state.busy} disabled={!state.dirty || state.readOnly || !state.workspace} onClick={() => void state.save()}><Icon name="action/save" />{state.dirty ? '保存修改' : '已保存'}</Button>
+      <IconButton variant="ghost" icon="action/undo" label="撤销" disabled={state.busy || state.readOnly || !state.dirty && state.workspace?.raw.can_undo !== true} onClick={() => void state.undo()} />
+    </div>
+    {specification && <div className="command-group" role="group" aria-label="交付">
+      <span className="command-caption">交付</span>
+      <Button size="compact" variant="ghost" disabled={state.dirty} onClick={() => go('specification', specification.tabs[0][0])}><Icon name="result/report" />规格书</Button>
+    </div>}
+    <span className="command-state" role="status">{state.readOnly ? '只读' : state.dirty ? '结构有未保存修改' : '已保存'}</span>
+  </div>;
   const inspector = <div className="type-property-wrapper">
     {document && <section className="inspector-block" aria-label="型号">
       <header><Icon name="nav/cable-type" /><h2>型号</h2></header>
@@ -91,9 +105,9 @@ export function TypeWorkspace() {
   </div>;
   return <TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<><StatusMark kind={status} label={location.run ? state.workspace?.raw.historical ? '历史运行快照 · 只读' : '运行快照 · 只读' : status === 'locked' ? '已发布 · 只读' : undefined} />{demo && <SourceBadge kind="demo" detail="型号基准与部分物性来自系统演示版本；各字段来源独立保留。" />}</>}
     activeNavigation="型号" theme={location.theme} onTheme={onTheme} onUnavailable={name => setInfo(name + '入口尚未接入')}
-    actions={<><Button variant="ghost" size="compact" onClick={() => void state.undo()} disabled={state.busy || state.readOnly || !state.dirty && state.workspace?.raw.can_undo !== true}>撤销</Button>
-      <Button variant="primary" size="compact" loading={state.busy} disabled={!state.dirty || state.readOnly || !state.workspace} onClick={() => void state.save()}>保存</Button></>}
+    actions={null}
     property={inspector}>
+    {commandBar}
     <div className="workbench-frame">{explorer}
     <div className="workbench" data-dock={dockMax ? 'max' : undefined}>
       <section className="workbench-canvas type-canvas" aria-label="电缆模型">
