@@ -51,8 +51,19 @@ function walk(directory) {
   });
 }
 
+/** CSS 里引用的令牌必须有定义（tokens.css 或某个样式表）；带回退值的引用和第三方组件注入的变量除外。 */
+export function undefinedTokens(sheets) {
+  const defined = new Set(sheets.flatMap(([, source]) => [...source.matchAll(/(--[\w-]+)\s*:/g)].map(match => match[1])));
+  return sheets.flatMap(([file, source]) => [...source.matchAll(/var\(\s*(--[\w-]+)\s*\)/g)]
+    .filter(match => !defined.has(match[1]) && !/^--(?:radix|tw)-/.test(match[1]))
+    .map(match => ({ file, line: source.slice(0, match.index).split('\n').length, message: `令牌 ${match[1]} 未定义。` })));
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const failures = walk(path.join(root, 'src')).flatMap(file => inspectStyles(fs.readFileSync(file, 'utf8'), path.relative(root, file)));
+  const files = walk(path.join(root, 'src'));
+  const sheets = [path.join(root, '../design/tokens.css'), ...files.filter(file => file.endsWith('.css'))]
+    .map(file => [path.relative(root, file), fs.readFileSync(file, 'utf8')]);
+  const failures = [...files.flatMap(file => inspectStyles(fs.readFileSync(file, 'utf8'), path.relative(root, file))), ...undefinedTokens(sheets)];
   failures.forEach(f => console.error(`${f.file}:${f.line} ${f.message}`));
   if (failures.length) process.exitCode = 1;
   else console.log('前端样式规则通过：无字面颜色、字号、圆角或内联 style。');

@@ -19,7 +19,7 @@ const SUGGESTIONS = ["解释这次计算的结论和主要限制因素", "土壤
  * Agent 面板：与工作台同一套工具（由插件能力生成）。对话里每次工具调用显示为卡片，
  * 修改只以“方案”出现，列出字段级前后值，由人批准或拒绝；数值只来自工具结果。
  */
-export function AgentPanel({ workspaceId, studyId, context }: { workspaceId: string; studyId?: string; context: string }) {
+export function AgentPanel({ workspaceId, studyId, context, suggestions = SUGGESTIONS }: { workspaceId: string; studyId?: string; context: string; suggestions?: string[] }) {
   const status = useQuery({ queryKey: ["agent-status"], queryFn: ({ signal }) => agentStatus(signal), retry: false, staleTime: 60_000 });
   const [items, setItems] = useState<Item[]>([]);
   const [draft, setDraft] = useState("");
@@ -75,7 +75,7 @@ export function AgentPanel({ workspaceId, studyId, context }: { workspaceId: str
     <div className="agent-transcript">
       {!items.length && <div className="agent-empty">
         <p>基于「{context}」工作。它调用的是工作台同一批模块和插件；任何修改都先给出方案，由你批准。</p>
-        <div className="agent-suggestions">{SUGGESTIONS.map((text) => <button key={text} type="button" disabled={!ready || sending} onClick={() => void send(text)}>{text}</button>)}</div>
+        <div className="agent-suggestions">{suggestions.map((text) => <button key={text} type="button" disabled={!ready || sending} onClick={() => void send(text)}>{text}</button>)}</div>
       </div>}
       {items.map((item, index) => item.kind === "user" ? <p key={index} className="agent-user">{item.text}</p>
         : item.kind === "assistant" ? <p key={index} className="agent-assistant">{item.text}</p>

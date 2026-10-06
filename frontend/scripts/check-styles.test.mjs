@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { inspectStyles } from './check-styles.mjs';
+import { inspectStyles, undefinedTokens } from './check-styles.mjs';
 
 test('拒绝 JSX style、对象展开 style、颜色和任意字号', () => {
   for (const text of [
@@ -23,4 +23,8 @@ test('拒绝 CSS 色值、命名色、字号和圆角以及 font 简写', () => 
 test('令牌映射、布局尺寸和真实语义类不误报', () => {
   assert.deepEqual(inspectStyles('p { color: var(--text); font-size: var(--text-body); border-radius: var(--radius-input); width: 100%; }', 'theme.css'), []);
   assert.deepEqual(inspectStyles('<div className="bg-panel text-ui-body rounded-ui-input" />', 'page.tsx'), []);
+});
+test('拒绝引用未定义的令牌，允许回退值与组件库变量', () => {
+  const sheets = [['tokens.css', ':root { --space-4: 16px; }'], ['page.css', 'p { gap: var(--space-5); margin: var(--space-4); width: var(--radix-select-trigger-width); padding: var(--gap, 4px); }']];
+  assert.deepEqual(undefinedTokens(sheets).map(failure => failure.message), ['令牌 --space-5 未定义。']);
 });

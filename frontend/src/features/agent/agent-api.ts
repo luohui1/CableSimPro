@@ -1,13 +1,16 @@
 /**
  * Agent 接口约定（前后端共用，后端由 harness 实现）：
  * - GET  /api/agent/status → { configured, model?, tools }
+ * - GET  /api/agent/tools → AgentTool[]（工具注册表：宿主工具 + 由插件清单生成的工具）
  * - POST /api/agent/sessions { workspace_id, study_id? } → { id }
  * - POST /api/agent/sessions/{id}/messages { content } → text/event-stream，事件见 AgentEvent
  * - POST /api/agent/proposals/{id}/approve | reject → { status }
  * 写操作只以“方案”出现，批准由人在界面完成；密钥从不经过前端。
  */
 export type AgentStatus = { configured: boolean; model?: string; tools?: number };
-export type ProposalChange = { path: string; label: string; before: unknown; after: unknown; unit?: string };
+/** kind：read 只读；propose 只生成方案；run 运行（正式运行与超算提交要人批准）。 */
+export type AgentTool = { name: string; title: string; kind: "read" | "propose" | "run"; description?: string; plugin_id?: string; hpc?: boolean };
+export type ProposalChange ={ path: string; label: string; before: unknown; after: unknown; unit?: string };
 export type AgentEvent =
   | { type: "message.delta"; text: string }
   | { type: "tool.call"; id: string; tool: string; title?: string; arguments?: Record<string, unknown> }
@@ -26,7 +29,9 @@ async function json<T>(response: Response): Promise<T> {
 
 export const agentStatus = (signal?: AbortSignal) => fetch("/api/agent/status", { signal }).then((response) => json<AgentStatus>(response));
 
-export const createSession = (workspaceId: string, studyId?: string) =>
+export const agentTools = (signal?: AbortSignal) => fetch("/api/agent/tools", { signal }).then((response) => json<AgentTool[]>(response));
+
+export const createSession =(workspaceId: string, studyId?: string) =>
   fetch("/api/agent/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace_id: workspaceId, study_id: studyId }) })
     .then((response) => json<{ id: string }>(response));
 
