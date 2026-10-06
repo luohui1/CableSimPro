@@ -25,6 +25,7 @@ const DeliveriesPage = lazyRouteComponent(() => import('./pages/deliveries-page'
 const PluginsPage = lazyRouteComponent(() => import('./pages/plugins-page'), 'PluginsPage');
 const SettingsPage = lazyRouteComponent(() => import('./pages/settings-page'), 'SettingsPage');
 const AgentPage = lazyRouteComponent(() => import('./pages/agent-page'), 'AgentPage');
+const ProjectHome = lazyRouteComponent(() => import('./pages/project-home'), 'ProjectHome');
 const ReproductionPage = lazyRouteComponent(() => import('./pages/reproduction-page'), 'ReproductionPage');
 const StudyProvider = lazyRouteComponent(() => import('./components/study-provider'), 'StudyProvider');
 const StudyWorkspace = lazyRouteComponent(() => import('./pages/study-workspace'), 'StudyWorkspace');
@@ -72,7 +73,11 @@ export const studiesRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/studies",
   validateSearch: (search: Record<string, unknown>): { theme: "light" | "dark"; kind?: string; workspace?: string } => ({ ...themeSearch(search), kind: ['simulation','ampacity'].includes(String(search.kind)) ? String(search.kind) : undefined, workspace: typeof search.workspace === 'string' ? search.workspace : undefined }),
-  component: ObjectListPage,
+  // 带工程身份时是工程首页（与计算工作台同一骨架），否则是全部计算的列表
+  component: function StudiesPage() {
+    const search = studiesRoute.useSearch();
+    return search.workspace ? <ProjectHome key={search.workspace} workspaceId={search.workspace} theme={search.theme} /> : <ObjectListPage />;
+  },
 });
 const simulationListRoute = createRoute({ getParentRoute: () => rootRoute, path: "/simulation", validateSearch: themeSearch, component: () => <Navigate to="/studies" search={{ theme: preferences().theme, kind: "simulation" }} replace /> });
 export const selectionRoute = createRoute({

@@ -21,7 +21,8 @@ export function calculationKind(study: StudyRow, catalog: Plugin[]) {
   const hpc = text(optionalRecord(plugin?.execution_policy).backend) === "slurm";
   const icon = kind === "selection" ? "calc/selection" : kind === "sweep" ? "calc/sweep" : kind === "batch" ? "nav/simulation" : kind === "crosscheck" ? "module/method-compare"
     : hpc || text(capability?.analysis) === "transient" ? "calc/thermal-field" : text(capability?.analysis) === "geometry" ? "object/section" : "calc/ampacity";
-  return { icon, label: text(capability?.title) || study.task, hpc };
+  // 能力标题里的括注（标准条款、适用场景）留给方法页，列表只用主名
+  return { icon, label: (text(capability?.title) || study.task).replace(/\s*[（(][^（）()]*[）)]\s*$/, ""), hpc };
 }
 
 /** 运行状态点：来自运行摘要，不读结果正文。 */
