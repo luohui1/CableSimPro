@@ -30,7 +30,11 @@ function Groups({ groups }: { groups: PropertyGroup[] }) {
  * 工作窗口右侧检查器：所选对象（截面中的电缆、排管、介质，或结果表中的候选）在上，
  * 工况始终可改，计算方法在最下。字段直接编辑，进入同一份模型草稿。
  */
-export function WorkbenchInspector({ document, historical, selection, candidate, method, demo }: {
+export function WorkbenchInspector({ view = "input", onView, methodPanel, document, historical, selection, candidate, method, demo }: {
+  /** 右侧“改输入”分两页：输入（所选对象、工况）与方法（方法参数、问询条件、扫描设置）。 */
+  view?: "input" | "method";
+  onView?: (view: "input" | "method") => void;
+  methodPanel?: ReactNode;
   document?: DomainDocument;
   historical: boolean;
   selection?: InputSelection;
@@ -39,6 +43,11 @@ export function WorkbenchInspector({ document, historical, selection, candidate,
   demo: boolean;
 }) {
   return <aside className="workbench-inspector" aria-label="属性">
+    {methodPanel && <div className="inspector-switch" role="tablist" aria-label="属性分页">
+      <button type="button" role="tab" aria-selected={view === "input"} onClick={() => onView?.("input")}><Icon name="object/conditions" />输入</button>
+      <button type="button" role="tab" aria-selected={view === "method"} onClick={() => onView?.("method")}><Icon name="nav/plugin" />方法</button>
+    </div>}
+    {methodPanel && view === "method" ? <div className="inspector-method">{methodPanel}</div> : <>
     {demo && <p className="inspector-note" role="note">敷设与部分工况来自模板，应按实际条件核对。</p>}
     {candidate ? <Block icon="calc/selection" title={candidate.title}><Groups groups={candidate.groups} /></Block>
       : selection ? <Block icon="object/section" title={selection.title}>
@@ -57,5 +66,6 @@ export function WorkbenchInspector({ document, historical, selection, candidate,
     {document && <Block icon="object/conditions" title="工况" id="inspector-conditions">
       <div className="inspector-conditions"><ConditionsInputs document={document} historical={historical} tab="inputs" onSelect={() => {}} /></div>
     </Block>}
+    </>}
   </aside>;
 }

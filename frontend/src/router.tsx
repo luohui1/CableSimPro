@@ -5,6 +5,7 @@ import {
   Link,
   Navigate,
   notFound,
+  redirect,
   lazyRouteComponent,
 } from "@tanstack/react-router";
 import { ObjectListPage } from "./pages/object-list-page";
@@ -109,6 +110,7 @@ export const studyRootRoute = createRoute({
     dataset?: string;
     compare?: string;
     view?: "section" | "cable" | "three";
+    inspector?: "input" | "method";
   } => ({
     theme: search.theme === "dark" ? ("dark" as const) : ("light" as const),
     workspace: typeof search.workspace === "string" ? search.workspace : "",
@@ -120,6 +122,8 @@ export const studyRootRoute = createRoute({
     compare: typeof search.compare === "string" ? search.compare : "",
     // 工作窗口中间画布显示的模型视图；不写时由计算类型决定
     view: search.view === "cable" || search.view === "three" || search.view === "section" ? search.view : undefined,
+    // 右侧属性区显示“输入”还是“方法”（方法参数、问询条件、扫描设置）
+    inspector: search.inspector === "method" ? "method" : search.inspector === "input" ? "input" : undefined,
   }),
   loaderDeps: ({ search }) => ({ workspace: search.workspace, run: search.run }),
   // 悬停或进入前并行预取研究、工程和运行；失败交给页面的错误状态。
@@ -134,13 +138,14 @@ const studyEntryRoute = createRoute({
 export const studyModuleRoute = createRoute({
   getParentRoute: () => studyRootRoute,
   path: "$module/$tab",
-  beforeLoad: ({ params }) => {
-    if (
-      !moduleDefinitions[params.module]?.tabs.some(
-        (item) => item.id === params.tab,
-      )
-    )
-      throw notFound();
+  beforeLoad: ({ params, search }) => {
+    const definition = moduleDefinitions[params.module];
+    if (!definition?.tabs.some((item) => item.id === params.tab)) throw notFound();
+    // 方法类页签（方法参数、问询条件、扫描设置）已移到右侧属性区：旧链接转到第一个结果页签并打开“方法”页
+    const methodTab = definition.tabs.find((item) => item.id === "parameters" || item.id === "settings");
+    const firstResult = definition.tabs.find((item) => item.id !== methodTab?.id);
+    if (methodTab && params.tab === methodTab.id && firstResult)
+      throw redirect({ to: "/studies/$sid/$module/$tab", params: { ...params, tab: firstResult.id }, search: { ...search, inspector: "method" }, replace: true });
   },
   component: StudyWorkspace,
 });

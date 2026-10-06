@@ -35,9 +35,12 @@ type ResultRow = {
 export function StudyResults({
   run,
   onSelect,
+  part = "all",
 }: {
   run?: Record<string, unknown>;
   onSelect: (selection: InputSelection) => void;
+  /** conclusion：只渲染结论（工作窗口答案条）；details：只渲染明细。 */
+  part?: "all" | "conclusion" | "details";
 }) {
   const [chosen, setChosen] = useState("");
   const [circuit, setCircuit] = useState("");
@@ -193,45 +196,49 @@ export function StudyResults({
       render: (row) => engineeringQuantity(row.key, row.value, row.unit).unit,
     },
   ];
+  const conclusion = (
+      <Conclusion
+      title={rating ? "载流量结论" : "保存结果结论"}
+      model={
+        rating
+          ? "允许电流 " + show("ampacity", rating.value, rating.unit) +
+            (limitingCable
+              ? "，受限于 " + entityLabel(domain, limitingCable).replace(/ · ([ABC])$/, " 的 $1 相")
+              : "；限制电缆未提供")
+          : hottest?.entity || "该运行未提供温度结论"
+      }
+      description={description}
+      historical={run.freshness === "historical" || isVersionStale(run)}
+      metrics={[
+        ...(rating
+          ? [
+              {
+                label: "允许电流",
+                value: rating.value,
+                unit: rating.unit,
+                quantity: "ampacity",
+              },
+            ]
+          : []),
+        {
+          label: "最热导体",
+          value: hottest?.value ?? null,
+          unit: hottest?.unit || "K",
+          quantity: "conductor_temperature",
+        },
+        {
+          label: "温限余量",
+          value: margin,
+          unit: "K",
+          quantity: "temperature_margin",
+        },
+      ]}
+    />
+  );
+  if (part === "conclusion") return conclusion;
   return (
     <div className="input-module">
-      <Conclusion
-        title={rating ? "载流量结论" : "保存结果结论"}
-        model={
-          rating
-            ? "允许电流 " + show("ampacity", rating.value, rating.unit) +
-              (limitingCable
-                ? "，受限于 " + entityLabel(domain, limitingCable).replace(/ · ([ABC])$/, " 的 $1 相")
-                : "；限制电缆未提供")
-            : hottest?.entity || "该运行未提供温度结论"
-        }
-        description={description}
-        historical={run.freshness === "historical" || isVersionStale(run)}
-        metrics={[
-          ...(rating
-            ? [
-                {
-                  label: "允许电流",
-                  value: rating.value,
-                  unit: rating.unit,
-                  quantity: "ampacity",
-                },
-              ]
-            : []),
-          {
-            label: "最热导体",
-            value: hottest?.value ?? null,
-            unit: hottest?.unit || "K",
-            quantity: "conductor_temperature",
-          },
-          {
-            label: "温限余量",
-            value: margin,
-            unit: "K",
-            quantity: "temperature_margin",
-          },
-        ]}
-      />
+      {part === "all" && conclusion}
       <Toolbar>
         <h2>结果明细</h2>
         <SourceBadge kind="calculation" detail={text(optionalRecord(optionalRecord(snapshot.definition).method).plugin_id) + " · " + text(run.id)} />

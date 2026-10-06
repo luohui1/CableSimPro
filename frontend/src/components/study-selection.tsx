@@ -112,12 +112,15 @@ export function StudySelection({
   onSelect,
   dirty,
   theme,
+  part = "all",
 }: {
   run: Record<string, unknown>;
   selectedId?: string;
   onSelect: (row: SelectionRow) => void;
   dirty: boolean;
   theme: "light" | "dark";
+  /** conclusion：只渲染结论（工作窗口答案条）；details：只渲染明细（结果停靠栏）。 */
+  part?: "all" | "conclusion" | "details";
 }) {
   const view = useMemo(() => selectionView(run), [run]);
   const [filter, setFilter] = useState("all");
@@ -180,15 +183,7 @@ export function StudySelection({
       (group) => group.rows.length && (filter === "all" || filter === group.id),
     );
   const recommended = view.recommendation;
-  return (
-    <>
-      {view.historical && (
-        <StaleBanner description="以下为历史运行，仅供追溯，不能用于当前计算书。" />
-      )}
-      {dirty && (
-        <StaleBanner description="有未保存修改；以下结果对应已保存研究。" />
-      )}
-      {recommended ? (
+  const conclusion = recommended ? (
         <Conclusion
           title={view.historical ? "历史最小满足候选" : "推荐型号"}
           model={recommended.name}
@@ -225,7 +220,17 @@ export function StudySelection({
           title={view.demo ? "候选尚未完成核对" : "当前条件下没有合格型号"}
           description="保留逐候选的失败与不适用记录，不补造推荐。"
         />
+      );
+  if (part === "conclusion") return conclusion;
+  return (
+    <>
+      {view.historical && (
+        <StaleBanner description="以下为历史运行，仅供追溯，不能用于当前计算书。" />
       )}
+      {dirty && (
+        <StaleBanner description="有未保存修改；以下结果对应已保存研究。" />
+      )}
+      {part === "all" && conclusion}
       <Toolbar>
         <h2>候选结果</h2>
         <SourceBadge

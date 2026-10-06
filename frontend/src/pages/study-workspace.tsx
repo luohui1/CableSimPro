@@ -210,10 +210,22 @@ export function StudyWorkspace() {
         replace
       />
     );
-  // 命令栏：按“模型 → 计算 → 交付”列出这里能做的全部操作，最右侧给出当前状态
+  // 方法类页签（方法参数、问询条件、扫描设置）属于“改输入”，放在右侧属性区；底部只留结果类页签
+  const methodTab = definition.tabs.find((item) => item.id === "parameters" || item.id === "settings")?.id;
+  const dockTabs = definition.tabs.filter((item) => item.id !== methodTab);
+  const methodHistorical = !!search.run;
+  const methodPanel = !methodTab ? undefined
+    : module === "sweep" ? <StudySweep run={run} tab="settings" readOnly={methodHistorical} onSelect={inputProps.onSelect} />
+      : <StudyMethodForm module={module} historical={methodHistorical}
+          definition={methodHistorical ? ((optionalRecord(run?.snapshot).study_definition || optionalRecord(run?.snapshot).definition) as StudyDefinition) : undefined} />;
+  // 答案条：先回答这次计算的结论（选型推荐 / 允许电流与最热导体），切换底部页签时保持可见
+  const answer = pendingRun || !run ? null
+    : module === "selection" && view && !selectionError ? <StudySelection theme={theme} run={run} selectedId={selectedRow?.id} onSelect={(row) => setSelected(row)} dirty={context.dirty} part="conclusion" />
+      : ["ampacity", "electrothermal", "transient", "sheath-losses"].includes(module) ? <StudyResults run={run} onSelect={inputProps.onSelect} part="conclusion" />
+        : null;
+  // 命令栏：只放“做什么”——保存、运行、交付；最右侧给出当前状态
   const runnable = ["ampacity", "thermal-field", "transient", "sheath-losses", "electrothermal", "sweep", "simulation", "selection"].includes(module) ||
     (module === "method-compare" && (!!study.definition.modules?.["method-compare"] || calculatedModule === "method-compare") && !search.compare);
-  const parameterTab = definition.tabs.find((item) => item.id === "parameters" || item.id === "settings")?.id;
   const latestRun = runs.at(-1);
   const runState = !latestRun ? "尚未运行" : `最近运行 ${new Date(text(latestRun.created)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} · ${["succeeded", "partial"].includes(text(latestRun.status)) ? "成功" : ["failed", "rejected"].includes(text(latestRun.status)) ? "失败" : "进行中"}`;
   const commandBar = (
@@ -226,9 +238,6 @@ export function StudyWorkspace() {
       </div>
       <div className="command-group" role="group" aria-label="计算">
         <span className="command-caption">计算</span>
-        <Button size="compact" variant="ghost" onClick={() => setCreating(true)}><Icon name="action/add" />新建计算</Button>
-        {parameterTab && <Button size="compact" variant="ghost" onClick={() => navigate({ params: { sid, module, tab: parameterTab }, search: currentSearch() })}><Icon name="action/edit" />方法参数</Button>}
-        <Button size="compact" variant="ghost" onClick={() => setRecords(true)}><Icon name="action/history" />运行记录</Button>
         {runnable && !snapshotInput && <StudyRunControl
                         key={sid + module}
                         module={inputModule ? calculatedModule : module}
@@ -316,6 +325,9 @@ export function StudyWorkspace() {
           actions={null}
           property={module === "report" ? undefined : (
             <WorkbenchInspector
+              view={methodPanel && search.inspector === "method" ? "method" : "input"}
+              onView={(value) => navigate({ search: { ...currentSearch(), inspector: value }, replace: true })}
+              methodPanel={methodPanel}
               document={canvasDocument}
               historical={viewingOldInput}
               selection={inputSelection}
@@ -346,7 +358,8 @@ export function StudyWorkspace() {
           {commandBar}
           <div className="workbench-frame">
           <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={context.domain} activeStudy={sid} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
-          <div className={`workbench ${showCanvas ? "" : "workbench-no-canvas"}`} data-dock={dockMax ? "max" : undefined}>
+          <div className={`workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer ? "has-answer" : ""}`} data-dock={dockMax ? "max" : undefined}>
+          {answer && <section className="answer-bar" aria-label="结论">{answer}</section>}
           {showCanvas && (
             <section className="workbench-canvas" aria-label="模型">
               <div className="workbench-views" role="group" aria-label="模型视图">
@@ -362,12 +375,14 @@ export function StudyWorkspace() {
           <section className="workbench-dock" aria-label="计算结果">
             <div className="workbench-dock-bar">
               <TabsList aria-label={`${definition.label}页签`}>
-                {definition.tabs.map((item) => (
+                {dockTabs.map((item) => (
                   <TabsTrigger key={item.id} value={item.id}>
                     {item.label}
                   </TabsTrigger>
                 ))}
               </TabsList>
+              <span className="spacer" />
+              <Button size="compact" variant="ghost" onClick={() => setRecords(true)}><Icon name="action/history" />运行记录</Button>
               {showCanvas && <IconButton variant="ghost" icon={dockMax ? "action/chevron-down" : "action/chevron-up"} label={dockMax ? "还原结果面板" : "放大结果面板"} onClick={() => setDockMax(!dockMax)} />}
             </div>
           <TabsContent value={tab} className="workbench-dock-body">
@@ -453,7 +468,7 @@ export function StudyWorkspace() {
               "sheath-losses",
               "electrothermal",
             ].includes(module) ? (
-            <StudyResults run={run} onSelect={inputProps.onSelect} />
+            <StudyResults run={run} onSelect={inputProps.onSelect} part="details" />
           ) : module === "selection" && tab === "results" ? (
             selectionError ? (
               <ErrorState
@@ -469,6 +484,7 @@ export function StudyWorkspace() {
                   setSelected(row);
                             }}
                 dirty={context.dirty}
+                part="details"
               />
             ) : (
               <EmptyState

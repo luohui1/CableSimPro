@@ -443,3 +443,25 @@
 .inspector-list dd { min-width: 0; }
 .inspector-lead { color: var(--text); line-height: 1.6; }
 .gallery-field { height: calc(var(--space-12) * 11); border: 1px solid var(--line); border-radius: var(--radius-surface); overflow: hidden; }
+
+/* 答案条：工作窗口最先回答“结论是什么”，切换底部页签时始终可见 */
+.workbench.has-answer { grid-template-rows: auto minmax(0, 1.4fr) minmax(0, 1fr); }
+.workbench.has-answer.workbench-no-canvas, .workbench.has-answer[data-dock="max"] { grid-template-rows: auto minmax(0, 1fr); }
+.answer-bar { padding: var(--space-3) var(--space-6); border-bottom: 1px solid var(--line); background: var(--panel); }
+.answer-bar .conclusion { padding: 0; margin: 0; border: 0; gap: var(--space-6); }
+.answer-bar .conclusion-copy h2 { font-size: var(--text-heading); }
+.answer-bar .state-view { min-height: 0; padding: var(--space-2) 0; flex-direction: row; gap: var(--space-3); }
+.answer-bar .state-view .state-art { display: none; }
+.workbench-dock-bar .spacer { flex: 1; }
+
+/* 右侧属性：输入 / 方法 两页 */
+.inspector-switch { display: flex; gap: calc(var(--space-1) / 2); margin: var(--space-3) var(--space-4) 0; padding: calc(var(--space-1) / 2); border-radius: var(--radius-pill); background: var(--fill); }
+.inspector-switch button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); height: calc(var(--control-compact) - var(--space-1)); border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--text-note); cursor: pointer; }
+.inspector-switch button[aria-selected="true"] { background: var(--panel); color: var(--text); font-weight: var(--weight-strong); box-shadow: var(--shadow-float); }
+.inspector-switch .icon { width: var(--space-4); height: var(--space-4); }
+.inspector-method { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-4); }
+.inspector-method .parameter-form, .inspector-method .parameter-fields { max-width: none; }
+.inspector-method .parameter-group .parameter-fields { grid-template-columns: minmax(0, 1fr); }
+/* 窄属性栏里的下拉：文字左对齐、单行省略，完整内容在展开列表里看 */
+.workbench-inspector .select-trigger { justify-content: space-between; text-align: left; min-width: 0; }
+.workbench-inspector .select-trigger > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
