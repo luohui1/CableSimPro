@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
 import { TypeCommandSlot } from './command-slot';
+import { moduleEvidenceState, useTypeEvidence } from './evidence';
 import { message, text } from '@/api/client';
 import { AppShell } from '@/components/app-shell';
 import { Icon } from '@/components/icon';
@@ -29,6 +30,7 @@ import { typeModules } from "./module-definitions";
 export { typeModules } from "./module-definitions";
 export function TypeWorkspace() {
   const state = useTypeWorkspace(), { location, navigate, onTheme } = useTypeNavigation();
+  const evidence = useTypeEvidence();
   const module = typeModules.find(module => module.id === location.module);
   const activeTab = module?.tabs.some(([id]) => id === location.tab) ? location.tab : module?.tabs[0][0] || location.tab;
   const [cableId, setCableId] = useState(''), [selected, setSelected] = useState<LayerTarget | null>(null), [collapsed, setCollapsed] = useState(false), [info, setInfo] = useState('');
@@ -84,7 +86,7 @@ export function TypeWorkspace() {
       <div className="explorer-items">
         {label === '结构' && document ? document.cable_types.map(item => <button key={item.id} type="button" className="explorer-item" aria-current={location.module === 'structure' && cable?.id === item.id ? 'page' : undefined} onClick={() => { setCableId(item.id); choose(null); go('structure', 'table'); }}>
           <Icon name="object/cable" /><span><b>{cleanLabel(item.label)}</b><small>{item.cores.length} 芯 · {item.common_layers.length + item.cores.reduce((n, core) => n + core.layers.length + 1, 0)} 层</small></span>
-        </button>) : ids.map(id => { const item = typeModules.find(entry => entry.id === id)!; return <button key={id} type="button" className="explorer-item" aria-current={location.module === id ? 'page' : undefined} onClick={() => go(id, item.tabs[0][0])}><Icon name={item.icon} /><span>{item.label}</span></button>; })}
+        </button>) : ids.map(id => { const item = typeModules.find(entry => entry.id === id)!, result = moduleEvidenceState(evidence.data, id, state.workspace?.revision, state.dirty); return <button key={id} type="button" className="explorer-item" aria-current={location.module === id ? 'page' : undefined} onClick={() => go(id, item.tabs[0][0])}><Icon name={item.icon} /><span>{item.label}</span>{result && <span className={`status-dot ${result === 'current' ? 'is-ok' : result === 'stale' ? 'is-running' : 'is-off'}`} title={result === 'current' ? '已有当前结果' : result === 'stale' ? '结果对应旧输入，待重算' : '尚未计算'} />}</button>; })}
       </div>
     </section>)}
   </nav>;
