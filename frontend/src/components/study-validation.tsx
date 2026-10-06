@@ -1,4 +1,6 @@
+import { useQuery } from '@tanstack/react-query';
 import { optionalRecord, text } from '@/api/client';
+import { methodCatalog } from '@/api/research';
 import { EmptyState } from './states';
 import { validationLevel } from '@/lib/plugin-labels';
 
@@ -10,6 +12,13 @@ const list = (value: unknown) => (Array.isArray(value) ? value : []);
  * 全部来自运行记录（output.executions / limitations / crosscheck / environment），不另行判断。
  */
 export function StudyValidation({ run }: { run?: Row }) {
+  const catalog = useQuery({ queryKey: ['method-catalog'], queryFn: ({ signal }) => methodCatalog(signal) });
+  // 插件与能力用清单里的名称显示；清单里找不到时保留运行记录中的原始身份
+  const named = (pluginId: string, capabilityId: string) => {
+    const plugin = (catalog.data || []).map(optionalRecord).find(row => text(optionalRecord(row.method).plugin_id) === pluginId);
+    const capability = list(plugin?.capabilities).map(optionalRecord).find(cap => text(cap.id) === capabilityId);
+    return { plugin: text(plugin?.name) || pluginId, capability: text(capability?.title) || capabilityId };
+  };
   if (!run) return <EmptyState title="尚无运行" description="运行后在这里查看方法验证与适用范围。" />;
   const output = optionalRecord(run.output);
   const executions = list(output.executions).map(optionalRecord);
@@ -22,7 +31,7 @@ export function StudyValidation({ run }: { run?: Row }) {
       <span className={`status-dot ${text(seal.status) === 'verified' ? 'is-ok' : 'is-off'}`} />
       <div>
         <b>{text(seal.status) === 'verified' ? '插件发行封签校验通过' : '封签状态未知'}</b>
-        <span className="muted">{text(output.plugin_id)} {text(output.plugin_version)}{text(seal.release_digest) ? ` · ${text(seal.release_digest).slice(0, 12)}…` : ''}{text(seal.verified_at) ? ` · ${new Date(text(seal.verified_at)).toLocaleString('zh-CN')}` : ''}</span>
+        <span className="muted">{named(text(output.plugin_id), '').plugin} {text(output.plugin_version)}{text(seal.release_digest) ? ` · ${text(seal.release_digest).slice(0, 12)}…` : ''}{text(seal.verified_at) ? ` · ${new Date(text(seal.verified_at)).toLocaleString('zh-CN')}` : ''}</span>
       </div>
     </section>
 
@@ -38,7 +47,7 @@ export function StudyValidation({ run }: { run?: Row }) {
       const cases = list(validation.cases).map(text).filter(Boolean);
       const limits = list(execution.limitations).map(text).filter(Boolean);
       return <section key={index} className="validation-block" aria-label="方法验证">
-        <h2>{text(method.plugin_id)} · {text(method.capability)} <span className="muted">{text(method.version)}</span></h2>
+        <h2>{named(text(method.plugin_id), text(method.capability)).plugin} · {named(text(method.plugin_id), text(method.capability)).capability} <span className="muted">{text(method.version)}</span></h2>
         <div className="validation-columns">
           <div>
             <h3>参考算例 <span className="muted">{cases.length} · {validationLevel(text(validation.level))}</span></h3>

@@ -414,3 +414,6 @@
 .parameter-group .number-field { min-width: 0; max-width: none; }
 .parameter-group [data-field] > .select-field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); align-items: center; column-gap: var(--space-3); padding: var(--space-1) 0; }
 .parameter-group [data-field] > .select-field > :first-child { color: var(--text-secondary); }
+/* 结果停靠栏内统一标题层级：区块标题 = 正文加粗，小节 = 注释字号；结论数字保留大字 */
+.workbench-dock-body :not(.conclusion-copy, .state-view) > h2 { font-size: var(--text-body); font-weight: var(--weight-strong); }
+.workbench-dock-body h3 { font-size: var(--text-note); }
