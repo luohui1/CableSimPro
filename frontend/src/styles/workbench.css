@@ -465,3 +465,7 @@
 /* 窄属性栏里的下拉：文字左对齐、单行省略，完整内容在展开列表里看 */
 .workbench-inspector .select-trigger { justify-content: space-between; text-align: left; min-width: 0; }
 .workbench-inspector .select-trigger > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.parameter-advanced { border-top: 1px solid var(--line); padding-top: var(--space-3); }
+.parameter-advanced > summary { cursor: pointer; color: var(--text-secondary); font-size: var(--text-note); font-weight: var(--weight-strong); }
+.parameter-advanced > summary span { margin-left: var(--space-1); font-weight: var(--weight-normal); }
+.parameter-advanced[open] > summary { margin-bottom: var(--space-4); }

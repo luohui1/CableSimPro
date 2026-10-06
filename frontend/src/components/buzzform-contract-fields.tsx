@@ -10,7 +10,11 @@ import { parseInput, type NumericInput } from '@/lib/domain-fields';
 import { EmptyState } from './states';
 
 type Props = ComponentProps<typeof ContractFields>;
-type Entry = { name: string; path: string; label: string; group: string; field: CoreField; source: Record<string, unknown>; spec?: NumericInput; integer?: boolean; json?: boolean };
+type Entry = { name: string; path: string; label: string; group: string; level: 'basic' | 'advanced' | 'expert'; order: number; field: CoreField; source: Record<string, unknown>; spec?: NumericInput; integer?: boolean; json?: boolean };
+/** 插件清单的参数界面元数据（x-group / x-order / x-level / x-bind）。没有声明时：同层分组、全部视为基本参数。 */
+const levelOf = (source: Record<string, unknown>): Entry['level'] => source['x-level'] === 'advanced' || source['x-level'] === 'expert' ? source['x-level'] : 'basic';
+/** x-bind 绑定类型 → 宿主提供的模型对象选项键。 */
+const BIND_KEYS: Record<string, string> = { 'domain.section': 'section_id', 'domain.load_case': 'load_case_id', 'domain.cable_type': 'cable_type_id' };
 function expand(raw: unknown, root: unknown): Record<string, unknown> {
   let field = optionalRecord(raw);
   const ref = text(field.$ref);
@@ -36,9 +40,10 @@ function compile(schema: unknown, root: unknown, prefix: string, module: string,
     const description = text(source.description);
     const base = { name, label: ownLabel.split(' · ').pop() || ownLabel, required, readOnly: readOnly || source.const !== undefined, meta: {path}, description: /[\u4e00-\u9fff]/.test(description) ? description : '' };
     let field: CoreField, spec: NumericInput | undefined, integer = false, json = false;
-    if (source.type === 'string' && references[key]?.length) {
+    const bound = references[BIND_KEYS[text(source['x-bind'])] || key];
+    if (source.type === 'string' && bound?.length) {
       // 引用工程模型里的对象：从真实的截面、负荷、电缆结构中选，不手填编号
-      field = { ...base, type: 'select', options: references[key] };
+      field = { ...base, type: 'select', options: bound };
     } else if (Array.isArray(source.enum) && source.enum.every(value => typeof value === 'string')) {
       field = { ...base, type: 'select', options: source.enum.map(value => ({ value: String(value), label: displayName(String(value)) })) };
     } else if (source.type === 'number' || source.type === 'integer') {
@@ -53,7 +58,8 @@ function compile(schema: unknown, root: unknown, prefix: string, module: string,
       field = { ...base, type: 'number', min: spec.min, max: spec.max, placeholder: range || undefined, ui: {suffix: display.unit, hideSteppers: true} };
     } else if (source.type === 'boolean') field = {...base, type: 'switch'};
     else { json = source.type !== 'string'; field = {...base, type: 'text', ...(json ? { placeholder: 'JSON（按方法契约）' } : { minLength: numeric(source.minLength) ?? undefined, maxLength: numeric(source.maxLength) ?? undefined, pattern: text(source.pattern) || undefined })}; }
-    const entry: Entry = { name, path, label, group: parent || '基本参数', source, spec, integer, json, field };
+    const declaredGroup = text(source['x-group']), groupTitle = text(optionalRecord(optionalRecord(model['x-groups'])[declaredGroup]).title);
+    const entry: Entry = { name, path, label, group: groupTitle || declaredGroup || parent || '基本参数', level: levelOf(source), order: numeric(source['x-order']) ?? entries.length, source, spec, integer, json, field };
     field.validate = { onChange: { checks: [{type: 'hostParameter', args: {index: entries.length}, message: `${label}不符合参数契约，请检查必填项、范围或格式。`}] } };
     entries.push(entry);
   }
@@ -84,7 +90,10 @@ export function BuzzformContractFields(props: Props) {
     return [entry.name, draft !== undefined ? entry.spec ? draft === '' ? undefined : Number(draft) : draft : entry.spec ? numeric(value) === null ? undefined : Number(value) * (entry.spec.scale ?? 1) + (entry.spec.offset ?? 0) : entry.json ? (value === undefined || value === null ? '' : JSON.stringify(value)) : value];
   }));
   if (!entries.length) return <EmptyState title="该能力没有单独的方法参数" description="" />;
-  const groups = [...new Set(entries.map(entry => entry.group))].map(group => ({ group, entries: entries.filter(entry => entry.group === group) }));
+  const sorted = [...entries].sort((a, b) => a.order - b.order);
+  const groupsOf = (items: Entry[]) => [...new Set(items.map(entry => entry.group))].map(group => ({ group, entries: items.filter(entry => entry.group === group) }));
+  const groups = groupsOf(sorted.filter(entry => entry.level === 'basic'));
+  const advanced = sorted.filter(entry => entry.level !== 'basic');
   const registries = { fields: registry, validators: {hostParameter: (value: unknown, args?: unknown) => { try { stored(entries[Number(optionalRecord(args).index)], value); return true; } catch { return false; } }} };
   const listeners = { onChange: ({fieldApi}: { fieldApi: { name: string; state: { value: unknown } } }) => {
     const entry = entries.find(entry => entry.name === fieldApi.name);
@@ -98,13 +107,19 @@ export function BuzzformContractFields(props: Props) {
     if (!draftFields[module + entry.path]) return;
     try { onChange(entry.path, stored(entry, fieldApi.state.value)); onDraftChange(undefined, module + entry.path); } catch { /* Keep invalid text in the formal draft; Save also validates it. */ }
   } };
+  // 一组参数 = 标题 + 名称/数值两列的属性表；高级与专家参数收进折叠区（普通渲染函数，避免每次重绘重新挂载表单）
+  const parameterGroup = ({ group, entries: items }: { group: string; entries: Entry[] }) => <section key={group} className="parameter-group" aria-label={group}>
+    <h4>{group}</h4>
+    <Form schema={{fields: items.map(entry => entry.field)}} defaultValues={Object.fromEntries(items.map(entry => [entry.name, defaults[entry.name]]))} registries={registries} listeners={listeners}>
+      <FormContent as="div"><FormFields className="parameter-fields" /></FormContent>
+    </Form>
+  </section>;
   // 按契约层次分组：每组一个标题 + 名称/数值两列的属性表
   return <div className="buzzform-contract" data-contract-form={module}>
-    {groups.map(({ group, entries: items }) => <section key={group} className="parameter-group" aria-label={group}>
-      <h4>{group}</h4>
-      <Form schema={{fields: items.map(entry => entry.field)}} defaultValues={Object.fromEntries(items.map(entry => [entry.name, defaults[entry.name]]))} registries={registries} listeners={listeners}>
-        <FormContent as="div"><FormFields className="parameter-fields" /></FormContent>
-      </Form>
-    </section>)}
+    {groups.map(parameterGroup)}
+    {advanced.length > 0 && <details className="parameter-advanced">
+      <summary>高级参数 <span>{advanced.length}</span></summary>
+      {groupsOf(advanced).map(parameterGroup)}
+    </details>}
   </div>;
 }
