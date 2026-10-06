@@ -8,6 +8,7 @@ import { illustration } from "@/lib/illustrations";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { StatusMark } from "@/components/status-mark";
+import { agentStatus, AgentUnavailable } from "@/features/agent/agent-api";
 
 type Backup = { id: string; sha256: string; size_bytes: number; created: string; download_url: string; schema_version: number };
 
@@ -24,10 +25,11 @@ function Section({ art, title, lead, children }: { art: string; title: string; l
   </section>;
 }
 
-/** 设置：外观与单位（本机偏好）、计算位置（来自插件清单）、数据备份与恢复（宿主接口）、Agent 与计算书模板（未接入如实显示）。 */
+/** 设置：外观与单位（本机偏好）、计算位置（来自插件清单）、数据备份与恢复（宿主接口）、Agent 连接状态（来自 Agent 服务）与计算书模板。 */
 export function SettingsPage() {
   const { theme, navigate } = usePageTheme();
   const queries = useQueryClient();
+  const agent = useQuery({ queryKey: ["agent-status"], queryFn: ({ signal }) => agentStatus(signal), retry: false, staleTime: 60_000 });
   const [reducedMotion, setReducedMotion] = useState(preferences().reducedMotion);
   const [restore, setRestore] = useState<Backup | null>(null);
   const health = useQuery({ queryKey: ["host-health"], queryFn: async ({ signal }) => record(await responseData(api.GET("/api/health", { signal })), "宿主状态") });
@@ -102,8 +104,10 @@ export function SettingsPage() {
         </Section>
 
         <Section art="model" title="Agent 模型" lead="Agent 通过与工作台相同的插件能力工作，只提出方案，批准由人完成。">
-          <div className="settings-row"><span>连接状态</span><StatusMark kind="draft" label="未连接模型" /></div>
-          <p className="muted">私有部署模型或云端模型的连接方式待定，确定后在这里配置地址与密钥。</p>
+          <div className="settings-row"><span>连接状态</span><StatusMark kind={agent.data?.configured ? "success" : "draft"} label={agent.data?.configured ? "已连接" : agent.error instanceof AgentUnavailable ? "服务尚未部署" : agent.isPending ? "检查中" : "模型未配置"} /></div>
+          {agent.data?.configured && <div className="settings-row"><span>模型</span><span>{agent.data.model || "—"}</span></div>}
+          {agent.data && <div className="settings-row"><span>可调用工具</span><span>{agent.data.tools ?? "—"}</span></div>}
+          <p className="muted">模型地址、名称与密钥由宿主的环境变量 CABLESIM_LLM_BASE_URL、CABLESIM_LLM_MODEL、CABLESIM_LLM_API_KEY 提供；密钥不经过浏览器，也不写入数据库与日志。</p>
         </Section>
 
         <Section art="report" title="计算书模板" lead="计算书只从指定运行生成，包含输入、方法版本与插件封签。">
