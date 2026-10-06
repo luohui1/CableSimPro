@@ -15,8 +15,13 @@ def make_router(research):
     router = APIRouter(prefix='/api')
 
     @router.get('/methods')
-    def methods():
-        return research.methods()
+    async def methods():
+        # The catalog parses and validates every manifest; reuse it until plugin
+        # sources or seals change (same invalidation as /api/input-contracts).
+        import json
+        from .read_responses import read_response
+        return await read_response(research, ('methods',), None,
+            lambda: json.dumps(research.methods(), ensure_ascii=False, allow_nan=False).encode(), uses_database=False)
 
     @router.get('/plugins/{plugin_id}/assets/{role}')
     def plugin_asset(plugin_id: str, role: Literal['cover', 'method', 'validation'], sha256: str | None = None):

@@ -184,3 +184,14 @@ def test_contract_catalog_reuses_schema_and_invalidates_on_seal_or_source_change
         os.utime(source, ns=(before.st_atime_ns,before.st_mtime_ns))
         failed = client.get('/api/input-contracts')
         assert failed.status_code == 409 and len(builds) == 3
+
+
+def test_method_catalog_is_reused_and_does_not_block_database_reads(client):
+    # The catalog is a source-only cached read; the first request may initialize the cache.
+    first = client.get('/api/methods')
+    assert first.status_code == 200 and first.json()
+    assert client.get('/api/methods').content == first.content
+    w, s = study(client)
+    root = f"/api/workspaces/{w['id']}/studies/{s['id']}"
+    assert client.get(root).status_code == 200
+    assert client.get(root + '/runs?view=summary').status_code == 200

@@ -51,6 +51,8 @@ class ReadResponses:
         if self.watch is None or not self.lock.acquire(blocking=False):return None
         try:
             if self.source_root != self.research.executor.registry.root.parent:return None
+            # A source-only read may have initialized the cache first; the build path opens the database.
+            if uses_database and self.database is None:return None
             generation = self.generation(uses_database)
             entry = self.entries.get(key)
             if generation is not None and entry is not None and entry[0] == generation:
