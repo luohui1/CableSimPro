@@ -46,7 +46,8 @@ async function run(command, args, options = {}) {
   if (code !== 0) throw Error(command + " 退出 " + code);
 }
 async function ready(url, child) {
-  for (let attempt = 0; attempt < 120; attempt++) {
+  // 后端启动时会预热研究与运行读取；大的演示库冷启动约 30 s，等待上限 60 s
+  for (let attempt = 0; attempt < 240; attempt++) {
     if (child.exitCode !== null)
       throw Error("临时服务启动失败：" + backendOutput.slice(-3000));
     try {
