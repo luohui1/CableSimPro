@@ -17,6 +17,7 @@ import { StatusMark } from "@/components/status-mark";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { WorkbenchInspector } from "@/components/workbench-inspector";
 import { ProjectExplorer } from "@/components/project-explorer";
+import { PreviewControls, PreviewStrip, useStudyPreview } from "@/components/study-preview";
 import { AddStudyDialog } from "@/components/add-study-dialog";
 import { StudyDrawing } from "@/components/study-drawing";
 import { conductorAnnotations } from "@/lib/result-annotations";
@@ -196,6 +197,8 @@ export function StudyWorkspace() {
     kind: text(capabilityEntry?.title),
     run: !lastRun ? "尚未运行" : `${["succeeded", "partial"].includes(text(lastRun.status)) ? "已有结果" : ["failed", "rejected"].includes(text(lastRun.status)) ? "运行失败" : "运行中"} · ${new Date(text(lastRun.created)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`,
   };
+  // 快速试算：插件声明 preview 且在本机运行的能力，查看当前输入时开放（固定的历史运行不试算）
+  const preview = useStudyPreview({ module, available: capabilityEntry?.preview === true && !methodInfo.hpc && !search.run });
   const status = context.dirty
     ? "draft"
     : context.runError
@@ -248,6 +251,7 @@ export function StudyWorkspace() {
       </div>
       <div className="command-group" role="group" aria-label="计算">
         <span className="command-caption">计算</span>
+        <PreviewControls preview={preview} />
         {runnable && !snapshotInput && <StudyRunControl
                         key={sid + module}
                         module={inputModule ? calculatedModule : module}
@@ -369,8 +373,8 @@ export function StudyWorkspace() {
           {commandBar}
           <div className="workbench-frame">
           <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={context.domain} activeStudy={sid} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
-          <div className={`workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer ? "has-answer" : ""}`} data-dock={dockMax ? "max" : undefined}>
-          {answer && <section className="answer-bar" aria-label="结论">{answer}</section>}
+          <div className={`workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-dock={dockMax ? "max" : undefined}>
+          {(answer || preview.result || preview.error) && <section className="answer-bar" aria-label="结论">{answer}<PreviewStrip preview={preview} saved={run?.headlines} /></section>}
           {showCanvas && (
             <section className="workbench-canvas" aria-label="模型">
               <div className="workbench-views" role="group" aria-label="模型视图">
