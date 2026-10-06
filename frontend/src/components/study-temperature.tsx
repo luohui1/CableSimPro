@@ -38,7 +38,7 @@ export function StudyTemperature({
       return { view: undefined, error };
     }
   }, [run]);
-  if (!run) return <EmptyState description="" title="尚无温度场运行" />;
+  if (!run) return <EmptyState art="simulation" description="" title="尚无温度场运行" />;
   if (parsed.error)
     return (
       <ErrorState title="温度场不可用" description={message(parsed.error)} />

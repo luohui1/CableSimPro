@@ -4,10 +4,14 @@ import { Icon } from './icon';
 import { StatusMark } from './status-mark';
 import { illustration } from '@/lib/illustrations';
 
-/** 空状态插画：no-results（尚无结果）、queued（等待计算）、missing-data（缺数据）、plugin（插件）。 */
-export type EmptyArt = 'no-results' | 'queued' | 'missing-data' | 'plugin';
-export function EmptyState({ title = '尚无选型结果', description = '选择候选型号后运行选型。', action, art = 'no-results' }: { title?: string; description?: string; action?: ReactNode; art?: EmptyArt }) {
-  const src = illustration('empty-' + art);
+/**
+ * 空状态插画：not-run（尚未计算）、no-results（检索无匹配）、queued（等待计算）、missing-data（缺数据）、
+ * plugin（插件）、report（计算书）、simulation（仿真）、standard-check（标准核对）。
+ * 未指定时按标题区分：检索无匹配用 no-results，其余「尚无…」用 not-run。
+ */
+export type EmptyArt = 'not-run' | 'no-results' | 'queued' | 'missing-data' | 'plugin' | 'report' | 'simulation' | 'standard-check';
+export function EmptyState({ title = '尚无选型结果', description = '选择候选型号后运行选型。', action, art }: { title?: string; description?: string; action?: ReactNode; art?: EmptyArt }) {
+  const src = illustration('empty-' + (art || (/^(没有匹配|未找到)/.test(title) ? 'no-results' : 'not-run')));
   return <div className="state-view state-empty">{src ? <img className="state-art" src={src} alt="" /> : <Icon name="result/table" className="icon-large" />}<h2>{title}</h2>{description && <p className="muted">{description}</p>}{action}</div>;
 }
 export function LoadingState({ title = '正在读取选型结果', description = '已保存输入保留，可稍后查看。' }: { title?: string; description?: string }) {

@@ -4,6 +4,7 @@ import { methodCatalog } from "@/api/research";
 import { optionalRecord, text } from "@/api/client";
 import { displayName } from "@/lib/display-names";
 import { moduleConfiguration } from "@/lib/study-config";
+import { illustration } from "@/lib/illustrations";
 import { ARTIFACT_KINDS, validationLevel } from "@/lib/plugin-labels";
 import { useStudy } from "./study-provider";
 import { usePageTheme } from "./catalog-shell";
@@ -33,10 +34,12 @@ export function SimulationSetup({ module }: { module: string }) {
   const outputs = list(capability?.outputs).map((o) => text(optionalRecord(o).key));
   const validation = optionalRecord(capability?.validation);
   const limits = list(capability?.limitations).map(text).filter(Boolean);
+  const art = illustration("empty-simulation");
   const link = (target: string, tab: string) => ({ to: "/studies/$sid/$module/$tab" as const, params: { sid: context.study.id, module: target, tab }, search: { theme, workspace: context.study.workspace, run: "", delivery: "" } });
 
   return <div className="sim-setup" data-state="setup">
     <header className="sim-setup-head">
+      {art && <img src={art} alt="" />}
       <h2>尚未运行</h2>
       <p>{plugin ? `${text(plugin.name)} · ${text(capability?.title) || method.capability} · ${method.version}` : `插件 ${method.plugin_id} 未安装`}</p>
     </header>

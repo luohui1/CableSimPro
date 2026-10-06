@@ -275,6 +275,8 @@
 /* 仿真运行前：输入 → 求解参数 → 运行位置 → 产出 */
 .sim-setup { display: flex; flex-direction: column; gap: var(--space-6); max-width: calc(var(--space-12) * 18); }
 .sim-setup-head { display: flex; flex-direction: column; gap: var(--space-1); }
+.sim-setup-head img { width: calc(var(--space-12) * 4); height: auto; margin-bottom: var(--space-3); mix-blend-mode: multiply; }
+[data-theme="dark"] .sim-setup-head img { mix-blend-mode: normal; filter: invert(.88) hue-rotate(180deg); opacity: .8; }
 .sim-setup-head h2 { font-size: var(--text-subheading); }
 .sim-setup-head p { color: var(--text-secondary); }
 .sim-steps { list-style: none; margin: 0; padding: 0; counter-reset: sim-step; display: flex; flex-direction: column; }

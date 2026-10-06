@@ -132,8 +132,9 @@ function CurrentReport({
   if (!run)
     return (
       <EmptyState
+        art="report"
         title="尚无可交付运行"
-        description="先选择已封存的选型运行。"
+        description="计算书只从一次成功的运行生成。先在计算模块运行，再回到这里生成。"
       />
     );
   if (!current)
