@@ -31,7 +31,7 @@ export function TypeWorkspace() {
   const module = typeModules.find(module => module.id === location.module);
   const activeTab = module?.tabs.some(([id]) => id === location.tab) ? location.tab : module?.tabs[0][0] || location.tab;
   const [cableId, setCableId] = useState(''), [selected, setSelected] = useState<LayerTarget | null>(null), [collapsed, setCollapsed] = useState(false), [info, setInfo] = useState('');
-  const [view, setView] = useState<'section' | 'three'>(location.tab === 'three' ? 'three' : 'section'), [dockMax, setDockMax] = useState(false);
+  const [view, setView] = useState<'section' | 'three'>(location.tab === 'three' ? 'three' : 'section'), [dockMax, setDockMax] = useState(['specification', 'requirements', 'comparison'].includes(location.module));
   const [resultProperty, setResultProperty] = useState<{ title: string; groups: PropertyGroup[] } | null>(null);
   const showProperty = useCallback((title: string, groups: PropertyGroup[]) => { setResultProperty({ title, groups }); setCollapsed(false); }, []);
   const clearProperty = useCallback(() => setResultProperty(null), []);
@@ -50,6 +50,8 @@ export function TypeWorkspace() {
     if (event.key === 'Escape' && !(event.target as HTMLElement).closest('input,textarea,[role=dialog],[role=combobox]')) { choose(null); setInfo(''); }
   }
   useEffect(() => { setInfo(''); setResultProperty(null); setCollapsed(false); }, [location.module, location.tab, selected]);
+  // 文档型模块（规格书、要求清单、方案对比）默认放大下方面板
+  useEffect(() => { setDockMax(['specification', 'requirements', 'comparison'].includes(location.module)); }, [location.module]);
   useEffect(() => { if (location.module === 'structure' && location.layer) { const row = rows.find(row => row.id === location.layer); if (row) { setSelected(row.target); setCollapsed(false); } } }, [location.module, location.layer, cable?.id]);
   const property = location.module === 'structure' && document && row ? <div className="type-property-wrapper">
     <PropertyPanel title={row.label} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} groups={[{ label: '结构输入', items: [
@@ -60,7 +62,9 @@ export function TypeWorkspace() {
     {!collapsed && <div className="type-property-fields"><TypeNumericField row={row} />
       <Select label="材料引用" value={row.material.id} disabled={state.busy || state.locked(row.materialPath)} options={document.materials.filter(item => item.category === row.material.category).map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={material => state.edit(row.materialPath, material)} />
       {!sourceKind(source) && source.kind !== 'demo' && <p className="muted">此尺寸未提供来源。</p>}<StructurePropertyInputs row={row} /></div>}
-  </div> : location.module === 'structure' ? <PropertyPanel title="所选结构层" groups={[{ label: '未选择结构层', items: [{ label: '提示', value: '选择截面编号或分层表中的行' }] }]} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} /> : <PropertyPanel title={resultProperty?.title || '所选结果'} groups={resultProperty?.groups || [{ label: '未选择结果', items: [{ label: '提示', value: '选择结果行查看依据与来源' }] }]} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} />;
+  </div> : location.module === 'structure' ? <section className="inspector-block" aria-label="所选结构层"><header><Icon name="module/structure" /><h2>所选结构层</h2></header><p className="inspector-empty">在截面或分层表中选择一层，在这里修改厚度与材料。</p></section>
+    : resultProperty ? <PropertyPanel title={resultProperty.title} groups={resultProperty.groups} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} />
+      : <section className="inspector-block" aria-label="所选结果"><header><Icon name="result/table" /><h2>所选结果</h2></header><p className="inspector-empty">选择结果表中的一行，在这里查看依据、条款与来源。</p></section>;
   // 型号工作窗口：画布 = 电缆截面 / 三维剥切；下方停靠栏 = 当前模块的页签；右侧 = 型号名称 + 所选结构层或结果
   const dockTabs = module?.id === 'structure' ? module.tabs.filter(([id]) => id === 'table' || id === 'quantities') : module?.tabs || [];
   const dockTab = module?.id === 'structure' ? (location.tab === 'quantities' ? 'quantities' : 'table') : activeTab;
