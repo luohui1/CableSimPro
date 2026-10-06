@@ -24,9 +24,9 @@ import { isVersionStale } from "@/lib/version-status";
 
 type Theme = "light" | "dark";
 
-const PROJECT_SUGGESTIONS = ["这个工程里哪些计算还没有结果？", "汇总各计算的载流量结论和限制因素", "检查工程模型还缺哪些输入"];
+const PROJECT_SUGGESTIONS = ["这个工程里哪些研究还没有结果？", "汇总各研究的载流量结论和限制因素", "检查工程模型还缺哪些输入"];
 
-/** 计算名常以工程名开头（“城北变电站 · …”），在工程内部省掉这段前缀。 */
+/** 研究名常以工程名开头（“城北变电站 · …”），在工程内部省掉这段前缀。 */
 const shortTitle = (title: string, project: string) => {
   const prefix = project.split(" · ")[0] + " · ";
   return title.startsWith(prefix) && title.length > prefix.length ? title.slice(prefix.length) : title;
@@ -43,9 +43,9 @@ function runStatus(run: Record<string, unknown> | undefined, stale: boolean): [S
 }
 
 /**
- * 工程首页：与计算工作台同一骨架。命令栏（模型 / 计算 / 交付）、左侧工程浏览器、
- * 中间是工程模型的截面与本工程全部计算，右侧是工程属性与 Agent。
- * 工程模型在计算里编辑（同一份模型，所有计算共用），这里只读展示。
+ * 工程首页：与研究工作台同一骨架。命令栏（模型 / 计算 / 交付）、左侧工程浏览器、
+ * 中间是工程模型的截面与本工程全部研究，右侧是工程属性与 Agent。
+ * 工程模型在研究里编辑（同一份模型，所有研究共用），这里只读展示。
  */
 export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme: Theme }) {
   const navigate = useNavigate();
@@ -81,7 +81,7 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
   });
 
   const columns: Column<StudyRow>[] = [
-    { id: "name", label: "计算", wrap: true, render: (row) => {
+    { id: "name", label: "研究", wrap: true, render: (row) => {
       const kind = calculationKind(row, catalog.data || []);
       return <Link className="object-link project-calc" to="/studies/$sid/$module/$tab" params={{ sid: row.id, module: rootModule(row.definition), tab: studyEntryTab(rootModule(row.definition)) }} search={{ workspace: row.workspace, theme, run: "", delivery: "" }}>
         <Icon name={kind.icon} /><span>{shortTitle(row.title, name)}</span>
@@ -119,7 +119,7 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
           {document.cable_types.map((item) => <div key={item.id}><dt>电缆</dt><dd>{item.label || entityLabel(document, item.id)}</dd></div>)}
           {document.load_cases.map((item) => <div key={item.id}><dt>工况</dt><dd>{entityLabel(document, item.id)}</dd></div>)}
         </dl>
-        <p className="inspector-note">模型由本工程全部计算共用；在任一计算里修改并保存，其他计算的结果会标为待重算。</p>
+        <p className="inspector-note">模型由本工程全部研究共用；在任一研究里修改并保存，其他研究的结果会标为待重算。</p>
       </section>}
     </>}
   </aside>;
@@ -131,13 +131,13 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
     </div>
     <div className="command-group" role="group" aria-label="计算">
       <span className="command-caption">计算</span>
-      <Button size="compact" variant="primary" onClick={() => setCreating(true)}><Icon name="action/add" />新建计算</Button>
+      <Button size="compact" variant="primary" onClick={() => setCreating(true)}><Icon name="action/add" />新建研究</Button>
     </div>
     <div className="command-group" role="group" aria-label="交付">
       <span className="command-caption">交付</span>
       <Button size="compact" variant="ghost" onClick={() => void navigate({ to: "/library/deliveries", search: { theme, workspace: workspaceId, delivery: "" } })}><Icon name="result/report" />交付记录</Button>
     </div>
-    <span className="command-state" role="status">{studies.isPending ? "读取中" : `${rows.length} 个计算 · ${done} 个已有结果`}</span>
+    <span className="command-state" role="status">{studies.isPending ? "读取中" : `${rows.length} 个研究 · ${done} 个已有结果`}</span>
   </div>;
 
   const canvas = !document ? null : <section className="workbench-canvas" aria-label="工程模型">
@@ -164,16 +164,16 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
         <div className={`workbench has-answer ${document ? "" : "workbench-no-canvas"}`}>
           <section className="answer-bar" aria-label="工程概况">
             <Conclusion title={isType ? "型号工程" : "工程"} model={name} description={facts || (workspace.isPending ? "读取工程模型" : "工程模型不可用")}
-              metrics={[{ label: "计算", value: rows.length, unit: "个" }, { label: "已有结果", value: done, unit: "个" }, { label: "未运行或待重算", value: rows.length - done, unit: "个" }]} />
+              metrics={[{ label: "研究", value: rows.length, unit: "个" }, { label: "已有结果", value: done, unit: "个" }, { label: "未运行或待重算", value: rows.length - done, unit: "个" }]} />
           </section>
           {canvas}
-          <section className="workbench-dock" aria-label="本工程计算">
-            <div className="workbench-dock-bar"><span className="workbench-dock-title">本工程计算</span></div>
+          <section className="workbench-dock" aria-label="本工程研究">
+            <div className="workbench-dock-bar"><span className="workbench-dock-title">本工程研究</span></div>
             <div className="workbench-dock-body">
-              {studies.isPending ? <LoadingState title="正在读取计算" />
+              {studies.isPending ? <LoadingState title="正在读取研究" />
                 : studies.isError ? <ErrorState description={message(studies.error)} action={<Button onClick={() => void studies.refetch()}>重新读取</Button>} />
-                  : rows.length ? <DataTable label="本工程计算" columns={columns} groups={[{ id: "calculations", label: "计算", rows }]} showGroups={false} rowLabel={(row) => row.title} onSelect={(row) => void open(row)} />
-                    : <EmptyState title="还没有计算" description="新建一个计算：选择任务和插件，工程模型会自动带入。" action={<Button variant="primary" onClick={() => setCreating(true)}>新建计算</Button>} />}
+                  : rows.length ? <DataTable label="本工程研究" columns={columns} groups={[{ id: "calculations", label: "研究", rows }]} showGroups={false} rowLabel={(row) => row.title} onSelect={(row) => void open(row)} />
+                    : <EmptyState title="还没有研究" description="新建一个研究：选择任务和插件，工程模型会自动带入。" action={<Button variant="primary" onClick={() => setCreating(true)}>新建研究</Button>} />}
             </div>
           </section>
         </div>

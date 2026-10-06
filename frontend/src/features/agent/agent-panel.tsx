@@ -13,7 +13,7 @@ type Item =
   | { kind: "error"; text: string };
 
 const show = (value: unknown) => (value === null || value === undefined ? "—" : typeof value === "object" ? JSON.stringify(value) : String(value));
-const SUGGESTIONS = ["解释这次计算的结论和主要限制因素", "土壤热阻率改成 1.2 K·m/W 会怎样？", "检查这次计算还缺哪些输入"];
+const SUGGESTIONS = ["解释这个研究的结论和主要限制因素", "土壤热阻率改成 1.2 K·m/W 会怎样？", "检查这个研究还缺哪些输入"];
 
 /**
  * Agent 面板：与工作台同一套工具（由插件能力生成）。对话里每次工具调用显示为卡片，

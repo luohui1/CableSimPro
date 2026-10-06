@@ -81,7 +81,7 @@ export function TypeWorkspace() {
       </div>
     </section>)}
   </nav>;
-  // 命令栏与计算工作台一致：模型（保存 / 撤销）、交付（规格书）；分析在各模块里运行
+  // 命令栏与研究工作台一致：模型（保存 / 撤销）、交付（规格书）；分析在各模块里运行
   const specification = typeModules.find(entry => entry.id === 'specification');
   const commandBar = <div className="command-bar" role="toolbar" aria-label="型号命令">
     <div className="command-group" role="group" aria-label="模型">

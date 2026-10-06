@@ -42,7 +42,7 @@ function Section({ icon, title, count, children }: { icon: string; title: string
 
 /**
  * 工程浏览器：侧栏右侧的第二层，只列本工程真实存在的对象。
- * 模型 = 工程模型里的敷设截面、电缆、负荷工况；计算 = 本工程的研究；交付 = 已封存的计算书。
+ * 模型 = 工程模型里的敷设截面、电缆、负荷工况；研究 = 本工程的研究；交付 = 已封存的计算书。
  */
 export function ProjectExplorer({ workspaceId, projectName, document, activeStudy, view, theme, onCreate }: {
   workspaceId: string; projectName: string; document?: DomainDocument; activeStudy: string; view: string; theme: Theme; onCreate: () => void;
@@ -89,7 +89,7 @@ export function ProjectExplorer({ workspaceId, projectName, document, activeStud
       </Link>)}
       {document.load_cases.map((load) => <a key={load.id} className="explorer-item" href="#inspector-conditions"><Icon name="object/conditions" /><span>{entityLabel(document, load.id)}</span></a>)}
     </Section>}
-    <Section icon="calc/ampacity" title="计算" count={rows.length}>
+    <Section icon="calc/ampacity" title="研究" count={rows.length}>
       {rows.map((study) => {
         const module = rootModule(study.definition), kind = calculationKind(study, plugins);
         const name = head && study.title.startsWith(head + " · ") ? study.title.slice(head.length + 3) : study.title;
@@ -97,7 +97,7 @@ export function ProjectExplorer({ workspaceId, projectName, document, activeStud
           <Icon name={kind.icon} /><span><b>{name}</b><small>{kind.label}{kind.hpc ? " · 超算" : ""}</small></span><RunDot study={study} />
         </Link>;
       })}
-      <button type="button" className="explorer-item explorer-add" onClick={onCreate}><Icon name="action/add" /><span>新建计算</span></button>
+      <button type="button" className="explorer-item explorer-add" onClick={onCreate}><Icon name="action/add" /><span>新建研究</span></button>
     </Section>
     {current && <Section icon="object/delivery" title="交付" count={books.data?.length}>
       {(books.data || []).map((book) => <Link key={book.id} className="explorer-item" {...at(current, "report", "preview", { delivery: book.id })}>

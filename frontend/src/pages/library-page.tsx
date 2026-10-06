@@ -152,9 +152,9 @@ export function LibraryPage() {
     >
       <CableShelf />
       <section className="cable-shelf library-assets" aria-label="材料、部件与模板">
-      <header><h2>材料、部件与模板</h2><span className="muted">{numeric(query.data?.total) ?? 0} 项 · 计算按版本引用</span></header>
+      <header><h2>材料、部件与模板</h2><span className="muted">{numeric(query.data?.total) ?? 0} 项 · 研究按版本引用</span></header>
       {/* 库里还没有任何资源时不摆筛选器，只说明怎么添加 */}
-      {!q && kind === "all" && status === "all" && query.isSuccess && !rows.length ? <p className="muted">还没有材料、部件或模板。用右上角“导入资源草稿”添加，审核发布后计算才能引用。</p> : <>
+      {!q && kind === "all" && status === "all" && query.isSuccess && !rows.length ? <p className="muted">还没有材料、部件或模板。用右上角“导入资源草稿”添加，审核发布后研究才能引用。</p> : <>
       <Toolbar label="资源筛选">
         <label className="search-field">
           检索

@@ -9,7 +9,7 @@ import { Select } from "@/components/ui/select";
 import { AgentPanel } from "@/features/agent/agent-panel";
 import { agentStatus, agentTools, AgentUnavailable, type AgentTool } from "@/features/agent/agent-api";
 
-const PROJECT_SUGGESTIONS = ["这个工程里哪些计算还没有结果？", "汇总各计算的载流量结论和限制因素", "检查工程模型还缺哪些输入"];
+const PROJECT_SUGGESTIONS = ["这个工程里哪些研究还没有结果？", "汇总各研究的载流量结论和限制因素", "检查工程模型还缺哪些输入"];
 const KINDS: [AgentTool["kind"], string, string][] = [
   ["read", "读取", "只读，不改任何数据"],
   ["propose", "生成方案", "改动写进方案，批准后才保存"],
