@@ -13,12 +13,15 @@ import { Tooltip } from "@/components/ui/tooltip";
 
 type Row = Record<string, unknown>;
 
-const GROUPS: [string, string[]][] = [
-  ["计算方法", ["cablesim.iec60287", "cablesim.type-electrical", "cablesim.thermal-network", "cablesim.hybrid-rating"]],
-  ["建模", ["cablesim.cable-geometry"]],
-  ["仿真", ["cablesim.simulation", "cablesim.native-reference", "cablesim.comsol-bridge"]],
-  ["数据与标准", ["cablesim.standard-check", "cablesim.datasheet-extract"]],
-];
+/** 插件归类：按清单里声明的分析类型与运行位置判断，不按插件编号写死；新安装的插件自动进入对应分组。 */
+const GROUP_ORDER = ["计算方法", "建模", "仿真", "数据与标准"] as const;
+function pluginGroup(row: Row): (typeof GROUP_ORDER)[number] {
+  const analyses = (Array.isArray(row.capabilities) ? row.capabilities : []).map((cap) => text(optionalRecord(cap).analysis));
+  if (analyses.some((kind) => kind === "extraction" || kind === "standard_check")) return "数据与标准";
+  if (text(optionalRecord(row.execution_policy).backend) === "slurm" || analyses.some((kind) => kind === "mesh" || kind === "frequency_domain" || kind === "postprocess")) return "仿真";
+  if (analyses.length && analyses.every((kind) => kind === "geometry")) return "建模";
+  return "计算方法";
+}
 const list = (value: unknown) => (Array.isArray(value) ? value : []);
 const pluginId = (row: Row) => text(optionalRecord(row.method).plugin_id);
 
@@ -29,11 +32,7 @@ export function PluginsPage() {
   const { theme } = usePageTheme();
   const { pid } = useParams({ strict: false }) as { pid?: string };
   const rows = (catalog.data || []) as Row[];
-  const known = new Set(GROUPS.flatMap(([, ids]) => ids));
-  const groups: [string, Row[]][] = [
-    ...GROUPS.map(([label, ids]) => [label, ids.map((id) => rows.find((row) => pluginId(row) === id)).filter(Boolean) as Row[]] as [string, Row[]]),
-    ["其他", rows.filter((row) => !known.has(pluginId(row)))],
-  ].filter(([, items]) => items.length) as [string, Row[]][];
+  const groups: [string, Row[]][] = GROUP_ORDER.map((label) => [label, rows.filter((row) => pluginGroup(row) === label)] as [string, Row[]]).filter(([, items]) => items.length);
   const selected = rows.find((row) => pluginId(row) === pid) || groups[0]?.[1][0];
 
   return (
