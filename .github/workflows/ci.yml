@@ -26,6 +26,18 @@ jobs:
       - run: python scripts/plugin_sdk.py verify
       - name: Plugin catalog seals match committed sources
         run: python scripts/seal_plugin_catalog.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Frontend style rules, types and unit tests
+        working-directory: frontend
+        run: |
+          npm ci --ignore-scripts
+          npm run check:styles
+          npx tsc -b
+          npm test
   native-plugins:
     name: Native plugins / Slurm dg83
     runs-on: [self-hosted, linux, cablesim-hpc]
