@@ -1,0 +1,30 @@
+/* Agent 面板：对话、工具调用卡片、修改方案（字段级前后值 + 批准/拒绝） */
+.agent-panel { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.agent-panel-head { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
+.agent-panel-head .button { margin-left: auto; }
+.agent-panel-model { color: var(--text-secondary); font-size: var(--text-note); }
+.agent-transcript { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); }
+.agent-empty p { color: var(--text-secondary); line-height: 1.7; }
+.agent-suggestions { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); }
+.agent-suggestions button { padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-item); background: var(--panel); color: var(--text); font: inherit; font-size: var(--text-note); text-align: left; cursor: pointer; }
+.agent-suggestions button:disabled { color: var(--text-weak); cursor: default; }
+.agent-user { align-self: flex-end; max-width: 90%; padding: var(--space-2) var(--space-3); border-radius: var(--radius-surface); background: var(--fill); line-height: 1.6; white-space: pre-wrap; }
+.agent-assistant { line-height: 1.7; white-space: pre-wrap; }
+.agent-error { color: var(--error); font-size: var(--text-note); }
+.agent-tool, .agent-proposal { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--panel); font-size: var(--text-note); }
+.agent-tool-head { display: flex; align-items: center; gap: var(--space-2); }
+.agent-tool-head .icon { width: var(--space-4); height: var(--space-4); color: var(--text-secondary); }
+.agent-tool-head span { margin-left: auto; color: var(--text-secondary); }
+.agent-tool.is-error .agent-tool-head span { color: var(--error); }
+.agent-tool.is-ok .agent-tool-head span { color: var(--success); }
+.agent-tool code { color: var(--text-secondary); overflow-wrap: anywhere; }
+.agent-proposal { border-color: var(--copper); }
+.agent-proposal table { border-collapse: collapse; width: 100%; }
+.agent-proposal th { text-align: left; font-weight: var(--weight-normal); color: var(--text-secondary); padding: var(--space-1) var(--space-2) var(--space-1) 0; }
+.agent-proposal td { padding: var(--space-1) var(--space-1); font-variant-numeric: tabular-nums; }
+.agent-check { color: var(--text-secondary); }
+.agent-proposal-actions { display: flex; gap: var(--space-2); }
+.agent-decision { color: var(--text-secondary); }
+.agent-composer-box { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-4); border-top: 1px solid var(--line); }
+.agent-composer-box textarea { min-height: calc(var(--space-12) + var(--space-6)); resize: vertical; padding: var(--space-2) var(--space-3); border: 1px solid var(--control-border); border-radius: var(--radius-item); background: var(--panel); color: var(--text); font: inherit; }
+.agent-composer-box .button { align-self: flex-end; }

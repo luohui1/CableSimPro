@@ -110,7 +110,7 @@ export const studyRootRoute = createRoute({
     dataset?: string;
     compare?: string;
     view?: "section" | "cable" | "three" | "field";
-    inspector?: "input" | "method";
+    inspector?: "input" | "method" | "agent";
   } => ({
     theme: search.theme === "dark" ? ("dark" as const) : ("light" as const),
     workspace: typeof search.workspace === "string" ? search.workspace : "",
@@ -123,7 +123,7 @@ export const studyRootRoute = createRoute({
     // 工作窗口中间画布显示的模型视图；不写时由计算类型决定
     view: search.view === "cable" || search.view === "three" || search.view === "section" || search.view === "field" ? search.view : undefined,
     // 右侧属性区显示“输入”还是“方法”（方法参数、问询条件、扫描设置）
-    inspector: search.inspector === "method" ? "method" : search.inspector === "input" ? "input" : undefined,
+    inspector: search.inspector === "method" || search.inspector === "input" || search.inspector === "agent" ? search.inspector : undefined,
   }),
   loaderDeps: ({ search }) => ({ workspace: search.workspace, run: search.run }),
   // 悬停或进入前并行预取研究、工程和运行；失败交给页面的错误状态。

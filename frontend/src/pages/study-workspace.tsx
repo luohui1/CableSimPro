@@ -22,6 +22,7 @@ import { StudyDrawing } from "@/components/study-drawing";
 import { conductorAnnotations } from "@/lib/result-annotations";
 import { temperatureView } from "@/lib/temperature-view";
 import { FieldView } from "@/features/field/field-view";
+import { AgentPanel } from "@/features/agent/agent-panel";
 import {
   StudySelection,
   selectedProperties,
@@ -334,7 +335,8 @@ export function StudyWorkspace() {
           actions={null}
           property={module === "report" ? undefined : (
             <WorkbenchInspector
-              view={methodPanel && search.inspector === "method" ? "method" : "input"}
+              view={search.inspector === "agent" ? "agent" : methodPanel && search.inspector === "method" ? "method" : "input"}
+              agentPanel={<AgentPanel workspaceId={study.workspace} studyId={sid} context={title} />}
               onView={(value) => navigate({ search: { ...currentSearch(), inspector: value }, replace: true })}
               methodPanel={methodPanel}
               document={canvasDocument}
