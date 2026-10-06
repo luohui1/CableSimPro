@@ -10,11 +10,22 @@ import { parseInput, type NumericInput } from '@/lib/domain-fields';
 import { EmptyState } from './states';
 
 type Props = ComponentProps<typeof ContractFields>;
-type Entry = { name: string; path: string; label: string; group: string; level: 'basic' | 'advanced' | 'expert'; order: number; field: CoreField; source: Record<string, unknown>; spec?: NumericInput; integer?: boolean; json?: boolean };
-/** 插件清单的参数界面元数据（x-group / x-order / x-level / x-bind）。没有声明时：同层分组、全部视为基本参数。 */
+type Entry = { name: string; path: string; label: string; group: string; groupOrder: number; level: 'basic' | 'advanced' | 'expert'; order: number; field: CoreField; source: Record<string, unknown>; spec?: NumericInput; integer?: boolean; json?: boolean };
+/**
+ * 插件清单的参数界面元数据：x-group / x-order / x-level 决定分组、顺序与折叠，x-unit 给显示单位与换算，
+ * x-bind 声明引用的工程模型对象，x-enum-labels 给选项中文名，x-default-basis 写默认值依据。
+ * 没有声明时：同层分组、全部视为基本参数、单位按字段名推断。
+ */
 const levelOf = (source: Record<string, unknown>): Entry['level'] => source['x-level'] === 'advanced' || source['x-level'] === 'expert' ? source['x-level'] : 'basic';
-/** x-bind 绑定类型 → 宿主提供的模型对象选项键。 */
-const BIND_KEYS: Record<string, string> = { 'domain.section': 'section_id', 'domain.load_case': 'load_case_id', 'domain.cable_type': 'cable_type_id' };
+/** x-bind 绑定类型 → 宿主提供的模型对象选项键（兼容早期的字符串写法）。 */
+const BIND_KEYS: Record<string, string> = { section: 'section_id', load: 'load_case_id', cable_type: 'cable_type_id', 'domain.section': 'section_id', 'domain.load_case': 'load_case_id', 'domain.cable_type': 'cable_type_id' };
+const bindKey = (value: unknown) => BIND_KEYS[typeof value === 'string' ? value : text(optionalRecord(value).type)];
+/** 分组标题与顺序：x-groups 可以是 [{id, title, order}] 或 {id: {title, order}}。 */
+function groupTable(value: unknown): Map<string, { title: string; order: number }> {
+  const rows = Array.isArray(value) ? value.map(optionalRecord).map((row, index) => [text(row.id), { title: text(row.title), order: numeric(row.order) ?? index }] as const)
+    : Object.entries(optionalRecord(value)).map(([id, row], index) => [id, { title: text(optionalRecord(row).title), order: numeric(optionalRecord(row).order) ?? index }] as const);
+  return new Map(rows.filter(([id]) => id));
+}
 function expand(raw: unknown, root: unknown): Record<string, unknown> {
   let field = optionalRecord(raw);
   const ref = text(field.$ref);
@@ -26,7 +37,7 @@ function expand(raw: unknown, root: unknown): Record<string, unknown> {
   if (Array.isArray(field.anyOf)) field = { ...expand(field.anyOf.find(item => optionalRecord(item).type !== 'null'), root), ...field };
   return field;
 }
-function compile(schema: unknown, root: unknown, prefix: string, module: string, readOnly: boolean, references: Record<string, { value: string; label: string }[]> = {}, entries: Entry[] = [], parent = ''): Entry[] {
+function compile(schema: unknown, root: unknown, prefix: string, module: string, readOnly: boolean, references: Record<string, { value: string; label: string }[]> = {}, entries: Entry[] = [], parent = '', declared = groupTable(optionalRecord(schema)['x-groups'] ?? optionalRecord(root)['x-groups'])): Entry[] {
   const model = expand(schema, root);
   for (const [key, raw] of Object.entries(optionalRecord(model.properties))) {
     const source = expand(raw, root), path = prefix + '/' + key;
@@ -34,32 +45,38 @@ function compile(schema: unknown, root: unknown, prefix: string, module: string,
     if (/_sha256$/.test(key) || key === 'run_id' || key === 'case_id' || key === 'artifact_type') continue;
     // 字段只显示自己的名称；上级层次作为分组标题（属性表式），不再拼成长串
     const ownLabel = displayName(key, text(source.title) || key), label = parent ? parent + ' · ' + ownLabel : ownLabel;
-    if (source.type === 'object' && source.properties && path.split('/').length < 6) { compile(source, root, path, module, readOnly, references, entries, label); continue; }
+    if (source.type === 'object' && source.properties && path.split('/').length < 6) { compile(source, root, path, module, readOnly, references, entries, label, declared); continue; }
     const name = module.replace(/[^a-zA-Z0-9_-]/g, '_') + '_parameter_' + entries.length;
     const required = Array.isArray(model.required) && model.required.includes(key);
-    const description = text(source.description);
-    const base = { name, label: ownLabel.split(' · ').pop() || ownLabel, required, readOnly: readOnly || source.const !== undefined, meta: {path}, description: /[\u4e00-\u9fff]/.test(description) ? description : '' };
+    const basis = optionalRecord(source['x-default-basis']), reason = text(source['x-editor-reason']);
+    const description = [text(source.description), text(basis.reference) && '默认值依据：' + text(basis.reference), reason].filter((line) => /[\u4e00-\u9fff]/.test(line)).join('\n');
+    const binding = optionalRecord(source['x-bind']);
+    const base = { name, label: ownLabel.split(' · ').pop() || ownLabel, required, readOnly: readOnly || source.const !== undefined || binding.read_only === true, meta: {path}, description };
     let field: CoreField, spec: NumericInput | undefined, integer = false, json = false;
-    const bound = references[BIND_KEYS[text(source['x-bind'])] || key];
+    const bound = references[bindKey(source['x-bind']) || key];
+    const enumLabels = optionalRecord(source['x-enum-labels']), declaredUnit = optionalRecord(source['x-unit']);
     if (source.type === 'string' && bound?.length) {
       // 引用工程模型里的对象：从真实的截面、负荷、电缆结构中选，不手填编号
       field = { ...base, type: 'select', options: bound };
     } else if (Array.isArray(source.enum) && source.enum.every(value => typeof value === 'string')) {
-      field = { ...base, type: 'select', options: source.enum.map(value => ({ value: String(value), label: displayName(String(value)) })) };
+      field = { ...base, type: 'select', options: source.enum.map(value => ({ value: String(value), label: text(enumLabels[String(value)]) || displayName(String(value)) })) };
     } else if (source.type === 'number' || source.type === 'integer') {
       integer = source.type === 'integer';
-      const unit = parameterUnit(key, source), display = engineeringQuantity(key, null, unit);
+      // 清单声明了显示单位就按它换算（显示值 = SI × scale + offset），否则按字段名推断
+      const unit = parameterUnit(key, source), hasUnit = 'display' in declaredUnit;
+      const display = hasUnit ? { unit: text(declaredUnit.display) || text(declaredUnit.si), scale: numeric(declaredUnit.scale) ?? 1, offset: numeric(declaredUnit.offset) ?? 0 } : engineeringQuantity(key, null, unit);
+      const shown = (value: number | null) => value === null ? undefined : hasUnit ? value * display.scale + display.offset : engineeringQuantity(key, value, unit).value ?? undefined;
       spec = { path, label, unit: display.unit, scale: display.scale, offset: display.offset, required,
-        min: engineeringQuantity(key, numeric(source.minimum) ?? numeric(source.exclusiveMinimum), unit).value ?? undefined,
+        min: shown(numeric(source.minimum) ?? numeric(source.exclusiveMinimum)),
         minExclusive: numeric(source.exclusiveMinimum) !== null,
-        max: engineeringQuantity(key, numeric(source.maximum) ?? numeric(source.exclusiveMaximum), unit).value ?? undefined };
+        max: shown(numeric(source.maximum) ?? numeric(source.exclusiveMaximum)) };
       // 取值范围作为输入框内的占位提示，超出时由校验给出错误，不在每个框下挂小字
       const range = [spec.min === undefined ? '' : `${spec.minExclusive ? '>' : '≥'} ${spec.min}`, spec.max === undefined ? '' : `${source.exclusiveMaximum !== undefined ? '<' : '≤'} ${spec.max}`].filter(Boolean).join('，');
       field = { ...base, type: 'number', min: spec.min, max: spec.max, placeholder: range || undefined, ui: {suffix: display.unit, hideSteppers: true} };
     } else if (source.type === 'boolean') field = {...base, type: 'switch'};
     else { json = source.type !== 'string'; field = {...base, type: 'text', ...(json ? { placeholder: 'JSON（按方法契约）' } : { minLength: numeric(source.minLength) ?? undefined, maxLength: numeric(source.maxLength) ?? undefined, pattern: text(source.pattern) || undefined })}; }
-    const declaredGroup = text(source['x-group']), groupTitle = text(optionalRecord(optionalRecord(model['x-groups'])[declaredGroup]).title);
-    const entry: Entry = { name, path, label, group: groupTitle || declaredGroup || parent || '基本参数', level: levelOf(source), order: numeric(source['x-order']) ?? entries.length, source, spec, integer, json, field };
+    const declaredGroup = text(source['x-group']), group = declared.get(declaredGroup);
+    const entry: Entry = { name, path, label, group: group?.title || declaredGroup || parent || '基本参数', groupOrder: group?.order ?? Number.MAX_SAFE_INTEGER, level: levelOf(source), order: numeric(source['x-order']) ?? entries.length, source, spec, integer, json, field };
     field.validate = { onChange: { checks: [{type: 'hostParameter', args: {index: entries.length}, message: `${label}不符合参数契约，请检查必填项、范围或格式。`}] } };
     entries.push(entry);
   }
@@ -90,7 +107,7 @@ export function BuzzformContractFields(props: Props) {
     return [entry.name, draft !== undefined ? entry.spec ? draft === '' ? undefined : Number(draft) : draft : entry.spec ? numeric(value) === null ? undefined : Number(value) * (entry.spec.scale ?? 1) + (entry.spec.offset ?? 0) : entry.json ? (value === undefined || value === null ? '' : JSON.stringify(value)) : value];
   }));
   if (!entries.length) return <EmptyState title="该能力没有单独的方法参数" description="" />;
-  const sorted = [...entries].sort((a, b) => a.order - b.order);
+  const sorted = [...entries].sort((a, b) => a.groupOrder - b.groupOrder || a.order - b.order);
   const groupsOf = (items: Entry[]) => [...new Set(items.map(entry => entry.group))].map(group => ({ group, entries: items.filter(entry => entry.group === group) }));
   const groups = groupsOf(sorted.filter(entry => entry.level === 'basic'));
   const advanced = sorted.filter(entry => entry.level !== 'basic');
