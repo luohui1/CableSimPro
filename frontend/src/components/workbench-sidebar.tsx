@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { studyIndex, studyRuns, typeIndex, workspaces, type StudyRow } from '@/api/research';
+import { studyIndex, typeIndex, workspaces } from '@/api/research';
 import { text } from '@/api/client';
 import { rootModule, studyEntryTab } from '@/lib/study-config';
 import { Icon } from './icon';
@@ -52,26 +52,28 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
       </DropdownMenuContent>
     </DropdownMenu>
     <div className="sidebar-scroll">
-      <>
-          <div className="tree-caption"><Icon name="object/folder" />工程</div>
-          {spaces.isPending ? <div className="tree-empty">读取中</div> : spaces.isError ? <div className="tree-empty">工程读取失败</div> : projects.map(project => (
-            <ProjectNode key={text(project.id)} id={text(project.id)} name={text(project.name) || '未命名工程'} theme={theme}
-              studies={(studies.data || []).filter(row => row.workspace === text(project.id))}
-              initiallyOpen={text(project.id) === activeProject} activeStudy={activeStudy} onCreate={() => setCreate(true)} />
-          ))}
-          <div className="tree-caption"><Icon name="nav/cable-type" />型号</div>
-          {(types.data || []).map(row => {
-            const wid = text(row.id);
-            const active = wid === activeType;
-            return <div key={wid}>
-              <Link className="tree-row" to="/types/$wid/$module/$tab" params={{ wid, module: 'structure', tab: 'section' }} search={{ theme }} aria-current={active ? 'page' : undefined}>
-                <span className="tree-twist" aria-hidden="true">{active ? '▾' : '▸'}</span><Icon name="object/cable" /><span className="tree-label">{text(row.name)}</span>
-              </Link>
-              {active && <nav ref={onSlot} className="tree-children" aria-label="型号模块" />}
-            </div>;
-          })}
-          {inGallery && <nav ref={onSlot} className="sidebar-modules" aria-label="陈列导航" />}
-      </>
+      {/* 第一层只列对象：工程与型号。工程里的模型、计算、交付在工作窗口左侧的工程浏览器中。 */}
+      <div className="tree-caption"><Icon name="object/folder" />工程</div>
+      {spaces.isPending ? <div className="tree-empty">读取中</div> : spaces.isError ? <div className="tree-empty">工程读取失败</div> : projects.map(project => {
+        const id = text(project.id), rows = (studies.data || []).filter(row => row.workspace === id);
+        const entry = rows[0];
+        const module = entry ? rootModule(entry.definition) : '';
+        return entry
+          ? <Link key={id} className="tree-row tree-object" to="/studies/$sid/$module/$tab" params={{ sid: entry.id, module, tab: studyEntryTab(module) }} search={{ workspace: id, theme, run: '', delivery: '' }} aria-current={id === activeProject ? 'page' : undefined} title={text(project.name)}>
+            <Icon name="object/folder" /><span className="tree-label">{text(project.name) || '未命名工程'}</span><span className="tree-count">{rows.length}</span>
+          </Link>
+          : <Link key={id} className="tree-row tree-object" to="/studies" search={{ theme, workspace: id }} aria-current={id === activeProject ? 'page' : undefined}>
+            <Icon name="object/folder" /><span className="tree-label">{text(project.name) || '未命名工程'}</span><span className="tree-count">0</span>
+          </Link>;
+      })}
+      <div className="tree-caption"><Icon name="nav/cable-type" />型号</div>
+      {(types.data || []).map(row => {
+        const wid = text(row.id);
+        return <Link key={wid} className="tree-row tree-object" to="/types/$wid/$module/$tab" params={{ wid, module: 'structure', tab: 'table' }} search={{ theme }} aria-current={wid === activeType ? 'page' : undefined}>
+          <Icon name="object/cable" /><span className="tree-label">{text(row.name)}</span>
+        </Link>;
+      })}
+      {inGallery && <nav ref={onSlot} className="sidebar-modules" aria-label="陈列导航" />}
     </div>
     <nav className="sidebar-foot" aria-label="资源">
       <Link className="module-item" to="/library" search={{ theme }} aria-current={inLibrary ? 'page' : undefined}><Icon name="nav/library" /><span>库</span></Link>
@@ -82,68 +84,4 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
     </nav>
     <CreateStudyDialog open={create} onOpenChange={setCreate} theme={theme} />
   </aside>;
-}
-
-/** 研究名在工程下面显示时去掉重复的工程名前缀（如「城北变电站 · 」）。 */
-function withinProject(title: string, project: string) {
-  const head = project.split(' · ')[0];
-  return head && title.startsWith(head + ' · ') ? title.slice(head.length + 3) : title;
-}
-
-/** 每类计算一个图标，侧栏一眼分清是选型、扫描还是仿真。 */
-const CALC_ICONS: Record<string, string> = {
-  selection: 'calc/selection', ampacity: 'calc/ampacity', sweep: 'calc/sweep', 'method-compare': 'module/method-compare',
-  'thermal-field': 'calc/thermal-field', electrothermal: 'calc/thermal-field', transient: 'calc/thermal-field',
-  'sheath-losses': 'calc/induced-voltage', simulation: 'nav/simulation', batch: 'nav/simulation', hybrid: 'calc/cross-check',
-};
-
-/** 计算的运行状态点：成功 / 部分成功 / 失败 / 未运行，来自运行摘要。 */
-function RunDot({ workspace, study }: { workspace: string; study: string }) {
-  const runs = useQuery({ queryKey: ['runs', workspace, study, 'summary'], queryFn: ({ signal }) => studyRuns(workspace, study, signal, 'summary') });
-  const status = text(runs.data?.at(-1)?.status);
-  const kind = ['succeeded', 'partial'].includes(status) ? 'is-ok' : ['failed', 'rejected', 'cancelled'].includes(status) ? 'is-error' : status ? 'is-running' : 'is-off';
-  return <span className={`status-dot ${kind}`} aria-label={kind === 'is-ok' ? '已有结果' : kind === 'is-error' ? '运行失败' : kind === 'is-running' ? '运行中' : '未运行'} />;
-}
-
-/**
- * 一个工程：模型（截面、电缆、工况，所有计算共用）→ 计算（只列真实存在的）→ 交付。
- * 模型节点切换当前计算工作窗口里的画布视图，不是单独页面。
- */
-function ProjectNode({ id, name, theme, studies, initiallyOpen, activeStudy, onCreate }: { id: string; name: string; theme: 'light' | 'dark'; studies: StudyRow[]; initiallyOpen: boolean; activeStudy: string; onCreate: () => void }) {
-  const [toggled, setToggled] = useState<boolean | null>(null);
-  const open = toggled ?? initiallyOpen;
-  const current = studies.find(study => study.id === activeStudy) || studies[0];
-  const at = (study: StudyRow, module: string, tab: string, view?: 'section' | 'cable') => ({
-    to: '/studies/$sid/$module/$tab' as const, params: { sid: study.id, module, tab },
-    search: { workspace: study.workspace, theme, run: '', delivery: '', ...(view ? { view } : {}) },
-  });
-  const calcModule = current ? rootModule(current.definition) : '';
-  return <div className="tree-project">
-    <div className="tree-row tree-project-row">
-      <button type="button" className="tree-twist" aria-expanded={open} aria-label={open ? `收起 ${name}` : `展开 ${name}`} onClick={() => setToggled(!open)}>{open ? '▾' : '▸'}</button>
-      <Icon name="object/folder" />
-      <Link className="tree-label" to="/studies" search={{ theme, workspace: id }} title={name}>{name}</Link>
-      {!open && <span className="tree-count">{studies.length}</span>}
-    </div>
-    {open && <div className="tree-children">
-      {current && <>
-        <div className="tree-group"><Icon name="object/overview" />模型</div>
-        <Link className="tree-row tree-leaf" {...at(current, calcModule, studyEntryTab(calcModule), 'section')}><Icon name="object/section" /><span className="tree-label">敷设截面</span></Link>
-        <Link className="tree-row tree-leaf" {...at(current, calcModule, studyEntryTab(calcModule), 'cable')}><Icon name="object/cable" /><span className="tree-label">电缆</span></Link>
-        <Link className="tree-row tree-leaf" {...at(current, calcModule, studyEntryTab(calcModule), 'section')}><Icon name="object/conditions" /><span className="tree-label">工况</span></Link>
-      </>}
-      <div className="tree-group"><Icon name="calc/ampacity" />计算</div>
-      {studies.map(study => {
-        const module = rootModule(study.definition);
-        return <Link key={study.id} className="tree-row tree-leaf" {...at(study, module, studyEntryTab(module))} aria-current={study.id === activeStudy ? 'page' : undefined}>
-          <Icon name={CALC_ICONS[module] || 'object/study'} /><span className="tree-label" title={study.title}>{withinProject(study.title, name)}</span><RunDot workspace={study.workspace} study={study.id} />
-        </Link>;
-      })}
-      <button type="button" className="tree-row tree-leaf tree-add" onClick={onCreate}><Icon name="action/add" /><span className="tree-label">添加计算</span></button>
-      {current && <>
-        <div className="tree-group"><Icon name="object/delivery" />交付</div>
-        <Link className="tree-row tree-leaf" {...at(current, 'report', 'content')}><Icon name="result/report" /><span className="tree-label">计算书</span></Link>
-      </>}
-    </div>}
-  </div>;
 }

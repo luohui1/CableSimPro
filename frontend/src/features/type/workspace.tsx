@@ -65,10 +65,18 @@ export function TypeWorkspace() {
   const dockTabs = module?.id === 'structure' ? module.tabs.filter(([id]) => id === 'table' || id === 'quantities') : module?.tabs || [];
   const dockTab = module?.id === 'structure' ? (location.tab === 'quantities' ? 'quantities' : 'table') : activeTab;
   const groups: [string, string, string[]][] = [['结构', 'module/structure', ['structure']], ['要求', 'module/standard-check', ['requirements', 'standard-check']], ['分析', 'calc/electrical-params', ['electrical', 'short-circuit', 'rating-table', 'comparison']], ['交付', 'module/datasheet', ['specification']]];
-  const sidebar = <>{groups.map(([label, icon, ids]) => <div key={label} role="group" aria-label={label}>
-    <div className="tree-group"><Icon name={icon} />{label}</div>
-    {ids.map(id => { const item = typeModules.find(entry => entry.id === id)!; return <button key={id} type="button" className="tree-row tree-leaf" aria-current={location.module === id ? 'page' : undefined} onClick={() => go(id, id === 'structure' ? 'table' : item.tabs[0][0])}><Icon name={item.icon} /><span className="tree-label">{item.label}</span></button>; })}
-  </div>)}</>;
+  // 型号浏览器：侧栏右侧第二层。结构下列出型号里真实的电缆结构，其余为型号的设计与分析环节
+  const explorer = <nav className="project-explorer" aria-label="型号浏览器">
+    <header><span className="explorer-kicker"><Icon name="nav/cable-type" />型号</span><strong title={cleanLabel(document?.name || '')}>{cleanLabel(document?.name || '型号')}</strong></header>
+    {groups.map(([label, icon, ids]) => <section key={label} className="explorer-section" aria-label={label}>
+      <h3><Icon name={icon} />{label}</h3>
+      <div className="explorer-items">
+        {label === '结构' && document ? document.cable_types.map(item => <button key={item.id} type="button" className="explorer-item" aria-current={location.module === 'structure' && cable?.id === item.id ? 'page' : undefined} onClick={() => { setCableId(item.id); choose(null); go('structure', 'table'); }}>
+          <Icon name="object/cable" /><span><b>{cleanLabel(item.label)}</b><small>{item.cores.length} 芯 · {item.common_layers.length + item.cores.reduce((n, core) => n + core.layers.length + 1, 0)} 层</small></span>
+        </button>) : ids.map(id => { const item = typeModules.find(entry => entry.id === id)!; return <button key={id} type="button" className="explorer-item" aria-current={location.module === id ? 'page' : undefined} onClick={() => go(id, item.tabs[0][0])}><Icon name={item.icon} /><span>{item.label}</span></button>; })}
+      </div>
+    </section>)}
+  </nav>;
   const inspector = <div className="type-property-wrapper">
     {document && <section className="inspector-block" aria-label="型号">
       <header><Icon name="nav/cable-type" /><h2>型号</h2></header>
@@ -79,10 +87,10 @@ export function TypeWorkspace() {
   </div>;
   return <TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<><StatusMark kind={status} label={location.run ? state.workspace?.raw.historical ? '历史运行快照 · 只读' : '运行快照 · 只读' : status === 'locked' ? '已发布 · 只读' : undefined} />{demo && <SourceBadge kind="demo" detail="型号基准与部分物性来自系统演示版本；各字段来源独立保留。" />}</>}
     activeNavigation="型号" theme={location.theme} onTheme={onTheme} onUnavailable={name => setInfo(name + '入口尚未接入')}
-    sidebar={sidebar}
     actions={<><Button variant="ghost" size="compact" onClick={() => void state.undo()} disabled={state.busy || state.readOnly || !state.dirty && state.workspace?.raw.can_undo !== true}>撤销</Button>
       <Button variant="primary" size="compact" loading={state.busy} disabled={!state.dirty || state.readOnly || !state.workspace} onClick={() => void state.save()}>保存</Button></>}
     property={inspector}>
+    <div className="workbench-frame">{explorer}
     <div className="workbench" data-dock={dockMax ? 'max' : undefined}>
       <section className="workbench-canvas type-canvas" aria-label="电缆模型">
         <div className="workbench-views" role="group" aria-label="模型视图">
@@ -105,6 +113,7 @@ export function TypeWorkspace() {
                 : <TypeModulePage module={location.module} tab={location.tab} />}
         </div></TabsContent>
       </section>
+    </div>
     </div>
   </AppShell></Tabs></TypeInspectorContext.Provider>;
 }

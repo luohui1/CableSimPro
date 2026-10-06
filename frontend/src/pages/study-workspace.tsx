@@ -16,6 +16,8 @@ import { missingInputDestination, focusPreflightField } from "@/lib/missing-inpu
 import { StatusMark } from "@/components/status-mark";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { WorkbenchInspector } from "@/components/workbench-inspector";
+import { ProjectExplorer } from "@/components/project-explorer";
+import { CreateStudyDialog } from "@/components/create-study-dialog";
 import { StudyDrawing } from "@/components/study-drawing";
 import { conductorAnnotations } from "@/lib/result-annotations";
 import {
@@ -80,6 +82,7 @@ export function StudyWorkspace() {
   // 以曲线、场图为主的计算默认放大结果栏；选型、载流量默认模型与结果各半
   const plotFirst = (key: string) => ["sweep", "batch", "method-compare", "simulation", "hybrid", "thermal-field", "electrothermal", "transient"].includes(key);
   const [dockMax, setDockMax] = useState(plotFirst(module));
+  const [creating, setCreating] = useState(false);
   const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
   const [edit, setEdit] = useState(false);
   const [records, setRecords] = useState(false);
@@ -380,6 +383,8 @@ export function StudyWorkspace() {
             })
           }
         >
+          <div className="workbench-frame">
+          <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={context.domain} activeStudy={sid} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
           <div className={`workbench ${showCanvas ? "" : "workbench-no-canvas"}`} data-dock={dockMax ? "max" : undefined}>
           {showCanvas && (
             <section className="workbench-canvas" aria-label="模型">
@@ -550,6 +555,7 @@ export function StudyWorkspace() {
           </TabsContent>
           </section>
           </div>
+          </div>
         </AppShell>
       </Tabs>
       <Dialog
@@ -584,6 +590,7 @@ export function StudyWorkspace() {
           />
         </label>
       </Dialog>
+      <CreateStudyDialog open={creating} onOpenChange={setCreating} theme={theme} />
       <RunRecordsDrawer
         workspace={study.workspace}
         studyId={sid}

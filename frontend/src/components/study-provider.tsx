@@ -249,16 +249,17 @@ export function StudyProvider() {
     }
     return save();
   }, [draft, domainDraft, domainMutation, mutation, save, moduleInputs]);
+  // 模型（电缆、截面、工况）有未保存改动时，撤销/重做作用于模型；否则作用于研究配置的已保存版本
+  const modelEditing = domainHistory.past.length > 0 || domainHistory.future.length > 0 || !!domainDraft;
+  // 只有查看已过期的运行才视为固定只读；刚运行完的当前运行仍可继续编辑
+  const pinnedRun = !!search.run && (runs.data || []).find((item) => item.id === search.run)?.freshness !== "current";
   const undo = useCallback(async () => {
     if (writing.current) return;
-    if (search.run) {
+    if (pinnedRun) {
       setNotice("固定运行输入只读，请返回当前输入后撤销。");
       return;
     }
     if (
-      ["cable", "conditions", "section"].includes(
-        location.pathname.split("/")[3],
-      ) &&
       domainHistory.past.length
     ) {
       dispatchDomain({ type: "undo" });
@@ -268,11 +269,7 @@ export function StudyProvider() {
       setNotice("请先保存或放弃草稿，再撤销已保存版本。");
       return;
     }
-    if (
-      !["cable", "conditions", "section"].includes(
-        location.pathname.split("/")[3],
-      )
-    ) {
+    if (!modelEditing) {
       await restoreConfiguration("undo");
       return;
     }
@@ -288,6 +285,8 @@ export function StudyProvider() {
       setNotice(message(error));
     }
   }, [
+    modelEditing,
+    pinnedRun,
     draft,
     domainDraft,
     location.pathname,
@@ -302,15 +301,11 @@ export function StudyProvider() {
   ]);
   const redo = useCallback(async () => {
     if (writing.current) return;
-    if (search.run) {
+    if (pinnedRun) {
       setNotice("固定运行输入只读，请返回当前输入后重做。");
       return;
     }
-    if (
-      !["cable", "conditions", "section"].includes(
-        location.pathname.split("/")[3],
-      )
-    ) {
+    if (!modelEditing) {
       if (draft || domainDraft || Object.keys(moduleInputs).length) {
         setNotice("请先保存或放弃草稿，再重做已保存版本。");
         return;
@@ -338,6 +333,8 @@ export function StudyProvider() {
       setNotice(message(error));
     }
   }, [
+    modelEditing,
+    pinnedRun,
     draft,
     domainDraft,
     domainHistory.future.length,
@@ -556,16 +553,16 @@ export function StudyProvider() {
     undo,
     redo,
     canUndo:
-      !search.run && !restoring && !Object.keys(moduleInputs).length &&
+      !pinnedRun && !restoring && !Object.keys(moduleInputs).length &&
       !!(
-        ["cable", "conditions", "section"].includes(location.pathname.split("/")[3])
+        modelEditing
           ? domainHistory.past.length || (!domainDraft && !draft && workspace.data.can_undo)
           : !domainDraft && !draft && study.raw.can_undo
       ),
     canRedo:
-      !search.run && !restoring && !Object.keys(moduleInputs).length &&
+      !pinnedRun && !restoring && !Object.keys(moduleInputs).length &&
       !!(
-        ["cable", "conditions", "section"].includes(location.pathname.split("/")[3])
+        modelEditing
           ? domainHistory.future.length || (!domainDraft && !draft && workspace.data.can_redo)
           : !domainDraft && !draft && study.raw.can_redo
       ),

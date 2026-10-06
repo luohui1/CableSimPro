@@ -10,8 +10,8 @@ import { ConditionsInputs, DomainNumber, type InputSelection } from "./study-inp
 const scopeOf = (path: string) => path.startsWith("/cable_types") ? "cable" : path.startsWith("/load_cases") ? "conditions" : "section";
 
 /** 检查器的一节：图标 + 标题，内容紧随其后。 */
-function Block({ icon, title, aside, children }: { icon: string; title: string; aside?: ReactNode; children: ReactNode }) {
-  return <section className="inspector-block" aria-label={title}>
+function Block({ icon, title, aside, children, id }: { icon: string; title: string; aside?: ReactNode; children: ReactNode; id?: string }) {
+  return <section className="inspector-block" aria-label={title} id={id}>
     <header><Icon name={icon} /><h2>{title}</h2>{aside}</header>
     {children}
   </section>;
@@ -47,7 +47,7 @@ export function WorkbenchInspector({ document, historical, selection, candidate,
           : <Groups groups={selection.groups} />}
       </Block>
         : <Block icon="object/section" title="所选对象"><p className="inspector-empty">在截面中点选电缆、排管或土层，在这里修改尺寸与参数。</p></Block>}
-    {document && <Block icon="object/conditions" title="工况">
+    {document && <Block icon="object/conditions" title="工况" id="inspector-conditions">
       <div className="inspector-conditions"><ConditionsInputs document={document} historical={historical} tab="inputs" onSelect={() => {}} /></div>
     </Block>}
     <Block icon="nav/plugin" title="计算方法">
