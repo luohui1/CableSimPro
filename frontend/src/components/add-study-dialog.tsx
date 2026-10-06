@@ -1,0 +1,149 @@
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { api, ApiError, message, numeric, optionalRecord, record, responseData, text } from "@/api/client";
+import type { components } from "@/api/generated/schema";
+import { exactContract, inputContracts } from "@/api/input-contracts";
+import { methodCatalog, studyIndex, type StudyDefinition } from "@/api/research";
+import { displayName } from "@/lib/display-names";
+import { rootModule, studyEntryTab } from "@/lib/study-config";
+import { workspaceQuery } from "@/lib/study-queries";
+import { Icon } from "./icon";
+import { ErrorState, LoadingState } from "./states";
+import { Button } from "./ui/button";
+import { Dialog } from "./ui/dialog";
+import { Select } from "./ui/select";
+
+type Method = components["schemas"]["Method"];
+type Task = NonNullable<components["schemas"]["CreateStudy"]["task"]>;
+type Choice = { id: string; task: Task; method: Method; label: string; hpc: boolean };
+
+/** 载流量类任务按插件声明的输出判断；仿真任务由宿主的任务清单给出方法。 */
+const AMPACITY_TASKS: [Task, string, string, string][] = [
+  ["rating", "额定载流量", "calc/ampacity", "ampacity"],
+  ["operating", "运行温度", "calc/thermal-field", "conductor_temperature"],
+];
+
+/**
+ * 在当前工程里新建研究：工程模型（敷设截面、电缆、工况）原样带入，只选任务、方法和名称。
+ * 方法参数按“本工程同方法研究 → 引用型号的推荐值 → 方法契约默认值”的顺序沿用，并记录来源；
+ * 建好后在右侧“方法”页按分组修改。缺必填参数时宿主会拒绝，界面如实显示原因。
+ */
+export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, projectName }: {
+  open: boolean; onOpenChange: (open: boolean) => void; theme: "light" | "dark"; workspaceId: string; projectName: string;
+}) {
+  const navigate = useNavigate();
+  const queries = useQueryClient();
+  const [task, setTask] = useState<Task>("rating");
+  const [methodId, setMethodId] = useState("");
+  const [title, setTitle] = useState("");
+  const [error, setError] = useState("");
+  const workspace = useQuery({ ...workspaceQuery(workspaceId), enabled: open });
+  const methods = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal), enabled: open });
+  const studies = useQuery({ queryKey: ["study-index"], queryFn: ({ signal }) => studyIndex(signal), enabled: open });
+  const simulation = useQuery({
+    queryKey: ["study-tasks"],
+    queryFn: async () => {
+      const value = await responseData(api.GET("/api/study-tasks"));
+      if (!Array.isArray(value)) throw new ApiError(502, "仿真任务清单不完整");
+      return value.map((item) => record(item, "仿真任务"));
+    },
+    enabled: open,
+  });
+
+  const catalog = methods.data || [];
+  const hpcOf = (pluginId: string) => text(optionalRecord(catalog.find((item) => text(optionalRecord(item.method).plugin_id) === pluginId)?.execution_policy).backend) === "slurm";
+  const choices: Choice[] = [
+    ...AMPACITY_TASKS.flatMap(([value, , , output]) => catalog.flatMap((item) => {
+      const pin = optionalRecord(item.method);
+      return (Array.isArray(item.capabilities) ? item.capabilities : []).map(optionalRecord)
+        .filter((cap) => (Array.isArray(cap.outputs) ? cap.outputs : []).some((entry) => optionalRecord(entry).key === output) &&
+          cap.analysis !== "crosscheck" && cap.input_schema === "cablesim.domain/1" && pin.plugin_id !== "cablesim.hybrid-rating" && item.platform_supported !== false)
+        .map((cap) => ({
+          id: `${value}:${text(pin.plugin_id)}:${text(cap.id)}`, task: value,
+          method: { ...pin, capability: text(cap.id) } as Method,
+          label: `${text(item.name)} · ${text(cap.title).replace(/\s*[（(][^（）()]*[）)]\s*$/, "")} ${text(pin.version)}`,
+          hpc: hpcOf(text(pin.plugin_id)),
+        }));
+    })),
+    ...(simulation.data || []).map((item) => {
+      const pin = optionalRecord(item.method);
+      return { id: `${text(item.task)}:${text(pin.plugin_id)}:${text(pin.capability)}`, task: text(item.task) as Task, method: pin as Method,
+        label: `${text(catalog.find((entry) => text(optionalRecord(entry.method).plugin_id) === text(pin.plugin_id))?.name) || text(pin.plugin_id)} ${text(pin.version)}`, hpc: hpcOf(text(pin.plugin_id)) };
+    }),
+  ];
+  const tasks: [Task, string, string][] = [
+    ...AMPACITY_TASKS.filter(([value]) => choices.some((choice) => choice.task === value)).map(([value, label, icon]) => [value, label, icon] as [Task, string, string]),
+    ...(simulation.data || []).map((item) => [text(item.task) as Task, text(item.label), "nav/simulation"] as [Task, string, string]),
+  ];
+  const options = choices.filter((choice) => choice.task === task);
+  const chosen = options.find((choice) => choice.id === methodId) || options[0];
+
+  // 参数来源：本工程同方法的最近研究 → 引用型号的推荐方法参数 → 方法契约默认值
+  const same = (studies.data || []).filter((row) => row.workspace === workspaceId && chosen &&
+    row.definition.method?.plugin_id === chosen.method.plugin_id && row.definition.method?.capability === chosen.method.capability)
+    .sort((a, b) => b.updated.localeCompare(a.updated))[0];
+  const reference = optionalRecord(workspace.data?.study_cable_reference);
+  const recommended = chosen ? optionalRecord(optionalRecord(reference.method_defaults)[chosen.method.plugin_id]) : {};
+  const origin = same ? `沿用本工程研究「${same.title}」的方法参数` : Object.keys(recommended).length ? `采用引用型号 ${text(reference.name)} 的推荐方法参数` : "采用方法契约声明的默认值";
+
+  const create = useMutation({
+    retry: false,
+    mutationFn: async () => {
+      if (!title.trim()) throw new ApiError(422, "请填写研究名称");
+      if (!chosen) throw new ApiError(422, "所选任务没有可用方法");
+      const revision = numeric(workspace.data?.revision);
+      if (revision === null) throw new ApiError(409, "工程修订不可用，请刷新后重试");
+      let parameters: Record<string, unknown> = same ? structuredClone(optionalRecord(same.definition.parameters)) : { ...recommended };
+      if (!same && !Object.keys(recommended).length) {
+        const schema = optionalRecord(exactContract(await inputContracts(), chosen.method).parameter_schema);
+        parameters = Object.fromEntries(Object.entries(optionalRecord(schema.properties)).flatMap(([key, value]) => "default" in optionalRecord(value) ? [[key, optionalRecord(value).default]] : []));
+      }
+      const body: components["schemas"]["CreateStudy"] = {
+        title: title.trim(), task: chosen.task, expected_revision: revision, method: chosen.method, input_source: "domain",
+        parameters: parameters as components["schemas"]["CreateStudy"]["parameters"], driver: { kind: "single" },
+        input_sources: {
+          "/title": { kind: "user", reference: "工程师填写研究名称", reviewed: false },
+          "/parameters": { kind: "derived", reference: origin, reviewed: false },
+        },
+      };
+      const saved = record(await responseData(api.POST("/api/workspaces/{wid}/studies", { params: { path: { wid: workspaceId } }, body })), "新研究");
+      return { sid: text(saved.id), module: rootModule(body as unknown as StudyDefinition) };
+    },
+    onSuccess: async ({ sid, module }) => {
+      await Promise.all([queries.invalidateQueries({ queryKey: ["study-index"] }), queries.invalidateQueries({ queryKey: ["workspace", workspaceId] })]);
+      onOpenChange(false);
+      setTitle("");
+      await navigate({ to: "/studies/$sid/$module/$tab", params: { sid, module, tab: studyEntryTab(module) }, search: { workspace: workspaceId, theme, run: "", delivery: "", inspector: "method" } });
+    },
+    onError: (problem) => {
+      // 宿主按方法契约逐项拒绝缺失的必填参数；翻成中文并说明为什么没有默认值
+      const missing = [...message(problem).matchAll(/parameters\.([\w.]+)：Field required/g)].map((match) => displayName(match[1]));
+      setError(missing.length ? `该方法有必填参数没有默认值：${missing.join("、")}。本工程还没有同方法的研究可沿用，插件也未声明默认值，因此不能自动建立。` : message(problem));
+    },
+  });
+
+  const loading = workspace.isPending || methods.isPending || studies.isPending;
+  const failure = workspace.error || methods.error || studies.error;
+  return <Dialog open={open} onOpenChange={(value) => { if (!create.isPending) { onOpenChange(value); setError(""); } }}
+    title="新建研究" description={`在「${projectName}」中提出一个新问题；工程模型自动带入。`} initialFocus="form"
+    actions={<Button variant="primary" loading={create.isPending} disabled={loading || !!failure || !chosen} onClick={() => { setError(""); create.mutate(); }}>建立研究</Button>}>
+    {loading ? <LoadingState title="正在读取工程与方法" />
+      : failure ? <ErrorState description={message(failure)} />
+        : <form className="create-study-form add-study-form" onSubmit={(event) => { event.preventDefault(); setError(""); create.mutate(); }}>
+          <label className="text-field">研究名称<input value={title} maxLength={120} aria-invalid={!!error && !title.trim()} placeholder="如：排管段 · 夏季高温工况" onChange={(event) => setTitle(event.target.value)} /></label>
+          <fieldset className="task-choices">
+            <legend>要回答的问题</legend>
+            {tasks.map(([value, label, icon]) => <button key={value} type="button" aria-pressed={task === value} onClick={() => { setTask(value); setMethodId(""); setError(""); }}>
+              <Icon name={icon} /><span>{label}</span>
+            </button>)}
+            {simulation.isError && <p className="muted">仿真任务清单读取失败：{message(simulation.error)}</p>}
+          </fieldset>
+          {options.length > 1 ? <Select label="计算方法" value={chosen?.id} onChange={setMethodId} options={options.map((choice) => ({ value: choice.id, label: `${choice.label} · ${choice.hpc ? "超算" : "本机"}` }))} />
+            : chosen && <p className="add-study-method"><span className="muted">计算方法</span>{chosen.label} · {chosen.hpc ? "超算" : "本机"}</p>}
+          {chosen && <p className="muted">{origin}；建好后在右侧“方法”页修改。</p>}
+          {error && <p className="field-error" role="alert">{error}</p>}
+          <button type="submit" className="visually-hidden" tabIndex={-1} aria-hidden="true">建立研究</button>
+        </form>}
+  </Dialog>;
+}

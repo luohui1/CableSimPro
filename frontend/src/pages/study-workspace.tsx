@@ -17,7 +17,7 @@ import { StatusMark } from "@/components/status-mark";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { WorkbenchInspector } from "@/components/workbench-inspector";
 import { ProjectExplorer } from "@/components/project-explorer";
-import { CreateStudyDialog } from "@/components/create-study-dialog";
+import { AddStudyDialog } from "@/components/add-study-dialog";
 import { StudyDrawing } from "@/components/study-drawing";
 import { conductorAnnotations } from "@/lib/result-annotations";
 import { temperatureView } from "@/lib/temperature-view";
@@ -591,7 +591,7 @@ export function StudyWorkspace() {
           />
         </label>
       </Dialog>
-      <CreateStudyDialog open={creating} onOpenChange={setCreating} theme={theme} />
+      <AddStudyDialog open={creating} onOpenChange={setCreating} theme={theme} workspaceId={study.workspace} projectName={projectName} />
       <RunRecordsDrawer
         workspace={study.workspace}
         studyId={sid}

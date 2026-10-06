@@ -5,7 +5,7 @@ import { methodCatalog, studyIndex, studyRuns, typeIndex, workspaces, type Study
 import { message, optionalRecord, text } from "@/api/client";
 import { AppShell } from "@/components/app-shell";
 import { Conclusion } from "@/components/conclusion";
-import { CreateStudyDialog } from "@/components/create-study-dialog";
+import { AddStudyDialog } from "@/components/add-study-dialog";
 import { DataTable, type Column } from "@/components/data-table";
 import { Icon } from "@/components/icon";
 import { calculationKind, ProjectExplorer } from "@/components/project-explorer";
@@ -179,6 +179,6 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
         </div>
       </div>
     </AppShell>
-    <CreateStudyDialog open={creating} onOpenChange={setCreating} theme={theme} />
+    <AddStudyDialog open={creating} onOpenChange={setCreating} theme={theme} workspaceId={workspaceId} projectName={name} />
   </>;
 }
