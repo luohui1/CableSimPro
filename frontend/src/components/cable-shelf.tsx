@@ -34,7 +34,7 @@ export function CableShelf() {
   if (models.isError) return <p className="field-error">电缆型号读取失败</p>;
   if (!rows.length) return null;
   return <section className="cable-shelf" aria-label="电缆型号">
-    <header><h2>电缆型号</h2><span className="muted">{rows.length} 条 · 研究按版本引用</span></header>
+    <header><h2>电缆型号</h2><span className="muted">{rows.length} 条 · 计算按版本引用</span></header>
     <ul>
       {rows.map((row) => {
         const art = render(row.designation);
