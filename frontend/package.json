@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:workbench": "node scripts/isolated-e2e.mjs verify-workbench.mjs",
     "test:component-foundation": "node scripts/isolated-e2e.mjs verify-component-foundation.mjs",
     "test:version-status": "node scripts/isolated-e2e.mjs verify-version-status.mjs",
     "test:reproduction": "node scripts/isolated-e2e.mjs verify-reproduction.mjs",
