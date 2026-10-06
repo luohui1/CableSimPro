@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { methodCatalog, studyIndex, studyRuns, typeIndex, workspaces, type StudyRow } from "@/api/research";
@@ -49,6 +49,7 @@ function runStatus(run: Record<string, unknown> | undefined, stale: boolean): [S
  */
 export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme: Theme }) {
   const navigate = useNavigate();
+  useEffect(() => { window.document.documentElement.dataset.theme = theme; }, [theme]);
   const [creating, setCreating] = useState(false);
   const [view, setView] = useState<"section" | "cable">("section");
   const [chosen, setChosen] = useState("");
