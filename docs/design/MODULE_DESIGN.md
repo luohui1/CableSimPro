@@ -4,7 +4,7 @@
 日期：2026-09-26（0.3.1：§5.4、§5.5 按“宿主不内置算法”更新）  
 适用范围：承接 [系统总览](./SYSTEM_ARCHITECTURE.md)，作为模块接口和迁移评审依据；本文件不是已实现 API 文档。本轮根据宿主和 CableModelKit 的固定源码契约补充，不自动升级现有协议。
 
-**当前后端落点**：`backend/kernel/` 实现保存研究版本、工程档案、固定快照准入与事务外执行、幂等 Run、重启中断、完整性检查、比较与计算书；`backend/domain/` 实现领域子集和显式转换。实际请求模型见 `backend/kernel/contracts.py`，接口见 `router.py`，回归见 `tests/test_research.py`。§2 的固定提交观察保留为设计依据，不能当作当前实现状态；D4–D6 的范围与已接入界面的子集统一见[系统架构 §7.2](./SYSTEM_ARCHITECTURE.md)。
+**当前后端落点**：`backend/kernel/` 实现保存研究版本、工程档案、固定快照准入与事务外执行、幂等Run、重启中断、完整性检查、比较与计算书；`backend/domain/` 实现领域子集和显式转换；`backend/harness/` 实现§14原生任务控制与有界模型工具链。实际请求模型见`backend/kernel/contracts.py`、`backend/harness/contracts.py`，接口由正式main挂载。§2的固定提交观察保留为设计依据，不能当作当前实现状态；D4–D6的范围与已接入界面的子集统一见[系统架构 §7.2](./SYSTEM_ARCHITECTURE.md)。
 
 ## 1. 先用一个例子说明
 
@@ -618,6 +618,53 @@ SQLite WAL 官方约束是同一宿主访问，且同一时刻只有一个 write
 - 来源文本可能包含诱导内容。权限、版本、输入范围和审批由宿主代码决定，模型高把握也不能绕过。
 
 本轮不保证模型可固定版本、数据保留条款或服务可用性；正式接入前再核对供应商实际接口、计费和数据政策。通用 AI 分数不能升级为厂家数据核对或工程认证。
+
+## 14. 原生 Agent Harness
+
+本节吸收2026-10-06用户提供的原生Harness评审稿，作为M09的现行设计；评审稿PDF和其中的合成数值示例不入库，不另建平行设计文档。实施范围为阶段A及阶段B的本机快速闭环、预算和恢复对账基础。阶段C的CAD分析桥、阶段D的领域规程及有限元自动修复仍未实现。
+
+### 14.1 组件与事实所有权
+
+| 组件 | 当前职责 |
+| --- | --- |
+| `service.py` / `task_store.py` | 有界消息循环、任务/计划/步骤/追加事件，保持操作身份与人工等待状态 |
+| `context_builder.py` | 固定工程/研究身份、历史消息与工具观察；旧输入不冒充当前事实 |
+| `planner.py` / `model_port.py` | 模型只生成工具意图与解释；可替换模型端口，不赋予执行权限 |
+| `tool_registry.py` / `tool_broker.py` | 12项窄宿主工具及清单自动生成的能力工具；检查参数、修订、发行、预算和本机执行边界 |
+| `recipe_compiler.py` | 将一批工具意图编译为有限串行节点；不是通用脚本引擎，也没有领域规程库 |
+| `evidence.py` | 读取已有量值、工件状态与收敛证据；拒绝未见数值/单位；对账原运行，不制造数值验证 |
+| `providers/` | 环境配置的OpenAI兼容HTTP适配；后续提供方插件可替换此端口 |
+
+Workspace仍是唯一当前工程，Study/Run/工件和HPC预算仍属既有服务。Task只保存引用、用户/模型消息、候选编辑和有界观察；不复制一份可编辑领域模型或完整网格。插件工具的名称、中文说明和参数schema由当前封签清单生成；模型schema只移除展示排序/依据长文本、只读宿主字段及未引用定义，保留验证约束和SI单位说明。实际模型注册表由`GET /api/agent/tools`提供，具体schema由`/api/agent/contract`提供。
+
+### 14.2 任务、节点与四张增量表
+
+AgentTask：`created/planning/running/waiting/reviewing/completed/blocked/failed/cancelled`；等待原因独立为`missing_input/scope_confirmation/external_job/capability/budget/human_review`。PlanNode：`pending/issued/running/succeeded/failed/unknown/cancelled`。这些状态不替代Run/Slurm状态，完成一次读取失败运行的节点不表示求解成功。
+
+| 表 | 保存内容 |
+| --- | --- |
+| `agent_tasks` | 会话绑定工程/研究修订、任务状态与等待原因、当前计划修订、执行所有者、累计模型/工具预算 |
+| `agent_plan_revisions` | 不可变有限节点计划或候选方案、内容摘要；方案ID只用于索引，不新增工程副本 |
+| `agent_steps` | `task_id + plan_revision + node_id + attempt`、操作UUID、参数摘要、输入身份、状态、有界结果及现有study/run引用 |
+| `agent_events` | 只追加的消息、模型请求/用量、工具意图与观察、人工决定、等待与对账事件 |
+
+先提交动作意图，再调用应用服务；同一操作身份不能绑定不同参数。网络重试不赋予再次计算权限。启动将旧所有者未完成步骤标为unknown，恢复先读取原Run及其完整性；未知临时预览没有可恢复原件，保持等待，不重复执行。该机制不声称跨数据库/SSH/Slurm普遍exactly-once。停止模型流也不表示远端作业已取消。
+
+### 14.3 权限、保存与预算
+
+公共工具结果包含`status/artifact_refs/diagnostics/next_actions/execution_ref`，诊断含稳定code、路径、可修复标志及证据引用。正式运行、HPC、任意HTTP/shell/SSH、批准、发布和外发不向模型开放。未绑定研究时，插件能力工具可以生成新建研究方案；已绑定研究时，只允许当前方法声明的本机快速预览。非快速或远程能力返回人工确认诊断，不隐式换成本机求解。
+
+领域方案只改明确标量字段，按稳定对象身份定位；参数方案按封签schema验证，机器来源正文不可改。人看到的before/after使用工作台单位（温度°C、长度m），内部候选仍是SI。批准入口重新检查修订、锁、方案摘要、有效期和方法封签，借用同一个短事务调用普通`save_domain`或`Research.save`，把保存与人工决定回执原子提交。批准重放不会再次保存；409保留方案。人工批准输入不等于工程结果批准，来源不会自动变为已核对。人工确认后任务显式采用新的上下文修订，旧计划和观察不改写。
+
+默认每会话最多12次工具调用、8次模型请求、32步、120秒累计模型/工具时间、262144个提供方报告token，创建后30分钟截止；同一工具/参数/错误签名最多两次。模型请求有30秒上限，预览同时受插件超时和剩余预算约束。等待人工的空闲时间不计累计执行时间，但不延长截止时间。提供方未报告用量或请求中断时，审计标记用量不完整；显示累计已报告token，不把未知消耗说成零。正式HPC预算没有在Harness复制或自动放宽。
+
+### 14.4 模型、证据与实施边界
+
+仅从`CABLESIM_LLM_BASE_URL/CABLESIM_LLM_MODEL/CABLESIM_LLM_API_KEY`读取模型配置；当前用户选定deepseek-flash，提供方可替换。未配置明确返回`LLM_NOT_CONFIGURED`，不会请求服务。密钥不进入仓库、数据库、审计、日志或错误正文；传输错误不回显提供方响应正文。参数与文本持久化前还排除凭据字段和当前密钥。
+
+模型解释中的数值/单位须与工具返回的结果或输入字段相符；推荐与载流量结论额外匹配相应结果身份。此检查不将自然语言语义判断升级为物理校核。完整性、适用性、数值收敛和工程批准分开展示，未取得的检查为unknown，不能折算为pass。CAD分析资格本轮明确unknown；有限元工具仅读取既有检查并等待人工正式执行，不提供新求解器、网格修复或放宽阈值。
+
+接口与SSE字段维护在[正式宿主接口](../architecture/host-inputs.md#agent-会话与工具接口)，请求/响应及节点/事件JSON Schema由正式OpenAPI和`/api/agent/contract`生成。`tests/test_harness.py`通过本地OpenAI兼容假服务验证工具链、纠错、方案与人工决定、预算、凭据排除和未知步骤恢复；真实模型冒烟仅在配置密钥时运行，默认跳过。
 
 ## 参考原文与范围
 

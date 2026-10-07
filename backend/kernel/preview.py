@@ -10,7 +10,7 @@ from backend.domain.models import DomainDocument
 from .workspace import fingerprint
 
 
-def preview(research, wid, sid, body):
+def preview(research, wid, sid, body, *, max_timeout_s=None):
     started = perf_counter()
     with research.store.db() as db:
         row, state = research.store.load(db, wid, body.expected_revision, allow_domain=True)
@@ -41,8 +41,11 @@ def preview(research, wid, sid, body):
     research.bind_loss_artifact(wid, case)
     research.bind_native_artifact(wid, case)
     local = getattr(research.executor, 'local', research.executor)
+    timeout_s=capability.preview_timeout_s if max_timeout_s is None else min(capability.preview_timeout_s,max_timeout_s)
+    if timeout_s<=0:
+        raise HTTPException(429,{'code':'BUDGET_EXCEEDED','message':'快速预览已无剩余时间预算。'})
     result = local.run(plugin.manifest.id, capability.id, [case],
-                       timeout_s=capability.preview_timeout_s, expected_manifest=plugin.manifest)
+                       timeout_s=timeout_s, expected_manifest=plugin.manifest)
     cases = [asdict(value) for value in result.cases]
     statuses = {value['status'] for value in cases}
     snapshot = {'cases': [case], 'definition': definition,

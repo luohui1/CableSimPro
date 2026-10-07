@@ -165,6 +165,19 @@ class RunPage(PublicResponse):
     next_cursor: int | None
 
 
+class RunDetailResponse(RunResponse):
+    snapshot_view: Literal['inputs-on-demand'] = Field(description='Response projection only. Each snapshot case has input_ref instead of input; input_digest still identifies the full stored snapshot, which was verified before projection. Use view=full for the unchanged complete response.')
+
+
+class RunCaseInput(PublicResponse):
+    run_id: UUID
+    case_id: str
+    input: dict[str, JsonValue] = Field(description='Exact immutable accepted case input, never the current workspace.')
+    input_digest: str = Field(description='Canonical SHA256 of this case input.')
+    run_input_digest: str = Field(description='Canonical SHA256 of the full accepted run snapshot.')
+    integrity: Literal['verified']
+
+
 class RunSummarySnapshot(BaseModel):
     module: str | None = Field(description='Saved selected module; null means the root study configuration.')
 

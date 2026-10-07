@@ -14,6 +14,7 @@ from uuid import uuid4
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
 from threading import RLock
+from contextlib import nullcontext
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -182,11 +183,11 @@ class Research:
         return {**dict(row), **state(db,sid), 'definition': definition, 'created': version['created'],
                 'lock': self.lock(db, wid, revision, definition['method'])}
 
-    def save(self, wid, body, sid=None):
+    def save(self, wid, body, sid=None, *, connection=None):
         definition = StudyDefinition.model_validate(body.model_dump(exclude={'expected_revision', 'expected_study_revision'}))
         prior = None
         if sid is not None:
-            with self.store.db() as db:
+            with (nullcontext(connection) if connection is not None else self.store.db()) as db:
                 prior = StudyDefinition.model_validate(self.definition(db,wid,sid,body.expected_study_revision)['definition'])
         def verify_changed(config, previous):
             if previous is not None and config.model_dump()==previous.model_dump():
@@ -226,7 +227,7 @@ class Research:
             verify_changed(config,prior.modules.get(name) if prior else None)
         value = definition.model_dump(mode='json')
         encoded = encode(value)
-        with self.store.db(True) as db:
+        with (nullcontext(connection) if connection is not None else self.store.db(True)) as db:
             self.store.load(db, wid, body.expected_revision, allow_domain=True)
             self.store.assert_mutable(db, wid)
             if sid is None:

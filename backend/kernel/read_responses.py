@@ -80,7 +80,7 @@ class ReadResponses:
                     identities.append(('study', row['id'], row['revision'], fingerprint(row['definition'])))
         return tuple(identities)
 
-    def build(self, key, model, load, uses_database):
+    def build(self, key, model, load, uses_database, *, exclude_unset=False):
         with self.lock:
             self.initialize(uses_database)
             before = self.generation(uses_database)
@@ -91,7 +91,7 @@ class ReadResponses:
         value = load()
         adapter = TypeAdapter(model) if not isinstance(value, bytes) else None
         payload = value if isinstance(value, bytes) else adapter.dump_json(
-            adapter.validate_python(value), by_alias=True)
+            adapter.validate_python(value), by_alias=True, exclude_unset=exclude_unset)
         identity = self.input_identity(value)
         with self.lock:
             after = self.generation(uses_database)
@@ -115,9 +115,9 @@ class ReadResponses:
             self.entries.clear();self.bytes = 0
 
 
-async def read_response(research, key, model, load, *, uses_database=True):
+async def read_response(research, key, model, load, *, uses_database=True, exclude_unset=False):
     cache = research.read_responses
     payload = cache.get(key, uses_database)
     if payload is None:
-        payload = await run_in_threadpool(cache.build, key, model, load, uses_database)
+        payload = await run_in_threadpool(cache.build, key, model, load, uses_database, exclude_unset=exclude_unset)
     return Response(payload, media_type='application/json')

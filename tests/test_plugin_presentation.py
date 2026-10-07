@@ -115,7 +115,7 @@ def test_explicit_upgrade_normalizes_saved_si_without_rewriting_run(client):
     definition=response.json()['definition']
     assert definition['method']['version']=='1.0.0'
     assert definition['parameters']['duct']==pytest.approx({'u':1.87,'v_per_m':10,'y_per_m_k':.6,'initial_mean_air_temperature_k':293.15})
-    saved=client.get(root+'/runs/'+run['id']).json()
+    saved=client.get(root+'/runs/'+run['id']+'?view=full').json()
     assert saved['snapshot']==run['snapshot'] and saved['output']==run['output']
 
 

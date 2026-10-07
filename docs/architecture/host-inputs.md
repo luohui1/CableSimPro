@@ -27,7 +27,11 @@
 
 ### 列表投影与输入契约缓存
 
-`GET /api/workspaces/{wid}/studies/{sid}/runs?view=summary` 返回 `RunSummaryPage`，保持既有 `after/limit/next_cursor` 分页。每项只有 `id/workspace/study/sequence/status/created/finished/freshness/integrity/version_status`、`snapshot.module`、保存的方法四项身份 `method`，以及至多512字符的运行级 `error.code/message`；没有 `output`、完整快照和数值工件。错误详情、物理结果与工件仍从 `GET .../runs/{rid}` 获取。省略 `view` 或传 `view=full` 保持原来的完整 `RunPage`；非法模式返回422。
+`GET /api/workspaces/{wid}/studies/{sid}/runs?view=summary` 返回 `RunSummaryPage`，保持既有 `after/limit/next_cursor` 分页。每项包含 `id/workspace/study/sequence/status/created/finished/freshness/integrity/version_status`、`snapshot.module`、保存的方法四项身份 `method`、至多512字符的运行级 `error.code/message`及至多三个`headlines`；没有`output`、完整快照或网格。`headlines`从同工况已校验见证工件投影，含SI值、显示值与单位、实体、工况和来源摘要，不填默认数值。single沿用能力声明；selection只取与选型结论一致的推荐候选和工况，没有推荐则为空；sweep/batch/crosscheck返回空，不跨样本聚合。前端可对single和selection显示研究答案。运行列表省略view或传view=full仍保持完整RunPage。
+
+`GET .../runs/{rid}`默认`view=detail`，完整校验保存的snapshot/output后，省略`snapshot.cases[*].input`，改为`input_ref{url,sha256}`并标记`snapshot_view=inputs-on-demand`。返回的input_digest始终是原完整快照摘要，不是裁剪投影的摘要；数据库原件、报告、比较、历史回放及内部Research.get_run保持完整语义。`view=full`返回原完整RunResponse，不增加投影字段。非法view返回422。
+
+`GET .../runs/{rid}/cases/{case_id}/input`按固定快照工况读取原输入，返回`run_id/case_id/input/input_digest/run_input_digest/integrity=verified`；case的input_digest与input_ref.sha256相同。归属错误或没有工况为404，原快照或输出完整性失败为409；不拿当前领域文档替代历史输入。详情和按工况输入复用现有已验证响应缓存，数据库提交、源码/封签变化仍使缓存失效；这是读取投影，不是运行数据迁移。
 
 研究列表及单个研究新增只读 `workspace_revision`、`model_reference{id,name,version,content_sha256}`。引用身份来自当前保存的 `study_cable_reference` 或 `type_origin_reference`，没有版本绑定时可显示本地域文档首个电缆的真实ID和标签，此时version/digest为空；独立 `input_source=study` 返回null，不冒用工程型号。前端可直接显示这些字段，减少为一个型号名称请求完整工程快照。研究读取不再为取得 `version_status` 调用完整运行/工件展示校验。
 
@@ -74,3 +78,48 @@
 回归：`tests/test_version_refresh.py`覆盖版本差异、空状态、重新执行及幂等、409、失败预检、断网重试、型号升级保留敷设/负荷、仅选published型号、历史工件不变和规格书封面。
 
 验证见 `tests/test_host_api.py`、`tests/test_simulation_study_tasks.py`；原生流程见 `plugin-tests/test_simulation_study_workflow.py`，求解只经 Slurm 执行。浏览器契约流程：独立验收数据库启动正式宿主后，设置 `E2E_ISOLATED=1`、`HOST_API_URL` 并执行 `node tests/browser/host-workflow.mjs`。该脚本经隔离的 Edge --headless=new / CDP 创建研究、预检、运行、重复提交、轮询、交付和实际下载，核验两种桌面宽度下保存计算书的横向溢出；结束关闭所有自有标签页并删除浏览器配置。它验证浏览器网络和下载流程，不是新前端页面操作次数或工程师耗时。
+
+## Agent 会话与工具接口
+
+正式后端注册`backend/harness/`，前端既有`agent-api.ts`无需另换端点。M09架构、状态、持久意图、权限和恢复边界统一见[模块设计 §14](../design/MODULE_DESIGN.md#14-原生-agent-harness)。配置只读宿主环境中的`CABLESIM_LLM_BASE_URL`、`CABLESIM_LLM_MODEL`、`CABLESIM_LLM_API_KEY`（任一 OpenAI 兼容地址与模型名，由部署方设置）。没有密钥或完整配置时configured=false；工具查询仍可用，消息返回明确错误，不产生模型调用。
+
+| 接口 | 请求/结果 |
+| --- | --- |
+| GET `/api/agent/status` | `{configured,model,tools}`；model未配置时展示deepseek-flash，tools为实际注册数量 |
+| GET `/api/agent/tools` | `[{name,title,kind,description,plugin_id?,hpc}]`；kind为read/propose/run，宿主工具不带plugin_id |
+| POST `/api/agent/sessions` | `{workspace_id,study_id:null或UUID}` → `{id}`；校验工程与研究归属，记录固定修订及本机快速执行授权 |
+| POST `/api/agent/sessions/{id}/messages` | `{content}` → `text/event-stream`；每会话同时只处理一条消息，冲突409 |
+| GET `/api/agent/sessions/{id}` | 绑定、任务状态/等待原因、预算、消息、工具调用/结果摘要、方案、计划、步骤、按序审计事件 |
+| POST `/api/agent/proposals/{id}/approve` | 无正文；人工批准后普通保存，返回`{status:approved}`；修订/锁/封签/有效期冲突409中文原因 |
+| POST `/api/agent/proposals/{id}/reject` | 无正文；`{status:rejected}`，不改工程或研究；同决定重放幂等，反向决定409 |
+| POST `/api/agent/sessions/{id}/reconcile` | 无正文；查询原Run，返回`{resolved,unknown,reissued:false}`；不重新执行未知预览或提交作业 |
+| GET `/api/agent/contract` | 生成的事件、节点和实际模型工具参数JSON Schema；SSE事件schema也写入OpenAPI的x-sse-events |
+
+当前12个宿主工具为workspace_list/read、study_list/read、run_list/read、plugin_inspect、cable_model_read、propose_domain_changes、propose_method_parameters、study_preflight、study_preview。另从51个已安装能力生成工具，总计63。插件工具未绑定研究时只生成新建研究方案，批准后只保存Study；绑定研究时必须与该研究的准确方法一致，只有preview且非远程能力可本机试算。原生或HPC预检需要人工执行，不通过LLM触发远程作业。
+
+SSE每个事件恰为`event: 类型`与`data: 单行JSON`，空行分隔；中文JSON保留字符，字符串内换行转义。事件data字段：
+
+```text
+message.delta    {text}
+tool.call        {id,tool,title,arguments}
+tool.result      {id,status:"ok"|"error",summary,next_actions}
+proposal.created {id,title,changes:[{path,label,before,after,unit}],checks}
+error            {code,message}
+done             {usage:{prompt_tokens,completion_tokens}}
+```
+
+示例（说明用ID，数值为候选输入而非计算结果）：
+
+```text
+event: proposal.created
+data: {"id":"方案UUID","title":"调整地表温度","changes":[{"path":"/sections/section~1s1/medium/surface_temperature","label":"地表温度","before":25,"after":30,"unit":"°C"}],"checks":["领域结构与锁校验通过；等待人工批准。"]}
+
+event: done
+data: {"usage":{"prompt_tokens":120,"completion_tokens":20}}
+```
+
+批准后内部温度以K保存；长度变更以m显示和保存，截面按声明显示mm²、存m²。方法参数单位来自封签元数据，不按后缀猜。修改只读来源、批准自己、调用任意命令、隐藏正式执行均被broker拒绝。常见流错误为LLM_NOT_CONFIGURED、LLM_AUTH_FAILED、LLM_TIMEOUT、BUDGET_EXCEEDED、UNKNOWN_OPERATION、REPAIR_LIMIT_EXCEEDED、UNGROUNDED_NUMBER/QUANTITY；工具错误先形成结构化公共结果回给模型，保留字段定位和下一步。
+
+每次模型请求记录模型名、消息/工具契约摘要、时间与报告用量；每次工具调用保存意图身份、参数、输入身份、有界结果、耗时及执行引用。会话可按事件和不可变计划回放，不意味着重新调用模型得到同样输出。`budget.usage_reported_only=true`；提供方未返回用量时usage_complete=false，done仅为累计已报告token。预览摘要可留在任务审计中，但没有正式Run或可交付原件。恢复不能确认的原预览保持unknown，绝不伪造成功。
+
+验证见`tests/test_harness.py`，使用本地OpenAI兼容假HTTP服务，不请求真实模型；真实提供方冒烟仅在设置CABLESIM_LLM_API_KEY时启用，交由真实环境联调。CAD分析资格、有限元自动修复及通用HPC授权执行不在本轮实现范围。

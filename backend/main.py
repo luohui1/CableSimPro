@@ -75,6 +75,9 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     from .kernel.datasheets import Documents, make_router as documents_router
     documents = Documents(workspace_store)
     owner = OwnerLock(workspace_store.path)
+    from .harness.service import Harness
+    from .harness.router import make_router as agent_router
+    harness=Harness(research)
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
@@ -89,6 +92,7 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             from .kernel.candidates import initialize
             with workspace_store.db(True) as db:
                 initialize(db)
+            harness.initialize()
             research.warm_reads()
             yield
         finally:
@@ -115,11 +119,13 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(scenario_router(workspace_store,research))
     app.include_router(requirements_router(research))
     app.include_router(rating_table_router(research))
+    app.include_router(agent_router(harness))
     app.state.types, app.state.assets = types, assets
     app.state.research, app.state.batches = research, batches
     app.state.previews = previews
     app.state.workspace_store = workspace_store
     app.state.documents = documents
+    app.state.harness = harness
 
     @app.exception_handler(PluginHostError)
     async def method_error(request, exc):

@@ -1,5 +1,6 @@
 """Explicit conversion and one current domain document per workspace."""
 from fastapi import APIRouter, HTTPException
+from contextlib import nullcontext
 
 from ..kernel.workspace import Revision
 from .guards import describe_locks, validate_lock
@@ -9,6 +10,19 @@ from .editing import DraftDomainDocument, resolve_edit
 
 class SaveDomain(Revision):
     document: DraftDomainDocument
+
+
+def save_domain(store,wid,body,connection=None):
+    """One ordinary save path, also usable in an atomic human proposal decision."""
+    with (nullcontext(connection) if connection is not None else store.db(True)) as db:
+        row,state=store.load(db,wid,body.expected_revision,allow_domain=True)
+        if 'domain' not in state:
+            raise HTTPException(409,'请先显式转换工程。')
+        state['domain']=resolve_edit(state,body.document)
+        store.commit(db,row,state,'保存领域文档')
+        saved=store.snapshot(wid,db)
+        return {'revision':saved['revision'],'document':saved['domain'],
+                'conversion':saved.get('domain_conversion'),'locks':describe_locks(saved)}
 
 
 def make_router(store):
@@ -42,13 +56,6 @@ def make_router(store):
 
     @router.put('/{wid}/domain')
     def save(wid: str, body: SaveDomain):
-        with store.db(True) as db:
-            row, state = store.load(db, wid, body.expected_revision, allow_domain=True)
-            if 'domain' not in state:
-                raise HTTPException(409, '请先显式转换工程。')
-            document = resolve_edit(state, body.document)
-            state['domain'] = document
-            store.commit(db, row, state, '保存领域文档')
-        return get(wid)
+        return save_domain(store,wid,body)
 
     return router

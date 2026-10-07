@@ -195,3 +195,58 @@ def test_method_catalog_is_reused_and_does_not_block_database_reads(client):
     root = f"/api/workspaces/{w['id']}/studies/{s['id']}"
     assert client.get(root).status_code == 200
     assert client.get(root + '/runs?view=summary').status_code == 200
+
+
+def test_headlines_follow_the_recommended_candidate_and_driver_condition():
+    from backend.kernel.headlines import project
+    unit = {'si':'A','display':'A','scale':1,'offset':0}
+    driver = {'kind':'selection','target_key':'ampacity','target_unit':'A','target_entity':'circuit/c1',
+              'target_entities':[],'rating_basis':'simultaneous','candidate_ids':['a','b']}
+    snapshot = {'definition':{'driver':driver},'headline_contract':[{
+        'key':'ampacity','title':'允许电流','unit':unit,'aggregate':'minimum','condition':'rating',
+        'artifact':'x-cablesim.headline-witness','source_artifact':'x-cablesim.iec60287-trace'}],
+        'candidate_snapshots':[{'state':'engineering_input','digest':str(i)*64,
+            'payload':{'name':str(i),'cable_type':{'cores':[{'conductor':{'nominal_area':area}}]}}}
+            for i,area in enumerate((.00015,.00024))]}
+    cases = [{'case_id':f'case-{i}','status':'succeeded','artifact_digests':{'x-cablesim.headline-witness':str(i)*64},
+        'artifacts':{'x-cablesim.headline-witness':{'quantities':[{'key':'ampacity','value':value,'unit':'A',
+            'entity':'circuit/c1','condition':'rating-simultaneous','artifact_type':'x-cablesim.iec60287-trace',
+            'artifact_sha256':str(i)*64}]}}} for i,value in enumerate((212.9,406.1))]
+    output = {'cases':cases,'assessment':[
+        {'case_id':'case-0','value':212.9,'status':'not_satisfied','margin':-87.1,'rating_basis':'simultaneous'},
+        {'case_id':'case-1','value':406.1,'status':'satisfied','margin':106.1,'rating_basis':'simultaneous'}]}
+    statuses = {case['case_id']:{'x-cablesim.headline-witness':{'status':'verified'}} for case in cases}
+    answer = project(snapshot,output,statuses)
+    assert len(answer)==1 and answer[0]['value']==406.1 and answer[0]['case_id']=='case-1'
+    assert answer[0]['condition']=='rating-simultaneous'
+    for kind in ('sweep','batch','crosscheck'):
+        snapshot['definition']['driver']={**driver,'kind':kind}
+        assert project(snapshot,output,statuses)==[]
+    snapshot['definition']['driver']=driver
+    output['assessment'][1]['status']='not_satisfied'
+    assert project(snapshot,output,statuses)==[]
+
+
+def test_run_detail_reads_inputs_on_demand_without_rewriting_evidence(client):
+    w,s=study(client)
+    root,body=request(client,w,s)
+    original=client.post(root+'/runs',json=body).json()
+    url=root+'/runs/'+original['id']
+    response=client.get(url)
+    assert response.status_code==200,response.text
+    detail=response.json()
+    assert detail['snapshot_view']=='inputs-on-demand'
+    case=detail['snapshot']['cases'][0]
+    assert 'input' not in case and detail['input_digest']==original['input_digest']
+    assert client.get(url+'?view=full').json()==original
+    saved=client.get(case['input_ref']['url']).json()
+    assert saved['input']==original['snapshot']['cases'][0]['input']
+    assert saved['input_digest']==case['input_ref']['sha256']
+    assert saved['run_input_digest']==original['input_digest']
+    assert client.get(url+'/cases/missing/input').status_code==404
+    with client.app.state.workspace_store.db(True) as db:
+        snapshot=deepcopy(original['snapshot'])
+        snapshot['cases'][0]['input']['name']='篡改后的输入'
+        db.execute('UPDATE study_runs SET snapshot=? WHERE id=?',(json.dumps(snapshot),original['id']))
+    assert client.get(url).json()['integrity']=='corrupt'
+    assert client.get(case['input_ref']['url']).status_code==409

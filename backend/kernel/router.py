@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Query, Response
 from typing import Literal
 from .study_tasks import task_catalog
-from .responses import StudyResponse, RunResponse, RunPage, RunSummaryPage, PreflightResponse, TaskOption
+from .responses import StudyResponse, RunResponse, RunDetailResponse, RunCaseInput, RunPage, RunSummaryPage, PreflightResponse, TaskOption
 
 from .contracts import Comparison, CreateStudy, DeliveryRequest, RunStudy, UpdateStudy, RecalculateStudy, PreviewStudy, UpgradeStudyMethods
 from .study_history import StudyHistoryRequest, restore
@@ -133,12 +133,19 @@ def make_router(research):
                 lambda: research.list_runs(wid,sid,after,limit,view='summary'))
         return await run_in_threadpool(research.list_runs, wid, sid, after, limit)
 
-    @router.get('/workspaces/{wid}/studies/{sid}/runs/{rid}', response_model=RunResponse, response_model_exclude_unset=True)
-    def run(wid: str, sid: str, rid: str):
-        value = research.get_run(wid, rid)
-        if value['study'] != sid:
-            raise HTTPException(404, '运行不属于此研究。')
-        return value
+    @router.get('/workspaces/{wid}/studies/{sid}/runs/{rid}', response_model=RunResponse | RunDetailResponse, response_model_exclude_unset=True)
+    async def run(wid: str, sid: str, rid: str,
+                  view: Literal['detail', 'full'] = Query('detail', description='detail omits snapshot.cases[*].input and supplies immutable input references. full returns the original complete snapshot. Both validate the original stored input and output before projecting.')):
+        from .run_details import detail
+        model = RunResponse if view == 'full' else RunDetailResponse
+        return await read_response(research, ('run-detail',wid,sid,rid,view), model,
+            lambda: detail(research,wid,sid,rid,view), exclude_unset=True)
+
+    @router.get('/workspaces/{wid}/studies/{sid}/runs/{rid}/cases/{case_id}/input', response_model=RunCaseInput)
+    async def run_case_input(wid: str, sid: str, rid: str, case_id: str):
+        from .run_details import case_input
+        return await read_response(research, ('run-input',wid,sid,rid,case_id), RunCaseInput,
+            lambda: case_input(research,wid,sid,rid,case_id))
 
     @router.post('/workspaces/{wid}/studies/{sid}/runs/{rid}/resume')
     def resume(wid:str,sid:str,rid:str):

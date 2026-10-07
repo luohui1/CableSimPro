@@ -1,0 +1,115 @@
+"""Environment-only OpenAI-compatible transport, with bounded response and tool calls."""
+import json
+import os
+from time import perf_counter
+from urllib.parse import urlsplit
+
+import httpx
+
+from ..model_port import ModelError, ModelReply
+from ..security import redact
+
+
+class OpenAICompatibleProvider:
+    MAX_RESPONSE_BYTES = 512*1024
+    MAX_ARGUMENT_BYTES = 32*1024
+
+    def status(self):
+        model = os.environ.get('CABLESIM_LLM_MODEL','').strip() or 'deepseek-flash'
+        configured = bool(os.environ.get('CABLESIM_LLM_API_KEY','').strip()
+            and os.environ.get('CABLESIM_LLM_BASE_URL','').strip()
+            and os.environ.get('CABLESIM_LLM_MODEL','').strip())
+        return configured,redact(model)
+
+    def reply(self,messages,tools,timeout_s):
+        configured,model = self.status()
+        if not configured:
+            raise ModelError('LLM_NOT_CONFIGURED','模型未配置；请在宿主环境中配置模型地址、模型名与密钥。')
+        base = os.environ.get('CABLESIM_LLM_BASE_URL','').strip()
+        key = os.environ.get('CABLESIM_LLM_API_KEY','').strip()
+        parsed=urlsplit(base)
+        if parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or len(model)>100:
+            raise ModelError('LLM_CONFIGURATION_INVALID','模型环境配置不合法；地址须为无凭据、查询串或片段的 HTTP(S) API 基址。')
+        if timeout_s<=0:raise ModelError('BUDGET_EXCEEDED','模型请求已无剩余时间预算。')
+        body={'model':model,'messages':messages,'tools':tools,'tool_choice':'auto',
+            'parallel_tool_calls':False,'stream':True,'stream_options':{'include_usage':True},'max_tokens':2048}
+        # No endpoint, header or credential enters model messages or audit payloads.
+        started=perf_counter()
+        chunks,calls,usage,finish=[],{}, {},None
+        received=0
+        try:
+            timeout=httpx.Timeout(timeout_s,connect=min(5.,timeout_s))
+            with httpx.Client(timeout=timeout,follow_redirects=False) as client:
+                with client.stream('POST',base.rstrip('/')+'/chat/completions',
+                    headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'},json=body) as response:
+                    if response.status_code!=200:
+                        code='LLM_AUTH_FAILED' if response.status_code in (401,403) else 'LLM_PROVIDER_ERROR'
+                        raise ModelError(code,'模型服务认证失败。' if code=='LLM_AUTH_FAILED' else '模型服务拒绝了请求，请核对模型配置或稍后重试。')
+                    if 'text/event-stream' not in response.headers.get('content-type',''):
+                        raw=b''
+                        for part in response.iter_bytes():
+                            raw+=part
+                            if len(raw)>self.MAX_RESPONSE_BYTES:raise ModelError('LLM_RESPONSE_TOO_LARGE','模型响应超过大小上限。')
+                            if perf_counter()-started>timeout_s:raise ModelError('LLM_TIMEOUT','模型请求超过剩余时间预算。')
+                        return self.parse_response(json.loads(raw))
+                    for line in response.iter_lines():
+                        received+=len(line.encode('utf-8'))
+                        if received>self.MAX_RESPONSE_BYTES:raise ModelError('LLM_RESPONSE_TOO_LARGE','模型响应超过大小上限。')
+                        if perf_counter()-started>timeout_s:raise ModelError('LLM_TIMEOUT','模型请求超过剩余时间预算。')
+                        if not line.startswith('data:'):continue
+                        raw=line[5:].strip()
+                        if raw=='[DONE]':break
+                        if not raw:continue
+                        data=json.loads(raw)
+                        if data.get('error'):raise ModelError('LLM_PROVIDER_ERROR','模型服务返回错误，未执行新工具。')
+                        if data.get('usage'):usage=self.usage(data['usage'])
+                        for choice in data.get('choices',[])[:1]:
+                            delta=choice.get('delta',{})
+                            if delta.get('content'):
+                                if not isinstance(delta['content'],str):raise ValueError('text required')
+                                chunks.append(delta['content'])
+                            for call in delta.get('tool_calls',[]):
+                                index=call.get('index',0)
+                                current=calls.setdefault(index,{'id':'','name':'','arguments':''})
+                                if call.get('id'):current['id']=call['id']
+                                function=call.get('function',{})
+                                current['name']+=function.get('name','')
+                                current['arguments']+=function.get('arguments','')
+                                if len(current['arguments'].encode())>self.MAX_ARGUMENT_BYTES:raise ValueError('arguments limit')
+                            finish=choice.get('finish_reason') or finish
+            if finish=='length':raise ModelError('LLM_OUTPUT_TRUNCATED','模型输出达到上限；未执行不完整的工具意图。')
+            return ModelReply(redact(''.join(chunks)),self.calls([calls[index] for index in sorted(calls)]),usage,finish)
+        except ModelError:
+            raise
+        except httpx.TimeoutException:
+            raise ModelError('LLM_TIMEOUT','模型请求超时；未自动重试。') from None
+        except httpx.HTTPError:
+            raise ModelError('LLM_CONNECTION_FAILED','无法连接模型服务；请核对宿主网络与配置。') from None
+        except (ValueError,TypeError,KeyError,AttributeError):
+            raise ModelError('LLM_RESPONSE_INVALID','模型服务响应或工具参数格式不合法；未执行不完整意图。') from None
+
+    @staticmethod
+    def usage(value):
+        return {name:value[name] for name in ('prompt_tokens','completion_tokens')
+                if type(value.get(name)) is int and value[name]>=0}
+
+    def calls(self,calls):
+        if len(calls)>12:raise ModelError('LLM_RESPONSE_INVALID','单次模型请求返回过多工具意图。')
+        result=[]
+        for call in calls:
+            raw=call['arguments']
+            if not isinstance(raw,str) or len(raw.encode())>self.MAX_ARGUMENT_BYTES:raise ValueError('argument format')
+            arguments=json.loads(raw or '{}')
+            if not isinstance(arguments,dict) or not isinstance(call['id'],str) or not call['id'] or len(call['id'])>96:
+                raise ValueError('tool call identity')
+            result.append({'id':redact(call['id']),'name':redact(call['name']),'arguments':redact(arguments)})
+        return result
+
+    def parse_response(self,data):
+        choice=data['choices'][0];message=choice['message']
+        text=message.get('content') or ''
+        if not isinstance(text,str):raise ValueError('text required')
+        if choice.get('finish_reason')=='length':raise ModelError('LLM_OUTPUT_TRUNCATED','模型输出达到上限。')
+        calls=[{'id':call['id'],'name':call['function']['name'],'arguments':call['function']['arguments']}
+            for call in message.get('tool_calls',[])]
+        return ModelReply(redact(text),self.calls(calls),self.usage(data.get('usage') or {}),choice.get('finish_reason'))

@@ -1,0 +1,232 @@
+"""Validate each registered action and call the same host application services."""
+from copy import deepcopy
+import json
+from time import time
+
+from fastapi import HTTPException
+from fastapi.exceptions import RequestValidationError
+from jsonschema import Draft202012Validator
+from pydantic import ValidationError
+
+from backend.domain.guards import value_at
+from backend.kernel.contracts import PreviewStudy
+from backend.kernel.preview import preview
+from backend.kernel.workspace import fingerprint
+from backend.plugin_host import PluginHostError
+
+from .contracts import ToolResult,Diagnostic
+from .evidence import run_points
+from .fields import domain_metadata, displayed
+from .security import redact
+
+
+def failure(code,message,path=None,actions=None):
+    return ToolResult(status='error',summary=message,
+        diagnostics=[Diagnostic(code=code,message=message,path=path,recoverable=True)],
+        next_actions=actions or ['根据字段诊断读取原输入和契约，修正后再请求。'])
+
+
+def bounded(value,maximum=32*1024):
+    """Never cut JSON into an apparently complete fact; retain an explicit reference."""
+    if len(json.dumps(value,ensure_ascii=False,allow_nan=False).encode())<=maximum:return value
+    return {'omitted':True,'reason':'内容超过工具上下文上限，请按对象或字段读取。','content_digest':fingerprint(value)}
+
+
+class ToolBroker:
+    def __init__(self,research,tasks,registry,proposals):
+        self.research,self.tasks,self.registry,self.proposals=research,tasks,registry,proposals
+
+    def study_id(self,task,args):
+        sid=args.get('study_id') or task['study_id']
+        if sid is None:raise HTTPException(422,{'code':'STUDY_REQUIRED','message':'请明确选择本工程内的已保存研究。'})
+        if task['study_id'] and sid!=task['study_id']:
+            raise HTTPException(422,{'code':'SCOPE_VIOLATION','message':'此会话已绑定另一研究，请新建相应研究的会话。'})
+        return sid
+
+    @staticmethod
+    def field_points(document,paths):
+        fields=[]
+        for path in paths:
+            value=value_at(document,path)
+            metadata=domain_metadata(path) if document.get('schema_version')=='cablesim.domain/1' and not isinstance(value,(dict,list)) else None
+            fields.append({'path':path,'label':metadata['title'] if metadata else '保存输入字段',
+                'value':displayed(value,metadata['x-unit']) if metadata else bounded(value,8192),
+                'unit':metadata['x-unit']['display'] if metadata else None})
+        return fields
+
+    def identity(self,task,node,tool):
+        args=node['arguments'];identity=deepcopy(node['input_identity'])
+        if tool and (tool.method or tool.name in ('study_read','run_list','run_read','propose_method_parameters','study_preflight','study_preview')):
+            sid=args.get('study_id') or task['study_id']
+            if sid:
+                with self.research.store.db() as db:
+                    study=self.research.definition(db,task['workspace_id'],sid)
+                identity.update(study_id=sid,study_revision=study['revision'])
+                if tool.method is None:identity['method']=self.research.module_definition(study['definition'],args.get('module'))['method']
+        if args.get('run_id'):identity['run_id']=args['run_id']
+        if tool:identity['tool_contract_digest']=fingerprint(tool.parameters)
+        return identity
+
+    def execute(self,task,node,tool):
+        try:
+            if tool is None:return failure('TOOL_NOT_ALLOWED','此工具未注册；模型不能调用批准、发布或任意命令。')
+            errors=sorted(Draft202012Validator(tool.model()['function']['parameters']).iter_errors(node['arguments']),key=lambda item:str(list(item.path)))
+            if errors:
+                error=errors[0];path='/'+ '/'.join(str(part) for part in error.absolute_path)
+                return failure('TOOL_ARGUMENTS_INVALID','工具参数不符合声明契约：'+error.validator+'。',path)
+            value=self.dispatch(task,node['arguments'],tool,node['input_identity'])
+            return ToolResult.model_validate(redact(value.model_dump(mode='json'))) if isinstance(value,ToolResult) else ToolResult.model_validate(redact(value))
+        except HTTPException as error:
+            detail=error.detail
+            return failure(detail.get('code','HOST_REQUEST_REJECTED') if isinstance(detail,dict) else 'HOST_REQUEST_REJECTED',
+                redact(detail.get('message') or str(detail)) if isinstance(detail,dict) else redact(str(detail)),
+                detail.get('path') if isinstance(detail,dict) else None)
+        except PluginHostError as error:
+            return failure(error.code,redact(error.message),getattr(error,'path',None))
+        except (ValidationError,RequestValidationError) as error:
+            issues=error.errors();first=issues[0]
+            return failure('INPUT_INVALID',redact(str(first['msg'])),'/'+ '/'.join(str(part) for part in first['loc']))
+        except (ValueError,KeyError,TypeError,IndexError):
+            return failure('TOOL_INPUT_INVALID','工具输入或来源格式不合法；未生成替代结果。')
+
+    def dispatch(self,task,args,tool,identity):
+        wid=task['workspace_id'];name=tool.name
+        if name=='workspace_list':
+            with self.research.store.db() as db:
+                rows=[{'id':row['id'],'revision':row['revision'],'name':row['name'],'updated':row['updated']}
+                    for row in db.execute("SELECT id,revision,COALESCE(json_extract(state,'$.domain.name'),json_extract(state,'$.scenario.name')) AS name,updated FROM workspaces ORDER BY updated DESC LIMIT 30")]
+            return ToolResult(status='ok',summary='已读取工程身份与修订。',data={'workspaces':rows})
+        if name=='workspace_read':
+            current,state,_=self.proposals.source(task)
+            document=state.get('domain')
+            if document is None:return failure('DOMAIN_INPUT_REQUIRED','工程尚未转换为领域输入，请在工作台显式转换。')
+            paths=args.get('paths')
+            if paths:
+                fields=[]
+                for path in paths:
+                    value=value_at(document,path)
+                    if isinstance(value,(dict,list)):
+                        fields.append({'path':path,'value':bounded(value,8192),'unit':None})
+                    else:
+                        metadata=domain_metadata(path);unit=metadata['x-unit']
+                        fields.append({'path':path,'label':metadata['title'],'value':displayed(value,unit),'unit':unit['display']})
+                data={'fields':fields}
+            else:
+                data={'name':document['name'],'objects':{key:[{'id':item['id'],'label':item.get('label'),'kind':item.get('kind'),'category':item.get('category')}
+                    for item in document.get(key,[])[:12]] for key in ('materials','cable_types','circuits','sections','load_cases')},
+                    'locks':state.get('locks',[]),'next_read':'使用稳定对象路径读取具体字段；需要完整对象时明确 paths。'}
+            return ToolResult(status='ok',summary='已读取会话固定版本的工程输入。',data={**data,
+                'workspace_id':wid,'workspace_revision':task['workspace_revision'],'current_revision':current['revision'],
+                'freshness':'current' if current['revision']==task['workspace_revision'] else 'historical'})
+        if name=='study_list':
+            studies=self.research.list_studies(wid)
+            return ToolResult(status='ok',summary='已读取本工程研究。',data={'studies':[
+                {key:row[key] for key in ('id','revision','latest_run_id','version_status')} |
+                {'title':row['definition']['title'],'method':row['definition']['method'],'driver':row['definition']['driver']['kind']}
+                for row in studies[:20]],'truncated':len(studies)>20})
+        if name=='study_read':
+            sid=self.study_id(task,args)
+            _,_,study=self.proposals.source(task,sid)
+            definition=self.research.module_definition(study['definition'],args.get('module'))
+            data={'study_id':sid,'revision':study['revision'],'workspace_revision':task['workspace_revision'],
+                'definition':{key:bounded(definition[key],8192) for key in ('title','task','method','parameters','input_source')},
+                'driver':{key:bounded(value,8192) for key,value in definition['driver'].items() if key!='cases'},
+                'cases':[{'case_id':case['case_id'],'label':case['label'],'parameters':bounded(case.get('parameters',{}),4096)}
+                    for case in definition['driver'].get('cases',[])[:20]]}
+            if args.get('input_paths'):
+                _,state,_=self.proposals.source(task)
+                if definition['driver']['kind']=='batch':
+                    case=next((case for case in definition['driver']['cases'] if case['case_id']==args.get('case_id')),None)
+                    if case is None:raise HTTPException(422,'读取批量保存输入须明确已有case_id。')
+                    source=case['input']
+                else:source=definition['method_input'] if definition['input_source']=='study' else state.get('domain')
+                if source is None:raise HTTPException(422,'此研究缺少保存输入。')
+                data['input_fields']=self.field_points(source,args['input_paths'])
+            return ToolResult(status='ok',summary='已读取保存研究的定义与工况。',data=data)
+        if name=='run_list':
+            sid=self.study_id(task,args)
+            page=self.research.list_runs(wid,sid,args.get('after',0),args.get('limit',5),view='summary')
+            return ToolResult(status='ok',summary='已读取保存运行摘要；空结论没有补默认值。',data=page)
+        if name=='run_read':
+            sid=self.study_id(task,args);run=self.research.get_run(wid,args['run_id'])
+            if run['study']!=sid:raise HTTPException(404,'运行不属于此会话研究。')
+            data=run_points(self.research,run,args.get('case_id'))
+            if args.get('input_paths'):
+                if not args.get('case_id'):raise HTTPException(422,'读取原运行输入须明确已有case_id。')
+                from backend.kernel.run_details import case_input
+                original=case_input(self.research,wid,sid,args['run_id'],args['case_id'])
+                data['input_fields']=self.field_points(original['input'],args['input_paths'])
+                data['case_input_digest']=original['input_digest']
+            refs=data.pop('artifact_refs')
+            return ToolResult(status='ok',summary='已读取保存运行的量值与分项证据；完整性通过不代表工程批准。',
+                data=bounded(data),artifact_refs=refs,execution_ref={'run_id':run['id'],'study_id':sid,'status':run['status']})
+        if name=='plugin_inspect':
+            from backend.kernel.input_contracts import contracts
+            entries=contracts(self.research)
+            selected=[entry for entry in entries if (not args.get('plugin_id') or entry['method']['plugin_id']==args['plugin_id'])
+                and (not args.get('capability') or entry['method']['capability']==args['capability'])]
+            if not selected:raise HTTPException(404,'没有匹配的已安装插件能力。')
+            if args.get('schema_path'):
+                if len(selected)!=1:raise HTTPException(422,'按字段读取契约须明确一个插件能力。')
+                spec=selected[0]
+                return ToolResult(status='ok',summary='已按字段读取封签输入契约。',data={
+                    'method':spec['method'],'path':args['schema_path'],'schema':bounded(value_at(spec,args['schema_path']))})
+            if not args.get('capability'):
+                selected=[{key:entry[key] for key in ('method','input_schema','input_sources','preview','reference_only')} for entry in selected]
+            return ToolResult(status='ok',summary='已读取封签插件能力与输入契约。',data={'contracts':bounded(selected)})
+        if name=='cable_model_read':
+            from backend.kernel.scenarios import system_models
+            from backend.kernel.candidates import read
+            model=next((item for item in system_models() if item['id']==args['model_id']),None)
+            if model is None:
+                with self.research.store.db() as db:model=read(db,args['model_id'])
+            if args.get('path'):model={'model_id':args['model_id'],'path':args['path'],'value':value_at(model,args['path'])}
+            return ToolResult(status='ok',summary='已读取型号结构和来源；未采用或批准型号。',data={'model':bounded(model)})
+        if name=='propose_domain_changes':
+            public=self.proposals.domain(task,args['changes'],args.get('title') or '调整工程输入')
+            return ToolResult(status='ok',summary='领域输入方案已生成，等待人工批准。',data={'proposal':public},next_actions=['在工作台审阅字段差异并批准或拒绝。'])
+        if name=='propose_method_parameters':
+            sid=self.study_id(task,args)
+            public=self.proposals.parameters(task,sid,args.get('module'),args['changes'],args.get('title') or '调整方法参数')
+            return ToolResult(status='ok',summary='方法参数方案已生成，等待人工批准。',data={'proposal':public},next_actions=['在工作台审阅字段差异并批准或拒绝。'])
+        if name in ('study_preflight','study_preview') or tool.method:
+            if tool.method and not (args.get('study_id') or task['study_id']):
+                if args.get('module'):raise HTTPException(422,'新建研究方案不能引用尚不存在的模块。')
+                public=self.proposals.study(task,tool.method,args.get('parameters'),args.get('title') or tool.title)
+                return ToolResult(status='ok',summary='新建研究方案已生成，等待人工批准；未执行插件。',
+                    data={'proposal':public},next_actions=['在工作台审阅并保存研究，再预检或运行。'])
+            sid=self.study_id(task,args)
+            _,_,study=self.proposals.source(task,sid)
+            if study['revision']!=identity.get('study_revision',study['revision']):raise HTTPException(409,'研究在工具意图登记后已变化。')
+            selected=self.research.module_definition(study['definition'],args.get('module'))
+            plugin,cap=self.research.resolve(selected['method'])
+            if tool.method and selected['method']!=tool.method:
+                return failure('METHOD_MISMATCH','此插件工具与已保存研究方法不一致；请人工配置并保存对应研究。')
+            hpc=bool(hasattr(self.research.executor,'required') and self.research.executor.required(plugin.manifest.id,cap.id))
+            methods=[entry['method'] for entry in selected.get('crosschecks',[])]
+            methods.extend(entry['method'] for entry in selected.get('candidate_completions',{}).values())
+            remote_dependencies=any(hasattr(self.research.executor,'required') and self.research.executor.required(entry['plugin_id'],entry['capability']) for entry in methods)
+            if hpc or remote_dependencies or not cap.preview:
+                return failure('HUMAN_EXECUTION_REQUIRED','此能力需要正式或超算运行，由人在工作台确认；未提交作业。',
+                    actions=['在工作台核对方法范围与预算，人工批准正式运行。'])
+            if name=='study_preflight':
+                data=self.research.preflight(wid,sid,task['workspace_revision'],study['revision'],args.get('module'))
+                issues=[row.get('error') for row in [*data.get('cases',[]),*data.get('crosschecks',[])] if row.get('error')]
+                return ToolResult(status='ok' if data['ready'] else 'error',summary='研究预检通过。' if data['ready'] else '研究预检未通过，请补齐明确缺项。',
+                    data=bounded(data),diagnostics=[Diagnostic(code=issue.get('code','PREFLIGHT_FAILED'),message=issue.get('message','预检失败。'),path=issue.get('path'),recoverable=True) for issue in issues[:8]],
+                    next_actions=[] if data['ready'] else ['根据预检路径读取输入，生成修正方案；不要猜测物性。'])
+            body=PreviewStudy(expected_revision=task['workspace_revision'],expected_study_revision=study['revision'],
+                module=args.get('module'),parameters=args.get('parameters'))
+            with self.research.store.db() as db:budget=self.tasks.load(db,task['id'])
+            data=preview(self.research,wid,sid,body,max_timeout_s=min((budget['limits']['max_active_ms']-budget['elapsed_ms'])/1000,budget['deadline']-time()))
+            refs=[{'execution_id':data['execution_id'],'case_id':case['case_id'],'artifact_type':kind,'sha256':digest,
+                    'verification':data.get('artifact_status',{}).get(case['case_id'],{}).get(kind,{}).get('status','unknown')}
+                for case in data['cases'] for kind,digest in case.get('artifact_digests',{}).items()]
+            result={key:data[key] for key in ('preview','persisted','engineering_approval','status','elapsed_ms','input_digest','headlines')}
+            result['cases']=[{key:case.get(key) for key in ('case_id','status','results','error','warnings')} for case in data['cases']]
+            errors=[case['error'] for case in data['cases'] if case.get('error')]
+            return ToolResult(status='ok' if data['status']=='succeeded' else 'error',summary='快速预览已完成；未保存运行，未批准工程结果。' if data['status']=='succeeded' else '快速预览失败，未返回替代数值。',
+                data=bounded(result),artifact_refs=refs,diagnostics=[Diagnostic(code=issue['code'],message=issue['message'],path=issue.get('path'),recoverable=True) for issue in errors],
+                execution_ref={'type':'preview','execution_id':data['execution_id'],'input_digest':data['input_digest'],'persisted':False},
+                next_actions=['需要交付证据时，在工作台人工确认并保存正式运行。'])
+        return failure('TOOL_NOT_ALLOWED','此动作未登记为 Agent 工具。')

@@ -37,3 +37,19 @@ def test_validation_references_are_scoped_and_docs_are_consumers(tmp_path,monkey
         target=tmp_path/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_text(body,encoding='utf-8')
     issues=hygiene.dead_scripts(files)
     assert len(issues)==1 and issues[0].endswith('plugins/b/validation/check.py')
+
+
+def test_only_declared_and_byte_sealed_plugin_covers_are_binary_exceptions(tmp_path,monkeypatch):
+    from hashlib import sha256
+    import json
+    import scripts.check_hygiene as hygiene
+    monkeypatch.setattr(hygiene,'ROOT',tmp_path)
+    manifest='plugins/example.method/plugin.json';cover='plugins/example.method/assets/cover.webp'
+    raw=b'RIFF'+bytes(4)+b'WEBPfixture'
+    path=tmp_path/cover;path.parent.mkdir(parents=True);path.write_bytes(raw)
+    data={'presentation':{'assets':[{'role':'cover','path':'assets/cover.webp','media_type':'image/webp'}]},
+        'files':[{'path':'assets/cover.webp','sha256':sha256(raw).hexdigest(),'size_bytes':len(raw)}]}
+    (tmp_path/manifest).write_text(json.dumps(data),encoding='utf-8')
+    assert hygiene.large_or_misplaced_binaries([manifest,cover])==[]
+    path.write_bytes(raw+b'changed')
+    assert hygiene.large_or_misplaced_binaries([manifest,cover])==['binary outside design or docs: '+cover]

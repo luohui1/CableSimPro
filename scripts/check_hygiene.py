@@ -9,6 +9,8 @@ Usage: python scripts/check_hygiene.py        (exit 1 on any violation)
 from __future__ import annotations
 
 import fnmatch
+from hashlib import sha256
+import json
 import re
 import subprocess
 import sys
@@ -64,9 +66,26 @@ def large_or_misplaced_binaries(files: list[str]) -> list[str]:
         size = (ROOT / f).stat().st_size
         if size > MAX_BYTES:
             issues.append(f'too large ({size // 1024} KB > {MAX_BYTES // 1024} KB): {f}')
-        if PurePosixPath(f).suffix.lower() in BINARY_EXT and not match(f, BINARY_DIRS):
+        if PurePosixPath(f).suffix.lower() in BINARY_EXT and not match(f, BINARY_DIRS) and not sealed_plugin_cover(f,files):
             issues.append(f'binary outside design or docs: {f}')
     return issues
+
+
+def sealed_plugin_cover(path: str, files: list[str]) -> bool:
+    """Only the declared, byte-verified first-party presentation cover is an exception."""
+    if not re.fullmatch(r'plugins/[a-z][a-z0-9.-]*/assets/cover\.webp',path):return False
+    plugin='/'.join(path.split('/')[:2]);manifest=plugin+'/plugin.json'
+    if manifest not in files:return False
+    try:
+        data=json.loads((ROOT/manifest).read_text(encoding='utf-8'))
+        asset=next((item for item in data.get('presentation',{}).get('assets',[]) if item.get('role')=='cover'
+            and item.get('path')=='assets/cover.webp' and item.get('media_type')=='image/webp'),None)
+        record=next((item for item in data.get('files',[]) if item.get('path')=='assets/cover.webp'),None)
+        if not asset or not record:return False
+        raw=(ROOT/path).read_bytes()
+        return (len(raw)>=12 and raw[:4]==b'RIFF' and raw[8:12]==b'WEBP'
+            and len(raw)==record['size_bytes'] and sha256(raw).hexdigest()==record['sha256'])
+    except (OSError,ValueError,TypeError,KeyError):return False
 
 
 def branch_bound_workflows(files: list[str]) -> list[str]:

@@ -55,7 +55,9 @@ def test_simulation_task_polling_duplicate_click_and_timeout_keep_input(tmp_path
             time.sleep(.02)
         assert result['status']=='failed' and result['error']['code']=='WORKER_TIMEOUT'
         assert result['snapshot']['module']=='transient-temperature'
-        assert result['snapshot']['cases'][0]['input']==value
+        reference=result['snapshot']['cases'][0]['input_ref']
+        assert client.get(reference['url']).json()['input']==value
+        assert client.get(first.headers['location']+'?view=full').json()['snapshot']['cases'][0]['input']==value
         saved=client.get(root).json()
         assert saved['revision']==w['revision'] and saved['scenario']==w['scenario']
         changed=client.put(sroot,json={**config,'expected_revision':1,'expected_study_revision':1,'modules':{}})

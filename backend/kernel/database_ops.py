@@ -15,7 +15,7 @@ from pydantic import Field, JsonValue
 from backend.schemas import StrictModel
 from .ownership import OwnerLock
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def fail(code, message, status=409):

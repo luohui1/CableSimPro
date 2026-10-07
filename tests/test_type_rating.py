@@ -216,7 +216,7 @@ def test_edited_conditions_preserve_history_and_block_current_export(client):
     changed['driver']['cases'][0]['metadata']['condition']['depth_m'] = 1.5
     response = client.put(root, json={**changed, 'expected_revision': w['revision'], 'expected_study_revision': study['revision']})
     assert response.status_code == 200, response.text
-    reread = client.get(root+'/runs/'+run['id']).json()
+    reread = client.get(root+'/runs/'+run['id']+'?view=full').json()
     assert reread['freshness'] == 'historical'
     assert reread['snapshot'] == before
     from fastapi import HTTPException
