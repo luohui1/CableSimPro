@@ -28,3 +28,11 @@
 .agent-composer-box { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-3) var(--space-4) var(--space-4); border-top: 1px solid var(--line); }
 .agent-composer-box textarea { min-height: calc(var(--space-12) + var(--space-6)); resize: vertical; padding: var(--space-2) var(--space-3); border: 1px solid var(--control-border); border-radius: var(--radius-item); background: var(--panel); color: var(--text); font: inherit; }
 .agent-composer-box .button { align-self: flex-end; }
+/* 连续工具调用合成一组：进行中展开，完成后收成一行 */
+.agent-tools-group { border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--panel); font-size: var(--text-note); }
+.agent-tools-group > summary { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); cursor: pointer; list-style: none; }
+.agent-tools-group > summary::-webkit-details-marker { display: none; }
+.agent-tools-group > summary .icon { width: var(--space-4); height: var(--space-4); color: var(--text-secondary); }
+.agent-tools-group > summary span { margin-left: auto; color: var(--text-secondary); }
+.agent-tools-group ol { list-style: none; margin: 0; padding: 0 var(--space-3) var(--space-2); display: flex; flex-direction: column; gap: var(--space-2); }
+.agent-tools-group .agent-tool { padding: var(--space-2) 0 0; border: 0; border-top: 1px solid var(--line); background: none; }

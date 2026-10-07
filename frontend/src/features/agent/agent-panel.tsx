@@ -13,6 +13,29 @@ type Item =
   | { kind: "error"; text: string };
 
 const show = (value: unknown) => (value === null || value === undefined ? "—" : typeof value === "object" ? JSON.stringify(value) : String(value));
+/** 工具参数只摘要简单标量；身份编号与结构化内容（方案字段差异等）在各自卡片里展示，不摊开 JSON。 */
+const argumentText = (args?: Record<string, unknown>) => Object.entries(args || {})
+  .filter(([key, value]) => ["string", "number", "boolean"].includes(typeof value) && !/(^|_)id$/.test(key) && String(value).length <= 40)
+  .map(([key, value]) => `${key}=${String(value)}`).join("  ");
+type ToolItem = Extract<Item, { kind: "tool" }>;
+/** 从 index 起连续的工具调用。 */
+const toolRun = (items: Item[], index: number) => {
+  const end = items.findIndex((item, position) => position > index && item.kind !== "tool");
+  return items.slice(index, end === -1 ? items.length : end) as ToolItem[];
+};
+/** 连续的工具调用合成一组：进行中展开显示每一步，完成后收成一行“工具调用 · N 步”。 */
+function ToolGroup({ tools }: { tools: ToolItem[] }) {
+  const running = tools.some((tool) => tool.status === "running"), failed = tools.filter((tool) => tool.status === "error").length;
+  const last = tools[tools.length - 1];
+  return <details className="agent-tools-group" open={running || undefined}>
+    <summary><Icon name="nav/plugin" /><b>工具调用 · {tools.length} 步</b><span>{running ? (last.title || last.tool) + " · 运行中" : failed ? `${failed} 步失败` : "完成"}</span></summary>
+    <ol>{tools.map((tool) => <li key={tool.id} className={`agent-tool is-${tool.status}`}>
+      <div className="agent-tool-head"><b>{tool.title || tool.tool}</b><span>{tool.status === "running" ? "运行中" : tool.status === "ok" ? "完成" : "失败"}</span></div>
+      {argumentText(tool.args) && <code>{argumentText(tool.args)}</code>}
+      {tool.summary && <p>{tool.summary}</p>}
+    </li>)}</ol>
+  </details>;
+}
 const SUGGESTIONS = ["解释这个研究的结论和主要限制因素", "土壤热阻率改成 1.2 K·m/W 会怎样？", "检查这个研究还缺哪些输入"];
 
 /**
@@ -80,11 +103,7 @@ export function AgentPanel({ workspaceId, studyId, context, suggestions = SUGGES
       {items.map((item, index) => item.kind === "user" ? <p key={index} className="agent-user">{item.text}</p>
         : item.kind === "assistant" ? <p key={index} className="agent-assistant">{item.text}</p>
           : item.kind === "error" ? <p key={index} className="agent-error" role="alert">{item.text}</p>
-            : item.kind === "tool" ? <div key={index} className={`agent-tool is-${item.status}`}>
-              <div className="agent-tool-head"><Icon name="nav/plugin" /><b>{item.title || item.tool}</b><span>{item.status === "running" ? "运行中" : item.status === "ok" ? "完成" : "失败"}</span></div>
-              {item.args && Object.keys(item.args).length > 0 && <code>{Object.entries(item.args).map(([key, value]) => `${key}=${show(value)}`).join("  ")}</code>}
-              {item.summary && <p>{item.summary}</p>}
-            </div>
+            : item.kind === "tool" ? (items[index - 1]?.kind === "tool" ? null : <ToolGroup key={index} tools={toolRun(items, index)} />)
               : <div key={index} className="agent-proposal">
                 <div className="agent-tool-head"><Icon name="action/edit" /><b>方案：{item.title}</b></div>
                 <table><tbody>{item.changes.map((change) => <tr key={change.path}><th>{change.label}</th><td>{show(change.before)}</td><td aria-hidden="true">→</td><td><b>{show(change.after)}</b>{change.unit && ` ${change.unit}`}</td></tr>)}</tbody></table>
