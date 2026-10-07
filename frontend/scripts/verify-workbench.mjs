@@ -42,6 +42,11 @@ try {
   await tabs.getByRole("tab", { name: "输入" }).click();
   await expect(page.locator(".workbench-inspector").getByRole("heading", { name: "本次计算" })).toBeVisible();
 
+  // 不带模块的分享链接只跳转一次到默认页签，页面不卡死
+  await page.goto(`${base}/studies/${studies[0].id}?workspace=${project.id}`, { waitUntil: "commit", timeout: 60000 });
+  await page.waitForURL(/\/studies\/[^/?]+\/[^/?]+\/[^/?]+/);
+  await zones();
+
   // 工程内新建研究：不另建工程，参数来源写入研究
   await go(`/studies?workspace=${project.id}`);
   await page.getByRole("toolbar", { name: "工程命令" }).getByRole("button", { name: "新建研究" }).click();

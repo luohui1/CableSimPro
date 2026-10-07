@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { methodCatalog, workspaces } from "@/api/research";
 import { displayName } from '@/lib/display-names';
-import { Navigate } from "@tanstack/react-router";
+import { Redirect } from "@/components/redirect";
 import { studyModuleRoute, studyRootRoute } from "@/router";
 import { useStudy } from "@/components/study-provider";
 import { AppShell } from "@/components/app-shell";
@@ -62,7 +62,7 @@ export function StudyEntry() {
   const { study } = useStudy();
   const search = studyRootRoute.useSearch();
   return (
-    <Navigate
+    <Redirect
       to="/studies/$sid/$module/$tab"
       params={{
         sid: study.id,
@@ -217,7 +217,7 @@ export function StudyWorkspace() {
   // 电缆、截面、工况不再是单独页面：并入当前计算的工作窗口，画布切到对应视图
   if (inputModule)
     return (
-      <Navigate
+      <Redirect
         to="/studies/$sid/$module/$tab"
         params={{ sid, module: calculatedModule, tab: studyEntryTab(calculatedModule) }}
         search={{ ...search, workspace: study.workspace, view: module === "cable" ? "cable" : "section" }}

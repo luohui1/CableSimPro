@@ -3,7 +3,6 @@ import {
   createRoute,
   createRouter,
   Link,
-  Navigate,
   notFound,
   redirect,
   lazyRouteComponent,
@@ -17,6 +16,7 @@ import { ShellLayout, RouteSkeleton } from "./components/shell-layout";
 import { queryClient } from "./lib/query-client";
 import { prefetchStudy } from "./lib/study-queries";
 import { EmptyState } from "./components/states";
+import { Redirect } from "./components/redirect";
 const SelectionPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pages/selection-page'), 'SelectionPage') : undefined;
 const GalleryPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pages/gallery-page'), 'GalleryPage') : undefined;
 const LibraryPage = lazyRouteComponent(() => import('./pages/library-page'), 'LibraryPage');
@@ -79,7 +79,7 @@ export const studiesRoute = createRoute({
     return search.workspace ? <ProjectHome key={search.workspace} workspaceId={search.workspace} theme={search.theme} /> : <ObjectListPage />;
   },
 });
-const simulationListRoute = createRoute({ getParentRoute: () => rootRoute, path: "/simulation", validateSearch: themeSearch, component: () => <Navigate to="/studies" search={{ theme: preferences().theme, kind: "simulation" }} replace /> });
+const simulationListRoute = createRoute({ getParentRoute: () => rootRoute, path: "/simulation", validateSearch: themeSearch, component: () => <Redirect to="/studies" search={{ theme: preferences().theme, kind: "simulation" }} replace /> });
 export const selectionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/gallery/selection",
@@ -166,7 +166,7 @@ function ModuleEntry() {
   const { sid, module } = moduleEntryRoute.useParams();
   const search = studyRootRoute.useSearch();
   return (
-    <Navigate
+    <Redirect
       to="/studies/$sid/$module/$tab"
       params={{ sid, module, tab: moduleDefinitions[module].tabs[0].id }}
       search={search}
@@ -178,7 +178,7 @@ const sampleEntryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/study/selection",
   component: () => (
-    <Navigate to="/studies" search={{ theme: "light" }} replace />
+    <Redirect to="/studies" search={{ theme: "light" }} replace />
   ),
 });
 export const router = createRouter({
