@@ -25,6 +25,7 @@ export function useAgentSession({ sessionId, workspaceId, studyId, onCreated }: 
   const [sending, setSending] = useState(false);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
   const liveProposals = useRef(new Map<string, AgentProposal>());
+  const controller = useRef<AbortController | null>(null);
 
   // 外部切换任务（或点“新任务”）时换会话；自己刚建的会话回写到地址时不打断正在进行的一轮
   useEffect(() => {
@@ -47,6 +48,14 @@ export function useAgentSession({ sessionId, workspaceId, studyId, onCreated }: 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [record.data, decisions, live]);
 
+  /** 读回审计记录；记录里已经有这一轮时，临时拼出的那一轮让位给记录。 */
+  async function settle(id: string, question: string) {
+    try {
+      const saved = await queries.fetchQuery({ queryKey: ["agent-session", id], queryFn: ({ signal }) => agentSession(id, signal), staleTime: 0 });
+      if (buildTurns(saved).at(-1)?.question === question) setLive(null);
+    } catch { /* 记录读不到时保留临时显示 */ }
+  }
+
   async function send(text: string) {
     const content = text.trim();
     if (!content || sending || !workspaceId) return;
@@ -59,12 +68,16 @@ export function useAgentSession({ sessionId, workspaceId, studyId, onCreated }: 
         id = (await createSession(workspaceId, studyId)).id;
         currentRef.current = id; setCurrent(id); onCreated?.(id);
       }
-      await sendMessage(id, content, (event) => { turn = applyEvent(turn, event, liveProposals.current); setLive(turn); });
-      await queries.fetchQuery({ queryKey: ["agent-session", id], queryFn: ({ signal }) => agentSession(id!, signal) });
-      setLive(null);
+      controller.current = new AbortController();
+      await sendMessage(id, content, (event) => { turn = applyEvent(turn, event, liveProposals.current); setLive(turn); }, controller.current.signal);
+      await settle(id, content);
     } catch (error) {
-      setLive({ ...turn, running: false, notices: [...turn.notices, { text: error instanceof Error ? error.message : String(error) }] });
+      const stopped = controller.current?.signal.aborted;
+      setLive({ ...turn, running: false, notices: [...turn.notices, { text: stopped ? "已停止接收。已经开始的步骤由服务端收尾，结果以任务记录为准。" : error instanceof Error ? error.message : String(error) }] });
+      // 停止或中断后以服务端记录为准：等它把这一轮收尾，再用记录替换临时显示
+      if (id) window.setTimeout(() => void settle(id!, content), stopped ? 1500 : 0);
     } finally {
+      controller.current = null;
       setSending(false);
       void queries.invalidateQueries({ queryKey: ["agent-sessions"] });
     }
@@ -83,5 +96,7 @@ export function useAgentSession({ sessionId, workspaceId, studyId, onCreated }: 
     }
   }
 
-  return { id: current, turns, live, proposals, decisions, sending, loading: record.isPending && !!current, error: record.error, send, decide };
+  const stop = () => controller.current?.abort();
+
+  return { id: current, turns, live, stop, proposals, decisions, sending, loading: record.isPending && !!current, error: record.error, send, decide };
 }

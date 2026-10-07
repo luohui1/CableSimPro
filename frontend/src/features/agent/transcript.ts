@@ -5,10 +5,11 @@ export type Step = { id: string; tool: string; title: string; status: "running" 
 export type Headline = { title: string; entity?: string; value: number; unit: string };
 export type Ampacity = { entity: string; basis: string; value: number | null; reason?: string };
 export type Preview = { id: string; studyId?: string; proposalId?: string; headlines: Headline[]; ampacity: Ampacity[] };
+export type SavedRun = { id: string; studyId: string; sequence?: number; created?: string; headlines: Headline[] };
 export type Notice = { code?: string; text: string };
 export type Turn = {
   id: string; question: string; steps: Step[]; answer: string; evidenceOnly: boolean;
-  notices: Notice[]; proposals: string[]; previews: Preview[]; started?: string; finished?: string; running: boolean;
+  notices: Notice[]; proposals: string[]; previews: Preview[]; runs: SavedRun[]; started?: string; finished?: string; running: boolean;
 };
 
 const CHECK = "answer-check";
@@ -26,16 +27,23 @@ function checkStep(turn: Turn, status: Step["status"], summary: string) {
   else turn.steps.push({ id: CHECK, tool: CHECK, title: "核对回答里的数值", status, summary });
 }
 
+/** 宿主给出的结论量值（显示单位优先）。 */
+const headlines = (value: unknown): Headline[] => list(value).map(record).flatMap((row) => {
+  const amount = number(row.display_value) ?? number(row.value);
+  return amount === null ? [] : [{ title: String(row.title || row.key), entity: row.entity ? String(row.entity) : undefined, value: amount, unit: String(row.display_unit || row.unit || "") }];
+});
+
+/** Agent 读过的保存运行：只收有结论量值的。 */
+const savedRuns = (data: Record<string, unknown>): SavedRun[] => list(data.items).map(record)
+  .map((row) => ({ id: String(row.id), studyId: String(row.study), sequence: number(row.sequence) ?? undefined, created: row.created ? String(row.created) : undefined, headlines: headlines(row.headlines) }))
+  .filter((row) => row.headlines.length > 0);
+
 /** 试算结果：宿主给出的结论量值，加上各回路允许电流（单独额定 / 同时额定）。 */
 function preview(id: string, data: Record<string, unknown>, args: Record<string, unknown>): Preview {
-  const headlines = list(data.headlines).map(record).flatMap((row) => {
-    const value = number(row.display_value) ?? number(row.value);
-    return value === null ? [] : [{ title: String(row.title || row.key), entity: row.entity ? String(row.entity) : undefined, value, unit: String(row.display_unit || row.unit || "") }];
-  });
   const ampacity = list(data.cases).map(record).flatMap((item) => list(item.results).map(record))
     .filter((row) => row.key === "ampacity")
     .map((row) => ({ entity: String(row.entity), basis: String(row.case), value: number(row.value), reason: record(row.reason).message ? String(record(row.reason).message) : undefined }));
-  return { id, studyId: args.study_id ? String(args.study_id) : undefined, proposalId: data.proposal_id ? String(data.proposal_id) : undefined, headlines, ampacity };
+  return { id, studyId: args.study_id ? String(args.study_id) : undefined, proposalId: data.proposal_id ? String(data.proposal_id) : undefined, headlines: headlines(data.headlines), ampacity };
 }
 
 /** 从会话审计记录还原对话；数值只取自已保存的工具结果。 */
@@ -46,7 +54,7 @@ export function buildTurns(source: AgentRecord): Turn[] {
   for (const event of source.events) {
     const data = event.data;
     if (event.type === "chat.message" && data.role === "user") {
-      turn = { id: String(event.sequence), question: String(data.content || ""), steps: [], answer: "", evidenceOnly: false, notices: [], proposals: [], previews: [], started: event.created, running: true };
+      turn = { id: String(event.sequence), question: String(data.content || ""), steps: [], answer: "", evidenceOnly: false, notices: [], proposals: [], previews: [], runs: [], started: event.created, running: true };
       turns.push(turn);
       continue;
     }
@@ -62,6 +70,7 @@ export function buildTurns(source: AgentRecord): Turn[] {
       const result = record(saved?.result?.data), proposal = record(result.proposal);
       if (proposal.id && !turn.proposals.includes(String(proposal.id))) turn.proposals.push(String(proposal.id));
       if (saved?.tool === "study_preview" && saved.result?.status === "ok") turn.previews.push(preview(String(data.id), result, record(saved.arguments)));
+      if (saved?.tool === "run_list" && saved.result?.status === "ok") turn.runs.push(...savedRuns(result).filter((run) => !turn!.runs.some((item) => item.id === run.id)));
     } else if (event.type === "answer.rejected") {
       checkStep(turn, "error", `${list(data.issues).length} 处数值对不上证据，退回重写`);
     } else if (event.type === "answer.accepted") {
@@ -98,4 +107,4 @@ export function applyEvent(turn: Turn, event: AgentEvent, proposals: Map<string,
   return next;
 }
 
-export const newTurn = (question: string): Turn => ({ id: `live-${Date.now()}`, question, steps: [], answer: "", evidenceOnly: false, notices: [], proposals: [], previews: [], started: new Date().toISOString(), running: true });
+export const newTurn = (question: string): Turn => ({ id: `live-${Date.now()}`, question, steps: [], answer: "", evidenceOnly: false, notices: [], proposals: [], previews: [], runs: [], started: new Date().toISOString(), running: true });

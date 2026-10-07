@@ -7,22 +7,34 @@ import { AppShell } from "@/components/app-shell";
 import { usePageTheme } from "@/components/catalog-shell";
 import { StatusMark } from "@/components/status-mark";
 import { Icon } from "@/components/icon";
-import { Button } from "@/components/ui/button";
+import { Button, IconButton } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { entityLabel } from "@/lib/domain-fields";
+import { SectionThumbnail } from "@/features/drawing";
+import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { workspaceQuery } from "@/lib/study-queries";
 import { agentSessions, agentTools } from "@/features/agent/agent-api";
-import { Composer, PreviewCard, ProposalCard, TurnView } from "@/features/agent/conversation";
+import { PreviewCard, ProposalCard, SavedRunCard, TurnView } from "@/features/agent/conversation";
+import { PromptBar, type PromptCommand, type PromptReference } from "@/features/agent/prompt-bar";
 import { taskState } from "@/features/agent/task-list";
 import { useAgentSession, useAgentStatus } from "@/features/agent/use-agent-session";
 
 const SUGGESTIONS = ["汇总各研究的载流量结论和限制因素", "这个工程里哪些研究还没有结果？", "土壤热阻率改成 1.2 K·m/W，给出方案并试算最高导体温度的变化"];
+/** “/” 调出的常用任务：只放 Agent 现有工具做得到的事。 */
+const COMMANDS: PromptCommand[] = [
+  { key: "summary", name: "结论汇总", description: "各研究的结论量值与限制对象", text: "汇总本工程各研究的结论量值和限制因素" },
+  { key: "missing", name: "检查缺项", description: "工程模型与研究还缺哪些输入", text: "检查工程模型和各研究还缺哪些输入，按影响排序" },
+  { key: "trial", name: "方案试算", description: "改一个参数，给出方案并快速试算", text: "给出修改方案并快速试算对比：" },
+  { key: "explain", name: "解释结果", description: "说明某个研究为什么得到这个结论", text: "解释这个研究的结论和主要限制因素：" },
+];
+const SIDE_KEY = "cablesim:agent:side-open";
+const readSide = () => { try { return localStorage.getItem(SIDE_KEY) !== "false"; } catch { return true; } };
+const storeSide = (open: boolean) => { try { localStorage.setItem(SIDE_KEY, String(open)); } catch { /* 隐私模式只保留本次 */ } };
 
 /**
- * Agent 模式（组件陈列“Agent 模式（整页）”）：左栏任务、中间对话、右栏审核。
- * 对话里只放提问、工作过程、回答和试算；改动方案都进右栏，由人核对后按住批准。
+ * Agent 模式（组件陈列“Agent 模式（整页）”）：左栏任务、中间对话、右栏侧栏（改动 · 运行 · 截面），右栏可收起。
+ * 改动方案只在右栏审核，由人按住批准；试算与读过的保存运行列在“运行”，“截面”是 Agent 正在用的工程模型。
  */
 export function AgentPage() {
   const { theme } = usePageTheme();
@@ -41,28 +53,43 @@ export function AgentPage() {
   const workspaceId = summary?.workspace_id || options.find((row) => row.id === search.workspace)?.id || options[0]?.id;
   const project = options.find((row) => row.id === workspaceId);
   const workspace = useQuery({ ...workspaceQuery(workspaceId), enabled: !!workspaceId });
-  const label = (entity: string) => entityLabel(workspace.data?.domain, entity);
+  const domain = workspace.data?.domain as DomainDocument | undefined;
+  const label = (entity: string) => entityLabel(domain, entity);
   const agent = useAgentSession({ sessionId: search.task, workspaceId, studyId: summary?.study_id ?? undefined,
     onCreated: (id) => void navigate({ to: "/agent", search: { theme, task: id, workspace: workspaceId }, replace: true }) });
   const [draft, setDraft] = useState("");
+  const [side, setSide] = useState(readSide);
+  // 右栏页签：没手动选过时跟着内容走（有待审改动先看改动），换任务时重置
+  const [sideTab, setSideTab] = useState<string>();
+  useEffect(() => setSideTab(undefined), [agent.id]);
   const thread = useRef<HTMLDivElement>(null);
 
   // 新内容出现时滚到底部
   useEffect(() => { thread.current?.scrollTo({ top: thread.current.scrollHeight }); }, [agent.turns.length, agent.live]);
 
-  const openStudy = (sid: string) => {
+  const projectStudies = (studies.data || []).filter((row) => row.workspace === workspaceId);
+  const studyTitle = (sid: string) => studies.data?.find((row) => row.id === sid)?.title;
+  const openStudy = (sid: string, run = "") => {
     const row = studies.data?.find((item) => item.id === sid);
     if (!row) return;
     const module = rootModule(row.definition);
-    void navigate({ to: "/studies/$sid/$module/$tab", params: { sid, module, tab: studyEntryTab(module) }, search: { workspace: row.workspace, theme, run: "", delivery: "" } });
+    void navigate({ to: "/studies/$sid/$module/$tab", params: { sid, module, tab: studyEntryTab(module) }, search: { workspace: row.workspace, theme, run, delivery: "" } });
   };
+  const references: PromptReference[] = [
+    ...projectStudies.map((row) => ({ key: row.id, name: row.title, description: row.task, icon: "object/study" })),
+    ...(types.data || []).map((row) => ({ key: text(row.id), name: text(row.name), description: "型号", icon: "object/cable" })),
+  ];
   const send = (value: string) => { void agent.send(value); setDraft(""); };
+  const toggleSide = () => setSide((open) => { storeSide(!open); return !open; });
+
   const turns = agent.live ? [...agent.turns, agent.live] : agent.turns;
   const proposals = [...new Set(turns.flatMap((turn) => turn.proposals))].map((id) => agent.proposals.get(id)).filter((item) => !!item);
   const pending = proposals.filter((item) => item.status === "pending").length;
   const previews = turns.flatMap((turn) => turn.previews);
+  const runs = turns.flatMap((turn) => turn.runs).filter((run, index, all) => all.findIndex((item) => item.id === run.id) === index);
   const title = summary?.title || turns[0]?.question || "新任务";
   const state = agent.live?.running ? { tone: "running", text: "执行中" } : summary ? taskState({ ...summary, pending_proposals: pending }) : null;
+  const section = domain?.sections?.[0];
 
   const scope = agent.id
     ? <span className="agent-scope-chip"><Icon name="object/folder" />{project?.name || "工程"}</span>
@@ -71,27 +98,43 @@ export function AgentPage() {
       <DropdownMenuContent align="start">{options.map((row) => <DropdownMenuItem key={row.id} onSelect={() => void navigate({ to: "/agent", search: { theme, workspace: row.id }, replace: true })}>{row.name}</DropdownMenuItem>)}</DropdownMenuContent>
     </DropdownMenu>;
 
-  // 右栏只在有改动或试算要人核对时出现
-  const review = <aside className="property-panel agent-review" aria-label="审核">
-    <Tabs defaultValue="changes" className="agent-review-tabs">
-      <TabsList><TabsTrigger value="changes">改动{proposals.length > 0 && ` ${proposals.length}`}</TabsTrigger><TabsTrigger value="previews">试算{previews.length > 0 && ` ${previews.length}`}</TabsTrigger></TabsList>
+  const sidebar = <aside className="property-panel agent-side" aria-label="侧栏">
+    <Tabs value={sideTab ?? (pending || !(previews.length + runs.length) ? "changes" : "runs")} onValueChange={setSideTab} className="agent-side-tabs">
+      <div className="agent-side-head">
+        <TabsList>
+          <TabsTrigger value="changes">改动{proposals.length > 0 && <span className="agent-side-count">{proposals.length}</span>}</TabsTrigger>
+          <TabsTrigger value="runs">运行{previews.length + runs.length > 0 && <span className="agent-side-count">{previews.length + runs.length}</span>}</TabsTrigger>
+          <TabsTrigger value="section">截面</TabsTrigger>
+        </TabsList>
+        <IconButton variant="ghost" icon="nav/sidebar" label="收起右栏" onClick={toggleSide} />
+      </div>
       <TabsContent value="changes">
         {proposals.length ? proposals.map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} onDecide={(id, decision) => void agent.decide(id, decision)}
           busy={agent.decisions[proposal.id]?.busy} error={agent.decisions[proposal.id]?.error} />)
           : <div className="agent-review-empty"><Icon name="agent/proposal" /><p>Agent 要改工程时，会把字段级改动写成方案放在这里。你核对后按住批准才会保存；拒绝不会留下任何改动。</p></div>}
       </TabsContent>
-      <TabsContent value="previews">
-        {previews.length ? previews.map((item) => <PreviewCard key={item.id} preview={item} label={label} proposalTitle={item.proposalId ? agent.proposals.get(item.proposalId)?.title : undefined}
-          onOpen={item.studyId ? () => openStudy(item.studyId!) : undefined} />)
-          : <div className="agent-review-empty"><Icon name="calc/ampacity" /><p>Agent 用方案做的快速试算会列在这里。试算不保存运行，也不代表批准。</p></div>}
+      <TabsContent value="runs">
+        {previews.map((item) => <PreviewCard key={item.id} preview={item} label={label} proposalTitle={item.proposalId ? agent.proposals.get(item.proposalId)?.title : undefined}
+          onOpen={item.studyId ? () => openStudy(item.studyId!) : undefined} />)}
+        {runs.map((run) => <SavedRunCard key={run.id} run={run} title={studyTitle(run.studyId)} label={label} onOpen={() => openStudy(run.studyId, run.id)} />)}
+        {!previews.length && !runs.length && <div className="agent-review-empty"><Icon name="result/snapshot" /><p>Agent 读取的保存结果和它做的快速试算会列在这里，可以直接回到工作台查看。</p></div>}
+      </TabsContent>
+      <TabsContent value="section">
+        {domain && section ? <figure className="agent-side-section">
+          <SectionThumbnail document={domain} sectionId={section.id} label={`${project?.name || "工程"} 敷设截面`} />
+          <figcaption>{project?.name} · 工程模型第 {String(workspace.data?.revision ?? "—")} 版。Agent 读取和试算用的都是这一版；待批准的改动不会画进来。</figcaption>
+        </figure> : <div className="agent-review-empty"><Icon name="object/section" /><p>{workspace.isPending ? "正在读取工程模型" : "这个工程还没有敷设截面。"}</p></div>}
       </TabsContent>
     </Tabs>
   </aside>;
 
   return (
     <AppShell title={title} status={state ? <span className={`agent-state is-${state.tone}`}>{state.text}</span> : <StatusMark kind="draft" label="新任务" />}
-      actions={summary?.study_id ? <Button size="compact" variant="ghost" onClick={() => openStudy(summary.study_id!)}><Icon name="nav/workbench" />在工作台打开</Button> : null}
-      property={proposals.length || previews.length ? review : undefined} theme={theme} onTheme={() => {}} onUnavailable={() => {}}>
+      actions={<>
+        {summary?.study_id && <Button size="compact" variant="ghost" onClick={() => openStudy(summary.study_id!)}><Icon name="nav/workbench" />在工作台打开</Button>}
+        {!side && <IconButton variant="ghost" icon="nav/sidebar" label={pending ? `展开右栏（${pending} 项改动待审核）` : "展开右栏"} onClick={toggleSide} />}
+      </>}
+      property={side ? sidebar : undefined} theme={theme} onTheme={() => {}} onUnavailable={() => {}}>
       <div className="agent-page" data-page="agent">
         <div className="agent-thread" ref={thread}>
           {agent.loading ? <p className="agent-thread-note">正在读取任务记录</p>
@@ -104,9 +147,13 @@ export function AgentPage() {
                 : turns.map((turn, index) => <TurnView key={turn.id} turn={turn} kinds={kinds} proposals={agent.proposals} label={label} review="aside" onOpenStudy={openStudy}
                   onRetry={index === turns.length - 1 && canSend && !agent.sending ? () => send(turn.question) : undefined} />)}
         </div>
-        <Composer value={draft} onChange={setDraft} onSend={() => send(draft)} disabled={!canSend || !project || agent.sending} sending={agent.sending}
-          placeholder={canSend ? "描述任务，如：回路间距加大到 0.3 m，看看载流量怎么变" : "Agent 模型未连接，暂时不能发送"}
-          scope={scope} model={<><span className={`status-dot ${ready ? "is-ok" : "is-off"}`} /><span className="agent-panel-model">{model}</span></>} />
+        <div className="agent-prompt">
+          <PromptBar value={draft} onChange={setDraft} onSend={() => send(draft)} onStop={agent.stop} busy={agent.sending} canSend={canSend && !!project}
+            placeholder={canSend ? "描述任务，或输入 @ 引用研究、/ 调出常用任务" : "Agent 模型未连接，暂时不能发送"}
+            references={references} commands={COMMANDS}
+            model={<><span className={`status-dot ${ready ? "is-ok" : "is-off"}`} /><span className="agent-panel-model">{model}</span></>} />
+          <div className="agent-prompt-scope">{scope}</div>
+        </div>
       </div>
     </AppShell>
   );

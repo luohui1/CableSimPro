@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Button, IconButton } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/icon";
 import { significantNumber } from "@/lib/format";
-import { EVIDENCE_LABEL, type Preview, type Step, type Turn } from "./transcript";
+import { EVIDENCE_LABEL, type Preview, type SavedRun, type Step, type Turn } from "./transcript";
 import type { AgentProposal } from "./agent-api";
 import "./agent.css";
 
@@ -126,6 +126,17 @@ export function PreviewCard({ preview, label, proposalTitle, onOpen }: { preview
   </article>;
 }
 
+/** 保存运行卡：Agent 读过的已保存结果，数值来自运行摘要的结论量值。 */
+export function SavedRunCard({ run, title, label, onOpen }: { run: SavedRun; title?: string; label: Label; onOpen?: () => void }) {
+  return <article className="agent-card">
+    <header><Icon name="result/snapshot" /><b>{title || "保存运行"}</b><span className="agent-card-tag">{run.sequence ? `运行 ${run.sequence}` : "已保存"}</span></header>
+    <dl className="agent-card-values">{run.headlines.map((row) => <div key={row.title + row.entity}>
+      <dt>{row.title}{row.entity && <span>{label(row.entity)}</span>}</dt><dd>{significantNumber(row.value, 4)}<small>{row.unit}</small></dd>
+    </div>)}</dl>
+    <footer><span>{run.created ? `保存于 ${new Date(run.created).toLocaleString("zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}` : "已保存运行"}</span>{onOpen && <Button size="compact" variant="ghost" onClick={onOpen}>在工作台打开<Icon name="action/arrow-right" /></Button>}</footer>
+  </article>;
+}
+
 /** 按住确认：松手即取消，避免误触批准。 */
 export function HoldButton({ children, onConfirm, disabled, loading }: { children: ReactNode; onConfirm: () => void; disabled?: boolean; loading?: boolean }) {
   const [holding, setHolding] = useState(false);
@@ -189,19 +200,4 @@ export function TurnView({ turn, kinds, proposals, label, review, onOpenStudy, o
     {turn.notices.map((notice, index) => <p key={index} className="agent-notice" role="alert"><Icon name="status/warning" />{notice.text}</p>)}
     {onRetry && !turn.running && !turn.answer && turn.notices.length > 0 && <Button size="compact" variant="outline" className="agent-retry" onClick={onRetry}><Icon name="agent/retry" />重新发送</Button>}
   </section>;
-}
-
-/** 输入栏：Enter 发送，Shift+Enter 换行；左下是工作对象，右下是模型与发送。模型未就绪时可先输入，只是不能发送。 */
-export function Composer({ value, onChange, onSend, disabled, sending, placeholder, scope, model }: {
-  value: string; onChange: (value: string) => void; onSend: () => void; disabled?: boolean; sending?: boolean; placeholder: string; scope?: ReactNode; model?: ReactNode;
-}) {
-  return <form className="agent-composer" onSubmit={(event) => { event.preventDefault(); onSend(); }}>
-    <textarea value={value} disabled={sending} aria-label="给 Agent 的任务" placeholder={placeholder} rows={2}
-      onChange={(event) => onChange(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); if (!disabled) onSend(); } }} />
-    <div className="agent-composer-bar">
-      {scope}
-      <span className="agent-composer-model">{model}</span>
-      <IconButton type="submit" variant="primary" icon="agent/send" label="发送" disabled={disabled || !value.trim()} loading={sending} />
-    </div>
-  </form>;
 }

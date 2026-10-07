@@ -5,7 +5,8 @@ import { Icon } from "@/components/icon";
 import { entityLabel } from "@/lib/domain-fields";
 import { workspaceQuery } from "@/lib/study-queries";
 import { agentTools } from "./agent-api";
-import { Composer, ProposalCard, TurnView } from "./conversation";
+import { ProposalCard, TurnView } from "./conversation";
+import { PromptBar } from "./prompt-bar";
 import { useAgentSession, useAgentStatus } from "./use-agent-session";
 
 const SUGGESTIONS = ["解释这个研究的结论和主要限制因素", "土壤热阻率改成 1.2 K·m/W 会怎样？", "检查这个研究还缺哪些输入"];
@@ -42,7 +43,7 @@ export function AgentPanel({ workspaceId, studyId, context, suggestions = SUGGES
           onRetry={index === turns.length - 1 && canSend && !agent.sending ? () => send(turn.question) : undefined}
           review={(proposal) => <ProposalCard proposal={proposal} onDecide={(id, decision) => void agent.decide(id, decision)} busy={agent.decisions[proposal.id]?.busy} error={agent.decisions[proposal.id]?.error} />} />)}
     </div>
-    <Composer value={draft} onChange={setDraft} onSend={() => send(draft)} disabled={!canSend || agent.sending} sending={agent.sending}
+    <PromptBar value={draft} onChange={setDraft} onSend={() => send(draft)} onStop={agent.stop} busy={agent.sending} canSend={canSend}
       placeholder={canSend ? "描述任务，如：回路间距加大到 0.3 m，看看载流量" : "Agent 模型未连接，暂时不能发送"} />
   </section>;
 }
