@@ -139,6 +139,27 @@ def test_tool_error_is_corrected_and_parameter_approval_uses_normal_save(client,
     assert any(event['type']=='proposal.decision' and event['data']['engineering_approval'] is False for event in audit['events'])
 
 
+def test_settings_page_connection_is_used_and_its_key_never_returned(client,fake_model):
+    script,requests=fake_model;w=client.post('/api/workspaces',json={}).json()
+    base=os.environ['CABLESIM_LLM_BASE_URL'];key='sk-settings-only-key-7781'
+    saved=client.put('/api/agent/settings',json={'base_url':base,'model':'custom-model','api_key':key,
+        'instructions':'结论先写一句话。','model_timeout_s':40})
+    assert saved.status_code==200,saved.text
+    body=saved.json()
+    assert (body['source'],body['model'],body['key_hint'],body['key_source'])==('settings','custom-model','…7781','memory')
+    assert key not in saved.text and key not in client.get('/api/agent/settings').text
+    assert client.get('/api/agent/status').json()['model']=='custom-model'
+    tid=session(client,w)
+    assert client.get(f'/api/agent/sessions/{tid}').json()['budget']['limits']['model_timeout_s']==40
+    script.append(answer('已读取。'));send(client,tid,'说明下一步。')
+    assert requests[-1]['model']=='custom-model' and '结论先写一句话。' in requests[-1]['messages'][0]['content']
+    assert key not in json.dumps(client.get(f'/api/agent/sessions/{tid}').json(),ensure_ascii=False)
+    bad=client.put('/api/agent/settings',json={'base_url':'ftp://example.com','model':'m'})
+    assert bad.status_code==422 and bad.json()['detail']['code']=='LLM_BASE_INVALID'
+    assert client.delete('/api/agent/settings').json()['source']=='environment'
+    assert client.get('/api/agent/status').json()['model']=='deepseek-flash'
+
+
 def test_domain_proposals_show_display_units_and_reject_without_writing(client,fake_model):
     script,_=fake_model;w=client.post('/api/workspaces',json={}).json()
     converted=client.post(f'/api/workspaces/{w["id"]}/domain/conversion',json={'expected_revision':w['revision']}).json()

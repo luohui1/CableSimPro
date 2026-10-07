@@ -6,7 +6,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import TypeAdapter
 from starlette.background import BackgroundTask
 
-from .contracts import AgentStatus,ToolInfo,CreateSession,SessionId,SessionSummary,Message,SessionRecord,ProposalDecision,StreamEvent,PlanNode
+from .contracts import AgentStatus,ToolInfo,CreateSession,SessionId,SessionSummary,ModelSettingsUpdate,ModelSettingsTest,Message,SessionRecord,ProposalDecision,StreamEvent,PlanNode
 
 
 def make_router(harness):
@@ -14,6 +14,19 @@ def make_router(harness):
 
     @router.get('/status',response_model=AgentStatus)
     def status():return harness.status()
+
+    # 模型设置：密钥只写不读，响应里只有是否已保存与末四位
+    @router.get('/settings')
+    def settings():return harness.settings.public()
+
+    @router.put('/settings')
+    def save_settings(body:ModelSettingsUpdate):return harness.settings.update(body)
+
+    @router.delete('/settings')
+    def reset_settings():return harness.settings.reset()
+
+    @router.post('/settings/test')
+    def test_settings(body:ModelSettingsTest):return harness.test_model(body)
 
     @router.get('/tools',response_model=list[ToolInfo],response_model_exclude_none=True)
     def tools():return harness.tools()

@@ -278,7 +278,6 @@ summary { color: var(--text-secondary); cursor: pointer; margin-block: var(--spa
 .state-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
 .not-found { justify-content: center; }
 .object-section { margin-block: var(--space-6); }
-.settings-shortcuts { display: grid; grid-template-columns: auto 1fr; gap: var(--space-3) var(--space-6); font-size: var(--text-note); }
 .series-chart { width: 100%; min-width: 0; }
 .series-chart > svg { width: 100%; height: auto; display: block; }
 .series-chart text { font-family: var(--font-ui); font-size: var(--text-note); fill: var(--text-secondary); font-variant-numeric: tabular-nums; }

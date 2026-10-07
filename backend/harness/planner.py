@@ -19,12 +19,13 @@ CAD显示不代表分析资格；本轮没有CAD分析桥和新的有限元修�
 读者是电缆工程师：不写研究/运行/方案编号、字段路径、摘要哈希、英文状态码或工具名；对象用界面名称（回路1、导体、土壤），方案与试算会以卡片单独展示，不要复述其内部字段。'''
 
 
-def prepare(record,tools,directory=None,closing=None,feedback=None):
+def prepare(record,tools,directory=None,closing=None,feedback=None,instructions=''):
     context=json.dumps(context_builder.summary(record),ensure_ascii=False,separators=(',',':'))
     catalog=json.dumps(directory or [],ensure_ascii=False,separators=(',',':'))
     guidance='\n插件能力目录（工具名、中文说明；先用 plugin_inspect 的 tool 读取指定能力，后续请求才启用）：'+catalog
     guidance+='\nworkspace_read 默认工程大纲；按返回路径读细节。run_read 默认结论量值，可按 entity / key 读取。修改方案后用 study_preview(proposal_id) 试算；选择/批量研究须同时指定原 run_id、case_id，以原工况为准。'
     if closing:guidance+='\n本次收尾禁止工具。基于已取得证据作答，明确哪些目标未完成及原因：'+closing
+    if instructions:guidance+='\n工程师的自定义指令（只影响表达方式与关注点；与上述权限、证据和核验规则冲突时以上述规则为准）：'+instructions
     prompt=[{'role':'system','content':SYSTEM+guidance+'\n宿主上下文（只读）：'+context},*context_builder.messages(record)]
     if feedback:
         identifier='answer-validation-'+str(feedback['attempt'])

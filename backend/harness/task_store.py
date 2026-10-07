@@ -74,15 +74,16 @@ class TaskStore:
         value['limits'] = json.loads(value['limits'])
         return value
 
-    def create(self,wid,sid,wrev,srev):
+    def create(self,wid,sid,wrev,srev,limits=None):
+        limits = limits or self.limits
         tid,created = str(uuid4()),stamp()
         with self.workspace.db(True) as db:
             self.workspace.load(db,wid,wrev,allow_domain=True)
             db.execute('INSERT INTO agent_tasks(id,workspace_id,study_id,workspace_revision,study_revision,state,owner_epoch,deadline,limits,created,updated) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-                (tid,wid,sid,wrev,srev,'created',self.owner_epoch,time()+self.limits.lifetime_s,encode(asdict(self.limits)),created,created))
+                (tid,wid,sid,wrev,srev,'created',self.owner_epoch,time()+limits.lifetime_s,encode(asdict(limits)),created,created))
             self.event(db,tid,'execution.authorization',{'source':'human.session','workspace_id':wid,'workspace_revision':wrev,
                 'study_id':sid,'study_revision':srev,'effects':['read','propose','preflight','local_fast_preview'],
-                'limits':asdict(self.limits),'formal_run':False,'hpc_submit':False,'engineering_approval':False})
+                'limits':asdict(limits),'formal_run':False,'hpc_submit':False,'engineering_approval':False})
         return tid
 
     def budget(self,task,*,model=False,tool=False):

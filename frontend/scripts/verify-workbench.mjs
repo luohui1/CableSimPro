@@ -71,6 +71,13 @@ try {
   await expect(page.getByLabel("给 Agent 的任务")).toBeEditable();
   await expect(page.getByText("可调用的工具")).toHaveCount(0);
 
+  // 设置 · AI 模型：可在界面填写连接；未配置时如实显示，密钥框不回显
+  await go("/settings?section=ai");
+  await expect(page.getByRole("heading", { name: "AI 模型" })).toBeVisible();
+  await expect(page.getByLabel("服务地址")).toBeEditable();
+  await expect(page.getByLabel("API 密钥")).toHaveValue("");
+  await expect(page.getByRole("button", { name: "测试连接" })).toBeVisible();
+
   // 深色主题
   await go(`/studies?workspace=${project.id}&theme=dark`);
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "dark");

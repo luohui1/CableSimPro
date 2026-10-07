@@ -1,5 +1,6 @@
 """Bounded native conversation loop; the model never owns a business write path."""
 import json
+from dataclasses import replace
 from time import perf_counter,time
 
 from fastapi import HTTPException
@@ -10,6 +11,7 @@ from .contracts import StreamEvent
 from .context_builder import request_summary,compress_result
 from .evidence import grounded_text,reconcile,evidence_summary
 from .model_port import ModelError
+from .model_settings import ModelSettings
 from .planner import prepare
 from .proposals import Proposals
 from .providers import OpenAICompatibleProvider
@@ -23,7 +25,8 @@ from .tool_registry import ToolRegistry
 class Harness:
     def __init__(self,research,model=None,limits=None):
         self.research=research
-        self.model=model or OpenAICompatibleProvider()
+        self.settings=ModelSettings(research.store)
+        self.model=model or OpenAICompatibleProvider(self.settings)
         self.tasks=TaskStore(research.store,research.owner_epoch,limits)
         self.registry=ToolRegistry(research)
         self.proposals=Proposals(research,self.tasks)
@@ -31,6 +34,16 @@ class Harness:
 
     def initialize(self):
         self.tasks.initialize()
+        self.settings.initialize()
+
+    def test_model(self,body):
+        """Probe a candidate connection; omitted fields fall back to the one in use."""
+        current=self.settings.resolve()
+        base=(body.base_url or current['base_url'] or '').strip()
+        model=(body.model or current['model'] or '').strip()
+        key=(body.api_key or '').strip() or current['api_key']
+        if not hasattr(self.model,'probe'):return {'ok':False,'code':'LLM_PROBE_UNAVAILABLE','message':'当前模型接口不支持连接测试。'}
+        return self.model.probe(base,model,key)
 
     def status(self):
         configured,model=self.model.status()
@@ -44,7 +57,9 @@ class Harness:
         with self.research.store.db() as db:
             row,_=self.research.store.load(db,wid)
             study=self.research.definition(db,wid,sid) if sid else None
-        return {'id':self.tasks.create(wid,sid,row['revision'],study['revision'] if study else None)}
+        timeout=self.settings.model_timeout()
+        limits=replace(self.tasks.limits,model_timeout_s=timeout) if timeout else None
+        return {'id':self.tasks.create(wid,sid,row['revision'],study['revision'] if study else None,limits)}
 
     def emit(self,tid,kind,data,*,persist=True):
         data=redact(data)
@@ -66,7 +81,7 @@ class Harness:
             while True:
                 record=self.tasks.record(tid)
                 tools=self.registry.visible(record)
-                prompt,definitions=prepare(record,tools,self.registry.directory())
+                prompt,definitions=prepare(record,tools,self.registry.directory(),instructions=self.settings.instructions())
                 configured,model=self.model.status()
                 if not configured:raise ModelError('LLM_NOT_CONFIGURED','模型未配置；请在宿主环境中配置模型地址、模型名与密钥。')
                 metrics=request_summary(model,prompt,definitions)
@@ -190,7 +205,7 @@ class Harness:
             record=self.tasks.record(tid)
             feedback=next(event['data'] for event in reversed(record['events']) if event['type']=='answer.rejected' and event['data']['turn_id']==turn)
             if attempt==limit:break
-            prompt,definitions=prepare(record,{},closing='只重写被拦的解释，不执行任何业务动作。',feedback=feedback)
+            prompt,definitions=prepare(record,{},closing='只重写被拦的解释，不执行任何业务动作。',feedback=feedback,instructions=self.settings.instructions())
             _,model=self.model.status();metrics={**request_summary(model,prompt,definitions),'phase':'repair'}
             with self.research.store.db() as db:task=self.tasks.load(db,tid)
             reason=self.tasks.closing_reason(task,metrics['prompt_bytes'],metrics['definition_bytes'],repair=True)
@@ -222,7 +237,7 @@ class Harness:
     def closing(self,tid,turn,reason):
         record=self.tasks.record(tid)
         feedback=next((event['data'] for event in reversed(record['events']) if event['type']=='answer.rejected' and event['data']['turn_id']==turn),None)
-        prompt,definitions=prepare(record,{},closing=reason,feedback=feedback)
+        prompt,definitions=prepare(record,{},closing=reason,feedback=feedback,instructions=self.settings.instructions())
         configured,model=self.model.status()
         if not configured:raise ModelError('LLM_NOT_CONFIGURED','模型未配置，无法发起收尾请求。')
         task=self.tasks.begin_model(tid,turn,request_summary(model,prompt,definitions),closing=True)

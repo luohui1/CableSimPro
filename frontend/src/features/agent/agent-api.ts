@@ -52,6 +52,20 @@ export const agentStatus = (signal?: AbortSignal) => fetch("/api/agent/status", 
 
 export const agentTools = (signal?: AbortSignal) => fetch("/api/agent/tools", { signal }).then((response) => json<AgentTool[]>(response));
 
+/** 模型设置：密钥只写不读，响应里只有是否已保存、末四位与存放位置。 */
+export type AgentSettings = {
+  source: "settings" | "environment" | "none"; base_url: string; model: string; has_key: boolean; key_hint: string | null;
+  key_source: "system" | "memory" | "environment" | null; key_storage: "system" | "memory"; configured: boolean;
+  instructions: string; model_timeout_s: number | null; environment: { base_url: boolean; model: boolean; api_key: boolean };
+};
+export type AgentSettingsUpdate = { base_url: string; model: string; api_key?: string; instructions: string; model_timeout_s: number | null };
+export type AgentProbe = { ok: boolean; latency_ms?: number; model?: string; code?: string; message?: string };
+const sendJson = (method: string, body?: unknown) => ({ method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+export const agentSettings = (signal?: AbortSignal) => fetch("/api/agent/settings", { signal }).then((response) => json<AgentSettings>(response));
+export const saveAgentSettings = (body: AgentSettingsUpdate) => fetch("/api/agent/settings", sendJson("PUT", body)).then((response) => json<AgentSettings>(response));
+export const resetAgentSettings = () => fetch("/api/agent/settings", { method: "DELETE" }).then((response) => json<AgentSettings>(response));
+export const testAgentSettings = (body: { base_url?: string; model?: string; api_key?: string }) => fetch("/api/agent/settings/test", sendJson("POST", body)).then((response) => json<AgentProbe>(response));
+
 export const agentSessions = (workspaceId?: string, signal?: AbortSignal) =>
   fetch(`/api/agent/sessions${workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""}`, { signal }).then((response) => json<AgentSessionSummary[]>(response));
 

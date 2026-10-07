@@ -46,6 +46,20 @@ class SessionId(StrictModel):
     id: UUID
 
 
+class ModelSettingsUpdate(StrictModel):
+    base_url: str = Field(max_length=500)
+    model: str = Field(max_length=100)
+    api_key: str | None = Field(default=None,max_length=500)
+    instructions: str = Field(default='',max_length=4000)
+    model_timeout_s: int | None = None
+
+
+class ModelSettingsTest(StrictModel):
+    base_url: str | None = Field(default=None,max_length=500)
+    model: str | None = Field(default=None,max_length=100)
+    api_key: str | None = Field(default=None,max_length=500)
+
+
 class SessionSummary(StrictModel):
     id: UUID
     workspace_id: UUID

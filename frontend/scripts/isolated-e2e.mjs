@@ -78,6 +78,8 @@ try {
   const environment = {
     ...process.env,
     CABLESIM_DB: database,
+    // 验收库的 Agent 密钥只放进程内存，不碰本机系统凭据库
+    CABLESIM_AGENT_KEY_STORE: "memory",
     CABLESIM_DATASETS_DIR: path.join(scratch, "datasets"),
     TEMP: scratch,
     TMP: scratch,

@@ -1,4 +1,4 @@
-"""Environment-only OpenAI-compatible transport, with bounded response and tool calls."""
+"""OpenAI-compatible transport configured from saved settings or the host environment, with bounded response and tool calls."""
 import json
 import os
 from time import perf_counter
@@ -14,22 +14,54 @@ class OpenAICompatibleProvider:
     MAX_RESPONSE_BYTES = 512*1024
     MAX_ARGUMENT_BYTES = 32*1024
 
+    def __init__(self,settings=None):
+        self.settings=settings
+
+    def connection(self):
+        if self.settings:return self.settings.resolve()
+        env={name:os.environ.get('CABLESIM_LLM_'+name.upper(),'').strip() for name in ('base_url','model','api_key')}
+        return {**env,'model':env['model'] or 'deepseek-flash','source':'environment' if all(env.values()) else 'none'}
+
     def status(self):
-        model = os.environ.get('CABLESIM_LLM_MODEL','').strip() or 'deepseek-flash'
-        configured = bool(os.environ.get('CABLESIM_LLM_API_KEY','').strip()
-            and os.environ.get('CABLESIM_LLM_BASE_URL','').strip()
-            and os.environ.get('CABLESIM_LLM_MODEL','').strip())
-        return configured,redact(model)
+        current=self.connection()
+        return current['source']!='none' and bool(current['base_url'] and current['model'] and current['api_key']),redact(current['model'])
+
+    def probe(self,base,model,key,timeout_s=20.):
+        """Smallest real request: confirms address, model name and key together; nothing is stored."""
+        parsed=urlsplit(base)
+        if parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
+            return {'ok':False,'code':'LLM_BASE_INVALID','message':'服务地址须为 http(s) 开头、不含账号密码、查询串或片段的 API 基址。'}
+        if not model or not key:
+            return {'ok':False,'code':'LLM_NOT_CONFIGURED','message':'请先填写模型名与密钥。'}
+        started=perf_counter()
+        try:
+            with httpx.Client(timeout=httpx.Timeout(timeout_s,connect=min(8.,timeout_s)),follow_redirects=False) as client:
+                response=client.post(base.rstrip('/')+'/chat/completions',headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+                    json={'model':model,'messages':[{'role':'user','content':'只回复“好”。'}],'max_tokens':8,'stream':False})
+            elapsed=round((perf_counter()-started)*1000)
+            if response.status_code in (401,403):return {'ok':False,'code':'LLM_AUTH_FAILED','message':'密钥不被接受（%d）。'%response.status_code,'latency_ms':elapsed}
+            if response.status_code==404:return {'ok':False,'code':'LLM_NOT_FOUND','message':'服务地址或模型名不对（404）。','latency_ms':elapsed}
+            if response.status_code!=200:return {'ok':False,'code':'LLM_PROVIDER_ERROR','message':'模型服务拒绝了请求（%d）。'%response.status_code,'latency_ms':elapsed}
+            data=response.json()
+            if not isinstance(data.get('choices'),list) or not data['choices']:
+                return {'ok':False,'code':'LLM_RESPONSE_INVALID','message':'地址可达，但返回的不是 OpenAI 兼容的对话结果。','latency_ms':elapsed}
+            return {'ok':True,'model':redact(str(data.get('model') or model))[:100],'latency_ms':elapsed}
+        except httpx.TimeoutException:
+            return {'ok':False,'code':'LLM_TIMEOUT','message':'%g 秒内没有响应；请检查网络、代理或服务状态。'%timeout_s}
+        except httpx.HTTPError:
+            return {'ok':False,'code':'LLM_CONNECTION_FAILED','message':'连不上服务地址；请检查网络、代理或地址拼写。'}
+        except ValueError:
+            return {'ok':False,'code':'LLM_RESPONSE_INVALID','message':'地址可达，但返回的不是 JSON 对话结果。'}
 
     def reply(self,messages,tools,timeout_s):
         configured,model = self.status()
         if not configured:
-            raise ModelError('LLM_NOT_CONFIGURED','模型未配置；请在宿主环境中配置模型地址、模型名与密钥。')
-        base = os.environ.get('CABLESIM_LLM_BASE_URL','').strip()
-        key = os.environ.get('CABLESIM_LLM_API_KEY','').strip()
+            raise ModelError('LLM_NOT_CONFIGURED','模型未配置；请在“设置 · AI 模型”里填写服务地址、模型名与密钥。')
+        current=self.connection()
+        base,key=current['base_url'],current['api_key']
         parsed=urlsplit(base)
         if parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or len(model)>100:
-            raise ModelError('LLM_CONFIGURATION_INVALID','模型环境配置不合法；地址须为无凭据、查询串或片段的 HTTP(S) API 基址。')
+            raise ModelError('LLM_CONFIGURATION_INVALID','模型配置不合法；地址须为无凭据、查询串或片段的 HTTP(S) API 基址。')
         if timeout_s<=0:raise ModelError('BUDGET_EXCEEDED','模型请求已无剩余时间预算。')
         body={'model':model,'messages':messages,'stream':True,'stream_options':{'include_usage':True},'max_tokens':2048}
         if tools:body.update(tools=tools,tool_choice='auto',parallel_tool_calls=False)

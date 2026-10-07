@@ -191,31 +191,55 @@
 @media (max-width: 1180px) { .plugins-page { grid-template-columns: minmax(0, 1fr); } .plugin-list { position: static; } }
 
 /* 设置：插画 + 分区 */
-.settings-page { display: flex; flex-direction: column; max-width: calc(var(--space-12) * 20); }
-.settings-section { display: grid; grid-template-columns: calc(var(--space-12) * 4) minmax(0, 1fr); gap: var(--space-8); padding-block: var(--space-8); border-bottom: 1px solid var(--line); }
-.settings-art img { width: 100%; height: auto; mix-blend-mode: multiply; }
-[data-theme="dark"] .settings-art img { mix-blend-mode: normal; filter: invert(.88) hue-rotate(180deg); opacity: .8; }
-.settings-body { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
-.settings-body h2 { font-size: var(--text-subheading); }
-.settings-lead { color: var(--text-secondary); max-width: 64ch; line-height: 1.7; }
-.settings-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); max-width: calc(var(--space-12) * 10); min-height: var(--control-standard); border-bottom: 1px solid var(--line); }
-.settings-units { max-width: calc(var(--space-12) * 10); }
-.settings-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--space-12) * 5), 1fr)); gap: var(--space-3); }
-.settings-facts > div { padding: var(--space-3) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-surface); display: flex; flex-direction: column; gap: var(--space-1); }
-.settings-facts dt { color: var(--text-secondary); font-size: var(--text-note); }
-.settings-facts dd { font-weight: var(--weight-strong); }
-.settings-facts dd.muted { font-weight: var(--weight-normal); line-height: 1.6; }
-.settings-actions { display: flex; align-items: center; gap: var(--space-3); }
+/* 设置：左侧分类，右侧内容（一次只看一类） */
+.settings-page { display: grid; grid-template-columns: calc(var(--space-12) * 4) minmax(0, 1fr); gap: var(--space-8); align-items: start; max-width: calc(var(--space-12) * 22); }
+.settings-nav { position: sticky; top: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.settings-nav button { display: flex; align-items: center; gap: var(--space-2); height: calc(var(--space-8) + var(--space-1)); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-item); background: transparent; color: var(--text-secondary); font: inherit; text-align: left; cursor: pointer; }
+.settings-nav button:hover { background: var(--hover); color: var(--text); }
+.settings-nav button[aria-current="page"] { background: var(--location); color: var(--text); font-weight: var(--weight-strong); }
+.settings-nav .icon { width: var(--space-4); height: var(--space-4); }
+.settings-content { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; max-width: calc(var(--space-12) * 16); }
+.settings-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-6); padding-bottom: var(--space-4); border-bottom: 1px solid var(--line); }
+.settings-head h2 { margin: 0; font-size: var(--text-heading); }
+.settings-head p { margin: var(--space-2) 0 0; color: var(--text-secondary); line-height: 1.7; }
+.settings-head img { flex: none; width: calc(var(--space-12) * 2 + var(--space-4)); height: auto; mix-blend-mode: multiply; }
+[data-theme="dark"] .settings-head img { mix-blend-mode: normal; filter: invert(.88) hue-rotate(180deg); opacity: .8; }
+.settings-subhead { margin: var(--space-4) 0 0; font-size: var(--text-subheading); }
+.settings-card { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--panel); }
+.settings-card-head { display: flex; align-items: baseline; gap: var(--space-2); padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--line); }
+.settings-card-head span { color: var(--text-secondary); font-size: var(--text-note); }
+.settings-card-head small { margin-left: auto; color: var(--text-weak); font-size: var(--text-note); }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-4); }
+.settings-row + .settings-row { border-top: 1px solid var(--line); }
+.settings-row-label { display: flex; flex-direction: column; gap: var(--space-1); }
+.settings-row-label small { color: var(--text-secondary); font-size: var(--text-note); }
+.settings-row-control { display: flex; align-items: center; justify-content: flex-end; color: var(--text-secondary); text-align: right; }
+.settings-units { max-width: calc(var(--space-12) * 12); }
+.settings-compute { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--space-12) * 6), 1fr)); gap: var(--space-3); }
+.settings-plugins { list-style: none; margin: 0; padding: var(--space-2) var(--space-4) var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
+.settings-plugins li { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-note); }
+.settings-plugins small { color: var(--text-weak); font-variant-numeric: tabular-nums; }
+.settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .settings-row-actions { display: flex; justify-content: flex-end; gap: var(--space-1); }
 .settings-banner { padding: var(--space-2) var(--space-3); border-radius: var(--radius-item); background: var(--fill); color: var(--attention); }
-.settings-about { padding-block: var(--space-6); }
-.settings-about dl { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-note); }
-.settings-about dl > div { display: grid; grid-template-columns: calc(var(--space-12) * 2) minmax(0, 1fr); }
-.settings-about dt { color: var(--text-secondary); }
-.segmented { display: inline-flex; padding: calc(var(--space-1) / 2); border-radius: var(--radius-pill); background: var(--hover); }
-.segmented > button { height: var(--control-compact); padding: 0 var(--space-4); border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--text-secondary); font-size: var(--text-note); }
-.segmented > button[aria-checked="true"] { background: var(--panel); color: var(--text); font-weight: var(--weight-strong); }
-@media (max-width: 860px) { .settings-section { grid-template-columns: minmax(0, 1fr); } .settings-art { max-width: calc(var(--space-12) * 4); } }
+.settings-link { padding: 0; border: 0; background: none; color: var(--agent); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+/* AI 模型 */
+.settings-ai { display: flex; flex-direction: column; gap: var(--space-6); }
+.settings-connection { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-radius: var(--radius-surface); background: var(--fill); }
+.settings-connection.is-ok { background: var(--agent-fill); }
+.settings-connection > div { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.settings-connection > div span { color: var(--text-secondary); font-size: var(--text-note); line-height: 1.6; }
+.settings-connection-tools { margin-left: auto; color: var(--text-secondary); font-size: var(--text-note); white-space: nowrap; }
+.settings-form { gap: var(--space-6); }
+.settings-form-pair { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: var(--space-4); }
+.settings-presets { flex-wrap: wrap; justify-content: flex-start; }
+.settings-test { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin-top: calc(var(--space-2) * -1); }
+.settings-test-ok, .settings-test-fail { display: inline-flex; align-items: center; gap: var(--space-1); font-size: var(--text-note); }
+.settings-test-ok { color: var(--success); }
+.settings-test-fail { color: var(--error); }
+.settings-test-ok .icon, .settings-test-fail .icon { width: var(--space-4); height: var(--space-4); }
+.settings-inline { display: flex; align-items: center; gap: var(--space-2); max-width: calc(var(--space-12) * 3); color: var(--text-secondary); }
+@media (max-width: 860px) { .settings-page { grid-template-columns: minmax(0, 1fr); } .settings-nav { position: static; flex-direction: row; flex-wrap: wrap; } .settings-form-pair { grid-template-columns: minmax(0, 1fr); } .settings-head img { display: none; } }
 
 /* 库：电缆型号架 */
 .cable-shelf { display: flex; flex-direction: column; gap: var(--space-4); padding-bottom: var(--space-8); margin-bottom: var(--space-6); border-bottom: 1px solid var(--line); }

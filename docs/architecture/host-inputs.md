@@ -86,6 +86,10 @@
 | 接口 | 请求/结果 |
 | --- | --- |
 | GET `/api/agent/status` | `{configured,model,tools}`；model未配置时展示deepseek-flash，tools为实际注册数量 |
+| GET `/api/agent/settings` | 当前生效的模型连接：`source`（settings/environment/none）、地址、模型名、`has_key`、末四位提示、密钥来源与存放位置（system 系统凭据库 / memory 仅本次进程）、自定义指令、单次请求超时；从不返回密钥 |
+| PUT `/api/agent/settings` | `{base_url,model,api_key?,instructions,model_timeout_s?}`；api_key 省略则保留原密钥，空串清除；非敏感项写入工程库 `agent_settings`，密钥只进系统凭据库或进程内存；保存的设置优先于 `CABLESIM_LLM_*` 环境变量 |
+| DELETE `/api/agent/settings` | 清除界面设置与保存的密钥，回到环境变量配置 |
+| POST `/api/agent/settings/test` | `{base_url?,model?,api_key?}`，缺项取当前生效值；发一次最小对话请求，返回 `{ok,latency_ms?,model?,code?,message?}`，不保存任何内容 |
 | GET `/api/agent/tools` | `[{name,title,kind,description,plugin_id?,hpc}]`；kind为read/propose/run，宿主工具不带plugin_id |
 | GET `/api/agent/sessions?workspace_id=` | 任务列表，按更新时间新到旧：绑定、状态/等待原因、首条提问作标题、未决方案数；不含消息正文与结果 |
 | POST `/api/agent/sessions` | `{workspace_id,study_id:null或UUID}` → `{id}`；校验工程与研究归属，记录固定修订及本机快速执行授权 |
