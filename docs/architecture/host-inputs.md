@@ -99,6 +99,8 @@
 
 SSE每个事件恰为`event: 类型`与`data: 单行JSON`，空行分隔；中文JSON保留字符，字符串内换行转义。事件data字段：
 
+回答核验审计通过会话GET的`events`读取：`answer.rejected.data`含`turn_id/phase/attempt/draft/issues`，issue含`code/rule/fragment/start/end/value/unit/message/available_values`；凭据已隐藏。草稿仅供审计，不是回答。`answer.repair`记录实际重写次数与反馈，`model.request.phase`区分`tools/repair/closing`，`answer.accepted.matches`记录量值来源，`answer.fallback.sources`记录确定性摘要来源。SSE沿用下列现有字段，前端展示回答无需新增字段；若增加核验诊断面板，只读取审计事件。
+
 ```text
 message.delta    {text}
 tool.call        {id,tool,title,arguments}

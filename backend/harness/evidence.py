@@ -1,6 +1,7 @@
 """Read existing evidence without manufacturing verification or model quantities."""
 import math
 import re
+from decimal import Decimal, ROUND_HALF_UP, localcontext
 
 from fastapi import HTTPException
 
@@ -15,7 +16,7 @@ def run_points(research,run,case_id=None,*,entity=None,key=None):
     if case_id is None and run['snapshot']['definition']['driver']['kind']=='selection':
         from backend.kernel.report import recommended_case
         preferred=recommended_case(run)
-        selected=[case for case in selected if case['case_id']==preferred] if preferred else []
+        if preferred:selected=[case for case in selected if case['case_id']==preferred]
     cases=[];refs=[]
     conclusion_keys={'ampacity','conductor_temperature','temperature_margin','x-cablesim.emergency-current',
         'thermal_resistance.external','thermal_resistance.insulation','thermal_resistance.oversheath','losses.total'}
@@ -67,58 +68,371 @@ def numbers(value):
     return result
 
 
+NUMBER=r'[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?'
+QUANTITY=re.compile(r'('+NUMBER+r')\s*(K\s*[·*.]\s*m/W|J/\(m³[·*]K\)|Ω/km|Ω/m|ohm/km|ohm/m|mm²|mm2|m²|m2|W/m|kV|kA|°C|℃|摄氏度|安培|Hz|mm|Pa|kg|A|K|V|W|m|s|%|倍)(?![A-Za-z²0-9/])')
+
+
+def unit_name(unit):
+    return str(unit).replace('℃','°C').replace('摄氏度','°C').replace('安培','A').replace('ohm','Ω').replace('mm2','mm²').replace('m2','m²').replace('*','·').replace('K.m','K·m').replace(' ','')
+
+
+def is_delta(key):
+    return bool(re.search(r'margin|delta|rise|difference|温差|余量',str(key),re.I))
+
+
+def delta_context(prefix,unit):
+    if unit not in ('K','°C'):return False
+    # "升高到58°C" is an absolute value; "升高5°C" is a difference.
+    if re.search(r'(?:升高|降低|变化)(?:到|至|为)|(?:从|由|→)[^，。；\n]*$',prefix):return False
+    return bool(re.search(r'温差|余量|温升|变化|差值|升高|降低|超出(?:温限|上限)?|超过(?:温限|上限)',prefix))
+
+
 def quantity_facts(observations):
+    """Keep field identity and JSON source paths, never treat numeric metadata as quantities."""
     facts=[]
-    def add(value,unit,key,headline=False):
-        if type(value) in (int,float) and math.isfinite(value) and unit:
-            facts.append((float(value),unit,key,headline))
-            facts.append((round(float(value),1),unit,key,headline))
-    def visit(item):
+    def visit(item,path,identity):
         if isinstance(item,dict):
-            key=item.get('key') or item.get('path') or item.get('label')
-            if item.get('status')!='unavailable':add(item.get('value'),item.get('unit'),key)
-            add(item.get('display_value'),item.get('display_unit'),key,True)
-            add(item.get('before'),item.get('unit'),key)
-            add(item.get('after'),item.get('unit'),key)
-            for child in item.values():visit(child)
+            identity={**identity,**{key:item[key] for key in ('run_id','case_id','entity','condition','proposal_id') if item.get(key)}}
+            if isinstance(item.get('case'),str) and not item.get('condition'):identity['condition']=item['case']
+            key=item.get('key') or item.get('path') or item.get('label') or ''
+            for field,unit,headline in (('value',item.get('unit'),False),('display_value',item.get('display_unit'),True),
+                                        ('before',item.get('unit'),False),('after',item.get('unit'),False)):
+                value=item.get(field)
+                if type(value) in (int,float) and math.isfinite(value) and unit and item.get('status')!='unavailable':
+                    facts.append({'value':float(value),'unit':unit_name(unit),'key':key,'delta':is_delta(key),
+                        'headline':headline or '/headlines/' in path,'field':field,'source':path+'/'+field,**identity})
+            for name,child in item.items():visit(child,path+'/'+str(name),identity)
         elif isinstance(item,list):
-            for child in item:visit(child)
-    visit(observations)
+            for index,child in enumerate(item):visit(child,path+'/'+str(index),identity)
+    visit(observations,'observations',{})
     return facts
 
 
-def grounded_text(text,observations,*,current=None,proposals=None):
-    """Block unseen numeric claims before any assistant text is persisted or streamed."""
-    known=numbers(observations)
-    facts=quantity_facts(observations)
-    current=current if current is not None else observations
-    if re.search(r'方案(?:已经|已)?(?:生成|创建|提出)',text) and not any(item.get('data',{}).get('proposal') for item in current):
-        raise HTTPException(422,{'code':'UNSUPPORTED_OPERATION_CLAIM','message':'本次工具没有生成方案，已拦截与实际操作不符的解释。'})
-    if re.search(r'已经?(?:写入|修改|更新|保存)|已(?:写入|修改|更新)|已(?:经)?批准',text):
-        if not proposals or any(item['status']=='pending' for item in proposals) or not any(item['status']=='approved' for item in proposals):
-            raise HTTPException(422,{'code':'UNSUPPORTED_OPERATION_CLAIM','message':'没有相应人工保存回执，模型不能宣称已保存或批准。'})
-    if re.search(r'已(?:经)?发布|已(?:经)?外发|合规认证通过',text):
-        raise HTTPException(422,{'code':'ENGINEERING_AUTHORITY_REQUIRED','message':'模型没有发布、外发或工程认证权限。'})
-    # Manifest/version identifiers and standard names are references, not quantities.
-    clean=re.sub(r'\b(?:IEC|GB|TB)\s*\d+(?:[-.]\d+)*','标准引用',text,flags=re.I)
-    if re.search(r'[零〇一二两三四五六七八九十百千万点]+\s*(?:安培|安|伏特|伏|米|摄氏度|度|A\b|K\b|V\b|℃|°C)',clean):
-        raise HTTPException(422,{'code':'UNGROUNDED_QUANTITY','message':'工程数值须按工具返回的明确数字与单位引用，不能改写为未核验的中文数值。'})
-    quantity=re.compile(r'([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)\s*(K[·*]m/W|J/\(m³[·*]K\)|Ω/m|ohm/m|m²|m2|mm²|mm2|°C|℃|A|K|V|Hz|m|s|%)')
-    for match in quantity.finditer(clean):
-        number=float(match.group(1));unit=match.group(2).replace('℃','°C').replace('m2','m²').replace('*','·')
-        context=clean[max(0,match.start()-18):match.end()+8]
-        candidates=[fact for fact in facts if math.isclose(number,fact[0],rel_tol=1e-9,abs_tol=1e-10)
-            and unit==fact[1].replace('℃','°C').replace('m2','m²').replace('*','·')]
-        if '推荐' in context:candidates=[fact for fact in candidates if fact[3]]
-        if re.search(r'允许电流|载流量',context):candidates=[fact for fact in candidates if fact[2] in ('ampacity','x-cablesim.emergency-current')]
-        if not candidates:
-            raise HTTPException(422,{'code':'UNGROUNDED_QUANTITY','message':'模型解释中的数值、单位或结论归属没有对应工具证据，已拦截。'})
-        known.add(number)
-    for token in re.findall(r'(?<![A-Za-z0-9_/.:-])[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?(?![A-Za-z0-9_/])',clean):
-        number=float(token)
-        if not any(math.isclose(number,value,rel_tol=1e-9,abs_tol=1e-10) for value in known):
-            raise HTTPException(422,{'code':'UNGROUNDED_NUMBER','message':'模型解释包含工具或输入中没有的数值，已拦截；请读取证据后再说明。'})
+def converted(fact,target,*,delta=False):
+    source=fact['unit'];value=fact['value']
+    if source==target:return value
+    if source in ('K','°C') and target in ('K','°C'):
+        if fact['delta']!=delta:return None
+        return value if source==target or delta else value+(273.15 if target=='K' else -273.15)
+    if source==target:return value
+    scales={'m':('length',1.),'mm':('length',.001),'m²':('area',1.),'mm²':('area',1e-6),
+            'Ω/m':('resistance',1.),'Ω/km':('resistance',.001)}
+    if source in scales and target in scales and scales[source][0]==scales[target][0]:
+        return value*scales[source][1]/scales[target][1]
+    return None
+
+
+def rounded_match(number,value):
+    if value is None or not math.isfinite(value) or not math.isfinite(number):return False
+    if math.isclose(number,value,rel_tol=1e-10,abs_tol=1e-10):return True
+    decimal=Decimal(str(value))
+    places=[1,2]+([digits-1-decimal.copy_abs().adjusted() for digits in (3,4)] if value else [])
+    with localcontext() as context:
+        context.prec=max(28,len(decimal.as_tuple().digits)+abs(decimal.adjusted())+4)
+        return any(math.isclose(number,float(decimal.quantize(Decimal(1).scaleb(-place),rounding=ROUND_HALF_UP)),
+                               rel_tol=1e-10,abs_tol=1e-10) for place in places)
+
+
+def reference_text(text):
+    # Equal-length masking preserves audit offsets in the original draft; typographic hyphens
+    # (YJV22‑8.7/15) are normalised first so designations are recognised.
+    text=re.sub('[‐‑‒–—]','-',text)
+    patterns=[r'(?<![A-Za-z0-9_])(?:IEC|GB(?:/T)?|TB(?:/T)?)\s*\d+(?:[-./]\d+)*',
+              r'(?<![A-Za-z0-9_])[A-Z]{2,}[A-Z0-9]*(?:[- ]\d+(?:\.\d+)?(?:/\d+)?)?(?:\s+\d+[×x*]\d+)?(?![A-Za-z0-9_])',
+              r'(?m)^\s*\d+[.)、](?=\s|[\u4e00-\u9fff])',
+              r'(?<![A-Za-z0-9_])[0-9a-f]{8}-[0-9a-f-]{27,}(?![A-Za-z0-9_])',
+              # Abbreviated run/proposal ids such as 72adf998 (hex with both letters and digits).
+              r'(?<![A-Za-z0-9_])(?=[0-9a-f]*[a-f])(?=[0-9a-f]*\d)[0-9a-f]{6,}(?![A-Za-z0-9_])',
+              # List enumerators such as (2) or （2）.
+              r'[（(]\d{1,2}[）)]']
+    for pattern in patterns:text=re.sub(pattern,lambda match:' '*len(match[0]),text)
+    # Model paths and entity ids (load~1steady/currents, cable/template2); unit strings such as
+    # K·m/W carry no digits, tildes or underscores and stay visible.
+    text=re.sub(r'(?<![A-Za-z0-9_·.])/?[A-Za-z_~][\w~.-]*(?:/[\w~.-]+)+',
+                lambda match:' '*len(match[0]) if re.search(r'[\d~_]',match[0]) else match[0],text)
+    text=re.sub(r'(?<![A-Za-z0-9_])[A-Za-z_][\w-]*~[\w~-]+',lambda match:' '*len(match[0]),text)
     return text
+
+
+class Implied:
+    """A number whose unit is written once after the following operand; behaves like a regex match."""
+    def __init__(self,start,end,number,unit):self.span=(start,end);self.groups=(number+' '+unit,number,unit)
+    def start(self):return self.span[0]
+    def end(self):return self.span[1]
+    def __getitem__(self,index):return self.groups[index]
+
+
+def fact_entity(fact):
+    """Entity of a fact: its own field, or the id encoded in its model path (circuit~1c1 -> circuit/c1)."""
+    if fact.get('entity'):return fact['entity']
+    for segment in str(fact.get('key') or '').split('/'):
+        decoded=segment.replace('~1','/').replace('~0','~')
+        if '/' in decoded:return decoded
+    return None
+
+
+def attributed(fact,named):
+    """A clause naming entities only constrains facts of the same kind (cable, circuit…); limits and loads
+    of other kinds stay usable."""
+    entity=fact_entity(fact)
+    if not named or entity is None:return True
+    return entity in named or entity.split('/')[0] not in {name.split('/')[0] for name in named}
+
+
+def grounded_text(text,observations,*,current=None,proposals=None,users=None,proof=None):
+    """Check each claim; rejected drafts remain private audit data, never chat content."""
+    facts=quantity_facts(observations);issues=[];matches=[]
+    def issue(match,code,rule,message,available=(),unit=None):
+        issues.append({'code':code,'rule':rule,'fragment':text[match.start():match.end()],
+            'start':match.start(),'end':match.end(),'value':(float(match[1]) if math.isfinite(float(match[1])) else match[1]) if code.startswith('UNGROUNDED') and re.fullmatch(NUMBER,match[1]) else None,
+            'unit':unit,'message':message,'available_values':list(available)[:16]})
+    for match in re.finditer(r'已(?:经)?(?:批准|发布|外发)|已(?:经)?(?:保存|写入)(?:到|进|至)?(?:当前)?工程|已(?:经)?(?:修改|更新)(?:当前)?工程|工程[^，。；\n]{0,12}已(?:经)?(?:修改|更新|保存)|已(?:经)?(?:将|把)[^，。；\n]{0,50}(?:保存|写入)(?:到|进|至)?(?:当前)?工程|合规认证通过',text):
+        prefix=re.split(r'[，。；\n]',text[:match.start()])[-1][-24:]
+        if re.search(r'未|没有|不能|不得|不应|不要|不可|禁止|不表示|不代表|不是|并非|非',prefix):continue
+        issue(match,'UNSUPPORTED_OPERATION_CLAIM','actual_engineering_state','没有工程保存、批准或发布证据；方案与试算不能描述为实际工程状态。')
+    if re.search(r'方案(?:已经|已)?(?:生成|创建|提出)',text) and not proposals and not any(item.get('data',{}).get('proposal') for item in (current or observations)):
+        match=re.search(r'方案(?:已经|已)?(?:生成|创建|提出)',text)
+        issue(match,'UNSUPPORTED_OPERATION_CLAIM','proposal_receipt','没有生成方案的工具回执。')
+    clean=reference_text(text).replace('−','-')
+    def sentence(position):
+        start=max(clean.rfind(mark,0,position) for mark in '。；;\n')+1
+        ends=[found for found in (clean.find(mark,position) for mark in '。；;\n') if found>=0]
+        return start,min(ends) if ends else len(clean)
+    # The change of one quantity between two evidence records (saved run vs preview, proposal before/after):
+    # same key, entity, condition and unit but different sources. It may be cited anywhere ("上升 12.6 K",
+    # "下降 20.6 A", "+20%"); differences across unrelated quantities still need operands in their sentence.
+    # Entity ids are masked in `clean` (they contain digits); attribution reads the original clause.
+    def entities_named(position):
+        clause=re.split(r'[，。；\n]',text[:position])[-1][-40:]
+        return {row['entity'] for row in facts if row.get('entity') and row['entity'] in clause}
+    changes={}
+    for fact in facts:changes.setdefault((fact['key'],fact.get('entity'),fact.get('condition'),fact['unit']),[]).append(fact)
+    def evidence_change(match,unit):
+        number,fragment=float(match[1]),match[0]
+        clause=re.split(r'[，。；\n]',clean[:match.start()])[-1][-40:]
+        for rows in changes.values():
+            for i,first in enumerate(rows):
+                for second in rows[i+1:]:
+                    if first['source']==second['source'] or math.isclose(first['value'],second['value']):continue
+                    a,b=first['value'],second['value']
+                    if unit=='%':options=[(b-a)/a*100,(a-b)/a*100,(a-b)/b*100,(b-a)/b*100] if a and b else []
+                    else:options=[converted({'value':b-a,'unit':first['unit'],'delta':True},unit,delta=True),
+                                  converted({'value':a-b,'unit':first['unit'],'delta':True},unit,delta=True)]
+                    if any(value is not None and rounded_match(number,value) for value in options):
+                        return {'fragment':fragment,'rule':'evidence_change','sources':[first['source'],second['source']]}
+        # Temperature margin = limit − conductor temperature, signed; a negative margin may be stated as a
+        # positive exceedance ("超温 29.6 K"). A cable named in the clause must be the one whose temperature is used.
+        if unit in ('K','°C'):
+            named=entities_named(match.start())
+            exceedance=re.search(r'超|高出|不足|欠',clause) and not match[1].startswith('+')
+            limits=[fact for fact in facts if re.search(r'max_conductor_temperature|temperature_limit',str(fact['key'])) and not fact['delta']]
+            temperatures=[fact for fact in facts if fact['key']=='conductor_temperature' and not fact['delta']
+                          and attributed(fact,named)]
+            for limit in limits:
+                for temperature in temperatures:
+                    a=converted(limit,'K');b=converted(temperature,'K')
+                    if a is None or b is None:continue
+                    if rounded_match(number,a-b) or (exceedance and a<b and rounded_match(number,b-a)):
+                        return {'fragment':fragment,'rule':'temperature_margin','sources':[limit['source'],temperature['source']]}
+        return None
+    for match in re.finditer(r'([零〇一二两三四五六七八九十百千万点]+)\s*(安培|伏特|米|摄氏度|A\b|K\b|V\b|℃|°C)',clean):
+        issue(match,'UNGROUNDED_QUANTITY','numeric_notation','工程量用证据中的阿拉伯数字和单位引用。',unit=match[2])
+    known=numbers(observations);counts=evidence_counts(observations);covered=[];anchors=[];pending=[]
+    user_facts=[]
+    for user in users or []:
+        known.update(float(match[0]) for match in re.finditer(r'(?<![A-Za-z0-9_/.:-])'+NUMBER+r'(?![A-Za-z0-9_/])',reference_text(user))
+                     if math.isfinite(float(match[0])))
+        for match in QUANTITY.finditer(reference_text(user)):
+            user_facts.append({'value':float(match[1]),'unit':unit_name(match[2]),'key':'user_input','delta':False,
+                'headline':False,'source':'user_message','field':'value'})
+    quantities=list(QUANTITY.finditer(clean))
+    # "362.2 → 341.6 A", "119.61 − 106.98 °C": the first operand borrows the unit written after the second.
+    for match in list(quantities):
+        offset=max(0,match.start()-24)
+        lead=re.search(r'(?<![A-Za-z0-9_/.:-])('+NUMBER+r')\s*(?:→|->|-|–|—|~|～|至|到)\s*$',clean[offset:match.start()])
+        if lead:quantities.append(Implied(offset+lead.start(1),offset+lead.end(1),lead[1],match[2]))
+    quantities.sort(key=lambda item:item.start())
+    for match in quantities:
+        number=float(match[1]);unit=unit_name(match[2]);covered.append((match.start(),match.end()))
+        clause=re.split(r'[，。；\n]',clean[:match.start()])[-1][-40:]
+        delta=delta_context(clause,unit)
+        named_entities=entities_named(match.start())
+        candidates=[]
+        # A negative margin may be stated as a positive exceedance ("超温 17.0 K"); never as headroom
+        # ("余量 +17 K"), so only exceedance wording, an unsigned number and a negative fact qualify.
+        exceedance=re.search(r'超|高出|不足|欠',clause) and not match[1].startswith('+')
+        for fact in facts+user_facts:
+            value=converted(fact,unit,delta=delta)
+            if not rounded_match(number,value) and not (fact['delta'] and exceedance and value is not None and value<0 and rounded_match(number,-value)):continue
+            if not attributed(fact,named_entities):continue
+            # Only a current introduced directly by 允许电流/载流量 must be an ampacity ("允许电流 362.2 A（低于 400 A）").
+            if unit=='A' and re.search(r'(?:允许电流|载流量)[^0-9]{0,12}$',clause):
+                if fact['key'] not in ('ampacity','x-cablesim.emergency-current'):continue
+                if '推荐' in clause and not fact['headline']:continue
+                if re.search(r'同时额定|共同允许电流',clause) and fact.get('condition')!='rating-simultaneous':continue
+            candidates.append(fact)
+        if candidates:
+            anchors.append((match,candidates));matches.append({'fragment':match[0],'rule':'quantity','sources':[fact['source'] for fact in candidates[:8]]})
+        else:pending.append((match,unit,delta))
+    for match,unit,delta in pending:
+        # A derived claim requires two explicit evidence anchors in the same sentence, so a difference
+        # cannot borrow operands from an unrelated statement elsewhere in the paragraph.
+        paragraph_start,paragraph_end=sentence(match.start())
+        nearby=[(anchor,candidates) for anchor,candidates in anchors if paragraph_start<=anchor.start()<paragraph_end]
+        derived=None
+        for i,(left,left_facts) in enumerate(nearby):
+            for right,right_facts in nearby[i+1:]:
+                for first in left_facts:
+                    for second in right_facts:
+                        # User settings cannot manufacture computed conclusions; quantities must share dimensions.
+                        if first['source']=='user_message' or second['source']=='user_message':continue
+                        # Same dimension is required (checked by conversion below); both operands sit in this sentence,
+                        # so comparing load with capacity or two rating bases is explicit.
+                        base=unit_name(left[2])
+                        a=converted(first,base,delta=first['delta']);b=converted(second,base,delta=first['delta'])
+                        if a is None or b is None:continue
+                        context=clean[max(paragraph_start,match.start()-32):match.end()+8]
+                        # Percentages: share or change in either direction; the value written must agree.
+                        if unit=='%' and a and b:
+                            options=[(b/a*100,'percentage'),((b-a)/a*100,'percent_change'),((a-b)/a*100,'percent_decrease'),
+                                     ((a-b)/b*100,'percent_change'),((b-a)/b*100,'percent_decrease')]
+                        elif unit in ('倍','1') and re.search(r'比值|倍',context) and a:options=[(b/a,'ratio')]
+                        elif re.search(r'差|相减|余量|超出|超过|提高|增加|降低|减少|变化|升高|上升|下降|增大|减小|升幅|降幅|[+＋]',context):
+                            difference={'value':b-a,'unit':base,'delta':base in ('K','°C')}
+                            # Either subtraction order; the sign written in the text must agree with it.
+                            options=[(converted(difference,unit,delta=True),'difference'),
+                                     (converted({**difference,'value':a-b},unit,delta=True),'difference')]
+                        else:options=[]
+                        for value,operation in options:
+                            if rounded_match(float(match[1]),value):derived={'fragment':match[0],'rule':operation,'sources':[first['source'],second['source']]};break
+                        if derived:break
+                    if derived:break
+                if derived:break
+            if derived:break
+        if not derived:derived=evidence_change(match,unit)
+        if derived:matches.append(derived)
+        else:
+            available=[fact for fact in facts+user_facts if converted(fact,unit,delta=delta) is not None]
+            issue(match,'UNGROUNDED_QUANTITY','quantity_source_or_derivation','数值须匹配证据、允许的舍入/单位换算，或在本段明确引用推导的两个证据值。',available,unit)
+    # A unitless number written right after two cited, verified quantities of one paragraph may be their
+    # ratio or difference ("400 A / 362.2 A = 1.104"); 273.15 is the Kelvin offset used in conversions.
+    def derived_bare(number,position):
+        start,end=sentence(position)
+        values=[float(anchor[1]) for anchor,_ in anchors if start<=anchor.start()<end]
+        return any(rounded_match(number,value) for a in values for b in values if a!=b and b
+                   for value in (a/b,a-b))
+    for match in re.finditer(r'(?<![A-Za-z0-9_/.:-])('+NUMBER+r')(?![A-Za-z0-9_/])',clean):
+        if any(start<=match.start()<end for start,end in covered):continue
+        number=float(match[1])
+        if rounded_match(number,273.15) or derived_bare(number,match.start()):continue
+        context=clean[max(0,match.start()-12):match.end()+12]
+        count=bool(re.search(r'工况|回路|编号|序号',context))
+        count_known=number in counts
+        if not any(rounded_match(number,value) for value in known) and not (count and count_known) and not any(rounded_match(number,f['value']) for f in user_facts):
+            issue(match,'UNGROUNDED_NUMBER','bare_number','没有对应输入、工具字段或实际工况/回路计数。')
+    for match in re.finditer(r'(?<![A-Za-z0-9_/.:-])('+NUMBER+r')\s*([A-Za-zΩ°℃μ]+(?:[/·][A-Za-zΩμ²³]+)*)',clean):
+        if not any(start<=match.start()<end for start,end in covered):
+            issue(match,'UNGROUNDED_QUANTITY','unsupported_unit','此数值的单位未取得可核验的字段证据。',unit=match[2])
+    if proof is not None:proof.extend(matches)
+    if issues:raise HTTPException(422,{'code':issues[0]['code'],'message':issues[0]['message'],'issues':issues})
+    return text
+
+
+def evidence_counts(observations):
+    counts=set()
+    def visit(item):
+        if isinstance(item,dict):
+            for key,value in item.items():
+                if key in ('cases','circuits','load_cases') and isinstance(value,list):counts.update(range(1,len(value)+1))
+                if key in ('case_id','entity','id') and isinstance(value,str) and (key=='case_id' or re.match(r'(?:circuit|cable|load_case)[/-]',value)):
+                    counts.update(int(token) for token in re.findall(r'\d+',value))
+                visit(value)
+        elif isinstance(item,list):
+            for child in item:visit(child)
+    visit(observations)
+    return counts
+
+
+def evidence_summary(record):
+    """A host explanation of durable tool evidence, with no new physical result."""
+    lines=['以下为工具证据摘要，模型解释未通过核验。'];refs=[];saved={};trials=[]
+    labels={'ampacity':'允许电流','conductor_temperature':'最高导体温度','temperature_margin':'温限余量'}
+    def display(value,unit):return f'{value:.4g} {unit}'
+    def conclusions(data):
+        facts=quantity_facts([{'data':data}]);selected={}
+        for key in labels:
+            candidates=[fact for fact in facts if fact['key']==key and fact['field'] in ('value','display_value')]
+            if not candidates:continue
+            if key=='conductor_temperature':
+                candidates=[fact for fact in candidates if fact.get('condition') in ('operating',None)]
+                candidates=[fact for fact in candidates if converted(fact,'°C') is not None]
+                if candidates:selected[key]={**max(candidates,key=lambda fact:converted(fact,'°C')),'value':max(converted(fact,'°C') for fact in candidates),'unit':'°C'}
+            else:
+                preferred=[fact for fact in candidates if fact['headline']]
+                selected[key]=min(candidates,key=lambda fact:fact['value']) if key=='temperature_margin' else (preferred or candidates)[0]
+        return selected
+    def describe(data,name,identity):
+        values=conclusions(data);parts=[]
+        for key in ('ampacity','conductor_temperature','temperature_margin'):
+            if key in values:
+                fact=values[key];parts.append(labels[key]+' '+display(fact['value'],fact['unit'])+(f'（{fact["entity"]}）' if fact.get('entity') else ''))
+                refs.append({'identity':identity,'source':fact['source'],'key':key})
+            elif key=='ampacity':
+                import json
+                parts.append('无正允许电流' if 'NO_POSITIVE_RATING' in json.dumps(data) else '允许电流未返回')
+            else:parts.append(labels[key]+'未返回')
+        factors=[factor for case in data.get('cases',[]) for factor in case.get('factors',[]) if factor.get('key') in ('limiting_cable','hottest_cable')]
+        parts.extend(('限制对象' if factor['key']=='limiting_cable' else '最热导体')+' '+factor['entity'] for factor in factors)
+        if not factors:parts.append('插件未明确返回限制对象')
+        conditions={fact.get('condition') for fact in values.values()}
+        if 'rating-simultaneous' in conditions:parts.append('口径：同时额定（共同允许电流）')
+        elif conditions:parts.append('口径：'+', '.join(sorted(value for value in conditions if value)))
+        if data.get('freshness') and data['freshness']!='current':parts.append('历史保存结果：'+data['freshness'])
+        lines.append(name+'（'+identity+'）：'+'；'.join(parts)+'。')
+        return values
+    for step in record['steps']:
+        result=step.get('result') or {};data=result.get('data') or {};reference=result.get('execution_ref') or {}
+        if data.get('run_id') and 'cases' in data:
+            saved[data['run_id']]=data
+        if data.get('preview') and data.get('cases'):trials.append((data,reference))
+    for rid,data in saved.items():
+        if len(data['cases'])>1 and not data.get('headlines'):
+            for case in data['cases']:
+                describe({**data,'cases':[case],'assessment':[row for row in data.get('assessment',[]) if row.get('case_id')==case['case_id']]},
+                    '保存结果工况 '+case['case_id'],rid)
+        else:describe(data,'保存结果',rid)
+    for proposal in record['proposals']:
+        changes=[]
+        for change in proposal.get('changes',[]):
+            unit=change.get('unit','');before=change.get('before');after=change.get('after')
+            def field_value(value):return display(value,unit) if type(value) in (int,float) else str(value)
+            changes.append((change.get('label') or change.get('path','字段'))+'：'+field_value(before)+' → '+field_value(after))
+            refs.append({'proposal_id':proposal['id'],'path':change.get('path'),'field':'before/after'})
+        lines.append('方案（'+proposal['id']+'，'+proposal['status']+'）：'+('；'.join(changes) or proposal.get('title','无字段差异'))+'。')
+    for data,reference in trials:
+        identity=reference.get('execution_id','快速预览');after=describe(data,'试算（未保存运行、未批准）',identity)
+        original=saved.get(data.get('source_run_id'))
+        if original and data.get('source_case_id'):
+            original={**original,'cases':[case for case in original['cases'] if case['case_id']==data['source_case_id']],
+                'headlines':[fact for fact in original.get('headlines',[]) if fact.get('case_id')==data['source_case_id']]}
+            before=conclusions(original);changes=[]
+            for key in ('ampacity','conductor_temperature'):
+                a=before.get(key);b=after.get(key)
+                if not a or not b or a.get('condition')!=b.get('condition') or (key!='conductor_temperature' and a.get('entity')!=b.get('entity')):continue
+                previous=converted(a,b['unit'],delta=b['delta'])
+                if previous is None:continue
+                changes.append(labels[key]+' '+display(previous,b['unit'])+' → '+display(b['value'],b['unit'])+'，变化 '+display(b['value']-previous,b['unit']))
+                refs.append({'operation':'difference','sources':[{'run_id':data['source_run_id'],'source':a['source']},{'execution_id':identity,'source':b['source']}]})
+            if changes:lines.append('同一原工况前后对比：'+'；'.join(changes)+'。')
+            else:lines.append('试算与原运行未返回可直接比较的同口径量值。')
+        else:lines.append('试算未绑定已读取的原运行/工况，未推算前后差值。')
+    if len(lines)==1:lines.append('尚未取得保存研究结论、字段方案或试算证据。')
+    for step in record['steps']:
+        result=step.get('result') or {}
+        if result.get('status')=='error':
+            lines.extend('工具诊断 '+str(item.get('code'))+'：'+str(item.get('message')) for item in result.get('diagnostics',[])[:2])
+    lines.append('方案等待人工决定；试算不等于保存结果或工程批准。' if any(p['status']=='pending' for p in record['proposals']) else '工程批准状态：未由本会话确认。')
+    return '\n'.join(lines),refs
 
 
 def reconcile(research,tasks,tid,*,persist=False):

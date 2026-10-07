@@ -94,12 +94,12 @@ class TaskStore:
             or tool and task['tool_calls']>=limits['max_tool_calls'])
         if exceeded:raise HTTPException(429,{'code':'BUDGET_EXCEEDED','message':'本条消息的工具、步骤、时间或模型用量已达到上限；未继续执行。'})
 
-    def closing_reason(self,task,prompt_bytes,definition_bytes):
+    def closing_reason(self,task,prompt_bytes,definition_bytes,*,repair=False):
         limits=task['limits']
         # UTF-8 bytes are a conservative token upper estimate, not reported usage.
         closing_reserve=min(48*1024+4096, prompt_bytes+4096)
         request_estimate=prompt_bytes+definition_bytes+2048
-        if task['tool_calls']>=limits['max_tool_calls']:return '本条消息的工具调用预算不足。'
+        if not repair and task['tool_calls']>=limits['max_tool_calls']:return '本条消息的工具调用预算不足。'
         if task['model_requests']>=limits['max_model_requests']-1:return '本条消息的模型请求预算不足，已预留一次收尾。'
         if task['steps_used']>=limits['max_steps']-2:return '本条消息的步骤预算不足。'
         if task['prompt_tokens']+task['completion_tokens']+request_estimate+closing_reserve>limits['max_tokens']:
@@ -127,7 +127,7 @@ class TaskStore:
                 if previous:raise HTTPException(409,'本条消息已使用收尾请求。')
             else:self.budget(task,model=True)
             db.execute('UPDATE agent_tasks SET model_requests=model_requests+1,steps_used=steps_used+1,updated=? WHERE id=?',(stamp(),tid))
-            self.event(db,tid,'model.request',{**request_summary,'turn_id':turn,'phase':'closing' if closing else 'tools','request_number':task['model_requests']+1})
+            self.event(db,tid,'model.request',{**request_summary,'turn_id':turn,'phase':'closing' if closing else request_summary.get('phase','tools'),'request_number':task['model_requests']+1})
             return task
 
     @staticmethod

@@ -8,7 +8,7 @@ from backend.kernel.workspace import stamp
 
 from .contracts import StreamEvent
 from .context_builder import request_summary,compress_result
-from .evidence import grounded_text,reconcile
+from .evidence import grounded_text,reconcile,evidence_summary
 from .model_port import ModelError
 from .planner import prepare
 from .proposals import Proposals
@@ -90,7 +90,7 @@ class Harness:
                     {'status':'ok','finish_reason':reply.finish_reason,'tool_names':[call['name'] for call in reply.tool_calls],
                      'usage_available':all(name in reply.usage for name in ('prompt_tokens','completion_tokens')),'text_received':bool(reply.text)})
                 if not reply.tool_calls:
-                    yield from self.respond(tid,turn,reply.text)
+                    yield from self.answer_loop(tid,turn,reply.text)
                     break
                 plan=compile_calls(reply.tool_calls,tools,record['workspace_id'],record['workspace_revision'])
                 with self.research.store.db() as db:task=self.tasks.load(db,tid)
@@ -142,14 +142,17 @@ class Harness:
                 try:yield from self.closing(tid,turn,message)
                 except ModelError as failure:
                     yield self.emit(tid,'error',{'code':failure.code,'message':failure.message})
+                    yield from self.fallback(tid,turn)
                 except HTTPException:
-                    yield from self.respond(tid,turn,'已取得的工具证据保存在会话记录中。解释未通过证据核验；其余请求尚未完成，请核对工具诊断。',safe=True)
+                    yield from self.fallback(tid,turn)
+            elif any(step.get('result') for step in self.tasks.record(tid)['steps']):
+                yield from self.fallback(tid,turn)
             normal=True
         except Exception as error:
             state,reason='failed',None
             self.tasks.emit(tid,'harness.error',{'exception_type':type(error).__name__,'details_recorded':False})
             yield self.emit(tid,'error',{'code':'HARNESS_FAILED','message':'Agent 运行层发生错误；已保留记录，未生成替代结果或自动重试。'})
-            yield from self.respond(tid,turn,'处理发生错误，已保留取得的工具记录。当前请求尚未完成，请查看诊断后继续。',safe=True)
+            yield from self.fallback(tid,turn)
             normal=True
         finally:
             # Disconnecting the stream does not assert that a solver/job was cancelled.
@@ -157,19 +160,69 @@ class Harness:
         record=self.tasks.record(tid)
         yield self.emit(tid,'done',{'usage':{name:record['budget'][name] for name in ('prompt_tokens','completion_tokens')}})
 
-    def respond(self,tid,turn,text,*,safe=False):
+    def respond(self,tid,turn,text,*,safe=False,phase='answer',attempt=0,suffix=''):
         record=self.tasks.record(tid)
-        observations=[compress_result(step['result']) for step in record['steps'] if step.get('result')]
+        observations=[step['result'] for step in record['steps'] if step.get('result')]
         began=next(event['created'] for event in record['events'] if event['type']=='chat.message' and event['data'].get('turn_id')==turn and event['data'].get('role')=='user')
-        current=[compress_result(step['result']) for step in record['steps'] if step.get('result') and step['created']>=began]
+        current=[step['result'] for step in record['steps'] if step.get('result') and step['created']>=began]
         text=redact(text).strip() or '未取得可用解释，请根据工具诊断补充输入；当前请求尚未完成。'
-        if not safe:text=grounded_text(text,observations,current=current,proposals=record['proposals'])
+        if not safe:
+            proof=[]
+            try:text=grounded_text(text,observations,current=current,proposals=record['proposals'],
+                users=[message['content'] for message in record['messages'] if message['role']=='user'],proof=proof)
+            except HTTPException as error:
+                self.tasks.emit(tid,'answer.rejected',redact({'turn_id':turn,'phase':phase,'attempt':attempt,
+                    'draft':text,'issues':error.detail['issues']}))
+                raise
+            self.tasks.emit(tid,'answer.accepted',{'turn_id':turn,'phase':phase,'attempt':attempt,'matches':proof})
+        text+=suffix
         self.tasks.emit(tid,'chat.message',{'role':'assistant','content':text,'turn_id':turn})
         for offset in range(0,len(text),64):yield self.emit(tid,'message.delta',{'text':text[offset:offset+64]})
 
+    def answer_loop(self,tid,turn,text):
+        record=self.tasks.record(tid);limit=record['budget']['limits']['max_repair_attempts']
+        for attempt in range(limit+1):
+            try:
+                yield from self.respond(tid,turn,text,phase='repair' if attempt else 'answer',attempt=attempt)
+                return
+            except HTTPException as error:
+                yield self.emit(tid,'error',{'code':error.detail['code'],'message':error.detail['message']})
+            record=self.tasks.record(tid)
+            feedback=next(event['data'] for event in reversed(record['events']) if event['type']=='answer.rejected' and event['data']['turn_id']==turn)
+            if attempt==limit:break
+            prompt,definitions=prepare(record,{},closing='只重写被拦的解释，不执行任何业务动作。',feedback=feedback)
+            _,model=self.model.status();metrics={**request_summary(model,prompt,definitions),'phase':'repair'}
+            with self.research.store.db() as db:task=self.tasks.load(db,tid)
+            reason=self.tasks.closing_reason(task,metrics['prompt_bytes'],metrics['definition_bytes'],repair=True)
+            if reason:break
+            self.tasks.emit(tid,'answer.repair',{'turn_id':turn,'attempt':attempt+1,'feedback':compress_result({
+                'status':'error','summary':'根据核验问题重写解释','data':{'issues':feedback['issues']}})})
+            task=self.tasks.begin_model(tid,turn,metrics)
+            timeout=min(task['limits']['model_timeout_s'],max(.001,(task['limits']['max_active_ms']-task['elapsed_ms'])/1000),max(.001,task['deadline']-time()))
+            started=perf_counter()
+            try:reply=self.model.reply(prompt,definitions,timeout)
+            except ModelError as error:
+                self.tasks.model_finished(tid,turn,(perf_counter()-started)*1000,{}, {'status':'error','phase':'repair','code':error.code,'usage_available':False})
+                yield self.emit(tid,'error',{'code':error.code,'message':error.message})
+                break
+            self.tasks.model_finished(tid,turn,(perf_counter()-started)*1000,reply.usage,{'status':'ok','phase':'repair',
+                'usage_available':all(key in reply.usage for key in ('prompt_tokens','completion_tokens'))})
+            if reply.tool_calls:
+                self.tasks.emit(tid,'answer.repair_rejected',{'turn_id':turn,'attempt':attempt+1,'code':'TOOLS_NOT_ALLOWED'})
+                break
+            text=reply.text
+        yield from self.closing(tid,turn,'解释修正次数或可用预算已到上限。')
+
+    def fallback(self,tid,turn):
+        record=self.tasks.record(tid)
+        text,refs=evidence_summary(record)
+        self.tasks.emit(tid,'answer.fallback',{'turn_id':turn,'sources':refs,'model_explanation_verified':False})
+        yield from self.respond(tid,turn,text,safe=True)
+
     def closing(self,tid,turn,reason):
         record=self.tasks.record(tid)
-        prompt,definitions=prepare(record,{},closing=reason)
+        feedback=next((event['data'] for event in reversed(record['events']) if event['type']=='answer.rejected' and event['data']['turn_id']==turn),None)
+        prompt,definitions=prepare(record,{},closing=reason,feedback=feedback)
         configured,model=self.model.status()
         if not configured:raise ModelError('LLM_NOT_CONFIGURED','模型未配置，无法发起收尾请求。')
         task=self.tasks.begin_model(tid,turn,request_summary(model,prompt,definitions),closing=True)
@@ -178,15 +231,17 @@ class Harness:
         try:reply=self.model.reply(prompt,definitions,timeout)
         except ModelError as error:
             self.tasks.model_finished(tid,turn,(perf_counter()-started)*1000,{}, {'status':'error','code':error.code,'usage_available':False})
-            raise
+            yield self.emit(tid,'error',{'code':error.code,'message':error.message})
+            yield from self.fallback(tid,turn)
+            return
         self.tasks.model_finished(tid,turn,(perf_counter()-started)*1000,reply.usage,{'status':'ok','phase':'closing',
             'finish_reason':reply.finish_reason,'usage_available':all(key in reply.usage for key in ('prompt_tokens','completion_tokens'))})
         self.tasks.emit(tid,'budget.closing',{'turn_id':turn,'reason':reason,'tools_allowed':False,'remaining_goals_completed':False})
         try:
             if reply.tool_calls:raise HTTPException(422,'收尾请求不能调用工具。')
-            yield from self.respond(tid,turn,reply.text+'\n尚未完成的请求：'+reason+'请据此核对工具记录后继续。')
+            yield from self.respond(tid,turn,reply.text,phase='closing',suffix='' if feedback else '\n尚未完成的请求：'+reason)
         except HTTPException:
-            yield from self.respond(tid,turn,'已取得的工具证据保存在会话记录中；模型解释未通过证据核验。尚未完成的请求：'+reason+'请核对诊断后继续。',safe=True)
+            yield from self.fallback(tid,turn)
 
     def repeated_error(self,tid,node,result):
         signature=[(item['code'],item.get('path')) for item in result['diagnostics']]

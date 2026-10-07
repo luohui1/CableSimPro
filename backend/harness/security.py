@@ -8,6 +8,7 @@ def redact(value):
     if isinstance(value,str):
         text = value.replace(key,'[凭据已隐藏]') if key else value
         text = re.sub(r'(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+','Bearer [凭据已隐藏]',text)
+        text = re.sub(r'''(?i)\b(api[-_]?key|access[-_]?token|secret|password)\s*[:=]\s*["']?[^\s,"'&;]+''',r'\1=[凭据已隐藏]',text)
         return text
     if isinstance(value,list):
         return [redact(item) for item in value]

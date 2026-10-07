@@ -269,7 +269,10 @@ def test_unseen_quantities_and_provider_credentials_never_become_messages(client
     assert any(kind=='message.delta' for kind,_ in events)
     assert next(data['code'] for kind,data in events if kind=='error')=='UNGROUNDED_QUANTITY'
     record=client.get('/api/agent/sessions/'+tid).json()
-    assert '9999 A' not in json.dumps(record,ensure_ascii=False)
+    assert '9999 A' not in json.dumps(record['messages'],ensure_ascii=False)
+    rejection=next(event['data'] for event in record['events'] if event['type']=='answer.rejected')
+    assert rejection['draft']=='允许电流为9999 A。' and rejection['issues'][0]['value']==9999
+    assert rejection['issues'][0]['unit']=='A' and rejection['issues'][0]['fragment']=='9999 A'
     other=session(client,w,s);script.append({'http_status':401})
     events=send(client,other)
     assert next(data['code'] for kind,data in events if kind=='error')=='LLM_AUTH_FAILED'
