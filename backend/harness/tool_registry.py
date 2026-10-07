@@ -44,6 +44,13 @@ class Tool:
         return {'type':'function','function':{'name':self.name,'description':self.title+'：'+self.description,
                 'parameters':schema}}
 
+    def disclosed_model(self):
+        definition=self.model()
+        if self.plugin_id and len(json.dumps(definition,ensure_ascii=False).encode())>4096:
+            definition['function']['parameters']=object_schema({**STUDY,'parameters':{
+                'type':'object','description':'按 plugin_inspect 读取的封签参数契约提供SI值；可用 schema_path 分字段读取。'},'title':TEXT})
+        return definition
+
 
 def model_schema(schema):
     """Derive a compact schema; UI ordering/basis prose is available through plugin_inspect."""
@@ -105,10 +112,10 @@ def host_tools():
         ('run_list','读取运行摘要','read','读取指定研究保存运行的有界摘要与关键结论。',object_schema({**STUDY,
             'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':10}})),
         ('run_read','读取运行结果要点','read','只读指定运行的量值、来源与分项证据；不读完整场数组。',object_schema({**STUDY,
-            'run_id':TEXT,'case_id':TEXT,'input_paths':{'type':'array','maxItems':8,'items':{'type':'string'},
+            'run_id':TEXT,'case_id':TEXT,'entity':TEXT,'key':TEXT,'input_paths':{'type':'array','maxItems':8,'items':{'type':'string'},
                 'description':'按固定快照工况读取原输入字段；使用时case_id必填。'}},['run_id'])),
         ('plugin_inspect','读取插件能力与输入契约','read','读取安装清单的准确方法身份、范围和参数schema。',object_schema({
-            'plugin_id':TEXT,'capability':TEXT,'schema_path':{'type':'string','maxLength':500,
+            'plugin_id':TEXT,'capability':TEXT,'tool':TEXT,'schema_path':{'type':'string','maxLength':500,
                 'description':'能力契约内的JSON Pointer，例如 /parameter_schema/properties/solver；用于按字段读取大契约。'}})),
         ('cable_model_read','读取型号结构','read','读取受摘要保护的型号结构与来源；不采用或批准型号。',object_schema({
             'model_id':TEXT,'path':{'type':'string','maxLength':500,'description':'型号返回对象内的稳定路径；省略读取有界完整对象。'}},['model_id'])),
@@ -117,7 +124,8 @@ def host_tools():
         ('propose_method_parameters','提出方法参数修改方案','propose','按封签参数契约生成方案，等待人批准后普通保存。',object_schema({
             **STUDY,'changes':PATCH,'title':TEXT},['changes'])),
         ('study_preflight','预检研究','run','复用研究预检；需要原生或超算的能力不在本机替代执行。',object_schema(STUDY)),
-        ('study_preview','快速预览试算','run','复用本机快速预览；不保存输入、不创建Run、不批准结果。',object_schema(STUDY)),
+        ('study_preview','快速预览试算','run','复用本机快速预览；可试算未批准方案，不保存输入、不创建Run、不批准结果。',object_schema({**STUDY,
+            'proposal_id':TEXT,'run_id':TEXT,'case_id':TEXT})),
     ]
     return [Tool(*spec) for spec in specs]
 
@@ -171,3 +179,11 @@ class ToolRegistry:
             values.append(Tool(name,cap.title,'run',description,parameters,method['plugin_id'],hpc,method,entry['preview']))
         if len({tool.name for tool in values})!=len(values):raise ValueError('duplicate tool names')
         return {tool.name:tool for tool in values}
+
+    def visible(self,record):
+        enabled={name for step in record['steps'] if step['tool']=='plugin_inspect' and step.get('result')
+            and step['result']['status']=='ok' for name in step['result']['data'].get('enabled_tools',[])}
+        return {name:tool for name,tool in self.tools().items() if not tool.plugin_id or name in enabled}
+
+    def directory(self):
+        return [[tool.name,tool.title] for tool in self.tools().values() if tool.plugin_id]

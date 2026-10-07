@@ -8,9 +8,11 @@ correctness. Changing one plugin never invalidates another plugin's seal.
 from __future__ import annotations
 
 from hashlib import sha256
+from collections import OrderedDict
 import json
 from pathlib import Path
 import re
+from threading import RLock
 
 from .manifest import ID, Manifest
 from .dependencies import verify_host_dependencies
@@ -18,6 +20,26 @@ from .dependencies import verify_host_dependencies
 ROOT = Path(__file__).resolve().parents[2]
 PLUGINS = ROOT / 'plugins'
 IGNORED = {'__pycache__'}
+_MANIFESTS = OrderedDict()
+_MANIFEST_LOCK = RLock()
+
+
+def validated_manifest(data: bytes) -> Manifest:
+    """Cache validation by actual bytes, never cache package/host integrity checks.
+
+    Nested manifest values are mutable, so callers receive an isolated copy.
+    Invalid documents are never inserted into the bounded process-local cache.
+    """
+    digest = sha256(data).digest()
+    with _MANIFEST_LOCK:
+        manifest = _MANIFESTS.get(digest)
+        if manifest is None:
+            manifest = Manifest.model_validate(json.loads(data))
+            _MANIFESTS[digest] = manifest
+            while len(_MANIFESTS) > 64:
+                _MANIFESTS.popitem(last=False)
+        _MANIFESTS.move_to_end(digest)
+        return manifest.model_copy(deep=True)
 
 
 class PluginHostError(Exception):
@@ -81,7 +103,7 @@ class Registry:
             raise PluginHostError('PLUGIN_UNKNOWN', f'非法插件 ID：{plugin_id}', 404)
         manifests = root.glob('*/plugin.json') if plugin_id is None else (root / plugin_id).glob('plugin.json')
         for manifest_path in sorted(manifests):
-            manifest = Manifest.model_validate(json.loads(manifest_path.read_text('utf-8')))
+            manifest = validated_manifest(manifest_path.read_bytes())
             if manifest.id != manifest_path.parent.name:
                 raise PluginHostError('PLUGIN_DIRECTORY_MISMATCH', f'{manifest_path.parent.name} 目录中的清单 ID 为 {manifest.id}')
             if manifest.id in self.plugins:

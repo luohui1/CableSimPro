@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.native-reference",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "有限元与线源参考",
   "description": "领域输入的CAD、网格、有限元、电热与线源参考；来源工件由宿主绑定并验证哈希。",
   "icon": "assets/icon.svg",
@@ -3522,7 +3522,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "873861f1b01ba9e0db4dafee8d8788a72401cdc6d4d567aa41d60b68e07129a6",
+      "sha256": "bc2384c0a2b134ba382bc8a6fc9c03a3f401f6e9e521003a6c3c80868e0ef1c0",
       "size_bytes": 5111
     }
   ]

@@ -33,9 +33,9 @@
     },
     {
       "plugin_id": "cablesim.native-reference",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "manifest": "plugins/cablesim.native-reference/plugin.json",
-      "release_digest": "681b64b116530b9e853dd47dd3953c623d8019e661d60c0401678244b24cc975"
+      "release_digest": "0f303961f099d610c623fbc6e7d931694262593c906eb1833fbb5144fcc80899"
     },
     {
       "plugin_id": "cablesim.simulation",

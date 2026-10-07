@@ -1,5 +1,6 @@
 """Task-side contracts; engineering documents and solver states stay in kernel/SDK."""
 from dataclasses import dataclass
+import os
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -15,13 +16,25 @@ WaitReason = Literal['missing_input','scope_confirmation','external_job','capabi
 @dataclass(frozen=True)
 class Limits:
     max_tool_calls: int = 12
-    max_model_requests: int = 8
-    max_steps: int = 32
+    max_model_requests: int = 12
+    max_steps: int = 40
     max_active_ms: int = 120000
     max_tokens: int = 262144
     max_repair_attempts: int = 2
     lifetime_s: int = 1800
     model_timeout_s: int = 30
+
+    @classmethod
+    def configured(cls):
+        from dataclasses import fields
+        values={}
+        for field in fields(cls):
+            raw=os.environ.get('CABLESIM_AGENT_'+field.name.upper())
+            if raw is not None:
+                value=int(raw)
+                if value<=0:raise ValueError('Agent budget must be positive: '+field.name)
+                values[field.name]=value
+        return cls(**values)
 
 
 class CreateSession(StrictModel):
@@ -128,6 +141,7 @@ class SessionRecord(StrictModel):
     plans: list[dict[str,JsonValue]]
     steps: list[dict[str,JsonValue]]
     events: list[AuditEvent]
+    enabled_tools: list[str] = Field(default_factory=list)
 
 
 class MessageDelta(StrictModel):

@@ -31,8 +31,8 @@ class OpenAICompatibleProvider:
         if parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or len(model)>100:
             raise ModelError('LLM_CONFIGURATION_INVALID','模型环境配置不合法；地址须为无凭据、查询串或片段的 HTTP(S) API 基址。')
         if timeout_s<=0:raise ModelError('BUDGET_EXCEEDED','模型请求已无剩余时间预算。')
-        body={'model':model,'messages':messages,'tools':tools,'tool_choice':'auto',
-            'parallel_tool_calls':False,'stream':True,'stream_options':{'include_usage':True},'max_tokens':2048}
+        body={'model':model,'messages':messages,'stream':True,'stream_options':{'include_usage':True},'max_tokens':2048}
+        if tools:body.update(tools=tools,tool_choice='auto',parallel_tool_calls=False)
         # No endpoint, header or credential enters model messages or audit payloads.
         started=perf_counter()
         chunks,calls,usage,finish=[],{}, {},None

@@ -48,8 +48,15 @@ def preview(research, wid, sid, body, *, max_timeout_s=None):
                        timeout_s=timeout_s, expected_manifest=plugin.manifest)
     cases = [asdict(value) for value in result.cases]
     statuses = {value['status'] for value in cases}
-    snapshot = {'cases': [case], 'definition': definition,
-                'headline_contract': [value.model_dump(mode='json') for value in capability.headlines]}
+    headline_specs=[value.model_dump(mode='json') for value in capability.headlines]
+    # A preview evaluates one fixed input, never reruns candidate selection. Keep
+    # the original rating condition so a common rating stays a common rating.
+    driver=definition['driver']
+    if driver.get('candidate_ids') or driver.get('rating_basis')=='simultaneous':
+        for spec in headline_specs:
+            if spec['key']=='ampacity':spec['condition']='rating-simultaneous'
+    snapshot = {'cases': [case], 'definition': {**definition,'driver':{'kind':'single'}},
+                'headline_contract': headline_specs}
     snapshot['artifact_source_contracts']={fingerprint(definition['method']):{
         'manifest_sha256':sha256((plugin.directory/'plugin.json').read_bytes()).hexdigest(),
         'temperature_field_binding':capability.temperature_field_binding.model_dump(mode='json') if capability.temperature_field_binding else None}}

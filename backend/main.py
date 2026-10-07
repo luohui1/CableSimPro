@@ -2,6 +2,7 @@
 from contextlib import asynccontextmanager
 import os
 from pathlib import Path
+from threading import Event, Thread
 from urllib.parse import urlsplit
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
@@ -82,6 +83,8 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         owner.acquire()
+        warm_stop = Event()
+        warmer = None
         try:
             workspace_store.initialize()
             assets.initialize()
@@ -93,9 +96,12 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             with workspace_store.db(True) as db:
                 initialize(db)
             harness.initialize()
-            research.warm_reads()
+            warmer = Thread(target=research.warm_reads, args=(warm_stop,), name='study-read-warmup', daemon=True)
+            warmer.start()
             yield
         finally:
+            warm_stop.set()
+            if warmer is not None:warmer.join()
             documents.close()
             previews.close()
             research.close()

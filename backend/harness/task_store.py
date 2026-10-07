@@ -19,7 +19,7 @@ class TaskStore:
     def __init__(self,workspace_store,owner_epoch,limits=None):
         self.workspace = workspace_store
         self.owner_epoch = owner_epoch
-        self.limits = limits or Limits()
+        self.limits = limits or Limits.configured()
 
     def initialize(self):
         with self.workspace.db(True) as db:
@@ -92,22 +92,42 @@ class TaskStore:
             or task['prompt_tokens']+task['completion_tokens']>=limits['max_tokens']
             or model and task['model_requests']>=limits['max_model_requests']
             or tool and task['tool_calls']>=limits['max_tool_calls'])
-        if exceeded:raise HTTPException(429,{'code':'BUDGET_EXCEEDED','message':'本会话的工具、步骤、时间或模型用量已达到上限；未继续执行。'})
+        if exceeded:raise HTTPException(429,{'code':'BUDGET_EXCEEDED','message':'本条消息的工具、步骤、时间或模型用量已达到上限；未继续执行。'})
+
+    def closing_reason(self,task,prompt_bytes,definition_bytes):
+        limits=task['limits']
+        # UTF-8 bytes are a conservative token upper estimate, not reported usage.
+        closing_reserve=min(48*1024+4096, prompt_bytes+4096)
+        request_estimate=prompt_bytes+definition_bytes+2048
+        if task['tool_calls']>=limits['max_tool_calls']:return '本条消息的工具调用预算不足。'
+        if task['model_requests']>=limits['max_model_requests']-1:return '本条消息的模型请求预算不足，已预留一次收尾。'
+        if task['steps_used']>=limits['max_steps']-2:return '本条消息的步骤预算不足。'
+        if task['prompt_tokens']+task['completion_tokens']+request_estimate+closing_reserve>limits['max_tokens']:
+            return '本条消息的剩余token预算不足以继续工具循环。'
+        reserve_ms=min(5000,limits['max_active_ms']/4)
+        if task['elapsed_ms']>=limits['max_active_ms']-reserve_ms or time()>=task['deadline']-reserve_ms/1000:
+            return '本条消息的剩余时间不足以继续工具循环。'
+        return None
 
     def begin_turn(self,tid,content):
         turn = str(uuid4())
         with self.workspace.db(True) as db:
             task = self.load(db,tid)
             if task['active_turn']:raise HTTPException(409,'此 Agent 会话正在处理消息，请等待当前步骤完成。')
-            db.execute("UPDATE agent_tasks SET active_turn=?,owner_epoch=?,state='planning',waiting_reason=NULL,updated=? WHERE id=?",(turn,self.owner_epoch,stamp(),tid))
+            db.execute("UPDATE agent_tasks SET active_turn=?,owner_epoch=?,state='planning',waiting_reason=NULL,tool_calls=0,model_requests=0,steps_used=0,elapsed_ms=0,prompt_tokens=0,completion_tokens=0,deadline=?,limits=?,updated=? WHERE id=?",
+                (turn,self.owner_epoch,time()+self.limits.lifetime_s,encode(asdict(self.limits)),stamp(),tid))
             self.event(db,tid,'chat.message',{'role':'user','content':content,'turn_id':turn})
         return turn
 
-    def begin_model(self,tid,turn,request_summary):
+    def begin_model(self,tid,turn,request_summary,*,closing=False):
         with self.workspace.db(True) as db:
-            task = self.load(db,tid);self.assert_turn(task,turn);self.budget(task,model=True)
+            task = self.load(db,tid);self.assert_turn(task,turn)
+            if closing:
+                previous=db.execute("SELECT 1 FROM agent_events WHERE task_id=? AND type='model.request' AND json_extract(data,'$.turn_id')=? AND json_extract(data,'$.phase')='closing'",(tid,turn)).fetchone()
+                if previous:raise HTTPException(409,'本条消息已使用收尾请求。')
+            else:self.budget(task,model=True)
             db.execute('UPDATE agent_tasks SET model_requests=model_requests+1,steps_used=steps_used+1,updated=? WHERE id=?',(stamp(),tid))
-            self.event(db,tid,'model.request',request_summary)
+            self.event(db,tid,'model.request',{**request_summary,'turn_id':turn,'phase':'closing' if closing else 'tools','request_number':task['model_requests']+1})
             return task
 
     @staticmethod
@@ -119,7 +139,7 @@ class TaskStore:
             task=self.load(db,tid);self.assert_turn(task,turn)
             db.execute('UPDATE agent_tasks SET elapsed_ms=elapsed_ms+?,prompt_tokens=prompt_tokens+?,completion_tokens=completion_tokens+?,updated=? WHERE id=?',
                 (elapsed_ms,usage.get('prompt_tokens',0),usage.get('completion_tokens',0),stamp(),tid))
-            self.event(db,tid,'model.result',{'elapsed_ms':elapsed_ms,'usage':usage,**reply_summary})
+            self.event(db,tid,'model.result',{'turn_id':turn,'request_number':task['model_requests'],'elapsed_ms':elapsed_ms,'usage':usage,**reply_summary})
 
     def add_plan(self,tid,body,proposal_id=None,connection=None):
         from contextlib import nullcontext
@@ -163,6 +183,7 @@ class TaskStore:
                 (state,encode(result),encode(reference) if reference else None,(reference or {}).get('run_id'),elapsed_ms,stamp(),tid,operation,self.owner_epoch)).rowcount:
                 raise HTTPException(409,'工具结果不能覆盖已恢复或已结束的操作。')
             db.execute('UPDATE agent_tasks SET elapsed_ms=elapsed_ms+?,updated=? WHERE id=?',(elapsed_ms,stamp(),tid))
+            self.event(db,tid,'tool.observation',{'operation_id':operation,'result':result})
 
     def reconcile_step(self,tid,operation,result):
         with self.workspace.db(True) as db:
@@ -219,8 +240,12 @@ class TaskStore:
             'budget':{'limits':task['limits'],'tool_calls':task['tool_calls'],'model_requests':task['model_requests'],
                 'steps_used':task['steps_used'],'elapsed_ms':task['elapsed_ms'],'prompt_tokens':task['prompt_tokens'],
                 'completion_tokens':task['completion_tokens'],'deadline':task['deadline'],
+                'scope':'message','turn_id':task['active_turn'] or next((event['data']['turn_id'] for event in reversed(events) if event['type']=='chat.message' and event['data'].get('role')=='user'),None),
+                'session_totals':{key:sum(event['data'].get('usage',{}).get(key,0) for event in events if event['type']=='model.result') for key in ('prompt_tokens','completion_tokens')},
                 'usage_reported_only':True,'usage_complete':all(event['data'].get('usage_available',False) for event in events if event['type']=='model.result')},
             'messages':[event['data'] for event in events if event['type']=='chat.message'],
             'tool_calls':[event['data'] for event in events if event['type']=='tool.call'],
             'results':[{'id':step['node_id'],**step['result']} for step in steps if step['result']],
-            'proposals':proposals,'plans':plans,'steps':steps,'events':events}
+            'proposals':proposals,'plans':plans,'steps':steps,'events':events,
+            'enabled_tools':sorted({name for step in steps if step['tool']=='plugin_inspect' and step.get('result') and step['result']['status']=='ok'
+                for name in step['result']['data'].get('enabled_tools',[])})}

@@ -139,6 +139,79 @@ class Proposals:
         self.tasks.add_plan(task['id'],{'kind':'proposal','proposal':proposal},proposal['id'])
         self.tasks.emit(task['id'],'proposal.created',proposal['public'])
 
+    def preview_inputs(self,task,sid,module,proposal_id,run_id=None,case_id=None):
+        """Replay a reviewed draft against a verified original case, without saving."""
+        _,state,study=self.source(task,sid)
+        selected=self.research.module_definition(study['definition'],module)
+        trial_state=deepcopy(state)
+        pinned_case=None
+        document=deepcopy(selected['method_input'] if selected['input_source']=='study' else state.get('domain'))
+        parameters=deepcopy(selected['parameters'])
+        if selected['driver']['kind']!='single' and not (run_id and case_id):
+            raise HTTPException(422,'选择、扫描或批量研究试算须指定原 run_id 与 case_id；不会以默认工程冒充推荐工况。')
+        if bool(run_id)!=bool(case_id):raise HTTPException(422,'原运行和工况必须一起指定。')
+        if run_id:
+            run=self.research.get_run(task['workspace_id'],run_id)
+            if run['study']!=sid or run['integrity']!='verified' or run['freshness']!='current':
+                raise HTTPException(409,'原运行归属、完整性或新鲜度未通过，拒绝试算。')
+            if run['snapshot'].get('module')!=module:raise HTTPException(409,'原运行不属于指定研究模块。')
+            original=run['snapshot']['definition']
+            if original['method']!=selected['method']:raise HTTPException(409,'原工况与当前方法身份不一致。')
+            case=next((value for value in run['snapshot']['cases'] if value['case_id']==case_id),None)
+            if case is None:raise HTTPException(404,'原运行没有指定工况。')
+            document=deepcopy(case['input']);parameters=deepcopy(case['parameters'])
+            if selected['driver'].get('candidate_ids'):
+                # Same candidate experiment scope as Research.snapshot: retain manual
+                # locks, replace only the saved model binding with the verified case.
+                binding=trial_state.get('study_cable_reference') or {}
+                trial_state['locks']=[path for path in trial_state.get('locks',[]) if path not in binding.get('locks',[])]
+                trial_state.pop('study_cable_reference',None)
+                pinned_case=deepcopy(document)
+        original_document=deepcopy(document)
+        if proposal_id:
+            with self.workspace.db() as db:owner,proposal,decision=self.tasks.proposal(db,proposal_id)
+            if owner['id']!=task['id'] or proposal['workspace_revision']!=task['workspace_revision'] or decision or time()>proposal['expires']:
+                raise HTTPException(409,'试算只接受本会话、同版本、未决定且未过期的方案。')
+            if proposal['kind']=='domain':
+                if selected['input_source']!='domain':raise HTTPException(422,'领域修改方案不能覆盖独立研究输入。')
+                # Recheck the immutable proposal against its original domain/editor rules.
+                base=deepcopy(state['domain'])
+                for change in proposal['edits']:
+                    parent,key=target(base,change['path'],stable=True);parent[key]=change['value']
+                    base.setdefault('provenance',{})[change['path']]={'kind':'user','reviewed':False,
+                        'reference':'Agent 输入方案 '+proposal_id+'；非厂家实测，物性来源尚待人工核对。'}
+                if fingerprint(resolve_edit(state,DraftDomainDocument.model_validate(base)))!=proposal['candidate_digest']:
+                    raise HTTPException(409,'方案领域校验规则已变化，请重新提出方案。')
+                for change in proposal['edits']:
+                    parent,key=target(document,change['path'],stable=True);parent[key]=change['value']
+                    document.setdefault('provenance',{})[change['path']]=base['provenance'][change['path']]
+                document=resolve_edit({**trial_state,'domain':original_document},DraftDomainDocument.model_validate(document))
+            elif proposal['kind']=='parameters':
+                if proposal['study_id']!=sid or proposal['study_revision']!=study['revision'] or proposal['module']!=module or proposal['method']!=selected['method']:
+                    raise HTTPException(409,'方法参数方案与试算研究不一致。')
+                _,cap=self.research.resolve(selected['method']);schema,_=schemas(cap,document)
+                if fingerprint(schema)!=proposal['schema_digest']:raise HTTPException(409,'方案参数契约已变化。')
+                for change in proposal['edits']:
+                    parent,key=target(parameters,change['path'],stable=False);parent[key]=change['value']
+            else:raise HTTPException(422,'新建研究方案须先由人工保存研究，再请求试算。')
+        if pinned_case:
+            if document['cable_types']!=pinned_case['cable_types']:raise HTTPException(422,'原候选型号结构不能被试算方案修改。')
+            referenced=set()
+            def materials(value):
+                if isinstance(value,dict):
+                    if isinstance(value.get('material'),str):referenced.add(value['material'])
+                    for child in value.values():materials(child)
+                elif isinstance(value,list):
+                    for child in value:materials(child)
+            materials(pinned_case['cable_types'])
+            before={value['id']:value for value in pinned_case['materials'] if value['id'] in referenced}
+            after={value['id']:value for value in document['materials'] if value['id'] in referenced}
+            if before!=after:raise HTTPException(422,'原候选型号材料事实不能被试算方案修改。')
+        if selected['input_source']=='domain':check_locks(trial_state,document,parameters)
+        _,cap=self.research.resolve(selected['method'])
+        validate_case(cap,{'input':document,'parameters':parameters})
+        return {'domain' if selected['input_source']=='domain' else 'method_input':document,'parameters':parameters}
+
     def decide(self,pid,decision):
         # The public human route is the only caller; no decision exists in the broker registry.
         marker='human-decision:'+pid

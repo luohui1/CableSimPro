@@ -62,7 +62,7 @@ class Research:
         seals=getattr(getattr(self.executor,'local',self.executor),'seals',None)
         if seals is not None:seals.close()
 
-    def warm_reads(self):
+    def warm_reads(self, stop=None):
         """Validate a small existing library at startup; never run a method."""
         from .responses import StudyResponse, RunSummaryPage
         import logging
@@ -80,6 +80,7 @@ class Research:
                 (('runs',wid,sid,0,50),RunSummaryPage,lambda wid=wid,sid=sid:self.list_runs(wid,sid,view='summary')),
             ])
         for key,model,load in tasks:
+            if stop is not None and stop.is_set():return
             try:self.read_responses.build(key,model,load,True)
             except (HTTPException,PluginHostError,ValueError,TypeError,KeyError):
                 logging.getLogger(__name__).debug('Read cache warm-up skipped for %s',key,exc_info=True)

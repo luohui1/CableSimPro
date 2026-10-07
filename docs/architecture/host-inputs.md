@@ -120,6 +120,8 @@ data: {"usage":{"prompt_tokens":120,"completion_tokens":20}}
 
 批准后内部温度以K保存；长度变更以m显示和保存，截面按声明显示mm²、存m²。方法参数单位来自封签元数据，不按后缀猜。修改只读来源、批准自己、调用任意命令、隐藏正式执行均被broker拒绝。常见流错误为LLM_NOT_CONFIGURED、LLM_AUTH_FAILED、LLM_TIMEOUT、BUDGET_EXCEEDED、UNKNOWN_OPERATION、REPAIR_LIMIT_EXCEEDED、UNGROUNDED_NUMBER/QUANTITY；工具错误先形成结构化公共结果回给模型，保留字段定位和下一步。
 
-每次模型请求记录模型名、消息/工具契约摘要、时间与报告用量；每次工具调用保存意图身份、参数、输入身份、有界结果、耗时及执行引用。会话可按事件和不可变计划回放，不意味着重新调用模型得到同样输出。`budget.usage_reported_only=true`；提供方未返回用量时usage_complete=false，done仅为累计已报告token。预览摘要可留在任务审计中，但没有正式Run或可交付原件。恢复不能确认的原预览保持unknown，绝不伪造成功。
+模型默认只收到宿主工具；插件目录只含工具名和中文说明。`plugin_inspect(tool)`或指定`plugin_id/capability`成功后，会话`enabled_tools`列出后续启用的插件能力，完整注册表仍由`/tools`提供。`workspace_read(paths)`读取大纲或指定字段；`run_read`支持`entity/key/case_id`；`study_preview`支持`proposal_id`，选择/批量工况还须原`run_id/case_id`。完整结果保留在步骤与审计，进入模型的单项结果最多6KiB，超限明确标注并给出继续读取提示。
+
+每次请求审计增加`turn_id/request_number/phase/definition_bytes/prompt_bytes`，`model.result`记录对应实际`usage`；`phase=closing`为一次无工具收尾。预算规则统一见[模块设计 §14.3](../design/MODULE_DESIGN.md#143-权限保存与预算)。会话预算`scope=message`，done报告本条消息已报告token，`session_totals`保留会话合计；提供方缺失用量时`usage_complete=false`。SSE工具卡片事件字段保持不变，完整结果在`results/steps`和`tool.observation`审计中读取。未知预览仍保持unknown，不重新执行。
 
 验证见`tests/test_harness.py`，使用本地OpenAI兼容假HTTP服务，不请求真实模型；真实提供方冒烟仅在设置CABLESIM_LLM_API_KEY时启用，交由真实环境联调。CAD分析资格、有限元自动修复及通用HPC授权执行不在本轮实现范围。

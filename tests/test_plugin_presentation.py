@@ -19,8 +19,10 @@ def test_all_capabilities_are_sealed_self_describing_and_assets_match(client):
     contracts=client.get('/api/input-contracts').json()
     assert len(methods)==10 and len(contracts)==51
     for item in methods:
-        assert item['method']['version']=='1.0.0'
-        assert all(cap['method_version']=='1.0.0' for cap in item['capabilities'])
+        declared=json.loads((ROOT/'plugins'/item['method']['plugin_id']/'plugin.json').read_text('utf-8'))
+        assert item['method']['version']==declared['version']
+        capabilities={cap['id']:cap for cap in declared['capabilities']}
+        assert all(cap['method_version']==capabilities[cap['id']]['method_version'] for cap in item['capabilities'])
         for asset in item['resources']:
             response=client.get(asset['url'])
             assert response.status_code==200,response.text

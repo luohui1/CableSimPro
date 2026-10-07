@@ -86,8 +86,8 @@
   },
   {
     "path": "backend/plugin_host/registry.py",
-    "sha256": "674eaa668e5a7fe28fb453157142a126d95b7b0a0c18331cb8e4fd58864faa51",
-    "size_bytes": 4418
+    "sha256": "54111803a5865966f22079596b74983946319d325ed706227be5f4a9686fb3f5",
+    "size_bytes": 5221
   },
   {
     "path": "backend/plugin_host/runtime.py",

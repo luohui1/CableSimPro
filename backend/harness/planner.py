@@ -16,8 +16,12 @@ CAD显示不代表分析资格；本轮没有CAD分析桥和新的有限元修�
 回答简短中文，先说明已取得什么和下一步。方案等待人工决定时不要宣称已经保存。'''
 
 
-def prepare(record,tools):
+def prepare(record,tools,directory=None,closing=None):
     context=json.dumps(context_builder.summary(record),ensure_ascii=False,separators=(',',':'))
-    prompt=[{'role':'system','content':SYSTEM+'\n宿主上下文（只读）：'+context},*context_builder.messages(record)]
-    definitions=[tool.model() for tool in tools.values()]
+    catalog=json.dumps(directory or [],ensure_ascii=False,separators=(',',':'))
+    guidance='\n插件能力目录（工具名、中文说明；先用 plugin_inspect 的 tool 读取指定能力，后续请求才启用）：'+catalog
+    guidance+='\nworkspace_read 默认工程大纲；按返回路径读细节。run_read 默认结论量值，可按 entity / key 读取。修改方案后用 study_preview(proposal_id) 试算；选择/批量研究须同时指定原 run_id、case_id，以原工况为准。'
+    if closing:guidance+='\n本次收尾禁止工具。基于已取得证据作答，明确哪些目标未完成及原因：'+closing
+    prompt=[{'role':'system','content':SYSTEM+guidance+'\n宿主上下文（只读）：'+context},*context_builder.messages(record)]
+    definitions=[] if closing else [tool.disclosed_model() for tool in tools.values()]
     return prompt,definitions

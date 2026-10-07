@@ -88,7 +88,7 @@ def test_local_model_runs_the_same_preflight_and_preview_with_durable_intent(cli
     registry=client.get('/api/agent/tools').json()
     generated=next(row['name'] for row in registry if row.get('plugin_id')=='cablesim.iec60287' and row['name'].endswith('__steady_rating'))
     script.extend([call('study_read',{'input_paths':['/sections/section~1s1/placements/cable~1c1-A/z']}),
-        call('study_preflight'),call(generated),answer('预检与快速预览已完成；正式交付仍需保存运行并人工复核。')])
+        call('study_preflight'),call('plugin_inspect',{'tool':generated}),call(generated),answer('预检与快速预览已完成；正式交付仍需保存运行并人工复核。')])
     executor=client.app.state.research.executor;original=executor.run
     def verified_intent(*args,**kwargs):
         with client.app.state.workspace_store.db() as db:
@@ -97,18 +97,22 @@ def test_local_model_runs_the_same_preflight_and_preview_with_durable_intent(cli
         return original(*args,**kwargs)
     monkeypatch.setattr(executor,'run',verified_intent)
     events=send(client,tid)
-    assert [data['status'] for kind,data in events if kind=='tool.result']==['ok','ok','ok'],events
-    assert len({data['id'] for kind,data in events if kind=='tool.call'})==3
+    assert [data['status'] for kind,data in events if kind=='tool.result']==['ok','ok','ok','ok'],events
+    assert len({data['id'] for kind,data in events if kind=='tool.call'})==4
     assert {data['id'] for kind,data in events if kind=='tool.call'}=={data['id'] for kind,data in events if kind=='tool.result'}
     record=client.get('/api/agent/sessions/'+tid).json()
     assert record['state']=='completed' and record['waiting_reason'] is None
-    assert record['budget']['tool_calls']==3 and record['budget']['prompt_tokens']==40
+    assert record['budget']['tool_calls']==4 and record['budget']['prompt_tokens']==50
     assert record['results'][0]['data']['input_fields'][0]['unit']=='m'
     assert record['results'][0]['data']['input_fields'][0]['value']==-.8
-    assert len(record['plans'])==3 and all(step['state']=='succeeded' for step in record['steps'])
+    assert len(record['plans'])==4 and all(step['state']=='succeeded' for step in record['steps'])
     assert record['results'][-1]['execution_ref']['persisted'] is False
     assert client.get(f'/api/workspaces/{w["id"]}/studies/{s["id"]}/runs').json()['items']==[]
-    assert set(row['function']['name'] for row in requests[0]['tools'])==set(row['name'] for row in registry)
+    assert set(row['function']['name'] for row in requests[0]['tools'])==set(row['name'] for row in registry if not row.get('plugin_id'))
+    assert generated not in {row['function']['name'] for row in requests[2]['tools']}
+    assert generated in {row['function']['name'] for row in requests[3]['tools']}
+    assert record['enabled_tools']==[generated]
+    assert all(len(json.dumps(request['tools'],ensure_ascii=False,separators=(',',':')).encode())<=16*1024 for request in requests)
     assert FAKE_KEY not in json.dumps(record,ensure_ascii=False)
     assert any(event['type']=='model.result' and event['data']['elapsed_ms']>0 for event in record['events'])
 
@@ -183,7 +187,7 @@ def test_manifest_tool_proposes_a_new_study_and_only_human_approval_saves_it(cli
     from cablesim_sdk.parameter_units import translate
     contract=next(row for row in client.get('/api/input-contracts').json() if row['method']['plugin_id']=='cablesim.iec60287' and row['method']['capability']=='steady-rating')
     parameters=translate(contract['parameter_schema'],deepcopy(METHOD_DEFAULTS['cablesim.iec60287']))
-    script.extend([call(generated,{'title':'直埋稳态研究','parameters':parameters}),
+    script.extend([call('plugin_inspect',{'tool':generated}),call(generated,{'title':'直埋稳态研究','parameters':parameters}),
         answer('新建研究方案已生成，等待人工批准。')])
     events=send(client,tid)
     assert any(kind=='proposal.created' for kind,_ in events),events
@@ -197,22 +201,31 @@ def test_manifest_tool_proposes_a_new_study_and_only_human_approval_saves_it(cli
     assert record['study_id']==saved[0]['id'] and record['study_revision']==1
 
 
-def test_session_budget_stops_before_an_extra_tool_or_model_request(client,fake_model):
+@pytest.mark.parametrize('token_stop',[False,True])
+def test_message_budget_reserves_tool_free_answer_and_resets_next_message(client,fake_model,token_stop):
     script,requests=fake_model;w,s=study(client)
-    client.app.state.harness.tasks.limits=replace(Limits(),max_tool_calls=1)
+    client.app.state.harness.tasks.limits=replace(Limits(),max_tool_calls=12 if token_stop else 1,max_tokens=100000 if token_stop else 262144)
     tid=session(client,w,s)
-    script.extend([call('workspace_list'),call('study_list')])
+    first=call('workspace_list')
+    if token_stop:first['usage']['prompt_tokens']=80000
+    script.extend([first,answer('已读取工程身份，研究结论尚未读取。')])
     events=send(client,tid)
-    assert next(data['code'] for kind,data in events if kind=='error')=='BUDGET_EXCEEDED'
+    assert any(kind=='message.delta' for kind,_ in events)
     record=client.get('/api/agent/sessions/'+tid).json()
     assert record['budget']['tool_calls']==1 and len(record['steps'])==1
     assert record['state']=='blocked' and record['waiting_reason']=='budget'
     assert len(requests)==2
-    client.app.state.harness.tasks.limits=replace(Limits(),max_active_ms=0)
-    other=session(client,w,s)
-    events=send(client,other)
-    assert next(data['code'] for kind,data in events if kind=='error')=='BUDGET_EXCEEDED'
-    assert len(requests)==2
+    assert 'tools' not in requests[-1] and 'tool_choice' not in requests[-1] and 'parallel_tool_calls' not in requests[-1]
+    assert '尚未完成' in ''.join(data['text'] for kind,data in events if kind=='message.delta')
+    second=call('study_list')
+    if token_stop:second['usage']['prompt_tokens']=80000
+    script.extend([second,answer('已读取研究身份，结果仍需读取。')])
+    send(client,tid,'继续读取研究。')
+    record=client.get('/api/agent/sessions/'+tid).json()
+    assert record['budget']['scope']=='message' and record['budget']['tool_calls']==1
+    prompt_tokens=80010 if token_stop else 20
+    assert record['budget']['prompt_tokens']==prompt_tokens and record['budget']['session_totals']['prompt_tokens']==2*prompt_tokens
+    assert len(record['steps'])==2 and len(requests)==4
 
 
 def test_missing_model_configuration_keeps_status_tools_and_sse_available(client,monkeypatch):
@@ -239,7 +252,7 @@ def test_model_has_no_self_approval_or_unapproved_execution_tool(client,fake_mod
     monkeypatch.setattr(executor,'required',lambda *args:True,raising=False)
     monkeypatch.setattr(executor,'run',lambda *args,**kwargs:pytest.fail('unapproved execution reached the executor'))
     tid=session(client,w,s)
-    script.extend([call('approve',{'id':'invented'}),call('study_preview')])
+    script.extend([call('approve',{'id':'invented'}),call('study_preview'),answer('该能力需要人工确认，尚未执行。')])
     events=send(client,tid)
     record=client.get('/api/agent/sessions/'+tid).json()
     assert record['results'][0]['diagnostics'][0]['code']=='TOOL_NOT_ALLOWED'
@@ -251,9 +264,9 @@ def test_model_has_no_self_approval_or_unapproved_execution_tool(client,fake_mod
 
 def test_unseen_quantities_and_provider_credentials_never_become_messages(client,fake_model):
     script,_=fake_model;w,s=study(client);tid=session(client,w,s)
-    script.append(answer('允许电流为9999 A。'))
+    script.extend([answer('允许电流为9999 A。'),answer('尚未读取运行结果，没有可引用的允许电流证据。')])
     events=send(client,tid)
-    assert not any(kind=='message.delta' for kind,_ in events)
+    assert any(kind=='message.delta' for kind,_ in events)
     assert next(data['code'] for kind,data in events if kind=='error')=='UNGROUNDED_QUANTITY'
     record=client.get('/api/agent/sessions/'+tid).json()
     assert '9999 A' not in json.dumps(record,ensure_ascii=False)
