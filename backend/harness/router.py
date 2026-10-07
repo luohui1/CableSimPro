@@ -1,10 +1,12 @@
 """Frontend-compatible human session, streaming and proposal decision endpoints."""
+from uuid import UUID
+
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 from pydantic import TypeAdapter
 from starlette.background import BackgroundTask
 
-from .contracts import AgentStatus,ToolInfo,CreateSession,SessionId,Message,SessionRecord,ProposalDecision,StreamEvent,PlanNode
+from .contracts import AgentStatus,ToolInfo,CreateSession,SessionId,SessionSummary,Message,SessionRecord,ProposalDecision,StreamEvent,PlanNode
 
 
 def make_router(harness):
@@ -18,6 +20,9 @@ def make_router(harness):
 
     @router.post('/sessions',response_model=SessionId)
     def create(body:CreateSession):return harness.create(body)
+
+    @router.get('/sessions',response_model=list[SessionSummary])
+    def sessions(workspace_id:UUID|None=None):return harness.tasks.sessions(str(workspace_id) if workspace_id else None)
 
     @router.get('/sessions/{id}',response_model=SessionRecord)
     def session(id:str):return harness.tasks.record(id)

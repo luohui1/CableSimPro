@@ -2,7 +2,9 @@
  * Agent 接口约定（前后端共用，后端由 harness 实现）：
  * - GET  /api/agent/status → { configured, model?, tools }
  * - GET  /api/agent/tools → AgentTool[]（工具注册表：宿主工具 + 由插件清单生成的工具）
+ * - GET  /api/agent/sessions?workspace_id= → AgentSessionSummary[]（任务列表，新到旧）
  * - POST /api/agent/sessions { workspace_id, study_id? } → { id }
+ * - GET  /api/agent/sessions/{id} → AgentRecord（完整审计记录，重开任务时据此还原对话）
  * - POST /api/agent/sessions/{id}/messages { content } → text/event-stream，事件见 AgentEvent
  * - POST /api/agent/proposals/{id}/approve | reject → { status }
  * 写操作只以“方案”出现，批准由人在界面完成；密钥从不经过前端。
@@ -19,17 +21,42 @@ export type AgentEvent =
   | { type: "error"; code?: string; message: string }
   | { type: "done"; usage?: { prompt_tokens?: number; completion_tokens?: number } };
 
+export type AgentSessionSummary = { id: string; workspace_id: string; study_id: string | null; state: string; waiting_reason: string | null; title: string; created: string; updated: string; pending_proposals: number };
+export type AgentProposal = { id: string; title: string; changes: ProposalChange[]; checks?: string[]; status: "pending" | "approved" | "rejected" };
+export type AgentStepRecord = { node_id: string; tool: string; arguments: Record<string, unknown> | null; result: { status: string; summary: string; data: Record<string, unknown> } | null; elapsed_ms: number | null };
+export type AgentRecord = {
+  id: string; workspace_id: string; study_id: string | null; state: string; waiting_reason: string | null; created: string; updated: string;
+  proposals: AgentProposal[]; steps: AgentStepRecord[]; events: { sequence: number; type: string; created: string; data: Record<string, unknown> }[];
+};
+
 export class AgentUnavailable extends Error {}
 
+/** 服务端错误只取人能读的说明（FastAPI 的 detail 或 detail.message），不把 JSON 原样摆给人看。 */
+async function failure(response: Response) {
+  const body = await response.text();
+  try {
+    const detail = (JSON.parse(body) as { detail?: unknown }).detail;
+    if (typeof detail === "string") return new Error(detail);
+    if (detail && typeof detail === "object" && typeof (detail as { message?: unknown }).message === "string") return new Error((detail as { message: string }).message);
+  } catch { /* 非 JSON 正文按原文显示 */ }
+  return new Error(body || `请求失败（${response.status}）`);
+}
+
 async function json<T>(response: Response): Promise<T> {
-  if (response.status === 404) throw new AgentUnavailable("Agent 服务尚未部署");
-  if (!response.ok) throw new Error((await response.text()) || `请求失败（${response.status}）`);
+  if (response.status === 404 && response.url.endsWith("/api/agent/status")) throw new AgentUnavailable("Agent 服务尚未部署");
+  if (!response.ok) throw await failure(response);
   return response.json() as Promise<T>;
 }
 
 export const agentStatus = (signal?: AbortSignal) => fetch("/api/agent/status", { signal }).then((response) => json<AgentStatus>(response));
 
 export const agentTools = (signal?: AbortSignal) => fetch("/api/agent/tools", { signal }).then((response) => json<AgentTool[]>(response));
+
+export const agentSessions = (workspaceId?: string, signal?: AbortSignal) =>
+  fetch(`/api/agent/sessions${workspaceId ? `?workspace_id=${encodeURIComponent(workspaceId)}` : ""}`, { signal }).then((response) => json<AgentSessionSummary[]>(response));
+
+export const agentSession = (id: string, signal?: AbortSignal) =>
+  fetch(`/api/agent/sessions/${encodeURIComponent(id)}`, { signal }).then((response) => json<AgentRecord>(response));
 
 export const createSession =(workspaceId: string, studyId?: string) =>
   fetch("/api/agent/sessions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ workspace_id: workspaceId, study_id: studyId }) })
@@ -43,8 +70,7 @@ export async function sendMessage(sessionId: string, content: string, onEvent: (
   const response = await fetch(`/api/agent/sessions/${encodeURIComponent(sessionId)}/messages`, {
     method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream" }, body: JSON.stringify({ content }), signal,
   });
-  if (response.status === 404) throw new AgentUnavailable("Agent 服务尚未部署");
-  if (!response.ok || !response.body) throw new Error((await response.text()) || `请求失败（${response.status}）`);
+  if (!response.ok || !response.body) throw await failure(response);
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
   let buffer = "";
   for (;;) {

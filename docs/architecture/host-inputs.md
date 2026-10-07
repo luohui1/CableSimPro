@@ -87,6 +87,7 @@
 | --- | --- |
 | GET `/api/agent/status` | `{configured,model,tools}`；model未配置时展示deepseek-flash，tools为实际注册数量 |
 | GET `/api/agent/tools` | `[{name,title,kind,description,plugin_id?,hpc}]`；kind为read/propose/run，宿主工具不带plugin_id |
+| GET `/api/agent/sessions?workspace_id=` | 任务列表，按更新时间新到旧：绑定、状态/等待原因、首条提问作标题、未决方案数；不含消息正文与结果 |
 | POST `/api/agent/sessions` | `{workspace_id,study_id:null或UUID}` → `{id}`；校验工程与研究归属，记录固定修订及本机快速执行授权 |
 | POST `/api/agent/sessions/{id}/messages` | `{content}` → `text/event-stream`；每会话同时只处理一条消息，冲突409 |
 | GET `/api/agent/sessions/{id}` | 绑定、任务状态/等待原因、预算、消息、工具调用/结果摘要、方案、计划、步骤、按序审计事件 |

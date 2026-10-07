@@ -46,6 +46,18 @@ class SessionId(StrictModel):
     id: UUID
 
 
+class SessionSummary(StrictModel):
+    id: UUID
+    workspace_id: UUID
+    study_id: UUID | None
+    state: TaskState
+    waiting_reason: WaitReason | None
+    title: str
+    created: str
+    updated: str
+    pending_proposals: int
+
+
 class Message(StrictModel):
     content: str = Field(min_length=1,max_length=8000)
 

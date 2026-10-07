@@ -38,7 +38,7 @@ try {
   await zones();
   const tabs = page.getByRole("tablist", { name: "属性分页" });
   await tabs.getByRole("tab", { name: "Agent" }).click();
-  await expect(page.locator(".inspector-agent .agent-panel-model")).toHaveText(/已连接|deepseek|服务尚未部署|模型未配置|检查中/);
+  await expect(page.locator(".inspector-agent .agent-panel-model")).toHaveText(/已连接|deepseek|服务尚未部署|未连接模型|检查中/);
   await tabs.getByRole("tab", { name: "输入" }).click();
   await expect(page.locator(".workbench-inspector").getByRole("heading", { name: "本次计算" })).toBeVisible();
 
@@ -62,6 +62,14 @@ try {
   assert.ok(created, "应能按名称找到新研究");
   assert.equal(created.definition.input_sources["/parameters"].kind, "derived", "方法参数应记录沿用来源");
   await zones();
+
+  // Agent 模式：左栏换成任务列表，中间是对话与输入栏；不再摆工具注册表
+  await go(`/agent?workspace=${project.id}`);
+  await expect(page.locator('[data-page="agent"]')).toBeVisible();
+  await expect(page.getByRole("link", { name: "新任务" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "要 Agent 做什么？" })).toBeVisible();
+  await expect(page.getByLabel("给 Agent 的任务")).toBeEditable();
+  await expect(page.getByText("可调用的工具")).toHaveCount(0);
 
   // 深色主题
   await go(`/studies?workspace=${project.id}&theme=dark`);

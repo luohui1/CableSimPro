@@ -49,9 +49,10 @@ export function ShellLayout() {
   const width = useRef(clampWidth(Number(readStored(WIDTH_KEY)) || DEFAULT_WIDTH));
   useLayoutEffect(() => applyWidth(width.current), []);
   // 过渡只在用户主动开合的那一次加上，平时不挂，窗口缩放不会触发一串中间尺寸（ZCode useAnimatedResizablePanel）。
-  const toggle = useCallback(() => {
+  // 进入工作窗口时的自动收起不写入偏好，刷新后别的页面仍按人上次手动选择显示
+  const toggle = useCallback((auto = false) => {
     setAnimating(true);
-    setCollapsed(value => { store(COLLAPSED_KEY, String(!value)); return !value; });
+    setCollapsed(value => { if (!auto) store(COLLAPSED_KEY, String(!value)); return !value; });
     window.setTimeout(() => setAnimating(false), 260);
   }, []);
   useEffect(() => {

@@ -149,10 +149,13 @@ def test_domain_proposals_show_display_units_and_reject_without_writing(client,f
         script.extend([call('propose_domain_changes',{'changes':[{'path':path,'value':value,'unit':'°C'}]}),answer('输入方案已生成，等待人工确认。')])
         events=send(client,tid,f'把地表温度调整为{value}°C，先给方案。')
         return tid,next(data for kind,data in events if kind=='proposal.created')
-    _,proposal=propose(30)
+    tid,proposal=propose(30)
     change=proposal['changes'][0]
     assert change['unit']=='°C' and change['before']==25 and change['after']==30
+    listed=client.get('/api/agent/sessions',params={'workspace_id':w['id']}).json()
+    assert [(row['id'],row['title'],row['pending_proposals']) for row in listed]==[(tid,'把地表温度调整为30°C，先给方案。',1)]
     assert client.post('/api/agent/proposals/'+proposal['id']+'/reject').json()=={'status':'rejected'}
+    assert client.get('/api/agent/sessions').json()[0]['pending_proposals']==0
     assert client.get('/api/workspaces/'+w['id']).json()['revision']==w['revision']
     _,proposal=propose(30)
     assert client.post('/api/agent/proposals/'+proposal['id']+'/approve').json()=={'status':'approved'}

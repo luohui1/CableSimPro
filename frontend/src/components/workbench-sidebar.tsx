@@ -10,6 +10,7 @@ import { Button, IconButton } from './ui/button';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from './ui/dropdown-menu';
 import { CreateStudyDialog } from './create-study-dialog';
+import { AgentTaskList } from '@/features/agent/task-list';
 
 type Slot = (element: HTMLElement | null) => void;
 
@@ -17,7 +18,7 @@ type Slot = (element: HTMLElement | null) => void;
  * 常驻侧栏（ZCode 式）：工程逐级展开 → 研究 → 当前研究的模块；型号库单独一区。
  * 当前对象的模块导航由页面经插槽（onSlot）以 portal 放入它所在的树节点下。
  */
-export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse }: { theme: 'light' | 'dark'; onTheme: () => void; onSlot: Slot; collapsed: boolean; onCollapse: () => void }) {
+export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse }: { theme: 'light' | 'dark'; onTheme: () => void; onSlot: Slot; collapsed: boolean; onCollapse: (auto?: boolean) => void }) {
   const [create, setCreate] = useState(false);
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { workspace?: string };
@@ -32,8 +33,8 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
   const inWorkbench = /^\/(studies|types)\/[^/]+\//.test(pathname);
   const autoCollapsed = useRef(false);
   useEffect(() => {
-    if (inWorkbench && !collapsed) { autoCollapsed.current = true; onCollapse(); }
-    else if (!inWorkbench && collapsed && autoCollapsed.current) { autoCollapsed.current = false; onCollapse(); }
+    if (inWorkbench && !collapsed) { autoCollapsed.current = true; onCollapse(true); }
+    else if (!inWorkbench && collapsed && autoCollapsed.current) { autoCollapsed.current = false; onCollapse(true); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inWorkbench]);
   const activeStudy = pathname.match(/^\/studies\/([^/]+)/)?.[1] || '';
@@ -47,11 +48,13 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
   return <aside className="workbench-sidebar" aria-label="导航">
     <div className="sidebar-head">
       <BrandLogo theme={theme} compact={collapsed} />
-      <IconButton variant="ghost" icon="nav/sidebar" label={collapsed ? '展开侧栏（Ctrl+B）' : '收起侧栏（Ctrl+B）'} onClick={onCollapse} className="sidebar-collapse" />
+      <IconButton variant="ghost" icon="nav/sidebar" label={collapsed ? '展开侧栏（Ctrl+B）' : '收起侧栏（Ctrl+B）'} onClick={() => onCollapse()} className="sidebar-collapse" />
     </div>
     <ToggleGroup type="single" value={mode} onValueChange={value => value && setMode(value)} className="sidebar-mode" aria-label="模式">
       <ToggleGroupItem value="workbench">工作台</ToggleGroupItem><ToggleGroupItem value="agent">Agent</ToggleGroupItem>
     </ToggleGroup>
+    {/* Agent 模式下左栏换成任务列表；工作台模式是工程与型号 */}
+    {mode === 'agent' ? <AgentTaskList theme={theme} /> : <>
     <DropdownMenu>
       <DropdownMenuTrigger asChild><Button variant="secondary" className="sidebar-new"><Icon name="action/add" /><span>新建</span></Button></DropdownMenuTrigger>
       <DropdownMenuContent align="start">
@@ -83,6 +86,7 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
       })}
       {inGallery && <nav ref={onSlot} className="sidebar-modules" aria-label="陈列导航" />}
     </div>
+    </>}
     <nav className="sidebar-foot" aria-label="资源">
       <Link className="module-item rail-only" to="/studies" search={{ theme }}><Icon name="object/folder" /><span>工程</span></Link>
       <Link className="module-item rail-only" to="/types" search={{ theme }}><Icon name="nav/cable-type" /><span>型号</span></Link>

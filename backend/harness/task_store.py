@@ -214,6 +214,20 @@ class TaskStore:
         decision=db.execute("SELECT data FROM agent_events WHERE task_id=? AND type='proposal.decision' AND json_extract(data,'$.id')=? ORDER BY sequence DESC LIMIT 1",(task['id'],pid)).fetchone()
         return task,body['proposal'],json.loads(decision['data']) if decision else None
 
+    def sessions(self,wid=None,limit=100):
+        """Newest first; the title is the first user message, pending counts undecided proposals."""
+        with self.workspace.db() as db:
+            rows=db.execute('SELECT * FROM agent_tasks'+(' WHERE workspace_id=?' if wid else '')+' ORDER BY updated DESC LIMIT ?',((wid,) if wid else ())+(limit,)).fetchall()
+            summaries=[]
+            for row in rows:
+                first=db.execute("SELECT data FROM agent_events WHERE task_id=? AND type='chat.message' AND json_extract(data,'$.role')='user' ORDER BY sequence LIMIT 1",(row['id'],)).fetchone()
+                pending=db.execute("""SELECT COUNT(*) FROM agent_plan_revisions p WHERE p.task_id=? AND p.proposal_id IS NOT NULL
+                    AND NOT EXISTS (SELECT 1 FROM agent_events e WHERE e.task_id=p.task_id AND e.type='proposal.decision' AND json_extract(e.data,'$.id')=p.proposal_id)""",(row['id'],)).fetchone()[0]
+                summaries.append({'id':row['id'],'workspace_id':row['workspace_id'],'study_id':row['study_id'],'state':row['state'],
+                    'waiting_reason':row['waiting_reason'],'title':json.loads(first['data'])['content'][:80] if first else '',
+                    'created':row['created'],'updated':row['updated'],'pending_proposals':pending})
+        return summaries
+
     def record(self,tid):
         with self.workspace.db() as db:
             db.execute('BEGIN')

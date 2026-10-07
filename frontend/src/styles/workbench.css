@@ -48,10 +48,6 @@
 .layer-grid-module .toolbar { flex-wrap: wrap; }
 .run-records-content { display: flex; flex-direction: column; gap: var(--space-4); }
 .data-table.table-history td { color: var(--text-secondary); }
-.code-block { color: var(--text); background: var(--fill); border-radius: var(--radius-surface); font-size: var(--text-note); overflow: hidden; }
-.code-block > header { display: flex; align-items: center; justify-content: space-between; padding: var(--space-2) var(--space-3); }
-.code-block pre { margin: 0; padding: var(--space-3); overflow: auto; font: inherit; font-family: var(--font-code); }
-.code-line { display: block; }
 @media (max-width: 1180px) { .home-areas { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 860px) { .shell-workbench { grid-template-columns: calc(var(--space-12) * 3) minmax(0, 1fr); } .workbench-sidebar { padding: var(--space-2); } .sidebar-recent { display: none; } }
 
@@ -255,22 +251,6 @@
 .validation-list { margin: 0; padding-left: var(--space-4); font-size: var(--text-note); line-height: 1.8; color: var(--text-secondary); }
 .validation-list.is-ok li::marker { color: var(--success); }
 
-/* Agent：左侧对话（未连接时为说明），右侧可调用工具 = 工作台模块 + 插件能力 */
-.agent-page { display: grid; grid-template-columns: minmax(0, 1fr) calc(var(--space-12) * 8); gap: var(--space-6); height: 100%; min-height: 0; }
-.agent-conversation { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; min-height: 0; width: 100%; max-width: 80ch; margin-inline: auto; }
-.agent-scope { max-width: calc(var(--space-12) * 6); }
-.agent-conversation .agent-panel { flex: 1; border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--panel); overflow: hidden; }
-.agent-tools { display: flex; flex-direction: column; gap: var(--space-6); padding-left: var(--space-6); border-left: 1px solid var(--line); overflow: auto; }
-.agent-tools h2 { display: flex; align-items: baseline; gap: var(--space-2); font-size: var(--text-subheading); }
-.agent-tools h2 span { color: var(--text-secondary); font-size: var(--text-note); font-weight: var(--weight-normal); }
-.agent-tools > p { font-size: var(--text-note); line-height: 1.6; }
-.agent-tools h3 { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-2); padding-bottom: var(--space-1); font-size: var(--text-body); }
-.agent-tools h3 span { color: var(--text-secondary); font-size: var(--text-note); font-weight: var(--weight-normal); }
-.agent-tools ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.agent-tools li { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-1) 0; color: var(--text-secondary); font-size: var(--text-note); }
-.agent-tools li span { color: var(--text-weak); }
-@media (max-width: 860px) { .agent-page { grid-template-columns: minmax(0, 1fr); } .agent-tools { padding-left: 0; border-left: 0; } }
-
 /* 仿真运行前：输入 → 求解参数 → 运行位置 → 产出 */
 .sim-setup { display: flex; flex-direction: column; gap: var(--space-6); max-width: calc(var(--space-12) * 18); }
 .sim-setup-head { display: flex; flex-direction: column; gap: var(--space-1); }
@@ -416,7 +396,7 @@
 .command-bar { display: flex; align-items: center; gap: var(--space-2); flex: none; min-height: calc(var(--space-12) - var(--space-1)); padding: var(--space-1) var(--space-4); border-bottom: 1px solid var(--line); background: var(--panel); overflow-x: auto; }
 .command-group { display: flex; align-items: center; gap: var(--space-1); padding-right: var(--space-3); border-right: 1px solid var(--line); }
 .command-group:last-of-type { border-right: 0; }
-.command-caption { padding: 0 var(--space-2) 0 var(--space-1); color: var(--text-weak); font-size: var(--text-note); }
+.command-caption { padding: 0 var(--space-2) 0 var(--space-1); color: var(--text-secondary); font-size: var(--text-note); }
 .command-bar .button-compact { gap: var(--space-1); white-space: nowrap; }
 .command-bar .button-compact .icon { width: var(--space-4); height: var(--space-4); }
 .command-state { margin-left: auto; padding-left: var(--space-4); color: var(--text-secondary); font-size: var(--text-note); white-space: nowrap; }
