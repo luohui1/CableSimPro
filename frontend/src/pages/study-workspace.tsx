@@ -53,7 +53,7 @@ import { StudyBatch } from "@/components/study-batch";
 import { StudyCompare } from "@/components/study-compare";
 import { StudyPhysicsComparison } from "@/components/study-physics-comparison";
 import { StudySimulation } from "@/components/study-simulation";
-import { savedDomain, type DomainDocument } from "@/lib/domain-fields";
+import { entityLabel, savedDomain, type DomainDocument } from "@/lib/domain-fields";
 import type { StudyDefinition } from "@/api/research";
 
 import { moduleDefinitions } from "./study-modules";
@@ -391,7 +391,9 @@ export function StudyWorkspace() {
                   points={fieldView.points}
                   triangles={fieldView.triangles}
                   values={fieldView.temperatures.map((kelvin) => kelvin - 273.15)}
-                  circles={(fieldView.geometry?.cables || []).map((cable) => ({ x: cable.x, z: cable.z, r: cable.shape.radiusM, label: cable.label }))}
+                  circles={fieldView.excluded.length
+                    ? fieldView.excluded.map((region) => ({ x: region.x, z: region.z, r: region.r, label: canvasDocument ? entityLabel(canvasDocument, region.label) : region.label }))
+                    : (fieldView.geometry?.cables || []).map((cable) => ({ x: cable.x, z: cable.z, r: cable.shape.radiusM, label: cable.label }))}
                   groundZ={fieldView.geometry ? 0 : undefined}
                   hotspot={{ point: fieldView.hotspot.point, value: fieldView.hotspot.temperature - 273.15, label: fieldView.kind === "iec" ? "土壤最高" : "最高" }}
                   // IEC 解析场只有土壤区域，导体温限画在色标上没有意义

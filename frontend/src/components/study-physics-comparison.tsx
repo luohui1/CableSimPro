@@ -3,6 +3,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useStudy } from './study-provider';
 import { DataTable, type Column } from './data-table';
 import { EmptyState, ErrorState } from './states';
+import { savedDomain } from '@/lib/domain-fields';
 import { StatusMark } from './status-mark';
 import { StudyMethodForm } from './study-method-form';
 import { downloadCsv } from '@/lib/download';
@@ -40,7 +41,7 @@ export function StudyPhysicsComparison({ run, tab, readOnly }: { run?: Record<st
   const convergence = optionalRecord(payload.convergence);
   const snapshot = optionalRecord(run?.snapshot);
   const definition = optionalRecord(snapshot.definition);
-  const domain = optionalRecord(readOnly ? optionalRecord(rows(snapshot.cases)[0]).input : context.workspace.domain);
+  const domain = optionalRecord(readOnly ? optionalRecord(rows(snapshot.cases)[0]).input ?? (run ? savedDomain(run) : undefined) : context.workspace.domain);
   const circuits = rows(domain.circuits);
   const empty = <EmptyState title="尚无标准与物理场对比" description="保存参数后，预检并提交超算求解。" />;
   return <div className="hybrid-study" data-module-state={failureMessage ? 'error' : !hasResult ? 'empty' : readOnly || run?.freshness === 'historical' ? 'historical' : 'success'}>

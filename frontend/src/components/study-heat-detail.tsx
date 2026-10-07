@@ -3,6 +3,7 @@ import { optionalRecord, numeric, text } from '@/api/client';
 import { EmptyState } from './states';
 import { Select } from './ui/select';
 import { displayName } from '@/lib/display-names';
+import { savedDomain } from '@/lib/domain-fields';
 
 type Row = Record<string, unknown>;
 const K = 273.15;
@@ -23,7 +24,9 @@ function operating(caseRow: Row) {
 /** 电缆实体按回路顺序命名为「回路 n」；单回路多根时加序号。 */
 function cableNames(run: Row, caseId: string) {
   const snapshotCase = (Array.isArray(optionalRecord(run.snapshot).cases) ? optionalRecord(run.snapshot).cases as unknown[] : []).map(optionalRecord).find(c => text(c.case_id) === caseId);
-  const circuits = Array.isArray(optionalRecord(snapshotCase?.input).circuits) ? optionalRecord(snapshotCase?.input).circuits as unknown[] : [];
+  // 运行详情默认不带工况输入；回退到快照里保存的工作区模型（回路与电缆身份相同）
+  const input = optionalRecord(snapshotCase?.input ?? savedDomain(run));
+  const circuits = Array.isArray(input.circuits) ? input.circuits as unknown[] : [];
   const names = new Map<string, string>();
   circuits.map(optionalRecord).forEach((circuit, i) => {
     const cables = (Array.isArray(circuit.cables) ? circuit.cables : []).map(optionalRecord);

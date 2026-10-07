@@ -31,14 +31,14 @@ function RunDot({ study }: { study: StudyRow }) {
   const runs = useQuery({ queryKey: ["runs", study.workspace, study.id, "summary"], queryFn: ({ signal }) => studyRuns(study.workspace, study.id, signal, "summary") });
   const latest = runs.data?.at(-1), status = text(latest?.status);
   const kind = ["succeeded", "partial"].includes(status) ? "is-ok" : ["failed", "rejected", "cancelled"].includes(status) ? "is-error" : status ? "is-running" : "is-off";
-  const answer = kind === "is-ok" && latest?.freshness !== "historical" && singleAnswer(study) ? headlineText(latest?.headlines, 1) : "";
+  const answer = kind === "is-ok" && latest?.freshness !== "historical" ? headlineText(latest?.headlines, 1) : "";
   if (answer) return <span className="explorer-answer" title={headlineText(latest?.headlines)}>{answer}</span>;
   return <span className={`status-dot ${kind}`} title={kind === "is-ok" ? "已有结果" : kind === "is-error" ? "运行失败" : kind === "is-running" ? "运行中" : "未运行"} />;
 }
 
 /**
- * 关键结论只对单次计算显示：选型、扫描、批量、对比的运行包含多个候选或样本，
- * 宿主跨工况取极值并不是这个研究的答案（选型的答案是推荐候选）。
+ * 单次计算：只有一个工况，单工况的试算才能代表这个研究。宿主的关键结论已按驱动方式投影
+ * （选型取推荐候选，扫描、批量、对比不跨样本聚合），列表直接显示返回的结论。
  */
 export const singleAnswer = (study: StudyRow) => !study.definition.driver?.kind || study.definition.driver.kind === "single";
 

@@ -6,7 +6,7 @@ import {
   numeric,
   ApiError,
 } from "@/api/client";
-import type { DomainDocument } from "@/lib/domain-fields";
+import { savedDomain, type DomainDocument } from "@/lib/domain-fields";
 import {
   sectionGeometry,
   type SectionGeometry,
@@ -38,6 +38,8 @@ export type TemperatureView = {
   section?: DomainDocument["sections"][number];
   geometry?: SectionGeometry;
   geometryError?: string;
+  /** IEC 解析场里插件给出的电缆 / 排管排除区域（位置与半径由插件写出，比按模型推算准确）。 */
+  excluded: { x: number; z: number; r: number; label: string; kind: string }[];
 };
 export function temperatureView(
   run: Record<string, unknown>,
@@ -171,7 +173,7 @@ export function temperatureView(
   const savedCase = (Array.isArray(snapshot.cases) ? snapshot.cases : [])
     .map(optionalRecord)
     .find((value) => value.case_id === chosen.case_id);
-  const input = optionalRecord(savedCase?.input);
+  const input = optionalRecord(savedCase?.input ?? savedDomain(run));
   if (input.schema_version === "cablesim.domain/1") {
     const document = input as unknown as DomainDocument;
     const sectionId =
@@ -210,6 +212,10 @@ export function temperatureView(
     bundle,
     kind: iec ? "iec" : "fem",
     limitations,
+    excluded: (iec ? array(optionalRecord(field.analytical_soil_view).excluded_regions, "排除区域") : []).map((value) => {
+      const region = record(value, "排除区域"), center = Array.isArray(region.center_m) ? region.center_m : [];
+      return { x: numeric(center[0]) ?? NaN, z: numeric(center[1]) ?? NaN, r: numeric(region.radius_m) ?? NaN, label: text(region.entity), kind: text(region.kind) };
+    }).filter((item) => Number.isFinite(item.x) && Number.isFinite(item.z) && item.r > 0),
     section,
     geometry,
     geometryError,
