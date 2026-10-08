@@ -31,3 +31,12 @@
 .cad-status{display:flex;gap:var(--space-4);padding:var(--space-2) var(--space-3);border-top:1px solid var(--line);font-variant-numeric:tabular-nums;color:var(--text-secondary);flex-wrap:wrap}
 .cad-point-measurement path{fill:none;stroke:var(--text);stroke-width:.75}
 .cad-point-measurement circle{fill:var(--panel);stroke:var(--text);stroke-width:1.5}
+.cad-temperature-slice{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+.cad-thermal-overlay{z-index:2}
+.cad-thermal-overlay text{fill:var(--text);font:inherit;font-size:var(--text-note);font-variant-numeric:tabular-nums;paint-order:stroke;stroke:var(--panel);stroke-width:3}
+.cad-hot-conductor{pointer-events:auto;cursor:pointer}
+.cad-hot-conductor circle{fill:none;stroke:var(--text);stroke-width:2}
+.cad-hot-conductor path{fill:none;stroke:var(--text);stroke-width:1}
+.cad-hot-conductor:focus-visible{outline:2px solid var(--text)}
+.cad-result-status,.cad-slice-error{position:absolute;top:calc(var(--space-12) + var(--space-2));left:var(--space-3);max-width:calc(100% - var(--space-12)*3);padding:var(--space-1) var(--space-2);background:var(--panel);color:var(--text-secondary);border:1px solid var(--border);border-radius:var(--radius-input);z-index:3;font-size:var(--text-note)}
+.cad-slice-error{top:calc(var(--space-12)*2)}

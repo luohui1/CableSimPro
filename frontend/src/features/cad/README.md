@@ -10,6 +10,10 @@
 | `CableSection` | OpenAPI 的 `CableType` 和 `Material[]`，`selectedObject: LayerTarget`，五态、`editable`、`isLocked` | `onSelectionChange`；`onDimensionChange({target, field, valueM, previousValueM})`。图上输入为 mm，回调为 m；提交失败保留输入框草稿 |
 | `LayingSection` | OpenAPI 的 `DomainDocument`、`sectionId`、`selectedObject`，五态、`editable`、`isLocked(field)` | `onChange(nextSection, {gestureId, kind, selection, fields})`；一次拖动提交一次。`onPreview` 仅表示拖动预览，取消/结束返回 null；`onTemplateRequest(id)` 由父页面读取正式模板并更新 props |
 
+研究三维用 `inputScene(document, sectionId)` 将同一份二维输入转成按尺寸绘制的显示网格。截面和敷设位置不变，轴向仅显示 0.4 m；它不是插件计算工件，也不提供精确拓扑量测。排管、回填、土层和地表均使用输入尺寸，缺项、重叠或未覆盖的外露填充孔明确拒绝显示并可切回二维。输入场景与温度切片使用 OffscreenCanvas worker：WebGL 初始化、网格上传、绘制和对象拾取不占用主线程；不支持后台 WebGL 的浏览器报错。型号剥切与正式 CAD 工件仍使用 OCCT，运行编译可由 `prewarmCad()` 提前准备。
+
+`StudyGeometry` 可接收 `run` 与 `fieldCase`；未指定时使用已校验的最新保存运行或 URL 固定的运行。`savedThermal` 复用 `temperatureView` 校验 IEC/FEM 的同一个温度场工件、来源摘要和保存输入，使用工件节点与三角形，K 转为 °C；不生成温度。输入几何或截面不匹配时只显示几何及错误状态。电缆级结果只标记电缆，不猜测其中哪根线芯最热。`CadViewport.thermal` 接收归一化后的 `CadThermal`，Turbo 色图与二维共用，IEC 范围为土壤节点极值，FEM 与二维一样扩展到导体限温。拾取返回原来的 `SectionSelection` 对象 ID，由父组件继续生成同一套 `InputSelection`。
+
 `DrawingCommand` 为 `undo/redo/save`。父页面管理研究草稿、保存与撤销记录，组件不创建另一份已保存领域状态。输入框保留浏览器文本撤销。历史图纸可选择和查看，尺寸与位置只读。`onObjectCommand` 让父页面处理实例复制/删除及布置操作；`objectCommands` 指定当前已接入的操作，未接入按钮保持禁用。`canUndo/canRedo` 由页面提供。
 
 电缆参数截面保持圆形 / 扇形层的真实比例与原始芯坐标，不据标称面积反推外轮廓。扇形须给圆弧直径、夹角及朝向，分割导体显示声明的设计包络；填充扣除各芯外轮廓。三芯同名层以芯 ID 区分，中文标注展开所选芯。材料缺项、碰撞和无效尺寸报到具体字段。敷设视图仅转换 SI 坐标与显示包络，不给标准间距、载流量、质量或热学结果。拖动提交前检查几何重叠、地表、管内边界、土层边界和字段锁定；页面仍负责正式领域校验。
@@ -35,6 +39,11 @@ npx tsc -p src/features/cad/tsconfig.json
 npx vite build --config src/features/cad/gallery.config.ts --logLevel warn
 node --test src/features/cad/tests/runtime-assets.test.mjs src/features/cad/tests/geometry.test.mjs src/features/cad/tests/component.test.mjs
 node src/features/cad/tests/verify-browser.mjs
+
+# 真实保存运行与型号页面；先构建正式前端。服务由调用方提供。
+npm run build
+node src/features/cad/tests/verify-study.mjs
+# 非默认端口：CAD_BACKEND_URL=http://127.0.0.1:<port>
 ```
 
 独立陈列构建保存在 `.data/frontend-canvas/build/`。验收脚本自行分配本地端口，只服务构建产物；结束关闭全部自建标签页、核对数量并删除隔离浏览器配置。截图与机器结果保存到 `.data/frontend-canvas/`，不入库。几何单元测试的临时转译文件在 `.tmp/frontend/`，同次运行结束删除。
@@ -56,5 +65,7 @@ node src/features/cad/tests/verify-browser.mjs
 手算校验单芯绘图外径 38 mm，并对照原生工件；验证三芯原始坐标、SI/像素变换、1 mm 捕捉、原生工件身份、原始拓扑加载、失败回滚、原子管缆移动、土层联动、锁定字段、父页面撤销与五态。浏览器流程包含尺寸提交失败保留草稿、五种模板、回填缩放、缩略窗、保存回调和减少动态。
 
 `onReady.elapsedMs` 从工件到达客户端开始计时，到原生更新后的下一动画帧；首挂载计入运行加载/编译，不包含插件求解、服务端计算与传输等待。单根更新与场景首显要求小于 3000 ms，结果记录实际环境的样本，不作为求解器性能基准。WASM 编译复用与卸载后原生实例归零在组件测试中检查。
+
+研究验收脚本 `verify-study.mjs` 只读保存运行和几何预览，不启动求解或写入工程。它断言 SwiftShader 软件 WebGL 的真实帧像素、视口首显 ≤ 3 s、首显主线程单次阻塞 ≤ 100 ms、温度换算与工件绑定、切片开关、剖切、三维电缆/排管拾取与属性栏、型号表格与原生拾取联动、初始化超时及二维恢复，并自动覆盖两种尺寸、深浅主题和五态。全页冷导航耗时单独记录，不与视口首显混用；非本模块的全页对比度失败另行记录。仅保存两张改动页面截图及机器结果到 `.data/cad-study/`，结束关闭全部自建页面与临时静态服务。
 
 桌面检查 1366×768、1920×1080，浅/深色及 100/125/150% CDP 模拟；直接由 CDP 截图并核对像素尺寸，避免截图工具恢复默认视口。另查 390 px 移动宽度。Windows 系统 DPI 尚未实机核验。超算 CAD 回归使用 `.data/hpc/cad-config.json` 提交 dg83，保存源码快照、测试日志及实际核时。

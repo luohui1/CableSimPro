@@ -76,7 +76,7 @@ export class CadRenderer {
       ? object.kind === 'ground' ? '--border' : object.kind === 'soil' && object.tint_index ? '--material-metal' : '--text-secondary'
       : isCopper ? '--conductor' : materialTokens[layer.category || ''] || '--material-sheath';
     return [
-      ...tokenColor(this.host, token),
+      ...('display_color' in layer && layer.display_color ? layer.display_color : tokenColor(this.host, token)),
       !object || object.kind === 'cable' ? ['conductor', 'metal'].includes(layer.category || '') : false,
       geometry.length_m * 1000,
       (layer.inner_radius_m || 0) * 1000,

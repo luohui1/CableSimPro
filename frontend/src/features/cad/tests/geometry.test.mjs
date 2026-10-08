@@ -6,6 +6,7 @@ import { loadSources } from './load-source.mjs';
 const source = await loadSources([
   'src/features/drawing/cable-geometry.ts', 'src/features/drawing/cross-section-profile.ts', 'src/features/drawing/coordinates.ts', 'src/features/drawing/section-geometry.ts',
   'src/features/cad/geometry-contract.ts', 'src/features/cad/display-mesh.ts',
+  'src/features/cad/input-scene.ts',
 ]);
 after(() => source.close());
 const cable = await source.import('src/features/drawing/cable-geometry.ts');
@@ -14,9 +15,34 @@ const coordinates = await source.import('src/features/drawing/coordinates.ts');
 const laying = await source.import('src/features/drawing/section-geometry.ts');
 const contract = await source.import('src/features/cad/geometry-contract.ts');
 const mesh = await source.import('src/features/cad/display-mesh.ts');
+const scene = await source.import('src/features/cad/input-scene.ts');
 const document = JSON.parse(await fs.readFile(new URL('../node_modules/.cache/gallery/document.json', import.meta.url), 'utf8'));
 const nativeModel = JSON.parse(await fs.readFile(new URL('../node_modules/.cache/gallery/model.json', import.meta.url), 'utf8'));
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-10, `${actual} != ${expected}`);
+
+test('Research input scene: 38 mm hand dimensions, 140/160 mm duct, real placement and display-only length', () => {
+  const doc = structuredClone(document), section = doc.sections[0];
+  section.placements = [{ cable: doc.circuits[0].cables[0].id, x: .25, z: -1.2, enclosure: 'duct/1' }];
+  section.enclosures = [{ id: 'duct/1', type: 'duct', x: .25, z: -1.2, inner_diameter: .14, outer_diameter: .16, material: doc.materials[0].id }];
+  section.backfill = { id: 'backfill/1', x: .25, z: -1.2, width: .5, height: .4, material: doc.materials[0].id };
+  section.soil_layers = [{ id: 'soil/1', top_z: 0, bottom_z: -2, material: doc.materials[0].id }];
+  const before = structuredClone(doc), model = scene.inputScene(doc, section.id);
+  contract.validateGeometry(model);
+  const cableObject = model.objects.find(o => o.kind === 'cable');
+  close(cableObject.bounds_m[3] - cableObject.bounds_m[0], .038);
+  assert.deepEqual(cableObject.parts[0].transform_mm, [1, 0, 0, 250, 0, 1, 0, 0, 0, 0, 1, -1200]);
+  close(model.assets['duct/1'].inner_radius_m, .07); close(model.assets['duct/1'].outer_radius_m, .08);
+  assert.deepEqual(model.objects.find(o => o.kind === 'backfill').bounds_m, [0, 0, -1.4, .5, .4, -1]);
+  assert.equal(model.objects.find(o => o.kind === 'ground').bounds_m[2], 0);
+  assert.equal(model.length_m, .4); assert.deepEqual(doc, before);
+  // Snapshot JSON object-key order may differ; values and array order remain authoritative.
+  const reverseKeys = value => Array.isArray(value) ? value.map(reverseKeys) : value && typeof value === 'object'
+    ? Object.fromEntries(Object.entries(value).reverse().map(([key, child]) => [key, reverseKeys(child)])) : value;
+  assert.equal(scene.sceneIdentity(doc, section.id), scene.sceneIdentity(reverseKeys(doc), section.id));
+  doc.sections[0].placements[0].x += .1;
+  assert.notEqual(scene.sceneIdentity(doc, section.id), scene.sceneIdentity(before, section.id));
+  assert.throws(() => scene.inputScene(doc, section.id), /超出管道内径/);
+});
 
 test('CableSection: radial dimensions match the 38 mm hand calculation and native artifact', () => {
   const original = structuredClone(document);

@@ -8,7 +8,7 @@ import type { CameraPose, CadCamera, CadGeometry, CadMode, CadModel, CadPick, Ca
 const defaultPose: CameraPose = { yaw: 0, elevation: Math.atan(1 / Math.sqrt(2)), heading: -Math.PI / 4,
   zoom: 1, panX: 0, panY: 0 };
 type NativeSession = Awaited<ReturnType<typeof createNativeViewer>>;
-interface Callbacks {
+export interface Callbacks {
   onCameraChange: (camera: CadCamera) => void;
   onSelectionChange: (selection: CadSelection) => void;
   onPick: (pick: CadPick | null) => void;
@@ -313,6 +313,7 @@ export class CadController {
 }
 
 export const asError = (error: unknown) => error instanceof Error ? error : new Error(String(error));
+export type ViewportController = Pick<CadController, 'update' | 'select' | 'mode' | 'section' | 'fit' | 'zoom' | 'project' | 'info' | 'view' | 'selection' | 'dispose'>;
 
 export async function mountController(host: HTMLElement, callbacks: Callbacks, initialCamera: Partial<CameraPose>, current: () => boolean) {
   const canvas = document.createElement('canvas');

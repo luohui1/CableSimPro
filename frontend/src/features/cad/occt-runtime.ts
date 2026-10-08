@@ -76,6 +76,9 @@ async function compiledRuntime() {
   return { ...await pending, cacheHit };
 }
 
+/** Start immutable fetch/async WASM compilation before a viewport needs an instance. */
+export function prewarmRuntime() { return compiledRuntime().then(() => undefined); }
+
 export function checked<T>(value: T): T {
   if (value && typeof value === 'object' && 'error' in value && value.error) {
     throw new Error(String(value.error));

@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { formatNumber } from '@/lib/format';
 import { clamp, selectionIndex } from './geometry-contract';
-import type { CadController } from './cad-controller';
+import type { ViewportController as CadController } from './cad-controller';
 import type { CadCamera, CadGeometry, CadPick, CadSelection } from './types';
 import { layerNames } from '@/features/drawing/cable-geometry';
 

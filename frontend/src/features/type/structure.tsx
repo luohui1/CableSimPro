@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { DataTable } from '@/components/data-table';
 import { SourceBadge } from '@/components/source-badge';
 import { NumberField } from '@/components/ui/number-field';
@@ -25,6 +26,11 @@ export function TypeNumericField({ row }: { row: LayerRow }) {
 }
 export function LayerTable({ rows, selected, onSelect, compact = false }: { rows: LayerRow[]; selected: LayerTarget | null; onSelect: (target: LayerTarget | null) => void; compact?: boolean }) {
   const state = useTypeWorkspace();
+  const selectedId = selected ? targetId(selected) : undefined;
+  useEffect(() => {
+    const row = selectedId ? document.getElementById(`row-型号分层-${selectedId}`) : null;
+    if (row) row.scrollIntoView({ block: row.getBoundingClientRect().bottom > window.innerHeight ? 'center' : 'nearest', inline: 'nearest' });
+  }, [selectedId]);
   return <DataTable label="型号分层" selectedId={selected ? targetId(selected) : undefined} onSelect={row => onSelect(row.target)} rowLabel={row => `${row.number} ${row.label}`} showGroups={false}
     groups={[{ id: 'layers', label: '结构层', rows }]} columns={[
       { id: 'number', label: '序号', numeric: true, render: row => row.number },
@@ -41,7 +47,7 @@ export function TypeStructure({ tab, cable, selected, onSelect }: { tab: string;
   let rows: LayerRow[];
   try { rows = layerRows(state.document, cable); } catch (error) { return <ErrorState title="结构不可绘制" description={error instanceof Error ? error.message : String(error)} />; }
   if (tab === 'quantities') return <TypeQuantities cable={cable} />;
-  if (tab === 'three') return <><StructureActions cable={cable} selected={selected} onSelect={onSelect} /><TypeGeometry cable={cable} selected={selected} onSelect={onSelect} /></>;
+  if (tab === 'three') return <div className="type-canvas-frame"><StructureActions cable={cable} selected={selected} onSelect={onSelect} /><TypeGeometry cable={cable} selected={selected} onSelect={onSelect} /></div>;
   const section = <CableSection cableType={cable} materials={state.document.materials} selectedObject={selected} onSelectionChange={onSelect}
     state={state.workspace?.raw.historical ? 'historical' : 'success'} editable={!state.readOnly && !state.busy} showDimensions onCommand={command => { if (command === 'save') void state.save(); if (command === 'undo') void state.undo(); }}
     isLocked={target => { const row = rows.find(row => row.id === targetId(target)); return !row || state.locked(row.path); }}
@@ -57,12 +63,12 @@ export function TypeCanvas({ view, cable, selected, onSelect }: { view: 'section
   if (!state.document || !cable) return <EmptyState title="型号没有结构" description="当前型号未提供电缆与结构层。" />;
   let rows: LayerRow[];
   try { rows = layerRows(state.document, cable); } catch (error) { return <ErrorState title="结构不可绘制" description={error instanceof Error ? error.message : String(error)} />; }
-  return <>
+  return <div className="type-canvas-frame">
     <StructureActions cable={cable} selected={selected} onSelect={onSelect} />
     {view === 'three' ? <TypeGeometry cable={cable} selected={selected} onSelect={onSelect} /> : <CableSection cableType={cable} materials={state.document.materials} selectedObject={selected} onSelectionChange={onSelect}
       state={state.workspace?.raw.historical ? 'historical' : 'success'} editable={!state.readOnly && !state.busy} showDimensions onCommand={command => { if (command === 'save') void state.save(); if (command === 'undo') void state.undo(); }}
       isLocked={target => { const row = rows.find(row => row.id === targetId(target)); return !row || state.locked(row.path); }}
       onDimensionChange={edit => { const row = rows.find(row => row.id === targetId(edit.target)); if (!row) throw new Error('所选结构层已不存在'); state.edit(row.path, edit.valueM); }} />}
-  </>;
+  </div>;
 }
 export function nominalArea(document: unknown, row: LayerRow): number | null { return row.target.scope === 'core' && row.target.role === 'conductor' ? numeric(at(document, row.path.replace(/diameter$/, 'nominal_area'))) : null; }

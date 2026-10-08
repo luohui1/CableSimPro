@@ -24,6 +24,7 @@ export interface DisplayMesh {
 }
 
 export interface CadLayer {
+  display_color?: readonly number[];
   entity?: string;
   role: string;
   label?: string;
@@ -58,6 +59,8 @@ export interface CadModel {
 }
 
 export interface SceneAsset {
+  core_id?: string;
+  display_color?: readonly number[];
   geometry_key: string;
   material?: string | null;
   category?: string;
@@ -155,4 +158,22 @@ export interface CadViewportProps {
   initialCamera?: Partial<CameraPose>;
   className?: string;
   label?: string;
+  onFallback?: () => void;
+  resultStatus?: string;
+  resultState?: CanvasState;
+  thermal?: CadThermal;
+}
+
+/** Validated, saved node-field data; positions in m and displayed temperatures in °C. */
+export interface CadThermal {
+  runId: string;
+  caseId: string;
+  source: string;
+  kind?: 'iec' | 'fem';
+  minimum: number;
+  maximum: number;
+  points: readonly [number, number][];
+  triangles: readonly [number, number, number][];
+  values: readonly number[];
+  conductors: readonly { id: string; coreId?: string; x: number; z: number; radius: number; value: number; hottest: boolean; label: string }[];
 }
