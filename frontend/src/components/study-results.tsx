@@ -32,6 +32,7 @@ type ResultRow = {
   status: string;
   case: string;
   reason: string;
+  conditionLabel: string;
 };
 export function StudyResults({
   run,
@@ -83,7 +84,7 @@ export function StudyResults({
     return {
       id: String(index),
       key,
-      label: displayName(key),
+      label: text(result.title) || text((Array.isArray(snapshot.headline_contract) ? snapshot.headline_contract : []).map(optionalRecord).find(spec => spec.key === key)?.title) || displayName(key),
       entity: entityLabel(domain, text(result.entity)),
       entityId: text(result.entity),
       value: numericValue,
@@ -91,6 +92,7 @@ export function StudyResults({
       status: text(result.status),
       case: text(result.case),
       reason: text(optionalRecord(result.reason).message),
+      conditionLabel: text(optionalRecord(result.rating_basis).display_name) || text(result.case),
     };
   });
   const ratings = rows.filter(
@@ -176,12 +178,7 @@ export function StudyResults({
     {
       id: "case",
       label: "输出条件",
-      render: (row) =>
-        row.case === "rating"
-          ? "额定"
-          : row.case === "operating"
-            ? "运行"
-            : displayName(row.case),
+      render: (row) => displayName(row.conditionLabel),
     },
     {
       id: "value",

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from .candidates import CableModelVersion
 
-SERIES = Path(__file__).with_name('data')/'huayuan_yjv22.json'
+SERIES = Path(__file__).with_name('model_series_data')/'huayuan_yjv22.json'
 UNITS = {'mm':(.001,'m'), 'mm2':(1e-6,'m2'), 'ohm/km':(.001,'ohm/m'), '1':(1,'1')}
 
 
@@ -52,3 +52,44 @@ def import_yjv22(api, method):
     completions={c['id']:{'method':{**method,'capability':'model-completion'},'parameters':deepcopy(parameters)} for c in entries}
     return {'id':data['id'],'version':data['version'],'sha256':digest,'candidates':entries,
             'candidate_completions':completions,'engineering_scope':data['engineering_scenario']['scope']}
+
+
+def bundled_hv():
+    """Public Qifan dimensions plus separately declared engineering references."""
+    raw=(SERIES.parent/'qifan_yjlw03.json').read_bytes()
+    return json.loads(raw),sha256(raw).hexdigest()
+
+
+def hv_payload():
+    data,digest=bundled_hv();payload=deepcopy(data['model'])
+    sources=deepcopy(data['sources'])
+    # Sources become saved domain provenance, not a claim of factory approval.
+    payload['sources']={
+        '/cable_type/cores/core~11/conductor/diameter':sources['factory'],
+        '/cable_type/cores/core~11/conductor/r20':sources['factory'],
+        '/cable_type/cores/core~11/layers':sources['installed_dimensions'],
+        '/cable_type/cores/core~11/layers/4/corrugation_depth':sources['geometry_reference'],
+        '/cable_type/cores/core~11/layers/4/corrugation_pitch':sources['geometry_reference'],
+        '/materials':sources['standard'],
+        '/materials/material~1buffer-qifan/thermal_resistivity':sources['buffer_reference'],
+        'bundle':{'kind':'asset','reviewed':False,'reference':
+                  f"{data['id']} {data['version']} sha256:{digest}；{data['scope']}"}}
+    return CableModelVersion.model_validate(payload).model_dump(mode='json')
+
+
+def hv_study_document(workspace):
+    """Apply the published validation scenario; model facts stay bound to version."""
+    from math import sqrt
+    data,_=bundled_hv();scenario=data['scenario'];document=deepcopy(workspace['domain'])
+    section=document['sections'][0];medium=section['medium']
+    medium['surface_temperature']=scenario['surface_temperature_k']
+    next(m for m in document['materials'] if m['id']==medium['material'])['thermal_resistivity']=scenario['soil_thermal_resistivity_k_m_w']
+    radius=scenario['touching_trefoil_outer_diameter_m']/2
+    centre=-scenario['centre_depth_m']
+    positions=((0,centre+2*radius/sqrt(3)),(-radius,centre-radius/sqrt(3)),(radius,centre-radius/sqrt(3)))
+    for placement,(x,z) in zip(section['placements'],positions):placement.update(x=x,z=z)
+    section['layout_template'].update(depth=scenario['centre_depth_m'],spacing=2*radius)
+    document['circuits'][0]['bonding']['kind']=scenario['bonding']
+    document['provenance']['/sections']={'kind':'user','reviewed':False,'reference':scenario['reference']}
+    document['provenance']['/load_cases']={'kind':'user','reviewed':False,'reference':scenario['reference']}
+    return document

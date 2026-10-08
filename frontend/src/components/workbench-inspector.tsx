@@ -1,10 +1,13 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { displayText } from "@/lib/display-names";
 import type { DomainDocument } from "@/lib/domain-fields";
 import { Icon } from "./icon";
 import { SourceBadge } from "./source-badge";
 import type { PropertyGroup } from "./property-panel";
-import { ConditionsInputs, DomainNumber, type InputSelection } from "./study-inputs";
+import { CableInputs, ConditionsInputs, DomainNumber, type InputSelection } from "./study-inputs";
+import { inspectorViews } from './study-workbench-config';
+import { Dialog } from './ui/dialog';
+import { Button } from './ui/button';
 
 /** 输入字段按路径归类，决定保存时的说明（电缆 / 敷设 / 工况）。 */
 const scopeOf = (path: string) => path.startsWith("/cable_types") ? "cable" : path.startsWith("/load_cases") ? "conditions" : "section";
@@ -30,7 +33,7 @@ function Groups({ groups }: { groups: PropertyGroup[] }) {
  * 工作窗口右侧检查器：所选对象（截面中的电缆、排管、介质，或结果表中的候选）在上，
  * 工况始终可改，计算方法在最下。字段直接编辑，进入同一份模型草稿。
  */
-export function WorkbenchInspector({ view = "input", onView, methodPanel, agentPanel, document, historical, selection, candidate, method, demo }: {
+export function WorkbenchInspector({ view = "input", onView, methodPanel, agentPanel, document, historical, selection, candidate, method }: {
   /** 右侧“改输入”分两页：输入（所选对象、工况）与方法（方法参数、问询条件、扫描设置）。 */
   view?: "input" | "method" | "agent";
   onView?: (view: "input" | "method" | "agent") => void;
@@ -44,14 +47,13 @@ export function WorkbenchInspector({ view = "input", onView, methodPanel, agentP
   method: { name: string; version: string; hpc: boolean; kind: string; run: string };
   demo: boolean;
 }) {
+  const [layers, setLayers] = useState(false);
   return <aside className="workbench-inspector" aria-label="属性">
     {(methodPanel || agentPanel) && <div className="inspector-switch" role="tablist" aria-label="属性分页">
-      <button type="button" role="tab" aria-selected={view === "input"} onClick={() => onView?.("input")}><Icon name="object/conditions" />输入</button>
-      {methodPanel && <button type="button" role="tab" aria-selected={view === "method"} onClick={() => onView?.("method")}><Icon name="nav/plugin" />方法</button>}
-      {agentPanel && <button type="button" role="tab" aria-selected={view === "agent"} onClick={() => onView?.("agent")}><Icon name="agent/agent" />Agent</button>}
+      {inspectorViews.filter(item => item.id === 'input' || item.id === 'method' && methodPanel || item.id === 'agent' && agentPanel).map(item =>
+        <button key={item.id} type="button" role="tab" aria-selected={view === item.id} onClick={() => onView?.(item.id)}><Icon name={item.icon} />{item.label}</button>)}
     </div>}
     {agentPanel && view === "agent" ? <div className="inspector-agent">{agentPanel}</div> : methodPanel && view === "method" ? <div className="inspector-method">{methodPanel}</div> : <>
-    {demo && <p className="inspector-note" role="note">敷设与部分工况来自模板，应按实际条件核对。</p>}
     {candidate ? <Block icon="calc/selection" title={candidate.title}><Groups groups={candidate.groups} /></Block>
       : selection ? <Block icon="object/section" title={selection.title}>
         {selection.fields?.length && document
@@ -69,6 +71,10 @@ export function WorkbenchInspector({ view = "input", onView, methodPanel, agentP
     {document && <Block icon="object/conditions" title="工况" id="inspector-conditions">
       <div className="inspector-conditions"><ConditionsInputs document={document} historical={historical} tab="inputs" onSelect={() => {}} /></div>
     </Block>}
+    {document && <Button size="compact" variant="ghost" onClick={() => setLayers(true)}>分层参数</Button>}
+    <Dialog open={layers} onOpenChange={setLayers} title="电缆分层" initialFocus="form">
+      {layers && <CableInputs tab="layers" document={document} historical={historical} onSelect={() => {}} />}
+    </Dialog>
     </>}
   </aside>;
 }

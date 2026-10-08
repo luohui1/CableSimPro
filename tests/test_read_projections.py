@@ -17,6 +17,15 @@ from backend.plugin_host.registry import Registry
 from test_research import client, study, request
 
 
+def test_metadata_startup_does_not_eagerly_validate_all_history(client,monkeypatch):
+    research=client.app.state.research
+    monkeypatch.setattr(research,'list_studies',lambda *_a,**_k:pytest.fail('Startup must not load historical study results'))
+    monkeypatch.setattr(research,'list_runs',lambda *_a,**_k:pytest.fail('Startup must not load historical runs'))
+    research.warm_reads()
+    assert client.get('/api/input-contracts').status_code==200
+    assert client.get('/api/methods').status_code==200
+
+
 @pytest.mark.skipif(os.name != 'nt', reason='Windows directory notification lifecycle')
 def test_directory_notification_buffers_are_cancelled_before_collection(tmp_path):
     from backend.kernel.source_watch import SourceWatch, native_api
@@ -172,18 +181,32 @@ def test_contract_catalog_reuses_schema_and_invalidates_on_seal_or_source_change
         second = client.get('/api/input-contracts')
         assert second.status_code == 200, second.text
         assert second.json()[0]['method']['version'] == '9.0.0' and len(builds) == 2
+        assert client.get('/api/methods').json()[0]['method']['version']=='9.0.0'
         manifest['description'] += ' changed seal'
         manifest_path.write_text(json.dumps(manifest), encoding='utf-8')
         third = client.get('/api/input-contracts')
         assert third.status_code == 200, third.text
         assert third.json()[0]['method']['release_digest'] != second.json()[0]['method']['release_digest']
+        assert client.get('/api/methods').json()[0]['method']['release_digest']==third.json()[0]['method']['release_digest']
         assert len(builds) == 3
+        unrelated = tmp_path/'backend/harness/catalog_note.py'
+        unrelated.parent.mkdir(exist_ok=True)
+        unrelated.write_text('# not part of any plugin source closure\n',encoding='utf-8')
+        assert client.get('/api/input-contracts').json()==third.json()
+        assert len(builds)==3
         source = tmp_path/'plugins/cablesim.thermal-network'/manifest['files'][0]['path']
         raw, before = source.read_bytes(), source.stat()
         source.write_bytes(raw+b'\n# drift\n')
         os.utime(source, ns=(before.st_atime_ns,before.st_mtime_ns))
         failed = client.get('/api/input-contracts')
         assert failed.status_code == 409 and len(builds) == 3
+        source.write_bytes(raw)
+        assert client.get('/api/input-contracts').status_code==200
+        shared = tmp_path/'backend/schemas.py'
+        before = shared.stat()
+        shared.write_bytes(shared.read_bytes()+b'\n# shared source drift\n')
+        os.utime(shared,ns=(before.st_atime_ns,before.st_mtime_ns))
+        assert client.get('/api/input-contracts').status_code==409
 
 
 def test_method_catalog_is_reused_and_does_not_block_database_reads(client):
@@ -195,6 +218,53 @@ def test_method_catalog_is_reused_and_does_not_block_database_reads(client):
     root = f"/api/workspaces/{w['id']}/studies/{s['id']}"
     assert client.get(root).status_code == 200
     assert client.get(root + '/runs?view=summary').status_code == 200
+
+
+def test_first_catalog_requests_use_startup_receipts(tmp_path, monkeypatch):
+    """The first HTTP read must not start the expensive catalog build."""
+    from backend.kernel import input_contracts
+    from time import perf_counter
+    with TestClient(create_app(tmp_path/'first-read.sqlite')) as client:
+        research = client.app.state.research
+        assert research.catalog_read_responses.get(('methods',), False)
+        assert research.catalog_read_responses.get(('input-contracts',), False)
+        for index in range(research.read_responses.MAX_ENTRIES+1):
+            research.read_responses.build(('projection',index),list[dict],lambda:[],True)
+        assert research.catalog_read_responses.get(('methods',),False)
+        assert research.catalog_read_responses.get(('input-contracts',),False)
+        def unexpected(*args, **kwargs):
+            raise AssertionError('Catalog rebuilt on first HTTP request')
+        monkeypatch.setattr(research, 'methods', unexpected)
+        monkeypatch.setattr(input_contracts, 'verified_contracts', unexpected)
+        for path in ('/api/input-contracts', '/api/methods'):
+            start = perf_counter()
+            response = client.get(path)
+            elapsed = perf_counter()-start
+            assert response.status_code == 200, response.text
+            assert elapsed < .3, (path, elapsed)
+
+
+def test_comparison_preserves_saved_headlines_inputs_and_limiting_objects():
+    from backend.kernel.drivers import compare
+    original = {'id':'a','snapshot':{'definition':{'method':{'version':'1'},'crosschecks':[]},
+        'input_contract':{'parameter_schema':{'properties':{'ks':{'x-unit':{'si':'1'}}}}},
+        'cases':[{'input':{'soil':1},'parameters':{'ks':.8}}]},
+        'headlines':[{'key':'ampacity','title':'共同能力','value':350,'display_value':350,'display_unit':'A'}],
+        'output':{'cases':[{'case_id':'case-0','status':'succeeded',
+            'results':[{'type':'quantity','status':'available','key':'ampacity','entity':'c1','unit':'A','value':350}],
+            'artifacts':{'trace':{'circuit_ratings':[{'entity':'c1','limiting_cable':'cable-1'}]}}}]}}
+    other = deepcopy(original);other['id']='b'
+    other['snapshot']['cases'][0]['input']['soil']=1.2
+    other['output']['cases'][0]['results'][0]['value']=330
+    other['headlines'][0]['value']=other['headlines'][0]['display_value']=330
+    saved = deepcopy([original,other])
+    result = compare([original,other])
+    assert result['sources'][0]['headlines'] == original['headlines']
+    assert result['sources'][1]['snapshot'] == other['snapshot']
+    assert result['sources'][0]['limiting_objects']==[{'case_id':'case-0','entity':'c1','limiting_cable':'cable-1'}]
+    assert result['differences'][0]['same_input'] is False
+    assert result['differences'][0]['quantities'][0]['difference']==-20
+    assert [original,other]==saved
 
 
 def test_headlines_follow_the_recommended_candidate_and_driver_condition():

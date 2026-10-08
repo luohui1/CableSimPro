@@ -76,7 +76,7 @@ def model_for(plugin_id, capability):
 
 
 
-def contracts(research, *, encoded=False):
+def contracts(research, *, encoded=False, catalog_preload=False):
     from backend.plugin_host import PluginHostError
     from .verified_executor import verification_scope
     from .host_api import InputContract
@@ -87,6 +87,14 @@ def contracts(research, *, encoded=False):
             registry = research.registry()
             entries = research.methods()
             cache = {'registries': {pid: registry for pid in registry.plugins}}
+            if catalog_preload:
+                # Startup only publishes metadata, with a SourceWatch lease around
+                # the whole read. Verify all package bytes/import closures once;
+                # execution receipts and before/after source snapshots remain the
+                # executor's responsibility when an engineering operation starts.
+                for plugin in registry.plugins.values():
+                    plugin.verify()
+                cache['verified'] = {pid: None for pid in registry.plugins}
             # Every hit rechecks the exact installed bytes, including presentation.
             for entry in entries:
                 for cap in entry['capabilities']:

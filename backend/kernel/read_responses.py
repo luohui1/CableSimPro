@@ -3,6 +3,7 @@ from collections import OrderedDict
 from contextlib import suppress
 from hashlib import sha256
 from threading import RLock
+from time import perf_counter
 import sqlite3
 
 from fastapi import Response
@@ -31,7 +32,10 @@ class ReadResponses:
         if self.source_root != root:
             if self.watch is not None:self.watch.close()
             self.source_root = root
-            self.watch = SourceWatch(root.resolve())
+            # Unrelated host services do not change plugin contracts/evidence.
+            # Sealed dependency locks define the public source closure; plugin
+            # additions and publication still invalidate immediately.
+            self.watch = SourceWatch(root.resolve(), release_only=True)
             self.entries.clear();self.bytes = 0
         if uses_database and self.database is None:
             # A persistent connection is required: data_version cannot be compared
@@ -116,8 +120,12 @@ class ReadResponses:
 
 
 async def read_response(research, key, model, load, *, uses_database=True, exclude_unset=False):
-    cache = research.read_responses
+    started=perf_counter()
+    cache = research.read_responses if uses_database else research.catalog_read_responses
     payload = cache.get(key, uses_database)
+    hit=payload is not None
     if payload is None:
         payload = await run_in_threadpool(cache.build, key, model, load, uses_database, exclude_unset=exclude_unset)
-    return Response(payload, media_type='application/json')
+    return Response(payload, media_type='application/json', headers={
+        'Server-Timing': f'host-read;dur={(perf_counter()-started)*1000:.2f}',
+        'X-CableSim-Read-Cache': 'hit' if hit else 'miss'})

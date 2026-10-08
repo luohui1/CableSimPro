@@ -8,6 +8,7 @@ from functools import lru_cache
 import os
 from contextlib import suppress
 import struct
+import json
 
 
 @lru_cache(maxsize=1)
@@ -33,11 +34,12 @@ def native_api():
 
 
 class DirectoryChanges:
-    def __init__(self,path,recursive):
+    def __init__(self,path,recursive,relevance=None):
         self.api,self.Overlapped,self.DWORD=native_api()
         self.handle=None;self.event=None;self.pending=False;self.serial=0
         self.buffer=ctypes.create_string_buffer(64*1024)
         self.recursive=recursive
+        self.relevance=relevance
         try:
             self.handle=self.api.CreateFileW(str(path),1,7,None,3,0x02000000|0x40000000,None)
             if self.handle in (None,ctypes.c_void_p(-1).value):
@@ -76,7 +78,8 @@ class DirectoryChanges:
                 name=raw[offset+12:offset+12+length].decode('utf-16-le')
                 parts=name.replace('/', '\\').split('\\')
                 if self.recursive:
-                    relevant = relevant or ('__pycache__' not in parts and not name.endswith('.pyc'))
+                    relevant = relevant or ('__pycache__' not in parts and not name.endswith('.pyc')
+                                            and (self.relevance is None or self.relevance(name.replace('\\','/'))))
                 else:
                     relevant = relevant or parts[0].lower() in ('backend','cablesim_sdk','plugins')
                 if following == 0:break
@@ -104,8 +107,9 @@ class DirectoryChanges:
 
 
 class SourceWatch:
-    def __init__(self,root):
+    def __init__(self,root,*,release_only=False):
         self.root=root;self.handles=[];self.epoch=0;self.healthy=False
+        self.release_only=release_only;self.shared_files=None
         if os.name=='nt':
             try:self.configure()
             except OSError:self.close()
@@ -116,16 +120,37 @@ class SourceWatch:
             self.handles.append(DirectoryChanges(self.root,False))
             for name in ('backend','cablesim_sdk','plugins'):
                 path=self.root/name
-                if path.is_dir():self.handles.append(DirectoryChanges(path,True))
+                relevance = (lambda relative: self.shared_change('backend/'+relative)) if name=='backend' and self.release_only else None
+                if path.is_dir():self.handles.append(DirectoryChanges(path,True,relevance))
+            self.load_shared_files()
             self.healthy=True
         except OSError:
             self.close();raise
+
+    def load_shared_files(self):
+        """Only sealed host dependencies affect a cached plugin catalog.
+
+        Plugin directory events are always relevant, including added packages
+        and changed dependency locks. Unreadable locks widen to all sources.
+        """
+        if not self.release_only:return
+        try:
+            self.shared_files={row['path'].casefold() for manifest in (self.root/'plugins').glob('*/plugin.json')
+                               for row in json.loads((manifest.parent/'src/host-dependencies.json').read_text('utf-8'))}
+        except (OSError,ValueError,KeyError,TypeError):self.shared_files=None
+
+    def shared_change(self,path):
+        if self.shared_files is None:return True
+        name=path.casefold().rstrip('/')
+        return name.startswith('backend/plugin_host/') or name in self.shared_files or any(value.startswith(name+'/') for value in self.shared_files)
 
     def snapshot(self):
         if not self.healthy:return None
         try:
             if self.handles[0].poll():self.configure()
-            for handle in self.handles[1:]:handle.poll()
+            changed=False
+            for handle in self.handles[1:]:changed=handle.poll() or changed
+            if changed:self.load_shared_files()
             return (self.epoch,*(handle.serial for handle in self.handles))
         except (OSError,UnicodeError,struct.error):
             self.close();return None

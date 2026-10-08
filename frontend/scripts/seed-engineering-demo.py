@@ -220,24 +220,9 @@ def ensure_temperature(client, result):
 
 
 def release_hv_model():
-    """The same People catalogue facts as the development demo, bundled offline."""
-    reference = ('人民电器64/110kV交联电缆产品样本；PDF4/印刷065页800行、PDF7/印刷069页90℃温限；'
-                 'https://www.chinapeople.com/pdf/sh/dxdl/64-110kV.pdf；下载2026-10-04；'
-                 'sha256:5f1e3af4c35d474ab69120bea4b66534b6cd3bed9860712205038239babbd3b3；'
-                 '缺少半导电屏蔽、缓冲径向尺寸、波纹、材料物性及设计R20；不跨厂家拼接。')
-    return {'name':'YJLW03-64/110 1×800', 'version':'公开尺寸待补齐', 'confirmed':False,
-            'materials':[{'id':'material/'+key,'label':label,'category':category,'standard_kind':kind}
-                         for key,label,category,kind in [('cu','铜','conductor','copper_bare'),
-                         ('xlpe','交联聚乙烯','insulation','XLPE'),('al','皱纹铝护套','metal','aluminium'),
-                         ('pe','聚乙烯外护套','polymer','other')]],
-            'cable_type':{'id':'cable_type/ct1','label':'YJLW03-64/110 1×800','construction':'single_core',
-                'rating':{'u0':64000,'u':110000,'max_conductor_temperature':{'normal':363.15}},
-                'cores':[{'id':'core/1','conductor':{'material':'material/cu','form':'unspecified',
-                          'nominal_area':.0008,'diameter':.034,'r20':None},'layers':[]}],
-                'common_layers':[{'role':role,'material':'material/'+material,'thickness':thickness,'form':form}
-                                 for role,material,thickness,form in [('insulation','xlpe',.016,None),
-                                 ('metallic_sheath','al',.002,'corrugated'),('oversheath','pe',.004,None)]]},
-            'sources':{'factory':{'kind':'manufacturer','reference':reference,'reviewed':False}}}
+    """Sourced Qifan reference design; never a factory ampacity declaration."""
+    from backend.kernel.model_series import hv_payload
+    return hv_payload()
 
 
 def release_identity():
@@ -245,17 +230,19 @@ def release_identity():
     from backend.plugin_host.registry import Registry
     from backend.kernel.research import Research
     from backend.kernel.scenarios import system_models
-    from backend.kernel.model_series import bundled_series
+    from backend.kernel.model_series import bundled_series, bundled_hv
     from backend.kernel.workspace import fingerprint
     registry = Registry()
     for plugin in registry.plugins.values():
         plugin.verify()
     series, digest = bundled_series()
-    return {'seed_revision':2,
+    hv,hv_digest = bundled_hv()
+    return {'seed_revision':3,
             'plugins':{key:Research.pin(plugin) for key,plugin in sorted(registry.plugins.items())},
             'models':{item['id']:{'version':item['version'],'sha256':item['content_sha256']} for item in system_models()},
             'manufacturer_series':{'id':series['id'],'version':series['version'],'sha256':digest},
-            'hv_model':{'version':release_hv_model()['version'],'sha256':fingerprint(release_hv_model())}}
+            'hv_model':{'id':hv['id'],'version':hv['version'],'sha256':hv_digest,
+                        'model_sha256':fingerprint(release_hv_model())}}
 
 
 def build_release_seed(staged, database, identity):
@@ -279,7 +266,7 @@ def build_release_seed(staged, database, identity):
 
             method = next(row['method'] for row in api('/api/methods') if row['method']['plugin_id']=='cablesim.iec60287')
             method = {**method, 'capability':'steady-rating'}
-            from backend.kernel.model_series import import_yjv22
+            from backend.kernel.model_series import import_yjv22, bundled_hv, hv_study_document
             series = import_yjv22(api,method)
             candidates = [c['id'] for c in series['candidates']]
             result['series'] = {k:series[k] for k in ('id','version','sha256','engineering_scope')}
@@ -305,12 +292,18 @@ def build_release_seed(staged, database, identity):
                 return api('/api/workspaces/'+created['id'])
 
             for model, status in ((mv,'公开尺寸与有来源的工程参数草稿，未批准'),
-                                  (hv,'厂家尺寸草稿；电阻、波纹和材料参数待补齐，未批准')):
+                                  (hv,'公开结构与声明的工程参考参数，未批准')):
                 draft = create_workspace(model,model['payload']['name'],type_draft=True)
                 result['types'].append({'name':model['payload']['name'],'workspace':draft['id'],'status':status})
             workspace = create_workspace(mv,'城北变电站 · 10 kV 三回排管',
                                          target_current_a=400,three_core_layout='three_core_ducts_horizontal')
             hv_workspace = create_workspace(hv,'城南线路 · 110 kV 直埋单回',target_current_a=600)
+            hv_data,hv_digest = bundled_hv()
+            api('/api/workspaces/'+hv_workspace['id']+'/domain','PUT',{
+                'expected_revision':hv_workspace['revision'],'document':hv_study_document(hv_workspace)})
+            hv_workspace=api('/api/workspaces/'+hv_workspace['id'])
+            result['hv_series']={'id':hv_data['id'],'version':hv_data['version'],
+                                 'sha256':hv_digest,'engineering_scope':hv_data['scope']}
             parameters = {**deepcopy(METHOD_DEFAULTS['cablesim.iec60287']), 'rating_mode':'both'}
             parameters['solver']['max_iterations'] = 300
             circuit = workspace['domain']['circuits'][0]['id']
@@ -360,8 +353,10 @@ def build_release_seed(staged, database, identity):
                 print(title+'：真实计算完成',flush=True)
             for title, module, driver in definitions:
                 save_study(workspace,title,module,driver)
-            save_study(hv_workspace,'城南线路 · 110 kV 直埋单回校核（待补厂家参数）','rating',
-                       {'kind':'single'},required=False)
+            save_study(hv_workspace,'城南线路 · 110 kV 直埋单回校核','rating',
+                       {'kind':'single'},parameters=deepcopy(hv_data['parameters']),
+                       input_sources={'/parameters':{'kind':'user','reviewed':False,
+                           'reference':hv_data['scope']+'；'+hv_data['sources']['buffer_reference']['reference']+'；'+hv_data['sources']['geometry_reference']['reference']}})
             contracts = api('/api/input-contracts')
             contract = next(item for item in contracts if item['method']['capability']=='electrothermal-steady')
             title = '城北变电站 · 排管段温度场（需在超算运行）'

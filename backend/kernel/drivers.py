@@ -144,7 +144,13 @@ def compare(runs):
                                             'baseline': baseline[k], 'value': values[k], 'difference': values[k] - baseline[k]}
                                            for k in sorted(set(values) & set(baseline))]})
     return {'kind': 'method-comparison', 'interpretation': '绝对数值对照；不同输入、边界或方法不代表优化收益。',
-            'sources': [{'run_id': r['id'], 'snapshot': r['snapshot']} for r in runs], 'differences': differences}
+            'sources': [{'run_id': r['id'], 'snapshot': r['snapshot'],
+                         'headlines': r.get('headlines', []),
+                         'limiting_objects': [dict(row, case_id=case['case_id'])
+                            for case in r['output']['cases'] if case['status']=='succeeded'
+                            for artifact in case.get('artifacts',{}).values() if isinstance(artifact,dict)
+                            for row in artifact.get('circuit_ratings',[]) if isinstance(row,dict)]}
+                        for r in runs], 'differences': differences}
 
 
 def crosscheck_differences(cases):

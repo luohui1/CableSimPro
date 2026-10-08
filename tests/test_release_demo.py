@@ -130,17 +130,30 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     receipt = json.loads(database.with_suffix('.seed.json').read_text(encoding='utf-8'))
     assert receipt['complete'] and len(receipt['studies']) == 4 and len(receipt['types']) == 2
     assert receipt['identity'] == seed.release_identity()
-    assert sum(bool(row.get('run')) for row in receipt['studies']) == 2
+    assert sum(bool(row.get('run')) for row in receipt['studies']) == 3
     assert any('需在超算运行' in row['title'] and not row.get('run') for row in receipt['studies'])
-    assert any('110 kV' in row['title'] and not row.get('run') and not row['ready'] for row in receipt['studies'])
+    hv=next(row for row in receipt['studies'] if '110 kV' in row['title'])
+    assert hv['run'] and hv['ready'] and hv['status']=='succeeded'
     with closing(sqlite3.connect(database)) as connection:
         assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == 4
-        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status='succeeded'").fetchone()[0] == 2
+        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status='succeeded'").fetchone()[0] == 3
         candidates=[json.loads(r[0]) for r in connection.execute('SELECT payload FROM domain_cable_models')]
         public=[c for c in candidates if c.get('specification')]
         assert len(public)==10 and len(candidates)==12
         assert all(c['specification']['designation']=='YJV22' and c['specification']['u0_v']==8700 for c in public)
         assert not any(c['confirmed'] for c in candidates)
+        hv_run=json.loads(connection.execute('SELECT output FROM study_runs WHERE id=?',(hv['run'],)).fetchone()[0])
+        quantities=hv_run['cases'][0]['results']
+        capacity=next(q['value'] for q in quantities if q['key']=='ampacity' and q.get('case')=='rating')
+        assert capacity == pytest.approx(748.3219742774963,abs=.001)
+        from backend.kernel.report import task_answer
+        disclosure=task_answer({'snapshot':json.loads(connection.execute('SELECT snapshot FROM study_runs WHERE id=?',(hv['run'],)).fetchone()[0]),'output':hv_run})
+        assert '工程师给定参考参数不是厂家实测值' in disclosure and '不是厂家额定载流量' in disclosure
+        hv_model=next(c for c in candidates if '起帆' in c['name'])
+        assert hv_model['version']=='1.0.0'
+        assert hv_model['cable_type']['cores'][0]['conductor']['r20_basis']=='manufacturer_limit'
+        assert {s['kind'] for s in hv_model['sources'].values()} >= {'manufacturer','standard','derived','user'}
+        assert '不是厂家额定' in receipt['hv_series']['engineering_scope']
     before = database.read_bytes()
     seed.seed_release(database)
     assert database.read_bytes() == before

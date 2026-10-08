@@ -13,16 +13,14 @@ import { ErrorState, LoadingState } from "./states";
 import { Button } from "./ui/button";
 import { Dialog } from "./ui/dialog";
 import { Select } from "./ui/select";
+import { hostTasks } from './study-workbench-config';
 
 type Method = components["schemas"]["Method"];
 type Task = NonNullable<components["schemas"]["CreateStudy"]["task"]>;
 type Choice = { id: string; task: Task; method: Method; label: string; hpc: boolean };
 
 /** 载流量类任务按插件声明的输出判断；仿真任务由宿主的任务清单给出方法。 */
-const AMPACITY_TASKS: [Task, string, string, string][] = [
-  ["rating", "额定载流量", "calc/ampacity", "ampacity"],
-  ["operating", "运行温度", "calc/thermal-field", "conductor_temperature"],
-];
+const AMPACITY_TASKS: [Task, string, string, string][] = hostTasks.map(row => [row.task, row.label, row.icon, row.output]);
 
 /**
  * 在当前工程里新建研究：工程模型（敷设截面、电缆、工况）原样带入，只选任务、方法和名称。
@@ -58,7 +56,7 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
       const pin = optionalRecord(item.method);
       return (Array.isArray(item.capabilities) ? item.capabilities : []).map(optionalRecord)
         .filter((cap) => (Array.isArray(cap.outputs) ? cap.outputs : []).some((entry) => optionalRecord(entry).key === output) &&
-          cap.analysis !== "crosscheck" && cap.input_schema === "cablesim.domain/1" && pin.plugin_id !== "cablesim.hybrid-rating" && item.platform_supported !== false)
+          cap.analysis !== "crosscheck" && cap.input_schema === "cablesim.domain/1" && item.platform_supported !== false)
         .map((cap) => ({
           id: `${value}:${text(pin.plugin_id)}:${text(cap.id)}`, task: value,
           method: { ...pin, capability: text(cap.id) } as Method,

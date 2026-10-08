@@ -38,11 +38,12 @@ try{
   let did=fixture.book.id,book=fixture.book;
   if(!archiveOnly){
   await go(`/studies/${study.id}/selection/results?workspace=${study.workspace}&run=${run.id}`);
-  await expect(page.getByRole('button',{name:'生成客户计算书',exact:true})).toBeVisible();
-  const customer=await downloaded(()=>page.getByRole('button',{name:'生成客户计算书',exact:true}).click());
+  await page.getByRole('toolbar',{name:'工程命令',exact:true}).getByRole('button',{name:'生成计算书',exact:true}).click();
+  await expect(page.locator('iframe[title="计算书预览"]')).toHaveAttribute('src',/^blob:/);
+  const customer=await downloaded(()=>page.getByRole('button',{name:'下载 PDF',exact:true}).click());
   did=new URL(page.url()).searchParams.get('delivery');assert.ok(did);
   book=await get(root+'/deliveries/'+did);verify(customer,book,'customer');
-  await expect(page.frameLocator('iframe[title="计算书预览"]').locator('a[data-report-pdf]')).toHaveCount(0);
+  await expect(page.locator('iframe[title="计算书预览"]')).toHaveAttribute('src',/^blob:/);
   await customer.file.saveAs(path.join(out,'customer.pdf'));
   await expect(page.getByRole('combobox',{name:'PDF 版本'})).toContainText('客户版');
   await page.getByRole('combobox',{name:'PDF 版本'}).click();await page.getByRole('option',{name:'内部审核版',exact:true}).click();
@@ -50,7 +51,7 @@ try{
   await internal.file.saveAs(path.join(out,'internal.pdf'));
   const html=await downloaded(()=>page.getByRole('button',{name:'HTML 存档',exact:true}).click());assert.equal(html.bytes.toString(),book.html);
   await variants('研究 PDF 下载');await shot('study-pdf');
-  report.checks.push('生成客户计算书自动下载真实客户 PDF；切换内部版后字节与封存版本一致；HTML 为独立次入口');
+  report.checks.push('生成后预览真实客户 PDF，点击下载；切换内部版后字节与封存版本一致；HTML 为独立次入口');
   }
   await go(`/library/deliveries?workspace=${study.workspace}&delivery=${did}`);
   const list=await get(root+'/deliveries'),version=list.find(x=>x.id===did).version;

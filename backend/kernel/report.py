@@ -64,6 +64,8 @@ def task_answer(run):
         text = '此历史运行未输出所选任务的目标答复，保留原始物理量。'
     if artifact.get('corrugated_sheaths'):
         text += ' 结论依赖声明的波谷接触、缓冲/间隙物性及几何参考参数，详见皱纹护套参数节。'
+        if any(s.get('kind') == 'user' for s in definition.get('input_sources', {}).values()):
+            text += ' 工程师给定参考参数不是厂家实测值，本计算结果不是厂家额定载流量。'
     method = definition['method']
     label = {'cablesim.thermal-network': '交叉校核参考', 'cablesim.iec60287': 'IEC 60287 解析法'}.get(method['plugin_id'], method['plugin_id'])
     return '<p class="answer">'+escape(text+' '+label+' · '+method['version']+'。')+'</p>'

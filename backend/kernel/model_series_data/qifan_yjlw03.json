@@ -1,0 +1,89 @@
+{
+  "id": "public.qifan.yjlw03-110kv-800",
+  "version": "1.0.0",
+  "name": "起帆 ZC-YJLW03-Z-64/110 kV 1×800",
+  "scope": "公开转载结构与工程参考条件；计算结果不是厂家额定载流量，型号未经人工批准。",
+  "sources": {
+    "factory": {
+      "kind": "manufacturer", "reviewed": false,
+      "reference": "起帆 ZC-YJLW03-Z 64/110kV 1×800 公开产品技术规格书，表 No.3–11；https://www.qifandl.com/products_detail/c-_detailId=1266420897496969216.html；下载2026-10-04；SHA256:b5ffd2e5df25f0fa46446701f235b2e4113f4f4a3459577e4618cf244d490942；网站主体上海子奕实业，公开转载，非签章制造图。"
+    },
+    "standard": {
+      "kind": "standard", "reviewed": false,
+      "reference": "IEC 60287-1-1:2023 表1/3、IEC 60287-2-1:2023 表1：铜/铝温度系数、铝电阻率、XLPE介电参数与材料热阻率；不是厂家试验值。"
+    },
+    "buffer_reference": {
+      "kind": "user", "reviewed": false,
+      "reference": "工程师给定参考值：刘黎等2021 表2/PDF3（印刷56页），缓冲带k=0.17 W/(m·K)、空气k=0.023 W/(m·K)；均匀等效间隙，不是起帆接触热阻试验值或额定载流量。"
+    },
+    "geometry_reference": {
+      "kind": "user", "reviewed": false,
+      "reference": "工程师给定参考值：波谷接触起帆缓冲外径79.1mm，波峰外径91.1mm、壁厚2mm，推得径向波深4mm；节距25mm引用王航等《波纹金属护套高压单芯电缆线芯护层互感的解析解》2020 附表1，DOI10.19595/j.cnki.1000-6753.tces.190928；不是起帆实测波深/节距。"
+    },
+    "installed_dimensions": {
+      "kind": "derived", "reviewed": false,
+      "reference": "起帆公开表No.3–11的近似外径链34.0→36.7→69.1→71.1→79.1→91.1→100.6mm，用外径差重建安装厚度；区别于16mm名义绝缘和3×2mm未压缩缓冲带；未计石墨表面涂层热阻。"
+    }
+  },
+  "manufacturer_values": {
+    "conductor_diameter_m": 0.034,
+    "conductor_screen_outer_diameter_m": 0.0367,
+    "insulation_outer_diameter_m": 0.0691,
+    "insulation_screen_outer_diameter_m": 0.0711,
+    "buffer_outer_diameter_m": 0.0791,
+    "metallic_sheath_crest_outer_diameter_m": 0.0911,
+    "outer_diameter_m": 0.1006,
+    "outer_diameter_tolerance_m": 0.003,
+    "metallic_sheath_wall_thickness_m": 0.002,
+    "r20_maximum_ohm_per_m": 0.0000221
+  },
+  "model": {
+    "name": "起帆 ZC-YJLW03-Z-64/110 kV 1×800", "version": "1.0.0", "confirmed": false,
+    "materials": [
+      {"id":"material/cu", "label":"铜", "category":"conductor", "standard_kind":"copper_bare", "temperature_coefficient_20":0.00393},
+      {"id":"material/semi", "label":"半导电材料标准参考", "category":"semiconductor", "thermal_resistivity":2.5},
+      {"id":"material/insulation-qifan", "label":"XLPE标准参考", "category":"insulation", "standard_kind":"XLPE", "thermal_resistivity":3.5, "relative_permittivity":2.5, "loss_tangent":0.001},
+      {"id":"material/buffer-qifan", "label":"缓冲带工程参考", "category":"filler", "thermal_resistivity":5.88235294117647},
+      {"id":"material/al-qifan", "label":"铝护套标准参考", "category":"metal", "electrical_resistivity_20":2.84e-8, "temperature_coefficient_20":0.00403},
+      {"id":"material/bitumen-qifan", "label":"沥青标准参考", "category":"polymer", "thermal_resistivity":6.0},
+      {"id":"material/pe-qifan", "label":"PE标准参考", "category":"polymer", "thermal_resistivity":3.5}
+    ],
+    "cable_type": {
+      "id":"cable_type/ct1", "label":"起帆 ZC-YJLW03-Z-64/110 kV 1×800", "construction":"single_core",
+      "rating":{"u0":64000, "u":110000, "max_conductor_temperature":{"normal":363.15}},
+      "cores":[{
+        "id":"core/1", "x":0, "z":0,
+        "conductor":{"material":"material/cu", "form":"stranded_round_compacted", "nominal_area":0.0008, "diameter":0.034, "r20":0.0000221, "r20_basis":"manufacturer_limit"},
+        "layers":[
+          {"role":"conductor_screen", "material":"material/semi", "thickness":0.00135},
+          {"role":"insulation", "material":"material/insulation-qifan", "thickness":0.0162},
+          {"role":"insulation_screen", "material":"material/semi", "thickness":0.001},
+          {"role":"bedding", "material":"material/buffer-qifan", "thickness":0.004},
+          {"role":"metallic_sheath", "material":"material/al-qifan", "thickness":0.002, "form":"corrugated", "corrugation_depth":0.004, "corrugation_pitch":0.025},
+          {"role":"separator", "material":"material/bitumen-qifan", "thickness":0.00025},
+          {"role":"oversheath", "material":"material/pe-qifan", "thickness":0.0045}
+        ]
+      }], "common_layers":[]
+    }
+  },
+  "scenario": {
+    "surface_temperature_k":298.15, "soil_thermal_resistivity_k_m_w":1.0,
+    "centre_depth_m":0.8, "touching_trefoil_outer_diameter_m":0.1006, "target_current_a":600,
+    "bonding":"both_ends",
+    "reference":"工程师给定参考工况：地表25°C、土壤1 K·m/W、三根接触品字形中心平均埋深0.8m、两端接地、每回600A；非现场实测。"
+  },
+  "parameters": {
+    "ks":1.0, "kp":1.0, "t4_form":"exact", "eddy":"ignored", "rating_mode":"both",
+    "solver":{"initial_sheath_temperature_c":70.0, "current_tolerance_a":1e-8, "max_iterations":300},
+    "corrugated_gap":{"cable_type/ct1":{
+      "rho_k_m_w":43.47826086956522,
+      "source":"工程师给定参考值：刘黎等2021 表2/PDF3（印刷56页），空气k=0.023 W/(m·K)，均匀等效环隙；不是厂家额定值或接触热阻试验。",
+      "geometry_source":"起帆公开800结构表，声明波谷接触缓冲外径79.1mm，据此波深4mm；节距25mm引自王航等2020 附表1，非起帆实测。"
+    }}
+  },
+  "verification": {
+    "reference_run":"5f5d7354-48b2-4242-9926-6c9fcb8c38da", "hpc_job":"785281",
+    "reference_ampacity_a":748.3219742774963,
+    "note":"历史验证值，仅用于回归；发布种子须用当前IEC插件重新执行，不复制历史运行结果。"
+  }
+}

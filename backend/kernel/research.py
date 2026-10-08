@@ -52,38 +52,31 @@ class Research:
         self.contract_read_lock = RLock()
         from .read_responses import ReadResponses
         self.read_responses = ReadResponses(self)
+        # Large run/library projections must never evict the two source-only
+        # catalogs while startup warm-up is still running.
+        self.catalog_read_responses = ReadResponses(self)
         self.background = ThreadPoolExecutor(max_workers=2, thread_name_prefix='study-run')
 
     def close(self):
         self.background.shutdown(wait=False)
         self.read_responses.close()
+        self.catalog_read_responses.close()
         if self.resident_runner is not None:
             self.resident_runner.close()
         seals=getattr(getattr(self.executor,'local',self.executor),'seals',None)
         if seals is not None:seals.close()
 
     def warm_reads(self, stop=None):
-        """Validate a small existing library at startup; never run a method."""
-        from .responses import StudyResponse, RunSummaryPage
-        import logging
-        with self.store.db() as db:
-            count=db.execute('SELECT COUNT(*) FROM studies').fetchone()[0]
-            if count == 0 or count > 64:return
-            rows=db.execute('SELECT workspace,id FROM studies ORDER BY rowid').fetchall()
-        tasks=[]
-        for wid in dict.fromkeys(row['workspace'] for row in rows):
-            tasks.append((('studies',wid),list[StudyResponse],lambda wid=wid:self.list_studies(wid)))
-        for row in rows:
-            wid,sid=row['workspace'],row['id']
-            tasks.extend([
-                (('study',wid,sid),StudyResponse,lambda wid=wid,sid=sid:self.study_detail(wid,sid)),
-                (('runs',wid,sid,0,50),RunSummaryPage,lambda wid=wid,sid=sid:self.list_runs(wid,sid,view='summary')),
-            ])
-        for key,model,load in tasks:
-            if stop is not None and stop.is_set():return
-            try:self.read_responses.build(key,model,load,True)
-            except (HTTPException,PluginHostError,ValueError,TypeError,KeyError):
-                logging.getLogger(__name__).debug('Read cache warm-up skipped for %s',key,exc_info=True)
+        """Warm metadata without competing with the first interactive page.
+
+        Eager validation of unrelated historical FEM artifacts held the GIL for
+        seconds even while catalog reads were cache hits. Saved runs continue
+        to be verified on demand by the normal read endpoints.
+        """
+        # initialize() already built the receipts synchronously. Do not race the
+        # first HTTP cache read with a redundant background lock acquisition.
+        if (stop is None or not stop.is_set()) and not self.catalog_read_responses.entries:
+            self.warm_catalogs()
 
     def initialize(self):
         with self.store.db(True) as db:
@@ -116,6 +109,23 @@ class Research:
             db.execute("UPDATE study_runs SET status='interrupted',finished=?,error=? "
                        "WHERE owner_epoch<>? AND status IN ('accepted','running','validating')",
                        (stamp(), encode({'code': 'HOST_RESTART', 'message': '旧执行未能确认完成；不会自动重算。'}), self.owner_epoch))
+
+        self.warm_catalogs()
+
+    def warm_catalogs(self):
+        """Complete source-only contract reads before the host starts serving.
+
+        No solver is invoked. SourceWatch still invalidates every cached payload
+        on publication; an invalid package remains a 409 on its public endpoint.
+        """
+        from .input_contracts import contracts
+        import logging
+        tasks = [(('methods',), lambda: json.dumps(self.methods(), ensure_ascii=False, allow_nan=False).encode()),
+                 (('input-contracts',), lambda: contracts(self, encoded=True, catalog_preload=True))]
+        for key, load in tasks:
+            try:self.catalog_read_responses.build(key, None, load, False)
+            except (HTTPException, PluginHostError, ValueError, OSError):
+                logging.getLogger(__name__).warning('Plugin catalog warm-up rejected %s', key, exc_info=True)
 
     def methods(self):
         from ..plugin_host.presentation import resources
@@ -487,6 +497,9 @@ class Research:
                 'lock': lock, 'cases': cases, 'candidate_snapshots': candidates, 'host_version': __version__,
                 'planned_environment': {'python': platform.python_version(), 'platform': platform.system()}}
         result['headline_contract'] = [value.model_dump(mode='json') for value in primary_capability.headlines]
+        # Freeze presentation metadata with the input; history comparisons must
+        # not consult a subsequently installed parameter schema for units.
+        result['input_contract'] = {'parameter_schema': primary_capability.parameter_schema.model_dump(mode='json')}
         result['artifact_source_contracts'] = {}
         for method in [definition['method'], *(item['method'] for item in definition['crosschecks'])]:
             plugin, capability = self.resolve(method)

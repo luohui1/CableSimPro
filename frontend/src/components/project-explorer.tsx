@@ -8,6 +8,7 @@ import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
 import { significantNumber } from "@/lib/format";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { Icon } from "./icon";
+import { driverViews, runStates } from "./study-workbench-config";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 
 type Theme = "light" | "dark";
@@ -20,17 +21,18 @@ export function calculationKind(study: StudyRow, catalog: Plugin[]) {
   const plugin = catalog.find((row) => text(optionalRecord(row.method).plugin_id) === text(pin.plugin_id));
   const capability = (Array.isArray(plugin?.capabilities) ? plugin!.capabilities : []).map(optionalRecord).find((cap) => text(cap.id) === text(pin.capability));
   const hpc = text(optionalRecord(plugin?.execution_policy).backend) === "slurm";
-  const icon = kind === "selection" ? "calc/selection" : kind === "sweep" ? "calc/sweep" : kind === "batch" ? "nav/simulation" : kind === "crosscheck" ? "module/method-compare"
-    : hpc || text(capability?.analysis) === "transient" ? "calc/thermal-field" : text(capability?.analysis) === "geometry" ? "object/section" : "calc/ampacity";
+  const icon = driverViews[kind]?.icon || (hpc || text(capability?.analysis) === "transient" ? "calc/thermal-field" : text(capability?.analysis) === "geometry" ? "object/section" : "calc/ampacity");
   // 能力标题里的括注（标准条款、适用场景）留给方法页，列表只用主名
-  return { icon, label: (text(capability?.title) || study.task).replace(/\s*[（(][^（）()]*[）)]\s*$/, ""), hpc };
+  return { icon, label: driverViews[kind]?.label || text(capability?.title) || text(study.definition.task) || text(pin.capability),
+    methodName: text(plugin?.name) || text(pin.plugin_id), hpc };
 }
 
 /** 运行状态：来自运行摘要，不读结果正文。有插件声明的关键结论时直接显示答案（如允许电流），否则显示状态点。 */
 function RunDot({ study }: { study: StudyRow }) {
   const runs = useQuery({ queryKey: ["runs", study.workspace, study.id, "summary"], queryFn: ({ signal }) => studyRuns(study.workspace, study.id, signal, "summary") });
   const latest = runs.data?.at(-1), status = text(latest?.status);
-  const kind = ["succeeded", "partial"].includes(status) ? "is-ok" : ["failed", "rejected", "cancelled"].includes(status) ? "is-error" : status ? "is-running" : "is-off";
+  const phase = runStates[status]?.phase;
+  const kind = phase === "complete" ? "is-ok" : phase === "failed" ? "is-error" : phase ? "is-running" : "is-off";
   const answer = kind === "is-ok" && latest?.freshness !== "historical" ? headlineText(latest?.headlines, 1) : "";
   if (answer) return <span className="explorer-answer" title={headlineText(latest?.headlines)}>{answer}</span>;
   return <span className={`status-dot ${kind}`} title={kind === "is-ok" ? "已有结果" : kind === "is-error" ? "运行失败" : kind === "is-running" ? "运行中" : "未运行"} />;
@@ -109,7 +111,7 @@ export function ProjectExplorer({ workspaceId, projectName, document, activeStud
         const module = rootModule(study.definition), kind = calculationKind(study, plugins);
         const name = head && study.title.startsWith(head + " · ") ? study.title.slice(head.length + 3) : study.title;
         return <Link key={study.id} className="explorer-item explorer-calc" {...at(study, module, studyEntryTab(module))} aria-current={study.id === activeStudy ? "page" : undefined} title={study.title}>
-          <Icon name={kind.icon} /><span><b>{name}</b><small>{study.task || kind.label}{kind.hpc ? " · 超算" : ""}</small></span><RunDot study={study} />
+          <Icon name={kind.icon} /><span><b>{name}</b><small>{kind.label}{kind.hpc ? " · 超算" : ""}</small></span><RunDot study={study} />
         </Link>;
       })}
       <button type="button" className="explorer-item explorer-add" onClick={onCreate}><Icon name="action/add" /><span>新建研究</span></button>

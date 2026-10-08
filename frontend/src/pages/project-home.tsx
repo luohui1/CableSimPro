@@ -17,14 +17,13 @@ import { AgentPanel } from "@/features/agent/agent-panel";
 import { CableSection } from "@/features/drawing/cable-section";
 import { LayingSection } from "@/features/drawing/laying-section";
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
-import { displayName } from "@/lib/display-names";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { workspaceQuery } from "@/lib/study-queries";
 import { isVersionStale } from "@/lib/version-status";
+import { modelViews, projectSuggestions, runStates } from '@/components/study-workbench-config';
 
 type Theme = "light" | "dark";
 
-const PROJECT_SUGGESTIONS = ["这个工程里哪些研究还没有结果？", "汇总各研究的载流量结论和限制因素", "检查工程模型还缺哪些输入"];
 
 /** 研究名常以工程名开头（“城北变电站 · …”），在工程内部省掉这段前缀。 */
 const shortTitle = (title: string, project: string) => {
@@ -37,9 +36,10 @@ function runStatus(run: Record<string, unknown> | undefined, stale: boolean): [S
   const status = text(run?.status);
   if (stale || run?.freshness === "historical") return ["historical", "历史结果"];
   if (!run) return ["draft", "未运行"];
-  if (["succeeded", "partial"].includes(status)) return ["current", status === "partial" ? "部分成功" : "已有结果"];
-  if (["accepted", "queued", "running", "validating"].includes(status)) return ["running", "运行中"];
-  return ["error", "失败"];
+  const state = runStates[status];
+  if (state?.phase === 'complete') return ["current", state.label];
+  if (state?.phase === 'queued' || state?.phase === 'running') return ["running", state.label];
+  return ["error", state?.label || status];
 }
 
 /**
@@ -88,8 +88,8 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
         <Icon name={kind.icon} /><span>{shortTitle(row.title, name)}</span>
       </Link>;
     } },
-    { id: "kind", label: "任务", render: (row) => row.task || calculationKind(row, catalog.data || []).label },
-    { id: "method", label: "插件", wrap: true, render: (row) => `${displayName(text(row.definition.method?.plugin_id))} ${text(row.definition.method?.version)} · ${calculationKind(row, catalog.data || []).hpc ? "超算" : "本机"}` },
+    { id: "kind", label: "任务", render: (row) => calculationKind(row, catalog.data || []).label },
+    { id: "method", label: "插件", wrap: true, render: (row) => `${calculationKind(row, catalog.data || []).methodName} ${text(row.definition.method?.version)} · ${calculationKind(row, catalog.data || []).hpc ? "超算" : "本机"}` },
     { id: "answer", label: "结论", wrap: true, numeric: true, render: (row) => { const run = latest.get(row.id); return run?.freshness !== "historical" && headlineText(run?.headlines, 2) || "—"; } },
     { id: "state", label: "状态", render: (row) => { const [kind, label] = runStatus(latest.get(row.id), isVersionStale(row.raw)); return <StatusMark kind={kind} label={label} />; } },
   ];
@@ -103,7 +103,7 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
       <button type="button" role="tab" aria-selected={inspector === "project"} onClick={() => setInspector("project")}><Icon name="object/folder" />工程</button>
       <button type="button" role="tab" aria-selected={inspector === "agent"} onClick={() => setInspector("agent")}><Icon name="agent/agent" />Agent</button>
     </div>
-    {inspector === "agent" ? <div className="inspector-agent"><AgentPanel key={workspaceId} workspaceId={workspaceId} context={name} suggestions={PROJECT_SUGGESTIONS} /></div> : <>
+    {inspector === "agent" ? <div className="inspector-agent"><AgentPanel key={workspaceId} workspaceId={workspaceId} context={name} suggestions={projectSuggestions} /></div> : <>
       <section className="inspector-block" aria-label="工程">
         <header><Icon name="object/folder" /><h2>工程</h2></header>
         <dl className="inspector-list">
@@ -143,7 +143,7 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
 
   const canvas = !document ? null : <section className="workbench-canvas" aria-label="工程模型">
     <div className="workbench-views" role="group" aria-label="模型视图">
-      {([["section", "object/section", "敷设截面"], ["cable", "object/cable", "电缆截面"]] as const).map(([value, icon, label]) =>
+      {modelViews.map(({id: value, icon, label}) =>
         <button key={value} type="button" aria-pressed={view === value} onClick={() => { setView(value); setChosen(""); }}><Icon name={icon} />{label}</button>)}
     </div>
     <div className="study-drawing">

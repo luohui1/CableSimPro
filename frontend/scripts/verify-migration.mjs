@@ -148,7 +148,7 @@ try {
     .getByRole("row", { name: "选择 YJV22-8.7/15 kV 3×300", exact: true })
     .focus();
   await page.keyboard.press("Enter");
-  await expect(page.locator(".property-panel h2")).toHaveText(
+  await expect(page.locator(".workbench-inspector .inspector-block h2").first()).toHaveText(
     "YJV22-8.7/15 kV 3×300",
   );
   const rowHeights = await page
@@ -157,17 +157,16 @@ try {
   expect(rowHeights.every((height) => height === 40)).toBe(true);
   await page.getByRole("tab", { name: "候选结果" }).focus();
   await page.keyboard.press("ArrowRight");
-  await expect(page).toHaveURL(/selection\/settings/);
-  await expect(page.getByRole("tab", { name: "问询条件", exact: true })).toHaveAttribute("data-state", "active");
+  await expect(page).toHaveURL(/selection\/detail/);
+  await page.getByRole('tab', { name: '方法', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: '方法版本', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: '输入', exact: true }).click();
   await page.goBack();
   await expect(page).toHaveURL(/selection\/results/);
   await page.reload();
   await expect(page.getByRole("table", { name: "真实选型候选" })).toBeVisible();
   if (current) {
-    await page.getByRole("button", { name: "预览计算书", exact: true }).click();
-    await page
-      .getByRole("button", { name: "生成客户计算书", exact: true })
-      .click();
+    await page.getByRole('toolbar', { name: '工程命令', exact: true }).getByRole('button', { name: '生成计算书', exact: true }).click();
     await expect(page.getByTitle("计算书预览")).toBeVisible();
     await capture("report-generated-1366.png");
   }

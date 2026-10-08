@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { methodCatalog, workspaces } from "@/api/research";
 import { displayName } from '@/lib/display-names';
@@ -22,20 +22,19 @@ import { AddStudyDialog } from "@/components/add-study-dialog";
 import { StudyDrawing } from "@/components/study-drawing";
 import { conductorAnnotations } from "@/lib/result-annotations";
 import { temperatureView } from "@/lib/temperature-view";
-import { FieldView } from "@/features/field/field-view";
-import { AgentPanel } from "@/features/agent/agent-panel";
 import {
   StudySelection,
   selectedProperties,
 } from "@/components/study-selection";
 import { StudyReport } from "@/components/study-report";
-import { StudyHybrid } from "@/components/study-hybrid";
 import { Icon } from "@/components/icon";
 import { message, numeric, optionalRecord, text } from "@/api/client";
 import { selectionView, type SelectionRow } from "@/lib/selection-view";
 import { StudyHeatDetail } from "@/components/study-heat-detail";
 import { StudyValidation } from "@/components/study-validation";
-import { rootModule, studyEntryTab } from "@/lib/study-config";
+import { rootModule, studyEntryTab, moduleConfiguration } from "@/lib/study-config";
+import { modelViews, runStates } from '@/components/study-workbench-config';
+import { SavedRunConclusion } from '@/components/study-saved-conclusion';
 import {
   CableInputs,
   ConditionsInputs,
@@ -44,19 +43,24 @@ import {
 } from "@/components/study-inputs";
 import { StudyMethodForm } from "@/components/study-method-form";
 import { StudyResults } from "@/components/study-results";
-import { StudyTemperature } from "@/components/study-temperature";
 import { SimulationSetup } from "@/components/simulation-setup";
 import { StudyRunControl } from "@/components/study-run-control";
-import { StudyNativeArtifact } from "@/components/study-native-artifact";
-import { StudySweep } from "@/components/study-sweep";
-import { StudyBatch } from "@/components/study-batch";
-import { StudyCompare } from "@/components/study-compare";
 import { StudyPhysicsComparison } from "@/components/study-physics-comparison";
-import { StudySimulation } from "@/components/study-simulation";
 import { entityLabel, savedDomain, type DomainDocument } from "@/lib/domain-fields";
 import type { StudyDefinition } from "@/api/research";
 
-import { moduleDefinitions } from "./study-modules";
+import { moduleDefinitions, moduleBehavior } from "./study-modules";
+// Optional result viewers load only when opened, leaving the input workbench
+// interactive while keeping each viewer's own state and saved evidence intact.
+const FieldView = lazy(() => import('@/features/field/field-view').then(m => ({ default: m.FieldView })));
+const AgentPanel = lazy(() => import('@/features/agent/agent-panel').then(m => ({ default: m.AgentPanel })));
+const StudyHybrid = lazy(() => import('@/components/study-hybrid').then(m => ({ default: m.StudyHybrid })));
+const StudyTemperature = lazy(() => import('@/components/study-temperature').then(m => ({ default: m.StudyTemperature })));
+const StudyNativeArtifact = lazy(() => import('@/components/study-native-artifact').then(m => ({ default: m.StudyNativeArtifact })));
+const StudySweep = lazy(() => import('@/components/study-sweep').then(m => ({ default: m.StudySweep })));
+const StudyBatch = lazy(() => import('@/components/study-batch').then(m => ({ default: m.StudyBatch })));
+const StudyCompare = lazy(() => import('@/components/study-compare').then(m => ({ default: m.StudyCompare })));
+const StudySimulation = lazy(() => import('@/components/study-simulation').then(m => ({ default: m.StudySimulation })));
 export { moduleDefinitions } from "./study-modules";
 export function StudyEntry() {
   const { study } = useStudy();
@@ -84,7 +88,7 @@ export function StudyWorkspace() {
   const projectIndex = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
   const [selected, setSelected] = useState<SelectionRow | undefined>();
   // 以曲线为主的研究默认放大数据区；选型、载流量和温度场类研究默认模型与结果各半（温度场画在画布上）
-  const plotFirst = (key: string) => ["sweep", "batch", "method-compare", "simulation", "hybrid"].includes(key);
+  const plotFirst = (key: string) => moduleBehavior.plotFirst.has(key);
   const [dockMax, setDockMax] = useState(plotFirst(module));
   const [creating, setCreating] = useState(false);
   const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
@@ -110,7 +114,7 @@ export function StudyWorkspace() {
   );
   const run = search.run
     ? runs.find((item) => item.id === search.run)
-    : (["cable", "conditions", "section", "report"].includes(module)
+    : (moduleBehavior.input.has(module) || module === 'report'
         ? runs
         : moduleRuns
       ).at(-1);
@@ -124,7 +128,7 @@ export function StudyWorkspace() {
   for (const key of Object.keys(study.definition.modules || {}))
     if (moduleDefinitions[key] && !enabled.includes(key))
       enabled.splice(enabled.length - 1, 0, key);
-  for (const key of ["sweep", "batch", "method-compare", "simulation"])
+  for (const key of moduleBehavior.supporting)
     if (!enabled.includes(key)) enabled.splice(enabled.length - 1, 0, key);
   if (
     study.definition.task === "operating" &&
@@ -153,8 +157,8 @@ export function StudyWorkspace() {
   }, [run, pendingRun, fieldCase]);
   const historical =
     (run?.freshness === "historical" || isVersionStale(run)) &&
-    (!["cable", "conditions", "section"].includes(module) || !!search.run);
-  const inputModule = ["cable", "conditions", "section"].includes(module);
+    (!moduleBehavior.input.has(module) || !!search.run);
+  const inputModule = moduleBehavior.input.has(module);
   const snapshotInput = inputModule && !!search.run;
   const inputDocument = (
     snapshotInput ? (run ? savedDomain(run) : undefined) : context.domain
@@ -187,16 +191,17 @@ export function StudyWorkspace() {
   const canvasView = search.view || (fieldView ? "field" : "section");
   // 运行后把导体温度直接标在截面电缆上：选型取当前选中或推荐的候选工况
   const annotations = run && !pendingRun ? conductorAnnotations(run, module === "selection" ? selectedRow?.id || view?.recommendation?.id : undefined) : undefined;
-  const methodPin = optionalRecord(study.definition.method);
+  const shownDefinition = viewingOldInput ? optionalRecord(optionalRecord(run?.snapshot).definition) as StudyDefinition : draft?.definition || study.definition;
+  const methodPin = optionalRecord(moduleConfiguration(shownDefinition, module)?.method || shownDefinition.method);
   const pluginEntry = (catalog.data || []).map(optionalRecord).find((row) => text(optionalRecord(row.method).plugin_id) === text(methodPin.plugin_id));
   const capabilityEntry = (Array.isArray(pluginEntry?.capabilities) ? pluginEntry!.capabilities : []).map(optionalRecord).find((cap) => text(cap.id) === text(methodPin.capability));
-  const lastRun = runs.at(-1);
+  const lastRun = run;
   const methodInfo = {
     name: text(pluginEntry?.name) || displayName(text(methodPin.plugin_id)),
     version: text(methodPin.version),
     hpc: text(optionalRecord(pluginEntry?.execution_policy).backend) === "slurm",
     kind: text(capabilityEntry?.title),
-    run: !lastRun ? "尚未运行" : `${["succeeded", "partial"].includes(text(lastRun.status)) ? "已有结果" : ["failed", "rejected"].includes(text(lastRun.status)) ? "运行失败" : "运行中"} · ${new Date(text(lastRun.created)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`,
+    run: !lastRun ? "尚未运行" : `${runStates[text(lastRun.status)]?.label || text(lastRun.status)} · ${new Date(text(lastRun.created)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`,
   };
   // 快速试算：插件声明 preview 且在本机运行的能力，单次计算的研究查看当前输入时开放（选型、扫描的答案跨候选或样本，不用单工况试算代替）
   const preview = useStudyPreview({ module, available: capabilityEntry?.preview === true && !methodInfo.hpc && !search.run && singleAnswer(study) });
@@ -227,6 +232,9 @@ export function StudyWorkspace() {
   // 方法类页签（方法参数、问询条件、扫描设置）属于“改输入”，放在右侧属性区；底部只留结果类页签
   const methodTab = definition.tabs.find((item) => item.id === "parameters" || item.id === "settings")?.id;
   const dockTabs = definition.tabs.filter((item) => item.id !== methodTab);
+  // Keep old deep links, but open the current inspector rather than rendering
+  // a second method form in the result dock.
+  if (methodTab && tab === methodTab) return <Redirect to="/studies/$sid/$module/$tab" params={{ sid, module, tab: dockTabs[0].id }} search={{ ...currentSearch(), inspector: 'method' }} replace />;
   const methodHistorical = !!search.run;
   const methodPanel = !methodTab ? undefined
     : module === "sweep" ? <StudySweep run={run} tab="settings" readOnly={methodHistorical} onSelect={inputProps.onSelect} />
@@ -235,13 +243,13 @@ export function StudyWorkspace() {
   // 答案条：先回答这次计算的结论（选型推荐 / 允许电流与最热导体），切换底部页签时保持可见
   const answer = pendingRun || !run ? null
     : module === "selection" && view && !selectionError ? <StudySelection theme={theme} run={run} selectedId={selectedRow?.id} onSelect={(row) => setSelected(row)} dirty={context.dirty} part="conclusion" />
-      : ["ampacity", "electrothermal", "transient", "sheath-losses"].includes(module) ? <StudyResults run={run} onSelect={inputProps.onSelect} part="conclusion" />
+      : moduleBehavior.resultConclusion.has(module) ? <SavedRunConclusion run={run} />
         : null;
   // 命令栏：只放“做什么”——保存、运行、交付；最右侧给出当前状态
-  const runnable = ["ampacity", "thermal-field", "transient", "sheath-losses", "electrothermal", "sweep", "simulation", "selection"].includes(module) ||
+  const runnable = moduleBehavior.runnable.has(module) ||
     (module === "method-compare" && (!!study.definition.modules?.["method-compare"] || calculatedModule === "method-compare") && !search.compare);
   const latestRun = runs.at(-1);
-  const runState = !latestRun ? "尚未运行" : `最近运行 ${new Date(text(latestRun.created)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} · ${["succeeded", "partial"].includes(text(latestRun.status)) ? "成功" : ["failed", "rejected"].includes(text(latestRun.status)) ? "失败" : "进行中"}`;
+  const runState = !latestRun ? "尚未运行" : `最近运行 ${new Date(text(latestRun.created)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} · ${runStates[text(latestRun.status)]?.label || text(latestRun.status)}`;
   const commandBar = (
     <div className="command-bar" role="toolbar" aria-label="工程命令">
       <div className="command-group" role="group" aria-label="模型">
@@ -290,7 +298,7 @@ export function StudyWorkspace() {
       </div>
       <div className="command-group" role="group" aria-label="交付">
         <span className="command-caption">交付</span>
-        <Button size="compact" variant="ghost" disabled={!run || context.dirty} onClick={() => navigate({ params: { sid, module: "report", tab: "preview" }, search: { ...currentSearch(), generate: true } })}><Icon name="result/report" />生成计算书</Button>
+        <Button size="compact" variant="ghost" disabled={!run || context.dirty || !['succeeded','partial'].includes(text(run.status))} onClick={() => navigate({ params: { sid, module: "report", tab: "preview" }, search: { ...currentSearch(), run: text(run?.id), delivery: '', generate: true } })}><Icon name="result/report" />生成计算书</Button>
       </div>
       <span className="command-state" role="status">{context.dirty ? "模型有未保存修改" : runState}</span>
     </div>
@@ -306,7 +314,7 @@ export function StudyWorkspace() {
           })
         }
       >
-        <AppShell
+        <Suspense fallback={<LoadingState title="正在读取研究模块" />}><AppShell
           title={projectName && title.startsWith(projectName.split(" · ")[0] + " · ") ? title.slice(projectName.split(" · ")[0].length + 3) : title}
           path={projectName}
           status={
@@ -379,7 +387,7 @@ export function StudyWorkspace() {
           {showCanvas && (
             <section className="workbench-canvas" aria-label="模型">
               <div className="workbench-views" role="group" aria-label="模型视图">
-                {([...(fieldView ? [["field", "calc/thermal-field", fieldView.kind === "iec" ? "土壤温度场" : "温度场"]] : []), ["section", "object/section", "敷设截面"], ["cable", "object/cable", "电缆截面"], ...(["thermal-field", "electrothermal", "transient", "sheath-losses", "simulation"].includes(module) ? [["three", "result/field", "三维"]] : [])] as ["field" | "section" | "cable" | "three", string, string][]).map(([value, icon, label]) => (
+                {([...(fieldView ? [["field", "calc/thermal-field", fieldView.kind === "iec" ? "土壤温度场" : "温度场"]] : []), ...modelViews.map(item => [item.id, item.icon, item.label]), ...(["thermal-field", "electrothermal", "transient", "sheath-losses", "simulation"].includes(module) ? [["three", "result/field", "三维"]] : [])] as ["field" | "section" | "cable" | "three", string, string][]).map(([value, icon, label]) => (
                   <button key={value} type="button" aria-pressed={canvasView === value} onClick={() => navigate({ search: { ...currentSearch(), view: value }, replace: true })}>
                     <Icon name={icon} />{label}
                   </button>
@@ -553,7 +561,7 @@ export function StudyWorkspace() {
                 })
               }
               onDelivery={(id) =>
-                navigate({ search: { ...currentSearch(), delivery: id } })
+                navigate({ search: { ...currentSearch(), delivery: id, generate: false } })
               }
             />
           ) : (
@@ -566,7 +574,7 @@ export function StudyWorkspace() {
           </section>
           </div>
           </div>
-        </AppShell>
+        </AppShell></Suspense>
       </Tabs>
       <Dialog
         open={edit}

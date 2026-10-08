@@ -143,3 +143,15 @@ export const moduleDefinitions: Record<
     ],
   },
 };
+
+/** Host navigation is intentionally stable (FRONTEND_REQUIREMENTS §3.2).
+ * Single-method names are replaced by the installed capability title in the
+ * workbench; these flags only select the host renderer and its layout.
+ */
+export const moduleBehavior = {
+  input: new Set(["cable", "section", "conditions"]),
+  plotFirst: new Set(["sweep", "batch", "method-compare", "simulation", "hybrid"]),
+  resultConclusion: new Set(["ampacity", "electrothermal", "transient", "sheath-losses"]),
+  runnable: new Set(["ampacity", "thermal-field", "transient", "sheath-losses", "electrothermal", "sweep", "simulation", "selection"]),
+  supporting: ["sweep", "batch", "method-compare", "simulation"],
+};

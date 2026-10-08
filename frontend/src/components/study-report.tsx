@@ -1,6 +1,6 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useRef, useEffect, useState, useMemo } from "react";
-import { createCurrentDelivery, delivery, deliveryFile, deliveryPdf, deliveryPreview, type ReportAudience } from "@/api/delivery";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef, useEffect, useState } from "react";
+import { createCurrentDelivery, delivery, deliveryFile, deliveryPdf, type ReportAudience } from "@/api/delivery";
 import { Select } from "./ui/select";
 import {
   api,
@@ -44,6 +44,7 @@ function CurrentReport({
   autoGenerate?: boolean;
   onGenerateConsumed?: () => void;
 }) {
+  const queries = useQueryClient();
   const [audience, setAudience] = useState<ReportAudience>("customer");
   const current =
     !!run &&
@@ -57,7 +58,20 @@ function CurrentReport({
     enabled: !!did && !!run,
   });
   const request = useRef({ run: "", id: "" });
-  const preview = useMemo(() => document.data ? deliveryPreview(text(document.data.html)) : "", [document.data]);
+  const [preview, setPreview] = useState('');
+  const [previewError, setPreviewError] = useState<Error>();
+  useEffect(() => {
+    setPreview('');setPreviewError(undefined);
+    if (!document.data) return;
+    let url: string;
+    try {
+      // Preview the actual customer/internal PDF selected for export. The saved
+      // HTML remains an evidence archive, including its diagnostic source keys.
+      url = URL.createObjectURL(deliveryPdf(document.data, audience));
+      setPreview(url);
+    } catch (error) { setPreviewError(error as Error); }
+    return () => { if (url) URL.revokeObjectURL(url); };
+  }, [document.data, audience]);
   async function fresh() {
     if (!run || dirty)
       throw new ApiError(409, "未保存修改或缺少源运行，不能交付");
@@ -88,8 +102,8 @@ function CurrentReport({
       return book;
     },
     onSuccess: (value) => {
+      queries.setQueryData(['delivery', wid, text(value.id)], value);
       onDelivery(text(value.id));
-      downloadBlob(deliveryPdf(value, "customer"), "客户计算书.pdf");
     },
   });
   const download = useMutation({
@@ -104,10 +118,10 @@ function CurrentReport({
       downloadBlob(blob, format === "html" ? "计算书存档.html" : `${audience === "customer" ? "客户" : "内部"}计算书.pdf`);
     },
   });
-  const generated = useRef(false);
+  const generated = useRef('');
   useEffect(() => {
-    if (autoGenerate && current && !did && !generated.current) {
-      generated.current = true;
+    if (autoGenerate && current && !did && generated.current !== text(run?.id)) {
+      generated.current = text(run?.id);
       create.mutate();
       onGenerateConsumed?.();
     }
@@ -147,7 +161,7 @@ function CurrentReport({
         }
       />
     );
-  const error = create.error || download.error || document.error;
+  const error = create.error || download.error || document.error || previewError;
   let boundError: Error | undefined;
   if (document.data)
     try {
@@ -158,7 +172,7 @@ function CurrentReport({
   return (
     <div className="report-module">
       <div className="report-toolbar">
-        <StatusMark kind="current" label="仅当前运行" />
+        <StatusMark kind={create.isPending ? 'running' : create.error ? 'error' : did ? 'current' : 'saved'} label={create.isPending ? '正在生成' : create.error ? '生成失败' : did ? '已生成 · 所选运行' : '所选运行'} />
         <div className="spacer" />
         {did ? (
           <>
@@ -188,9 +202,10 @@ function CurrentReport({
         <ErrorState
           title="计算书不可用"
           description={message(error || boundError)}
+          action={!boundError && create.error ? <Button disabled={create.isPending} onClick={() => create.mutate()}>重新生成</Button> : undefined}
         />
       )}
-      {error || boundError ? null : document.isFetching ? (
+      {error || boundError ? null : create.isPending ? <LoadingState title="正在生成客户计算书" /> : document.isFetching ? (
         <LoadingState title="正在读取计算书" />
       ) : !did ? (
         <EmptyState
@@ -213,8 +228,7 @@ function CurrentReport({
           <iframe
             className="report-frame"
             title="计算书预览"
-            sandbox=""
-            srcDoc={preview}
+            src={preview}
           />
         )
       ) : null}
