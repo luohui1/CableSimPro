@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { agentSession, agentStatus, AgentUnavailable, createSession, decideProposal, sendMessage, type AgentProposal } from "./agent-api";
+import { agentSession, agentStatus, AgentUnavailable, createSession, decideProposal, sendMessage, type AgentProposal, type RecipeCall } from "./agent-api";
 import { applyEvent, buildTurns, newTurn, type Turn } from "./transcript";
 
 export type Decision = { busy?: boolean; error?: string; status?: AgentProposal["status"] };
@@ -56,7 +56,7 @@ export function useAgentSession({ sessionId, workspaceId, studyId, onCreated }: 
     } catch { /* 记录读不到时保留临时显示 */ }
   }
 
-  async function send(text: string) {
+  async function send(text: string, recipe?: RecipeCall) {
     const content = text.trim();
     if (!content || sending || !workspaceId) return;
     setSending(true);
@@ -69,7 +69,7 @@ export function useAgentSession({ sessionId, workspaceId, studyId, onCreated }: 
         currentRef.current = id; setCurrent(id); onCreated?.(id);
       }
       controller.current = new AbortController();
-      await sendMessage(id, content, (event) => { turn = applyEvent(turn, event, liveProposals.current); setLive(turn); }, controller.current.signal);
+      await sendMessage(id, content, (event) => { turn = applyEvent(turn, event, liveProposals.current); setLive(turn); }, controller.current.signal, recipe);
       await settle(id, content);
     } catch (error) {
       const stopped = controller.current?.signal.aborted;

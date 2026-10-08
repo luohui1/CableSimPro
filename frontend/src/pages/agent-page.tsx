@@ -20,8 +20,11 @@ import { PromptBar, type PromptCommand, type PromptReference } from "@/features/
 import { taskState } from "@/features/agent/task-list";
 import { useAgentSession, useAgentStatus } from "@/features/agent/use-agent-session";
 
-const SUGGESTIONS = ["汇总各研究的载流量结论和限制因素", "这个工程里哪些研究还没有结果？", "土壤热阻率改成 1.2 K·m/W，给出方案并试算最高导体温度的变化"];
-/** “/” 菜单来自宿主配方（GET /api/agent/recipes）；选中后填入一句任务开头，模型据此调用 recipe_execute。 */
+const SUGGESTIONS = ["汇总本工程各研究的结论量值和限制因素", "这个工程里哪些研究还没有结果？", "土壤热阻率改成 1.2 K·m/W，给出方案并试算最高导体温度的变化"];
+/**
+ * “/” 菜单来自宿主配方（GET /api/agent/recipes）；选中后填入一句任务开头。无必填参数的配方随消息带上 recipe 字段，
+ * 由宿主确定性执行；需要参数的（如方案对比）仍作自由提问，由模型调用 recipe_execute。
+ */
 const RECIPE_TEXT: Record<string, string> = {
   conclusion_summary: "汇总本工程各研究的结论量值和限制因素",
   missing_inputs: "检查工程模型和各研究还缺哪些输入，按影响排序",
@@ -81,7 +84,12 @@ export function AgentPage() {
     ...projectStudies.map((row) => ({ key: row.id, name: row.title, description: row.task, icon: "object/study" })),
     ...(types.data || []).map((row) => ({ key: text(row.id), name: text(row.name), description: "型号", icon: "object/cable" })),
   ];
-  const send = (value: string) => { void agent.send(value); setDraft(""); };
+  // 以“/”任务开头、且不需要额外参数的配方，交给宿主按固定步骤执行，再请模型作答一次
+  const send = (value: string) => {
+    const recipe = (recipes.data || []).find((row) => RECIPE_TEXT[row.id] && value.trim().startsWith(RECIPE_TEXT[row.id]) && !(row.parameters.required as unknown[] | undefined)?.length);
+    void agent.send(value, recipe ? { id: recipe.id, parameters: {} } : undefined);
+    setDraft("");
+  };
   const toggleSide = () => setSide((open) => { storeSide(!open); return !open; });
 
   const turns = agent.live ? [...agent.turns, agent.live] : agent.turns;

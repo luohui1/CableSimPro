@@ -84,9 +84,11 @@ export const decideProposal = (id: string, decision: "approve" | "reject") =>
   fetch(`/api/agent/proposals/${encodeURIComponent(id)}/${decision}`, { method: "POST" }).then((response) => json<{ status: string }>(response));
 
 /** 发送一条消息并逐个回调服务器推送的事件（SSE：event: 类型，data: JSON）。 */
-export async function sendMessage(sessionId: string, content: string, onEvent: (event: AgentEvent) => void, signal?: AbortSignal) {
+/** 宿主配方调用：带上它时宿主先按配方确定性执行工具步骤，再请模型作答一次（host-inputs.md）。 */
+export type RecipeCall = { id: string; parameters: Record<string, unknown> };
+export async function sendMessage(sessionId: string, content: string, onEvent: (event: AgentEvent) => void, signal?: AbortSignal, recipe?: RecipeCall) {
   const response = await fetch(`/api/agent/sessions/${encodeURIComponent(sessionId)}/messages`, {
-    method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream" }, body: JSON.stringify({ content }), signal,
+    method: "POST", headers: { "Content-Type": "application/json", Accept: "text/event-stream" }, body: JSON.stringify(recipe ? { content, recipe } : { content }), signal,
   });
   if (!response.ok || !response.body) throw await failure(response);
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
