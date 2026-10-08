@@ -79,7 +79,7 @@ try {
   ).toBeVisible();
   await capture("preflight-missing-ready-light-1366");
   await page.getByRole("button", { name: "前往工况输入", exact: true }).click();
-  await expect(page).toHaveURL(/conditions\/inputs/);
+  await expect(page).toHaveURL(/ampacity\/results/);
   await expect(rho).toHaveValue("");
   await rho.fill("1.25");
   await rho.press("Enter");
@@ -96,20 +96,20 @@ try {
   await page.getByRole("option", { name: "单回水平", exact: true }).click();
   await page.getByRole("button", { name: "应用模板", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "保存敷设", exact: true }),
+    page.getByRole("button", { name: "保存修改", exact: true }),
   ).toBeVisible();
   await page.locator(".drawing-svg").first().focus();
   await page.keyboard.press("Control+z");
   await expect(
-    page.getByRole("button", { name: "保存敷设", exact: true }),
+    page.getByRole("button", { name: "保存修改", exact: true }),
   ).toHaveCount(0);
   await page.keyboard.press("Control+Shift+z");
   await expect(
-    page.getByRole("button", { name: "保存敷设", exact: true }),
+    page.getByRole("button", { name: "保存修改", exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Control+s");
   await expect(
-    page.getByRole("button", { name: "保存敷设", exact: true }),
+    page.getByRole("button", { name: "保存修改", exact: true }),
   ).toHaveCount(0);
   checks.push("正式模板请求、页面撤销/重做与保存");
   await page.getByRole("button", { name: "尺寸链", exact: true }).click();
@@ -132,7 +132,7 @@ try {
   expect((await savedDimension).status()).toBe(200);
   await expect(dimensionInput).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "保存敷设", exact: true }),
+    page.getByRole("button", { name: "保存修改", exact: true }),
   ).toHaveCount(0);
   checks.push("尺寸编辑器中Ctrl+S确认数值并保存最新页面状态");
   let aligned;

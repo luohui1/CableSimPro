@@ -76,7 +76,7 @@ def model_for(plugin_id, capability):
 
 
 
-def contracts(research, *, encoded=False, catalog_preload=False):
+def contracts(research, *, encoded=False, catalog_preload=True):
     from backend.plugin_host import PluginHostError
     from .verified_executor import verification_scope
     from .host_api import InputContract
@@ -85,15 +85,19 @@ def contracts(research, *, encoded=False, catalog_preload=False):
     try:
         with research.contract_read_lock, verification_scope():
             registry = research.registry()
-            entries = research.methods()
+            entries = research.methods(registry)
             cache = {'registries': {pid: registry for pid in registry.plugins}}
             if catalog_preload:
-                # Startup only publishes metadata, with a SourceWatch lease around
+                # Discovery only publishes metadata, with a SourceWatch lease around
                 # the whole read. Verify all package bytes/import closures once;
                 # execution receipts and before/after source snapshots remain the
                 # executor's responsibility when an engineering operation starts.
-                for plugin in registry.plugins.values():
-                    plugin.verify()
+                # Package verification is bounded filesystem work, not solver
+                # execution. Four readers overlap Windows path/byte I/O while
+                # keeping every package's normal digest/import-closure check.
+                from concurrent.futures import ThreadPoolExecutor
+                with ThreadPoolExecutor(max_workers=4) as readers:
+                    list(readers.map(lambda plugin: plugin.verify(), registry.plugins.values()))
                 cache['verified'] = {pid: None for pid in registry.plugins}
             # Every hit rechecks the exact installed bytes, including presentation.
             for entry in entries:

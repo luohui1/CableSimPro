@@ -225,7 +225,7 @@ def chapters(runs, audience):
     return sections
 
 
-def render_pdf(runs, audience='customer', *, generated_at=None):
+def render_pdf(runs, audience='customer', *, generated_at=None, attachments=None):
     if audience not in ('customer','internal'):raise ValueError('文档版本须为 customer 或 internal。')
     if not runs:raise ValueError('请选择至少一个已保存运行。')
     for run in runs:
@@ -298,6 +298,17 @@ def render_pdf(runs, audience='customer', *, generated_at=None):
     cover+=paragraph('本文为设计计算资料，不代替厂家试验、完整产品认证或现场校核。')
     story=flow(cover)
     for body in chapters(runs,audience):story.append(PageBreak());story.extend(flow(body))
+    if attachments:
+        from base64 import b64decode
+        from .report_attachments import chapter_html
+        from reportlab.platypus import Image
+        items = attachments.get('cad_images', []) + ([attachments['fem_chapter']] if attachments.get('fem_chapter') else [])
+        for body, item in zip(chapter_html(attachments, audience), items):
+            story.append(PageBreak());story.extend(flow(body))
+            image = Image(BytesIO(b64decode(item['png_base64'], validate=True)))
+            factor = min(doc.width/image.imageWidth, (doc.height*0.65)/image.imageHeight)
+            image.drawWidth = image.imageWidth*factor; image.drawHeight = image.imageHeight*factor
+            story.append(image)
     arranged=[]
     for item in story:
         if isinstance(item,LongTable) and item.wrap(doc.width,doc.height)[1]<doc.height-45:

@@ -1,5 +1,5 @@
 import { entityLabel } from "@/lib/domain-fields";
-import { useRef, useState } from "react";
+import { useRef, useState, type ComponentProps } from "react";
 import { api, ApiError, numeric, record, responseData } from "@/api/client";
 import type { components } from "@/api/generated/schema";
 import {
@@ -88,13 +88,14 @@ export function StudyDrawing({
   kind,
   onSelect,
   annotations,
+  run, fieldCase, viewportRef, onExport, preview, onPropose,
 }: {
   document: DomainDocument;
   historical: boolean;
   kind: "cable" | "section" | "scene";
   onSelect: (selection: InputSelection) => void;
   annotations?: Record<string, { text: string; emphasis?: boolean }>;
-}) {
+} & Pick<ComponentProps<typeof StudyGeometry>, 'run' | 'fieldCase' | 'viewportRef' | 'onExport' | 'preview' | 'onPropose'>) {
   const context = useStudy();
   const current = useRef(context);
   current.current = context;
@@ -237,6 +238,7 @@ export function StudyDrawing({
           historical={historical}
           selected={selection}
           onSelect={selectSection}
+          run={run} fieldCase={fieldCase} viewportRef={viewportRef} onExport={onExport} preview={preview} onPropose={onPropose}
         />
       ) : (
         <LayingSection

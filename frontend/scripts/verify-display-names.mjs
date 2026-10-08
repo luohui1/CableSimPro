@@ -25,6 +25,10 @@ async function go(route) {
     timeout: 60000,
   });
   await settle(page);
+  const inputView = new URL(route,base).hash;
+  if (inputView === '#layers') await page.getByRole('button',{name:'分层参数',exact:true}).click();
+  if (inputView === '#coordinates') await page.locator('.drawing-object[role="button"][data-section-object^="cable/"]').first().click();
+  if (inputView === '#three-dimensional') await page.getByRole('button',{name:'三维',exact:true}).click();
   await expect(
     page.locator(
       '.provider-state [aria-busy="true"],.main-content .state-view[aria-busy="true"]',
@@ -103,8 +107,11 @@ try {
     seed.types.map(item => [item.workspace,item.name]).sort());
   assert.ok(types.some((t) => t.name === "YJV22-8.7/15 3×300"));
   assert.ok(types.some((t) => t.name === "YJLW03-64/110 1×800"));
-  const route = (s, module, tab) =>
-    `/studies/${s.id}/${module}/${tab}?workspace=${s.wid}`;
+  const route = (s, module, tab) => {
+    if (['cable','section','conditions'].includes(module)) return `/studies/${s.id}?workspace=${s.wid}&view=${module==='cable'?'cable':'section'}&inspector=input#${tab}`;
+    if (['parameters','settings'].includes(tab)) return `/studies/${s.id}/${module}/${module==='sweep'?'curve':module==='thermal-field'?'field':'results'}?workspace=${s.wid}&inspector=method`;
+    return `/studies/${s.id}/${module}/${tab}?workspace=${s.wid}`;
+  };
   const routes = [
     "/",
     "/studies",

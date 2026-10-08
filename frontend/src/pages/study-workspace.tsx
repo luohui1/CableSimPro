@@ -48,6 +48,9 @@ import { StudyRunControl } from "@/components/study-run-control";
 import { StudyPhysicsComparison } from "@/components/study-physics-comparison";
 import { entityLabel, savedDomain, type DomainDocument } from "@/lib/domain-fields";
 import type { StudyDefinition } from "@/api/research";
+import type { CadImage } from '@/features/cad/types';
+import { caseRun, hydrateCaseInputs } from '@/features/cad/saved-field-controls';
+import { downloadBlob } from '@/lib/download';
 
 import { moduleDefinitions, moduleBehavior } from "./study-modules";
 // Optional result viewers load only when opened, leaving the input workbench
@@ -94,6 +97,7 @@ export function StudyWorkspace() {
   const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
   const [edit, setEdit] = useState(false);
   const [records, setRecords] = useState(false);
+  const [reportImage, setReportImage] = useState<{runId: string; image: CadImage}>();
   const [inputSelection, setInputSelection] = useState<
     InputSelection | undefined
   >();
@@ -155,6 +159,8 @@ export function StudyWorkspace() {
     if (!run || pendingRun) return undefined;
     try { return temperatureView(run, fieldCase); } catch { return undefined; }
   }, [run, pendingRun, fieldCase]);
+  // 场值换算只做一次：每次渲染都新建数组会让场图重算等温线和定位网格，切换属性页时整页卡死
+  const fieldValues = useMemo(() => fieldView?.temperatures.map((kelvin) => kelvin - 273.15), [fieldView]);
   const historical =
     (run?.freshness === "historical" || isVersionStale(run)) &&
     (!moduleBehavior.input.has(module) || !!search.run);
@@ -189,6 +195,13 @@ export function StudyWorkspace() {
   const conductorLimits = (canvasDocument?.cable_types || []).map((cable) => numeric(optionalRecord(optionalRecord(cable.rating).max_conductor_temperature).normal)).filter((value): value is number => value !== null);
   const conductorLimit = conductorLimits.length ? Math.min(...conductorLimits) - 273.15 : undefined;
   const canvasView = search.view || (fieldView ? "field" : "section");
+  const drawingCase = fieldCase || text(fieldView?.case.case_id) || undefined;
+  const drawingInput = useQuery({queryKey:['drawing-saved-input',run?.id,drawingCase],
+    enabled:canvasView === 'three' && !!run && !pendingRun && !context.dirty,
+    queryFn:({signal}) => hydrateCaseInputs(caseRun(run!, drawingCase), signal)});
+  const drawingRun = drawingInput.data || run;
+  const savedDrawingCase = (Array.isArray(optionalRecord(drawingRun?.snapshot).cases) ? optionalRecord(drawingRun?.snapshot).cases as unknown[] : []).map(optionalRecord).find(row => row.case_id === drawingCase);
+  const drawingDocument = optionalRecord(savedDrawingCase?.input).schema_version === 'cablesim.domain/1' ? savedDrawingCase!.input as DomainDocument : canvasDocument;
   // 运行后把导体温度直接标在截面电缆上：选型取当前选中或推荐的候选工况
   const annotations = run && !pendingRun ? conductorAnnotations(run, module === "selection" ? selectedRow?.id || view?.recommendation?.id : undefined) : undefined;
   const shownDefinition = viewingOldInput ? optionalRecord(optionalRecord(run?.snapshot).definition) as StudyDefinition : draft?.definition || study.definition;
@@ -387,18 +400,20 @@ export function StudyWorkspace() {
           {showCanvas && (
             <section className="workbench-canvas" aria-label="模型">
               <div className="workbench-views" role="group" aria-label="模型视图">
-                {([...(fieldView ? [["field", "calc/thermal-field", fieldView.kind === "iec" ? "土壤温度场" : "温度场"]] : []), ...modelViews.map(item => [item.id, item.icon, item.label]), ...(["thermal-field", "electrothermal", "transient", "sheath-losses", "simulation"].includes(module) ? [["three", "result/field", "三维"]] : [])] as ["field" | "section" | "cable" | "three", string, string][]).map(([value, icon, label]) => (
+                {([...(fieldView ? [["field", "calc/thermal-field", fieldView.kind === "iec" ? "土壤温度场" : "温度场"]] : []), ...modelViews.map(item => [item.id, item.icon, item.label]), ["three", "result/field", "三维"]] as ["field" | "section" | "cable" | "three", string, string][]).map(([value, icon, label]) => (
                   <button key={value} type="button" aria-pressed={canvasView === value} onClick={() => navigate({ search: { ...currentSearch(), view: value }, replace: true })}>
                     <Icon name={icon} />{label}
                   </button>
                 ))}
+                {canvasView === 'three' && reportImage?.runId === run?.id && <StatusMark kind="saved" label="三维图已选入计算书" />}
               </div>
               {canvasView === "field" && fieldView ? (
                 <FieldView
                   label={fieldView.kind === "iec" ? "土壤温度场（IEC 解析）" : "温度场"}
                   points={fieldView.points}
                   triangles={fieldView.triangles}
-                  values={fieldView.temperatures.map((kelvin) => kelvin - 273.15)}
+                  values={fieldValues!}
+                  maskObjects={fieldView.kind === "iec"}
                   circles={fieldView.excluded.length
                     ? fieldView.excluded.map((region) => ({ x: region.x, z: region.z, r: region.r, label: canvasDocument ? entityLabel(canvasDocument, region.label) : region.label }))
                     : (fieldView.geometry?.cables || []).map((cable) => ({ x: cable.x, z: cable.z, r: cable.shape.radiusM, label: cable.label }))}
@@ -407,8 +422,13 @@ export function StudyWorkspace() {
                   // IEC 解析场只有土壤区域，导体温限画在色标上没有意义
                   limit={conductorLimit === undefined || fieldView.kind === "iec" ? undefined : { value: conductorLimit, label: `${conductorLimit.toFixed(0)} 限值` }}
                 />
-              ) : (
-                <StudyDrawing document={canvasDocument!} historical={viewingOldInput} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} onSelect={inputProps.onSelect} annotations={annotations} />
+              ) : canvasView === 'three' && drawingInput.isFetching && !drawingInput.data ? <LoadingState title="正在读取保存工况的三维输入" />
+                : canvasView === 'three' && drawingInput.error ? <ErrorState description={message(drawingInput.error)} action={<Button onClick={() => void drawingInput.refetch()}>重新读取</Button>} /> : (
+                <StudyDrawing document={canvasView === 'three' ? drawingDocument! : canvasDocument!} historical={viewingOldInput} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} run={drawingRun} fieldCase={drawingCase} onSelect={inputProps.onSelect} annotations={annotations} onExport={async image => {
+                  if (!run || context.dirty || image.metadata.field?.provisional || image.metadata.field?.runId !== run.id) throw Error('请从所选保存运行的三维结果导出，试算图不能进入计算书。');
+                  setReportImage({runId: text(run.id), image});
+                  downloadBlob(image.blob, '三维视图.png');
+                }} />
               )}
               {canvasView === "field" && fieldView?.kind === "iec" && <p className="field-basis" title={fieldView.limitations.join("；")}>{fieldView.limitations[0]}</p>}
             </section>
@@ -553,6 +573,8 @@ export function StudyWorkspace() {
               did={search.delivery}
               tab={tab}
               dirty={context.dirty}
+              cadImage={reportImage && reportImage.runId === run?.id ? reportImage.image : undefined}
+              runs={runs}
               autoGenerate={search.generate}
               onGenerateConsumed={() =>
                 navigate({

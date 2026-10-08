@@ -43,13 +43,24 @@ try {
     const modules = { cable: ['section','layers','references'], section: ['section','three-dimensional','coordinates','media'], conditions:['inputs'], ampacity:['results','parameters'], selection:['results','settings'], 'thermal-field':['field','samples','parameters','diagnostics','convergence'], sweep:['curve','points','settings'], batch:['space','results','execution'], 'method-compare':['inputs','results','evidence'], simulation:['inputs','results','evidence'], report:['content','sources','preview'], hybrid:['results','validation','sources'], transient:['results','history','field','samples','diagnostics','convergence','parameters'], 'sheath-losses':['results','losses','parameters'], electrothermal:['results','field','samples','parameters','diagnostics','convergence'] };
     for (const [module,tabs] of Object.entries(modules)) {
       const study = studies.find(s => module === 'sweep' ? s.definition.driver.kind === 'sweep' : module === 'method-compare' ? s.definition.driver.kind === 'crosscheck' : ['thermal-field','electrothermal'].includes(module) ? s.definition.title.includes('温度场') : s.definition.driver.kind === 'selection') || studies[0];
-      for (const tab of tabs) routes.push(`/studies/${study.id}/${module}/${tab}?workspace=${study.wid}`);
+      for (const tab of tabs) {
+        const query=`workspace=${study.wid}`;
+        routes.push(['cable','section','conditions'].includes(module)
+          ? `/studies/${study.id}?${query}&view=${module==='cable'?'cable':'section'}&inspector=input#${tab}`
+          : ['parameters','settings'].includes(tab)
+            ? `/studies/${study.id}/${module}/${module==='sweep'?'curve':module==='thermal-field'?'field':'results'}?${query}&inspector=method`
+            : `/studies/${study.id}/${module}/${tab}?${query}`);
+      }
     }
     const type = types.find(t => t.name.startsWith('YJV22')) || types[0];
     for (const [module,tabs] of Object.entries({ structure:['section','three','table','quantities'], requirements:['list','standards','pending'], 'standard-check':['results'], electrical:['results','parameters'], 'short-circuit':['results','parameters'], 'rating-table':['results','parameters'], comparison:['matrix','parameters','geometry'], specification:['content','preview','review','revisions'] })) for (const tab of tabs) routes.push(`/types/${type.id}/${module}/${tab}`);
     for (const route of routes.filter(r => !process.env.AUDIT_FILTER || process.env.AUDIT_FILTER.split(',').some(filter=>r.includes(filter)))) {
       await page.goto(base + route, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await settle(page);
+      const inputView=new URL(route,base).hash;
+      if(inputView==='#layers')await page.getByRole('button',{name:'分层参数',exact:true}).click();
+      if(inputView==='#coordinates')await page.locator('.drawing-object[role="button"][data-section-object^="cable/"]').first().click();
+      if(inputView==='#three-dimensional')await page.getByRole('button',{name:'三维',exact:true}).click();
       await page.locator('.provider-state [aria-busy="true"]').waitFor({state:'hidden',timeout:30000});
       await page.waitForFunction(()=>![...document.querySelectorAll('.main-content .state-view[aria-busy=true]')].some(e=>!e.closest('.cad-viewport')),null,{timeout:30000});
       const cadRoute=route.includes('/three-dimensional') || route.includes('/structure/three');

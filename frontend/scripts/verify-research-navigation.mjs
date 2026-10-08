@@ -19,10 +19,13 @@ try {
   await expect(page.getByRole("table", { name: "保存温度取样" })).toBeVisible();
   await page.getByRole("row").nth(1).focus();
   await page.keyboard.press("Enter");
-  await expect(page.locator(".property-panel h2")).toBeVisible();
+  await expect(page.locator(".workbench-inspector .inspector-block h2").first()).toBeVisible();
   await page.getByRole("tab", { name: "取样", exact: true }).focus();
   await page.keyboard.press("ArrowRight");
-  await expect(page).toHaveURL(/thermal-field\/parameters/);
+  await expect(page).toHaveURL(/thermal-field\/diagnostics/);
+  await page.getByRole('tab', { name: '方法', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: '方法版本', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: '输入', exact: true }).click();
   await page.goBack();
   await expect(page).toHaveURL(/thermal-field\/samples/);
   await page.waitForLoadState("domcontentloaded");
@@ -35,16 +38,18 @@ try {
     for (const theme of ["light", "dark"]) {
       await page.setViewportSize({ width, height });
       await page.goto(base + prefix + "field" + query + "&theme=" + theme);
-      await page
-        .getByRole("combobox", { name: "场图范围", exact: true })
-        .click();
-      await page
-        .getByRole("option", { name: "热点 · 256×", exact: true })
-        .click();
-      await page.getByRole("button", { name: "选择热点", exact: true }).focus();
+      const field=page.locator('.field-view').first();await expect(field).toBeVisible();
+      const contour=field.locator('.field-contour path').first();await expect(contour).toBeVisible();
+      const original=await contour.getAttribute('d');await field.hover();await page.mouse.wheel(0,-1200);
+      await expect(contour).not.toHaveAttribute('d',original);
+      await field.dblclick();await expect(contour).toHaveAttribute('d',original);
+      // The field moved to the canvas; select its saved hotspot through the
+      // current sample table, preserving keyboard/property-link verification.
+      await page.getByRole('tab',{name:'取样',exact:true}).click();
+      await page.getByRole('table',{name:'保存温度取样',exact:true}).getByRole('row').last().focus();
       await page.keyboard.press("Enter");
-      await expect(page.locator(".property-panel h2")).toHaveText(
-        "保存节点热点",
+      await expect(page.locator(".workbench-inspector .inspector-block h2").first()).toHaveText(
+        "最高温度位置",
       );
       await settle(page);
       const overflow = await page.evaluate(
@@ -54,10 +59,10 @@ try {
       );
       expect(overflow).toBe(false);
       const panelOverflow = await page
-        .locator(".property-panel")
+        .locator(".workbench-inspector")
         .evaluate((panel) => panel.scrollWidth > panel.clientWidth);
       expect(panelOverflow).toBe(false);
-      await page.screenshot({
+      if (width === 1366 && theme === 'light') await page.screenshot({
         path: path.join(
           out,
           `thermal-field-hotspot-selected-${theme}-${width}.png`,

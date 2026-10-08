@@ -63,10 +63,7 @@ try {
     "临时参数单位验收",
     coupled.definition.parameters,
   );
-  parameterUrl.pathname = parameterUrl.pathname.replace(
-    /\/results$/,
-    "/parameters",
-  );
+  parameterUrl.searchParams.set('inspector', 'method');
   for (const [width, height] of [
     [1366, 768],
     [1920, 1080],

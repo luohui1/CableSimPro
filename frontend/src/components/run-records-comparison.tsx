@@ -7,7 +7,8 @@ import { entityLabel } from '@/lib/domain-fields';
 import { DataTable, type Column } from './data-table';
 import { Button } from './ui/button';
 import { EmptyState, ErrorState, LoadingState } from './states';
-import { domainFieldUnits, snapshotFieldLabels } from './study-workbench-config';
+import { domainFieldUnits, snapshotFieldLabels, runStates } from './study-workbench-config';
+import { savedRunLabel } from '@/features/field/run-label';
 import './run-records-comparison.css';
 
 type Cell = { value: unknown; unit: string; name?: string; display?: string };
@@ -110,9 +111,9 @@ export function RunRecordsComparison({ workspace, ids }: { workspace: string; id
   ];
   return <section className="run-comparison" aria-label="两次运行对比">
     <h3>保存运行对比</h3>
-    <dl className="reference-list">{sources.map((source, index) => <div key={text(source.run_id)}><dt>运行 {index ? 'B' : 'A'}</dt><dd>{text(source.run_id)}</dd></div>)}</dl>
-    {[['结论量值', headlines], ['限制对象', limiting], ['输入差异（SI）', inputs]].map(([label, rows]) => <DataTable key={String(label)} label={String(label)} columns={columns}
+    <dl className="reference-list">{sources.map((source, index) => <div key={text(source.run_id)}><dt>运行 {index ? 'B' : 'A'}</dt><dd>{savedRunLabel(source, '运行')} · {runStates[text(source.status)]?.label || text(source.status)}</dd></div>)}</dl>
+    {[['结论量值', headlines], ['限制对象', limiting], ...(inputs.length ? [['输入差异（SI）', inputs]] : [])].map(([label, rows]) => <DataTable key={String(label)} label={String(label)} columns={columns}
       groups={label === '输入差异（SI）' ? [...new Set(inputs.map(row => row.id.startsWith('/cases/') ? row.id.split('/').slice(0, 3).join('/') : '研究配置'))].map(id => ({ id, label: id === '研究配置' ? id : displayName(id.split('/').at(-1) || ''), defaultCollapsed: id !== '研究配置', rows: inputs.filter(row => (row.id.startsWith('/cases/') ? row.id.split('/').slice(0, 3).join('/') : '研究配置') === id) })) : [{ id: String(label), label: String(label), rows: rows as Difference[] }]} rowLabel={row => row.name} />)}
-    {!inputs.length && <p role="status">两次保存输入一致。</p>}
+    {!inputs.length && <p role="status">输入相同</p>}
   </section>;
 }

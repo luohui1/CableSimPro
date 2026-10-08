@@ -1,0 +1,2 @@
+/* Saved curve labels are working data, so use the primary text token in both themes. */
+.study-sweep-results .series-chart text { fill: var(--text); }

@@ -9,6 +9,7 @@ import os
 from contextlib import suppress
 import struct
 import json
+import logging
 
 
 @lru_cache(maxsize=1)
@@ -145,14 +146,18 @@ class SourceWatch:
         return name.startswith('backend/plugin_host/') or name in self.shared_files or any(value.startswith(name+'/') for value in self.shared_files)
 
     def snapshot(self):
-        if not self.healthy:return None
+        if not self.healthy:
+            if os.name != 'nt': return None
+            try:self.configure()
+            except OSError:return None
         try:
             if self.handles[0].poll():self.configure()
             changed=False
             for handle in self.handles[1:]:changed=handle.poll() or changed
             if changed:self.load_shared_files()
             return (self.epoch,*(handle.serial for handle in self.handles))
-        except (OSError,UnicodeError,struct.error):
+        except (OSError,UnicodeError,struct.error) as exc:
+            logging.getLogger(__name__).warning('Source notifications unavailable; cached reads invalidated: %s', exc)
             self.close();return None
 
     def close(self):

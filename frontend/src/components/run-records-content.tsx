@@ -8,6 +8,8 @@ import { useState } from 'react';
 import { Button } from './ui/button';
 import { RunRecordsComparison } from './run-records-comparison';
 import { runStates } from './study-workbench-config';
+import { savedRunLabel } from '@/features/field/run-label';
+import { StudyRemoteProgress } from './study-run-control';
 
 const statusLabel = (status: string) => runStates[status]?.label || status;
 const time = (value: unknown) => text(value) ? new Date(text(value)).toLocaleString('zh-CN') : '时间未提供';
@@ -29,12 +31,13 @@ export default function RunRecordsContent({runs, selectedId, onSelect, workspace
     ...(selected.finished ? [{id:'finished', verb:statusLabel(text(selected.status)), status:(selected.status === 'failed' ? 'failed' : 'complete') as ToolTimelineItem['status'], time:time(selected.finished)}] : [{id:'current', verb:statusLabel(text(selected.status)), status:(['running','validating'].includes(text(selected.status)) ? 'running' : 'pending') as ToolTimelineItem['status']}]),
   ] : [];
   return <div className="run-records-content" aria-label="研究运行记录">
+    {selected && <StudyRemoteProgress run={selected} />}
     {workspace && <section aria-label="选择运行对比"><h3>对比两次运行</h3>
       <div className="run-comparison-choices">{[...runs].reverse().map(run => <label className="inspector-lead" key={text(run.id)}>
-        <input type="checkbox" aria-label={`对比运行 ${text(run.id)}`} checked={chosen.includes(text(run.id))}
+        <input type="checkbox" data-run-id={text(run.id)} aria-label={`对比 ${savedRunLabel(run)} · ${statusLabel(text(run.status))}`} checked={chosen.includes(text(run.id))}
           disabled={!['succeeded','partial','failed'].includes(text(run.status)) || chosen.length === 2 && !chosen.includes(text(run.id))}
           onChange={event => { setChosen(ids => event.target.checked ? [...ids, text(run.id)] : ids.filter(id => id !== run.id)); setComparing([]); }} />
-        {time(run.created)} · {statusLabel(text(run.status))}
+        {savedRunLabel(run)} · {statusLabel(text(run.status))}
       </label>)}</div>
       <Button size="compact" disabled={chosen.length !== 2} onClick={() => setComparing([...chosen])}>对比所选运行</Button>
       {comparing.length === 2 && <RunRecordsComparison workspace={workspace} ids={comparing} />}

@@ -73,10 +73,12 @@ class Research:
         seconds even while catalog reads were cache hits. Saved runs continue
         to be verified on demand by the normal read endpoints.
         """
-        # initialize() already built the receipts synchronously. Do not race the
-        # first HTTP cache read with a redundant background lock acquisition.
         if (stop is None or not stop.is_set()) and not self.catalog_read_responses.entries:
-            self.warm_catalogs()
+            self.warm_catalogs(stop)
+        # Windows cancels directory I/O when its issuing thread exits. Keep the
+        # managed watcher owner alive until lifespan shutdown; no polling work.
+        if stop is not None:
+            stop.wait()
 
     def initialize(self):
         with self.store.db(True) as db:
@@ -110,24 +112,24 @@ class Research:
                        "WHERE owner_epoch<>? AND status IN ('accepted','running','validating')",
                        (stamp(), encode({'code': 'HOST_RESTART', 'message': '旧执行未能确认完成；不会自动重算。'}), self.owner_epoch))
 
-        self.warm_catalogs()
-
-    def warm_catalogs(self):
-        """Complete source-only contract reads before the host starts serving.
+    def warm_catalogs(self, stop=None):
+        """Preload source-only contracts in the managed background thread.
 
         No solver is invoked. SourceWatch still invalidates every cached payload
         on publication; an invalid package remains a 409 on its public endpoint.
         """
         from .input_contracts import contracts
         import logging
-        tasks = [(('methods',), lambda: json.dumps(self.methods(), ensure_ascii=False, allow_nan=False).encode()),
-                 (('input-contracts',), lambda: contracts(self, encoded=True, catalog_preload=True))]
+        tasks = [(('input-contracts',), lambda: contracts(self, encoded=True, catalog_preload=True)),
+                 (('methods',), lambda: json.dumps(self.methods(), ensure_ascii=False, allow_nan=False).encode())]
         for key, load in tasks:
+            if stop is not None and stop.is_set():
+                return
             try:self.catalog_read_responses.build(key, None, load, False)
             except (HTTPException, PluginHostError, ValueError, OSError):
                 logging.getLogger(__name__).warning('Plugin catalog warm-up rejected %s', key, exc_info=True)
 
-    def methods(self):
+    def methods(self, registry=None):
         from ..plugin_host.presentation import resources
         return [{'method': self.pin(p), 'name': p.manifest.name, 'description': p.manifest.description,
                  'presentation': p.manifest.presentation.model_dump(mode='json') if p.manifest.presentation else None,
@@ -138,7 +140,7 @@ class Research:
                                       'memory_limit_enforced': False, 'network_isolation_enforced': False,
                                       'parent_death_enforced': os.name == 'nt', 'process_tree_cleanup_enforced': os.name == 'nt'},
                  'capabilities': [c.model_dump(mode='json', by_alias=True, exclude_none=True) for c in p.manifest.capabilities]}
-                for p in self.registry().plugins.values()]
+                for p in (registry or self.registry()).plugins.values()]
 
     def registry(self, plugin_id=None):
         try:
@@ -524,7 +526,7 @@ class Research:
         if run['status'] not in ('failed','interrupted'):
             return run
         snapshot=run['snapshot'];definition=snapshot['definition']
-        if (len(snapshot['cases'])!=1 and not snapshot.get('automatic_convergence')) or definition['crosschecks'] or not hasattr(self.executor,'saved'):
+        if (len(snapshot['cases'])!=1 and not snapshot.get('automatic_convergence') and not definition.get('verification')) or definition['crosschecks'] or not hasattr(self.executor,'saved'):
             raise HTTPException(422,'此恢复入口只回收单工况超算运行；扫描或批量请使用数据集恢复接口。')
         method=definition['method']
         directory,plan=self.executor.saved(rid,method['plugin_id'],method['capability'])
@@ -974,9 +976,9 @@ class Research:
     def comparison(self, wid, ids):
         return compare(self.verified_runs(wid, ids))
 
-    def deliver(self, wid, ids, request_id=None, *, current_only=False):
+    def deliver(self, wid, ids, request_id=None, *, current_only=False, cad_images=None, fem_chapter=None):
         from .report import RENDERER, render
-        encoded_ids = encode([str(rid) for rid in ids])
+        encoded_ids = encode([str(rid) for rid in ids]) if not (cad_images or fem_chapter) else encode({'runs': [str(rid) for rid in ids], 'cad_images': cad_images or [], 'fem_chapter': fem_chapter})
         if request_id is not None:
             with self.store.db() as db:
                 prior = db.execute('SELECT * FROM delivery_requests WHERE workspace=? AND request_id=?', (wid, str(request_id))).fetchone()
@@ -984,6 +986,12 @@ class Research:
                 if prior['run_ids'] != encoded_ids:
                     raise HTTPException(409, '同一请求标识不能用于不同源运行。')
                 return self.delivery(wid, prior['delivery'])
+        attachments = None
+        if cad_images or fem_chapter:
+            if len(ids) != 1:
+                raise HTTPException(422, '带附图或有限元章节的计算书请选择一个主运行。')
+            from .report_attachments import prepare
+            ids, attachments = prepare(self, wid, ids, cad_images or [], fem_chapter)
         runs = self.verified_runs(wid, ids)
         from .convergence import has_temperature_field
         if any(has_temperature_field(r) and r.get('convergence',{}).get('status') != 'converged' for r in runs):
@@ -999,7 +1007,7 @@ class Research:
                     raise HTTPException(422,'IEC/FEM 比较未通过网格与计算域收敛，不能纳入计算书。')
         if current_only and any(r['freshness'] != 'current' for r in runs):
             raise HTTPException(409, '计算书只能纳入当前保存输入的运行；请重新计算或重新选择。')
-        html = render(runs)
+        html = render(runs, attachments=attachments)
         source = [{'run_id': r['id'], 'input_digest': r['input_digest'], 'output_digest': r['output_digest']} for r in runs]
         did, renderer = str(uuid4()), RENDERER
         digest = fingerprint({'renderer': renderer, 'sources': source, 'html': html})

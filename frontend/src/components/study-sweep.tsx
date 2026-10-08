@@ -26,6 +26,7 @@ import { NumberField } from "./ui/number-field";
 import { StudyMethodForm } from "./study-method-form";
 import { downloadCsv } from "@/lib/download";
 import type { InputSelection } from "./study-inputs";
+import './study-sweep.css';
 type ScanForm = {
   path: string;
   minimum: string;
@@ -313,7 +314,7 @@ export function StudySweep({
   const variableLabel = variable?.label.split(" · ").at(-1) || "采样变量";
   return (
     <div
-      className="input-module"
+      className="input-module study-sweep-results"
       data-module-state={
         run?.freshness === "historical" ? "historical" : "success"
       }

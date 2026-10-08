@@ -31,11 +31,12 @@ export async function currentSelection(base) {
     study = studies.find(
       (value) =>
         value.definition.driver.kind === "selection" &&
-        value.definition.driver.minimum === 350,
+        value.definition.method.plugin_id === "cablesim.iec60287" &&
+        value.definition.driver.candidate_ids.length > 0,
     );
     if (study) break;
   }
-  if (!study) throw Error("缺少已保存的真实 350 A 三芯选型输入");
+  if (!study) throw Error("缺少已保存的真实 IEC 候选选型输入");
   const wid = study.workspace,
     sid = study.id,
     prefix = `/api/workspaces/${wid}/studies/${sid}`;

@@ -2,7 +2,7 @@
 from html import escape
 import json
 
-RENDERER = 'cablesim.study-html/17'
+RENDERER = 'cablesim.study-html/18'
 
 
 def formatted(value, digits=1):
@@ -302,11 +302,13 @@ def sweep_answer(run):
     return '<p class="answer" data-section="sweep-basis">'+meaning+'</p>'+table(['采样','允许电流 / A','回路','结果口径'], rows)
 
 
-def render(runs):
+def render(runs, *, attachments=None):
     from .version_status import cover_status
     from .rating_table import is_rating_table
     from .type_specification import render_run_specification
     ratings = [r for r in runs if is_rating_table(r)]
+    if attachments and ratings:
+        raise ValueError('此附图接口用于研究计算书；规格书由型号交付流程生成。')
     if ratings:
         geometry = [r for r in runs if any('x-cablesim.cad-model' in c.get('artifacts', {}) for c in r['output']['cases'])]
         if len(ratings) == 1 and len(runs) == len(geometry)+1 and len(geometry) <= 1:
@@ -353,10 +355,19 @@ def render(runs):
             'td,th{overflow-wrap:anywhere;font-variant-numeric:tabular-nums;border:1px solid #ccc;padding:8px;text-align:left}th{background:#f5f5f3;font-weight:500}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}.answer{font-size:20px;line-height:1.6;border-bottom:1px solid #ddd;padding-bottom:20px}section{break-before:page}details{margin-top:24px}h2{margin-top:36px}h3{margin-top:24px}</style>'
             '<h1>CableSimPro 研究计算书</h1><p>来源为指定运行的已保存结果；导出未重新计算。验证等级仅适用于声明范围，不构成设计签审认证。</p>'
             + ('<p data-version-status="stale">'+escape(cover_status(runs)['display_name'])+'</p>' if cover_status(runs)['status']=='stale' else '')
-            + pdf_downloads(runs) + ''.join(blocks) + '</html>')
+            + pdf_downloads(runs, attachments=attachments) + ''.join(blocks) + attachment_html(attachments) + '</html>')
 
 
-def pdf_downloads(runs):
+def attachment_html(attachments):
+    if not attachments: return ''
+    from .report_attachments import chapter_html
+    parts = chapter_html(attachments)
+    images = attachments.get('cad_images', []) + ([attachments['fem_chapter']] if attachments.get('fem_chapter') else [])
+    body = ''.join('<section data-report-attachment="saved">'+part+'<img style="max-width:100%" alt="保存结果图" src="data:image/png;base64,'+image['png_base64']+'"></section>' for part, image in zip(parts, images))
+    return body + '<script type="application/json" data-report-attachments>'+json.dumps(attachments,ensure_ascii=False).replace('<','\\u003c')+'</script>'
+
+
+def pdf_downloads(runs, *, attachments=None):
     """Both editions are frozen into the same integrity-checked HTML delivery.
 
     Standalone exported HTML supports these download links. A sandboxed app
@@ -369,6 +380,6 @@ def pdf_downloads(runs):
     generated_at=datetime.now(timezone.utc).isoformat(timespec='seconds')
     links=[]
     for audience,label in [('customer','客户版'),('internal','内部审核版')]:
-        payload=b64encode(render_pdf(runs,audience,generated_at=generated_at)).decode('ascii')
+        payload=b64encode(render_pdf(runs,audience,generated_at=generated_at,attachments=attachments)).decode('ascii')
         links.append(f'<a data-report-pdf="{audience}" download="研究计算书-{label}.pdf" href="data:application/pdf;base64,{payload}">下载{label} PDF</a>')
     return '<nav aria-label="计算书 PDF 下载">'+'　'.join(links)+'</nav>'

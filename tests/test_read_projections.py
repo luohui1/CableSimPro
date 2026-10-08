@@ -17,6 +17,43 @@ from backend.plugin_host.registry import Registry
 from test_research import client, study, request
 
 
+@pytest.mark.parametrize('fails', [False, True])
+def test_catalog_concurrent_miss_has_one_loader_and_shared_outcome(monkeypatch, fails):
+    from concurrent.futures import Future, ThreadPoolExecutor
+    from threading import Event
+    from types import SimpleNamespace
+    from backend.kernel import read_responses
+    from backend.kernel.read_responses import ReadResponses
+    cache = ReadResponses(SimpleNamespace())
+    entered, release, joined = Event(), Event(), Event()
+    class Pending(Future):
+        def result(self, timeout=None):
+            joined.set()
+            return super().result(timeout)
+    monkeypatch.setattr(read_responses, 'Future', Pending)
+    monkeypatch.setattr(cache, 'initialize', lambda _: None)
+    monkeypatch.setattr(cache, 'generation', lambda _: (None, 1))
+    monkeypatch.setattr(cache, 'input_identity', lambda _: ())
+    calls = []
+    def load():
+        calls.append(1); entered.set()
+        assert release.wait(5)
+        if fails: raise ValueError('invalid release')
+        return b'[]'
+    with ThreadPoolExecutor(max_workers=2) as workers:
+        first = workers.submit(cache.build, ('catalog',), None, load, False)
+        assert entered.wait(5)
+        second = workers.submit(cache.build, ('catalog',), None, load, False)
+        assert joined.wait(5)
+        release.set()
+        for result in (first, second):
+            if fails:
+                with pytest.raises(ValueError, match='invalid release'): result.result()
+            else: assert result.result() == b'[]'
+    assert calls == [1]
+    assert not cache.inflight
+
+
 def test_metadata_startup_does_not_eagerly_validate_all_history(client,monkeypatch):
     research=client.app.state.research
     monkeypatch.setattr(research,'list_studies',lambda *_a,**_k:pytest.fail('Startup must not load historical study results'))
@@ -220,17 +257,34 @@ def test_method_catalog_is_reused_and_does_not_block_database_reads(client):
     assert client.get(root + '/runs?view=summary').status_code == 200
 
 
-def test_first_catalog_requests_use_startup_receipts(tmp_path, monkeypatch):
-    """The first HTTP read must not start the expensive catalog build."""
+def test_first_catalog_requests_use_background_receipts(tmp_path, monkeypatch):
+    """Once managed warm-up completes, reads reuse its receipts in under 300 ms."""
     from backend.kernel import input_contracts
     from time import perf_counter
-    with TestClient(create_app(tmp_path/'first-read.sqlite')) as client:
+    from threading import Event
+    from backend.kernel.research import Research
+    warmed = Event()
+    original = Research.warm_catalogs
+    def warm(self, stop):
+        original(self, stop)
+        warmed.set()
+    monkeypatch.setattr(Research, 'warm_catalogs', warm)
+    # Package publication in another thread must not masquerade as cache eviction.
+    # Source invalidation itself is covered by the adjacent drift regression.
+    root = Path(__file__).resolve().parents[1]
+    for name in ('backend','cablesim_sdk','plugins/cablesim.thermal-network'):
+        shutil.copytree(root/name, tmp_path/name, ignore=shutil.ignore_patterns('__pycache__','*.pyc','tests'))
+    app = create_app(tmp_path/'first-read.sqlite')
+    app.state.research.executor = VerifiedExecutor(registry=Registry(tmp_path/'plugins'), jobs_root=tmp_path/'jobs')
+    with TestClient(app) as client:
+        assert warmed.wait(20), 'Managed catalogue warm-up did not complete'
         research = client.app.state.research
         assert research.catalog_read_responses.get(('methods',), False)
         assert research.catalog_read_responses.get(('input-contracts',), False)
+        before = research.catalog_read_responses.generation(False)
         for index in range(research.read_responses.MAX_ENTRIES+1):
             research.read_responses.build(('projection',index),list[dict],lambda:[],True)
-        assert research.catalog_read_responses.get(('methods',),False)
+        assert research.catalog_read_responses.get(('methods',),False), (before, research.catalog_read_responses.generation(False), research.catalog_read_responses.watch.healthy)
         assert research.catalog_read_responses.get(('input-contracts',),False)
         def unexpected(*args, **kwargs):
             raise AssertionError('Catalog rebuilt on first HTTP request')

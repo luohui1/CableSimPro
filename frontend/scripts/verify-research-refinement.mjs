@@ -193,7 +193,7 @@ try {
   await expect(object).toBeVisible();
   await object.focus();
   await page.keyboard.press("Enter");
-  await expect(page.locator(".property-panel h2")).toBeVisible();
+  await expect(page.locator(".workbench-inspector .inspector-block h2").first()).toBeVisible();
   await page.getByRole("button", { name: "尺寸链", exact: true }).click();
   const dimension = page.locator(".drawing-dimension-chip.is-editable").first();
   await expect(dimension).toBeVisible();
@@ -205,20 +205,20 @@ try {
   await input.fill(String(Number(old) + 0.1));
   await input.press("Enter");
   await expect(
-    page.getByRole("button", { name: "保存敷设", exact: true }),
+    page.getByRole("button", { name: "保存修改", exact: true }),
   ).toBeVisible();
   await page.locator(".drawing-svg").first().focus();
   await page.keyboard.press("Control+z");
   await expect(
-    page.getByRole("button", { name: "保存敷设", exact: true }),
+    page.getByRole("button", { name: "保存修改", exact: true }),
   ).toHaveCount(0);
   await page.keyboard.press("Control+Shift+z");
   await expect(
-    page.getByRole("button", { name: "保存敷设", exact: true }),
+    page.getByRole("button", { name: "保存修改", exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Control+s");
   await expect(
-    page.getByRole("button", { name: "保存敷设", exact: true }),
+    page.getByRole("button", { name: "保存修改", exact: true }),
   ).toHaveCount(0);
   const models = await request(base, "/api/design/study-cable-models"),
     pin = (await request(base, "/api/input-contracts")).find(
@@ -329,6 +329,7 @@ try {
       ).toBeVisible();
       await capture(`laying-canvas-ready-${theme}-${width}`);
       await go(route(sceneStudy, "section", "three-dimensional", "", theme));
+      await page.getByRole('button', { name: '三维', exact: true }).click();
       await expect(page.locator(".cad-viewport")).toHaveAttribute(
         "aria-busy",
         "false",

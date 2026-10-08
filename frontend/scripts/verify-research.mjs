@@ -40,9 +40,20 @@ await page.route("**/api/**", (route) => {
 const route = (study, module, tab, run = "", theme = "light", delivery = "") =>
   `/studies/${study.id}/${module}/${tab}?workspace=${study.workspace}&run=${run}&theme=${theme}&delivery=${delivery}`;
 async function go(url) {
+  const target = new URL(url, base);
+  const oldInput = target.pathname.match(/^\/studies\/([^/]+)\/(cable|section|conditions)\/([^/]+)$/);
+  if (oldInput) {
+    target.pathname = `/studies/${oldInput[1]}`;
+    target.searchParams.set('view', oldInput[2] === 'cable' ? 'cable' : 'section');
+    target.searchParams.set('inspector', 'input');
+  }
   await page.goto("about:blank");
-  await page.goto(base + url);
+  await page.goto(target.href);
   await settle(page);
+  // The former input-page checks now exercise their real workbench controls.
+  if (oldInput?.[3] === 'layers') await page.getByRole('button', { name: '分层参数', exact: true }).click();
+  if (oldInput?.[3] === 'coordinates') await page.locator('.drawing-object[role="button"][data-section-object^="cable/"]').first().click();
+  if (oldInput?.[3] === 'three-dimensional') await page.getByRole('button', { name: '三维', exact: true }).click();
 }
 async function capture(name) {
   if (/-ready-|-historical-|hotspot-selected/.test(name))
@@ -85,8 +96,8 @@ try {
   });
   await expect(temperature).toHaveValue("25.0");
   await temperature.fill("bad");
-  await page.getByRole("link", { name: "电缆", exact: true }).click();
-  await page.getByRole("link", { name: "工况", exact: true }).click();
+  await page.getByRole('button', { name: '电缆截面', exact: true }).click();
+  await page.getByRole('button', { name: '敷设截面', exact: true }).click();
   await expect(temperature).toHaveValue("bad");
   const beforeInvalid = writes.length;
   await page.keyboard.press("Control+s");
@@ -142,17 +153,17 @@ try {
     "工况非法草稿跨模块保留、无非法请求、Celsius/SI保存、工程师来源、服务端撤销",
   );
 
-  await page.getByRole("link", { name: "电缆", exact: true }).click();
-  await page.getByRole("tab", { name: "分层", exact: true }).click();
+  await page.getByRole('button', { name: '分层参数', exact: true }).click();
   await expect(
-    page.getByRole("textbox", { name: "导体标称截面" }).first(),
-  ).toHaveAttribute("readonly", "");
+    page.locator('[role="gridcell"][data-column-id="area"]').first(),
+  ).toHaveAttribute("data-readonly", "true");
+  await page.keyboard.press('Escape');
   checks.push("引用型号锁定字段只读");
 
-  await page.getByRole("link", { name: "敷设截面", exact: true }).click();
-  await page.getByRole("tab", { name: "坐标", exact: true }).click();
+  await page.getByRole('button', { name: '敷设截面', exact: true }).click();
+  await page.locator('.drawing-object[role="button"][data-section-object^="cable/"]').first().click();
   const coordinate = page
-    .getByRole("textbox", { name: "x 坐标", exact: true })
+    .getByRole("textbox", { name: "水平位置 x", exact: true })
     .first();
   const oldCoordinate = await coordinate.inputValue();
   await coordinate.fill("-0.3");
@@ -164,7 +175,7 @@ try {
   await coordinate.press("Enter");
   await page.keyboard.press("Control+s");
   await expect(
-    page.getByRole("button", { name: "保存敷设", exact: true }),
+    page.getByRole("button", { name: "保存修改", exact: true }),
   ).toHaveCount(0);
   expect(
     (await request(base, workspacePath)).domain.sections[0].placements[0].x,
@@ -172,12 +183,12 @@ try {
   await page.locator("h1").click();
   await page.keyboard.press("Control+z");
   await expect(coordinate).toHaveValue(oldCoordinate);
-  await page.getByRole("tab", { name: "截面", exact: true }).click();
+  await page.getByRole('button', { name: '敷设截面', exact: true }).click();
   expect(
     await page.locator("[data-drawing-mount='laying-section']").count(),
   ).toBe(1);
-  expect(await page.locator("[data-drawing-mount] canvas").count()).toBe(0);
-  checks.push("坐标实际保存/撤销、画布仅预留挂载点");
+  await expect(page.locator('.workbench-canvas svg').first()).toBeVisible();
+  checks.push("坐标实际保存/撤销、真实敷设画布挂载");
 
   // Create one real IEC study through the product, then use its preflight and run controls.
   await go("/studies?theme=light");
@@ -204,7 +215,7 @@ try {
   let rating = (await request(base, `/api/workspaces/${wid}/studies`)).find(
     (value) => value.id === sid,
   );
-  await page.getByRole("tab", { name: "方法参数", exact: true }).click();
+  await page.getByRole("tab", { name: "方法", exact: true }).click();
   await expect(
     page.getByRole("combobox", { name: "方法版本", exact: true }),
   ).toBeVisible();
@@ -419,10 +430,10 @@ try {
   await go(route(fields, "thermal-field", "samples"));
   await page.getByRole("row").nth(1).focus();
   await page.keyboard.press("Enter");
-  await expect(page.locator(".property-panel h2")).toBeVisible();
+  await expect(page.locator(".workbench-inspector .inspector-block h2").first()).toBeVisible();
   await page.getByRole("tab", { name: "取样", exact: true }).focus();
   await page.keyboard.press("ArrowRight");
-  await expect(page).toHaveURL(/thermal-field\/parameters/);
+  await expect(page).toHaveURL(/thermal-field\/diagnostics/);
   await page.goBack();
   await expect(page).toHaveURL(/thermal-field\/samples/);
   await page.waitForLoadState("domcontentloaded");
@@ -444,7 +455,7 @@ try {
         .click();
       await page.getByRole("button", { name: "选择热点", exact: true }).focus();
       await page.keyboard.press("Enter");
-      await expect(page.locator(".property-panel h2")).toHaveText(
+      await expect(page.locator(".workbench-inspector .inspector-block h2").first()).toHaveText(
         "保存节点热点",
       );
       await capture(`thermal-field-hotspot-selected-${theme}-${width}`);

@@ -3,6 +3,7 @@ from collections import OrderedDict
 from contextlib import suppress
 from hashlib import sha256
 from threading import RLock
+from concurrent.futures import Future
 from time import perf_counter
 import sqlite3
 
@@ -22,6 +23,7 @@ class ReadResponses:
         self.research = research
         self.lock = RLock()
         self.entries = OrderedDict()
+        self.inflight = {}
         self.bytes = 0
         self.database = None
         self.source_root = None
@@ -92,23 +94,37 @@ class ReadResponses:
             if before is not None and previous is not None and previous[0] == before:
                 self.entries.move_to_end(key)
                 return previous[2]
-        value = load()
-        adapter = TypeAdapter(model) if not isinstance(value, bytes) else None
-        payload = value if isinstance(value, bytes) else adapter.dump_json(
-            adapter.validate_python(value), by_alias=True, exclude_unset=exclude_unset)
-        identity = self.input_identity(value)
-        with self.lock:
-            after = self.generation(uses_database)
-            # A concurrent commit/publication may make this response usable for
-            # its own read only; it must never become a reusable current receipt.
-            if before is not None and before == after and len(payload) <= self.MAX_BYTES:
-                prior = self.entries.pop(key, None)
-                if prior is not None:self.bytes -= len(prior[2])
-                self.entries[key] = (after, identity, payload)
-                self.bytes += len(payload)
-                while self.bytes > self.MAX_BYTES or len(self.entries) > self.MAX_ENTRIES:
-                    _, old = self.entries.popitem(last=False);self.bytes -= len(old[2])
-        return payload
+            pending_key = (key, before)
+            pending = self.inflight.get(pending_key)
+            owner = pending is None
+            if owner:
+                pending = Future()
+                self.inflight[pending_key] = pending
+        if not owner:
+            return pending.result()  # Worker thread only; never block the event loop.
+        try:
+            value = load()
+            adapter = TypeAdapter(model) if not isinstance(value, bytes) else None
+            payload = value if isinstance(value, bytes) else adapter.dump_json(
+                adapter.validate_python(value), by_alias=True, exclude_unset=exclude_unset)
+            identity = self.input_identity(value)
+            with self.lock:
+                after = self.generation(uses_database)
+                # Publication/commit during this read must not become a reusable receipt.
+                if before is not None and before == after and len(payload) <= self.MAX_BYTES:
+                    prior = self.entries.pop(key, None)
+                    if prior is not None:self.bytes -= len(prior[2])
+                    self.entries[key] = (after, identity, payload)
+                    self.bytes += len(payload)
+                    while self.bytes > self.MAX_BYTES or len(self.entries) > self.MAX_ENTRIES:
+                        _, old = self.entries.popitem(last=False);self.bytes -= len(old[2])
+            pending.set_result(payload)
+            return payload
+        except BaseException as exc:
+            pending.set_exception(exc)
+            raise
+        finally:
+            with self.lock:self.inflight.pop(pending_key, None)
 
     def close(self):
         with self.lock:
