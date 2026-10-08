@@ -29,7 +29,9 @@ def prepare(record,tools,directory=None,closing=None,feedback=None,instructions=
     prompt=[{'role':'system','content':SYSTEM+guidance+'\n宿主上下文（只读）：'+context},*context_builder.messages(record)]
     if feedback:
         identifier='answer-validation-'+str(feedback['attempt'])
-        prompt.extend([{'role':'assistant','content':feedback['draft'],'tool_calls':[{'id':identifier,'type':'function',
+        # 思考模式：历史里出现过思维链后，每条助手消息都要带 reasoning_content 字段（宿主构造的草稿补空串）
+        thinking={'reasoning_content':''} if any('reasoning_content' in message for message in prompt) else {}
+        prompt.extend([{'role':'assistant','content':feedback['draft'],**thinking,'tool_calls':[{'id':identifier,'type':'function',
             'function':{'name':'answer_validation','arguments':'{}'}}]},
             {'role':'tool','tool_call_id':identifier,'content':json.dumps(context_builder.compress_result({
                 'status':'error','summary':'回答未通过核验。只改写被指出的片段：数值按可用证据引用，保留3–4位有效数字，不要照抄全部小数位；无法用两个证据值说明的推导直接删去。本次只能输出解释，不能调用业务工具。',

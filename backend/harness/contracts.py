@@ -15,10 +15,11 @@ WaitReason = Literal['missing_input','scope_confirmation','external_job','capabi
 
 @dataclass(frozen=True)
 class Limits:
-    max_tool_calls: int = 12
-    max_model_requests: int = 12
-    max_steps: int = 40
-    max_active_ms: int = 120000
+    # 思考模式的模型每次请求约 7–11 秒，汇总多个研究常需 15–20 次读取
+    max_tool_calls: int = 24
+    max_model_requests: int = 16
+    max_steps: int = 48
+    max_active_ms: int = 240000
     max_tokens: int = 262144
     max_repair_attempts: int = 2
     lifetime_s: int = 1800

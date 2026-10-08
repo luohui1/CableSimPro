@@ -105,7 +105,7 @@ class Harness:
                     {'status':'ok','finish_reason':reply.finish_reason,'tool_names':[call['name'] for call in reply.tool_calls],
                      'usage_available':all(name in reply.usage for name in ('prompt_tokens','completion_tokens')),'text_received':bool(reply.text)})
                 if not reply.tool_calls:
-                    yield from self.answer_loop(tid,turn,reply.text)
+                    yield from self.answer_loop(tid,turn,reply.text,reply.reasoning)
                     break
                 plan=compile_calls(reply.tool_calls,tools,record['workspace_id'],record['workspace_revision'])
                 with self.research.store.db() as db:task=self.tasks.load(db,tid)
@@ -116,7 +116,7 @@ class Harness:
                         node['preparation_error']={'code':detail.get('code','INPUT_IDENTITY_INVALID') if isinstance(detail,dict) else 'INPUT_IDENTITY_INVALID',
                             'message':redact(str(detail))}
                 revision=self.tasks.add_plan(tid,plan)
-                self.tasks.emit(tid,'chat.message',{'role':'assistant','content':None,'turn_id':turn,
+                self.tasks.emit(tid,'chat.message',{'role':'assistant','content':None,'turn_id':turn,**({'reasoning_content':reply.reasoning} if reply.reasoning else {}),
                     'tool_calls':[{'id':node['id'],'name':node['tool'],'arguments':node['arguments']} for node in plan['nodes']]})
                 for node in plan['nodes']:
                     tool=tools.get(node['tool'])
@@ -155,8 +155,8 @@ class Harness:
             yield self.emit(tid,'error',{'code':code,'message':message})
             if not isinstance(error,ModelError):
                 try:yield from self.closing(tid,turn,message)
-                except ModelError as failure:
-                    yield self.emit(tid,'error',{'code':failure.code,'message':failure.message})
+                except ModelError as closing_error:
+                    yield self.emit(tid,"error",{"code":closing_error.code,"message":closing_error.message})
                     yield from self.fallback(tid,turn)
                 except HTTPException:
                     yield from self.fallback(tid,turn)
@@ -175,7 +175,7 @@ class Harness:
         record=self.tasks.record(tid)
         yield self.emit(tid,'done',{'usage':{name:record['budget'][name] for name in ('prompt_tokens','completion_tokens')}})
 
-    def respond(self,tid,turn,text,*,safe=False,phase='answer',attempt=0,suffix=''):
+    def respond(self,tid,turn,text,*,safe=False,phase='answer',attempt=0,suffix='',reasoning=''):
         record=self.tasks.record(tid)
         observations=[step['result'] for step in record['steps'] if step.get('result')]
         began=next(event['created'] for event in record['events'] if event['type']=='chat.message' and event['data'].get('turn_id')==turn and event['data'].get('role')=='user')
@@ -191,14 +191,14 @@ class Harness:
                 raise
             self.tasks.emit(tid,'answer.accepted',{'turn_id':turn,'phase':phase,'attempt':attempt,'matches':proof})
         text+=suffix
-        self.tasks.emit(tid,'chat.message',{'role':'assistant','content':text,'turn_id':turn})
+        self.tasks.emit(tid,'chat.message',{'role':'assistant','content':text,'turn_id':turn,**({'reasoning_content':reasoning} if reasoning else {})})
         for offset in range(0,len(text),64):yield self.emit(tid,'message.delta',{'text':text[offset:offset+64]})
 
-    def answer_loop(self,tid,turn,text):
+    def answer_loop(self,tid,turn,text,reasoning=''):
         record=self.tasks.record(tid);limit=record['budget']['limits']['max_repair_attempts']
         for attempt in range(limit+1):
             try:
-                yield from self.respond(tid,turn,text,phase='repair' if attempt else 'answer',attempt=attempt)
+                yield from self.respond(tid,turn,text,phase='repair' if attempt else 'answer',attempt=attempt,reasoning=reasoning)
                 return
             except HTTPException as error:
                 yield self.emit(tid,'error',{'code':error.detail['code'],'message':error.detail['message']})
@@ -225,7 +225,7 @@ class Harness:
             if reply.tool_calls:
                 self.tasks.emit(tid,'answer.repair_rejected',{'turn_id':turn,'attempt':attempt+1,'code':'TOOLS_NOT_ALLOWED'})
                 break
-            text=reply.text
+            text,reasoning=reply.text,reply.reasoning
         yield from self.closing(tid,turn,'解释修正次数或可用预算已到上限。')
 
     def fallback(self,tid,turn):
@@ -254,7 +254,7 @@ class Harness:
         self.tasks.emit(tid,'budget.closing',{'turn_id':turn,'reason':reason,'tools_allowed':False,'remaining_goals_completed':False})
         try:
             if reply.tool_calls:raise HTTPException(422,'收尾请求不能调用工具。')
-            yield from self.respond(tid,turn,reply.text,phase='closing',suffix='' if feedback else '\n尚未完成的请求：'+reason)
+            yield from self.respond(tid,turn,reply.text,phase='closing',suffix='' if feedback else '\n尚未完成的请求：'+reason,reasoning=reply.reasoning)
         except HTTPException:
             yield from self.fallback(tid,turn)
 

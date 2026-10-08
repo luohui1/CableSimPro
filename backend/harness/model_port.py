@@ -9,6 +9,8 @@ class ModelReply:
     tool_calls: list[dict]
     usage: dict[str,int]
     finish_reason: str | None = None
+    # 思考模式的思维链：带工具的后续请求必须原样回传（DeepSeek 等），不进回答也不做核验
+    reasoning: str = ''
 
 
 class ModelError(Exception):

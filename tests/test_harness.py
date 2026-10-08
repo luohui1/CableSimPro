@@ -52,6 +52,7 @@ def fake_model(monkeypatch):
             else:
                 text=message['content'];middle=len(text)//2
                 deltas=[{'content':text[:middle]},{'content':text[middle:]}]
+            if message.get('reasoning_content'):deltas.insert(0,{'reasoning_content':message['reasoning_content']})
             for delta in deltas:
                 self.wfile.write(('data: '+json.dumps({'choices':[{'delta':delta,'finish_reason':None}]})+'\n\n').encode())
             self.wfile.write(('data: '+json.dumps({'choices':[{'delta':{},'finish_reason':choice['finish_reason']}],
@@ -158,6 +159,27 @@ def test_settings_page_connection_is_used_and_its_key_never_returned(client,fake
     assert bad.status_code==422 and bad.json()['detail']['code']=='LLM_BASE_INVALID'
     assert client.delete('/api/agent/settings').json()['source']=='environment'
     assert client.get('/api/agent/status').json()['model']=='deepseek-flash'
+
+
+def test_a_made_up_study_id_is_a_tool_diagnostic_not_a_harness_failure(client,fake_model):
+    script,_=fake_model;w=client.post('/api/workspaces',json={}).json();tid=session(client,w)
+    script.extend([call('study_preflight',{'study_id':'f2c0f6f2-0ccb-4b3e-b3bb-be79ae4b6a52'}),answer('该研究不存在。')])
+    events=send(client,tid,'预检那个研究。')
+    assert [data['status'] for kind,data in events if kind=='tool.result']==['error']
+    assert not any(kind=='error' and data['code']=='HARNESS_FAILED' for kind,data in events)
+
+
+def test_thinking_mode_reasoning_is_passed_back_on_every_later_request(client,fake_model):
+    script,requests=fake_model;w=client.post('/api/workspaces',json={}).json();tid=session(client,w)
+    thought=call('workspace_list');thought['choices'][0]['message']['reasoning_content']='先读工程再回答。'
+    script.extend([thought,answer('已读取工程。')]);send(client,tid,'这个工程有哪些输入？')
+    replayed=[message for message in requests[-1]['messages'] if message['role']=='assistant']
+    assert replayed and replayed[0]['reasoning_content']=='先读工程再回答。'
+    script.append(answer('仍是同一个工程。'));send(client,tid,'再确认一次。')
+    assert all('reasoning_content' in message for message in requests[-1]['messages'] if message['role']=='assistant')
+    # 被核验退回重写时，宿主构造的草稿消息同样带上该字段
+    script.extend([answer('工程里共有 987654 个输入。'),answer('已读取工程。')]);send(client,tid,'输入有多少？')
+    assert 'tools' not in requests[-1] and all('reasoning_content' in message for message in requests[-1]['messages'] if message['role']=='assistant')
 
 
 def test_domain_proposals_show_display_units_and_reject_without_writing(client,fake_model):

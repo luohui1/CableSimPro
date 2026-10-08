@@ -11,7 +11,8 @@ from ..security import redact
 
 
 class OpenAICompatibleProvider:
-    MAX_RESPONSE_BYTES = 512*1024
+    MAX_RESPONSE_BYTES = 1024*1024  # 回答、思维链与工具参数的正文
+    MAX_STREAM_BYTES = 16*1024*1024  # 含 SSE 外壳的原始字节；思考模式每个词元一行，外壳远大于正文
     MAX_ARGUMENT_BYTES = 32*1024
 
     def __init__(self,settings=None):
@@ -41,7 +42,9 @@ class OpenAICompatibleProvider:
             elapsed=round((perf_counter()-started)*1000)
             if response.status_code in (401,403):return {'ok':False,'code':'LLM_AUTH_FAILED','message':'密钥不被接受（%d）。'%response.status_code,'latency_ms':elapsed}
             if response.status_code==404:return {'ok':False,'code':'LLM_NOT_FOUND','message':'服务地址或模型名不对（404）。','latency_ms':elapsed}
-            if response.status_code!=200:return {'ok':False,'code':'LLM_PROVIDER_ERROR','message':'模型服务拒绝了请求（%d）。'%response.status_code,'latency_ms':elapsed}
+            if response.status_code!=200:
+                reason=self.refusal(response)
+                return {'ok':False,'code':'LLM_PROVIDER_ERROR','message':'模型服务拒绝了请求（%d）'%response.status_code+('：'+reason if reason else '。'),'latency_ms':elapsed}
             data=response.json()
             if not isinstance(data.get('choices'),list) or not data['choices']:
                 return {'ok':False,'code':'LLM_RESPONSE_INVALID','message':'地址可达，但返回的不是 OpenAI 兼容的对话结果。','latency_ms':elapsed}
@@ -63,12 +66,13 @@ class OpenAICompatibleProvider:
         if parsed.scheme not in ('http','https') or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment or len(model)>100:
             raise ModelError('LLM_CONFIGURATION_INVALID','模型配置不合法；地址须为无凭据、查询串或片段的 HTTP(S) API 基址。')
         if timeout_s<=0:raise ModelError('BUDGET_EXCEEDED','模型请求已无剩余时间预算。')
-        body={'model':model,'messages':messages,'stream':True,'stream_options':{'include_usage':True},'max_tokens':2048}
+        # 思考模式下思维链也计入输出上限；2048 会在调用工具前被截断
+        body={'model':model,'messages':messages,'stream':True,'stream_options':{'include_usage':True},'max_tokens':8192}
         if tools:body.update(tools=tools,tool_choice='auto',parallel_tool_calls=False)
         # No endpoint, header or credential enters model messages or audit payloads.
         started=perf_counter()
-        chunks,calls,usage,finish=[],{}, {},None
-        received=0
+        chunks,thinking,calls,usage,finish=[],[],{}, {},None
+        received=payload=0
         try:
             timeout=httpx.Timeout(timeout_s,connect=min(5.,timeout_s))
             with httpx.Client(timeout=timeout,follow_redirects=False) as client:
@@ -76,7 +80,9 @@ class OpenAICompatibleProvider:
                     headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'},json=body) as response:
                     if response.status_code!=200:
                         code='LLM_AUTH_FAILED' if response.status_code in (401,403) else 'LLM_PROVIDER_ERROR'
-                        raise ModelError(code,'模型服务认证失败。' if code=='LLM_AUTH_FAILED' else '模型服务拒绝了请求，请核对模型配置或稍后重试。')
+                        reason=self.refusal(response)
+                        raise ModelError(code,('模型服务认证失败（HTTP %d）' if code=='LLM_AUTH_FAILED' else '模型服务拒绝了请求（HTTP %d）')%response.status_code
+                            +('：'+reason if reason else '。请核对模型配置或稍后重试。'))
                     if 'text/event-stream' not in response.headers.get('content-type',''):
                         raw=b''
                         for part in response.iter_bytes():
@@ -86,7 +92,7 @@ class OpenAICompatibleProvider:
                         return self.parse_response(json.loads(raw))
                     for line in response.iter_lines():
                         received+=len(line.encode('utf-8'))
-                        if received>self.MAX_RESPONSE_BYTES:raise ModelError('LLM_RESPONSE_TOO_LARGE','模型响应超过大小上限。')
+                        if received>self.MAX_STREAM_BYTES:raise ModelError('LLM_RESPONSE_TOO_LARGE','模型响应超过大小上限。')
                         if perf_counter()-started>timeout_s:raise ModelError('LLM_TIMEOUT','模型请求超过剩余时间预算。')
                         if not line.startswith('data:'):continue
                         raw=line[5:].strip()
@@ -97,6 +103,11 @@ class OpenAICompatibleProvider:
                         if data.get('usage'):usage=self.usage(data['usage'])
                         for choice in data.get('choices',[])[:1]:
                             delta=choice.get('delta',{})
+                            payload+=sum(len(str(delta.get(name) or '').encode('utf-8')) for name in ('content','reasoning_content'))
+                            if payload>self.MAX_RESPONSE_BYTES:raise ModelError('LLM_RESPONSE_TOO_LARGE','模型回答超过大小上限。')
+                            if delta.get('reasoning_content'):
+                                if not isinstance(delta['reasoning_content'],str):raise ValueError('reasoning text required')
+                                thinking.append(delta['reasoning_content'])
                             if delta.get('content'):
                                 if not isinstance(delta['content'],str):raise ValueError('text required')
                                 chunks.append(delta['content'])
@@ -110,7 +121,7 @@ class OpenAICompatibleProvider:
                                 if len(current['arguments'].encode())>self.MAX_ARGUMENT_BYTES:raise ValueError('arguments limit')
                             finish=choice.get('finish_reason') or finish
             if finish=='length':raise ModelError('LLM_OUTPUT_TRUNCATED','模型输出达到上限；未执行不完整的工具意图。')
-            return ModelReply(redact(''.join(chunks)),self.calls([calls[index] for index in sorted(calls)]),usage,finish)
+            return ModelReply(redact(''.join(chunks)),self.calls([calls[index] for index in sorted(calls)]),usage,finish,redact(''.join(thinking)))
         except ModelError:
             raise
         except httpx.TimeoutException:
@@ -119,6 +130,24 @@ class OpenAICompatibleProvider:
             raise ModelError('LLM_CONNECTION_FAILED','无法连接模型服务；请核对宿主网络与配置。') from None
         except (ValueError,TypeError,KeyError,AttributeError):
             raise ModelError('LLM_RESPONSE_INVALID','模型服务响应或工具参数格式不合法；未执行不完整意图。') from None
+
+    @staticmethod
+    def refusal(response):
+        """The provider's own short reason (e.g. a 400 message), credentials hidden; never the request."""
+        try:
+            raw=b''
+            for part in response.iter_bytes():
+                raw+=part
+                if len(raw)>4096:break
+            text=raw[:4096].decode('utf-8','replace')
+            try:
+                error=json.loads(text).get('error')
+                text=error.get('message') if isinstance(error,dict) else str(error or text)
+            except (ValueError,AttributeError):
+                pass
+            return redact(' '.join(str(text).split()))[:240]
+        except Exception:
+            return ''
 
     @staticmethod
     def usage(value):
@@ -144,4 +173,6 @@ class OpenAICompatibleProvider:
         if choice.get('finish_reason')=='length':raise ModelError('LLM_OUTPUT_TRUNCATED','模型输出达到上限。')
         calls=[{'id':call['id'],'name':call['function']['name'],'arguments':call['function']['arguments']}
             for call in message.get('tool_calls',[])]
-        return ModelReply(redact(text),self.calls(calls),self.usage(data.get('usage') or {}),choice.get('finish_reason'))
+        reasoning=message.get('reasoning_content') or ''
+        if not isinstance(reasoning,str):raise ValueError('reasoning text required')
+        return ModelReply(redact(text),self.calls(calls),self.usage(data.get('usage') or {}),choice.get('finish_reason'),redact(reasoning))
