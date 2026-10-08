@@ -11,8 +11,9 @@ interface Gesture {
   operation: 'pan' | 'move' | 'width' | 'height'; id: string; moved: boolean;
   next: Section | null; fields: string[];
 }
-export function useSectionGesture({ props, section, view, size, snap, followEnclosure, tool, editable, setView, commit, report }: {
+export function useSectionGesture({ props, section, view, objectView = view, size, snap, followEnclosure, tool, editable, setView, commit, report }: {
   props: LayingSectionProps; section: Section | null; view: DrawingView; size: PixelSize; snap: boolean; followEnclosure: boolean;
+  objectView?: DrawingView;
   tool: 'select' | 'pan'; editable: boolean; setView: (view: DrawingView) => void;
   commit: (section: Section, edit: SectionEdit) => Promise<void>; report: (error: unknown) => void;
 }) {
@@ -49,7 +50,8 @@ export function useSectionGesture({ props, section, view, size, snap, followEncl
     props.onSelectionChange?.(selection);
     if (tool !== 'pan' && !editable) return;
     svg.current.focus(); svg.current.setPointerCapture(event.pointerId);
-    gesture.current = { pointerId: event.pointerId, section, view, size: { ...size }, bounds: svg.current.getBoundingClientRect(), start: screenToWorld(pointerPosition(event), view, size),
+    const transform = tool === 'pan' ? view : objectView;
+    gesture.current = { pointerId: event.pointerId, section, view: transform, size: { ...size }, bounds: svg.current.getBoundingClientRect(), start: screenToWorld(pointerPosition(event), transform, size),
       selection, operation: tool === 'pan' ? 'pan' : operation, id: crypto.randomUUID(), moved: false, next: null, fields: [] };
   };
   function beginBackground(event: ReactPointerEvent<SVGSVGElement>) {

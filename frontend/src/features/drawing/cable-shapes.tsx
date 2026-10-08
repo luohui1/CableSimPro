@@ -28,33 +28,34 @@ export function CableShapes({ shape, center = { x: 0, z: 0 }, view, size, select
   </g>;
 }
 
-export function LayerNumbers({ rings, view, size, selectedId, onSelect }: {
+export function LayerNumbers({ rings, view, size, selectedId, onSelect, equivalentCores = [] }: {
   rings: readonly DrawingRing[]; view: DrawingView; size: PixelSize; selectedId?: string; onSelect: (target: LayerTarget) => void;
+  equivalentCores?: readonly string[];
 }) {
   const selected = rings.find(ring => ring.id === selectedId);
   const coreRings = (id?: string) => rings.filter(ring => ring.target.scope === 'core' && ring.target.coreId === id);
-  // 标注沿同一条射线：从电缆中心穿过一根线芯中心向外。优先选中层所在线芯，否则取最靠右（屏幕上）的线芯。
   const cores = [...new Set(rings.flatMap(ring => ring.target.scope === 'core' ? [ring.target.coreId] : []))];
-  const centre = (id: string) => { const p = coreRings(id)[0]?.profile; return p ? { x: p.x, z: p.z } : { x: 0, z: 0 }; };
-  const coreId = selected?.target.scope === 'core' ? selected.target.coreId
-    : cores.reduce<string | undefined>((best, id) => best === undefined || centre(id).x - 0.3 * centre(id).z > centre(best).x - 0.3 * centre(best).z ? id : best, undefined);
-  const c = coreId ? centre(coreId) : { x: 0, z: 0 };
-  const direction = Math.hypot(c.x, c.z) > 1e-9 ? Math.atan2(c.z, c.x) : -Math.PI / 6;
+  const coreId = selected?.target.scope === 'core' ? selected.target.coreId : cores[0];
+  const coreX = coreRings(coreId)[0]?.profile.x || 0;
+  // Lower support points preserve inner-to-outer order, including a top trefoil core.
+  const direction = -Math.PI / 2;
   const labels = [...coreRings(coreId), ...rings.filter(ring => ring.target.scope === 'common')].map(ring => {
     const profile = ring.innerProfile ? { ...ring.profile, offset: (ring.profile.offset + ring.innerProfile.offset) / 2,
       radius: (ring.profile.radius + ring.innerProfile.radius) / 2 } : ring.profile;
-    return { ring, anchor: worldToScreen(profileSupportPoint(profile, direction), view, size) };
-  }).sort((a, b) => a.anchor.y - b.anchor.y);
-  // 标签一列放在射线朝向的一侧，顺序与锚点一致，因此引线两两不交叉。
-  const right = labels.length ? labels[labels.length - 1].anchor.x >= size.width / 2 || direction > -Math.PI / 2 && direction < Math.PI / 2 : true;
-  const top = 28, bottom = size.height - 92;
-  const step = Math.min(44, (bottom - top) / Math.max(1, labels.length));
-  const first = Math.max(top, Math.min(bottom - step * (labels.length - 1), labels.reduce((sum, item) => sum + item.anchor.y, 0) / Math.max(1, labels.length) - step * (labels.length - 1) / 2));
-  const x = right ? size.width - 20 : 20;
-  const knee = right ? size.width - 128 : 128;
+    const point = ring.target.scope === 'common' && profile.kind === 'circle'
+      ? { x: coreX, z: profile.z - Math.sqrt((profile.radius + profile.offset) ** 2 - (coreX - profile.x) ** 2) }
+      : profileSupportPoint(profile, direction);
+    return { ring, anchor: worldToScreen(point, view, size) };
+  }).sort((a, b) => a.ring.number - b.ring.number);
+  const top = 72, bottom = Math.max(top, size.height - 64);
+  const capacity = Math.max(1, Math.floor((bottom - top) / 34) + 1);
+  const columns = labels.length > capacity ? 2 : 1;
+  const rows = Math.ceil(labels.length / columns), step = Math.min(40, (bottom - top) / Math.max(1, rows - 1));
   return <g className="drawing-layer-numbers" aria-label="结构层编号">
     {labels.map(({ ring, anchor }, index) => {
-      const y = first + index * step;
+      const column = Math.floor(index / rows), right = columns === 1 || column === 1;
+      const x = right ? size.width - 20 : 20, knee = right ? size.width - 168 : 168;
+      const y = top + index % rows * step;
       return <g key={ring.id} role="button" tabIndex={0} aria-label={`选择层号 ${ring.number} ${ring.name}`}
         aria-pressed={selectedId === ring.id} className={selectedId === ring.id ? 'is-selected' : ''}
         data-layer-number={ring.number} data-label-column={right ? 'right' : 'left'} data-label-core={ring.target.scope === 'core' ? ring.target.coreId : undefined} onClick={() => onSelect(ring.target)} onKeyDown={event => {
@@ -64,5 +65,8 @@ export function LayerNumbers({ rings, view, size, selectedId, onSelect }: {
         <text className="drawing-layer-name" x={x + (right ? -20 : 20)} y={y - 5}
           textAnchor={right ? 'end' : 'start'}>{ring.name.split(' · ').at(-1)}</text><title>{ring.name}</title></g>;
     })}
+    {cores.length > 1 && <text className="drawing-text" data-core-equivalence x="16" y={size.height - 20}>
+      {equivalentCores.length ? `${cores.map((id, i) => equivalentCores.includes(id) ? `芯 ${i + 1}` : '').filter(Boolean).join('、')} 同芯 ${cores.indexOf(coreId!) + 1}` : `显示芯 ${cores.indexOf(coreId!) + 1} · 其他芯可点选查看`}
+    </text>}
   </g>;
 }

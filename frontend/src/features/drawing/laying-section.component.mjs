@@ -45,7 +45,7 @@ export async function verifyLayingSection(page) {
   }
   await component.locator('[data-drawing-canvas]').focus(); await page.keyboard.press('Control+s');
   assert.ok((await snapshot(page, 'laying')).commands.includes('save'));
-  await expect(component.locator('[data-section-overview]')).toBeVisible();
+  await expect(component.locator('[data-section-detail], [data-section-overview]')).toBeVisible();
   for (const state of ['empty', 'loading', 'error', 'historical', 'success']) {
     await page.evaluate(value => window.canvasGallery.setState(value), state);
     await expect(component).toHaveAttribute('data-laying-section-state', state);

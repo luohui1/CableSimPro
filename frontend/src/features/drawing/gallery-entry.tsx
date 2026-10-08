@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { CableSection } from './cable-section';
 import { LayingSection } from './laying-section';
+import { CompositionGallery } from './composition-gallery';
 import { demoDocument, demoTemplate } from '../cad/gallery-fixtures';
 import type { GalleryEntry } from '../cad/gallery-support';
 import type { CanvasState } from '../cad/types';
@@ -92,6 +93,7 @@ export function LayingGallery({ state }: { state: CanvasState }) {
   </section>;
 }
 export const galleryEntries: readonly GalleryEntry[] = [
+  { id: 'composition', title: '截面构图回归', Component: CompositionGallery },
   { id: 'cable-section', title: '电缆截面图', Component: CableGallery },
   { id: 'laying-section', title: '敷设截面编辑器', Component: LayingGallery },
 ];

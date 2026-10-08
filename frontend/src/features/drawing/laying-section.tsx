@@ -1,8 +1,10 @@
-import { useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useRef, useState } from 'react';
 import { Button, IconButton } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { EmptyState, ErrorState, LoadingState, StaleBanner } from '@/components/states';
-import { fitBounds, worldToScreen, zoomView } from './coordinates';
+import { worldToScreen, zoomView } from './coordinates';
+import { sectionComposition } from './section-composition';
+import { SectionLabels } from './section-labels';
 import { DimensionEditor } from './dimension-editor';
 import { moveSelection, sectionGeometry, validateSectionEdit } from './section-geometry';
 import { savedThermal } from '../cad/saved-thermal';
@@ -37,6 +39,8 @@ export function LayingSection(input: LayingSectionProps) {
   const [snap, setSnap] = useState(true);
   const [followEnclosure, setFollowEnclosure] = useState(true);
   const [showDimensions, setShowDimensions] = useState(props.showDimensions || false);
+  const [showResults, setShowResults] = useState(true);
+  const clipId = useId();
   const [template, setTemplate] = useState((props.templates || defaultTemplates)[0]?.id || 'single');
   const [problem, setProblem] = useState('');
   const [busy, setBusy] = useState(false);
@@ -49,10 +53,11 @@ export function LayingSection(input: LayingSectionProps) {
     try { return { geometry: sectionGeometry(props.document, section), error: '' }; }
     catch (error) { return { geometry: null, error: error instanceof Error ? error.message : String(error) }; }
   }, [props.document, section]);
-  // 全览时顶部留出浮动工具条的高度，地表线与标高不被遮挡
-  const toolbarReserve = 56;
-  const fitted = calculated.geometry ? fitBounds(calculated.geometry.bounds, { width: size.width, height: Math.max(1, size.height - toolbarReserve) }) : null;
-  const camera = view || (fitted ? { ...fitted, z: fitted.z + toolbarReserve / 2 * fitted.widthM / Math.max(1, size.width) } : { x: 0, z: -.5, widthM: 2 });
+  const plotTop = host.current?.closest('.workbench-canvas') ? 96 : 56;
+  const composition = calculated.geometry && section ? sectionComposition(section, calculated.geometry, size, plotTop) : null;
+  const detail = !view ? composition?.detail : undefined;
+  const camera = view || composition?.main || { x: 0, z: -.5, widthM: 2 };
+  const objectCamera = detail?.view || camera;
   const report = (error: unknown) => setProblem(error instanceof Error ? error.message : String(error));
   async function commit(next: Section, edit: SectionEdit) {
     if (pending.current) throw new Error('上一项改动正在提交，请稍后再试。');
@@ -66,7 +71,7 @@ export function LayingSection(input: LayingSectionProps) {
     try { await props.onChange?.(next, edit); }
     finally { pending.current = false; setBusy(false); }
   }
-  const gesture = useSectionGesture({ props, section, view: camera, size, snap, followEnclosure, tool, editable,
+  const gesture = useSectionGesture({ props, section, view: camera, objectView: objectCamera, size, snap, followEnclosure, tool, editable,
     setView, commit, report });
   const displayed = gesture.preview || section;
   const currentGeometry = useMemo(() => {
@@ -80,10 +85,12 @@ export function LayingSection(input: LayingSectionProps) {
     const value = thermal.conductors.find(t => t.id === c.id && (!t.coreId || t.coreId === core))?.value;
     return value === undefined ? [] : [[r.id, '#' + turbo((value - thermal.minimum) / Math.max(1e-6, thermal.maximum - thermal.minimum)).map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('')]];
   }))])) : undefined;
-  const annotations = trial.enabled ? thermal ? Object.fromEntries(thermal.conductors.map(c => [c.id, { text: `${c.value.toFixed(1)} °C`, emphasis: c.hottest }])) : undefined : props.annotations;
-  const projector = useMemo(() => ({ project: (x: number, _y: number, z: number) => worldToScreen({ x: x / 1000, z: z / 1000 }, camera, size) }), [camera.x, camera.z, camera.widthM, size.width, size.height]);
+  const availableAnnotations = trial.enabled ? thermal ? Object.fromEntries(thermal.conductors.map(c => [c.id, { label: `${c.value.toFixed(1)} °C`, limiting: c.hottest }])) : undefined : props.annotations;
+  const annotations = showResults ? availableAnnotations : undefined;
+  const projector = useMemo(() => ({ project: (x: number, _y: number, z: number) => worldToScreen({ x: x / 1000, z: z / 1000 }, objectCamera, size) }), [objectCamera.x, objectCamera.z, objectCamera.widthM, size.width, size.height]);
   const selected = props.selectedObject || null;
-  const dimensions = displayed && currentGeometry ? sectionDimensions(displayed, currentGeometry, selected, camera, size, showDimensions) : [];
+  const dimensions = displayed && currentGeometry ? sectionDimensions(displayed, currentGeometry, selected, objectCamera, size, showDimensions)
+    .filter(d => !detail || d.field !== 'depth').map(d => detail ? { ...d, outside: true } : d) : [];
   const error = props.error || calculated.error || (state === 'error' ? '敷设输入读取失败，请重试。' : '');
   const focusCanvas = () => requestAnimationFrame(() => gesture.svg.current?.focus());
   const dismiss = () => { setEditing(null); focusCanvas(); };
@@ -116,11 +123,12 @@ export function LayingSection(input: LayingSectionProps) {
     <div className="drawing-toolbar" role="toolbar" aria-label="敷设截面工具">
       <IconButton icon="tool/select" label="选择 V" aria-pressed={tool === 'select'} onClick={() => setTool('select')} />
       <IconButton icon="tool/pan" label="平移 H" aria-pressed={tool === 'pan'} onClick={() => setTool('pan')} />
-      <IconButton icon="tool/fit" label="显示全部 F" onClick={() => setView(null)} disabled={!currentGeometry} />
+      <IconButton icon="tool/fit" label="适配敷设截面 F" onClick={() => setView(null)} disabled={!currentGeometry} />
       <IconButton icon="tool/snap" label="捕捉 S" aria-pressed={snap} onClick={() => setSnap(value => !value)} />
       <IconButton icon="tool/zoom-in" label="放大敷设截面" disabled={!currentGeometry} onClick={() => setView(zoomView(camera, 1 / 1.2, { x: size.width / 2, y: size.height / 2 }, size))} />
       <IconButton icon="tool/zoom-out" label="缩小敷设截面" disabled={!currentGeometry} onClick={() => setView(zoomView(camera, 1.2, { x: size.width / 2, y: size.height / 2 }, size))} />
       <Button size="compact" aria-pressed={showDimensions} onClick={() => setShowDimensions(value => !value)}>尺寸链</Button>
+      <Button size="compact" aria-pressed={showResults} disabled={!availableAnnotations || !Object.keys(availableAnnotations).length} onClick={() => setShowResults(value => !value)}>图上显示</Button>
       <Button size="compact" aria-pressed={followEnclosure} onClick={() => setFollowEnclosure(value => !value)}>管缆联动</Button>
       {!trial.enabled && <><Select label="模板" value={template} options={(props.templates || defaultTemplates).map(option => ({ value: option.id, label: option.label, disabled: option.disabled }))}
         onChange={setTemplate} disabled={!editable || !props.onTemplateRequest} />
@@ -139,7 +147,7 @@ export function LayingSection(input: LayingSectionProps) {
     </div>
     {problem && <div className="drawing-error" role="alert">{problem}</div>}
     <div ref={host} className="drawing-stage" data-tool={tool} data-dragging={gesture.dragging}>
-      {thermal && <TemperatureSlice thermal={thermal} controller={projector} projectionKey={camera} width={size.width} height={size.height} visible={!gesture.dragging} showHotspot={false} legendSide="left" onSelect={id => props.onSelectionChange?.({ kind: 'cable', id })} />}
+      {thermal && !detail && <TemperatureSlice thermal={thermal} controller={projector} projectionKey={objectCamera} width={size.width} height={size.height} visible={!gesture.dragging} showHotspot={false} legendSide="left" onSelect={id => props.onSelectionChange?.({ kind: 'cable', id })} />}
       {state === 'loading' && !currentGeometry ? <LoadingState title="正在读取敷设截面" />
         : state === 'empty' || !section ? <EmptyState title="尚无敷设截面" description="选择敷设区段后查看和编辑。" />
           : error || !currentGeometry || !displayed ? <ErrorState title="敷设截面不可用" description={error || '输入缺少可绘制结构。'}
@@ -155,20 +163,43 @@ export function LayingSection(input: LayingSectionProps) {
                 }}>
                 <SectionGrid view={camera} size={size} />
                 <SectionObjects section={displayed} geometry={currentGeometry} view={camera} size={size} selected={selected}
-                  onSelect={props.onSelectionChange} onPointer={gesture.begin} editable={editable} colors={temperatureColors} compactLabels={trial.enabled} />
-                {annotations && [...currentGeometry.cables].sort((a, b) => a.x - b.x).filter(cable => annotations?.[cable.id]).map((cable, index) => {
-                  // 相邻电缆的标注一下一上错开（上方有对象标签，留出距离），排管间距小时也不重叠
-                  const note = annotations![cable.id];
-                  const below = index % 2 === 0;
-                  const at = worldToScreen({ x: cable.x, z: below ? cable.z - cable.shape.radiusM : cable.z + cable.shape.radiusM }, camera, size);
-                  const width = note.text.length * 8 + 16;
-                  return <g key={cable.id} className={`drawing-annotation ${note.emphasis ? 'is-emphasis' : ''}`} transform={`translate(${at.x} ${below ? at.y + 40 : at.y - 44})`}>
-                    <rect x={-width / 2} y={-11} width={width} height={22} rx={11} /><text textAnchor="middle" dominantBaseline="central">{note.text}</text>
-                  </g>;
-                })}
-                {gesture.guides && <path className="drawing-snap-guide" d={`M0 ${worldToScreen(gesture.guides, camera, size).y}H${size.width}M${worldToScreen(gesture.guides, camera, size).x} 0V${size.height}`} />}
+                  onSelect={detail ? undefined : props.onSelectionChange} onPointer={detail ? undefined : gesture.begin} editable={!detail && editable} miniature={!!detail} showLabels={false} colors={temperatureColors} />
+                {detail && composition && <>
+                  <rect className="drawing-detail-frame" x={detail.rect.x} y={detail.rect.y} width={detail.rect.width} height={detail.rect.height} />
+                  <text className="drawing-text" x={detail.rect.x + 16} y={detail.rect.y + 24}>详图 A · 放大 {formatNumber(detail.factor, 1)} 倍</text>
+                  <defs><clipPath id={clipId}><rect x={detail.plot.x} y={detail.plot.y} width={detail.plot.width} height={detail.plot.height} /></clipPath></defs>
+                  <g data-section-detail="A" clipPath={`url(#${clipId})`}>
+                    {thermal && <foreignObject x="0" y="0" width={size.width} height={size.height}><div className="drawing-detail-field">
+                      <TemperatureSlice thermal={thermal} controller={projector} projectionKey={objectCamera} width={size.width} height={size.height} visible={!gesture.dragging} showHotspot={false} legendSide="right" onSelect={id => props.onSelectionChange?.({ kind: 'cable', id })} />
+                    </div></foreignObject>}
+                    <SectionObjects section={displayed} geometry={currentGeometry} view={objectCamera} size={size} selected={selected} showLabels={false}
+                      onSelect={props.onSelectionChange} onPointer={gesture.begin} editable={editable} colors={temperatureColors} />
+                    {props.document && <SectionLabels document={props.document} section={displayed} geometry={currentGeometry} view={objectCamera} size={size} rect={detail.plot} annotations={annotations} />}
+                  </g>
+                  {(() => { const b = composition.group, center = worldToScreen({ x: (b.left + b.right) / 2, z: (b.top + b.bottom) / 2 }, camera, size);
+                    const rx = Math.max(12, (b.right - b.left) * size.width / camera.widthM / Math.SQRT2 + 4);
+                    const ry = Math.max(12, (b.top - b.bottom) * size.width / camera.widthM / Math.SQRT2 + 4);
+                    const cable = currentGeometry.cables.find(c => c.id === selected?.id) || currentGeometry.cables[0];
+                    const groundY = worldToScreen({ x: 0, z: 0 }, camera, size).y, cableY = worldToScreen(cable, camera, size).y;
+                    return <g className="drawing-detail-source">
+                      <ellipse className="drawing-detail-leader" cx={center.x} cy={center.y} rx={rx} ry={ry} /><path className="drawing-detail-leader" d={`M${center.x + rx} ${center.y}L${detail.rect.x} ${detail.rect.y + detail.rect.height / 2}`} />
+                      <text className="drawing-text" x={center.x} y={center.y - ry - 8} textAnchor="middle">A</text>
+                      {section?.kind === 'ground' && <g className="drawing-dimensions" data-detail-depth>
+                        <text x="24" y={groundY - 10}>地表 ±0.000 m</text>
+                        <path d={`M24 ${groundY}V${cableY}M18 ${groundY + 5}l12 -10M18 ${cableY + 5}l12 -10M24 ${groundY}H${center.x}M24 ${cableY}H${center.x}`} />
+                        <g data-section-dimension="depth" className={`drawing-dimension-chip ${editable ? 'is-editable' : ''}`} role={editable ? 'button' : undefined} tabIndex={editable ? 0 : undefined}
+                          aria-label={`${editable ? '编辑' : '查看'}中心埋深，单位 m`} onDoubleClick={() => { if (editable) setEditing({ selection: { kind: 'cable', id: cable.id }, field: 'depth', label: '中心埋深', valueM: -cable.z, x: 120, y: (groundY + cableY) / 2 }); }}
+                          onKeyDown={event => { if (editable && event.key === 'Enter') { event.stopPropagation(); setEditing({ selection: { kind: 'cable', id: cable.id }, field: 'depth', label: '中心埋深', valueM: -cable.z, x: 120, y: (groundY + cableY) / 2 }); } }}>
+                          <text x="36" y={(groundY + cableY) / 2}>中心埋深 {formatNumber(-cable.z, 3)} m</text>
+                        </g>
+                      </g>}
+                    </g>; })()}
+                </>}
+                {!detail && props.document && <SectionLabels document={props.document} section={displayed} geometry={currentGeometry} view={camera} size={size}
+                  rect={{ x: 0, y: plotTop, width: size.width, height: Math.max(1, size.height - plotTop - 8) }} annotations={annotations} />}
+                {gesture.guides && <path className="drawing-snap-guide" d={`M0 ${worldToScreen(gesture.guides, objectCamera, size).y}H${size.width}M${worldToScreen(gesture.guides, objectCamera, size).x} 0V${size.height}`} />}
                 <SectionDimensions dimensions={dimensions} geometry={currentGeometry} view={camera} size={size} editable={editable} onEdit={setEditing} />
-                {!trial.enabled && selected?.kind === 'cable' && currentGeometry.cables.find(cable => cable.id === selected.id) && <CableDetail
+                {!detail && !trial.enabled && selected?.kind === 'cable' && currentGeometry.cables.find(cable => cable.id === selected.id) && <CableDetail
                   cable={currentGeometry.cables.find(cable => cable.id === selected.id)!} view={camera} size={size} />}
                 {editing && state === 'success' && props.editable !== false && <DimensionEditor x={Math.max(8, Math.min(size.width - 232, editing.x - 112))}
                   y={Math.max(8, Math.min(size.height - 156, editing.y + 14))} label={editing.label} value={editing.valueM} unit="m"
@@ -182,7 +213,7 @@ export function LayingSection(input: LayingSectionProps) {
     </div>
     {dimensions.some(dimension => dimension.outside) && <div className="drawing-overflow-dimensions" aria-label="图外尺寸标注">{dimensions.filter(dimension => dimension.outside).map(dimension => <Button key={`${dimension.selection.kind}/${dimension.selection.id}/${dimension.field}`} size="compact" variant="ghost" disabled={!editable}
       onClick={() => setEditing(dimension)}>{currentGeometry?.cables.find(cable => cable.id === dimension.selection.id)?.label || dimension.selection.id} · {dimension.label} {formatNumber(dimension.valueM, 3)} m</Button>)}</div>}
-    {!error && state !== 'empty' && currentGeometry && displayed && <SectionOverview section={displayed}
+    {!detail && !error && state !== 'empty' && currentGeometry && displayed && <SectionOverview section={displayed}
       geometry={currentGeometry} view={camera} size={size} onView={setView} />}
     <div className="drawing-status"><span>{section?.label || '敷设截面'} · m</span><span>{state === 'loading' || busy ? '正在更新' : editable ? '可编辑' : '只读'}</span>
       <span>{snap ? `捕捉 ${(props.snapStepM ?? .001) * 1000} mm` : '捕捉关闭'}</span><span>{selected ? selected.id : '选择对象查看尺寸'}</span></div>

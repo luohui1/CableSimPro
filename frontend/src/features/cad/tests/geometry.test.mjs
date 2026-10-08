@@ -8,12 +8,28 @@ const source = await loadSources([
   'src/features/cad/geometry-contract.ts', 'src/features/cad/display-mesh.ts',
   'src/features/cad/input-scene.ts',
   'src/features/cad/tests/large-scene-fixture.ts',
+  'src/features/drawing/section-composition.ts',
 ]);
 after(() => source.close());
 const cable = await source.import('src/features/drawing/cable-geometry.ts');
 const profiles = await source.import('src/features/drawing/cross-section-profile.ts');
 const coordinates = await source.import('src/features/drawing/coordinates.ts');
 const laying = await source.import('src/features/drawing/section-geometry.ts');
+const { sectionComposition } = await source.import('src/features/drawing/section-composition.ts');
+test('1.2 m burial: the detail keeps 40 mm cables readable and SI distances unchanged', () => {
+  const section = { kind: 'ground', placements: [], enclosures: [], backfill: null, soil_layers: [] };
+  const geometry = { cables: [-.05, 0, .05].map(x => ({ x, z: -1.2, shape: { radiusM: .02 } })), bounds: { left: -.07, right: .07, top: 0, bottom: -1.22 } };
+  const before = JSON.stringify({ section, geometry }), size = { width: 850, height: 400 };
+  const composition = sectionComposition(section, geometry, size);
+  assert.ok(composition.detail);
+  const view = composition.detail.view, scale = size.width / view.widthM;
+  assert.ok(.04 * scale >= 24);
+  const p = coordinates.worldToScreen({ x: 0, z: -1.2 }, view, size), q = coordinates.worldToScreen({ x: .01, z: -1.2 }, view, size);
+  assert.ok(Math.abs((q.x - p.x) / scale - .01) < 1e-12);
+  const restored = coordinates.screenToWorld(p, view, size);
+  assert.ok(Math.abs(restored.x) < 1e-12 && Math.abs(restored.z + 1.2) < 1e-12);
+  assert.equal(JSON.stringify({ section, geometry }), before);
+});
 const contract = await source.import('src/features/cad/geometry-contract.ts');
 const mesh = await source.import('src/features/cad/display-mesh.ts');
 const scene = await source.import('src/features/cad/input-scene.ts');

@@ -26,8 +26,11 @@ export function CableSection(props: CableSectionProps) {
   const shape = calculated.shape;
   const state = props.state || (props.cableType ? 'success' : 'empty');
   const problem = props.error || calculated.problem || (state === 'error' ? '电缆结构读取失败，请重试。' : '');
-  const fitted = shape ? { x: 0, z: -shape.radiusM * .1,
-    widthM: 2 * shape.radiusM * size.width / Math.max(40, Math.min(size.width - 256, size.height - 160)) }
+  const displayedCoreId = props.selectedObject?.scope === 'core' ? props.selectedObject.coreId : props.cableType?.cores[0]?.id;
+  const labelCount = shape?.rings.filter(r => r.target.scope === 'common' || r.target.scope === 'core' && r.target.coreId === displayedCoreId).length || 0;
+  const twoColumns = labelCount > Math.max(1, Math.floor((size.height - 136) / 34) + 1);
+  const fitted = shape ? { x: twoColumns ? 0 : shape.radiusM * .35, z: -shape.radiusM * .1,
+    widthM: 2 * shape.radiusM * size.width / Math.max(40, Math.min(size.width - (twoColumns ? 400 : 256), size.height - 160)) }
     : { x: 0, z: 0, widthM: .1 };
   const camera = view || fitted;
   const selectedId = props.selectedObject ? targetId(props.selectedObject) : undefined;
@@ -40,6 +43,9 @@ export function CableSection(props: CableSectionProps) {
   const dimensionLabel = value?.field === 'diameter' ? sectorConductor ? '扇形高度' : '直径' : '厚度';
   const selectedCoreId = selected?.target.scope === 'core' ? selected.target.coreId : null;
   const selectedCore = props.cableType?.cores.find(core => core.id === selectedCoreId);
+  const displayedCore = selectedCore || props.cableType?.cores[0];
+  const equivalentCores = displayedCore ? (props.cableType?.cores || []).filter(core => core.id !== displayedCore.id
+    && JSON.stringify([core.conductor, core.layers]) === JSON.stringify([displayedCore.conductor, displayedCore.layers])).map(core => core.id) : [];
   const editable = props.editable !== false && !!props.onDimensionChange && state === 'success'
     && !!selected && !props.isLocked?.(selected.target);
   const center = selected ? worldToScreen({ x: selected.centerX, z: selected.centerZ }, camera, size) : null;
@@ -80,7 +86,7 @@ export function CableSection(props: CableSectionProps) {
                   { x: event.clientX - bounds.left, y: event.clientY - bounds.top }, size));
               }}>
               <CableShapes shape={shape} view={camera} size={size} selectedId={selectedId} onSelect={select} />
-              <LayerNumbers rings={shape.rings} view={camera} size={size} selectedId={selectedId} onSelect={select} />
+              <LayerNumbers rings={shape.rings} view={camera} size={size} selectedId={selectedId} onSelect={select} equivalentCores={equivalentCores} />
               {(showDimensions || !!selected) && <g className="drawing-dimensions" data-cable-dimensions>
                 {selected && center ? <>
                   {selected.profile.kind === 'circle' && <path d={`M${center.x - selected.outerM * scale} ${center.y}V${dimensionY + 6}M${center.x + selected.outerM * scale} ${center.y}V${dimensionY + 6}M${center.x - selected.outerM * scale} ${dimensionY}H${center.x + selected.outerM * scale}M${center.x - selected.outerM * scale - 5} ${dimensionY + 5}l10 -10M${center.x + selected.outerM * scale - 5} ${dimensionY + 5}l10 -10`} />}

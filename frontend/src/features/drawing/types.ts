@@ -10,6 +10,7 @@ export type DrawingState = 'empty' | 'loading' | 'error' | 'success' | 'historic
 export type DrawingCommand = 'undo' | 'redo' | 'save';
 export type LayerTarget = { scope: 'core'; coreId: string; role: string } | { scope: 'common'; role: string };
 export type SectionSelection = { kind: 'cable' | 'enclosure' | 'backfill' | 'soil'; id: string } | null;
+export type ResultAnnotation = { label: string; limiting?: boolean } | { text: string; emphasis?: boolean };
 
 export interface DrawingIssue { field: string; message: string }
 export interface DrawingView { x: number; z: number; widthM: number }
@@ -40,7 +41,7 @@ export interface CableSectionProps {
   className?: string;
   label?: string;
   /** 运行结果标注：电缆放置 id → 文本（如导体温度），emphasis 标出最热的一根。只显示，不参与编辑。 */
-  annotations?: Readonly<Record<string, { text: string; emphasis?: boolean }>>;
+  annotations?: Readonly<Record<string, ResultAnnotation>>;
 }
 
 export interface SectionEdit {
@@ -79,5 +80,5 @@ export interface LayingSectionProps extends WhatIfProps {
   className?: string;
   label?: string;
   /** 运行结果标注：电缆放置 id → 文本（如导体温度），emphasis 标出最热的一根。只显示，不参与编辑。 */
-  annotations?: Readonly<Record<string, { text: string; emphasis?: boolean }>>;
+  annotations?: Readonly<Record<string, ResultAnnotation>>;
 }

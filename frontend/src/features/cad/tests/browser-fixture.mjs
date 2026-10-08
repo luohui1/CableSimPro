@@ -7,15 +7,21 @@ import { chromium } from 'playwright-core';
 
 export const repositoryRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
 export const outputRoot = path.join(repositoryRoot, '.data/frontend-canvas');
-export async function createBrowserFixture({ software = false } = {}) {
-  const build = path.join(outputRoot, 'build');
-  const entry = path.join(build, 'src/features/cad/gallery.html');
+export async function createBrowserFixture({ software = false, production = false, backend = 'http://127.0.0.1:8100' } = {}) {
+  const build = production ? path.join(repositoryRoot, 'frontend/dist') : path.join(outputRoot, 'build');
+  const entry = path.join(build, production ? 'index.html' : 'src/features/cad/gallery.html');
   await fs.access(entry);
   const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
     '.wasm': 'application/wasm', '.woff2': 'font/woff2', '.woff': 'font/woff' };
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url, 'http://127.0.0.1');
+      if (production && url.pathname.startsWith('/api/')) {
+        if (!['GET', 'HEAD'].includes(request.method)) { response.writeHead(405).end('Read-only canvas validation'); return; }
+        const upstream = await fetch(backend + url.pathname + url.search);
+        response.writeHead(upstream.status, { 'content-type': upstream.headers.get('content-type') || 'application/json' });
+        response.end(Buffer.from(await upstream.arrayBuffer())); return;
+      }
       const file = url.pathname.startsWith('/assets/') ? path.resolve(build, `.${decodeURIComponent(url.pathname)}`) : entry;
       if (!file.startsWith(build + path.sep)) { response.writeHead(403).end(); return; }
       const body = await fs.readFile(file);
