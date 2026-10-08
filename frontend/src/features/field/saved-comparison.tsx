@@ -6,6 +6,8 @@ import { savedDomain, entityLabel } from "@/lib/domain-fields";
 import { DataTable } from "@/components/data-table";
 import { Select } from "@/components/ui/select";
 import { EmptyState, ErrorState, LoadingState } from "@/components/states";
+import { savedRunLabel } from './run-label';
+import './field.css';
 
 const records = (value: unknown) => Array.isArray(value) ? value.map(optionalRecord) : [];
 const canonical = (value: unknown): string => JSON.stringify(value, (_, item) => item && typeof item === "object" && !Array.isArray(item) ? Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b))) : item);
@@ -42,7 +44,7 @@ export function compareSavedFields(fem: Record<string, unknown>, iec: Record<str
     const a = Math.max(...temperatures.map(row => row.fem!)), b = Math.max(...temperatures.map(row => row.iec!));
     rows.unshift({ id: "maximum", entity: "最高导体温度", key: "conductor_temperature", condition: "operating", unit: "K", fem: a, iec: b, delta: a-b, relative: (a-b)/b*100, reason: "", exceeded: Math.abs(a-b)>2 });
   }
-  return { rows, femCase: caseId, iecCase: text(reference.case_id), method: optionalRecord(definition.method), referenceMethod: optionalRecord(referenceDefinition.method) };
+  return { rows, femCase: caseId, iecCase: text(reference.case_id), method: optionalRecord(definition.method), referenceMethod: optionalRecord(referenceDefinition.method), femLabel: savedRunLabel(fem), iecLabel: savedRunLabel(iec) };
 }
 
 export function SavedFieldComparison({ run }: { run: Record<string, unknown> }) {
@@ -69,9 +71,10 @@ export function SavedFieldComparison({ run }: { run: Record<string, unknown> }) 
   return <section className="input-section" aria-label="有限元与IEC保存运行对照">
     <h3>有限元 vs IEC</h3>
     {candidates.isPending ? <LoadingState title="读取保存运行" /> : candidates.error ? <ErrorState description={message(candidates.error)} /> : !candidate ? <EmptyState title="尚无可对照的 IEC 保存运行" description="在同一保存工况下运行 IEC 后再比较。" /> : <>
-      <Select label="IEC 参考运行" value={text(candidate.id)} onChange={setSelected} options={(candidates.data || []).map(item => ({ value: text(item.id), label: text(item.title) + " · " + text(item.created) }))} />
+      <Select label="IEC 参考运行" value={text(candidate.id)} onChange={setSelected} options={(candidates.data || []).map(item => ({ value: text(item.id), label: savedRunLabel(item, text(item.title)) }))} />
       {comparison.isPending ? <LoadingState title="核对两次保存运行" /> : comparison.error ? <ErrorState description={message(comparison.error)} /> : data && <>
-        <p>有限元 {text(data.method.version)} · 运行 {text(run.id)}；IEC {text(data.referenceMethod.version)} · 运行 {text(candidate.id)}</p>
+        <dl className="field-scope"><div><dt>有限元 {text(data.method.version)}</dt><dd>{data.femLabel}</dd></div>
+          <div><dt>IEC {text(data.referenceMethod.version)}</dt><dd>{data.iecLabel}</dd></div></dl>
         <DataTable label="有限元与IEC量值对照" columns={[
           { id: "entity", label: "对象", render: row => row.id === "maximum" ? row.entity : entityLabel(domain, row.entity) },
           { id: "quantity", label: "量值", render: row => row.key === "ampacity" ? (row.condition === "rating-simultaneous" ? "共同允许电流 A" : "条件允许电流 A") : "导体温度 °C" },
@@ -80,8 +83,13 @@ export function SavedFieldComparison({ run }: { run: Record<string, unknown> }) 
           { id: "difference", label: "差值 K / A", numeric: true, render: row => row.delta?.toFixed(3) ?? "—" },
           { id: "relative", label: "相对差 %", numeric: true, render: row => row.relative?.toFixed(2) ?? "—" },
         ]} groups={[{ id: "comparison", label: "保存值", rows: data.rows }]} rowLabel={row => row.entity} showGroups={false} />
-        <details><summary>对照口径与差异解释</summary><p>温度相对差以 IEC 绝对温度 K 为分母；温差以 K 展示。提示阈值为 2 K 或电流 5%，是界面诊断阈值，不是标准验收限值。</p>
-          {data.rows.some(row => row.exceeded) && <p>差异超过提示阈值。可能原因：有限计算域的定温边界、地表处理、IEC 外部互热近似与实际三芯热域。需结合本次网格和计算域核验判断，不能据此认定某方法正确。</p>}
+        <details><summary>对照口径{data.rows.some(row => row.exceeded) ? ' · 差异超过提示阈值' : ''}</summary>
+          <dl className="field-scope"><div><dt>边界</dt><dd>有限元：有限域定温；IEC：无限土壤外部热阻</dd></div>
+            <div><dt>地表</dt><dd>有限元：模型地表；IEC：Kennelly 镜像</dd></div>
+            <div><dt>互热</dt><dd>有限元：二维三芯耦合；IEC：外部互热模型</dd></div>
+            <div><dt>相对差</dt><dd>以 IEC 保存值为分母；温度用 K</dd></div>
+            <div><dt>提示阈值</dt><dd>温差 2 K / 电流 5%（非标准验收限值）</dd></div></dl>
+          {data.rows.some(row => row.exceeded) && <p>优先核对上述边界、地表与互热口径，并检查网格和计算域核验。</p>}
           {data.rows.filter(row => row.reason).map(row => <p key={row.id}>{entityLabel(domain, row.entity)}：{row.reason}</p>)}
         </details>
       </>}

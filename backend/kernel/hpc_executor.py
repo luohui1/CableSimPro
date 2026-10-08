@@ -1,5 +1,7 @@
 """Route administrator-selected methods through frozen Slurm jobs, without physics."""
 from copy import deepcopy
+from contextlib import contextmanager
+from contextvars import ContextVar
 import gzip
 from hashlib import sha256
 import json
@@ -17,9 +19,16 @@ from .batch_runtime import freeze_runtime
 from .batch_slurm import SlurmBackend,RemoteDisconnected,allocation_estimate
 
 ROOT=Path(__file__).resolve().parents[2]
+_CHECK_CONTEXT=ContextVar('hpc_check_operation',default=None)
 
 
 class HpcExecutor:
+    @contextmanager
+    def check_operation(self,identifier,cancelled=None):
+        token=_CHECK_CONTEXT.set({'id':str(UUID(identifier)),'cancelled':cancelled})
+        try:yield
+        finally:_CHECK_CONTEXT.reset(token)
+
     def __init__(self, local=None, *, profile=None, root=None, ledger=None, operation=None):
         self.local=local or Executor()
         self.registry=self.local.registry
@@ -50,6 +59,8 @@ class HpcExecutor:
                 estimate=allocation_estimate(self.resources(manifest,len(accepted)),len(accepted),read(self.profile))
                 for case in accepted:
                     case.evidence={**(case.evidence or {}),'execution_budget':estimate}
+            for case in result.cases:
+                case.evidence={**(case.evidence or {}),'preflight_execution':result.environment.get('remote_execution')}
         return result
 
     @staticmethod
@@ -70,12 +81,14 @@ class HpcExecutor:
                          'reuse_artifacts':reuse_artifacts,'timeout_s':timeout_s})
         # Validation can reuse the exact frozen check. A new engineering operation
         # gets a new run identity; reconnection uses that same identity and never sbatch twice.
-        identifier=str(uuid5(UUID(self.operation),plugin_id+'/'+capability+'/'+phase)) if self.operation else str(uuid5(NAMESPACE_URL,'cablesim-check/'+identity)) if phase=='check' else str(uuid4())
+        context=_CHECK_CONTEXT.get() if phase=='check' else None
+        operation=self.operation or (context['id'] if context else None)
+        identifier=str(uuid5(UUID(operation),plugin_id+'/'+capability+'/'+phase)) if operation else str(uuid5(NAMESPACE_URL,'cablesim-check/'+identity)) if phase=='check' else str(uuid4())
         directory=self.root/identifier
         # A confirmed failed check may be explicitly retried after environment
         # repair. Retain every failed plan; uncertain/disconnected jobs keep their
         # original identity until accounting establishes a terminal outcome.
-        if phase=='check' and not self.operation:
+        if phase=='check' and not operation:
             while self.failed_check(directory):
                 identifier=str(uuid5(UUID(identifier),'retry-confirmed-check'))
                 directory=self.root/identifier
@@ -93,7 +106,7 @@ class HpcExecutor:
                     candidate=Path(scratch)
                     runtime_sha,frozen_manifest=freeze_runtime(candidate,plugin_id,self.registry.root.parent)
                     plan={'schema_version':'cablesim.remote-run-plan/1','id':identifier,
-                          'request_identity':identity,'operation_id':self.operation,
+                          'request_identity':identity,'operation_id':operation,
                           'plugin_id':plugin_id,'capability':capability,'phase':phase,
                           'plugin_manifest':frozen_manifest,'runtime_sha256':runtime_sha,
                           'cases':deepcopy(cases),'reuse_artifacts':deepcopy(reuse_artifacts),
@@ -143,6 +156,9 @@ class HpcExecutor:
             if not submission.get('job_id'):
                 raise PluginHostError('REMOTE_'+submission['state'].upper(),submission.get('message','远端提交尚未确认，输入与预留保留。'),503)
             while True:
+                context=_CHECK_CONTEXT.get()
+                if context and context['cancelled'] and context['cancelled']():
+                    atomic(directory/'cancel-request.json',{'operation_id':plan.get('operation_id'),'plan_id':plan['id']})
                 if (directory/'cancel-request.json').is_file():
                     remote.cancel(directory,submission['token'])
                 accounting=remote.poll(directory,submission['token'])
@@ -152,6 +168,7 @@ class HpcExecutor:
                 atomic(directory/'execution.json',{'state':state,'backend':'slurm','job_id':submission['job_id'],
                     'plan_id':plan['id'],'slurm_states':states,'actual_cpu_seconds':accounting.get('actual_cpu_seconds',0),
                     'cancel_requested':(directory/'cancel-request.json').is_file(),
+                    'started':accounting.get('started'),'finished':accounting.get('finished'),
                     'updated':accounting.get('updated')})
                 if accounting.get('terminal'):break
                 time.sleep(5)
@@ -188,6 +205,7 @@ class HpcExecutor:
             'backend':'slurm','plan_id':plan['id'],'plan_sha256':digest(plan),
             'runtime_sha256':plan['runtime_sha256'],'job_id':submission['job_id'],
             'actual_cpu_seconds':accounting['actual_cpu_seconds'],
+            'started':accounting.get('started'),'finished':accounting.get('finished'),
             'accounting':accounting['accounting'],'result_sha256':collected['status']['result_sha256']}
         return RunResult(**result)
 
@@ -215,9 +233,9 @@ class HpcExecutor:
             raise PluginHostError('REMOTE_JOB_MISSING','此运行没有已冻结的超算作业；不会自动创建替代计算。',409)
         return directory,read(directory/'plan.json')
 
-    def execution_status(self,operation,plugin_id,capability):
+    def execution_status(self,operation,plugin_id,capability,phase='run'):
         """Read cached scheduler evidence; page polling never contacts SSH."""
-        identifier=str(uuid5(UUID(operation),plugin_id+'/'+capability+'/run'))
+        identifier=str(uuid5(UUID(operation),plugin_id+'/'+capability+'/'+phase))
         directory=self.root/identifier
         if not (directory/'plan.json').is_file():return None
         plan=read(directory/'plan.json')
@@ -231,11 +249,15 @@ class HpcExecutor:
             if submission.is_file():value['job_id']=read(submission).get('job_id')
         return value
 
-    def request_cancel(self,operation,plugin_id,capability):
-        directory,plan=self.saved(operation,plugin_id,capability)
+    def request_cancel(self,operation,plugin_id,capability,phase='run'):
+        directory,_=self.saved(operation,plugin_id,capability,phase)
+        return self.cancel_plan(directory)
+
+    def cancel_plan(self,directory):
+        plan=read(directory/'plan.json')
         if digest(plan)!=read(directory/'integrity.json')['plan_sha256']:
             raise PluginHostError('REMOTE_PLAN_CORRUPT','计划校验失败，未发送取消。',409)
-        atomic(directory/'cancel-request.json',{'operation_id':operation,'plan_id':plan['id']})
+        atomic(directory/'cancel-request.json',{'operation_id':plan.get('operation_id'),'plan_id':plan['id']})
         submissions=list((directory/'submissions').glob('*/submission.json'))
         if not submissions:return {'state':'cancel_requested','message':'取消请求已保存，等待提交身份确认。'}
         remote=SlurmBackend(self.profile,self.ledger)
@@ -243,6 +265,29 @@ class HpcExecutor:
             submission=read(path)
             if submission.get('job_id'):remote.cancel(directory,submission['token'])
         return {'state':'cancel_requested','message':'已请求取消，等待 Slurm 终态与核时结算。'}
+
+    def refresh_status(self,operation,plugin_id,capability,phase='run'):
+        """Reconcile an existing allocation only; never prepare or submit a job."""
+        directory,_=self.saved(operation,plugin_id,capability,phase)
+        return self.refresh_plan(directory)
+
+    def refresh_plan(self,directory):
+        plan=read(directory/'plan.json')
+        if digest(plan)!=read(directory/'integrity.json')['plan_sha256']:
+            raise PluginHostError('REMOTE_PLAN_CORRUPT','计划校验失败，未查询作业。',409)
+        remote=SlurmBackend(self.profile,self.ledger);latest=None
+        remote.install_agent()
+        for path in (directory/'submissions').glob('*/submission.json'):
+            submission=read(path)
+            if not submission.get('job_id'):continue
+            accounting=remote.poll(directory,submission['token'])
+            states=sorted({r['State'].split()[0].rstrip('+') for r in accounting.get('accounting',[]) if '.' not in r.get('JobID','')})
+            latest={'backend':'slurm','job_id':submission['job_id'],'plan_id':plan['id'],'slurm_states':states,
+                    'state':'collecting' if accounting.get('terminal') else 'running' if 'RUNNING' in states else 'queued',
+                    'actual_cpu_seconds':accounting.get('actual_cpu_seconds',0),'started':accounting.get('started'),
+                    'finished':accounting.get('finished'),'cancel_requested':(directory/'cancel-request.json').is_file()}
+            atomic(directory/'execution.json',latest)
+        return latest
 
 
 def read_gzip(path):

@@ -20,6 +20,7 @@ import { FieldView } from '@/features/field/field-view';
 import { ConvergenceChart } from '@/features/field/convergence-chart';
 import { StudyRemoteProgress } from './study-run-control';
 import { SavedFieldComparison } from '@/features/field/saved-comparison';
+import { AdaptiveConvergence } from '@/features/field/adaptive-convergence';
 export function StudyTemperature({
   run,
   tab,
@@ -243,6 +244,10 @@ export function StudyTemperature({
   if (tab === "convergence") {
     const proof = optionalRecord(run.convergence);
     const solver = optionalRecord(data.field.convergence);
+    if (data.kind === 'fem' && optionalRecord(optionalRecord(optionalRecord(run.snapshot).definition).method).capability === 'iec-thermal-field')
+      return <div className="input-module">{conclusion}<AdaptiveConvergence run={run} />
+        {Array.isArray(solver.iterations) && <ConvergenceChart label="耦合迭代温度更新" unit="K" values={solver.iterations.map(value => numeric(optionalRecord(value).temperature_update_inf_k))} />}
+      </div>;
     if (
       (!Array.isArray(proof.rows) || !proof.rows.length) &&
       Array.isArray(solver.iterations) &&

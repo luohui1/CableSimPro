@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { StatusMark } from "@/components/status-mark";
+import { HpcJobList } from "@/features/field/hpc-job-list";
 import { agentSettings, agentStatus, resetAgentSettings, saveAgentSettings, testAgentSettings, type AgentProbe, type AgentSettings } from "@/features/agent/agent-api";
 
 type Backup = { id: string; sha256: string; size_bytes: number; created: string; download_url: string; schema_version: number };
@@ -238,6 +239,7 @@ export function SettingsPage() {
               </li>)}{!catalog.isPending && !group.rows.length && <li className="muted">没有插件</li>}</ul>
             </div>)}
           </div>}
+          {current === "compute" && <HpcJobList />}
           {current === "data" && <>
             {restoreState === "pending_restart" && <p className="settings-banner" role="status">已安排恢复，重启宿主后生效。</p>}
             <div className="settings-actions">

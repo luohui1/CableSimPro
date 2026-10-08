@@ -33,7 +33,7 @@ def lock(path):
 
 
 def command(arguments):
-    result=subprocess.run(arguments,capture_output=True,text=True,timeout=45)
+    result=subprocess.run(arguments,capture_output=True,text=True,timeout=45,env={**os.environ,'TZ':'UTC'})
     if result.returncode:raise RuntimeError(result.stderr[-3000:] or result.stdout[-3000:])
     return result.stdout
 
@@ -177,12 +177,12 @@ def accounting(root,token):
     saved=read(root/'submissions'/str(UUID(token))/'submission.json')
     job=saved.get('job_id')
     if not job:return saved
-    fields=['JobID','State','AllocCPUS','ElapsedRaw','CPUTimeRAW','MaxRSS','NodeList','ExitCode']
+    fields=['JobID','State','AllocCPUS','ElapsedRaw','CPUTimeRAW','MaxRSS','NodeList','ExitCode','Start','End']
     raw=command(['sacct','--array','-n','-P','-j',job,'--format',','.join(fields)])
     records=[]
     for line in raw.splitlines():
         values=line.split('|')
-        if len(values)>=len(fields):records.append(dict(zip(fields,values)))
+        if len(values)>=8:records.append(dict(zip(fields,values)))
     # Charge once per array allocation. Some cluster accounting parents retain
     # zero time/"None assigned" after real completed batch/extern steps. In that
     # case retain the raw rows and use the maximum step CPUTime, never their sum.
@@ -202,6 +202,9 @@ def accounting(root,token):
         actual+=seconds
     value={**saved,'accounting':records,'actual_cpu_seconds':actual,'accounting_reconciliations':reconciliations,
            'terminal':terminal,'accounted_samples':len(allocations),'updated':now()}
+    starts=[r['Start']+'Z' for r in allocations if re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d',r.get('Start',''))]
+    ends=[r['End']+'Z' for r in allocations if re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d',r.get('End',''))]
+    value.update(started=min(starts) if starts else None,finished=max(ends) if terminal and ends else None)
     atomic(root/'submissions'/token/'accounting.json',value)
     return value
 

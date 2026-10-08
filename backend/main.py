@@ -117,6 +117,8 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(research_router(research))
     app.include_router(host_api_router(research, previews))
     app.include_router(batch_router(batches))
+    from .kernel.hpc_jobs import make_router as hpc_jobs_router
+    app.include_router(hpc_jobs_router(research, batches))
     from .kernel.candidates import make_router as candidate_router
     app.include_router(candidate_router(workspace_store))
     app.include_router(documents_router(documents))

@@ -29,3 +29,12 @@
 .fem-chart-axis { fill: none; stroke: var(--line); }
 .fem-chart-line { fill: none; stroke: var(--text); stroke-width: 2; }
 .fem-chart-dot { fill: var(--text); }
+.field-scope { display: grid; gap: var(--space-2); margin: var(--space-3) 0; font-size: var(--text-body); font-variant-numeric: tabular-nums; }
+.field-scope > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 4fr); gap: var(--space-3); }
+.field-scope dt { color: var(--text-secondary); }
+.field-scope dd { margin: 0; overflow-wrap: anywhere; }
+.hpc-actions { display: flex; gap: var(--space-3); align-items: center; flex-wrap: wrap; }
+.hpc-actions h3 { margin-right: auto; }
+.hpc-budget { display: grid; gap: var(--space-2); font-size: var(--text-body); }
+.hpc-budget input { padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-item); background: var(--panel); color: var(--text); font: inherit; font-variant-numeric: tabular-nums; }
+.hpc-job-list { min-width: 0; max-width: 100%; }

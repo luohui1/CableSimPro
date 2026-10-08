@@ -57,6 +57,17 @@ def test_disconnect_then_collect_preserves_allocation_and_result(tmp_path,monkey
     assert remote.submissions==1 and value.environment['remote_execution']['job_id']=='999'
 
 
+def test_refresh_only_polls_existing_allocation(tmp_path,monkeypatch):
+    executor,directory,plan,_,_,_,remote=fixture(tmp_path,monkeypatch)
+    token=str(uuid4());atomic(directory/'submissions'/token/'submission.json',{'job_id':'999','token':token})
+    monkeypatch.setattr(remote,'install_agent',lambda *a:None,raising=False)
+    monkeypatch.setattr(remote,'poll',lambda *a:{'terminal':True,'actual_cpu_seconds':60,'started':'2026-10-08T12:00:00Z',
+        'finished':'2026-10-08T12:01:00Z','accounting':[{'JobID':'999_0','State':'CANCELLED'}]})
+    result=executor.refresh_plan(directory)
+    assert remote.submissions==0 and result['actual_cpu_seconds']==60 and result['slurm_states']==['CANCELLED']
+    assert read(directory/'execution.json')['started']=='2026-10-08T12:00:00Z'
+
+
 def test_progress_comes_from_scheduler_before_collection(tmp_path,monkeypatch):
     executor,directory,_,_,_,_,remote=fixture(tmp_path,monkeypatch)
     states=iter(['PENDING','RUNNING','COMPLETED']);observed=[]
