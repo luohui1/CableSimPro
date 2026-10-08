@@ -68,7 +68,7 @@ export function VersionNotice({ value, target, disabledReason, onComplete }: {
   return <>
     <span className="version-notice" onClick={event => event.stopPropagation()}>
       <StatusMark kind="historical" label="结果已过期" detail={<ul>{(reasons.length ? reasons : ['请核对输入与方法的新版本。']).map(reason => <li key={reason}>{reason}</li>)}</ul>} />
-      <span aria-hidden="true">·</span><Button variant="ghost" size="compact" disabled={!!disabledReason || running} title={disabledReason} onClick={() => { setOpen(true); setAck(false); execute.reset(); prepare.mutate(); }}>重算</Button>
+      <Button variant="ghost" size="compact" disabled={!!disabledReason || running} title={disabledReason} onClick={() => { setOpen(true); setAck(false); execute.reset(); prepare.mutate(); }}>重算</Button>
       {disabledReason && <span className="muted">{disabledReason}</span>}
     </span>
     <Dialog open={open} onOpenChange={value => { if (!running) setOpen(value); }} title="按当前版本重算" description="采用当前已保存输入和当前方法版本，宿主会重新预检；旧结果与存档保留。" actions={<Button variant="run" disabled={!prepare.data || prepare.isPending || !ack || !!disabledReason || running} loading={running} onClick={() => { if (!pending.current) { pending.current = true; execute.mutate(); } }}>确认范围并重算</Button>}>

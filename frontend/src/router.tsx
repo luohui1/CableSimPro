@@ -22,6 +22,7 @@ const GalleryPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pag
 const AssetsPage = lazyRouteComponent(() => import('./pages/library-page'), 'AssetsPage');
 const CableVersionsPage = lazyRouteComponent(() => import('./pages/cable-versions-page'), 'CableVersionsPage');
 const RunsPage = lazyRouteComponent(() => import('./pages/runs-page'), 'RunsPage');
+const HomePage = lazyRouteComponent(() => import('./pages/home-page'), 'HomePage');
 const DocumentsPage = lazyRouteComponent(() => import('./pages/documents-page'), 'DocumentsPage');
 const DeliveriesPage = lazyRouteComponent(() => import('./pages/deliveries-page'), 'DeliveriesPage');
 const PluginsPage = lazyRouteComponent(() => import('./pages/plugins-page'), 'PluginsPage');
@@ -82,7 +83,7 @@ export const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
   validateSearch: themeSearch,
-  component: () => <ObjectListPage home />,
+  component: HomePage,
 });
 export const studiesRoute = createRoute({
   getParentRoute: () => rootRoute,

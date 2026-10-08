@@ -5,7 +5,6 @@ import {
   workspaces,
   studyIndex,
   studyRuns,
-  typeIndex,
   methodCatalog,
   type StudyRow,
 } from "@/api/research";
@@ -23,51 +22,14 @@ import {
   StaleBanner,
 } from "@/components/states";
 import { Toolbar } from "@/components/toolbar";
-import { Icon } from "@/components/icon";
-import { illustration } from "@/lib/illustrations";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { VersionNotice } from '@/components/version-notice';
 import { isVersionStale } from '@/lib/version-status';
 
 const SIMULATION_MODULES = ["simulation", "electrothermal", "transient", "sheath-losses", "thermal-field", "batch"];
 
-/** 首页三个核心领域入口：数字全部来自宿主列表，读不到时显示“—”。 */
-function HomeAreas({ theme, studies, types, succeeded }: { theme: "light" | "dark"; studies: StudyRow[]; types?: number; succeeded: number }) {
-  const simulation = studies.filter((row) => SIMULATION_MODULES.includes(rootModule(row.definition))).length;
-  const areas = [
-    { id: "ampacity", icon: "calc/ampacity", title: "载流量计算", copy: "IEC 60287 选型、参数扫描与方法对比", count: studies.length - simulation, unit: "个研究", to: "/studies" as const, search: { theme, kind: "ampacity" } },
-    { id: "design", icon: "nav/cable-type", title: "电缆设计", copy: "结构、标准核对、电气参数与规格书", count: types, unit: "个型号", to: "/types" as const, search: { theme } },
-    { id: "simulation", icon: "calc/thermal-field", title: "电缆仿真", copy: "有限元温度场、电热耦合与论文复现", count: simulation, unit: "个研究", to: "/studies" as const, search: { theme, kind: "simulation" } },
-  ];
-  return (
-    <section className="home-hero" aria-label="工作台概况">
-      <div className="home-banner">
-        <div className="home-greeting">
-          <h2>电缆设计与计算工作台</h2>
-          <p>载流量计算、电缆设计与电缆仿真都由插件完成；每个结果都能追溯到输入、方法和版本。</p>
-          <dl className="home-stats">
-            <div><dt>研究</dt><dd>{studies.length}</dd></div>
-            <div><dt>已有结果</dt><dd>{succeeded}</dd></div>
-            <div><dt>型号</dt><dd>{types ?? "—"}</dd></div>
-          </dl>
-        </div>
-        {illustration("cable-section-hero") && <img className="home-banner-art" src={illustration("cable-section-hero")} alt="三芯电缆截面" />}
-      </div>
-      <div className="home-areas">
-        {areas.map((area) => (
-          <Link key={area.id} className="home-area" to={area.to} search={area.search}>
-            <span className="home-area-icon"><Icon name={area.icon} /></span>
-            <strong>{area.title}</strong>
-            <span className="muted">{area.copy}</span>
-            <span className="home-area-count"><b>{area.count ?? "—"}</b> {area.unit}<Icon name="action/arrow-right" /></span>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-export function ObjectListPage({ home = false }: { home?: boolean }) {
+/** 研究列表（目录页）：全部研究按所属工程分组。首页在 home-page.tsx。 */
+export function ObjectListPage() {
   const search = useSearch({ strict: false });
   const theme = search.theme === "dark" ? "dark" : "light";
   const navigate = useNavigate();
@@ -77,11 +39,6 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
   const studies = useQuery({
     queryKey: ["study-index"],
     queryFn: ({ signal }) => studyIndex(signal),
-  });
-  const types = useQuery({
-    queryKey: ["type-index"],
-    queryFn: ({ signal }) => typeIndex(signal),
-    enabled: home,
   });
   const runQueries = useQueries({
     queries: (studies.data || []).map((row) => ({
@@ -208,11 +165,9 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
   matching.sort(
     (a, b) => rank(a) - rank(b) || b.updated.localeCompare(a.updated),
   );
-  const rows = home ? matching.slice(0, 6) : matching;
-  // 全部研究按所属工程分组（工程 → 研究）；首页的最近研究保持单组
-  const tableGroups = home
-    ? [{ id: "studies", label: "研究", rows }]
-    : [...new Set(rows.map((row) => row.workspace))].map((wid) => ({ id: wid, label: projectName(wid), rows: rows.filter((row) => row.workspace === wid) }));
+  const rows = matching;
+  // 全部研究按所属工程分组（工程 → 研究）
+  const tableGroups = [...new Set(rows.map((row) => row.workspace))].map((wid) => ({ id: wid, label: projectName(wid), rows: rows.filter((row) => row.workspace === wid) }));
   function global(label: string) {
     if (label === "首页") navigate({ to: "/", search: { theme } });
     else if (label === "研究") navigate({ to: "/studies", search: { theme } });
@@ -223,7 +178,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
   return (
     <>
       <AppShell
-        title={home ? "首页" : search.kind === "simulation" ? "电缆仿真研究" : "研究"}
+        title={search.kind === "simulation" ? "电缆仿真研究" : "研究"}
         status={
           (studies.isError || studies.isFetching) && <StatusMark
             kind={
@@ -257,7 +212,6 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
               size="compact"
               onClick={() => {
                 studies.refetch();
-                if (home) types.refetch();
               }}
             >
               刷新
@@ -271,32 +225,26 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
             </Button>
           </>
         }
-        activeNavigation={home ? "首页" : "研究"}
+        activeNavigation="研究"
         onGlobalNavigate={global}
         onUnavailable={setNotice}
         theme={theme}
         onTheme={() =>
           navigate({
-            to: home ? "/" : "/studies",
+            to: "/studies",
             search: { theme: theme === "light" ? "dark" : "light" },
             replace: true,
           })
         }
       >
-        {home && <HomeAreas theme={theme} studies={studies.data || []} types={types.data?.length} succeeded={(studies.data || []).filter((row) => ["succeeded", "partial"].includes(text(statuses.get(row.id)?.data?.at(-1)?.status))).length} />}
         {studies.isError && studies.data && (
           <StaleBanner description="连接中断，保留上次读取的列表。" />
         )}
         <section className="object-section">
           <header>
-            <h2>{home ? "最近研究" : "研究列表"}</h2>
-            {home && (
-              <Link to="/studies" search={{ theme }}>
-                查看全部
-              </Link>
-            )}
+            <h2>研究列表</h2>
           </header>
-          {!home && (
+          {(
             <Toolbar label="研究检索">
               <label className="search-field">
                 筛选研究
@@ -320,7 +268,7 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
             />
           ) : rows.length ? (
             <DataTable
-              label={home ? "最近研究" : "研究列表"}
+              label="研究列表"
               columns={columns}
               groups={tableGroups}
               rowLabel={(row) => row.title}
@@ -340,73 +288,6 @@ export function ObjectListPage({ home = false }: { home?: boolean }) {
             />
           )}
         </section>
-        {home && (
-          <section className="object-section">
-            <header>
-              <h2>最近型号</h2>
-              <Link to="/types" search={{ theme }}>
-                打开型号工作区
-              </Link>
-            </header>
-            {types.isPending ? (
-              <LoadingState title="正在读取最近型号" />
-            ) : types.isError ? (
-              <ErrorState
-                description={message(types.error)}
-                action={
-                  <Button onClick={() => types.refetch()}>重新读取</Button>
-                }
-              />
-            ) : types.data.length ? (
-              <DataTable<Record<string, unknown> & { id: string }>
-                label="最近型号"
-                columns={[
-                  {
-                    id: "name",
-                    label: "型号",
-                    render: (row) => (
-                      <Link
-                        className="object-link"
-                        to="/types/$wid/$module/$tab" params={{ wid: text(row.id), module: "structure", tab: "section" }} search={{ theme }}
-                      >
-                        {text(row.name)}
-                      </Link>
-                    ),
-                  },
-                  {
-                    id: "version",
-                    label: "版本",
-                    render: (row) =>
-                      text(row.origin_version) || String(row.revision),
-                  },
-                  {
-                    id: "updated",
-                    label: "更新时间",
-                    render: (row) => new Date(text(row.updated_at)).toLocaleString("zh-CN", {
-                      month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
-                    }),
-                  },
-                ]}
-                groups={[
-                  {
-                    id: "types",
-                    label: "型号",
-                    rows: types.data
-                      .map((row) => ({ ...row, id: text(row.id) }))
-                      .slice(0, 6),
-                  },
-                ]}
-                rowLabel={(row) => text(row.name)}
-                showGroups={false}
-              />
-            ) : (
-              <EmptyState
-                title="尚无型号工作区"
-                description="选择型号入口创建或打开型号。"
-              />
-            )}
-          </section>
-        )}
       </AppShell>
       <CreateStudyDialog open={create} onOpenChange={setCreate} theme={theme} />
       <Dialog
