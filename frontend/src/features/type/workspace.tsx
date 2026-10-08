@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { TypeCommandSlot } from './command-slot';
-import { moduleEvidenceState, useTypeEvidence } from './evidence';
-import { message, text } from '@/api/client';
+import { moduleResultStatus, useTypeEvidence } from './evidence';
+import { message, optionalRecord, text } from '@/api/client';
+import { methodCatalog } from '@/api/research';
 import { AppShell } from '@/components/app-shell';
 import { Icon } from '@/components/icon';
 import { PropertyPanel, type PropertyGroup } from '@/components/property-panel';
-import { SourceBadge } from '@/components/source-badge';
-import { StatusMark } from '@/components/status-mark';
+import { StatusMark, type StatusKind } from '@/components/status-mark';
+import { Tooltip } from '@/components/ui/tooltip';
 import { Button, IconButton } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -25,12 +27,17 @@ import { cleanLabel } from './labels';
 import { StructurePropertyInputs } from './property-inputs';
 import { TypeInspectorContext } from './inspector';
 import { TypeModulePage } from './module-page';
+import { DesignCard } from './design-card';
+import { typeComparison, typeSpecification } from './version-api';
 
 import { typeModules } from "./module-definitions";
 export { typeModules } from "./module-definitions";
 export function TypeWorkspace() {
   const state = useTypeWorkspace(), { location, navigate, onTheme } = useTypeNavigation();
   const evidence = useTypeEvidence();
+  const methods = useQuery({ queryKey: ['type-method-catalog'], queryFn: ({ signal }) => methodCatalog(signal) });
+  const specificationState = useQuery({ queryKey: ['type-specification', state.workspace?.id, 'customer'], queryFn: ({ signal }) => typeSpecification(state.workspace!.id, signal, 'customer'), enabled: !!state.workspace });
+  const comparisonState = useQuery({ queryKey: ['type-comparison', state.workspace?.id], queryFn: ({ signal }) => typeComparison(state.workspace!.id, signal), enabled: !!state.workspace });
   const module = typeModules.find(module => module.id === location.module);
   const activeTab = module?.tabs.some(([id]) => id === location.tab) ? location.tab : module?.tabs[0][0] || location.tab;
   const [cableId, setCableId] = useState(''), [selected, setSelected] = useState<LayerTarget | null>(null), [collapsed, setCollapsed] = useState(false), [info, setInfo] = useState('');
@@ -50,7 +57,30 @@ export function TypeWorkspace() {
   const row = selected ? rows.find(row => row.id === targetId(selected)) : undefined;
   const source = row && document ? fieldSource(document, row.path) : {};
   const demo = Object.values(document?.provenance || {}).some(source => source.kind === 'demo');
-  const status = state.readOnly ? state.workspace?.raw.historical ? 'historical' : 'locked' : state.dirty ? 'draft' : 'saved';
+  const status: StatusKind = state.loading ? 'running' : state.error ? 'error' : state.readOnly ? state.workspace?.raw.historical ? 'historical' : 'locked' : state.dirty ? 'draft' : 'saved';
+  const statusLabel = state.loading ? '读取中' : state.error ? state.workspace ? '保存失败' : '读取失败' : state.readOnly ? state.workspace?.raw.historical ? '历史 · 只读' : '已发布 · 只读' : state.dirty ? '未保存' : '已保存';
+  function resultStatus(id: string) {
+    if (id === 'comparison') {
+      if (comparisonState.error) return { kind: 'error' as const, label: '读取失败', reason: message(comparisonState.error) };
+      if (!comparisonState.data) return { kind: 'unknown' as const, label: '未接入', reason: '方案对照状态尚未读取。' };
+      const metrics = comparisonState.data.items.flatMap(item => Object.values(item.values)).filter(metric => metric.state !== 'missing');
+      if (!metrics.length) return { kind: 'unknown' as const, label: '未运行', reason: '各方案尚无可对照的保存结果。' };
+      const stale = state.dirty || metrics.some(metric => metric.state !== 'current');
+      return { kind: stale ? 'historical' as const : 'current' as const, label: stale ? '过期' : '当前', reason: stale ? '对照引用了过期结果；请重新运行对应方案。' : '对照指标来自各方案的当前保存结果；缺项保持未提供。' };
+    }
+    if (id === 'specification') {
+      const spec = specificationState.data;
+      if (specificationState.error) return { kind: 'error' as const, label: '读取失败', reason: message(specificationState.error) };
+      if (!spec) return { kind: 'unknown' as const, label: '未接入', reason: '规格书状态尚未读取。' };
+      const sources = Array.isArray(spec.payload.sources) ? spec.payload.sources : [];
+      if (!sources.length) return { kind: 'unknown' as const, label: '未运行', reason: '尚无由保存结果生成的规格书。' };
+      const stale = state.dirty || spec.lifecycle.stale || spec.payload.revision !== state.workspace?.revision || sources.some(source => optionalRecord(source).freshness !== 'current');
+      return { kind: stale ? 'historical' as const : 'current' as const, label: stale ? '过期' : '当前', reason: stale ? '规格书引用的输入或结果已变化，需重新生成。' : '规格书对应当前输入及保存结果。' };
+    }
+    if (evidence.error || methods.error) return { kind: 'error' as const, label: '读取失败', reason: message(evidence.error || methods.error) };
+    return moduleResultStatus(evidence.data, id, state.workspace?.revision, state.dirty, methods.data);
+  }
+  function resultMark(id: string) { const value = resultStatus(id); return <Tooltip content={value.reason}><span className="type-module-status" title={value.reason}><StatusMark kind={value.kind} label={value.label} /></span></Tooltip>; }
   function choose(target: LayerTarget | null) { setSelected(target); if (target) setCollapsed(false); }
   const go = (module: string, tab: string) => navigate(typePath(location.wid!, module, tab, location.theme) + (location.revision ? '&revision=' + location.revision : '') + (location.run && module === location.module ? '&run=' + encodeURIComponent(location.run) : ''));
   function shortcut(event: KeyboardEvent<HTMLDivElement>) {
@@ -69,11 +99,11 @@ export function TypeWorkspace() {
       { label: '绘图外径', value: formatNumber(row.outerM === null ? null : row.outerM * 2000, 2), unit: 'mm', source: row.outerM === null ? undefined : 'derived', sourceDetail: '参数截面尺寸，原始实体结果见外径与用料页签' },
     ] }]} />
     {!collapsed && <div className="type-property-fields"><TypeNumericField row={row} />
-      <Select label="材料引用" value={row.material.id} disabled={state.busy || state.locked(row.materialPath)} options={document.materials.filter(item => item.category === row.material.category).map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={material => state.edit(row.materialPath, material)} />
-      {!sourceKind(source) && source.kind !== 'demo' && <p className="muted">此尺寸未提供来源。</p>}<StructurePropertyInputs row={row} /></div>}
-  </div> : location.module === 'structure' ? <section className="inspector-block" aria-label="所选结构层"><header><Icon name="module/structure" /><h2>所选结构层</h2></header><p className="inspector-empty">在截面或分层表中选择一层，在这里修改厚度与材料。</p></section>
+      <div title={cleanLabel(row.material.label)}><Select label="材料引用" value={row.material.id} disabled={state.busy || state.locked(row.materialPath)} options={document.materials.filter(item => item.category === row.material.category).map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={material => state.edit(row.materialPath, material)} /></div>
+      {!sourceKind(source) && source.kind !== 'demo' && <span className="type-field-source" title="此尺寸未提供来源；编辑后请补充工程依据。">来源未提供</span>}<StructurePropertyInputs row={row} /></div>}
+  </div> : location.module === 'structure' ? document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} /> : null
     : resultProperty ? <PropertyPanel title={resultProperty.title} groups={resultProperty.groups} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} />
-      : <section className="inspector-block" aria-label="所选结果"><header><Icon name="result/table" /><h2>所选结果</h2></header><p className="inspector-empty">选择结果表中的一行，在这里查看依据、条款与来源。</p></section>;
+      : document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} /> : null;
   // 型号工作窗口：画布 = 电缆截面 / 三维剥切；下方停靠栏 = 当前模块的页签；右侧 = 型号名称 + 所选结构层或结果
   const dockTabs = module?.id === 'structure' ? module.tabs.filter(([id]) => id === 'table' || id === 'quantities') : methodModule ? module!.tabs.filter(([id]) => id !== 'parameters') : module?.tabs || [];
   const dockTab = module?.id === 'structure' ? (location.tab === 'quantities' ? 'quantities' : 'table') : methodModule && activeTab === 'parameters' ? 'results' : activeTab;
@@ -85,8 +115,8 @@ export function TypeWorkspace() {
       <h3><Icon name={icon} />{label}</h3>
       <div className="explorer-items">
         {label === '结构' && document ? document.cable_types.map(item => <button key={item.id} type="button" className="explorer-item" aria-current={location.module === 'structure' && cable?.id === item.id ? 'page' : undefined} onClick={() => { setCableId(item.id); choose(null); go('structure', 'table'); }}>
-          <Icon name="object/cable" /><span><b>{cleanLabel(item.label)}</b><small>{item.cores.length} 芯 · {item.common_layers.length + item.cores.reduce((n, core) => n + core.layers.length + 1, 0)} 层</small></span>
-        </button>) : ids.map(id => { const item = typeModules.find(entry => entry.id === id)!, result = moduleEvidenceState(evidence.data, id, state.workspace?.revision, state.dirty); return <button key={id} type="button" className="explorer-item" aria-current={location.module === id ? 'page' : undefined} onClick={() => go(id, item.tabs[0][0])}><Icon name={item.icon} /><span>{item.label}</span>{result && <span className={`status-dot ${result === 'current' ? 'is-ok' : result === 'stale' ? 'is-running' : 'is-off'}`} title={result === 'current' ? '已有当前结果' : result === 'stale' ? '结果对应旧输入，待重算' : '尚未计算'} />}</button>; })}
+          <Icon name="object/cable" /><span><b>{cleanLabel(item.label)}</b><small>{item.cores.length} 芯 · {item.common_layers.length + item.cores.reduce((n, core) => n + core.layers.length + 1, 0)} 层</small></span>{resultMark('structure')}
+        </button>) : ids.map(id => { const item = typeModules.find(entry => entry.id === id)!; return <button key={id} type="button" className="explorer-item" aria-current={location.module === id ? 'page' : undefined} onClick={() => go(id, item.tabs[0][0])}><Icon name={item.icon} /><span>{item.label}</span>{resultMark(id)}</button>; })}
       </div>
     </section>)}
   </nav>;
@@ -95,7 +125,6 @@ export function TypeWorkspace() {
   const commandBar = <div className="command-bar" role="toolbar" aria-label="型号命令">
     <div className="command-group" role="group" aria-label="模型">
       <span className="command-caption">模型</span>
-      <Button size="compact" variant={state.dirty ? 'primary' : 'ghost'} loading={state.busy} disabled={!state.dirty || state.readOnly || !state.workspace} onClick={() => void state.save()}><Icon name="action/save" />{state.dirty ? '保存修改' : '已保存'}</Button>
       <IconButton variant="ghost" icon="action/undo" label="撤销" disabled={state.busy || state.readOnly || !state.dirty && state.workspace?.raw.can_undo !== true} onClick={() => void state.undo()} />
     </div>
     <div className="command-group command-group-slot" role="group" aria-label="计算">
@@ -106,7 +135,7 @@ export function TypeWorkspace() {
       <span className="command-caption">交付</span>
       <Button size="compact" variant="ghost" disabled={state.dirty} onClick={() => go('specification', specification.tabs[0][0])}><Icon name="result/report" />规格书</Button>
     </div>}
-    <span className="command-state" role="status">{state.readOnly ? '只读' : state.dirty ? '结构有未保存修改' : '已保存'}</span>
+    <span className="command-state" title={resultStatus(location.module).reason}>{resultStatus(location.module).reason}</span>
   </div>;
   const inspector = methodModule && inspectorView === 'method' ? <div className="type-property-wrapper">
     <div className="inspector-switch" role="tablist" aria-label="属性分页">
@@ -126,9 +155,9 @@ export function TypeWorkspace() {
     </section>}
     {property}
   </div>;
-  return <TypeCommandSlot.Provider value={slot}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<><StatusMark kind={status} label={location.run ? state.workspace?.raw.historical ? '历史运行快照 · 只读' : '运行快照 · 只读' : status === 'locked' ? '已发布 · 只读' : undefined} />{demo && <SourceBadge kind="demo" detail="型号基准与部分物性来自系统演示版本；各字段来源独立保留。" />}</>}
+  return <TypeCommandSlot.Provider value={slot}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<StatusMark kind={status} label={(location.run ? '运行快照 · 只读' : statusLabel) + (demo ? ' · 演示' : '')} detail={state.error || (demo ? '型号基准含演示来源，请核对各字段工程依据。' : state.readOnly ? '所选输入快照只读；基准版本与来源见型号名片。' : state.dirty ? '保存后更新型号输入；原运行结果保留并标为过期。' : '当前编辑已保存；各模块保存结果的状态见型号浏览器。')} />}
     activeNavigation="型号" theme={location.theme} onTheme={onTheme} onUnavailable={name => setInfo(name + '入口尚未接入')}
-    actions={null}
+    actions={<Button variant="primary" loading={state.busy} disabled={!state.dirty || state.readOnly || !state.workspace} onClick={() => void state.save()}><Icon name="action/save" />保存</Button>}
     property={inspector}>
     {commandBar}
     <div className="workbench-frame">{explorer}

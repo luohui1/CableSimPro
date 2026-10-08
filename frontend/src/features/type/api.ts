@@ -2,9 +2,10 @@ import { api, ApiError, array, numeric, optionalRecord, record, responseData, te
 import { typeIndex, studyRuns } from '@/api/research';
 import type { components } from '@/api/generated/schema';
 import type { DomainDocument } from '@/lib/domain-fields';
+import { publicationStatus, type DesignStatus } from './design-summary';
 
 export type Workspace = { id: string; revision: number; document: DomainDocument; raw: Record<string, unknown> };
-export type TypeRow = { id: string; name: string; version: string; updated: string; status: 'draft' | 'published'; raw: Record<string, unknown> };
+export type TypeRow = { id: string; name: string; version: string; updated: string; status: DesignStatus; raw: Record<string, unknown>; document: DomainDocument };
 export type ModelChoice = { id: string; name: string; version: string; digest: string; workspace?: string; raw: Record<string, unknown> };
 
 export function projectWorkspace(value: unknown): Workspace {
@@ -29,7 +30,7 @@ export async function loadWorkspace(wid: string, signal?: AbortSignal, revision?
   if (revision !== undefined) {
     const saved = record(await responseData(api.GET('/api/workspaces/{wid}/revisions/{revision}', { params: { path: { wid, revision } }, signal })), '历史型号版本');
     if (saved.workspace !== wid || saved.revision !== revision) throw new ApiError(409, '历史型号身份不一致');
-    return projectWorkspace({ ...record(saved.state, '历史输入'), id: wid, revision, historical: true, can_undo: false, can_redo: false });
+    return projectWorkspace({ ...record(saved.state, '历史输入'), id: wid, revision, updated_at: text(saved.created), historical: true, can_undo: false, can_redo: false });
   }
   return projectWorkspace(await responseData(api.GET('/api/workspaces/{wid}', { params: { path: { wid } }, signal })));
 }
@@ -39,11 +40,15 @@ export async function publishedTypes(signal?: AbortSignal) {
 }
 export async function listTypes(signal?: AbortSignal): Promise<TypeRow[]> {
   const [drafts, published] = await Promise.all([typeIndex(signal), publishedTypes(signal)]);
-  const released = new Set(published.map(item => text(item.workspace_id)));
-  return [
-    ...published.map(item => ({ id: text(item.workspace_id), name: text(item.name), version: text(item.version), updated: text(item.created), status: 'published' as const, raw: item })),
-    ...drafts.filter(item => !released.has(text(item.id))).map(item => ({ id: text(item.id), name: text(item.name), version: text(item.origin_version), updated: text(item.updated_at), status: 'draft' as const, raw: item })),
-  ].map(item => { if (!item.id || !item.name) throw new ApiError(502, '型号列表缺少名称或身份'); return item; });
+  const ids = [...new Set([...drafts.map(item => text(item.id)), ...published.map(item => text(item.workspace_id))])];
+  const rows: TypeRow[] = [];
+  // Bounded reads of the design objects: multiple published versions share one design home.
+  for (let start = 0; start < ids.length; start += 4) rows.push(...await Promise.all(ids.slice(start, start + 4).map(async id => {
+    if (!id) throw new ApiError(502, '型号列表缺少身份');
+    const workspace = await loadWorkspace(id, signal), raw = workspace.raw, origin = optionalRecord(raw.type_origin_reference);
+    return { id, name: workspace.document.name, version: text(origin.version), updated: text(raw.updated_at), status: publicationStatus(raw), raw, document: workspace.document };
+  })));
+  return rows;
 }
 export async function modelChoices(signal?: AbortSignal): Promise<ModelChoice[]> {
   const [system, published] = await Promise.all([

@@ -12,10 +12,10 @@ try {
   const created = await fixture.api('/api/design/type-workspaces', 'POST', { model_id: model.id, content_sha256: model.content_sha256 });
   for (const width of [1366, 1920]) for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width, height: width === 1366 ? 768 : 1080 }); await page.goto(`${fixture.url}/types?theme=${theme}`);
-    await expect(page.locator('[data-type-page=list]')).toHaveAttribute('data-type-state', 'success'); await expect(page.getByRole('table', { name: '型号', exact: true })).toBeVisible(); await layout(); await shot('types-' + theme + '-' + width); result.states.push('success');
-    await page.getByRole('button', { name: '新建型号', exact: true }).click(); await expect(page.getByRole('dialog', { name: '新建型号草稿', exact: true })).toBeVisible(); await layout(); await shot('type-create-' + theme + '-' + width); await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0);
+    await expect(page.locator('[data-type-page=list]')).toHaveAttribute('data-type-state', 'success'); await expect(page.getByRole('table', { name: '型号', exact: true })).toBeVisible(); await layout(); result.states.push('success');
+    await page.getByRole('button', { name: '新建型号', exact: true }).click(); await expect(page.getByRole('dialog', { name: '新建型号草稿', exact: true })).toBeVisible(); await layout(); await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0);
   }
-  await page.getByRole('searchbox', { name: '查找型号', exact: true }).fill('没有匹配的型号检索'); await expect(page.getByText('暂无记录', { exact: true })).toBeVisible();
+  await page.getByRole('searchbox', { name: '查找型号', exact: true }).fill('没有匹配的型号检索'); await expect(page.getByText('没有匹配的型号设计', { exact: true })).toBeVisible();
   await page.getByRole('searchbox', { name: '查找型号', exact: true }).fill(''); await page.getByRole('table', { name: '型号', exact: true }).locator('.object-link').first().focus(); await page.keyboard.press('Enter'); await expect(page.locator('[data-drawing-canvas=cable]')).toBeVisible();
   expect(new URL(page.url()).pathname).toContain('/types/' + created.id + '/structure'); result.workflows.push('真实型号、检索、键盘进入、两主题两尺寸、新建对话框与Esc');
   const released = await fixture.api('/api/types/library'); result.historicalSourceAvailable = released.items.length > 0;

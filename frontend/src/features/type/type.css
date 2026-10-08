@@ -88,3 +88,30 @@
 .type-canvas-frame > .cad-viewport { flex: 1; height: auto; min-height: 0; border: 0; }
 .type-canvas-frame .cad-stage { min-height: 0; }
 .type-canvas-frame > .drawing-frame { flex: 1; height: auto; min-height: 0; border: 0; }
+.type-list-toolbar{padding:var(--space-3) 0;flex-wrap:wrap}
+.type-list-toolbar>.select-field{display:flex;flex-direction:row;align-items:center;gap:var(--space-2);margin-left:auto}
+.type-list-toolbar .select-trigger{min-width:calc(var(--space-12)*2.5)}
+.type-design-card{min-width:0;overflow:auto}
+.type-design-card>.property-panel{height:auto;border:0}
+.type-design-card[data-closable=false] .property-panel>header>.icon-button{display:none}
+.type-design-card .property-row,.type-root .property-row{min-height:var(--control-compact);padding-block:0;align-items:center;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr)}
+.type-design-card .property-row dd{min-width:0;text-align:right;white-space:normal;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.type-design-card .property-row dt{min-width:0;white-space:normal}
+.type-design-card .property-row .source-badge span{display:none}
+.type-design-card .property-panel>header h2{white-space:normal;overflow-wrap:anywhere}
+.type-module-status{flex:none;margin-left:auto;white-space:nowrap}
+.type-root .explorer-item>span:not(.type-module-status){min-width:0}
+.type-root .explorer-item b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+.type-root .command-state{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.type-property-fields{gap:0}
+.type-root .type-property-wrapper .number-field,.type-root .type-property-wrapper .select-field,.type-root .type-property-wrapper>.inspector-block .text-field{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);align-items:center;gap:var(--space-3);min-height:var(--control-compact)}
+.type-root .type-property-wrapper .number-field>label,.type-root .type-property-wrapper .select-field>label{margin:0;min-width:0;font-size:var(--text-note);overflow-wrap:anywhere}
+.type-root .type-property-wrapper .field-value-line{min-width:0;justify-content:flex-end}
+.type-root .type-property-wrapper .number-input{width:100%;min-width:0;height:var(--control-compact)}
+.type-root .type-property-wrapper input,.type-root .type-property-wrapper .select-trigger{min-width:0;width:100%;height:var(--control-compact);font-variant-numeric:tabular-nums;text-align:right}
+.type-root .type-property-wrapper .field-error{grid-column:1/-1}
+.type-field-source{font-size:var(--text-note);color:var(--text-secondary);text-align:right;line-height:var(--control-compact)}
+.work-panel:has([data-type-page=list])>.topbar h1{font-size:var(--text-heading);font-weight:600}
+.type-root .status-mark,[data-type-page=list] .status-mark,.type-design-card .status-mark{color:var(--text)}
+.type-root .type-property-wrapper .source-badge span{display:none}
+.type-root .type-property-wrapper .select-trigger>span:first-child{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

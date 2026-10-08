@@ -6,6 +6,7 @@ import type { components } from '@/api/generated/schema';
 import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { useTypeWorkspace } from './provider';
+import { methodLabel } from './evidence';
 
 type Definition = Omit<components['schemas']['CreateStudy'], 'expected_revision'>;
 type Prepared = { study: components['schemas']['StudyResponse']; preflight: components['schemas']['PreflightResponse']; revision: number };
@@ -80,7 +81,7 @@ export function TypeRunControl({ channel, label, definition, onBusy, unavailable
     <Dialog open={open} onOpenChange={value => { if (!busy) setOpen(value); }} title={label + ' · 预检'} description={prepared?.preflight.ready ? '保存输入已通过预检，确认范围后运行。' : '当前输入未通过预检，修正后重新提交。'}
       actions={<Button variant="primary" loading={busy} disabled={!ack || !prepared?.preflight.ready || state.dirty || state.workspace?.revision !== prepared?.revision} onClick={() => void execute()}>确认并运行</Button>}>
       <div className="type-create-fields">{prepared?.preflight.cases.filter(item => item.status !== 'succeeded').map(item => <p key={item.case_id} className="field-error">{text(optionalRecord(item.error).message) || item.status}</p>)}
-        {prepared && <p className="type-meta">方法 {prepared.study.definition.method.plugin_id} · {prepared.study.definition.method.version} · {prepared.study.definition.method.release_digest}</p>}
+        {prepared && <p className="type-meta" title={[prepared.study.definition.method.plugin_id, prepared.study.definition.method.release_digest].join(' · ')}>{methodLabel({ snapshot: { definition: prepared.study.definition } })}</p>}
         <ul>{prepared?.preflight.limitations.map(item => <li key={item}>{item}</li>)}</ul>{prepared?.preflight.ready && <label><input type="checkbox" checked={ack} onChange={event => setAck(event.target.checked)} /> 已核对输入来源与方法适用范围</label>}</div>
     </Dialog>
   </div>;

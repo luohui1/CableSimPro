@@ -18,7 +18,7 @@ async function run(command, args, options = {}) {
   const child = spawn(command, args, { cwd: root, windowsHide: true, ...options });
   const code = await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', resolve); }); if (code !== 0) throw Error(command + '退出' + code);
 }
-export async function typeFixture({ main = false } = {}) {
+export async function typeFixture({ main = false, build } = {}) {
   const python = process.env.PYTHON || path.join(root, process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python');
   const backendRoot=process.env.E2E_BACKEND_ROOT ? path.resolve(process.env.E2E_BACKEND_ROOT) : root;
   if(backendRoot!==root && (!backendRoot.startsWith(path.resolve(root,'.tmp')+path.sep)
@@ -42,7 +42,7 @@ export async function typeFixture({ main = false } = {}) {
     for (const stream of [backend.stdout, backend.stderr]) stream.on('data', data => { backendOutput = (backendOutput + data.toString()).slice(-12000); });
     async function ready(url, child) { for (let i = 0; i < 120; i++) { if (child.exitCode !== null || child.pid === undefined) throw Error(backendOutput.slice(-3000)); try { if ((await fetch(url, { signal: AbortSignal.timeout(1500) })).ok) return; } catch {} await delay(250); } throw Error('服务启动超时：' + url + '\n' + backendOutput.slice(-3000)); }
     await ready(environment.BACKEND_URL + '/api/health', backend);
-    const preview = spawn(process.execPath, [path.join(root, 'frontend/node_modules/vite/bin/vite.js'), 'preview', '--config', main ? 'vite.config.ts' : 'src/features/type/preview.config.ts', ...(main ? ['--outDir', path.join(output, 'main-build')] : []), '--host', '127.0.0.1', '--port', String(frontendPort), '--strictPort'], { cwd: path.join(root, 'frontend'), env: environment, windowsHide: true, stdio: 'ignore' }); preview.on('error', error => { backendOutput += String(error); }); owned.push(preview);
+    const preview = spawn(process.execPath, [path.join(root, 'frontend/node_modules/vite/bin/vite.js'), 'preview', '--config', main ? 'vite.config.ts' : 'src/features/type/preview.config.ts', ...(main ? ['--outDir', build || path.join(output, 'main-build')] : []), '--host', '127.0.0.1', '--port', String(frontendPort), '--strictPort'], { cwd: path.join(root, 'frontend'), env: environment, windowsHide: true, stdio: 'ignore' }); preview.on('error', error => { backendOutput += String(error); }); owned.push(preview);
     const url = 'http://127.0.0.1:' + frontendPort; await ready(url, preview);
     process.env.FRONTEND_URL = url; process.env.E2E_ISOLATED = '1'; browser = await openHeadlessBrowser();
     const errors = []; browser.page.on('pageerror', error => errors.push(error.message));

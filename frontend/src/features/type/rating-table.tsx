@@ -18,6 +18,7 @@ import { useTypeInspector } from './inspector';
 import { compileRating, isRatingDefinition, ratingBody, ratingResults, typeStudies, type RatingDraft } from './rating-api';
 import { TypeRunControl } from './run-control';
 import { MethodParameterFields } from '@/components/method-parameter-fields';
+import { EvidenceDigest } from './evidence-digest';
 
 const layouts = { trefoil: '直埋 · 品字', flat: '直埋 · 水平', ducts: '排管 · 品字', air: '空气', three_core_buried_single: '三芯直埋 · 单回', three_core_buried_horizontal: '三芯直埋 · 三回水平', three_core_ducts_horizontal: '三芯排管 · 三回水平' };
 const statusKinds: Record<string, StatusKind> = { 已计算: 'success', 未运行: 'unknown', 计算失败: 'error', 待补数据: 'unknown', 输入错误: 'error', 超出范围: 'inapplicable' };
@@ -60,7 +61,7 @@ export function TypeRatingTable({ tab }: { tab: string }) {
     inspector.show(row.name, [
       { label: '真实结果与范围', items: [{ label: '完整电流精度', value: numeric(result?.value_a) === null ? '—' : String(result!.value_a), unit: 'A', source: result && numeric(result.value_a) !== null ? 'calculation' : undefined, sourceDetail: saved ? methodLabel(saved.run) : undefined }, { label: '状态', value: text(result?.status) || '未运行' }, { label: '原因', value: text(result?.reason) || '—' }] },
       { label: '保存的实际工况', items: Object.entries(condition).filter(([key]) => key !== 'case_id' && key !== 'name' && key !== 'rating_basis' && (condition.layout === 'ducts' || condition.layout === 'three_core_ducts_horizontal' || !key.startsWith('duct_'))).map(([key, value]) => { const [label, unit] = conditionLabels[key] || [key]; const display = key === 'layout' ? layouts[text(value) as keyof typeof layouts] || text(value) : key === 'bonding' ? ({ both_ends: '两端接地', single_point: '单点接地', unspecified: '待明确' }[text(value)] || text(value)) : numeric(value) === null ? value === null ? '未提供' : String(value) : formatNumber(numeric(value), 6); return { label, value: <span title={value === null ? undefined : String(value)}>{display}</span>, unit, source: numeric(value) === null ? undefined : 'user' as const, sourceDetail: text(condition.source) || undefined }; }) },
-      { label: '方法与工件', items: [{ label: '方法', value: saved ? methodLabel(saved.run) : '未运行' }, { label: '运行', value: saved ? text(saved.run.id) : '未运行' }, { label: '工件摘要', value: result ? Object.entries(optionalRecord(result.artifact_digests)).map(([key, value]) => displayName(key) + ' · ' + text(value)).join('；') : '未运行' }] },
+      { label: '方法与工件', items: [{ label: '方法', value: saved ? methodLabel(saved.run) : '未运行' }, { label: '运行', value: saved ? <EvidenceDigest value={saved.run.id} /> : '未运行' }, { label: '工件摘要', value: result ? Object.entries(optionalRecord(result.artifact_digests)).map(([key, value]) => <span key={key}>{displayName(key)} · <EvidenceDigest value={value} /> </span>) : '未运行' }] },
     ]);
   }
   async function definition() { if (!savedStudy) throw Error('请先保存工况表'); return compileRating(state.workspace!.id, state.workspace!.revision, ratingBody(savedStudy)); }
