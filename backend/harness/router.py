@@ -6,7 +6,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import TypeAdapter
 from starlette.background import BackgroundTask
 
-from .contracts import AgentStatus,ToolInfo,CreateSession,SessionId,SessionSummary,ModelSettingsUpdate,ModelSettingsTest,Message,SessionRecord,ProposalDecision,StreamEvent,PlanNode
+from .contracts import AgentStatus,ToolInfo,RecipeInfo,CreateSession,SessionId,SessionSummary,ModelSettingsUpdate,ModelSettingsTest,Message,SessionRecord,ProposalDecision,StreamEvent,PlanNode
+from .recipes import recipes
 
 
 def make_router(harness):
@@ -30,6 +31,9 @@ def make_router(harness):
 
     @router.get('/tools',response_model=list[ToolInfo],response_model_exclude_none=True)
     def tools():return harness.tools()
+
+    @router.get('/recipes',response_model=list[RecipeInfo])
+    def recipe_catalog():return recipes()
 
     @router.post('/sessions',response_model=SessionId)
     def create(body:CreateSession):return harness.create(body)

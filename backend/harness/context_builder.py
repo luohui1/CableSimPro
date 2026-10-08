@@ -49,6 +49,7 @@ def compress_result(value,maximum=RESULT_BYTES):
 def messages(record):
     # Completed results are durable even if delivery of their SSE event was interrupted.
     outcomes={step['node_id']:step.get('result') for step in record['steps'] if step.get('result')}
+    arguments={step['node_id']:step['arguments'] for step in record['steps'] if step.get('result')}
     # 思考模式（DeepSeek 等）：带工具的请求必须回传全部历史 reasoning_content；
     # 只在服务确实返回过思维链时才带这个字段，宿主自己生成的回答补空串，其他服务看不到它。
     thinking=any(message.get('reasoning_content') for message in record['messages'])
@@ -65,7 +66,7 @@ def messages(record):
                 calls=[call for call in calls if call['id'] in outcomes]
                 if not calls:continue
                 row['tool_calls']=[{'id':call['id'],'type':'function','function':{
-                    'name':call['name'],'arguments':json.dumps(call['arguments'],ensure_ascii=False,separators=(',',':'))}}
+                    'name':call['name'],'arguments':json.dumps(arguments.get(call['id'],call['arguments']),ensure_ascii=False,separators=(',',':'))}}
                     for call in calls]
             result.append(row)
             for call in calls:

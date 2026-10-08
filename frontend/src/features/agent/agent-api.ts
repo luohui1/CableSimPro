@@ -50,6 +50,10 @@ async function json<T>(response: Response): Promise<T> {
 
 export const agentStatus = (signal?: AbortSignal) => fetch("/api/agent/status", { signal }).then((response) => json<AgentStatus>(response));
 
+/** 宿主审过的工程配方（结论汇总、检查缺项、方案试算对比……）；模型按配方编排既有工具，权限不放宽。 */
+export type AgentRecipe = { id: string; name: string; description: string; parameters: Record<string, unknown> };
+export const agentRecipes = (signal?: AbortSignal) => fetch("/api/agent/recipes", { signal }).then((response) => json<AgentRecipe[]>(response));
+
 export const agentTools = (signal?: AbortSignal) => fetch("/api/agent/tools", { signal }).then((response) => json<AgentTool[]>(response));
 
 /** 模型设置：密钥只写不读，响应里只有是否已保存、末四位与存放位置。 */

@@ -85,12 +85,13 @@
 
 | 接口 | 请求/结果 |
 | --- | --- |
-| GET `/api/agent/status` | `{configured,model,tools}`；model未配置时展示deepseek-flash，tools为实际注册数量 |
+| GET `/api/agent/status` | `{configured,model,tools}`；model未配置时展示deepseek-flash；从内存清单计数，不构建工具规格或等待输入契约锁 |
 | GET `/api/agent/settings` | 当前生效的模型连接：`source`（settings/environment/none）、地址、模型名、`has_key`、末四位提示、密钥来源与存放位置（system 系统凭据库 / memory 仅本次进程）、自定义指令、单次请求超时；从不返回密钥 |
 | PUT `/api/agent/settings` | `{base_url,model,api_key?,instructions,model_timeout_s?}`；api_key 省略则保留原密钥，空串清除；非敏感项写入工程库 `agent_settings`，密钥只进系统凭据库或进程内存；保存的设置优先于 `CABLESIM_LLM_*` 环境变量 |
 | DELETE `/api/agent/settings` | 清除界面设置与保存的密钥，回到环境变量配置 |
 | POST `/api/agent/settings/test` | `{base_url?,model?,api_key?}`，缺项取当前生效值；发一次最小对话请求，返回 `{ok,latency_ms?,model?,code?,message?}`，不保存任何内容 |
-| GET `/api/agent/tools` | `[{name,title,kind,description,plugin_id?,hpc}]`；kind为read/propose/run，宿主工具不带plugin_id |
+| GET `/api/agent/tools` | `[{name,title,kind,description,plugin_id?,hpc}]`；kind为read/propose/run，宿主工具不带plugin_id；直接从已校验清单构建发现信息，后续沿用源码通知缓存；完整封签核验仍在能力检查与执行边界进行 |
+| GET `/api/agent/recipes` | `[{id,name,description,parameters}]`；parameters为所需参数的JSON Schema，供前端“/”菜单展示与填参；未给study_id时使用会话绑定研究 |
 | GET `/api/agent/sessions?workspace_id=` | 任务列表，按更新时间新到旧：绑定、状态/等待原因、首条提问作标题、未决方案数；不含消息正文与结果 |
 | POST `/api/agent/sessions` | `{workspace_id,study_id:null或UUID}` → `{id}`；校验工程与研究归属，记录固定修订及本机快速执行授权 |
 | POST `/api/agent/sessions/{id}/messages` | `{content}` → `text/event-stream`；每会话同时只处理一条消息，冲突409 |
@@ -100,7 +101,13 @@
 | POST `/api/agent/sessions/{id}/reconcile` | 无正文；查询原Run，返回`{resolved,unknown,reissued:false}`；不重新执行未知预览或提交作业 |
 | GET `/api/agent/contract` | 生成的事件、节点和实际模型工具参数JSON Schema；SSE事件schema也写入OpenAPI的x-sse-events |
 
-当前12个宿主工具为workspace_list/read、study_list/read、run_list/read、plugin_inspect、cable_model_read、propose_domain_changes、propose_method_parameters、study_preflight、study_preview。另从51个已安装能力生成工具，总计63。插件工具未绑定研究时只生成新建研究方案，批准后只保存Study；绑定研究时必须与该研究的准确方法一致，只有preview且非远程能力可本机试算。原生或HPC预检需要人工执行，不通过LLM触发远程作业。
+当前16个宿主工具为workspace_list/read、study_list/read、run_list/read、plugin_inspect、cable_model_read、propose_domain_changes、propose_method_parameters、study_preflight、study_preview、project_digest、study_baseline、sensitivity_inputs、recipe_execute。另从51个已安装能力生成工具，总计67。插件工具未绑定研究时只生成新建研究方案，批准后只保存Study；绑定研究时必须与该研究的准确方法一致，只有preview且非远程能力可本机试算。原生或HPC预检需要人工执行，不通过LLM触发远程作业。
+
+`project_digest({after?,limit?})`返回本工程各研究最新保存运行：`data.studies[]`含`study_id/title/study_revision/run_state/latest_run`，run_state为`not_run/stale/failed/normal/running`；latest_run带运行身份、方法版本与发行摘要、输入/输出摘要、headlines（实体、工况、SI及显示单位）、插件限制对象及原工况证据。完整性失败时不提供量值。整个工具结果UTF-8紧凑JSON不超过6KiB；`next_cursor`非空表示尚有研究，继续用`after=next_cursor`分页；单研究过大时`details_omitted=true`并指向`run_read(study_id,run_id)`。未绑定研究的`run_list`直接返回此摘要，不再发STUDY_REQUIRED。
+
+`recipe_execute({recipe,parameters})`只编译有限的既有工具步骤：`conclusion_summary`→project_digest；`missing_inputs`→workspace_read、study_preflight；`proposal_comparison`→study_baseline、字段方案、study_preview；`sensitivity_advice`→workspace_read、sensitivity_inputs、project_digest。方案对比要求`scope:domain|parameters`及明确`changes`，可指定研究、模块、原运行和工况；自动选择当前最新正常保存运行，single使用唯一主工况、selection使用已保存推荐工况，扫描/批量须指定case_id。失败或过期原运行会停止后续步骤。所有步骤照常计入预算、保存计划和操作身份；绑定值仅来自同配方已成功步骤。`recipe.compiled`记录展开节点，`recipe.bound`记录来源节点、字段路径与解析后参数摘要。参数敏感性只整理已保存字段和封签约束，不计算敏感性或自动采样。
+
+同条消息中完全相同的工具、参数与输入身份已返回错误时，宿主不再执行该动作；`tool.diagnostic_reused`引用原操作，后续返回DIAGNOSTIC_ALREADY_REPORTED并进入一次收尾。修改输入或进入新消息可重新检查。
 
 SSE每个事件恰为`event: 类型`与`data: 单行JSON`，空行分隔；中文JSON保留字符，字符串内换行转义。事件data字段：
 

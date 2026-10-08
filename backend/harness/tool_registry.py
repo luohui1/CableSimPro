@@ -5,7 +5,7 @@ from hashlib import sha256
 import json
 from threading import RLock
 
-from backend.kernel.input_contracts import contracts
+from .recipes import recipe_schema
 
 
 def object_schema(properties=None,required=None):
@@ -107,9 +107,14 @@ def host_tools():
         ('workspace_read','读取工程输入','read','读取会话固定版本的工程事实、字段与单位；不修改输入。',object_schema({
             'paths':{'type':'array','maxItems':8,'items':{'type':'string'},'description':'可选稳定领域路径；省略返回有界工程概览。'}})),
         ('study_list','列出研究','read','读取本工程的研究名称、方法与状态。',object_schema()),
+        ('project_digest','汇总工程研究结论','read','优先用于结论汇总：一次读取各研究最新保存运行的量值、单位、口径、限制对象和状态；按next_cursor分页。',object_schema({
+            'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':20}})),
+        ('recipe_execute','执行工程配方','run','选择宿主配方并填参数；宿主展开有限工具步骤，每一步照常核验权限、预算并审计。',recipe_schema()),
+        ('study_baseline','读取试算对比原工况','read','读取当前最新保存运行，绑定快速预览原工况；扫描/批量须明确case_id。',object_schema({**STUDY,'run_id':TEXT,'case_id':TEXT})),
+        ('sensitivity_inputs','读取敏感性研究约束','read','读取当前方法参数与封签范围；只供研究建议，不猜敏感性或自动求解。',object_schema(STUDY)),
         ('study_read','读取研究定义与工况','read','读取已保存研究的参数、驱动与工况身份。',object_schema({**STUDY,
             'case_id':TEXT,'input_paths':{'type':'array','maxItems':8,'items':{'type':'string'},'description':'按稳定字段路径读取保存输入；批量工况须明确case_id。'}})),
-        ('run_list','读取运行摘要','read','读取指定研究保存运行的有界摘要与关键结论。',object_schema({**STUDY,
+        ('run_list','读取运行摘要','read','有study_id时读取研究保存运行；未选研究时直接返回工程最新结论摘要，无需重试。',object_schema({**STUDY,
             'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':10}})),
         ('run_read','读取运行结果要点','read','只读指定运行的量值、来源与分项证据；不读完整场数组。',object_schema({**STUDY,
             'run_id':TEXT,'case_id':TEXT,'entity':TEXT,'key':TEXT,'input_paths':{'type':'array','maxItems':8,'items':{'type':'string'},
@@ -144,12 +149,31 @@ def nested_schema(schema):
     return value
 
 
+def capability_name(plugin_id,capability):
+    name=(plugin_id+'__'+capability).replace('.','_').replace('-','_')
+    return name[:55]+'_'+sha256(name.encode()).hexdigest()[:8] if len(name)>64 else name
+
+
 class ToolRegistry:
     def __init__(self,research):
         self.research=research
         self.lock=RLock()
         self.payload=None
         self.current=None
+        self.hosts=host_tools()
+        self.catalog_count=len(self.hosts)
+
+    def initialize(self):
+        # Load only manifest metadata before serving status, never full contracts.
+        from backend.plugin_host import PluginHostError
+        try:
+            registry=self.research.registry()
+            self.catalog_count=len(self.hosts)+sum(cap.input_contract is not None
+                for plugin in registry.plugins.values() for cap in plugin.manifest.capabilities)
+        except PluginHostError:
+            # A broken plugin must not make model settings/status unavailable.
+            # /tools and execution retain the existing explicit plugin diagnosis.
+            self.catalog_count=len(self.hosts)
 
     def tools(self):
         # Reuse the host's existing source-notification cache; no new TTL cache.
@@ -165,20 +189,47 @@ class ToolRegistry:
                 self.payload=payload
             return self.current
 
+    def info(self):
+        """The UI directory does not need parameter schemas or model definitions."""
+        cache=self.research.read_responses;key=('agent-tool-directory',)
+        payload=cache.get(key,False)
+        if payload is None:
+            def load():
+                rows=[tool.info() for tool in self.hosts]
+                for plugin in self.research.registry().plugins.values():
+                    for cap in plugin.manifest.capabilities:
+                        if cap.input_contract is None:continue
+                        rows.append({'name':capability_name(plugin.manifest.id,cap.id),'title':cap.title,'kind':'run',
+                            'description':(cap.description or cap.title)+' 已选研究时只允许快速预览；未选研究时仅生成新建研究方案。',
+                            'plugin_id':plugin.manifest.id,
+                            'hpc':bool(hasattr(self.research.executor,'required') and self.research.executor.required(plugin.manifest.id,cap.id))})
+                self.catalog_count=len(rows)
+                return json.dumps(rows,ensure_ascii=False,allow_nan=False).encode()
+            payload=cache.build(key,None,load,False)
+        return json.loads(payload)
+
     def build(self):
-        entries=contracts(self.research)
+        # Discovery uses validated installed manifests only. Full input-contract
+        # construction and release verification remain at inspection/execution.
         registry=self.research.registry()
-        values=host_tools()
-        for entry in entries:
-            method=entry['method'];cap=registry.get(method['plugin_id']).manifest.capability(method['capability'])
-            name=(method['plugin_id']+'__'+cap.id).replace('.','_').replace('-','_')
-            if len(name)>64:name=name[:55]+'_'+sha256(name.encode()).hexdigest()[:8]
-            hpc=bool(hasattr(self.research.executor,'required') and self.research.executor.required(method['plugin_id'],cap.id))
-            description=(cap.description or cap.title)+' 已选研究时只允许快速预览；未选研究时仅生成新建研究方案。'
-            parameters=object_schema({**STUDY,'parameters':nested_schema(entry['parameter_schema']),'title':TEXT})
-            values.append(Tool(name,cap.title,'run',description,parameters,method['plugin_id'],hpc,method,entry['preview']))
+        values=deepcopy(self.hosts)
+        for plugin in registry.plugins.values():
+            pinned=self.research.pin(plugin)
+            for cap in plugin.manifest.capabilities:
+                if cap.input_contract is None:continue
+                method={**pinned,'capability':cap.id}
+                name=capability_name(method['plugin_id'],cap.id)
+                hpc=bool(hasattr(self.research.executor,'required') and self.research.executor.required(method['plugin_id'],cap.id))
+                description=(cap.description or cap.title)+' 已选研究时只允许快速预览；未选研究时仅生成新建研究方案。'
+                parameters=object_schema({**STUDY,'parameters':nested_schema(cap.parameter_schema.model_dump(mode='json',by_alias=True,exclude_none=False)),'title':TEXT})
+                values.append(Tool(name,cap.title,'run',description,parameters,method['plugin_id'],hpc,method,cap.preview))
         if len({tool.name for tool in values})!=len(values):raise ValueError('duplicate tool names')
+        self.catalog_count=len(values)
         return {tool.name:tool for tool in values}
+
+    def count(self):
+        # No disk scan, schema generation or contract-read lock on /status.
+        return self.catalog_count
 
     def visible(self,record):
         enabled={name for step in record['steps'] if step['tool']=='plugin_inspect' and step.get('result')

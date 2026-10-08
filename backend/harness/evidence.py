@@ -394,6 +394,10 @@ def evidence_summary(record):
         result=step.get('result') or {};data=result.get('data') or {};reference=result.get('execution_ref') or {}
         if data.get('run_id') and 'cases' in data:
             saved[data['run_id']]=data
+        for study in data.get('studies',[]):
+            latest=study.get('latest_run') or {}
+            if latest.get('run_id') and ('cases' in latest or latest.get('headlines')):
+                saved[latest['run_id']]={**latest,'cases':latest.get('cases',[])}
         if data.get('preview') and data.get('cases'):trials.append((data,reference))
     for rid,data in saved.items():
         if len(data['cases'])>1 and not data.get('headlines'):

@@ -6,6 +6,8 @@ from time import perf_counter,time
 from fastapi import HTTPException
 from pydantic import TypeAdapter
 from backend.kernel.workspace import stamp
+from backend.domain.guards import value_at
+from backend.kernel.workspace import fingerprint
 
 from .contracts import StreamEvent
 from .context_builder import request_summary,compress_result
@@ -35,6 +37,7 @@ class Harness:
     def initialize(self):
         self.tasks.initialize()
         self.settings.initialize()
+        self.registry.initialize()
 
     def test_model(self,body):
         """Probe a candidate connection; omitted fields fall back to the one in use."""
@@ -47,10 +50,10 @@ class Harness:
 
     def status(self):
         configured,model=self.model.status()
-        return {'configured':configured,'model':model,'tools':len(self.registry.tools())}
+        return {'configured':configured,'model':model,'tools':self.registry.count()}
 
     def tools(self):
-        return [tool.info() for tool in self.registry.tools().values()]
+        return self.registry.info()
 
     def create(self,body):
         wid=str(body.workspace_id);sid=str(body.study_id) if body.study_id else None
@@ -116,17 +119,46 @@ class Harness:
                         node['preparation_error']={'code':detail.get('code','INPUT_IDENTITY_INVALID') if isinstance(detail,dict) else 'INPUT_IDENTITY_INVALID',
                             'message':redact(str(detail))}
                 revision=self.tasks.add_plan(tid,plan)
+                recipes={node['input_identity'].get('recipe') for node in plan['nodes']} - {None}
+                if recipes:self.tasks.emit(tid,'recipe.compiled',{'turn_id':turn,'revision':revision,
+                    'recipes':sorted(recipes),'nodes':[{'id':node['id'],'tool':node['tool'],
+                        'recipe':node['input_identity'].get('recipe'),'bindings':node.get('bindings',{})} for node in plan['nodes']],
+                    'engineering_approval':False})
                 self.tasks.emit(tid,'chat.message',{'role':'assistant','content':None,'turn_id':turn,**({'reasoning_content':reply.reasoning} if reply.reasoning else {}),
                     'tool_calls':[{'id':node['id'],'name':node['tool'],'arguments':node['arguments']} for node in plan['nodes']]})
                 for node in plan['nodes']:
                     tool=tools.get(node['tool'])
+                    if node['input_identity'].get('recipe'):
+                        outcomes={step['node_id']:step for step in self.tasks.record(tid)['steps']}
+                        dependencies=[outcomes.get(identifier) for identifier in node['depends_on']]
+                        if any(step and step['state']!='succeeded' for step in dependencies):
+                            node['preparation_error']={'code':'RECIPE_DEPENDENCY_FAILED',
+                                'message':'配方前一步未成功，后续动作未执行；请先处理原诊断。'}
+                        elif node.get('bindings'):
+                            for field,binding in node['bindings'].items():
+                                source=outcomes.get(binding['node_id'])
+                                if not source or not source.get('result') or source['state']!='succeeded':
+                                    node['preparation_error']={'code':'RECIPE_DEPENDENCY_FAILED','message':'配方输入证据未取得，后续动作未执行。'}
+                                    break
+                                node['arguments'][field]=value_at(source['result'],binding['path'])
+                            node['arguments_digest']=fingerprint(node['arguments'])
+                            node['input_identity']=self.broker.identity(task,node,tool)
+                            self.tasks.emit(tid,'recipe.bound',{'turn_id':turn,'node_id':node['id'],
+                                'bindings':node['bindings'],'arguments_digest':node['arguments_digest']})
+                    # An identical failed action cannot learn anything by executing
+                    # again. Retain its original diagnostic once and close this turn.
+                    prior=self.previous_error(tid,node)
                     operation=self.tasks.issue(tid,turn,revision,node)
                     title=tool.title if tool else '未注册工具'
                     yield self.emit(tid,'tool.call',{'id':node['id'],'tool':node['tool'],'title':title,'arguments':node['arguments']})
                     self.tasks.running(tid,operation)
                     started=perf_counter()
-                    result=(failure(**node['preparation_error']) if node.get('preparation_error')
+                    result=(failure('DIAGNOSTIC_ALREADY_REPORTED','同一工具与输入的诊断已给出，未重复执行；请处理原缺项。',
+                                actions=['读取原诊断并修正输入；结论汇总可直接使用 project_digest。']) if prior
+                            else failure(**node['preparation_error']) if node.get('preparation_error')
                             else self.broker.execute(task,node,tool))
+                    if prior:self.tasks.emit(tid,'tool.diagnostic_reused',{'turn_id':turn,'node_id':node['id'],
+                        'source_operation_id':prior['operation_id']})
                     result=redact(result.model_dump(mode='json'))
                     self.tasks.finish_step(tid,operation,result,(perf_counter()-started)*1000)
                     yield self.emit(tid,'tool.result',{'id':node['id'],'status':result['status'],
@@ -134,6 +166,8 @@ class Harness:
                     if result['data'].get('proposal'):
                         yield self.emit(tid,'proposal.created',result['data']['proposal'],persist=False)
                     codes={item['code'] for item in result['diagnostics']}
+                    if 'DIAGNOSTIC_ALREADY_REPORTED' in codes:
+                        raise HTTPException(422,{'code':'DIAGNOSTIC_ALREADY_REPORTED','message':'重复动作已停止；请按原诊断修正输入。'})
                     if 'HUMAN_EXECUTION_REQUIRED' in codes:
                         state,reason='waiting','scope_confirmation'
                         break
@@ -265,6 +299,16 @@ class Harness:
         return sum(step['tool']==node['tool'] and step['arguments_digest']==node['arguments_digest']
             and [(item['code'],item.get('path')) for item in step['result']['diagnostics']]==signature
             for step in record['steps'] if step.get('result') and step['result']['status']=='error' and step['created']>=began)
+
+    def previous_error(self,tid,node):
+        record=self.tasks.record(tid)
+        began=next(event['created'] for event in reversed(record['events'])
+            if event['type']=='chat.message' and event['data'].get('role')=='user')
+        physical=lambda identity:{key:value for key,value in identity.items() if key not in ('recipe','recipe_version','recipe_step')}
+        return next((step for step in reversed(record['steps']) if step.get('result')
+            and step['result']['status']=='error' and step['created']>=began
+            and step['tool']==node['tool'] and step['arguments_digest']==node['arguments_digest']
+            and physical(step['input_identity'])==physical(node['input_identity'])),None)
 
     def close_stream(self,tid,turn,iterator):
         iterator.close()

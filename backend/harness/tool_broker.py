@@ -12,11 +12,13 @@ from backend.kernel.contracts import PreviewStudy
 from backend.kernel.preview import preview
 from backend.kernel.workspace import fingerprint
 from backend.plugin_host import PluginHostError
+from backend.plugin_host.parameter_contracts import schemas
 
 from .contracts import ToolResult,Diagnostic
 from .evidence import run_points
 from .fields import domain_metadata, displayed
 from .security import redact
+from .project_digest import project_digest, study_baseline
 
 
 def failure(code,message,path=None,actions=None):
@@ -85,7 +87,7 @@ class ToolBroker:
 
     def identity(self,task,node,tool):
         args=node['arguments'];identity=deepcopy(node['input_identity'])
-        if tool and (tool.method or tool.name in ('study_read','run_list','run_read','propose_method_parameters','study_preflight','study_preview')):
+        if tool and (tool.method or tool.name in ('study_read','run_list','run_read','study_baseline','sensitivity_inputs','propose_method_parameters','study_preflight','study_preview')):
             sid=args.get('study_id') or task['study_id']
             if sid:
                 with self.research.store.db() as db:
@@ -151,6 +153,27 @@ class ToolBroker:
                 {key:row[key] for key in ('id','revision','latest_run_id','version_status')} |
                 {'title':row['definition']['title'],'method':row['definition']['method'],'driver':row['definition']['driver']['kind']}
                 for row in studies]})
+        if name=='project_digest':
+            return project_digest(self.research,task,args)
+        if name=='study_baseline':
+            return study_baseline(self.research,task,args)
+        if name=='sensitivity_inputs':
+            sid=self.study_id(task,args)
+            _,state,study=self.proposals.source(task,sid)
+            selected=self.research.module_definition(study['definition'],args.get('module'))
+            _,cap=self.research.resolve(selected['method'])
+            source=selected['method_input'] if selected['input_source']=='study' else state.get('domain')
+            if source is None:raise HTTPException(422,'研究缺少明确输入，不能提出敏感性范围。')
+            schema,_=schemas(cap,source)
+            fields=[]
+            for key,spec in schema.get('properties',{}).items():
+                if spec.get('readOnly') or (spec.get('x-bind') or {}).get('read_only'):continue
+                unit=spec.get('x-unit') or {}
+                fields.append({'path':'/parameters/'+key,'value':selected['parameters'].get(key),
+                    'unit':unit.get('si'),'schema':spec})
+            return ToolResult(status='ok',summary='已读取保存参数与封签约束；未计算敏感性，不补造建议范围。',
+                data={'study_id':sid,'method':selected['method'],'fields':fields,
+                    'limitations':['定量敏感性需明确候选值、保持同工况并取得试算或人工正式运行证据。']})
         if name=='study_read':
             sid=self.study_id(task,args)
             _,_,study=self.proposals.source(task,sid)
@@ -171,6 +194,8 @@ class ToolBroker:
                 data['input_fields']=self.field_points(source,args['input_paths'])
             return ToolResult(status='ok',summary='已读取保存研究的定义与工况。',data=data)
         if name=='run_list':
+            if not (args.get('study_id') or task['study_id']):
+                return project_digest(self.research,task,args)
             sid=self.study_id(task,args)
             page=self.research.list_runs(wid,sid,args.get('after',0),args.get('limit',5),view='summary')
             return ToolResult(status='ok',summary='已读取保存运行摘要；空结论没有补默认值。',data=page)

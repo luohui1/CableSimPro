@@ -92,6 +92,13 @@ class ToolInfo(StrictModel):
     hpc: bool
 
 
+class RecipeInfo(StrictModel):
+    id: Literal['conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice']
+    name: str
+    description: str
+    parameters: dict[str,JsonValue]
+
+
 class Diagnostic(StrictModel):
     code: str
     message: str
@@ -148,6 +155,7 @@ class PlanNode(StrictModel):
     depends_on: list[str]
     provider_call_id: str
     preparation_error: dict[str,JsonValue] | None = None
+    bindings: dict[str,JsonValue] = Field(default_factory=dict)
 
 
 class SessionRecord(StrictModel):

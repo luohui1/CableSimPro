@@ -30,6 +30,9 @@ def answer(text):
 @pytest.fixture
 def fake_model(monkeypatch):
     script=deque();requests=[]
+    # The loopback fake must never depend on the developer's proxy or send its
+    # test credential through an external transport during the full suite.
+    monkeypatch.setenv('NO_PROXY','127.0.0.1,localhost,::1')
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args):pass
         def do_POST(self):
@@ -277,8 +280,8 @@ def test_message_budget_reserves_tool_free_answer_and_resets_next_message(client
 def test_missing_model_configuration_keeps_status_tools_and_sse_available(client,monkeypatch):
     for name in ('CABLESIM_LLM_BASE_URL','CABLESIM_LLM_MODEL','CABLESIM_LLM_API_KEY'):monkeypatch.delenv(name,raising=False)
     status=client.get('/api/agent/status').json()
-    assert status=={'configured':False,'model':'deepseek-flash','tools':63}
-    tools=client.get('/api/agent/tools').json();assert len(tools)==63
+    assert status=={'configured':False,'model':'deepseek-flash','tools':67}
+    tools=client.get('/api/agent/tools').json();assert len(tools)==67
     assert len([tool for tool in tools if tool.get('plugin_id')])==51
     assert all(tool['kind'] in ('read','propose','run') and tool['title'] for tool in tools)
     w=client.post('/api/workspaces',json={}).json();tid=session(client,w)

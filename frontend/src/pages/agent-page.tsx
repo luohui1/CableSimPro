@@ -14,20 +14,20 @@ import { SectionThumbnail } from "@/features/drawing";
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { workspaceQuery } from "@/lib/study-queries";
-import { agentSessions, agentTools } from "@/features/agent/agent-api";
+import { agentRecipes, agentSessions, agentTools } from "@/features/agent/agent-api";
 import { PreviewCard, ProposalCard, SavedRunCard, TurnView } from "@/features/agent/conversation";
 import { PromptBar, type PromptCommand, type PromptReference } from "@/features/agent/prompt-bar";
 import { taskState } from "@/features/agent/task-list";
 import { useAgentSession, useAgentStatus } from "@/features/agent/use-agent-session";
 
 const SUGGESTIONS = ["汇总各研究的载流量结论和限制因素", "这个工程里哪些研究还没有结果？", "土壤热阻率改成 1.2 K·m/W，给出方案并试算最高导体温度的变化"];
-/** “/” 调出的常用任务：只放 Agent 现有工具做得到的事。 */
-const COMMANDS: PromptCommand[] = [
-  { key: "summary", name: "结论汇总", description: "各研究的结论量值与限制对象", text: "汇总本工程各研究的结论量值和限制因素" },
-  { key: "missing", name: "检查缺项", description: "工程模型与研究还缺哪些输入", text: "检查工程模型和各研究还缺哪些输入，按影响排序" },
-  { key: "trial", name: "方案试算", description: "改一个参数，给出方案并快速试算", text: "给出修改方案并快速试算对比：" },
-  { key: "explain", name: "解释结果", description: "说明某个研究为什么得到这个结论", text: "解释这个研究的结论和主要限制因素：" },
-];
+/** “/” 菜单来自宿主配方（GET /api/agent/recipes）；选中后填入一句任务开头，模型据此调用 recipe_execute。 */
+const RECIPE_TEXT: Record<string, string> = {
+  conclusion_summary: "汇总本工程各研究的结论量值和限制因素",
+  missing_inputs: "检查工程模型和各研究还缺哪些输入，按影响排序",
+  proposal_comparison: "给出修改方案并快速试算对比：",
+  sensitivity_advice: "给出参数敏感性研究建议：",
+};
 const SIDE_KEY = "cablesim:agent:side-open";
 const readSide = () => { try { return localStorage.getItem(SIDE_KEY) !== "false"; } catch { return true; } };
 const storeSide = (open: boolean) => { try { localStorage.setItem(SIDE_KEY, String(open)); } catch { /* 隐私模式只保留本次 */ } };
@@ -43,6 +43,8 @@ export function AgentPage() {
   const { ready, canSend, label: model } = useAgentStatus();
   const tools = useQuery({ queryKey: ["agent-tools"], queryFn: ({ signal }) => agentTools(signal), retry: false, staleTime: 60_000 });
   const kinds = useMemo(() => new Map((tools.data || []).map((tool) => [tool.name, tool.kind])), [tools.data]);
+  const recipes = useQuery({ queryKey: ["agent-recipes"], queryFn: ({ signal }) => agentRecipes(signal), retry: false, staleTime: 300_000 });
+  const commands: PromptCommand[] = (recipes.data || []).map((row) => ({ key: row.id, name: row.name, description: row.description, text: RECIPE_TEXT[row.id] || `${row.name}：` }));
   const sessions = useQuery({ queryKey: ["agent-sessions"], queryFn: ({ signal }) => agentSessions(undefined, signal), retry: false });
   const projects = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
   const types = useQuery({ queryKey: ["type-index"], queryFn: ({ signal }) => typeIndex(signal) });
@@ -150,7 +152,7 @@ export function AgentPage() {
         <div className="agent-prompt">
           <PromptBar value={draft} onChange={setDraft} onSend={() => send(draft)} onStop={agent.stop} busy={agent.sending} canSend={canSend && !!project}
             placeholder={canSend ? "描述任务，或输入 @ 引用研究、/ 调出常用任务" : "Agent 模型未连接，暂时不能发送"}
-            references={references} commands={COMMANDS}
+            references={references} commands={commands}
             model={<><span className={`status-dot ${ready ? "is-ok" : "is-off"}`} /><span className="agent-panel-model">{model}</span></>} />
           <div className="agent-prompt-scope">{scope}</div>
         </div>
