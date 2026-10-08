@@ -7,7 +7,8 @@ import { pluginArt } from "@/lib/illustrations";
 import { ANALYSIS_KINDS, isBenchmarked, validationLevel } from "@/lib/plugin-labels";
 import { CatalogShell, usePageTheme } from "@/components/catalog-shell";
 import { QueryState } from "@/components/query-state";
-import { EmptyState } from "@/components/states";
+import { EmptyState, InlineEmpty } from "@/components/states";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 
@@ -83,73 +84,87 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
   const figure = resource(row, "method"), validationFigure = resource(row, "validation");
   const presentation = optionalRecord(row.presentation);
   const enforced = [policy.timeout_enforced && "强制超时", policy.parent_death_enforced && "宿主退出即终止", policy.process_tree_cleanup_enforced && "清理子进程", policy.memory_limit_enforced && "内存上限", policy.network_isolation_enforced && "断网运行"].filter(Boolean) as string[];
+  const levels = caps.map((cap) => text(optionalRecord(cap.validation).level)).filter(Boolean);
+  const best = levels.find(isBenchmarked) || levels[0];
+  // 详情页模板（§2.4）：页头 → 页签 → 正文与右侧名片；运行约束、平台、插件 ID、封签放进“技术信息”
   return <article className="plugin-detail" aria-label={text(row.name)}>
     <header className="plugin-hero">
       {art && <img src={art} alt="" />}
       <div>
-        <h1>{text(row.name)}{text(presentation.category_title) && <span className="tag">{text(presentation.category_title)}</span>}</h1>
-        <p className="plugin-id"><code>{id}</code><span>{text(method.version)}</span></p>
+        <h1>{text(row.name)}<span className="muted">{text(method.version)}</span>{text(presentation.category_title) && <span className="tag">{text(presentation.category_title)}</span>}</h1>
         <p className="plugin-description">{text(row.description)}</p>
       </div>
     </header>
-
-    <dl className="plugin-facts">
-      <div><dt>运行位置</dt><dd>{text(policy.backend) === "slurm" ? "超算（Slurm 作业）" : "本机 · 独立进程"}</dd></div>
-      <div><dt>运行约束</dt><dd>{enforced.length ? enforced.join("、") : "—"}</dd></div>
-      <div><dt>平台</dt><dd>{platforms.join("、") || "—"}</dd></div>
-      <div><dt>被研究使用</dt><dd>{studies.length} 个</dd></div>
-    </dl>
-
-    {figure && <section className="plugin-section">
-      <h2>方法</h2>
-      <figure className="plugin-figure"><img src={text(figure.url)} alt={text(figure.title)} /><figcaption><b>{text(figure.title)}</b>{text(figure.description)}</figcaption></figure>
-    </section>}
-
-    <section className="plugin-section">
-      <h2>能力 <span className="muted">{caps.length}</span></h2>
-      <ol className="capability-list">
-        {caps.map((cap) => {
-          const validation = optionalRecord(cap.validation);
-          const cases = list(validation.cases).map(text).filter(Boolean);
-          const limits = list(cap.limitations).map(text).filter(Boolean);
-          const outputs = list(cap.outputs).map((o) => text(optionalRecord(o).key)).filter(Boolean);
-          const parameters = Object.values(optionalRecord(optionalRecord(cap.parameter_schema).properties)).map(optionalRecord);
-          const basic = parameters.filter((item) => !item["x-level"] || item["x-level"] === "basic").length;
-          const headlines = list(cap["x-headline"]).map(optionalRecord);
-          return <li key={text(cap.id)} className="capability">
-            <div className="capability-head">
-              <h3>{text(cap.title)}</h3>
-              <span className="capability-tags">
-                {text(cap.analysis) && <span className="tag">{ANALYSIS_KINDS[text(cap.analysis)] || text(cap.analysis)}</span>}
-                {cap.preview === true && <span className="tag">支持试算</span>}
-                <span className={`tag ${isBenchmarked(text(validation.level)) ? "tag-good" : ""}`}>{text(validation.level) ? validationLevel(text(validation.level)) : "未声明验证"}</span>
-              </span>
-            </div>
-            {text(cap.description) && <p className="capability-description">{text(cap.description)}</p>}
-            {!!headlines.length && <p className="capability-headlines"><span className="muted">关键结论</span>{headlines.map((item) => <span key={text(item.key)}>{text(item.title)}{text(optionalRecord(item.unit).display) && ` / ${text(optionalRecord(item.unit).display)}`}</span>)}</p>}
-            <p className="capability-meta"><code>{text(cap.id)}</code>{text(cap.method_version) && <span>{text(cap.method_version)}</span>}{!!outputs.length && <span>输出 {outputs.length} 项</span>}{!!parameters.length && <span>参数 {parameters.length} 项（常用 {basic}）</span>}</p>
-            {!!cases.length && <details><summary>参考算例 {cases.length}</summary><ul>{cases.map((c) => <li key={c}>{c}</li>)}</ul></details>}
-            {!!limits.length && <details><summary>适用范围 {limits.length}</summary><ul>{limits.map((c) => <li key={c}>{c}</li>)}</ul></details>}
-          </li>;
-        })}
-      </ol>
-    </section>
-
-    {(validationFigure || text(presentation.validation_note)) && <section className="plugin-section">
-      <h2>验证</h2>
-      {validationFigure && <figure className="plugin-figure"><img src={text(validationFigure.url)} alt={text(validationFigure.title)} /><figcaption><b>{text(validationFigure.title)}</b>{text(validationFigure.description)}</figcaption></figure>}
-      {text(presentation.validation_note) && <p className="muted">{text(presentation.validation_note)}</p>}
-    </section>}
-
-    {!!studies.length && <section className="plugin-section">
-      <h2>使用它的研究</h2>
-      <ul className="plugin-usage">{studies.map((study) => <li key={study.id}><Link to="/studies" search={{ theme, workspace: study.workspace }}>{study.title}</Link></li>)}</ul>
-    </section>}
-
-    <section className="plugin-section plugin-trust">
-      <h2>可信与追溯</h2>
-      <p>每次运行都记录该插件的版本与发行封签{text(method.release_digest) ? `（${text(method.release_digest).slice(0, 12)}…）` : ""}；封签与清单不一致时宿主拒绝执行。插件只给出结果，批准由人完成。</p>
-      <Button size="compact" onClick={() => downloadJson({ method, execution_policy: policy, validation: caps.map((cap) => ({ capability: cap.id, ...optionalRecord(cap.validation) })) }, "plugin-evidence.json")}>下载验证证据与发行摘要</Button>
-    </section>
+    <div className="detail-body">
+      <Tabs defaultValue="method" className="detail-tabs">
+        <TabsList aria-label="插件详情">
+          <TabsTrigger value="method">方法</TabsTrigger>
+          <TabsTrigger value="capabilities">能力 {caps.length}</TabsTrigger>
+          <TabsTrigger value="validation">验证</TabsTrigger>
+          <TabsTrigger value="usage">被用于 {studies.length}</TabsTrigger>
+          <TabsTrigger value="technical">技术信息</TabsTrigger>
+        </TabsList>
+        <TabsContent value="method" className="plugin-section">
+          {figure ? <figure className="plugin-figure"><img src={text(figure.url)} alt={text(figure.title)} /><figcaption><b>{text(figure.title)}</b>{text(figure.description)}</figcaption></figure>
+            : <InlineEmpty title="插件没有提供方法示意图。" />}
+        </TabsContent>
+        <TabsContent value="capabilities" className="plugin-section">
+          <ol className="capability-list">
+            {caps.map((cap) => {
+              const validation = optionalRecord(cap.validation);
+              const cases = list(validation.cases).map(text).filter(Boolean);
+              const limits = list(cap.limitations).map(text).filter(Boolean);
+              const outputs = list(cap.outputs).map((o) => text(optionalRecord(o).key)).filter(Boolean);
+              const parameters = Object.values(optionalRecord(optionalRecord(cap.parameter_schema).properties)).map(optionalRecord);
+              const basic = parameters.filter((item) => !item["x-level"] || item["x-level"] === "basic").length;
+              const headlines = list(cap["x-headline"]).map(optionalRecord);
+              return <li key={text(cap.id)} className="capability">
+                <div className="capability-head">
+                  <h3>{text(cap.title)}</h3>
+                  <span className="capability-tags">
+                    {text(cap.analysis) && <span className="tag">{ANALYSIS_KINDS[text(cap.analysis)] || text(cap.analysis)}</span>}
+                    {cap.preview === true && <span className="tag">支持试算</span>}
+                    <span className={`tag ${isBenchmarked(text(validation.level)) ? "tag-good" : ""}`}>{text(validation.level) ? validationLevel(text(validation.level)) : "未声明验证"}</span>
+                  </span>
+                </div>
+                {text(cap.description) && <p className="capability-description">{text(cap.description)}</p>}
+                {!!headlines.length && <p className="capability-headlines"><span className="muted">关键结论</span>{headlines.map((item) => <span key={text(item.key)}>{text(item.title)}{text(optionalRecord(item.unit).display) && ` / ${text(optionalRecord(item.unit).display)}`}</span>)}</p>}
+                <p className="capability-meta">{!!outputs.length && <span>输出 {outputs.length} 项</span>}{!!parameters.length && <span>参数 {parameters.length} 项（常用 {basic}）</span>}</p>
+                {!!cases.length && <details><summary>参考算例 {cases.length}</summary><ul>{cases.map((c) => <li key={c}>{c}</li>)}</ul></details>}
+                {!!limits.length && <details><summary>适用范围 {limits.length}</summary><ul>{limits.map((c) => <li key={c}>{c}</li>)}</ul></details>}
+              </li>;
+            })}
+          </ol>
+        </TabsContent>
+        <TabsContent value="validation" className="plugin-section">
+          {validationFigure && <figure className="plugin-figure"><img src={text(validationFigure.url)} alt={text(validationFigure.title)} /><figcaption><b>{text(validationFigure.title)}</b>{text(validationFigure.description)}</figcaption></figure>}
+          {text(presentation.validation_note) && <p className="muted">{text(presentation.validation_note)}</p>}
+          {!validationFigure && !text(presentation.validation_note) && <InlineEmpty title="插件没有提供验证说明；各能力的验证等级见“能力”。" />}
+          <Link className="detail-link" to="/validation" search={{ theme, snapshot: "" }}>查看验证算例</Link>
+        </TabsContent>
+        <TabsContent value="usage" className="plugin-section">
+          {studies.length ? <ul className="plugin-usage">{studies.map((study) => <li key={study.id}><Link to="/studies" search={{ theme, workspace: study.workspace }}>{study.title}</Link></li>)}</ul>
+            : <InlineEmpty title="还没有研究使用这个插件。" />}
+        </TabsContent>
+        <TabsContent value="technical" className="plugin-section">
+          <dl className="detail-meta">
+            <div><dt>插件标识</dt><dd><code>{id}</code></dd></div>
+            <div><dt>版本</dt><dd>{text(method.version)}</dd></div>
+            <div><dt>发行封签</dt><dd><code>{text(method.release_digest).slice(0, 16) || "—"}</code></dd></div>
+            <div><dt>运行约束</dt><dd>{enforced.length ? enforced.join("、") : "—"}</dd></div>
+            <div><dt>平台</dt><dd>{platforms.join("、") || "—"}</dd></div>
+            <div><dt>能力标识</dt><dd>{caps.map((cap) => <code key={text(cap.id)}>{text(cap.id)}</code>)}</dd></div>
+          </dl>
+          <p className="muted">每次运行都记录插件版本与发行封签；封签与清单不一致时宿主拒绝执行。插件只给出结果，批准由人完成。</p>
+          <Button size="compact" onClick={() => downloadJson({ method, execution_policy: policy, validation: caps.map((cap) => ({ capability: cap.id, ...optionalRecord(cap.validation) })) }, "plugin-evidence.json")}>下载验证证据与发行摘要</Button>
+        </TabsContent>
+      </Tabs>
+      <dl className="detail-card" aria-label="名片">
+        <div><dt>运行位置</dt><dd>{text(policy.backend) === "slurm" ? "超算" : "本机"}</dd></div>
+        <div><dt>验证等级</dt><dd>{best ? validationLevel(best) : "未声明"}</dd></div>
+        <div><dt>能力</dt><dd>{caps.length} 项</dd></div>
+        <div><dt>被研究使用</dt><dd>{studies.length} 项</dd></div>
+      </dl>
+    </div>
   </article>;
 }

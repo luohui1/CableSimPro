@@ -4,7 +4,6 @@ import { api, message, optionalRecord, record, responseData, text } from "@/api/
 import { methodCatalog } from "@/api/research";
 import { CatalogShell, usePageTheme } from "@/components/catalog-shell";
 import { preferences, savePreferences } from "@/lib/preferences";
-import { illustration } from "@/lib/illustrations";
 import { Icon } from "@/components/icon";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
@@ -43,10 +42,8 @@ const KEY_PLACE: Record<string, string> = { system: "系统凭据库（Windows �
 
 function SectionHead({ id }: { id: SectionId }) {
   const section = SECTIONS.find((item) => item.id === id)!;
-  const art = illustration("settings-" + ({ general: "appearance", ai: "model", compute: "compute", data: "data", report: "report", about: "units" } as const)[id]);
   return <header className="settings-head">
     <div><h2>{section.title}</h2><p>{section.lead}</p></div>
-    {art && <img src={art} alt="" />}
   </header>;
 }
 

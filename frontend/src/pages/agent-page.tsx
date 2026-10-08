@@ -6,6 +6,7 @@ import { text } from "@/api/client";
 import { AppShell } from "@/components/app-shell";
 import { usePageTheme } from "@/components/catalog-shell";
 import { StatusMark } from "@/components/status-mark";
+import { InlineEmpty } from "@/components/states";
 import { Icon } from "@/components/icon";
 import { Button, IconButton } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -152,7 +153,9 @@ export function AgentPage() {
               : !turns.length ? <div className="agent-start">
                 <h2>要 Agent 做什么？</h2>
                 <p>{project ? `基于「${project.name}」工作。` : "先选择一个工程。"}它调用工作台同一批模块和插件；改工程时先写成方案，由你批准。</p>
-                <div className="agent-start-grid">{SUGGESTIONS.map((item) => <button key={item} type="button" disabled={!canSend || !project} onClick={() => send(item)}><Icon name="agent/message" />{item}</button>)}</div>
+                {/* 没连模型时先说明原因和去处，建议不再整体变淡得像坏了 */}
+                {!canSend ? <InlineEmpty title="还没有连接 AI 模型。在设置里填写服务地址、模型名和密钥后即可使用。" action={<Button size="compact" onClick={() => void navigate({ to: "/settings", search: { theme, section: "ai" } })}>去设置</Button>} />
+                  : <div className="agent-start-grid">{SUGGESTIONS.map((item) => <button key={item} type="button" disabled={!project} onClick={() => send(item)}><Icon name="agent/message" />{item}</button>)}</div>}
               </div>
                 : turns.map((turn, index) => <TurnView key={turn.id} turn={turn} kinds={kinds} proposals={agent.proposals} label={label} review="aside" onOpenStudy={openStudy}
                   onRetry={index === turns.length - 1 && canSend && !agent.sending ? () => send(turn.question) : undefined} />)}
