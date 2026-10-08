@@ -55,8 +55,8 @@ try {
     assert.equal(route.request().method(), 'GET', 'No solver or write requests allowed');
     const url = new URL(route.request().url());
     if (inputs[url.pathname]) return route.fulfill({ json: inputs[url.pathname] });
-    if (url.pathname.endsWith('/studies')) return route.fulfill({ json: [{ id: iec.study, definition: { title: 'IEC 保存参考', method: { plugin_id: 'cablesim.iec60287' } } }] });
-    if (url.pathname.endsWith('/runs')) return route.fulfill({ json: { items: [{ id: iec.id, status: iec.status, created: iec.created }], next_cursor: null } });
+    if (url.pathname.endsWith('/studies')) return route.fulfill({ json: [{ id: iec.study, definition: { title: iec.snapshot.definition.title, method: { plugin_id: 'cablesim.iec60287' } } }] });
+    if (url.pathname.endsWith('/runs')) return route.fulfill({ json: { items: [{ id: iec.id, status: iec.status, created: iec.created, sequence: iec.sequence }], next_cursor: null } });
     if (url.pathname.endsWith(`/runs/${iec.id}`)) return route.fulfill({ json: iec });
     return route.fulfill({ status: 404, json: { detail: 'Read-only saved fixture' } });
   });
@@ -74,6 +74,7 @@ try {
   await selectOption(page, '三维温度场', '有限元 − IEC'); await page.locator('[data-field-kind=difference]').waitFor(); await page.locator('[data-cad-field-ready=true]').waitFor();
   const difference = await page.evaluate(() => window.canvasGallery.field.snapshot().thermal);
   assert.equal(difference.maximum, -difference.minimum); assert.ok(difference.values.every(Number.isFinite)); assert.deepEqual(difference.references.map(v => v.runId), [fem.id, iec.id]);
+  for (const reference of difference.references) { assert.match(reference.label, /· 运行 \d+ ·/); assert.ok(!reference.label.includes(reference.runId)); assert.ok(!reference.label.includes('T09:')); }
   assert.match(await page.locator('.cad-thermal-legend').textContent(), /K.*0/);
   results.difference = { triangles: difference.triangles.length, minimum: difference.minimum, maximum: difference.maximum };
   results.export = await saveExport('field', 'saved-difference.png'); assert.equal(results.export.field.kind, 'difference'); assert.equal(results.export.field.references.length, 2);
@@ -129,7 +130,6 @@ try {
   await page.setViewportSize({ width: 1366, height: 768 }); await navigate(fixture, 'cad'); await page.getByRole('button', { name: '精细替换', exact: true }).click(); await page.locator('[data-cad-model-kind=precise][data-cad-ready=true]').waitFor();
   const annotations = page.locator('[data-cad-layer-annotation]'); assert.ok(await annotations.count() >= 4); assert.match(await annotations.first().getAttribute('aria-label'), /mm/);
   await annotations.nth(2).press('Enter'); assert.equal(await page.locator('[data-cad-ready]').getAttribute('data-cad-selected'), await annotations.nth(2).getAttribute('data-cad-layer-annotation'));
-  await page.screenshot({ path: path.join(output, 'type-layer-labels.png') });
   for (const size of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) for (const theme of ['light', 'dark']) {
     await page.setViewportSize(size); await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
     for (const state of ['success', 'empty', 'loading', 'error', 'historical']) { await page.evaluate(state => window.canvasGallery.setState(state), state); if (state === 'success' || state === 'historical') await page.locator('[data-cad-ready=true]').waitFor(); await layout(`type-labels ${size.width} ${theme} ${state}`); }

@@ -7,6 +7,7 @@ import type { DrawingView, LayingSectionProps, PixelSize, Section, SectionEdit, 
 
 interface Gesture {
   pointerId: number; section: Section; view: DrawingView; start: WorldPoint; selection: SectionSelection;
+  size: PixelSize; bounds: { left: number; top: number };
   operation: 'pan' | 'move' | 'width' | 'height'; id: string; moved: boolean;
   next: Section | null; fields: string[];
 }
@@ -48,7 +49,7 @@ export function useSectionGesture({ props, section, view, size, snap, followEncl
     props.onSelectionChange?.(selection);
     if (tool !== 'pan' && !editable) return;
     svg.current.focus(); svg.current.setPointerCapture(event.pointerId);
-    gesture.current = { pointerId: event.pointerId, section, view, start: screenToWorld(pointerPosition(event), view, size),
+    gesture.current = { pointerId: event.pointerId, section, view, size: { ...size }, bounds: svg.current.getBoundingClientRect(), start: screenToWorld(pointerPosition(event), view, size),
       selection, operation: tool === 'pan' ? 'pan' : operation, id: crypto.randomUUID(), moved: false, next: null, fields: [] };
   };
   function beginBackground(event: ReactPointerEvent<SVGSVGElement>) {
@@ -56,15 +57,16 @@ export function useSectionGesture({ props, section, view, size, snap, followEncl
     event.preventDefault(); svg.current.focus();
     if (tool !== 'pan' && event.button !== 1) return;
     svg.current.setPointerCapture(event.pointerId);
-    gesture.current = { pointerId: event.pointerId, section, view, start: screenToWorld(pointerPosition(event), view, size),
+    gesture.current = { pointerId: event.pointerId, section, view, size: { ...size }, bounds: svg.current.getBoundingClientRect(), start: screenToWorld(pointerPosition(event), view, size),
       selection: null, operation: 'pan', id: crypto.randomUUID(), moved: false, next: null, fields: [] };
   }
   function move(event: ReactPointerEvent<SVGSVGElement>) {
     const current = gesture.current;
     if (!current || event.pointerId !== current.pointerId) return;
-    const pointer = screenToWorld(pointerPosition(event), current.view, size);
+    // Selection can resize the stage mid-gesture. Keep the original SI transform.
+    const pointer = screenToWorld({ x: event.clientX - current.bounds.left, y: event.clientY - current.bounds.top }, current.view, current.size);
     const delta = { x: pointer.x - current.start.x, z: pointer.z - current.start.z };
-    if (Math.hypot(delta.x, delta.z) * size.width / current.view.widthM > 3) current.moved = true;
+    if (Math.hypot(delta.x, delta.z) * current.size.width / current.view.widthM > 3) current.moved = true;
     if (!current.moved) return;
     setDragging(true);
     if (current.operation === 'pan') {
@@ -77,7 +79,7 @@ export function useSectionGesture({ props, section, view, size, snap, followEncl
       let x = snapCoordinate(position.x + delta.x, snap, step), z = snapCoordinate(position.z + delta.z, snap, step);
       let guide: WorldPoint | null = null;
       if (snap && current.selection?.kind === 'cable') {
-        const threshold = 8 * current.view.widthM / size.width;
+        const threshold = 8 * current.view.widthM / current.size.width;
         for (const other of current.section.placements) if (other.cable !== current.selection.id) {
           if (Math.abs(x - other.x) < threshold) { x = other.x; guide = { x, z }; }
           if (Math.abs(z - other.z) < threshold) { z = other.z; guide = { x, z }; }

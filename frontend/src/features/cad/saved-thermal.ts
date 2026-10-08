@@ -4,6 +4,7 @@ import { temperatureView } from '@/lib/temperature-view';
 import { sectionGeometry } from '../drawing/section-geometry';
 import { turbo } from '../field/colormap';
 import { fieldColor } from './difference-colormap';
+import { savedRunLabel } from '../field/run-label';
 import { sceneIdentity } from './input-scene';
 import type { DomainDocument } from '../drawing/types';
 import type { CadScene, CadThermal } from './types';
@@ -40,10 +41,12 @@ export function savedThermal(run: Record<string, unknown>, document: DomainDocum
   const geometry = sectionGeometry(document, section);
   const conductors: CadThermal['conductors'][number][] = [];
   for (const cable of geometry.cables) {
+    const circuitIndex = document.circuits.findIndex(c => c.cables.some(instance => instance.id === cable.id));
+    const label = `${circuitIndex >= 0 ? `回路 ${circuitIndex + 1}` : cable.id} · ${cable.label}`;
     const aggregate = temperatures.get(cable.id);
     if (aggregate !== undefined) {
       // A cable-level quantity does not identify one of its cores. Mark the cable, rather than invent a hottest core.
-      conductors.push({ id: cable.id, x: cable.x, z: cable.z, radius: cable.shape.radiusM, value: aggregate, hottest: false, label: `${cable.label} · 导体` });
+      conductors.push({ id: cable.id, x: cable.x, z: cable.z, radius: cable.shape.radiusM, value: aggregate, hottest: false, label: `${label} · 导体` });
       continue;
     }
     for (const ring of cable.shape.rings.filter(r => r.target.role === 'conductor')) {
@@ -51,7 +54,7 @@ export function savedThermal(run: Record<string, unknown>, document: DomainDocum
       const value = temperatures.get(`${cable.id}/${coreId}`);
       if (value === undefined) continue;
       conductors.push({ id: cable.id, coreId, x: cable.x + ring.centerX, z: cable.z + ring.centerZ,
-        radius: ring.outerM, value, hottest: false, label: `${cable.label} · ${coreId || '导体'}` });
+        radius: ring.outerM, value, hottest: false, label: `${label} · ${coreId || '导体'}` });
     }
   }
   if (!field && !conductors.length) return undefined;
@@ -70,7 +73,7 @@ export function savedThermal(run: Record<string, unknown>, document: DomainDocum
   const fieldSource = optionalRecord(field?.field.source);
   const convergence = optionalRecord(run.convergence);
   return { runId: text(run.id), caseId: text(chosen.case_id), source: `${text(pin.plugin_id)} ${text(pin.version)} · ${text(pin.release_digest)} · 输入 ${text(fieldSource.input_sha256)} · 工件 ${text(optionalRecord(chosen.artifact_digests)['x-cablesim.temperature-field'])}${convergence.status ? ` · 收敛 ${text(convergence.status)} · ${text(convergence.reason)}` : ''}`,
-    kind: field?.kind, notice: field?.kind === 'fem' && convergence.status === 'unconverged' ? '有限元未收敛' : undefined, points: field?.points || [], triangles: field?.triangles || [], values, minimum, maximum, conductors };
+    runLabel: savedRunLabel(run), kind: field?.kind, notice: field?.kind === 'fem' && convergence.status === 'unconverged' ? '有限元未收敛' : undefined, points: field?.points || [], triangles: field?.triangles || [], values, minimum, maximum, conductors };
 }
 
 export function colorScene(scene: CadScene, thermal: CadThermal | undefined, palette?: readonly number[][]): CadScene {

@@ -1,0 +1,15 @@
+.geometry-what-if{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;min-width:0;padding:var(--space-2) var(--space-3);background:var(--panel);color:var(--text);font-size:var(--text-note);border-bottom:1px solid var(--line)}
+.what-if-status{flex:1;min-width:0;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.what-if-deltas{display:flex;gap:var(--space-3);max-width:100%;overflow:auto;font-variant-numeric:tabular-nums;white-space:nowrap}
+.scene-what-if{height:100%;min-height:0;min-width:0}
+.what-if-dimension-slot{min-height:calc(var(--space-8) + var(--space-2));flex-shrink:0;padding:var(--space-1) var(--space-3)}
+.what-if-edit-tools{min-height:calc(var(--space-8) + var(--space-2));width:100%}
+.what-if-edit-tools,.what-if-dimensions{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2)}
+.what-if-length{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-1);font-size:var(--text-note)}
+.what-if-length input{width:calc(var(--space-12)*2);padding:var(--space-1) var(--space-2);font:inherit;font-variant-numeric:tabular-nums;color:var(--text);background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-surface)}
+.what-if-length input[aria-invalid=true]{border-color:var(--error)}
+.what-if-field-error{color:var(--error);font-size:var(--text-note);overflow-wrap:anywhere}
+.laying-section .cad-temperature-slice{z-index:0}
+.laying-section .drawing-svg{z-index:1}
+.laying-section .drawing-stage>.state-view{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-3);padding:var(--space-6);overflow:auto}
+.laying-section .state-art{max-width:calc(var(--space-12)*4);max-height:calc(var(--space-12)*3);object-fit:contain}

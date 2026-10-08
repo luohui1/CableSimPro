@@ -1,4 +1,6 @@
 import type { components } from '@/api/generated/schema';
+import type { CadThermal } from '../cad/types';
+import type { WhatIfProps } from './what-if';
 
 export type DomainDocument = components['schemas']['DomainDocument'];
 export type CableType = components['schemas']['CableType'];
@@ -50,9 +52,12 @@ export interface SectionEdit {
 
 export interface TemplateOption { id: string; label: string; disabled?: boolean }
 
-export interface LayingSectionProps {
+export interface LayingSectionProps extends WhatIfProps {
   document: DomainDocument | null;
   sectionId: string;
+  thermal?: CadThermal;
+  run?: Record<string, unknown>;
+  fieldCase?: string;
   selectedObject?: SectionSelection;
   onSelectionChange?: (selection: SectionSelection) => void;
   onChange?: (section: Section, edit: SectionEdit) => void | Promise<void>;

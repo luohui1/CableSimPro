@@ -4,7 +4,12 @@ import { Select } from '@/components/ui/select';
 import { EmptyState, ErrorState, LoadingState, StaleBanner } from '@/components/states';
 import { fitBounds, worldToScreen, zoomView } from './coordinates';
 import { DimensionEditor } from './dimension-editor';
-import { sectionGeometry, validateSectionEdit } from './section-geometry';
+import { moveSelection, sectionGeometry, validateSectionEdit } from './section-geometry';
+import { savedThermal } from '../cad/saved-thermal';
+import { TemperatureSlice } from '../cad/temperature-slice';
+import { turbo } from '../field/colormap';
+import { useWhatIf } from './use-what-if';
+import { WhatIfDimensions } from './what-if-dimensions';
 import { editDimension, sectionDimensions, SectionDimensions, type SectionDimension } from './section-dimensions';
 import { CableDetail, SectionObjects } from './section-objects';
 import { SectionOverview } from './section-overview';
@@ -19,7 +24,12 @@ const defaultTemplates: readonly TemplateOption[] = [
   { id: 'single', label: '单回' }, { id: 'double', label: '双回' }, { id: 'duct', label: '排管' },
   { id: 'backfill', label: '回填' }, { id: 'three-core', label: '三芯' },
 ];
-export function LayingSection(props: LayingSectionProps) {
+export function LayingSection(input: LayingSectionProps) {
+  const baseline = useMemo(() => { try { return input.thermal || (input.run && input.document ? savedThermal(input.run, input.document, input.sectionId, input.fieldCase) : undefined); } catch { return undefined; } }, [input.thermal, input.run, input.document, input.sectionId, input.fieldCase]);
+  const trial = useWhatIf(input.document, input.sectionId, input, baseline, input.editable === false || input.state === 'historical' || input.state === 'empty' || input.state === 'error');
+  const props: LayingSectionProps = trial.enabled ? { ...input, document: trial.document, onChange: (s, edit) => trial.commit(s, edit, input.isLocked),
+    onPreview: undefined, onTemplateRequest: undefined, onObjectCommand: undefined, objectCommands: [],
+    onCommand: trial.command, canUndo: trial.canUndo, canRedo: trial.canRedo } : input;
   const { host, size } = useCanvasSize();
   const section = props.document?.sections.find(item => item.id === props.sectionId) || null;
   const [view, setView] = useState<DrawingView | null>(null);
@@ -47,6 +57,10 @@ export function LayingSection(props: LayingSectionProps) {
   async function commit(next: Section, edit: SectionEdit) {
     if (pending.current) throw new Error('上一项改动正在提交，请稍后再试。');
     if (!editable || !props.document) throw new Error('敷设截面当前只读。');
+    if (trial.enabled && followEnclosure && edit.kind === 'dimension' && edit.selection?.kind === 'cable' && section) {
+      const before = section.placements.find(p => p.cable === edit.selection!.id), after = next.placements.find(p => p.cable === edit.selection!.id);
+      if (before && after) { const moved = moveSelection(section, edit.selection, { x: after.x - before.x, z: after.z - before.z }, true); next = moved.section; edit = { ...edit, fields: moved.fields }; }
+    }
     validateSectionEdit(props.document, next, edit.fields, props.isLocked);
     pending.current = true; setBusy(true); setProblem('');
     try { await props.onChange?.(next, edit); }
@@ -59,6 +73,15 @@ export function LayingSection(props: LayingSectionProps) {
     if (!props.document || !displayed) return null;
     try { return sectionGeometry(props.document, displayed); } catch { return calculated.geometry; }
   }, [props.document, displayed, calculated.geometry]);
+  const thermal = state === 'empty' || state === 'error' ? undefined : trial.enabled ? trial.thermal : input.thermal;
+  const temperatureColors = thermal && currentGeometry ? Object.fromEntries(currentGeometry.cables.map(c => [c.id, Object.fromEntries(c.shape.rings.flatMap(r => {
+    if (r.target.role !== 'conductor') return [];
+    const core = r.target.scope === 'core' ? r.target.coreId : undefined;
+    const value = thermal.conductors.find(t => t.id === c.id && (!t.coreId || t.coreId === core))?.value;
+    return value === undefined ? [] : [[r.id, '#' + turbo((value - thermal.minimum) / Math.max(1e-6, thermal.maximum - thermal.minimum)).map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('')]];
+  }))])) : undefined;
+  const annotations = trial.enabled ? thermal ? Object.fromEntries(thermal.conductors.map(c => [c.id, { text: `${c.value.toFixed(1)} °C`, emphasis: c.hottest }])) : undefined : props.annotations;
+  const projector = useMemo(() => ({ project: (x: number, _y: number, z: number) => worldToScreen({ x: x / 1000, z: z / 1000 }, camera, size) }), [camera.x, camera.z, camera.widthM, size.width, size.height]);
   const selected = props.selectedObject || null;
   const dimensions = displayed && currentGeometry ? sectionDimensions(displayed, currentGeometry, selected, camera, size, showDimensions) : [];
   const error = props.error || calculated.error || (state === 'error' ? '敷设输入读取失败，请重试。' : '');
@@ -88,6 +111,8 @@ export function LayingSection(props: LayingSectionProps) {
   return <div className={`drawing-frame laying-section ${props.className || ''}`} aria-label={props.label || '敷设截面编辑器'}
     data-laying-section-state={error ? 'error' : state} aria-busy={busy || state === 'loading'} onKeyDown={keyDown}>
     {state === 'historical' && <StaleBanner description="历史敷设截面保持只读。" />}
+    {trial.controls}
+    {trial.enabled && section && <div className="what-if-dimension-slot"><WhatIfDimensions section={section} selected={selected} commit={(next, edit) => trial.commit(next, edit, input.isLocked)} /></div>}
     <div className="drawing-toolbar" role="toolbar" aria-label="敷设截面工具">
       <IconButton icon="tool/select" label="选择 V" aria-pressed={tool === 'select'} onClick={() => setTool('select')} />
       <IconButton icon="tool/pan" label="平移 H" aria-pressed={tool === 'pan'} onClick={() => setTool('pan')} />
@@ -97,9 +122,9 @@ export function LayingSection(props: LayingSectionProps) {
       <IconButton icon="tool/zoom-out" label="缩小敷设截面" disabled={!currentGeometry} onClick={() => setView(zoomView(camera, 1.2, { x: size.width / 2, y: size.height / 2 }, size))} />
       <Button size="compact" aria-pressed={showDimensions} onClick={() => setShowDimensions(value => !value)}>尺寸链</Button>
       <Button size="compact" aria-pressed={followEnclosure} onClick={() => setFollowEnclosure(value => !value)}>管缆联动</Button>
-      <Select label="模板" value={template} options={(props.templates || defaultTemplates).map(option => ({ value: option.id, label: option.label, disabled: option.disabled }))}
+      {!trial.enabled && <><Select label="模板" value={template} options={(props.templates || defaultTemplates).map(option => ({ value: option.id, label: option.label, disabled: option.disabled }))}
         onChange={setTemplate} disabled={!editable || !props.onTemplateRequest} />
-      <Button size="compact" onClick={() => void applyTemplate()} disabled={!editable || !props.onTemplateRequest} loading={busy}>应用模板</Button>
+      <Button size="compact" onClick={() => void applyTemplate()} disabled={!editable || !props.onTemplateRequest} loading={busy}>应用模板</Button></>}
       <span className="spacer" />
       {/* 对象操作只在选中对象且宿主提供命令时出现，避免一排灰按钮占位 */}
       {selected && !!props.onObjectCommand && (!props.objectCommands || props.objectCommands.length > 0) && <div className="drawing-object-tools" role="toolbar" aria-label="所选敷设对象操作">
@@ -114,6 +139,7 @@ export function LayingSection(props: LayingSectionProps) {
     </div>
     {problem && <div className="drawing-error" role="alert">{problem}</div>}
     <div ref={host} className="drawing-stage" data-tool={tool} data-dragging={gesture.dragging}>
+      {thermal && <TemperatureSlice thermal={thermal} controller={projector} projectionKey={camera} width={size.width} height={size.height} visible={!gesture.dragging} showHotspot={false} legendSide="left" onSelect={id => props.onSelectionChange?.({ kind: 'cable', id })} />}
       {state === 'loading' && !currentGeometry ? <LoadingState title="正在读取敷设截面" />
         : state === 'empty' || !section ? <EmptyState title="尚无敷设截面" description="选择敷设区段后查看和编辑。" />
           : error || !currentGeometry || !displayed ? <ErrorState title="敷设截面不可用" description={error || '输入缺少可绘制结构。'}
@@ -129,10 +155,10 @@ export function LayingSection(props: LayingSectionProps) {
                 }}>
                 <SectionGrid view={camera} size={size} />
                 <SectionObjects section={displayed} geometry={currentGeometry} view={camera} size={size} selected={selected}
-                  onSelect={props.onSelectionChange} onPointer={gesture.begin} editable={editable} />
-                {props.annotations && [...currentGeometry.cables].sort((a, b) => a.x - b.x).filter(cable => props.annotations?.[cable.id]).map((cable, index) => {
+                  onSelect={props.onSelectionChange} onPointer={gesture.begin} editable={editable} colors={temperatureColors} compactLabels={trial.enabled} />
+                {annotations && [...currentGeometry.cables].sort((a, b) => a.x - b.x).filter(cable => annotations?.[cable.id]).map((cable, index) => {
                   // 相邻电缆的标注一下一上错开（上方有对象标签，留出距离），排管间距小时也不重叠
-                  const note = props.annotations![cable.id];
+                  const note = annotations![cable.id];
                   const below = index % 2 === 0;
                   const at = worldToScreen({ x: cable.x, z: below ? cable.z - cable.shape.radiusM : cable.z + cable.shape.radiusM }, camera, size);
                   const width = note.text.length * 8 + 16;
@@ -142,7 +168,7 @@ export function LayingSection(props: LayingSectionProps) {
                 })}
                 {gesture.guides && <path className="drawing-snap-guide" d={`M0 ${worldToScreen(gesture.guides, camera, size).y}H${size.width}M${worldToScreen(gesture.guides, camera, size).x} 0V${size.height}`} />}
                 <SectionDimensions dimensions={dimensions} geometry={currentGeometry} view={camera} size={size} editable={editable} onEdit={setEditing} />
-                {selected?.kind === 'cable' && currentGeometry.cables.find(cable => cable.id === selected.id) && <CableDetail
+                {!trial.enabled && selected?.kind === 'cable' && currentGeometry.cables.find(cable => cable.id === selected.id) && <CableDetail
                   cable={currentGeometry.cables.find(cable => cable.id === selected.id)!} view={camera} size={size} />}
                 {editing && state === 'success' && props.editable !== false && <DimensionEditor x={Math.max(8, Math.min(size.width - 232, editing.x - 112))}
                   y={Math.max(8, Math.min(size.height - 156, editing.y + 14))} label={editing.label} value={editing.valueM} unit="m"

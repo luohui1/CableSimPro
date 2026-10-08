@@ -3,7 +3,7 @@ import { clamp, validateGeometry } from './geometry-contract';
 import { SceneWorkerClient } from './scene-worker-client';
 import type { Callbacks, ViewportController } from './cad-controller';
 import { pointDistance, type Vec3 } from './scene-measurement';
-import type { CadCamera, CadGeometry, CadMode, CadScene, CadSelection, CadTiming, CadView, CameraPose, MeasurementMode } from './types';
+import type { CadCamera, CadGeometry, CadMode, CadScene, CadSelection, CadTiming, CadView, CameraPose, MeasurementMode, CadObjectMove } from './types';
 
 class InputSceneController implements ViewportController {
   private alive = true;
@@ -19,7 +19,10 @@ class InputSceneController implements ViewportController {
   private events = new AbortController();
   private resize: ResizeObserver;
   private theme: MutationObserver;
-  private drag: { x: number; y: number; startX: number; startY: number; pan: boolean } | null = null;
+  private drag: { x: number; y: number; startX: number; startY: number; pan: boolean; pending?: boolean;
+    object?: string; matrix?: Float32Array; bounds?: number[] } | null = null;
+  private editing = false;
+  private moveFrame = 0;
   private frame = 0;
   private measurement: MeasurementMode = 'part';
   private firstPoint: Vec3 | null = null;
@@ -39,19 +42,27 @@ class InputSceneController implements ViewportController {
       if (![0, 1, 2].includes(event.button)) return;
       event.preventDefault(); canvas.focus(); canvas.setPointerCapture(event.pointerId);
       this.drag = { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, pan: event.button !== 0 };
+      if (this.editing && event.button === 0) void this.beginMove(this.drag);
     }, options);
     canvas.addEventListener('pointermove', event => {
       const drag = this.drag; if (!drag) return;
       const dx = event.clientX - drag.x, dy = event.clientY - drag.y; drag.x = event.clientX; drag.y = event.clientY;
+      if (drag.pending) return;
+      if (drag.object) {
+        if (!this.moveFrame) this.moveFrame = requestAnimationFrame(() => { this.moveFrame = 0; if (this.drag === drag) this.moveObject(drag, 'preview'); });
+        return;
+      }
       if (drag.pan) { this.pose.panX += dx / this.host.clientWidth; this.pose.panY -= dy / this.host.clientHeight; }
       else { this.pose.heading += dx * .008; this.pose.elevation += dy * .008; this.namedView = 'free'; }
       this.schedule();
     }, options);
     canvas.addEventListener('pointerup', event => {
-      const drag = this.drag; this.drag = null; if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+      const drag = this.drag; this.drag = null; cancelAnimationFrame(this.moveFrame); this.moveFrame = 0;
+      if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+      if (drag?.object) { drag.x = event.clientX; drag.y = event.clientY; this.moveObject(drag, Math.hypot(drag.x - drag.startX, drag.y - drag.startY) >= 4 ? 'commit' : 'cancel'); return; }
       if (drag && !drag.pan && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < 4) void this.pick(event.clientX, event.clientY);
     }, options);
-    canvas.addEventListener('pointercancel', () => { this.drag = null; }, options);
+    canvas.addEventListener('pointercancel', () => this.cancelMove(), options);
     canvas.addEventListener('wheel', event => { event.preventDefault(); this.pose.zoom *= Math.exp(-clamp(event.deltaY, -200, 200) * .002); this.schedule(); }, { ...options, passive: false });
     canvas.addEventListener('keydown', event => {
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && this.measurement === 'point') { event.preventDefault(); event.stopPropagation(); this.cancelMeasure(); return; }
@@ -63,14 +74,36 @@ class InputSceneController implements ViewportController {
         this.callbacks.onPick({ cursor_x: p.x, cursor_y: p.y, measure_pending: !!this.firstPoint }); return;
       }
       if (event.key.toLowerCase() === 'f') this.fit();
-      if (event.key === 'Escape') { this.cancelMeasure(); this.callbacks.onSelectionChange(null); }
+      if (event.key === 'Escape') { this.cancelMove(); this.cancelMeasure(); this.callbacks.onSelectionChange(null); }
       if (event.key === '+' || event.key === '=') this.zoom(1.15);
       if (event.key === '-') this.zoom(.85);
     }, options);
   }
   private schedule() { if (!this.frame) this.frame = requestAnimationFrame(() => { this.frame = 0; this.draw(); }); }
+  private async beginMove(drag: NonNullable<InputSceneController['drag']>) {
+    drag.pending = true; drag.matrix = this.matrix.slice(); drag.bounds = this.scene?.crop_bounds_m.slice();
+    const box = this.canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+    try {
+      const { id } = await this.worker.request('pick', { x: Math.floor((drag.startX - box.left) * dpr), y: Math.floor((box.bottom - drag.startY) * dpr) }) as { id?: string };
+      if (!this.alive || this.drag !== drag) return;
+      const object = this.scene?.objects.find(o => o.id === id);
+      if (object && ['cable', 'enclosure'].includes(object.kind)) {
+        drag.object = id; this.callbacks.onSelectionChange({ kind: 'object', id: id! });
+      }
+    } catch (error) { if (this.alive) this.callbacks.onError(error instanceof Error ? error : new Error(String(error))); }
+    finally { drag.pending = false; }
+  }
+  private moveObject(drag: NonNullable<InputSceneController['drag']>, phase: CadObjectMove['phase']) {
+    if (!drag.object || !drag.matrix) return;
+    const m = drag.matrix, determinant = m[0] * m[9] - m[1] * m[8];
+    if (Math.abs(determinant) < 1e-12) { this.callbacks.onObjectMove?.({ id: drag.object, deltaXM: 0, deltaZM: 0, phase: 'cancel', error: '当前视角无法拖动截面，请选择端面。' }); return; }
+    const dx = 2 * (drag.x - drag.startX) / this.host.clientWidth, dy = -2 * (drag.y - drag.startY) / this.host.clientHeight;
+    this.callbacks.onObjectMove?.({ id: drag.object, deltaXM: (dx * m[9] - dy * m[8]) / determinant / 1000,
+      deltaZM: (m[0] * dy - m[1] * dx) / determinant / 1000, phase });
+  }
+  private cancelMove() { const drag = this.drag; this.drag = null; cancelAnimationFrame(this.moveFrame); this.moveFrame = 0; if (drag?.object) this.moveObject(drag, 'cancel'); }
   private projection() {
-    const bounds = this.scene!.crop_bounds_m.map(v => v * 1000), center = [0, 1, 2].map(i => (bounds[i] + bounds[i + 3]) / 2);
+    const bounds = (this.drag?.object && this.drag.bounds || this.scene!.crop_bounds_m).map(v => v * 1000), center = [0, 1, 2].map(i => (bounds[i] + bounds[i + 3]) / 2);
     this.pose.elevation = clamp(this.pose.elevation, -.7, Math.PI / 2); this.pose.zoom = clamp(this.pose.zoom, .65, 3);
     this.pose.panX = clamp(this.pose.panX, -.4, .4); this.pose.panY = clamp(this.pose.panY, -.4, .4);
     const c = Math.cos(this.pose.heading), s = Math.sin(this.pose.heading), e = Math.sin(this.pose.elevation), f = Math.cos(this.pose.elevation);
@@ -123,6 +156,8 @@ class InputSceneController implements ViewportController {
       elapsedMs: performance.now() - start, nativeUpdateMs: 0, replacedParts: geometry.objects.reduce((n, o) => n + o.parts.length, 0), reusedParts: 0, runtimeCacheHit: false };
   }
   select(value: CadSelection) { this.selected = value; this.draw(); }
+  edit(value: boolean) { this.editing = value; this.cancelMove(); if (value && Math.abs(Math.cos(this.pose.elevation)) < .05) this.view('end');
+    this.canvas.setAttribute('aria-label', value ? '敷设试算画布。左键拖动电缆或排管，空白处旋转，右键平移，Esc 取消。' : '敷设三维画布。左键旋转，右键平移，滚轮缩放。'); }
   mode(value: CadMode) { this.currentMode = value; this.draw(); }
   section(value: number) { this.fraction = clamp(value, .05, .95); this.draw(); }
   fit() { Object.assign(this.pose, { zoom: 1, panX: 0, panY: 0 }); this.draw(); }
@@ -136,11 +171,12 @@ class InputSceneController implements ViewportController {
   async selection(value: string) { if (value !== 'part' && value !== 'point') throw new Error('输入网格不提供原始拓扑直径捕捉。'); this.measurement = value; this.canvas.dataset.measureMode = value; this.cancelMeasure(); return true; }
   async capture() { await this.worker.request('draw', this.viewData()); return await this.worker.request('capture', {}) as Blob; }
   view(value: CadView) {
+    if (this.editing && value === 'top') value = 'end';
     this.namedView = value; this.pose.elevation = value === 'top' ? Math.PI / 2 : value === 'iso' ? Math.atan(1 / Math.sqrt(2)) : 0;
     this.pose.heading = value === 'end' ? 0 : value === 'front' ? -Math.PI / 2 : -Math.PI / 4; this.draw();
   }
   dispose() {
-    if (!this.alive) return; this.alive = false; this.revision++; cancelAnimationFrame(this.frame); this.events.abort(); this.resize.disconnect(); this.theme.disconnect(); this.worker.dispose(); this.canvas.remove();
+    if (!this.alive) return; this.alive = false; this.revision++; cancelAnimationFrame(this.frame); cancelAnimationFrame(this.moveFrame); this.events.abort(); this.resize.disconnect(); this.theme.disconnect(); this.worker.dispose(); this.canvas.remove();
   }
 }
 

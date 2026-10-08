@@ -22,7 +22,7 @@
 
 ## 保存场对照、量测与计算书图像
 
-`useSavedFieldControls()` 只读工程内两侧保存运行，默认选择最新同工况，并可指定参考运行。按需读取 `input_ref`，核对工况 ID、输入摘要、运行摘要和完整性；再复用 `features/field/compareSavedFields` 校验领域输入与 IEC 电损耗参数。两侧绝对温度共享联合范围和二维 Turbo；差值为有限元减 IEC，使用以零为中心的设计令牌发散色标。`differenceField` 在 worker 内求两份保存三角网格的真实交集，并做保存节点线性插值；电缆/排管孔洞和域外区域不外推。这是场显示，不是新的求解器或误差认证；来源保留两次运行、工况、方法版本和工件摘要，收敛状态沿用保存运行。
+`useSavedFieldControls()` 只读工程内两侧保存运行，默认选择最新同工况，并可指定参考运行。按需读取 `input_ref`，核对工况 ID、输入摘要、运行摘要和完整性；再复用 `features/field/compareSavedFields` 校验领域输入与 IEC 电损耗参数。两侧绝对温度共享联合范围和二维 Turbo；差值为有限元减 IEC，使用以零为中心的设计令牌发散色标。`differenceField` 在 worker 内分别将两侧保存节点线性插值到同一规则网格（长边 192 格），然后相减，以规则单元双线性插值着色，消除显示三角形对角线；保留原保存场的数值与离散误差。穿越任一侧网格边界的单元留空，包括小于规则格的孔洞；不外推，不模糊物理温度。这是场显示，不是新的求解器或误差认证；来源保留两次运行、工况、方法版本和工件摘要，收敛状态沿用保存运行。运行选择和 PNG 页脚共用 `features/field/savedRunLabel`，显示研究名、运行序号和本地时间；原始 ID 只保留在工件元数据中。
 
 输入场景的“两点距离”捕捉同一显示三角网格表面，曲面弦差 ≤ 0.08 mm；指针定位还受当前像素尺度影响，放大后更易精确捕捉。Esc 取消、Ctrl+Z 清除量测；画布获焦后方向键移动捕捉十字、Enter 捕捉。选中对象的中心埋深、外径和最近同类中心距来自 `sectionGeometry` 的 SI 坐标和尺寸，与二维共源。轴向距离仅针对标明的 0.4 m 展示段。型号剥切各层材料/厚度标注可点击或 Enter 选择，同一层 ID 继续联动分层表；长标注悬停查看全文。
 
@@ -39,6 +39,35 @@ node src/features/cad/tests/verify-analysis.mjs
 ```
 
 手算验证采用不一致对角线网格：有限元 `20+2x+3z` °C 减 IEC `10+x+z` °C，交集上精确得到 `10+x+2z` K；半域缺失保持空白。三维距离用 3–4–12 mm 对拍 13 mm；六回路对象埋深 900 mm、外径 38 mm、中心距 180 mm 与二维源数据一致。回归记录和两张改动截图、导出 PNG 位于 `.data/cad-analysis/`。
+
+## 几何试算注入与方案接口
+
+`StudyGeometry`、`SceneWhatIf` 和 `LayingSection` 接收相同的可选属性：
+
+```ts
+preview?: (document: DomainDocument) => Promise<Record<string, unknown>>;
+onPropose?: (changes: readonly GeometryChange[]) => void | Promise<void>;
+// GeometryChange: {path: string; previousValue: number; value: number; unit: 'm'}
+```
+
+未注入 `preview` 不出现试算模式。父页面把完整 SI `document` 放到现有 `POST /api/workspaces/{wid}/studies/{sid}/preview` 的 `domain` 覆盖，保留当前 `expected_revision`、`expected_study_revision`、`module` 和需要的参数口径；回调返回未经改写的 API JSON，HTTP 失败须抛出具体错误。父页面应给 fetch 设置 ≤ 9 s 的 AbortSignal 超时，防止挂起的回调阻塞串行队列。组件默认 180 ms 防抖、最多一个在途请求，只保留最后一个待发输入；迟到、过期或退出模式后的响应均不显示。10 s 超时保留几何并报错。有限元等 `preview:false` 能力按宿主错误明确拒绝，不把快速近似标成有限元结果。
+
+`previewThermal` 要求 `preview:true / persisted:false / engineering_approval:false`、成功的单个 `preview` 工况、执行/输入/方法来源，以及宿主校验为 verified 的温度场；继续按 `temperatureView` 校验场节点、单位、工件摘要与 IEC 轨迹/FEM 场束绑定。缺导体或土壤覆盖时失败，不拿旧温度补缺。拖动时只预览几何，松手才请求；改变几何后先撤下保存温度，返回有效试算再着色和叠加土壤切片。试算两视图共用土壤节点和保存/试算导体温度的联合色标，避免 IEC 土壤最大值把所有导体截成同一种颜色；不改变任何温度值。温差按稳定电缆/芯 ID 与保存结果比较。无保存温度时明确说明无对照。导出 PNG 页脚标明未保存/未批准，元数据 `field.provisional:true` 保留执行/输入/方法来源，不能当成保存运行工件。
+
+两视图共用 `sectionGeometry`、`moveSelection` 和 `validateSectionEdit`：排管与其中电缆原子联动，尺寸编辑以 m 为单位，验证地表、碰撞、管内边界、土层与锁定。三维在截面平面拖动，顶视时切回端面避免退化投影；空白仍可旋转，右键平移。尺寸 Enter 确认、Esc 取消，Ctrl+Z/Y 撤销/重做，Ctrl+S 仅交出方案。历史视图只读。几何草稿属于当前组件，退出试算、切换视图或输入源变化时清除；它不写入工程输入，也不生成保存运行。
+
+方案路径采用 **按稳定 ID 寻址的 JSON Pointer**，不是数组下标。例如 `/sections/section~1s1/placements/cable~1A/x` 和 `/sections/section~1s1/enclosures/duct~1A/x`，`~1` 解码为 `/`、`~0` 为 `~`；每项包含原值、新值与 SI 单位 m。父页面先核对原值/输入修订再解析 ID 并调用正式输入/Agent 方案流程，组件不直接保存或批准。按钮在无变化或回调执行中禁用；回调失败保留草稿。二维原有正式 `onChange` 在试算模式下由组件内部接管，不调用它。
+
+父页面接入位置：`StudyGeometry` 透传 `preview / onPropose`；二维的上层绘图组件继续将这两个属性和 `run / fieldCase`（或已校验 `thermal`）传到 `LayingSection`。本模块不修改 `study-workspace.tsx` 或父二维组件。
+
+```sh
+# frontend；只启动一个页面。私有库只升级方法发行，真实温度来自 IEC 快速试算。
+npx vite build --config src/features/cad/gallery.config.ts --logLevel warn
+node --test src/features/cad/tests/what-if.test.mjs src/features/cad/tests/thermal-difference.test.mjs
+node src/features/cad/tests/verify-what-if.mjs
+```
+
+`verify-what-if.mjs` 用 `tests/preview-fixture.py` 只读备份已有演示库到独立 `.tmp/`，在副本上明确采用当前方法发行，调用真实试算 API；不运行本机原生仿真、不改演示库。先单独记录宿主冷请求耗时，再在宿主已启动的条件下自动验证两视图拖动、松手到着色 ≤ 2 s、管缆联动、字段方案、单位/范围错误、重试和未保存性，覆盖两尺寸、两主题、五态及 SwiftShader。来源请求/响应、机器结果和两张改动截图放 `.data/cad-what-if/`，结束关闭任务页面、私有服务并清理私有库。可设 `CAD_PREVIEW_DATABASE` 指定另一份已有演示库。冷启动超过 2 s 时需由宿主侧改善启动耗时；组件不提前请求重复计算。纯单元手算 20 mm 位移核对 0.02 m 的 SI 字段输出，异步队列核对连续拖动只发最后一次及迟到抑制。
 
 ## 原生运行资产
 

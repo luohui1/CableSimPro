@@ -7,9 +7,10 @@ import { formatNumber } from '@/lib/format';
 import type { ViewportController as CadController } from './cad-controller';
 import type { CadCamera, CadThermal } from './types';
 
-export function TemperatureSlice({ thermal, controller, camera, width, height, visible, onSelect }: {
-  thermal: CadThermal; controller: CadController; camera: CadCamera; width: number; height: number; visible: boolean;
+export function TemperatureSlice({ thermal, controller, camera, projectionKey, width, height, visible, onSelect, showHotspot = true, legendSide = 'right' }: {
+  thermal: CadThermal; controller: Pick<CadController, 'project'>; camera?: CadCamera; projectionKey?: unknown; width: number; height: number; visible: boolean;
   onSelect: (id: string) => void;
+  showHotspot?: boolean; legendSide?: 'left' | 'right';
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState('');
@@ -58,21 +59,21 @@ export function TemperatureSlice({ thermal, controller, camera, width, height, v
     };
   }, [hasField, visible]);
   useEffect(() => { void upload.current?.().catch(reason => { setReady(false); setError(String(reason)); }); }, [thermal]);
-  useEffect(() => { render.current?.(); }, [camera, width, height]);
+  useEffect(() => { render.current?.(); }, [camera, projectionKey, width, height]);
   const hottest = thermal.conductors.find(c => c.hottest);
   const hot = hottest && controller.project(hottest.x * 1000, 0, hottest.z * 1000);
   const labelX = hot ? Math.max(16, Math.min(width - 180, hot.x + 28)) : 16;
   const labelY = hot ? Math.max(44, Math.min(height - 84, hot.y - 32)) : 44;
   return <>
-    {visible && thermal.triangles.length > 0 && <canvas ref={canvas} className="cad-temperature-slice" aria-label="保存温度场垂直切片" data-cad-field-ready={ready} />}
+    {visible && thermal.triangles.length > 0 && <canvas ref={canvas} className="cad-temperature-slice" aria-label={thermal.provisional ? '试算温度场垂直切片' : '保存温度场垂直切片'} data-cad-field-ready={ready} />}
     <svg className="cad-overlay cad-thermal-overlay" viewBox={`0 0 ${width} ${height}`} aria-label={thermal.kind === 'difference' ? '导体温差与共享温差色标' : '导体温度与共享温度色标'}
       data-run-id={thermal.runId} data-case-id={thermal.caseId} data-field-kind={thermal.kind} data-minimum={thermal.minimum} data-maximum={thermal.maximum}>
-      {hot && hottest && <g className="cad-hot-conductor" role="button" tabIndex={0} aria-label={`选择${thermal.kind === 'difference' ? '最大导体温差' : '最热导体'} ${hottest.label} ${formatNumber(hottest.value, 1)} ${thermal.kind === 'difference' ? 'K' : '°C'}`}
+      {showHotspot && hot && hottest && <g className="cad-hot-conductor" role="button" tabIndex={0} aria-label={`选择${thermal.kind === 'difference' ? '最大导体温差' : '最热导体'} ${hottest.label} ${formatNumber(hottest.value, 1)} ${thermal.kind === 'difference' ? 'K' : '°C'}`}
         onClick={() => onSelect(hottest.id)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onSelect(hottest.id); } }} data-cad-hottest={hottest.id}>
         <circle cx={hot.x} cy={hot.y} r="8" /><path d={`M${hot.x} ${hot.y}L${labelX} ${labelY}`} />
         <text x={labelX} y={labelY - 6}>{thermal.kind === 'difference' ? '最大导体温差' : '最热导体'} {formatNumber(hottest.value, 1)} {thermal.kind === 'difference' ? 'K' : '°C'}</text>
       </g>}
-      <g className="cad-thermal-legend" transform={`translate(${Math.max(16, width - 104)}, 148)`} aria-label="温度色标">
+      <g className="cad-thermal-legend" transform={`translate(${legendSide === 'left' ? 16 : Math.max(16, width - 104)}, 148)`} aria-label="温度色标">
         <text x="0" y="-10">{thermal.kind === 'difference' ? 'ΔT / K' : '°C'}</text>
         {Array.from({ length: 32 }, (_, i) => <rect key={i} x="0" y={i * 4} width="12" height="4.5" fill={hex(1 - i / 31)} />)}
         <text x="18" y="10">{formatNumber(thermal.maximum, 1)}</text><text x="18" y="128">{formatNumber(thermal.minimum, 1)}</text>

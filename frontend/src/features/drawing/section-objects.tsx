@@ -8,12 +8,15 @@ import type { DrawingView, PixelSize, Section, SectionSelection } from './types'
 export type ObjectPointer = (event: ReactPointerEvent<SVGElement>, selection: NonNullable<SectionSelection>, operation?: 'move' | 'width' | 'height') => void;
 const matches = (selection: SectionSelection, kind: string, id: string) => selection?.kind === kind && selection.id === id;
 
-export function SectionObjects({ section, geometry, view, size, selected, onSelect, onPointer, editable = false, miniature = false }: {
+export function SectionObjects({ section, geometry, view, size, selected, onSelect, onPointer, editable = false, miniature = false, colors, compactLabels = false }: {
   section: Section; geometry: SectionGeometry; view: DrawingView; size: PixelSize; selected: SectionSelection;
   onSelect?: (selection: SectionSelection) => void; onPointer?: ObjectPointer; editable?: boolean; miniature?: boolean;
+  colors?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+  compactLabels?: boolean;
 }) {
   const scale = size.width / view.widthM;
   const ground = worldToScreen({ x: 0, z: 0 }, view, size).y;
+  const crowded = (point: { x: number; z: number }, others: readonly { x: number; z: number }[]) => compactLabels && others.some(other => other !== point && Math.abs(other.x - point.x) * scale < 64 && Math.abs(other.z - point.z) * scale < 32);
   const behavior = (kind: NonNullable<SectionSelection>['kind'], id: string) => {
     const selection = { kind, id };
     return { role: onSelect ? 'button' : undefined, tabIndex: onSelect ? 0 : undefined,
@@ -59,12 +62,13 @@ export function SectionObjects({ section, geometry, view, size, selected, onSele
       const point = worldToScreen(enclosure, view, size);
       const selectedHere = matches(selected, 'enclosure', enclosure.id);
       return <g key={enclosure.id} className="drawing-object" data-section-object={`enclosure/${enclosure.id}`} {...behavior('enclosure', enclosure.id)}>
+        <title>{displayName(enclosure.id)}</title>
         {enclosure.type === 'duct' ? <>
           <circle className="drawing-duct-outer" cx={point.x} cy={point.y} r={enclosure.outer_diameter! * scale / 2} />
           <circle className="drawing-duct-inner" cx={point.x} cy={point.y} r={enclosure.inner_diameter! * scale / 2} />
           {selectedHere && <circle className="drawing-selection" cx={point.x} cy={point.y} r={enclosure.outer_diameter! * scale / 2 + 3} />}
         </> : <rect {...rectangle(enclosure.x, enclosure.z, enclosure.width!, enclosure.height!)} className={`drawing-region ${selectedHere ? 'is-selected' : ''}`} />}
-        {!miniature && <text className="drawing-text" x={point.x} y={point.y - (enclosure.outer_diameter || enclosure.height || 0) * scale / 2 - 8} textAnchor="middle">{displayName(enclosure.id)}</text>}
+        {!miniature && !crowded(enclosure, section.enclosures || []) && <text className="drawing-text" x={point.x} y={point.y - (enclosure.outer_diameter || enclosure.height || 0) * scale / 2 - 8} textAnchor="middle">{displayName(enclosure.id)}</text>}
         {editable && selectedHere && enclosure.type !== 'duct' && <ResizeHandles x={enclosure.x} z={enclosure.z} width={enclosure.width!} height={enclosure.height!}
           view={view} size={size} selection={{ kind: 'enclosure', id: enclosure.id }} onPointer={onPointer} />}
       </g>;
@@ -73,11 +77,12 @@ export function SectionObjects({ section, geometry, view, size, selected, onSele
       const point = worldToScreen(cable, view, size);
       const radius = cable.shape.radiusM * scale;
       return <g key={cable.id} className="drawing-object" data-section-object={`cable/${cable.id}`} {...behavior('cable', cable.id)}>
-        <CableShapes shape={cable.shape} center={cable} view={view} size={size} mini={miniature} />
+        <title>{cable.label}</title>
+        <CableShapes shape={cable.shape} center={cable} view={view} size={size} mini={miniature} colors={colors?.[cable.id]} />
         {/* Hit target expands interaction only; the drawn geometry stays to scale. */}
         {onSelect && <circle className="drawing-hit-area" cx={point.x} cy={point.y} r={Math.max(radius, 8)} />}
         {matches(selected, 'cable', cable.id) && <circle className="drawing-selection" cx={point.x} cy={point.y} r={radius + 3} />}
-        {!miniature && <text className="drawing-text" x={point.x} y={point.y + radius + 20} textAnchor="middle">{cable.label}</text>}
+        {!miniature && !crowded(cable, geometry.cables) && <text className="drawing-text" x={point.x} y={point.y + radius + 20} textAnchor="middle">{cable.label}</text>}
       </g>;
     })}
   </g>;

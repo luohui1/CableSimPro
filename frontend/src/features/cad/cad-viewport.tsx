@@ -88,7 +88,7 @@ export const CadViewport = forwardRef<CadViewportHandle, CadViewportProps>(funct
         <IconButton icon="tool/zoom-out" label="缩小三维" disabled={disabled} onClick={() => instance?.zoom(.85)} />
         <IconButton icon="tool/zoom-in" label="放大三维" disabled={disabled} onClick={() => instance?.zoom(1.15)} />
         <Select label="选择方式" value={viewport.measurement}
-          disabled={disabled || !scene && !!displayed?.envelope} options={[
+          disabled={disabled || !!props.onObjectMove || !scene && !!displayed?.envelope} options={[
             { value: 'part', label: scene ? '对象' : '整层' }, ...(!scene ? [{ value: 'diameter', label: '原始直径', disabled: !props.selectedObject }] : []),
             { value: 'point', label: '两点距离', disabled: !scene && !props.selectedObject },
           ]} onChange={value => void viewport.changeMeasurement(value as MeasurementMode)} />
@@ -96,7 +96,7 @@ export const CadViewport = forwardRef<CadViewportHandle, CadViewportProps>(funct
       </div>
       {(busy && ready || viewport.measurementBusy) && <span className="cad-updating" role="status">
         {viewport.measurementBusy ? '读取精确拓扑' : '更新显示'}</span>}
-      {(props.resultStatus || props.thermal?.notice) && !(busy && ready) && <span className="cad-result-status" role="status" title={props.thermal ? `运行 ${props.thermal.runId} · 工况 ${props.thermal.caseId} · ${props.thermal.source}` : undefined}>{[props.resultStatus, props.thermal?.notice].filter(Boolean).join(' · ')}</span>}
+      {props.resultStatus !== null && (props.resultStatus || props.thermal?.notice) && !(busy && ready) && <span className="cad-result-status" role="status" title={props.thermal ? `${props.thermal.runLabel || '保存运行'} · 工况 ${props.thermal.caseId}` : undefined}>{[props.resultStatus, props.thermal?.notice].filter(Boolean).join(' · ')}</span>}
       {exportError && <span className="cad-slice-error" role="alert">{exportError}</span>}
     </div>
     <div className="cad-status"><span>mm</span><span>{displayed?.display_source === 'domain-input' ? '输入几何 · 展示段 0.4 m' : displayed?.envelope ? '包络预览' : displayed ? '原始几何' : '三维查看'}</span>

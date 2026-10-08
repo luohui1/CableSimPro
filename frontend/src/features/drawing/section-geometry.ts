@@ -130,6 +130,16 @@ export function validateSectionEdit(document: DomainDocument, section: Section, 
       throw new Error(`placements.${second.id}：电缆与 ${first.id} 的几何截面重叠，请增大间距。`);
     }
   }
+  const ducts = (section.enclosures || []).filter(e => e.type === 'duct');
+  for (let a = 0; a < ducts.length; a++) {
+    const first = ducts[a], radius = first.outer_diameter! / 2;
+    if (section.kind === 'ground' && first.z + radius > 1e-9) throw Error(`enclosures.${first.id}.z：排管须完全位于地表下。`);
+    for (let b = a + 1; b < ducts.length; b++) {
+      const second = ducts[b];
+      if (Math.hypot(first.x - second.x, first.z - second.z) + 1e-9 < radius + second.outer_diameter! / 2)
+        throw Error(`enclosures.${second.id}：排管外轮廓重叠，请增大中心距。`);
+    }
+  }
   for (const cable of geometry.cables) {
     const enclosure = section.enclosures?.find(item => item.id === cable.enclosure || item.contains?.includes(cable.id));
     if (!enclosure) { if (cable.enclosure) throw new Error(`placements.${cable.id}.enclosure：引用缺失。`); continue; }

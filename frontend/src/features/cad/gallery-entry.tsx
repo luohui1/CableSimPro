@@ -6,6 +6,7 @@ import { demoDocument, demoModel, demoScene, envelopeModel, previewModel, update
 import { inputScene } from './input-scene';
 import { largeSceneDocument } from './tests/large-scene-fixture';
 import { TemperatureComparisonGallery } from './temperature-comparison-gallery';
+import { WhatIfGallery } from './what-if-gallery';
 import { runtimeDiagnostics } from './occt-runtime';
 import type { GalleryEntry } from './gallery-support';
 import type { CadGeometry, CadSelection, CadTiming, CadViewportHandle, CanvasState } from './types';
@@ -56,4 +57,4 @@ export function CadGallery({ state }: { state: CanvasState }) {
       onReady={timing => setTimings(previous => [...previous, timing])} />}</div>
   </section>;
 }
-export const galleryEntries: readonly GalleryEntry[] = [{ id: 'cad', title: 'CAD 视口', Component: CadGallery }, { id: 'cad-field', title: '保存场三维回归', Component: TemperatureComparisonGallery }];
+export const galleryEntries: readonly GalleryEntry[] = [{ id: 'cad', title: 'CAD 视口', Component: CadGallery }, { id: 'cad-field', title: '保存场三维回归', Component: TemperatureComparisonGallery }, { id: 'cad-what-if', title: '几何试算回归', Component: WhatIfGallery }];

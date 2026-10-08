@@ -55,6 +55,7 @@ export function useCadViewport(props: CadViewportProps) {
     void mount.then(create => create(element, {
       onCameraChange: value => { if (alive) { setCamera(value); latest.current.onCameraChange?.(value); } },
       onSelectionChange: selection => latest.current.onSelectionChange?.(selection),
+      onObjectMove: move => latest.current.onObjectMove?.(move),
       onPick: value => {
         if (!alive) return;
         setPick(value);
@@ -124,6 +125,8 @@ export function useCadViewport(props: CadViewportProps) {
 
   useEffect(() => { instance?.select(props.selectedObject || null); },
     [instance, props.selectedObject?.id, props.selectedObject?.kind]);
+
+  useEffect(() => { instance?.edit?.(!!props.onObjectMove); }, [instance, !!props.onObjectMove]);
 
   function changeMode(next: CadMode) {
     setMode(next);

@@ -4,6 +4,7 @@ import { api, array, message, optionalRecord, record, responseData, text } from 
 import { studyRuns } from '@/api/research';
 import { temperatureView } from '@/lib/temperature-view';
 import { compareSavedFields } from '../field/saved-comparison';
+import { savedRunLabel } from '../field/run-label';
 import { Select } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { savedThermal } from './saved-thermal';
@@ -40,7 +41,7 @@ export function savedFieldPair(femRun: Record<string, unknown>, iecRun: Record<s
   const iec = savedThermal(caseRun(iecRun, comparison.iecCase), document, sectionId, comparison.iecCase);
   if (fem?.kind !== 'fem' || iec?.kind !== 'iec' || !fem.triangles.length || !iec.triangles.length) throw Error('缺少有限元或 IEC 保存节点场；差值未覆盖。');
   const minimum = Math.min(fem.minimum, iec.minimum), maximum = Math.max(fem.maximum, iec.maximum);
-  const references = [fem, iec].map(({ runId, caseId, source }) => ({ runId, caseId, source }));
+  const references = [fem, iec].map(({ runId, caseId, source, runLabel }) => ({ runId, caseId, source, label: runLabel }));
   return { fem: { ...fem, minimum, maximum, references }, iec: { ...iec, minimum, maximum, references } };
 }
 function difference(fem: CadThermal, iec: CadThermal, signal: AbortSignal): Promise<CadThermal> {
@@ -63,11 +64,11 @@ export function useSavedFieldControls(run: Record<string, unknown> | undefined, 
   const wid = text(run?.workspace), enabled = !!active && !!wid;
   const candidates = useQuery({ queryKey: ['cad-field-runs', wid, active?.kind], enabled, retry: false, queryFn: async ({ signal }) => {
     const studies = array(await responseData(api.GET('/api/workspaces/{wid}/studies', { params: { path: { wid } }, signal }))).map(optionalRecord);
-    const values: { id: string; study: string; created: string; title: string }[] = [];
+    const values: { id: string; study: string; created: string; title: string; label: string }[] = [];
     for (const study of studies) {
       const plugin = text(optionalRecord(optionalRecord(study.definition).method).plugin_id);
       if (active!.kind === 'fem' ? plugin !== 'cablesim.iec60287' : plugin !== 'cablesim.simulation') continue;
-      for (const item of await studyRuns(wid, text(study.id), signal, 'summary')) if (['succeeded', 'partial'].includes(text(item.status))) values.push({ id: text(item.id), study: text(study.id), created: text(item.created), title: text(optionalRecord(study.definition).title) });
+      for (const item of await studyRuns(wid, text(study.id), signal, 'summary')) if (['succeeded', 'partial'].includes(text(item.status))) values.push({ id: text(item.id), study: text(study.id), created: text(item.created), title: text(optionalRecord(study.definition).title), label: savedRunLabel(item, text(optionalRecord(study.definition).title)) });
     }
     return values.sort((a, b) => b.created.localeCompare(a.created));
   } });
@@ -104,7 +105,7 @@ export function useSavedFieldControls(run: Record<string, unknown> | undefined, 
     <Select label="三维温度场" value={mode === 'current' ? active!.kind : mode} onChange={value => setMode(value as typeof mode)} options={[
       { value: 'iec', label: 'IEC', disabled: !pair.data && active!.kind !== 'iec' }, { value: 'fem', label: '有限元', disabled: !pair.data && active!.kind !== 'fem' }, { value: 'difference', label: '有限元 − IEC', disabled: !pair.data },
     ]} />
-    {!!candidates.data?.length && <Select label={active!.kind === 'fem' ? 'IEC 参考运行' : '有限元参考运行'} value={selected || pair.data?.referenceId || 'auto'} onChange={setSelected} options={[{ value: 'auto', label: '最新同工况' }, ...candidates.data.map(c => ({ value: c.id, label: `${c.title} · ${c.created}` }))]} />}
+    {!!candidates.data?.length && <Select label={active!.kind === 'fem' ? 'IEC 参考运行' : '有限元参考运行'} value={selected || pair.data?.referenceId || 'auto'} onChange={setSelected} options={[{ value: 'auto', label: '最新同工况' }, ...candidates.data.map(c => ({ value: c.id, label: c.label }))]} />}
     {reason && <span className="cad-field-notice" role="status" title={reason}>{reason}</span>}
     {!!(candidates.error || pair.error || delta.error) && <Button size="compact" onClick={() => { void candidates.refetch(); if (candidates.data?.length) void pair.refetch(); if (mode === 'difference' && pair.data) void delta.refetch(); }}>重试对照</Button>}
   </> : undefined;

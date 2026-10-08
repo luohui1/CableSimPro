@@ -62,6 +62,15 @@ test('CableSection: radial dimensions match the 38 mm hand calculation and nativ
   assert.equal(cable.dimensionValue(document.cable_types[0], { scope: 'common', role: 'insulation' }).valueM, .004);
   assert.deepEqual(document, original);
 });
+test('Two 160 mm ducts require at least 160 mm center distance and 80 mm center depth', () => {
+  const doc = structuredClone(document), section = doc.sections[0]; section.placements = [];
+  section.enclosures = [0, .16].map((x, index) => ({ id: `duct/${index}`, type: 'duct', x, z: -.08, inner_diameter: .14, outer_diameter: .16, material: doc.materials[0].id }));
+  laying.validateSectionEdit(doc, section, []);
+  section.enclosures[1].x = .159;
+  assert.throws(() => laying.validateSectionEdit(doc, section, []), /排管外轮廓重叠/);
+  section.enclosures[1].x = .16; section.enclosures[0].z = -.079;
+  assert.throws(() => laying.validateSectionEdit(doc, section, []), /完全位于地表下/);
+});
 test('CableSection: three-core coordinates remain to scale and missing material is refused', () => {
   const type = structuredClone(document.cable_types[0]);
   type.construction = 'three_core'; type.common_layers = [];

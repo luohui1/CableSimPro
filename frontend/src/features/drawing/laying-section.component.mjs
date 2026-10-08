@@ -5,7 +5,7 @@ import { drag, editNumber, selectOption, snapshot } from '../cad/tests/browser-f
 export async function verifyLayingSection(page) {
   const component = page.locator('.laying-section');
   await expect(component.locator('[data-drawing-canvas="laying"] [data-section-object^="cable/"]')).toHaveCount(3);
-  const cable = page.locator('[data-section-object="cable/cable/A"] .drawing-hit-area');
+  const cable = component.locator('[data-drawing-canvas="laying"] [data-section-object="cable/cable/A"] .drawing-hit-area');
   await cable.click();
   const initial = await snapshot(page, 'laying');
   await expect(component.locator('[data-section-dimension="depth"]')).toBeVisible();

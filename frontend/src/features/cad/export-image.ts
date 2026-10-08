@@ -7,7 +7,8 @@ export function registerCanvasCapture(canvas: HTMLCanvasElement, capture: () => 
 }
 const blobOf = (canvas: HTMLCanvasElement) => new Promise<Blob>((resolve, reject) => canvas.toBlob(blob => blob ? resolve(blob) : reject(Error('三维图像编码失败。')), 'image/png'));
 export async function exportCadImage(stage: HTMLElement, controller: ViewportController, geometry: CadGeometry, camera: CadCamera, thermal?: CadThermal): Promise<CadImage> {
-  const width = Math.round(stage.clientWidth), height = Math.round(stage.clientHeight), ratio = 2, footer = 96;
+  const refs = thermal?.references || (thermal ? [{ runId: thermal.runId, caseId: thermal.caseId, label: thermal.runLabel }] : []);
+  const width = Math.round(stage.clientWidth), height = Math.round(stage.clientHeight), ratio = 2, footer = 96 + Math.max(0, refs.length - 1) * 20;
   if (!width || !height) throw Error('视口尚不可见，无法导出。');
   if (stage.querySelectorAll('.cad-canvas-host canvas').length !== 1) throw Error('视口正在替换，请完成后再导出。');
   if (thermal?.triangles.length && stage.querySelector('[data-cad-field-ready]')?.getAttribute('data-cad-field-ready') !== 'true') throw Error('温度切片尚未完成，请出图后再导出。');
@@ -45,10 +46,10 @@ export async function exportCadImage(stage: HTMLElement, controller: ViewportCon
   const names = { iso: '轴测', front: '正视', end: '截面', top: '俯视', free: '自由视角' };
   context.fillText(`${names[camera.view]} · 方位 ${(camera.heading * 180 / Math.PI).toFixed(1)}° · 仰角 ${(camera.elevation * 180 / Math.PI).toFixed(1)}° · 展示段 ${geometry.length_m} m`, Math.max(160, length + 40), y);
   context.fillText(thermal ? `${thermal.kind === 'difference' ? '有限元 − IEC · 温差 K' : thermal.kind === 'fem' ? '有限元 · °C' : thermal.kind === 'iec' ? 'IEC · °C' : '导体温度 · °C'} · 工况 ${thermal.caseId}${thermal.notice ? ` · ${thermal.notice}` : ''}` : '尚无结果 · 输入几何', Math.max(160, length + 40), y + 22);
-  const refs = thermal?.references || (thermal ? [{ runId: thermal.runId, caseId: thermal.caseId }] : []);
-  context.fillText(refs.length ? refs.map(r => `运行 ${r.runId}`).join(' / ') : '尺寸来自同一敷设输入；表面量测为显示网格（弦差 ≤ 0.08 mm）', 16, height + 76, width - 32);
+  if (refs.length) refs.forEach((reference, index) => context.fillText(reference.label || '保存运行', 16, height + 76 + index * 20, width - 32));
+  else context.fillText('尺寸来自同一敷设输入；表面量测为显示网格（弦差 ≤ 0.08 mm）', 16, height + 76, width - 32);
   let inputSha256 = geometry.input_sha256;
   if (!inputSha256 && typeof geometry.display_input === 'string') inputSha256 = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(geometry.display_input)))).map(v => v.toString(16).padStart(2, '0')).join('');
   return { blob: await blobOf(output), metadata: { schema: 'cablesim.cad-image/1', mime: 'image/png', width: output.width, height: output.height, camera: { ...camera }, geometryInputSha256: inputSha256,
-    displayLengthM: geometry.length_m, scaleMmPerPixel: scaleMmPerPixel / ratio, field: thermal ? { runId: thermal.runId, caseId: thermal.caseId, source: thermal.source, kind: thermal.kind, minimum: thermal.minimum, maximum: thermal.maximum, references: thermal.references } : undefined } };
+    displayLengthM: geometry.length_m, scaleMmPerPixel: scaleMmPerPixel / ratio, field: thermal ? { runId: thermal.runId, caseId: thermal.caseId, source: thermal.source, kind: thermal.kind, minimum: thermal.minimum, maximum: thermal.maximum, references: thermal.references, provisional: thermal.provisional } : undefined } };
 }

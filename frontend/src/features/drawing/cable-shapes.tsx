@@ -3,9 +3,10 @@ import type { CableShape, DrawingRing } from './cable-geometry';
 import type { DrawingView, LayerTarget, PixelSize, WorldPoint } from './types';
 import { profilePath, profileSupportPoint } from './cross-section-profile';
 
-export function CableShapes({ shape, center = { x: 0, z: 0 }, view, size, selectedId, onSelect, mini = false }: {
+export function CableShapes({ shape, center = { x: 0, z: 0 }, view, size, selectedId, onSelect, mini = false, colors }: {
   shape: CableShape; center?: WorldPoint; view: DrawingView; size: PixelSize;
   selectedId?: string; onSelect?: (target: LayerTarget) => void; mini?: boolean;
+  colors?: Readonly<Record<string, string>>;
 }) {
   const scale = size.width / view.widthM;
   return <g className={`drawing-cable-shapes ${mini ? 'is-miniature' : ''}`}>
@@ -16,7 +17,7 @@ export function CableShapes({ shape, center = { x: 0, z: 0 }, view, size, select
         + ring.holes.map(hole => profilePath(hole, project, scale)).join('');
       const selected = selectedId === ring.id;
       return <path key={ring.id} d={contour} data-profile-kind={ring.profile.kind}
-        fillRule="evenodd" className={`drawing-material-${ring.materialRole} drawing-ring ${selected ? 'is-selected' : ''} ${selectedId && !selected ? 'is-dimmed' : ''}`}
+        fill={colors?.[ring.id]} fillRule="evenodd" className={`${colors?.[ring.id] ? 'drawing-thermal-conductor' : `drawing-material-${ring.materialRole}`} drawing-ring ${selected ? 'is-selected' : ''} ${selectedId && !selected ? 'is-dimmed' : ''}`}
         data-layer-id={ring.id} role={onSelect ? 'button' : undefined} tabIndex={onSelect ? 0 : undefined}
         aria-label={onSelect ? `选择 ${ring.number} ${ring.name}` : undefined} aria-pressed={onSelect ? selected : undefined}
         onClick={onSelect ? event => { event.stopPropagation(); onSelect(ring.target); } : undefined}

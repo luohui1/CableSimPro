@@ -3,11 +3,11 @@ import { expect } from '@playwright/test';
 import { editNumber, snapshot } from '../cad/tests/browser-fixture.mjs';
 
 export async function verifyCableSection(page) {
-  const component = page.locator('.cable-section');
+  const component = page.locator('[data-gallery-entry="cable-section"] .cable-section');
   await expect(component.locator('[data-layer-number]')).toHaveCount(6);
   await expect(component.locator('[data-cable-dimensions]')).toHaveCount(0);
-  await page.locator('[data-layer-number="3"] circle').click();
-  const trigger = page.locator('[data-dimension-trigger="cable"]');
+  await component.locator('[data-layer-number="3"] circle:not(.drawing-layer-anchor)').click();
+  const trigger = component.locator('[data-dimension-trigger="cable"]');
   await expect(trigger).toBeVisible();
   await editNumber(page, trigger, 5);
   await expect(page.locator('.drawing-dimension-editor')).toHaveCount(0);
@@ -32,14 +32,21 @@ export async function verifyCableSection(page) {
   await component.locator('[data-drawing-canvas]').focus(); await page.keyboard.press('Control+s');
   assert.deepEqual((await snapshot(page, 'cable')).commands, ['save']);
   await page.evaluate(() => window.canvasGallery.cable.construction('three'));
-  await expect(component.locator('[data-layer-number]')).toHaveCount(16);
+  await expect(component.locator('[data-layer-id]')).toHaveCount(16);
+  // Three cores are all drawn; the readable number column follows one selected core.
+  await expect(component.locator('[data-layer-number]')).toHaveCount(6);
+  for (const core of ['core/1', 'core/2', 'core/3']) {
+    await component.locator(`[data-layer-id="${core}/conductor"]`).click({ force: true });
+    await expect(component.locator(`[data-label-core="${core}"]`)).toHaveCount(5);
+  }
+  await component.locator('[data-layer-id="core/1/conductor"]').click({ force: true });
   assert.equal((await snapshot(page, 'cable')).document.cable_types[0].cores.length, 3);
   for (const state of ['empty', 'loading', 'error', 'historical', 'success']) {
     await page.evaluate(value => window.canvasGallery.setState(value), state);
     await expect(component).toHaveAttribute('data-cable-section-state', state);
     if (state === 'historical') {
-      await page.locator('[data-layer-number="1"] circle').click();
-      await expect(page.locator('[data-dimension-trigger="cable"]')).not.toHaveAttribute('role', 'button');
+      await component.locator('[data-layer-number="1"] circle:not(.drawing-layer-anchor)').click();
+      await expect(component.locator('[data-dimension-trigger="cable"]')).not.toHaveAttribute('role', 'button');
     }
   }
   return { edits: (await snapshot(page, 'cable')).edits.length };

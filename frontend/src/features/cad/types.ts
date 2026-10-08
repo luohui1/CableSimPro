@@ -152,7 +152,7 @@ export interface CadImage {
   metadata: {
     schema: 'cablesim.cad-image/1'; mime: 'image/png'; width: number; height: number;
     camera: CadCamera; geometryInputSha256: string; displayLengthM: number;
-    scaleMmPerPixel: number; field?: Pick<CadThermal, 'runId' | 'caseId' | 'source' | 'kind' | 'minimum' | 'maximum' | 'references'>;
+    scaleMmPerPixel: number; field?: Pick<CadThermal, 'runId' | 'caseId' | 'source' | 'kind' | 'minimum' | 'maximum' | 'references' | 'provisional'>;
   };
 }
 
@@ -160,6 +160,7 @@ export interface CadViewportProps {
   geometry: CadGeometry | null;
   selectedObject?: CadSelection;
   onSelectionChange?: (selection: CadSelection) => void;
+  onObjectMove?: (move: CadObjectMove) => void;
   onPick?: (pick: CadPick | null) => void;
   onCameraChange?: (camera: CadCamera) => void;
   onReady?: (timing: CadTiming) => void;
@@ -172,25 +173,38 @@ export interface CadViewportProps {
   className?: string;
   label?: string;
   onFallback?: () => void;
-  resultStatus?: string;
+  /** null lets an enclosing toolbar own the result status without duplicating its badge. */
+  resultStatus?: string | null;
   resultState?: CanvasState;
   thermal?: CadThermal;
   controls?: ReactNode;
   onExport?: (image: CadImage) => void | Promise<void>;
 }
 
+export interface CadObjectMove {
+  id: string;
+  deltaXM: number;
+  deltaZM: number;
+  phase: 'preview' | 'commit' | 'cancel';
+  error?: string;
+}
+
 /** Validated, saved node-field data; positions in m and displayed temperatures in °C. */
 export interface CadThermal {
   runId: string;
+  runLabel?: string;
+  provisional?: boolean;
   caseId: string;
   source: string;
   kind?: 'iec' | 'fem' | 'difference';
-  references?: readonly { runId: string; caseId: string; source: string }[];
+  references?: readonly { runId: string; caseId: string; source: string; label?: string }[];
   notice?: string;
   minimum: number;
   maximum: number;
   points: readonly [number, number][];
   triangles: readonly [number, number, number][];
+  /** Valid regular cells, ordered bottom-left/right, top-right/left; display interpolation only. */
+  quads?: readonly [number, number, number, number][];
   values: readonly number[];
   conductors: readonly { id: string; coreId?: string; x: number; z: number; radius: number; value: number; hottest: boolean; label: string }[];
 }
