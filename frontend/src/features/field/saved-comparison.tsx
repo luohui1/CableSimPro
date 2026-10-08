@@ -25,8 +25,12 @@ export function compareSavedFields(fem: Record<string, unknown>, iec: Record<str
   const reference = referenceCases.find(item => item.status === "succeeded" && matchingIds.includes(item.case_id));
   if (!chosen || !reference || !original?.input) throw Error("两次保存运行没有完全相同的领域工况；请对同一保存输入运行 IEC。");
   const femParameters = optionalRecord(original.parameters), iecParameters = optionalRecord(records(other.cases).find(item => item.case_id === reference.case_id)?.parameters);
-  if (canonical(femParameters.iec) !== canonical(iecParameters)) throw Error("两次运行的 IEC 电损耗参数或额定口径不同，不能作为同工况对照。");
-  const left = records(chosen.results), right = records(reference.results);
+  const scope = (value: unknown) => Object.fromEntries(Object.entries(optionalRecord(value)).filter(([key]) => key !== 'operation'));
+  if (canonical(scope(femParameters.iec)) !== canonical(scope(iecParameters))) throw Error("两次运行的 IEC 电损耗参数或额定口径不同，不能作为同工况对照。");
+  const saved = records(chosen.results), right = records(reference.results);
+  const identity = (row: Record<string, unknown>) => canonical([row.key, row.entity, row.unit, row.case]);
+  const left: Record<string, unknown>[] = [...saved, ...right.filter(row => !saved.some(item => identity(item) === identity(row))).map(row =>
+    ({ ...row, status: 'unavailable', value: null, reason: { message: '此保存级别未计算该量值。' } }))];
   const rows = left.filter(item => ["conductor_temperature", "ampacity"].includes(text(item.key))).map((item, index) => {
     const match = right.find(row => row.key === item.key && row.entity === item.entity && row.unit === item.unit && row.case === item.case);
     const a = item.status === "available" ? numeric(item.value) : null, b = match?.status === "available" ? numeric(match.value) : null;
@@ -49,7 +53,7 @@ export function compareSavedFields(fem: Record<string, unknown>, iec: Record<str
 
 export function SavedFieldComparison({ run }: { run: Record<string, unknown> }) {
   const [selected, setSelected] = useState("");
-  const wid = text(run.workspace), sid = text(run.study);
+  const wid = text(run.workspace);
   const candidates = useQuery({ queryKey: ["field-comparison-runs", wid], enabled: !!wid, queryFn: async ({ signal }) => {
     const studies = array(await responseData(api.GET("/api/workspaces/{wid}/studies", { params: { path: { wid } }, signal }))).map(optionalRecord);
     const values = await Promise.all(studies.filter(study => optionalRecord(optionalRecord(study.definition).method).plugin_id === "cablesim.iec60287").map(async study =>
@@ -58,12 +62,12 @@ export function SavedFieldComparison({ run }: { run: Record<string, unknown> }) 
   } });
   const candidate = candidates.data?.find(item => item.id === selected) || candidates.data?.at(-1);
   const comparison = useQuery({ queryKey: ["saved-field-comparison", run.id, candidate?.id], enabled: !!candidate, retry: false, queryFn: async ({ signal }) => {
-    const read = async (study: string, id: string) => {
-      const response = await fetch(`/api/workspaces/${encodeURIComponent(wid)}/studies/${encodeURIComponent(study)}/runs/${encodeURIComponent(id)}?view=full`, { signal, credentials: "same-origin", cache: "no-store" });
+    const read = async (id: string) => {
+      const response = await fetch(`/api/hpc/workspaces/${encodeURIComponent(wid)}/fields/${encodeURIComponent(id)}/view`, { signal, credentials: "same-origin", cache: "no-store" });
       if (!response.ok) throw Error("保存运行读取失败（" + response.status + "）");
       return record(await response.json());
     };
-    const [fem, iec] = await Promise.all([read(sid, text(run.id)), read(text(candidate!.study), text(candidate!.id))]);
+    const [fem, iec] = await Promise.all([read(text(run.id)), read(text(candidate!.id))]);
     return compareSavedFields(fem, iec);
   } });
   const domain = savedDomain(run), data = comparison.data;

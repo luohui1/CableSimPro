@@ -27,7 +27,7 @@ def saved_fixture():
          'method':{'plugin_id':'cablesim.simulation','capability':'iec-thermal-field','version':'1.0.1','release_digest':'c'*64}},'cases':[original]},
          'output':{'cases':[case]},'artifact_status':{'case-0':{'x-cablesim.temperature-field':{'status':'verified'}}}}
     iec=deepcopy(run);iec['id']=str(uuid4());iec['snapshot']['definition']['method']['plugin_id']='cablesim.iec60287'
-    iec['snapshot']['cases'][0]['parameters']=params['iec'];iec['output']['cases'][0]['results'][0]['value']=319.
+    iec['snapshot']['cases'][0]['parameters']=deepcopy(params['iec']);iec['output']['cases'][0]['results'][0]['value']=319.
     return run,iec
 
 
@@ -72,9 +72,29 @@ def test_half_mesh_and_double_domain_keep_physics_and_field_order():
     assert next_parameters(parameters,'domain')['domain_options']['bounds_m']==[-16,-16,16,0]
 
 
+def test_continue_keeps_saved_expansions_and_original_final_rating(tmp_path,monkeypatch):
+    from backend.kernel.batch_convergence import observation
+    manager,run,_=service(tmp_path,monkeypatch)
+    first=manager.start(run['workspace'],run['study'],RefineRequest(request_id=uuid4(),source_run_id=run['id'],budget_confirmed=True))
+    first.update(status='blocked',study=run['study'])
+    run['snapshot']['cases'][0]['parameters']['iec']['operation']='temperature'
+    expanded=deepcopy(run);expanded['id']=str(uuid4())
+    expanded['snapshot']['cases'][0]['parameters']['domain_options']['bounds_m']=[-16,-16,16,0]
+    first['rows'].append(observation(expanded,'case-0','domain'))
+    manager.save(first);manager.active.clear()
+    manager.research.get_run=lambda wid,rid:expanded if rid==expanded['id'] else run
+    result=manager.start(run['workspace'],run['study'],RefineRequest(request_id=uuid4(),source_run_id=run['id'],
+        continue_from=first['id'],budget_confirmed=True))
+    assert len(result['rows'])==2
+    assert result['domain_parameters']['domain_options']['bounds_m']==[-16,-16,16,0]
+    assert result['definition']['parameters']['iec']['operation']=='both'
+
+
 def test_hand_calculated_differences_reject_small_domain_and_stale_mesh():
     rows=[{'kind':'mesh','hotspot_k':t,'mesh_size_m':h,'bounds_m':[-8,-8,8,0]} for h,t in ((.008,320.1),(.004,320.04),(.002,320.))]
     rows.append({'kind':'domain','hotspot_k':320.02,'mesh_size_m':.002,'bounds_m':[-16,-16,16,0],'change_k':0})
+    assert not verdict(rows,.1)['domain_passed']
+    rows.append({'kind':'domain','hotspot_k':320.04,'mesh_size_m':.002,'bounds_m':[-32,-32,32,0],'change_k':0})
     actual=verdict(rows,.1)
     assert actual['status']=='converged' and actual['grid_change_k']==pytest.approx(.04) and actual['domain_change_k']==pytest.approx(.02)
     rows[-1]['bounds_m']=[-9,-9,9,0]
@@ -106,20 +126,49 @@ def test_cancellation_and_restart_preserve_pending_identity(tmp_path,monkeypatch
     manager.work(value['id']);assert manager.load(value['id'])['status']=='cancelled'
 
 
-def test_worker_stops_immediately_at_two_mesh_and_domain_thresholds(tmp_path,monkeypatch):
+@pytest.mark.parametrize('temperature_only',[False,True])
+def test_worker_stops_immediately_at_two_mesh_and_domain_thresholds(tmp_path,monkeypatch,temperature_only):
     manager,run,_=service(tmp_path,monkeypatch)
-    value=manager.start(run['workspace'],run['study'],RefineRequest(request_id=uuid4(),source_run_id=run['id'],budget_confirmed=True))
+    value=manager.start(run['workspace'],run['study'],RefineRequest(request_id=uuid4(),source_run_id=run['id'],budget_confirmed=True,temperature_only_levels=temperature_only))
     calls=[]
     def step(v,kind):
+        if kind=='rating':
+            calls.append(kind);v['rating_run_id']='final-rating';manager.save(v);return
         parameters=next_parameters(v[kind+'_parameters'],kind);calls.append(kind)
         row={**v['rows'][-1],'kind':kind,'mesh_size_m':parameters['mesh']['size_m'],'bounds_m':parameters['domain_options']['bounds_m'],
-             'hotspot_k':320 + [.04,.06,.07][len(calls)-1]}
+             'hotspot_k':320 + [.04,.06,.07,.075][len(calls)-1]}
         v['rows'].append(row);v[kind+'_parameters']=parameters
         if kind=='mesh':v['domain_parameters']=deepcopy(parameters)
         v['attempts'].append({'status':'succeeded'});v['actual_core_hours']+=.01;manager.save(v)
     monkeypatch.setattr(manager,'step',step);manager.work(value['id'])
-    assert calls==['mesh','mesh','domain']
+    assert calls==['mesh','mesh','domain','domain']+(['rating'] if temperature_only else [])
     assert manager.load(value['id'])['status']=='completed'
+
+
+def test_field_routes_project_without_mutation_and_sample_full_saved_values(tmp_path,monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.kernel.hpc_jobs import make_router
+    from io import BytesIO
+    import numpy as np
+    manager,run,_=service(tmp_path,monkeypatch)
+    artifacts=run['output']['cases'][0]['artifacts']
+    artifacts['x-cablesim.temperature-field']['mesh']['domain_ids']=[1]
+    artifacts['x-cablesim.field-test']={'binary':'must not travel with view'}
+    app=FastAPI();app.include_router(make_router(manager.research))
+    url=f"/api/hpc/workspaces/{run['workspace']}/fields/{run['id']}"
+    with TestClient(app) as client:
+        view=client.get(url+'/view');assert view.status_code==200
+        assert 'x-cablesim.field-test' not in view.json()['output']['cases'][0]['artifacts']
+        assert 'x-cablesim.field-test' in artifacts
+        sampled=client.post(url+'/sample',json=[[.25,.25],[2,2]])
+        assert sampled.json()['temperature_k']==[307.5,None] and sampled.json()['mesh']=='full'
+        assert client.post(url+'/sample',json=[]).status_code==422
+        archive=client.get(url+'/full');assert archive.status_code==200
+        with np.load(BytesIO(archive.content),allow_pickle=False) as arrays:
+            assert arrays['temperature_k'].tolist()==[300.,310.,320.]
+        run['integrity']='tampered'
+        assert client.get(url+'/view').status_code==409
 
 
 def test_scheduler_start_end_are_utc_and_legacy_accounting_still_valid(tmp_path,monkeypatch):
@@ -182,6 +231,18 @@ def test_saved_comparison_hand_difference_kelvin_and_input_rejection():
     assert value['rows'][0]['fem']==320 and not value['engineering_approval']
     iec['snapshot']['cases'][0]['input']['load_a']=401
     with pytest.raises(ValueError,match='领域输入'):compare(fem,iec)
+
+
+def test_temperature_only_level_compares_saved_temperatures_without_inventing_rating():
+    fem,iec=saved_fixture()
+    fem['snapshot']['cases'][0]['parameters']['iec']['operation']='temperature'
+    fem['output']['cases'][0]['results']=fem['output']['cases'][0]['results'][:1]
+    rows=compare(fem,iec)['rows']
+    assert rows[0]['delta']==1
+    rating=next(row for row in rows if row['key']=='ampacity')
+    assert rating['fem'] is None and rating['iec']==400 and rating['delta'] is None
+    fem['snapshot']['cases'][0]['parameters']['iec']['ks']=.9
+    with pytest.raises(ValueError,match='电损耗'):compare(fem,iec)
 
 
 def test_png_is_saved_linear_field_not_a_solver():

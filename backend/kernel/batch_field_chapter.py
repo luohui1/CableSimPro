@@ -27,11 +27,17 @@ def compare(fem,iec,case_id=None):
     chosen,original=selected_case(fem,case_id)
     if iec.get('integrity')!='verified' or iec.get('status') not in ('succeeded','partial') or iec['snapshot']['definition']['method']['plugin_id']!='cablesim.iec60287':
         raise ValueError('参考运行必须是完整性通过的 IEC 保存运行。')
-    candidates=[c for c in iec['snapshot']['cases'] if c['input']==original['input'] and c['parameters']==original['parameters'].get('iec')]
+    # Operation selects saved quantities, not the electrical/thermal condition.
+    scope=lambda p:{k:v for k,v in p.items() if k!='operation'}
+    candidates=[c for c in iec['snapshot']['cases'] if c['input']==original['input'] and scope(c['parameters'])==scope(original['parameters'].get('iec',{}))]
     match=next(((a,b) for a in candidates for b in iec['output']['cases'] if b['case_id']==a['case_id'] and b['status']=='succeeded'),None)
     if not match:raise ValueError('领域输入、IEC 电损耗参数或额定口径不同，不能对照。')
     other,output=match;rows=[]
-    for item in chosen['results']:
+    items=list(chosen['results'])
+    keys=lambda r:tuple(r.get(k) for k in ('key','entity','unit','case'))
+    items.extend({**item,'status':'unavailable','value':None,'reason':{'code':'NOT_REQUESTED','message':'此保存级别未计算该量值。'}}
+                 for item in output['results'] if keys(item) not in {keys(r) for r in chosen['results']})
+    for item in items:
         if item['key'] not in ('conductor_temperature','ampacity'):continue
         b=next((r for r in output['results'] if all(r.get(k)==item.get(k) for k in ('key','entity','unit','case'))),{})
         a_value=item.get('value') if item['status']=='available' else None
@@ -106,6 +112,8 @@ def field_png(field):
     label=f"Tmax {hotspot['temperature_k']-273.15:.2f} deg C";tx=max(45,min(680,x+12));ty=max(28,y-27)
     draw.rectangle(draw.textbbox((tx,ty),label,font=font),fill='white');draw.text((tx,ty),label,fill='black',font=font)
     draw.text((45,570),f"x: {low[0]:g}..{high[0]:g} m   z: {low[1]:g}..{high[1]:g} m | saved FEM triangles",fill='black',font=font)
+    if field.get('convergence',{}).get('display_decimated'):
+        draw.text((45,546),f"Display decimated; calculation: full {field['convergence']['full_mesh_nodes']} nodes",fill='black',font=font)
     stream=BytesIO();image.save(stream,format='PNG');return stream.getvalue()
 
 
@@ -114,22 +122,27 @@ def chapter(research,refinements,wid,rid,iec_id,convergence_id=None):
     if convergence_id:
         workflow=refinements.load(convergence_id)
         if workflow['workspace']!=wid or rid not in {r['run_id'] for r in workflow['rows']}:raise HTTPException(409,'收敛研究与引用运行不匹配。')
-        latest=next(r for r in reversed(workflow['rows']) if r['kind']=='mesh')
-        if rid!=latest['run_id']:raise HTTPException(409,'请引用收敛研究最新的网格运行，避免套用其他级别的结论。')
+        proven=verdict(workflow['rows'],workflow['request']['tolerance_k'])
+        latest=workflow['rows'][-1]
+        if rid!=latest['run_id']:raise HTTPException(409,'请引用收敛研究最终网格与计算域运行，避免套用其他级别的结论。')
         case_id=latest['case_id']
         for source_id in dict.fromkeys(r['run_id'] for r in workflow['rows']):
             saved=fem if source_id==rid else research.get_run(wid,source_id)
             for row in (r for r in workflow['rows'] if r['run_id']==source_id):
                 actual=observation(saved,row['case_id'],row['kind'])
                 if any(actual[k]!=row[k] for k in actual if k not in ('change_k','study_name')):raise HTTPException(409,'收敛记录与封存结果不一致，拒绝引用。')
-        workflow={**workflow,'verdict':verdict(workflow['rows'],workflow['request']['tolerance_k'])}
+        attempts=workflow.get('history_attempts',[])+workflow['attempts']
+        rows=[{**row,'execution':next((a.get('execution') for a in attempts if a.get('run_id')==row['run_id']),None)} for row in workflow['rows']]
+        workflow={**workflow,'rows':rows,'verdict':proven}
     data=compare(fem,iec,case_id);chosen,_=selected_case(fem,case_id)
     data.update(schema_version='cablesim.fem-report-chapter/1',title='有限元温度场与 IEC 对照',
                 convergence={k:workflow[k] for k in ('id','status','verdict','reason','rows','attempts','actual_core_hours','per_step_upper_core_hours')} if workflow else fem.get('convergence'),
                 execution={**(fem.get('execution') or {}),'core_hours':(fem.get('execution') or {}).get('actual_cpu_seconds',0)/3600},
                 preflight_jobs=list(workflow['preflight_executions'].values()) if workflow else [],
-                convergence_jobs=list(workflow.get('run_executions',{}).values()) if workflow else [],
+                convergence_jobs=([a['execution'] for a in workflow.get('history_attempts',[]) if a.get('execution')]+list(workflow.get('run_executions',{}).values())) if workflow else [],
                 field={'artifact_digest':chosen['artifact_digests']['x-cablesim.temperature-field'],
+                       'display_decimated':chosen['artifacts']['x-cablesim.temperature-field'].get('convergence',{}).get('display_decimated',False),
+                       'full_mesh_nodes':chosen['artifacts']['x-cablesim.temperature-field'].get('convergence',{}).get('full_mesh_nodes'),
                        'image_url':f'/api/hpc/workspaces/{wid}/fields/{rid}.png?case_id={chosen["case_id"]}',
                        'media_type':'image/png','temperature_unit':'degC','length_unit':'m'})
     data['chapter_digest']=digest(data)

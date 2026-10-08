@@ -244,7 +244,8 @@ def export_dataset(directory):
 def transport_archive(directory, destination):
     """Only the frozen code, compute inputs and plan; no historical user documents."""
     directory=Path(directory);destination=Path(destination)
-    with tarfile.open(destination,'w:gz') as archive:
+    partial=destination.with_name(destination.name+'.part')
+    with tarfile.open(partial,'w:gz') as archive:
         for name in ('plan.json','integrity.json','runtime','inputs'):
             source=directory/name
             paths=sorted(source.rglob('*')) if source.is_dir() else [source]
@@ -254,4 +255,5 @@ def transport_archive(directory, destination):
                     if relative.as_posix()=='runtime/.data/cablesim-solvers.json':continue
                     if path.is_symlink():raise ValueError('No symbolic links in a remote package')
                     archive.add(path,arcname=relative.as_posix(),recursive=False)
+    os.replace(partial,destination)
     return {'sha256':sha256(destination.read_bytes()).hexdigest(),'size_bytes':destination.stat().st_size}

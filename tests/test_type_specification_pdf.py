@@ -69,7 +69,7 @@ def test_export_pdf_contains_version_and_saved_clause_sources(tmp_path):
         assert response.headers['x-specification-sha256'] == spec['digest']
         with fitz.open(stream=response.content, filetype='pdf') as document:
             output = ''.join(page.get_text() for page in document)
-            for value in ['电气参数', '修订', 'IEC 60287-1-1:2023', '5.1.2', spec['digest'], '1.0.0', '草稿']:
+            for value in ['电气参数', '修订', 'IEC 60287-1-1:2023', '5.1.2', spec['digest'], entry['method']['version'], '草稿']:
                 assert ''.join(value.split()) in ''.join(output.split()), value
             assert document.page_count < 100
         # Digests are copied as exact hexadecimal text, including adjacent f characters.

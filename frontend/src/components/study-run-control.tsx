@@ -226,7 +226,12 @@ const remoteStates: Record<string, string> = {
 export function StudyRemoteProgress({ run }: { run?: Record<string, unknown> }) {
   const context = useStudy();
   const selected = run || [...context.runs].reverse().find(item => ["cablesim.simulation", "cablesim.comsol-bridge"].includes(text(optionalRecord(item.method || optionalRecord(optionalRecord(item.snapshot).definition).method).plugin_id)) || optionalRecord(item.execution).backend === "slurm");
-  const rid = text(selected?.id), wid = context.study.workspace, sid = context.study.id;
+  return <SavedRunProgress run={selected && { ...selected, workspace: context.study.workspace, study: context.study.id }} onRefresh={context.refresh} />;
+}
+
+/** Saved fields can also be opened from reports without an editable study context. */
+export function SavedRunProgress({ run: selected, onRefresh }: { run?: Record<string, unknown>; onRefresh?: () => void }) {
+  const rid = text(selected?.id), wid = text(selected?.workspace), sid = text(selected?.study);
   const detail = useQuery({
     queryKey: ["remote-run-progress", wid, sid, rid], enabled: !!rid,
     queryFn: async ({ signal }) => {
@@ -246,7 +251,7 @@ export function StudyRemoteProgress({ run }: { run?: Record<string, unknown> }) 
       if (!response.ok) { const body = await response.json().catch(() => ({})); throw new ApiError(response.status, typeof body.detail === "string" ? body.detail : "运行操作失败，原运行已保留"); }
       return response.json();
     },
-    onSuccess: () => { detail.refetch(); context.refresh(); },
+    onSuccess: () => { detail.refetch(); onRefresh?.(); },
   });
   useEffect(() => {
     if (!action.isPending) return;

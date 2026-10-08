@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.datasheet-extract",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "厂家资料参数提取",
   "icon": "assets/icon.svg",
   "description": "PDF 文字层与表格优先；保留型号、页码、原文坐标和单位，模型输出只作为待人工核对候选。",
@@ -1915,7 +1915,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "35e8ae8bf4a9ad0e10f253fad4ee89428786f821c08d0b6e0e7977867cccf923",
+      "sha256": "e61938e0cd6d62408873db405e9071ecb6345166f8e2aae17747b9f8373aeffa",
       "size_bytes": 791
     }
   ],

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from '@tanstack/react-query';
+import { hpcJson } from '@/features/field/run-label';
 import { message, optionalRecord, text, numeric } from "@/api/client";
 import { temperatureView, type FieldSample } from "@/lib/temperature-view";
 import { entityLabel, savedDomain } from "@/lib/domain-fields";
@@ -7,7 +9,7 @@ import { deferredView } from './deferred-view';
 const TemperaturePlot = deferredView(() => import('./temperature-plot').then(m => ({ default: m.TemperaturePlot })));
 import { DataTable } from "./data-table";
 import { Toolbar } from "./toolbar";
-import { EmptyState, ErrorState } from "./states";
+import { EmptyState, ErrorState, LoadingState } from "./states";
 import { SourceBadge } from "./source-badge";
 import { Select } from "./ui/select";
 import { Button } from "./ui/button";
@@ -18,7 +20,7 @@ import type { InputSelection } from "./study-inputs";
 import { StatusMark } from './status-mark';
 import { FieldView } from '@/features/field/field-view';
 import { ConvergenceChart } from '@/features/field/convergence-chart';
-import { StudyRemoteProgress } from './study-run-control';
+import { SavedRunProgress } from './study-run-control';
 import { SavedFieldComparison } from '@/features/field/saved-comparison';
 import { AdaptiveConvergence } from '@/features/field/adaptive-convergence';
 export function StudyTemperature({
@@ -30,6 +32,9 @@ export function StudyTemperature({
   tab: string;
   onSelect: (selection: InputSelection) => void;
 }) {
+  const view = useQuery({ queryKey: ['saved-field-view', run?.workspace, run?.id], enabled: !!run?.id && !!run?.workspace && !run?.output,
+    queryFn: ({ signal }) => hpcJson(`/workspaces/${text(run?.workspace)}/fields/${text(run?.id)}/view`, { signal }), retry: false });
+  run = view.data ?? run;
   const [selected, setSelected] = useState("");
   const [zoom, setZoom] = useState("2");
   useEffect(() => {
@@ -43,6 +48,8 @@ export function StudyTemperature({
       return { view: undefined, error };
     }
   }, [run]);
+  if (run?.id && !run.output && view.isPending) return <LoadingState title="读取保存场图" />;
+  if (view.error && !run?.output) return <ErrorState title="温度场不可用" description={message(view.error)} />;
   if (!run) return <EmptyState art="simulation" description="" title="尚无温度场运行" />;
   if (parsed.error)
     return (
@@ -132,10 +139,11 @@ export function StudyTemperature({
   if (tab === "field")
     return (
       <div className="input-module">
-        {data.kind === "fem" && <StudyRemoteProgress run={run} />}
+        {data.kind === "fem" && <SavedRunProgress run={run} />}
         {conclusion}
         <Toolbar>
           <h2>保存温度场</h2>
+          {optionalRecord(data.field.convergence).display_decimated === true && <span className="muted">显示已降采样，计算用全网格</span>}
           <div className="spacer" />
           {data.geometryError && (
             <Tooltip content={data.geometryError}>
@@ -161,10 +169,16 @@ export function StudyTemperature({
           <Button size="compact" onClick={() => select(data.hotspot)}>
             选择热点
           </Button>
+          {optionalRecord(data.field.convergence).display_decimated === true && <a className="button button-compact button-outline" href={`/api/hpc/workspaces/${text(run.workspace)}/fields/${text(run.id)}/full?case_id=${text(data.case.case_id)}`} download>导出全网格</a>}
         </Toolbar>
         {data.kind === "fem" ? <div className="saved-fem-field"><FieldView
           label="有限元温度场" points={data.points} triangles={data.triangles}
           values={data.temperatures.map(value => value - 273.15)}
+          samplePoint={optionalRecord(data.field.convergence).display_decimated === true ? async point => {
+            const response = await hpcJson(`/workspaces/${text(run.workspace)}/fields/${text(run.id)}/sample?case_id=${text(data.case.case_id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([point]) });
+            const values = response.temperature_k; const value = Array.isArray(values) ? numeric(values[0]) : null;
+            return value === null ? undefined : value - 273.15;
+          } : undefined}
           hotspot={{ point: data.hotspot.point, value: data.hotspot.temperature - 273.15, label: "最高温度" }}
         /></div> : <TemperaturePlot
           data={data}
@@ -438,7 +452,8 @@ export function StudyTemperature({
     ...summary,
     ...evidence,
     ...optionalRecord(data.field.convergence),
-    ...(data.kind === "fem" ? { nodes: data.points.length, elements: data.triangles.length } : {}),
+    ...(data.kind === "fem" ? { nodes: numeric(optionalRecord(data.field.convergence).full_mesh_nodes) ?? data.points.length,
+      elements: numeric(optionalRecord(data.field.convergence).full_mesh_elements) ?? data.triangles.length } : {}),
   };
   const diagnostics = Object.entries(entries)
     .filter(
@@ -454,6 +469,10 @@ export function StudyTemperature({
           {
             nodes: "节点数",
             elements: "单元数",
+            full_mesh_nodes: "计算网格节点数",
+            full_mesh_elements: "计算网格单元数",
+            display_decimated: "显示已降采样",
+            display_notice: "显示口径",
             energy_relative_residual: "能量相对残差",
             physical_residual_inf_w_m: "物理残差",
             source_heat_w_m: "总热源",

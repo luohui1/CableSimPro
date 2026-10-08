@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.cable-geometry",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "电缆实体建模",
   "icon": "assets/icon.svg",
   "description": "单芯及多芯电缆实体、显式扇形轮廓、间隙填充、内衬、双带与丝铠装；结构推导外径和理论用料；同源 OCCT 实体与 STEP。",
@@ -436,7 +436,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "7426eba687ef4482a370d604d6a38c8563978d9ef42733d52b56252b9a727394",
+      "sha256": "675312c9c2fed1442a4d2a915575533545eb21c5a9b79ec4ee5c9124933c0fbf",
       "size_bytes": 951
     },
     {

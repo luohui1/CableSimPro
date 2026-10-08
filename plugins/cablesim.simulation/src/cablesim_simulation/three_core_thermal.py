@@ -270,15 +270,21 @@ def host_case(request,case,job):
     result,mesh,temperatures,samples = solve(prepared,analysis_mesh)
     ratings,trials=rating(prepared,analysis_mesh) if prepared[0].iec.get('operation','both')=='both' else ([],[])
     result['rating_trials']=trials
+    from .compact_field import export,display
+    storage,full_artifacts=export(job,case['case_id'],mesh,temperatures)
+    display_mesh,display_temperatures=display(mesh,temperatures)
     bundle = {'input':prepared[1],'parameters':prepared[0].model_dump(mode='json'),'problem':prepared[3].model_dump(mode='json'),
-        'mesh':mesh,'result':result,'engineering_approval':False}
+        'field_storage':storage,'result':result,'engineering_approval':False}
     raw = write(job,case['case_id'],'bundle','x-cablesim.simulation-bundle',bundle)
     producer = source(request,case,(job/raw['path']).read_bytes())
-    field = temperature_field(mesh,temperatures,producer,samples=samples,convergence={
+    field = temperature_field(display_mesh,display_temperatures,producer,samples=samples,convergence={
+        'full_mesh_nodes':len(mesh['points']),'full_mesh_elements':len(mesh['triangles']),
+        'display_decimated':len(display_mesh['points'])<len(mesh['points']),
+        'display_notice':'显示已降采样，计算用全网格' if len(display_mesh['points'])<len(mesh['points']) else None,
         'solver_status':'converged','iterations':result['iterations'],'energy_relative_residual':result['energy_relative_residual'],
         'physical_residual_inf_w_m':result['physical_residual_inf_w_m']})
     artifact = write(job,case['case_id'],'temperature','x-cablesim.temperature-field',field)
-    return {'case_id':case['case_id'],'status':'succeeded','artifacts':[raw,artifact],
+    return {'case_id':case['case_id'],'status':'succeeded','artifacts':[raw,artifact,*full_artifacts],
         'results':[{'key':'conductor_temperature','type':'quantity','entity':c['entity'],'unit':'K','status':'available',
                     'case':'operating','value':c['conductor_max_temperature_k']} for c in result['cables']]+ratings,
         'warnings':[{'code':'IEC_THERMAL_FIELD_SCOPE','message':'三芯IEC平衡电损耗按金属区域平均温度反馈；场解析实际三芯热域。丝/带为有来源的热层等效，不是三维电磁场。'}]}

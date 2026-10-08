@@ -20,6 +20,8 @@ export type FieldViewProps = {
   /** 色带分级数；0 为连续色带。 */
   bands?: number;
   label: string;
+  /** Optional exact sampling of the saved full mesh (returns degrees C). */
+  samplePoint?: (point: Point) => Promise<number | undefined>;
 };
 
 type View = { cx: number; cz: number; scale: number };
@@ -39,13 +41,14 @@ function shader(gl: WebGL2RenderingContext, type: number, source: string) {
  * 温度场视图：WebGL2 逐像素按 Turbo 色带着色（可分级），SVG 叠加等温线、电缆轮廓、热点与取点读数。
  * 数值全部来自插件工件；这里只做显示（插值、取色、等值线），不计算物理量。
  */
-export function FieldView({ points, triangles, values, limit, circles = [], maskObjects = true, groundZ, hotspot, bands = 14, label }: FieldViewProps) {
+export function FieldView({ points, triangles, values, limit, circles = [], maskObjects = true, groundZ, hotspot, bands = 14, label, samplePoint }: FieldViewProps) {
   const host = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [view, setView] = useState<View | null>(null);
-  const [pointer, setPointer] = useState<{ x: number; y: number; value?: number; world: Point } | null>(null);
+  const [pointer, setPointer] = useState<{ x: number; y: number; value?: number; world: Point; pending?: boolean; failed?: boolean } | null>(null);
   const drag = useRef<{ x: number; y: number; view: View } | null>(null);
   const gl = useRef<{ context: WebGL2RenderingContext; program: WebGLProgram; count: number } | null>(null);
+  const sampling = useRef<Promise<unknown>>(Promise.resolve());
 
   const range = useMemo(() => {
     let minimum = Infinity, maximum = -Infinity;
@@ -61,6 +64,23 @@ export function FieldView({ points, triangles, values, limit, circles = [], mask
   const levels = useMemo(() => contourLevels(range.minimum, range.maximum, 8), [range]);
   const contours = useMemo(() => levels.map((level) => ({ level, segments: contourSegments(points, triangles, values, level) })), [levels, points, triangles, values]);
   const locator = useMemo(() => buildLocator(points, triangles), [points, triangles]);
+  useEffect(() => {
+    if (!samplePoint || !pointer) return;
+    let alive = true; const world = pointer.world;
+    const timer = window.setTimeout(() => {
+      // A moving pointer must not queue concurrent full-field decodes on the host.
+      sampling.current = sampling.current.catch(() => {}).then(async () => {
+        if (!alive) return;
+        try {
+          const value = await samplePoint(world);
+          if (alive) setPointer(current => current && current.world === world ? { ...current, value, pending: false } : current);
+        } catch {
+          if (alive) setPointer(current => current && current.world === world ? { ...current, pending: false, failed: true } : current);
+        }
+      });
+    }, 180);
+    return () => { alive = false; window.clearTimeout(timer); };
+  }, [pointer?.world, samplePoint]);
 
   // 视图：默认全览（四周留边，右侧给色标）；滚轮缩放、拖动平移、双击复位。
   const plotWidth = Math.max(1, size.width - COLORBAR);
@@ -85,7 +105,7 @@ export function FieldView({ points, triangles, values, limit, circles = [], mask
     const element = canvas.current;
     const context = element?.getContext("webgl2", { antialias: true });
     if (!element || !context) return;
-    const program = context.createProgram()!;
+    const program = context.createProgram()!, buffers: WebGLBuffer[] = [];
     context.attachShader(program, shader(context, context.VERTEX_SHADER, `#version 300 es
 in vec2 a_pos; in float a_value; uniform vec2 u_center; uniform float u_scale; uniform vec2 u_size; out float v_value;
 void main() { vec2 p = (a_pos - u_center) * u_scale; gl_Position = vec4(p.x / (u_size.x * 0.5), p.y / (u_size.y * 0.5), 0.0, 1.0); v_value = a_value; }`));
@@ -96,6 +116,7 @@ void main() { float t = clamp((v_value - u_min) / (u_max - u_min), 0.0, 1.0); if
     context.linkProgram(program);
     const upload = (name: string, data: Float32Array, components: number) => {
       const buffer = context.createBuffer();
+      if (buffer) buffers.push(buffer);
       context.bindBuffer(context.ARRAY_BUFFER, buffer);
       context.bufferData(context.ARRAY_BUFFER, data, context.STATIC_DRAW);
       const location = context.getAttribLocation(program, name);
@@ -107,10 +128,12 @@ void main() { float t = clamp((v_value - u_min) / (u_max - u_min), 0.0, 1.0); if
     upload("a_pos", new Float32Array(points.flatMap(([x, z]) => [x, z])), 2);
     upload("a_value", new Float32Array(values), 1);
     const indices = context.createBuffer();
+    if (indices) buffers.push(indices);
     context.bindBuffer(context.ELEMENT_ARRAY_BUFFER, indices);
     context.bufferData(context.ELEMENT_ARRAY_BUFFER, new Uint32Array(triangles.flat()), context.STATIC_DRAW);
     gl.current = { context, program, count: triangles.length * 3 };
-    return () => { context.deleteProgram(program); gl.current = null; };
+    return () => { buffers.forEach(buffer => context.deleteBuffer(buffer)); context.deleteVertexArray(vao);
+      context.getAttachedShaders(program)?.forEach(shader => context.deleteShader(shader)); context.deleteProgram(program); gl.current = null; };
   }, [points, triangles, values]);
 
   // 每次视图或尺寸变化重画（只改 uniform，不重新上传网格）。
@@ -159,7 +182,7 @@ void main() { float t = clamp((v_value - u_min) / (u_max - u_min), 0.0, 1.0); if
     }
     if (sx > plotWidth) { setPointer(null); return; }
     const world = toWorld(sx, sy);
-    setPointer({ x: sx, y: sy, world, value: probe(locator, triangles, values, world[0], world[1]) });
+    setPointer({ x: sx, y: sy, world, pending: !!samplePoint, value: samplePoint ? undefined : probe(locator, triangles, values, world[0], world[1]) });
   };
 
   const scaleBar = { x: plotWidth + 20, top: MARGIN, height: Math.max(40, size.height - MARGIN * 2) };
@@ -169,6 +192,17 @@ void main() { float t = clamp((v_value - u_min) / (u_max - u_min), 0.0, 1.0); if
   const screenCircles = circles.map((circle) => ({ center: toScreen(circle.x, circle.z), r: Math.max(2, circle.r * camera.scale) }));
   const spacing = screenCircles.reduce((closest, a, i) => Math.min(closest, ...screenCircles.slice(i + 1).map((b) => Math.hypot(a.center[0] - b.center[0], a.center[1] - b.center[1]))), Infinity);
   const objectsRight = screenCircles.reduce((right, item) => Math.max(right, item.center[0] + item.r), -Infinity);
+  const occupied = hot ? [{ x: hot[0] - 8, y: hot[1] - 30, w: 170, h: 40 }] : [];
+  const contourLabels = contours.map(({ segments }) => {
+    for (let i = 0; i < 12 && segments.length; i++) {
+      const [x, y] = toScreen(...segments[Math.floor(segments.length * i / 12)][0]);
+      const box = { x, y: y - 14, w: 40, h: 18 };
+      if (x < 8 || x + 40 > plotWidth || y < 24 || y > size.height - 32 || occupied.some(a =>
+        box.x < a.x + a.w + 6 && box.x + box.w + 6 > a.x && box.y < a.y + a.h + 6 && box.y + box.h + 6 > a.y)) continue;
+      occupied.push(box); return [x, y];
+    }
+    return null;
+  });
 
   return <div ref={host} className="field-view" role="img" aria-label={label}
     onPointerDown={(event) => { const [x, y] = local(event); drag.current = { x, y, view: camera }; event.currentTarget.setPointerCapture(event.pointerId); }}
@@ -176,11 +210,11 @@ void main() { float t = clamp((v_value - u_min) / (u_max - u_min), 0.0, 1.0); if
     onDoubleClick={() => setView(null)}>
     <canvas ref={canvas} className="field-canvas" />
     {size.width > 0 && <svg className="field-overlay" width={size.width} height={size.height}>
-      {contours.map(({ level, segments }) => {
+      {contours.map(({ level, segments }, index) => {
         if (!segments.length) return null;
         const d = segments.map(([a, b]) => { const [x1, y1] = toScreen(a[0], a[1]), [x2, y2] = toScreen(b[0], b[1]); return `M${x1.toFixed(1)} ${y1.toFixed(1)}L${x2.toFixed(1)} ${y2.toFixed(1)}`; }).join("");
-        const [mx, my] = toScreen(...segments[Math.floor(segments.length / 3)][0]);
-        return <g key={level} className="field-contour"><path d={d} /><text x={mx} y={my}>{fixed(level)}</text></g>;
+        const position = contourLabels[index];
+        return <g key={level} className="field-contour"><path d={d} />{position && <text x={position[0]} y={position[1]}>{fixed(level)}</text>}</g>;
       })}
       {groundZ !== undefined && (() => { const [, y] = toScreen(bounds.x0, groundZ); return <line className="field-ground" x1={0} x2={plotWidth} y1={y} y2={y} />; })()}
       {[...circles].sort((a, b) => a.x - b.x).map((circle, index) => {
@@ -208,7 +242,7 @@ void main() { float t = clamp((v_value - u_min) / (u_max - u_min), 0.0, 1.0); if
       {pointer && !drag.current && <g className="field-probe">
         <line x1={pointer.x} x2={pointer.x} y1={pointer.y - 8} y2={pointer.y + 8} /><line x1={pointer.x - 8} x2={pointer.x + 8} y1={pointer.y} y2={pointer.y} />
         <rect x={pointer.x + 12} y={pointer.y + 10} width={168} height={44} rx={8} />
-        <text x={pointer.x + 22} y={pointer.y + 29}>{pointer.value === undefined ? "网格外" : `${fixed(pointer.value)} °C`}</text>
+        <text x={pointer.x + 22} y={pointer.y + 29}>{pointer.pending ? "读取全网格…" : pointer.failed ? "全网格取样失败" : pointer.value === undefined ? "网格外" : `${fixed(pointer.value)} °C`}</text>
         <text className="field-probe-coords" x={pointer.x + 22} y={pointer.y + 46}>x {pointer.world[0].toFixed(3)} m · z {pointer.world[1].toFixed(3)} m</text>
       </g>}
     </svg>}

@@ -26,6 +26,10 @@ class RefineRequest(StrictModel):
     max_steps: int = Field(default=8, ge=1, le=16)
     tolerance_k: float = Field(default=.1, gt=0, le=.1)
     budget_confirmed: bool = False
+    max_nodes: int | None = Field(default=None,ge=100,le=2400000)
+    upgrade_method: bool = False
+    temperature_only_levels: bool = True
+    continue_from: UUID | None = None
 
 
 def observation(run, case_id, kind):
@@ -38,8 +42,12 @@ def observation(run, case_id, kind):
     original=next(c for c in run['snapshot']['cases'] if c['case_id']==case_id)
     parameters=original['parameters']; peak=field['hotspot']['temperature_k']
     if not isfinite(peak):raise ValueError('热点温度不是有限数值。')
+    if row['artifacts'].get('x-cablesim.simulation-bundle',{}).get('field_storage'):
+        from .batch_field_storage import full_field
+        full=full_field(row);nodes=len(full['points']);peak=float(full['temperature_k'].max())
+    else:nodes=len(field['mesh']['points'])
     return {'run_id':run['id'],'case_id':case_id,'kind':kind,'hotspot_k':peak,
-            'nodes':len(field['mesh']['points']),'mesh_size_m':parameters['mesh']['size_m'],
+            'nodes':nodes,'mesh_size_m':parameters['mesh']['size_m'],
             'bounds_m':parameters['domain_options']['bounds_m'],
             'output_digest':run['output_digest'],'artifact_digest':row['artifact_digests']['x-cablesim.temperature-field'],
             'sequence':run.get('sequence'),'created':run.get('created'),'study_name':run['snapshot']['definition']['title'],'change_k':None}
@@ -54,13 +62,14 @@ def verdict(rows,tolerance):
     # Domain observations must use the latest mesh. A mesh advance invalidates
     # the old domain sequence; callers retain it as history, never as evidence.
     matching=[r for r in domain if mesh and r['mesh_size_m']==mesh[-1]['mesh_size_m']]
-    domain_change=None; domain_geometry=True
+    domain_change=None; domain_changes=[]; domain_geometry=True
     for previous,current in zip([mesh[-1]]+matching,matching) if mesh else []:
         a,b=previous['bounds_m'],current['bounds_m']
         domain_geometry &= (isclose(b[2]-b[0],2*(a[2]-a[0])) and isclose(b[3]-b[1],2*(a[3]-a[1]))
                             and isclose(b[0]+b[2],a[0]+a[2],abs_tol=1e-9) and b[3]==a[3])
         domain_change=abs(current['hotspot_k']-previous['hotspot_k'])
-    domain_ok=domain_geometry and domain_change is not None and domain_change<tolerance
+        domain_changes.append(domain_change)
+    domain_ok=domain_geometry and len(domain_changes)>=2 and all(v<tolerance for v in domain_changes[-2:])
     return {'mesh_passed':mesh_ok,'domain_passed':domain_ok,'status':'converged' if mesh_ok and domain_ok else 'unconverged',
             'grid_change_k':changes[-1] if changes else None,'domain_change_k':domain_change,
             'tolerance_k':tolerance,'engineering_approval':False}
@@ -91,6 +100,10 @@ class Refinements:
         with self.store.db() as db:row=db.execute('SELECT state FROM hpc_convergence WHERE id=?',(str(identifier),)).fetchone()
         if row is None:raise HTTPException(404,'收敛研究不存在。')
         value=json.loads(row['state'])
+        if value.get('request',{}).get('continue_from') and 'history_attempts' not in value:
+            with self.store.db() as db:parent=db.execute('SELECT state FROM hpc_convergence WHERE id=?',(value['request']['continue_from'],)).fetchone()
+            previous=json.loads(parent['state']) if parent else {}
+            value['history_attempts']=previous.get('history_attempts',[])+previous.get('attempts',[])
         if value['status'] in ('queued','running') and value['owner']!=self.research.owner_epoch:
             value['status']='interrupted';value['reason']='宿主已重启；恢复时先回收原运行，不重复提交。'
         return value
@@ -123,7 +136,13 @@ class Refinements:
             base=observation(run,reference,'mesh')
             original=next(c for c in run['snapshot']['cases'] if c['case_id']==reference)
             parameters=deepcopy(original['parameters'])
-            method=run['snapshot']['definition']['method']
+            method=deepcopy(run['snapshot']['definition']['method'])
+            if body.upgrade_method:
+                from .workspace import fingerprint
+                from ..plugin_host.registry import Registry
+                installed=Registry(self.research.executor.registry.root,plugin_id=method['plugin_id']).get(method['plugin_id']).manifest
+                method.update(version=installed.version,release_digest=fingerprint(installed.model_dump(mode='json',by_alias=True)))
+            if body.max_nodes is not None:parameters['mesh']['max_nodes']=body.max_nodes
             if method['capability']!='iec-thermal-field':raise ValueError('自动加密当前仅覆盖 IEC 耦合有限元热场；此能力尚未覆盖。')
             if not self.research.executor.required(method['plugin_id'],method['capability']):raise ValueError('该方法未配置超算执行，拒绝本机求解。')
             plugin,_=self.research.resolve(method)
@@ -138,9 +157,26 @@ class Refinements:
             try:row=observation(run,source['case_id'],source['kind'])
             except (KeyError,ValueError,StopIteration):continue
             row['change_k']=source.get('change_k');rows.append(row)
+        if body.continue_from:
+            previous=self.load(str(body.continue_from))
+            if previous['workspace']!=wid or previous['study']!=sid or previous['status'] in ('queued','running','interrupted'):
+                raise HTTPException(409,'继续来源须为本研究已结束的收敛记录；请先停止原任务。')
+            stop=next((i for i,r in enumerate(previous['rows']) if r['run_id']==run['id'] and r['kind']=='mesh'),None)
+            if stop is None:raise HTTPException(422,'继续来源必须包含所选保存网格。')
+            # Keep completed expansions after the selected finest mesh. They
+            # remain valid evidence and must not be submitted a second time.
+            tail=previous['rows'][stop+1:]
+            keep_tail=all(r['kind']=='domain' and r['mesh_size_m']==base['mesh_size_m'] for r in tail)
+            rows=deepcopy(previous['rows'] if keep_tail else previous['rows'][:stop+1])
+            for row in rows:
+                saved=self.research.get_run(wid,row['run_id']);actual=observation(saved,row['case_id'],row['kind'])
+                if any(actual[k]!=row[k] for k in actual if k not in ('change_k','study_name')):raise HTTPException(409,'原收敛记录与保存工件不一致。')
+            # Intermediate temperature-only runs do not replace the original
+            # request to calculate the final rating after convergence.
+            parameters.setdefault('iec',{})['operation']=previous['definition']['parameters'].get('iec',{}).get('operation','both')
         if not rows:rows=[base]
         definition=deepcopy(run['snapshot']['definition'])
-        definition.update(title=(definition['title'][:90]+' · 自动收敛'),task=None,input_source='study',method_input=original['input'],
+        definition.update(title=(definition['title'][:90]+' · 自动收敛'),method=method,task=None,input_source='study',method_input=original['input'],
                           parameters=parameters,driver={'kind':'single'},verification=None,crosschecks=[],modules={})
         with self.store.db() as db:revision=db.execute('SELECT revision FROM workspaces WHERE id=?',(wid,)).fetchone()['revision']
         identifier=str(uuid4());stamp=utc_now()
@@ -209,8 +245,11 @@ class Refinements:
                     self.settle_cancel(value)
                     value.update(status='cancelled',reason='已停止后续加密；现有作业已核对终态与核时。');break
                 value['verdict']=verdict(value['rows'],value['request']['tolerance_k'])
-                if value['verdict']['status']=='converged':value.update(status='completed',reason='连续两次网格加密及域加倍均小于原阈值。');break
-                kind=next((k for k in ('mesh','domain') if not value['verdict'][k+'_passed'] and k not in value['blocked_phases']),None)
+                passed=value['verdict']['status']=='converged'
+                needs_rating=value['request'].get('temperature_only_levels',True) and value['definition']['parameters'].get('iec',{}).get('operation','both')=='both'
+                if passed and (not needs_rating or value.get('rating_run_id')):
+                    value.update(status='completed',reason='网格与扩域各连续两级均小于原阈值；最终量值来自保存的全网格运行。');break
+                kind='rating' if passed else next((k for k in ('mesh','domain') if not value['verdict'][k+'_passed'] and k not in value['blocked_phases']),None)
                 if kind is None:value.update(status='blocked',reason='当前资源上限不能完成收敛；原阈值未改变。');break
                 if not value.get('pending') and (len(value['attempts'])>=value['request']['max_steps'] or value['actual_core_hours']+value['per_step_upper_core_hours']>value['request']['max_core_hours']):
                     value.update(status='budget_exhausted',reason='达到级数或核时预算上限；后续一级仍需预留 '+str(round(value['per_step_upper_core_hours'],3))+' 核时，实际用量须运行后结算。');break
@@ -262,7 +301,9 @@ class Refinements:
         # if the response or process is lost after Slurm accepted a job.
         pending=value.get('pending')
         if not pending:
-            parameters=next_parameters(value[kind+'_parameters'],kind)
+            parameters=deepcopy(value['domain_parameters']) if kind=='rating' else next_parameters(value[kind+'_parameters'],kind)
+            if kind=='rating':parameters['iec']=deepcopy(value['definition']['parameters']['iec'])
+            elif value['request'].get('temperature_only_levels',True):parameters.setdefault('iec',{})['operation']='temperature'
             definition={**value['definition'],'parameters':parameters}
             body=UpdateStudy.model_validate({**definition,'expected_revision':value['workspace_revision'],'expected_study_revision':value['study_revision']})
             with self.store.db(True) as db:
@@ -292,7 +333,8 @@ class Refinements:
         if run['status'] in ('failed','interrupted'):
             execution=run.get('execution') or {}
             self.charge(value,'run_executions',run['id'],execution);self.save(value)
-            if execution.get('state')=='disconnected' or run['status']=='interrupted' or (run.get('error') or {}).get('code')=='REMOTE_DISCONNECTED':
+            preparing=execution.get('plan_id') and not execution.get('job_id')
+            if preparing or execution.get('state')=='disconnected' or run['status']=='interrupted' or (run.get('error') or {}).get('code')=='REMOTE_DISCONNECTED':
                 run=self.research.resume_remote(wid,sid,run['id'])
             else:raise ValueError('原作业已经失败，保留原结果；请修复错误后新建研究。')
         value['current_run_id']=run['id'];self.save(value)
@@ -307,14 +349,17 @@ class Refinements:
         self.save(value)
         if value['cancel_requested']:return
         if run['status'] not in ('succeeded','partial'):
-            raise ValueError('原运行未完成：'+str(run.get('error'))+'；恢复时仅回收原作业。')
+            failures=[c.get('error') for c in run.get('output',{}).get('cases',[]) if c.get('error')]
+            raise ValueError('原运行未完成：'+str(run.get('error') or failures)+'；恢复时仅回收原作业。')
         row=observation(run,run['output']['cases'][0]['case_id'],kind)
         previous=[r for r in value['rows'] if r['kind']==kind and (kind!='domain' or r['mesh_size_m']==row['mesh_size_m'])]
         if not previous:previous=[r for r in value['rows'] if r['kind']=='mesh']
         row['change_k']=abs(row['hotspot_k']-previous[-1]['hotspot_k']) if previous else None
         value['rows'].append(row);value[kind+'_parameters']=pending['parameters']
+        if kind=='rating':value['rating_run_id']=run['id']
         if kind=='mesh':value['domain_parameters']=deepcopy(pending['parameters'])
         seconds=(run.get('execution') or {}).get('actual_cpu_seconds',0)
-        value['attempts'].append({**pending,'status':'succeeded','run_id':run['id'],'actual_cpu_seconds':seconds})
+        value['attempts'].append({**pending,'status':'succeeded','run_id':run['id'],'actual_cpu_seconds':seconds,
+            'nodes':row['nodes'],'hotspot_k':row['hotspot_k'],'execution':run.get('execution')})
         value.pop('pending',None);value.pop('current_run_id',None)
         value['cancel_requested']=self.load(value['id'])['cancel_requested'];self.save(value)

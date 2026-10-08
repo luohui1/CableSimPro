@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.thermal-network",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "交叉校核参考",
   "description": "简化热网络用于同输入方法对比；附加损耗系数须显式给定。",
   "icon": "assets/icon.svg",
@@ -389,7 +389,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "6f49ad3ba2e38b504579cc2d5a50105106d4c69329fe6111db3ffc50f884fc12",
+      "sha256": "142add3a79053dc0348f810b00c84681dc7b38739ca99406fdfee4cb3e1b6729",
       "size_bytes": 1087
     }
   ]

@@ -2,6 +2,7 @@
 from hashlib import sha256
 from math import ceil
 import json
+import gzip
 from pathlib import Path
 import re
 import shlex
@@ -149,6 +150,12 @@ print(json.dumps(parts))'''
         self.install_agent();self.ssh(['mkdir','-p',remote])
         transport=directory/'transport';transport.mkdir(exist_ok=True)
         archive=transport/'input.tar.gz'
+        if archive.exists():
+            try:
+                with gzip.open(archive,'rb') as stream:
+                    while stream.read(1024*1024):pass
+            except (EOFError,gzip.BadGzipFile):
+                archive.replace(archive.with_name('input.incomplete.gz'))
         if not archive.exists():transport_archive(directory,archive)
         hashed=self.upload(archive,remote+'/input.tar.gz')
         result=self.call('stage',remote,remote+'/input.tar.gz','--sha256',hashed)

@@ -207,4 +207,37 @@ def make_router(research,batches=None):
             return Response(value,media_type='image/png',headers={'ETag':'"'+sha256(value).hexdigest()+'"','Cache-Control':'private, no-cache'})
         except (ValueError,KeyError,StopIteration) as exc:raise HTTPException(422,str(exc)) from exc
 
+    @router.get('/workspaces/{wid}/fields/{rid}/view')
+    def field_view(wid:UUID,rid:UUID):
+        """Verified display projection: binary arrays stay on the server."""
+        run=research.get_run(str(wid),str(rid))
+        if run.get('integrity')!='verified':raise HTTPException(409,'保存场完整性未通过。')
+        output=run.get('output',{})
+        cases=[{**case,'artifacts':{key:value for key,value in case.get('artifacts',{}).items()
+                                  if not key.startswith('x-cablesim.field-')}} for case in output.get('cases',[])]
+        return {**run,'output':{**output,'cases':cases}}
+
+    @router.get('/workspaces/{wid}/fields/{rid}/full')
+    def field_archive(wid:UUID,rid:UUID,case_id:str|None=None):
+        """Download lossless arrays; normal view requests never download these."""
+        from .batch_field_storage import full_field
+        from io import BytesIO
+        import numpy as np
+        try:
+            case,_=selected_case(research.get_run(str(wid),str(rid)),case_id)
+            arrays=full_field(case);stream=BytesIO();np.savez_compressed(stream,**arrays)
+        except (ValueError,KeyError) as exc:raise HTTPException(422,str(exc)) from exc
+        return Response(stream.getvalue(),media_type='application/octet-stream',
+            headers={'Content-Disposition':f'attachment; filename="field-{rid}.npz"'})
+
+    @router.post('/workspaces/{wid}/fields/{rid}/sample')
+    def field_sample(wid:UUID,rid:UUID,points:list[tuple[float,float]],case_id:str|None=None):
+        from .batch_field_storage import full_field,sample
+        try:
+            case,_=selected_case(research.get_run(str(wid),str(rid)),case_id)
+            values=sample(full_field(case),points)
+            return {'points_m':points,'temperature_k':values,'mesh':'full',
+                    'artifact_digest':case['artifact_digests']['x-cablesim.temperature-field']}
+        except (ValueError,KeyError) as exc:raise HTTPException(422,str(exc)) from exc
+
     return router

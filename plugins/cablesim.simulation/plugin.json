@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.simulation",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "name": "仿真复现基准",
   "description": "多区域稳态导热与GetDP时谐涡流、Elmer稳态/瞬态热适配，使用统一问题、网格和复现工件。",
   "icon": "assets/icon.svg",
@@ -55,7 +55,7 @@
   "dependencies": [],
   "resources": {
     "timeout_s": 3600,
-    "memory_mb": 4096,
+    "memory_mb": 32768,
     "network": "none"
   },
   "capabilities": [
@@ -63,7 +63,7 @@
       "kind": "method",
       "id": "iec-thermal-field",
       "title": "三芯IEC损耗与有限元温度反馈",
-      "method_version": "1.1.0",
+      "method_version": "1.2.1",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -91,6 +91,70 @@
         },
         {
           "type": "x-cablesim.headline-witness",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-0",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.field-part-1",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-2",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-3",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-4",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-5",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-6",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-7",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-8",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-9",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-10",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-11",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-12",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-13",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-14",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.field-part-15",
           "required": false
         }
       ],
@@ -1135,7 +1199,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 120000,
+                "maximum": 2400000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -3678,7 +3742,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 120000,
+                "maximum": 2400000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -5165,7 +5229,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 120000,
+                "maximum": 2400000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -6520,7 +6584,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 120000,
+                "maximum": 2400000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -11879,7 +11943,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 120000,
+                "maximum": 2400000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -15080,7 +15144,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 120000,
+                "maximum": 2400000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -17456,7 +17520,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 120000,
+                "maximum": 2400000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -22013,6 +22077,11 @@
       "size_bytes": 10106
     },
     {
+      "path": "src/cablesim_simulation/compact_field.py",
+      "sha256": "e394406388c7cd346c87d30cb8342e4ee0189d549b8027eec63e539234373d52",
+      "size_bytes": 4204
+    },
+    {
       "path": "src/cablesim_simulation/constitutive_losses.py",
       "sha256": "293210b9ca91cba5107c4e05236faeaed470ed9ae88ca6e50fae516b7e6a3f45",
       "size_bytes": 8863
@@ -22139,8 +22208,8 @@
     },
     {
       "path": "src/cablesim_simulation/three_core_thermal.py",
-      "sha256": "a8be1ddf7f1d66608c3b5d561319ddcfeb06b42fc0c3b1c0796e7d8f0affd575",
-      "size_bytes": 20672
+      "sha256": "f92842a119138a1d4d51ca7abf9a1c42cddd3515ba94c73394c6931a614b7079",
+      "size_bytes": 21197
     },
     {
       "path": "src/cablesim_simulation/transient.py",
@@ -22224,7 +22293,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "3bd28fa0f06845c4b315c1831ebeb4f3ea44022e9066cc19a09a02f835248544",
+      "sha256": "1c8dd71178cace553b18288ed745e55a65345e3e798fb50eadce34d6c66b86aa",
       "size_bytes": 5308
     }
   ]

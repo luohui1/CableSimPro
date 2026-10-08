@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.comsol-bridge",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "COMSOL 参考对照",
   "description": "独立运行用户已安装的 COMSOL 6.2，对同一 SI 问题作可选内部基准比较；平台开源计算不依赖它。",
   "icon": "assets/icon.svg",
@@ -141,7 +141,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 120000,
+                "maximum": 2400000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -2746,7 +2746,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 120000,
+                "maximum": 2400000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -5117,7 +5117,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 120000,
+                "maximum": 2400000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -6889,7 +6889,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "5052a83ff605f28e45ef06416017dbfc411e6883fea2fd0a4bfee81075fd6bf4",
+      "sha256": "f410e576189f6e2d75834f5b336818df03afdae403d826c8c5346847ce0ced98",
       "size_bytes": 951
     }
   ],

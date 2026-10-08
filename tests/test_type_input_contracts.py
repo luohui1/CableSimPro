@@ -1,6 +1,7 @@
 """Installed form identity, parameter admission and R20 data/limit provenance."""
 from hashlib import sha256
 import importlib.util
+import json
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -25,8 +26,9 @@ def test_installed_type_contracts_match_plugin_pins(tmp_path):
         assert response.status_code == 200, response.text
         contracts = [item for item in response.json() if item['method']['plugin_id'] == 'cablesim.type-electrical']
         assert {item['method']['capability'] for item in contracts} == {'electrical', 'short-circuit'}
+        installed = json.loads((ROOT/'plugins/cablesim.type-electrical/plugin.json').read_text('utf-8'))
         for item in contracts:
-            assert item['method']['version'] == '1.0.0'
+            assert item['method']['version'] == installed['version']
             assert len(item['method']['release_digest']) == 64
             assert item['parameter_source_sha256'] == sha256((ROOT/item['parameter_source']).read_bytes()).hexdigest()
             assert item['parameter_schema']['additionalProperties'] is False
