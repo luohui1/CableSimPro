@@ -13,6 +13,8 @@ export type FieldViewProps = {
   limit?: { value: number; label: string };
   /** 叠加在场上的电缆、排管轮廓与地表线（只描边，不改变场值）。 */
   circles?: FieldCircle[];
+  /** IEC 土壤场遮盖电缆内部；解析电缆内部的有限元场可显式关闭。 */
+  maskObjects?: boolean;
   groundZ?: number;
   hotspot?: { point: Point; value: number; label: string };
   /** 色带分级数；0 为连续色带。 */
@@ -37,7 +39,7 @@ function shader(gl: WebGL2RenderingContext, type: number, source: string) {
  * 温度场视图：WebGL2 逐像素按 Turbo 色带着色（可分级），SVG 叠加等温线、电缆轮廓、热点与取点读数。
  * 数值全部来自插件工件；这里只做显示（插值、取色、等值线），不计算物理量。
  */
-export function FieldView({ points, triangles, values, limit, circles = [], groundZ, hotspot, bands = 14, label }: FieldViewProps) {
+export function FieldView({ points, triangles, values, limit, circles = [], maskObjects = true, groundZ, hotspot, bands = 14, label }: FieldViewProps) {
   const host = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const [view, setView] = useState<View | null>(null);
@@ -184,7 +186,7 @@ void main() { float t = clamp((v_value - u_min) / (u_max - u_min), 0.0, 1.0); if
       {[...circles].sort((a, b) => a.x - b.x).map((circle, index) => {
         // 电缆本体实心显示（内部不属于土壤场）；相邻标签上下交替；挤在一起时不画标签，放大后再显示
         const [x, y] = toScreen(circle.x, circle.z), r = Math.max(2, circle.r * camera.scale), above = index % 2 === 0;
-        return <g key={index} className="field-object"><circle cx={x} cy={y} r={r} />{circle.label && spacing >= 36 && <text x={x} y={above ? y - r - 6 : y + r + 14} textAnchor="middle">{circle.label}</text>}</g>;
+        return <g key={index} className={maskObjects ? "field-object" : "field-object field-object-outline"}><circle cx={x} cy={y} r={r} />{circle.label && spacing >= 36 && <text x={x} y={above ? y - r - 6 : y + r + 14} textAnchor="middle">{circle.label}</text>}</g>;
       })}
       {(() => {
         // 比例尺：取 1/2/5×10ⁿ m，长度约为画面宽度的 1/6

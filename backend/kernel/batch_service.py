@@ -361,4 +361,9 @@ def make_router(service):
     @router.post('/datasets/{batch_id}/export')
     def export(wid:str,sid:str,batch_id:str):
         return FileResponse(service.export(wid,sid,batch_id),media_type='application/zip',filename='CableSimPro-dataset.zip')
-    return router
+    # Both dataset and saved-study allocations use the same HPC control plane.
+    from .hpc_executor import make_router as hpc_router
+    combined=APIRouter()
+    combined.include_router(router)
+    combined.include_router(hpc_router(service.research))
+    return combined

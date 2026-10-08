@@ -16,6 +16,10 @@ import { Conclusion } from "./conclusion";
 import { EngineeringValue } from "./engineering-value";
 import type { InputSelection } from "./study-inputs";
 import { StatusMark } from './status-mark';
+import { FieldView } from '@/features/field/field-view';
+import { ConvergenceChart } from '@/features/field/convergence-chart';
+import { StudyRemoteProgress } from './study-run-control';
+import { SavedFieldComparison } from '@/features/field/saved-comparison';
 export function StudyTemperature({
   run,
   tab,
@@ -127,6 +131,7 @@ export function StudyTemperature({
   if (tab === "field")
     return (
       <div className="input-module">
+        {data.kind === "fem" && <StudyRemoteProgress run={run} />}
         {conclusion}
         <Toolbar>
           <h2>保存温度场</h2>
@@ -138,7 +143,7 @@ export function StudyTemperature({
               </span>
             </Tooltip>
           )}
-          <Select
+          {data.kind !== "fem" && <Select
             label="场图范围"
             value={zoom}
             onChange={setZoom}
@@ -151,17 +156,21 @@ export function StudyTemperature({
               { value: "64", label: "热点 · 64×" },
               { value: "256", label: "热点 · 256×" },
             ]}
-          />
+          />}
           <Button size="compact" onClick={() => select(data.hotspot)}>
             选择热点
           </Button>
         </Toolbar>
-        <TemperaturePlot
+        {data.kind === "fem" ? <div className="saved-fem-field"><FieldView
+          label="有限元温度场" points={data.points} triangles={data.triangles}
+          values={data.temperatures.map(value => value - 273.15)}
+          hotspot={{ point: data.hotspot.point, value: data.hotspot.temperature - 273.15, label: "最高温度" }}
+        /></div> : <TemperaturePlot
           data={data}
           selected={selected}
           onSelect={select}
           zoom={Number(zoom)}
-        />
+        />}
       </div>
     );
   if (tab === "samples")
@@ -228,6 +237,7 @@ export function StudyTemperature({
           rowLabel={(row) => entityLabel(domain, row.entity)}
           showGroups={false}
         />
+        {data.kind === "fem" && <SavedFieldComparison run={run} />}
       </div>
     );
   if (tab === "convergence") {
@@ -255,6 +265,7 @@ export function StudyTemperature({
               · 网格核验未覆盖
             </span>
           </Toolbar>
+          <ConvergenceChart label="耦合迭代温度更新" unit="K" values={rows.map(row => numeric(row.temperature_update_inf_k))} />
           <DataTable
             label="保存耦合迭代记录"
             columns={[
@@ -363,6 +374,8 @@ export function StudyTemperature({
                 : text(proof.status)}
           </span>
         </Toolbar>
+        <ConvergenceChart label="网格与计算域核验热点" unit="K" values={rows.map(row => numeric(row.hotspot_k))} />
+        {Array.isArray(solver.iterations) && <ConvergenceChart label="耦合迭代温度更新" unit="K" values={solver.iterations.map(value => numeric(optionalRecord(value).temperature_update_inf_k))} />}
         <DataTable
           label="保存收敛记录"
           columns={[
@@ -414,12 +427,13 @@ export function StudyTemperature({
       </div>
     );
   }
-  const summary = optionalRecord(data.bundle.summary),
+  const summary = optionalRecord(data.bundle.summary || data.bundle.result),
     evidence = optionalRecord(data.case.evidence);
   const entries: Record<string, unknown> = {
     ...summary,
     ...evidence,
     ...optionalRecord(data.field.convergence),
+    ...(data.kind === "fem" ? { nodes: data.points.length, elements: data.triangles.length } : {}),
   };
   const diagnostics = Object.entries(entries)
     .filter(
@@ -441,9 +455,13 @@ export function StudyTemperature({
             boundary_heat_w_m: "边界流出",
             iterations: "迭代次数",
             residual_k: "温度残差",
+            engineering_approval: "工程批准",
+            solver: "求解方法",
+            mesh_status: "本工件网格核验",
+            solver_status: "求解器状态",
           } as Record<string, string>
         )[key] || key,
-      value,
+      value: typeof value === "boolean" ? (value ? "是" : "否") : ({ converged: "已收敛", not_assessed_single_mesh: "单网格工件；多网格结论见收敛页" } as Record<string, string>)[String(value)] || value,
       unit:
         typeof value === "number"
           ? parameterUnit(key, { type: "number" })

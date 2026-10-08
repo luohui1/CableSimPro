@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.simulation",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "name": "仿真复现基准",
   "description": "多区域稳态导热与GetDP时谐涡流、Elmer稳态/瞬态热适配，使用统一问题、网格和复现工件。",
   "icon": "assets/icon.svg",
@@ -63,7 +63,7 @@
       "kind": "method",
       "id": "iec-thermal-field",
       "title": "三芯IEC损耗与有限元温度反馈",
-      "method_version": "1.0.0",
+      "method_version": "1.1.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -72,6 +72,12 @@
           "type": "quantity",
           "per": "cable",
           "required": true
+        },
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": false
         }
       ],
       "artifacts": [
@@ -22133,8 +22139,8 @@
     },
     {
       "path": "src/cablesim_simulation/three_core_thermal.py",
-      "sha256": "bc6667251d386b560ffbcb776c964afaf56e3a1531b1560b2223e9ea6adf26e2",
-      "size_bytes": 16501
+      "sha256": "a8be1ddf7f1d66608c3b5d561319ddcfeb06b42fc0c3b1c0796e7d8f0affd575",
+      "size_bytes": 20672
     },
     {
       "path": "src/cablesim_simulation/transient.py",

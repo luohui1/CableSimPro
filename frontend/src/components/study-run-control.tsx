@@ -8,6 +8,7 @@ import {
   numeric,
   ApiError,
   optionalRecord,
+  message,
 } from "@/api/client";
 import { moduleConfiguration } from "./study-method-form";
 import { useStudy } from "./study-provider";
@@ -17,6 +18,7 @@ import { modelVersions } from "@/api/research";
 import { displayName } from "@/lib/display-names";
 import { missingInputDestination } from "@/lib/missing-input";
 import type { components } from "@/api/generated/schema";
+import { ErrorState } from "./states";
 
 export function StudyRunControl({
   module,
@@ -48,6 +50,9 @@ export function StudyRunControl({
     lock: string;
   } | null>(null);
   const configuration = moduleConfiguration(context.study.definition, module);
+  const activeRun = context.runs.some(item => ["accepted", "queued", "running", "validating"].includes(text(item.status)) && (!item.module || item.module === module));
+  const requestKey = `cablesim.pending-run:${context.study.workspace}:${context.study.id}:${module}`;
+  const submitGuard = useRef(false);
   const models = useQuery({ queryKey: ["model-versions"], queryFn: ({ signal }) => modelVersions(signal), enabled: open && configuration?.driver?.kind === "selection" });
   const configuredModule = context.study.definition.modules?.[module]
     ? module
@@ -81,17 +86,20 @@ export function StudyRunControl({
         "研究预检",
       );
       accepted.current = { ...source, lock: text(value.lock_digest) };
+      let previous: Record<string, unknown> = {};
+      try { previous = optionalRecord(JSON.parse(sessionStorage.getItem(requestKey) || "{}")); } catch { /* Storage is optional; the server remains authoritative. */ }
+      request.current = previous.lock === accepted.current.lock && typeof previous.id === "string" ? previous.id : crypto.randomUUID();
+      try { sessionStorage.setItem(requestKey, JSON.stringify({ lock: accepted.current.lock, id: request.current })); } catch { /* Private browser storage can be unavailable. */ }
       return value;
     },
     onSuccess: () => {
-      request.current = crypto.randomUUID();
       setAck(false);
     },
   });
   const execution = useMutation({
     retry: false,
     mutationFn: async () => {
-      if (context.dirty || !preflight.data?.ready || (needsScopeConfirmation(preflight.data) && !ack))
+      if (context.dirty || !preflight.data?.ready || ((needsScopeConfirmation(preflight.data) || remoteBudget) && !ack))
         throw new ApiError(409, "需保存输入并确认预检范围");
       const source = accepted.current;
       if (
@@ -119,12 +127,17 @@ export function StudyRunControl({
       );
     },
     onSuccess: (value) => {
+      try { sessionStorage.removeItem(requestKey); } catch { /* Optional request recovery storage. */ }
       setOpen(false);
       context.refresh();
       if (location.pathname.startsWith("/studies/" + context.study.id + "/"))
         onResult(text(value.id), module);
     },
+    onSettled: () => { submitGuard.current = false; },
+    onError: () => { context.refresh(); },
   });
+  const checkedCases = Array.isArray(preflight.data?.cases) ? preflight.data.cases.map(optionalRecord) : [];
+  const remoteBudget = checkedCases.map(item => optionalRecord(optionalRecord(item.evidence).execution_budget)).find(item => numeric(item.upper_core_hours) !== null);
   useEffect(() => {
     if (!execution.isPending) return;
     const timer = setInterval(context.refresh, 2000);
@@ -144,7 +157,7 @@ export function StudyRunControl({
       <Button
         variant={secondary ? "default" : "run"}
         size="compact"
-        disabled={context.dirty || context.saving || !configuration}
+        disabled={context.dirty || context.saving || !configuration || activeRun || execution.isPending || preflight.isPending}
         onClick={() => {
           setOpen(true);
           setAck(false);
@@ -155,6 +168,12 @@ export function StudyRunControl({
         预检并运行
       </Button>
       <PreflightDialog
+        requireConfirmation={!!remoteBudget}
+        summary={remoteBudget && <section aria-label="超算核时预算" className="input-section">
+          <strong>提交 {text(remoteBudget.partition)} · 本次核时预算上限 {Number(remoteBudget.upper_core_hours).toFixed(3)} 核时</strong>
+          <p>预计占用不超过上述资源上限；实际核时以 Slurm 记账为准。共 {Number(remoteBudget.case_count)} 个工况，单任务时限 {Number(remoteBudget.wall_seconds)} 秒。</p>
+          {checkedCases.map((item, index) => { const evidence = optionalRecord(item.evidence); return <p key={text(item.case_id)}>工况 {index + 1}：{numeric(evidence.mesh_nodes) ?? "未提供"} 节点 · {numeric(evidence.mesh_elements) ?? "未提供"} 单元</p>; })}
+        </section>}
         caseLabel={(id, index) => {
           const match = /case-(\d+)$/.exec(id);
           const n = match ? Number(match[1]) : index;
@@ -186,12 +205,64 @@ export function StudyRunControl({
         running={execution.isPending}
         runError={execution.error}
         disabled={context.dirty}
-        onRun={() => execution.mutate()}
+        onRun={() => { if (submitGuard.current) return; submitGuard.current = true; execution.mutate(); }}
         onMissing={(field) => {
           setOpen(false);
           onMissing?.(field);
         }}
       />
+      {(activeRun || ["failed", "interrupted"].includes(text(context.runs.at(-1)?.status))) && <StudyRemoteProgress />}
     </>
   );
+}
+
+const remoteStates: Record<string, string> = {
+  preparing: "准备", submitted: "已提交", queued: "排队", running: "运行",
+  collecting: "后处理", validating: "封存中", succeeded: "已封存", partial: "部分封存",
+  failed: "失败", interrupted: "连接中断", disconnected: "连接中断", cancel_requested: "正在取消",
+};
+
+/** Can also be placed inside the workbench run-records drawer. */
+export function StudyRemoteProgress({ run }: { run?: Record<string, unknown> }) {
+  const context = useStudy();
+  const selected = run || [...context.runs].reverse().find(item => ["cablesim.simulation", "cablesim.comsol-bridge"].includes(text(optionalRecord(item.method || optionalRecord(optionalRecord(item.snapshot).definition).method).plugin_id)) || optionalRecord(item.execution).backend === "slurm");
+  const rid = text(selected?.id), wid = context.study.workspace, sid = context.study.id;
+  const detail = useQuery({
+    queryKey: ["remote-run-progress", wid, sid, rid], enabled: !!rid,
+    queryFn: async ({ signal }) => {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(wid)}/studies/${encodeURIComponent(sid)}/runs/${encodeURIComponent(rid)}/progress`, { signal, cache: "no-store", credentials: "same-origin" });
+      if (!response.ok) throw new ApiError(response.status, "超算进度读取失败，保存运行未改变");
+      return record(await response.json(), "运行进度");
+    },
+    refetchInterval: query => ["accepted", "running", "validating"].includes(text(query.state.data?.status)) ? 2000 : false,
+    retry: false,
+  });
+  const value = detail.data || selected, execution = optionalRecord(value?.execution);
+  const status = text(execution.state) || text(value?.status), busy = ["accepted", "running", "validating"].includes(text(value?.status));
+  const action = useMutation({
+    retry: false,
+    mutationFn: async (verb: "cancel" | "resume") => {
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(wid)}/studies/${encodeURIComponent(sid)}/runs/${encodeURIComponent(rid)}/${verb}`, { method: "POST", credentials: "same-origin" });
+      if (!response.ok) { const body = await response.json().catch(() => ({})); throw new ApiError(response.status, typeof body.detail === "string" ? body.detail : "运行操作失败，原运行已保留"); }
+      return response.json();
+    },
+    onSuccess: () => { detail.refetch(); context.refresh(); },
+  });
+  useEffect(() => {
+    if (!action.isPending) return;
+    const timer = setInterval(() => { void detail.refetch(); }, 2000);
+    return () => clearInterval(timer);
+  }, [action.isPending]);
+  if (!rid || (!execution.backend && !detail.error)) return null;
+  const cancelled = Array.isArray(execution.slurm_states) && execution.slurm_states.includes("CANCELLED");
+  return <section className="input-section" aria-label="超算运行记录" aria-live="polite">
+    <div className="report-toolbar"><strong>{cancelled ? "已取消" : execution.cancel_requested && busy ? "正在取消" : remoteStates[status] || status}</strong>
+      <span>作业 {text(execution.job_id) || "等待 Slurm 回执"} · 已用 {((numeric(execution.actual_cpu_seconds) || 0) / 3600).toFixed(4)} 核时</span>
+      {busy && <Button size="compact" disabled={action.isPending || execution.cancel_requested === true} onClick={() => action.mutate("cancel")}>取消运行</Button>}
+      {!busy && !cancelled && ["failed", "interrupted"].includes(text(value?.status)) && <Button size="compact" disabled={action.isPending} onClick={() => action.mutate("resume")}>恢复原作业</Button>}
+    </div>
+    {!!detail.error && <ErrorState title="进度连接中断，原作业保留" description={message(detail.error)} action={<Button size="compact" onClick={() => detail.refetch()}>重新读取进度</Button>} />}
+    {!!action.error && <ErrorState description={message(action.error)} />}
+    {text(optionalRecord(value?.error).message) && <p role="status">{text(optionalRecord(value?.error).message)}</p>}
+  </section>;
 }

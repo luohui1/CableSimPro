@@ -100,7 +100,7 @@ def prepare(value, parameters):
     return p,d,group,problem,bindings,ducts
 
 
-def solve(prepared):
+def solve(prepared, mesh=None):
     import numpy as np
     from skfem import MeshTri,Basis,FacetBasis,ElementTriP1,ElementTriP2,BilinearForm,LinearForm,asm
     from skfem.helpers import dot,grad
@@ -108,7 +108,8 @@ def solve(prepared):
     from cablesim_iec60287.three_core import electrical,SOURCES
     from .problem_mesh import build,package
     p,d,group,problem,bindings,ducts = prepared
-    mesh = build(problem,p.mesh);points = np.asarray(mesh['points']);cells = np.asarray(mesh['triangles']);ids = np.asarray(mesh['domain_ids'])
+    mesh = build(problem,p.mesh) if mesh is None else deepcopy(mesh)
+    points = np.asarray(mesh['points']);cells = np.asarray(mesh['triangles']);ids = np.asarray(mesh['domain_ids'])
     element = ElementTriP2() if p.mesh.field_order==2 else ElementTriP1()
     basis = Basis(MeshTri(points.T,cells.T),element,intorder=5)
     if basis.N>p.mesh.max_nodes:
@@ -206,20 +207,78 @@ def solve(prepared):
     return result,mesh,temperature.tolist(),samples
 
 
+def rating(prepared,mesh):
+    """Locate temperature limits by real coupled FEM solves on this exact mesh."""
+    from scipy.optimize import brentq
+    from cablesim_sdk.ampacity import AmpacityBasis
+    p,d,group,problem,bindings,ducts=prepared
+    circuits=[c['id'] for c in d['circuits']]
+    limits={b['entity']:next(t for t in d['cable_types'] if t['id']==next(c for c in d['circuits'] if c['id']==b['circuit'])['cable_type'])['rating']['max_conductor_temperature']['normal'] for b in bindings}
+    if any(v is None for v in limits.values()):raise ValueError('缺少正常运行导体温限，不能反求允许电流。')
+    modes=p.iec.get('rating_mode','individual');rows=[];trials=[]
+    targets=[([c],'rating') for c in circuits] if modes in ('individual','both') else []
+    if modes in ('simultaneous','both'):targets.append((circuits,'rating-simultaneous'))
+    for varied,condition in targets:
+        fixed={c['id']:c['current'] for c,b in zip(group.cables,bindings) if b['circuit'] not in varied}
+        basis=AmpacityBasis(kind='conditional_fixed_load' if fixed else 'single_circuit' if len(circuits)==1 else 'common_balanced',
+            display_name='其他回路固定负荷：'+', '.join(f'{uid} {current:g} A' for uid,current in fixed.items()) if fixed else '单回路能力' if len(circuits)==1 else '全回路共同能力',
+            varied_circuits=varied,fixed_currents_a=fixed).model_dump()
+        def evaluate(current):
+            trial=deepcopy(prepared)
+            for cable,binding in zip(trial[2].cables,bindings):
+                if binding['circuit'] in varied:cable['current']=current
+            result,_,_,_=solve(trial,mesh)
+            excess=max(c['conductor_max_temperature_k']-limits[c['entity']] for c in result['cables'])
+            trials.append({'varied_circuits':varied,'current_a':current,'maximum_excess_k':excess,
+                           'energy_relative_residual':result['energy_relative_residual']})
+            return excess
+        low=evaluate(0.)
+        if low>=0:
+            for circuit in varied:rows.append({'key':'ampacity','type':'quantity','entity':circuit,'unit':'A','case':condition,'status':'unavailable','rating_basis':basis,
+                'reason':{'code':'NO_POSITIVE_RATING','message':'其余回路维持保存负荷时，零电流已达到温限；没有正允许电流。'}})
+            continue
+        upper=max(1.,max(c['current'] for c in group.cables))
+        for _ in range(16):
+            if evaluate(upper)>=0:break
+            upper*=1.25
+        else:raise ValueError('有限元允许电流未能在有界搜索内包住温限，未返回近似值。')
+        tolerance=p.iec.get('solver',{}).get('current_tolerance_a',1e-4)
+        current=brentq(evaluate,0.,upper,xtol=max(tolerance,1e-7),maxiter=40)
+        evaluate(current)
+        for circuit in varied:rows.append({'key':'ampacity','type':'quantity','entity':circuit,'unit':'A','case':condition,
+            'status':'available','value':current,'rating_basis':basis})
+    return rows,trials
+
+
 def host_case(request,case,job):
     from .artifacts import source,write,temperature_field
     prepared = prepare(case['input'],case.get('parameters',{}))
-    if request['phase']=='check':return {'case_id':case['case_id'],'status':'succeeded','results':[],'artifacts':[]}
-    result,mesh,temperatures,samples = solve(prepared)
+    if request['phase']=='check':
+        from .problem_mesh import build
+        mesh=build(prepared[3],prepared[0].mesh)
+        nodes=len(mesh['points'])
+        if prepared[0].mesh.field_order==2:
+            edges={tuple(sorted((t[a],t[b]))) for t in mesh['triangles'] for a,b in ((0,1),(1,2),(2,0))}
+            nodes+=len(edges)
+        if nodes>prepared[0].mesh.max_nodes:
+            raise FieldValueError(f'三芯热场有{nodes}自由度，超过保存上限；请增大网格尺寸或改用一阶场。','parameters','mesh','max_nodes')
+        return {'case_id':case['case_id'],'status':'succeeded','results':[],'artifacts':[],
+                'evidence':{'mesh_nodes':nodes,'geometry_nodes':len(mesh['points']),'mesh_elements':len(mesh['triangles']),
+                            'mesh_sha256':mesh['sha256'],'field_order':prepared[0].mesh.field_order or 1}}
+    from .problem_mesh import build
+    analysis_mesh=build(prepared[3],prepared[0].mesh)
+    result,mesh,temperatures,samples = solve(prepared,analysis_mesh)
+    ratings,trials=rating(prepared,analysis_mesh) if prepared[0].iec.get('operation','both')=='both' else ([],[])
+    result['rating_trials']=trials
     bundle = {'input':prepared[1],'parameters':prepared[0].model_dump(mode='json'),'problem':prepared[3].model_dump(mode='json'),
         'mesh':mesh,'result':result,'engineering_approval':False}
     raw = write(job,case['case_id'],'bundle','x-cablesim.simulation-bundle',bundle)
     producer = source(request,case,(job/raw['path']).read_bytes())
     field = temperature_field(mesh,temperatures,producer,samples=samples,convergence={
-        'solver_status':'converged','energy_relative_residual':result['energy_relative_residual'],
+        'solver_status':'converged','iterations':result['iterations'],'energy_relative_residual':result['energy_relative_residual'],
         'physical_residual_inf_w_m':result['physical_residual_inf_w_m']})
     artifact = write(job,case['case_id'],'temperature','x-cablesim.temperature-field',field)
     return {'case_id':case['case_id'],'status':'succeeded','artifacts':[raw,artifact],
         'results':[{'key':'conductor_temperature','type':'quantity','entity':c['entity'],'unit':'K','status':'available',
-                    'value':c['conductor_max_temperature_k']} for c in result['cables']],
+                    'case':'operating','value':c['conductor_max_temperature_k']} for c in result['cables']]+ratings,
         'warnings':[{'code':'IEC_THERMAL_FIELD_SCOPE','message':'三芯IEC平衡电损耗按金属区域平均温度反馈；场解析实际三芯热域。丝/带为有来源的热层等效，不是三维电磁场。'}]}

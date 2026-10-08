@@ -153,6 +153,26 @@ def submit(root,request_path):
         atomic(record,saved);return saved
 
 
+def cancel(root,token):
+    """A signal request is not a terminal state; accounting remains authoritative."""
+    token=str(UUID(token));folder=root/'submissions'/token
+    with lock(folder/'submit.lock'):
+        saved=read(folder/'submission.json')
+        if saved.get('token')!=token:raise ValueError('CANCEL_IDENTITY_MISMATCH')
+        job=saved.get('job_id')
+        if not job or not re.fullmatch(r'[0-9]+',job):raise ValueError('CANCEL_ALLOCATION_UNKNOWN')
+        observed=accounting(root,token)
+        if observed.get('terminal'):return observed
+        if (folder/'cancellation.json').is_file():
+            receipt=read(folder/'cancellation.json')
+            if receipt.get('token')!=token or receipt.get('job_id')!=job:raise ValueError('CANCEL_IDENTITY_MISMATCH')
+            return receipt
+        command(['scancel',job])
+        receipt={'state':'cancel_requested','job_id':job,'token':token,'requested':now()}
+        atomic(folder/'cancellation.json',receipt)
+        return receipt
+
+
 def accounting(root,token):
     saved=read(root/'submissions'/str(UUID(token))/'submission.json')
     job=saved.get('job_id')
@@ -244,13 +264,14 @@ def collect(root,destination):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('action',choices=['stage','submit','accounting','collect','run-group'])
+    parser.add_argument('action',choices=['stage','submit','accounting','collect','run-group','cancel'])
     parser.add_argument('root');parser.add_argument('value');parser.add_argument('--sha256')
     args=parser.parse_args();root=validate_root(args.root);root.mkdir(parents=True,exist_ok=True)
     try:
         if args.action=='stage':result=unpack(root,args.value,args.sha256)
         elif args.action=='submit':result=submit(root,args.value)
         elif args.action=='accounting':result=accounting(root,args.value)
+        elif args.action=='cancel':result=cancel(root,args.value)
         elif args.action=='run-group':result=run_group(root,args.value)
         else:result=collect(root,args.value)
         print(json.dumps({'ok':True,'result':result},ensure_ascii=False))

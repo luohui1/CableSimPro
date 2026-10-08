@@ -20,6 +20,20 @@ class RemoteDisconnected(RuntimeError):
     pass
 
 
+def allocation_estimate(resources, count, configuration):
+    """The same conservative allocation used by submit; never a solver timing claim."""
+    maximum=min(configuration.get('maximum_array_tasks',1000),configuration.get('maximum_pending_tasks',8),resources['slurm_parallelism'])
+    if count < 1 or maximum < 1:raise ValueError('No runnable allocation')
+    group_size=ceil(count/maximum)
+    tasks=ceil(count/group_size)
+    workers=resources.get('slurm_cpus_per_task',1)
+    cpus=max(workers,configuration.get('accounting_cpus_per_task',1),ceil(resources['slurm_memory_mb']/configuration.get('max_memory_per_cpu_mb',6500)))
+    wall=ceil(group_size/workers)*resources['slurm_wall_seconds']
+    return {'tasks':tasks,'cpus_per_task':cpus,'wall_seconds':wall,
+            'upper_core_hours':tasks*cpus*wall/3600,'case_count':count,
+            'partition':configuration.get('partition','dg83'),'basis':'allocation upper bound, not predicted solver time'}
+
+
 class SlurmBackend:
     def __init__(self, configuration, ledger):
         self.configuration=read(configuration) if isinstance(configuration,(str,Path)) else configuration
@@ -161,9 +175,8 @@ print(json.dumps(parts))'''
             saved=folder/'submission.json'
             if saved.is_file() and read(saved).get('job_id'):
                 return read(saved)  # historical accounting policy must not create a new allocation
-            workers=resources.get('slurm_cpus_per_task',1)
-            cpus=max(workers,self.configuration.get('accounting_cpus_per_task',1),ceil(resources['slurm_memory_mb']/self.configuration.get('max_memory_per_cpu_mb',6500)))
-            reservation=self.ledger.reserve(token,tasks=len(groups),cpus_per_task=cpus,wall_seconds=ceil(group_size/workers)*resources['slurm_wall_seconds'])
+            estimate=allocation_estimate(resources,len(indices),self.configuration)
+            reservation=self.ledger.reserve(token,tasks=estimate['tasks'],cpus_per_task=estimate['cpus_per_task'],wall_seconds=estimate['wall_seconds'])
             if reservation['state']=='accounted':
                 saved=folder/'submission.json'
                 if saved.is_file():return read(saved)
@@ -197,9 +210,17 @@ print(json.dumps(parts))'''
                 self.ledger.record(token,jobs=[result['job_id']],actual_seconds=result['actual_cpu_seconds'],terminal=result['terminal'])
             return result
         except RemoteDisconnected as exc:
-            atomic(directory/'execution.json',{'state':'disconnected','backend':'slurm','token':token,
+            previous=read(directory/'execution.json') if (directory/'execution.json').is_file() else {}
+            atomic(directory/'execution.json',{**previous,'state':'disconnected','backend':'slurm','token':token,
                 'updated':utc_now(),'error':str(exc)})
             raise
+
+    def cancel(self,directory,token):
+        """Cancel only the allocation bound to this frozen submission, then reconcile."""
+        directory=Path(directory);plan=read(directory/'plan.json');token=str(UUID(token))
+        result=self.call('cancel',self.root+'/'+str(UUID(plan['id'])),token)
+        atomic(directory/'submissions'/token/'cancellation.json',result)
+        return self.poll(directory,token)
 
     def collect(self,directory,token):
         directory=Path(directory);plan=read(directory/'plan.json');token=str(UUID(token))

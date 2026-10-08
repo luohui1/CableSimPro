@@ -9,6 +9,7 @@ import { ARTIFACT_KINDS, validationLevel } from "@/lib/plugin-labels";
 import { useStudy } from "./study-provider";
 import { usePageTheme } from "./catalog-shell";
 import { EmptyState, LoadingState } from "./states";
+import { StudyRemoteProgress } from "./study-run-control";
 
 const list = (value: unknown) => (Array.isArray(value) ? value : []);
 const INPUTS: [string, string, string][] = [["cable", "电缆", "section"], ["section", "敷设截面", "section"], ["conditions", "工况", "inputs"]];
@@ -38,6 +39,7 @@ export function SimulationSetup({ module }: { module: string }) {
   const link = (target: string, tab: string) => ({ to: "/studies/$sid/$module/$tab" as const, params: { sid: context.study.id, module: target, tab }, search: { theme, workspace: context.study.workspace, run: "", delivery: "" } });
 
   return <div className="sim-setup" data-state="setup">
+    <StudyRemoteProgress />
     <header className="sim-setup-head">
       {art && <img src={art} alt="" />}
       <h2>尚未运行</h2>
