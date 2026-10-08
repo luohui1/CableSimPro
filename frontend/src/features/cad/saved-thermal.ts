@@ -3,6 +3,7 @@ import { savedDomain } from '@/lib/domain-fields';
 import { temperatureView } from '@/lib/temperature-view';
 import { sectionGeometry } from '../drawing/section-geometry';
 import { turbo } from '../field/colormap';
+import { fieldColor } from './difference-colormap';
 import { sceneIdentity } from './input-scene';
 import type { DomainDocument } from '../drawing/types';
 import type { CadScene, CadThermal } from './types';
@@ -67,11 +68,12 @@ export function savedThermal(run: Record<string, unknown>, document: DomainDocum
   const method = optionalRecord(optionalRecord(run.snapshot).definition).method || optionalRecord(run.snapshot).method;
   const pin = optionalRecord(method);
   const fieldSource = optionalRecord(field?.field.source);
-  return { runId: text(run.id), caseId: text(chosen.case_id), source: `${text(pin.plugin_id)} ${text(pin.version)} · ${text(pin.release_digest)} · 输入 ${text(fieldSource.input_sha256)} · 工件 ${text(optionalRecord(chosen.artifact_digests)['x-cablesim.temperature-field'])}`,
-    kind: field?.kind, points: field?.points || [], triangles: field?.triangles || [], values, minimum, maximum, conductors };
+  const convergence = optionalRecord(run.convergence);
+  return { runId: text(run.id), caseId: text(chosen.case_id), source: `${text(pin.plugin_id)} ${text(pin.version)} · ${text(pin.release_digest)} · 输入 ${text(fieldSource.input_sha256)} · 工件 ${text(optionalRecord(chosen.artifact_digests)['x-cablesim.temperature-field'])}${convergence.status ? ` · 收敛 ${text(convergence.status)} · ${text(convergence.reason)}` : ''}`,
+    kind: field?.kind, notice: field?.kind === 'fem' && convergence.status === 'unconverged' ? '有限元未收敛' : undefined, points: field?.points || [], triangles: field?.triangles || [], values, minimum, maximum, conductors };
 }
 
-export function colorScene(scene: CadScene, thermal: CadThermal | undefined): CadScene {
+export function colorScene(scene: CadScene, thermal: CadThermal | undefined, palette?: readonly number[][]): CadScene {
   if (!thermal) return scene;
   const span = Math.max(thermal.maximum - thermal.minimum, 1e-6);
   return { ...scene, assets: Object.fromEntries(Object.entries(scene.assets).map(([id, asset]) => {
@@ -79,6 +81,7 @@ export function colorScene(scene: CadScene, thermal: CadThermal | undefined): Ca
     const candidates = thermal.conductors.filter(c => c.id === object?.id && (!asset.core_id || !c.coreId || c.coreId === asset.core_id));
     if (!candidates.length) return [id, asset];
     const value = Math.max(...candidates.map(c => c.value));
-    return [id, { ...asset, display_color: turbo((value - thermal.minimum) / span) }];
+    const t = (value - thermal.minimum) / span;
+    return [id, { ...asset, display_color: thermal.kind === 'difference' && palette ? fieldColor(t, true, palette[0], palette[1], palette[2]) : turbo(t) }];
   })) };
 }

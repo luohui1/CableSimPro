@@ -1,5 +1,6 @@
 import { decodeMesh, primitiveMesh } from './display-mesh';
 import { TURBO_GLSL } from '../field/colormap';
+import { pixelRay, surfacePoint } from './scene-measurement';
 import type { CadScene, CadThermal, SceneObject, Transform } from './types';
 
 const vertex = `#version 300 es
@@ -12,14 +13,14 @@ const fieldVertex = `#version 300 es
 in vec2 point; in float value; uniform vec2 origin; uniform vec2 dx; uniform vec2 dz; uniform vec2 size; out float temperature;
 void main(){vec2 p=origin+point.x*dx+point.y*dz;gl_Position=vec4(p.x/size.x*2.-1.,1.-p.y/size.y*2.,0.,1.);temperature=value;}`;
 const fieldFragment = `#version 300 es
-precision highp float; in float temperature; uniform float minimum; uniform float span; out vec4 color;
+precision highp float; in float temperature; uniform float minimum; uniform float span; uniform bool difference; uniform vec3 negative; uniform vec3 positive; uniform vec3 neutral; out vec4 color;
 ${TURBO_GLSL}
-void main(){color=vec4(turbo((temperature-minimum)/span),.82);}`;
+void main(){float t=clamp((temperature-minimum)/span,0.,1.);vec3 rgb=difference?mix(neutral,t<.5?negative:positive,abs(t*2.-1.)):turbo(t);color=vec4(rgb,.82);}`;
 const opacity = { cable: 1, enclosure: .42, backfill: .18, soil: .08, ground: .1 };
 const priority = { ground: -1, soil: 0, backfill: 1, enclosure: 2, cable: 3 };
-type Part = { buffer: WebGLBuffer; count: number; object: SceneObject; index: number; color: readonly number[] };
+type Part = { buffer: WebGLBuffer; data: Float32Array; key: string; count: number; object: SceneObject; index: number; color: readonly number[] };
 type SceneView = { matrix: Float32Array; width: number; height: number; background: number[]; fallback: number[]; selected?: string; cut: number };
-type FieldView = { width: number; height: number; size: number[]; origin: number[]; dx: number[]; dz: number[] };
+type FieldView = { width: number; height: number; size: number[]; origin: number[]; dx: number[]; dz: number[]; negative: number[]; positive: number[]; neutral: number[] };
 const transform = (t: Transform, p: number[]) => [0, 1, 2].map(i => t[i * 4] * p[0] + t[i * 4 + 1] * p[1] + t[i * 4 + 2] * p[2] + t[i * 4 + 3]);
 let canvas: OffscreenCanvas, gl: WebGL2RenderingContext, program: WebGLProgram;
 let scene: CadScene | undefined, thermal: CadThermal | undefined, view: SceneView | FieldView;
@@ -78,6 +79,9 @@ function uploadScene(value: CadScene) {
   const next: Part[] = [];
   try {
     for (const [index, object] of value.objects.entries()) for (const part of object.parts) {
+      const key = JSON.stringify([part.asset_id, value.assets[part.asset_id].geometry_key, part.transform_mm, value.length_m]);
+      const previous = parts.find(p => p.key === key);
+      if (previous) { next.push({ ...previous, object, index, color: value.assets[part.asset_id].display_color || [] }); continue; }
       const asset = value.assets[part.asset_id], mesh = asset.display_mesh ? decodeMesh(asset.display_mesh) : primitiveMesh(value.length_m, asset), data: number[] = [];
       for (const prototype of mesh.prototypes) for (const instance of prototype.instances) {
         const positions = prototype.positions!, triangles = prototype.triangles!;
@@ -88,11 +92,11 @@ function uploadScene(value: CadScene) {
           for (const point of p) data.push(...point, ...n.map(v => v / length));
         }
       }
-      const buffer = gl.createBuffer()!; gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
-      next.push({ buffer, count: data.length / 6, object, index, color: asset.display_color || [] });
+      const vertices = new Float32Array(data), buffer = gl.createBuffer()!; gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+      next.push({ buffer, data: vertices, key, count: data.length / 6, object, index, color: asset.display_color || [] });
     }
-  } catch (error) { for (const part of next) gl.deleteBuffer(part.buffer); throw error; }
-  for (const part of parts) gl.deleteBuffer(part.buffer); parts = next; scene = value;
+  } catch (error) { for (const part of next) if (!parts.some(p => p.buffer === part.buffer)) gl.deleteBuffer(part.buffer); throw error; }
+  for (const part of parts) if (!next.some(p => p.buffer === part.buffer)) gl.deleteBuffer(part.buffer); parts = next; scene = value;
   targetWidth = 0; targetHeight = 0;
 }
 
@@ -110,6 +114,8 @@ function paintField() {
   const v = view as FieldView; target(v.width, v.height); gl.viewport(0, 0, canvas.width, canvas.height); gl.useProgram(program);
   gl.uniform2fv(uniform('origin'), v.origin); gl.uniform2fv(uniform('dx'), v.dx); gl.uniform2fv(uniform('dz'), v.dz); gl.uniform2fv(uniform('size'), v.size);
   gl.uniform1f(uniform('minimum'), thermal.minimum); gl.uniform1f(uniform('span'), Math.max(1e-6, thermal.maximum - thermal.minimum));
+  gl.uniform1i(uniform('difference'), thermal.kind === 'difference' ? 1 : 0);
+  gl.uniform3fv(uniform('negative'), v.negative); gl.uniform3fv(uniform('positive'), v.positive); gl.uniform3fv(uniform('neutral'), v.neutral);
   gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT); gl.drawElements(gl.TRIANGLES, thermal.triangles.length * 3, gl.UNSIGNED_INT, 0);
 }
 function diagnostics() {
@@ -132,10 +138,18 @@ self.onmessage = event => {
     } else if (type === 'scene') { uploadScene(payload.geometry); view = payload.view; paintScene(); }
     else if (type === 'field') { uploadField(payload.thermal); view = payload.view; paintField(); }
     else if (type === 'draw') { view = payload; if (scene) paintScene(); else paintField(); }
+    else if (type === 'capture') { if (scene) paintScene(); else paintField(); canvas.convertToBlob({ type: 'image/png' }).then(value => self.postMessage({ id, value })).catch(error => self.postMessage({ id, error: String(error) })); return; }
     else if (type === 'pick') {
       paintScene(true); const pixel = new Uint8Array(4); gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer); gl.readPixels(payload.x, payload.y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel); gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-      const object = scene!.objects[pixel[0] + (pixel[1] << 8) + (pixel[2] << 16) - 1]; paintScene(); self.postMessage({ id, value: object?.id }); return;
+      const object = scene!.objects[pixel[0] + (pixel[1] << 8) + (pixel[2] << 16) - 1];
+      let point: readonly number[] | undefined;
+      if (object && payload.measure) {
+        const v = view as SceneView, ray = pixelRay(v.matrix, payload.x + .5, payload.y + .5, canvas.width, canvas.height);
+        const hits = parts.filter(p => p.object.id === object.id).map(p => surfacePoint(p.data, ray.origin, ray.direction, v.cut)).filter(h => !!h).sort((a, b) => a.distance - b.distance);
+        point = hits[0]?.point;
+      }
+      paintScene(); self.postMessage({ id, value: { id: object?.id, point } }); return;
     }
-    if (id) self.postMessage({ id, value: type === 'scene' || type === 'field' ? diagnostics() : true });
+    if (id) { if (type === 'draw') gl.finish(); self.postMessage({ id, value: type === 'scene' || type === 'field' ? diagnostics() : true }); }
   } catch (error) { self.postMessage({ id, error: error instanceof Error ? error.message : String(error) }); }
 };

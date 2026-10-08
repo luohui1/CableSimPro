@@ -40,3 +40,15 @@
 .cad-hot-conductor:focus-visible{outline:2px solid var(--text)}
 .cad-result-status,.cad-slice-error{position:absolute;top:calc(var(--space-12) + var(--space-2));left:var(--space-3);max-width:calc(100% - var(--space-12)*3);padding:var(--space-1) var(--space-2);background:var(--panel);color:var(--text-secondary);border:1px solid var(--border);border-radius:var(--radius-input);z-index:3;font-size:var(--text-note)}
 .cad-slice-error{top:calc(var(--space-12)*2)}
+.cad-field-tools{display:flex;align-items:center;gap:var(--space-2);flex-wrap:wrap;padding:var(--space-2) var(--space-3);border-bottom:1px solid var(--line);min-width:0}
+.cad-field-tools .select-field{display:flex;flex-direction:row;align-items:center;gap:var(--space-2);min-width:0}
+.cad-field-tools .select-trigger{min-width:0;max-width:calc(var(--space-12)*5);height:var(--control-compact)}
+.cad-field-tools .select-field>label{position:absolute;clip-path:inset(50%);width:1px;height:1px;overflow:hidden}
+.cad-field-notice{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-secondary)}
+.cad-point-measurement text,.cad-layer-annotations text{fill:var(--text);font:inherit;font-variant-numeric:tabular-nums;paint-order:stroke;stroke:var(--panel);stroke-width:3}
+.cad-layer-annotations g{pointer-events:auto;cursor:pointer}
+.cad-layer-annotations g[aria-pressed=true] text{font-weight:var(--weight-strong)}
+.cad-layer-annotations g:focus-visible{outline:2px solid var(--text);outline-offset:var(--space-1)}
+.cad-canvas-host canvas[data-measure-mode=point]{cursor:crosshair}
+.cad-viewport[data-cad-exporting=true] .cad-canvas-host{pointer-events:none}
+.cad-temperature-slice[data-cad-field-ready=false]{visibility:hidden}

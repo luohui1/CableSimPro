@@ -2,13 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { CadViewport } from './index';
-import { demoModel, demoScene, envelopeModel, previewModel, updatedModel } from './gallery-fixtures';
+import { demoDocument, demoModel, demoScene, envelopeModel, previewModel, updatedModel } from './gallery-fixtures';
+import { inputScene } from './input-scene';
+import { largeSceneDocument } from './tests/large-scene-fixture';
+import { TemperatureComparisonGallery } from './temperature-comparison-gallery';
 import { runtimeDiagnostics } from './occt-runtime';
 import type { GalleryEntry } from './gallery-support';
 import type { CadGeometry, CadSelection, CadTiming, CadViewportHandle, CanvasState } from './types';
 
 export function CadGallery({ state }: { state: CanvasState }) {
-  const [geometry, setGeometry] = useState<CadGeometry>(() => new URLSearchParams(location.search).get('kind') === 'scene' ? demoScene : envelopeModel);
+  const [geometry, setGeometry] = useState<CadGeometry>(() => new URLSearchParams(location.search).get('kind') === 'large' ? inputScene(largeSceneDocument(demoDocument), demoDocument.sections[0].id) : new URLSearchParams(location.search).get('kind') === 'scene' ? demoScene : envelopeModel);
   const [selection, setSelection] = useState<CadSelection>(() => geometry.schema === 'cablesim.cad-scene/1'
     ? { kind: 'object', id: geometry.objects.find(object => object.kind === 'cable')!.id }
     : { kind: 'layer', id: demoModel.layers[1].entity! });
@@ -27,6 +30,8 @@ export function CadGallery({ state }: { state: CanvasState }) {
         : kind === 'invalid' ? { ...demoModel, length_m: -1 } : updatedModel),
       mount: setMounted,
       mismatchExact: value => { mismatchExact.current = value; },
+      exportImage: async () => { const image = await viewport.current!.exportImage(); return { metadata: image.metadata, bytes: [...new Uint8Array(await image.blob.arrayBuffer())] }; },
+      project: (x, y, z) => viewport.current?.project(x, y, z) || null,
     };
     return () => { delete window.canvasGallery?.cad; };
   }, []);
@@ -37,7 +42,7 @@ export function CadGallery({ state }: { state: CanvasState }) {
       {!scene && <><Button size="compact" onClick={() => setGeometry(envelopeModel)}>包络先行</Button>
         <Button size="compact" onClick={() => setGeometry(previewModel)}>精细替换</Button></>}
       <Select label="选中对象" value={selection?.id || 'none'} onChange={id => setSelection(id === 'none' ? null : { kind: scene ? 'object' : 'layer', id })}
-        options={[{ value: 'none', label: '无选中' }, ...(scene ? demoScene.objects.map(item => ({ value: item.id, label: item.label || item.id }))
+        options={[{ value: 'none', label: '无选中' }, ...(scene && geometry.schema === 'cablesim.cad-scene/1' ? geometry.objects.map(item => ({ value: item.id, label: item.label || item.id }))
           : demoModel.layers.map(layer => ({ value: layer.entity || layer.role, label: layer.role })))]} />
     </div>
     <div className="canvas-gallery-stage">{mounted && <CadViewport ref={viewport} state={state} geometry={state === 'empty' ? null : geometry}
@@ -51,4 +56,4 @@ export function CadGallery({ state }: { state: CanvasState }) {
       onReady={timing => setTimings(previous => [...previous, timing])} />}</div>
   </section>;
 }
-export const galleryEntries: readonly GalleryEntry[] = [{ id: 'cad', title: 'CAD 视口', Component: CadGallery }];
+export const galleryEntries: readonly GalleryEntry[] = [{ id: 'cad', title: 'CAD 视口', Component: CadGallery }, { id: 'cad-field', title: '保存场三维回归', Component: TemperatureComparisonGallery }];

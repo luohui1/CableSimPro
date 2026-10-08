@@ -6,3 +6,5 @@ export function prewarmCad() {
 export const CadViewport = deferredView(() => import('./cad-viewport').then(m => ({ default: m.CadViewport })));
 export type { CadViewportProps, CadViewportHandle, CadGeometry, CadModel, CadScene, CadSelection,
   CadTiming, CadCamera, CadPick, CanvasState } from './types';
+export { exportCadImage } from './export-image';
+export type { CadImage } from './types';

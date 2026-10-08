@@ -3,10 +3,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { openHeadlessBrowser } from '../../../../scripts/browser.mjs';
+import { chromium } from 'playwright-core';
 
 export const repositoryRoot = fileURLToPath(new URL('../../../../../', import.meta.url));
 export const outputRoot = path.join(repositoryRoot, '.data/frontend-canvas');
-export async function createBrowserFixture() {
+export async function createBrowserFixture({ software = false } = {}) {
   const build = path.join(outputRoot, 'build');
   const entry = path.join(build, 'src/features/cad/gallery.html');
   await fs.access(entry);
@@ -25,7 +26,13 @@ export async function createBrowserFixture() {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const url = `http://127.0.0.1:${server.address().port}`;
   let owned;
-  try { owned = await openHeadlessBrowser(); }
+  try {
+    if (software) {
+      const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--use-gl=angle'] });
+      const page = await browser.newPage(), context = page.context();
+      owned = { browser, context, page, close: async () => { try { for (const c of browser.contexts()) for (const p of c.pages()) await p.close(); if (browser.contexts().flatMap(c => c.pages()).length) throw Error('任务页面未清空。'); console.log('任务浏览器页面已清空：0'); } finally { await browser.close(); } } };
+    } else owned = await openHeadlessBrowser();
+  }
   catch (error) { await new Promise(resolve => server.close(resolve)); throw error; }
   const errors = [], external = [], requests = [];
   owned.page.on('pageerror', error => errors.push(error.message));

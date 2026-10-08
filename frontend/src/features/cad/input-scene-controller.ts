@@ -2,7 +2,8 @@ import { tokenColor } from './cad-renderer';
 import { clamp, validateGeometry } from './geometry-contract';
 import { SceneWorkerClient } from './scene-worker-client';
 import type { Callbacks, ViewportController } from './cad-controller';
-import type { CadCamera, CadGeometry, CadMode, CadScene, CadSelection, CadTiming, CadView, CameraPose } from './types';
+import { pointDistance, type Vec3 } from './scene-measurement';
+import type { CadCamera, CadGeometry, CadMode, CadScene, CadSelection, CadTiming, CadView, CameraPose, MeasurementMode } from './types';
 
 class InputSceneController implements ViewportController {
   private alive = true;
@@ -20,6 +21,10 @@ class InputSceneController implements ViewportController {
   private theme: MutationObserver;
   private drag: { x: number; y: number; startX: number; startY: number; pan: boolean } | null = null;
   private frame = 0;
+  private measurement: MeasurementMode = 'part';
+  private firstPoint: Vec3 | null = null;
+  private pickRevision = 0;
+  private keyboardPoint = { x: .5, y: .5 };
 
   constructor(private host: HTMLElement, private canvas: HTMLCanvasElement, private worker: SceneWorkerClient,
     private callbacks: Callbacks, initial: Partial<CameraPose>) {
@@ -49,9 +54,16 @@ class InputSceneController implements ViewportController {
     canvas.addEventListener('pointercancel', () => { this.drag = null; }, options);
     canvas.addEventListener('wheel', event => { event.preventDefault(); this.pose.zoom *= Math.exp(-clamp(event.deltaY, -200, 200) * .002); this.schedule(); }, { ...options, passive: false });
     canvas.addEventListener('keydown', event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && this.measurement === 'point') { event.preventDefault(); event.stopPropagation(); this.cancelMeasure(); return; }
       if (event.ctrlKey || event.metaKey || event.altKey) return;
+      if (this.measurement === 'point' && ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Enter'].includes(event.key)) {
+        event.preventDefault(); const p = this.keyboardPoint;
+        if (event.key === 'Enter') { const b = canvas.getBoundingClientRect(); void this.pick(b.left + p.x * b.width, b.top + p.y * b.height); }
+        else { p.x = clamp(p.x + (event.key === 'ArrowLeft' ? -.01 : event.key === 'ArrowRight' ? .01 : 0), 0, 1); p.y = clamp(p.y + (event.key === 'ArrowUp' ? -.01 : event.key === 'ArrowDown' ? .01 : 0), 0, 1); }
+        this.callbacks.onPick({ cursor_x: p.x, cursor_y: p.y, measure_pending: !!this.firstPoint }); return;
+      }
       if (event.key.toLowerCase() === 'f') this.fit();
-      if (event.key === 'Escape') this.callbacks.onSelectionChange(null);
+      if (event.key === 'Escape') { this.cancelMeasure(); this.callbacks.onSelectionChange(null); }
       if (event.key === '+' || event.key === '=') this.zoom(1.15);
       if (event.key === '-') this.zoom(.85);
     }, options);
@@ -86,10 +98,16 @@ class InputSceneController implements ViewportController {
   }
   private async pick(x: number, y: number) {
     const box = this.canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+    const revision = ++this.pickRevision;
     try {
-      const id = await this.worker.request('pick', { x: Math.floor((x - box.left) * dpr), y: Math.floor((box.bottom - y) * dpr) });
-      if (!this.alive) return;
-      this.callbacks.onSelectionChange(typeof id === 'string' ? { kind: 'object', id } : null); this.callbacks.onPick(typeof id === 'string' ? { object_id: id } : null);
+      const { id, point } = await this.worker.request('pick', { x: Math.floor((x - box.left) * dpr), y: Math.floor((box.bottom - y) * dpr), measure: this.measurement === 'point' }) as { id?: string; point?: Vec3 };
+      if (!this.alive || revision !== this.pickRevision) return;
+      if (this.measurement === 'point') {
+        if (!point) return;
+        const distance = this.firstPoint ? pointDistance(this.firstPoint, point) : undefined;
+        this.callbacks.onPick({ object_id: id, x_mm: point[0], y_mm: point[1], z_mm: point[2], distance_mm: distance, measure_pending: !this.firstPoint });
+        this.firstPoint = this.firstPoint ? null : point;
+      } else { this.callbacks.onSelectionChange(id ? { kind: 'object', id } : null); this.callbacks.onPick(id ? { object_id: id } : null); }
     } catch (error) { if (this.alive) this.callbacks.onError(error instanceof Error ? error : new Error(String(error))); }
   }
   async update(geometry: CadGeometry): Promise<CadTiming | null> {
@@ -113,8 +131,10 @@ class InputSceneController implements ViewportController {
     const m = this.matrix; return { x: (m[0] * x + m[4] * y + m[8] * z + m[12] + 1) * this.host.clientWidth / 2,
       y: (1 - m[1] * x - m[5] * y - m[9] * z - m[13]) * this.host.clientHeight / 2 };
   }
-  info() { return this.alive ? { scene: true, scene_objects: this.scene?.objects.length || 0, input_sha256: this.scene?.input_sha256, renderer: 'webgl-input-worker' } : null; }
-  async selection(value: string) { if (value !== 'part') throw new Error('输入网格不提供原始拓扑量测。'); return true; }
+  info() { return this.alive ? { scene: true, scene_objects: this.scene?.objects.length || 0, input_sha256: this.scene?.input_sha256, renderer: 'webgl-input-worker', frame_ms: this.worker.timings() } : null; }
+  private cancelMeasure() { this.firstPoint = null; this.pickRevision++; this.callbacks.onPick(null); }
+  async selection(value: string) { if (value !== 'part' && value !== 'point') throw new Error('输入网格不提供原始拓扑直径捕捉。'); this.measurement = value; this.canvas.dataset.measureMode = value; this.cancelMeasure(); return true; }
+  async capture() { await this.worker.request('draw', this.viewData()); return await this.worker.request('capture', {}) as Blob; }
   view(value: CadView) {
     this.namedView = value; this.pose.elevation = value === 'top' ? Math.PI / 2 : value === 'iso' ? Math.atan(1 / Math.sqrt(2)) : 0;
     this.pose.heading = value === 'end' ? 0 : value === 'front' ? -Math.PI / 2 : -Math.PI / 4; this.draw();

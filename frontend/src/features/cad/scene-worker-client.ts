@@ -4,7 +4,10 @@ export class SceneWorkerClient {
   private sequence = 0;
   private pending = new Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; timer: number }>();
   private alive = true;
-  constructor(onError: (error: Error) => void) {
+  private drawing = false;
+  private nextDraw: unknown;
+  private frameTimes: number[] = [];
+  constructor(private onError: (error: Error) => void) {
     this.worker.onmessage = event => {
       const { id, value, error } = event.data, pending = this.pending.get(id);
       if (pending) { window.clearTimeout(pending.timer); this.pending.delete(id); if (error) pending.reject(new Error(error)); else pending.resolve(value); }
@@ -24,7 +27,18 @@ export class SceneWorkerClient {
       try { this.worker.postMessage({ id, type, payload }, transfer); } catch (error) { window.clearTimeout(timer); this.pending.delete(id); reject(error); }
     });
   }
-  draw(payload: unknown) { if (this.alive) this.worker.postMessage({ type: 'draw', payload }); }
+  draw(payload: unknown) {
+    if (!this.alive) return;
+    if (this.drawing) { this.nextDraw = payload; return; }
+    this.drawing = true; const began = performance.now();
+    void this.request('draw', payload).then(() => {
+      this.frameTimes.push(performance.now() - began); if (this.frameTimes.length > 120) this.frameTimes.shift();
+    }).catch(error => { if (this.alive) { this.nextDraw = undefined; this.onError(error); } }).finally(() => {
+      this.drawing = false;
+      if (this.nextDraw !== undefined && this.alive) { const next = this.nextDraw; this.nextDraw = undefined; this.draw(next); }
+    });
+  }
+  timings() { return [...this.frameTimes]; }
   dispose() {
     if (!this.alive) return; this.alive = false; this.worker.terminate();
     for (const pending of this.pending.values()) { window.clearTimeout(pending.timer); pending.reject(new Error('三维视口已关闭。')); } this.pending.clear();

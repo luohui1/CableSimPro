@@ -7,6 +7,7 @@ const source = await loadSources([
   'src/features/drawing/cable-geometry.ts', 'src/features/drawing/cross-section-profile.ts', 'src/features/drawing/coordinates.ts', 'src/features/drawing/section-geometry.ts',
   'src/features/cad/geometry-contract.ts', 'src/features/cad/display-mesh.ts',
   'src/features/cad/input-scene.ts',
+  'src/features/cad/tests/large-scene-fixture.ts',
 ]);
 after(() => source.close());
 const cable = await source.import('src/features/drawing/cable-geometry.ts');
@@ -16,9 +17,17 @@ const laying = await source.import('src/features/drawing/section-geometry.ts');
 const contract = await source.import('src/features/cad/geometry-contract.ts');
 const mesh = await source.import('src/features/cad/display-mesh.ts');
 const scene = await source.import('src/features/cad/input-scene.ts');
+const { largeSceneDocument } = await source.import('src/features/cad/tests/large-scene-fixture.ts');
 const document = JSON.parse(await fs.readFile(new URL('../node_modules/.cache/gallery/document.json', import.meta.url), 'utf8'));
 const nativeModel = JSON.parse(await fs.readFile(new URL('../node_modules/.cache/gallery/model.json', import.meta.url), 'utf8'));
 const close = (actual, expected) => assert.ok(Math.abs(actual - expected) < 1e-10, `${actual} != ${expected}`);
+test('Six circuits / 18 cables / 18 ducts, backfill and two soil layers retain shared 2D dimensions', () => {
+  const doc = largeSceneDocument(document), model = scene.inputScene(doc, doc.sections[0].id);
+  assert.equal(doc.circuits.length, 6); assert.equal(model.objects.filter(o => o.kind === 'cable').length, 18);
+  assert.equal(model.objects.filter(o => o.kind === 'enclosure').length, 18); assert.equal(model.objects.filter(o => o.kind === 'soil').length, 2);
+  assert.equal(model.objects.filter(o => o.kind === 'backfill').length, 1);
+  const cable = model.objects.find(o => o.kind === 'cable'); close(cable.dimensions.centerDepthM, .9); close(cable.dimensions.outerDiameterM, .038); close(cable.dimensions.nearestCenterM, .18);
+});
 
 test('Research input scene: 38 mm hand dimensions, 140/160 mm duct, real placement and display-only length', () => {
   const doc = structuredClone(document), section = doc.sections[0];

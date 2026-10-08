@@ -1,5 +1,6 @@
 /** Display artifact contracts. These are renderer inputs, not handwritten HTTP models. */
 import type { CrossSectionProfile } from '@/features/drawing/cross-section-profile';
+import type { ReactNode } from 'react';
 export type CanvasState = 'empty' | 'loading' | 'error' | 'success' | 'historical';
 export type CadMode = 'peel' | 'section' | 'transparent' | 'scene';
 export type CadView = 'iso' | 'front' | 'top' | 'end';
@@ -79,6 +80,7 @@ export interface SceneObject {
   bounds_m: readonly number[];
   tint_index?: number;
   parts: readonly { asset_id: string; transform_mm: Transform }[];
+  dimensions?: { centerDepthM: number; outerDiameterM?: number; nearestCenterM?: number; nearestId?: string };
 }
 
 export interface CadScene {
@@ -141,6 +143,17 @@ export interface CadViewportHandle {
   zoom(factor: number): void;
   view(view: CadView): void;
   info(): Record<string, unknown> | null;
+  project(xMm: number, yMm: number, zMm: number): { x: number; y: number } | null;
+  exportImage(): Promise<CadImage>;
+}
+
+export interface CadImage {
+  blob: Blob;
+  metadata: {
+    schema: 'cablesim.cad-image/1'; mime: 'image/png'; width: number; height: number;
+    camera: CadCamera; geometryInputSha256: string; displayLengthM: number;
+    scaleMmPerPixel: number; field?: Pick<CadThermal, 'runId' | 'caseId' | 'source' | 'kind' | 'minimum' | 'maximum' | 'references'>;
+  };
 }
 
 export interface CadViewportProps {
@@ -162,6 +175,8 @@ export interface CadViewportProps {
   resultStatus?: string;
   resultState?: CanvasState;
   thermal?: CadThermal;
+  controls?: ReactNode;
+  onExport?: (image: CadImage) => void | Promise<void>;
 }
 
 /** Validated, saved node-field data; positions in m and displayed temperatures in °C. */
@@ -169,7 +184,9 @@ export interface CadThermal {
   runId: string;
   caseId: string;
   source: string;
-  kind?: 'iec' | 'fem';
+  kind?: 'iec' | 'fem' | 'difference';
+  references?: readonly { runId: string; caseId: string; source: string }[];
+  notice?: string;
   minimum: number;
   maximum: number;
   points: readonly [number, number][];

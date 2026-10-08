@@ -147,10 +147,12 @@ try {
   assert.ok(pickedCable, 'Pointer picking of a visible cable conductor must select its cable');
   // Move outward through the actual drawn duct wall: picking must select the enclosure rather than its cable.
   let pickedDuct = false;
-  for (const offset of [12, 16, 20, 24, 28, 32]) {
-    await page.mouse.click(center.x + offset, center.y);
-    try { await page.locator('.workbench-inspector').getByLabel('内径', { exact: true }).waitFor({ timeout: 350 }); pickedDuct = true; break; } catch { /* Next actual wall point. */ }
+  for (const [dx, dy] of Array.from({ length: 32 }, (_, i) => [i + 1, -5])) {
+    await page.mouse.click(center.x + dx, center.y + dy);
+    try { await page.locator('.workbench-inspector').getByLabel('内径', { exact: true }).waitFor({ timeout: 350 }); pickedDuct = true; break; }
+    catch { /* The field marker denotes the cable; scan the visible annulus at pixel resolution. */ }
   }
+  if (!pickedDuct) { await page.screenshot({ path: path.join(output, 'study-three.png') }); console.log('INSPECTOR', await page.locator('.workbench-inspector').innerText()); }
   assert.ok(pickedDuct, '3D duct selection must reach the shared input inspector');
   await nativePicking.evaluate(node => node.remove());
   await hottest.press('Enter');
@@ -181,12 +183,17 @@ try {
   const typeWorkspace = workspaces.find(w => /YJV22/.test(w.name) && !/城/.test(w.name));
   assert.ok(typeWorkspace, 'A saved three-core type is required for selection regression');
   await page.goto(`${base}/types/${typeWorkspace.id}/structure/three?theme=light`);
-  try { await page.locator('[data-cad-ready=true]').waitFor({ timeout: 12000 }); }
+  // Type CAD waits for the server's geometry preview as well as the viewport;
+  // the <=3 s assertion above only measures rendering after input is available.
+  try { await page.locator('[data-cad-ready=true]').waitFor({ timeout: 90000 }); }
   catch (error) { console.log('TYPE_FAILURE', await page.locator('body').innerText()); throw error; }
   const row = page.getByRole('row').filter({ hasText: '绝缘' }).first();
   await row.click();
   assert.ok((await page.locator('[data-cad-selected]').getAttribute('data-cad-selected')).includes('insulation'));
   assert.equal(await row.getAttribute('aria-selected'), 'true');
+  const annotation = page.locator('[data-cad-layer-annotation]').filter({ hasText: '绝缘' }).first();
+  assert.match(await annotation.getAttribute('aria-label'), /mm/);
+  await annotation.press('Enter'); assert.equal(await page.locator('tr[aria-selected=true]').count(), 1);
   const previousLayer = await page.locator('[data-cad-selected]').getAttribute('data-cad-selected');
   // Real pointer picking in the native peel must update the same controlled layer table.
   let pickedLayer = false;
@@ -214,6 +221,7 @@ try {
   await page.screenshot({ path: path.join(output, 'type-peel.png') });
   // Exercise failure/loading/empty/history without changing a stored input or calculating another run.
   const typeDetail = await (await fetch(`${backend}/api/workspaces/${typeWorkspace.id}`)).json();
+  await page.close();
   for (const kind of ['study', 'type']) for (const state of ['empty', 'loading', 'error', 'historical']) {
     const statePage = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     let release;
@@ -259,7 +267,6 @@ try {
     console.log('STATE', kind, state, 'four layout cases passed');
   }
   await fs.writeFile(path.join(output, 'browser-results.json'), JSON.stringify(results, null, 2));
-  await page.close();
 } finally {
   if (browser) {
     for (const context of browser.contexts()) for (const page of context.pages()) await page.close();

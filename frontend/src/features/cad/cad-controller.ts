@@ -313,9 +313,9 @@ export class CadController {
 }
 
 export const asError = (error: unknown) => error instanceof Error ? error : new Error(String(error));
-export type ViewportController = Pick<CadController, 'update' | 'select' | 'mode' | 'section' | 'fit' | 'zoom' | 'project' | 'info' | 'view' | 'selection' | 'dispose'>;
+export type ViewportController = Pick<CadController, 'update' | 'select' | 'mode' | 'section' | 'fit' | 'zoom' | 'project' | 'info' | 'view' | 'selection' | 'dispose'> & { capture?: () => Promise<Blob> };
 
-export async function mountController(host: HTMLElement, callbacks: Callbacks, initialCamera: Partial<CameraPose>, current: () => boolean) {
+export async function mountController(host: HTMLElement, callbacks: Callbacks, initialCamera: Partial<CameraPose>, current: () => boolean): Promise<ViewportController | null> {
   const canvas = document.createElement('canvas');
   canvas.id = `occt-${crypto.randomUUID()}`;
   canvas.tabIndex = 0;

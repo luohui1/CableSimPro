@@ -58,6 +58,7 @@ export function useCadViewport(props: CadViewportProps) {
       onPick: value => {
         if (!alive) return;
         setPick(value);
+        if (!value) setPoints([]);
         if (measurementRef.current === 'point' && Number.isFinite(value?.x_mm)) {
           setPoints(previous => value!.measure_pending ? [value!]
             : Number.isFinite(value!.distance_mm) ? [previous[0], value!].filter(Boolean) : previous);
@@ -95,6 +96,7 @@ export function useCadViewport(props: CadViewportProps) {
     setBusy(true);
     setProblem('');
     setMeasurement('part');
+    void instance.selection('part');
     setPick(null); setPoints([]);
     void instance.update(geometry).then(timing => {
       if (!current || controller.current !== instance || !timing) return;

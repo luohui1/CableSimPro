@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { Button, IconButton } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { EmptyState, ErrorState, LoadingState, StaleBanner } from '@/components/states';
@@ -7,39 +7,72 @@ import { CadOverlay } from './cad-overlay';
 import { ViewCube } from './view-cube';
 import { TemperatureSlice } from './temperature-slice';
 import { useCadViewport } from './use-cad-viewport';
+import { exportCadImage } from './export-image';
+import { colorScene } from './saved-thermal';
+import { tokenColor } from './cad-renderer';
 import type { CadMode, CadViewportHandle, CadViewportProps, MeasurementMode } from './types';
 import './cad.css';
 
 export const CadViewport = forwardRef<CadViewportHandle, CadViewportProps>(function CadViewport(props, ref) {
-  const viewport = useCadViewport(props);
+  const [themeVersion, setThemeVersion] = useState(0);
+  useEffect(() => { const observer = new MutationObserver(() => setThemeVersion(v => v + 1)); observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] }); return () => observer.disconnect(); }, []);
+  const geometry = useMemo(() => props.geometry?.schema === 'cablesim.cad-scene/1' && props.thermal
+    ? colorScene(props.geometry, props.thermal, ['--brand-primary', '--error', '--fill'].map(name => tokenColor(document.documentElement, name))) : props.geometry, [props.geometry, props.thermal, themeVersion]);
+  const viewport = useCadViewport({ ...props, geometry });
+  const stage = useRef<HTMLDivElement>(null);
+  const exportBusy = useRef(false);
+  const downloadBusy = useRef(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [slice, setSlice] = useState(true);
   const { instance, busy, camera, displayed } = viewport;
   const state = props.state || (props.geometry ? 'success' : 'empty');
   const scene = props.geometry?.schema === 'cablesim.cad-scene/1';
   const ready = !!instance && !!displayed;
-  const disabled = !ready || busy || viewport.measurementBusy;
+  const disabled = !ready || busy || viewport.measurementBusy || exporting;
   const error = props.error || (props.geometry ? viewport.problem : '') || (state === 'error' ? '几何工件读取失败，请重试。' : '');
   const bounds = viewport.host.current?.getBoundingClientRect();
+  async function exportImage() {
+    if (exportBusy.current) throw Error('三维图片正在导出，请等待。');
+    if (!stage.current || !instance || !displayed || !camera || busy || error) throw Error('三维视口尚未完成，无法导出。');
+    exportBusy.current = true; setExporting(true); setExportError('');
+    try { return await exportCadImage(stage.current, instance, displayed, camera, slice ? props.thermal : props.thermal ? { ...props.thermal, triangles: [] } : undefined); }
+    catch (reason) { setExportError(reason instanceof Error ? reason.message : String(reason)); throw reason; }
+    finally { exportBusy.current = false; setExporting(false); }
+  }
+  async function downloadImage() {
+    if (downloadBusy.current) return;
+    downloadBusy.current = true;
+    try {
+      const image = await exportImage();
+      exportBusy.current = true; setExporting(true);
+      if (props.onExport) await props.onExport(image);
+      else { const url = URL.createObjectURL(image.blob), link = document.createElement('a'); link.href = url; link.download = '三维视图.png'; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000); }
+    } catch (reason) { setExportError(reason instanceof Error ? reason.message : String(reason)); }
+    finally { downloadBusy.current = false; exportBusy.current = false; setExporting(false); }
+  }
   useImperativeHandle(ref, () => ({
     fit: () => viewport.controller.current?.fit(), zoom: factor => viewport.controller.current?.zoom(factor),
-    view: view => viewport.controller.current?.view(view), info: () => viewport.controller.current?.info() || null,
-  }), [viewport.controller]);
+    view: view => viewport.controller.current?.view(view), info: () => viewport.controller.current?.info() || null, exportImage,
+    project: (x, y, z) => viewport.controller.current?.project(x, y, z) || null,
+  }));
   const modes: [CadMode, string][] = scene ? [['scene', '全景'], ['section', '剖面']]
     : [['peel', '剥切'], ['section', '剖面'], ['transparent', '透明']];
 
   return <div className={`cad-viewport ${props.className || ''}`} data-cad-state={error ? 'error' : state}
     data-cad-ready={ready} data-cad-selected={props.selectedObject?.id} data-cad-first-display-ms={viewport.firstDisplayMs}
-    data-cad-result-state={props.resultState}
+    data-cad-result-state={props.resultState} data-cad-exporting={exporting} data-cad-distance-mm={viewport.pick?.distance_mm}
     data-cad-model-kind={displayed?.envelope ? 'envelope' : displayed ? 'precise' : undefined}
     data-cad-view={camera?.view} data-cad-mode={viewport.mode} aria-label={props.label || '三维 CAD 视口'}
     aria-busy={busy || state === 'loading' || viewport.measurementBusy}>
     {state === 'historical' && <StaleBanner description="输入已变化，保留原几何快照。" />}
-    <div className="cad-stage">
+    {props.controls && <div className="cad-field-tools" inert={exporting} role="toolbar" aria-label="保存温度场对照">{props.controls}</div>}
+    <div ref={stage} className="cad-stage">
       <div ref={viewport.host} className="cad-canvas-host" />
       {ready && camera && bounds && props.thermal && <TemperatureSlice thermal={props.thermal} controller={instance!}
         camera={camera} width={bounds.width} height={bounds.height} visible={slice} onSelect={id => props.onSelectionChange?.({ kind: 'object', id })} />}
       {ready && camera && displayed && bounds && <CadOverlay geometry={displayed} selected={props.selectedObject || null}
-        camera={camera} controller={instance!} width={bounds.width} height={bounds.height} points={viewport.points} />}
+        camera={camera} controller={instance!} width={bounds.width} height={bounds.height} points={viewport.points} cursor={viewport.measurement === 'point' ? viewport.pick : undefined} onSelect={value => props.onSelectionChange?.(value)} />}
       {!error && (state === 'empty' || !props.geometry && state !== 'loading') ? <div className="cad-state-overlay"><EmptyState title="尚无几何工件"
         description="取得型号单根电缆或敷设场景的几何工件后查看。" /></div>
         : !ready && !error ? <div className="cad-state-overlay"><LoadingState title="正在打开三维视口" description="已有输入与结果保留。" /></div> : null}
@@ -54,20 +87,22 @@ export const CadViewport = forwardRef<CadViewportHandle, CadViewportProps>(funct
         <IconButton icon="tool/fit" label="适应窗口 F" disabled={disabled} onClick={() => instance?.fit()} />
         <IconButton icon="tool/zoom-out" label="缩小三维" disabled={disabled} onClick={() => instance?.zoom(.85)} />
         <IconButton icon="tool/zoom-in" label="放大三维" disabled={disabled} onClick={() => instance?.zoom(1.15)} />
-        {!scene && <Select label="选择方式" value={viewport.measurement}
-          disabled={disabled || !!displayed?.envelope} options={[
-            { value: 'part', label: '整层' }, { value: 'diameter', label: '原始直径', disabled: !props.selectedObject },
-            { value: 'point', label: '两点距离', disabled: !props.selectedObject },
-          ]} onChange={value => void viewport.changeMeasurement(value as MeasurementMode)} />}
+        <Select label="选择方式" value={viewport.measurement}
+          disabled={disabled || !scene && !!displayed?.envelope} options={[
+            { value: 'part', label: scene ? '对象' : '整层' }, ...(!scene ? [{ value: 'diameter', label: '原始直径', disabled: !props.selectedObject }] : []),
+            { value: 'point', label: '两点距离', disabled: !scene && !props.selectedObject },
+          ]} onChange={value => void viewport.changeMeasurement(value as MeasurementMode)} />
+        <Button size="compact" disabled={disabled || !!error} onClick={() => void downloadImage()}>{exporting ? '导出中' : '导出 PNG'}</Button>
       </div>
       {(busy && ready || viewport.measurementBusy) && <span className="cad-updating" role="status">
         {viewport.measurementBusy ? '读取精确拓扑' : '更新显示'}</span>}
-      {props.resultStatus && !(busy && ready) && <span className="cad-result-status" role="status" title={props.thermal ? `运行 ${props.thermal.runId} · 工况 ${props.thermal.caseId} · ${props.thermal.source}` : undefined}>{props.resultStatus}</span>}
+      {(props.resultStatus || props.thermal?.notice) && !(busy && ready) && <span className="cad-result-status" role="status" title={props.thermal ? `运行 ${props.thermal.runId} · 工况 ${props.thermal.caseId} · ${props.thermal.source}` : undefined}>{[props.resultStatus, props.thermal?.notice].filter(Boolean).join(' · ')}</span>}
+      {exportError && <span className="cad-slice-error" role="alert">{exportError}</span>}
     </div>
     <div className="cad-status"><span>mm</span><span>{displayed?.display_source === 'domain-input' ? '输入几何 · 展示段 0.4 m' : displayed?.envelope ? '包络预览' : displayed ? '原始几何' : '三维查看'}</span>
       <span>{viewport.measurement === 'point' ? viewport.pick?.measure_pending ? '已捕捉第一点；选择第二点' : Number.isFinite(viewport.pick?.distance_mm)
         ? `两点距离 ${formatNumber(viewport.pick!.distance_mm, 3)} mm` : '依次捕捉两个点'
         : viewport.measurement === 'diameter' ? Number.isFinite(viewport.pick?.diameter_mm) ? `原始直径 Ø ${formatNumber(viewport.pick!.diameter_mm, 3)} mm`
-          : '捕捉选中层圆面或圆边' : scene ? '选择电缆或排管' : '选择整层轮廓'}</span></div>
+          : '捕捉选中层圆面或圆边' : scene ? '选择电缆或排管' : '选择整层轮廓'}</span>{scene && viewport.measurement === 'point' && <span title="量测来自显示网格，曲面弦差不大于 0.08 mm；不是原始 BREP 拓扑。">表面量测 · Esc 取消</span>}</div>
   </div>;
 });

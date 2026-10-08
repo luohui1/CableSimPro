@@ -72,8 +72,15 @@ export function inputScene(document: DomainDocument, sectionId: string): CadScen
     if (!section.soil_layers?.length) addBox(`${section.id}/soil`, 'soil', bounds, '土壤显示窗口');
     addBox(`${section.id}/ground`, 'ground', [bounds[0], 0, 0, bounds[3], length, 0], '地表');
   }
+  for (const object of objects.filter(o => o.kind === 'cable' || o.kind === 'enclosure')) {
+    const b = object.bounds_m, x = (b[0] + b[3]) / 2, z = (b[2] + b[5]) / 2;
+    const peers = objects.filter(o => o.kind === object.kind && o.id !== object.id).map(o => ({ id: o.id,
+      distance: Math.hypot((o.bounds_m[0] + o.bounds_m[3]) / 2 - x, (o.bounds_m[2] + o.bounds_m[5]) / 2 - z) })).sort((a, b) => a.distance - b.distance);
+    const circular = object.kind === 'cable' || section.enclosures?.find(e => e.id === object.id)?.type === 'duct';
+    object.dimensions = { centerDepthM: -z, outerDiameterM: circular ? b[3] - b[0] : undefined, nearestCenterM: peers[0]?.distance, nearestId: peers[0]?.id };
+  }
   const scene: CadScene = { schema: 'cablesim.cad-scene/1', brep_unit: 'mm', coordinate_frame: 'x/y/z', extrusion_axis: '+Y',
-    input_sha256: '', length_m: length, crop_bounds_m: bounds, objects, assets, envelope: true, display_source: 'domain-input' };
+    input_sha256: '', display_input: sceneIdentity(document, sectionId), length_m: length, crop_bounds_m: bounds, objects, assets, envelope: true, display_source: 'domain-input' };
   validateGeometry(scene);
   return scene;
 }

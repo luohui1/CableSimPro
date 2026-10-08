@@ -1,6 +1,7 @@
 import { useRef } from 'react';
 import { formatNumber } from '@/lib/format';
 import { clamp, selectionIndex } from './geometry-contract';
+import { layerId } from './geometry-contract';
 import type { ViewportController as CadController } from './cad-controller';
 import type { CadCamera, CadGeometry, CadPick, CadSelection } from './types';
 import { layerNames } from '@/features/drawing/cable-geometry';
@@ -52,8 +53,8 @@ function LayerDimensions({ geometry, selected, camera, controller, height }: {
   </g>;
 }
 
-export function CadOverlay({ geometry, selected, camera, controller, width, height, points = [] }: {
-  geometry: CadGeometry; selected: CadSelection; camera: CadCamera; controller: CadController; width: number; height: number; points?: readonly CadPick[];
+export function CadOverlay({ geometry, selected, camera, controller, width, height, points = [], onSelect, cursor }: {
+  geometry: CadGeometry; selected: CadSelection; camera: CadCamera; controller: CadController; width: number; height: number; points?: readonly CadPick[]; onSelect?: (value: CadSelection) => void; cursor?: CadPick | null;
 }) {
   const drag = useRef<{ x: number; y: number; fraction: number; dx: number; dy: number } | null>(null);
   const cut = camera.mode === 'section' ? plane(geometry, camera.section, controller) : null;
@@ -62,15 +63,45 @@ export function CadOverlay({ geometry, selected, camera, controller, width, heig
   const projected = points.filter(point => [point.x_mm, point.y_mm, point.z_mm].every(Number.isFinite))
     .map(point => controller.project(point.x_mm!, point.y_mm!, point.z_mm!));
   const selectedLayer = geometry.schema === 'cablesim.cad-model/1' ? geometry.layers[selectionIndex(geometry, selected)] : null;
+  const object = geometry.schema === 'cablesim.cad-scene/1' ? geometry.objects.find(o => o.id === selected?.id) : undefined;
+  const dimensions = object?.dimensions;
+  const rowCount = Math.max(1, Math.floor((height - 160) / 24));
+  const selectedIndex = geometry.schema === 'cablesim.cad-model/1' ? Math.max(0, selectionIndex(geometry, selected)) : 0;
+  const pageStart = Math.floor(selectedIndex / rowCount) * rowCount;
+  const layers = geometry.schema === 'cablesim.cad-model/1' ? geometry.layers.slice(pageStart, pageStart + rowCount) : [];
   return <svg className="cad-overlay" viewBox={`0 0 ${width} ${height}`} aria-label="几何尺寸和剖切面">
     {selectedLayer && <g className="cad-layer-dimensions" data-cad-layer-label><text x="16" y="28">
       {selectedLayer.label || layerNames[selectedLayer.role] || '结构层'}</text></g>}
+    {!!layers.length && camera.mode === 'peel' && <g className="cad-layer-annotations" aria-label="结构层材料与厚度">
+      {layers.map((layer, i) => {
+        const id = layerId(layer), material = geometry.schema === 'cablesim.cad-model/1' ? geometry.material_sources?.find(m => m.id === layer.material)?.label || layer.material : layer.material;
+        const thickness = typeof layer.construction?.thickness === 'number' ? layer.construction.thickness : layer.outer_radius_m - layer.inner_radius_m;
+        const label = `${layer.label || layerNames[layer.role] || layer.role} · ${material} · ${layer.role === 'conductor' ? `Ø ${formatNumber(layer.outer_radius_m * 2000, 1)}` : `厚 ${formatNumber(thickness * 1000, 2)}`} mm`;
+        const budget = Math.max(16, Math.floor((width - 112) / 13)), limit = Math.max(3, Math.floor((budget - 12) / 2));
+        const shorten = (s: string) => s.length > limit ? s.slice(0, limit - 1) + '…' : s;
+        const visibleLabel = `${shorten(layer.label || layerNames[layer.role] || layer.role)} · ${shorten(material)} · ${layer.role === 'conductor' ? `Ø ${formatNumber(layer.outer_radius_m * 2000, 1)}` : `厚 ${formatNumber(thickness * 1000, 2)}`} mm`;
+        return <g key={id} role="button" tabIndex={0} aria-label={label} aria-pressed={selected?.id === id} data-cad-layer-annotation={id}
+          transform={`translate(16, ${88 + i * 24})`} onClick={() => onSelect?.({ kind: 'layer', id })}
+          onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect?.({ kind: 'layer', id }); } }}>
+          <title>{label}</title><text>{visibleLabel}</text>
+        </g>;
+      })}
+      {geometry.schema === 'cablesim.cad-model/1' && geometry.layers.length > rowCount && <text x="16" y={88 + layers.length * 24}>
+        {pageStart + 1}–{pageStart + layers.length} / {geometry.layers.length} 层 · 选中表格行查看</text>}
+    </g>}
+    {dimensions && <g className="cad-layer-dimensions" data-cad-object-dimensions={object!.id}>
+      <text x="16" y="104">中心埋深 {formatNumber(dimensions.centerDepthM * 1000, 1)} mm{dimensions.outerDiameterM !== undefined ? ` · 外径 Ø ${formatNumber(dimensions.outerDiameterM * 1000, 1)} mm` : ''}</text>
+      {dimensions.nearestCenterM !== undefined && <text x="16" y="128"><title>{dimensions.nearestId}</title>最近同类中心距 {formatNumber(dimensions.nearestCenterM * 1000, 1)} mm</text>}
+    </g>}
     {cut && <path className="cad-cut-outline" d={path} />}
     <LayerDimensions geometry={geometry} selected={selected} camera={camera} controller={controller} height={height} />
     {!!projected.length && <g className="cad-point-measurement" data-cad-point-measurement>
       {projected.length === 2 && <path d={`M${projected[0].x} ${projected[0].y}L${projected[1].x} ${projected[1].y}`} />}
       {projected.map((point, index) => <circle key={index} cx={point.x} cy={point.y} r="4" />)}
+      {projected.length === 2 && <text x={clamp((projected[0].x + projected[1].x) / 2, 16, width - 180)} y={clamp((projected[0].y + projected[1].y) / 2 - 14, 148, height - 100)}>
+        {formatNumber(points[1].distance_mm!, 2)} mm</text>}
     </g>}
+    {Number.isFinite(cursor?.cursor_x) && Number.isFinite(cursor?.cursor_y) && <g className="cad-point-measurement" transform={`translate(${Number(cursor!.cursor_x) * width},${Number(cursor!.cursor_y) * height})`}><path d="M-8 0H8M0-8V8" /></g>}
     {draggable && cut && <g className="cad-cut-handle" role="slider" tabIndex={0} aria-label="轴向剖切位置"
       aria-valuemin={5} aria-valuemax={95} aria-valuenow={Math.round(camera.section * 100)}
       transform={`translate(${cut.position.x} ${cut.position.y})`} data-cad-section-handle
