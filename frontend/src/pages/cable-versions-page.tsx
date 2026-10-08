@@ -1,0 +1,145 @@
+import { useState } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { cableModels } from "@/api/documents";
+import { message, numeric, optionalRecord, text } from "@/api/client";
+import { CatalogShell, usePageTheme } from "@/components/catalog-shell";
+import { DataTable } from "@/components/data-table";
+import { PropertyPanel } from "@/components/property-panel";
+import { StatusMark } from "@/components/status-mark";
+import { Toolbar } from "@/components/toolbar";
+import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
+import type { SourceKind } from "@/components/source-badge";
+import { ErrorState, InlineEmpty, LoadingState } from "@/components/states";
+
+/** 来源类别：电缆型号版本的每个值都带出处（§2.3 关联），这里按出处归类显示。 */
+const SOURCE: Record<string, { label: string; badge: SourceKind }> = {
+  manufacturer: { label: "厂家资料", badge: "document" },
+  standard: { label: "标准", badge: "standard" },
+  derived: { label: "推导", badge: "derived" },
+  user: { label: "工程师给定", badge: "user" },
+  asset: { label: "资源库", badge: "library" },
+  demo: { label: "演示", badge: "demo" },
+};
+const STATE: Record<string, "saved" | "draft"> = { reviewed: "saved", draft: "draft", incomplete: "draft" };
+
+type Version = {
+  id: string; name: string; version: string; state: string; status: string; series: string;
+  spec: string; content: string; maker: string; sources: { path: string; kind: string; reference: string; reviewed: boolean }[];
+};
+
+/** 型号系列：取型号代号（如 YJLW03、YJV22），用于分组。 */
+function seriesOf(name: string, designation: string) {
+  return designation || name.match(/\b(?:ZC-|ZR-|ZA-)?([A-Z]{2,}[0-9]*)/)?.[1] || "其他";
+}
+/** 主要来源：值最多的那类出处；全部出处在右侧名片里逐条列出。 */
+function mainSource(row: Version) {
+  const counts = new Map<string, number>();
+  for (const source of row.sources) counts.set(source.kind, (counts.get(source.kind) || 0) + 1);
+  return [...counts].sort((a, b) => b[1] - a[1])[0]?.[0] || "";
+}
+function kv(value?: number) {
+  return value ? `${Number((value / 1000).toPrecision(4))}` : "";
+}
+
+function rows(data: Record<string, unknown>[]): Version[] {
+  return data.map((row) => {
+    const payload = optionalRecord(row.payload), spec = optionalRecord(payload.specification), cable = optionalRecord(payload.cable_type);
+    const rating = optionalRecord(cable.rating), cores = Array.isArray(cable.cores) ? cable.cores : [];
+    const area = numeric(spec.area_m2) ?? numeric(optionalRecord(optionalRecord(cores[0]).conductor).nominal_area);
+    const count = numeric(spec.cores) ?? (cores.length || undefined);
+    const u0 = numeric(spec.u0_v) ?? numeric(rating.u0), u = numeric(spec.voltage_v) ?? numeric(rating.u);
+    const missing = Array.isArray(spec.missing) ? spec.missing.length : 0;
+    const sources = Object.entries(optionalRecord(payload.sources)).map(([path, value]) => {
+      const source = optionalRecord(value);
+      return { path, kind: text(source.kind), reference: text(source.reference), reviewed: source.reviewed === true };
+    });
+    const name = text(payload.name);
+    return {
+      id: text(row.id), name, version: text(payload.version).replace(/\+engineering$/, "（工程版）"), state: text(row.state), status: text(row.display_status),
+      series: seriesOf(name, text(spec.designation)),
+      spec: [count ? `${count} 芯` : "", area ? `${Math.round(area * 1e6)} mm²` : "", u0 && u ? `${kv(u0)}/${kv(u)} kV` : ""].filter(Boolean).join(" · "),
+      content: payload.cable_type ? "完整结构" : missing ? `公开规格 · 缺 ${missing} 项` : "公开规格",
+      maker: text(spec.manufacturer), sources,
+    };
+  });
+}
+
+/** 资源 › 电缆型号版本（FRONTEND_REQUIREMENTS §2.2）：研究可引用的型号版本，每条写明来源。 */
+export function CableVersionsPage() {
+  const { theme } = usePageTheme();
+  const navigate = useNavigate();
+  const [selected, setSelected] = useState(""), [origin, setOrigin] = useState("all");
+  const models = useQuery({ queryKey: ["domain-cable-models"], queryFn: ({ signal }) => cableModels(signal) });
+  const all = rows(models.data || []);
+  const kindsOf = (row: Version) => new Set(row.sources.map((source) => source.kind));
+  const visible = all.filter((row) => origin === "all" || kindsOf(row).has(origin));
+  const series = [...new Set(visible.map((row) => row.series))].sort();
+  const current = all.find((row) => row.id === selected);
+  const openImport = () => void navigate({ to: "/resources/cables/imports", search: { theme } });
+  const origins = [...new Set(all.flatMap((row) => [...kindsOf(row)]))].filter((kind) => SOURCE[kind]);
+  return (
+    <CatalogShell
+      title="电缆型号版本"
+      status={<span className="muted">{all.length} 项 · 研究按版本引用</span>}
+      actions={<Button variant="primary" size="compact" onClick={openImport}>从厂家资料导入</Button>}
+      property={current ? (
+        <PropertyPanel
+          collapsed={false}
+          title={current.name}
+          onToggle={() => setSelected("")}
+          groups={[
+            {
+              label: "名片",
+              items: [
+                { label: "版本", value: current.version },
+                { label: "状态", value: current.status },
+                { label: "内容", value: current.content },
+                ...(current.spec ? [{ label: "规格", value: current.spec }] : []),
+                ...(current.maker ? [{ label: "制造商", value: current.maker }] : []),
+              ],
+            },
+            {
+              label: "来源",
+              items: current.sources.map((source, index) => ({
+                label: `${SOURCE[source.kind]?.label || source.kind} ${index + 1}`,
+                value: source.reviewed ? "已核对" : "待核对",
+                source: SOURCE[source.kind]?.badge || "document",
+                sourceDetail: `${source.path}\n${source.reference}`,
+              })),
+            },
+          ]}
+        />
+      ) : undefined}
+    >
+      {models.isPending ? <LoadingState title="正在读取电缆型号版本" />
+        : models.error ? <ErrorState description={message(models.error)} action={<Button onClick={() => models.refetch()}>重新读取</Button>} />
+        : !all.length ? <InlineEmpty title="还没有可引用的型号版本。从厂家资料导入，或在型号设计里发布。" action={<Button size="compact" onClick={openImport}>从厂家资料导入</Button>} />
+        : <>
+          {origins.length > 1 && <Toolbar label="型号版本筛选">
+            <Select label="来源" value={origin} onChange={setOrigin} options={[{ value: "all", label: "全部" }, ...origins.map((kind) => ({ value: kind, label: SOURCE[kind].label }))]} />
+          </Toolbar>}
+          <div data-page="cable-versions" data-state={visible.length ? "success" : "empty"}>
+            {!visible.length ? <InlineEmpty title="没有这个来源的型号版本" /> : (
+              <DataTable<Version>
+                label="电缆型号版本"
+                selectedId={selected}
+                onSelect={(row) => setSelected(row.id)}
+                rowLabel={(row) => row.name}
+                groups={series.map((name) => ({ id: name, label: name, rows: visible.filter((row) => row.series === name) }))}
+                columns={[
+                  { id: "name", label: "型号", wrap: true, render: (row) => row.name },
+                  { id: "spec", label: "规格", render: (row) => row.spec || "—" },
+                  { id: "content", label: "内容", render: (row) => row.content },
+                  { id: "source", label: "主要来源", render: (row) => (SOURCE[mainSource(row)]?.label || mainSource(row)) + (row.maker ? ` · ${row.maker}` : "") },
+                  { id: "version", label: "版本", render: (row) => row.version },
+                  { id: "status", label: "状态", render: (row) => <StatusMark kind={STATE[row.state] || "draft"} label={row.status} /> },
+                ]}
+              />
+            )}
+          </div>
+        </>}
+    </CatalogShell>
+  );
+}

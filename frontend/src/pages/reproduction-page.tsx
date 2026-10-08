@@ -139,15 +139,15 @@ export function ReproductionPage() {
       value={activeTab}
       onValueChange={(tab) =>
         void navigate({
-          to: "/library/reproductions/$target/$tab",
+          to: "/validation/$target/$tab",
           params: { target: target!, tab },
           search: { theme, snapshot },
         })
       }
     >
       <CatalogShell
-        title={target ? text(detail.data?.short_title) || "复现详情" : "复现库"}
-        active="库"
+        title={target ? text(detail.data?.short_title) || "验证算例" : "验证算例"}
+        path={target ? "验证算例" : undefined}
         status={
           <StatusMark
             kind={historical ? "historical" : "saved"}
@@ -217,7 +217,7 @@ export function ReproductionPage() {
           <Toolbar>
             <Link
               className="object-link"
-              to="/library/reproductions"
+              to="/validation"
               search={{ theme, snapshot }}
             >
               全部复现目标
@@ -284,7 +284,7 @@ export function ReproductionPage() {
                   rowLabel={(row) => text(row.short_title) || text(row.title)}
                   onActivate={(row) =>
                     void navigate({
-                      to: "/library/reproductions/$target/$tab",
+                      to: "/validation/$target/$tab",
                       params: { target: row.id, tab: "results" },
                       search: { theme, snapshot },
                     })

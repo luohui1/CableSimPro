@@ -14,6 +14,10 @@ export function EmptyState({ title = '尚无选型结果', description = '选择
   const src = illustration('empty-' + (art || (/^(没有匹配|未找到)/.test(title) ? 'no-results' : 'not-run')));
   return <div className="state-view state-empty">{src ? <img className="state-art" src={src} alt="" /> : <Icon name="result/table" className="icon-large" />}<h2>{title}</h2>{description && <p className="muted">{description}</p>}{action}</div>;
 }
+/** 行内空状态（FRONTEND_REQUIREMENTS §2.4）：一行原因加一个下一步按钮，放在内容区顶部，不配大插图。 */
+export function InlineEmpty({ title, action }: { title: string; action?: ReactNode }) {
+  return <div className="state-inline" role="status"><Icon name="status/info" /><span>{displayText(title)}</span>{action}</div>;
+}
 export function LoadingState({ title = '正在读取选型结果', description = '已保存输入保留，可稍后查看。' }: { title?: string; description?: string }) {
   return <div className="state-view" role="status" aria-busy="true"><StatusMark kind="running" label={title} /><p className="muted">{description}</p><div className="skeleton-lines" aria-hidden="true"><div /><div /><div /></div></div>;
 }

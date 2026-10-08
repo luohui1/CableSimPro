@@ -1,7 +1,6 @@
 import { useEffect, type ReactNode } from "react";
-import { Link, useNavigate, useSearch } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { AppShell } from "./app-shell";
-import { Icon } from "./icon";
 export function usePageTheme() {
   const search = useSearch({ strict: false }),
     navigate = useNavigate();
@@ -12,32 +11,34 @@ export function usePageTheme() {
   }, [theme]);
   return { theme, search, navigate };
 }
+/**
+ * 目录页与详情页的内容面板（FRONTEND_REQUIREMENTS §2.4）。导航全部在常驻侧栏里按类别给出，
+ * 这里不再另放一套子导航。
+ */
 export function CatalogShell({
   title,
-  active,
+  path,
   children,
   status,
   actions,
   tabs,
   property,
-  sidebar,
 }: {
   title: string;
-  active: "库" | "插件" | "设置";
+  path?: string;
   children: ReactNode;
   status?: ReactNode;
   actions?: ReactNode;
   tabs?: ReactNode;
   property?: ReactNode;
-  sidebar?: ReactNode;
 }) {
   const { theme, search, navigate } = usePageTheme();
   return (
     <AppShell
       title={title}
+      path={path}
       status={status}
       actions={actions}
-      activeNavigation={active}
       theme={theme}
       onUnavailable={() => {}}
       onTheme={() =>
@@ -46,36 +47,6 @@ export function CatalogShell({
           search: { ...search, theme: theme === "light" ? "dark" : "light" },
           replace: true,
         })
-      }
-      sidebar={
-        sidebar ||
-        (active === "库" ? (
-          <>
-            <Link className="module-item" to="/library" search={{ theme }} activeOptions={{ exact: true, includeSearch: false }}>
-              <Icon name="nav/library" />
-              资源库
-            </Link>
-            <Link className="module-item" to="/library/documents" search={{ theme }} activeOptions={{ exact: true, includeSearch: false }}>
-              <Icon name="module/datasheet" />
-              资料导入
-            </Link>
-            <Link className="module-item" to="/library/deliveries" search={{ theme, workspace: "", delivery: "" }} activeOptions={{ exact: true, includeSearch: false }}>
-              <Icon name="module/datasheet" />交付历史
-            </Link>
-            <Link
-              className="module-item"
-              to="/library/reproductions"
-              search={{ theme, snapshot: "" }}
-            >
-              <Icon name="nav/study" />
-              复现库
-            </Link>
-          </>
-        ) : (
-          <span className="module-item">
-            {active === "插件" ? "已安装插件" : "应用偏好"}
-          </span>
-        ))
       }
       tabs={tabs}
       property={property}

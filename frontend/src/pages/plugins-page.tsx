@@ -40,7 +40,7 @@ export function PluginsPage() {
   const selected = rows.find((row) => pluginId(row) === pid) || groups[0]?.[1][0];
 
   return (
-    <CatalogShell title="插件" active="插件" status={<span className="muted">已安装 {rows.length} 个 · 计算方法全部来自插件</span>}
+    <CatalogShell title="插件" status={<span className="muted">已安装 {rows.length} 个 · 计算方法全部来自插件</span>}
       actions={<Tooltip content="宿主尚未提供插件安装接口"><span><Button size="compact" disabled>从文件安装</Button></span></Tooltip>}>
       <div data-page={pid ? "plugin-detail" : "plugins"} className="plugins-page">
         <QueryState query={catalog} empty={!rows.length && "尚无已安装插件"}>

@@ -16,13 +16,19 @@
 [data-collapsed] .workbench-sidebar .module-item > span, [data-collapsed] .sidebar-user > span, [data-collapsed] .sidebar-user > .icon:last-child { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 [data-collapsed] .sidebar-user { justify-content: center; width: auto; }
 [data-collapsed] .sidebar-foot { align-items: center; }
-[data-collapsed] .sidebar-scroll, [data-collapsed] .sidebar-new > span { display: none; }
+[data-collapsed] .sidebar-new > span, [data-collapsed] .sidebar-scroll .tree-caption, [data-collapsed] .sidebar-scroll .tree-row, [data-collapsed] .sidebar-scroll .tree-empty { display: none; }
+[data-collapsed] .sidebar-scroll { align-items: center; }
 [data-collapsed] .sidebar-new { width: calc(var(--space-8) + var(--space-2)); padding: 0; }
 .workbench-sidebar { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4) var(--space-3); min-height: 0; min-width: 0; }
 .sidebar-mode { display: flex; width: 100%; padding: calc(var(--space-1) / 2); border-radius: var(--radius-pill); background: var(--hover); }
 .sidebar-mode > button { flex: 1; min-width: 0; height: var(--control-compact); border: 0; border-radius: var(--radius-pill); font-size: var(--text-note); }
 .sidebar-mode > button[data-state="on"] { background: var(--panel); color: var(--text); }
-.sidebar-scroll { min-height: 0; flex: 1; overflow-y: auto; overflow-x: hidden; }
+.sidebar-scroll { min-height: 0; flex: 1; overflow-y: auto; overflow-x: hidden; display: flex; flex-direction: column; gap: 1px; }
+/* 侧栏按类别分组（§2.3）：类别标题、类别入口、入口下的具体对象（工程、型号设计）缩进到入口文字处 */
+.sidebar-scroll .module-item { min-height: calc(var(--control-compact) - var(--space-1)); padding-block: var(--space-1); }
+.sidebar-scroll .tree-row { min-height: calc(var(--control-compact) - var(--space-1)); padding-left: var(--space-8); color: var(--text-secondary); }
+.sidebar-scroll .tree-caption { padding-top: var(--space-2); }
+.sidebar-scroll .tree-row[aria-current] { color: var(--text); }
 .workbench-sidebar .module-item { color: var(--text); white-space: nowrap; }
 .workbench-sidebar .module-item > span { overflow: hidden; text-overflow: ellipsis; }
 .sidebar-modules { margin: var(--space-1) 0 var(--space-2) calc(var(--space-4) + var(--space-1)); padding-left: var(--space-2); border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: var(--space-1); }
@@ -219,6 +225,9 @@
 .settings-plugins { list-style: none; margin: 0; padding: var(--space-2) var(--space-4) var(--space-3); display: flex; flex-direction: column; gap: var(--space-2); }
 .settings-plugins li { display: flex; justify-content: space-between; gap: var(--space-3); font-size: var(--text-note); }
 .settings-plugins small { color: var(--text-weak); font-variant-numeric: tabular-nums; }
+.settings-link a { display: inline-flex; align-items: center; gap: var(--space-1); color: var(--text-secondary); }
+.settings-link a:hover { color: var(--text); }
+.settings-link .icon { width: var(--space-4); height: var(--space-4); }
 .settings-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .settings-row-actions { display: flex; justify-content: flex-end; gap: var(--space-1); }
 .settings-banner { padding: var(--space-2) var(--space-3); border-radius: var(--radius-item); background: var(--fill); color: var(--attention); }
@@ -241,18 +250,6 @@
 .settings-inline { display: flex; align-items: center; gap: var(--space-2); max-width: calc(var(--space-12) * 3); color: var(--text-secondary); }
 @media (max-width: 860px) { .settings-page { grid-template-columns: minmax(0, 1fr); } .settings-nav { position: static; flex-direction: row; flex-wrap: wrap; } .settings-form-pair { grid-template-columns: minmax(0, 1fr); } .settings-head img { display: none; } }
 
-/* 库：电缆型号架 */
-.cable-shelf { display: flex; flex-direction: column; gap: var(--space-4); padding-bottom: var(--space-8); margin-bottom: var(--space-6); border-bottom: 1px solid var(--line); }
-.cable-shelf > header { display: flex; align-items: baseline; gap: var(--space-3); }
-.cable-shelf h2 { font-size: var(--text-subheading); }
-.cable-shelf ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(var(--space-12) * 5), 1fr)); gap: var(--space-4); }
-.cable-card { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-surface); overflow: hidden; background: var(--panel); }
-.cable-card-art { aspect-ratio: 16 / 5; background: var(--panel); overflow: hidden; }
-.cable-card-art img { width: 100%; height: 100%; object-fit: cover; object-position: 60% 50%; }
-[data-theme="dark"] .cable-card-art { background: var(--fill); }
-.cable-card-body { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3) var(--space-4) var(--space-4); font-size: var(--text-note); }
-.cable-card-body b { font-size: var(--text-body); }
-.cable-card-meta { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-1); }
 .tag-warn { color: var(--attention); }
 .home-banner { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: var(--space-8); }
 .home-greeting p { color: var(--text-secondary); max-width: 46ch; line-height: 1.7; margin-top: var(--space-2); }

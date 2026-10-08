@@ -63,7 +63,7 @@ export function DocumentsPage() {
       const saved = await documents.uploadDocument(file);
       await queryClient.invalidateQueries({ queryKey: ["documents"] });
       await navigate({
-        to: "/library/documents",
+        to: "/resources/cables/imports",
         search: { theme, document: saved.id },
       });
     } catch (error) {
@@ -76,8 +76,8 @@ export function DocumentsPage() {
   }
   return (
     <CatalogShell
-      title="资料导入"
-      active="库"
+      title="厂家资料导入"
+      path="电缆型号版本"
       status={
         uploading ? (
           <StatusMark kind="running" label="正在上传原件" />
@@ -155,7 +155,7 @@ export function DocumentsPage() {
                   <tr key={item.id}>
                     <td>
                       <Link
-                        to="/library/documents"
+                        to="/resources/cables/imports"
                         search={{ theme, document: item.id }}
                       >
                         {item.name}
@@ -343,7 +343,7 @@ function DocumentWorkspace({ did }: { did: string }) {
     setSelected("");
     await history.refetch();
     await navigate({
-      to: "/library/documents",
+      to: "/resources/cables/imports",
       search: { theme, document: did, extraction: saved.id },
     });
   }
@@ -366,7 +366,7 @@ function DocumentWorkspace({ did }: { did: string }) {
       setShowProposal(false);
       if (pid)
         await navigate({
-          to: "/library/documents",
+          to: "/resources/cables/imports",
           search: { theme, document: did, extraction: run.id },
         });
     });
@@ -462,7 +462,7 @@ function DocumentWorkspace({ did }: { did: string }) {
       onKeyDown={reviewKey}
     >
       <div className="document-toolbar">
-        <Link to="/library/documents" search={{ theme }}>
+        <Link to="/resources/cables/imports" search={{ theme }}>
           资料目录
         </Link>
         <strong>{doc.data?.name || "读取原件"}</strong>
@@ -677,7 +677,7 @@ function DocumentWorkspace({ did }: { did: string }) {
             {!!latestSpecs.length && <label>规格<select aria-label="规格" value={run ? specificationKey(run) : ''} disabled={!!busy} onChange={event => {
               const next = latestSpecs.find(item=>specificationKey(item)===event.target.value); if (!next) return;
               setSelected(''); setCommand(undefined); setShowProposal(false);
-              void navigate({to:'/library/documents',search:{...search,theme,document:did,extraction:next.id,proposal:''}});
+              void navigate({to:'/resources/cables/imports',search:{...search,theme,document:did,extraction:next.id,proposal:''}});
             }}>{latestSpecs.map(item=><option key={item.id} value={specificationKey(item)}>{specificationLabel(item)} · {item.reviews.length}/{item.result?.candidates.length || 0}</option>)}</select></label>}
             <label>
               提取记录
@@ -689,7 +689,7 @@ function DocumentWorkspace({ did }: { did: string }) {
                   setSelected("");
                   setShowProposal(false);
                   void navigate({
-                    to: "/library/documents",
+                    to: "/resources/cables/imports",
                     search: {
                       theme,
                       document: did,
@@ -744,7 +744,7 @@ function DocumentWorkspace({ did }: { did: string }) {
               下载原件
             </Button>
           </div>
-          <BatchProposals did={did} batchId={text(search.batch)} items={queued} onRemove={id=>setQueued(items=>items.filter(item=>item.extraction_id!==id))} onCreated={batch=>void navigate({to:'/library/documents',search:{...search,theme,document:did,batch}})}/>
+          <BatchProposals did={did} batchId={text(search.batch)} items={queued} onRemove={id=>setQueued(items=>items.filter(item=>item.extraction_id!==id))} onCreated={batch=>void navigate({to:'/resources/cables/imports',search:{...search,theme,document:did,batch}})}/>
           {isRunning(run) && (
             <div role="status" className="document-progress">
               <progress aria-label="资料提取进度" />
@@ -787,7 +787,7 @@ function DocumentWorkspace({ did }: { did: string }) {
             <section className="document-review-panel" aria-label="候选与提案">
               {proposal.data ? (
                 <section className="document-proposal">
-                  <Button size="compact" variant="ghost" onClick={() => { setShowProposal(false); void navigate({ to: '/library/documents', search: { theme, document: did, extraction: runId } }); }}>返回逐项核对</Button>
+                  <Button size="compact" variant="ghost" onClick={() => { setShowProposal(false); void navigate({ to: '/resources/cables/imports', search: { theme, document: did, extraction: runId } }); }}>返回逐项核对</Button>
                   <h2>
                     {proposal.data.status === "approved"
                       ? "型号草稿已生成"
@@ -884,7 +884,7 @@ function DocumentWorkspace({ did }: { did: string }) {
                           saved,
                         );
                         await navigate({
-                          to: "/library/documents",
+                          to: "/resources/cables/imports",
                           search: {
                             theme,
                             document: did,

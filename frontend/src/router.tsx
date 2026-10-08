@@ -19,7 +19,9 @@ import { EmptyState } from "./components/states";
 import { Redirect } from "./components/redirect";
 const SelectionPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pages/selection-page'), 'SelectionPage') : undefined;
 const GalleryPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pages/gallery-page'), 'GalleryPage') : undefined;
-const LibraryPage = lazyRouteComponent(() => import('./pages/library-page'), 'LibraryPage');
+const AssetsPage = lazyRouteComponent(() => import('./pages/library-page'), 'AssetsPage');
+const CableVersionsPage = lazyRouteComponent(() => import('./pages/cable-versions-page'), 'CableVersionsPage');
+const RunsPage = lazyRouteComponent(() => import('./pages/runs-page'), 'RunsPage');
 const DocumentsPage = lazyRouteComponent(() => import('./pages/documents-page'), 'DocumentsPage');
 const DeliveriesPage = lazyRouteComponent(() => import('./pages/deliveries-page'), 'DeliveriesPage');
 const PluginsPage = lazyRouteComponent(() => import('./pages/plugins-page'), 'PluginsPage');
@@ -53,16 +55,29 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
     </section>
   ),
 });
-const libraryRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library", validateSearch: themeSearch, component: LibraryPage });
-const deliveriesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/deliveries", validateSearch: (search: Record<string, unknown>) => ({ ...themeSearch(search), workspace: typeof search.workspace === "string" ? search.workspace : "", delivery: typeof search.delivery === "string" ? search.delivery : "" }), component: DeliveriesPage });
-const documentsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/documents", validateSearch: (search: Record<string, unknown>): { theme: 'light' | 'dark'; document?: string; extraction?: string; proposal?: string; batch?:string } => ({ ...themeSearch(search), document: typeof search.document === 'string' ? search.document : '', extraction: typeof search.extraction === 'string' ? search.extraction : '', proposal: typeof search.proposal === 'string' ? search.proposal : '', batch:typeof search.batch === 'string' ? search.batch : '' }), component: DocumentsPage });
+const deliverySearch = (search: Record<string, unknown>) => ({ ...themeSearch(search), workspace: typeof search.workspace === "string" ? search.workspace : "", delivery: typeof search.delivery === "string" ? search.delivery : "" });
+const documentSearch = (search: Record<string, unknown>): { theme: 'light' | 'dark'; document?: string; extraction?: string; proposal?: string; batch?:string } => ({ ...themeSearch(search), document: typeof search.document === 'string' ? search.document : '', extraction: typeof search.extraction === 'string' ? search.extraction : '', proposal: typeof search.proposal === 'string' ? search.proposal : '', batch:typeof search.batch === 'string' ? search.batch : '' });
+// 资源（FRONTEND_REQUIREMENTS §2.2 / §2.3）：电缆型号版本及其厂家资料导入；材料与部件、模板与计算方案、标准与规则
+const cableVersionsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/cables", validateSearch: themeSearch, component: CableVersionsPage });
+const documentsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/cables/imports", validateSearch: documentSearch, component: DocumentsPage });
+const assetGroupRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/$group", validateSearch: themeSearch, beforeLoad: ({ params }) => { if (!["materials", "templates", "standards"].includes(params.group)) throw notFound(); }, component: AssetsPage });
+// 记录：运行与作业、交付；都是跨对象的筛选视图，各自的家在所属研究或型号里
+const runsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/runs", validateSearch: themeSearch, component: RunsPage });
+const deliveriesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/deliveries", validateSearch: deliverySearch, component: DeliveriesPage });
+// 旧地址只做跳转，书签与其他页面里的链接不失效
+const legacyLibraryRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library", validateSearch: themeSearch, beforeLoad: ({ search }) => { throw redirect({ to: "/resources/cables", search, replace: true }); } });
+const legacyDeliveriesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/deliveries", validateSearch: deliverySearch, beforeLoad: ({ search }) => { throw redirect({ to: "/deliveries", search, replace: true }); } });
+const legacyDocumentsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/documents", validateSearch: documentSearch, beforeLoad: ({ search }) => { throw redirect({ to: "/resources/cables/imports", search, replace: true }); } });
 const pluginsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/plugins", validateSearch: themeSearch, component: PluginsPage });
 const pluginDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/plugins/$pid", validateSearch: themeSearch, component: PluginsPage });
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings", validateSearch: (search: Record<string, unknown>): { theme: "light" | "dark"; section?: string } => ({ ...themeSearch(search), section: typeof search.section === "string" ? search.section : undefined }), component: SettingsPage });
 const agentRoute = createRoute({ getParentRoute: () => rootRoute, path: "/agent", validateSearch: (search: Record<string, unknown>): { theme: "light" | "dark"; workspace?: string; task?: string } => ({ ...themeSearch(search), workspace: typeof search.workspace === "string" ? search.workspace : undefined, task: typeof search.task === "string" ? search.task : undefined }), component: AgentPage });
 const reproductionSearch = (search: Record<string, unknown>) => ({ ...themeSearch(search), snapshot: typeof search.snapshot === "string" ? search.snapshot : "" });
-const reproductionsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/reproductions", validateSearch: reproductionSearch, component: ReproductionPage });
-const reproductionDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/reproductions/$target/$tab", validateSearch: reproductionSearch, beforeLoad: ({ params }) => { if (!["results", "overlay", "convergence", "sources", "scope"].includes(params.tab)) throw notFound(); }, component: ReproductionPage });
+// 方法：验证算例是插件的验证证据（§2.3）
+const reproductionsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/validation", validateSearch: reproductionSearch, component: ReproductionPage });
+const reproductionDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/validation/$target/$tab", validateSearch: reproductionSearch, beforeLoad: ({ params }) => { if (!["results", "overlay", "convergence", "sources", "scope"].includes(params.tab)) throw notFound(); }, component: ReproductionPage });
+const legacyReproductionsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/reproductions", validateSearch: reproductionSearch, beforeLoad: ({ search }) => { throw redirect({ to: "/validation", search, replace: true }); } });
+const legacyReproductionDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library/reproductions/$target/$tab", validateSearch: reproductionSearch, beforeLoad: ({ params, search }) => { throw redirect({ to: "/validation/$target/$tab", params, search, replace: true }); } });
 export const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
@@ -184,8 +199,10 @@ const sampleEntryRoute = createRoute({
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     homeRoute,
-    libraryRoute, documentsRoute, deliveriesRoute, pluginsRoute, pluginDetailRoute, settingsRoute, agentRoute,
+    cableVersionsRoute, documentsRoute, assetGroupRoute, runsRoute, deliveriesRoute,
+    pluginsRoute, pluginDetailRoute, settingsRoute, agentRoute,
     reproductionsRoute, reproductionDetailRoute,
+    legacyLibraryRoute, legacyDeliveriesRoute, legacyDocumentsRoute, legacyReproductionsRoute, legacyReproductionDetailRoute,
     simulationListRoute,
     ...createTypeRoutes(rootRoute),
     studiesRoute,

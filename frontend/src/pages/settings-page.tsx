@@ -14,7 +14,7 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { StatusMark } from "@/components/status-mark";
-import { HpcJobList } from "@/features/field/hpc-job-list";
+import { Link } from "@tanstack/react-router";
 import { agentSettings, agentStatus, resetAgentSettings, saveAgentSettings, testAgentSettings, type AgentProbe, type AgentSettings } from "@/features/agent/agent-api";
 
 type Backup = { id: string; sha256: string; size_bytes: number; created: string; download_url: string; schema_version: number };
@@ -203,7 +203,7 @@ export function SettingsPage() {
   const restoreState = text(pending.data?.status);
 
   return (
-    <CatalogShell title="设置" active="设置" status={<StatusMark kind="current" label="修改即时生效" />} actions={null}>
+    <CatalogShell title="设置" status={<StatusMark kind="current" label="修改即时生效" />} actions={null}>
       <div className="settings-page" data-page="settings" data-state={health.isPending ? "loading" : health.error ? "error" : "success"}>
         <nav className="settings-nav" aria-label="设置分类">
           {SECTIONS.map((item) => <button key={item.id} type="button" aria-current={item.id === current ? "page" : undefined} onClick={() => go(item.id)}>
@@ -239,7 +239,7 @@ export function SettingsPage() {
               </li>)}{!catalog.isPending && !group.rows.length && <li className="muted">没有插件</li>}</ul>
             </div>)}
           </div>}
-          {current === "compute" && <HpcJobList />}
+          {current === "compute" && <p className="settings-link"><Link to="/runs" search={{ theme }}>超算作业在“运行与作业”中查看<Icon name="action/arrow-right" /></Link></p>}
           {current === "data" && <>
             {restoreState === "pending_restart" && <p className="settings-banner" role="status">已安排恢复，重启宿主后生效。</p>}
             <div className="settings-actions">

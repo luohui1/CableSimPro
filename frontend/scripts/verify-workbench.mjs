@@ -78,6 +78,16 @@ try {
   await expect(page.getByLabel("API 密钥")).toHaveValue("");
   await expect(page.getByRole("button", { name: "测试连接" })).toBeVisible();
 
+  // 侧栏按对象类别排（§2.3），在工作台里也保持展开；旧的“库”地址跳到各自的新家
+  await go(`/studies?workspace=${project.id}`);
+  const nav = page.getByRole("navigation", { name: "对象" });
+  for (const name of ["电缆型号版本", "材料与部件", "运行与作业", "交付", "插件", "验证算例"]) await expect(nav.getByRole("link", { name })).toBeVisible();
+  await go("/library/documents");
+  await page.waitForURL(/\/resources\/cables\/imports/);
+  await go("/library");
+  await page.waitForURL(/\/resources\/cables/);
+  await expect(page.getByRole("table", { name: "电缆型号版本" })).toBeVisible();
+
   // 深色主题
   await go(`/studies?workspace=${project.id}&theme=dark`);
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), "dark");
