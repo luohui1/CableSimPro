@@ -53,6 +53,10 @@
 
 仿真复现输入的精确契约为 `GET /api/simulation/problem-contract`，详见[仿真研究](simulation-research.md)。这些接口没有样板兼容别名，也未删除旧地址。
 
+| 作业接口 | 记录字段与语义 |
+| --- | --- |
+| GET `/api/hpc/jobs`；POST `/api/hpc/jobs/{id}/cancel`、`/refresh` | 分页 `items/total/next_offset`；每项含 `workspace_id/workspace_name`、`study_id/study_name`、`run_id`、`job_id`、`type`（single 单次 / convergence 收敛 / batch 批量）、`status`、`queue_position/queue_position_basis`、`used_core_hours/budget_core_hours`、`started/finished`（UTC）、`cancellable`；收敛另含 `convergence_id/convergence_level/phase/workflow_budget_core_hours`。排队位置为 dg83 可见待调度作业的优先序，非预计开跑顺序；未知位置为 null。预检没有运行时 run_id 为 null；历史缺失身份或预算列入 missing_fields，不猜测。原 workspace/study/kind/core_hours/execution 字段保留兼容。GET 只读本地回执；refresh 查询原 Slurm 作业，不重新提交。跨对象目录属于 `/runs` 记录页，设置只保留连接配置。 |
+
 ## 版本过期与明确重算
 
 `GET /api/workspaces/{wid}/studies`及新增`GET /api/workspaces/{wid}/studies/{sid}`返回`latest_run_id`和`version_status`。`GET .../runs`及`GET .../runs/{rid}`在每条运行上返回同一结构。运行`status`仍表示执行状态；`freshness`保留current/historical/unknown兼容语义，版本过期也归historical；前端用`version_status.status == stale`显示“结果已过期 · 重算”。没有运行的研究为empty，不把失败或加载中改成过期。
@@ -94,7 +98,7 @@
 | GET `/api/agent/recipes` | `[{id,name,description,parameters}]`；parameters为所需参数的JSON Schema，供前端“/”菜单展示与填参；未给study_id时使用会话绑定研究 |
 | GET `/api/agent/sessions?workspace_id=` | 任务列表，按更新时间新到旧：绑定、状态/等待原因、首条提问作标题、未决方案数；不含消息正文与结果 |
 | POST `/api/agent/sessions` | `{workspace_id,study_id:null或UUID}` → `{id}`；校验工程与研究归属，记录固定修订及本机快速执行授权 |
-| POST `/api/agent/sessions/{id}/messages` | `{content}` → `text/event-stream`；每会话同时只处理一条消息，冲突409 |
+| POST `/api/agent/sessions/{id}/messages` | `{content,recipe?:{id,parameters}}` → `text/event-stream`；省略recipe沿用自由提问；每会话同时只处理一条消息，冲突409 |
 | GET `/api/agent/sessions/{id}` | 绑定、任务状态/等待原因、预算、消息、工具调用/结果摘要、方案、计划、步骤、按序审计事件 |
 | POST `/api/agent/proposals/{id}/approve` | 无正文；人工批准后普通保存，返回`{status:approved}`；修订/锁/封签/有效期冲突409中文原因 |
 | POST `/api/agent/proposals/{id}/reject` | 无正文；`{status:rejected}`，不改工程或研究；同决定重放幂等，反向决定409 |
@@ -106,6 +110,12 @@
 `project_digest({after?,limit?,case_after?})`返回本工程各研究最新保存运行：`data.studies[]`含`study_id/title/study_revision/run_state/latest_run`，run_state为`not_run/stale/failed/normal/running`；latest_run带方法版本与发行摘要、输入/输出摘要、headlines（实体、工况、SI及显示单位）、各口径允许电流、导体温度、温限余量、限制对象与最热导体。`cases[].input_fields`只来自冻结工况，含土壤热阻率、负荷与埋深；地下敷设的负z坐标投影为正埋深并保留`saved_z`和投影说明，地上敷设保留z坐标；不以当前工程冒充历史输入。完整性失败不提供量值，有限元未收敛只给诊断。整个工具结果UTF-8紧凑JSON不超过6KiB；`next_page`非空时以该对象参数继续配方分页，含研究游标和必要的工况分段游标，保留全部工况量值而不丢弃大研究。`next_cursor`保留研究分页兼容字段。结论汇总取得完整摘要后进入无工具解释请求，仅用户追问细节再读运行。未绑定研究的`run_list`直接返回此摘要，不再发STUDY_REQUIRED。
 
 `recipe_execute({recipe,parameters})`只编译有限的既有工具步骤：`conclusion_summary`→project_digest；`missing_inputs`→workspace_read、study_preflight；`proposal_comparison`→study_baseline、字段方案、study_preview；`sensitivity_advice`→workspace_read、sensitivity_inputs、project_digest。方案对比要求`scope:domain|parameters`及明确`changes`，可指定研究、模块、原运行和工况；自动选择当前最新正常保存运行，single使用唯一主工况、selection使用已保存推荐工况，扫描/批量须指定case_id。失败或过期原运行会停止后续步骤。所有步骤照常计入预算、保存计划和操作身份；绑定值仅来自同配方已成功步骤。`recipe.compiled`记录展开节点，`recipe.bound`记录来源节点、字段路径与解析后参数摘要。参数敏感性只整理已保存字段和封签约束，不计算敏感性或自动采样。
+
+前端“/”菜单选中配方时直接发送例如`{"content":"汇总各研究的结论与限制因素","recipe":{"id":"conclusion_summary","parameters":{}}}`。`id`为四个目录ID之一；`parameters`省略等同空对象，按GET `/recipes`对应条目的JSON Schema校验，方案对比仍须`scope/changes`。非法参数在开始消息或执行工具前返回422，`detail`含`code:RECIPE_PARAMETERS_INVALID/path:/recipe/parameters/具体字段/message`。宿主确定性展开步骤并自动续读结论分页，最后发一次无工具解释请求（`model.request.phase=recipe_answer`）；核验失败仍按原上限修正。`recipe.requested/recipe.compiled/recipe.finished`审计标明`source:human.message|host`；不会放宽正式运行、批准与超算权限。模型历史的`reasoning_content`仍原样回传，宿主生成的工具意图不伪造模型思考。
+
+自由提问默认累计6次只读工具后关闭下一请求的工具，也会在结论摘要已覆盖本工程研究时提前关闭：须从首个游标连续读完同一工程修订的所有页，单独的尾页不算完整。`CABLESIM_AGENT_MAX_READ_TOOL_CALLS`可配置正整数，只影响本条消息；失败读、复用读同样计数，显式宿主配方按既有总工具/步骤预算执行。`turn.read_policy`保存阈值和是否显式配方；`turn.answer_only`含`reason:recipe_complete|summary_covered|read_limit|baseline_unavailable/read_tool_calls/max_read_tool_calls/tools_allowed:false/remaining_page`，自由请求阶段为`answer_only`。同批意图超过读取上限时`plan.read_limit.skipped_node_ids`标明未下发节点，解释须说明未展开细节，不把它们称为已完成。
+
+`study_baseline`过期、历史、部分成功或无保存运行时返回error，不生成方案或预览；`diagnostics[].code=BASELINE_INVALID|BASELINE_REQUIRED`，`details`与`data.baseline`含`reasons:[{code,message,...源版本/修订}]`、`requested_run/latest_run/available_runs`（最近最多3个，仅身份、状态、方法与修订）、`actions:[{id,label,target,workspace_id,study_id,module,requires_human:true}]`和`stale_reference_allowed:false/proposal_executed:false/preview_executed:false`。运行摘要的`usable_as_baseline`仅表示运行级状态满足，扫描/批量仍须选成功主工况。常见原因包括`METHOD_VERSION_CHANGED/METHOD_UNAVAILABLE/MODEL_VERSION_CHANGED/INPUT_REVISION_CHANGED/STUDY_INPUT_CHANGED/PARTIAL_SUCCESS/HISTORICAL_BASELINE/SESSION_REVISION_MISMATCH/MODULE_MISMATCH`。动作`rerun_study`指导工作台先更新升级的方法/型号来源、核对工况，再人工重算保存；`new_session`指导重算后新建当前研究会话。任务等待`missing_input`，下一模型请求无工具，解释原因与下一步；解释仍失败时由宿主返回该可执行诊断并记录`answer.diagnostic`，不会只给“模型解释未通过核验”。本轮不允许把过期基准作参照试算。
 
 同条消息中完全相同的工具、参数与输入身份已返回错误时，宿主不再执行该动作；`tool.diagnostic_reused`引用原操作，后续返回DIAGNOSTIC_ALREADY_REPORTED并进入一次收尾。修改输入或进入新消息可重新检查。
 
@@ -122,7 +132,7 @@ SSE每个事件恰为`event: 类型`与`data: 单行JSON`，空行分隔；中�
 ```text
 message.delta    {text}
 tool.call        {id,tool,title,arguments}
-tool.result      {id,status:"ok"|"error",summary,next_actions}
+tool.result      {id,status:"ok"|"error",summary,next_actions,diagnostics?:[{code,message,path,recoverable,evidence_refs,details}]}
 proposal.created {id,title,changes:[{path,label,before,after,unit}],checks}
 error            {code,message}
 done             {usage:{prompt_tokens,completion_tokens}}

@@ -54,7 +54,7 @@ def make_router(harness):
             'content':{'text/event-stream':{'schema':{'type':'string'}}}}},
         openapi_extra={'x-sse-events':TypeAdapter(StreamEvent).json_schema()})
     def message(id:str,body:Message):
-        turn=harness.begin(id,body.content)
+        turn=harness.begin(id,body.content,body.recipe.model_dump(mode='json') if body.recipe else None)
         iterator=harness.stream(id,turn)
         return StreamingResponse(iterator,media_type='text/event-stream',
             headers={'Cache-Control':'no-store','X-Accel-Buffering':'no'},

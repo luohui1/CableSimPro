@@ -114,7 +114,7 @@ def host_tools():
             'run_id':TEXT,'case_id':TEXT,'capability':{'enum':['iec-thermal-field','iec-fem-comparison']},
             'parameters':{'type':'object','description':'按 plugin_inspect 封签参数契约填写 SI 值；原 IEC 参数由宿主绑定，不猜求解边界。'},'title':TEXT},['run_id'])),
         ('recipe_execute','执行工程配方','run','选择宿主配方并填参数；宿主展开有限工具步骤，每一步照常核验权限、预算并审计。',recipe_schema()),
-        ('study_baseline','读取试算对比原工况','read','读取当前最新保存运行，绑定快速预览原工况；扫描/批量须明确case_id。',object_schema({**STUDY,'run_id':TEXT,'case_id':TEXT})),
+        ('study_baseline','读取试算对比原工况','read','绑定当前正常保存运行；过期、历史或部分成功返回原因、最近运行与人工重算动作，不继续方案试算。扫描/批量须明确case_id。',object_schema({**STUDY,'run_id':TEXT,'case_id':TEXT})),
         ('sensitivity_inputs','读取敏感性研究约束','read','读取当前方法参数与封签范围；只供研究建议，不猜敏感性或自动求解。',object_schema(STUDY)),
         ('study_read','读取研究定义与工况','read','读取已保存研究的参数、驱动与工况身份。',object_schema({**STUDY,
             'run_id':TEXT,'case_id':TEXT,'input_paths':{'type':'array','maxItems':8,'items':{'type':'string'},'description':'按稳定字段路径读取保存输入；批量工况须明确case_id。'}})),

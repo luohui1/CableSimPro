@@ -24,6 +24,7 @@ class Limits:
     max_repair_attempts: int = 2
     lifetime_s: int = 1800
     model_timeout_s: int = 30
+    max_read_tool_calls: int = 6
 
     @classmethod
     def configured(cls):
@@ -73,8 +74,14 @@ class SessionSummary(StrictModel):
     pending_proposals: int
 
 
+class RecipeRequest(StrictModel):
+    id: Literal['conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice']
+    parameters: dict[str,JsonValue] = Field(default_factory=dict)
+
+
 class Message(StrictModel):
     content: str = Field(min_length=1,max_length=8000)
+    recipe: RecipeRequest | None = None
 
 
 class AgentStatus(StrictModel):
@@ -105,6 +112,7 @@ class Diagnostic(StrictModel):
     path: str | None = None
     recoverable: bool = False
     evidence_refs: list[dict[str,JsonValue]] = Field(default_factory=list)
+    details: dict[str,JsonValue] = Field(default_factory=dict)
 
 
 class ToolResult(StrictModel):
@@ -198,6 +206,7 @@ class ToolResultEvent(StrictModel):
     status: Literal['ok','error']
     summary: str
     next_actions: list[str]
+    diagnostics: list[Diagnostic] = Field(default_factory=list)
 
 
 class ProposalCreated(StrictModel):

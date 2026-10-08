@@ -75,8 +75,8 @@ def session(client,w,s=None):
     return response.json()['id']
 
 
-def send(client,sid,content='核对当前工程并说明下一步。'):
-    response=client.post(f'/api/agent/sessions/{sid}/messages',json={'content':content})
+def send(client,sid,content='核对当前工程并说明下一步。',recipe=None):
+    response=client.post(f'/api/agent/sessions/{sid}/messages',json={'content':content,**({'recipe':recipe} if recipe else {})})
     assert response.status_code==200,response.text
     assert response.headers['content-type'].startswith('text/event-stream')
     events=[]

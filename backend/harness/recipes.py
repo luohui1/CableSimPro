@@ -1,5 +1,8 @@
 """Reviewed finite engineering workflows. These carry no execution authority."""
 from copy import deepcopy
+from fastapi import HTTPException
+from jsonschema import Draft202012Validator
+from .context_builder import encoded
 
 
 def obj(properties, required=()):
@@ -17,7 +20,7 @@ CATALOG = [
      'parameters':obj(PAGE)},
     {'id':'missing_inputs','name':'检查缺项','description':'读取工程字段并预检指定研究；不自动补物性，正式或超算预检仍需人工。',
      'parameters':obj(STUDY)},
-    {'id':'proposal_comparison','name':'方案试算对比','description':'绑定原保存工况、生成字段级方案、快速预览；不保存、不批准、不正式运行。',
+    {'id':'proposal_comparison','name':'方案试算对比','description':'绑定当前正常保存工况、生成字段级方案、快速预览；过期或部分成功基准停止后续动作，指导工作台更新来源并人工重算。不保存、不批准、不正式运行。',
      'parameters':obj({**STUDY,'changes':CHANGES,'scope':{'enum':['domain','parameters']},
          'run_id':{'type':'string','maxLength':120},'case_id':{'type':'string','maxLength':120}}, ('changes','scope'))},
     {'id':'sensitivity_advice','name':'参数敏感性建议','description':'读取当前字段、方法参数范围与已有结论，提出研究建议；不猜采样范围或敏感性数值，不自动求解。',
@@ -27,6 +30,21 @@ CATALOG = [
 
 def recipes():
     return deepcopy(CATALOG)
+
+
+def validate_request(request):
+    try:encoded(request)
+    except (ValueError,TypeError):raise HTTPException(422,{'code':'RECIPE_PARAMETERS_INVALID','path':'/recipe/parameters','message':'配方参数须为有限数值和合法 JSON。'}) from None
+    row=next((row for row in CATALOG if row['id']==request['id']),None)
+    if row is None:raise HTTPException(422,{'code':'RECIPE_INVALID','path':'/recipe/id','message':'请选择已注册的工程配方。'})
+    errors=sorted(Draft202012Validator(row['parameters']).iter_errors(request['parameters']),key=lambda error:str(list(error.path)))
+    if errors:
+        error=errors[0]
+        path='/recipe/parameters'+''.join('/'+str(part) for part in error.absolute_path)
+        if error.validator=='required':path+='/'+next(key for key in error.validator_value if key not in error.instance)
+        raise HTTPException(422,{'code':'RECIPE_PARAMETERS_INVALID','path':path,
+            'message':'配方参数不符合 '+error.validator+' 约束；请按 /api/agent/recipes 中该配方的 parameters 填写。'})
+    return deepcopy(request)
 
 
 def recipe_schema():

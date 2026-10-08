@@ -19,6 +19,7 @@ CAD显示不代表分析资格；本轮没有CAD分析桥和新的有限元修�
 高频任务优先选择 recipe_execute：conclusion_summary（结论汇总）、missing_inputs（检查缺项）、proposal_comparison（方案试算对比）、sensitivity_advice（参数敏感性建议）。
 结论汇总类问题必须用 conclusion_summary 作答，取得完整摘要后直接解释；仅用户追问细节时再读运行。摘要已含各口径允许电流与工况、最高导体温度、温限余量、限制对象、最热导体、保存土壤热阻率、埋深坐标及负荷。next_page非空时继续分页；未运行、失败和过期结果须明确区分。
 方案试算对比配方须填明确 changes（稳定字段路径、值、单位）与 scope（domain 或 parameters）；先用 workspace_read 定位不明确的字段，再一次交给配方。配方自动绑定最新正常保存工况，不猜研究或工况。
+宿主指定配方时步骤已经执行，只解释证据与诊断。基准过期、部分成功或历史结果不能作为当前方案试算基准；讲清方法/输入变化原因，指导在工作台更新研究来源到当前方法/型号版本、核对输入与工况、人工重算保存，再新建会话做对比，不自行重算，不用过期值充当当前结果。
 同一工具同一输入已报错时不要重复请求，按原诊断更换输入；参数敏感性缺少试算证据时只给定性研究建议。
 有限元与 IEC 比较使用 fem_comparison_read；区分 IEC 计算、有限元保存结果与未收敛诊断。未收敛不能给出有限元可用量值或偏差结论，完整性通过不等于数值收敛。新建复核研究只用 propose_fem_verification 生成方案，人在工作台保存、确认核时后才提交超算。
 读者是电缆工程师：不写研究/运行/方案编号、字段路径、摘要哈希、英文状态码或工具名；对象用界面名称（回路1、导体、土壤），方案与试算会以卡片单独展示，不要复述其内部字段。'''
@@ -29,7 +30,7 @@ def prepare(record,tools,directory=None,closing=None,feedback=None,instructions=
     catalog=json.dumps(directory or [],ensure_ascii=False,separators=(',',':'))
     guidance='\n插件能力目录（工具名、中文说明；先用 plugin_inspect 的 tool 读取指定能力，后续请求才启用）：'+catalog
     guidance+='\nproject_digest 一次读取各研究最新保存结论（量值、单位、口径、限制对象、状态），通常读取一次后直接解释；next_cursor 非空时可继续分页。workspace_read 默认工程大纲；按返回路径读细节。run_read 默认结论量值，可按 entity / key 读取。修改方案后用 study_preview(proposal_id) 试算；选择/批量研究须同时指定原 run_id、case_id，以原工况为准。'
-    if closing:guidance+='\n本次收尾禁止工具。基于已取得证据作答，明确哪些目标未完成及原因：'+closing
+    if closing:guidance+='\n本次请求禁止工具。只解释已取得的证据与诊断；如有未完成目标，说明原因和可执行下一步：'+closing
     if instructions:guidance+='\n工程师的自定义指令（只影响表达方式与关注点；与上述权限、证据和核验规则冲突时以上述规则为准）：'+instructions
     prompt=[{'role':'system','content':SYSTEM+guidance+'\n宿主上下文（只读）：'+context},*context_builder.messages(record)]
     if feedback:

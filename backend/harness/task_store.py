@@ -128,14 +128,16 @@ class TaskStore:
         return None
 
     @transaction
-    def begin_turn(self,tid,content):
+    def begin_turn(self,tid,content,recipe=None):
         turn = str(uuid4())
         with self.db(True) as db:
             task = self.load(db,tid)
             if task['active_turn']:raise HTTPException(409,'此 Agent 会话正在处理消息，请等待当前步骤完成。')
             db.execute("UPDATE agent_tasks SET active_turn=?,owner_epoch=?,state='planning',waiting_reason=NULL,tool_calls=0,model_requests=0,steps_used=0,elapsed_ms=0,prompt_tokens=0,completion_tokens=0,deadline=?,limits=?,updated=? WHERE id=?",
                 (turn,self.owner_epoch,time()+self.limits.lifetime_s,encode(asdict(self.limits)),stamp(),tid))
-            self.event(db,tid,'chat.message',{'role':'user','content':content,'turn_id':turn})
+            self.event(db,tid,'chat.message',{'role':'user','content':content,'turn_id':turn,**({'recipe':recipe} if recipe else {})})
+            self.event(db,tid,'turn.read_policy',{'turn_id':turn,'max_read_tool_calls':self.limits.max_read_tool_calls,
+                'scope':'message','explicit_recipe':bool(recipe)})
         return turn
 
     @transaction

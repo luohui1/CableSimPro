@@ -4,6 +4,7 @@ import re
 import sqlite3
 from dataclasses import replace
 from time import perf_counter,time
+from uuid import uuid4
 
 from fastapi import HTTPException
 from pydantic import TypeAdapter
@@ -20,7 +21,7 @@ from .planner import prepare
 from .proposals import Proposals
 from .providers import OpenAICompatibleProvider
 from .recipe_compiler import compile_calls
-from .recipes import recipe_schema
+from .recipes import recipe_schema,validate_request
 from .security import redact
 from .task_store import TaskStore
 from .tool_broker import ToolBroker,failure
@@ -74,9 +75,10 @@ class Harness:
         if persist:self.tasks.emit(tid,kind,data)
         return 'event: '+kind+'\ndata: '+json.dumps(data,ensure_ascii=False,separators=(',',':'),allow_nan=False)+'\n\n'
 
-    def begin(self,tid,content):
+    def begin(self,tid,content,recipe=None):
         self.tasks.record(tid)
-        return self.tasks.begin_turn(tid,redact(content))
+        recipe=validate_request(recipe) if recipe is not None else None
+        return self.tasks.begin_turn(tid,redact(content),redact(recipe) if recipe else None)
 
     def stream(self,tid,turn):
         normal=False
@@ -86,6 +88,12 @@ class Harness:
             recovery=reconcile(self.research,self.tasks,tid,persist=True)
             if recovery['unknown']:
                 raise HTTPException(409,{'code':'UNKNOWN_OPERATION','message':'原工具步骤结果未知；请先对账，未重新执行或提交作业。'})
+            record=self.tasks.record(tid);snapshot=record
+            requested=next(event['data'].get('recipe') for event in reversed(record['events'])
+                if event['type']=='chat.message' and event['data'].get('turn_id')==turn and event['data'].get('role')=='user')
+            if requested:
+                waiting=yield from self.run_recipe(tid,turn,requested,record)
+                if waiting:state,reason='waiting',waiting
             while True:
                 record=self.tasks.record(tid)
                 snapshot=record
@@ -93,21 +101,32 @@ class Harness:
                 user=next(message for message in reversed(record['messages']) if message['role']=='user')
                 summary=bool(re.search(r'汇总|总结|概览|conclusion_summary',user['content']) and re.search(r'研究|结论|载流量|conclusion_summary',user['content'])
                     and not re.search(r'改成|修改|试算|细节|具体输入',user['content']))
-                current=[step for step in record['steps'] if step['created']>=next(event['created'] for event in reversed(record['events'])
-                    if event['type']=='chat.message' and event['data'].get('role')=='user')]
-                digest=next((step['result']['data'] for step in reversed(current) if step['tool']=='project_digest'
-                    and step.get('result') and step['result']['status']=='ok'),None)
-                answer_only=summary and digest is not None and digest.get('next_page') is None
+                current=self.turn_steps(record,turn)
+                digest=next((step['result']['data'] for step in reversed(current) if step.get('result')
+                    and step['result']['status']=='ok' and 'studies' in step['result']['data'] and 'next_page' in step['result']['data']),None)
+                covered=summary and self.digest_complete(current)
+                reads=self.read_count(record,turn,tools)
+                baseline=self.baseline_problem(record,turn)
+                answer_reason=('宿主已执行所选配方。只解释已取得的结果与诊断，不再调用工具。' if requested else
+                    '试算对比基准不可用。说明诊断原因和工作台重算步骤；方案与试算未执行，不引用历史结果作当前结论。' if baseline else
+                    '结论汇总摘要已覆盖本工程研究。直接解释保存证据；运行输入细节尚未展开，可供用户追问。' if covered else
+                    '只读工具已达到本条消息的软上限。按现有证据回答，明确尚未展开的对象或细节，不继续读取。' if reads>=record['budget']['limits']['max_read_tool_calls'] else None)
+                answer_only=answer_reason is not None
+                if baseline:state,reason='waiting','missing_input'
+                if answer_only:self.tasks.emit(tid,'turn.answer_only',{'turn_id':turn,
+                    'reason':'recipe_complete' if requested else 'baseline_unavailable' if baseline else 'summary_covered' if covered else 'read_limit',
+                    'read_tool_calls':reads,'max_read_tool_calls':record['budget']['limits']['max_read_tool_calls'],
+                    'tools_allowed':False,'remaining_page':digest.get('next_page') if digest else None})
                 shown={name:tool for name,tool in tools.items() if name in ('recipe_execute','project_digest')} if summary else tools
                 if summary:
                     schema=recipe_schema();schema['properties']['recipe']['enum']=['conclusion_summary'];schema['oneOf']=schema['oneOf'][:1]
                     shown['recipe_execute']=replace(shown['recipe_execute'],parameters=schema)
-                prompt,definitions=prepare(record,shown,self.registry.directory() if not summary else [],
-                    closing='结论汇总证据已完整，直接回答各研究结论与限制因素。不得继续读取运行、研究或工程。' if answer_only else None,
+                prompt,definitions=prepare(record,shown,self.registry.directory() if not summary and not answer_only else [],
+                    closing=answer_reason,
                     instructions=self.settings.instructions())
                 configured,model=self.model.status()
                 if not configured:raise ModelError('LLM_NOT_CONFIGURED','模型未配置；请在宿主环境中配置模型地址、模型名与密钥。')
-                metrics=request_summary(model,prompt,definitions)
+                metrics={**request_summary(model,prompt,definitions),**({'phase':'recipe_answer' if requested else 'answer_only'} if answer_only else {})}
                 with self.research.store.db() as db:task=self.tasks.load(db,tid)
                 closing=self.tasks.closing_reason(task,metrics['prompt_bytes'],metrics['definition_bytes'])
                 if closing:
@@ -135,79 +154,14 @@ class Harness:
                 if not reply.tool_calls:
                     yield from self.answer_loop(tid,turn,reply.text,reply.reasoning)
                     break
-                if answer_only:raise HTTPException(422,{'code':'SUMMARY_ALREADY_COMPLETE','message':'摘要已完整；本次只需解释保存证据，不再读取细节。'})
+                if answer_only:raise HTTPException(422,{'code':'TOOLS_NOT_ALLOWED','message':'本次仅解释已取得证据与诊断，不能继续调用工具。'})
                 plan=compile_calls(reply.tool_calls,shown,record['workspace_id'],record['workspace_revision'])
-                with self.research.store.db() as db:task=self.tasks.load(db,tid)
                 for node in plan['nodes']:
                     if summary and node['tool'] not in shown:
                         node['preparation_error']={'code':'SUMMARY_RECIPE_REQUIRED','message':'结论汇总只需 conclusion_summary；请直接读取完整摘要。'}
-                    try:node['input_identity']=self.broker.identity(task,node,tools.get(node['tool']))
-                    except HTTPException as error:
-                        detail=error.detail
-                        node['preparation_error']={'code':detail.get('code','INPUT_IDENTITY_INVALID') if isinstance(detail,dict) else 'INPUT_IDENTITY_INVALID',
-                            'message':redact(str(detail))}
-                revision=self.tasks.add_plan(tid,plan)
-                recipes={node['input_identity'].get('recipe') for node in plan['nodes']} - {None}
-                if recipes:self.tasks.emit(tid,'recipe.compiled',{'turn_id':turn,'revision':revision,
-                    'recipes':sorted(recipes),'nodes':[{'id':node['id'],'tool':node['tool'],
-                        'recipe':node['input_identity'].get('recipe'),'bindings':node.get('bindings',{})} for node in plan['nodes']],
-                    'engineering_approval':False})
-                self.tasks.emit(tid,'chat.message',{'role':'assistant','content':None,'turn_id':turn,**({'reasoning_content':reply.reasoning} if reply.reasoning else {}),
-                    'tool_calls':[{'id':node['id'],'name':node['tool'],'arguments':node['arguments']} for node in plan['nodes']]})
-                for node in plan['nodes']:
-                    tool=tools.get(node['tool'])
-                    if node['input_identity'].get('recipe'):
-                        outcomes={step['node_id']:step for step in self.tasks.record(tid)['steps']}
-                        dependencies=[outcomes.get(identifier) for identifier in node['depends_on']]
-                        if any(step and step['state']!='succeeded' for step in dependencies):
-                            node['preparation_error']={'code':'RECIPE_DEPENDENCY_FAILED',
-                                'message':'配方前一步未成功，后续动作未执行；请先处理原诊断。'}
-                        elif node.get('bindings'):
-                            for field,binding in node['bindings'].items():
-                                source=outcomes.get(binding['node_id'])
-                                if not source or not source.get('result') or source['state']!='succeeded':
-                                    node['preparation_error']={'code':'RECIPE_DEPENDENCY_FAILED','message':'配方输入证据未取得，后续动作未执行。'}
-                                    break
-                                node['arguments'][field]=value_at(source['result'],binding['path'])
-                            node['arguments_digest']=fingerprint(node['arguments'])
-                            node['input_identity']=self.broker.identity(task,node,tool)
-                            self.tasks.emit(tid,'recipe.bound',{'turn_id':turn,'node_id':node['id'],
-                                'bindings':node['bindings'],'arguments_digest':node['arguments_digest']})
-                    # An identical failed action cannot learn anything by executing
-                    # again. Retain its original diagnostic once and close this turn.
-                    prior=self.previous_error(tid,node)
-                    reused=self.previous_read(tid,node) if not prior and not node.get('preparation_error') else None
-                    operation=self.tasks.issue(tid,turn,revision,node)
-                    title=tool.title if tool else '未注册工具'
-                    yield self.emit(tid,'tool.call',{'id':node['id'],'tool':node['tool'],'title':title,'arguments':node['arguments']})
-                    self.tasks.running(tid,operation)
-                    started=perf_counter()
-                    result=(failure('DIAGNOSTIC_ALREADY_REPORTED','同一工具与输入的诊断已给出，未重复执行；请处理原缺项。',
-                                actions=['读取原诊断并修正输入；结论汇总可直接使用 project_digest。']) if prior
-                            else failure(**node['preparation_error']) if node.get('preparation_error')
-                            else ToolResult.model_validate(reused['result']) if reused
-                            else self.broker.execute(task,node,tool))
-                    if prior:self.tasks.emit(tid,'tool.diagnostic_reused',{'turn_id':turn,'node_id':node['id'],
-                        'source_operation_id':prior['operation_id']})
-                    if reused:self.tasks.emit(tid,'tool.result_reused',{'turn_id':turn,'node_id':node['id'],
-                        'source_operation_id':reused['operation_id'],'source_run_id':reused['run_id'],'executed':False})
-                    result=redact(result.model_dump(mode='json'))
-                    self.tasks.finish_step(tid,operation,result,(perf_counter()-started)*1000)
-                    # Retain bounded evidence even if the next record allocation fails.
-                    snapshot['steps'].append({'result':compress_result(result)})
-                    yield self.emit(tid,'tool.result',{'id':node['id'],'status':result['status'],
-                        'summary':result['summary'],'next_actions':result['next_actions']})
-                    if result['data'].get('proposal'):
-                        yield self.emit(tid,'proposal.created',result['data']['proposal'],persist=False)
-                    codes={item['code'] for item in result['diagnostics']}
-                    if 'DIAGNOSTIC_ALREADY_REPORTED' in codes:
-                        raise HTTPException(422,{'code':'DIAGNOSTIC_ALREADY_REPORTED','message':'重复动作已停止；请按原诊断修正输入。'})
-                    if 'HUMAN_EXECUTION_REQUIRED' in codes:
-                        state,reason='waiting','scope_confirmation'
-                        break
-                    if result['status']=='error' and self.repeated_error(tid,node,result)>=task['limits']['max_repair_attempts']:
-                        raise HTTPException(422,{'code':'REPAIR_LIMIT_EXCEEDED','message':'同一错误已达到修正次数上限，请人工补充输入或能力；没有无限重试。'})
-                if state=='waiting':
+                waiting=yield from self.execute_plan(tid,turn,plan,tools,record,reasoning=reply.reasoning,soft_limit=True)
+                if waiting=='scope_confirmation':
+                    state,reason='waiting',waiting
                     yield from self.closing(tid,turn,'所选能力需要人工确认正式或超算运行，尚未执行。')
                     break
             record=self.tasks.record(tid)
@@ -237,9 +191,10 @@ class Harness:
             try:self.tasks.emit(tid,'harness.error',issue)
             except (MemoryError,sqlite3.OperationalError):pass
             yield self.emit(tid,'error',{'code':'HARNESS_RESOURCE_PRESSURE','message':'运行层暂时资源不足；保留已取得证据与操作记录，未重放计算。'},persist=False)
-            text,refs=evidence_summary(snapshot) if snapshot else ('以下为工具证据摘要，模型解释未通过核验。\n本次尚未取得可用工具证据；未推算工程结果。',[])
+            baseline=self.baseline_problem(snapshot,turn) if snapshot else None
+            text,refs=(baseline['summary']+'\n下一步：'+'；'.join(baseline['next_actions']),[]) if baseline else evidence_summary(snapshot) if snapshot else ('以下为工具证据摘要，模型解释未通过核验。\n本次尚未取得可用工具证据；未推算工程结果。',[])
             try:
-                self.tasks.emit(tid,'answer.fallback',{'turn_id':turn,'sources':refs,'model_explanation_verified':False,'reason':issue})
+                self.tasks.emit(tid,'answer.diagnostic' if baseline else 'answer.fallback',{'turn_id':turn,'sources':refs,'model_explanation_verified':False,'reason':issue})
                 self.tasks.emit(tid,'chat.message',{'role':'assistant','content':text,'turn_id':turn})
             except (MemoryError,sqlite3.OperationalError):pass
             for offset in range(0,len(text),64):yield self.emit(tid,'message.delta',{'text':text[offset:offset+64]},persist=False)
@@ -259,21 +214,146 @@ class Harness:
         usage={name:record['budget'][name] if record else 0 for name in ('prompt_tokens','completion_tokens')}
         yield self.emit(tid,'done',{'usage':usage},persist=False)
 
+    @staticmethod
+    def digest_complete(steps):
+        cursor=None;identity=None;studies=set();complete=False
+        for step in steps:
+            result=step.get('result') or {};data=result.get('data') or {}
+            if result.get('status')!='ok' or 'studies' not in data or 'next_page' not in data:continue
+            args=step.get('arguments') or {}
+            position=(args.get('after',0),args.get('case_after',0))
+            current=(data.get('workspace_revision'),data.get('total_studies'))
+            if position==(0,0):cursor=(0,0);identity=current;studies=set();complete=False
+            if position!=cursor or current!=identity:continue
+            studies.update(item['study_id'] for item in data['studies'])
+            page=data['next_page']
+            cursor=(page.get('after',0),page.get('case_after',0)) if page else None
+            complete=page is None and len(studies)==data.get('total_studies')
+        return complete
+
+    @staticmethod
+    def turn_steps(record,turn):
+        start=next(i for i in range(len(record['events'])-1,-1,-1) if record['events'][i]['type']=='chat.message'
+            and record['events'][i]['data'].get('turn_id')==turn and record['events'][i]['data'].get('role')=='user')
+        end=next((i for i in range(start+1,len(record['events'])) if record['events'][i]['type']=='chat.message'
+            and record['events'][i]['data'].get('role')=='user'),len(record['events']))
+        operations={event['data']['operation_id'] for event in record['events'][start+1:end] if event['type']=='tool.intent'}
+        return [step for step in record['steps'] if step.get('operation_id') in operations or step.get('turn_id')==turn]
+
+    def read_count(self,record,turn,tools):
+        return sum(tools[step['tool']].kind=='read' for step in self.turn_steps(record,turn) if step['tool'] in tools)
+
+    def baseline_problem(self,record,turn):
+        return next((step['result'] for step in reversed(self.turn_steps(record,turn)) if step.get('result')
+            and any(row['code'] in ('BASELINE_INVALID','BASELINE_REQUIRED','BASELINE_NOT_FOUND','BASELINE_CASE_INVALID')
+                for row in step['result']['diagnostics'])),None)
+
+    def run_recipe(self,tid,turn,request,record):
+        """User-selected finite steps run before any model request, with normal authority."""
+        self.tasks.emit(tid,'recipe.requested',{'turn_id':turn,**request,'source':'human.message','engineering_approval':False})
+        arguments={'recipe':request['id'],'parameters':request['parameters']}
+        pages=set();waiting=None
+        while True:
+            tools=self.registry.visible(self.tasks.record(tid))
+            plan=compile_calls([{'id':'host-recipe-'+str(uuid4()),'name':'recipe_execute','arguments':arguments}],
+                tools,record['workspace_id'],record['workspace_revision'])
+            waiting=yield from self.execute_plan(tid,turn,plan,tools,record,source='host')
+            current=self.tasks.record(tid)
+            if request['id']!='conclusion_summary' or waiting:break
+            result=current['steps'][-1].get('result')
+            next_page=result['data'].get('next_page') if result and result['status']=='ok' else None
+            if not next_page:break
+            marker=fingerprint(next_page)
+            if marker in pages:
+                self.tasks.emit(tid,'recipe.pagination_stopped',{'turn_id':turn,'next_page':next_page,'reason':'cursor_not_advanced'})
+                break
+            pages.add(marker);arguments={'recipe':request['id'],'parameters':next_page}
+        self.tasks.emit(tid,'recipe.finished',{'turn_id':turn,'id':request['id'],'source':'host','tools_allowed_next':False,
+            'status':'needs_action' if waiting or any((step.get('result') or {}).get('status')=='error' for step in self.turn_steps(current,turn)) else 'completed'})
+        return waiting
+
+    def execute_plan(self,tid,turn,plan,tools,snapshot,*,reasoning='',source='model',soft_limit=False):
+        with self.tasks.db() as db:task=self.tasks.load(db,tid)
+        for node in plan['nodes']:
+            try:node['input_identity']=self.broker.identity(task,node,tools.get(node['tool']))
+            except HTTPException as error:
+                detail=error.detail
+                node['preparation_error']={'code':detail.get('code','INPUT_IDENTITY_INVALID') if isinstance(detail,dict) else 'INPUT_IDENTITY_INVALID',
+                    'message':redact(str(detail))}
+        revision=self.tasks.add_plan(tid,plan)
+        recipes={node['input_identity'].get('recipe') for node in plan['nodes']} - {None}
+        if recipes:self.tasks.emit(tid,'recipe.compiled',{'turn_id':turn,'revision':revision,'source':source,
+            'recipes':sorted(recipes),'nodes':[{'id':node['id'],'tool':node['tool'],
+                'recipe':node['input_identity'].get('recipe'),'bindings':node.get('bindings',{})} for node in plan['nodes']],
+            'engineering_approval':False})
+        self.tasks.emit(tid,'chat.message',{'role':'assistant','content':None,'turn_id':turn,**({'reasoning_content':reasoning} if reasoning else {}),
+            'tool_calls':[{'id':node['id'],'name':node['tool'],'arguments':node['arguments']} for node in plan['nodes']]})
+        for index,node in enumerate(plan['nodes']):
+            if soft_limit and self.read_count(self.tasks.record(tid),turn,tools)>=task['limits']['max_read_tool_calls']:
+                self.tasks.emit(tid,'plan.read_limit',{'turn_id':turn,'revision':revision,'executed':False,
+                    'skipped_node_ids':[row['id'] for row in plan['nodes'][index:]]})
+                break
+            tool=tools.get(node['tool'])
+            if node['input_identity'].get('recipe'):
+                outcomes={step['node_id']:step for step in self.tasks.record(tid)['steps']}
+                dependencies=[outcomes.get(identifier) for identifier in node['depends_on']]
+                if any(step and step['state']!='succeeded' for step in dependencies):
+                    node['preparation_error']={'code':'RECIPE_DEPENDENCY_FAILED',
+                        'message':'配方前一步未成功，后续动作未执行；请先处理原诊断。'}
+                elif node.get('bindings'):
+                    for field,binding in node['bindings'].items():
+                        item=outcomes.get(binding['node_id'])
+                        if not item or not item.get('result') or item['state']!='succeeded':
+                            node['preparation_error']={'code':'RECIPE_DEPENDENCY_FAILED','message':'配方输入证据未取得，后续动作未执行。'}
+                            break
+                        node['arguments'][field]=value_at(item['result'],binding['path'])
+                    node['arguments_digest']=fingerprint(node['arguments'])
+                    node['input_identity']=self.broker.identity(task,node,tool)
+                    self.tasks.emit(tid,'recipe.bound',{'turn_id':turn,'node_id':node['id'],
+                        'bindings':node['bindings'],'arguments_digest':node['arguments_digest']})
+            prior=self.previous_error(tid,node)
+            reused=self.previous_read(tid,node) if not prior and not node.get('preparation_error') else None
+            operation=self.tasks.issue(tid,turn,revision,node)
+            yield self.emit(tid,'tool.call',{'id':node['id'],'tool':node['tool'],
+                'title':tool.title if tool else '未注册工具','arguments':node['arguments']})
+            self.tasks.running(tid,operation);started=perf_counter()
+            result=(failure('DIAGNOSTIC_ALREADY_REPORTED','同一工具与输入的诊断已给出，未重复执行；请处理原缺项。',
+                        actions=['读取原诊断并修正输入；结论汇总可直接使用 project_digest。']) if prior
+                else failure(**node['preparation_error']) if node.get('preparation_error')
+                else ToolResult.model_validate(reused['result']) if reused else self.broker.execute(task,node,tool))
+            if prior:self.tasks.emit(tid,'tool.diagnostic_reused',{'turn_id':turn,'node_id':node['id'],'source_operation_id':prior['operation_id']})
+            if reused:self.tasks.emit(tid,'tool.result_reused',{'turn_id':turn,'node_id':node['id'],
+                'source_operation_id':reused['operation_id'],'source_run_id':reused['run_id'],'executed':False})
+            result=redact(result.model_dump(mode='json'));self.tasks.finish_step(tid,operation,result,(perf_counter()-started)*1000)
+            snapshot['steps'].append({'result':compress_result(result),'operation_id':operation,'turn_id':turn,
+                'node_id':node['id'],'tool':node['tool'],'state':'succeeded' if result['status']=='ok' else 'failed'})
+            yield self.emit(tid,'tool.result',{'id':node['id'],'status':result['status'],'summary':result['summary'],
+                'next_actions':result['next_actions'],**({'diagnostics':result['diagnostics']} if result['diagnostics'] else {})})
+            if result['data'].get('proposal'):yield self.emit(tid,'proposal.created',result['data']['proposal'],persist=False)
+            codes={row['code'] for row in result['diagnostics']}
+            if 'DIAGNOSTIC_ALREADY_REPORTED' in codes:raise HTTPException(422,{'code':'DIAGNOSTIC_ALREADY_REPORTED','message':'重复动作已停止；请按原诊断修正输入。'})
+            if 'HUMAN_EXECUTION_REQUIRED' in codes:return 'scope_confirmation'
+            if result['status']=='error' and self.repeated_error(tid,node,result)>=task['limits']['max_repair_attempts']:
+                raise HTTPException(422,{'code':'REPAIR_LIMIT_EXCEEDED','message':'同一错误已达到修正次数上限，请人工补充输入或能力；没有无限重试。'})
+
     def respond(self,tid,turn,text,*,safe=False,phase='answer',attempt=0,suffix='',reasoning=''):
         record=self.tasks.record(tid)
         observations=[step['result'] for step in record['steps'] if step.get('result')]
-        began=next(event['created'] for event in record['events'] if event['type']=='chat.message' and event['data'].get('turn_id')==turn and event['data'].get('role')=='user')
-        current=[step['result'] for step in record['steps'] if step.get('result') and step['created']>=began]
+        current=[step['result'] for step in self.turn_steps(record,turn) if step.get('result')]
+        baseline=self.baseline_problem(record,turn)
+        if baseline:observations=current  # Earlier previews cannot prove a new comparison that was stopped.
         text=redact(text).strip() or '未取得可用解释，请根据工具诊断补充输入；当前请求尚未完成。'
         if not safe:
             proof=[]
-            try:text=grounded_text(text,observations,current=current,proposals=record['proposals'],
+            try:text=grounded_text(text,observations,current=current,proposals=[] if baseline else record['proposals'],
                 users=[message['content'] for message in record['messages'] if message['role']=='user'],proof=proof)
             except HTTPException as error:
                 self.tasks.emit(tid,'answer.rejected',redact({'turn_id':turn,'phase':phase,'attempt':attempt,
                     'draft':text,'issues':error.detail['issues']}))
                 raise
             self.tasks.emit(tid,'answer.accepted',{'turn_id':turn,'phase':phase,'attempt':attempt,'matches':proof})
+        if baseline and not ('工作台' in text and '重算' in text):
+            text+='\n'+baseline['summary']+'\n下一步：'+'；'.join(baseline['next_actions'])
         text+=suffix
         self.tasks.emit(tid,'chat.message',{'role':'assistant','content':text,'turn_id':turn,**({'reasoning_content':reasoning} if reasoning else {})})
         for offset in range(0,len(text),64):yield self.emit(tid,'message.delta',{'text':text[offset:offset+64]})
@@ -314,6 +394,13 @@ class Harness:
 
     def fallback(self,tid,turn):
         record=self.tasks.record(tid)
+        baseline=self.baseline_problem(record,turn)
+        if baseline:
+            text=baseline['summary']+'\n下一步：'+'；'.join(baseline['next_actions'])
+            self.tasks.emit(tid,'answer.diagnostic',{'turn_id':turn,'model_explanation_verified':False,
+                'code':baseline['diagnostics'][0]['code'],'details':baseline['diagnostics'][0]['details']})
+            yield from self.respond(tid,turn,text,safe=True)
+            return
         text,refs=evidence_summary(record)
         self.tasks.emit(tid,'answer.fallback',{'turn_id':turn,'sources':refs,'model_explanation_verified':False})
         yield from self.respond(tid,turn,text,safe=True)

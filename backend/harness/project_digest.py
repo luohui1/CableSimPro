@@ -4,7 +4,7 @@ from copy import deepcopy
 from fastapi import HTTPException
 
 from .context_builder import encoded, RESULT_BYTES
-from .contracts import ToolResult
+from .contracts import ToolResult,Diagnostic
 from .evidence import run_points
 
 
@@ -138,6 +138,34 @@ def project_digest(research, task, args):
     return ToolResult(status=result.status, summary=result.summary, data=data)
 
 
+def invalid_baseline(research,task,sid,run,reasons,module=None):
+    """Actionable metadata, never promote old/partial quantities into a baseline."""
+    def brief(value):
+        return {key:value.get(key) for key in ('id','study','status','freshness','integrity')} | {
+            'method':(value.get('snapshot') or {}).get('definition',{}).get('method'),
+            'workspace_revision':(value.get('snapshot') or {}).get('workspace_revision'),
+            'usable_as_baseline':value.get('status')=='succeeded' and value.get('freshness')=='current' and value.get('integrity')=='verified'
+                and (value.get('snapshot') or {}).get('workspace_revision')==task['workspace_revision']
+                and (value.get('snapshot') or {}).get('module')==module}
+    with research.store.db() as db:
+        ids=[row[0] for row in db.execute('SELECT id FROM study_runs WHERE workspace=? AND study=? ORDER BY sequence DESC LIMIT 3',
+            (task['workspace_id'],sid))]
+    recent=[];cache={}
+    for rid in ids:
+        candidate=run if run and run['id']==rid else research.get_run(task['workspace_id'],rid,cache)
+        recent.append(brief(candidate))
+    actions=[{'id':'rerun_study','label':'在工作台打开该研究；若方法或型号升级，先更新研究来源到当前版本，核对输入与工况后人工重算并保存正常运行。',
+        'workspace_id':task['workspace_id'],'study_id':sid,'module':module,'target':'workbench','requires_human':True},
+        {'id':'new_session','label':'重算完成后新建绑定当前研究的 Agent 会话，再请求方案试算对比。',
+        'workspace_id':task['workspace_id'],'study_id':sid,'target':'agent','requires_human':True}]
+    details={'reasons':reasons,'requested_run':brief(run) if run else None,'latest_run':recent[0] if recent else None,
+        'available_runs':recent,'actions':actions,'stale_reference_allowed':False,'proposal_executed':False,'preview_executed':False}
+    message='试算基准不可用：'+'；'.join(row['message'] for row in reasons)+'。需要先在工作台重算；本次方案和试算未执行。'
+    return ToolResult(status='error',summary=message,data={'baseline':details},
+        diagnostics=[Diagnostic(code='BASELINE_INVALID' if run else 'BASELINE_REQUIRED',message=message,path='/run_id',recoverable=True,details=details)],
+        next_actions=[action['label'] for action in actions])
+
+
 def study_baseline(research, task, args):
     """Bind comparison to one current saved case before creating any proposal."""
     sid = args.get('study_id') or task['study_id']
@@ -147,24 +175,44 @@ def study_baseline(research, task, args):
         raise HTTPException(422, {'code':'SCOPE_VIOLATION','message':'会话绑定另一研究。','path':'/study_id'})
     rid = args.get('run_id')
     with research.store.db() as db:
-        research.definition(db, task['workspace_id'], sid)
+        study=research.definition(db, task['workspace_id'], sid)
+        current,_=research.store.load(db,task['workspace_id'])
         if not rid:
             row = db.execute('SELECT id FROM study_runs WHERE workspace=? AND study=? ORDER BY sequence DESC LIMIT 1',
                 (task['workspace_id'],sid)).fetchone()
             rid = row['id'] if row else None
     if not rid:
-        raise HTTPException(422, {'code':'BASELINE_REQUIRED','message':'此研究尚无保存运行，无法比较；请先人工运行。','path':'/run_id'})
+        return invalid_baseline(research,task,sid,None,[{'code':'NO_SAVED_RUN','message':'此研究尚无保存运行'}],args.get('module'))
     try:
         run = research.get_run(task['workspace_id'],rid)
     except HTTPException as error:
         if error.status_code!=404:raise
         raise HTTPException(404, {'code':'BASELINE_NOT_FOUND','message':'原运行不存在或不属于本工程；请从 project_digest 选择保存运行。','path':'/run_id'}) from None
-    if run['study']!=sid or run['freshness']!='current' or run['integrity']!='verified' or run['status']!='succeeded':
-        raise HTTPException(409, {'code':'BASELINE_INVALID','message':'请选择本研究完整、正常且当前的保存运行。','path':'/run_id'})
-    if run['snapshot']['workspace_revision']!=task['workspace_revision'] or run['snapshot'].get('module')!=args.get('module'):
-        raise HTTPException(409, {'code':'BASELINE_INVALID','message':'原运行与会话修订或模块不一致。','path':'/run_id'})
-    if task['study_id']==sid and run['snapshot']['study_revision']!=task['study_revision']:
-        raise HTTPException(409, {'code':'BASELINE_INVALID','message':'研究已变化，请使用对应保存修订的会话。','path':'/study_id'})
+    if run['study']!=sid:raise HTTPException(422,{'code':'SCOPE_VIOLATION','message':'保存运行不属于所选研究。','path':'/run_id'})
+    reasons=[{key:value for key,value in row.items() if key in ('kind','code','message','id','from_version','to_version','from_digest','to_digest')}
+        for row in run.get('version_status',{}).get('reasons',[])]
+    def reason(code,message,**details):reasons.append({'code':code,'message':message,**details})
+    snapshot=run.get('snapshot') or {}
+    if run['integrity']!='verified':reason('INTEGRITY_FAILED','保存运行完整性未通过，不能作为比较证据')
+    if run['status']!='succeeded':reason('PARTIAL_SUCCESS' if run['status']=='partial' else 'RUN_NOT_SUCCEEDED',
+        '保存运行仅部分成功，不能作为完整基准' if run['status']=='partial' else '保存运行未正常成功完成',status=run['status'])
+    if snapshot.get('workspace_revision')!=current['revision']:
+        reason('INPUT_REVISION_CHANGED','工程输入修订已变化',saved_revision=snapshot.get('workspace_revision'),current_revision=current['revision'])
+    try:selected=research.module_definition(study['definition'],args.get('module'))
+    except HTTPException:selected=None;reason('MODULE_UNAVAILABLE','所选研究模块已不可用')
+    if selected is not None and snapshot.get('definition'):
+        old=snapshot['definition']
+        if selected['method']!=old['method'] and not any(row['code'].startswith('METHOD_') for row in reasons):
+            reason('METHOD_CONFIGURATION_CHANGED','研究的方法或插件配置已变化',saved_method=old['method'],current_method=selected['method'])
+        if any(selected.get(key)!=old.get(key) for key in ('parameters','driver','input_source','method_input','crosschecks')):
+            reason('STUDY_INPUT_CHANGED','研究输入、方法参数或工况配置已变化')
+    if snapshot.get('workspace_revision')!=task['workspace_revision']:
+        reason('SESSION_REVISION_MISMATCH','保存基准与会话绑定的工程修订不一致')
+    if snapshot.get('module')!=args.get('module'):reason('MODULE_MISMATCH','保存基准属于另一研究模块')
+    if task['study_id']==sid and snapshot.get('study_revision')!=task['study_revision']:
+        reason('SESSION_STUDY_REVISION_MISMATCH','保存基准与会话绑定的研究修订不一致')
+    if run['freshness']!='current' and not reasons:reason('HISTORICAL_BASELINE','保存运行已过期或属于历史版本')
+    if reasons:return invalid_baseline(research,task,sid,run,reasons,args.get('module'))
     cid = args.get('case_id')
     if cid is None:
         kind = run['snapshot']['definition']['driver']['kind']

@@ -1,6 +1,7 @@
 """Bounded saved evidence, deterministic recipe steps and convergent diagnostics."""
 from copy import deepcopy
 import json
+from threading import current_thread
 from time import perf_counter
 
 import pytest
@@ -32,7 +33,12 @@ def test_digest_pages_saved_quantities_and_cold_catalog_avoids_input_contracts(c
     started=perf_counter();status=client.get('/api/agent/status');status_ms=(perf_counter()-started)*1000
     assert status.status_code==200 and status.json()['tools']==69
     import backend.kernel.input_contracts as contracts
-    monkeypatch.setattr(contracts,'contracts',lambda *a,**k:pytest.fail('catalog built input contracts'))
+    original_contracts=contracts.contracts
+    def forbid_request_contracts(*args,**kwargs):
+        # Lifespan warm-up is independent of the HTTP tool directory request.
+        if current_thread().name=='study-read-warmup':return original_contracts(*args,**kwargs)
+        pytest.fail('catalog built input contracts')
+    monkeypatch.setattr(contracts,'contracts',forbid_request_contracts)
     # A held contract lock must not delay /tools, even its first request.
     research=harness.research
     research.contract_read_lock.acquire()
@@ -41,7 +47,10 @@ def test_digest_pages_saved_quantities_and_cold_catalog_avoids_input_contracts(c
     finally:research.contract_read_lock.release()
     assert tools.status_code==200 and len(tools.json())==69
     registry=research.registry
-    monkeypatch.setattr(research,'registry',lambda *a,**k:pytest.fail('warm directory rediscovered plugins'))
+    def forbid_request_rediscovery(*args,**kwargs):
+        if current_thread().name=='study-read-warmup':return registry(*args,**kwargs)
+        pytest.fail('warm directory rediscovered plugins')
+    monkeypatch.setattr(research,'registry',forbid_request_rediscovery)
     started=perf_counter();assert client.get('/api/agent/tools').json()==tools.json();warm_ms=(perf_counter()-started)*1000
     monkeypatch.setattr(research,'registry',registry)
     monkeypatch.setattr(harness.registry,'tools',original)
