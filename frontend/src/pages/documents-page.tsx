@@ -14,7 +14,7 @@ import {
 import { CatalogShell, usePageTheme } from "@/components/catalog-shell";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { EmptyState, ErrorState, LoadingState } from "@/components/states";
+import { EmptyState, ErrorState, InlineEmpty, LoadingState } from "@/components/states";
 import { StatusMark } from "@/components/status-mark";
 import { displayName, displayText, displayUnit } from "@/lib/display-names";
 import { downloadJson } from "@/lib/download";
@@ -135,11 +135,7 @@ export function DocumentsPage() {
               }
             />
           ) : !catalog.data?.length ? (
-            <EmptyState
-              art="report"
-              title="尚无厂家资料"
-              description="上传 PDF 原件，离线提取后逐项核对。"
-            />
+            <InlineEmpty title="尚无厂家资料" />
           ) : (
             <table className="document-catalog">
               <thead>
