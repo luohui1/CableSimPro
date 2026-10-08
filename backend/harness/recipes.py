@@ -7,13 +7,13 @@ def obj(properties, required=()):
 
 
 STUDY = {'study_id':{'type':['string','null'],'maxLength':120}, 'module':{'type':['string','null'],'maxLength':120}}
-PAGE = {'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':20}}
+PAGE = {'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':20},'case_after':{'type':'integer','minimum':0}}
 CHANGES = {'type':'array','minItems':1,'maxItems':12,'items':obj({
     'path':{'type':'string','minLength':1,'maxLength':500},
     'value':{'type':['number','string','boolean','null']},
     'unit':{'type':['string','null'],'maxLength':40}}, ('path','value'))}
 CATALOG = [
-    {'id':'conclusion_summary','name':'结论汇总','description':'一次读取各研究最新保存结论、限制对象与状态；超过容量分页。',
+    {'id':'conclusion_summary','name':'结论汇总','description':'结论汇总问题必须用此配方：一次读取各口径电流、工况、热点、温限余量、限制对象、土壤/坐标/负荷与状态；next_page分页。取得完整摘要后直接解释，仅用户追问细节再读运行。',
      'parameters':obj(PAGE)},
     {'id':'missing_inputs','name':'检查缺项','description':'读取工程字段并预检指定研究；不自动补物性，正式或超算预检仍需人工。',
      'parameters':obj(STUDY)},

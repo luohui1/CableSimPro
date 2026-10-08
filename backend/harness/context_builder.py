@@ -1,5 +1,6 @@
 """Bounded model context from fixed object identities and saved tool observations."""
 import json
+from hashlib import sha256
 
 from backend.kernel.workspace import fingerprint
 
@@ -10,16 +11,30 @@ def encoded(value):
     return json.dumps(value,ensure_ascii=False,separators=(',',':'),allow_nan=False).encode()
 
 
+def fits(value,maximum):
+    size=0
+    for chunk in json.JSONEncoder(ensure_ascii=False,separators=(',',':'),allow_nan=False).iterencode(value):
+        size+=len(chunk.encode())
+        if size>maximum:return False
+    return True
+
+
+def content_digest(value):
+    digest=sha256()
+    for chunk in json.JSONEncoder(sort_keys=True,ensure_ascii=False,separators=(',',':'),allow_nan=False).iterencode(value):digest.update(chunk.encode())
+    return digest.hexdigest()
+
+
 def compress_result(value,maximum=RESULT_BYTES):
     """Project a model observation; durable steps always retain the original JSON."""
-    if len(encoded(value))<=maximum:return value
+    if fits(value,maximum):return value
     result={key:value[key] for key in ('status','summary','execution_ref') if key in value}
     result.update(truncated=True,reason='已截断，可按 paths / key 继续读取',
-        content_digest=fingerprint(value),read_hint={'tool':'run_read' if (value.get('execution_ref') or {}).get('run_id') else 'workspace_read',
+        content_digest=content_digest(value),read_hint={'tool':'run_read' if (value.get('execution_ref') or {}).get('run_id') else 'workspace_read',
         'filters':['paths','entity','key','case_id','schema_path']})
     remaining=maximum-len(encoded(result))-128
     def take(item,budget):
-        if len(encoded(item))<=budget:return item
+        if fits(item,budget):return item
         if isinstance(item,(dict,list)):
             output={} if isinstance(item,dict) else []
             priority=('proposal','enabled_tools','headlines','run_id','study_id','input_digest','status','preview','persisted',

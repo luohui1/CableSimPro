@@ -1,5 +1,7 @@
 """Bounded native conversation loop; the model never owns a business write path."""
 import json
+import re
+import sqlite3
 from dataclasses import replace
 from time import perf_counter,time
 
@@ -9,7 +11,7 @@ from backend.kernel.workspace import stamp
 from backend.domain.guards import value_at
 from backend.kernel.workspace import fingerprint
 
-from .contracts import StreamEvent
+from .contracts import StreamEvent,ToolResult
 from .context_builder import request_summary,compress_result
 from .evidence import grounded_text,reconcile,evidence_summary
 from .model_port import ModelError
@@ -18,10 +20,12 @@ from .planner import prepare
 from .proposals import Proposals
 from .providers import OpenAICompatibleProvider
 from .recipe_compiler import compile_calls
+from .recipes import recipe_schema
 from .security import redact
 from .task_store import TaskStore
 from .tool_broker import ToolBroker,failure
 from .tool_registry import ToolRegistry
+from .resilience import category
 
 
 class Harness:
@@ -77,14 +81,30 @@ class Harness:
     def stream(self,tid,turn):
         normal=False
         state,reason='completed',None
+        snapshot=None
         try:
             recovery=reconcile(self.research,self.tasks,tid,persist=True)
             if recovery['unknown']:
                 raise HTTPException(409,{'code':'UNKNOWN_OPERATION','message':'原工具步骤结果未知；请先对账，未重新执行或提交作业。'})
             while True:
                 record=self.tasks.record(tid)
+                snapshot=record
                 tools=self.registry.visible(record)
-                prompt,definitions=prepare(record,tools,self.registry.directory(),instructions=self.settings.instructions())
+                user=next(message for message in reversed(record['messages']) if message['role']=='user')
+                summary=bool(re.search(r'汇总|总结|概览|conclusion_summary',user['content']) and re.search(r'研究|结论|载流量|conclusion_summary',user['content'])
+                    and not re.search(r'改成|修改|试算|细节|具体输入',user['content']))
+                current=[step for step in record['steps'] if step['created']>=next(event['created'] for event in reversed(record['events'])
+                    if event['type']=='chat.message' and event['data'].get('role')=='user')]
+                digest=next((step['result']['data'] for step in reversed(current) if step['tool']=='project_digest'
+                    and step.get('result') and step['result']['status']=='ok'),None)
+                answer_only=summary and digest is not None and digest.get('next_page') is None
+                shown={name:tool for name,tool in tools.items() if name in ('recipe_execute','project_digest')} if summary else tools
+                if summary:
+                    schema=recipe_schema();schema['properties']['recipe']['enum']=['conclusion_summary'];schema['oneOf']=schema['oneOf'][:1]
+                    shown['recipe_execute']=replace(shown['recipe_execute'],parameters=schema)
+                prompt,definitions=prepare(record,shown,self.registry.directory() if not summary else [],
+                    closing='结论汇总证据已完整，直接回答各研究结论与限制因素。不得继续读取运行、研究或工程。' if answer_only else None,
+                    instructions=self.settings.instructions())
                 configured,model=self.model.status()
                 if not configured:raise ModelError('LLM_NOT_CONFIGURED','模型未配置；请在宿主环境中配置模型地址、模型名与密钥。')
                 metrics=request_summary(model,prompt,definitions)
@@ -100,6 +120,11 @@ class Harness:
                 started=perf_counter()
                 try:
                     reply=self.model.reply(prompt,definitions,timeout)
+                except (MemoryError,sqlite3.OperationalError):
+                    try:self.tasks.model_finished(tid,turn,(perf_counter()-started)*1000,{},
+                        {'status':'error','code':'HARNESS_RESOURCE_PRESSURE','usage_available':False})
+                    except (MemoryError,sqlite3.OperationalError):pass
+                    raise
                 except ModelError as error:
                     self.tasks.model_finished(tid,turn,(perf_counter()-started)*1000,{},
                         {'status':'error','code':error.code,'usage_available':False})
@@ -110,9 +135,12 @@ class Harness:
                 if not reply.tool_calls:
                     yield from self.answer_loop(tid,turn,reply.text,reply.reasoning)
                     break
-                plan=compile_calls(reply.tool_calls,tools,record['workspace_id'],record['workspace_revision'])
+                if answer_only:raise HTTPException(422,{'code':'SUMMARY_ALREADY_COMPLETE','message':'摘要已完整；本次只需解释保存证据，不再读取细节。'})
+                plan=compile_calls(reply.tool_calls,shown,record['workspace_id'],record['workspace_revision'])
                 with self.research.store.db() as db:task=self.tasks.load(db,tid)
                 for node in plan['nodes']:
+                    if summary and node['tool'] not in shown:
+                        node['preparation_error']={'code':'SUMMARY_RECIPE_REQUIRED','message':'结论汇总只需 conclusion_summary；请直接读取完整摘要。'}
                     try:node['input_identity']=self.broker.identity(task,node,tools.get(node['tool']))
                     except HTTPException as error:
                         detail=error.detail
@@ -148,6 +176,7 @@ class Harness:
                     # An identical failed action cannot learn anything by executing
                     # again. Retain its original diagnostic once and close this turn.
                     prior=self.previous_error(tid,node)
+                    reused=self.previous_read(tid,node) if not prior and not node.get('preparation_error') else None
                     operation=self.tasks.issue(tid,turn,revision,node)
                     title=tool.title if tool else '未注册工具'
                     yield self.emit(tid,'tool.call',{'id':node['id'],'tool':node['tool'],'title':title,'arguments':node['arguments']})
@@ -156,11 +185,16 @@ class Harness:
                     result=(failure('DIAGNOSTIC_ALREADY_REPORTED','同一工具与输入的诊断已给出，未重复执行；请处理原缺项。',
                                 actions=['读取原诊断并修正输入；结论汇总可直接使用 project_digest。']) if prior
                             else failure(**node['preparation_error']) if node.get('preparation_error')
+                            else ToolResult.model_validate(reused['result']) if reused
                             else self.broker.execute(task,node,tool))
                     if prior:self.tasks.emit(tid,'tool.diagnostic_reused',{'turn_id':turn,'node_id':node['id'],
                         'source_operation_id':prior['operation_id']})
+                    if reused:self.tasks.emit(tid,'tool.result_reused',{'turn_id':turn,'node_id':node['id'],
+                        'source_operation_id':reused['operation_id'],'source_run_id':reused['run_id'],'executed':False})
                     result=redact(result.model_dump(mode='json'))
                     self.tasks.finish_step(tid,operation,result,(perf_counter()-started)*1000)
+                    # Retain bounded evidence even if the next record allocation fails.
+                    snapshot['steps'].append({'result':compress_result(result)})
                     yield self.emit(tid,'tool.result',{'id':node['id'],'status':result['status'],
                         'summary':result['summary'],'next_actions':result['next_actions']})
                     if result['data'].get('proposal'):
@@ -197,6 +231,19 @@ class Harness:
             elif any(step.get('result') for step in self.tasks.record(tid)['steps']):
                 yield from self.fallback(tid,turn)
             normal=True
+        except (MemoryError,sqlite3.OperationalError) as error:
+            state,reason='blocked','capability'
+            issue={'exception_type':type(error).__name__,'category':category(error),'degraded':True,'automatic_execution':False}
+            try:self.tasks.emit(tid,'harness.error',issue)
+            except (MemoryError,sqlite3.OperationalError):pass
+            yield self.emit(tid,'error',{'code':'HARNESS_RESOURCE_PRESSURE','message':'运行层暂时资源不足；保留已取得证据与操作记录，未重放计算。'},persist=False)
+            text,refs=evidence_summary(snapshot) if snapshot else ('以下为工具证据摘要，模型解释未通过核验。\n本次尚未取得可用工具证据；未推算工程结果。',[])
+            try:
+                self.tasks.emit(tid,'answer.fallback',{'turn_id':turn,'sources':refs,'model_explanation_verified':False,'reason':issue})
+                self.tasks.emit(tid,'chat.message',{'role':'assistant','content':text,'turn_id':turn})
+            except (MemoryError,sqlite3.OperationalError):pass
+            for offset in range(0,len(text),64):yield self.emit(tid,'message.delta',{'text':text[offset:offset+64]},persist=False)
+            normal=True
         except Exception as error:
             state,reason='failed',None
             self.tasks.emit(tid,'harness.error',{'exception_type':type(error).__name__,'details_recorded':False})
@@ -205,9 +252,12 @@ class Harness:
             normal=True
         finally:
             # Disconnecting the stream does not assert that a solver/job was cancelled.
-            self.tasks.finish_turn(tid,turn,state if normal else 'waiting',reason if normal else 'capability')
-        record=self.tasks.record(tid)
-        yield self.emit(tid,'done',{'usage':{name:record['budget'][name] for name in ('prompt_tokens','completion_tokens')}})
+            try:self.tasks.finish_turn(tid,turn,state if normal else 'waiting',reason if normal else 'capability')
+            except (MemoryError,sqlite3.OperationalError):pass  # Durable running intent remains unknown, never reissued.
+        try:record=self.tasks.record(tid)
+        except (MemoryError,sqlite3.OperationalError):record=snapshot
+        usage={name:record['budget'][name] if record else 0 for name in ('prompt_tokens','completion_tokens')}
+        yield self.emit(tid,'done',{'usage':usage},persist=False)
 
     def respond(self,tid,turn,text,*,safe=False,phase='answer',attempt=0,suffix='',reasoning=''):
         record=self.tasks.record(tid)
@@ -308,6 +358,14 @@ class Harness:
         return next((step for step in reversed(record['steps']) if step.get('result')
             and step['result']['status']=='error' and step['created']>=began
             and step['tool']==node['tool'] and step['arguments_digest']==node['arguments_digest']
+            and physical(step['input_identity'])==physical(node['input_identity'])),None)
+
+    def previous_read(self,tid,node):
+        if node['tool']!='run_read':return None
+        view=lambda args:{key:args[key] for key in ('run_id','case_id','entity','key','input_paths') if args.get(key) is not None}
+        physical=lambda identity:{key:value for key,value in identity.items() if key not in ('recipe','recipe_version','recipe_step')}
+        return next((step for step in reversed(self.tasks.record(tid)['steps']) if step['tool']=='run_read'
+            and step['state']=='succeeded' and step.get('result') and view(step['arguments'])==view(node['arguments'])
             and physical(step['input_identity'])==physical(node['input_identity'])),None)
 
     def close_stream(self,tid,turn,iterator):

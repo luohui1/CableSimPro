@@ -101,13 +101,19 @@
 | POST `/api/agent/sessions/{id}/reconcile` | 无正文；查询原Run，返回`{resolved,unknown,reissued:false}`；不重新执行未知预览或提交作业 |
 | GET `/api/agent/contract` | 生成的事件、节点和实际模型工具参数JSON Schema；SSE事件schema也写入OpenAPI的x-sse-events |
 
-当前16个宿主工具为workspace_list/read、study_list/read、run_list/read、plugin_inspect、cable_model_read、propose_domain_changes、propose_method_parameters、study_preflight、study_preview、project_digest、study_baseline、sensitivity_inputs、recipe_execute。另从51个已安装能力生成工具，总计67。插件工具未绑定研究时只生成新建研究方案，批准后只保存Study；绑定研究时必须与该研究的准确方法一致，只有preview且非远程能力可本机试算。原生或HPC预检需要人工执行，不通过LLM触发远程作业。
+当前18个宿主工具为workspace_list/read、study_list/read、run_list/read、plugin_inspect、cable_model_read、propose_domain_changes、propose_method_parameters、study_preflight、study_preview、project_digest、study_baseline、sensitivity_inputs、recipe_execute、fem_comparison_read、propose_fem_verification。另从51个已安装能力生成工具，总计69。插件工具未绑定研究时只生成新建研究方案，批准后只保存Study；绑定研究时必须与该研究的准确方法一致，只有preview且非远程能力可本机试算。原生或HPC预检需要人工执行，不通过LLM触发远程作业。
 
-`project_digest({after?,limit?})`返回本工程各研究最新保存运行：`data.studies[]`含`study_id/title/study_revision/run_state/latest_run`，run_state为`not_run/stale/failed/normal/running`；latest_run带运行身份、方法版本与发行摘要、输入/输出摘要、headlines（实体、工况、SI及显示单位）、插件限制对象及原工况证据。完整性失败时不提供量值。整个工具结果UTF-8紧凑JSON不超过6KiB；`next_cursor`非空表示尚有研究，继续用`after=next_cursor`分页；单研究过大时`details_omitted=true`并指向`run_read(study_id,run_id)`。未绑定研究的`run_list`直接返回此摘要，不再发STUDY_REQUIRED。
+`project_digest({after?,limit?,case_after?})`返回本工程各研究最新保存运行：`data.studies[]`含`study_id/title/study_revision/run_state/latest_run`，run_state为`not_run/stale/failed/normal/running`；latest_run带方法版本与发行摘要、输入/输出摘要、headlines（实体、工况、SI及显示单位）、各口径允许电流、导体温度、温限余量、限制对象与最热导体。`cases[].input_fields`只来自冻结工况，含土壤热阻率、负荷与埋深；地下敷设的负z坐标投影为正埋深并保留`saved_z`和投影说明，地上敷设保留z坐标；不以当前工程冒充历史输入。完整性失败不提供量值，有限元未收敛只给诊断。整个工具结果UTF-8紧凑JSON不超过6KiB；`next_page`非空时以该对象参数继续配方分页，含研究游标和必要的工况分段游标，保留全部工况量值而不丢弃大研究。`next_cursor`保留研究分页兼容字段。结论汇总取得完整摘要后进入无工具解释请求，仅用户追问细节再读运行。未绑定研究的`run_list`直接返回此摘要，不再发STUDY_REQUIRED。
 
 `recipe_execute({recipe,parameters})`只编译有限的既有工具步骤：`conclusion_summary`→project_digest；`missing_inputs`→workspace_read、study_preflight；`proposal_comparison`→study_baseline、字段方案、study_preview；`sensitivity_advice`→workspace_read、sensitivity_inputs、project_digest。方案对比要求`scope:domain|parameters`及明确`changes`，可指定研究、模块、原运行和工况；自动选择当前最新正常保存运行，single使用唯一主工况、selection使用已保存推荐工况，扫描/批量须指定case_id。失败或过期原运行会停止后续步骤。所有步骤照常计入预算、保存计划和操作身份；绑定值仅来自同配方已成功步骤。`recipe.compiled`记录展开节点，`recipe.bound`记录来源节点、字段路径与解析后参数摘要。参数敏感性只整理已保存字段和封签约束，不计算敏感性或自动采样。
 
 同条消息中完全相同的工具、参数与输入身份已返回错误时，宿主不再执行该动作；`tool.diagnostic_reused`引用原操作，后续返回DIAGNOSTIC_ALREADY_REPORTED并进入一次收尾。修改输入或进入新消息可重新检查。
+
+`run_read/study_read(run_id)`可由本工程保存运行反查研究；显式研究或会话绑定冲突仍拒绝。`workspace_read`与输入字段读取路径无效时返回PATH_NOT_FOUND，列可用顶层路径、最接近路径和下一步。会话内重复`run_read`同运行、同视图及相同工程/研究版本时引用上次成功结果，`tool.result_reused`记录原操作；不会重读运行或重算。
+
+`fem_comparison_read({run_id?,iec_run_id?,case_id?})`读取保存的IEC/FEM对照工件，或比较输入及IEC参数完全一致的两次保存运行。量值带方法、实体、工况、单位和运行/工件摘要；仅既有收敛检查通过时提供有限元偏差，未收敛保留诊断，工程批准仍为false。温度相对差用K，算术差值不是新的求解结果。省略运行时读取最近有限元运行并搜索最多20个IEC参考档；未匹配明示缺项。`propose_fem_verification({run_id,case_id?,capability?,parameters?,title?})`为当前保存工况生成新建研究方案，方法为封签的iec-thermal-field或iec-fem-comparison，IEC参数由宿主绑定。边界、网格和来源须明确，缺项定位字段；不从CAD显示范围推断求解边界。人保存研究后仍须预检、确认核时并在工作台提交超算；Agent不提交、不求解、不自动批准。
+
+任务事务和只读工具对sqlite_busy最多尝试3次（短等待），读工具重试记录`runtime.retry`异常类别；方案/试算不自动重放。MemoryError及其他sqlite运行异常降级为已取得的有界工具证据摘要，`harness.error`记录异常类别，无可用证据时明示缺项。持久资源不足时SSE仍给出诊断与摘要；无法写入的事件不声称已保存，未完成意图继续由既有对账流程处理。GET会话在一致数据库快照内分块输出JSON，不构造整份记录；大工具原件仍在steps/results，`tool.observation`副本限6KiB并给出原步骤引用与内容摘要。
 
 SSE每个事件恰为`event: 类型`与`data: 单行JSON`，空行分隔；中文JSON保留字符，字符串内换行转义。事件data字段：
 
@@ -134,8 +140,8 @@ data: {"usage":{"prompt_tokens":120,"completion_tokens":20}}
 
 批准后内部温度以K保存；长度变更以m显示和保存，截面按声明显示mm²、存m²。方法参数单位来自封签元数据，不按后缀猜。修改只读来源、批准自己、调用任意命令、隐藏正式执行均被broker拒绝。常见流错误为LLM_NOT_CONFIGURED、LLM_AUTH_FAILED、LLM_TIMEOUT、BUDGET_EXCEEDED、UNKNOWN_OPERATION、REPAIR_LIMIT_EXCEEDED、UNGROUNDED_NUMBER/QUANTITY；工具错误先形成结构化公共结果回给模型，保留字段定位和下一步。
 
-模型默认只收到宿主工具；插件目录只含工具名和中文说明。`plugin_inspect(tool)`或指定`plugin_id/capability`成功后，会话`enabled_tools`列出后续启用的插件能力，完整注册表仍由`/tools`提供。`workspace_read(paths)`读取大纲或指定字段；`run_read`支持`entity/key/case_id`；`study_preview`支持`proposal_id`，选择/批量工况还须原`run_id/case_id`。完整结果保留在步骤与审计，进入模型的单项结果最多6KiB，超限明确标注并给出继续读取提示。
+模型默认只收到宿主工具；插件目录只含工具名和中文说明。`plugin_inspect(tool)`或指定`plugin_id/capability`成功后，会话`enabled_tools`列出后续启用的插件能力，完整注册表仍由`/tools`提供。`workspace_read(paths)`读取大纲或指定字段；`run_read`支持`entity/key/case_id`；`study_preview`支持`proposal_id`，选择/批量工况还须原`run_id/case_id`。完整结果保留在步骤，审计副本与进入模型的单项结果最多6KiB，超限明确标注并给出继续读取提示。
 
-每次请求审计增加`turn_id/request_number/phase/definition_bytes/prompt_bytes`，`model.result`记录对应实际`usage`；`phase=closing`为一次无工具收尾。预算规则统一见[模块设计 §14.3](../design/MODULE_DESIGN.md#143-权限保存与预算)。会话预算`scope=message`，done报告本条消息已报告token，`session_totals`保留会话合计；提供方缺失用量时`usage_complete=false`。SSE工具卡片事件字段保持不变，完整结果在`results/steps`和`tool.observation`审计中读取。未知预览仍保持unknown，不重新执行。
+每次请求审计增加`turn_id/request_number/phase/definition_bytes/prompt_bytes`，`model.result`记录对应实际`usage`；`phase=closing`为一次无工具收尾。预算规则统一见[模块设计 §14.3](../design/MODULE_DESIGN.md#143-权限保存与预算)。会话预算`scope=message`，done报告本条消息已报告token，`session_totals`保留会话合计；提供方缺失用量时`usage_complete=false`。SSE工具卡片事件字段保持不变，完整结果在`results/steps`读取，`tool.observation`为有界审计副本。未知预览仍保持unknown，不重新执行。
 
 验证见`tests/test_harness.py`，使用本地OpenAI兼容假HTTP服务，不请求真实模型；真实提供方冒烟仅在设置CABLESIM_LLM_API_KEY时启用，交由真实环境联调。CAD分析资格、有限元自动修复及通用HPC授权执行不在本轮实现范围。

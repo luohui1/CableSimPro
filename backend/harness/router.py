@@ -1,5 +1,6 @@
 """Frontend-compatible human session, streaming and proposal decision endpoints."""
 from uuid import UUID
+from itertools import chain
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -42,7 +43,11 @@ def make_router(harness):
     def sessions(workspace_id:UUID|None=None):return harness.tasks.sessions(str(workspace_id) if workspace_id else None)
 
     @router.get('/sessions/{id}',response_model=SessionRecord)
-    def session(id:str):return harness.tasks.record(id)
+    def session(id:str):
+        iterator=harness.tasks.stream_record(id)
+        first=next(iterator)  # Resolve 404 before sending headers.
+        return StreamingResponse(chain((first,),iterator),media_type='application/json',
+            headers={'Cache-Control':'no-store'},background=BackgroundTask(iterator.close))
 
     @router.post('/sessions/{id}/messages',response_class=StreamingResponse,
         responses={200:{'description':'SSE events, each event/data JSON pair separated by a blank line.',

@@ -108,12 +108,16 @@ def host_tools():
             'paths':{'type':'array','maxItems':8,'items':{'type':'string'},'description':'可选稳定领域路径；省略返回有界工程概览。'}})),
         ('study_list','列出研究','read','读取本工程的研究名称、方法与状态。',object_schema()),
         ('project_digest','汇总工程研究结论','read','优先用于结论汇总：一次读取各研究最新保存运行的量值、单位、口径、限制对象和状态；按next_cursor分页。',object_schema({
-            'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':20}})),
+            'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':20},'case_after':{'type':'integer','minimum':0}})),
+        ('fem_comparison_read','读取有限元与 IEC 对照','read','读取已保存且完整性通过的对照工件或同输入、同 IEC 参数的两次运行；未收敛只给诊断，不给偏差结论。',object_schema({'run_id':TEXT,'iec_run_id':TEXT,'case_id':TEXT})),
+        ('propose_fem_verification','提出新建有限元核验研究','propose','绑定原保存工况，只生成研究方案；边界、网格和来源必须明确。人工保存、预检与确认核时后才提交超算。',object_schema({
+            'run_id':TEXT,'case_id':TEXT,'capability':{'enum':['iec-thermal-field','iec-fem-comparison']},
+            'parameters':{'type':'object','description':'按 plugin_inspect 封签参数契约填写 SI 值；原 IEC 参数由宿主绑定，不猜求解边界。'},'title':TEXT},['run_id'])),
         ('recipe_execute','执行工程配方','run','选择宿主配方并填参数；宿主展开有限工具步骤，每一步照常核验权限、预算并审计。',recipe_schema()),
         ('study_baseline','读取试算对比原工况','read','读取当前最新保存运行，绑定快速预览原工况；扫描/批量须明确case_id。',object_schema({**STUDY,'run_id':TEXT,'case_id':TEXT})),
         ('sensitivity_inputs','读取敏感性研究约束','read','读取当前方法参数与封签范围；只供研究建议，不猜敏感性或自动求解。',object_schema(STUDY)),
         ('study_read','读取研究定义与工况','read','读取已保存研究的参数、驱动与工况身份。',object_schema({**STUDY,
-            'case_id':TEXT,'input_paths':{'type':'array','maxItems':8,'items':{'type':'string'},'description':'按稳定字段路径读取保存输入；批量工况须明确case_id。'}})),
+            'run_id':TEXT,'case_id':TEXT,'input_paths':{'type':'array','maxItems':8,'items':{'type':'string'},'description':'按稳定字段路径读取保存输入；批量工况须明确case_id。'}})),
         ('run_list','读取运行摘要','read','有study_id时读取研究保存运行；未选研究时直接返回工程最新结论摘要，无需重试。',object_schema({**STUDY,
             'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':10}})),
         ('run_read','读取运行结果要点','read','只读指定运行的量值、来源与分项证据；不读完整场数组。',object_schema({**STUDY,

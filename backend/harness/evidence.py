@@ -18,14 +18,22 @@ def run_points(research,run,case_id=None,*,entity=None,key=None):
         preferred=recommended_case(run)
         if preferred:selected=[case for case in selected if case['case_id']==preferred]
     cases=[];refs=[]
+    family=run['snapshot']['definition']['method'].get('plugin_id')
+    fem=family=='cablesim.simulation'
+    numerical=run.get('convergence')
     conclusion_keys={'ampacity','conductor_temperature','temperature_margin','x-cablesim.emergency-current',
         'thermal_resistance.external','thermal_resistance.insulation','thermal_resistance.oversheath','losses.total'}
     for case in selected:
+        comparison=case.get('artifacts',{}).get('x-cablesim.iec-fem-comparison')
+        usable=not fem or (numerical or {}).get('status')=='converged' or (
+            isinstance(comparison,dict) and comparison.get('valid') is True and
+            run.get('artifact_status',{}).get(case['case_id'],{}).get('x-cablesim.iec-fem-comparison',{}).get('status')=='verified')
         quantities=[value for value in case.get('results',[]) if (entity is None or value.get('entity')==entity)
-            and (value.get('key')==key if key else value.get('key') in conclusion_keys)] if case['status']=='succeeded' else []
+            and (value.get('key')==key if key else value.get('key') in conclusion_keys)] if case['status']=='succeeded' and usable else []
         quantities.sort(key=lambda row:(0 if row.get('key')=='ampacity' else 1 if row.get('key')=='conductor_temperature' else 2))
         factors=[]
         for kind,artifact in case.get('artifacts',{}).items():
+            if not usable:continue
             if not isinstance(artifact,dict):continue
             source={'run_id':run['id'],'case_id':case['case_id'],'artifact_type':kind,'sha256':case.get('artifact_digests',{}).get(kind)}
             operating=artifact.get('operating') or {}
@@ -38,14 +46,19 @@ def run_points(research,run,case_id=None,*,entity=None,key=None):
                         'value':goal['margin'],'unit':goal['unit'],'entity':goal.get('entity'),'condition':goal.get('condition'),'source':source})
         cases.append({'case_id':case['case_id'],'status':case['status'],
             'results':quantities,'factors':factors,'limitations':[] if factors else ['未取得插件明确输出的限制对象或温限余量；未推算。'],
-            'error':case.get('error'),'warnings':case.get('warnings',[])})
+            'error':case.get('error'),'warnings':case.get('warnings',[]),
+            **({'limitations':['有限元未通过数值收敛；只保留诊断，不作为可用结论。']} if not usable else {})})
         for kind,digest in case.get('artifact_digests',{}).items():
             refs.append({'run_id':run['id'],'case_id':case['case_id'],'artifact_type':kind,'sha256':digest,
                 'verification':run.get('artifact_status',{}).get(case['case_id'],{}).get(kind,{}).get('status','unknown')})
     headline=project(run['snapshot'],output,run.get('artifact_status')) if run['status'] in ('succeeded','partial') else []
     headline=[{**value,'display_rounded':round(value['display_value'],1)} for value in headline]
     headline=[value for value in headline if (entity is None or value.get('entity')==entity) and (key is None or value.get('key')==key)]
-    numerical=run.get('convergence')
+    if fem and (numerical or {}).get('status')!='converged' and not any(
+        isinstance(case.get('artifacts',{}).get('x-cablesim.iec-fem-comparison'),dict) and
+        case['artifacts']['x-cablesim.iec-fem-comparison'].get('valid') is True and
+        run.get('artifact_status',{}).get(case['case_id'],{}).get('x-cablesim.iec-fem-comparison',{}).get('status')=='verified'
+        for case in selected):headline=[]
     return {'run_id':run['id'],'study_id':run['study'],'status':run['status'],'freshness':run['freshness'],
         'input_digest':run['input_digest'],'output_digest':run.get('output_digest'),'method':run['snapshot']['definition']['method'],
         'headlines':headline,'cases':cases,'assessment':[value for value in output.get('assessment',[]) if any(case['case_id']==value.get('case_id') for case in selected)],
@@ -53,6 +66,7 @@ def run_points(research,run,case_id=None,*,entity=None,key=None):
             'numerical':numerical if numerical is not None else {'status':'unknown','message':'未取得独立数值收敛检查。'},
             'cad_analysis_qualification':{'status':'unknown','message':'本轮未接入CAD分析资格桥。'},
             'engineering_approval':False},'artifact_refs':refs,'projection':'conclusions',
+        'method_family':'finite_element' if fem else 'iec' if family=='cablesim.iec60287' else 'plugin',
         'read_hint':'可用 case_id / entity / key 继续读取；完整结果保留在运行记录。'}
 
 

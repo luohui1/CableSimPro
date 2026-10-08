@@ -30,7 +30,7 @@ def test_digest_pages_saved_quantities_and_cold_catalog_avoids_input_contracts(c
     original=harness.registry.tools
     monkeypatch.setattr(harness.registry,'tools',lambda:pytest.fail('status built tool specs'))
     started=perf_counter();status=client.get('/api/agent/status');status_ms=(perf_counter()-started)*1000
-    assert status.status_code==200 and status.json()['tools']==67
+    assert status.status_code==200 and status.json()['tools']==69
     import backend.kernel.input_contracts as contracts
     monkeypatch.setattr(contracts,'contracts',lambda *a,**k:pytest.fail('catalog built input contracts'))
     # A held contract lock must not delay /tools, even its first request.
@@ -39,7 +39,7 @@ def test_digest_pages_saved_quantities_and_cold_catalog_avoids_input_contracts(c
     try:
         started=perf_counter();tools=client.get('/api/agent/tools');cold_ms=(perf_counter()-started)*1000
     finally:research.contract_read_lock.release()
-    assert tools.status_code==200 and len(tools.json())==67
+    assert tools.status_code==200 and len(tools.json())==69
     registry=research.registry
     monkeypatch.setattr(research,'registry',lambda *a,**k:pytest.fail('warm directory rediscovered plugins'))
     started=perf_counter();assert client.get('/api/agent/tools').json()==tools.json();warm_ms=(perf_counter()-started)*1000

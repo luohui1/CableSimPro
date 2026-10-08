@@ -1,6 +1,9 @@
 """Four task-side tables, immutable plans/events and durable operation identities."""
 from dataclasses import asdict
 import json
+import sqlite3
+import codecs
+from contextlib import contextmanager
 from time import time
 from uuid import uuid4, uuid5, NAMESPACE_URL
 
@@ -9,6 +12,8 @@ from fastapi import HTTPException
 from backend.kernel.workspace import fingerprint, stamp
 from .contracts import Limits
 from .security import redact
+from .resilience import transaction
+from .context_builder import compress_result
 
 
 def encode(value):
@@ -21,8 +26,19 @@ class TaskStore:
         self.owner_epoch = owner_epoch
         self.limits = limits or Limits.configured()
 
+    @contextmanager
+    def db(self,write=False):
+        # Task records use a short busy wait; retry only after transaction rollback.
+        db=sqlite3.connect(self.workspace.path,timeout=.1,check_same_thread=False)
+        try:
+            with db:
+                db.row_factory=sqlite3.Row
+                if write:db.execute('BEGIN IMMEDIATE')
+                yield db
+        finally:db.close()
+
     def initialize(self):
-        with self.workspace.db(True) as db:
+        with self.db(True) as db:
             db.executescript('''
             CREATE TABLE IF NOT EXISTS agent_tasks (
               id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, study_id TEXT,
@@ -74,10 +90,11 @@ class TaskStore:
         value['limits'] = json.loads(value['limits'])
         return value
 
+    @transaction
     def create(self,wid,sid,wrev,srev,limits=None):
         limits = limits or self.limits
         tid,created = str(uuid4()),stamp()
-        with self.workspace.db(True) as db:
+        with self.db(True) as db:
             self.workspace.load(db,wid,wrev,allow_domain=True)
             db.execute('INSERT INTO agent_tasks(id,workspace_id,study_id,workspace_revision,study_revision,state,owner_epoch,deadline,limits,created,updated) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                 (tid,wid,sid,wrev,srev,'created',self.owner_epoch,time()+limits.lifetime_s,encode(asdict(limits)),created,created))
@@ -110,9 +127,10 @@ class TaskStore:
             return '本条消息的剩余时间不足以继续工具循环。'
         return None
 
+    @transaction
     def begin_turn(self,tid,content):
         turn = str(uuid4())
-        with self.workspace.db(True) as db:
+        with self.db(True) as db:
             task = self.load(db,tid)
             if task['active_turn']:raise HTTPException(409,'此 Agent 会话正在处理消息，请等待当前步骤完成。')
             db.execute("UPDATE agent_tasks SET active_turn=?,owner_epoch=?,state='planning',waiting_reason=NULL,tool_calls=0,model_requests=0,steps_used=0,elapsed_ms=0,prompt_tokens=0,completion_tokens=0,deadline=?,limits=?,updated=? WHERE id=?",
@@ -120,8 +138,9 @@ class TaskStore:
             self.event(db,tid,'chat.message',{'role':'user','content':content,'turn_id':turn})
         return turn
 
+    @transaction
     def begin_model(self,tid,turn,request_summary,*,closing=False):
-        with self.workspace.db(True) as db:
+        with self.db(True) as db:
             task = self.load(db,tid);self.assert_turn(task,turn)
             if closing:
                 previous=db.execute("SELECT 1 FROM agent_events WHERE task_id=? AND type='model.request' AND json_extract(data,'$.turn_id')=? AND json_extract(data,'$.phase')='closing'",(tid,turn)).fetchone()
@@ -135,8 +154,9 @@ class TaskStore:
     def assert_turn(task,turn):
         if task['active_turn']!=turn:raise HTTPException(409,'Agent 消息执行身份已变化；不会写回迟到结果。')
 
+    @transaction
     def model_finished(self,tid,turn,elapsed_ms,usage,reply_summary):
-        with self.workspace.db(True) as db:
+        with self.db(True) as db:
             task=self.load(db,tid);self.assert_turn(task,turn)
             db.execute('UPDATE agent_tasks SET elapsed_ms=elapsed_ms+?,prompt_tokens=prompt_tokens+?,completion_tokens=completion_tokens+?,updated=? WHERE id=?',
                 (elapsed_ms,usage.get('prompt_tokens',0),usage.get('completion_tokens',0),stamp(),tid))
@@ -144,7 +164,7 @@ class TaskStore:
 
     def add_plan(self,tid,body,proposal_id=None,connection=None):
         from contextlib import nullcontext
-        with (nullcontext(connection) if connection is not None else self.workspace.db(True)) as db:
+        with (nullcontext(connection) if connection is not None else self.db(True)) as db:
             task=self.load(db,tid)
             revision=task['plan_revision']+1
             encoded=encode(body)
@@ -153,8 +173,9 @@ class TaskStore:
             self.event(db,tid,'plan.created',{'revision':revision,'digest':fingerprint(json.loads(encoded)),'proposal_id':proposal_id})
         return revision
 
+    @transaction
     def issue(self,tid,turn,revision,node):
-        with self.workspace.db(True) as db:
+        with self.db(True) as db:
             task=self.load(db,tid);self.assert_turn(task,turn)
             operation = str(uuid5(NAMESPACE_URL,f"cablesim-agent:{tid}:{revision}:{node['id']}:1"))
             arguments=redact(node['arguments'])
@@ -171,30 +192,34 @@ class TaskStore:
                 'tool':node['tool'],'arguments_digest':fingerprint(arguments),'input_identity':node['input_identity']})
             return operation
 
+    @transaction
     def running(self,tid,operation):
-        with self.workspace.db(True) as db:
+        with self.db(True) as db:
             if not db.execute("UPDATE agent_steps SET state='running' WHERE task_id=? AND operation_id=? AND state='issued' AND owner_epoch=?",(tid,operation,self.owner_epoch)).rowcount:
                 raise HTTPException(409,'工具操作身份或状态已变化。')
 
+    @transaction
     def finish_step(self,tid,operation,result,elapsed_ms):
-        with self.workspace.db(True) as db:
+        with self.db(True) as db:
             state='succeeded' if result['status']=='ok' else 'failed'
             reference=result.get('execution_ref')
             if not db.execute("UPDATE agent_steps SET state=?,result=?,execution_ref=?,run_id=?,elapsed_ms=?,finished=? WHERE task_id=? AND operation_id=? AND state='running' AND owner_epoch=?",
                 (state,encode(result),encode(reference) if reference else None,(reference or {}).get('run_id'),elapsed_ms,stamp(),tid,operation,self.owner_epoch)).rowcount:
                 raise HTTPException(409,'工具结果不能覆盖已恢复或已结束的操作。')
             db.execute('UPDATE agent_tasks SET elapsed_ms=elapsed_ms+?,updated=? WHERE id=?',(elapsed_ms,stamp(),tid))
-            self.event(db,tid,'tool.observation',{'operation_id':operation,'result':result})
+            self.event(db,tid,'tool.observation',{'operation_id':operation,'result':compress_result(result),
+                'original_ref':{'table':'agent_steps','operation_id':operation}})
 
     def reconcile_step(self,tid,operation,result):
-        with self.workspace.db(True) as db:
+        with self.db(True) as db:
             self.load(db,tid)
             changed=db.execute("UPDATE agent_steps SET state=?,result=?,finished=?,owner_epoch=? WHERE task_id=? AND operation_id=? AND state='unknown'",
                 ('succeeded' if result['status']=='ok' else 'failed',encode(result),stamp(),self.owner_epoch,tid,operation)).rowcount
             if changed:self.event(db,tid,'tool.reconciled',{'operation_id':operation,'execution_ref':result['execution_ref'],'status':result['status'],'reissued':False})
 
+    @transaction
     def finish_turn(self,tid,turn,state='completed',waiting_reason=None):
-        with self.workspace.db(True) as db:
+        with self.db(True) as db:
             task=self.load(db,tid)
             if task['active_turn']!=turn:return
             db.execute("UPDATE agent_steps SET state='cancelled',finished=? WHERE task_id=? AND state='issued'",(stamp(),tid))
@@ -203,8 +228,9 @@ class TaskStore:
             db.execute('UPDATE agent_tasks SET active_turn=NULL,state=?,waiting_reason=?,updated=? WHERE id=?',(state,waiting_reason,stamp(),tid))
             self.event(db,tid,'task.state',{'state':state,'waiting_reason':waiting_reason})
 
+    @transaction
     def emit(self,tid,kind,data):
-        with self.workspace.db(True) as db:self.event(db,tid,kind,data)
+        with self.db(True) as db:self.event(db,tid,kind,data)
 
     def proposal(self,db,pid):
         row=db.execute('SELECT * FROM agent_plan_revisions WHERE proposal_id=?',(pid,)).fetchone()
@@ -217,7 +243,7 @@ class TaskStore:
 
     def sessions(self,wid=None,limit=100):
         """Newest first; the title is the first user message, pending counts undecided proposals."""
-        with self.workspace.db() as db:
+        with self.db() as db:
             rows=db.execute('SELECT * FROM agent_tasks'+(' WHERE workspace_id=?' if wid else '')+' ORDER BY updated DESC LIMIT ?',((wid,) if wid else ())+(limit,)).fetchall()
             summaries=[]
             for row in rows:
@@ -229,8 +255,9 @@ class TaskStore:
                     'created':row['created'],'updated':row['updated'],'pending_proposals':pending})
         return summaries
 
+    @transaction
     def record(self,tid):
-        with self.workspace.db() as db:
+        with self.db() as db:
             db.execute('BEGIN')
             task=self.load(db,tid)
             events=[{'sequence':row['sequence'],'type':row['type'],'created':row['created'],'data':json.loads(row['data'])}
@@ -264,3 +291,96 @@ class TaskStore:
             'proposals':proposals,'plans':plans,'steps':steps,'events':events,
             'enabled_tools':sorted({name for step in steps if step['tool']=='plugin_inspect' and step.get('result') and step['result']['status']=='ok'
                 for name in step['result']['data'].get('enabled_tools',[])})}
+
+    def stream_record(self,tid):
+        """One consistent SQLite snapshot, raw JSON fields in bounded text slices.
+
+        Never construct all steps/events or parse a large result. Connections allow
+        ASGI's worker-thread iterator to resume on a different worker thread.
+        """
+        encoder=json.JSONEncoder(ensure_ascii=False,separators=(',',':'),allow_nan=False)
+        with self.db() as db:
+            db.execute('BEGIN')
+            task=self.load(db,tid)
+            user=db.execute("SELECT json_extract(data,'$.turn_id') FROM agent_events WHERE task_id=? AND type='chat.message' AND json_extract(data,'$.role')='user' ORDER BY sequence DESC LIMIT 1",(tid,)).fetchone()
+            totals=db.execute("SELECT COALESCE(SUM(json_extract(data,'$.usage.prompt_tokens')),0),COALESCE(SUM(json_extract(data,'$.usage.completion_tokens')),0),COALESCE(MIN(json_extract(data,'$.usage_available')),1) FROM agent_events WHERE task_id=? AND type='model.result'",(tid,)).fetchone()
+            head={key:task[key] for key in ('id','workspace_id','study_id','workspace_revision','study_revision','state','waiting_reason','created','updated')}
+            head['budget']={key:task[key] for key in ('limits','tool_calls','model_requests','steps_used','elapsed_ms','prompt_tokens','completion_tokens','deadline')}
+            head['budget'].update(scope='message',turn_id=task['active_turn'] or (user[0] if user else None),
+                session_totals=dict(zip(('prompt_tokens','completion_tokens'),totals[:2])),usage_reported_only=True,usage_complete=bool(totals[2]))
+            prefix=encoder.encode(head)
+            yield prefix[:-1]
+
+            def raw(table,column,rowid,start=1,stop=None):
+                if column.isidentifier():
+                    # SQLite's incremental blob API also reads TEXT bytes. Avoid
+                    # materializing a giant TEXT column or rescanning it per slice.
+                    with db.blobopen(table,column,rowid,readonly=True) as blob:
+                        end=len(blob)-(1 if stop is not None else 0)
+                        blob.seek(start-1);decoder=codecs.getincrementaldecoder('utf-8')()
+                        while blob.tell()<end:
+                            yield decoder.decode(blob.read(min(8192,end-blob.tell())))
+                        tail=decoder.decode(b'',final=True)
+                        if tail:yield tail
+                    return
+                size=stop if stop is not None else db.execute(f'SELECT length({column}) FROM {table} WHERE rowid=?',(rowid,)).fetchone()[0]
+                for offset in range(start,(size or 0)+1,8192):
+                    yield db.execute(f'SELECT substr({column},?,?) FROM {table} WHERE rowid=?',
+                        (offset,min(8192,size-offset+1),rowid)).fetchone()[0]
+
+            def array(name,items):
+                yield ','+encoder.encode(name)+':['
+                for index,item in enumerate(items):
+                    if index:yield ','
+                    yield from item
+                yield ']'
+
+            for name,kind in (('messages','chat.message'),('tool_calls','tool.call')):
+                yield from array(name,(raw('agent_events','data',row[0]) for row in db.execute(
+                    'SELECT rowid FROM agent_events WHERE task_id=? AND type=? ORDER BY sequence',(tid,kind))))
+
+            def steps():
+                for row in db.execute('SELECT rowid,task_id,plan_revision,node_id,attempt,operation_id,tool,state,arguments_digest,study_id,run_id,budget_ref,elapsed_ms,owner_epoch,created,finished FROM agent_steps WHERE task_id=? ORDER BY rowid',(tid,)):
+                    def one(row=row):
+                        value=dict(row);rid=value.pop('rowid')
+                        yield encoder.encode(value)[:-1]
+                        for key in ('arguments','input_identity','result','execution_ref'):
+                            yield ','+encoder.encode(key)+':'
+                            if db.execute(f'SELECT {key} IS NULL FROM agent_steps WHERE rowid=?',(rid,)).fetchone()[0]:yield 'null'
+                            else:yield from raw('agent_steps',key,rid)
+                        yield '}'
+                    yield one()
+            yield from array('steps',steps())
+            def results():
+                for row in db.execute('SELECT rowid,node_id,length(result) AS size FROM agent_steps WHERE task_id=? AND result IS NOT NULL ORDER BY rowid',(tid,)):
+                    def one(row=row):
+                        yield '{"id":'+encoder.encode(row['node_id'])+','
+                        yield from raw('agent_steps','result',row['rowid'],2,row['size']-1)
+                        yield '}'
+                    yield one()
+            yield from array('results',results())
+            def events():
+                for row in db.execute('SELECT rowid AS storage_rowid,sequence,type,created FROM agent_events WHERE task_id=? ORDER BY sequence',(tid,)):
+                    def one(row=row):
+                        yield encoder.encode({key:row[key] for key in ('sequence','type','created')})[:-1]+',"data":'
+                        yield from raw('agent_events','data',row['storage_rowid']);yield '}'
+                    yield one()
+            yield from array('events',events())
+            def plans():
+                for row in db.execute('SELECT rowid,revision,digest,created FROM agent_plan_revisions WHERE task_id=? ORDER BY revision',(tid,)):
+                    def one(row=row):
+                        yield encoder.encode({key:row[key] for key in ('revision','digest','created')})[:-1]+',"body":'
+                        yield from raw('agent_plan_revisions','body',row['rowid']);yield '}'
+                    yield one()
+            yield from array('plans',plans())
+            def proposals():
+                public="json_extract(body,'$.proposal.public')"
+                for row in db.execute('SELECT rowid,proposal_id,length('+public+') AS size FROM agent_plan_revisions WHERE task_id=? AND proposal_id IS NOT NULL ORDER BY revision',(tid,)):
+                    def one(row=row):
+                        yield from raw('agent_plan_revisions',public,row['rowid'],1,row['size']-1)
+                        decision=db.execute("SELECT json_extract(data,'$.status') FROM agent_events WHERE task_id=? AND type='proposal.decision' AND json_extract(data,'$.id')=? ORDER BY sequence DESC LIMIT 1",(tid,row['proposal_id'])).fetchone()
+                        yield ',"status":'+encoder.encode(decision[0] if decision else 'pending')+'}'
+                    yield one()
+            yield from array('proposals',proposals())
+            enabled=sorted({row[0] for row in db.execute("SELECT j.value FROM agent_steps s,json_each(s.result,'$.data.enabled_tools') j WHERE s.task_id=? AND s.tool='plugin_inspect' AND json_extract(s.result,'$.status')='ok'",(tid,))})
+            yield ',"enabled_tools":'+encoder.encode(enabled)+'}'

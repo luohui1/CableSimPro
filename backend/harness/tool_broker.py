@@ -1,5 +1,7 @@
 """Validate each registered action and call the same host application services."""
 from copy import deepcopy
+from difflib import get_close_matches
+import json
 from time import time
 
 from fastapi import HTTPException
@@ -19,6 +21,8 @@ from .evidence import run_points
 from .fields import domain_metadata, displayed
 from .security import redact
 from .project_digest import project_digest, study_baseline
+from .fem import comparisons, propose as propose_fem
+from .resilience import retry
 
 
 def failure(code,message,path=None,actions=None):
@@ -69,6 +73,13 @@ class ToolBroker:
 
     def study_id(self,task,args):
         sid=args.get('study_id') or task['study_id']
+        if args.get('run_id'):
+            with self.research.store.db() as db:
+                row=db.execute('SELECT study FROM study_runs WHERE workspace=? AND id=?',
+                    (task['workspace_id'],args['run_id'])).fetchone()
+            if row is None:raise HTTPException(404,{'code':'RUN_NOT_FOUND','message':'本工程中没有此保存运行。','path':'/run_id'})
+            if sid and sid!=row['study']:raise HTTPException(422,{'code':'SCOPE_VIOLATION','message':'保存运行与指定研究不一致。','path':'/run_id'})
+            sid=row['study']
         if sid is None:raise HTTPException(422,{'code':'STUDY_REQUIRED','message':'请明确选择本工程内的已保存研究。'})
         if task['study_id'] and sid!=task['study_id']:
             raise HTTPException(422,{'code':'SCOPE_VIOLATION','message':'此会话已绑定另一研究，请新建相应研究的会话。'})
@@ -78,23 +89,48 @@ class ToolBroker:
     def field_points(document,paths):
         fields=[]
         for path in paths:
-            value=value_at(document,path)
+            value=ToolBroker.path_value(document,path)
             metadata=domain_metadata(path) if document.get('schema_version')=='cablesim.domain/1' and not isinstance(value,(dict,list)) else None
             fields.append({'path':path,'label':metadata['title'] if metadata else '保存输入字段',
                 'value':displayed(value,metadata['x-unit']) if metadata else value,
                 'unit':metadata['x-unit']['display'] if metadata else None})
         return fields
 
+    @staticmethod
+    def path_value(document,path):
+        try:return value_at(document,path)
+        except (ValueError,KeyError,IndexError,TypeError,HTTPException):
+            roots=['/'+key.replace('~','~0').replace('/','~1') for key in document]
+            candidates=roots[:]
+            for root in roots:
+                rows=document[root[1:].replace('~1','/').replace('~0','~')]
+                if isinstance(rows,list):
+                    for row in rows:
+                        if isinstance(row,dict) and row.get('id'):
+                            candidates.append(root+'/'+row['id'].replace('~','~0').replace('/','~1'))
+            normalized=path.removeprefix('/input')
+            closest=get_close_matches(normalized,candidates,n=3,cutoff=.2)
+            raise HTTPException(422,{'code':'PATH_NOT_FOUND','path':path,
+                'message':'输入路径不存在。可用顶层路径：'+', '.join(roots)+'；最接近路径：'+', '.join(closest),
+                'next_actions':['使用 '+candidate+'，或 workspace_read 不带 paths 读取稳定字段路径。' for candidate in closest]}) from None
+
     def identity(self,task,node,tool):
         args=node['arguments'];identity=deepcopy(node['input_identity'])
         if tool and (tool.method or tool.name in ('study_read','run_list','run_read','study_baseline','sensitivity_inputs','propose_method_parameters','study_preflight','study_preview')):
-            sid=args.get('study_id') or task['study_id']
+            sid=self.study_id(task,args) if args.get('run_id') else args.get('study_id') or task['study_id']
             if sid:
                 with self.research.store.db() as db:
                     study=self.research.definition(db,task['workspace_id'],sid)
                 identity.update(study_id=sid,study_revision=study['revision'])
                 if tool.method is None:identity['method']=self.research.module_definition(study['definition'],args.get('module'))['method']
         if args.get('run_id'):identity['run_id']=args['run_id']
+        if tool and tool.name in ('run_read','study_read') and args.get('run_id'):
+            with self.research.store.db() as db:
+                row=db.execute('SELECT revision FROM workspaces WHERE id=?',(task['workspace_id'],)).fetchone()
+                original=db.execute("SELECT json_extract(snapshot,'$.definition.method') AS method,json_extract(snapshot,'$.module') AS module,json_extract(snapshot,'$.study_revision') AS revision FROM study_runs WHERE workspace=? AND id=?",
+                    (task['workspace_id'],args['run_id'])).fetchone()
+            identity['current_workspace_revision']=row['revision']
+            identity.update(method=json.loads(original['method']),run_module=original['module'],run_study_revision=original['revision'])
         if tool:identity['tool_contract_digest']=fingerprint(tool.parameters)
         return identity
 
@@ -105,13 +141,18 @@ class ToolBroker:
             if errors:
                 error=errors[0];path='/'+ '/'.join(str(part) for part in error.absolute_path)
                 return failure('TOOL_ARGUMENTS_INVALID','工具参数不符合声明契约：'+error.validator+'。',path)
-            value=self.dispatch(task,node['arguments'],tool,node['input_identity'])
+            recovered=[]
+            action=lambda:self.dispatch(task,node['arguments'],tool,node['input_identity'])
+            try:value=retry(action,lambda kind,attempt:recovered.append({'category':kind,'attempt':attempt})) if tool.kind=='read' else action()
+            finally:
+                if recovered:self.tasks.emit(task['id'],'runtime.retry',{'tool':tool.name,'exceptions':recovered,'read_only':True})
             return ToolResult.model_validate(redact(value.model_dump(mode='json'))) if isinstance(value,ToolResult) else ToolResult.model_validate(redact(value))
         except HTTPException as error:
             detail=error.detail
             return failure(detail.get('code','HOST_REQUEST_REJECTED') if isinstance(detail,dict) else 'HOST_REQUEST_REJECTED',
                 redact(detail.get('message') or str(detail)) if isinstance(detail,dict) else redact(str(detail)),
-                detail.get('path') if isinstance(detail,dict) else None)
+                detail.get('path') if isinstance(detail,dict) else None,
+                detail.get('next_actions') if isinstance(detail,dict) else None)
         except PluginHostError as error:
             return failure(error.code,redact(error.message),getattr(error,'path',None))
         except (ValidationError,RequestValidationError) as error:
@@ -135,7 +176,7 @@ class ToolBroker:
             if paths:
                 fields=[]
                 for path in paths:
-                    value=value_at(document,path)
+                    value=self.path_value(document,path)
                     if isinstance(value,(dict,list)):
                         fields.append({'path':path,'value':value,'unit':None})
                     else:
@@ -155,6 +196,8 @@ class ToolBroker:
                 for row in studies]})
         if name=='project_digest':
             return project_digest(self.research,task,args)
+        if name=='fem_comparison_read':return comparisons(self.research,task,args)
+        if name=='propose_fem_verification':return propose_fem(self.research,self.proposals,task,args)
         if name=='study_baseline':
             return study_baseline(self.research,task,args)
         if name=='sensitivity_inputs':
@@ -177,15 +220,29 @@ class ToolBroker:
         if name=='study_read':
             sid=self.study_id(task,args)
             _,_,study=self.proposals.source(task,sid)
-            definition=self.research.module_definition(study['definition'],args.get('module'))
+            module=args.get('module')
+            if args.get('run_id'):
+                with self.tasks.db() as db:
+                    original=db.execute("SELECT json_extract(snapshot,'$.study_revision') AS revision,json_extract(snapshot,'$.workspace_revision') AS workspace_revision,json_extract(snapshot,'$.module') AS module,json_array_length(snapshot,'$.cases') AS case_count,json_extract(snapshot,'$.cases[0].case_id') AS first_case FROM study_runs WHERE workspace=? AND id=?",
+                        (wid,args['run_id'])).fetchone()
+                    study=self.research.definition(db,wid,sid,original['revision'])
+                module=module if module is not None else original['module']
+            definition=self.research.module_definition(study['definition'],module)
             data={'study_id':sid,'revision':study['revision'],'workspace_revision':task['workspace_revision'],
                 'definition':{key:definition[key] for key in ('title','task','method','parameters','input_source')},
                 'driver':{key:value for key,value in definition['driver'].items() if key!='cases'},
                 'cases':[{'case_id':case['case_id'],'label':case['label'],'parameters':case.get('parameters',{})}
                     for case in definition['driver'].get('cases',[])]}
+            if args.get('run_id'):data.update(run_id=args['run_id'],workspace_revision=original['workspace_revision'])
             if args.get('input_paths'):
                 _,state,_=self.proposals.source(task)
-                if definition['driver']['kind']=='batch':
+                if args.get('run_id'):
+                    cid=args.get('case_id') or (original['first_case'] if original['case_count']==1 else None)
+                    if cid is None:raise HTTPException(422,{'code':'CASE_REQUIRED','message':'读取原运行输入须指定保存工况。','path':'/case_id'})
+                    from backend.kernel.run_details import case_input
+                    source=case_input(self.research,wid,sid,args['run_id'],cid)['input']
+                    data['case_id']=cid
+                elif definition['driver']['kind']=='batch':
                     case=next((case for case in definition['driver']['cases'] if case['case_id']==args.get('case_id')),None)
                     if case is None:raise HTTPException(422,'读取批量保存输入须明确已有case_id。')
                     source=case['input']

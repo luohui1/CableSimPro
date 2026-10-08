@@ -99,20 +99,23 @@ class Proposals:
         self.persist(task,proposal)
         return proposal['public']
 
-    def study(self,task,method,parameters,title):
+    def study(self,task,method,parameters,title,*,method_input=None,source_ref=None):
         _,state,_=self.source(task)
-        if 'domain' not in state:raise HTTPException(422,'新研究方案需要已保存的领域输入，请先在工作台显式转换。')
+        document=deepcopy(method_input) if method_input is not None else state.get('domain')
+        source='study' if method_input is not None else 'domain'
+        if document is None:raise HTTPException(422,'新研究方案需要明确保存输入，请先在工作台显式转换。')
         _,cap=self.research.resolve(method)
-        if cap.input_contract is None or 'domain' not in cap.input_contract.input_sources:
+        if cap.input_contract is None or source not in cap.input_contract.input_sources:
             raise HTTPException(422,'此能力需要独立输入或来源对象，本轮不从领域工程猜测另一份输入。')
         schema=cap.parameter_schema.model_dump(mode='json',by_alias=True,exclude_none=True)
         parameters=deepcopy(parameters) if parameters is not None else {
             name:deepcopy(field['default']) for name,field in schema.get('properties',{}).items() if 'default' in field}
         forbidden={'source_bundle','source_metadata','external_loss_artifact','_artifact_reuse_sha256'}
         if forbidden & parameters.keys():raise HTTPException(422,'新研究来源正文须由宿主绑定，不能由模型注入。')
-        check_locks(state,state['domain'],parameters)
-        validate_case(cap,{'input':state['domain'],'parameters':parameters})
-        config=CreateStudy(expected_revision=task['workspace_revision'],title=title,method=method,input_source='domain',parameters=parameters)
+        if source=='domain':check_locks(state,document,parameters)
+        validate_case(cap,{'input':document,'parameters':parameters})
+        config=CreateStudy(expected_revision=task['workspace_revision'],title=title,method=method,input_source=source,
+            method_input=document if source=='study' else None,parameters=parameters)
         definition=config.model_dump(mode='json',exclude={'expected_revision'})
         pid=str(uuid4())
         differences=[{'path':'/studies/title','label':'研究名称','before':None,'after':title,'unit':None},
@@ -132,6 +135,10 @@ class Proposals:
             'public':{'id':pid,'title':'新建研究 · '+title,'changes':differences,
                 'checks':['引用当前工程领域输入与准确封签方法；参数结构和锁校验通过。',
                     '批准仅保存研究；未预检、未求解、未批准工程结果。']}}
+        if source_ref:
+            proposal['source_ref']=source_ref
+            proposal['public']['checks']=['引用原保存工况输入与封签有限元方法；参数结构和锁校验通过。',
+                '人工保存研究后仍须预检、确认核时并提交超算；未提交作业，未批准工程结果。']
         self.persist(task,proposal)
         return proposal['public']
 
