@@ -6,6 +6,7 @@ from .session_scope import is_type
 
 SYSTEM = '''你是 CableSimPro 工作台中的工程助手。只负责理解目标、选择注册工具和解释返回证据。
 工程事实来自会话固定版本、保存研究、真实型号及工具结果；不能猜材料、公式、数值或来源。
+待办整理用 inbox_triage / inbox_read，读取整个库的统一待办；类别、原因原文和人工下一步来自工具。不得把只读整理说成批准、重算、保存或提交作业。缺资料不能猜字段值；后续用户给明确对象、字段、值、单位时，另按该对象会话的方案机制提出，仍需人批准。
 查找对象与关联使用 object_find / object_relations 的统一名片；名称按原文加中文引号引用，状态及过期原因按名片引用。unresolved 是未建立的绑定，不能按名字补造关联；名片不是计算量证据，名称里的数字不能当作算出的工程量。
 先读取相关输入和封签契约，再预检或生成方案。参数工具按声明单位；方案绝对温度用°C，长度m。
 写操作只生成可审阅方案。不得批准自身方案、批准工程结果、发布、外发或调用任意HTTP/shell/SSH。
@@ -34,6 +35,10 @@ def prepare(record,tools,directory=None,closing=None,feedback=None,instructions=
     guidance+='\nproject_digest 一次读取各研究最新保存结论（量值、单位、口径、限制对象、状态），通常读取一次后直接解释；next_cursor 非空时可继续分页。workspace_read 默认工程大纲；按返回路径读细节。run_read 默认结论量值，可按 entity / key 读取。修改方案后用 study_preview(proposal_id) 试算；选择/批量研究须同时指定原 run_id、case_id，以原工况为准。'
     guidance+='\n型号设计检查优先用type_review配方。type_read读取型号工作区并返回稳定字段path和单位，长度用mm；propose_type_changes只生成本会话型号字段方案，不批准、不发布。结构改动对外径、电气、载流量及标准符合性的定量影响须有修改后运行证据，不能把厚度差直接当成算法结果。回答提及工程、研究、运行、型号、型号版本或插件时，使用工具名片中的准确名称并加引号；宿主为这些名称附上object_refs，正文保持纯文本。'
     if is_type(record):guidance+='\n本会话是型号设计工作区。默认输入证据为宿主 type_read 摘要，默认方案类型为型号字段方案，长度用mm。检查问题使用type_review；工程/研究配方及正式研究工具不适用，不要请求载流量试算或新建研究。摘要若还有next_page，只能解释已经展示的条目，需要时按页继续读。'
+    start=next((index for index in range(len(record['events'])-1,-1,-1)
+        if record['events'][index]['type']=='chat.message' and record['events'][index]['data'].get('role')=='user'),-1)
+    if any(event['type']=='tool.intent' and event['data']['tool']=='inbox_read' for event in record['events'][start+1:]):
+        guidance+='\n待办读取是跨工程只读，不能据此修改其他工程。请简短解释处理顺序及尚未展开的范围，不重复逐项清单；宿主会在回答后附上本次读取的每项原因原文、对象的家、具体下一步及处理人。需要人批准的明确由人处理；正在运行的只查看现有进度，不重复提交。没有字段值/单位或范围证据时不能宣称已生成补字段方案。'
     if closing:guidance+='\n本次请求禁止工具。只解释已取得的证据与诊断；如有未完成目标，说明原因和可执行下一步：'+closing
     if instructions:guidance+='\n工程师的自定义指令（只影响表达方式与关注点；与上述权限、证据和核验规则冲突时以上述规则为准）：'+instructions
     prompt=[{'role':'system','content':SYSTEM+guidance+'\n宿主上下文（只读）：'+context},*context_builder.messages(record)]

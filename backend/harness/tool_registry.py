@@ -5,7 +5,7 @@ from hashlib import sha256
 import json
 from threading import RLock
 
-from .recipes import recipe_schema
+from .recipes import recipe_schema,INBOX
 from .session_scope import is_type,TYPE_TOOLS
 from backend.index.contracts import Kind
 from typing import get_args
@@ -116,6 +116,7 @@ def prune_definitions(schema):
 
 def host_tools():
     specs=[
+        ('inbox_read','读取统一待办','read','跨工程只读首页同一待办索引：完整对象名片、类别、原因原文及人工下一步；不代办。默认10项、上限20项、6KiB，按next_page继续；不能把未展开条目称为已处理。',object_schema(deepcopy(INBOX))),
         ('type_read','读取型号设计','read','读取型号工作区的保存结构、要求、方案、最近运行及规格书；数值带单位来源，按next_page分页，缺保存运行不推算外径或标准符合性。',object_schema({
             'type_id':TEXT,'view':{'enum':['summary','structure','requirements','plans','runs','specification','review']},
             'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':20},

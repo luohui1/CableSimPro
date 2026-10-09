@@ -84,7 +84,7 @@ class SessionSummary(StrictModel):
 
 
 class RecipeRequest(StrictModel):
-    id: Literal['conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice','type_review']
+    id: Literal['conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice','type_review','inbox_triage']
     parameters: dict[str,JsonValue] = Field(default_factory=dict)
 
 
@@ -109,7 +109,7 @@ class ToolInfo(StrictModel):
 
 
 class RecipeInfo(StrictModel):
-    id: Literal['conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice','type_review']
+    id: Literal['conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice','type_review','inbox_triage']
     name: str
     description: str
     parameters: dict[str,JsonValue]

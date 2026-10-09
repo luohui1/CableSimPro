@@ -29,6 +29,7 @@ from .tool_registry import ToolRegistry
 from .resilience import category
 from .object_refs import references
 from .session_scope import is_type,load_context
+from .inbox import report as inbox_report,MAX_TRIAGE_PAGES
 
 
 class Harness:
@@ -98,7 +99,10 @@ class Harness:
     def begin(self,tid,content,recipe=None):
         record=self.tasks.record(tid)
         source='human.message'
-        if recipe is None and is_type(record) and re.search(r'检查|审查|缺项|问题|type_review',content) and not re.search(r'改成|改为|修改|调为|调整|换成|更换|替换|设为|增加|减少|删除',content):
+        if recipe is None and re.search(r'待办|需要处理',content) and re.search(r'整理|理一下|梳理|说明|处理顺序',content):
+            recipe={'id':'inbox_triage','parameters':{}}
+            source='host.intent'
+        elif recipe is None and is_type(record) and re.search(r'检查|审查|缺项|问题|type_review',content) and not re.search(r'改成|改为|修改|调为|调整|换成|更换|替换|设为|增加|减少|删除',content):
             recipe={'id':'type_review','parameters':{}}
             source='host.intent'
         recipe=validate_request(recipe,record['context']) if recipe is not None else None
@@ -135,19 +139,20 @@ class Harness:
                 summary=bool(not is_type(record) and re.search(r'汇总|总结|概览|conclusion_summary',user['content']) and re.search(r'研究|结论|载流量|conclusion_summary',user['content'])
                     and not re.search(r'改成|修改|试算|细节|具体输入',user['content']))
                 current=self.turn_steps(record,turn)
+                inbox_recipe=any(step['input_identity'].get('recipe')=='inbox_triage' for step in current)
                 digest=next((step['result']['data'] for step in reversed(current) if step.get('result')
                     and step['result']['status']=='ok' and 'studies' in step['result']['data'] and 'next_page' in step['result']['data']),None)
                 covered=summary and self.digest_complete(current)
                 reads=self.read_count(record,turn,tools)
                 baseline=self.baseline_problem(record,turn)
-                answer_reason=('宿主已执行所选配方。只解释已取得的结果与诊断，不再调用工具。' if requested else
+                answer_reason=('宿主已执行所选配方。只解释已取得的结果与诊断，不再调用工具。' if requested or inbox_recipe else
                     '试算对比基准不可用。说明诊断原因和工作台重算步骤；方案与试算未执行，不引用历史结果作当前结论。' if baseline else
                     '结论汇总摘要已覆盖本工程研究。直接解释保存证据；运行输入细节尚未展开，可供用户追问。' if covered else
                     '只读工具已达到本条消息的软上限。按现有证据回答，明确尚未展开的对象或细节，不继续读取。' if reads>=record['budget']['limits']['max_read_tool_calls'] else None)
                 answer_only=answer_reason is not None
                 if baseline:state,reason='waiting','missing_input'
                 if answer_only:self.tasks.emit(tid,'turn.answer_only',{'turn_id':turn,
-                    'reason':'recipe_complete' if requested else 'baseline_unavailable' if baseline else 'summary_covered' if covered else 'read_limit',
+                    'reason':'recipe_complete' if requested or inbox_recipe else 'baseline_unavailable' if baseline else 'summary_covered' if covered else 'read_limit',
                     'read_tool_calls':reads,'max_read_tool_calls':record['budget']['limits']['max_read_tool_calls'],
                     'tools_allowed':False,'remaining_page':digest.get('next_page') if digest else None})
                 shown={name:tool for name,tool in tools.items() if name in ('recipe_execute','project_digest')} if summary else tools
@@ -159,7 +164,7 @@ class Harness:
                     instructions=self.settings.instructions())
                 configured,model=self.model.status()
                 if not configured:raise ModelError('LLM_NOT_CONFIGURED','模型未配置；请在宿主环境中配置模型地址、模型名与密钥。')
-                metrics={**request_summary(model,prompt,definitions),**({'phase':'recipe_answer' if requested else 'answer_only'} if answer_only else {})}
+                metrics={**request_summary(model,prompt,definitions),**({'phase':'recipe_answer' if requested or inbox_recipe else 'answer_only'} if answer_only else {})}
                 with self.research.store.db() as db:task=self.tasks.load(db,tid)
                 closing=self.tasks.closing_reason(task,metrics['prompt_bytes'],metrics['definition_bytes'])
                 if closing:
@@ -296,10 +301,14 @@ class Harness:
                 tools,record['workspace_id'],record['workspace_revision'])
             waiting=yield from self.execute_plan(tid,turn,plan,tools,record,source='host')
             current=self.tasks.record(tid)
-            if request['id'] not in ('conclusion_summary','type_review') or waiting:break
+            if request['id'] not in ('conclusion_summary','type_review','inbox_triage') or waiting:break
             result=current['steps'][-1].get('result')
             next_page=result['data'].get('next_page') if result and result['status']=='ok' else None
             if not next_page:break
+            if request['id']=='inbox_triage' and len(pages)>=MAX_TRIAGE_PAGES-1:
+                self.tasks.emit(tid,'recipe.pagination_stopped',{'turn_id':turn,'next_page':next_page,'reason':'page_limit',
+                    'max_pages':MAX_TRIAGE_PAGES})
+                break
             marker=fingerprint(next_page)
             if marker in pages:
                 self.tasks.emit(tid,'recipe.pagination_stopped',{'turn_id':turn,'next_page':next_page,'reason':'cursor_not_advanced'})
@@ -392,7 +401,19 @@ class Harness:
         if baseline and not ('工作台' in text and '重算' in text):
             text+='\n'+baseline['summary']+'\n下一步：'+'；'.join(baseline['next_actions'])
         text+=suffix
+        # The model's explanation is verified first. Exact saved reasons and
+        # human-only actions come from the host, not unverified model claims.
+        checklist,known_refs,triage=inbox_report(self.turn_steps(record,turn))
+        if checklist:
+            text+='\n\n'+checklist
+            self.tasks.emit(tid,'inbox.triaged',{'turn_id':turn,**triage,'source':'host',
+                'model_explanation_verified':not safe})
         object_refs=self.object_refs(tid,text,record)
+        for card in known_refs:
+            if not any((ref['kind'],ref['id'])==(card['kind'],card['id']) for ref in object_refs):object_refs.append(card)
+        # Host references include ambiguous names whose identities were saved in
+        # the list; order them by the first actual mention just like model refs.
+        object_refs.sort(key=lambda card:text.find('“'+card['name']+'”') if '“'+card['name']+'”' in text else text.find(card['id']) if card['id'] in text else len(text))
         self.tasks.emit(tid,'chat.message',{'role':'assistant','content':text,'turn_id':turn,'object_refs':object_refs,
             **({'reasoning_content':reasoning} if reasoning else {})})
         for offset in range(0,len(text),64):yield self.emit(tid,'message.delta',{'text':text[offset:offset+64],
@@ -441,6 +462,11 @@ class Harness:
 
     def fallback(self,tid,turn):
         record=self.tasks.record(tid)
+        if any(step['tool']=='inbox_read' for step in self.turn_steps(record,turn)):
+            self.tasks.emit(tid,'answer.fallback',{'turn_id':turn,'sources':['inbox_read'],
+                'model_explanation_verified':False})
+            yield from self.respond(tid,turn,'以下为工具证据摘要，模型解释未通过核验。\n模型解释暂不可用；由宿主根据本次读取的统一待办列出原因和人工下一步。',safe=True)
+            return
         baseline=self.baseline_problem(record,turn)
         if baseline:
             text=baseline['summary']+'\n下一步：'+'；'.join(baseline['next_actions'])

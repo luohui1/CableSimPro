@@ -21,7 +21,7 @@ def test_type_session_catalog_context_host_review_and_default_type_proposal(clie
     assert record['context']=={'kind':'type','id':w['id'],'default_proposal_kind':'type','default_recipe':'type_review'}
     for params in ({'session_id':tid},{'workspace_id':w['id']}):
         rows=client.get('/api/agent/recipes',params=params).json()
-        assert [r['id'] for r in rows]==['type_review']
+        assert [r['id'] for r in rows]==['type_review','inbox_triage']
         assert rows[0]['parameters']['required']==[] and rows[0]['parameters']['properties']['type_id']['const']==w['id']
         assert {t['name'] for t in client.get('/api/agent/tools',params=params).json()}==TYPE_TOOLS
     rejected=client.post('/api/agent/sessions/'+tid+'/messages',json={'content':'检查',

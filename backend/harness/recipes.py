@@ -11,6 +11,9 @@ def obj(properties, required=()):
 
 STUDY = {'study_id':{'type':['string','null'],'maxLength':120}, 'module':{'type':['string','null'],'maxLength':120}}
 PAGE = {'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':20},'case_after':{'type':'integer','minimum':0}}
+INBOX = {'category':{'enum':['review','stale','missing','running']},
+    'limit':{'type':'integer','minimum':1,'maximum':20},'offset':{'type':'integer','minimum':0},
+    'expected_digest':{'type':'string','pattern':'^[a-f0-9]{64}$'}}
 CHANGES = {'type':'array','minItems':1,'maxItems':12,'items':obj({
     'path':{'type':'string','minLength':1,'maxLength':500},
     'value':{'type':['number','string','boolean','null']},
@@ -29,13 +32,15 @@ CATALOG = [
      'parameters':obj({'type_id':{'type':'string','minLength':1,'maxLength':120},
          'view':{'const':'review'},'after':{'type':'integer','minimum':0},
          'limit':{'type':'integer','minimum':1,'maximum':20},'expected_revision':{'type':'integer','minimum':1}},('type_id',))},
+    {'id':'inbox_triage','name':'整理待办','description':'跨工程只读统一待办，保留原因原文，列出对象的家、具体下一步及人工处理责任。宿主附逐项清单；不批准、不重算、不发布、不提交超算。最多续读四页，剩余条目明确标注未展开。',
+     'parameters':obj(INBOX)},
 ]
 
 
 def recipes(context=None):
     rows=deepcopy(CATALOG)
     if context and context.get('kind')=='type':
-        rows=[row for row in rows if row['id']=='type_review']
+        rows=[row for row in rows if row['id'] in ('type_review','inbox_triage')]
         rows[0]['parameters']['required']=[]
         rows[0]['parameters']['properties']['type_id'].update(const=context['id'],default=context['id'])
     return rows
@@ -44,10 +49,10 @@ def recipes(context=None):
 def validate_request(request,context=None):
     request=deepcopy(request)
     if context and context.get('kind')=='type':
-        if request['id']!='type_review':
+        if request['id'] not in ('type_review','inbox_triage'):
             raise HTTPException(422,{'code':'RECIPE_NOT_APPLICABLE','path':'/recipe/id',
-                'message':'型号设计会话只适用 type_review；研究配方请在工程或研究会话使用。'})
-        request['parameters'].setdefault('type_id',context['id'])
+                'message':'型号设计会话适用 type_review 和只读 inbox_triage；研究配方请在工程或研究会话使用。'})
+        if request['id']=='type_review':request['parameters'].setdefault('type_id',context['id'])
     try:encoded(request)
     except (ValueError,TypeError):raise HTTPException(422,{'code':'RECIPE_PARAMETERS_INVALID','path':'/recipe/parameters','message':'配方参数须为有限数值和合法 JSON。'}) from None
     row=next((row for row in recipes(context) if row['id']==request['id']),None)
@@ -74,6 +79,7 @@ def expand(arguments):
     study = {k:params[k] for k in STUDY if k in params}
     if rid=='conclusion_summary':return [('project_digest',params,{})]
     if rid=='type_review':return [('type_read',{**params,'view':'review'},{})]
+    if rid=='inbox_triage':return [('inbox_read',params,{})]
     if rid=='missing_inputs':return [('workspace_read',{},{}),('study_preflight',study,{})]
     if rid=='sensitivity_advice':
         return [('workspace_read',{'paths':params['paths']} if params.get('paths') else {},{}),

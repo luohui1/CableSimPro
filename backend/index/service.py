@@ -318,7 +318,7 @@ class Index:
         used_by=[{**edge,'target':snapshot.cards[source]} for source,edge in snapshot.edges if (edge['target']['kind'],edge['target']['id'])==key]
         return Relations(uses=uses,used_by=used_by,unresolved=snapshot.unresolved.get(key,[])).model_dump(mode='json')
 
-    def inbox(self):
-        snapshot=self.snapshot();items=snapshot.todos
+    def inbox(self,snapshot=None):
+        snapshot=snapshot if snapshot is not None else self.snapshot();items=snapshot.todos
         items.sort(key=lambda item:(item['created'] or '',item['category'],item['object']['id']),reverse=True)
         return Inbox(items=items,counts={key:sum(item['category']==key for item in items) for key in ('review','stale','missing','running')}).model_dump(mode='json')

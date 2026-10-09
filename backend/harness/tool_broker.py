@@ -167,6 +167,9 @@ class ToolBroker:
 
     def dispatch(self,task,args,tool,identity):
         wid=task['workspace_id'];name=tool.name
+        if name=='inbox_read':
+            from .inbox import read
+            return read(self.research,args)
         if name in ('object_find','object_relations'):return read_index(self.research,name,args)
         if name=='type_read':
             from .type_design import read

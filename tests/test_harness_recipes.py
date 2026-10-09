@@ -137,7 +137,7 @@ def test_recipe_binds_proposal_and_saved_case_with_audit_and_no_engineering_writ
     assert run['status']=='succeeded',run
     path='/materials/'+soil['id'].replace('/','~1')+'/thermal_resistivity';tid=session(client,w,s)
     catalog=client.get('/api/agent/recipes').json()
-    assert {row['id'] for row in catalog}=={'conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice','type_review'}
+    assert {row['id'] for row in catalog}=={'conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice','type_review','inbox_triage'}
     script.append(call('recipe_execute',{'recipe':'proposal_comparison','parameters':{
         'scope':'domain','changes':[{'path':path,'value':1.2,'unit':'K·m/W'}]}}))
     harness=client.app.state.harness;original=harness.model.reply;texts=[]

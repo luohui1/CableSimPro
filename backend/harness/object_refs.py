@@ -1,7 +1,9 @@
 """Resolve text mentions to shared cards; ambiguous names need observed identities."""
 from backend.index import get_index
+from backend.index.contracts import Kind
+from typing import get_args
 
-KINDS = {'project','study','run','type','cable_version','plugin'}
+KINDS = set(get_args(Kind))
 FIELDS = {'workspace_id':'project','study_id':'study','run_id':'run','type_id':'type',
           'model_id':'cable_version','plugin_id':'plugin'}
 
