@@ -67,3 +67,46 @@ def test_capacity_temperature_margin_hand_check_and_no_borrowed_limits():
     assert result['rating_basis']=='rating-simultaneous' and run==before
     domain['cable_types'][0]['rating']={}
     assert values(run,{'reference_case_id':'case-0'})[0]['margin_k'] is None
+
+
+def test_projection_observation_cache_invalidates_on_database_commit(tmp_path):
+    import sqlite3,json
+    from contextlib import contextmanager
+    from threading import RLock
+    from backend.kernel.fem_evidence import source_observation
+    from backend.kernel.research import encode
+    from backend.kernel.workspace import fingerprint
+    from cablesim_sdk.reproduction import digest
+    run,_=saved_fixture();case=run['output']['cases'][0];field=case['artifacts']['x-cablesim.temperature-field']
+    field['source']={**run['snapshot']['definition']['method'],'plugin_version':'1.0.1','binding':'simulation-bundle',
+        'case_id':'case-0','input_sha256':digest(run['snapshot']['cases'][0]['input']),'bundle_sha256':'d'*64}
+    field['convergence']={'full_mesh_nodes':3}
+    case['artifacts']['x-cablesim.simulation-bundle']={'field_storage':{'nodes':3}}
+    case['artifact_digests']['x-cablesim.simulation-bundle']='d'*64
+    path=tmp_path/'source.sqlite'
+    @contextmanager
+    def db():
+        connection=sqlite3.connect(path);connection.row_factory=sqlite3.Row
+        try:yield connection;connection.commit()
+        finally:connection.close()
+    with db() as connection:
+        connection.execute('CREATE TABLE study_runs(id,workspace,sequence,created,status,snapshot,input_digest,output,output_digest)')
+        connection.execute('INSERT INTO study_runs VALUES (?,?,?,?,?,?,?,?,?)',(run['id'],run['workspace'],3,run['created'],'succeeded',encode(run['snapshot']),fingerprint(run['snapshot']),encode(run['output']),fingerprint(run['output'])))
+    monitor=sqlite3.connect(path)
+    class ResearchStub:pass
+    research=ResearchStub();research.store=SimpleNamespace(db=db)
+    research.get_run=lambda *args:(_ for _ in ()).throw(HTTPException(409,'Corrupt source bytes'))
+    research.read_responses=SimpleNamespace(database=monitor,watch=True,lock=RLock(),generation=lambda _:(monitor.execute('PRAGMA data_version').fetchone()[0],'seal'))
+    try:
+        first=source_observation(research,run['workspace'],run['id'],'case-0','mesh')
+        assert first['hotspot_k']==320 and first['nodes']==3
+        assert source_observation(research,run['workspace'],run['id'],'case-0','mesh')==first
+        # A changed source cannot reuse a previously verified receipt.
+        with db() as connection:connection.execute("UPDATE study_runs SET output=output || ' '")
+        with pytest.raises(HTTPException) as corrupt:source_observation(research,run['workspace'],run['id'],'case-0','mesh')
+        assert corrupt.value.status_code==409
+        case['artifacts']['x-cablesim.simulation-bundle']['field_storage']['nodes']=4
+        with db() as connection:connection.execute('UPDATE study_runs SET output=?,output_digest=?',(encode(run['output']),fingerprint(run['output'])))
+        with pytest.raises(HTTPException) as caught:source_observation(research,run['workspace'],run['id'],'case-0','mesh')
+        assert caught.value.status_code==409
+    finally:monitor.close()

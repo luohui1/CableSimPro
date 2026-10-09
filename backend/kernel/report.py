@@ -2,7 +2,7 @@
 from html import escape
 import json
 
-RENDERER = 'cablesim.study-html/20'
+RENDERER = 'cablesim.study-html/21'
 
 
 def formatted(value, digits=1):
@@ -303,6 +303,7 @@ def sweep_answer(run):
 
 
 def render(runs, *, attachments=None):
+    from .report_reads import archive_runs
     from .version_status import cover_status
     from .rating_table import is_rating_table
     from .type_specification import render_run_specification
@@ -349,7 +350,7 @@ def render(runs, *, attachments=None):
                       + '<h3>适用范围与证据</h3><pre>'
                       + escape(json.dumps({k: run['output'].get(k) for k in ('limitations', 'validation', 'executions', 'environment_digest', 'assessment', 'crosscheck')}, ensure_ascii=False, indent=2))
                       + '</pre><details><summary>原始输入快照与完整精度结果</summary><pre>'
-                      + escape(json.dumps({'snapshot': run['snapshot'], 'output': run['output']}, ensure_ascii=False, indent=2)) + '</pre></details></section>')
+                      + escape(json.dumps(archive_runs([run])[0], ensure_ascii=False, separators=(',', ':'))) + '</pre></details></section>')
     return ('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><title>CableSimPro 研究计算书</title>'
             '<style>body{font:14px system-ui;max-width:1100px;margin:32px auto;padding:16px}table{border-collapse:collapse;width:100%}'
             'td,th{overflow-wrap:anywhere;font-variant-numeric:tabular-nums;border:1px solid #ccc;padding:8px;text-align:left}th{background:#f5f5f3;font-weight:500}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px}.answer{font-size:20px;line-height:1.6;border-bottom:1px solid #ddd;padding-bottom:20px}section{break-before:page}details{margin-top:24px}h2{margin-top:36px}h3{margin-top:24px}</style>'
@@ -376,10 +377,11 @@ def pdf_downloads(runs, *, attachments=None):
     """
     from base64 import b64encode
     from datetime import datetime, timezone
-    from .study_pdf import render_pdf
+    from .study_pdf import render_editions
     generated_at=datetime.now(timezone.utc).isoformat(timespec='seconds')
+    editions=render_editions(runs,generated_at=generated_at,attachments=attachments)
     links=[]
     for audience,label in [('customer','客户版'),('internal','内部审核版')]:
-        payload=b64encode(render_pdf(runs,audience,generated_at=generated_at,attachments=attachments)).decode('ascii')
+        payload=b64encode(editions[audience]).decode('ascii')
         links.append(f'<a data-report-pdf="{audience}" download="研究计算书-{label}.pdf" href="data:application/pdf;base64,{payload}">下载{label} PDF</a>')
     return '<nav aria-label="计算书 PDF 下载">'+'　'.join(links)+'</nav>'

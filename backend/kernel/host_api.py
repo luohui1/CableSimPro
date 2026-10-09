@@ -129,6 +129,18 @@ class DeliveryResult(StrictModel):
     version_status: VersionStatus = Field(description='Current version status of source runs; saved HTML and its digest are not rewritten.')
 
 
+class DeliveryJob(StrictModel):
+    id: UUID = Field(description='Report generation job identity; does not create a solver run.')
+    workspace: UUID
+    request_id: UUID = Field(description='Idempotent retry identity for the exact source and attachments.')
+    state: Literal['queued','running','succeeded','cancelled','failed']
+    stage: Literal['queued','source','evidence','pdf','save','done'] = Field(description='Observed formatting phase; cancellation is accepted until save begins.')
+    created: str = Field(description='UTC ISO 8601 admission time.')
+    finished: str | None = Field(description='UTC ISO 8601 terminal time.')
+    delivery_id: UUID | None = Field(description='Saved delivery identity, present only after successful commit.')
+    error: ApiErrorDetail | None
+
+
 class DeliverySummary(StrictModel):
     id: UUID = Field(description='Immutable delivery identity.')
     workspace: UUID
@@ -217,11 +229,29 @@ def make_router(research, previews):
     router = APIRouter(prefix='/api', tags=['Host inputs and delivery'])
     from .database_ops import make_router as database_router
     router.include_router(database_router(research.store))
+    from .delivery_jobs import DeliveryJobs
+    research.delivery_jobs=DeliveryJobs(research)
+
+    @router.post('/workspaces/{wid}/delivery-jobs',status_code=202,response_model=DeliveryJob,responses=ERRORS)
+    def create_delivery_job(wid:UUID,body:CurrentDeliveryRequest):
+        if len(body.run_ids)!=1:fail(422,'DELIVERY_SOURCE_COMBINATION_INVALID','异步生成请选择一个研究主运行。')
+        return host_call(research.delivery_jobs.start,str(wid),body.model_dump(mode='json'))
+
+    @router.get('/workspaces/{wid}/delivery-jobs/{jid}',response_model=DeliveryJob,responses=ERRORS)
+    def delivery_job(wid:UUID,jid:UUID):
+        return host_call(research.delivery_jobs.read,str(wid),str(jid))
+
+    @router.post('/workspaces/{wid}/delivery-jobs/{jid}/cancel',response_model=DeliveryJob,responses=ERRORS)
+    def cancel_delivery_job(wid:UUID,jid:UUID):
+        return host_call(research.delivery_jobs.cancel,str(wid),str(jid))
 
     @router.get('/workspaces/{wid}/runs/{rid}/fem-conclusion',response_model=FemConclusion,responses=ERRORS)
-    def saved_fem_conclusion(wid:UUID,rid:UUID):
-        try:return host_call(fem_conclusion,research,str(wid),str(rid))
-        except (ValueError,KeyError,StopIteration):fail(422,'FEM_EVIDENCE_INVALID','保存有限元证据不完整或不满足核验条件，请检查诊断与收敛记录。')
+    async def saved_fem_conclusion(wid:UUID,rid:UUID):
+        from .read_responses import read_response
+        def load():
+            try:return host_call(fem_conclusion,research,str(wid),str(rid))
+            except (ValueError,KeyError,StopIteration):fail(422,'FEM_EVIDENCE_INVALID','保存有限元证据不完整或不满足核验条件，请检查诊断与收敛记录。')
+        return await read_response(research,('fem-conclusion',str(wid),str(rid)),FemConclusion,load)
 
     @router.get('/simulation/problem-contract',response_model=ProblemContract,responses=ERRORS)
     def simulation_problem_contract():

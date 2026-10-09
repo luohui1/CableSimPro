@@ -8,7 +8,7 @@ import { Button } from './ui/button';
 
 export function useFemEvidence(run?: Record<string,unknown>) {
   const method=optionalRecord(run?.method || optionalRecord(optionalRecord(run?.snapshot).definition).method);
-  return useQuery({queryKey:['fem-conclusion',run?.workspace,run?.id], enabled:!!run && method.capability==='iec-thermal-field' && ['succeeded','partial'].includes(text(run.status)), retry:false,
+  return useQuery({queryKey:['fem-conclusion',run?.workspace,run?.id], enabled:!!run && method.capability==='iec-thermal-field' && ['succeeded','partial'].includes(text(run.status)), retry:false,staleTime:30000,
     queryFn:async({signal})=>{
       const response=await fetch(`/api/workspaces/${encodeURIComponent(text(run?.workspace))}/runs/${encodeURIComponent(text(run?.id))}/fem-conclusion`,{signal});
       const data=await response.json();if(!response.ok)throw Error(text(optionalRecord(data.detail).message) || text(data.detail) || `保存证明读取失败（${response.status}）`);

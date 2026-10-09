@@ -7,7 +7,7 @@ import { assertLayout } from './layout-assertions.mjs';
 
 if(process.env.E2E_ISOLATED!=='1')throw Error('FEM report verification requires an isolated database');
 const receipt=JSON.parse(await fs.readFile(process.env.FEM_RECEIPT,'utf8'));
-const out=path.join(outputRoot,'fem-report');await fs.mkdir(out,{recursive:true});
+const out=path.join(outputRoot,process.env.FEM_REPORT_OUTPUT || 'fem-report');await fs.mkdir(out,{recursive:true});
 const session=await openHeadlessBrowser(),{page}=session;
 // External Edge/CDP does not own Playwright's temporary download directory.
 // Capture the actual browser download in a task-owned directory instead.
@@ -18,7 +18,10 @@ const cdp=await session.browser.newBrowserCDPSession(),progress=new Map();
 await cdp.send('Browser.setDownloadBehavior',{behavior:'allowAndName',downloadPath:downloadDir,eventsEnabled:true});
 cdp.on('Browser.downloadProgress',event=>progress.set(event.guid,event.state));
 const base=process.env.FRONTEND_URL,expect=baseExpect.configure({timeout:120000});
-const report={errors:[],variants:[],writes:[]};
+const report={errors:[],variants:[],writes:[],reads:[]};
+const readStarts=new WeakMap();
+page.on('request',request=>{if(request.method()==='GET' && request.url().includes('/api/'))readStarts.set(request,Date.now());});
+page.on('requestfinished',request=>{const start=readStarts.get(request);if(start)report.reads.push({path:new URL(request.url()).pathname,ms:Date.now()-start});});
 page.on('pageerror',error=>report.errors.push(error.message));
 page.on('request',request=>{if(request.url().includes('/api/') && !['GET','HEAD','OPTIONS'].includes(request.method()))report.writes.push({path:new URL(request.url()).pathname,body:request.postDataJSON()});});
 const wid=receipt.workspace,rid=receipt.latest_fem_run,sid=receipt.child_study;
@@ -48,13 +51,28 @@ try {
   await expect(page.getByRole('table',{name:'有限元与 IEC 同输入对照'})).toContainText('362.24');
   await expect(page.getByRole('table',{name:'有限元与 IEC 同输入对照'})).toContainText('106.98');
   await variants('收敛结论与同输入对照');
+  const firstScreen=Date.now();await page.reload();
+  await expect(page.locator('.answer-bar')).toContainText('359.6');
+  await expect(page.locator('.study-field-slot canvas')).toBeVisible();
+  await page.waitForFunction(()=>!!document.querySelector('.study-field-slot canvas')?.width);
+  await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+  report.firstScreenMs=Date.now()-firstScreen;
+  const region=await page.locator('.study-field-slot .field-object circle').first().getAttribute('r');
+  await page.getByRole('button',{name:'适配全域',exact:true}).click();
+  await expect(page.getByRole('button',{name:'对准电缆区域',exact:true})).toBeVisible();
+  const full=await page.locator('.study-field-slot .field-object circle').first().getAttribute('r');
+  report.fieldRadius={region,full};
+  assert.ok(Number(region)>Number(full),'Default field view must show cables larger than full-domain fit');
+  await page.getByRole('button',{name:'对准电缆区域',exact:true}).click();
   await page.screenshot({path:path.join(out,'conclusion.png')});
   report.summary=await page.evaluate(async({wid,rid})=>await(await fetch(`/api/workspaces/${wid}/runs/${rid}/fem-conclusion`)).json(),{wid,rid});
   assert.equal(report.summary.reference.iec_run_id,receipt.iecRun);
   assert.equal(report.summary.reference.convergence_id,receipt.convergence);
   await page.getByRole('tab',{name:'方法',exact:true}).click();
+  if(await page.locator('.workbench-inspector').getByText('方法契约不可用',{exact:true}).isVisible())throw Error('Installed plugin seal is inconsistent; complete publication before current-report acceptance. Saved runs must not be rebound.');
   await expect(page.locator('.workbench-inspector')).toContainText('Kennelly');
   await expect(page.locator('.workbench-inspector')).not.toContainText('kennelly_image');
+  if(await page.getByRole('toolbar',{name:'工程命令'}).getByRole('button',{name:'生成计算书',exact:true}).isDisabled())throw Error('Saved FEM method version is historical; provide a real current-version run before formal-delivery acceptance.');
   const generated=Date.now();
   await page.getByRole('toolbar',{name:'工程命令'}).getByRole('button',{name:'生成计算书',exact:true}).click();
   await expect(page.getByRole('button',{name:'下载 PDF',exact:true})).toBeEnabled();
@@ -70,7 +88,7 @@ try {
     await fs.rename(path.join(downloadDir,guid),path.join(out,audience+'.pdf'));
   }
   await variants('有限元计算书预览',false);
-  assert.ok(report.writes.some(r=>r.path.endsWith('/deliveries/current') && r.body.fem_chapter.convergence_id===receipt.convergence));
+  assert.ok(report.writes.some(r=>r.path.endsWith('/delivery-jobs') && r.body.fem_chapter.convergence_id===receipt.convergence));
   assert.ok(!report.writes.some(r=>r.path.endsWith('/runs')),'No solver submission during result/report projection');
   await page.route('**/fem-conclusion',route=>route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({detail:'验收注入：保存证明暂不可用'})}));
   await page.goto(base+route);await expect(page.getByText('收敛证明不可用',{exact:true})).toBeVisible();await variants('证明读取错误');
@@ -95,5 +113,7 @@ try {
   await expect(page.locator('.answer-bar')).toContainText('未收敛');
   await expect(page.locator('.answer-bar .conclusion-metrics')).toHaveCount(0);await variants('未收敛与历史诊断');
   assert.deepEqual(report.errors,[]);
+  assert.ok(report.firstScreenMs<=3000,`FEM first screen ${report.firstScreenMs} ms exceeds 3 s`);
+  assert.ok(report.reportGenerationMs<=10000,`FEM report ${report.reportGenerationMs} ms exceeds 10 s`);
 }catch(error){report.failure=error.stack;report.screen=await page.locator('body').innerText();await page.screenshot({path:path.join(out,'failure.png')});throw error;}
 finally{releaseProof?.();await fs.writeFile(path.join(out,'acceptance.json'),JSON.stringify(report,null,2));await session.close();await fs.rm(downloadDir,{recursive:true,force:true});}

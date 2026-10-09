@@ -59,7 +59,9 @@ def methods(definition):
 
 def inspect(research, snapshot, cache=None):
     reasons = []
-    cache = {} if cache is None else cache
+    from .report_reads import read_cache
+    shared=read_cache()
+    cache = shared.setdefault('methods',{}) if shared is not None else {} if cache is None else cache
     pins = cache.setdefault('version_pins', {})
     for old in methods(snapshot['definition']):
         pid = old['plugin_id']

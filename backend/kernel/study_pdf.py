@@ -15,7 +15,7 @@ import re
 from .specification_pdf import _Blocks, _font_lock
 from .workspace import fingerprint
 
-RENDERER = 'cablesim.study-pdf/3'
+RENDERER = 'cablesim.study-pdf/4'
 PLUGIN_NAMES = {'cablesim.iec60287':'IEC 60287 稳态载流量', 'cablesim.thermal-network':'热网络交叉校核',
     'cablesim.simulation':'数值仿真', 'cablesim.hybrid-rating':'混合载流量参考',
     'cablesim.native-reference':'原生算法参考', 'cablesim.comsol-bridge':'COMSOL 仿真'}
@@ -344,12 +344,27 @@ def chapters(runs, audience):
     return sections
 
 
-def render_pdf(runs, audience='customer', *, generated_at=None, attachments=None):
-    if audience not in ('customer','internal'):raise ValueError('文档版本须为 customer 或 internal。')
+def validate_sources(runs):
     if not runs:raise ValueError('请选择至少一个已保存运行。')
     for run in runs:
         if run.get('integrity')!='verified' or fingerprint(run['snapshot'])!=run['input_digest'] or fingerprint(run['output'])!=run['output_digest']:
             raise ValueError('计算书源运行完整性校验失败。')
+
+
+def render_pdf(runs, audience='customer', *, generated_at=None, attachments=None):
+    validate_sources(runs)
+    return _render_pdf(runs,audience,generated_at=generated_at,attachments=attachments)
+
+
+def render_editions(runs, *, generated_at=None, attachments=None):
+    """Validate once, format both editions from the same private source objects."""
+    validate_sources(runs)
+    return {audience:_render_pdf(runs,audience,generated_at=generated_at,attachments=attachments)
+            for audience in ('customer','internal')}
+
+
+def _render_pdf(runs, audience, *, generated_at=None, attachments=None):
+    if audience not in ('customer','internal'):raise ValueError('文档版本须为 customer 或 internal。')
     import fitz
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4
@@ -458,8 +473,9 @@ def render_pdf(runs, audience='customer', *, generated_at=None, attachments=None
     doc.build(arranged,canvasmaker=NumberedCanvas)
     if audience=='internal':
         import json
+        from .report_reads import archive_runs
         with fitz.open(stream=output.getvalue(),filetype='pdf') as audit:
-            audit.embfile_add('saved-runs.json',json.dumps(runs,ensure_ascii=False,indent=2).encode('utf-8'),filename='saved-runs.json',desc='完整输入快照、完整精度结果、诊断及验证证据；未重新计算。')
+            audit.embfile_add('saved-runs.json',json.dumps(archive_runs(runs),ensure_ascii=False,indent=2).encode('utf-8'),filename='saved-runs.json',desc='完整输入、完整精度结果与证据；大场二进制数组以来源工件摘要和保存运行地址引用，原件保留在工程库；未重新计算。')
             return audit.tobytes(garbage=3,deflate=True)
     return output.getvalue()
 

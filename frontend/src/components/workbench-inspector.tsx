@@ -51,6 +51,7 @@ export function WorkbenchInspector({ view = "input", onView, methodPanel, agentP
   demo: boolean;
 }) {
   const [layers, setLayers] = useState(false);
+  const [relations,setRelations]=useState(false);
   return <aside className="workbench-inspector study-inspector" aria-label="属性">
     {(methodPanel || agentPanel) && <div className="inspector-switch" role="tablist" aria-label="属性分页">
       {inspectorViews.filter(item => item.id === 'input' || item.id === 'method' && methodPanel || item.id === 'agent' && agentPanel).map(item =>
@@ -78,7 +79,7 @@ export function WorkbenchInspector({ view = "input", onView, methodPanel, agentP
     <Dialog open={layers} onOpenChange={setLayers} title="电缆分层" initialFocus="form">
       {layers && <CableInputs tab="layers" document={document} historical={historical} onSelect={() => {}} />}
     </Dialog>
-    {relationPanel && <Block icon="object/study" title="关联">{relationPanel}</Block>}
+    {relationPanel && <Block icon="object/study" title="关联" aside={<Button size="compact" variant="ghost" aria-expanded={relations} onClick={()=>setRelations(value=>!value)}>{relations ? '收起' : '查看关联'}</Button>}>{relations && relationPanel}</Block>}
     </>}
   </aside>;
 }

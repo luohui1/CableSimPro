@@ -100,12 +100,12 @@ def prepare(research, wid, ids, images, fem_reference, section_images=None):
         if field and not any(f['case_id']==image['case_id'] for f in attachments['field_images']):
             if saved.get('artifact_status',{}).get(image['case_id'],{}).get('x-cablesim.temperature-field',{}).get('status')!='verified':raise HTTPException(409,'温度场工件来源校验失败，不能纳入计算书。')
             from .convergence import has_temperature_field
-            if has_temperature_field(saved):
+            if has_temperature_field(saved) and not fem_reference:
                 from .fem_evidence import proof
                 if proof(research,saved,(fem_reference or {}).get('convergence_id'))['status']!='converged':raise HTTPException(422,'温度场未收敛，不能进入正式计算书。')
             if fem_reference:continue  # Its frozen chapter includes this same saved field.
-            from .batch_field_chapter import field_png
-            raw=field_png(field)
+            from .report_reads import saved_field_image
+            raw=saved_field_image(field)
             analytic=field.get('source',{}).get('binding')=='iec-trace'
             if analytic:
                 # Reuse the saved-triangle renderer, but label the actual IEC
@@ -139,21 +139,19 @@ def prepare(research, wid, ids, images, fem_reference, section_images=None):
     if fem_reference:
         fem_id, iec_id = str(fem_reference['fem_run_id']), str(fem_reference['iec_run_id'])
         if primary not in (fem_id, iec_id): raise HTTPException(409, '有限元章节必须包含所选源运行。')
-        from .batch_field_chapter import chapter, selected_case, field_png
-        from .batch_convergence import Refinements
-        from .fem_evidence import workflow_for
+        from .fem_evidence import workflow_for, report_chapter
         workflow=workflow_for(research,wid,fem_id)
         convergence_id=fem_reference.get('convergence_id') or (workflow or {}).get('id')
-        data = chapter(research, Refinements(research) if convergence_id else None, wid, fem_id, iec_id, convergence_id)
+        data, fem = report_chapter(research, wid, fem_id, iec_id, convergence_id)
         convergence=data.get('convergence') or {}
         # Workflow completion is not the physical verdict. Chapter verifies the
         # saved observations; use that verdict for the delivery gate.
         verdict=convergence.get('verdict',convergence)
         if verdict.get('status') != 'converged' or not 0<verdict.get('tolerance_k',.1)<=.1:
             raise HTTPException(422, '有限元未收敛，不能进入正式计算书。')
-        fem = research.get_run(wid, fem_id)
-        chosen, _ = selected_case(fem,data['convergence']['rows'][-1]['case_id'] if convergence_id else None)
-        raw = field_png(chosen['artifacts']['x-cablesim.temperature-field'])
+        chosen = next(c for c in fem['output']['cases'] if c['case_id']==data['fem']['case_id'])
+        from .report_reads import saved_field_image
+        raw = saved_field_image(chosen['artifacts']['x-cablesim.temperature-field'])
         attachments['fem_chapter'] = {'data': data, 'png_base64': b64encode(raw).decode(), 'image_sha256': sha256(raw).hexdigest()}
         for rid in (fem_id, iec_id):
             if rid not in ids: ids.append(rid)

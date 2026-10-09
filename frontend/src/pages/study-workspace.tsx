@@ -24,6 +24,7 @@ import { AddStudyDialog } from "@/components/add-study-dialog";
 import { StudyDrawing } from "@/components/study-drawing";
 import { conductorAnnotations } from "@/lib/result-annotations";
 import { temperatureView } from "@/lib/temperature-view";
+import { focusField } from '@/components/study-field-focus';
 import {
   StudySelection,
   selectedProperties,
@@ -95,6 +96,8 @@ export function StudyWorkspace() {
   const theme = search.theme;
   const projectIndex = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
   const [selected, setSelected] = useState<SelectionRow | undefined>();
+  const [fullFieldDomain,setFullFieldDomain]=useState(false);
+  useEffect(()=>setFullFieldDomain(false),[sid,search.run]);
   // 以曲线为主的研究默认放大数据区；选型、载流量和温度场类研究默认模型与结果各半（温度场画在画布上）
   const plotFirst = (key: string) => moduleBehavior.plotFirst.has(key);
   const [dockMax, setDockMax] = useState(plotFirst(module));
@@ -180,6 +183,11 @@ export function StudyWorkspace() {
   }, [fieldRun, pendingRun, fieldCase]);
   // 场值换算只做一次：每次渲染都新建数组会让场图重算等温线和定位网格，切换属性页时整页卡死
   const fieldValues = useMemo(() => fieldView?.temperatures.map((kelvin) => kelvin - 273.15), [fieldView]);
+  const focusedField = useMemo(() => {
+    if(!fieldView || !fieldValues)return undefined;
+    const objects=fieldView.excluded.length ? fieldView.excluded : (fieldView.geometry?.cables || []).map(cable=>({x:cable.x,z:cable.z,r:cable.shape.radiusM}));
+    return fieldView.kind==='fem' && !fullFieldDomain ? focusField(fieldView.points,fieldView.triangles,fieldValues,objects) : {points:fieldView.points,triangles:fieldView.triangles,values:fieldValues};
+  },[fieldView,fieldValues,fullFieldDomain]);
   const inputModule = moduleBehavior.input.has(module);
   const snapshotInput = inputModule && !!search.run;
   const inputDocument = (
@@ -298,6 +306,9 @@ export function StudyWorkspace() {
   // 命令栏：只放“做什么”——保存、运行、交付；最右侧给出当前状态
   const runnable = moduleBehavior.runnable.has(module) ||
     (module === "method-compare" && (!!study.definition.modules?.["method-compare"] || calculatedModule === "method-compare") && !search.compare);
+  const analyses = enabled.filter(key => !moduleBehavior.input.has(key) && key !== 'report' && (key !== 'thermal-field' || calculatedModule === key))
+    .map(key => ({value:key,label:key === calculatedModule ? hostTasks.find(task => task.task === study.definition.task)?.label || moduleDefinitions[key].label : moduleDefinitions[key].label}));
+  const currentAnalysis = module === 'report' || moduleBehavior.input.has(module) ? calculatedModule : module;
   const commandBar = (
     <div className="command-bar" role="toolbar" aria-label="工程命令">
       <div className="command-group" role="group" aria-label="模型">
@@ -308,8 +319,8 @@ export function StudyWorkspace() {
       </div>
       <div className="command-group" role="group" aria-label="计算">
         <span className="command-caption">计算</span>
-        <Select label="分析" value={module === 'report' ? calculatedModule : module} options={enabled.filter(key => !moduleBehavior.input.has(key) && key !== 'report' && key !== 'thermal-field').map(key => ({value:key,label:key === calculatedModule ? hostTasks.find(task => task.task === study.definition.task)?.label || moduleDefinitions[key].label : moduleDefinitions[key].label}))}
-          onChange={value => navigate({params:{sid,module:value,tab:value === 'sweep' && !study.definition.modules?.sweep ? 'settings' : value === 'method-compare' && !study.definition.modules?.['method-compare'] ? 'inputs' : studyEntryTab(value)},search:{...currentSearch(),run:'',delivery:'',inspector:value === 'sweep' ? 'method' : 'input'}})} />
+        {analyses.length > 1 && <Select label="分析" value={analyses.some(item => item.value === currentAnalysis) ? currentAnalysis : calculatedModule} options={analyses}
+          onChange={value => navigate({params:{sid,module:value,tab:value === 'sweep' && !study.definition.modules?.sweep ? 'settings' : value === 'method-compare' && !study.definition.modules?.['method-compare'] ? 'inputs' : studyEntryTab(value)},search:{...currentSearch(),run:'',delivery:'',inspector:value === 'sweep' ? 'method' : 'input'}})} />}
         <PreviewControls preview={preview} />
         {runnable && !snapshotInput && <StudyRunControl
                         key={sid + module}
@@ -434,13 +445,15 @@ export function StudyWorkspace() {
                   </button>
                 ))}
                 {canvasView === 'three' && reportImage?.runId === run?.id && <StatusMark kind="saved" label="三维图已选入计算书" />}
+                {canvasView==='field' && fieldView?.kind==='fem' && <Button size="compact" variant="ghost" onClick={()=>setFullFieldDomain(value=>!value)}>{fullFieldDomain ? '对准电缆区域' : '适配全域'}</Button>}
               </div>
               {canvasView === "field" && fieldView ? (
                 <div className="study-field-slot"><FieldView
                   label={fieldView.kind === "iec" ? "土壤温度场（IEC 解析）" : "温度场"}
-                  points={fieldView.points}
-                  triangles={fieldView.triangles}
-                  values={fieldValues!}
+                  key={fullFieldDomain ? 'full-domain' : 'cable-region'}
+                  points={focusedField!.points}
+                  triangles={focusedField!.triangles}
+                  values={focusedField!.values}
                   samplePoint={optionalRecord(fieldView.field.convergence).display_decimated === true ? async point => {
                     const value = await hpcJson(`/workspaces/${text(run?.workspace)}/fields/${text(run?.id)}/sample?case_id=${encodeURIComponent(text(fieldView.case.case_id))}`, {
                       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify([point])});

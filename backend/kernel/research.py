@@ -26,6 +26,7 @@ from ..plugin_host.executor import CaseResult, current_platform
 from .workspace import fingerprint, stamp
 from .contracts import LossArtifactReference, StudyConfiguration, StudyDefinition
 from .drivers import assess, cases_for, compare, crosscheck_differences
+from .report_reads import saved_scope, read_cache, byte_digest, checkpoint
 
 
 def encode(value):
@@ -58,6 +59,7 @@ class Research:
         self.background = ThreadPoolExecutor(max_workers=2, thread_name_prefix='study-run')
 
     def close(self):
+        if hasattr(self,'delivery_jobs'):self.delivery_jobs.close()
         self.background.shutdown(wait=False)
         self.read_responses.close()
         self.catalog_read_responses.close()
@@ -157,7 +159,8 @@ class Research:
     def resolve(self, method, cache=None):
         # Refresh disk metadata: an already-created executor cannot hide a package upgrade.
         # Only callers performing one read request share this cache; executions never do.
-        cache = {} if cache is None else cache
+        shared=read_cache()
+        cache = shared.setdefault('methods',{}) if shared is not None else {} if cache is None else cache
         registries = cache.setdefault('registries', {})
         plugin_id = method['plugin_id']
         if plugin_id not in registries:
@@ -761,7 +764,11 @@ class Research:
         return result
 
     def get_run(self, wid, rid, cache=None):
-        cache = {} if cache is None else cache
+        shared = read_cache()
+        identity = (id(self), wid, str(rid))
+        if shared is not None and identity in shared:
+            return shared[identity]
+        cache = shared.setdefault('methods',{}) if shared is not None else {} if cache is None else cache
         with self.store.db() as db:
             db.execute('BEGIN')
             row, _ = self.store.load(db, wid)
@@ -769,15 +776,15 @@ class Research:
             if record is None:
                 raise HTTPException(404, '运行不存在或不属于此工程。')
             value = dict(record)
+            canonical = byte_digest(value['snapshot']) == value['input_digest'] and (value['output'] is None or byte_digest(value['output']) == value['output_digest'])
             try:
                 for key in ('snapshot', 'output', 'error'):
                     value[key] = json.loads(value[key]) if value[key] else None
             except (ValueError, TypeError):
                 return {**value, 'integrity': 'corrupt', 'freshness': 'unknown'}
             snapshot = value['snapshot']
-            intact = fingerprint(snapshot) == value['input_digest']
-            if value['output'] is not None:
-                intact = intact and fingerprint(value['output']) == value['output_digest']
+            intact = canonical or (fingerprint(snapshot) == value['input_digest'] and
+                (value['output'] is None or fingerprint(value['output']) == value['output_digest']))
             if not intact:
                 return {**value, 'integrity': 'corrupt', 'freshness': 'unknown'}
             study = self.definition(db, wid, value['study'])
@@ -813,6 +820,7 @@ class Research:
         from .convergence import has_temperature_field, temperature_convergence
         if has_temperature_field(value):
             value['convergence'] = temperature_convergence(value)
+        if shared is not None: shared[identity] = value
         return value
 
     @staticmethod
@@ -976,6 +984,7 @@ class Research:
     def comparison(self, wid, ids):
         return compare(self.verified_runs(wid, ids))
 
+    @saved_scope
     def deliver(self, wid, ids, request_id=None, *, current_only=False, cad_images=None, fem_chapter=None, section_images=None):
         from .report import RENDERER, render
         identity = [str(rid) for rid in ids]
@@ -991,6 +1000,7 @@ class Research:
                     raise HTTPException(409, '同一请求标识不能用于不同源运行。')
                 return self.delivery(wid, prior['delivery'])
         attachments = None
+        checkpoint('evidence')
         if cad_images or fem_chapter or section_images:
             if len(ids) != 1:
                 raise HTTPException(422, '带附图或有限元章节的计算书请选择一个主运行。')
@@ -1018,10 +1028,12 @@ class Research:
                     raise HTTPException(422,'IEC/FEM 比较未通过网格与计算域收敛，不能纳入计算书。')
         if current_only and any(r['freshness'] != 'current' for r in runs):
             raise HTTPException(409, '计算书只能纳入当前保存输入的运行；请重新计算或重新选择。')
+        checkpoint('pdf')
         html = render(runs, attachments=attachments) if attachments else render(runs)
         source = [{'run_id': r['id'], 'input_digest': r['input_digest'], 'output_digest': r['output_digest']} for r in runs]
         did, renderer = str(uuid4()), RENDERER
         digest = fingerprint({'renderer': renderer, 'sources': source, 'html': html})
+        checkpoint('save')
         with self.store.db(True) as db:
             if current_only:
                 row, _ = self.store.load(db, wid)
@@ -1039,11 +1051,17 @@ class Research:
                     if prior['run_ids'] != encoded_ids:
                         raise HTTPException(409, '同一请求标识不能用于不同源运行。')
                     return self.delivery(wid, prior['delivery'])
-            db.execute('INSERT INTO deliveries VALUES (?,?,?,?,?,?,?)', (did, wid, encode(source), renderer, html, digest, stamp()))
+            created=stamp()
+            db.execute('INSERT INTO deliveries VALUES (?,?,?,?,?,?,?)', (did, wid, encode(source), renderer, html, digest, created))
             if request_id is not None:
                 db.execute('INSERT INTO delivery_requests VALUES (?,?,?,?)', (wid, str(request_id), encoded_ids, did))
-        return self.delivery(wid, did)
+        # These exact bytes were just committed after source/revision checks.
+        # A read/export still revalidates the stored archive independently.
+        from .version_status import cover_status
+        return {'id':did,'workspace':wid,'sources':source,'renderer':renderer,'html':html,
+                'digest':digest,'created':created,'version_status':cover_status(runs)}
 
+    @saved_scope
     def delivery(self, wid, did):
         with self.store.db() as db:
             row = db.execute('SELECT * FROM deliveries WHERE workspace=? AND id=?', (wid, did)).fetchone()
@@ -1058,5 +1076,6 @@ class Research:
         if digest != result['digest']:
             raise HTTPException(409, '计算书完整性校验失败。')
         from .version_status import cover_status
-        result['version_status'] = cover_status([self.get_run(wid, s['run_id']) for s in result['sources']])
+        from .fem_evidence import display_read
+        result['version_status'] = cover_status([display_read(self, wid, s['run_id']) for s in result['sources']])
         return result

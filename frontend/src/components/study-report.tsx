@@ -79,10 +79,11 @@ function CurrentReport({
   const selectedIec=iecId || text(defaultReference.iec_run_id);
   const chapterReference = primaryFem ? (selectedIec ? {fem_run_id:text(run?.id),iec_run_id:selectedIec,convergence_id:text(defaultReference.convergence_id) || undefined} : undefined)
     : femId ? {fem_run_id:femId,iec_run_id:text(run?.id),convergence_id:text(defaultReference.convergence_id) || undefined} : undefined;
-  const chapter = useQuery({queryKey:['report-fem-chapter',wid,chapterReference?.fem_run_id,chapterReference?.iec_run_id,chapterReference?.convergence_id], enabled:!!chapterReference && !did && !!femEvidence.data,
+  const summaryReference = primaryFem && selectedIec === text(defaultReference.iec_run_id);
+  const chapter = useQuery({queryKey:['report-fem-chapter',wid,chapterReference?.fem_run_id,chapterReference?.iec_run_id,chapterReference?.convergence_id], enabled:!!chapterReference && !did && !!femEvidence.data && !summaryReference,
     queryFn:({signal}) => hpcJson(`/workspaces/${encodeURIComponent(wid)}/chapters/${encodeURIComponent(chapterReference!.fem_run_id)}?iec_run_id=${encodeURIComponent(chapterReference!.iec_run_id)}${chapterReference!.convergence_id ? '&convergence_id='+encodeURIComponent(chapterReference!.convergence_id) : ''}`, {signal})});
   const convergence=optionalRecord(chapter.data?.convergence);
-  const chapterConverged=text(optionalRecord(convergence.verdict).status || convergence.status)==='converged';
+  const chapterConverged=summaryReference ? femEvidence.data?.status==='converged' : text(optionalRecord(convergence.verdict).status || convergence.status)==='converged';
   const current =
     !!run &&
     run.freshness === "current" &&
@@ -93,8 +94,24 @@ function CurrentReport({
     queryKey: ["delivery", wid, did],
     queryFn: () => delivery(wid, did),
     enabled: !!did && !!run,
+    // Generation has already fetched and verified this immutable archive.
+    // Reuse that response when opening preview; export rechecks source freshness.
+    staleTime:30000,
   });
   const request = useRef({ run: "", id: "" });
+  const [generation, setGeneration] = useState<Record<string,unknown>>();
+  const cancelRequested = useRef(false);
+  const generating = useRef(false);
+  const progressLabels: Record<string,string> = {source:'读取保存运行',evidence:'核验收敛与来源',pdf:'排版与生成 PDF',save:'保存交付',done:'已生成'};
+  async function jobRequest(path: string, init?: RequestInit) {
+    const response=await fetch(path,init),data=await response.json();
+    if(!response.ok)throw new ApiError(response.status,text(optionalRecord(data.detail).message) || text(data.detail) || '计算书任务不可用');
+    return record(data);
+  }
+  async function cancelGeneration() {
+    cancelRequested.current=true;
+    if(generation?.id)setGeneration(await jobRequest(`/api/workspaces/${wid}/delivery-jobs/${text(generation.id)}/cancel`,{method:'POST'}));
+  }
   const [preview, setPreview] = useState('');
   const [previewError, setPreviewError] = useState<Error>();
   useEffect(() => {
@@ -112,7 +129,7 @@ function CurrentReport({
   async function fresh() {
     if (!run || dirty)
       throw new ApiError(409, "未保存修改或缺少源运行，不能交付");
-    const saved = record(
+    const saved = primaryFem ? await hpcJson(`/workspaces/${wid}/fields/${text(run.id)}/view`) : record(
       await responseData(
         api.GET("/api/workspaces/{wid}/studies/{sid}/runs/{rid}", {
           params: { path: { wid, sid, rid: text(run.id) } },
@@ -130,19 +147,36 @@ function CurrentReport({
   const create = useMutation({
     retry: false,
     mutationFn: async () => {
+      if(generating.current)throw new ApiError(409,'计算书正在生成，请等待当前任务。');
+      generating.current=true;cancelRequested.current=false;setGeneration({state:'running',stage:'source'});
+      try {
       const source = await fresh();
       const rid = text(source.id);
       if (primaryFem && !chapterReference) throw new ApiError(422, '请选择输入匹配的 IEC 对照运行。');
       if (chapterReference && (!chapterConverged || chapter.error || chapter.isFetching)) throw new ApiError(422, '请先核对有限元章节；未收敛或输入不一致不能交付。');
       const cadImages = includeImage && cadImage ? [{metadata:cadImage.metadata,png_base64:await pngBase64(cadImage.blob)}] : [];
       const sectionImages = await reportSectionImages(source);
+      if(cancelRequested.current)throw new ApiError(499,'已取消生成，保存运行未改变。');
       const payload = {run_ids:[rid], request_id:'', cad_images:cadImages, section_images:sectionImages, fem_chapter:chapterReference || null};
       const identity = JSON.stringify({...payload,request_id:undefined});
       if (request.current.run !== identity) request.current = { run: identity, id: crypto.randomUUID() };
       payload.request_id = request.current.id;
-      const book = record(await responseData(api.POST('/api/workspaces/{wid}/deliveries/current', {params:{path:{wid}},body:payload})), '计算书');
+      let job=await jobRequest(`/api/workspaces/${wid}/delivery-jobs`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+      setGeneration(job);
+      while(['queued','running'].includes(text(job.state))) {
+        if(cancelRequested.current && job.stage!=='save')job=await jobRequest(`/api/workspaces/${wid}/delivery-jobs/${text(job.id)}/cancel`,{method:'POST'});
+        else {
+          await new Promise(resolve=>window.setTimeout(resolve,150));
+          job=await jobRequest(`/api/workspaces/${wid}/delivery-jobs/${text(job.id)}`);
+        }
+        setGeneration(job);
+      }
+      if(job.state==='cancelled'){request.current={run:'',id:''};throw new ApiError(499,'已取消生成，保存运行未改变。');}
+      if(job.state!=='succeeded')throw new ApiError(422,text(optionalRecord(job.error).message) || '计算书生成失败，保存运行未改变。');
+      const book = await delivery(wid,text(job.delivery_id));
       verify(book, source);
       return book;
+      } finally {generating.current=false;}
     },
     onSuccess: (value) => {
       queries.setQueryData(['delivery', wid, text(value.id)], value);
@@ -204,7 +238,8 @@ function CurrentReport({
         }
       />
     );
-  const error = create.error || download.error || document.error || previewError || chapter.error || ((primaryFem || femId) ? femEvidence.error : undefined);
+  const cancelled = create.error instanceof ApiError && create.error.status === 499;
+  const error = (!cancelled && create.error) || download.error || document.error || previewError || chapter.error || ((primaryFem || femId) ? femEvidence.error : undefined);
   let boundError: Error | undefined;
   if (document.data)
     try {
@@ -215,7 +250,8 @@ function CurrentReport({
   return (
     <div className="report-module">
       <div className="report-toolbar">
-        <StatusMark kind={create.isPending ? 'running' : create.error ? 'error' : did ? 'current' : 'saved'} label={create.isPending ? '正在生成' : create.error ? '生成失败' : did ? '已生成 · 所选运行' : '所选运行'} />
+        <StatusMark kind={create.isPending ? 'running' : create.error && !cancelled ? 'error' : did ? 'current' : 'saved'} label={create.isPending ? '正在生成' : cancelled ? '已取消' : create.error ? '生成失败' : did ? '已生成 · 所选运行' : '所选运行'} />
+        {create.isPending && <><span role="status">{progressLabels[text(generation?.stage)] || '正在准备'}</span><Button variant="ghost" size="compact" disabled={generation?.stage==='save' || generation?.state==='cancelled'} onClick={()=>void cancelGeneration().catch(error=>setPreviewError(error as Error))}>取消生成</Button></>}
         <div className="spacer" />
         {did ? (
           <>
