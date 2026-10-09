@@ -13,8 +13,11 @@ export type AgentStatus = { configured: boolean; model?: string; tools?: number 
 /** kind：read 只读；propose 只生成方案；run 运行（正式运行与超算提交要人批准）。 */
 export type AgentTool = { name: string; title: string; kind: "read" | "propose" | "run"; description?: string; plugin_id?: string; hpc?: boolean };
 export type ProposalChange ={ path: string; label: string; before: unknown; after: unknown; unit?: string };
+import type { ObjectCard } from "@/api/object-index";
+
+/** message.delta 的首个分片附带回答里提到的对象名片（统一索引），本条回答内保留。 */
 export type AgentEvent =
-  | { type: "message.delta"; text: string }
+  | { type: "message.delta"; text: string; object_refs?: ObjectCard[] }
   | { type: "tool.call"; id: string; tool: string; title?: string; arguments?: Record<string, unknown> }
   | { type: "tool.result"; id: string; status: "ok" | "error"; summary: string; next_actions?: string[] }
   | { type: "proposal.created"; id: string; title: string; changes: ProposalChange[]; checks?: string[] }

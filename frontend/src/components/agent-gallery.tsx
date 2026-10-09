@@ -8,7 +8,7 @@ const preview = { id: 'demo-preview', proposalId: proposal.id, headlines: [{ tit
 const turn: Turn = {
   id: 'demo', question: '把土壤热阻率改成 1.2 K·m/W，给出方案并试算最高导体温度怎么变。', running: false, started: '2026-01-01T00:00:00Z', finished: '2026-01-01T00:00:42Z', evidenceOnly: false, notices: [],
   steps: [{ id: 'a', tool: 'workspace_read', title: '读取工程输入', status: 'ok', summary: '已读取工程输入', ms: 120 }, { id: 'b', tool: 'propose_domain_changes', title: '提出领域输入修改方案', status: 'ok', summary: '方案已生成，等待人工批准', ms: 310 }, { id: 'c', tool: 'study_preview', title: '快速试算', status: 'ok', summary: '未保存运行', ms: 630 }, { id: 'answer-check', tool: 'answer-check', title: '核对回答里的数值', status: 'ok', summary: '数值都来自工具结果' }],
-  answer: '试算中最高导体温度由 **107.0 °C** 升到 **119.6 °C**，三回同时额定由 362.2 A 降到 341.6 A。\n\n- 方案尚未批准，工程没有改动\n- 正式结论需在工作台运行后保存', proposals: [proposal.id], previews: [], runs: [],
+  answer: '试算中最高导体温度由 **107.0 °C** 升到 **119.6 °C**，三回同时额定由 362.2 A 降到 341.6 A。\n\n- 方案尚未批准，工程没有改动\n- 正式结论需在工作台运行后保存', proposals: [proposal.id], previews: [], runs: [], refs: [],
 };
 const kinds = new Map([['workspace_read', 'read'], ['propose_domain_changes', 'propose'], ['study_preview', 'run']]);
 const label = (entity: string) => entity.replace('circuit/', '回路 ').replace('cable/', '回路 ');

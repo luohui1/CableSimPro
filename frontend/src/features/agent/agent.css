@@ -196,3 +196,6 @@
 
 /* 组件陈列里的演示排布 */
 .agent-gallery { display: flex; flex-direction: column; gap: var(--space-6); max-width: calc(var(--space-12) * 14); }
+
+/* 回答里提到的对象（统一索引名片） */
+.agent-refs { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); padding-top: var(--space-2); border-top: 1px solid var(--line); font-size: var(--text-note); }

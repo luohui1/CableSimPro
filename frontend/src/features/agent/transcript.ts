@@ -1,4 +1,5 @@
 import type { AgentEvent, AgentProposal, AgentRecord } from "./agent-api";
+import type { ObjectCard } from "@/api/object-index";
 
 /** 对话按“轮”组织：一句提问 → 工作步骤 → 回答，附带这一轮产生的方案与试算。 */
 export type Step = { id: string; tool: string; title: string; status: "running" | "ok" | "error"; summary?: string; ms?: number };
@@ -10,7 +11,10 @@ export type Notice = { code?: string; text: string };
 export type Turn = {
   id: string; question: string; steps: Step[]; answer: string; evidenceOnly: boolean;
   notices: Notice[]; proposals: string[]; previews: Preview[]; runs: SavedRun[]; started?: string; finished?: string; running: boolean;
+  /** 回答里提到的对象，按首次出现顺序（统一索引名片） */
+  refs: ObjectCard[];
 };
+const cards = (value: unknown): ObjectCard[] => Array.isArray(value) ? value.filter((item): item is ObjectCard => !!item && typeof item === "object" && "kind" in item && "id" in item) : [];
 
 const CHECK = "answer-check";
 export const EVIDENCE_LABEL = "以下为工具证据摘要，模型解释未通过核验。";
@@ -54,7 +58,7 @@ export function buildTurns(source: AgentRecord): Turn[] {
   for (const event of source.events) {
     const data = event.data;
     if (event.type === "chat.message" && data.role === "user") {
-      turn = { id: String(event.sequence), question: String(data.content || ""), steps: [], answer: "", evidenceOnly: false, notices: [], proposals: [], previews: [], runs: [], started: event.created, running: true };
+      turn = { id: String(event.sequence), question: String(data.content || ""), steps: [], answer: "", evidenceOnly: false, notices: [], proposals: [], previews: [], runs: [], started: event.created, running: true, refs: [] };
       turns.push(turn);
       continue;
     }
@@ -62,6 +66,7 @@ export function buildTurns(source: AgentRecord): Turn[] {
     if (event.type === "chat.message" && data.role === "assistant" && typeof data.content === "string") {
       turn.answer = data.content;
       turn.evidenceOnly = data.content.startsWith(EVIDENCE_LABEL);
+      turn.refs = cards(data.object_refs);
     } else if (event.type === "tool.call") {
       turn.steps.push({ id: String(data.id), tool: String(data.tool), title: String(data.title || data.tool), status: "running" });
     } else if (event.type === "tool.result") {
@@ -93,6 +98,7 @@ export function applyEvent(turn: Turn, event: AgentEvent, proposals: Map<string,
   if (event.type === "message.delta") {
     next.answer += event.text;
     next.evidenceOnly = next.answer.startsWith(EVIDENCE_LABEL);
+    if (event.object_refs?.length) next.refs = cards(event.object_refs);
   } else if (event.type === "tool.call") next.steps.push({ id: event.id, tool: event.tool, title: event.title || event.tool, status: "running" });
   else if (event.type === "tool.result") {
     const step = next.steps.find((item) => item.id === event.id);
@@ -107,4 +113,4 @@ export function applyEvent(turn: Turn, event: AgentEvent, proposals: Map<string,
   return next;
 }
 
-export const newTurn = (question: string): Turn => ({ id: `live-${Date.now()}`, question, steps: [], answer: "", evidenceOnly: false, notices: [], proposals: [], previews: [], runs: [], started: new Date().toISOString(), running: true });
+export const newTurn = (question: string): Turn => ({ id: `live-${Date.now()}`, question, steps: [], answer: "", evidenceOnly: false, notices: [], proposals: [], previews: [], runs: [], started: new Date().toISOString(), running: true, refs: [] });

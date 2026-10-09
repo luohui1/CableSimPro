@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/icon";
+import { ObjectChip } from "@/components/object-link";
 import { significantNumber } from "@/lib/format";
 import { EVIDENCE_LABEL, type Preview, type SavedRun, type Step, type Turn } from "./transcript";
 import type { AgentProposal } from "./agent-api";
@@ -197,6 +198,8 @@ export function TurnView({ turn, kinds, proposals, label, review, onOpenStudy, o
       onOpen={item.studyId && onOpenStudy ? () => onOpenStudy(item.studyId!) : undefined} />)}
     {turn.evidenceOnly && <p className="agent-evidence-tag"><Icon name="result/evidence" />证据摘要 · 模型的解释没有通过数值核对，下面只列工具结果</p>}
     {evidence && <AnswerText text={evidence} />}
+    {/* 回答里提到的对象：同一张名片，点了回到它的家（§2.3） */}
+    {!turn.running && turn.refs.length > 0 && <div className="agent-refs" aria-label="提到的对象">{turn.refs.map((card) => <ObjectChip key={card.kind + card.id} card={card} />)}</div>}
     {turn.notices.map((notice, index) => <p key={index} className="agent-notice" role="alert"><Icon name="status/warning" />{notice.text}</p>)}
     {onRetry && !turn.running && !turn.answer && turn.notices.length > 0 && <Button size="compact" variant="outline" className="agent-retry" onClick={onRetry}><Icon name="agent/retry" />重新发送</Button>}
   </section>;
