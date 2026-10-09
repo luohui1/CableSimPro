@@ -50,6 +50,8 @@ function preview(id: string, data: Record<string, unknown>, args: Record<string,
   return { id, studyId: args.study_id ? String(args.study_id) : undefined, proposalId: data.proposal_id ? String(data.proposal_id) : undefined, headlines: headlines(data.headlines), ampacity };
 }
 
+const ACTIVE = new Set(["planning", "running"]);
+
 /** 从会话审计记录还原对话；数值只取自已保存的工具结果。 */
 export function buildTurns(source: AgentRecord): Turn[] {
   const steps = new Map(source.steps.map((step) => [step.node_id, step]));
@@ -58,6 +60,8 @@ export function buildTurns(source: AgentRecord): Turn[] {
   for (const event of source.events) {
     const data = event.data;
     if (event.type === "chat.message" && data.role === "user") {
+      // 新问题开始，上一轮必然已结束
+      if (turn) turn.running = false;
       turn = { id: String(event.sequence), question: String(data.content || ""), steps: [], answer: "", evidenceOnly: false, notices: [], proposals: [], previews: [], runs: [], started: event.created, running: true, refs: [] };
       turns.push(turn);
       continue;
@@ -84,11 +88,14 @@ export function buildTurns(source: AgentRecord): Turn[] {
       checkStep(turn, "error", "改用工具证据摘要");
     } else if (event.type === "error" && !isCheckCode(data.code as string)) {
       turn.notices.push({ code: data.code as string | undefined, text: String(data.message || "") });
-    } else if (event.type === "done") {
-      turn.finished = event.created;
+    } else if (event.type === "done" || (event.type === "task.state" && !ACTIVE.has(String(data.state)))) {
+      // 记录里一轮以 task.state 收尾（completed / failed / cancelled / waiting…），流里才有 done
+      turn.finished = turn.finished || event.created;
       turn.running = false;
     }
   }
+  // 会话已不在进行中时，最后一轮也不能显示“正在思考”
+  if (turn && !ACTIVE.has(source.state)) turn.running = false;
   return turns;
 }
 
@@ -98,6 +105,9 @@ export function applyEvent(turn: Turn, event: AgentEvent, proposals: Map<string,
   if (event.type === "message.delta") {
     next.answer += event.text;
     next.evidenceOnly = next.answer.startsWith(EVIDENCE_LABEL);
+    // 流里没有单独的核验结论事件：正文开始输出时，把“正在重写”这一步收尾
+    if (next.steps.some((step) => step.tool === "answer-check" && step.status === "running"))
+      checkStep(next, next.evidenceOnly ? "error" : "ok", next.evidenceOnly ? "改用工具证据摘要" : "重写后数值都来自工具结果");
     if (event.object_refs?.length) next.refs = cards(event.object_refs);
   } else if (event.type === "tool.call") next.steps.push({ id: event.id, tool: event.tool, title: event.title || event.tool, status: "running" });
   else if (event.type === "tool.result") {

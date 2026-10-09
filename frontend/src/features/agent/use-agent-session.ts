@@ -70,6 +70,9 @@ export function useAgentSession({ sessionId, workspaceId, studyId, onCreated }: 
       }
       controller.current = new AbortController();
       await sendMessage(id, content, (event) => { turn = applyEvent(turn, event, liveProposals.current); setLive(turn); }, controller.current.signal, recipe);
+      // 流已结束：这一轮不再“思考中”，即使没收到 done 也一样；随后用审计记录替换临时显示
+      turn = { ...turn, running: false };
+      setLive(turn);
       await settle(id, content);
     } catch (error) {
       const stopped = controller.current?.signal.aborted;
