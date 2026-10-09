@@ -55,7 +55,8 @@ def compare(fem,iec,case_id=None):
         rows.insert(0,{'entity':'maximum','key':'conductor_temperature','unit':'K','case':'operating','fem':a,'iec':b,'delta':a-b,'relative_percent':(a-b)/b*100})
     for row in rows:
         row['exceeded']=row['delta'] is not None and (abs(row['delta'])>2 if row['unit']=='K' else row['relative_percent'] is not None and abs(row['relative_percent'])>5)
-    boundary=original['parameters'].get('outer_boundary','ambient_truncated')
+    saved_boundary=chosen.get('artifacts',{}).get('x-cablesim.simulation-bundle',{}).get('result',{}).get('outer_boundary',{})
+    boundary=saved_boundary.get('kind') or original['parameters'].get('outer_boundary') or 'ambient_truncated'
     return {'fem':reference(fem,original),'iec':reference(iec,other),'rows':rows,'outer_boundary':boundary,
             'scope':[{'item':'边界','fem':'Kennelly 镜像远场 · 当前迭代实际损耗' if boundary=='kennelly_image' else '环境定温截断','iec':'无限土壤解析外部热阻'},
                      {'item':'地表','fem':'保存环境温度 · 等温','iec':'Kennelly 镜像 · 等温'},

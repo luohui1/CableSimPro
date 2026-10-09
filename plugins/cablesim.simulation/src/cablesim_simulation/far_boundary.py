@@ -13,7 +13,20 @@ from cablesim_sdk.iec_thermal import ThreeCoreThermalParameters
 
 class ThermalParameters(ThreeCoreThermalParameters):
     outer_boundary: Literal['ambient_truncated','kennelly_image'] = Field(
-        default='ambient_truncated', description='Side/bottom boundary; ground surface remains isothermal.')
+        default='kennelly_image', description='均匀土壤、恒温地表的稳态研究默认镜像远场；分层、回填等工况须显式选择适用边界。')
+
+
+def default_boundary_reason(section, load):
+    """A default is authorized only for the validated homogeneous half-space."""
+    if section.get('kind') != 'ground':return '此默认只覆盖地下土壤截面'
+    if section.get('soil_layers'):return '分层土壤不满足均匀半无限土壤假设'
+    if section.get('backfill'):return '回填区不满足均匀半无限土壤假设'
+    if load.get('kind') != 'steady':return '此默认只覆盖稳态负荷'
+    surface=section.get('medium',{}).get('surface_temperature')
+    from math import isfinite
+    if not isinstance(surface,(int,float)) or isinstance(surface,bool) or not isfinite(surface):
+        return '地表没有保存有限的恒温边界'
+    return None
 
 
 def image_rise(points, sources, rho):

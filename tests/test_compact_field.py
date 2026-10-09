@@ -8,7 +8,8 @@ from cablesim_simulation.compact_field import pack,display,export
 from backend.kernel.batch_field_storage import unpack,full_field,sample
 
 
-def test_display_projection_checks_real_bytes_and_keeps_live_freshness(tmp_path,monkeypatch):
+@pytest.mark.parametrize('monitored',[False,True])
+def test_display_projection_checks_real_bytes_and_keeps_live_freshness(tmp_path,monkeypatch,monitored):
     import json,sqlite3
     from contextlib import contextmanager
     from types import SimpleNamespace
@@ -32,10 +33,23 @@ def test_display_projection_checks_real_bytes_and_keeps_live_freshness(tmp_path,
     research=SimpleNamespace(store=SimpleNamespace(db=database),executor=SimpleNamespace(),
         definition=lambda *args:{},artifact_status=lambda run:{},
         get_run=lambda *args:calls.append(args) or {'integrity':'corrupt'})
+    monitor=None
+    if monitored:
+        from threading import RLock
+        class Reader:pass
+        bound=Reader();bound.__dict__.update(research.__dict__);research=bound
+        monitor=sqlite3.connect(path);seal=[1]
+        research.read_responses=SimpleNamespace(database=monitor,watch=True,lock=RLock(),
+            generation=lambda _:(monitor.execute('PRAGMA data_version').fetchone()[0],seal[0]))
     monkeypatch.setattr('backend.kernel.batch_field_projection.run_state',lambda research,snapshot,wid,revision,study,cache:{'integrity':'verified','freshness':'current' if revision==1 else 'historical'})
     result=read_display(research,'w','r')
     assert result['integrity']=='verified' and result['freshness']=='current' and not calls
     assert result['output']['cases'][0]['artifacts']=={'x-cablesim.summary':{'temperature_k':320}}
+    result['output']['cases'][0]['artifacts']['x-cablesim.summary']['temperature_k']=999
+    assert read_display(research,'w','r')['output']['cases'][0]['artifacts']['x-cablesim.summary']['temperature_k']==320
+    if monitored:
+        seal[0]+=1
+        assert read_display(research,'w','r')['integrity']=='verified'
     with database() as db:db.execute("UPDATE workspaces SET revision=2 WHERE id='w'")
     assert read_display(research,'w','r')['freshness']=='historical'
     with database() as db:db.execute("UPDATE study_runs SET output=replace(output,'320','321')")
@@ -47,6 +61,7 @@ def test_display_projection_checks_real_bytes_and_keeps_live_freshness(tmp_path,
     assert read_display(research,'w','r')['output']['cases'][0]['artifacts']=={'x-cablesim.summary':{'temperature_k':320}}
     with pytest.raises(HTTPException) as caught:read_display(research,'other','r')
     assert caught.value.status_code==404
+    if monitor is not None:monitor.close()
 
 
 def test_mesh_capacity_and_bit_exact_block_roundtrip():

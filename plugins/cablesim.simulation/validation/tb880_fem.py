@@ -133,13 +133,20 @@ def isothermal_projection(count, groups):
 
 
 class ConstrainedField:
-    def __init__(self,model,controls,group):
+    def __init__(self,model,controls,group,*,prepared_mesh=None,interfaces=(),duct_centers=None,outer_resistance=None):
         if not os.environ.get('SLURM_JOB_ID'):raise RuntimeError('Native TB 880 FEM must run in Slurm dg83.')
         import numpy as np
         from skfem import BilinearForm,asm
         from skfem.helpers import dot,grad
         from cablesim_simulation.thermal import ThermalSystem
-        self.system=system=ThermalSystem(model,controls);self.group=group;self.np=np
+        # Optional controls are diagnostic model reductions, never engineering
+        # defaults. Nonconcentric ducts need their real interface coordinates.
+        laws={}
+        if duct_centers:
+            model=deepcopy(model)
+            for cable in model.cables:
+                laws[cable.uid]=cable.duct.air_law;cable.duct.air_law=None
+        self.system=system=ThermalSystem(model,controls,prepared_mesh);self.group=group;self.np=np
         metal_nodes=[];self.metals=[]
         @BilinearForm
         def conduction(u,v,w):return w.k*dot(grad(u),grad(v))
@@ -150,9 +157,36 @@ class ConstrainedField:
                 ids=[r['id'] for r in system.regions if r['uid']==layer.uid]
                 metal=asm(conduction,system.basis,k=np.isin(system.ids.reshape(-1,4)[:,0],ids)[:,None].astype(float))
                 system._fixed_conduction-=metal;system.K-=metal
+        from skfem import FacetBasis
+        endpoints=system.mesh.p[:,system.mesh.facets]
+        self.outer_groups=[];self.outer_resistance=outer_resistance
+        for cable in model.cables:
+            if not cable.duct:continue
+            center=(duct_centers or {}).get(cable.uid,(cable.x_m,cable.z_m))
+            def surface(position,radius):
+                distances=np.sqrt((endpoints[0]-position[0])**2+(endpoints[1]-position[1])**2)
+                facets=np.flatnonzero(np.all(np.isclose(distances,radius,atol=1e-8,rtol=0),axis=0))
+                if not len(facets):raise ValueError('Diagnostic duct interface is absent')
+                return facets,system.basis.get_dofs(facets=facets).all()
+            if duct_centers and laws[cable.uid] is not None:
+                cable.duct.air_law=laws[cable.uid]
+                ids=[r['id'] for r in system.regions if r['uid']==cable.duct.uid+'/air']
+                unit=asm(conduction,system.basis,k=np.isin(system.ids.reshape(-1,4)[:,0],ids)[:,None].astype(float))
+                initial=log(cable.duct.inner_radius_m/cable.layers[-1].outer_radius_m)/(2*pi*cable.duct.air_resistance_k_m_w)
+                system._fixed_conduction-=initial*unit
+                from skfem import ElementTriP2,ElementTriP1
+                element=ElementTriP2() if controls.element_order==2 else ElementTriP1()
+                surfaces=[surface((cable.x_m,cable.z_m),cable.layers[-1].outer_radius_m)[0],surface(center,cable.duct.inner_radius_m)[0]]
+                system._duct_feedback.append((cable,unit,[FacetBasis(system.mesh,element,facets=f,intorder=4) for f in surfaces]))
+            for role,position,radius in [('cable',(cable.x_m,cable.z_m),cable.layers[-1].outer_radius_m),
+                                        ('inner',center,cable.duct.inner_radius_m),('outer',center,cable.duct.outer_radius_m)]:
+                if role in interfaces or (role=='outer' and outer_resistance is not None):
+                    nodes=surface(position,radius)[1];metal_nodes.append(nodes)
+                    if role=='outer' and outer_resistance is not None:self.outer_groups.append(nodes)
         self.P,inverse=isothermal_projection(system.basis.N,metal_nodes)
         self.reduced_nodes=self.P.shape[1];self.inverse=inverse
         self.D=np.unique(inverse[np.array(sorted(system.dirichlet),dtype=int)])
+        if self.outer_groups:self.D=np.union1d(self.D,inverse[np.concatenate(self.outer_groups)])
         self.free=np.setdiff1d(np.arange(self.reduced_nodes),self.D);self.factor=None
         self.spacings={i:r['spacing'] for r in group.circuits for i in r['indices']}
 
@@ -187,6 +221,8 @@ class ConstrainedField:
                 sources=[dict(center_m=[c.x_m,c.z_m],loss_w_m=sum(p[k] for k in ('conductor_loss_w_m','sheath_loss_w_m','dielectric_loss_w_m')))
                     for c,p in zip(s.model.cables,powers)]
                 prescribed[self.inverse[boundary_nodes]]=image_rise(s.points[boundary_nodes].T,sources,1.)
+            for nodes,power in zip(self.outer_groups,powers):
+                prescribed[self.inverse[nodes]]=sum(power[k] for k in ('conductor_loss_w_m','sheath_loss_w_m','dielectric_loss_w_m'))*self.outer_resistance
             reduced=matrix[self.free][:,self.free].tocsr()
             if self.factor is None:self.factor=LinearOperator(reduced.shape,matvec=splu(reduced.tocsc()).solve)
             solution,status=cg(reduced,rhs[self.free]-matrix[self.free][:,self.D]@prescribed[self.D],M=self.factor,rtol=1e-11,atol=1e-12,maxiter=250)

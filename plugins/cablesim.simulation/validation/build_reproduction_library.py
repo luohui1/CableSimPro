@@ -247,8 +247,8 @@ def tb880_fields(items):
             {'source':'TB 880:2022 §4.5.3.1' if ident=='B02-1' else 'TB 880:2022 §4.7.5',
                 'pdf_page':75 if ident=='B02-1' else 87,'printed_page':75 if ident=='B02-1' else 87,
                 'note':f"公布允许电流 {case['reference_current_a']:.10f} A；报告未给数值容差。"}]
-        if ident=='B02-2':item['inputs'].append({'source':'TB 880:2022 §4.7','pdf_page':83,'printed_page':83,
-            'note':'HDPE管外径140 mm、内径119.4 mm，相切排列；管壁热阻率3.5 K·m/W；管内空气经验系数见后续计算页。'})
+        if ident=='B02-2':item['inputs'].append({'source':'TB 880:2022 §4.7','pdf_page':84,'printed_page':84,
+            'note':'HDPE管外径140 mm、内径119.4 mm，相切排列；p.85 管壁热阻率3.5 K·m/W、空气经验系数表4。'})
         converged=case.get('convergence',{}).get('passed',False)
         item['mesh_note']=('网格与扩域连续两级均 < 0.1 K' if converged else '未达到两类连续两级 0.1 K 门槛')
         item['convergence_summary']=case.get('convergence',{})
@@ -292,6 +292,63 @@ def tb880_fields(items):
                 'source':item['reference_location']})
 
 
+def tb880_sensitivity(items):
+    """Import validation/tb880_sensitivity.py's actual dg83 interventions."""
+    item=items.get('B02-2')
+    if item is None:return
+    report=load('.data/simulation/tb880-duct-diagnostics/report.json',item)
+    if not report:return
+    rows=report['rows'];baseline=next((r for r in rows if r['id']=='baseline' and r['status']=='complete'),None)
+    if baseline is None:raise ValueError('Duct diagnostics require a completed saved baseline')
+    current=baseline['ampacity_a'];reference=report['reference_current_a'];gap=reference-current
+    table=[]
+    for row in rows:
+        value=row.get('ampacity_a');delta=value-current if value is not None else None
+        table.append({key:row.get(key) for key in ('id','label','basis','status','failure','wall_seconds','allocated_core_hours')} |
+            dict(ampacity_a=value,delta_a=delta,delta_percent=100*delta/current if delta is not None else None,
+                parameter_change={k:row[k] for k in ('air_c','rho_factor','air_size','mesh_size','offset_fraction','interfaces','soil_r') if k in row},
+                hdpe_k_w_m_k=next(iter(row.get('thermal_input',{}).get('cables',[])),{}).get('duct',{}).get('k_w_m_k'),
+                nodes=row.get('rating_state',{}).get('nodes'),hotspot_k=row.get('public_current_state',{}).get('hotspot_k'),
+                energy_residual=row.get('rating_state',{}).get('energy_relative_residual')))
+    byid={r['id']:r for r in table}
+    def effect(key):
+        r=byid.get(key,{})
+        if r.get('delta_a') is None:return '未得到结果'
+        digits=6 if 0<abs(r['delta_a'])<.001 else 3
+        return f"{r['delta_a']:+.{digits}f} A（{r['delta_percent']:+.{digits}f}%）"
+    network=byid.get('network-interfaces',{})
+    explained=network.get('ampacity_a') is not None and abs(network['ampacity_a']-reference)<.2
+    findings=[
+        f"空气经验式：20/90 °C 温度包络分别 {effect('air-20')} / {effect('air-90')}；U/V/Y 保持 p.85 表4 的塑料管值，不用其他管材系数。",
+        f"HDPE：热阻率 ±10% 假设扰动分别 {effect('hdpe-low')} / {effect('hdpe-high')}；报告只给 3.5 K·m/W，未给热导率范围，不能据此排除实际材料不确定性。",
+        f"接触几何：半间隙偏心 {effect('offset-half')}；与管底相切 {effect('contact')}，加密相切 {effect('contact-refined')}；保留同心环换算的空气等效导热率，无自然对流求解。原文未声明电缆与管壁接触，缺接触热阻与实际安装位置。",
+        f"空气局部网格：0.3/0.15 mm 分别 {effect('air-mesh-1')} / {effect('air-mesh-2')}；未改变计算域、材料与损耗反馈。",
+        '已排除的主要解释：来源空气系数未抄错；已完成的空气局部加密、相切加密变化不足以解释 14.932 A。原工况网格与扩域两类收敛已通过；0.15 mm 空气网格因 4,385,861 自由度超出 4,000,000 上限停在预检，不声称诊断空气网格连续两级通过。',
+        f"口径分解：空气两侧周向恒温 {effect('air-isothermal')}；报告管外土壤热阻 {effect('soil-network')}；两者组合 {effect('network-interfaces')}。集中热阻替换只用于诊断，不是可交付的工程场。",
+        '最可能来源：二维求解保留管外土壤与管壁/空气的周向非均匀热流，报告采用集中热阻网络。仅替换报告管外土壤热阻已消除绝大部分差额，因此不能把差异单独归于空气经验系数。空气温度上界、相切几何、HDPE ±10% 扰动均不能单独补足差额；尚未排除其组合及实际材料/接触不确定性。',
+        ('口径差异：以报告集中热阻和周向恒温口径复算后，与公布载流量相差小于 0.2 A；空间热流模型与报告热阻网络不同，不能将原 −2.187% 直接称为数值误差。' if explained else
+         '尚未归因：集中热阻口径替换仍不能在 0.2 A 内复现公布值；缺报告管内流动/接触模型及 HDPE 物性范围，不调参数拟合。'),
+        '0.2 A 仅用于上述模型口径诊断闭合，不替代原复现验收门槛；原有限元结果 667.882 A、公布值 682.814 A 均保留，未将诊断替换结果登记为复现通过。',
+        'TB 880 p.84 明示空气填充管的镜像方法适用性存在限制；p.90 温度网络含附加涡流损耗，本次继续对照 p.87 未附加涡流的原算例，未混用 679.841 A。']
+    findings.extend(r['label']+'：'+r.get('failure',{}).get('message','未完成，未得到数值结果') for r in rows if r['status']!='complete')
+    prefix='排管敏感性诊断：'
+    item['limitations']=[v for v in item['limitations'] if not v.startswith(prefix)]+[prefix+v for v in findings]
+    item['sensitivity']=dict(schema='cablesim.tb880-sensitivity/1',baseline_ampacity_a=current,
+        reference_gap_a=gap,rows=table,findings=findings,classification='basis_difference' if explained else 'not_resolved',
+        source_pages=[84,85,86,87,90],report_thermal_conductivity_range=None,
+        mesh_verification=report.get('mesh_verification'),accounting=report.get('accounting'),
+        source_sha256=report.get('source_sha256'),job_ids=report.get('job_ids',[report['job_id']]))
+    if explained:
+        for row in item['rows']:
+            if row.get('variant') in ('有限元 · 收敛网格','有限元 · 公布电流工况'):
+                row.update(status='not_comparable',reason='口径差异：分辨二维热流与报告集中热阻网络不同；敏感性诊断见覆盖与限制。差值保留，不作为数值误差。',
+                    numerical_error_assessed=False,comparison_basis='resolved_2d_vs_lumped_thermal_network')
+    item['runs'].append(dict(plugin_id='cablesim.simulation',plugin_version=report['plugin_version'],
+        method_version=report['method'],job_id=report['job_id'],actual_core_hours=report.get('accounting',{}).get('actual_core_hours'),
+        outer_boundary='kennelly_image',source_sha256=report.get('source_sha256'),engineering_approval=False,
+        purpose='sensitivity_diagnostic')) if not any(r.get('job_id')==report['job_id'] for r in item['runs']) else None
+
+
 def build():
     items=base_items()
     example=load('.data/simulation/insulated-wire/report.json',items['B01'])
@@ -306,7 +363,7 @@ def build():
         item['convergence']=[{'variant':'default','quantity':'centre-rise','solver':'open_source','nodes':r['nodes'],'mesh_size_m':r['mesh_size_m'],'value':r['centre_rise_k']} for r in example['rows']]
     for ident,name in [('E02','thermal-cywinski'),('E03','thermal-jorgens'),('E05','eddy-lunca'),('E17','eddy-twin'),('E18','eddy-induced'),('E19','eddy-two-round')]:
         paper(items[ident],name)
-    standard_cases(items);tutorials(items);tb880_fields(items)
+    standard_cases(items);tutorials(items);tb880_fields(items);tb880_sensitivity(items)
     for item in items.values():
         item['has_results']=any(r.get('open_source') is not None for r in item['rows'])
         deviations=[abs(r['relative_difference']) for r in item['rows'] if r.get('relative_difference') is not None and not r.get('reference_approximate')]
@@ -339,6 +396,7 @@ def publish_tb880_fields():
     if sha256(raw).hexdigest()!=index['current']:raise ValueError('Library snapshot integrity failed')
     snapshot=json.loads(raw);items={item['id']:item for item in snapshot['items']}
     tb880_fields(items)
+    tb880_sensitivity(items)
     for ident in ('B02-1','B02-2'):
         item=items[ident];item['has_results']=any(r.get('open_source') is not None for r in item['rows'])
         differences=[abs(r['relative_difference']) for r in item['rows'] if r.get('relative_difference') is not None]

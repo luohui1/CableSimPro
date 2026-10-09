@@ -39,6 +39,23 @@ def test_isothermal_metal_constraint_matches_hand_heat_balance():
         assert (matrix@rise-load)[1]==-4.
 
 
+def test_duct_diagnostic_bounds_keep_report_coefficients_and_missing_range():
+    from tb880_sensitivity import variants
+    rows={r['id']:r for r in variants()}
+    assert [rows[k]['air_c'] for k in ('air-20','air-90')]==[20.,90.]
+    assert all('假设扰动' in rows[k]['basis'] for k in ('hdpe-low','hdpe-high'))
+    # TB 880 p.85: U=1.87, V=.312, Y=.0037, De=75.5 mm, mean=70 C.
+    r=1.87/(1+.1*(.312+.0037*70)*75.5)
+    assert r==pytest.approx(.3520961015,abs=1e-10)
+    assert rows['soil-network']['soil_r']==1.38002093961
+
+
+def test_diagnostics_cannot_execute_native_work_outside_slurm(tmp_path,monkeypatch):
+    from tb880_sensitivity import run
+    monkeypatch.delenv('SLURM_JOB_ID',raising=False)
+    with pytest.raises(RuntimeError,match='Slurm dg83'):run(tmp_path)
+
+
 @pytest.mark.skipif(not os.environ.get('SLURM_JOB_ID'),reason='Native FEM runs only on dg83')
 def test_isothermal_conductor_annulus_against_analytic_resistance():
     from cablesim_simulation.thermal_input import ThermalModel,Controls

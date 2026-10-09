@@ -48,7 +48,9 @@ export function compareSavedFields(fem: Record<string, unknown>, iec: Record<str
     const a = Math.max(...temperatures.map(row => row.fem!)), b = Math.max(...temperatures.map(row => row.iec!));
     rows.unshift({ id: "maximum", entity: "最高导体温度", key: "conductor_temperature", condition: "operating", unit: "K", fem: a, iec: b, delta: a-b, relative: (a-b)/b*100, reason: "", exceeded: Math.abs(a-b)>2 });
   }
-  return { rows, boundary: femParameters.outer_boundary === 'kennelly_image' ? 'Kennelly 镜像远场 · 当前迭代实际损耗' : '环境定温截断', femCase: caseId, iecCase: text(reference.case_id), method: optionalRecord(definition.method), referenceMethod: optionalRecord(referenceDefinition.method), femLabel: savedRunLabel(fem), iecLabel: savedRunLabel(iec) };
+  const bundle = optionalRecord(optionalRecord(chosen.artifacts)['x-cablesim.simulation-bundle']);
+  const actualBoundary = optionalRecord(optionalRecord(bundle.result).outer_boundary).kind || femParameters.outer_boundary || 'ambient_truncated';
+  return { rows, boundary: actualBoundary === 'kennelly_image' ? 'Kennelly 镜像远场 · 当前迭代实际损耗' : '环境定温截断', femCase: caseId, iecCase: text(reference.case_id), method: optionalRecord(definition.method), referenceMethod: optionalRecord(referenceDefinition.method), femLabel: savedRunLabel(fem), iecLabel: savedRunLabel(iec) };
 }
 
 export function SavedFieldComparison({ run }: { run: Record<string, unknown> }) {

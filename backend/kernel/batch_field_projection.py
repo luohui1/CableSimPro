@@ -14,9 +14,9 @@ from fastapi import HTTPException
 from .read_models import RUN_COLUMNS,run_state
 from .convergence import has_temperature_field,temperature_convergence
 
-# Immutable display data only. Identity alone never authorizes a cache hit: the
-# actual stored snapshot/output/error bytes are hashed on every request. Current
-# method/input revisions and live execution status remain uncached below.
+# Immutable display data only. Receipts expire on database commits and sealed
+# source changes. Without that monitor, actual bytes are hashed on every read.
+# Method/input revisions and live execution status remain uncached below.
 _caches = WeakKeyDictionary()
 _lock = RLock()
 
@@ -29,18 +29,32 @@ def display_only(run):
 
 
 def read_display(research,wid,rid):
+    from .report_reads import read_generation
+    monitor=getattr(research,'read_responses',None)
+    if monitor is not None and hasattr(monitor,'initialize'):
+        with monitor.lock:monitor.initialize(True)
+    generation=read_generation(research)
+    receipt_key=('generation',wid,rid,generation)
+    with _lock:
+        try:cache=_caches.get(research,{})
+        except TypeError:cache={}
+        receipt=cache.get(receipt_key) if generation is not None else None
     with research.store.db() as db:
         db.execute('BEGIN')
         workspace=db.execute('SELECT revision FROM workspaces WHERE id=?',(wid,)).fetchone()
         if workspace is None:raise HTTPException(404,'工程不存在。')
-        row=db.execute(f'SELECT {RUN_COLUMNS} FROM study_runs WHERE workspace=? AND id=?',(wid,rid)).fetchone()
+        # Recheck after the read transaction has acquired its database snapshot;
+        # a commit between receipt lookup and BEGIN must force a full reread.
+        if receipt is not None and generation!=read_generation(research):receipt=None
+        columns='id,workspace,study,sequence,status,created,finished,input_digest,output_digest' if receipt is not None else RUN_COLUMNS
+        row=db.execute(f'SELECT {columns} FROM study_runs WHERE workspace=? AND id=?',(wid,rid)).fetchone()
         if row is None:raise HTTPException(404,'运行不存在或不属于此工程。')
         value=dict(row)
         # Never trust just a declared digest or cached database identity.
-        hashes=tuple(sha256(value[name] or b'').hexdigest() for name in ('snapshot','output','error'))
-        canonical=hashes[0]==value['input_digest'] and (value['output'] is None or hashes[1]==value['output_digest'])
+        hashes=tuple(sha256(value[name] or b'').hexdigest() for name in ('snapshot','output','error')) if receipt is None else ()
+        canonical=receipt is not None or hashes[0]==value['input_digest'] and (value['output'] is None or hashes[1]==value['output_digest'])
         if canonical:
-            key=(wid,rid,*hashes)
+            key=receipt_key if generation is not None else (wid,rid,*hashes)
             with _lock:
                 try:cache=_caches.setdefault(research,OrderedDict())
                 except TypeError:cache=OrderedDict()  # Unhashable/nonweak test or legacy reader: no cache.
@@ -61,6 +75,10 @@ def read_display(research,wid,rid):
             # Consumers may trim inputs/artifacts. Never let their mutation
             # change the immutable verified entry used by the next request.
             value.update(deepcopy(cached))
+            if generation is not None and generation==read_generation(research):
+                with _lock:
+                    cache[receipt_key]=cached
+                    while len(cache)>4:cache.popitem(last=False)
             study=research.definition(db,wid,value['study'])
             value.update(run_state(research,value['snapshot'],wid,workspace['revision'],study,{}))
     if not canonical:

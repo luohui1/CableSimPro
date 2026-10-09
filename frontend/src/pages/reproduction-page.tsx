@@ -21,6 +21,7 @@ import { Select } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/tooltip";
 import { downloadJson } from "@/lib/download";
+import { DuctSensitivity } from "@/features/field/duct-sensitivity";
 const kinds: Record<string, string> = {
   paper: "论文",
   standard: "标准算例",
@@ -598,6 +599,8 @@ export function ReproductionPage() {
                           <p key={index}>{String(value)}</p>
                         ))}
                       </section>
+                      {/* 有保存的敏感性诊断（如 TB 880 排管）才显示；其他算例不放空表 */}
+                      {detail.data?.sensitivity ? <DuctSensitivity data={detail.data} historical={historical} /> : null}
                     </>
                   )}
                 </div>

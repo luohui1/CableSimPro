@@ -7,7 +7,46 @@ import pytest
 
 ROOT=Path(__file__).resolve().parents[3]
 sys.path[:0]=[str(ROOT/'plugins/cablesim.simulation/src')]
-from cablesim_simulation.far_boundary import image_rise, loss_sources, ThermalParameters
+from cablesim_simulation.far_boundary import image_rise, loss_sources, ThermalParameters, default_boundary_reason
+
+
+def test_default_far_field_scope_and_explicit_saved_boundary():
+    section=dict(kind='ground',soil_layers=[],backfill=None,medium=dict(surface_temperature=293.15))
+    assert default_boundary_reason(section,dict(kind='steady')) is None
+    assert ThermalParameters.model_fields['outer_boundary'].default=='kennelly_image'
+    assert ThermalParameters.model_fields['outer_boundary'].annotation is not None
+    assert default_boundary_reason({**section,'soil_layers':[{}]},dict(kind='steady'))
+    assert default_boundary_reason({**section,'backfill':{}},dict(kind='steady')) is None
+    assert default_boundary_reason({**section,'backfill':{'material':'x'}},dict(kind='steady'))
+    assert default_boundary_reason(section,dict(kind='transient'))
+    assert default_boundary_reason({**section,'medium':dict(surface_temperature=None)},dict(kind='steady'))
+
+
+def test_default_rejects_unsupported_scope_before_any_native_work():
+    sys.path[:0]=[str(ROOT/'plugin-tests')]
+    from test_three_core_thermal import case
+    from cablesim_simulation.three_core_thermal import prepare
+    d,p=case();p.pop('outer_boundary',None)
+    prepared=prepare(d,p)
+    assert prepared[0].outer_boundary=='kennelly_image'
+    assert prepare(d,{**p,'outer_boundary':'ambient_truncated'})[0].outer_boundary=='ambient_truncated'
+    from copy import deepcopy
+    layered=deepcopy(d);layered['sections'][0]['soil_layers']=[dict(id='region/layer',label='验证土层',material=layered['sections'][0]['medium']['material'],top_z=0.,bottom_z=-10.)]
+    with pytest.raises(ValueError,match='显式选择'):prepare(layered,p)
+
+
+def test_saved_comparison_reads_actual_boundary_and_preserves_legacy_snapshot():
+    sys.path.insert(0,str(ROOT/'tests'))
+    from test_hpc_convergence import saved_fixture
+    from backend.kernel.batch_field_chapter import compare
+    from copy import deepcopy
+    run,iec=saved_fixture();original=deepcopy(run)
+    assert compare(run,iec)['outer_boundary']=='ambient_truncated'
+    assert run==original
+    run['output']['cases'][0]['artifacts']['x-cablesim.simulation-bundle']={'result':{'outer_boundary':{'kind':'kennelly_image'}}}
+    assert compare(run,iec)['outer_boundary']=='kennelly_image'
+    run['snapshot']['cases'][0]['parameters']['outer_boundary']='ambient_truncated'
+    assert compare(run,iec)['outer_boundary']=='kennelly_image'
 
 
 def test_image_green_function_ground_and_superposition():

@@ -32,7 +32,10 @@ export function AdaptiveConvergence({ run }: { run: Record<string, unknown> }) {
   const savedProof = optionalRecord(run.convergence), tolerance = Math.min(.1, numeric(savedProof.tolerance_k) ?? .1);
   const sourceTitle = text(optionalRecord(optionalRecord(run.snapshot).definition).title) || '保存研究';
   const parameters = optionalRecord(optionalRecord(item?.definition).parameters ?? optionalRecord(optionalRecord(run.snapshot).definition).parameters);
-  const boundary = parameters.outer_boundary === 'kennelly_image' ? 'Kennelly 镜像远场' : '环境定温截断';
+  const savedCase = records(optionalRecord(run.output).cases)[0];
+  const savedBoundary = optionalRecord(optionalRecord(optionalRecord(savedCase?.artifacts)['x-cablesim.simulation-bundle']).result).outer_boundary;
+  const boundaryKind = optionalRecord(savedBoundary).kind || records(item?.rows ?? savedProof.rows).at(-1)?.outer_boundary || parameters.outer_boundary;
+  const boundary = boundaryKind === 'kennelly_image' ? 'Kennelly 镜像远场' : '环境定温截断';
   const validation = optionalRecord(item?.validation_history);
   const selectedBounds = optionalRecord(optionalRecord(item?.domain_parameters).domain_options).bounds_m;
   const selectedDepth = Array.isArray(selectedBounds) ? Number(selectedBounds[3]) - Number(selectedBounds[1]) : null;

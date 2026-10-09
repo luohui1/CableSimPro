@@ -102,13 +102,25 @@ const {renderFixture}=await import('/src/features/field/browser-fixture.tsx');wi
     return values;
   });
   assert(limitChecks.every(Boolean),'saved conductor limit comparison failed');
+  const boundaryChecks = await page.evaluate(async () => {
+    const { boundaryScope } = await import('/src/features/field/boundary-scope.ts');
+    const input = { sections: [{ id:'s',kind:'ground',soil_layers:[],backfill:null,medium:{surface_temperature:293.15} }],load_cases:[{id:'l',kind:'steady'}] };
+    const parameters = { domain_options:{section_id:'s',load_id:'l'} };
+    const checks = [boundaryScope(input,parameters).label === '镜像远场（默认）',
+      boundaryScope(input,{...parameters,outer_boundary:'ambient_truncated'}).label.includes('恒温截断')];
+    input.sections[0].soil_layers.push({});checks.push(boundaryScope(input,parameters).reason.includes('分层'));
+    input.sections[0].soil_layers=[];input.sections[0].backfill={};checks.push(boundaryScope(input,parameters).reason.includes('回填'));
+    input.sections[0].backfill=null;input.sections[0].medium.surface_temperature=null;checks.push(boundaryScope(input,parameters).reason.includes('恒温'));
+    return checks;
+  });
+  assert(boundaryChecks.every(Boolean),'default boundary scope failed');
   let serial = 0;
   async function mount(type, run = source) { kind = type; await page.evaluate(({ kind, run, key }) => window.renderFixture(kind, run, key), { kind, run: {...run,fixtureState:state}, key: ++serial }); }
   const checks = [];
   if (!realOnly) {
   for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) for (const theme of ['light', 'dark']) {
     await page.setViewportSize(viewport); await page.evaluate(theme => { document.documentElement.dataset.theme = theme; document.documentElement.dataset.reducedMotion = 'true'; }, theme);
-    for (const type of ['jobs', 'adaptive', 'comparison', 'field', 'setup']) for (const item of ['empty', 'loading', 'error', 'success', 'history']) {
+    for (const type of ['jobs', 'adaptive', 'comparison', 'field', 'setup', 'diagnostic']) for (const item of ['empty', 'loading', 'error', 'success', 'history']) {
       state = item; await mount(type, type === 'field' ? { id: source.id, workspace: source.workspace, study: source.study } : source); await page.waitForTimeout(item === 'loading' ? 100 : 400);
       const label = `${type}/${item}/${theme}/${viewport.width}`;
       const text = await page.locator('body').innerText(); assert(text.trim(), label + ' blank: ' + errors.join('; '));
@@ -120,8 +132,13 @@ const {renderFixture}=await import('/src/features/field/browser-fixture.tsx');wi
       if (type === 'setup') {
         assert(text.includes({empty:'尚未运行',loading:'读取超算预算',error:'超算连接中断',success:'排队位置 4',history:'方法版本变化 1.0.3 → 1.0.4'}[item]),label+' wrong lifecycle: '+text);
         assert.equal(await page.locator('img,ol').count(),0,label+' illustrative workflow remains');
+        if(item === 'empty')assert(text.includes('镜像远场（默认）'),label+' missing default boundary');
       }
       if (type === 'comparison' && ['success','history'].includes(item)) assert.equal(await page.getByRole('table',{name:'有限元与IEC量值对照'}).count(),1,label+' missing comparison');
+      if(type === 'diagnostic') {
+        assert(text.includes({empty:'尚无保存的排管敏感性诊断',loading:'读取排管诊断',error:'超算连接中断',success:'影响百分比以原有限元为分母',history:'历史'}[item]),label+' wrong diagnostic state');
+        if(['success','history'].includes(item)) assert.equal(await page.getByRole('table',{name:'排管敏感性影响'}).count(),1);
+      }
       if (type === 'adaptive' && ['success','history'].includes(item)) assert((await page.locator('.fem-chart-threshold').count())>0,label+' missing threshold');
       assert(!/\b[0-9a-f]{8}-[0-9a-f-]{27}\b|\d{4}-\d\d-\d\dT\d\d:/.test(text), label + ' raw run identity');
       const collisions = await page.evaluate(() => [...document.querySelectorAll('tr,.field-scope>div,.hpc-actions')].flatMap(group => {
@@ -232,6 +249,11 @@ const {renderFixture}=await import('/src/features/field/browser-fixture.tsx');wi
       await fs.writeFile(path.join(output, 'performance.json'), JSON.stringify({ openMs, zoomMs, exportMs, exportMaxEventLoopGapMs }, null, 2));
     }
   }
-  assert.deepEqual(errors, []); await fs.writeFile(path.join(output, realOnly ? 'real-checks.json' : 'checks.json'), JSON.stringify({ checks, limitChecks, submissions, continuations, cancellations, transitions, peakSamples, samples, errors }, null, 2));
+  if (!realOnly) {
+    state='empty'; await page.setViewportSize({width:1366,height:768});
+    await page.evaluate(() => document.documentElement.dataset.theme='light'); await mount('setup'); await settle(page);
+    await page.screenshot({path:path.join(output,'default-boundary.png')});
+  }
+  assert.deepEqual(errors, []); await fs.writeFile(path.join(output, realOnly ? 'real-checks.json' : 'checks.json'), JSON.stringify({ checks, limitChecks, boundaryChecks, submissions, continuations, cancellations, transitions, peakSamples, samples, errors }, null, 2));
   console.log(JSON.stringify({ checks: checks.length, submissions, continuations, cancellations, transitions, output }));
 } finally { await browser.close(); }

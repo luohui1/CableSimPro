@@ -7,7 +7,7 @@ No strand, tape-contact, or steel hysteresis Maxwell field is claimed here.
 from copy import deepcopy
 from math import hypot, log, pi
 from cablesim_sdk.domain import DomainDocument
-from .far_boundary import ThermalParameters, image_rise, loss_sources
+from .far_boundary import ThermalParameters, image_rise, loss_sources, default_boundary_reason
 from cablesim_sdk.simulation import Problem
 from cablesim_sdk.validation import FieldValueError
 from .report import digest
@@ -29,8 +29,11 @@ def prepare(value, parameters):
         if len(d[name])!=1:
             raise FieldValueError('请选择已保存的截面和稳态负荷。','parameters','domain_options','section_id' if name=='sections' else 'load_id')
     section = d['sections'][0];placed = {q['cable'] for q in section['placements']}
-    if p.outer_boundary=='kennelly_image' and (section.get('soil_layers') or section.get('backfill')):
-        raise FieldValueError('Kennelly远场仅覆盖均匀半无限土壤；有土层或回填时请选择原截断边界。','parameters','outer_boundary')
+    reason=default_boundary_reason(section,d['load_cases'][0])
+    if reason and 'outer_boundary' not in p.model_fields_set:
+        raise FieldValueError(reason+'；请在侧边与底边字段显式选择适用边界，不自动替换。','parameters','outer_boundary')
+    if p.outer_boundary=='kennelly_image' and reason:
+        raise FieldValueError(reason+'；Kennelly远场不适用，请显式选择适用边界。','parameters','outer_boundary')
     d['circuits'] = [c for c in d['circuits'] if any(x['id'] in placed for x in c['cables'])]
     group = prepare_iec(d,p.iec)
     if not group.soil.get('three_core'):
