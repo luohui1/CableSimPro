@@ -412,6 +412,7 @@ export function ReproductionPage() {
                                 outside_tolerance: "超出声明容差",
                                 not_comparable: "口径不可比",
                                 missing_reference: "原文缺项",
+                                not_assessed: "未评估",
                               })[text(row.status)] || text(row.status),
                           },
                         ]}
