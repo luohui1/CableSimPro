@@ -240,11 +240,16 @@ def import_release_reproductions(folder, expected_snapshot):
             raise RuntimeError('发布验证证据已损坏；保留现场，停止导入。')
     else:
         from tempfile import NamedTemporaryFile
-        with NamedTemporaryFile(dir=snapshots, suffix='.part', delete=False) as stream:
-            temporary = Path(stream.name)
-            stream.write(raw)
-        try:temporary.replace(destination)
-        finally:temporary.unlink(missing_ok=True)
+        temporary = None
+        try:
+            with NamedTemporaryFile(dir=snapshots, suffix='.part', delete=False) as stream:
+                temporary = Path(stream.name)
+                stream.write(raw)
+                stream.flush()
+                os.fsync(stream.fileno())
+            temporary.replace(destination)
+        finally:
+            if temporary is not None:temporary.unlink(missing_ok=True)
     index = folder/'index.json'
     existing = ReproductionLibrary(folder).snapshot() if index.exists() else None
     history = existing['history'] if existing else []

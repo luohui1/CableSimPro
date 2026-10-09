@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.simulation",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "name": "仿真复现基准",
   "description": "多区域稳态导热与GetDP时谐涡流、Elmer稳态/瞬态热适配，使用统一问题、网格和复现工件。",
   "icon": "assets/icon.svg",
@@ -22088,6 +22088,21 @@
       "path": "assets/method.svg",
       "sha256": "a782a8b00f5127eac7c77bcaca88a58bfe95255b5c702a59dc45aba69fc135ac",
       "size_bytes": 3206
+    },
+    {
+      "path": "assets/reproduction-evidence-index.json",
+      "sha256": "c19162222e1a3bf1c115e197a28bc9a3411b501f687aa03bbb8c331a452eaab2",
+      "size_bytes": 116
+    },
+    {
+      "path": "assets/reproduction-evidence-schema.json",
+      "sha256": "8842dd3704d3b7d6d992018a8fc058f3465fd5864e82e65485a6d5eee06869ce",
+      "size_bytes": 2437
+    },
+    {
+      "path": "assets/reproduction-evidence.json",
+      "sha256": "f32440b4a33b429d1753275c629526d4f0ccb9e45c8f13bc7784faf9d9bacb6d",
+      "size_bytes": 303245
     },
     {
       "path": "src/cablesim_simulation/__init__.py",

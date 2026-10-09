@@ -292,6 +292,26 @@ def tb880_fields(items):
                 'source':item['reference_location']})
 
 
+def duct_limitations(classification):
+    """Keep result values in sensitivity.rows; prose contains scope and sources."""
+    return [
+        ('口径差异：管外二维空间热流与报告集中热阻网络不同；报告土壤热阻替换解释主要差异，不单独归因于空气经验系数。' if classification=='basis_difference' else
+         '尚未归因：现有诊断未闭合到公布值，缺少材料与接触资料；不调参数拟合。'),
+        '来源：TB 880 p.84 几何与空气填充管镜像适用限制；p.85 表4 塑料管空气系数与 HDPE 单值；p.86 管外土壤热阻；p.87 未附加涡流算例。p.90 含附加涡流，不混用。',
+        'HDPE 仅有报告单值，没有物性范围；表中材料扰动为诊断假设，不能据此排除实际材料不确定性。',
+        '报告未声明电缆与管壁接触，缺实际位置、接触热阻及管内流动模型；同心环等效导热层未求解自然对流。',
+        '已完成的空气局部加密和相切加密不足以解释差额；更细空气网格超容量停在预检，未声称局部诊断连续两级通过。原算例两类收敛证据保留。',
+        '集中热阻和周向恒温替换仅用于诊断；不替代原工程结果、不降低复现门槛，尚未排除材料与接触不确定性的组合影响。']
+
+
+def compact_duct_notes(item):
+    saved=item['sensitivity']
+    notes=duct_limitations(saved['classification'])
+    previous=set(saved.get('findings',[]))
+    item['limitations']=list(dict.fromkeys([v for v in item['limitations'] if not v.startswith('排管敏感性诊断：') and v not in previous]+notes))
+    saved['findings']=notes
+
+
 def tb880_sensitivity(items):
     """Import validation/tb880_sensitivity.py's actual dg83 interventions."""
     item=items.get('B02-2')
@@ -310,29 +330,11 @@ def tb880_sensitivity(items):
                 hdpe_k_w_m_k=next(iter(row.get('thermal_input',{}).get('cables',[])),{}).get('duct',{}).get('k_w_m_k'),
                 nodes=row.get('rating_state',{}).get('nodes'),hotspot_k=row.get('public_current_state',{}).get('hotspot_k'),
                 energy_residual=row.get('rating_state',{}).get('energy_relative_residual')))
-    byid={r['id']:r for r in table}
-    def effect(key):
-        r=byid.get(key,{})
-        if r.get('delta_a') is None:return '未得到结果'
-        digits=6 if 0<abs(r['delta_a'])<.001 else 3
-        return f"{r['delta_a']:+.{digits}f} A（{r['delta_percent']:+.{digits}f}%）"
-    network=byid.get('network-interfaces',{})
+    network=next((r for r in table if r['id']=='network-interfaces'),{})
     explained=network.get('ampacity_a') is not None and abs(network['ampacity_a']-reference)<.2
-    findings=[
-        f"空气经验式：20/90 °C 温度包络分别 {effect('air-20')} / {effect('air-90')}；U/V/Y 保持 p.85 表4 的塑料管值，不用其他管材系数。",
-        f"HDPE：热阻率 ±10% 假设扰动分别 {effect('hdpe-low')} / {effect('hdpe-high')}；报告只给 3.5 K·m/W，未给热导率范围，不能据此排除实际材料不确定性。",
-        f"接触几何：半间隙偏心 {effect('offset-half')}；与管底相切 {effect('contact')}，加密相切 {effect('contact-refined')}；保留同心环换算的空气等效导热率，无自然对流求解。原文未声明电缆与管壁接触，缺接触热阻与实际安装位置。",
-        f"空气局部网格：0.3/0.15 mm 分别 {effect('air-mesh-1')} / {effect('air-mesh-2')}；未改变计算域、材料与损耗反馈。",
-        '已排除的主要解释：来源空气系数未抄错；已完成的空气局部加密、相切加密变化不足以解释 14.932 A。原工况网格与扩域两类收敛已通过；0.15 mm 空气网格因 4,385,861 自由度超出 4,000,000 上限停在预检，不声称诊断空气网格连续两级通过。',
-        f"口径分解：空气两侧周向恒温 {effect('air-isothermal')}；报告管外土壤热阻 {effect('soil-network')}；两者组合 {effect('network-interfaces')}。集中热阻替换只用于诊断，不是可交付的工程场。",
-        '最可能来源：二维求解保留管外土壤与管壁/空气的周向非均匀热流，报告采用集中热阻网络。仅替换报告管外土壤热阻已消除绝大部分差额，因此不能把差异单独归于空气经验系数。空气温度上界、相切几何、HDPE ±10% 扰动均不能单独补足差额；尚未排除其组合及实际材料/接触不确定性。',
-        ('口径差异：以报告集中热阻和周向恒温口径复算后，与公布载流量相差小于 0.2 A；空间热流模型与报告热阻网络不同，不能将原 −2.187% 直接称为数值误差。' if explained else
-         '尚未归因：集中热阻口径替换仍不能在 0.2 A 内复现公布值；缺报告管内流动/接触模型及 HDPE 物性范围，不调参数拟合。'),
-        '0.2 A 仅用于上述模型口径诊断闭合，不替代原复现验收门槛；原有限元结果 667.882 A、公布值 682.814 A 均保留，未将诊断替换结果登记为复现通过。',
-        'TB 880 p.84 明示空气填充管的镜像方法适用性存在限制；p.90 温度网络含附加涡流损耗，本次继续对照 p.87 未附加涡流的原算例，未混用 679.841 A。']
-    findings.extend(r['label']+'：'+r.get('failure',{}).get('message','未完成，未得到数值结果') for r in rows if r['status']!='complete')
+    findings=duct_limitations('basis_difference' if explained else 'not_resolved')
     prefix='排管敏感性诊断：'
-    item['limitations']=[v for v in item['limitations'] if not v.startswith(prefix)]+[prefix+v for v in findings]
+    item['limitations']=[v for v in item['limitations'] if not v.startswith(prefix)]+findings
     item['sensitivity']=dict(schema='cablesim.tb880-sensitivity/1',baseline_ampacity_a=current,
         reference_gap_a=gap,rows=table,findings=findings,classification='basis_difference' if explained else 'not_resolved',
         source_pages=[84,85,86,87,90],report_thermal_conductivity_range=None,
@@ -405,8 +407,22 @@ def publish_tb880_fields():
     publish(items)
 
 
+def publish_duct_notes():
+    """Publish wording only; preserve every other record and saved result."""
+    folder=DATA/'library';original=(folder/'index.json').read_bytes();index=json.loads(original)
+    raw=(folder/'snapshots'/(index['current']+'.json')).read_bytes()
+    if sha256(raw).hexdigest()!=index['current']:raise ValueError('Library snapshot integrity failed')
+    items={item['id']:item for item in json.loads(raw)['items']}
+    compact_duct_notes(items['B02-2'])
+    if (folder/'index.json').read_bytes()!=original:raise ValueError('Concurrent library publication; retry from current snapshot')
+    publish(items)
+
+
 if __name__=='__main__':
     import argparse
-    parser=argparse.ArgumentParser();parser.add_argument('--tb880-only',action='store_true')
-    if parser.parse_args().tb880_only:publish_tb880_fields()
+    parser=argparse.ArgumentParser();group=parser.add_mutually_exclusive_group()
+    group.add_argument('--tb880-only',action='store_true');group.add_argument('--duct-notes-only',action='store_true')
+    args=parser.parse_args()
+    if args.tb880_only:publish_tb880_fields()
+    elif args.duct_notes_only:publish_duct_notes()
     else:build()

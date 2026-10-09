@@ -39,9 +39,9 @@
     },
     {
       "plugin_id": "cablesim.simulation",
-      "version": "1.2.0",
+      "version": "1.2.1",
       "manifest": "plugins/cablesim.simulation/plugin.json",
-      "release_digest": "ba511b5fa8178247e38e83a9dd8720c387e5092a55e09ba83cb1a3bc782a8c15"
+      "release_digest": "650ed9b5c63c68dfc7bc0cb1cd4174067f888502267cdcff9460195a70458e7c"
     },
     {
       "plugin_id": "cablesim.standard-check",

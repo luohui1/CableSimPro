@@ -6,6 +6,29 @@ import re
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
+BUNDLED_EVIDENCE = Path(__file__).resolve().parents[2]/'plugins/cablesim.simulation/assets'
+
+
+def bundled_evidence(root=None):
+    """Verify saved evidence shipped with the repository; never run a solver."""
+    from jsonschema import Draft202012Validator, ValidationError
+    folder=Path(root) if root is not None else BUNDLED_EVIDENCE
+    raw=(folder/'reproduction-evidence.json').read_bytes()
+    index=json.loads((folder/'reproduction-evidence-index.json').read_text('utf-8'))
+    if index.get('kind')!='saved_evidence':raise ValueError('随附验证证据必须声明为保存证据。')
+    expected=index['snapshot_id']
+    if len(raw)>1024*1024 or not re.fullmatch('[a-f0-9]{64}',expected) or sha256(raw).hexdigest()!=expected:
+        raise ValueError('随附验证证据摘要不匹配或超过1 MiB；发布导入已停止。')
+    def invalid(value):raise ValueError('随附证据含非有限数值：'+value)
+    value=json.loads(raw,parse_constant=invalid)
+    schema=json.loads((folder/'reproduction-evidence-schema.json').read_text('utf-8'))
+    Draft202012Validator.check_schema(schema)
+    try:Draft202012Validator(schema).validate(value)
+    except ValidationError as error:raise ValueError('随附验证证据Schema不合法：'+error.message) from None
+    ids=[item['id'] for item in value['items']]
+    if len(ids)!=len(set(ids)):raise ValueError('随附验证证据目标身份重复。')
+    return value,raw,expected
+
 
 class ReproductionLibrary:
     def __init__(self, root):

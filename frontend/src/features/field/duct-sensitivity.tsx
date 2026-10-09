@@ -19,8 +19,7 @@ export function DuctSensitivity({ data, loading, error, historical }: {
   };
   return <section className="input-section" aria-label="排管敏感性诊断">
     <h3>排管敏感性诊断{historical || detail.historical ? ' · 历史' : ''}</h3>
-    <dl className="field-scope"><div><dt>基准</dt><dd>原有限元 {number(saved.baseline_ampacity_a)} A · 与公布值相差 {number(saved.reference_gap_a)} A</dd></div>
-      <div><dt>结论</dt><dd>{saved.classification === 'basis_difference' ? '口径差异' : '尚未归因'} · 影响百分比以原有限元为分母</dd></div></dl>
+    <dl className="field-scope"><div><dt>结论</dt><dd>{saved.classification === 'basis_difference' ? '口径差异' : '尚未归因'} · 影响百分比以原有限元为分母</dd></div></dl>
     <DataTable label="排管敏感性影响" showGroups={false} rowLabel={row => text(row.label)}
       groups={[{ id:'sensitivity',label:'诊断',rows }]} columns={[
         {id:'label',label:'诊断项',wrap:true,render:row => <Tooltip content={text(row.basis) || '与原工况比较；来源随保存证据记录'}><span tabIndex={0}>{text(row.label)}{row.id.startsWith('hdpe-') && numeric(row.hdpe_k_w_m_k) !== null ? ` · k ${number(row.hdpe_k_w_m_k,6)} W/(m·K)` : ''}</span></Tooltip>},
@@ -30,6 +29,5 @@ export function DuctSensitivity({ data, loading, error, historical }: {
         {id:'nodes',label:'自由度',numeric:true,render:row => numeric(row.nodes)?.toLocaleString() ?? '—'},
         {id:'status',label:'记录',wrap:true,render:row => row.status === 'complete' ? '已保存' : text(optionalRecord(row.failure).message) || '尚无结果'},
       ]} />
-    <p className="field-state-note">HDPE 报告只给单值，±10% 为诊断扰动；接触与集中热阻替换不代表原算例，原封存结果保留。</p>
   </section>;
 }
