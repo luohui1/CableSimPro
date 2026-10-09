@@ -21,6 +21,7 @@ const ASSET_GROUP: Record<string, "materials" | "templates" | "standards"> = {
 const MARKS: Record<string, StatusKind> = {
   current: "current", outdated: "historical", not_run: "draft", running: "running", failed: "error", incomplete: "draft", draft: "draft",
   reviewed: "saved", published: "saved", submitted: "proposal", approved: "saved", pending: "proposal", installed: "saved", unknown: "unknown",
+  reproduced: "saved", partial: "draft", missing_data: "unknown", capability_gap: "unknown", declared: "unknown",
 };
 export const statusMark = (code: string): StatusKind => MARKS[code] || "draft";
 /** 版本串里的内部后缀换成读得懂的写法，不露出“+engineering”“public-sample”这类内部标识。 */
@@ -44,7 +45,10 @@ export function ObjectLink({ card, children, className = "object-link" }: { card
     case "job": return <Link className={className} to="/runs" search={{ theme }}>{body}</Link>;
     case "delivery": return <Link className={className} to="/deliveries" search={{ theme, workspace: "", delivery: card.id }}>{body}</Link>;
     case "plugin": return <Link className={className} to="/plugins/$pid" params={{ pid: card.id }} search={{ theme }}>{body}</Link>;
-    case "validation": return parent?.kind === "plugin"
+    // 复现库的验证对象家在验证算例页，并固定到引用时的快照；清单声明的验证回到所属插件
+    case "validation": return card.subtype === "reproduced"
+      ? <Link className={className} to="/validation/$target/$tab" params={{ target: card.id, tab: "results" }} search={{ theme, snapshot: card.validation?.snapshot_digest || "" }}>{body}</Link>
+      : parent?.kind === "plugin"
       ? <Link className={className} to="/plugins/$pid" params={{ pid: parent.id }} search={{ theme }}>{body}</Link>
       : <Link className={className} to="/validation" search={{ theme, snapshot: "" }}>{body}</Link>;
     case "document": return <Link className={className} to="/resources/cables/imports" search={{ theme, document: card.id }}>{body}</Link>;

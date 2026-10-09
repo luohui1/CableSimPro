@@ -101,6 +101,7 @@ h3 { font-size: var(--text-body); }
 input { caret-color: var(--text); }
 .muted, .unit { color: var(--text-secondary); font-size: var(--text-note); font-weight: var(--weight-normal); }
 .unit { white-space: nowrap; }
+.numeric > .unit { margin-left: var(--space-1); }
 .spacer { flex: 1; }
 .numeric { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .motion-value { color: var(--text); }

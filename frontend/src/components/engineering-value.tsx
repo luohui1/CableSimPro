@@ -24,7 +24,7 @@ export function EngineeringValue({
     >
       <span className="numeric" tabIndex={0}>
         {display.text}
-        {withUnit && display.unit !== "—" && (
+        {withUnit && display.unit !== "—" && display.value !== null && (
           <span className="unit">{display.unit}</span>
         )}
       </span>

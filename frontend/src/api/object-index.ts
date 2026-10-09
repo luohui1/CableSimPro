@@ -6,9 +6,19 @@ import { ApiError } from "./client";
  */
 export type ObjectKind = "project" | "study" | "type" | "cable_version" | "asset" | "run" | "job" | "delivery" | "plugin" | "validation" | "document" | "proposal" | "agent_task" | "input_snapshot";
 export type ObjectStatus = { code: string; label: string; reason?: string | null };
+/** 复现验证名片的证据投影（host-inputs.md“统一索引”）：最多三条关键结果，超限优先；数字是公开算例的复现量值。 */
+export type ValidationMetric = {
+  id: string; variant: string; quantity: string; unit?: string | null; reference?: number | null; open_source?: number | null; comsol?: number | null;
+  difference?: number | null; relative_difference?: number | null; relative_difference_percent?: number | null; status: string; source?: string | null;
+};
+export type ValidationEvidence = {
+  snapshot_digest: string; citation: string; reference_location: string; scope: string; metrics: ValidationMetric[];
+  total_metrics: number; outside_tolerance: number; convergence_passed: boolean | null; limitations: string[];
+};
 export type ObjectCard = {
   kind: ObjectKind; id: string; name: string; version?: string | null; revision?: number | null; status: ObjectStatus;
   source?: { kind: string; label: string } | null; updated?: string | null; parent?: { kind: ObjectKind; id: string; name: string } | null; subtype?: string | null;
+  validation?: ValidationEvidence | null;
 };
 export type Relation = { role: string; target: ObjectCard; pinned?: { version?: string | null; revision?: number | null; digest?: string | null } | null; freshness: "current" | "outdated" | "unknown"; reason?: string | null };
 export type Relations = { uses: Relation[]; used_by: Relation[]; unresolved: { role: string; freshness: "unknown"; reason: string }[] };

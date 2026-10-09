@@ -22,17 +22,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/tooltip";
 import { downloadJson } from "@/lib/download";
 import { DuctSensitivity } from "@/features/field/duct-sensitivity";
+import { METRIC_STATES, VALIDATION_QUANTITIES, VALIDATION_STATES } from "@/lib/validation-labels";
 const kinds: Record<string, string> = {
   paper: "论文",
   standard: "标准算例",
   comsol: "COMSOL 教程",
   benchmark: "教学基准",
-};
-const statuses: Record<string, string> = {
-  reproduced: "声明范围内已复现",
-  partial: "部分覆盖",
-  missing_data: "缺资料",
-  capability_gap: "能力未覆盖",
 };
 const tabs = {
   results: "结果对照",
@@ -40,18 +35,6 @@ const tabs = {
   convergence: "网格收敛",
   sources: "输入来源",
   scope: "覆盖与限制",
-};
-const quantities: Record<string, string> = {
-  conductor_max_temperature_k: "导体最高温度",
-  interface_nodal_mean_k: "界面节点平均温度",
-  maximum_temperature_k: "最高温度",
-  ampacity_a: "允许电流",
-  ac_resistance_ohm_m: "交流电阻",
-  series_resistance_ohm_m: "线对交流电阻",
-  lambda1: "护套损耗系数",
-  conductor_loss_w_m: "导体损耗",
-  sheath_loss_w_m: "护套损耗",
-  total_loss_w_m: "总损耗",
 };
 export function ReproductionPage() {
   const { theme, search, navigate } = usePageTheme(),
@@ -98,7 +81,7 @@ export function ReproductionPage() {
     { value: "", label: "当前记录" },
     ...history.slice(1).map((row) => ({
       value: text(row.id),
-      label: "历史 · " + text(row.created_at),
+      label: "历史 · " + (text(row.created_at) ? new Date(text(row.created_at)).toLocaleString("zh-CN", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "时间未记录"),
     })),
   ];
   function changeSnapshot(snapshot: string) {
@@ -226,7 +209,8 @@ export function ReproductionPage() {
             <div className="spacer" />
             <Select
               label="记录版本"
-              value={snapshot}
+              // 链接固定的是当前快照时，显示为“当前记录”
+              value={snapshot && snapshot === text(history[0]?.id) ? "" : snapshot}
               onChange={changeSnapshot}
               options={options}
             />
@@ -273,7 +257,7 @@ export function ReproductionPage() {
                     onChange={setStatus}
                     options={[
                       { value: "all", label: "全部" },
-                      ...Object.entries(statuses).map(([value, label]) => ({
+                      ...Object.entries(VALIDATION_STATES).map(([value, label]) => ({
                         value,
                         label,
                       })),
@@ -314,7 +298,7 @@ export function ReproductionPage() {
                       id: "status",
                       label: "覆盖状态",
                       render: (row) =>
-                        statuses[text(row.status)] || text(row.status),
+                        VALIDATION_STATES[text(row.status)] || text(row.status),
                     },
                     {
                       id: "original",
@@ -347,7 +331,7 @@ export function ReproductionPage() {
                 <div className="input-module">
                   <section className="evidence-summary">
                     <h2>
-                      {statuses[text(detail.data?.status)] || "复现状态未提供"}
+                      {VALIDATION_STATES[text(detail.data?.status)] || "复现状态未提供"}
                     </h2>
                     <p className="muted">{text(detail.data?.scope)}</p>
                   </section>
@@ -368,7 +352,7 @@ export function ReproductionPage() {
                                 content={text(row.reason) || text(row.variant)}
                               >
                                 <span tabIndex={0}>
-                                  {quantities[text(row.quantity)] ||
+                                  {VALIDATION_QUANTITIES[text(row.quantity)] ||
                                     text(row.quantity)}{" "}
                                   · {text(row.variant)}
                                 </span>
@@ -408,13 +392,7 @@ export function ReproductionPage() {
                             id: "status",
                             label: "比较状态",
                             render: (row) =>
-                              ({
-                                matched: "在声明容差内",
-                                outside_tolerance: "超出声明容差",
-                                not_comparable: "口径不可比",
-                                missing_reference: "原文缺项",
-                                not_assessed: "未评估",
-                              })[text(row.status)] || text(row.status),
+                              METRIC_STATES[text(row.status)] || text(row.status),
                           },
                         ]}
                       />
@@ -450,7 +428,7 @@ export function ReproductionPage() {
                               ? "网格节点数"
                               : "样本序号"
                           }
-                          yLabel={quantities[quantity] || quantity}
+                          yLabel={VALIDATION_QUANTITIES[quantity] || quantity}
                           series={
                             activeTab === "convergence"
                               ? ["open_source", "comsol"].map((solver) => ({

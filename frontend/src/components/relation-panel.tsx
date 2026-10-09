@@ -45,13 +45,16 @@ function UsedBy({ rows }: { rows: Relation[] }) {
  * 关联面板（FRONTEND_REQUIREMENTS §2.3）：“用到了 / 被用于”，每项是一张小名片；引用变了就标“已变化”并写原因。
  * 数据来自统一索引，不在页面里各自拼关系。
  */
-export function RelationPanel({ kind, id }: { kind: ObjectKind; id: string }) {
+export function RelationPanel({ kind, id, hideRoles = [] }: { kind: ObjectKind; id: string; hideRoles?: string[] }) {
   // 滚到可见时才读：关联是次要信息，不和首屏的主要数据抢宿主
   const [anchor, visible] = useInView<HTMLDivElement>();
   const relations = useQuery({ queryKey: ["object-relations", kind, id], queryFn: ({ signal }) => objectRelations(kind, id, signal), enabled: !!id && visible });
   if (!visible || relations.isPending) return <div ref={anchor}><LoadingState title="正在读取关联" description="" /></div>;
   if (relations.error) return <ErrorState title="关联读取失败" description={message(relations.error)} />;
-  const { uses, used_by: usedBy, unresolved } = relations.data;
+  // 已在别处成表的关联（例如插件的验证算例在“验证”页签）不在这里重复
+  const uses = relations.data.uses.filter((row) => !hideRoles.includes(row.role));
+  const unresolved = relations.data.unresolved.filter((row) => !hideRoles.includes(row.role));
+  const usedBy = relations.data.used_by;
   return <div className="relation-panel">
     <section aria-label="用到了"><h3>用到了</h3>{uses.length ? <ul className="relation-list">{uses.map((row, index) => <Row key={row.role + row.target.id + index} row={row} label={ROLES[row.role] || row.role} />)}</ul> : <InlineEmpty title="没有引用其他对象" />}</section>
     <section aria-label="被用于"><h3>被用于</h3>{usedBy.length ? <UsedBy rows={usedBy} /> : <InlineEmpty title="还没有被引用" />}</section>

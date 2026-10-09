@@ -1,13 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link, useParams } from "@tanstack/react-router";
 import { methodCatalog, studyIndex } from "@/api/research";
-import { optionalRecord, text } from "@/api/client";
+import { message, optionalRecord, text } from "@/api/client";
+import { objectRelations, type ObjectCard, type ValidationMetric } from "@/api/object-index";
 import { downloadJson } from "@/lib/download";
 import { pluginArt } from "@/lib/illustrations";
 import { ANALYSIS_KINDS, isBenchmarked, validationLevel } from "@/lib/plugin-labels";
 import { CatalogShell, usePageTheme } from "@/components/catalog-shell";
 import { QueryState } from "@/components/query-state";
-import { EmptyState, InlineEmpty } from "@/components/states";
+import { EmptyState, ErrorState, InlineEmpty, LoadingState } from "@/components/states";
+import { DataTable } from "@/components/data-table";
+import { ObjectLink, statusMark } from "@/components/object-link";
+import { StatusMark } from "@/components/status-mark";
+import { METRIC_STATES, VALIDATION_QUANTITIES, percentText } from "@/lib/validation-labels";
+import { displayUnit } from "@/lib/display-names";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -75,6 +81,45 @@ function usesPlugin(definition: unknown, id: string): boolean {
   return methods.some((m) => text(optionalRecord(m).plugin_id) === id);
 }
 
+/** 一条关键结果：“情形：量 偏差”，比较状态另起一段弱化显示；有相对偏差用百分数，否则用差值。 */
+function MetricLine({ metric }: { metric: ValidationMetric }) {
+  const deviation = typeof metric.relative_difference_percent === "number" ? percentText(metric.relative_difference_percent)
+    : typeof metric.difference === "number" ? `${metric.difference > 0 ? "+" : metric.difference < 0 ? "−" : ""}${Math.abs(Number(metric.difference.toPrecision(3)))} ${displayUnit(metric.unit || "")}`.trim() : "";
+  return <li><span>{metric.variant}：{VALIDATION_QUANTITIES[metric.quantity] || metric.quantity} {deviation}</span> <span className="muted">{METRIC_STATES[metric.status] || metric.status}</span></li>;
+}
+
+/**
+ * 插件 › 验证：用这个插件复现过的公开算例（来自复现库，统一索引的 plugin → validation 关联）。
+ * 部分复现、超出容差、口径不可比照原样显示；清单声明只计数，逐条见“能力”页签。
+ */
+function PluginValidation({ pluginId }: { pluginId: string }) {
+  const relations = useQuery({ queryKey: ["object-relations", "plugin", pluginId], queryFn: ({ signal }) => objectRelations("plugin", pluginId, signal) });
+  if (relations.isPending) return <LoadingState title="正在读取验证证据" />;
+  if (relations.error) return <ErrorState title="验证证据读取失败" description={message(relations.error)} action={<Button size="compact" onClick={() => void relations.refetch()}>重新读取</Button>} />;
+  const rows = relations.data.uses.filter((row) => row.role === "validation");
+  const reproduced = rows.filter((row) => row.target.subtype === "reproduced").map((row) => row.target as ObjectCard & { id: string });
+  const declared = rows.length - reproduced.length;
+  const missing = relations.data.unresolved.filter((row) => row.role === "validation");
+  return <section className="object-section" aria-label="公开算例复现">
+    <header><h2>公开算例复现</h2><span className="muted">{reproduced.length} 个算例{declared ? ` · 清单另声明 ${declared} 项，见“能力”` : ""}</span></header>
+    {reproduced.length ? <DataTable<ObjectCard & { id: string }> label="公开算例复现" showGroups={false} rowLabel={(row) => row.name}
+      groups={[{ id: "reproduced", label: "复现", rows: reproduced }]}
+      columns={[
+        { id: "name", label: "算例", wrap: true, render: (row) => <ObjectLink card={row} /> },
+        { id: "status", label: "状态", render: (row) => <StatusMark kind={statusMark(row.status.code)} label={row.status.label} detail={row.status.reason || undefined} /> },
+        { id: "metrics", label: "关键结果", wrap: true, render: (row) => {
+          const evidence = row.validation;
+          if (!evidence?.metrics.length) return "没有保存的量值";
+          return <ul className="metric-lines">{evidence.metrics.map((metric) => <MetricLine key={metric.id} metric={metric} />)}
+            {evidence.total_metrics > evidence.metrics.length && <li className="muted">共 {evidence.total_metrics} 项，其余在算例页</li>}</ul>;
+        } },
+        { id: "convergence", label: "收敛", render: (row) => row.validation?.convergence_passed === true ? "通过" : row.validation?.convergence_passed === false ? "未通过" : "无记录" },
+      ]} />
+      : <InlineEmpty title="还没有用这个插件复现的公开算例" />}
+    {missing.map((row, index) => <ErrorState key={index} title="复现证据不可用" description={row.reason} />)}
+  </section>;
+}
+
 function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string; title: string; workspace: string; definition: unknown }[]; theme: "light" | "dark" }) {
   const id = pluginId(row);
   const method = optionalRecord(row.method);
@@ -140,12 +185,12 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
         <TabsContent value="validation" className="plugin-section">
           {validationFigure && <figure className="plugin-figure"><img src={text(validationFigure.url)} alt={text(validationFigure.title)} /><figcaption><b>{text(validationFigure.title)}</b>{text(validationFigure.description)}</figcaption></figure>}
           {text(presentation.validation_note) && <p className="muted">{text(presentation.validation_note)}</p>}
-          {!validationFigure && !text(presentation.validation_note) && <InlineEmpty title="插件没有提供验证说明；各能力的验证等级见“能力”。" />}
-          <Link className="detail-link" to="/validation" search={{ theme, snapshot: "" }}>查看验证算例</Link>
+          <PluginValidation pluginId={id} />
+          <Link className="detail-link" to="/validation" search={{ theme, snapshot: "" }}>全部验证算例</Link>
         </TabsContent>
         <TabsContent value="usage" className="plugin-section">
           {/* 关联来自统一索引：用这个插件的研究，以及它的验证证据 */}
-          <RelationPanel kind="plugin" id={id} />
+          <RelationPanel kind="plugin" id={id} hideRoles={["validation"]} />
         </TabsContent>
         <TabsContent value="technical" className="plugin-section">
           <dl className="detail-meta">

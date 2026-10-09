@@ -112,6 +112,9 @@ export function engineeringQuantity(
       ? formatNumber(value, 1)
       : unit === "m" && /coordinate/.test(key)
       ? formatNumber(value, 2)
+      // 差值不足 1 时按有效数字显示：0.03 A 的差不能显示成 0.0
+      : /difference|delta/i.test(key) && value !== null && value !== 0 && Math.abs(value) < 1
+      ? significantNumber(value, 2)
       : unit === "°C" || unit === "A" || unit === "%"
       ? formatNumber(value, 1)
       : significantNumber(
