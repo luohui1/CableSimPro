@@ -8,7 +8,7 @@ from time import perf_counter
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException, Response, Request, Query
 from pydantic import Field, JsonValue
 from ..domain.models import DomainDocument
 from ..domain.editing import DraftDomainDocument, resolve_edit
@@ -246,12 +246,13 @@ def make_router(research, previews):
         return host_call(research.delivery_jobs.cancel,str(wid),str(jid))
 
     @router.get('/workspaces/{wid}/runs/{rid}/fem-conclusion',response_model=FemConclusion,responses=ERRORS)
-    async def saved_fem_conclusion(wid:UUID,rid:UUID):
+    async def saved_fem_conclusion(wid:UUID,rid:UUID,request:Request,
+                                   prepare_report:bool=Query(False,description='Preformat the saved projection image on the report worker; only report view should request this. Does not run a solver or alter saved results.')):
         from .read_responses import read_response
         def load():
-            try:return host_call(fem_conclusion,research,str(wid),str(rid))
+            try:return host_call(fem_conclusion,research,str(wid),str(rid),prepare_report=prepare_report)
             except (ValueError,KeyError,StopIteration):fail(422,'FEM_EVIDENCE_INVALID','保存有限元证据不完整或不满足核验条件，请检查诊断与收敛记录。')
-        return await read_response(research,('fem-conclusion',str(wid),str(rid)),FemConclusion,load)
+        return await read_response(research,('fem-conclusion',str(wid),str(rid),prepare_report),FemConclusion,load,request=request)
 
     @router.get('/simulation/problem-contract',response_model=ProblemContract,responses=ERRORS)
     def simulation_problem_contract():
@@ -276,11 +277,11 @@ def make_router(research, previews):
 
     @router.get('/design/input-contracts', response_model=list[InputContract], responses=ERRORS, deprecated=True)
     @router.get('/input-contracts', response_model=list[InputContract], responses=ERRORS)
-    async def input_contracts():
+    async def input_contracts(request:Request):
         from .input_contracts import contracts
         from .read_responses import read_response
         return await read_response(research, ('input-contracts',), None,
-            lambda: contracts(research, encoded=True), uses_database=False)
+            lambda: contracts(research, encoded=True), uses_database=False,request=request)
 
     @router.get('/design/examples/iec', response_model=IecExample, deprecated=True)
     @router.get('/examples/iec', response_model=IecExample)

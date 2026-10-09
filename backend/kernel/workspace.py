@@ -64,6 +64,15 @@ class WorkspaceStore:
                 db.execute('BEGIN IMMEDIATE')
             yield db
 
+    @contextmanager
+    def read_snapshot(self):
+        """Independent WAL read snapshot; never joins a writer's transaction."""
+        uri = self.path.resolve().as_uri() + '?mode=ro'
+        with sqlite3.connect(uri, uri=True, timeout=20) as db:
+            db.row_factory = sqlite3.Row
+            db.execute('BEGIN')
+            yield db
+
     def initialize(self):
         from .database_ops import prepare_startup, SCHEMA_VERSION
         prepare_startup(self.path)
@@ -122,7 +131,7 @@ class WorkspaceStore:
         return rev
 
     def snapshot(self, wid, connection=None):
-        with (nullcontext(connection) if connection is not None else self.db()) as db:
+        with (nullcontext(connection) if connection is not None else self.read_snapshot()) as db:
             row, state = self.load(db, wid)
             maximum = db.execute('SELECT MAX(position) FROM workspace_history WHERE workspace=?', (wid,)).fetchone()[0]
             audit = [dict(r) for r in db.execute('SELECT * FROM workspace_audit WHERE workspace=? ORDER BY rowid DESC LIMIT 100', (wid,))]
@@ -281,4 +290,3 @@ def make_router(store: WorkspaceStore):
         return {**dict(run), 'output': json.loads(run['output']), 'events': json.loads(run['events'])}
 
     return router
-

@@ -43,6 +43,7 @@ class StudyResponse(PublicResponse):
     can_undo: bool = Field(default=False, description='Earlier study configuration exists; separate from workspace structure history.')
     can_redo: bool = Field(default=False, description='Later configuration on the active history branch exists.')
     latest_run_id: UUID | None = Field(default=None, description='Most recently accepted run; null before first execution.')
+    latest_run: 'RunSummary | None' = Field(default=None, description='Verified latest-run status and producer headlines from the same read snapshot. No history, full field arrays or physical recalculation; null before execution.')
     version_status: VersionStatus | None = Field(default=None, description='Version status of latest_run_id, computed at read time.')
     workspace_revision: int | None = Field(default=None, description='Current workspace revision for this read.', json_schema_extra={'readOnly': True})
     model_reference: ModelReference | None = Field(default=None, description='Model display identity from the saved workspace binding or local domain; null for standalone study input. Does not load the complete workspace payload.', json_schema_extra={'readOnly': True})
@@ -203,3 +204,6 @@ class RunSummary(BaseModel):
 class RunSummaryPage(BaseModel):
     items: list[RunSummary]
     next_cursor: int | None
+
+
+StudyResponse.model_rebuild()

@@ -39,6 +39,28 @@ def test_no_convergence_never_returns_numeric_conclusion(monkeypatch):
     assert not data.comparison
 
 
+def test_first_screen_does_not_start_image_renderer_but_report_can_prepare(monkeypatch):
+    import sqlite3
+    from contextlib import nullcontext
+    run,_=saved_fixture()
+    run['snapshot']['cases'][0]['input'].update(cable_types=[],circuits=[])
+    db=sqlite3.connect(':memory:');db.row_factory=sqlite3.Row
+    db.execute('CREATE TABLE study_runs(id TEXT,workspace TEXT,status TEXT,snapshot TEXT,sequence INTEGER)')
+    queued=[]
+    research=SimpleNamespace(store=SimpleNamespace(db=lambda:nullcontext(db)),
+        delivery_jobs=SimpleNamespace(worker=SimpleNamespace(submit=lambda *args:queued.append(args))),
+        resolve=lambda _: (SimpleNamespace(manifest=SimpleNamespace(capabilities=[SimpleNamespace(id='iec-thermal-field',parameter_schema={})])),None))
+    monkeypatch.setattr('backend.kernel.fem_evidence.display_read',lambda *args:deepcopy(run))
+    monkeypatch.setattr('backend.kernel.fem_evidence.proof',lambda *args,**kw:{'status':'converged','tolerance_k':.1,'reference_case_id':'case-0'})
+    try:
+        first=conclusion(research,run['workspace'],run['id'])
+        assert not queued
+        report=conclusion(research,run['workspace'],run['id'],prepare_report=True)
+        assert report==first and len(queued)==1
+        assert queued[0][1]==run['output']['cases'][0]['artifacts']['x-cablesim.temperature-field']
+    finally:db.close()
+
+
 def test_completed_workflow_lookup_matches_final_saved_run(tmp_path):
     import sqlite3,json
     from contextlib import contextmanager

@@ -29,10 +29,11 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
   const setMode = (next: string) => { if (next !== mode) void navigate({ to: next === 'agent' ? '/agent' : '/studies', search: { theme } }); };
   const spaces = useQuery({ queryKey: ['workspace-index'], queryFn: ({ signal }) => workspaces(signal) });
   const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal) });
-  const studies = useQuery({ queryKey: ['study-index'], queryFn: ({ signal }) => studyIndex(signal) });
-  // 待办数：需要人处理的审核、过期与缺项；进行中的作业不计入
-  // 待办数在浏览器空闲后再读，不和页面首屏抢宿主
+  // 全库研究列表（只用于各工程的研究数）和待办数在浏览器空闲后再读，不和页面首屏抢宿主；
+  // 当前工程优先取地址里的 workspace，不必等研究列表
   const idle = useIdleStart();
+  const studies = useQuery({ queryKey: ['study-index'], queryFn: ({ signal }) => studyIndex(signal), enabled: idle });
+  // 待办数：需要人处理的审核、过期与缺项；进行中的作业不计入
   const inbox = useQuery({ queryKey: ['index-inbox'], queryFn: ({ signal }) => indexInbox(signal), refetchInterval: 60_000, retry: false, enabled: idle });
   const todo = inbox.data ? inbox.data.counts.review + inbox.data.counts.stale + inbox.data.counts.missing : 0;
   const activeStudy = pathname.match(/^\/studies\/([^/]+)/)?.[1] || '';
@@ -41,7 +42,7 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
   const at = (prefix: string) => pathname === prefix || pathname.startsWith(prefix + '/') ? 'page' as const : undefined;
   const typeIds = new Set((types.data || []).map(row => text(row.id)));
   const projects = (spaces.data || []).filter(space => !typeIds.has(text(space.id)));
-  const activeProject = studies.data?.find(row => row.id === activeStudy)?.workspace || (typeof search.workspace === 'string' ? search.workspace : '');
+  const activeProject = (typeof search.workspace === 'string' && search.workspace) || studies.data?.find(row => row.id === activeStudy)?.workspace || '';
 
   return <aside className="workbench-sidebar" aria-label="导航">
     <div className="sidebar-head">

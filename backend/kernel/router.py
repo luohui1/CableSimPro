@@ -1,5 +1,5 @@
 """The saved-study API; existing workspace/run endpoints keep their v0 semantics."""
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response, Request
 from typing import Literal
 from .study_tasks import task_catalog
 from .responses import StudyResponse, RunResponse, RunDetailResponse, RunCaseInput, RunPage, RunSummaryPage, PreflightResponse, TaskOption
@@ -15,13 +15,13 @@ def make_router(research):
     router = APIRouter(prefix='/api')
 
     @router.get('/methods')
-    async def methods():
+    async def methods(request: Request):
         # The catalog parses and validates every manifest; reuse it until plugin
         # sources or seals change (same invalidation as /api/input-contracts).
         import json
         from .read_responses import read_response
         return await read_response(research, ('methods',), None,
-            lambda: json.dumps(research.methods(), ensure_ascii=False, allow_nan=False).encode(), uses_database=False)
+            lambda: json.dumps(research.methods(), ensure_ascii=False, allow_nan=False).encode(), uses_database=False, request=request)
 
     @router.get('/plugins/{plugin_id}/assets/{role}')
     def plugin_asset(plugin_id: str, role: Literal['cover', 'method', 'validation'], sha256: str | None = None):
@@ -66,12 +66,12 @@ def make_router(research):
             return {**dict(r), 'state': json.loads(r['state'])}
 
     @router.get('/workspaces/{wid}/studies', response_model=list[StudyResponse])
-    async def studies(wid: str):
-        return await read_response(research, ('studies',wid), list[StudyResponse], lambda: research.list_studies(wid))
+    async def studies(wid: str, request: Request):
+        return await read_response(research, ('studies',wid), list[StudyResponse], lambda: research.list_studies(wid), request=request)
 
     @router.get('/workspaces/{wid}/studies/{sid}', response_model=StudyResponse, responses=ERRORS)
-    async def study_detail(wid: str, sid: str):
-        return await read_response(research, ('study',wid,sid), StudyResponse, lambda: host_call(research.study_detail, wid, sid))
+    async def study_detail(wid: str, sid: str, request: Request):
+        return await read_response(research, ('study',wid,sid), StudyResponse, lambda: host_call(research.study_detail, wid, sid), request=request)
 
     @router.post('/workspaces/{wid}/studies/{sid}/recalculate', response_model=RunResponse,
                  response_model_exclude_unset=True, responses={**ERRORS, 202: {'model': RunResponse, 'description': 'Accepted current-version run; poll Location.'}})
@@ -126,20 +126,20 @@ def make_router(research):
         return result
 
     @router.get('/workspaces/{wid}/studies/{sid}/runs', response_model=RunPage | RunSummaryPage, response_model_exclude_unset=True)
-    async def runs(wid: str, sid: str, after: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100),
+    async def runs(wid: str, sid: str, request: Request, after: int = Query(0, ge=0), limit: int = Query(50, ge=1, le=100),
              view: Literal['full', 'summary'] = Query('full', description='full preserves the complete saved output and snapshot. summary returns list metadata, method identity and snapshot.module only; pagination and integrity/currentness semantics are unchanged.')):
         if view == 'summary':
             return await read_response(research, ('runs',wid,sid,after,limit), RunSummaryPage,
-                lambda: research.list_runs(wid,sid,after,limit,view='summary'))
+                lambda: research.list_runs(wid,sid,after,limit,view='summary'), request=request)
         return await run_in_threadpool(research.list_runs, wid, sid, after, limit)
 
     @router.get('/workspaces/{wid}/studies/{sid}/runs/{rid}', response_model=RunResponse | RunDetailResponse, response_model_exclude_unset=True)
-    async def run(wid: str, sid: str, rid: str,
+    async def run(wid: str, sid: str, rid: str, request: Request,
                   view: Literal['detail', 'full'] = Query('detail', description='detail omits snapshot.cases[*].input and lossless field shards, supplying immutable input references and the verified display mesh. Full-mesh sampling uses /api/hpc/workspaces/{wid}/fields/{rid}/sample. full returns the original complete evidence. Both validate the original stored input and output before projecting.')):
         from .run_details import detail
         model = RunResponse if view == 'full' else RunDetailResponse
         return await read_response(research, ('run-detail',wid,sid,rid,view), model,
-            lambda: detail(research,wid,sid,rid,view), exclude_unset=True)
+            lambda: detail(research,wid,sid,rid,view), exclude_unset=True, request=request)
 
     @router.get('/workspaces/{wid}/studies/{sid}/runs/{rid}/cases/{case_id}/input', response_model=RunCaseInput)
     async def run_case_input(wid: str, sid: str, rid: str, case_id: str):

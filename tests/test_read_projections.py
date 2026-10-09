@@ -17,6 +17,79 @@ from backend.plugin_host.registry import Registry
 from test_research import client, study, request
 
 
+@pytest.mark.skipif(os.name!='nt',reason='Windows overlapped directory I/O ownership')
+def test_source_notifications_survive_request_worker_exit(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from backend.kernel.source_watch import SourceWatch
+    (tmp_path/'backend').mkdir()
+    source=tmp_path/'backend'/'source.py'
+    source.write_text('before',encoding='utf-8')
+    with ThreadPoolExecutor(max_workers=1) as request_worker:
+        watch=request_worker.submit(SourceWatch,tmp_path).result()
+        before=request_worker.submit(watch.snapshot).result()
+    try:
+        assert before is not None and watch.snapshot()==before
+        source.write_text('after',encoding='utf-8')
+        assert watch.snapshot()!=before
+        assert watch.healthy
+    finally:watch.close()
+
+
+def test_latest_run_summary_matches_history_and_readers_do_not_wait_for_writer(client):
+    w, s = study(client)
+    root, body = request(client, w, s)
+    saved = client.post(root+'/runs', json=body).json()
+    service = client.app.state.research
+    # An index/report writer may be updating a different transaction. A reader
+    # sees the committed input snapshot immediately, not uncommitted edits.
+    with service.store.db(True) as writer:
+        writer.execute('UPDATE workspaces SET revision=revision+1 WHERE id=?', (w['id'],))
+        observed = service.study_detail(w['id'], s['id'])
+        workspace = service.store.snapshot(w['id'])
+        assert workspace['revision'] == w['revision']
+        assert observed['workspace_revision'] == w['revision']
+        writer.rollback()
+    history = client.get(root+'/runs?view=summary').json()['items'][-1]
+    detail = client.get(root).json()
+    assert detail['latest_run']['id'] == saved['id']
+    assert detail['latest_run'] == history
+    assert detail['version_status'] == history['version_status']
+    with service.store.read_snapshot() as reader:
+        import sqlite3
+        with pytest.raises(sqlite3.OperationalError, match='readonly'):
+            reader.execute('UPDATE workspaces SET revision=99')
+
+
+@pytest.mark.parametrize('header,expected', [('gzip',True),('br, gzip;q=0.5',True),('gzip;q=0',False),('identity',False),('gzip;q=bad',False)])
+def test_read_response_gzip_negotiation(header, expected):
+    from backend.kernel.read_responses import accepts_gzip
+    assert accepts_gzip(header) is expected
+
+
+def test_compressed_read_preserves_payload_and_changes_with_new_content():
+    from gzip import decompress
+    from types import SimpleNamespace
+    from backend.kernel.read_responses import ReadResponses
+    cache = ReadResponses(SimpleNamespace())
+    first = b'{"source":"saved-A","values":'+b'[1,2,3],'*1000+b'[]}'
+    second = first.replace(b'saved-A',b'saved-B')
+    assert decompress(cache.gzip(first)) == first
+    assert cache.gzip(first) is cache.gzip(first)
+    assert decompress(cache.gzip(second)) == second
+    assert cache.gzip(second) != cache.gzip(first)
+
+
+def test_http_compressed_and_identity_reads_are_the_same_verified_contract(client):
+    compressed=client.get('/api/input-contracts',headers={'Accept-Encoding':'gzip'})
+    raw=client.get('/api/input-contracts',headers={'Accept-Encoding':'identity'})
+    assert compressed.status_code == raw.status_code == 200
+    assert compressed.headers['content-encoding'] == 'gzip'
+    assert 'content-encoding' not in raw.headers
+    assert compressed.content == raw.content
+    assert compressed.headers['etag'] == raw.headers['etag']
+    assert compressed.headers['vary'] == 'Accept-Encoding'
+
+
 @pytest.mark.parametrize('output', [None, {'cases': [{'case_id': 'saved', 'artifacts': {
     'x-cablesim.field-shard/0': {'binary': 'full-mesh'},
     'x-cablesim.temperature-field': {'mesh': 'display'},

@@ -5,6 +5,7 @@ from hashlib import sha256
 from threading import RLock
 from concurrent.futures import Future
 from time import perf_counter
+from gzip import compress
 import sqlite3
 
 from fastapi import Response
@@ -28,6 +29,8 @@ class ReadResponses:
         self.database = None
         self.source_root = None
         self.watch = None
+        self.encoded = OrderedDict()
+        self.encoded_bytes = 0
 
     def initialize(self, uses_database):
         root = self.research.executor.registry.root.parent
@@ -133,15 +136,50 @@ class ReadResponses:
                 with suppress(sqlite3.Error):self.database.close()
             self.watch = None;self.database = None
             self.entries.clear();self.bytes = 0
+            self.encoded.clear();self.encoded_bytes = 0
+
+    def gzip(self, payload):
+        # Content addressed, so a DB commit or new seal can never reuse bytes
+        # from another response. Bounded separately from verified read receipts.
+        key = sha256(payload).digest()
+        with self.lock:
+            previous = self.encoded.get(key)
+            if previous is not None:
+                self.encoded.move_to_end(key)
+                return previous
+        encoded = compress(payload, compresslevel=1, mtime=0)
+        with self.lock:
+            if key not in self.encoded:
+                self.encoded[key] = encoded
+                self.encoded_bytes += len(encoded)
+            while self.encoded_bytes > self.MAX_BYTES or len(self.encoded) > self.MAX_ENTRIES:
+                _, old = self.encoded.popitem(last=False)
+                self.encoded_bytes -= len(old)
+        return encoded
 
 
-async def read_response(research, key, model, load, *, uses_database=True, exclude_unset=False):
+async def read_response(research, key, model, load, *, uses_database=True, exclude_unset=False, request=None):
     started=perf_counter()
     cache = research.read_responses if uses_database else research.catalog_read_responses
     payload = cache.get(key, uses_database)
     hit=payload is not None
     if payload is None:
         payload = await run_in_threadpool(cache.build, key, model, load, uses_database, exclude_unset=exclude_unset)
-    return Response(payload, media_type='application/json', headers={
+    headers = {
         'Server-Timing': f'host-read;dur={(perf_counter()-started)*1000:.2f}',
-        'X-CableSim-Read-Cache': 'hit' if hit else 'miss'})
+        'X-CableSim-Read-Cache': 'hit' if hit else 'miss', 'Vary':'Accept-Encoding',
+        'ETag': 'W/"'+sha256(payload).hexdigest()+'"'}
+    accepted = request.headers.get('accept-encoding','') if request is not None else ''
+    if len(payload) >= 1024 and accepts_gzip(accepted):
+        payload = await run_in_threadpool(cache.gzip, payload)
+        headers['Content-Encoding'] = 'gzip'
+    return Response(payload, media_type='application/json', headers=headers)
+
+
+def accepts_gzip(header):
+    for item in header.lower().split(','):
+        parts = [p.strip() for p in item.split(';')]
+        if parts[0] != 'gzip':continue
+        try:return all(float(p[2:]) > 0 for p in parts[1:] if p.startswith('q='))
+        except ValueError:return False
+    return False

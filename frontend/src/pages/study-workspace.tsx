@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { methodCatalog, workspaces } from "@/api/research";
+import { methodCatalog } from "@/api/research";
 import { displayName } from '@/lib/display-names';
 import { Redirect } from "@/components/redirect";
 import { studyModuleRoute, studyRootRoute } from "@/router";
@@ -94,7 +94,6 @@ export function StudyWorkspace() {
   const context = useStudy();
   const { study, workspace, runs, draft } = context;
   const theme = search.theme;
-  const projectIndex = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
   const [selected, setSelected] = useState<SelectionRow | undefined>();
   const [fullFieldDomain,setFullFieldDomain]=useState(false);
   useEffect(()=>setFullFieldDomain(false),[sid,search.run]);
@@ -173,14 +172,22 @@ export function StudyWorkspace() {
   });
   const savedMethod = optionalRecord(optionalRecord(optionalRecord(run?.snapshot).definition).method);
   const remoteMethod = (catalog.data || []).map(optionalRecord).find(item => optionalRecord(item.method).plugin_id === savedMethod.plugin_id);
-  const needsFieldProjection = !!run && !pendingRun && (hasFemField || !run.output && text(optionalRecord(remoteMethod?.execution_policy).backend) === 'slurm');
+  // The detail endpoint already verifies source digests and returns the display
+  // mesh. Reuse that exact artifact; only absent/unsupported views need /view.
+  // temperatureView also checks its artifact receipt and source binding.
+  const savedFieldView = useMemo(() => {
+    if (!run || pendingRun || !run.output) return undefined;
+    try { return temperatureView(run, fieldCase); } catch { return undefined; }
+  }, [run, pendingRun, fieldCase]);
+  const needsFieldProjection = !!run && !pendingRun && (hasFemField && !savedFieldView || !run.output && text(optionalRecord(remoteMethod?.execution_policy).backend) === 'slurm');
   const fieldProjection = useQuery({queryKey:['saved-field-view',run?.workspace,run?.id], enabled:needsFieldProjection,
     queryFn:({signal}) => hpcJson(`/workspaces/${text(run?.workspace)}/fields/${text(run?.id)}/view`, {signal}), retry:false});
   const fieldRun = needsFieldProjection ? fieldProjection.data : run;
   const fieldView = useMemo(() => {
+    if (!needsFieldProjection) return savedFieldView;
     if (!fieldRun || pendingRun) return undefined;
     try { return temperatureView(fieldRun, fieldCase); } catch { return undefined; }
-  }, [fieldRun, pendingRun, fieldCase]);
+  }, [fieldRun, pendingRun, fieldCase, savedFieldView, needsFieldProjection]);
   // 场值换算只做一次：每次渲染都新建数组会让场图重算等温线和定位网格，切换属性页时整页卡死
   const fieldValues = useMemo(() => fieldView?.temperatures.map((kelvin) => kelvin - 273.15), [fieldView]);
   const focusedField = useMemo(() => {
@@ -270,7 +277,7 @@ export function StudyWorkspace() {
     finally { window.clearTimeout(timer); }
   }
   const title = draft?.title || study.title;
-  const projectName = text((projectIndex.data || []).find((space) => text(space.id) === study.workspace)?.name);
+  const projectName = text(optionalRecord(workspace.domain || workspace.scenario).name);
   function currentSearch() {
     return { ...search, workspace: study.workspace };
   }

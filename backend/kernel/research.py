@@ -77,8 +77,8 @@ class Research:
         """
         if (stop is None or not stop.is_set()) and not self.catalog_read_responses.entries:
             self.warm_catalogs(stop)
-        # Windows cancels directory I/O when its issuing thread exits. Keep the
-        # managed watcher owner alive until lifespan shutdown; no polling work.
+        # Keep the managed warm-up task owned by lifespan until shutdown;
+        # directory I/O itself uses SourceWatch's persistent notification owner.
         if stop is not None:
             stop.wait()
 
@@ -261,7 +261,7 @@ class Research:
 
     def list_studies(self, wid):
         from .read_models import model_reference
-        with self.store.db() as db:
+        with self.store.read_snapshot() as db:
             revision, model = model_reference(db, wid)
             ids = [r[0] for r in db.execute('SELECT id FROM studies WHERE workspace=? ORDER BY rowid', (wid,))]
             cache = {}
@@ -269,20 +269,19 @@ class Research:
 
     def study_detail(self, wid, sid, cache=None):
         from .read_models import model_reference
-        with self.store.db() as db:
+        with self.store.read_snapshot() as db:
             revision, model = model_reference(db, wid)
             return self._study_detail(db, wid, sid, revision, model, {} if cache is None else cache)
 
     def _study_detail(self, db, wid, sid, revision, model, cache):
-        from .read_models import run_facts, RUN_COLUMNS
-        from .version_status import inspect
+        from .read_models import summary, RUN_COLUMNS
         value = self.definition(db, wid, sid)
         latest = db.execute('SELECT '+RUN_COLUMNS+' FROM study_runs WHERE workspace=? AND study=? ORDER BY sequence DESC LIMIT 1', (wid, sid)).fetchone()
         value['latest_run_id'] = latest['id'] if latest else None
+        value['latest_run'] = summary(self, latest, revision, value, cache) if latest else None
         value['version_status'] = {'status': 'empty', 'reasons': [], 'display_name': '尚无运行'}
         if latest:
-            facts = run_facts(self, latest)
-            value['version_status'] = inspect(self, facts['snapshot'], cache) if facts['integrity'] == 'verified' else None
+            value['version_status'] = value['latest_run']['version_status']
         value['workspace_revision'] = revision
         value['model_reference'] = model if value['definition'].get('input_source') == 'domain' else None
         return value
@@ -955,15 +954,18 @@ class Research:
         if view == 'summary':
             from .read_models import summary, RUN_COLUMNS
             from .verified_executor import verification_scope
-            with self.store.db() as db:
-                db.execute('BEGIN')
+            with self.store.read_snapshot() as db:
                 study = self.definition(db, wid, sid)
                 revision = db.execute('SELECT revision FROM workspaces WHERE id=?', (wid,)).fetchone()['revision']
-                rows = db.execute('SELECT '+RUN_COLUMNS+' FROM study_runs WHERE workspace=? AND study=? AND sequence>? ORDER BY sequence LIMIT ?',
+                rows = db.execute('SELECT id,sequence FROM study_runs WHERE workspace=? AND study=? AND sequence>? ORDER BY sequence LIMIT ?',
                                   (wid, sid, after, limit + 1)).fetchall()
-            page, cache = rows[:limit], {}
-            with verification_scope():
-                items = [summary(self, row, revision, study, cache) for row in page]
+                page, cache, items = rows[:limit], {}, []
+                with verification_scope():
+                    # Verify one immutable output at a time. A history of FEM
+                    # runs must not retain all lossless arrays in memory at once.
+                    for identity in page:
+                        row = db.execute('SELECT '+RUN_COLUMNS+' FROM study_runs WHERE workspace=? AND id=?', (wid,identity['id'])).fetchone()
+                        items.append(summary(self, row, revision, study, cache))
             return {'items': items, 'next_cursor': page[-1]['sequence'] if len(rows) > limit else None}
         with self.store.db() as db:
             self.definition(db, wid, sid)

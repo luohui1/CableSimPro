@@ -39,8 +39,12 @@ def run_facts(research, row):
         snapshot = json.loads(row['snapshot'])
         output = json.loads(row['output']) if row['output'] else None
         error = json.loads(row['error']) if row['error'] else None
-        intact = fingerprint(snapshot) == row['input_digest']
-        intact = intact and (output is None or fingerprint(output) == row['output_digest'])
+        # Saved canonical JSON already has the exact digest being verified.
+        # Hash those bytes once; retain semantic verification for legacy JSON.
+        # Never trust only the declared digest or the database revision.
+        from .report_reads import byte_digest
+        intact = byte_digest(row['snapshot']) == row['input_digest'] or fingerprint(snapshot) == row['input_digest']
+        intact = intact and (output is None or byte_digest(row['output']) == row['output_digest'] or fingerprint(output) == row['output_digest'])
         if intact:
             from .headlines import project
             state = snapshot['workspace_state']

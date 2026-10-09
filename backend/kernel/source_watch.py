@@ -10,6 +10,31 @@ from contextlib import suppress
 import struct
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor
+from functools import wraps
+from threading import local
+
+
+_notification_thread = local()
+_notification_owner = ThreadPoolExecutor(max_workers=1, thread_name_prefix='source-notifications')
+
+
+def notification_owner():
+    # Windows cancels outstanding overlapped I/O when its issuing thread exits.
+    # Request-pool workers expire after idle time, so all issue/rearm/cancel calls
+    # share one persistent owner. Only bounded, nonblocking polls run here.
+    return _notification_owner
+
+
+def owned_notification(function):
+    @wraps(function)
+    def wrapped(*args, **kwargs):
+        if getattr(_notification_thread,'active',False):return function(*args, **kwargs)
+        def invoke():
+            _notification_thread.active=True
+            return function(*args, **kwargs)
+        return notification_owner().submit(invoke).result()
+    return wrapped
 
 
 @lru_cache(maxsize=1)
@@ -35,6 +60,7 @@ def native_api():
 
 
 class DirectoryChanges:
+    @owned_notification
     def __init__(self,path,recursive,relevance=None):
         self.api,self.Overlapped,self.DWORD=native_api()
         self.handle=None;self.event=None;self.pending=False;self.serial=0
@@ -60,6 +86,7 @@ class DirectoryChanges:
         if not result and ctypes.get_last_error()!=997:raise OSError(ctypes.get_last_error(),'Directory notification failed')
         self.pending=True
 
+    @owned_notification
     def poll(self):
         changed=False
         for _ in range(256):
@@ -91,6 +118,7 @@ class DirectoryChanges:
             self.arm()
         raise OSError('Directory notifications did not settle')
 
+    @owned_notification
     def close(self):
         if self.handle is not None:
             if self.pending:

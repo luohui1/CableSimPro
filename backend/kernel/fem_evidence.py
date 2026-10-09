@@ -243,7 +243,7 @@ def values(run, evidence):
 
 
 @saved_scope
-def conclusion(research, wid, rid):
+def conclusion(research, wid, rid, *, prepare_report=False):
     from .batch_field_chapter import compare
     from .study_pdf import _names
     run=display_read(research,wid,rid)
@@ -275,10 +275,10 @@ def conclusion(research, wid, rid):
         schema=capability.parameter_schema
         response['boundary_label']=schema.get('properties',{}).get('outer_boundary',{}).get('x-enum-labels',{}).get(original['parameters'].get('outer_boundary'),'保存边界')
     jobs=getattr(research,'delivery_jobs',None)
-    if jobs is not None:
+    if prepare_report and jobs is not None:
         from .report_reads import saved_field_image
         chosen=next(c for c in run['output']['cases'] if c['case_id']==evidence['reference_case_id'])
-        # Format the saved projection while the engineer reads the conclusion.
-        # This worker is also used for books: no second rendering process/solver.
+        # Report view may preformat its saved image. First-screen conclusion
+        # reads never start a CPU-heavy renderer competing with the canvas.
         jobs.worker.submit(saved_field_image,chosen['artifacts']['x-cablesim.temperature-field'])
     return response

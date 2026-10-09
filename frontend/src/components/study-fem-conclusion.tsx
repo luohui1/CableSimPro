@@ -6,11 +6,11 @@ import { DataTable } from './data-table';
 import { ErrorState, InlineEmpty, LoadingState } from './states';
 import { Button } from './ui/button';
 
-export function useFemEvidence(run?: Record<string,unknown>) {
+export function useFemEvidence(run?: Record<string,unknown>, prepareReport=false) {
   const method=optionalRecord(run?.method || optionalRecord(optionalRecord(run?.snapshot).definition).method);
-  return useQuery({queryKey:['fem-conclusion',run?.workspace,run?.id], enabled:!!run && method.capability==='iec-thermal-field' && ['succeeded','partial'].includes(text(run.status)), retry:false,staleTime:30000,
+  return useQuery({queryKey:['fem-conclusion',run?.workspace,run?.id,prepareReport], enabled:!!run && method.capability==='iec-thermal-field' && ['succeeded','partial'].includes(text(run.status)), retry:false,staleTime:30000,
     queryFn:async({signal})=>{
-      const response=await fetch(`/api/workspaces/${encodeURIComponent(text(run?.workspace))}/runs/${encodeURIComponent(text(run?.id))}/fem-conclusion`,{signal});
+      const response=await fetch(`/api/workspaces/${encodeURIComponent(text(run?.workspace))}/runs/${encodeURIComponent(text(run?.id))}/fem-conclusion${prepareReport ? '?prepare_report=true' : ''}`,{signal});
       const data=await response.json();if(!response.ok)throw Error(text(optionalRecord(data.detail).message) || text(data.detail) || `保存证明读取失败（${response.status}）`);
       return optionalRecord(data);
     }});

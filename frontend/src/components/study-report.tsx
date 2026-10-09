@@ -74,7 +74,7 @@ function CurrentReport({
   });
   const savedRuns = [...new Map([...runs, ...(related.data || [])].map(row => [text(row.id), row])).values()]
     .filter(row => row.integrity === 'verified' && row.freshness === 'current' && !isVersionStale(row) && ['succeeded','partial'].includes(text(row.status)));
-  const femEvidence=useFemEvidence(primaryFem ? run : savedRuns.find(row=>text(row.id)===femId));
+  const femEvidence=useFemEvidence(primaryFem ? run : savedRuns.find(row=>text(row.id)===femId),true);
   const defaultReference=optionalRecord(femEvidence.data?.reference);
   const selectedIec=iecId || text(defaultReference.iec_run_id);
   const chapterReference = primaryFem ? (selectedIec ? {fem_run_id:text(run?.id),iec_run_id:selectedIec,convergence_id:text(defaultReference.convergence_id) || undefined} : undefined)

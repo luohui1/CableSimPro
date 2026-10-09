@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { methodCatalog, studyIndex, studyRuns, type StudyRow } from "@/api/research";
+import { methodCatalog, projectStudy, type StudyRow } from "@/api/research";
 import { deliveries } from "@/api/delivery";
-import { optionalRecord, text } from "@/api/client";
+import { api, array, optionalRecord, responseData, text } from "@/api/client";
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
 import { significantNumber } from "@/lib/format";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
@@ -31,8 +31,8 @@ export function calculationKind(study: StudyRow, catalog: Plugin[]) {
 
 /** 运行状态：来自运行摘要，不读结果正文。有插件声明的关键结论时直接显示答案（如允许电流），否则显示状态点。 */
 function RunDot({ study, state }: { study: StudyRow; state?: StudyPresentation }) {
-  const runs = useQuery({ queryKey: ["runs", study.workspace, study.id, "summary"], queryFn: ({ signal }) => studyRuns(study.workspace, study.id, signal, "summary") });
-  const shown = state || studyPresentation(study,runs.data?.at(-1),0,runs.error,runs.isPending);
+  const latest = optionalRecord(study.raw.latest_run);
+  const shown = state || studyPresentation(study, latest.id ? latest : undefined);
   return <span className="explorer-state" title={shown.reason}><StatusMark kind={shown.mark} label={shown.label} /></span>;
 }
 
@@ -62,7 +62,10 @@ function Section({ icon, title, count, children }: { icon: string; title: string
 export function ProjectExplorer({ workspaceId, projectName, document, activeStudy, activeState, view, theme, onCreate }: {
   workspaceId: string; projectName: string; document?: DomainDocument; activeStudy: string; activeState?: StudyPresentation; view: string; theme: Theme; onCreate: () => void;
 }) {
-  const studies = useQuery({ queryKey: ["study-index"], queryFn: ({ signal }) => studyIndex(signal) });
+  const studies = useQuery({ queryKey: ["study-index", workspaceId], queryFn: async ({ signal }) => {
+    const rows = array(await responseData(api.GET('/api/workspaces/{wid}/studies', {params:{path:{wid:workspaceId}},signal})), '本工程研究');
+    return rows.map(row => projectStudy(row,{id:workspaceId},optionalRecord(optionalRecord(row).model_reference)));
+  }});
   const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
   const books = useQuery({ queryKey: ["deliveries", workspaceId], queryFn: ({ signal }) => deliveries(workspaceId, signal) });
   const rows = (studies.data || []).filter((row) => row.workspace === workspaceId);
