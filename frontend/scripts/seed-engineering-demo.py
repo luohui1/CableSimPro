@@ -272,7 +272,7 @@ def release_identity():
         plugin.verify()
     series, digest = bundled_series()
     hv,hv_digest = bundled_hv()
-    return {'seed_revision':4, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
+    return {'seed_revision':5, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
             'plugins':{key:Research.pin(plugin) for key,plugin in sorted(registry.plugins.items())},
             'models':{item['id']:{'version':item['version'],'sha256':item['content_sha256']} for item in system_models()},
             'manufacturer_series':{'id':series['id'],'version':series['version'],'sha256':digest},
@@ -365,9 +365,10 @@ def build_release_seed(staged, database, identity):
                           'parameters':parameters,'driver':driver,
                           'candidate_completions':series['candidate_completions'] if module=='selection' else {},
                           'input_sources':{'/driver':{'kind':'user','reference':result['source']+'；工程场景为参考设计条件，非现场实测；具体敷设、负荷和来源保存在领域输入中。','reviewed':False}},**extra}
-                study = api(prefix,'POST',{**config,'modules':{module:deepcopy(config)},'expected_revision':target['revision']})
+                # module=None 与界面新建的普通载流量研究一致：不写模块键，运行记在根模块；模块键必须是前端已有的模块
+                study = api(prefix,'POST',{**config,**({'modules':{module:deepcopy(config)}} if module else {}),'expected_revision':target['revision']})
                 root = prefix + '/' + study['id']
-                check = api(root + f'/preflight?expected_revision={target["revision"]}&expected_study_revision={study["revision"]}&module={module}')
+                check = api(root + f'/preflight?expected_revision={target["revision"]}&expected_study_revision={study["revision"]}' + (f'&module={module}' if module else ''))
                 item = {'title':title,'workspace':target['id'],'study':study['id'],'module':module,'ready':check['ready']}
                 if not check['ready']:
                     if required:
@@ -378,7 +379,7 @@ def build_release_seed(staged, database, identity):
                     return
                 run = api(root+'/runs','POST',{'expected_revision':target['revision'],
                     'expected_study_revision':study['revision'],'request_id':str(uuid4()),
-                    'scope_acknowledged':True,'lock_digest':check['lock_digest'],'module':module})
+                    'scope_acknowledged':True,'lock_digest':check['lock_digest'],**({'module':module} if module else {})})
                 deadline = time.monotonic()+180
                 while run['status'] in ('accepted','running','validating') and time.monotonic()<deadline:
                     time.sleep(.2)
@@ -393,7 +394,7 @@ def build_release_seed(staged, database, identity):
                 print(title+'：真实计算完成',flush=True)
             for title, module, driver in definitions:
                 save_study(workspace,title,module,driver)
-            save_study(hv_workspace,'城南线路 · 110 kV 直埋单回校核','rating',
+            save_study(hv_workspace,'城南线路 · 110 kV 直埋单回校核',None,
                        {'kind':'single'},parameters=deepcopy(hv_data['parameters']),
                        input_sources={'/parameters':{'kind':'user','reviewed':False,
                            'reference':hv_data['scope']+'；'+hv_data['sources']['buffer_reference']['reference']+'；'+hv_data['sources']['geometry_reference']['reference']}})

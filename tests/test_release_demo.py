@@ -159,6 +159,14 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
         assert hv_model['cable_type']['cores'][0]['conductor']['r20_basis']=='manufacturer_limit'
         assert {s['kind'] for s in hv_model['sources'].values()} >= {'manufacturer','standard','derived','user'}
         assert '不是厂家额定' in receipt['hv_series']['engineering_scope']
+        # 研究模块键与运行记录的模块必须是前端已有的模块，否则研究页找不到运行、显示“未运行”
+        import re
+        modules=set(re.findall(r'^  "?([a-z-]+)"?: \{', (Path(__file__).resolve().parents[1]/'frontend/src/pages/study-modules.ts').read_text('utf-8'), re.M))
+        assert {'ampacity','selection','sweep','thermal-field'} <= modules
+        for (definition,) in connection.execute('SELECT definition FROM study_versions'):
+            assert set((json.loads(definition).get('modules') or {})) <= modules
+        for (snapshot,) in connection.execute('SELECT snapshot FROM study_runs'):
+            assert json.loads(snapshot).get('module') in modules | {None, ''}
     before = database.read_bytes()
     seed.seed_release(database)
     assert database.read_bytes() == before
