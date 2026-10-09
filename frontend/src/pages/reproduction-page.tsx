@@ -29,6 +29,7 @@ const kinds: Record<string, string> = {
   comsol: "COMSOL 教程",
   benchmark: "教学基准",
 };
+const STATE_ORDER: Record<string, number> = { reproduced: 0, partial: 1, capability_gap: 2, missing_data: 3 };
 const tabs = {
   results: "结果对照",
   overlay: "曲线叠加",
@@ -72,7 +73,11 @@ export function ReproductionPage() {
         .join(" ")
         .toLowerCase()
         .includes(filter.toLowerCase()),
-  );
+  )
+    // 有结果的先看：已复现 → 部分复现 → 能力未覆盖 → 缺资料；同一状态保持原顺序
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => (STATE_ORDER[text(a.item.status)] ?? 9) - (STATE_ORDER[text(b.item.status)] ?? 9) || a.index - b.index)
+    .map(({ item }) => item);
   const historical = data?.historical === true;
   const history = (Array.isArray(data?.history) ? data.history : []).map(
     optionalRecord,
