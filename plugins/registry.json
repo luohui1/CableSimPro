@@ -3,63 +3,63 @@
   "plugins": [
     {
       "plugin_id": "cablesim.cable-geometry",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "manifest": "plugins/cablesim.cable-geometry/plugin.json",
-      "release_digest": "4718e38c8ffb54bbc04f6c9da885d6e72fd1cb158e9eb61aabcbbf8cc652ccd7"
+      "release_digest": "6881154d8fe198991f69e5219f50031954d65d63c0b11dce7466a59e950f6d20"
     },
     {
       "plugin_id": "cablesim.comsol-bridge",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "manifest": "plugins/cablesim.comsol-bridge/plugin.json",
-      "release_digest": "393a1f41b322afd602aa7e5a0e55c9d70954441623a2bfb2e3814023c8fab5e1"
+      "release_digest": "929ffd6cfc278c921643bc098cf2797c8aa56fd7c8dc68a2b17d414e299e724d"
     },
     {
       "plugin_id": "cablesim.datasheet-extract",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "manifest": "plugins/cablesim.datasheet-extract/plugin.json",
-      "release_digest": "d70f7c405e9f1261eec72a28d56d6d8c9b1d536b64b69ce82f0a9724b00ba6fc"
+      "release_digest": "03ee4dc651fed62809cd3234cd2ceb46862d6e4a711269fb5b423418de8df7d1"
     },
     {
       "plugin_id": "cablesim.hybrid-rating",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "manifest": "plugins/cablesim.hybrid-rating/plugin.json",
-      "release_digest": "7cbc9b4a900f75e6e916c0d4f74e888372e5f0fbd84f79d924d9e7691cb0632a"
+      "release_digest": "9467469979732e36610f8d0e011692bc0fdc406ce1492a9cbe66e1020c7f4bdd"
     },
     {
       "plugin_id": "cablesim.iec60287",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "manifest": "plugins/cablesim.iec60287/plugin.json",
-      "release_digest": "21649a87039a48ed860b7a956e26f169554ead4686e74b89b71266f162f2ef0c"
+      "release_digest": "a6619874d1a5e78c2a0fa066e89297e0a55744ffb8d66bdf161757aaa2f332ac"
     },
     {
       "plugin_id": "cablesim.native-reference",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "manifest": "plugins/cablesim.native-reference/plugin.json",
-      "release_digest": "98e0b1e1b04f1f322093dd3fd163f8530d098e2cc27f0ce9bd9c74099c2b42d9"
+      "release_digest": "e9b1fb656ffa0621af366ac576199400e42556440972f5f245c30bba74a09e04"
     },
     {
       "plugin_id": "cablesim.simulation",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "manifest": "plugins/cablesim.simulation/plugin.json",
-      "release_digest": "cbba78d45b3551ed70d082795f054cb221b0b1a46195386a1d9fb6c6a8175652"
+      "release_digest": "4ea5061a4fca5070b9a4bc27be4ad50c9c6109d8deaafd00e934591ea98ca438"
     },
     {
       "plugin_id": "cablesim.standard-check",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "manifest": "plugins/cablesim.standard-check/plugin.json",
-      "release_digest": "8f2dc8406dc1099a354599529f3364fe491232268fad3c144e3d49a43e6bb5ac"
+      "release_digest": "c53fe3ef21f688046a77dcb046d7575fb9511e2258752ea9b74fd668bad5bbf2"
     },
     {
       "plugin_id": "cablesim.thermal-network",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "manifest": "plugins/cablesim.thermal-network/plugin.json",
-      "release_digest": "a36f62082dbc82345282199986c59110fcc753e49c0cb22cd592eda7beee635a"
+      "release_digest": "6fd7005ae891f99cb0661e35d7dce67affc4f462dcbf771514cb97bc8cb71ddb"
     },
     {
       "plugin_id": "cablesim.type-electrical",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "manifest": "plugins/cablesim.type-electrical/plugin.json",
-      "release_digest": "168bb829f278fb0e971727f38d4aaf897b001a0e0691a66f4fdfbfe196a028c3"
+      "release_digest": "aafa3bbe8d0b9caacfced75085ebb4e962ff763026fa7b5ba57dbd5fad5dc935"
     }
   ]
 }

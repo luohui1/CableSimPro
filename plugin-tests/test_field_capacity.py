@@ -11,7 +11,7 @@ from cablesim_simulation.compact_field import export
 
 @pytest.mark.skipif(not os.environ.get('SLURM_JOB_ID'),reason='Capacity benchmark belongs on dg83')
 def test_declared_maximum_shards_and_read_memory(tmp_path,record_property):
-    count=2400000
+    count=4000000
     random=np.random.default_rng(104)
     points=random.random((count,2));values=300+2*points[:,0]+points[:,1]
     base=np.arange(count-2,dtype=np.uint32)
@@ -30,11 +30,11 @@ root=Path(sys.argv[1]);manifest=json.loads((root/'manifest.json').read_text());s
 artifacts={r['type']:json.loads((root/r['path']).read_text()) for r in manifest['refs']}
 artifacts.update({'x-cablesim.simulation-bundle':{'field_storage':manifest['descriptor']},'x-cablesim.temperature-field':{'hotspot':manifest['hotspot']}})
 arrays=full_field({'artifacts':artifacts})
-assert len(arrays['points'])==2400000
+assert len(arrays['points'])==4000000
 status=dict(line.split(':',1) for line in Path('/proc/self/status').read_text().splitlines() if ':' in line)
 peak=float(status['VmHWM'].split()[0])/1024
-print(json.dumps({'nodes':2400000,'peak_rss_mb':peak,'read_seconds':time.perf_counter()-start}))
-assert peak<300
+print(json.dumps({'nodes':4000000,'peak_rss_mb':peak,'read_seconds':time.perf_counter()-start}))
+assert peak<400
 '''
     completed=subprocess.run([sys.executable,'-c',code,str(tmp_path)],cwd=Path(__file__).resolve().parents[1],capture_output=True,text=True)
     assert completed.returncode==0,completed.stdout+'\n'+completed.stderr

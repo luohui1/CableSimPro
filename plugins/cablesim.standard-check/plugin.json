@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standard-check",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "name": "产品标准尺寸核对",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -220,7 +220,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "e61938e0cd6d62408873db405e9071ecb6345166f8e2aae17747b9f8373aeffa",
+      "sha256": "94b7125ec38aca1c70ebd4b3771ab07dcea01c81dede192cbbdd9b5201640f57",
       "size_bytes": 791
     }
   ]

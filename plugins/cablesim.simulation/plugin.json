@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.simulation",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "name": "仿真复现基准",
   "description": "多区域稳态导热与GetDP时谐涡流、Elmer稳态/瞬态热适配，使用统一问题、网格和复现工件。",
   "icon": "assets/icon.svg",
@@ -1199,7 +1199,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 2400000,
+                "maximum": 4000000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -3742,7 +3742,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 2400000,
+                "maximum": 4000000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -5229,7 +5229,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 2400000,
+                "maximum": 4000000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -6584,7 +6584,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 2400000,
+                "maximum": 4000000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -11943,7 +11943,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 2400000,
+                "maximum": 4000000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -15144,7 +15144,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 2400000,
+                "maximum": 4000000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -17520,7 +17520,7 @@
               },
               "max_nodes": {
                 "default": 60000,
-                "maximum": 2400000,
+                "maximum": 4000000,
                 "minimum": 100,
                 "title": "最大节点数",
                 "type": "integer",
@@ -22293,7 +22293,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "1c8dd71178cace553b18288ed745e55a65345e3e798fb50eadce34d6c66b86aa",
+      "sha256": "09757c65f32d83e34ccf8f80a77759daee174739c8524b9e75667b5d27f94f71",
       "size_bytes": 5308
     }
   ]

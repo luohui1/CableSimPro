@@ -5,10 +5,10 @@ No solver runs from a GET, and list polling never opens the field archive.
 """
 import json
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid5
 from fastapi import APIRouter, HTTPException, Query, Response
 from .batch_files import read
-from .batch_slurm import SlurmBackend, RemoteDisconnected
+from .batch_slurm import SlurmBackend, RemoteDisconnected, allocation_estimate
 from .batch_convergence import Refinements, RefineRequest
 from .batch_field_chapter import chapter, selected_case, field_png
 from hashlib import sha256
@@ -53,9 +53,9 @@ def preflight_jobs(refinements):
             if current:saved[current['plan_id']]=current
         for identifier,execution in saved.items():
             states=execution.get('slurm_states') or [r['State'].split()[0].rstrip('+') for r in execution.get('accounting',[]) if '.' not in r['JobID']]
-            execution={**execution,'slurm_states':states};done=terminal(execution)
+            execution={**execution,'plan_id':identifier,'slurm_states':states};done=terminal(execution)
             result.append({'id':'preflight:'+value['id']+':'+identifier,'kind':'preflight','workspace':value['workspace'],'study':value['study'],
-                'study_name':value['title']+' · 网格预检','sequence':None,'created':value['created'],
+                'study_name':value['title'],'sequence':None,'created':value['created'],
                 'started':execution.get('started'),'finished':execution.get('finished'),
                 'status':'succeeded' if done and all(s=='COMPLETED' for s in states) else 'failed' if done else execution.get('state','queued'),
                 'execution':execution,'core_hours':execution.get('actual_cpu_seconds',0)/3600,
@@ -79,9 +79,11 @@ def dataset_jobs(batches):
             result.append({'id':row['id']+':'+path.parent.name,'kind':'dataset','workspace':row['workspace'],'study':row['study'],
                 'study_name':snapshot.get('definition',{}).get('title','数据集研究'),'sequence':None,'created':row['created'],
                 'started':accounting.get('started'),'finished':accounting.get('finished'),
-                'status':'succeeded' if accounting.get('terminal') and states and all(s=='COMPLETED' for s in states) else 'failed' if accounting.get('terminal') else row['status'],
+                'status':'succeeded' if accounting.get('terminal') and states and all(s=='COMPLETED' for s in states) else 'failed' if accounting.get('terminal') else 'queued' if states and all(s in ('PENDING','REQUEUED','REQUEUE_HOLD') for s in states) else row['status'],
                 'core_hours':accounting.get('actual_cpu_seconds',0)/3600,
-                'execution':{'job_id':submission['job_id'],'slurm_states':states,'cancel_requested':(path.parent/'cancellation.json').is_file()},
+                'execution':{'job_id':submission['job_id'],'slurm_states':states,'cancel_requested':(path.parent/'cancellation.json').is_file(),
+                    'queue_position':accounting.get('queue_position'),'queue_position_basis':accounting.get('queue_position_basis'),
+                    'budget_core_hours':submission.get('budget_core_hours')},
                 'cancellable':not accounting.get('terminal',False)})
     return result
 
@@ -107,6 +109,53 @@ def unbound_checks(research,linked):
     return result
 
 
+def job_cards(research,refinements,values,batches=None):
+    """Shared record cards; missing legacy identities remain explicit nulls."""
+    with research.store.db() as db:
+        columns={row['name'] for row in db.execute('PRAGMA table_info(workspaces)')}
+        names={row['id']:(state.get('domain') or state.get('scenario') or {}).get('name')
+               for row in db.execute('SELECT id,state FROM workspaces')
+               for state in [json.loads(row['state'])]} if 'state' in columns else {}
+    workflows=refinements.list();owners={}
+    for workflow in workflows:
+        for index,row in enumerate(workflow['rows']):owners.setdefault(row['run_id'],(workflow,index+1,row['kind']))
+        if workflow.get('current_run_id'):
+            owners[workflow['current_run_id']]=(workflow,len(workflow['rows'])+1,workflow.get('pending',{}).get('kind'))
+    for row in values:
+        execution=row['execution'];owner=owners.get(row['id']);workflow=owner[0] if owner else next(
+            (w for w in workflows if row['id'].startswith('preflight:'+w['id']+':')),None)
+        kind='batch' if row['kind']=='dataset' else 'convergence' if workflow else 'single'
+        run_id=row['id'].split(':')[0] if row['kind'] in ('study','dataset') else None
+        if workflow and row['kind']=='preflight':
+            method=workflow['definition']['method']
+            for attempt in workflow.get('attempts',[]):
+                if attempt.get('request_id') and str(uuid5(UUID(attempt['request_id']),method['plugin_id']+'/'+method['capability']+'/check'))==execution.get('plan_id'):
+                    run_id=attempt.get('run_id');break
+        budget=execution.get('budget_core_hours')
+        folder=(batches.root/row['id'].split(':')[0]) if kind=='batch' and batches else (
+            research.executor.root/execution['plan_id'] if getattr(research.executor,'root',None) and execution.get('plan_id') else None)
+        if budget is None and folder and (folder/'plan.json').is_file():
+            resources=read(folder/'plan.json').get('execution',{})
+            for path in (folder/'submissions').glob('*/submission.json'):
+                saved=read(path)
+                if saved.get('job_id')!=execution.get('job_id'):continue
+                budget=saved.get('budget_core_hours')
+                if budget is None and all(k in saved for k in ('task_count','task_wall_seconds')) and 'slurm_memory_mb' in resources:
+                    cpus=max(resources.get('slurm_cpus_per_task',1),-(-resources['slurm_memory_mb']//6500))
+                    budget=saved['task_count']*saved['task_wall_seconds']*cpus/3600
+        row.update(workspace_id=row['workspace'],workspace_name=names.get(row['workspace']),study_id=row['study'],
+                   run_id=run_id,
+                   type=kind,job_id=execution.get('job_id'),queue_position=execution.get('queue_position'),
+                   queue_position_basis=execution.get('queue_position_basis','not_recorded'),
+                   used_core_hours=row['core_hours'],budget_core_hours=budget,
+                   convergence_id=workflow['id'] if workflow else None,
+                   convergence_level=owner[1] if owner else len(workflow['rows'])+1 if workflow and workflow.get('pending') else None,
+                   phase=owner[2] if owner else 'preflight' if row['kind']=='preflight' else 'solve',
+                   workflow_budget_core_hours=workflow['request']['max_core_hours'] if workflow else None)
+        row['missing_fields']=[key for key in ('workspace_id','workspace_name','study_id','run_id','budget_core_hours') if row[key] is None]
+    return values
+
+
 def make_router(research,batches=None):
     router=APIRouter(prefix='/api/hpc');refinements=Refinements(research)
 
@@ -114,6 +163,7 @@ def make_router(research,batches=None):
     def jobs(offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100)):
         linked=preflight_jobs(refinements)
         values=sorted(study_jobs(research)+dataset_jobs(batches)+linked+unbound_checks(research,linked),key=created_order,reverse=True)
+        values=job_cards(research,refinements,values,batches)
         return {'items':values[offset:offset+limit],'total':len(values),'next_offset':offset+limit if offset+limit<len(values) else None}
 
     @router.post('/jobs/{identifier}/cancel')
@@ -182,6 +232,19 @@ def make_router(research,batches=None):
     @router.get('/convergence')
     def convergence(workspace:str|None=None,study:str|None=None):return {'items':refinements.list(workspace,study)}
 
+    @router.get('/workspaces/{wid}/studies/{sid}/estimate')
+    def estimate(wid:UUID,sid:UUID,expected_revision:int,expected_study_revision:int,module:str|None=None):
+        # Preparation only. Mesh generation remains an explicit Slurm preflight.
+        with research.store.db() as db:
+            snapshot=research.prepare(db,str(wid),str(sid),expected_revision,expected_study_revision,module)
+        method=snapshot['definition']['method'];plugin,_=research.resolve(method)
+        if not research.executor.required(method['plugin_id'],method['capability']):raise HTTPException(422,'此方法未配置超算。')
+        count=len(snapshot['cases'])
+        budget=allocation_estimate(research.executor.resources(plugin.manifest,count),count,read(research.executor.profile))
+        limits=[c.get('parameters',{}).get('mesh',{}).get('max_nodes') for c in snapshot['cases']]
+        return {'estimated_nodes':None,'node_limit':max((n for n in limits if n is not None),default=None),
+                'estimate_status':'mesh_preflight_required','budget_core_hours':budget['upper_core_hours'],'case_count':count}
+
     @router.post('/workspaces/{wid}/studies/{sid}/convergence',status_code=202)
     def start(wid:str,sid:str,body:RefineRequest):return refinements.start(wid,sid,body)
 
@@ -210,12 +273,18 @@ def make_router(research,batches=None):
     @router.get('/workspaces/{wid}/fields/{rid}/view')
     def field_view(wid:UUID,rid:UUID):
         """Verified display projection: binary arrays stay on the server."""
-        run=research.get_run(str(wid),str(rid))
-        if run.get('integrity')!='verified':raise HTTPException(409,'保存场完整性未通过。')
-        output=run.get('output',{})
-        cases=[{**case,'artifacts':{key:value for key,value in case.get('artifacts',{}).items()
-                                  if not key.startswith('x-cablesim.field-')}} for case in output.get('cases',[])]
-        return {**run,'output':{**output,'cases':cases}}
+        from time import perf_counter
+        from .batch_field_projection import read_display
+        started=perf_counter()
+        projected=read_display(research,str(wid),str(rid))
+        if projected.get('integrity')!='verified':raise HTTPException(409,'保存场完整性未通过。')
+        loaded=perf_counter()
+        # read_display has verified the saved contracts; avoid FastAPI walking every
+        # scalar of the display mesh a second time through jsonable_encoder.
+        payload=json.dumps(projected,ensure_ascii=False,separators=(',',':'),allow_nan=False).encode('utf-8')
+        return Response(payload,media_type='application/json',headers={
+            'Cache-Control':'private, no-cache',
+            'Server-Timing':f'verify;dur={(loaded-started)*1000:.1f}, serialize;dur={(perf_counter()-loaded)*1000:.1f}'})
 
     @router.get('/workspaces/{wid}/fields/{rid}/full')
     def field_archive(wid:UUID,rid:UUID,case_id:str|None=None):

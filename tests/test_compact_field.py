@@ -8,6 +8,47 @@ from cablesim_simulation.compact_field import pack,display,export
 from backend.kernel.batch_field_storage import unpack,full_field,sample
 
 
+def test_display_projection_checks_real_bytes_and_keeps_live_freshness(tmp_path,monkeypatch):
+    import json,sqlite3
+    from contextlib import contextmanager
+    from types import SimpleNamespace
+    from fastapi import HTTPException
+    from backend.kernel.batch_field_projection import read_display
+    from backend.kernel.research import encode
+    from backend.kernel.workspace import fingerprint
+    path=tmp_path/'fields.sqlite'
+    @contextmanager
+    def database():
+        db=sqlite3.connect(path);db.row_factory=sqlite3.Row
+        try:yield db;db.commit()
+        finally:db.close()
+    snapshot={'definition':{'method':{}},'cases':[]}
+    output={'cases':[{'case_id':'c','artifacts':{'x-cablesim.field-part-0':{'blocks':['sealed bytes']},'x-cablesim.summary':{'temperature_k':320}}}]}
+    with database() as db:
+        db.execute('CREATE TABLE workspaces(id,revision)');db.execute("INSERT INTO workspaces VALUES ('w',1)")
+        db.execute('CREATE TABLE study_runs(id,workspace,study,sequence,status,created,finished,input_digest,output_digest,snapshot,output,error)')
+        db.execute('INSERT INTO study_runs VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',('r','w','s',1,'succeeded','now','now',fingerprint(snapshot),fingerprint(output),encode(snapshot),encode(output),None))
+    calls=[]
+    research=SimpleNamespace(store=SimpleNamespace(db=database),executor=SimpleNamespace(),
+        definition=lambda *args:{},artifact_status=lambda run:{},
+        get_run=lambda *args:calls.append(args) or {'integrity':'corrupt'})
+    monkeypatch.setattr('backend.kernel.batch_field_projection.run_state',lambda research,snapshot,wid,revision,study,cache:{'integrity':'verified','freshness':'current' if revision==1 else 'historical'})
+    result=read_display(research,'w','r')
+    assert result['integrity']=='verified' and result['freshness']=='current' and not calls
+    assert result['output']['cases'][0]['artifacts']=={'x-cablesim.summary':{'temperature_k':320}}
+    with database() as db:db.execute("UPDATE workspaces SET revision=2 WHERE id='w'")
+    assert read_display(research,'w','r')['freshness']=='historical'
+    with database() as db:db.execute("UPDATE study_runs SET output=replace(output,'320','321')")
+    with pytest.raises(HTTPException) as caught:read_display(research,'w','r')
+    assert caught.value.status_code==409 and calls==[('w','r')]
+    # Legacy whitespace may be valid; only the full host checker can approve it.
+    with database() as db:db.execute('UPDATE study_runs SET output=?',(json.dumps(output,indent=2),))
+    research.get_run=lambda *args:{'integrity':'verified','output':output}
+    assert read_display(research,'w','r')['output']['cases'][0]['artifacts']=={'x-cablesim.summary':{'temperature_k':320}}
+    with pytest.raises(HTTPException) as caught:read_display(research,'other','r')
+    assert caught.value.status_code==404
+
+
 def test_mesh_capacity_and_bit_exact_block_roundtrip():
     assert MeshControls(size_m=.001,far_size_m=.5,transition_m=1,max_nodes=600000).max_nodes==600000
     values=np.linspace(273.15,410.123456789,70001)
@@ -26,7 +67,7 @@ def test_corrupt_bomb_and_shape_are_rejected():
     with pytest.raises(ValueError,match='摘要'):unpack(invalid,'temperature_k')
     invalid=copy.deepcopy(value);invalid['blocks'][0]=b64encode(zlib.compress(b'X'*100000)).decode()
     with pytest.raises(ValueError,match='长度'):unpack(invalid,'temperature_k')
-    invalid=copy.deepcopy(value);invalid['shape']=[2400001]
+    invalid=copy.deepcopy(value);invalid['shape']=[4000001]
     with pytest.raises(ValueError,match='容量'):unpack(invalid,'temperature_k')
 
 

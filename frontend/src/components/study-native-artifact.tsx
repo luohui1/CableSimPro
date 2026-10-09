@@ -17,6 +17,7 @@ import { Toolbar } from "./toolbar";
 import { SourceBadge } from "./source-badge";
 import { Conclusion } from "./conclusion";
 import { EngineeringValue } from "./engineering-value";
+import { FieldHistoryNotice } from '@/features/field/history-notice';
 
 function savedArtifact(run: Record<string, unknown>, key: string) {
   if (run.integrity !== "verified")
@@ -85,6 +86,7 @@ export function StudyNativeArtifact({
       )[0];
       return (
         <div className="input-module">
+          <FieldHistoryNotice run={run} />
           <Conclusion
             title="护套损耗结论"
             model={entityLabel(domain, text(largest?.entity))}
@@ -245,6 +247,7 @@ export function StudyNativeArtifact({
     const crossing = optionalRecord(curve.limit_crossing);
     return (
       <div className="input-module">
+        <FieldHistoryNotice run={run} />
         <Conclusion
           title="暂态温度结论"
           model={entityLabel(domain, text(curve.entity))}

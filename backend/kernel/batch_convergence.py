@@ -26,7 +26,7 @@ class RefineRequest(StrictModel):
     max_steps: int = Field(default=8, ge=1, le=16)
     tolerance_k: float = Field(default=.1, gt=0, le=.1)
     budget_confirmed: bool = False
-    max_nodes: int | None = Field(default=None,ge=100,le=2400000)
+    max_nodes: int | None = Field(default=None,ge=100,le=4000000)
     upgrade_method: bool = False
     temperature_only_levels: bool = True
     continue_from: UUID | None = None
@@ -100,12 +100,20 @@ class Refinements:
         with self.store.db() as db:row=db.execute('SELECT state FROM hpc_convergence WHERE id=?',(str(identifier),)).fetchone()
         if row is None:raise HTTPException(404,'收敛研究不存在。')
         value=json.loads(row['state'])
+        value.pop('current_execution',None);value.pop('live_core_hours',None)
         if value.get('request',{}).get('continue_from') and 'history_attempts' not in value:
             with self.store.db() as db:parent=db.execute('SELECT state FROM hpc_convergence WHERE id=?',(value['request']['continue_from'],)).fetchone()
             previous=json.loads(parent['state']) if parent else {}
             value['history_attempts']=previous.get('history_attempts',[])+previous.get('attempts',[])
         if value['status'] in ('queued','running') and value['owner']!=self.research.owner_epoch:
             value['status']='interrupted';value['reason']='宿主已重启；恢复时先回收原运行，不重复提交。'
+        if value.get('pending'):
+            method=value['definition']['method'];operation=value.get('current_run_id') or value['pending']['request_id']
+            value['current_execution']=self.research.executor.execution_status(operation,method['plugin_id'],method['capability'],
+                **({} if value.get('current_run_id') else {'phase':'check'}))
+            execution=value['current_execution'] or {}
+            recorded=value.get('run_executions',{}).get(operation,{}) if value.get('current_run_id') else value.get('preflight_executions',{}).get(execution.get('plan_id'),{})
+            value['live_core_hours']=value['actual_core_hours']+max(0,execution.get('actual_cpu_seconds',0)-recorded.get('actual_cpu_seconds',0))/3600
         return value
 
     def save(self,value):

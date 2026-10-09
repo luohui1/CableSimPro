@@ -23,6 +23,8 @@ import { ConvergenceChart } from '@/features/field/convergence-chart';
 import { SavedRunProgress } from './study-run-control';
 import { SavedFieldComparison } from '@/features/field/saved-comparison';
 import { AdaptiveConvergence } from '@/features/field/adaptive-convergence';
+import { FieldHistoryNotice } from '@/features/field/history-notice';
+import { studyRuns } from '@/api/research';
 export function StudyTemperature({
   run,
   tab,
@@ -35,6 +37,15 @@ export function StudyTemperature({
   const view = useQuery({ queryKey: ['saved-field-view', run?.workspace, run?.id], enabled: !!run?.id && !!run?.workspace && !run?.output,
     queryFn: ({ signal }) => hpcJson(`/workspaces/${text(run?.workspace)}/fields/${text(run?.id)}/view`, { signal }), retry: false });
   run = view.data ?? run;
+  const pendingRun = run && ['accepted','queued','running','validating'].includes(text(run.status)) ? run : undefined;
+  const previous = useQuery({ queryKey: ['field-previous-result', pendingRun?.workspace, pendingRun?.study, pendingRun?.id], enabled: !!pendingRun?.study, retry: false,
+    queryFn: async ({ signal }) => {
+      const values = await studyRuns(text(pendingRun?.workspace), text(pendingRun?.study), signal, 'summary');
+      const saved = values.filter(item => item.id !== pendingRun?.id && ['succeeded','partial'].includes(text(item.status)) &&
+        optionalRecord(item.snapshot).module === optionalRecord(pendingRun?.snapshot).module).sort((a,b) => Number(b.sequence)-Number(a.sequence))[0];
+      return saved ? hpcJson(`/workspaces/${text(pendingRun?.workspace)}/fields/${text(saved.id)}/view`, { signal }) : null;
+    } });
+  if (pendingRun && previous.data) run = {...previous.data, freshness:'historical'};
   const [selected, setSelected] = useState("");
   const [zoom, setZoom] = useState("2");
   useEffect(() => {
@@ -50,7 +61,9 @@ export function StudyTemperature({
   }, [run]);
   if (run?.id && !run.output && view.isPending) return <LoadingState title="读取保存场图" />;
   if (view.error && !run?.output) return <ErrorState title="温度场不可用" description={message(view.error)} />;
-  if (!run) return <EmptyState art="simulation" description="" title="尚无温度场运行" />;
+  if (pendingRun && !previous.data) return <div className="input-module"><SavedRunProgress run={pendingRun} />
+    {previous.isPending ? <LoadingState title="读取上次保存结果" /> : previous.error ? <ErrorState description={message(previous.error)} /> : <p>运行中，尚无已封存温度场。</p>}</div>;
+  if (!run) return <EmptyState description="" title="尚未运行；请提交超算生成温度场。" />;
   if (parsed.error)
     return (
       <ErrorState title="温度场不可用" description={message(parsed.error)} />
@@ -139,7 +152,8 @@ export function StudyTemperature({
   if (tab === "field")
     return (
       <div className="input-module">
-        {data.kind === "fem" && <SavedRunProgress run={run} />}
+        {data.kind === "fem" && <SavedRunProgress run={pendingRun || run} />}
+        {data.kind === "fem" && <FieldHistoryNotice run={run} />}
         {conclusion}
         <Toolbar>
           <h2>保存温度场</h2>

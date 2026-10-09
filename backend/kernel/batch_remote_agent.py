@@ -135,7 +135,8 @@ def submit(root,request_path):
         script+='exec '+' '.join(shlex.quote(a) for a in arguments)+'\n'
         (folder/'worker.sh').write_text(script,encoding='utf-8')
         saved={'token':token,'state':'submitting','created':now(),'request':request,'job_id':None,'job_name':name,
-               'agent_sha256':sha256(agent_bytes).hexdigest(),'task_count':len(groups),'task_wall_seconds':task_wall}
+               'agent_sha256':sha256(agent_bytes).hexdigest(),'task_count':len(groups),'task_wall_seconds':task_wall,
+               'budget_core_hours':len(groups)*task_wall*accounting_cpus/3600}
         atomic(record,saved)
         h,rest=divmod(task_wall,3600);m,s=divmod(rest,60)
         args=['sbatch','--parsable','--job-name',name,'--comment',token,'--partition','dg83',
@@ -205,6 +206,15 @@ def accounting(root,token):
     starts=[r['Start']+'Z' for r in allocations if re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d',r.get('Start',''))]
     ends=[r['End']+'Z' for r in allocations if re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d',r.get('End',''))]
     value.update(started=min(starts) if starts else None,finished=max(ends) if terminal and ends else None)
+    value.update(queue_position=None,queue_position_basis='not_pending')
+    if not terminal and (not allocations or any(r['State'].split()[0]=='PENDING' for r in allocations)):
+        try:
+            queue=command(['squeue','--noheader','--partition','dg83','--states','PENDING','--sort=-p,i','--format=%F'])
+            ordered=list(dict.fromkeys(queue.split()))
+            value['queue_position']=ordered.index(job)+1 if job in ordered else None
+            value['queue_position_basis']='partition_priority_order' if job in ordered else 'not_observed'
+        except (RuntimeError,subprocess.SubprocessError,OSError):
+            value['queue_position_basis']='scheduler_unavailable'
     atomic(root/'submissions'/token/'accounting.json',value)
     return value
 

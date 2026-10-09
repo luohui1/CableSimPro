@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.type-electrical",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "name": "型号电气参数与短路容量",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -1161,7 +1161,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "4a0cd90ab42d9740251eb55835608079ae9bfa6312410d5ff88418ce620aa894",
+      "sha256": "ab5c080ffbacb186bd91fd1ee7ccaa1465c0ba5f33a51e29e82f92d9b8aa73a4",
       "size_bytes": 1700
     }
   ]

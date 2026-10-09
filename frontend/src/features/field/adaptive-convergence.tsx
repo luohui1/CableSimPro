@@ -23,6 +23,7 @@ export function AdaptiveConvergence({ run }: { run: Record<string, unknown> }) {
     ? records(item.rows).filter(row => row.kind === 'mesh' && row.run_id !== item.source_run_id).at(-1) : undefined;
   const active = item && ['queued', 'running'].includes(text(item.status));
   const verdict = optionalRecord(item?.verdict);
+  const execution = optionalRecord(item?.current_execution), pending = optionalRecord(item?.pending);
   const savedProof = optionalRecord(run.convergence), tolerance = Math.min(.1, numeric(savedProof.tolerance_k) ?? .1);
   const sourceTitle = text(optionalRecord(optionalRecord(run.snapshot).definition).title) || '保存研究';
   const rows: (Record<string, unknown> & { id: string })[] = records(item?.rows ?? savedProof.rows).map((row, index) => {
@@ -42,7 +43,7 @@ export function AdaptiveConvergence({ run }: { run: Record<string, unknown> }) {
         const scope = `${wid}:${sourceStudy}:${text(sourceRun)}:${continuation ? text(item?.id) : ''}`;
         if (request.current.scope !== scope) request.current = { scope, id: crypto.randomUUID() };
         await hpcJson(`/workspaces/${encodeURIComponent(wid)}/studies/${encodeURIComponent(sourceStudy)}/convergence`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ request_id: request.current.id, source_run_id: sourceRun, max_core_hours: Number(budget), tolerance_k: tolerance, max_steps: 12, budget_confirmed: true, max_nodes: 2400000, upgrade_method: true,
+          body: JSON.stringify({ request_id: request.current.id, source_run_id: sourceRun, max_core_hours: Number(budget), tolerance_k: tolerance, max_steps: 12, budget_confirmed: true, max_nodes: 4000000, upgrade_method: true,
             ...(continuation ? { continue_from: item?.id } : {}) }) });
       } else await hpcJson(`/convergence/${text(item?.id)}/${action}`, { method: 'POST' });
       setOpen(false); await history.refetch();
@@ -60,15 +61,16 @@ export function AdaptiveConvergence({ run }: { run: Record<string, unknown> }) {
     {history.isPending ? <LoadingState title="读取逐级收敛记录" /> : !item && !history.error ? rows.length ? <p>保存核验{savedProof.status === 'converged' ? '已达到门槛' : '尚未收敛'} · 门槛 {tolerance} K</p> : <EmptyState title="尚未启动自动收敛" description="网格尺寸逐级减半，计算域宽度与深度逐级加倍；保留原门槛。" /> : item && <>
       <dl className="field-scope"><div><dt>状态</dt><dd>{hpcStatus(item.status)} · {verdict.status === 'converged' ? '达到门槛' : '尚未收敛'}</dd></div>
         <div><dt>门槛</dt><dd>网格与扩域各连续两级变化均小于 {numeric(verdict.tolerance_k) ?? .1} K</dd></div>
-        <div><dt>核时</dt><dd>{numeric(item.actual_core_hours)?.toFixed(5)} / {numeric(optionalRecord(item.request).max_core_hours)} 核时</dd></div>
+        {active && <div><dt>当前级别</dt><dd>第 {rows.length+1} 级 · {pending.kind === 'domain' ? '扩域' : pending.kind === 'rating' ? '最终载流量' : '网格'} · 排队位置 {numeric(execution.queue_position) ?? '尚未提供'}</dd></div>}
+        <div><dt>核时</dt><dd>{(numeric(item.live_core_hours) ?? numeric(item.actual_core_hours))?.toFixed(5)} / {numeric(optionalRecord(item.request).max_core_hours)} 核时</dd></div>
         <div><dt>后续一级预算</dt><dd>预检与求解上限 {numeric(item.per_step_upper_core_hours)?.toFixed(3)} 核时</dd></div>
       </dl>
-      {item.reason && <p role="status">{text(item.reason)}</p>}
+      {verdict.status !== 'converged' && <p role="status">尚未收敛：{verdict.mesh_passed ? '扩域' : verdict.domain_passed ? '网格' : '网格与扩域'}未达到连续两级门槛{item.reason ? `；${text(item.reason)}` : '。'}</p>}
       {records(item.attempts).filter(row => row.status === 'preflight_failed').map((row, index) => <p key={index}>{row.kind === 'mesh' ? '网格加密' : '计算域扩展'}：{records(row.errors).map(error => error.path === '/parameters/mesh/max_nodes' ? text(error.message).split('；')[0] + '；需提高可保存网格容量，保留原场阶次。' : text(error.message)).join('；')}</p>)}
     </>}
     {rows.length > 0 && <>
-      <ConvergenceChart label="逐级网格热点温差" unit="K" values={rows.filter(row => row.kind === 'mesh').map(row => numeric(row.change_k))} />
-      <ConvergenceChart label="逐级扩域热点温差" unit="K" values={rows.filter(row => row.kind === 'domain').map(row => numeric(row.change_k))} />
+      <ConvergenceChart label="逐级网格热点温差" unit="K" threshold={tolerance} values={rows.filter(row => row.kind === 'mesh').map(row => numeric(row.change_k))} />
+      <ConvergenceChart label="逐级扩域热点温差" unit="K" threshold={tolerance} values={rows.filter(row => row.kind === 'domain' && row.mesh_size_m === rows.filter(item => item.kind === 'mesh').at(-1)?.mesh_size_m).map(row => numeric(row.change_k))} />
       <DataTable label="自动收敛保存记录" columns={[
         { id: 'kind', label: '级别', render: row => row.kind === 'mesh' ? '网格加密' : row.kind === 'rating' ? '最终允许电流' : '计算域扩展' },
         { id: 'mesh', label: '网格 m', numeric: true, render: row => numeric(row.mesh_size_m)?.toFixed(5) },
@@ -84,7 +86,7 @@ export function AdaptiveConvergence({ run }: { run: Record<string, unknown> }) {
       actions={<Button variant="primary" disabled={busy} onClick={() => void perform('start')}>{busy ? '提交中…' : '确认预算并开始'}</Button>}>
       <label className="hpc-budget">累计核时预算<input type="number" min="0.001" max="2000" step="0.1" value={budget} onChange={event => setBudget(event.target.value)} aria-invalid={!!error} aria-describedby={error ? 'convergence-budget-error' : undefined} /></label>
       <p>最多 12 级；每级网格减半或域加倍；门槛保留 {tolerance} K。</p>
-      <p>使用已安装方法版本，完整计算网格上限 240 万节点；原保存运行保留。</p>
+      <p>使用已安装方法版本，完整计算网格上限 400 万节点；原保存运行保留。</p>
       <p>逐级核验温度；达到门槛后在最终网格反求允许电流。</p>
       {error && <p id="convergence-budget-error" role="alert">{error}</p>}
     </Dialog>

@@ -5,7 +5,7 @@ import zlib
 import numpy as np
 
 DTYPES = {'points':'<f8', 'triangles':'<u4', 'domain_ids':'<u4', 'temperature_k':'<f8'}
-MAX_NODES = 2400000
+MAX_NODES = 4000000
 
 
 def unpack(value, name):
@@ -46,7 +46,7 @@ def full_field(case):
             if any(packed.get(k)!=v for k,v in reference.items() if k!='artifact_type'):raise ValueError('原始场与绑定描述不一致。')
         else:
             blocks=[];references=reference.get('block_refs',[])
-            if not 1<=len(references)<=220:raise ValueError('原始场分块数无效。')
+            if not 1<=len(references)<=(MAX_NODES*6+65535)//65536:raise ValueError('原始场分块数无效。')
             for part in references:
                 packed_part=artifacts[part['artifact_type']];index=part['block_index']
                 if packed_part.get('schema_version')!='cablesim.field-blocks/1' or type(index) is not int or not 0<=index<len(packed_part.get('blocks',[])):

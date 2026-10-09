@@ -46,7 +46,9 @@ const {renderFixture}=await import('/src/features/field/browser-fixture.tsx');wi
     const respond = (body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
     if (state === 'loading') { await new Promise(resolve => setTimeout(resolve, 1500)); return respond({ items: [] }); }
     if (state === 'error') return respond({ detail: '超算连接中断，保存数据保留。' }, 503);
-    if (target.endsWith('/view') && kind === 'field') return respond(state === 'empty' ? source : { ...fieldRun, freshness: state === 'history' ? 'historical' : 'current' });
+    if (target.endsWith('/progress') && (kind === 'setup' || state === 'running')) return respond({status:state === 'history' ? 'succeeded' : 'running',execution:{backend:'slurm',state:state === 'history' ? 'succeeded' : 'queued',job_id:'799002',actual_cpu_seconds:36,budget_core_hours:6.2,queue_position:4}});
+    if (target.endsWith('/view') && kind === 'field') return respond(state === 'empty' ? source : state === 'running' && !target.includes('/previous/') ? {...source,status:'running',output:undefined} : { ...fieldRun, id:target.includes('/previous/') ? 'previous' : source.id, freshness: state === 'history' ? 'historical' : 'current' });
+    if (state === 'running' && target.endsWith('/runs')) return respond({items:[{...source,id:'previous'}],next_cursor:null});
     if (target.endsWith('/sample')) {
       activeSamples++; samples++; peakSamples = Math.max(peakSamples, activeSamples);
       try { if (slowSamples) await new Promise(resolve => setTimeout(resolve, 500)); return await respond({ temperature_k: [307.5], mesh: 'full' }); }
@@ -66,16 +68,16 @@ const {renderFixture}=await import('/src/features/field/browser-fixture.tsx');wi
       return respond({ items: state === 'empty' ? [] : [{ ...workflow, status, reason: status === 'blocked' ? '网格自由度超过保存上限，原阈值未改变。' : '', verdict: { status: status === 'completed' ? 'converged' : 'unconverged' } }] });
     }
     if (target.endsWith('/studies')) return respond(state === 'empty' ? [] : [{ id: 'iec', definition: iec.snapshot.definition }]);
-    if (target.endsWith('/runs')) return respond([iec]);
+    if (target.endsWith('/runs')) return respond({items:[iec],next_cursor:null});
     return respond(target.endsWith(source.id) || target.includes(`/fields/${source.id}/`) ? source : iec);
   });
   await page.goto(url + '/field-acceptance'); await page.waitForFunction(() => window.ready).catch(error => { console.error(errors); throw error; });
   let serial = 0;
-  async function mount(type, run = source) { kind = type; await page.evaluate(({ kind, run, key }) => window.renderFixture(kind, run, key), { kind, run, key: ++serial }); }
+  async function mount(type, run = source) { kind = type; await page.evaluate(({ kind, run, key }) => window.renderFixture(kind, run, key), { kind, run: {...run,fixtureState:state}, key: ++serial }); }
   const checks = [];
   for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) for (const theme of ['light', 'dark']) {
     await page.setViewportSize(viewport); await page.evaluate(theme => { document.documentElement.dataset.theme = theme; document.documentElement.dataset.reducedMotion = 'true'; }, theme);
-    for (const type of ['jobs', 'adaptive', 'comparison', 'field']) for (const item of ['empty', 'loading', 'error', 'success', 'history']) {
+    for (const type of ['jobs', 'adaptive', 'comparison', 'field', 'setup']) for (const item of ['empty', 'loading', 'error', 'success', 'history']) {
       state = item; await mount(type, type === 'field' ? { id: source.id, workspace: source.workspace, study: source.study } : source); await page.waitForTimeout(item === 'loading' ? 100 : 400);
       const label = `${type}/${item}/${theme}/${viewport.width}`;
       const text = await page.locator('body').innerText(); assert(text.trim(), label + ' blank: ' + errors.join('; '));
@@ -84,6 +86,12 @@ const {renderFixture}=await import('/src/features/field/browser-fixture.tsx');wi
         assert(text.includes(expected), label + ' wrong state: ' + text);
         if (item === 'history') assert.equal(await page.getByRole('region', { name: '历史结论' }).count(), 1);
       }
+      if (type === 'setup') {
+        assert(text.includes({empty:'尚未运行',loading:'读取超算预算',error:'超算连接中断',success:'排队位置 4',history:'方法版本变化 1.0.3 → 1.0.4'}[item]),label+' wrong lifecycle: '+text);
+        assert.equal(await page.locator('img,ol').count(),0,label+' illustrative workflow remains');
+      }
+      if (type === 'comparison' && ['success','history'].includes(item)) assert.equal(await page.getByRole('table',{name:'有限元与IEC量值对照'}).count(),1,label+' missing comparison');
+      if (type === 'adaptive' && ['success','history'].includes(item)) assert((await page.locator('.fem-chart-threshold').count())>0,label+' missing threshold');
       assert(!/\b[0-9a-f]{8}-[0-9a-f-]{27}\b|\d{4}-\d\d-\d\dT\d\d:/.test(text), label + ' raw run identity');
       const collisions = await page.evaluate(() => [...document.querySelectorAll('tr,.field-scope>div,.hpc-actions')].flatMap(group => {
         const children = [...group.children].map(node => ({ text: node.textContent.slice(0, 60), box: node.getBoundingClientRect() })).filter(({ box }) => box.width && box.height);
@@ -110,6 +118,11 @@ const {renderFixture}=await import('/src/features/field/browser-fixture.tsx');wi
   state = 'history'; await mount('adaptive'); await page.getByRole('button', { name: '用当前版本继续' }).click();
   await page.getByRole('spinbutton').fill('12'); await page.keyboard.press('Enter');
   await page.getByRole('dialog').waitFor({ state: 'hidden' }); assert.equal(continuations, 1); assert.equal(submissions, 2); live = false;
+  state='success'; await mount('setup'); await page.getByRole('button',{name:'停止',exact:true}).click();
+  await page.getByText('已封存',{exact:true}).waitFor(); assert.equal(cancellations,2);
+  state='running'; await mount('field',{...source,status:'running',output:undefined});
+  await page.locator('.field-canvas').waitFor(); await page.getByRole('button',{name:'停止',exact:true}).waitFor();
+  assert.equal(await page.getByRole('region',{name:'历史结论'}).count(),1,'running field lost prior result');
   if (process.argv[2]) {
     const receipt = JSON.parse(await fs.readFile(path.resolve(process.argv[2]), 'utf8')); real = true;
     await page.setViewportSize({ width: 1366, height: 768 }); await page.evaluate(() => document.documentElement.dataset.theme = 'light');

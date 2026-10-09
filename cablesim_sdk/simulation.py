@@ -179,7 +179,7 @@ class MeshControls(Strict):
     size_m: float = Field(gt=0)
     far_size_m: float = Field(gt=0)
     transition_m: float = Field(gt=0)
-    max_nodes: int = Field(default=60000,ge=100,le=2400000)
+    max_nodes: int = Field(default=60000,ge=100,le=4000000)
     probe_cell_size_m: float | None = Field(default=None,gt=0)
     exterior_growth_start_m: float | None = Field(default=None,gt=0)
     exterior_growth_rate: float = Field(default=0.1,gt=0,le=0.25)

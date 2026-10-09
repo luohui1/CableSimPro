@@ -28,6 +28,7 @@ export function StudyRunControl({
   onMissing,
   secondary = false,
   currentInput,
+  label = '预检并运行',
 }: {
   module: string;
   onResult: (id: string, module: string) => void;
@@ -36,6 +37,7 @@ export function StudyRunControl({
   onMissing?: (field: string) => void;
   secondary?: boolean;
   currentInput?: string;
+  label?: string;
 }) {
   const context = useStudy();
   const [open, setOpen] = useState(false),
@@ -165,7 +167,7 @@ export function StudyRunControl({
           preflight.mutate();
         }}
       >
-        预检并运行
+        {label}
       </Button>
       <PreflightDialog
         requireConfirmation={!!remoteBudget}
@@ -244,6 +246,13 @@ export function SavedRunProgress({ run: selected, onRefresh }: { run?: Record<st
   });
   const value = detail.data || selected, execution = optionalRecord(value?.execution);
   const status = text(execution.state) || text(value?.status), busy = ["accepted", "running", "validating"].includes(text(value?.status));
+  const convergence = useQuery({ queryKey: ['adaptive-convergence', wid, sid], enabled: busy && !!wid && !!sid, retry: false,
+    queryFn: async ({ signal }) => {
+      const response = await fetch(`/api/hpc/convergence?workspace=${encodeURIComponent(wid)}&study=${encodeURIComponent(sid)}`, { signal });
+      if (!response.ok) throw new ApiError(response.status, '级别读取失败');
+      return record(await response.json());
+    }, refetchInterval: busy ? 3000 : false });
+  const workflow = (Array.isArray(convergence.data?.items) ? convergence.data.items.map(optionalRecord) : []).find(item => item.current_run_id === rid);
   const action = useMutation({
     retry: false,
     mutationFn: async (verb: "cancel" | "resume") => {
@@ -262,8 +271,10 @@ export function SavedRunProgress({ run: selected, onRefresh }: { run?: Record<st
   const cancelled = Array.isArray(execution.slurm_states) && execution.slurm_states.includes("CANCELLED");
   return <section className="input-section" aria-label="超算运行记录" aria-live="polite">
     <div className="report-toolbar"><strong>{cancelled ? "已取消" : execution.cancel_requested && busy ? "正在取消" : remoteStates[status] || status}</strong>
-      <span>作业 {text(execution.job_id) || "等待 Slurm 回执"} · 已用 {((numeric(execution.actual_cpu_seconds) || 0) / 3600).toFixed(4)} 核时</span>
-      {busy && <Button size="compact" disabled={action.isPending || execution.cancel_requested === true} onClick={() => action.mutate("cancel")}>取消运行</Button>}
+      <span>作业 {text(execution.job_id) || "等待 Slurm 回执"} · 已用 {((numeric(execution.actual_cpu_seconds) || 0) / 3600).toFixed(4)} 核时{numeric(execution.budget_core_hours) !== null ? ` / 预算 ${Number(execution.budget_core_hours).toFixed(3)} 核时` : ''}</span>
+      {busy && <span title="同分区待调度优先序，不保证开跑顺序">排队位置 {numeric(execution.queue_position) ?? '尚未提供'}</span>}
+      {busy && <span>{workflow ? `第 ${(Array.isArray(workflow.rows) ? workflow.rows.length : 0)+1} 级 · ${optionalRecord(workflow.pending).kind === 'domain' ? '扩域' : optionalRecord(workflow.pending).kind === 'rating' ? '最终载流量' : '网格'}` : convergence.error ? '当前级别暂不可读' : '单次运行'}</span>}
+      {busy && <Button size="compact" disabled={action.isPending || execution.cancel_requested === true} onClick={() => action.mutate("cancel")}>停止</Button>}
       {!busy && !cancelled && ["failed", "interrupted"].includes(text(value?.status)) && <Button size="compact" disabled={action.isPending} onClick={() => action.mutate("resume")}>恢复原作业</Button>}
     </div>
     {!!detail.error && <ErrorState title="进度连接中断，原作业保留" description={message(detail.error)} action={<Button size="compact" onClick={() => detail.refetch()}>重新读取进度</Button>} />}

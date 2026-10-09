@@ -29,6 +29,8 @@
 .fem-chart-axis { fill: none; stroke: var(--line); }
 .fem-chart-line { fill: none; stroke: var(--text); stroke-width: 2; }
 .fem-chart-dot { fill: var(--text); }
+.fem-chart-threshold path { stroke: var(--text-secondary); stroke-width: 1.5; stroke-dasharray: 6 4; }
+.field-history { margin: 0; font-size: var(--text-body); color: var(--text-secondary); }
 .field-scope { display: grid; gap: var(--space-2); margin: var(--space-3) 0; font-size: var(--text-body); font-variant-numeric: tabular-nums; }
 .field-scope > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 4fr); gap: var(--space-3); }
 .field-scope dt { color: var(--text-secondary); }

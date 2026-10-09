@@ -7,7 +7,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { hpcJson, hpcStatus, localTime, savedRunLabel } from './run-label';
 import './field.css';
 
-/** Mount inside the existing QueryClientProvider on the compute-location page. */
+/** Record list for /runs; settings contains connection configuration only. */
 export function HpcJobList() {
   const [offset, setOffset] = useState(0), [error, setError] = useState('');
   const [busy, setBusy] = useState(''), locked = useRef(false);

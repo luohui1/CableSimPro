@@ -16,6 +16,7 @@ import { downloadJson } from "@/lib/download";
 import type { CatalogRow } from "@/api/catalogs";
 import type { StudyDefinition } from "@/api/research";
 import { displayName } from "@/lib/display-names";
+import { FieldHistoryNotice } from '@/features/field/history-notice';
 export function StudySimulation({
   run,
   tab,
@@ -179,6 +180,7 @@ export function StudySimulation({
           </Button>
         )}
       </Toolbar>
+      <FieldHistoryNotice run={run} />
       {!hasSimulation ? (
         <EmptyState
           title="尚无独立仿真算例"

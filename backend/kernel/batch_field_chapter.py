@@ -19,7 +19,9 @@ def reference(run,case):
     return {'run_id':run['id'],'study':run['study'],'study_name':run['snapshot']['definition']['title'],
             'sequence':run.get('sequence'),'created':run.get('created'),'case_id':case['case_id'],
             'method':run['snapshot']['definition']['method'],'input_digest':digest(case['input']),
-            'output_digest':run['output_digest']}
+            'output_digest':run['output_digest'],'freshness':run.get('freshness','unknown'),
+            'version_status':run.get('version_status'),
+            'eligible_current_report':run.get('freshness')=='current' and (run.get('version_status') or {}).get('status')!='stale'}
 
 
 def compare(fem,iec,case_id=None):

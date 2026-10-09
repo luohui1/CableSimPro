@@ -155,6 +155,10 @@ def test_field_routes_project_without_mutation_and_sample_full_saved_values(tmp_
     artifacts=run['output']['cases'][0]['artifacts']
     artifacts['x-cablesim.temperature-field']['mesh']['domain_ids']=[1]
     artifacts['x-cablesim.field-test']={'binary':'must not travel with view'}
+    # Route fixture uses an in-memory saved run; byte-integrity and live database
+    # currentness are exercised by test_display_projection_checks_real_bytes.
+    from backend.kernel.batch_field_projection import display_only
+    monkeypatch.setattr('backend.kernel.batch_field_projection.read_display',lambda research,wid,rid:display_only(research.get_run(wid,rid)))
     app=FastAPI();app.include_router(make_router(manager.research))
     url=f"/api/hpc/workspaces/{run['workspace']}/fields/{run['id']}"
     with TestClient(app) as client:
@@ -212,16 +216,22 @@ def test_job_list_uses_metadata_and_cancel_arrays_remain_cancellable(tmp_path,mo
     from fastapi.testclient import TestClient
     manager,run,_=service(tmp_path,monkeypatch)
     with manager.store.db(True) as db:
+        db.execute('ALTER TABLE workspaces ADD COLUMN state TEXT')
+        db.execute('UPDATE workspaces SET state=?',(json.dumps({'domain':{'name':'城北变电站'}}),))
         db.execute('CREATE TABLE study_runs(id,workspace,study,sequence,status,created,finished,snapshot)')
         db.execute('INSERT INTO study_runs VALUES (?,?,?,?,?,?,?,?)',(run['id'],run['workspace'],run['study'],3,'running',run['created'],None,json.dumps(run['snapshot'])))
     manager.research.get_run=lambda *a:pytest.fail('GET jobs must not load field archive')
-    execution={'job_id':'123','actual_cpu_seconds':60,'slurm_states':['RUNNING','COMPLETED'],'state':'running'}
+    execution={'job_id':'123','actual_cpu_seconds':60,'slurm_states':['RUNNING','COMPLETED'],'state':'running','budget_core_hours':2,'queue_position':None}
     manager.research.executor.execution_status=lambda *a:execution
     manager.research.executor.refresh_status=lambda *a:{**execution,'started':'2026-10-08T12:00:00Z'}
     app=FastAPI();app.include_router(make_router(manager.research))
     with TestClient(app) as client:
         values=client.get('/api/hpc/jobs').json();assert values['total']==1
         assert values['items'][0]['core_hours']==pytest.approx(1/60) and values['items'][0]['cancellable']
+        card=values['items'][0]
+        assert card['workspace_id']==run['workspace'] and card['workspace_name']=='城北变电站'
+        assert card['study_id']==run['study'] and card['run_id']==run['id'] and card['type']=='single'
+        assert card['budget_core_hours']==2 and card['queue_position'] is None and card['missing_fields']==[]
         assert client.post('/api/hpc/jobs/'+run['id']+'/refresh').json()['started'].endswith('Z')
 
 
@@ -231,6 +241,34 @@ def test_saved_comparison_hand_difference_kelvin_and_input_rejection():
     assert value['rows'][0]['fem']==320 and not value['engineering_approval']
     iec['snapshot']['cases'][0]['input']['load_a']=401
     with pytest.raises(ValueError,match='领域输入'):compare(fem,iec)
+
+
+def test_preflight_job_links_only_its_saved_run(tmp_path,monkeypatch):
+    from uuid import uuid5,UUID
+    from backend.kernel.hpc_jobs import job_cards
+    manager,run,_=service(tmp_path,monkeypatch)
+    request=str(uuid4());method=run['snapshot']['definition']['method'];workflow_id=str(uuid4())
+    plan=str(uuid5(UUID(request),method['plugin_id']+'/'+method['capability']+'/check'))
+    workflow={'id':workflow_id,'definition':{'method':method},'rows':[],
+              'request':{'max_core_hours':100},'attempts':[{'request_id':request,'run_id':run['id']}]}
+    manager.list=lambda:[workflow]
+    row={'id':'preflight:'+workflow_id+':'+plan,'kind':'preflight','workspace':run['workspace'],
+         'study':run['study'],'core_hours':.01,'execution':{'plan_id':plan,'job_id':'123','budget_core_hours':.1}}
+    card=job_cards(manager.research,manager,[row])[0]
+    assert card['run_id']==run['id'] and card['type']=='convergence'
+    assert card['budget_core_hours']==.1 and card['workflow_budget_core_hours']==100
+    row['execution']['plan_id']=str(uuid4())
+    assert job_cards(manager.research,manager,[row])[0]['run_id'] is None
+
+
+def test_historical_comparison_is_readable_but_not_current_report_evidence():
+    fem,iec=saved_fixture()
+    fem.update(freshness='historical',version_status={'status':'stale'})
+    iec.update(freshness='current',version_status={'status':'current'})
+    value=compare(fem,iec)
+    assert value['rows'][0]['delta']==1
+    assert not value['fem']['eligible_current_report']
+    assert value['iec']['eligible_current_report']
 
 
 def test_temperature_only_level_compares_saved_temperatures_without_inventing_rating():
@@ -292,3 +330,29 @@ def test_legacy_preflight_is_visible_without_inventing_a_study(tmp_path):
     atomic(tmp_path/identifier/'cancel-request.json',{'requested':True})
     assert unbound_checks(research,[])[0]['execution']['cancel_requested']
     assert unbound_checks(research,[{'execution':{'plan_id':identifier}}])==[]
+
+
+def test_queue_position_is_observed_priority_order_not_start_prediction(tmp_path,monkeypatch):
+    import sys
+    if sys.platform=='win32':monkeypatch.setitem(sys.modules,'fcntl',SimpleNamespace())
+    from backend.kernel import batch_remote_agent as remote
+    token=str(uuid4());atomic(tmp_path/'submissions'/token/'submission.json',{'job_id':'123','request':{'indices':[0]}})
+    monkeypatch.setattr(remote,'command',lambda cmd: '99\n99\n123\n456\n' if cmd[0]=='squeue' else '123_0|PENDING|1|0|0|||0:0|Unknown|Unknown|')
+    value=remote.accounting(tmp_path,token)
+    assert value['queue_position']==2 and value['queue_position_basis']=='partition_priority_order'
+    assert value['started'] is None and value['finished'] is None
+
+
+def test_budget_estimate_does_not_generate_or_solve_a_mesh(tmp_path,monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from backend.kernel.hpc_jobs import make_router
+    manager,run,_=service(tmp_path,monkeypatch)
+    manager.research.prepare=lambda *args:run['snapshot']
+    monkeypatch.setattr('backend.kernel.hpc_jobs.allocation_estimate',lambda *args:{'upper_core_hours':6.2})
+    manager.research.executor.check=lambda *args:pytest.fail('estimate must never submit a mesh')
+    app=FastAPI();app.include_router(make_router(manager.research))
+    with TestClient(app) as client:
+        response=client.get(f"/api/hpc/workspaces/{run['workspace']}/studies/{run['study']}/estimate?expected_revision=1&expected_study_revision=1")
+        assert response.status_code==200,response.text
+        assert response.json()=={'estimated_nodes':None,'node_limit':120000,'estimate_status':'mesh_preflight_required','budget_core_hours':6.2,'case_count':1}

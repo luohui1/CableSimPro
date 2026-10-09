@@ -169,6 +169,8 @@ class HpcExecutor:
                     'plan_id':plan['id'],'slurm_states':states,'actual_cpu_seconds':accounting.get('actual_cpu_seconds',0),
                     'cancel_requested':(directory/'cancel-request.json').is_file(),
                     'started':accounting.get('started'),'finished':accounting.get('finished'),
+                    'queue_position':accounting.get('queue_position'),'queue_position_basis':accounting.get('queue_position_basis'),
+                    'budget_core_hours':accounting.get('budget_core_hours'),
                     'updated':accounting.get('updated')})
                 if accounting.get('terminal'):break
                 time.sleep(5)
@@ -285,7 +287,9 @@ class HpcExecutor:
             latest={'backend':'slurm','job_id':submission['job_id'],'plan_id':plan['id'],'slurm_states':states,
                     'state':'collecting' if accounting.get('terminal') else 'running' if 'RUNNING' in states else 'queued',
                     'actual_cpu_seconds':accounting.get('actual_cpu_seconds',0),'started':accounting.get('started'),
-                    'finished':accounting.get('finished'),'cancel_requested':(directory/'cancel-request.json').is_file()}
+                    'finished':accounting.get('finished'),'cancel_requested':(directory/'cancel-request.json').is_file(),
+                    'queue_position':accounting.get('queue_position'),'queue_position_basis':accounting.get('queue_position_basis'),
+                    'budget_core_hours':accounting.get('budget_core_hours')}
             atomic(directory/'execution.json',latest)
         return latest
 

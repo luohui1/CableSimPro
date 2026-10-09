@@ -95,7 +95,11 @@ export function FieldView({ points, triangles, values, limit, circles = [], mask
   useEffect(() => {
     const element = host.current;
     if (!element) return;
-    const observer = new ResizeObserver(([entry]) => setSize({ width: Math.round(entry.contentRect.width), height: Math.round(entry.contentRect.height) }));
+    // 尺寸没变就不更新状态：否则旁边属性栏内容变化引起的回流会让场图反复重绘，整页卡死
+    const observer = new ResizeObserver(([entry]) => {
+      const width = Math.round(entry.contentRect.width), height = Math.round(entry.contentRect.height);
+      setSize(current => current.width === width && current.height === height ? current : { width, height });
+    });
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
