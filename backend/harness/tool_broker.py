@@ -165,6 +165,15 @@ class ToolBroker:
     def dispatch(self,task,args,tool,identity):
         wid=task['workspace_id'];name=tool.name
         if name in ('object_find','object_relations'):return read_index(self.research,name,args)
+        if name=='type_read':
+            from .type_design import read
+            return read(self.research,task,args)
+        if name=='propose_type_changes':
+            public=self.proposals.type_changes(task,args['type_id'],args['changes'],args['reason'])
+            from backend.index import get_index
+            return ToolResult(status='ok',summary='型号字段方案已生成，等待人工保存；未改变型号输入或发布。',
+                data={'proposal':public,'object':get_index(self.research).snapshot().cards.get(('type',args['type_id']))},
+                next_actions=['审阅字段差异后人工批准或拒绝；保存后在型号工作台更新受影响的运行。'])
         if name=='workspace_list':
             with self.research.store.db() as db:
                 rows=[{'id':row['id'],'revision':row['revision'],'name':row['name'],'updated':row['updated']}

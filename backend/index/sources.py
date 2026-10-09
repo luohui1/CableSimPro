@@ -46,6 +46,7 @@ def project(db):
             "(SELECT substr(json_extract(e.data,'$.content'),1,80) FROM agent_events e WHERE e.task_id=agent_tasks.id "
             "AND e.type='chat.message' AND json_extract(e.data,'$.role')='user' ORDER BY e.sequence LIMIT 1) AS name"),
         'agent_proposals':rows('agent_plan_revisions',"proposal_id AS id,task_id,created,digest,"
+            "json_extract(body,'$.proposal.type_id') AS type_id,"
             "json_extract(body,'$.proposal.public.title') AS name,json_extract(body,'$.proposal.expires') AS expires,"
             "json_extract(body,'$.proposal.workspace_revision') AS revision,json_extract(body,'$.proposal.study_id') AS study_id,"
             "(SELECT json_extract(e.data,'$.status') FROM agent_events e WHERE e.task_id=agent_plan_revisions.task_id "

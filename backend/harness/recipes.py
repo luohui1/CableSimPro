@@ -25,6 +25,10 @@ CATALOG = [
          'run_id':{'type':'string','maxLength':120},'case_id':{'type':'string','maxLength':120}}, ('changes','scope'))},
     {'id':'sensitivity_advice','name':'参数敏感性建议','description':'读取当前字段、方法参数范围与已有结论，提出研究建议；不猜采样范围或敏感性数值，不自动求解。',
      'parameters':obj({**STUDY,'paths':{'type':'array','maxItems':8,'items':{'type':'string','maxLength':500}}})},
+    {'id':'type_review','name':'型号设计检查','description':'只读型号结构、缺项及已有标准要求判定；区分保存输入、历史运行与未覆盖标准，建议改进，不修改、批准或发布。按next_page读取完整检查。',
+     'parameters':obj({'type_id':{'type':'string','minLength':1,'maxLength':120},
+         'view':{'const':'review'},'after':{'type':'integer','minimum':0},
+         'limit':{'type':'integer','minimum':1,'maximum':20},'expected_revision':{'type':'integer','minimum':1}},('type_id',))},
 ]
 
 
@@ -57,6 +61,7 @@ def expand(arguments):
     params = deepcopy(arguments['parameters']); rid=arguments['recipe']
     study = {k:params[k] for k in STUDY if k in params}
     if rid=='conclusion_summary':return [('project_digest',params,{})]
+    if rid=='type_review':return [('type_read',{**params,'view':'review'},{})]
     if rid=='missing_inputs':return [('workspace_read',{},{}),('study_preflight',study,{})]
     if rid=='sensitivity_advice':
         return [('workspace_read',{'paths':params['paths']} if params.get('paths') else {},{}),

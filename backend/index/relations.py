@@ -116,6 +116,7 @@ def build(index):
             owner=next(r for r in index.raw['tasks'] if r['id']==row['task_id'])
             index.link(card,index.workspace(owner['workspace_id']),'workspace',pin={'revision':row['revision']})
         index.link(card,index.get('study',row['study_id']),'study')
+        if row['type_id']:index.link(card,index.get('type',row['type_id']),'type',pin={'revision':row['revision']})
     for row in index.raw['convergence']:
         index.link(index.get('job','convergence:'+row['id']),index.get('study',row['study']),'study')
     for row in index.raw['datasets']:index.link(index.get('run',row['id']),index.get('study',row['study']),'study')

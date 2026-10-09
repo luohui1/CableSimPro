@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import Field, JsonValue
 
 from backend.schemas import StrictModel
+from backend.index.contracts import ObjectCard
 
 TaskState = Literal['created','planning','running','waiting','reviewing','completed','blocked','failed','cancelled']
 NodeState = Literal['pending','issued','running','succeeded','failed','unknown','cancelled']
@@ -75,7 +76,7 @@ class SessionSummary(StrictModel):
 
 
 class RecipeRequest(StrictModel):
-    id: Literal['conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice']
+    id: Literal['conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice','type_review']
     parameters: dict[str,JsonValue] = Field(default_factory=dict)
 
 
@@ -100,7 +101,7 @@ class ToolInfo(StrictModel):
 
 
 class RecipeInfo(StrictModel):
-    id: Literal['conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice']
+    id: Literal['conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice','type_review']
     name: str
     description: str
     parameters: dict[str,JsonValue]
@@ -139,6 +140,9 @@ class Proposal(StrictModel):
     changes: list[ProposalChange]
     checks: list[str]
     status: Literal['pending','approved','rejected'] = 'pending'
+    kind: Literal['domain','parameters','study','type'] | None = None
+    type_id: UUID | None = None
+    base_revision: int | None = None
 
 
 class ProposalDecision(StrictModel):
@@ -190,6 +194,7 @@ class SessionRecord(StrictModel):
 class MessageDelta(StrictModel):
     type: Literal['message.delta']
     text: str
+    object_refs: list[ObjectCard] = Field(default_factory=list)
 
 
 class ToolCallEvent(StrictModel):
@@ -215,6 +220,9 @@ class ProposalCreated(StrictModel):
     title: str
     changes: list[ProposalChange]
     checks: list[str]
+    kind: Literal['domain','parameters','study','type'] | None = None
+    type_id: UUID | None = None
+    base_revision: int | None = None
 
 
 class StreamError(StrictModel):

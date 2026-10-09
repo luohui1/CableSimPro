@@ -48,6 +48,16 @@ class Tool:
 
     def disclosed_model(self):
         definition=self.model()
+        if not self.plugin_id:
+            # Repeated per-field prose (including recipe alternatives) must not
+            # crowd out an inspected capability. Keep every validation keyword;
+            # full argument descriptions remain in /contract and tool.model().
+            def compact(node):
+                if isinstance(node,dict):return {key:compact(value) for key,value in node.items()
+                    if key!='description' or not isinstance(value,str)}
+                if isinstance(node,list):return [compact(value) for value in node]
+                return node
+            definition['function']['parameters']=compact(definition['function']['parameters'])
         if self.plugin_id and len(json.dumps(definition,ensure_ascii=False).encode())>4096:
             definition['function']['parameters']=object_schema({**STUDY,'parameters':{
                 'type':'object','description':'按 plugin_inspect 读取的封签参数契约提供SI值；可用 schema_path 分字段读取。'},'title':TEXT})
@@ -105,6 +115,15 @@ def prune_definitions(schema):
 
 def host_tools():
     specs=[
+        ('type_read','读取型号设计','read','读取型号工作区的保存结构、要求、方案、最近运行及规格书；数值带单位来源，按next_page分页，缺保存运行不推算外径或标准符合性。',object_schema({
+            'type_id':TEXT,'view':{'enum':['summary','structure','requirements','plans','runs','specification','review']},
+            'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':20},
+            'expected_revision':{'type':'integer','minimum':1}},['type_id'])),
+        ('propose_type_changes','提出型号修改方案','propose','仅本会话型号工作区：使用type_read返回稳定字段path，长度值用mm；材料仅引用已导入文档的材料ID。等待人工保存，不发布、不批准。',object_schema({
+            'type_id':TEXT,'changes':{'type':'array','minItems':1,'maxItems':12,'items':object_schema({
+                'path':{'type':'string','minLength':1,'maxLength':500},'value':{'type':['number','string','boolean','null']},
+                'unit':{'type':['string','null'],'maxLength':40}},['path','value'])},
+            'reason':{'type':'string','minLength':1,'maxLength':500}},['type_id','changes','reason'])),
         ('object_find','查找对象','read','按统一索引查对象名称、类别与唯一状态；不返回工程计算量。next_offset 非空时继续分页。',object_schema({
             'kind':{'enum':list(get_args(Kind))},'q':{'type':'string','maxLength':200},
             'limit':{'type':'integer','minimum':1,'maximum':20},'offset':{'type':'integer','minimum':0}})),
@@ -136,7 +155,7 @@ def host_tools():
                 'description':'能力契约内的JSON Pointer，例如 /parameter_schema/properties/solver；用于按字段读取大契约。'}})),
         ('cable_model_read','读取型号结构','read','读取受摘要保护的型号结构与来源；不采用或批准型号。',object_schema({
             'model_id':TEXT,'path':{'type':'string','maxLength':500,'description':'型号返回对象内的稳定路径；省略读取有界完整对象。'}},['model_id'])),
-        ('propose_domain_changes','提出领域输入修改方案','propose','生成有字段差异和校验结果的输入方案，等待人批准。',object_schema({
+        ('propose_domain_changes','提出领域输入修改方案','propose','按workspace_read的稳定路径与显示单位生成字段方案：长度m、温度°C、截面mm²；等待人工批准。',object_schema({
             'changes':PATCH,'title':TEXT},['changes'])),
         ('propose_method_parameters','提出方法参数修改方案','propose','按封签参数契约生成方案，等待人批准后普通保存。',object_schema({
             **STUDY,'changes':PATCH,'title':TEXT},['changes'])),

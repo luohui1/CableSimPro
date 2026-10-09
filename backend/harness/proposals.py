@@ -99,6 +99,24 @@ class Proposals:
         self.persist(task,proposal)
         return proposal['public']
 
+    def type_changes(self,task,type_id,changes,reason):
+        from .type_design import candidate
+        if type_id != task['workspace_id']:
+            raise HTTPException(422,{'code':'SCOPE_VIOLATION','path':'/type_id',
+                'message':'修改型号须在该型号工作区建立会话；只读查找不授予跨工程修改权限。'})
+        _,state,_=self.source(task)
+        with self.workspace.db() as db:self.workspace.assert_mutable(db,type_id)
+        pid=str(uuid4());document,edits,differences=candidate(state,changes,pid)
+        proposal={'id':pid,'kind':'type','type_id':type_id,'workspace_revision':task['workspace_revision'],
+            'study_id':None,'changes':deepcopy(changes),'edits':edits,'candidate_digest':fingerprint(document),'expires':time()+3600,
+            'public':{'id':pid,'kind':'type','type_id':type_id,'base_revision':task['workspace_revision'],
+                'title':'型号结构调整 · '+reason,'changes':differences,'checks':[
+                    '普通型号编辑器的结构、引用、单位、范围与字段锁校验通过。',
+                    '批准仅保存型号输入；基准修订冲突时失败，不发布型号，不批准工程结果。',
+                    '外径链、电气、载流量与标准符合性影响须用修改后的保存运行复核。']}}
+        self.persist(task,proposal)
+        return proposal['public']
+
     def study(self,task,method,parameters,title,*,method_input=None,source_ref=None):
         _,state,_=self.source(task)
         document=deepcopy(method_input) if method_input is not None else state.get('domain')
@@ -250,7 +268,16 @@ class Proposals:
             if decision=='approved':
                 row,state=self.workspace.load(db,task['workspace_id'],proposal['workspace_revision'],allow_domain=True)
                 self.workspace.assert_mutable(db,task['workspace_id'])
-                if proposal['kind']=='domain':
+                if proposal['kind']=='type':
+                    from .type_design import candidate
+                    if proposal['type_id']!=task['workspace_id']:raise HTTPException(409,'型号方案归属已变化。')
+                    document,_,_=candidate(state,proposal['changes'],pid)
+                    if fingerprint(document)!=proposal['candidate_digest']:
+                        raise HTTPException(409,'型号校验或派生规则已变化，请重新生成方案。')
+                    saved=save_domain(self.workspace,task['workspace_id'],SaveDomain(
+                        expected_revision=proposal['workspace_revision'],document=DraftDomainDocument.model_validate(document)),db)
+                    receipt={'type_id':proposal['type_id'],'workspace_revision':saved['revision']}
+                elif proposal['kind']=='domain':
                     document=deepcopy(state['domain'])
                     for change in proposal['edits']:
                         parent,key=target(document,change['path'],stable=True);parent[key]=change['value']
@@ -285,7 +312,7 @@ class Proposals:
             self.tasks.event(db,task['id'],'proposal.decision',{'id':pid,'status':decision,'actor':getpass.getuser(),
                 'source':'human.route','engineering_approval':False,**receipt})
             if decision=='approved':
-                if proposal['kind']=='domain':
+                if proposal['kind'] in ('domain','type'):
                     db.execute('UPDATE agent_tasks SET workspace_revision=? WHERE id=?',(receipt['workspace_revision'],task['id']))
                 elif proposal['kind']=='study' and task['study_id'] is None:
                     db.execute('UPDATE agent_tasks SET study_id=?,study_revision=? WHERE id=?',(receipt['study_id'],receipt['study_revision'],task['id']))

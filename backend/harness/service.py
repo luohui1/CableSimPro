@@ -27,6 +27,7 @@ from .task_store import TaskStore
 from .tool_broker import ToolBroker,failure
 from .tool_registry import ToolRegistry
 from .resilience import category
+from .object_refs import references
 
 
 class Harness:
@@ -193,11 +194,13 @@ class Harness:
             yield self.emit(tid,'error',{'code':'HARNESS_RESOURCE_PRESSURE','message':'运行层暂时资源不足；保留已取得证据与操作记录，未重放计算。'},persist=False)
             baseline=self.baseline_problem(snapshot,turn) if snapshot else None
             text,refs=(baseline['summary']+'\n下一步：'+'；'.join(baseline['next_actions']),[]) if baseline else evidence_summary(snapshot) if snapshot else ('以下为工具证据摘要，模型解释未通过核验。\n本次尚未取得可用工具证据；未推算工程结果。',[])
+            object_refs=self.object_refs(tid,text,snapshot) if snapshot else []
             try:
                 self.tasks.emit(tid,'answer.diagnostic' if baseline else 'answer.fallback',{'turn_id':turn,'sources':refs,'model_explanation_verified':False,'reason':issue})
-                self.tasks.emit(tid,'chat.message',{'role':'assistant','content':text,'turn_id':turn})
+                self.tasks.emit(tid,'chat.message',{'role':'assistant','content':text,'turn_id':turn,'object_refs':object_refs})
             except (MemoryError,sqlite3.OperationalError):pass
-            for offset in range(0,len(text),64):yield self.emit(tid,'message.delta',{'text':text[offset:offset+64]},persist=False)
+            for offset in range(0,len(text),64):yield self.emit(tid,'message.delta',{'text':text[offset:offset+64],
+                **({'object_refs':object_refs} if offset==0 else {})},persist=False)
             normal=True
         except Exception as error:
             state,reason='failed',None
@@ -259,7 +262,7 @@ class Harness:
                 tools,record['workspace_id'],record['workspace_revision'])
             waiting=yield from self.execute_plan(tid,turn,plan,tools,record,source='host')
             current=self.tasks.record(tid)
-            if request['id']!='conclusion_summary' or waiting:break
+            if request['id'] not in ('conclusion_summary','type_review') or waiting:break
             result=current['steps'][-1].get('result')
             next_page=result['data'].get('next_page') if result and result['status']=='ok' else None
             if not next_page:break
@@ -355,8 +358,18 @@ class Harness:
         if baseline and not ('工作台' in text and '重算' in text):
             text+='\n'+baseline['summary']+'\n下一步：'+'；'.join(baseline['next_actions'])
         text+=suffix
-        self.tasks.emit(tid,'chat.message',{'role':'assistant','content':text,'turn_id':turn,**({'reasoning_content':reasoning} if reasoning else {})})
-        for offset in range(0,len(text),64):yield self.emit(tid,'message.delta',{'text':text[offset:offset+64]})
+        object_refs=self.object_refs(tid,text,record)
+        self.tasks.emit(tid,'chat.message',{'role':'assistant','content':text,'turn_id':turn,'object_refs':object_refs,
+            **({'reasoning_content':reasoning} if reasoning else {})})
+        for offset in range(0,len(text),64):yield self.emit(tid,'message.delta',{'text':text[offset:offset+64],
+            **({'object_refs':object_refs} if offset==0 else {})})
+
+    def object_refs(self,tid,text,record):
+        try:return references(self.research,text,record)
+        except (HTTPException,MemoryError,sqlite3.OperationalError,OSError) as error:
+            try:self.tasks.emit(tid,'object_refs.unavailable',{'exception_type':type(error).__name__,'cards_invented':False})
+            except (MemoryError,sqlite3.OperationalError):pass
+            return []
 
     def answer_loop(self,tid,turn,text,reasoning=''):
         record=self.tasks.record(tid);limit=record['budget']['limits']['max_repair_attempts']

@@ -280,8 +280,8 @@ def test_message_budget_reserves_tool_free_answer_and_resets_next_message(client
 def test_missing_model_configuration_keeps_status_tools_and_sse_available(client,monkeypatch):
     for name in ('CABLESIM_LLM_BASE_URL','CABLESIM_LLM_MODEL','CABLESIM_LLM_API_KEY'):monkeypatch.delenv(name,raising=False)
     status=client.get('/api/agent/status').json()
-    assert status=={'configured':False,'model':'deepseek-flash','tools':71}
-    tools=client.get('/api/agent/tools').json();assert len(tools)==71
+    assert status=={'configured':False,'model':'deepseek-flash','tools':73}
+    tools=client.get('/api/agent/tools').json();assert len(tools)==73
     assert len([tool for tool in tools if tool.get('plugin_id')])==51
     assert all(tool['kind'] in ('read','propose','run') and tool['title'] for tool in tools)
     w=client.post('/api/workspaces',json={}).json();tid=session(client,w)

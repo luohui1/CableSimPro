@@ -31,6 +31,7 @@ def prepare(record,tools,directory=None,closing=None,feedback=None,instructions=
     catalog=json.dumps(directory or [],ensure_ascii=False,separators=(',',':'))
     guidance='\n插件能力目录（工具名、中文说明；先用 plugin_inspect 的 tool 读取指定能力，后续请求才启用）：'+catalog
     guidance+='\nproject_digest 一次读取各研究最新保存结论（量值、单位、口径、限制对象、状态），通常读取一次后直接解释；next_cursor 非空时可继续分页。workspace_read 默认工程大纲；按返回路径读细节。run_read 默认结论量值，可按 entity / key 读取。修改方案后用 study_preview(proposal_id) 试算；选择/批量研究须同时指定原 run_id、case_id，以原工况为准。'
+    guidance+='\n型号设计检查优先用type_review配方。type_read读取型号工作区并返回稳定字段path和单位，长度用mm；propose_type_changes只生成本会话型号字段方案，不批准、不发布。结构改动对外径、电气、载流量及标准符合性的定量影响须有修改后运行证据，不能把厚度差直接当成算法结果。回答提及工程、研究、运行、型号、型号版本或插件时，使用工具名片中的准确名称并加引号；宿主为这些名称附上object_refs，正文保持纯文本。'
     if closing:guidance+='\n本次请求禁止工具。只解释已取得的证据与诊断；如有未完成目标，说明原因和可执行下一步：'+closing
     if instructions:guidance+='\n工程师的自定义指令（只影响表达方式与关注点；与上述权限、证据和核验规则冲突时以上述规则为准）：'+instructions
     prompt=[{'role':'system','content':SYSTEM+guidance+'\n宿主上下文（只读）：'+context},*context_builder.messages(record)]

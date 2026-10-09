@@ -31,7 +31,7 @@ def test_digest_pages_saved_quantities_and_cold_catalog_avoids_input_contracts(c
     original=harness.registry.tools
     monkeypatch.setattr(harness.registry,'tools',lambda:pytest.fail('status built tool specs'))
     started=perf_counter();status=client.get('/api/agent/status');status_ms=(perf_counter()-started)*1000
-    assert status.status_code==200 and status.json()['tools']==71
+    assert status.status_code==200 and status.json()['tools']==73
     import backend.kernel.input_contracts as contracts
     original_contracts=contracts.contracts
     def forbid_request_contracts(*args,**kwargs):
@@ -45,7 +45,7 @@ def test_digest_pages_saved_quantities_and_cold_catalog_avoids_input_contracts(c
     try:
         started=perf_counter();tools=client.get('/api/agent/tools');cold_ms=(perf_counter()-started)*1000
     finally:research.contract_read_lock.release()
-    assert tools.status_code==200 and len(tools.json())==71
+    assert tools.status_code==200 and len(tools.json())==73
     registry=research.registry
     def forbid_request_rediscovery(*args,**kwargs):
         if current_thread().name=='study-read-warmup':return registry(*args,**kwargs)
@@ -135,7 +135,7 @@ def test_recipe_binds_proposal_and_saved_case_with_audit_and_no_engineering_writ
     assert run['status']=='succeeded',run
     path='/materials/'+soil['id'].replace('/','~1')+'/thermal_resistivity';tid=session(client,w,s)
     catalog=client.get('/api/agent/recipes').json()
-    assert {row['id'] for row in catalog}=={'conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice'}
+    assert {row['id'] for row in catalog}=={'conclusion_summary','missing_inputs','proposal_comparison','sensitivity_advice','type_review'}
     script.append(call('recipe_execute',{'recipe':'proposal_comparison','parameters':{
         'scope':'domain','changes':[{'path':path,'value':1.2,'unit':'K·m/W'}]}}))
     harness=client.app.state.harness;original=harness.model.reply;texts=[]
