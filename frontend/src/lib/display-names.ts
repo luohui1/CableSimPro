@@ -400,5 +400,10 @@ export function displayUnit(unit: string): string {
   return unit
     .replaceAll("*", "·")
     .replaceAll("ohm", "Ω")
-    .replaceAll("uF", "μF");
+    .replaceAll("uF", "μF")
+    // 宿主单位串用“.”连接和“^-1”写指数：K.m/W → K·m/W，K^-1 → K⁻¹
+    .replace(/(?<=[A-Za-zΩ])\.(?=[A-Za-zΩ])/g, "·")
+    .replaceAll("^-1", "⁻¹")
+    .replaceAll("^2", "²")
+    .replaceAll("^3", "³");
 }
