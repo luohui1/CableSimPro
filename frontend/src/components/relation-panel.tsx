@@ -6,20 +6,38 @@ import { StatusMark } from "./status-mark";
 import { ErrorState, InlineEmpty, LoadingState } from "./states";
 
 const ROLES: Record<string, string> = {
-  workspace: "所属工程", method: "方法", cable_version: "电缆型号版本", study: "研究", input_snapshot: "输入快照", delivery: "交付",
+  workspace: "所属工程", method: "方法", cable_version: "型号版本", study: "研究", input_snapshot: "输入快照", delivery: "交付",
   source_run: "来源运行", specification: "规格书", source_design: "来源设计", published_cable_version: "发布版本",
   source_document: "厂家资料", source_proposal: "来源方案", dependency: "依赖", validation: "验证", agent_task: "Agent 任务",
   material: "材料", standard: "标准",
 };
+const SHOWN = 3;
 
-/** “用到了”按引用角色称呼；“被用于”按引用者的类别称呼（例如运行、研究），角色是对方视角，不能直接套用。 */
-function Rows({ rows, by }: { rows: Relation[]; by: "role" | "kind" }) {
-  return <ul className="relation-list">{rows.map((row, index) => <li key={row.role + row.target.kind + row.target.id + index}>
-    <span className="relation-role">{by === "kind" ? KIND_LABELS[row.target.kind] || row.target.kind : ROLES[row.role] || row.role}</span>
-    <ObjectChip card={row.target} status={false} />
-    {row.freshness === "outdated" && <StatusMark kind="historical" label="已变化" detail={row.reason || undefined} />}
-    {row.freshness === "unknown" && <StatusMark kind="unknown" label="未核实" detail={row.reason || undefined} />}
-  </li>)}</ul>;
+/** 一条关联：角色、小名片；引用变了标“已变化”，当前引用的说明（如来源页码）直接写出。 */
+function Row({ row, label }: { row: Relation; label: string }) {
+  return <li className="relation-row">
+    <span className="relation-role">{label}</span>
+    <span className="relation-target">
+      <ObjectChip card={row.target} status={false} />
+      {row.freshness === "outdated" && <StatusMark kind="historical" label="已变化" detail={row.reason || undefined} />}
+      {row.freshness === "unknown" && <StatusMark kind="unknown" label="未核实" detail={row.reason || undefined} />}
+      {row.freshness === "current" && row.reason && <small className="relation-note">{row.reason}</small>}
+    </span>
+  </li>;
+}
+
+/** “被用于”按引用者类别合并：每类最近几条，其余只给数量，避免几十个运行把面板撑满。 */
+function UsedBy({ rows }: { rows: Relation[] }) {
+  const kinds = [...new Set(rows.map((row) => row.target.kind))];
+  return <ul className="relation-list">{kinds.map((kind) => {
+    const group = rows.filter((row) => row.target.kind === kind).sort((a, b) => (b.target.updated || "").localeCompare(a.target.updated || ""));
+    const changed = group.filter((row) => row.freshness === "outdated").length;
+    return <li key={kind} className="relation-group">
+      <span className="relation-role">{KIND_LABELS[kind] || kind} {group.length}{changed ? ` · ${changed} 个已变化` : ""}</span>
+      <ul className="relation-list">{group.slice(0, SHOWN).map((row, index) => <li key={row.target.id + index} className="relation-row is-plain"><span className="relation-target"><ObjectChip card={row.target} status={false} /></span></li>)}</ul>
+      {group.length > SHOWN && <small className="relation-note">另有 {group.length - SHOWN} 个</small>}
+    </li>;
+  })}</ul>;
 }
 
 /**
@@ -32,8 +50,8 @@ export function RelationPanel({ kind, id }: { kind: ObjectKind; id: string }) {
   if (relations.error) return <ErrorState title="关联读取失败" description={message(relations.error)} />;
   const { uses, used_by: usedBy, unresolved } = relations.data;
   return <div className="relation-panel">
-    <section aria-label="用到了"><h3>用到了</h3>{uses.length ? <Rows rows={uses} by="role" /> : <InlineEmpty title="没有引用其他对象" />}</section>
-    <section aria-label="被用于"><h3>被用于</h3>{usedBy.length ? <Rows rows={usedBy} by="kind" /> : <InlineEmpty title="还没有被引用" />}</section>
-    {!!unresolved.length && <section aria-label="未建立的关联"><h3>未建立</h3><ul className="relation-list">{unresolved.map((row, index) => <li key={row.role + index}><span className="relation-role">{ROLES[row.role] || row.role}</span><span className="muted">{row.reason}</span></li>)}</ul></section>}
+    <section aria-label="用到了"><h3>用到了</h3>{uses.length ? <ul className="relation-list">{uses.map((row, index) => <Row key={row.role + row.target.id + index} row={row} label={ROLES[row.role] || row.role} />)}</ul> : <InlineEmpty title="没有引用其他对象" />}</section>
+    <section aria-label="被用于"><h3>被用于</h3>{usedBy.length ? <UsedBy rows={usedBy} /> : <InlineEmpty title="还没有被引用" />}</section>
+    {!!unresolved.length && <section aria-label="未建立的关联"><h3>未建立</h3><ul className="relation-list">{unresolved.map((row, index) => <li key={row.role + index} className="relation-row"><span className="relation-role">{ROLES[row.role] || row.role}</span><small className="relation-note">{row.reason}</small></li>)}</ul></section>}
   </div>;
 }

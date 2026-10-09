@@ -23,6 +23,8 @@ const MARKS: Record<string, StatusKind> = {
   reviewed: "saved", published: "saved", submitted: "proposal", approved: "saved", pending: "proposal", installed: "saved", unknown: "unknown",
 };
 export const statusMark = (code: string): StatusKind => MARKS[code] || "draft";
+/** 版本串里的内部后缀换成读得懂的写法，不露出“+engineering”“public-sample”这类内部标识。 */
+export const versionLabel = (version: string) => version.replace(/^public-sample/, "公开样本").replace(/\+engineering$/, "（工程版）");
 
 export function ObjectLink({ card, children, className = "object-link" }: { card: ObjectCard; children?: ReactNode; className?: string }) {
   const search = useSearch({ strict: false }) as { theme?: string };
@@ -53,10 +55,10 @@ export function ObjectLink({ card, children, className = "object-link" }: { card
 
 /** 小名片：图标、名称、版本、状态。列表、关联面板、待办都用它显示引用。 */
 export function ObjectChip({ card, status = true }: { card: ObjectCard; status?: boolean }) {
-  return <span className="object-chip">
+  return <span className="object-chip" title={card.name}>
     <Icon name={ICONS[card.kind] || "object/file"} />
     <ObjectLink card={card}>{card.name}</ObjectLink>
-    {card.version && <span className="muted">{card.version.replace(/\+engineering$/, "（工程版）")}</span>}
+    {card.version && <span className="muted">{versionLabel(card.version)}</span>}
     {status && <StatusMark kind={statusMark(card.status.code)} label={card.status.label} detail={card.status.reason || undefined} />}
   </span>;
 }

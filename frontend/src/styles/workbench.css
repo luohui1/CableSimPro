@@ -541,11 +541,16 @@
 /* 统一管理（§2.3）：侧栏待办数、小名片、关联面板 */
 .sidebar-count { margin-left: auto; min-width: var(--space-6); padding-inline: var(--space-1); border-radius: var(--radius-pill); background: var(--hover); color: var(--text-secondary); font-size: var(--text-note); text-align: center; }
 [data-collapsed] .sidebar-count { display: none; }
-.object-chip { display: inline-flex; align-items: center; gap: var(--space-1) var(--space-2); flex-wrap: wrap; min-width: 0; }
-.object-chip > .icon { flex: none; width: var(--space-4); height: var(--space-4); color: var(--text-secondary); }
-.object-chip .object-link { min-width: 0; overflow-wrap: anywhere; }
-.relation-panel { display: flex; flex-direction: column; gap: var(--space-4); }
+.object-chip { display: inline-flex; align-items: baseline; gap: var(--space-1) var(--space-2); max-width: 100%; min-width: 0; }
+.object-chip > .icon { flex: none; align-self: center; width: var(--space-4); height: var(--space-4); color: var(--text-secondary); }
+.object-chip .object-link { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.object-chip > .muted { flex: none; font-size: var(--text-note); }
+.relation-panel { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
 .relation-panel h3 { font-size: var(--text-note); color: var(--text-secondary); font-weight: var(--weight-strong); margin-bottom: var(--space-1); }
-.relation-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
-.relation-list li { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); }
-.relation-role { flex: none; min-width: calc(var(--space-12) + var(--space-6)); color: var(--text-secondary); font-size: var(--text-note); }
+.relation-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.relation-row { display: grid; grid-template-columns: calc(var(--space-12) + var(--space-4)) minmax(0, 1fr); gap: var(--space-1) var(--space-2); align-items: baseline; }
+.relation-row.is-plain { grid-template-columns: minmax(0, 1fr); }
+.relation-target { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); min-width: 0; }
+.relation-group { display: flex; flex-direction: column; gap: var(--space-1); }
+.relation-role { color: var(--text-secondary); font-size: var(--text-note); }
+.relation-note { color: var(--text-secondary); font-size: var(--text-note); }
