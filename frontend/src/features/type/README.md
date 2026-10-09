@@ -6,13 +6,14 @@
 
 公共路由负责人从本目录 `index.ts` 引入 `createTypeRoutes`，在现有 `rootRoute.addChildren(...)` 中加入 `...createTypeRoutes(rootRoute)`。公共“型号”入口指向 `/types`。父路由保留结构、工况与方法条件、未完成输入文本和首次编辑修订；不可把 TypeProvider 移入会随模块卸载的子页面。
 
-地址为 `/types`、`/types/:wid/:module/:tab`。`theme`、`revision`、`run`、`layer` 进入 URL；历史修订和固定运行保持只读。`preview.tsx` 和 `preview.config.ts` 只供目录内隔离验收，不能作为第二个生产入口注册。
+地址为 `/types`、`/types/:wid/:module/:tab`。`theme`、`revision`、`run`、`layer`、`field` 进入 URL；`field` 为领域字段指针，定位后展开对应属性组并聚焦数值框。历史修订和固定运行保持只读。`preview.tsx` 和 `preview.config.ts` 只供目录内隔离验收，不能作为第二个生产入口注册。
 
 ## 功能范围
 
 - 型号目录 / 新建：每个设计工作区只列一行；已发布的多个版本仍引用同一设计对象。目录支持名称、发布状态筛选、状态分组与选中名片；型号名按钮 / Enter 打开工作台。资源版本的唯一管理入口为 `/resources/cables`。
 - 结构设计：圆形 / 扇形多芯截面、原生剥切、中文层名与跨视图选择；新增层与线芯保留未提交输入并拒绝重叠，复制芯清除实测值。分层表、材料与构造、插件外径 / 用料均支持保存与撤销。
 - 标准核对：真实精确发行运行、逐项判定、条款与输入来源、结构定位、要求批准记录和明确人工门禁。
+- 外径与用料：实体工件的建模长度、分层材料体积与单位长度用料；缺密度、绞入系数或绕包输入时保持缺项，选行定位具体输入。标准核对及实体推导均支持保存运行选择；保存成功后刷新规格书、方案对照与统一关联。内部审核稿读取同一保存工件生成核对表和用料表，缺项阻止正式发布。
 - 要求与标准：要求清单、执行标准、待批准导入三个页签，复用保存的标准工件和独立批准账本；来源版本、条款、定义冲突与结构定位进入属性栏。历史来源不能批准；输入缺失和未覆盖不改成不适用。
 - 电气参数 / 短路容量：正式 `cablesim.type-electrical` 0.3.0 参数契约、公共 MethodParameterFields 编辑、首次修订保存、错误保留、跨模块文本与方法草稿撤销。结果保留原始精度、性质、公式、条款和固定快照；短路曲线只读取插件保存点。R₂₀ 分别保留设计输入、实测和厂家上限；第 2 类导体显示 GB/T 3956-2008 表 2 的标准限值参照，不把标准上限当作实测值。
 - 载流量表：单芯 / 三芯工况编译、方法参数、工况选择、保存冲突和固定快照。多回路明确区分全回路等负荷与逐回路允许电流；等负荷结果须包含所有回路，不用单回路结果替代。历史条件保留原计算口径。填写 ks、kp 或涡流分支时须保存系数来源。
@@ -30,6 +31,7 @@ node node_modules/vite/bin/vite.js build --config src/features/type/preview.conf
 node src/features/type/tests/verify-list.mjs
 node src/features/type/tests/verify-structure.mjs
 node src/features/type/tests/verify-standard.mjs
+node src/features/type/tests/verify-calculations.mjs
 node src/features/type/tests/verify-analysis.mjs
 node src/features/type/tests/verify-rating.mjs
 node src/features/type/tests/verify-versions.mjs

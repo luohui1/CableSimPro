@@ -8,7 +8,7 @@ import { useTypeWorkspace } from './provider';
 
 function Numeric({ spec, integer }: { spec: NumericInput; integer?: boolean }) {
   const state = useTypeWorkspace(), source = fieldSource(state.document!, spec.path);
-  return <NumberField label={spec.label} value={displayed(state.document, spec)} unit={spec.unit} precision={spec.precision} min={spec.min} minExclusive={spec.minExclusive} max={spec.max} required={spec.required} integer={integer}
+  return <NumberField path={spec.path} label={spec.label} value={displayed(state.document, spec)} unit={spec.unit} precision={spec.precision} min={spec.min} minExclusive={spec.minExclusive} max={spec.max} required={spec.required} integer={integer}
     error={state.fieldError?.path === spec.path ? state.fieldError.message : undefined}
     locked={state.locked(spec.path)} disabled={state.busy} draftText={state.draft?.fields[spec.path]?.value} onDraftChange={value => state.setField(spec, value)}
     onCommit={value => state.edit(spec.path, value === null ? null : (value - (spec.offset || 0)) / (spec.scale || 1))} source={sourceKind(source)} sourceDetail={text(source.reference) || undefined} />;
@@ -27,7 +27,7 @@ export function StructurePropertyInputs({ row }: { row: LayerRow }) {
       {conductor && ['stranded_round_compacted', 'segmental', 'sectoral'].includes(form) && <Numeric spec={field('lay_factor', '导体用料绞入系数', '—', 1, 4, false, 1)} />}
       {conductor && form === 'sectoral' && <><Numeric spec={{ ...field('sector_angle_deg', '扇形夹角', '°', 1, 1, true), max: 180 }} />
         <Numeric spec={{ ...field('sector_rotation_deg', '扇形朝向', '°', 1, 1, true, -360), max: 360 }} /></>}
-      {!conductor && form === 'tape' && <><Select label="绕包方式" value={text(at(state.document, root + '/tape_application')) || 'unspecified'}
+      {!conductor && form === 'tape' && <><Select path={root + '/tape_application'} label="绕包方式" value={text(at(state.document, root + '/tape_application')) || 'unspecified'}
         disabled={state.busy || state.locked(root + '/tape_application')} options={[{ value: 'unspecified', label: '未给定' }, { value: 'helical_overlap', label: '单带搭盖绕包' }, { value: 'two_tape_gap', label: '双带间隙绕包' }, { value: 'longitudinal', label: '纵包' }]}
         onChange={value => state.edit(root + '/tape_application', value === 'unspecified' ? null : value)} />
         <Numeric spec={field('nominal_tape_thickness', '单带标称厚度', 'mm', 1000, 3, ['armour', 'metallic_screen'].includes(row.target.role))} />

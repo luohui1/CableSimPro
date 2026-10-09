@@ -8,7 +8,8 @@ const TypeWorkspace = lazyRouteComponent(() => import('./workspace'), 'TypeWorks
 
 export function typeSearch(value: Record<string, unknown>) { return { theme: value.theme === 'dark' ? 'dark' as const : 'light' as const,
   revision: Number.isInteger(Number(value.revision)) && Number(value.revision) >= 1 ? Number(value.revision) : undefined,
-  run: typeof value.run === 'string' && value.run ? value.run : undefined, layer: typeof value.layer === 'string' && value.layer.length <= 200 ? value.layer : undefined }; }
+  run: typeof value.run === 'string' && value.run ? value.run : undefined, layer: typeof value.layer === 'string' && value.layer.length <= 200 ? value.layer : undefined,
+  field: typeof value.field === 'string' && value.field.startsWith('/') && value.field.length <= 800 ? value.field : undefined }; }
 function Navigation({ children, location }: { children: React.ReactNode; location: TypeLocation }) {
   const navigate = useNavigate();
   useEffect(() => { document.documentElement.dataset.theme = location.theme; }, [location.theme]);

@@ -19,7 +19,7 @@ import { StructureActions } from './structure-actions';
 
 export function TypeNumericField({ row }: { row: LayerRow }) {
   const state = useTypeWorkspace(), doc = state.document!, provenance = fieldSource(doc, row.path);
-  return <NumberField label={row.spec.label} value={displayed(doc, row.spec)} unit={row.spec.unit} precision={row.spec.precision} min={0} minExclusive required
+  return <NumberField path={row.path} label={row.spec.label} value={displayed(doc, row.spec)} unit={row.spec.unit} precision={row.spec.precision} min={0} minExclusive required
     error={state.fieldError?.path === row.path ? state.fieldError.message : undefined}
     locked={state.locked(row.path)} disabled={state.busy} draftText={state.draft?.fields[row.path]?.value} onDraftChange={value => state.setField(row.spec, value)}
     onCommit={value => { if (value !== null) state.edit(row.path, value / (row.spec.scale || 1)); }} source={sourceKind(provenance)} sourceDetail={typeof provenance.reference === 'string' ? provenance.reference : undefined} />;

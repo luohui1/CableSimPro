@@ -42,7 +42,7 @@ export function TypeWorkspace() {
   const module = typeModules.find(module => module.id === location.module);
   const activeTab = module?.tabs.some(([id]) => id === location.tab) ? location.tab : module?.tabs[0][0] || location.tab;
   const [cableId, setCableId] = useState(''), [selected, setSelected] = useState<LayerTarget | null>(null), [collapsed, setCollapsed] = useState(false), [info, setInfo] = useState('');
-  const [view, setView] = useState<'section' | 'three'>(location.tab === 'three' ? 'three' : 'section'), [dockMax, setDockMax] = useState(['specification', 'requirements', 'comparison'].includes(location.module));
+  const [view, setView] = useState<'section' | 'three'>(location.tab === 'three' ? 'three' : 'section'), [dockMax, setDockMax] = useState(['specification', 'requirements', 'comparison', 'standard-check'].includes(location.module) || location.tab === 'quantities');
   const [resultProperty, setResultProperty] = useState<{ title: string; groups: PropertyGroup[] } | null>(null);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   // 电气参数、短路容量的方法参数属于“改输入”，放在右侧方法页；数据区只留结果
@@ -91,9 +91,19 @@ export function TypeWorkspace() {
   }
   useEffect(() => { setInfo(''); setResultProperty(null); setCollapsed(false); }, [location.module, location.tab, selected]);
   // 文档型模块（规格书、要求清单、方案对比）默认放大下方面板
-  useEffect(() => { setDockMax(['specification', 'requirements', 'comparison'].includes(location.module)); }, [location.module]);
+  useEffect(() => { setDockMax(['specification', 'requirements', 'comparison', 'standard-check'].includes(location.module) || location.tab === 'quantities'); }, [location.module, location.tab]);
   useEffect(() => { if (location.module === 'structure' && location.layer) { const row = rows.find(row => row.id === location.layer); if (row) { setSelected(row.target); setCollapsed(false); } } }, [location.module, location.layer, cable?.id]);
-  const property = location.module === 'structure' && document && row ? <div className="type-property-wrapper">
+  useEffect(() => {
+    if (location.module !== 'structure' || !location.field || !row) return;
+    const frame = requestAnimationFrame(() => {
+      const node = [...window.document.querySelectorAll<HTMLElement>('.type-property-fields [data-field-path]')].find(node => node.dataset.fieldPath === location.field);
+      if (!node) return;
+      for (let parent = node.parentElement; parent; parent = parent.parentElement) if (parent instanceof HTMLDetailsElement) parent.open = true;
+      node.querySelector<HTMLElement>('input,[role=combobox]')?.focus(); node.scrollIntoView({ block: 'nearest' });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [location.module, location.field, row?.id]);
+  const property = location.module === 'structure' && activeTab !== 'quantities' && document && row ? <div className="type-property-wrapper">
     <PropertyPanel title={row.label} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} groups={[{ label: '结构输入', items: [
       { label: '材料', value: cleanLabel(row.material.label), source: sourceKind(fieldSource(document, row.materialPath)), sourceDetail: text(fieldSource(document, row.materialPath).reference) || undefined },
       ...(row.target.role === 'conductor' ? [{ label: '标称截面', value: nominalNumber(nominalArea(document, row) === null ? null : nominalArea(document, row)! * 1e6), unit: 'mm²', source: sourceKind(fieldSource(document, row.path.replace(/diameter$/, 'nominal_area'))) }] : []),
@@ -102,7 +112,7 @@ export function TypeWorkspace() {
     {!collapsed && <div className="type-property-fields"><TypeNumericField row={row} />
       <div title={cleanLabel(row.material.label)}><Select label="材料引用" value={row.material.id} disabled={state.busy || state.locked(row.materialPath)} options={document.materials.filter(item => item.category === row.material.category).map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={material => state.edit(row.materialPath, material)} /></div>
       {!sourceKind(source) && source.kind !== 'demo' && <span className="type-field-source" title="此尺寸未提供来源；编辑后请补充工程依据。">来源未提供</span>}<StructurePropertyInputs row={row} /></div>}
-  </div> : location.module === 'structure' ? document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} /> : null
+  </div> : location.module === 'structure' && activeTab !== 'quantities' ? document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} /> : null
     : resultProperty ? <PropertyPanel title={resultProperty.title} groups={resultProperty.groups} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} />
       : document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} /> : null;
   // 型号工作窗口：画布 = 电缆截面 / 三维剥切；下方停靠栏 = 当前模块的页签；右侧 = 型号名称 + 所选结构层或结果

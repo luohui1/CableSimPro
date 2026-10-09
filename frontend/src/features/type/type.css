@@ -21,19 +21,19 @@
 .type-layer-input{display:flex;align-items:center;justify-content:flex-end;gap:var(--space-2)}
 .type-layer-input .number-input{min-width:0;width:calc(var(--space-12)*2.1)}
 .type-layer-input .field-value-line{justify-content:flex-end}
-.type-layer-input .number-input input{width:100%;min-width:0;text-align:right}
+.type-layer-input .number-input input{width:0;flex:1;min-width:0;text-align:right}
 .type-layer-input .source-badge{display:none}
 .type-layer-source .source-badge span{display:none}
 .type-root .data-table[aria-label="型号分层"]{table-layout:fixed}
 .type-root .data-table[aria-label="型号分层"] th:first-child{width:var(--space-12)}
 .type-root .data-table[aria-label="型号分层"] th:nth-child(2){width:calc(var(--space-12)*1.75)}
-.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) th:nth-child(4){width:calc(var(--space-12)*2.75)}
+.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) th:nth-child(4){width:calc(var(--space-12)*4)}
 .type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) th:nth-child(5){width:calc(var(--space-12)*1.75)}
 .type-root .data-table[aria-label="型号分层"] td:nth-child(2){white-space:normal;overflow-wrap:anywhere}
 .type-root .data-table[aria-label="型号分层"] td:nth-child(3){white-space:nowrap;overflow-wrap:normal}
 .type-root .data-table[aria-label="型号分层"] th:last-child,.type-root .data-table[aria-label="型号分层"] td:last-child{width:calc(var(--space-12)*1.25);white-space:nowrap}
 .type-root .data-table[aria-label="型号分层"] th,.type-root .data-table[aria-label="型号分层"] td{padding-inline:var(--space-2)}
-.type-root .data-table[aria-label="型号分层"] .type-layer-input .number-input{width:calc(var(--space-12)*1.75)}
+.type-root .data-table[aria-label="型号分层"] .type-layer-input .number-input{width:calc(var(--space-12)*2.75)}
 .type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) th:nth-child(5) .unit{display:block}
 .type-root .data-table[aria-label="型号分层"] .type-readonly-value .source-badge span{display:none}
 .type-property-fields{display:grid;gap:var(--space-4);padding:var(--space-4);border-top:1px solid var(--line)}
@@ -46,6 +46,23 @@
 .type-run-control{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap;min-width:0}
 .type-form-label{display:grid;gap:var(--space-2)}
 .type-result-toolbar>.select-field{margin-left:auto}
+.type-result-toolbar>.select-field{min-width:0;max-width:100%}
+.type-result-toolbar .select-trigger{max-width:calc(var(--space-12)*7)}
+.type-result-toolbar .select-trigger>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.type-requirement{display:grid;gap:var(--space-1);white-space:normal}
+.type-requirement small{font-size:var(--text-note);color:var(--text-secondary)}
+.type-root .data-table[aria-label="标准核对"] td:first-child{min-width:calc(var(--space-12)*5)}
+.type-root .data-table[aria-label="外径与用料"] td:first-child{white-space:nowrap}
+.type-root .data-table[aria-label="外径与用料"]{table-layout:fixed;width:100%;min-width:0}
+.type-root .data-table[aria-label="外径与用料"] th{white-space:normal}
+.type-root .data-table[aria-label="外径与用料"] th .unit{display:block}
+.type-root .data-table[aria-label="外径与用料"] th:first-child{width:22%}
+.type-root .data-table[aria-label="外径与用料"] th:nth-child(2){width:16%}
+.type-root .data-table[aria-label="外径与用料"] th:nth-child(3){width:18%}
+.type-root .data-table[aria-label="外径与用料"] th:nth-child(4){width:20%}
+.type-root .data-table[aria-label="外径与用料"] th:last-child{width:24%}
+.type-root .data-table[aria-label="外径与用料"] th,.type-root .data-table[aria-label="外径与用料"] td{padding-inline:var(--space-2)}
+@media(max-width:1500px){.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) th:nth-child(5),.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) td:nth-child(5){display:none}}
 .type-root .dialog-content .table-scroll{max-height:calc(var(--space-12)*5);flex-shrink:0}
 .type-meta{padding:var(--space-3) var(--space-4);font-size:var(--text-note);color:var(--text-secondary)}
 .type-property-wrapper{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--panel);overflow:auto}

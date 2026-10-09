@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { CommandAction } from './command-slot';
 import { api, ApiError, array, message, numeric, optionalRecord, record, responseData, text } from '@/api/client';
 import { DataTable } from '@/components/data-table';
-import { EmptyState, ErrorState, LoadingState, StaleBanner } from '@/components/states';
+import { InlineEmpty, ErrorState, LoadingState, StaleBanner } from '@/components/states';
 import { SourceBadge } from '@/components/source-badge';
 import { StatusMark, type StatusKind } from '@/components/status-mark';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { useTypeNavigation, typePath } from './navigation';
 import { artifactRows, chooseEvidence, currentEvidence, methodLabel, useTypeEvidence } from './evidence';
 import { useTypeInspector } from './inspector';
 import { TypeRunControl, methodForArtifact } from './run-control';
+import { SavedRunPicker } from './saved-run-picker';
 
 const verdicts: Record<string, { kind: StatusKind; label: string }> = { passed: { kind: 'satisfied', label: '满足' }, failed: { kind: 'unsatisfied', label: '不满足' }, missing: { kind: 'unknown', label: '待补数据' }, uncovered: { kind: 'unknown', label: '未覆盖' } };
 type StandardRow = Record<string, unknown> & { id: string };
@@ -65,15 +66,14 @@ export function TypeStandardCheck() {
   const bodyState = running || evidence.isPending ? 'loading' : error || evidence.error ? 'error' : !saved ? 'empty' : current ? 'success' : 'historical';
   return <div className="type-page" data-type-page="standard-check-results" data-type-state={bodyState}>
     <div className="type-result-toolbar"><CommandAction><TypeRunControl channel="standard-check" label="执行标准核对" definition={definition} onBusy={setRunning} /></CommandAction><Button size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, 'requirements', 'list', navigation.location.theme))}>要求与批准记录</Button>
-      {saved && <Select label="要求状态" value={filter} onChange={setFilter} options={[{ value: 'all', label: '全部要求' }, ...Object.entries(verdicts).map(([value, item]) => ({ value, label: item.label }))]} />}</div>
-    {bodyState === 'loading' ? <LoadingState title="正在读取或核对型号要求" /> : bodyState === 'error' ? <ErrorState title="标准核对不可用" description={error || message(evidence.error)} action={<Button onClick={() => void evidence.refetch()}>重新读取</Button>} /> : !saved ? <EmptyState art="standard-check" title="尚无标准核对结果" description="保存型号输入后，执行已安装产品标准插件的覆盖核对。" /> : <>
+      {saved && <><SavedRunPicker schema="cablesim.standard-check/1" /><Select label="要求状态" value={filter} onChange={setFilter} options={[{ value: 'all', label: '全部要求' }, ...Object.entries(verdicts).map(([value, item]) => ({ value, label: item.label }))]} /></>}</div>
+    {bodyState === 'loading' ? <LoadingState title="正在读取或核对型号要求" /> : bodyState === 'error' ? <ErrorState title="标准核对不可用" description={error || message(evidence.error)} action={<Button onClick={() => void evidence.refetch()}>重新读取</Button>} /> : !saved ? <InlineEmpty title="尚无标准核对结果，使用命令栏执行核对。" /> : <>
       {!current && <StaleBanner description="输入或方法已变化；保留原要求与判定，人工批准保持关闭。" />}
       <div className="type-result-summary"><strong>{!rows.length ? '暂无适用要求' : numeric(counts.failed) ? `${numeric(counts.failed)} 项不满足` : numeric(counts.missing) || numeric(counts.uncovered) ? '核对尚未完整覆盖' : '声明范围内要求满足'}</strong>
         <span>{formatNumber(numeric(counts.missing))} 项待补数据</span><span>{formatNumber(numeric(counts.uncovered))} 项未覆盖</span><SourceBadge kind="standard" detail={methodLabel(saved.run) + '；判定直接来自保存的标准工件'} /></div>
       <DataTable label="标准核对" selectedId={selected} onSelect={choose} rowLabel={row => text(row.title)} showGroups={false} groups={[{ id: 'requirements', label: '要求', rows: rows.filter(row => filter === 'all' || row.verdict === filter) }]} columns={[
-        { id: 'title', label: '要求', render: row => text(row.title) }, { id: 'limit', label: '标准值', numeric: true, render: requirement }, { id: 'actual', label: '实际值', numeric: true, render: row => resultValue(row.actual, row) },
+        { id: 'title', label: '要求', wrap: true, render: row => <div className="type-requirement"><strong>{text(row.title)} · {requirement(row)}</strong><small>{[text(row.standard), text(row.clause)].filter(Boolean).join(' · ') || '标准依据未覆盖'}</small>{row.verdict !== 'passed' && <small>{displayText(text(row.reason)) || '判定原因未提供'}</small>}</div> }, { id: 'actual', label: '实际值', numeric: true, render: row => resultValue(row.actual, row) },
         { id: 'margin', label: '余量', numeric: true, render: row => resultValue(row.margin, row) }, { id: 'verdict', label: '判定', render: row => <StatusMark {...verdicts[text(row.verdict)]} /> },
-        { id: 'reason', label: '原因', wrap: true, render: row => displayText(text(row.reason)) || '—' }, { id: 'source', label: '依据', render: row => <SourceBadge kind="standard" detail={[text(row.standard), text(row.clause), numeric(row.printed_page) === null ? '页码未核验' : '正文第 ' + numeric(row.printed_page) + ' 页'].join(' · ')} /> },
       ]} />
     </>}
   </div>;

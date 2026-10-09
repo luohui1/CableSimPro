@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-export type TypeLocation = { wid?: string; module: string; tab: string; revision?: number; run?: string; layer?: string; theme: 'light' | 'dark' };
+export type TypeLocation = { wid?: string; module: string; tab: string; revision?: number; run?: string; layer?: string; field?: string; theme: 'light' | 'dark' };
 export type TypeNavigation = { location: TypeLocation; navigate: (path: string) => void; onTheme: () => void };
 export const TypeNavigationContext = createContext<TypeNavigation | null>(null);
 export function useTypeNavigation() { const value = useContext(TypeNavigationContext); if (!value) throw new Error('型号路由上下文未挂载'); return value; }

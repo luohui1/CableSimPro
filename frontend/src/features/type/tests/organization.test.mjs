@@ -9,7 +9,29 @@ const server = await createServer({ configFile: false, root: frontend, server: {
 after(() => server.close());
 const { designSummary, versionLabel, publicationStatus, approvedStandardNames } = await server.ssrLoadModule('/src/features/type/design-summary.ts');
 const { commandResultLabel, latestModuleRun, moduleResultStatus, moduleEvidenceState, methodLabel } = await server.ssrLoadModule('/src/features/type/evidence.ts');
+const { quantityLayer, quantityMissingInputs } = await server.ssrLoadModule('/src/features/type/quantity-inputs.ts');
+const { pointer } = await server.ssrLoadModule('/src/lib/domain-fields.ts');
 const document = { name: '测试型号', provenance: {}, materials: [{ id:'cu',category:'conductor' },{ id:'xlpe',category:'insulation' }], cable_types: [{ id:'cable', construction:'single_core', rating:{u0:8700,u:15000}, cores:[{id:'core',conductor:{diameter:.02,nominal_area:300e-6,material:'cu',form:'round'},layers:[{role:'insulation',thickness:.003,material:'xlpe'}]}],common_layers:[] }] };
+test('Missing quantities resolve the saved core and material IDs, including escaped pointers; never fill inputs', () => {
+  const row = { target:{scope:'core',coreId:'core/2',role:'conductor'},path:pointer('cable_types','cable','cores','core/2','conductor','diameter'),material:{id:'material/cu'} };
+  const other = { ...row,target:{...row.target,coreId:'core/1'} };
+  assert.equal(quantityLayer([other,row],{source_target:{scope:'core',core_id:'core/2',role:'conductor'}}),row);
+  const before=structuredClone(document);
+  assert.deepEqual(quantityMissingInputs(document,row,['材料密度','导体绞入系数']),[
+    {label:'材料密度',path:'/materials/material~1cu/density'},
+    {label:'导体绞入系数',path:'/cable_types/cable/cores/core~12/conductor/lay_factor'},
+  ]);
+  assert.deepEqual(document,before);
+  assert.equal(quantityLayer([row],{source_target:{scope:'core',core_id:'missing',role:'conductor'}}),undefined);
+});
+test('Unknown tape material quantity locates absent application, width and count, preserving declared thickness', () => {
+  const next=structuredClone(document),layer={role:'metallic_screen',form:'tape',thickness:.0002,nominal_tape_thickness:.0001,material:'cu'};
+  next.cable_types[0].cores[0].layers.push(layer);
+  const row={path:'/cable_types/cable/cores/core/layers/metallic_screen/thickness',material:{id:'cu'}};
+  const fields=quantityMissingInputs(next,row,['金属屏蔽构造']);
+  assert.deepEqual(fields.map(f=>f.label),['绕包方式','带宽','带材层数']);
+  assert.ok(fields[0].path.endsWith('/tape_application'));assert.equal(layer.nominal_tape_thickness,.0001);
+});
 test('SI display agrees with hand conversion: 8700/15000 V, 300e-6 m², 20+2×3 mm envelope', () => {
   const card = designSummary(document, {});
   assert.equal(card.voltage,'8.7/15 kV'); assert.equal(card.area,'1×300 mm²'); assert.ok(Math.abs(card.diameter-26)<1e-9); assert.equal(card.layers,2);

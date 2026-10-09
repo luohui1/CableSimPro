@@ -24,7 +24,7 @@ export async function methodForArtifact(artifact: string, signal?: AbortSignal, 
   }
   throw new ApiError(501, '尚未安装支持当前平台与本模块的计算方法');
 }
-export function TypeRunControl({ channel, label, definition, onBusy, unavailable, primary = true }: { channel: string; label: string; definition: () => Promise<Definition>; onBusy?: (busy: boolean) => void; unavailable?: string; primary?: boolean }) {
+export function TypeRunControl({ channel, label, definition, onBusy, unavailable, primary = true, locateIssue }: { channel: string; label: string; definition: () => Promise<Definition>; onBusy?: (busy: boolean) => void; unavailable?: string; primary?: boolean; locateIssue?: (message: string) => React.ReactNode }) {
   const state = useTypeWorkspace(), queries = useQueryClient();
   const [prepared, setPrepared] = useState<Prepared | null>(null), [open, setOpen] = useState(false), [ack, setAck] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const pending = useRef(false), attempt = useRef<Attempt | null>(null), mounted = useRef(true);
@@ -43,6 +43,8 @@ export function TypeRunControl({ channel, label, definition, onBusy, unavailable
     if (!['succeeded', 'partial'].includes(run.status)) throw new ApiError(422, text(optionalRecord(run.error).message) || '本次运行未取得有效结果');
     if (run.integrity !== 'verified') throw new ApiError(409, '本次运行完整性未通过，未采用结果');
     await queries.invalidateQueries({ queryKey: ['type-studies', state.workspace!.id] });
+    await Promise.all(['type-specification', 'type-comparison'].map(key => queries.invalidateQueries({ queryKey: [key, state.workspace!.id] })));
+    await queries.invalidateQueries({ queryKey: ['object-relations', 'type', state.workspace!.id] });
     sessionStorage.removeItem(key); attempt.current = null; if (mounted.current) setOpen(false);
   }
   async function execute(retry = false) {
@@ -81,7 +83,7 @@ export function TypeRunControl({ channel, label, definition, onBusy, unavailable
     {reason && <span className="muted">{reason}</span>}{error && <p className="field-error" role="alert">{error}</p>}
     <Dialog open={open} onOpenChange={value => { if (!busy) setOpen(value); }} title={label + ' · 预检'} description={prepared?.preflight.ready ? '保存输入已通过预检，确认范围后运行。' : '当前输入未通过预检，修正后重新提交。'}
       actions={<Button variant="primary" loading={busy} disabled={!ack || !prepared?.preflight.ready || state.dirty || state.workspace?.revision !== prepared?.revision} onClick={() => void execute()}>确认并运行</Button>}>
-      <div className="type-create-fields">{prepared?.preflight.cases.filter(item => item.status !== 'succeeded').map(item => <p key={item.case_id} className="field-error">{text(optionalRecord(item.error).message) || item.status}</p>)}
+      <div className="type-create-fields">{prepared?.preflight.cases.filter(item => item.status !== 'succeeded').map(item => { const reason = text(optionalRecord(item.error).message) || item.status; return <div key={item.case_id}><p className="field-error">{reason}</p>{locateIssue?.(reason)}</div>; })}
         {prepared && <p className="type-meta" title={[prepared.study.definition.method.plugin_id, prepared.study.definition.method.release_digest].join(' · ')}>{methodLabel({ snapshot: { definition: prepared.study.definition } })}</p>}
         <ul>{prepared?.preflight.limitations.map(item => <li key={item}>{item}</li>)}</ul>{prepared?.preflight.ready && <label><input type="checkbox" checked={ack} onChange={event => setAck(event.target.checked)} /> 已核对输入来源与方法适用范围</label>}</div>
     </Dialog>

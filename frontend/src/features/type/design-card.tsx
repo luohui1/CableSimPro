@@ -1,4 +1,6 @@
 import { PropertyPanel } from '@/components/property-panel';
+import { RelationPanel } from '@/components/relation-panel';
+import { text } from '@/api/client';
 import { StatusMark } from '@/components/status-mark';
 import { formatNumber } from '@/lib/format';
 import type { DomainDocument } from '@/lib/domain-fields';
@@ -14,6 +16,5 @@ export function DesignCard({ document, raw, onClose }: { document: DomainDocumen
       { label: '绘图外径', value: formatNumber(card.diameter, 1), unit: 'mm', source: card.diameter === null ? undefined : 'derived', sourceDetail: '同一份参数截面的绘图包络；原始实体外径见外径与用料。' },
       { label: '层数', value: card.layers ?? '未提供' }, { label: '最近修订时间', value: card.updated }, { label: '所属', value: '独立型号设计' },
     ] },
-    { label: '用到了', items: [{ label: '型号版本', value: card.originName ? <a className="object-link" href={`/resources/cables?selected=${encodeURIComponent(card.originId)}`} title={card.sourceDetail}>{card.originName} · {card.version}</a> : '未提供' }] },
-  ]} /></div>;
+  ]} />{text(raw.id) && <RelationPanel kind="type" id={text(raw.id)} />}</div>;
 }
