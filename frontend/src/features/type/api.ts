@@ -1,11 +1,11 @@
-import { api, ApiError, array, numeric, optionalRecord, record, responseData, text } from '@/api/client';
+import { api, ApiError, array, message, numeric, optionalRecord, record, responseData, text } from '@/api/client';
 import { typeIndex, studyRuns } from '@/api/research';
 import type { components } from '@/api/generated/schema';
 import type { DomainDocument } from '@/lib/domain-fields';
-import { publicationStatus, type DesignStatus } from './design-summary';
+import { approvedStandardNames, publicationStatus, type DesignStatus } from './design-summary';
 
 export type Workspace = { id: string; revision: number; document: DomainDocument; raw: Record<string, unknown> };
-export type TypeRow = { id: string; name: string; version: string; updated: string; status: DesignStatus; raw: Record<string, unknown>; document: DomainDocument };
+export type TypeRow = { id: string; name: string; version: string; updated: string; status: DesignStatus; raw: Record<string, unknown>; document: DomainDocument; standards: string[]; standardsReason: string };
 export type ModelChoice = { id: string; name: string; version: string; digest: string; workspace?: string; raw: Record<string, unknown> };
 
 export function projectWorkspace(value: unknown): Workspace {
@@ -46,9 +46,24 @@ export async function listTypes(signal?: AbortSignal): Promise<TypeRow[]> {
   for (let start = 0; start < ids.length; start += 4) rows.push(...await Promise.all(ids.slice(start, start + 4).map(async id => {
     if (!id) throw new ApiError(502, '型号列表缺少身份');
     const workspace = await loadWorkspace(id, signal), raw = workspace.raw, origin = optionalRecord(raw.type_origin_reference);
-    return { id, name: workspace.document.name, version: text(origin.version), updated: text(raw.updated_at), status: publicationStatus(raw), raw, document: workspace.document };
+    const standards = await executionStandards(workspace, signal);
+    return { id, name: workspace.document.name, version: text(origin.version), updated: text(raw.updated_at), status: publicationStatus(raw), raw, document: workspace.document, ...standards };
   })));
   return rows;
+}
+async function executionStandards(workspace: Workspace, signal?: AbortSignal) {
+  try {
+    const source = (await typeEvidence(workspace.id, signal)).find(({ run }) => run.integrity === 'verified' && run.status === 'succeeded'
+      && run.freshness === 'current' && optionalRecord(run.snapshot).workspace_revision === workspace.revision && runArtifact(run, 'cablesim.standard-check/1'));
+    if (!source) return { standards: [], standardsReason: '在要求与标准里添加' };
+    const runId = text(source.run.id);
+    const ledger = record(await responseData(api.GET('/api/design/type-workspaces/{wid}/requirements', { params: { path: { wid: workspace.id }, query: { run_id: runId } }, signal })), '要求目录');
+    const standards = approvedStandardNames(ledger, runId);
+    return { standards, standardsReason: standards.length ? '当前保存运行的已批准执行标准；条款与批准记录见要求与标准。' : '在要求与标准里添加并批准' };
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return { standards: [], standardsReason: '在要求与标准里添加；要求目录未能读取：' + message(error) };
+  }
 }
 export async function modelChoices(signal?: AbortSignal): Promise<ModelChoice[]> {
   const [system, published] = await Promise.all([

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { TypeCommandSlot } from './command-slot';
-import { moduleResultStatus, useTypeEvidence } from './evidence';
+import { commandResultLabel, latestModuleRun, moduleResultStatus, useTypeEvidence } from './evidence';
+import { nominalNumber } from './design-summary';
 import { message, optionalRecord, text } from '@/api/client';
 import { methodCatalog } from '@/api/research';
 import { AppShell } from '@/components/app-shell';
@@ -80,7 +81,7 @@ export function TypeWorkspace() {
     if (evidence.error || methods.error) return { kind: 'error' as const, label: '读取失败', reason: message(evidence.error || methods.error) };
     return moduleResultStatus(evidence.data, id, state.workspace?.revision, state.dirty, methods.data);
   }
-  function resultMark(id: string) { const value = resultStatus(id); return <Tooltip content={value.reason}><span className="type-module-status" title={value.reason}><StatusMark kind={value.kind} label={value.label} /></span></Tooltip>; }
+  function resultMark(id: string) { const value = resultStatus(id); return <Tooltip content={value.reason}><span className="type-module-status" title={value.reason} aria-label={value.label}>{value.kind === 'unknown' ? <span className="type-module-idle" aria-hidden="true" /> : <StatusMark kind={value.kind} label={value.label} />}</span></Tooltip>; }
   function choose(target: LayerTarget | null) { setSelected(target); if (target) setCollapsed(false); }
   const go = (module: string, tab: string) => navigate(typePath(location.wid!, module, tab, location.theme) + (location.revision ? '&revision=' + location.revision : '') + (location.run && module === location.module ? '&run=' + encodeURIComponent(location.run) : ''));
   function shortcut(event: KeyboardEvent<HTMLDivElement>) {
@@ -95,7 +96,7 @@ export function TypeWorkspace() {
   const property = location.module === 'structure' && document && row ? <div className="type-property-wrapper">
     <PropertyPanel title={row.label} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} groups={[{ label: '结构输入', items: [
       { label: '材料', value: cleanLabel(row.material.label), source: sourceKind(fieldSource(document, row.materialPath)), sourceDetail: text(fieldSource(document, row.materialPath).reference) || undefined },
-      ...(row.target.role === 'conductor' ? [{ label: '标称截面', value: formatNumber(nominalArea(document, row) === null ? null : nominalArea(document, row)! * 1e6, 1), unit: 'mm²', source: sourceKind(fieldSource(document, row.path.replace(/diameter$/, 'nominal_area'))) }] : []),
+      ...(row.target.role === 'conductor' ? [{ label: '标称截面', value: nominalNumber(nominalArea(document, row) === null ? null : nominalArea(document, row)! * 1e6), unit: 'mm²', source: sourceKind(fieldSource(document, row.path.replace(/diameter$/, 'nominal_area'))) }] : []),
       { label: '绘图外径', value: formatNumber(row.outerM === null ? null : row.outerM * 2000, 2), unit: 'mm', source: row.outerM === null ? undefined : 'derived', sourceDetail: '参数截面尺寸，原始实体结果见外径与用料页签' },
     ] }]} />
     {!collapsed && <div className="type-property-fields"><TypeNumericField row={row} />
@@ -135,7 +136,7 @@ export function TypeWorkspace() {
       <span className="command-caption">交付</span>
       <Button size="compact" variant="ghost" disabled={state.dirty} onClick={() => go('specification', specification.tabs[0][0])}><Icon name="result/report" />规格书</Button>
     </div>}
-    <span className="command-state" title={resultStatus(location.module).reason}>{resultStatus(location.module).reason}</span>
+    <span className="command-state" title={resultStatus(location.module).reason}>{commandResultLabel(resultStatus(location.module), latestModuleRun(evidence.data, location.module, methods.data), state.dirty)}</span>
   </div>;
   const inspector = methodModule && inspectorView === 'method' ? <div className="type-property-wrapper">
     <div className="inspector-switch" role="tablist" aria-label="属性分页">
@@ -157,7 +158,7 @@ export function TypeWorkspace() {
   </div>;
   return <TypeCommandSlot.Provider value={slot}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<StatusMark kind={status} label={(location.run ? '运行快照 · 只读' : statusLabel) + (demo ? ' · 演示' : '')} detail={state.error || (demo ? '型号基准含演示来源，请核对各字段工程依据。' : state.readOnly ? '所选输入快照只读；基准版本与来源见型号名片。' : state.dirty ? '保存后更新型号输入；原运行结果保留并标为过期。' : '当前编辑已保存；各模块保存结果的状态见型号浏览器。')} />}
     activeNavigation="型号" theme={location.theme} onTheme={onTheme} onUnavailable={name => setInfo(name + '入口尚未接入')}
-    actions={<Button variant="primary" loading={state.busy} disabled={!state.dirty || state.readOnly || !state.workspace} onClick={() => void state.save()}><Icon name="action/save" />保存</Button>}
+    actions={<Button variant={state.dirty && !state.readOnly ? 'primary' : 'default'} loading={state.busy} disabled={!state.dirty || state.readOnly || !state.workspace} onClick={() => void state.save()}><Icon name="action/save" />保存</Button>}
     property={inspector}>
     {commandBar}
     <div className="workbench-frame">{explorer}

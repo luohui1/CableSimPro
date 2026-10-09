@@ -43,7 +43,7 @@ export function TypeListPage() {
           { id: 'name', label: '型号', wrap: true, render: row => <button className="object-link" type="button" onClick={event => { event.stopPropagation(); navigate(typePath(row.id, 'structure', 'section', location.theme)); }}>{cleanLabel(row.name)}</button> },
           { id: 'voltage', label: '电压', render: row => row.card.voltage },
           { id: 'area', label: '截面', render: row => row.card.area },
-          { id: 'standard', label: '执行标准', wrap: true, render: row => <span title="仅显示设计声明的执行标准；来源中的参考标准不作为执行声明。">{row.card.standards}</span> },
+          { id: 'standard', label: '执行标准', wrap: true, render: row => <span title={row.standardsReason}>{row.standards.length ? row.standards.join('、') : '未声明'}</span> },
           { id: 'version', label: '基准版本', render: row => versionLabel(row.version) },
           { id: 'status', label: '状态', render: row => <StatusMark kind={row.status === 'published' ? 'locked' : row.status === 'review' ? 'proposal' : 'draft'} label={publicationLabels[row.status]} /> },
         ]} selectedId={picked} onSelect={row => setPicked(row.id)} showGroups={groupBy === 'status'} groups={groupBy === 'status' ? Object.entries(publicationLabels).map(([status, label]) => ({ id: status, label, rows: rows.filter(row => row.status === status) })).filter(group => group.rows.length) : [{ id: 'all', label: '型号设计', rows }]} rowLabel={row => row.name} />}

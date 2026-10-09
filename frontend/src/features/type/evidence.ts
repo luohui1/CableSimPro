@@ -8,7 +8,8 @@ import type { StatusKind } from '@/components/status-mark';
 
 export function useTypeEvidence() {
   const state = useTypeWorkspace();
-  return useQuery({ queryKey: ['type-evidence', state.workspace?.id], queryFn: ({ signal }) => typeEvidence(state.workspace!.id, signal), enabled: !!state.workspace });
+  return useQuery({ queryKey: ['type-evidence', state.workspace?.id], queryFn: ({ signal }) => typeEvidence(state.workspace!.id, signal), enabled: !!state.workspace,
+    refetchInterval: query => query.state.data?.some(item => pendingRun(item.run)) ? 2000 : false });
 }
 export function containsArtifact(run: Record<string, unknown>, schema: string) {
   const cases = optionalRecord(run.output).cases;
@@ -50,9 +51,42 @@ export function moduleEvidenceState(groups: Awaited<ReturnType<typeof typeEviden
 }
 
 const MODULE_ARTIFACTS: Record<string, string> = { structure: 'x-cablesim.cad-model', electrical: 'x-cablesim.type-electrical', 'short-circuit': 'x-cablesim.type-short-circuit', requirements: 'x-cablesim.standard-check', 'standard-check': 'x-cablesim.standard-check', 'rating-table': 'x-cablesim.iec60287-trace' };
+function pendingRun(run: Record<string, unknown>) { return ['accepted', 'running', 'validating', 'queued'].includes(text(run.status)); }
+export function latestModuleRun(groups: Awaited<ReturnType<typeof typeEvidence>> | undefined, module: string, methods: Record<string, unknown>[] | undefined) {
+  return groups?.filter(({ run, study }) => {
+    const definition = optionalRecord(optionalRecord(run.snapshot).definition), pin = optionalRecord(definition.method || optionalRecord(study.definition).method);
+    if (module === 'rating-table') {
+      const cases = optionalRecord(definition.driver).cases;
+      return Array.isArray(cases) && cases.length > 0 && cases.every(c => optionalRecord(optionalRecord(c).metadata).kind === 'type-rating-table');
+    }
+    const rule = MODULE_EVIDENCE[module]; if (!rule || rule.capability && pin.capability !== rule.capability) return false;
+    if (containsArtifact(run, rule.schema)) return true;
+    return methods?.some(method => optionalRecord(method.method).plugin_id === pin.plugin_id && Array.isArray(method.capabilities)
+      && method.capabilities.some(c => optionalRecord(c).id === pin.capability && Array.isArray(optionalRecord(c).artifacts)
+        && (optionalRecord(c).artifacts as unknown[]).some(a => optionalRecord(a).type === MODULE_ARTIFACTS[module])));
+  }).sort((a, b) => text(b.run.created).localeCompare(text(a.run.created)))[0]?.run;
+}
+export function commandResultLabel(value: { kind: StatusKind; label: string }, run?: Record<string, unknown>, dirty = false) {
+  if (dirty) return '有未保存修改';
+  if (value.kind === 'unknown') return value.label === '未运行' ? '尚未运行' : value.label;
+  if (value.kind === 'historical') { const version = text(optionalRecord(optionalRecord(optionalRecord(run?.snapshot).definition).method).version); return '已过期' + (version ? ' · 方法 ' + versionLabel(version) : ''); }
+  if (value.kind === 'current' && run?.integrity === 'verified' && ['succeeded', 'partial'].includes(text(run.status))) {
+    const date = new Date(text(run.created));
+    if (Number.isFinite(date.getTime())) {
+      const pad = (n: number) => String(n).padStart(2, '0');
+      return `最近运行 ${pad(date.getMonth() + 1)}/${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())} · ${run.status === 'partial' ? '部分成功' : '成功'}`;
+    }
+  }
+  return value.label;
+}
 export function moduleResultStatus(groups: Awaited<ReturnType<typeof typeEvidence>> | undefined, module: string, revision: number | undefined, dirty: boolean, methods: Record<string, unknown>[] | undefined): { kind: StatusKind; label: string; reason: string } {
   if (module === 'comparison') return { kind: 'unknown', label: '未接入', reason: '方案对比引用各方案的保存结果，尚无独立保存的对照工件状态接口。' };
   if (!groups || !methods) return { kind: 'unknown', label: '未接入', reason: '结果或方法目录尚未读取；当前不能判断本模块结果状态。' };
+  const latest = latestModuleRun(groups, module, methods);
+  if (latest && optionalRecord(latest.snapshot).workspace_revision === revision) {
+    if (pendingRun(latest)) return { kind: 'running', label: '运行中', reason: '正在使用保存输入运行；完成后更新本模块结果。' };
+    if (['failed', 'cancelled', 'stopped'].includes(text(latest.status))) return { kind: 'error', label: '失败', reason: text(optionalRecord(latest.error).message) || '最近运行未取得有效结果，请检查方法与输入后重试。' };
+  }
   let result = moduleEvidenceState(groups, module, revision, dirty);
   if (module === 'rating-table') {
     const entries = groups.filter(item => {

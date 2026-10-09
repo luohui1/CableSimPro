@@ -12,15 +12,26 @@ export function publicationStatus(raw: Record<string, unknown>): DesignStatus {
 }
 export const publicationLabels = { draft: '草稿', review: '审核中', published: '已发布' } as const;
 export function localTime(value: string) { const date = new Date(value); return value && Number.isFinite(date.getTime()) ? date.toLocaleString('zh-CN', { hour12: false }) : '未提供'; }
+/** Rated/nominal values retain meaningful decimals without padding them with zeroes. */
+export function nominalNumber(value: number | null, precision = 2) { return formatNumber(value, precision).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, ''); }
+export function approvedStandardNames(ledger: Record<string, unknown>, runId: string): string[] {
+  if (ledger.run_id !== runId || ledger.source_current !== true || !Array.isArray(ledger.items)) return [];
+  return [...new Set(ledger.items.flatMap(value => {
+    const item = optionalRecord(value), approval = optionalRecord(item.approval), definition = optionalRecord(item.definition);
+    const name = text(definition.standard).trim();
+    return item.state === 'approved' && item.bindable === true && text(approval.id) && text(approval.digest)
+      && text(optionalRecord(approval.definition).standard) === name && name ? [name] : [];
+  }))];
+}
 /** Read declared SI values only; a reference standard is not an execution declaration. */
 export function designSummary(document: DomainDocument, raw: Record<string, unknown>) {
   const origin = optionalRecord(raw.type_origin_reference), cable = document.cable_types[0];
   const ratings = document.cable_types.map(c => [c.rating.u0, c.rating.u].every(v => typeof v === 'number' && Number.isFinite(v) && v > 0)
-    ? `${formatNumber(c.rating.u0! / 1000, 1)}/${formatNumber(c.rating.u! / 1000, 1)} kV` : '未提供');
+    ? `${nominalNumber(c.rating.u0! / 1000)}/${nominalNumber(c.rating.u! / 1000)} kV` : '未提供');
   const sections = document.cable_types.map(c => {
     const areas = c.cores.map(core => numeric(core.conductor.nominal_area));
     return areas.length && areas.every(v => v !== null && v > 0) ? areas.every(v => v === areas[0])
-      ? `${areas.length}×${formatNumber(areas[0]! * 1e6, 1)} mm²` : areas.map(v => formatNumber(v! * 1e6, 1)).join(' + ') + ' mm²' : '未提供';
+      ? `${areas.length}×${nominalNumber(areas[0]! * 1e6)} mm²` : areas.map(v => nominalNumber(v! * 1e6)).join(' + ') + ' mm²' : '未提供';
   });
   const declared = raw.declared_standards;
   const standards = Array.isArray(declared) ? declared.map(v => typeof v === 'string' ? v : text(optionalRecord(v).name)).filter(Boolean).join('、') : '';

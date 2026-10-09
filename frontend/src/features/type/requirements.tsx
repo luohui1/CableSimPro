@@ -46,7 +46,7 @@ export function TypeRequirements({ tab }: { tab: string }) {
     const revision = numeric(ledger.data.revision); if (revision === null) throw new Error('要求目录缺少审批修订');
     request.current ||= { request_id: crypto.randomUUID(), run_id: runId, row_ids: [...selected], expected_workspace_revision: state.workspace!.revision, expected_requirements_revision: revision, reviewer: reviewer.trim(), human_confirmed: true };
     return responseData(api.POST('/api/design/type-workspaces/{wid}/requirements/reviews', { params: { path: { wid: state.workspace!.id } }, body: request.current }));
-  }, onSuccess: async () => { request.current = null; setSelected(new Set()); setAck(false); setOpen(false); await ledger.refetch(); await queries.invalidateQueries({ queryKey: ['type-specification', state.workspace!.id] }); } });
+  }, onSuccess: async () => { request.current = null; setSelected(new Set()); setAck(false); setOpen(false); await ledger.refetch(); await queries.invalidateQueries({ queryKey: ['type-specification', state.workspace!.id] }); await queries.invalidateQueries({ queryKey: ['type-list'] }); } });
   function choose(row: Row) {
     setPicked(row.id); const definition = optionalRecord(row.definition), target = optionalRecord(definition.target), approval = optionalRecord(row.approval), method = optionalRecord(definition.method);
     const layer = target.scope === 'core' ? text(target.core_id) + '/' + text(target.role) : 'common/' + text(target.role);

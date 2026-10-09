@@ -10,7 +10,7 @@ await fs.mkdir(output, { recursive: true });
 const fixture = await createBrowserFixture({ production: true }), { page } = fixture;
 const result = { checks: [], screenshots: [], errors: fixture.errors, writes: [] };
 let wid, saved;
-let listState = 'success', workspaceState = 'success', release;
+let listState = 'success', workspaceState = 'success', standardsState = 'live', release;
 async function prepare() {
 const index = await fetch(fixture.url + '/api/design/type-workspaces').then(r => r.json());
 assert.ok(index.length, '需要至少一个真实型号设计作为只读验收输入');
@@ -28,6 +28,16 @@ await page.route('**/api/workspaces/' + wid, async route => {
   if (workspaceState === 'error') await route.fulfill({ status: 503, json: { detail: '型号输入暂时不可用，请重新读取。' } });
   else if (workspaceState === 'empty') { const empty = structuredClone(saved); empty.domain.cable_types = []; empty.domain.circuits = []; empty.domain.sections = []; empty.domain.load_cases = []; await route.fulfill({ json: empty }); }
   else await route.continue();
+});
+// Contract-only saved evidence/approval responses; never create runs or approve anything in the source database.
+const standardRun='00000000-0000-4000-8000-000000000001', standardStudy='00000000-0000-4000-8000-000000000002';
+await page.route('**/api/workspaces/' + wid + '/studies', route => standardsState === 'live' ? route.continue() : route.fulfill({json:[{id:standardStudy,definition:{method:{capability:'dimensions'}}}]}));
+await page.route('**/api/workspaces/' + wid + '/studies/*/runs?*', route => standardsState === 'live' ? route.continue() : route.fulfill({json:{items:[{id:standardRun,status:'succeeded',integrity:'verified',freshness:'current',snapshot:{workspace_revision:saved.revision},output:{cases:[{status:'succeeded',artifacts:{standard:{schema:'cablesim.standard-check/1'}}}]}}],next_cursor:null}}));
+await page.route('**/api/design/type-workspaces/' + wid + '/requirements?*', route => {
+  if(standardsState==='unavailable') return route.fulfill({status:503,json:{detail:'要求目录离线'}});
+  if(standardsState==='live') return route.continue();
+  const standard='GB/T 12706.2-2020';
+  return route.fulfill({json:{run_id:standardRun,source_current:true,items:[{state:standardsState==='approved'?'approved':'conflict',bindable:true,definition:{standard},approval:{id:'receipt',digest:'a'.repeat(64),definition:{standard}}}]}});
 });
 }
 async function check(label) {
@@ -55,11 +65,17 @@ async function check(label) {
     const clipped = [...document.querySelectorAll('.type-list-toolbar,.type-module-status,.type-design-card,.type-property-fields')].filter(node => node.checkVisibility() && node.scrollWidth > node.clientWidth + 1).map(node => node.className);
     const rowHeights = [...document.querySelectorAll('.type-property-wrapper .number-field,.type-property-wrapper .select-field')].filter(node => node.checkVisibility()).map(node => ({ label: node.querySelector('label')?.textContent, height: node.getBoundingClientRect().height }));
     const body = document.body.innerText;
-    return { collisions, clipped, rowHeights, internal: body.match(/\b[a-f0-9]{8}-[a-f0-9-]{27,}\b|\b[a-f0-9]{64}\b|cablesim\.[a-z-]+|\+engineering/g) || [] };
+    const tableClipped=[...document.querySelectorAll('.data-table[aria-label="型号分层"] th,.data-table[aria-label="型号分层"] td:nth-child(3),.data-table[aria-label="型号分层"] td:nth-child(5),.data-table[aria-label="型号分层"] td:nth-child(6)')].flatMap(cell=>{
+      const box=cell.getBoundingClientRect(), walker=document.createTreeWalker(cell,NodeFilter.SHOW_TEXT); let text, failed=false;
+      while((text=walker.nextNode())) {if(!text.textContent.trim() || !text.parentElement.checkVisibility())continue;const range=document.createRange();range.selectNodeContents(text);if([...range.getClientRects()].some(rect=>rect.left<box.left-1 || rect.right>box.right+1))failed=true;}
+      return failed?[cell.textContent]:[];
+    });
+    return { collisions, clipped, rowHeights, tableClipped, internal: body.match(/\b[a-f0-9]{8}-[a-f0-9-]{27,}\b|\b[a-f0-9]{64}\b|cablesim\.[a-z-]+|\+engineering/g) || [] };
   });
   assert.deepEqual(details.collisions, [], label + ': 属性标签与值重叠');
   assert.deepEqual(details.clipped, [], label + ': 型号控件横向溢出');
   assert.deepEqual(details.internal, [], label + ': 内部标识露出');
+  assert.deepEqual(details.tableClipped, [], label + ': 分层表文字越过单元格');
   assert.ok(details.rowHeights.every(row => Math.abs(row.height - 32) <= 1), label + ': 属性行高 ' + JSON.stringify(details.rowHeights));
   result.checks.push({ label, layout, ...details });
 }
@@ -80,7 +96,7 @@ try {
         assert.deepEqual(await page.getByRole('table', { name: '型号', exact: true }).locator('thead th').allTextContents(), ['型号', '电压', '截面', '执行标准', '基准版本', '状态']);
         await page.getByRole('table', { name: '型号', exact: true }).locator('tbody .data-row').first().click();
         await expect(page.locator('[data-type-card]')).toBeVisible();
-        if (width === 1366 && theme === 'light') await shot('catalog');
+        assert.doesNotMatch(await page.getByRole('table', { name: '型号', exact: true }).innerText(), /\.0(?:\/| kV| mm²)/);
       }
       await check(`目录 ${state} ${width} ${theme}`);
     }
@@ -93,6 +109,14 @@ try {
         await expect(page.getByText('基准版本', { exact: true })).toBeVisible();
         await expect(page.locator('.type-module-status')).toHaveCount(8);
         await expect(page.locator('.command-bar')).not.toContainText('已保存');
+        await expect(page.locator('.project-explorer')).not.toContainText('未运行');
+        assert.ok((await page.locator('.command-state').innerText()).length < 40);
+        await expect(page.getByRole('button', { name: '保存', exact: true })).toHaveClass(/button-outline/);
+        const materials=await page.getByRole('table', { name: '型号分层', exact: true }).locator('tbody .data-row td:nth-child(3)').evaluateAll(cells=>cells.map(cell=>{
+          const range=document.createRange();range.selectNodeContents(cell);const text=range.getBoundingClientRect(), box=cell.getBoundingClientRect();
+          return {name:cell.textContent,nowrap:getComputedStyle(cell).whiteSpace==='nowrap',fits:text.left>=box.left && text.right<=box.right,lines:range.getClientRects().length};
+        }));
+        assert.ok(materials.every(cell=>cell.nowrap && cell.fits && cell.lines===1),'材料列完整单行：'+JSON.stringify(materials));
         await page.locator('.type-module-status').first().hover();
         await expect(page.getByRole('tooltip')).toBeVisible();
         await page.mouse.move(0, 0);
@@ -106,7 +130,6 @@ try {
         await page.getByRole('table', { name: '型号分层', exact: true }).locator('tbody .data-row').nth(1).click();
         await expect(page.locator('.type-property-wrapper > .type-property-wrapper > .type-property-fields, .type-property-wrapper > .type-property-fields').first()).toBeVisible();
         await check(`行式属性 ${width} ${theme}`);
-        if (width === 1366 && theme === 'light') await shot('workbench-property');
         await page.locator('.explorer-item').first().focus(); await page.keyboard.press('Escape'); await expect(page.locator('[data-type-card]')).toBeVisible();
       }
     }
@@ -123,11 +146,23 @@ try {
   await page.keyboard.press('Enter'); await expect(page.locator('[data-type-card]')).toBeVisible();
   const name = page.locator('.type-name-input'); await name.fill(saved.domain.name + ' · 验收草稿');
   await expect(page.getByRole('button', { name: '保存', exact: true })).toBeEnabled();
+  await expect(page.getByRole('button', { name: '保存', exact: true })).toHaveClass(/button-primary/);
   await page.locator('.explorer-item').first().focus(); await page.keyboard.press('Control+z');
   await expect(name).toHaveValue(saved.domain.name); await expect(page.getByRole('button', { name: '保存', exact: true })).toBeDisabled();
+  for(const state of ['approved','conflict','unavailable']) {
+    standardsState=state;
+    await navigate('/types?theme=light','[data-type-page=list]','success');
+    const row=page.getByRole('table',{name:'型号',exact:true}).locator('tbody .data-row').filter({has:page.locator('.object-link').filter({hasText:saved.domain.name.replace(/（[^）]*演示[^）]*）|\([^)]*演示[^)]*\)/g,'').trim()})});
+    const standard=row.locator('td').nth(3);
+    await expect(standard).toHaveText(state==='approved'?'GB/T 12706.2-2020':'未声明');
+    if(state!=='approved') await expect(standard.locator('span')).toHaveAttribute('title',/在要求与标准里添加/);
+    if(state==='unavailable') await expect(standard.locator('span')).toHaveAttribute('title',/要求目录离线/);
+    await check('执行标准契约 '+state);
+  }
+  standardsState='live';
   assert.deepEqual(fixture.errors, []); assert.deepEqual(result.writes, []);
   result.workflow = '目录筛选、选中名片、Enter进入、层属性、Esc取消选中、编辑启用保存、Ctrl+Z撤销；只读，无计算请求。';
-  result.coverage = '目录没有历史模式；历史验收使用真实型号保存修订。';
+  result.coverage = '目录没有历史模式；历史验收使用真实型号保存修订。已批准/冲突/目录离线使用只读接口契约注入，不声称源库新增了批准数据。';
 } catch (error) { result.failure = String(error.stack || error); console.error(result.failure); console.error((await page.locator('body').innerText()).slice(0, 1500)); process.exitCode = 1; }
 finally { release?.(); await fixture.close(); await fs.writeFile(path.join(output, 'verification.json'), JSON.stringify(result, null, 2)); }
 console.log(JSON.stringify({ checks: result.checks.length, screenshots: result.screenshots, failure: result.failure || null }));

@@ -32,15 +32,16 @@ export function TypeRunControl({ channel, label, definition, onBusy, unavailable
   useEffect(() => { mounted.current = true; try { const value = JSON.parse(sessionStorage.getItem(key) || 'null'); if (value?.workspace === state.workspace?.id && typeof value.study === 'string' && typeof value.request?.request_id === 'string') { attempt.current = value; setError('前次运行连接中断，可查询同一请求。'); } } catch { /* Storage failure does not change host data. */ } return () => { mounted.current = false; }; }, [key, state.workspace?.id]);
   function running(value: boolean) { if (mounted.current) setBusy(value); onBusy?.(value); }
   async function finished(run: components['schemas']['RunResponse'], study: string) {
+    if (['accepted', 'running', 'validating', 'queued'].includes(run.status)) await queries.invalidateQueries({ queryKey: ['type-evidence', state.workspace!.id] });
     for (let iteration = 0; ['accepted', 'running', 'validating', 'queued'].includes(run.status); iteration++) {
       if (iteration >= 180) throw new ApiError(504, '运行仍在执行，可稍后查询同一请求');
       await new Promise(resolve => setTimeout(resolve, 2000));
       const next = await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/runs/{rid}', { params: { path: { wid: state.workspace!.id, sid: study, rid: run.id } } }));
       if (!next) throw new ApiError(502, '运行查询未返回记录'); run = next;
     }
+    await queries.invalidateQueries({ queryKey: ['type-evidence', state.workspace!.id] });
     if (!['succeeded', 'partial'].includes(run.status)) throw new ApiError(422, text(optionalRecord(run.error).message) || '本次运行未取得有效结果');
     if (run.integrity !== 'verified') throw new ApiError(409, '本次运行完整性未通过，未采用结果');
-    await queries.invalidateQueries({ queryKey: ['type-evidence', state.workspace!.id] });
     await queries.invalidateQueries({ queryKey: ['type-studies', state.workspace!.id] });
     sessionStorage.removeItem(key); attempt.current = null; if (mounted.current) setOpen(false);
   }
