@@ -65,7 +65,6 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
   const section = document?.sections.find((item) => item.id === chosen) || document?.sections[0];
   const cable = document?.cable_types.find((item) => item.id === chosen) || document?.cable_types[0];
   const states = new Map(rows.map((row,index)=>[row.id,studyPresentation(row,latest.get(row.id),0,runs[index]?.error,runs[index]?.isPending)]));
-  const done = rows.filter(row=>states.get(row.id)?.code==='current').length;
   const outdated = rows.filter(row=>states.get(row.id)?.code==='outdated');
   const open = (row: StudyRow, extra: Record<string, unknown> = {}) => navigate({
     to: "/studies/$sid/$module/$tab",
@@ -130,7 +129,7 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
       <span className="command-caption">交付</span>
       <Button size="compact" variant="ghost" onClick={() => void navigate({ to: "/deliveries", search: { theme, workspace: workspaceId, delivery: "" } })}><Icon name="result/report" />交付记录</Button>
     </div>
-    <span className="command-state" role="status">{studies.isPending ? "读取中" : `${rows.length} 个研究 · ${done} 个当前结果${outdated.length ? ` · ${outdated.length} 项需要重算` : ''}`}</span>
+    <span className="command-state" role="status">{studies.isPending ? "读取中" : outdated.length ? `${outdated.length} 项待重算` : '已保存'}</span>
   </div>;
 
   const canvas = !document ? null : <section className="workbench-canvas" aria-label="工程模型">

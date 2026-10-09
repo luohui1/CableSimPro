@@ -10,7 +10,7 @@ import { Tooltip } from "./ui/tooltip";
 import { Button } from "./ui/button";
 import { ErrorState, LoadingState, EmptyState, StaleBanner } from "./states";
 import { SourceBadge } from "./source-badge";
-import { DataTable } from "./data-table";
+import { downloadJson } from "@/lib/download";
 import { moduleConfiguration, withConfiguration } from "@/lib/study-config";
 import { entityLabel } from "@/lib/domain-fields";
 import { Suspense, useMemo } from 'react';
@@ -190,29 +190,10 @@ export function StudyMethodForm({
         </>
       )}
       {!contract && (
-        <DataTable
-          label="保存的方法参数"
-          columns={[
-            { id: "name", label: "参数", render: (row) => displayName(row.id) },
-            {
-              id: "value",
-              label: "保存值",
-              wrap: true,
-              render: (row) => row.value,
-            },
-          ]}
-          groups={[
-            {
-              id: "parameters",
-              label: "参数",
-              rows: Object.entries(configuration.parameters || {}).map(
-                ([id, value]) => ({ id, value: JSON.stringify(value) }),
-              ),
-            },
-          ]}
-          rowLabel={(row) => displayName(row.id)}
-          showGroups={false}
-        />
+        <div className="source-line">
+          <span className="muted">参数已保存；契约恢复后可查看单位与范围。</span>
+          <Button variant="ghost" onClick={() => downloadJson({method:configuration.method, parameters:configuration.parameters || {}, input_sources:configuration.input_sources || {}}, 'saved-method-parameters.json')}>导出已保存参数</Button>
+        </div>
       )}
     </div>
   );

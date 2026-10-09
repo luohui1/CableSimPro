@@ -1,6 +1,6 @@
 import { entityLabel } from "@/lib/domain-fields";
 import { useRef, useState, type ComponentProps } from "react";
-import { api, ApiError, numeric, record, responseData } from "@/api/client";
+import { api, ApiError, numeric, record, responseData, message } from "@/api/client";
 import type { components } from "@/api/generated/schema";
 import {
   CableSection,
@@ -21,6 +21,10 @@ import {
 } from "@/lib/domain-fields";
 import { useStudy } from "./study-provider";
 import { Select } from "./ui/select";
+import { Button } from "./ui/button";
+import { Dialog } from "./ui/dialog";
+import { NumberField } from "./ui/number-field";
+import './study-drawing.css';
 import { StudyGeometry } from "./study-geometry";
 import type { InputSelection } from "./study-inputs";
 
@@ -100,6 +104,11 @@ export function StudyDrawing({
   const current = useRef(context);
   current.current = context;
   const [chosen, setChosen] = useState("");
+  const [templateOpen, setTemplateOpen] = useState(false), [templateId, setTemplateId] = useState('');
+  const [templateDepth, setTemplateDepth] = useState<number | null>(0.8);
+  const [templateBusy, setTemplateBusy] = useState(false), [templateError, setTemplateError] = useState('');
+  const templatePending = useRef(false);
+  const templateDepthInput = useRef<HTMLInputElement | null>(null);
   const [layer, setLayer] = useState<LayerTarget | null>(null),
     [selection, setSelection] = useState<SectionSelection>(null);
   const cable =
@@ -165,6 +174,33 @@ export function StudyDrawing({
           { id: "ducts", label: "排管" },
           { id: "backfill", label: "回填" },
         ];
+  async function applyTemplate(id: string, depth = Math.abs(section?.placements[0]?.z || 0.8)) {
+    if (!editable) throw new ApiError(409, '当前敷设只读');
+    const option = templates.find(item => item.id === id);
+    if (!option || !Number.isFinite(depth) || depth <= 0) throw new ApiError(422, '请选择敷设模板并填写正的中心埋深');
+    const result = record(await responseData(api.POST('/api/design/workspaces/{wid}/section-template', {
+      params: {path:{wid:context.study.workspace}}, body:{
+        expected_revision: context.domainDraft?.revision ?? numeric(context.workspace.revision)!,
+        document: context.domainDraft ? commitFields(context.domainDraft) : document,
+        kind: option.id, depth,
+      },
+    })), '敷设模板');
+    if (result.schema_version !== 'cablesim.domain/1') throw new ApiError(502, '模板缺少领域输入');
+    context.editDomainDocument(result as DomainDocument, 'section', [pointer('sections')]);
+    setSelection(null);
+  }
+  async function confirmTemplate() {
+    if (templatePending.current) return;
+    const raw = templateDepthInput.current?.value.trim() || '';
+    const depth = raw ? Number(raw) : NaN;
+    if (!Number.isFinite(depth) || depth <= 0) {
+      setTemplateError('中心埋深：请输入大于 0 的数值，单位 m'); templateDepthInput.current?.focus(); return;
+    }
+    templatePending.current = true; setTemplateBusy(true); setTemplateError('');
+    try { await applyTemplate(templateId, depth); setTemplateOpen(false); }
+    catch (error) { setTemplateError(message(error)); }
+    finally { templatePending.current = false; setTemplateBusy(false); }
+  }
   return (
     <div
       className="study-drawing"
@@ -176,6 +212,15 @@ export function StudyDrawing({
             : "laying-section"
       }
     >
+      {kind !== 'cable' && editable && <div className="study-template-action"><Button size="compact" variant="ghost" onClick={() => {
+        setTemplateId(templates[0]?.id || ''); setTemplateDepth(Math.abs(section?.placements[0]?.z || 0.8)); setTemplateError(''); setTemplateOpen(true);
+      }}>敷设模板</Button></div>}
+      <Dialog open={templateOpen} onOpenChange={open => {if(!templatePending.current) setTemplateOpen(open);}} title="敷设模板" initialFocus="form"
+        actions={<Button variant="primary" loading={templateBusy} onClick={() => void confirmTemplate()}>应用模板</Button>}>
+        <Select label="模板" value={templateId} options={templates.map(item => ({value:item.id,label:item.label}))} onChange={setTemplateId} disabled={templateBusy} />
+        <NumberField label="中心埋深" unit="m" value={templateDepth} min={0} minExclusive required precision={3} onCommit={setTemplateDepth} inputRef={templateDepthInput} disabled={templateBusy} submitOnEnter />
+        {templateError && <p className="field-error" role="alert">{templateError}</p>}
+      </Dialog>
       {(kind === "cable" ? document.cable_types : document.sections).length >
         1 && (
         <Select
@@ -278,35 +323,7 @@ export function StudyDrawing({
               updated = change(updated, path, at(temporary, path));
             context.editDomainDocument(updated, "section", paths);
           }}
-          onTemplateRequest={async (id) => {
-            if (!editable) throw new ApiError(409, "当前敷设只读");
-            const option = templates.find((item) => item.id === id);
-            if (!option) throw new ApiError(422, "无效模板");
-            const result = record(
-              await responseData(
-                api.POST("/api/design/workspaces/{wid}/section-template", {
-                  params: { path: { wid: context.study.workspace } },
-                  body: {
-                    expected_revision:
-                      context.domainDraft?.revision ??
-                      numeric(context.workspace.revision)!,
-                    document: context.domainDraft
-                      ? commitFields(context.domainDraft)
-                      : document,
-                    kind: option.id,
-                    depth: Math.abs(section?.placements[0]?.z || 0.8),
-                  },
-                }),
-              ),
-              "敷设模板",
-            );
-            if (result.schema_version !== "cablesim.domain/1")
-              throw new ApiError(502, "模板缺少领域输入");
-            context.editDomainDocument(result as DomainDocument, "section", [
-              pointer("sections"),
-            ]);
-            setSelection(null);
-          }}
+          onTemplateRequest={applyTemplate}
         />
       )}
     </div>

@@ -8,6 +8,10 @@ import { openHeadlessBrowser, settle, outputRoot, repositoryRoot } from './brows
 import { request } from './research-fixtures.mjs';
 import { assertLayout } from './layout-assertions.mjs';
 if(process.env.E2E_ISOLATED!=='1')throw Error('Only run against an isolated database');
+if(process.env.COMPONENT_SCENARIOS_ONLY==='1') {
+  await import('./verify-research-scenarios.mjs');
+  process.exit(0);
+}
 const base=process.env.FRONTEND_URL, expect=baseExpect.configure({timeout:30000});
 const session=await openHeadlessBrowser(),{page,context}=session;
 page.setDefaultTimeout(30000);

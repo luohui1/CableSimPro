@@ -32,10 +32,11 @@ import { StudyReport } from "@/components/study-report";
 import { Icon } from "@/components/icon";
 import { message, numeric, optionalRecord, text } from "@/api/client";
 import { selectionView, type SelectionRow } from "@/lib/selection-view";
+import { Select } from '@/components/ui/select';
 import { StudyHeatDetail } from "@/components/study-heat-detail";
 import { StudyValidation } from "@/components/study-validation";
 import { rootModule, studyEntryTab, moduleConfiguration } from "@/lib/study-config";
-import { modelViews } from '@/components/study-workbench-config';
+import { modelViews, hostTasks } from '@/components/study-workbench-config';
 import { SavedRunConclusion } from '@/components/study-saved-conclusion';
 import {
   CableInputs,
@@ -288,7 +289,8 @@ export function StudyWorkspace() {
   // 答案条：先回答这次计算的结论（选型推荐 / 允许电流与最热导体），切换底部页签时保持可见
   const answer = pendingRun || !run ? null
     : module === "selection" && view && !selectionError ? <StudySelection theme={theme} run={run} selectedId={selectedRow?.id} onSelect={(row) => setSelected(row)} dirty={context.dirty} part="conclusion" />
-      : moduleBehavior.resultConclusion.has(module) ? <SavedRunConclusion run={run} />
+      : module === 'ampacity' ? <StudyResults run={run} onSelect={inputProps.onSelect} part="conclusion" />
+        : moduleBehavior.resultConclusion.has(module) ? <SavedRunConclusion run={run} />
         : null;
   // 命令栏：只放“做什么”——保存、运行、交付；最右侧给出当前状态
   const runnable = moduleBehavior.runnable.has(module) ||
@@ -303,6 +305,8 @@ export function StudyWorkspace() {
       </div>
       <div className="command-group" role="group" aria-label="计算">
         <span className="command-caption">计算</span>
+        <Select label="分析" value={module === 'report' ? calculatedModule : module} options={enabled.filter(key => !moduleBehavior.input.has(key) && key !== 'report' && key !== 'thermal-field').map(key => ({value:key,label:key === calculatedModule ? hostTasks.find(task => task.task === study.definition.task)?.label || moduleDefinitions[key].label : moduleDefinitions[key].label}))}
+          onChange={value => navigate({params:{sid,module:value,tab:value === 'sweep' && !study.definition.modules?.sweep ? 'settings' : value === 'method-compare' && !study.definition.modules?.['method-compare'] ? 'inputs' : studyEntryTab(value)},search:{...currentSearch(),run:'',delivery:'',inspector:value === 'sweep' ? 'method' : 'input'}})} />
         <PreviewControls preview={preview} />
         {runnable && !snapshotInput && <StudyRunControl
                         key={sid + module}
@@ -341,7 +345,7 @@ export function StudyWorkspace() {
       </div>
       <div className="command-group" role="group" aria-label="交付">
         <span className="command-caption">交付</span>
-        <Button size="compact" variant="ghost" disabled={!run || context.dirty || presentation.historical || !['succeeded','partial'].includes(text(run.status))} onClick={() => navigate({ params: { sid, module: "report", tab: "preview" }, search: { ...currentSearch(), run: text(run?.id), delivery: '', generate: true } })}><Icon name="result/report" />生成计算书</Button>
+        <Button size="compact" variant="ghost" title={!run ? '先运行研究，取得保存结果' : context.dirty ? '先保存修改并重新运行' : presentation.historical ? '旧结果保持为历史，请先重算' : !['succeeded','partial'].includes(text(run.status)) ? '等待运行成功后生成' : '生成所选保存运行的客户计算书'} disabled={!run || context.dirty || presentation.historical || !['succeeded','partial'].includes(text(run.status))} onClick={() => navigate({ params: { sid, module: "report", tab: "preview" }, search: { ...currentSearch(), run: text(run?.id), delivery: '', generate: true } })}><Icon name="result/report" />生成计算书</Button>
       </div>
       <span className="command-state" role="status" title={presentation.reason}>{presentation.label}</span>
     </div>

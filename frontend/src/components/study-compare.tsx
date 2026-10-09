@@ -101,7 +101,7 @@ export function StudyCompare({
   }, [run, comparison.data, selectedRuns]);
   const methods = (contracts.data || []).filter(
     (value) =>
-      value.tasks?.includes("rating") &&
+      (value.tasks?.includes("rating") || value.reference_only) &&
       value.method.capability ===
         (config?.method.capability || definition.method.capability),
   );
@@ -138,7 +138,10 @@ export function StudyCompare({
           candidate_ids: [],
           selected_case_ids: null,
         },
-        crosschecks: [{ method: selected.method, parameters: {} }],
+        crosschecks: [{ method: selected.method, parameters: contractDefaults(selected.parameter_schema) }],
+        input_sources: {...baseline.input_sources, '/crosschecks/0/parameters': {
+          kind: 'derived' as const, reference: `采用 ${displayName(selected.method.plugin_id)} ${selected.method.version} 契约声明的默认参数，工程师需核对适用范围`, reviewed: false,
+        }},
         candidate_completions: {},
         verification: null,
       };
@@ -439,6 +442,7 @@ export function StudyCompare({
                   onChange={setMethod}
                   options={methods.map((value) => ({
                     value: key(value.method),
+                    disabled: key(value.method) === key(config?.method || definition.method),
                     label:
                       displayName(value.method.plugin_id) +
                       " · " +
@@ -483,7 +487,7 @@ export function StudyCompare({
                   <Toolbar>
                     <h2>
                       对照方法参数 ·{" "}
-                      {crosscheck.method.plugin_id.replace("cablesim.", "")}
+                      {displayName(crosscheck.method.plugin_id)}
                     </h2>
                     {!readOnly && (
                       <Button

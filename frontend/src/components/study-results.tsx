@@ -163,6 +163,10 @@ export function StudyResults({
       : hottest
         ? `保存的最高导体温度 ${show(hottest.key, hottest.value, hottest.unit)}；温限余量${margin === null ? "未覆盖" : " " + show("temperature_margin", margin, "K")}`
         : "给定电流下的运行温度未覆盖";
+  const operatingTask = optionalRecord(snapshot.definition).task === 'operating';
+  const temperatureChecks = goals.filter(goal => goal.key === 'conductor_temperature' && goal.condition === 'operating');
+  const verdict = temperatureChecks.some(goal => goal.verdict === 'not_satisfied') ? '不满足温限'
+    : temperatureChecks.length && temperatureChecks.every(goal => goal.verdict === 'satisfied') ? '满足温限' : '温限判定未提供';
   const groupOf = (row: ResultRow) =>
     /temperature/.test(row.key) || row.unit === "K" || row.unit === "°C"
       ? "temperature"
@@ -201,9 +205,11 @@ export function StudyResults({
   ];
   const conclusion = (
       <Conclusion
-      title={rating ? "载流量结论" : "保存结果结论"}
+      title={operatingTask ? "负荷校核结论" : rating ? "载流量结论" : "保存结果结论"}
       model={
-        noRating
+        operatingTask && hottest
+          ? `${load === null ? '当前' : show('current', load, 'A')} 负荷${verdict}，最热 ${show(hottest.key, hottest.value, hottest.unit)}`
+          : noRating
           ? rating!.entity + " 在其他回路当前负荷下没有正允许电流" + (simultaneous ? "；同时额定 " + show("ampacity", simultaneous.value, simultaneous.unit) : "")
           : rating
           ? "允许电流 " + show("ampacity", rating.value, rating.unit) +

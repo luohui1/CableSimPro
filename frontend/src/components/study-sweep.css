@@ -1,2 +1,4 @@
 /* Saved curve labels are working data, so use the primary text token in both themes. */
 .study-sweep-results .series-chart text { fill: var(--text); }
+.study-sweep-results .evidence-summary { flex-wrap: wrap; }
+.sweep-critical { flex-basis: 100%; margin: 0; font-size: var(--text-note); }

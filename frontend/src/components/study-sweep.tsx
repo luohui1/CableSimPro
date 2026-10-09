@@ -312,6 +312,17 @@ export function StudySweep({
     (item) => item.value === variablePath,
   );
   const variableLabel = variable?.label.split(" · ").at(-1) || "采样变量";
+  // Only bracket changes in the plugin's saved verdict. Do not interpolate or
+  // promote a chart line into an independently calculated critical value.
+  const transitions = rows.flatMap((row, index) => {
+    const previous = rows[index - 1];
+    return previous && previous.x !== null && row.x !== null && previous.value !== null && row.value !== null &&
+      ['satisfied','not_satisfied'].includes(previous.verdict) && ['satisfied','not_satisfied'].includes(row.verdict) && previous.verdict !== row.verdict
+      ? [`${previous.x}–${row.x} ${displayUnit(variable?.unit || variableUnit)}`] : [];
+  });
+  const critical = transitions.length ? `插件判定改变的临界区间：${transitions.join('、')}（仅采样区间）`
+    : rows.length && rows.every(row => row.verdict === 'satisfied') ? '所有已采样点均满足；临界值不在已采样点中'
+      : rows.length && rows.every(row => row.verdict === 'not_satisfied') ? '所有已采样点均不满足；请调整负荷或扩展扫描范围' : '';
   return (
     <div
       className="input-module study-sweep-results"
@@ -333,6 +344,7 @@ export function StudySweep({
           kind={valid.length === rows.length ? "success" : "unknown"}
           label={`${valid.length} / ${rows.length} 点有效`}
         />
+        {critical && <p className="sweep-critical" role="status">{critical}</p>}
       </section>
       <Toolbar>
         <Select
