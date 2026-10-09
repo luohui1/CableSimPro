@@ -9,6 +9,8 @@ import { openHeadlessBrowser, settle, repositoryRoot } from '../../../scripts/br
 import { assertLayout } from '../../../scripts/layout-assertions.mjs';
 
 const url = process.env.FRONTEND_URL || 'http://127.0.0.1:8118';
+const realOnly = process.env.HPC_REAL_ONLY === '1';
+assert(!realOnly || process.argv[2], 'HPC_REAL_ONLY requires a saved acceptance receipt');
 assert(!['8100', '8200'].includes(new URL(url).port), 'Use an isolated frontend');
 const output = process.env.FIELD_EVIDENCE || path.join(repositoryRoot, '.data', 'fem-convergence', 'browser');
 await fs.mkdir(output, { recursive: true });
@@ -31,6 +33,8 @@ let state = 'empty', kind = 'jobs', live = false, submissions = 0, continuations
 let slowSamples = false, activeSamples = 0, peakSamples = 0, samples = 0;
 const workflow = { id: 'workflow', source_run_id: source.id, study: 'child', title: '城北变电站 · 自动收敛', request: { max_core_hours: 12 }, actual_core_hours: .2, per_step_upper_core_hours: 2.067,
   verdict: { status: 'unconverged' }, rows: [0.4, .15, .08, .04].map((change, i) => ({ kind: 'mesh', run_id: i ? `saved-level-${i}` : source.id, mesh_size_m: .008 / 2 ** i, hotspot_k: 380 + change, change_k: i ? change : null, nodes: 11000 * (i + 1), sequence: i + 1, created: source.created })), attempts: [] };
+const convergedRows = [0,1,2].map(i => ({ kind: 'mesh',run_id:i ? `saved-level-${i}` : source.id,mesh_size_m:.004/2**i,bounds_m:[-8,-8,8,0],hotspot_k:380+i*.01,change_k:i ? .01 : null,nodes:10000*(i+1) }));
+convergedRows.push(...[16,32,64].map((depth,i) => ({kind:'domain',run_id:`domain-${i}`,mesh_size_m:.001,bounds_m:[-depth,-depth,depth,0],hotspot_k:380.03+i*.01,change_k:.01,nodes:40000*(i+1)})));
 const browser = await openHeadlessBrowser(), { page } = browser;
 const errors = []; page.on('pageerror', error => errors.push(error.message));
 page.on('response', response => { if (response.status() >= 400 && !response.url().includes('/api/')) console.error(response.status(), response.url()); });
@@ -57,12 +61,13 @@ const {renderFixture}=await import('/src/features/field/browser-fixture.tsx');wi
     if (request.method() === 'POST') {
       if (target.endsWith('/cancel')) { cancellations++; state = 'history'; return respond({ state: 'cancel_requested' }); }
       const body = request.postDataJSON(); assert.equal(body.budget_confirmed, true); assert.equal(body.tolerance_k, .1); assert.equal(body.max_core_hours, 12);
-      if (body.continue_from) { assert.equal(body.continue_from, workflow.id); assert.equal(body.source_run_id, 'saved-level-3'); assert(target.includes('/studies/child/')); continuations++; }
+      if (body.continue_from) { assert.equal(body.continue_from, workflow.id); assert.equal(body.source_run_id, state === 'failed' ? 'saved-level-2' : 'saved-level-3'); assert(target.includes('/studies/child/')); if(state === 'failed')assert.equal(body.retain_domain_levels,2); continuations++; }
       submissions++; state = 'success'; live = true; return respond({ ...workflow, status: 'queued' }, 202);
     }
     if (target.endsWith('/jobs')) return respond({ total: state === 'empty' ? 0 : 1, next_offset: null, items: state === 'empty' ? [] : [{ id: 'job', study_name: '城北变电站 · 三回排管有限元收敛研究', sequence: 6, created: source.created,
       status: state === 'history' ? 'succeeded' : 'running', cancellable: state !== 'history', execution: { job_id: '799001' }, core_hours: .01472, started: source.created, finished: state === 'history' ? source.created : null }] });
     if (target.endsWith('/convergence')) {
+      if(state === 'failed')return respond({items:[{...workflow,status:'failed',reason:'最终载流量作业超时；保存温度验证保留。',rows:convergedRows,verdict:{status:'converged',mesh_passed:true,domain_passed:true,tolerance_k:.1}}]});
       const status = live ? (['queued', 'running', 'completed'][Math.min(transitions.length, 2)]) : state === 'history' ? 'blocked' : 'completed';
       if (live) transitions.push(status);
       return respond({ items: state === 'empty' ? [] : [{ ...workflow, status, reason: status === 'blocked' ? '网格自由度超过保存上限，原阈值未改变。' : '', verdict: { status: status === 'completed' ? 'converged' : 'unconverged' } }] });
@@ -72,9 +77,28 @@ const {renderFixture}=await import('/src/features/field/browser-fixture.tsx');wi
     return respond(target.endsWith(source.id) || target.includes(`/fields/${source.id}/`) ? source : iec);
   });
   await page.goto(url + '/field-acceptance'); await page.waitForFunction(() => window.ready).catch(error => { console.error(errors); throw error; });
+  const limitChecks = await page.evaluate(async () => {
+    const { savedConductorLimit } = await import('/src/features/field/saved-temperature-limit.ts');
+    const run = {integrity:'verified',snapshot:{definition:{method:{plugin_id:'cablesim.simulation',capability:'iec-thermal-field'}},cases:[{case_id:'c',input:{schema_version:'cablesim.domain/1',cable_types:[{id:'t',rating:{max_conductor_temperature:{normal:363.15}}}],circuits:[{cable_type:'t',cables:[{id:'a'},{id:'b'}]}]}}]},output:{cases:[{case_id:'c',status:'succeeded',results:['a','b'].map(entity=>({key:'conductor_temperature',case:'operating',entity,unit:'K',status:'available',value:350}))}]}};
+    const values = [];
+    values.push(savedConductorLimit(run,'c')?.within === true);
+    run.output.cases[0].results[1].value=381.15;
+    values.push(savedConductorLimit(run,'c')?.within === false && Math.abs(savedConductorLimit(run,'c').excess_k-18)<1e-8);
+    run.snapshot.cases[0].input.cable_types.push({id:'cold',rating:{max_conductor_temperature:{normal:323.15}}});
+    run.snapshot.cases[0].input.circuits=[{cable_type:'t',cables:[{id:'a'}]},{cable_type:'cold',cables:[{id:'b'}]}];run.output.cases[0].results[1].value=330;
+    values.push(savedConductorLimit(run,'c')?.within === false && savedConductorLimit(run,'c')?.shared_limit_c === null);
+    run.output.cases[0].results[1].status='unavailable';values.push(savedConductorLimit(run,'c') === undefined);
+    run.output.cases[0].results[1].status='available';run.output.cases[0].results[1].unit='degC';values.push(savedConductorLimit(run,'c') === undefined);
+    run.output.cases[0].results[1].unit='K';run.snapshot.cases[0].input.cable_types[0].rating.max_conductor_temperature.normal=null;values.push(savedConductorLimit(run,'c') === undefined);
+    run.snapshot.cases[0].input.cable_types[0].rating.max_conductor_temperature.normal=363.15;run.integrity='unverified';values.push(savedConductorLimit(run,'c') === undefined);
+    run.integrity='verified';run.snapshot.definition.method.plugin_id='cablesim.iec60287';values.push(savedConductorLimit(run,'c') === undefined);
+    return values;
+  });
+  assert(limitChecks.every(Boolean),'saved conductor limit comparison failed');
   let serial = 0;
   async function mount(type, run = source) { kind = type; await page.evaluate(({ kind, run, key }) => window.renderFixture(kind, run, key), { kind, run: {...run,fixtureState:state}, key: ++serial }); }
   const checks = [];
+  if (!realOnly) {
   for (const viewport of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) for (const theme of ['light', 'dark']) {
     await page.setViewportSize(viewport); await page.evaluate(theme => { document.documentElement.dataset.theme = theme; document.documentElement.dataset.reducedMotion = 'true'; }, theme);
     for (const type of ['jobs', 'adaptive', 'comparison', 'field', 'setup']) for (const item of ['empty', 'loading', 'error', 'success', 'history']) {
@@ -123,6 +147,17 @@ const {renderFixture}=await import('/src/features/field/browser-fixture.tsx');wi
   state='running'; await mount('field',{...source,status:'running',output:undefined});
   await page.locator('.field-canvas').waitFor(); await page.getByRole('button',{name:'停止',exact:true}).waitFor();
   assert.equal(await page.getByRole('region',{name:'历史结论'}).count(),1,'running field lost prior result');
+  for(const viewport of [{width:1366,height:768},{width:1920,height:1080}])for(const theme of ['light','dark']){
+    await page.setViewportSize(viewport);await page.evaluate(theme => document.documentElement.dataset.theme=theme,theme);
+    state='failed';await mount('adaptive');await page.getByText(/温度收敛已达标；最终允许电流运行失败/).waitFor();
+    await page.getByRole('button',{name:'用当前版本继续'}).click();
+    await page.getByRole('combobox',{name:'已验证计算域'}).selectOption('2');
+    await assertLayout(page,`failed-rating/dialog/${theme}/${viewport.width}`);
+    await page.keyboard.press('Escape');
+  }
+  await page.getByRole('button',{name:'用当前版本继续'}).click();await page.getByRole('spinbutton').fill('12');await page.keyboard.press('Enter');
+  await page.getByRole('dialog').waitFor({state:'hidden'});assert.equal(continuations,2);assert.equal(submissions,3);live=false;
+  }
   if (process.argv[2]) {
     const receipt = JSON.parse(await fs.readFile(path.resolve(process.argv[2]), 'utf8')); real = true;
     await page.setViewportSize({ width: 1366, height: 768 }); await page.evaluate(() => document.documentElement.dataset.theme = 'light');
@@ -131,8 +166,22 @@ const {renderFixture}=await import('/src/features/field/browser-fixture.tsx');wi
       await mount(type, realRun);
       if (type === 'adaptive') await page.locator('.field-scope').first().waitFor({ timeout: 30000 });
       if (type === 'jobs') await page.getByRole('table').first().waitFor({ timeout: 30000 });
-      if (type === 'comparison') { await page.getByRole('table', { name: '有限元与IEC量值对照' }).waitFor({ timeout: 60000 }); await page.getByText('对照口径', { exact: true }).click(); }
-      await settle(page); await assertLayout(page, `real/${type}`);
+      if (type === 'comparison') {
+        if (receipt.iecRun) {
+          const label = await page.evaluate(async ({ wid, rid }) => {
+            const { savedRunLabel } = await import('/src/features/field/run-label.ts');
+            const response = await fetch(`/api/hpc/workspaces/${wid}/fields/${rid}/view`);
+            if (!response.ok) throw Error('IEC acceptance run unavailable');
+            return savedRunLabel(await response.json());
+          }, { wid: receipt.workspace, rid: receipt.iecRun });
+          await page.getByRole('combobox', { name: 'IEC 参考运行' }).click();
+          await page.getByRole('option', { name: label, exact: true }).click();
+        }
+        await page.getByRole('table', { name: '有限元与IEC量值对照' }).waitFor({ timeout: 60000 });
+        await page.getByText('对照口径', { exact: true }).click();
+        if (receipt.outer_boundary === 'kennelly_image') assert((await page.locator('.field-scope').last().innerText()).includes('Kennelly 镜像远场'));
+      }
+      await settle(page); checks.push({label:`real/${type}`, ...(await assertLayout(page, `real/${type}`))});
       if (type === 'adaptive') await page.screenshot({ path: path.join(output, 'adaptive.png') });
     }
     if (receipt.latest_fem_run) {
@@ -141,28 +190,41 @@ const {renderFixture}=await import('/src/features/field/browser-fixture.tsx');wi
       await page.waitForFunction(() => document.querySelector('.field-canvas')?.width > 0);
       const openMs = performance.now() - started;
       await page.getByText('显示已降采样，计算用全网格', { exact: true }).waitFor();
+      if(receipt.outer_boundary === 'kennelly_image') { await page.getByText('超温',{exact:true}).waitFor(); await page.getByText(/保存正常温限 90.*最大超出 18.4/).waitFor(); }
       assert(openMs <= 3000, `large field opening ${openMs.toFixed(0)} ms exceeds 3 s`);
       const canvas = page.locator('.field-canvas'), box = await canvas.boundingBox();
       await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      const scaleBefore = await page.locator('.field-scale path').getAttribute('d');
       const zoomStart = performance.now(); await page.mouse.wheel(0, -400);
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       const zoomMs = performance.now() - zoomStart;
+      assert.notEqual(await page.locator('.field-scale path').getAttribute('d'), scaleBefore, 'wheel did not change field camera');
       await page.waitForTimeout(200);
       await page.waitForFunction(() => !document.querySelector('.field-probe')?.textContent.includes('读取全网格'));
       assert(!(await page.locator('.field-probe').textContent()).includes('失败'), 'full mesh probe failed');
-      await assertLayout(page, 'large field');
+      checks.push({label:'large field', ...(await assertLayout(page, 'large field'))});
       await page.evaluate(() => { window.fieldFrameGap = 0; let last = performance.now(); window.fieldFrameTimer = setInterval(() => { const now = performance.now(); window.fieldFrameGap = Math.max(window.fieldFrameGap, now-last); last=now; }, 50); });
       const downloadStart = performance.now(); const download = page.waitForEvent('download');
       await page.getByRole('link', { name: '导出全网格' }).click(); const file = await download;
       await file.saveAs(path.join(output, 'full-field.npz'));
       assert.equal(await file.failure(), null);
-      await page.screenshot({ path: path.join(output, 'large-field.png') });
       const exportMs = performance.now()-downloadStart;
       const exportMaxEventLoopGapMs = await page.evaluate(() => { clearInterval(window.fieldFrameTimer); return window.fieldFrameGap; });
       assert(exportMaxEventLoopGapMs < 250, 'export blocked browser interaction');
+      // Show the actual cable neighbourhood in the evidence, using ordinary pan/zoom.
+      await canvas.dblclick();
+      const hotspot = await page.locator('.field-hotspot circle').boundingBox();
+      await page.mouse.move(hotspot.x + hotspot.width / 2, hotspot.y + hotspot.height / 2);
+      await page.mouse.down(); await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 5 }); await page.mouse.up();
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+      const centered = await page.locator('.field-hotspot circle').boundingBox();
+      assert(Math.abs(centered.x + centered.width / 2 - box.x - box.width / 2) < 2 && Math.abs(centered.y + centered.height / 2 - box.y - box.height / 2) < 2, 'pan did not move the saved hotspot');
+      for (let i = 0; i < 24; i++) { await page.mouse.wheel(0, -400); await page.waitForTimeout(30); }
+      await page.mouse.move(20, 20); await settle(page); checks.push({label:'focused saved field', ...(await assertLayout(page, 'focused saved field'))});
+      await page.screenshot({ path: path.join(output, 'large-field.png') });
       await fs.writeFile(path.join(output, 'performance.json'), JSON.stringify({ openMs, zoomMs, exportMs, exportMaxEventLoopGapMs }, null, 2));
     }
   }
-  assert.deepEqual(errors, []); await fs.writeFile(path.join(output, 'checks.json'), JSON.stringify({ checks, submissions, continuations, cancellations, transitions, peakSamples, samples, errors }, null, 2));
+  assert.deepEqual(errors, []); await fs.writeFile(path.join(output, realOnly ? 'real-checks.json' : 'checks.json'), JSON.stringify({ checks, limitChecks, submissions, continuations, cancellations, transitions, peakSamples, samples, errors }, null, 2));
   console.log(JSON.stringify({ checks: checks.length, submissions, continuations, cancellations, transitions, output }));
 } finally { await browser.close(); }

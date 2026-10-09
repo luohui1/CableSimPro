@@ -55,9 +55,10 @@ def compare(fem,iec,case_id=None):
         rows.insert(0,{'entity':'maximum','key':'conductor_temperature','unit':'K','case':'operating','fem':a,'iec':b,'delta':a-b,'relative_percent':(a-b)/b*100})
     for row in rows:
         row['exceeded']=row['delta'] is not None and (abs(row['delta'])>2 if row['unit']=='K' else row['relative_percent'] is not None and abs(row['relative_percent'])>5)
-    return {'fem':reference(fem,original),'iec':reference(iec,other),'rows':rows,
-            'scope':[{'item':'边界','fem':'有限计算域定温边界','iec':'无限土壤解析外部热阻'},
-                     {'item':'地表','fem':'模型地表边界','iec':'Kennelly 镜像'},
+    boundary=original['parameters'].get('outer_boundary','ambient_truncated')
+    return {'fem':reference(fem,original),'iec':reference(iec,other),'rows':rows,'outer_boundary':boundary,
+            'scope':[{'item':'边界','fem':'Kennelly 镜像远场 · 当前迭代实际损耗' if boundary=='kennelly_image' else '环境定温截断','iec':'无限土壤解析外部热阻'},
+                     {'item':'地表','fem':'保存环境温度 · 等温','iec':'Kennelly 镜像 · 等温'},
                      {'item':'互热','fem':'二维三芯热域耦合','iec':'IEC 外部互热模型'},
                      {'item':'差异提示','fem':'温差 > 2 K / 电流 > 5%','iec':'界面提示阈值，非标准验收限值'}],
             'relative_temperature_basis':'kelvin', 'engineering_approval':False}
@@ -128,15 +129,31 @@ def chapter(research,refinements,wid,rid,iec_id,convergence_id=None):
         latest=workflow['rows'][-1]
         if rid!=latest['run_id']:raise HTTPException(409,'请引用收敛研究最终网格与计算域运行，避免套用其他级别的结论。')
         case_id=latest['case_id']
-        for source_id in dict.fromkeys(r['run_id'] for r in workflow['rows']):
+        executions={}
+        validation=workflow.get('validation_history')
+        proof_rows=workflow['rows']+(validation or {}).get('rows',[])
+        for source_id in dict.fromkeys(r['run_id'] for r in proof_rows):
             saved=fem if source_id==rid else research.get_run(wid,source_id)
-            for row in (r for r in workflow['rows'] if r['run_id']==source_id):
+            executions[source_id]=saved.get('execution')
+            for row in (r for r in proof_rows if r['run_id']==source_id):
                 actual=observation(saved,row['case_id'],row['kind'])
                 if any(actual[k]!=row[k] for k in actual if k not in ('change_k','study_name')):raise HTTPException(409,'收敛记录与封存结果不一致，拒绝引用。')
         attempts=workflow.get('history_attempts',[])+workflow['attempts']
-        rows=[{**row,'execution':next((a.get('execution') for a in attempts if a.get('run_id')==row['run_id']),None)} for row in workflow['rows']]
+        rows=[{**row,'execution':executions[row['run_id']]} for row in workflow['rows']]
         workflow={**workflow,'rows':rows,'verdict':proven}
+        if validation:
+            failed=[]
+            for source_id in validation.get('run_executions',{}):
+                if source_id in executions:continue
+                saved=research.get_run(wid,source_id)
+                if saved['status'] in ('failed','interrupted'):
+                    failed.append({'run_id':source_id,'status':saved['status'],'error':saved.get('error'),'execution':saved.get('execution')})
+            workflow['validation_history']={**validation,'rows':[{**row,'execution':executions[row['run_id']]} for row in validation['rows']], 'failed_runs':failed}
     data=compare(fem,iec,case_id);chosen,_=selected_case(fem,case_id)
+    data['boundary']=chosen['artifacts'].get('x-cablesim.simulation-bundle',{}).get('result',{}).get('outer_boundary')
+    if data['outer_boundary']=='kennelly_image':
+        data['boundary_source']={'standard':'IEC 60287-2-1:2023','clause':'4.2.3.2','printed_page':22,'pdf_page':24,
+            'kind':'standard_reference','scope':'镜像线热源温升公式；将其用于有限元侧边/底边是本插件的远场边界处理，不是标准新增载流量公式。'}
     data.update(schema_version='cablesim.fem-report-chapter/1',title='有限元温度场与 IEC 对照',
                 convergence={k:workflow[k] for k in ('id','status','verdict','reason','rows','attempts','actual_core_hours','per_step_upper_core_hours')} if workflow else fem.get('convergence'),
                 execution={**(fem.get('execution') or {}),'core_hours':(fem.get('execution') or {}).get('actual_cpu_seconds',0)/3600},
@@ -147,5 +164,6 @@ def chapter(research,refinements,wid,rid,iec_id,convergence_id=None):
                        'full_mesh_nodes':chosen['artifacts']['x-cablesim.temperature-field'].get('convergence',{}).get('full_mesh_nodes'),
                        'image_url':f'/api/hpc/workspaces/{wid}/fields/{rid}.png?case_id={chosen["case_id"]}',
                        'media_type':'image/png','temperature_unit':'degC','length_unit':'m'})
+    if workflow and workflow.get('validation_history'):data['convergence']['validation_history']=workflow['validation_history']
     data['chapter_digest']=digest(data)
     return data

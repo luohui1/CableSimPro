@@ -7,7 +7,7 @@ No strand, tape-contact, or steel hysteresis Maxwell field is claimed here.
 from copy import deepcopy
 from math import hypot, log, pi
 from cablesim_sdk.domain import DomainDocument
-from cablesim_sdk.iec_thermal import ThreeCoreThermalParameters
+from .far_boundary import ThermalParameters, image_rise, loss_sources
 from cablesim_sdk.simulation import Problem
 from cablesim_sdk.validation import FieldValueError
 from .report import digest
@@ -15,7 +15,7 @@ from .report import digest
 
 def prepare(value, parameters):
     from cablesim_iec60287.domain import prepare as prepare_iec
-    p = ThreeCoreThermalParameters.model_validate(parameters)
+    p = ThermalParameters.model_validate(parameters)
     d = DomainDocument.model_validate(value).model_dump(mode='json')
     for uid,property in p.material_thermal_resistivity.items():
         material = next((row for row in d['materials'] if row['id']==uid),None)
@@ -29,6 +29,8 @@ def prepare(value, parameters):
         if len(d[name])!=1:
             raise FieldValueError('请选择已保存的截面和稳态负荷。','parameters','domain_options','section_id' if name=='sections' else 'load_id')
     section = d['sections'][0];placed = {q['cable'] for q in section['placements']}
+    if p.outer_boundary=='kennelly_image' and (section.get('soil_layers') or section.get('backfill')):
+        raise FieldValueError('Kennelly远场仅覆盖均匀半无限土壤；有土层或回填时请选择原截断边界。','parameters','outer_boundary')
     d['circuits'] = [c for c in d['circuits'] if any(x['id'] in placed for x in c['cables'])]
     group = prepare_iec(d,p.iec)
     if not group.soil.get('three_core'):
@@ -91,22 +93,21 @@ def prepare(value, parameters):
                 if layer['role']=='insulation':insulations.append({'uid':uid,'center':[cx,cz],'inner':inner,'outer':r})
             geometry.extend(reversed(layers))
         bindings.append({'entity':q['cable'],'circuit':circuit['id'],'conductors':cores,'screens':screens,
-            'armour':armor_uid,'insulations':insulations,'centers':centers,'radius':cable_radius})
+            'armour':armor_uid,'insulations':insulations,'centers':centers,'center_m':[x,z],'radius':cable_radius})
     problem = Problem.model_validate({'schema_version':'cablesim.simulation-problem/1','physics':'steady_heat',
         'geometry':geometry,'boundaries':[{'uid':'outer','selector':'outer','values':[],'kind':'temperature','value':ambient}],
         'excitations':[],'provenance':{'domain_sha256':digest(d),'source':p.domain_options.source},
         'assumptions':['Balanced IEC electrical state at cable-average metal temperatures; resolved per-core 2D heat field.',
             'Round thermal envelopes for stranded conductors and tape layers; actual saved longitudinal screen resistance and IEC steel-tape losses.']})
+    problem.assumptions.append('Side/bottom: '+p.outer_boundary+'; ground surface: saved ambient isothermal at z=0.')
     return p,d,group,problem,bindings,ducts
 
 
-def solve(prepared, mesh=None):
+def _thermal_system(prepared, mesh):
     import numpy as np
     from skfem import MeshTri,Basis,FacetBasis,ElementTriP1,ElementTriP2,BilinearForm,LinearForm,asm
     from skfem.helpers import dot,grad
-    from scipy.sparse.linalg import splu,cg,LinearOperator
-    from cablesim_iec60287.three_core import electrical,SOURCES
-    from .problem_mesh import build,package
+    from .problem_mesh import build
     p,d,group,problem,bindings,ducts = prepared
     mesh = build(problem,p.mesh) if mesh is None else deepcopy(mesh)
     points = np.asarray(mesh['points']);cells = np.asarray(mesh['triangles']);ids = np.asarray(mesh['domain_ids'])
@@ -136,7 +137,6 @@ def solve(prepared, mesh=None):
             if not len(facets):raise ValueError('未找到排管热阻界面。')
             interfaces.append(FacetBasis(basis.mesh,element,facets=facets,intorder=4))
         air_laws.append((duct,unit,interfaces))
-    ambient = group.ambient+273.15;temperature = np.full(basis.N,ambient)
     D = basis.get_dofs().all();free = np.setdiff1d(np.arange(basis.N),D)
     fixed_heat = np.zeros(basis.N)
     xy = basis.global_coordinates()
@@ -147,6 +147,30 @@ def solve(prepared, mesh=None):
             density[mask] = 1/((xy[0,mask]-x)**2+(xy[1,mask]-z)**2)
             vector = asm(source,basis,q=density)
             fixed_heat += c['model']['wd']*vector/vector.sum()
+    return mesh,basis,ids,regions,weights,nodes,air_laws,fixed_matrix,fixed_heat,D,free
+
+
+def solve(prepared, mesh=None, *, _cache=None, _export_field=True):
+    """Solve every trial; reuse only the immutable same-mesh linear assembly.
+
+    Cache lifetime is one host case. Losses, air conductance, boundary values,
+    nonlinear residuals and temperature are recomputed for every rating trial.
+    """
+    import numpy as np
+    from scipy.sparse.linalg import splu,cg,LinearOperator
+    from cablesim_iec60287.three_core import electrical,SOURCES
+    from .problem_mesh import package
+    p,d,group,problem,bindings,ducts=prepared
+    cache={} if _cache is None else _cache
+    identity=digest({'problem':problem.model_dump(mode='json'),'mesh':p.mesh.model_dump(mode='json'),
+                     'dielectric':[c['model']['wd'] for c in group.cables]})
+    if cache and cache['identity']!=identity:raise ValueError('载流量网格复用身份不同，拒绝复用。')
+    if not cache:cache.update(identity=identity,system=_thermal_system(prepared,mesh),preconditioner=None)
+    mesh,basis,ids,regions,weights,nodes,air_laws,fixed_matrix,fixed_heat,D,free=cache['system']
+    ambient=group.ambient+273.15;temperature=np.full(basis.N,ambient)
+    rho=1/problem.geometry[0].material.k_w_m_k
+    def boundary(states):
+        return image_rise(basis.doflocs[:,D],loss_sources(states,bindings),rho) if p.outer_boundary=='kennelly_image' else np.zeros(len(D))
     def mean(uid,t):return float(weights[uid]@t/weights[uid].sum())
     def evaluate(t):
         matrix = fixed_matrix.copy();air = []
@@ -174,14 +198,17 @@ def solve(prepared, mesh=None):
                 'conductor_joule_heat_w_m':3*wc,'screen_heat_w_m':3*ws,'armour_heat_w_m':wa,
                 'dielectric_heat_w_m':3*c['model']['wd'],'lambda1':l1,'lambda2':l2['total'],'electrical_details':details})
         return matrix,load,states,air
-    history = [];preconditioner = None
+    history = [];preconditioner = cache['preconditioner']
     for iteration in range(1,p.maximum_iterations+1):
-        matrix,load,_,_ = evaluate(temperature);reduced = matrix[free][:,free].tocsr()
+        matrix,load,states,_ = evaluate(temperature);reduced = matrix[free][:,free].tocsr()
+        prescribed=boundary(states)
+        rhs=load[free]-matrix[free][:,D]@prescribed
         if preconditioner is None:
             factor = splu(reduced.tocsc());preconditioner = LinearOperator(reduced.shape,matvec=factor.solve)
-        rise,status = cg(reduced,load[free],M=preconditioner,rtol=1e-11,atol=1e-12,maxiter=200)
+            cache['preconditioner']=preconditioner
+        rise,status = cg(reduced,rhs,M=preconditioner,rtol=1e-11,atol=1e-12,maxiter=200)
         if status:raise ValueError('三芯当前热矩阵未收敛。')
-        proposed = np.full(basis.N,ambient);proposed[free] += rise
+        proposed = np.full(basis.N,ambient);proposed[free] += rise;proposed[D]+=prescribed
         delta = float(np.max(np.abs(proposed-temperature)))
         history.append({'iteration':iteration,'temperature_update_inf_k':delta,'power_w_m':float(load.sum())})
         if delta<=p.tolerance_k:
@@ -189,15 +216,21 @@ def solve(prepared, mesh=None):
         temperature += p.relaxation*(proposed-temperature)
     else:raise ValueError('三芯IEC损耗—温度反馈未收敛。')
     matrix,load,states,air = evaluate(temperature)
+    boundary_error=float(np.max(np.abs(temperature[D]-ambient-boundary(states))))
+    if boundary_error>p.tolerance_k:raise ValueError('当前损耗与远场边界反馈尚未收敛。')
     residual = matrix@(temperature-ambient)-load;power = float(load.sum());outflow = -float(residual[D].sum())
     balance = abs(power-outflow)/max(power,1.);physical = float(np.max(np.abs(residual[free])))
     if balance>1e-6 or physical>max(1e-5,p.tolerance_k):raise ValueError('三芯接受温度的热平衡不合格。')
-    samples = [{'entity':b['entity'],'point_m':center,'temperature_k':float((basis.probes(np.asarray(center)[:,None])@temperature)[0]),
-                'time_s':0.,'method':f'P{p.mesh.field_order or 1} interpolation at saved conductor centre'} for b in bindings for center in b['centers']]
     result = {'cables':states,'iterations':history,'source_heat_w_m':power,'boundary_heat_w_m':outflow,
         'energy_relative_residual':balance,'physical_residual_inf_w_m':physical,'duct_air_states':air,
         'solver':f'scikit-fem P{p.mesh.field_order or 1} / IEC60287 balanced three-core loss feedback','clauses':SOURCES,
+        'outer_boundary':{'kind':p.outer_boundary,'ground_surface':'isothermal','soil_resistivity_k_m_w':rho,
+            'sources':loss_sources(states,bindings) if p.outer_boundary=='kennelly_image' else [],
+            'feedback_residual_k':boundary_error,'reference':'IEC 60287-2-1:2023 4.2.2; Kennelly half-space Green function'},
         'assumptions':problem.assumptions,'engineering_approval':False}
+    if not _export_field:return result,None,None,None
+    samples = [{'entity':b['entity'],'point_m':center,'temperature_k':float((basis.probes(np.asarray(center)[:,None])@temperature)[0]),
+                'time_s':0.,'method':f'P{p.mesh.field_order or 1} interpolation at saved conductor centre'} for b in bindings for center in b['centers']]
     if p.mesh.field_order==2:
         dofs = basis.element_dofs.T
         display = dofs[:,[[0,3,5],[3,1,4],[5,4,2],[3,4,5]]].reshape(-1,3)
@@ -207,7 +240,7 @@ def solve(prepared, mesh=None):
     return result,mesh,temperature.tolist(),samples
 
 
-def rating(prepared,mesh):
+def rating(prepared,mesh,*,_cache=None):
     """Locate temperature limits by real coupled FEM solves on this exact mesh."""
     from scipy.optimize import brentq
     from cablesim_sdk.ampacity import AmpacityBasis
@@ -215,7 +248,7 @@ def rating(prepared,mesh):
     circuits=[c['id'] for c in d['circuits']]
     limits={b['entity']:next(t for t in d['cable_types'] if t['id']==next(c for c in d['circuits'] if c['id']==b['circuit'])['cable_type'])['rating']['max_conductor_temperature']['normal'] for b in bindings}
     if any(v is None for v in limits.values()):raise ValueError('缺少正常运行导体温限，不能反求允许电流。')
-    modes=p.iec.get('rating_mode','individual');rows=[];trials=[]
+    modes=p.iec.get('rating_mode','individual');rows=[];trials=[];cache={} if _cache is None else _cache
     targets=[([c],'rating') for c in circuits] if modes in ('individual','both') else []
     if modes in ('simultaneous','both'):targets.append((circuits,'rating-simultaneous'))
     for varied,condition in targets:
@@ -227,7 +260,7 @@ def rating(prepared,mesh):
             trial=deepcopy(prepared)
             for cable,binding in zip(trial[2].cables,bindings):
                 if binding['circuit'] in varied:cable['current']=current
-            result,_,_,_=solve(trial,mesh)
+            result,_,_,_=solve(trial,mesh,_cache=cache,_export_field=False)
             excess=max(c['conductor_max_temperature_k']-limits[c['entity']] for c in result['cables'])
             trials.append({'varied_circuits':varied,'current_a':current,'maximum_excess_k':excess,
                            'energy_relative_residual':result['energy_relative_residual']})
@@ -267,8 +300,10 @@ def host_case(request,case,job):
                             'mesh_sha256':mesh['sha256'],'field_order':prepared[0].mesh.field_order or 1}}
     from .problem_mesh import build
     analysis_mesh=build(prepared[3],prepared[0].mesh)
-    result,mesh,temperatures,samples = solve(prepared,analysis_mesh)
-    ratings,trials=rating(prepared,analysis_mesh) if prepared[0].iec.get('operation','both')=='both' else ([],[])
+    cache={}
+    result,mesh,temperatures,samples = solve(prepared,analysis_mesh,_cache=cache)
+    ratings,trials=rating(prepared,analysis_mesh,_cache=cache) if prepared[0].iec.get('operation','both')=='both' else ([],[])
+    cache.clear()
     result['rating_trials']=trials
     from .compact_field import export,display
     storage,full_artifacts=export(job,case['case_id'],mesh,temperatures)

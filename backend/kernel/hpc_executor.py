@@ -330,7 +330,9 @@ def make_router(research):
         if row is None:raise HTTPException(404,'运行不属于此研究。')
         method=json.loads(row['snapshot'])['definition']['method']
         execution=research.executor.execution_status(rid,method['plugin_id'],method['capability'])
-        if execution and row['status'] in ('validating','succeeded','partial','failed','interrupted'):
+        states=(execution or {}).get('slurm_states',[])
+        recovering_live=row['status']=='validating' and states and any(state in ('PENDING','RUNNING','CONFIGURING','COMPLETING','REQUEUED') for state in states)
+        if execution and row['status'] in ('validating','succeeded','partial','failed','interrupted') and not recovering_live:
             execution={**execution,'state':row['status']}
         return {'id':row['id'],'status':row['status'],'execution':execution,'error':json.loads(row['error']) if row['error'] else None}
     @router.post('/workspaces/{wid}/studies/{sid}/runs/{rid}/cancel')

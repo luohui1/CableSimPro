@@ -48,7 +48,7 @@ export function compareSavedFields(fem: Record<string, unknown>, iec: Record<str
     const a = Math.max(...temperatures.map(row => row.fem!)), b = Math.max(...temperatures.map(row => row.iec!));
     rows.unshift({ id: "maximum", entity: "最高导体温度", key: "conductor_temperature", condition: "operating", unit: "K", fem: a, iec: b, delta: a-b, relative: (a-b)/b*100, reason: "", exceeded: Math.abs(a-b)>2 });
   }
-  return { rows, femCase: caseId, iecCase: text(reference.case_id), method: optionalRecord(definition.method), referenceMethod: optionalRecord(referenceDefinition.method), femLabel: savedRunLabel(fem), iecLabel: savedRunLabel(iec) };
+  return { rows, boundary: femParameters.outer_boundary === 'kennelly_image' ? 'Kennelly 镜像远场 · 当前迭代实际损耗' : '环境定温截断', femCase: caseId, iecCase: text(reference.case_id), method: optionalRecord(definition.method), referenceMethod: optionalRecord(referenceDefinition.method), femLabel: savedRunLabel(fem), iecLabel: savedRunLabel(iec) };
 }
 
 export function SavedFieldComparison({ run }: { run: Record<string, unknown> }) {
@@ -88,8 +88,8 @@ export function SavedFieldComparison({ run }: { run: Record<string, unknown> }) 
           { id: "relative", label: "相对差 %", numeric: true, render: row => row.relative?.toFixed(2) ?? "—" },
         ]} groups={[{ id: "comparison", label: "保存值", rows: data.rows }]} rowLabel={row => row.entity} showGroups={false} />
         <details><summary>对照口径{data.rows.some(row => row.exceeded) ? ' · 差异超过提示阈值' : ''}</summary>
-          <dl className="field-scope"><div><dt>边界</dt><dd>有限元：有限域定温；IEC：无限土壤外部热阻</dd></div>
-            <div><dt>地表</dt><dd>有限元：模型地表；IEC：Kennelly 镜像</dd></div>
+          <dl className="field-scope"><div><dt>边界</dt><dd>有限元：{data.boundary}；IEC：无限土壤外部热阻</dd></div>
+            <div><dt>地表</dt><dd>两者均为保存环境温度 · 等温</dd></div>
             <div><dt>互热</dt><dd>有限元：二维三芯耦合；IEC：外部互热模型</dd></div>
             <div><dt>相对差</dt><dd>以 IEC 保存值为分母；温度用 K</dd></div>
             <div><dt>提示阈值</dt><dd>温差 2 K / 电流 5%（非标准验收限值）</dd></div></dl>

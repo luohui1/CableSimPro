@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.simulation",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "name": "仿真复现基准",
   "description": "多区域稳态导热与GetDP时谐涡流、Elmer稳态/瞬态热适配，使用统一问题、网格和复现工件。",
   "icon": "assets/icon.svg",
@@ -63,7 +63,7 @@
       "kind": "method",
       "id": "iec-thermal-field",
       "title": "三芯IEC损耗与有限元温度反馈",
-      "method_version": "1.2.1",
+      "method_version": "1.3.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -161,13 +161,15 @@
       "validation": {
         "level": "analytic-benchmark",
         "cases": [
-          "Resolved three-core conductor/screen/armour heat-source conservation and IEC scalar loss crosscheck"
+          "Resolved three-core conductor/screen/armour heat-source conservation and IEC scalar loss crosscheck",
+          "plugins/cablesim.simulation/tests/test_far_boundary.py: homogeneous disk-source half-space analytic Kennelly benchmark"
         ]
       },
       "limitations": [
         "平衡三芯独立屏蔽、两端接地，电损耗适用范围由IEC60287三芯分支校验；金属平均温度与损耗迭代。",
         "实际三芯与公共层热域；绞线与丝带采用明确的热层等效，未求三维电磁场。",
-        "一管一缆同心圆管；IEC管内热阻随两侧界面温度更新；结果为reference_only。"
+        "一管一缆同心圆管；IEC管内热阻随两侧界面温度更新；结果为reference_only。",
+        "Kennelly远场只覆盖均匀半无限土壤和等温地表；实际迭代损耗在金属/介质中心作镜像线热源，不覆盖分层土或回填。"
       ],
       "category": "simulation",
       "description": "平衡三芯独立屏蔽、两端接地，电损耗适用范围由IEC60287三芯分支校验；金属平均温度与损耗迭代。；实际三芯与公共层热域；绞线与丝带采用明确的热层等效，未求三维电磁场。",
@@ -992,6 +994,37 @@
             "x-range-basis": {
               "kind": "numerical",
               "reference": "plugins/cablesim.simulation/src 的 iec-thermal-field 输入校验；离散或资源限制，不是材料设计限值。"
+            }
+          },
+          "outer_boundary": {
+            "type": "string",
+            "enum": [
+              "ambient_truncated",
+              "kennelly_image"
+            ],
+            "default": "ambient_truncated",
+            "title": "侧边与底边",
+            "description": "均匀半无限土壤可用Kennelly镜像远场，热源为本次有限元迭代实际损耗；地表仍为保存的环境温度。",
+            "x-group": "numerical",
+            "x-order": 7,
+            "x-level": "basic",
+            "x-enum-labels": {
+              "ambient_truncated": "环境定温截断",
+              "kennelly_image": "Kennelly镜像远场"
+            },
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "Preserve saved ambient-truncated boundary unless explicitly selecting uniform half-space Kennelly far field."
+            },
+            "x-range-basis": {
+              "kind": "method",
+              "reference": "Kennelly homogeneous half-space image Green function; IEC 60287-2-1:2023 4.2.3.2, printed p22 / PDF24; no layered soil/backfill."
             }
           }
         },
@@ -22117,6 +22150,11 @@
       "size_bytes": 12308
     },
     {
+      "path": "src/cablesim_simulation/far_boundary.py",
+      "sha256": "d269a2acd85b92d3e418323de658c8647d7e269365fe573dd62de4d6da00de6b",
+      "size_bytes": 2439
+    },
+    {
       "path": "src/cablesim_simulation/getdp_adapter.py",
       "sha256": "eb39e374e2d093f029504f3579dc950a445638b3de1b7565a4b9df0060e71798",
       "size_bytes": 20790
@@ -22208,8 +22246,8 @@
     },
     {
       "path": "src/cablesim_simulation/three_core_thermal.py",
-      "sha256": "f92842a119138a1d4d51ca7abf9a1c42cddd3515ba94c73394c6931a614b7079",
-      "size_bytes": 21197
+      "sha256": "1b7ce71399f23e0e1b9447eb946db144dd0fdc58e63a4c24b5249c58c5a85088",
+      "size_bytes": 23749
     },
     {
       "path": "src/cablesim_simulation/transient.py",

@@ -24,6 +24,7 @@ import { SavedRunProgress } from './study-run-control';
 import { SavedFieldComparison } from '@/features/field/saved-comparison';
 import { AdaptiveConvergence } from '@/features/field/adaptive-convergence';
 import { FieldHistoryNotice } from '@/features/field/history-notice';
+import { savedConductorLimit } from '@/features/field/saved-temperature-limit';
 import { studyRuns } from '@/api/research';
 export function StudyTemperature({
   run,
@@ -74,8 +75,12 @@ export function StudyTemperature({
   const summaryEntry = Object.entries(optionalRecord(data.case.artifacts)).find(([, value]) => optionalRecord(value).schema_version === 'cablesim.electrothermal-reference/1');
   const thermalSummary = optionalRecord(summaryEntry?.[1]);
   const checked = summaryEntry && optionalRecord(optionalRecord(optionalRecord(run.artifact_status)[text(data.case.case_id)])[summaryEntry[0]]).status === 'verified';
-  const limit = numeric(thermalSummary.temperature_limit_c), savedMaximum = numeric(thermalSummary.maximum_temperature_c);
-  const verdict = checked && limit !== null && savedMaximum !== null && typeof thermalSummary.within_temperature_limit === 'boolean' ? thermalSummary.within_temperature_limit : undefined;
+  const suppliedLimit = numeric(thermalSummary.temperature_limit_c), suppliedMaximum = numeric(thermalSummary.maximum_temperature_c);
+  const pluginVerdict = checked && suppliedLimit !== null && suppliedMaximum !== null && typeof thermalSummary.within_temperature_limit === 'boolean' ? thermalSummary.within_temperature_limit : undefined;
+  const savedLimit = data.kind === 'fem' && pluginVerdict === undefined ? savedConductorLimit(run, text(data.case.case_id)) : undefined;
+  const limit = pluginVerdict === undefined ? savedLimit?.shared_limit_c ?? null : suppliedLimit;
+  const savedMaximum = pluginVerdict === undefined ? savedLimit?.maximum_c ?? null : suppliedMaximum;
+  const verdict = pluginVerdict ?? savedLimit?.within;
   function select(sample: FieldSample) {
     setSelected(sample.id);
     onSelect({
@@ -130,8 +135,8 @@ export function StudyTemperature({
   const conclusion = (
     <Conclusion
       title={<StatusMark kind={verdict === undefined ? 'unknown' : verdict ? 'satisfied' : 'unsatisfied'} label={verdict === undefined ? '无法判断' : verdict ? '满足温限' : '超温'} />}
-      model={`最高温度 ${verdict === undefined ? engineeringQuantity("temperature", data.maximum, "K").text : formatNumber(savedMaximum, 1)} °C`}
-      description={verdict === undefined ? '保存工件未提供温限判定与超出量；最高温度不代表满足温限。' : `保存温限 ${formatNumber(limit, 1)} °C。${verdict ? '判定来自已校验的插件工件。' : '插件已判定超温，但工件未提供超出量。'}`}
+      model={`${savedLimit ? '最高导体温度' : '最高温度'} ${verdict === undefined ? engineeringQuantity("temperature", data.maximum, "K").text : formatNumber(savedMaximum, 1)} °C`}
+      description={savedLimit ? `${limit === null ? '按各电缆保存正常温限' : `保存正常温限 ${formatNumber(limit, 1)} °C`} · ${savedLimit.within ? '导体结果满足温限' : `最大超出 ${formatNumber(savedLimit.excess_k, 1)} K`}` : verdict === undefined ? '保存工件未提供温限判定与超出量；最高温度不代表满足温限。' : `保存温限 ${formatNumber(limit, 1)} °C。${verdict ? '判定来自已校验的插件工件。' : '插件已判定超温，但工件未提供超出量。'}`}
       historical={run.freshness === "historical"}
       metrics={[
         {
@@ -188,6 +193,7 @@ export function StudyTemperature({
         {data.kind === "fem" ? <div className="saved-fem-field"><FieldView
           label="有限元温度场" points={data.points} triangles={data.triangles}
           values={data.temperatures.map(value => value - 273.15)}
+          limit={limit === null ? undefined : { value: limit, label: '导体正常温限' }}
           samplePoint={optionalRecord(data.field.convergence).display_decimated === true ? async point => {
             const response = await hpcJson(`/workspaces/${text(run.workspace)}/fields/${text(run.id)}/sample?case_id=${text(data.case.case_id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([point]) });
             const values = response.temperature_k; const value = Array.isArray(values) ? numeric(values[0]) : null;

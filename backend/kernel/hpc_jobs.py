@@ -23,7 +23,8 @@ def study_jobs(research):
         definition=json.loads(row['snapshot'])['definition'];method=definition['method']
         execution=research.executor.execution_status(row['id'],method['plugin_id'],method['capability'])
         if not execution:continue
-        state=row['status'] if row['status'] in ('validating','succeeded','partial','failed','interrupted') else execution.get('state',row['status'])
+        recovering_live=row['status']=='validating' and execution.get('slurm_states') and not terminal(execution)
+        state=row['status'] if row['status'] in ('validating','succeeded','partial','failed','interrupted') and not recovering_live else execution.get('state',row['status'])
         result.append({'id':row['id'],'kind':'study','workspace':row['workspace'],'study':row['study'],
             'study_name':definition['title'],'sequence':row['sequence'],'created':row['created'],
             'started':execution.get('started'),'finished':execution.get('finished') or row['finished'],

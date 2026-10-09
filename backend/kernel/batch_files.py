@@ -27,7 +27,16 @@ def atomic(path, value):
     try:
         with temporary.open('xb') as stream:
             stream.write(encoded(value));stream.flush();os.fsync(stream.fileno())
-        os.replace(temporary,path)
+        # Windows readers/antivirus can briefly hold a handle without DELETE
+        # sharing. Keep the old complete file until replacement succeeds; do not
+        # turn a transient progress-file collision into a failed Slurm run.
+        deadline=time.monotonic()+2
+        while True:
+            try:
+                os.replace(temporary,path);break
+            except PermissionError as exc:
+                if getattr(exc,'winerror',None) not in (5,32,33) or time.monotonic()>=deadline:raise
+                time.sleep(.02)
     finally:
         temporary.unlink(missing_ok=True)
 

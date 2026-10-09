@@ -13,7 +13,7 @@ def test_single_circuit_limit_matches_hand_calculation(monkeypatch,mode,conditio
     prepared=(SimpleNamespace(iec={'rating_mode':mode}),document,group,None,
         [{'entity':'cable/one','circuit':'circuit/one'}],[])
     mesh=object();calls=[]
-    def solve(value,saved_mesh):
+    def solve(value,saved_mesh,**_):  # 新增的 _cache、_export_field 只影响缓存与导出
         assert saved_mesh is mesh
         current=value[2].cables[0]['current'];calls.append(current)
         return {'cables':[{'entity':'cable/one','conductor_max_temperature_k':293.15+current**2/1000}],
