@@ -406,6 +406,12 @@ def seed_release(database):
         with TemporaryDirectory(prefix='seed-',dir=database.parent) as scratch:
             staged = Path(scratch)/database.name
             result = build_release_seed(staged,database,identity)
+            # 新库只挪主文件：先把 WAL 合并进主文件，否则最后几次写入（如最后一个运行）会留在 -wal 里丢失
+            with closing(sqlite3.connect(staged,timeout=20)) as built:
+                if built.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()[0] != 0:
+                    raise RuntimeError('新生成的发布库仍有未合并的写入，已停止替换。')
+                if built.execute('PRAGMA journal_mode=DELETE').fetchone()[0] != 'delete':
+                    raise RuntimeError('新生成的发布库仍被占用，已停止替换。')
             validate(staged)
             if identity != release_identity():
                 raise RuntimeError('生成期间插件或型号版本发生变化；保留旧库，请重新启动。')
