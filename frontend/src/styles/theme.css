@@ -299,6 +299,7 @@ summary { color: var(--text-secondary); cursor: pointer; margin-block: var(--spa
 .object-section > header a, .object-link { color: var(--text); text-underline-offset: var(--space-1); }
 .object-section > header a:hover, .object-link:hover { text-decoration: underline; }
 .object-section > header a { color: var(--text-secondary); font-size: var(--text-note); }
+.list-more { display: flex; justify-content: center; padding-top: var(--space-4); }
 .text-field { display: flex; flex-direction: column; gap: var(--space-1); color: var(--text-secondary); font-size: var(--text-note); }
 .text-field input, .search-field input { height: var(--control-standard); border: 1px solid var(--control-border); border-radius: var(--radius-input); padding-inline: var(--space-2); background: var(--panel); color: var(--text); }
 .text-field input[aria-invalid="true"] { border-color: var(--error); }
