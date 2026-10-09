@@ -16,7 +16,16 @@ from threading import local
 
 
 _notification_thread = local()
-_notification_owner = ThreadPoolExecutor(max_workers=1, thread_name_prefix='source-notifications')
+
+
+def _mark_owner():
+    # Set before the owner runs anything: a close() reached on this thread (for
+    # example from __del__ during garbage collection) must call through, not
+    # submit to itself and wait forever.
+    _notification_thread.active = True
+
+
+_notification_owner = ThreadPoolExecutor(max_workers=1, thread_name_prefix='source-notifications', initializer=_mark_owner)
 
 
 def notification_owner():
@@ -30,10 +39,7 @@ def owned_notification(function):
     @wraps(function)
     def wrapped(*args, **kwargs):
         if getattr(_notification_thread,'active',False):return function(*args, **kwargs)
-        def invoke():
-            _notification_thread.active=True
-            return function(*args, **kwargs)
-        return notification_owner().submit(invoke).result()
+        return notification_owner().submit(function,*args,**kwargs).result()
     return wrapped
 
 
