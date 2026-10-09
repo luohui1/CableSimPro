@@ -546,6 +546,7 @@
 .object-chip .object-link { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .object-chip > .muted { flex: none; font-size: var(--text-note); }
 .relation-panel { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.property-panel .relation-panel section { padding: 0; margin-block: 0; }
 .relation-panel h3 { font-size: var(--text-note); color: var(--text-secondary); font-weight: var(--weight-strong); margin-bottom: var(--space-1); }
 .relation-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 .relation-row { display: grid; grid-template-columns: calc(var(--space-12) + var(--space-4)) minmax(0, 1fr); gap: var(--space-1) var(--space-2); align-items: baseline; }

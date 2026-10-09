@@ -39,8 +39,8 @@ export function ObjectLink({ card, children, className = "object-link" }: { card
       ? <Link className={className} to="/studies/$sid" params={{ sid: parent.id }} search={{ theme, workspace: "", run: card.id, delivery: "" }}>{body}</Link>
       : <Link className={className} to="/runs" search={{ theme }}>{body}</Link>;
     case "type": return <Link className={className} to="/types/$wid/$module/$tab" params={{ wid: card.id, module: "structure", tab: "section" }} search={{ theme }}>{body}</Link>;
-    case "cable_version": return <Link className={className} to="/resources/cables" search={{ theme }}>{body}</Link>;
-    case "asset": return <Link className={className} to="/resources/$group" params={{ group: ASSET_GROUP[card.subtype || ""] || "materials" }} search={{ theme }}>{body}</Link>;
+    case "cable_version": return <Link className={className} to="/resources/cables" search={{ theme, item: card.id }}>{body}</Link>;
+    case "asset": return <Link className={className} to="/resources/$group" params={{ group: ASSET_GROUP[card.subtype || ""] || "materials" }} search={{ theme, item: card.id }}>{body}</Link>;
     case "job": return <Link className={className} to="/runs" search={{ theme }}>{body}</Link>;
     case "delivery": return <Link className={className} to="/deliveries" search={{ theme, workspace: "", delivery: card.id }}>{body}</Link>;
     case "plugin": return <Link className={className} to="/plugins/$pid" params={{ pid: card.id }} search={{ theme }}>{body}</Link>;

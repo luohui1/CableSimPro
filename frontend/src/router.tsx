@@ -58,11 +58,13 @@ const rootRoute = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   ),
 });
 const deliverySearch = (search: Record<string, unknown>) => ({ ...themeSearch(search), workspace: typeof search.workspace === "string" ? search.workspace : "", delivery: typeof search.delivery === "string" ? search.delivery : "" });
+// 资源目录的 item：链接直接打开某一条的属性面板（ObjectLink 只在 object-link 里换算）
+const itemSearch = (search: Record<string, unknown>): { theme: "light" | "dark"; item?: string } => ({ ...themeSearch(search), item: typeof search.item === "string" && search.item ? search.item : undefined });
 const documentSearch = (search: Record<string, unknown>): { theme: 'light' | 'dark'; document?: string; extraction?: string; proposal?: string; batch?:string } => ({ ...themeSearch(search), document: typeof search.document === 'string' ? search.document : '', extraction: typeof search.extraction === 'string' ? search.extraction : '', proposal: typeof search.proposal === 'string' ? search.proposal : '', batch:typeof search.batch === 'string' ? search.batch : '' });
 // 资源（FRONTEND_REQUIREMENTS §2.2 / §2.3）：电缆型号版本及其厂家资料导入；材料与部件、模板与计算方案、标准与规则
-const cableVersionsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/cables", validateSearch: themeSearch, component: CableVersionsPage });
+const cableVersionsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/cables", validateSearch: itemSearch, component: CableVersionsPage });
 const documentsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/cables/imports", validateSearch: documentSearch, component: DocumentsPage });
-const assetGroupRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/$group", validateSearch: themeSearch, beforeLoad: ({ params }) => { if (!["materials", "templates", "standards"].includes(params.group)) throw notFound(); }, component: AssetsPage });
+const assetGroupRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/$group", validateSearch: itemSearch, beforeLoad: ({ params }) => { if (!["materials", "templates", "standards"].includes(params.group)) throw notFound(); }, component: AssetsPage });
 // 记录：运行与作业、交付；都是跨对象的筛选视图，各自的家在所属研究或型号里
 const runsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/runs", validateSearch: themeSearch, component: RunsPage });
 // 待办：四类审核、过期待重算、资料缺项、进行中，来自统一索引（§2.3）

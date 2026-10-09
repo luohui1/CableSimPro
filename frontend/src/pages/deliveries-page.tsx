@@ -10,6 +10,8 @@ import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { LoadingState, ErrorState, InlineEmpty } from "@/components/states";
 import { VersionNotice } from '@/components/version-notice';
+import { PropertyPanel } from "@/components/property-panel";
+import { RelationPanel } from "@/components/relation-panel";
 
 type Row = DeliverySummary & { wid: string; owner: string };
 
@@ -50,8 +52,17 @@ export function DeliveriesPage() {
     link.download = `${row.kind === "specification" ? "规格书" : "计算书"}-第${row.version}版-${format === "html" ? "存档.html" : `${audience === "customer" ? "客户版" : "内部版"}.pdf`}`;
     link.click();setTimeout(() => URL.revokeObjectURL(url), 1000);
   } });
+  const label = (row: Row) => `${row.owner} · ${row.kind === "specification" ? "规格书" : "计算书"} · 第 ${row.version} 版`;
   const go = (workspace: string, next: string) => { download.reset(); void navigate({ to: "/deliveries", search: { theme, workspace, delivery: next } }); };
-  return <CatalogShell title="交付" status={<span className="muted">{pending ? "读取中" : `${rows.length} 份`} · 下载存档，不重新计算</span>}>
+  return <CatalogShell title="交付" status={<span className="muted">{pending ? "读取中" : `${rows.length} 份`} · 下载存档，不重新计算</span>}
+    property={selected ? <PropertyPanel collapsed={false} title={label(selected)} onToggle={() => go(filter, "")}
+      groups={[{ label: "名片", items: [
+        { label: "所属", value: selected.owner },
+        { label: "生成时间", value: new Date(selected.created).toLocaleString("zh-CN") },
+        { label: "来源", value: `${selected.sources.length} 个固定运行` },
+        { label: "存档摘要", value: selected.digest.slice(0, 12) },
+      ] }]}
+      extra={<section aria-label="关联"><h3>关联</h3><RelationPanel kind="delivery" id={selected.id} /></section>} /> : undefined}>
     <Toolbar label="交付筛选">
       <Select label="所属" value={filter || "all"} onChange={value => go(value === "all" ? "" : value, "")}
         options={[{ value: "all", label: "全部工程与型号" }, ...owners.map(owner => ({ value: owner.wid, label: owner.name }))]} />
@@ -61,7 +72,7 @@ export function DeliveriesPage() {
       : failure ? <ErrorState description={message(failure)} action={<Button onClick={() => { void spaces.refetch(); lists.forEach(list => void list.refetch()); }}>重新读取</Button>} />
       : !rows.length ? <InlineEmpty title={filter ? "这个工程或型号还没有交付。生成计算书或规格书后会出现在这里。" : "还没有交付。在研究里生成计算书，或在型号里生成规格书。"} />
       : <DataTable<Row> label="计算书与规格书" showGroups={false} selectedId={did}
-        groups={[{id:"deliveries",label:"交付版本",rows}]} rowLabel={row => `${row.owner} · ${row.kind === "specification" ? "规格书" : "计算书"} · 第 ${row.version} 版`}
+        groups={[{id:"deliveries",label:"交付版本",rows}]} rowLabel={label}
         onSelect={row => go(filter, row.id)}
         columns={[
           {id:"owner",label:"所属",wrap:true,render:row=>row.owner},

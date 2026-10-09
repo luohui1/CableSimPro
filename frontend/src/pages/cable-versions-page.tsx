@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { cableModels } from "@/api/documents";
 import { message, numeric, optionalRecord, text } from "@/api/client";
@@ -71,7 +71,10 @@ function rows(data: Record<string, unknown>[]): Version[] {
 export function CableVersionsPage() {
   const { theme } = usePageTheme();
   const navigate = useNavigate();
-  const [selected, setSelected] = useState(""), [origin, setOrigin] = useState("all");
+  const { item } = useSearch({ strict: false }) as { item?: string };
+  const selected = item || "";
+  const setSelected = (id: string) => void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, item: id || undefined }), replace: true });
+  const [origin, setOrigin] = useState("all");
   const models = useQuery({ queryKey: ["domain-cable-models"], queryFn: ({ signal }) => cableModels(signal) });
   const all = rows(models.data || []);
   const kindsOf = (row: Version) => new Set(row.sources.map((source) => source.kind));
@@ -137,8 +140,8 @@ export function CableVersionsPage() {
                 columns={[
                   { id: "name", label: "型号", wrap: true, render: (row) => row.name },
                   { id: "spec", label: "规格", render: (row) => row.spec || "—" },
-                  { id: "content", label: "内容", render: (row) => row.content },
-                  { id: "source", label: "主要来源", render: (row) => (SOURCE[mainSource(row)]?.label || mainSource(row)) + (row.maker ? ` · ${row.maker}` : "") },
+                  { id: "content", label: "内容", wrap: true, render: (row) => row.content },
+                  { id: "source", label: "主要来源", wrap: true, render: (row) => (SOURCE[mainSource(row)]?.label || mainSource(row)) + (row.maker ? ` · ${row.maker}` : "") },
                   { id: "version", label: "版本", render: (row) => row.version },
                   { id: "status", label: "状态", render: (row) => <StatusMark kind={STATE[row.state] || "draft"} label={row.status} /> },
                 ]}

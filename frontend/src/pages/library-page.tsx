@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "@tanstack/react-router";
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { assetCatalog, assetDetail, importAsset } from "@/api/catalogs";
 import { message, numeric, optionalRecord, text } from "@/api/client";
@@ -7,6 +7,7 @@ import type { components } from "@/api/generated/schema";
 import { CatalogShell } from "@/components/catalog-shell";
 import { DataTable } from "@/components/data-table";
 import { PropertyPanel } from "@/components/property-panel";
+import { RelationPanel } from "@/components/relation-panel";
 import { StatusMark } from "@/components/status-mark";
 import { Toolbar } from "@/components/toolbar";
 import { Button } from "@/components/ui/button";
@@ -41,10 +42,13 @@ export function AssetsPage() {
   const { group: groupId } = useParams({ strict: false }) as { group: keyof typeof groups };
   const group = groups[groupId] || groups.materials;
   const queries = useQueryClient();
+  const navigate = useNavigate();
+  const { item } = useSearch({ strict: false }) as { item?: string };
+  const selected = item || "";
+  const setSelected = (id: string) => void navigate({ to: ".", search: (prev: Record<string, unknown>) => ({ ...prev, item: id || undefined }), replace: true });
   const [q, setQ] = useState(""),
     [kind, setKind] = useState("all"),
     [status, setStatus] = useState("all"),
-    [selected, setSelected] = useState(""),
     [open, setOpen] = useState(false),
     [raw, setRaw] = useState(""),
     [fileError, setFileError] = useState("");
@@ -133,6 +137,7 @@ export function AssetsPage() {
                 })),
               },
             ]}
+            extra={<section aria-label="关联"><h3>关联</h3><RelationPanel kind="asset" id={selected} /></section>}
             onToggle={() => setSelected("")}
           />
         ) : undefined
