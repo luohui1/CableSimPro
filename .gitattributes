@@ -7,4 +7,6 @@
 /plugins/*/src/** text eol=lf
 /plugins/*/assets/** text=auto eol=lf
 /plugin-spec/*.json text eol=lf
+# Extension examples carry sha256/size declarations for their files.
+/docs/plugins/examples/** text eol=lf
 /plugins/releases/*.json text eol=lf
