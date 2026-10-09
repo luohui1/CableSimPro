@@ -54,7 +54,7 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
       <DropdownMenuTrigger asChild><Button variant="secondary" className="sidebar-new"><Icon name="action/add" /><span>新建</span></Button></DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         <DropdownMenuItem onSelect={() => setCreate(true)}>新建研究</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void navigate({ to: '/types', search: { theme } })}>新建型号</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => void navigate({ to: '/types', search: { theme, create: true } })}>新建型号</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
     <nav className="sidebar-scroll" aria-label="对象">

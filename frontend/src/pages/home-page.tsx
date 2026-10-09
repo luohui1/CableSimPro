@@ -112,7 +112,7 @@ export function HomePage() {
           </div>
           <nav className="home-domains" aria-label="新建">
             <div><Icon name="calc/ampacity" /><Link to="/studies" search={{ theme, kind: "ampacity" }}><b>载流量计算</b><span className="muted">{rows.length - simulation} 项研究</span></Link><Button size="compact" variant="ghost" onClick={() => setCreate(true)}>新建研究</Button></div>
-            <div><Icon name="nav/cable-type" /><Link to="/types" search={{ theme }}><b>电缆设计</b><span className="muted">{typeCards.data?.total ?? "—"} 个型号设计</span></Link><Button size="compact" variant="ghost" onClick={() => void navigate({ to: "/types", search: { theme } })}>新建型号</Button></div>
+            <div><Icon name="nav/cable-type" /><Link to="/types" search={{ theme }}><b>电缆设计</b><span className="muted">{typeCards.data?.total ?? "—"} 个型号设计</span></Link><Button size="compact" variant="ghost" onClick={() => void navigate({ to: "/types", search: { theme, create: true } })}>新建型号</Button></div>
             <div><Icon name="calc/thermal-field" /><Link to="/studies" search={{ theme, kind: "simulation" }}><b>电缆仿真</b><span className="muted">{simulation} 项研究</span></Link><Button size="compact" variant="ghost" onClick={() => setCreate(true)}>新建研究</Button></div>
           </nav>
         </>}

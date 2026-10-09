@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { newType } from "@/features/type/creation-api";
 import { matchesOriginal, printedValue, specificationKey, specificationLabel } from '@/features/documents/evidence';
 import { Link } from "@tanstack/react-router";
 import * as documents from "@/api/documents";
@@ -220,6 +221,14 @@ function DocumentWorkspace({ did }: { did: string }) {
     queryFn: ({ signal }) => documents.extractionInfo(did, runId, signal),
     enabled: !!runId,
     refetchInterval: (query) => (isRunning(query.state.data) ? 1200 : false),
+  });
+  const createDesign = useMutation({
+    retry: false,
+    mutationFn: async () => {
+      const value = proposal.data!;
+      const created = await newType({ request_id: crypto.randomUUID(), name: value.draft.name, origin: "import", proposal_id: value.id, content_sha256: value.sha256 });
+      await navigate({ to: "/types/$wid/$module/$tab", params: { wid: created.id, module: "structure", tab: "section" }, search: { theme } });
+    },
   });
   const proposal = useQuery({
     queryKey: ["document-proposal", did, pid],
@@ -847,10 +856,17 @@ function DocumentWorkspace({ did }: { did: string }) {
                     </Button>
                   </details>
                   {proposal.data.status === "approved" && (
-                    <Button onClick={() => downloadJson(proposal.data!.draft, '型号资料草稿.json')}>
-                      下载型号草稿
-                    </Button>
+                    <div className="report-toolbar">
+                      {/* 批准的资料提案直接建成型号设计（§4.2 第 3 个起点），来源固定为本提案与资料页码 */}
+                      <Button variant="primary" loading={createDesign.isPending} onClick={() => createDesign.mutate()}>
+                        新建型号设计
+                      </Button>
+                      <Button onClick={() => downloadJson(proposal.data!.draft, '型号资料草稿.json')}>
+                        下载型号草稿
+                      </Button>
+                    </div>
                   )}
+                  {createDesign.error && <p role="alert" className="field-error">{message(createDesign.error)}</p>}
                 </section>
               ) : showProposal && run ? (
                 models.isPending ? (
