@@ -31,6 +31,7 @@ import { TypeModulePage } from './module-page';
 import { DesignCard } from './design-card';
 import { typeComparison, typeSpecification } from './version-api';
 import { ResourceBindings } from './resource-bindings';
+import { AgentPanel } from '@/features/agent/agent-panel';
 
 import { typeModules } from "./module-definitions";
 export { typeModules } from "./module-definitions";
@@ -48,7 +49,9 @@ export function TypeWorkspace() {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   // 电气参数、短路容量的方法参数属于“改输入”，放在右侧方法页；数据区只留结果
   const methodModule = location.module === 'electrical' || location.module === 'short-circuit';
-  const [inspectorView, setInspectorView] = useState<'input' | 'method'>(methodModule && location.tab === 'parameters' ? 'method' : 'input');
+  const [inspectorView, setInspectorView] = useState<'input' | 'method' | 'agent'>(methodModule && location.tab === 'parameters' ? 'method' : 'input');
+  const [agentOpened, setAgentOpened] = useState(false);
+  useEffect(() => { if (inspectorView === 'agent') setAgentOpened(true); }, [inspectorView]);
   // 地址指向方法参数页签（如结果空状态里的“在方法页填写参数”）时打开右侧方法页
   useEffect(() => { if (methodModule && location.tab === 'parameters') setInspectorView('method'); }, [methodModule, location.tab]);
   const showProperty = useCallback((title: string, groups: PropertyGroup[]) => { setResultProperty({ title, groups }); setCollapsed(false); }, []);
@@ -150,23 +153,20 @@ export function TypeWorkspace() {
     </div>}
     <span className="command-state" title={resultStatus(location.module).reason}>{commandResultLabel(resultStatus(location.module), latestModuleRun(evidence.data, location.module, methods.data), state.dirty)}</span>
   </div>;
-  const inspector = methodModule && inspectorView === 'method' ? <div className="type-property-wrapper">
+  const inspector = <div className="type-property-wrapper">
     <div className="inspector-switch" role="tablist" aria-label="属性分页">
-      <button type="button" role="tab" aria-selected={false} onClick={() => setInspectorView('input')}><Icon name="object/conditions" />输入</button>
-      <button type="button" role="tab" aria-selected onClick={() => setInspectorView('method')}><Icon name="nav/plugin" />方法</button>
+      <button type="button" role="tab" aria-selected={inspectorView === 'input' || inspectorView === 'method' && !methodModule} onClick={() => setInspectorView('input')}><Icon name="object/conditions" />输入</button>
+      {methodModule && <button type="button" role="tab" aria-selected={inspectorView === 'method'} onClick={() => setInspectorView('method')}><Icon name="nav/plugin" />方法</button>}
+      <button type="button" role="tab" aria-selected={inspectorView === 'agent'} onClick={() => setInspectorView('agent')}><Icon name="agent/agent" />Agent</button>
     </div>
-    <div className="inspector-method">{document && <TypeModulePage module={location.module} tab="parameters" />}</div>
-  </div> : <div className="type-property-wrapper">
-    {methodModule && <div className="inspector-switch" role="tablist" aria-label="属性分页">
-      <button type="button" role="tab" aria-selected onClick={() => setInspectorView('input')}><Icon name="object/conditions" />输入</button>
-      <button type="button" role="tab" aria-selected={false} onClick={() => setInspectorView('method')}><Icon name="nav/plugin" />方法</button>
-    </div>}
+    {methodModule && inspectorView === 'method' ? <div className="inspector-method">{document && <TypeModulePage module={location.module} tab="parameters" />}</div> : inspectorView !== 'agent' && <>
     {document && <section className="inspector-block" aria-label="型号">
       <header><Icon name="nav/cable-type" /><h2>型号</h2></header>
       <label className="text-field">型号名称<input className="type-name-input" value={cleanLabel(document.name)} disabled={state.busy || state.readOnly} onChange={event => state.edit('/name', event.target.value)} /></label>
       {document.cable_types.length > 1 && <Select label="电缆结构" value={cable?.id} disabled={state.busy} options={document.cable_types.map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={value => { setCableId(value); choose(null); }} />}
     </section>}
-    {property}{location.module === 'structure' && !row && !!state.workspace?.raw.type_creation && document && <TypeRatingInputs />}
+    {property}{location.module === 'structure' && !row && !!state.workspace?.raw.type_creation && document && <TypeRatingInputs />}</>}
+    {agentOpened && state.workspace && <div className="type-agent-panel" hidden={inspectorView !== 'agent'}><AgentPanel key={state.workspace.id} workspaceId={state.workspace.id} context={cleanLabel(document?.name || '型号设计')} suggestions={['检查这个型号的问题', '绝缘厚度改到 15.8 mm 会怎样？', '检查规格书还缺哪些来源与结果']} /></div>}
   </div>;
   return <TypeCommandSlot.Provider value={slot}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<StatusMark kind={status} label={(location.run ? '运行快照 · 只读' : statusLabel) + (demo ? ' · 演示' : '')} detail={state.error || (demo ? '型号基准含演示来源，请核对各字段工程依据。' : state.readOnly ? '所选输入快照只读；基准版本与来源见型号名片。' : state.dirty ? '保存后更新型号输入；原运行结果保留并标为过期。' : '当前编辑已保存；各模块保存结果的状态见型号浏览器。')} />}
     activeNavigation="型号" theme={location.theme} onTheme={onTheme} onUnavailable={name => setInfo(name + '入口尚未接入')}

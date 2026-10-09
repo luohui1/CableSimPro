@@ -61,7 +61,7 @@ export function TypeQuantities({ cable }: { cable: CableType }) {
     }} definition={async () => ({ title: state.document!.name + ' · 结构推导', input_source: 'domain', method: await geometryMethod(), parameters: { cable_type_id: cable.id } })} /></CommandAction>
     {saved && <div className="type-result-toolbar"><SavedRunPicker schema="cablesim.cad-model/1" /></div>}
     {bodyState === 'loading' ? <LoadingState title="正在读取或推导实体用料" /> : bodyState === 'error' ? <ErrorState title="结构推导不可用" description={error || message(evidence.error)} action={<Button onClick={() => void evidence.refetch()}>重新读取</Button>} /> : !saved ? <InlineEmpty title="尚无保存的结构推导，使用命令栏更新。" /> : <>
-      {!current && <StaleBanner description="输入或方法已变化，以下为历史推导。" />}
+      {!current && <StaleBanner description="以下为历史推导；保存修改后点击“更新结构推导”。" />}
       <div className="type-result-summary"><span>成品外径 <strong>{formatNumber(numeric(saved.artifact.outer_diameter_m)! * 1000, 2)}</strong><span className="unit">mm</span></span>
         <span>理论用料 <strong>{saved.artifact.mass_kg_per_km == null ? '缺项' : formatNumber(numeric(saved.artifact.mass_kg_per_km), 2)}</strong><span className="unit">kg/km</span></span>
         <span>建模长度 {formatNumber(numeric(saved.artifact.length_m), 3)} m</span><SourceBadge kind="derived" detail={source} /></div>

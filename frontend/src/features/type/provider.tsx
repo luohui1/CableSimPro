@@ -46,7 +46,10 @@ export function TypeProvider({ wid, children }: { wid: string; children: ReactNo
       const next = previous || initial(); return { ...next, fields: { ...next.fields, [spec.path]: { value, spec } } };
     }); setError(''); setNotice('');
   }
-  async function refresh(next: Workspace) { queries.setQueryData(['type-workspace', wid, undefined, undefined], next); await queries.invalidateQueries({ queryKey: ['type-evidence', wid] }); await queries.invalidateQueries({ queryKey: ['type-list'] }); }
+  async function refreshResults() {
+    await Promise.all(['type-evidence', 'type-specification', 'type-comparison', 'type-studies'].map(key => queries.invalidateQueries({ queryKey: [key, wid] })));
+  }
+  async function refresh(next: Workspace) { queries.setQueryData(['type-workspace', wid, undefined, undefined], next); await refreshResults(); await queries.invalidateQueries({ queryKey: ['type-list'] }); }
   async function save() {
     if (pending.current || (!draftRef.current && !ratingRef.current && !Object.keys(methodsRef.current).length) || !workspace || readOnly) return;
     pending.current = true; setBusy(true); setError(''); setNotice(''); setFieldError(null);
@@ -63,11 +66,11 @@ export function TypeProvider({ wid, children }: { wid: string; children: ReactNo
         methodsToSave = Object.fromEntries(Object.entries(savedMethods).map(([module, original]) => [module, { ...original, revision: next.revision }]));
         methodsRef.current = methodsToSave; setMethodDrafts(methodsToSave);
       }
-      if (ratingToSave) { await saveRating(wid, ratingToSave, ratingToSave.revision); if (ratingRef.current === ratingToSave) setRatingDraft(null); await queries.invalidateQueries({ queryKey: ['type-studies', wid] }); await queries.invalidateQueries({ queryKey: ['type-evidence', wid] }); }
+      if (ratingToSave) { await saveRating(wid, ratingToSave, ratingToSave.revision); if (ratingRef.current === ratingToSave) setRatingDraft(null); await refreshResults(); }
       for (const [module, original] of Object.entries(methodsToSave)) {
         await saveMethod(wid, original);
         setMethodDrafts(current => { if (current[module] !== original) return current; const remaining = { ...current }; delete remaining[module]; methodsRef.current = remaining; return remaining; });
-        await queries.invalidateQueries({ queryKey: ['type-studies', wid] }); await queries.invalidateQueries({ queryKey: ['type-evidence', wid] });
+        await refreshResults();
       }
       setNotice(savedRating || Object.keys(savedMethods).length ? '已保存型号与方法条件' : '已保存型号草稿');
     } catch (error) { setError(message(error)); }

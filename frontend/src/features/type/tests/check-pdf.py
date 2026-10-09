@@ -17,7 +17,8 @@ with fitz.open(sys.argv[1]) as document:
         assert not re.search(r'[0-9a-f]{64}', compact)
         assert all(term not in text for term in ('发布前待完成事项','t_n','来源与运行依据','铅套标称厚度','铅套最薄点'))
         assert document.metadata['subject'] == '客户版产品规格书'
-        assert all('声明项目' in page for page in pages if '标准条款声明' in page), '标准声明标题与表格跨页分离'
+        assert '标准核对表' in text and '余量' in text and '来源与版本' in text
+        assert '结构截面' in pages[1] and len(document[1].get_drawings()) > 5
     else:
         assert document.metadata['subject'] == sys.argv[2]
         assert sys.argv[2] in compact

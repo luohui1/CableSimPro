@@ -125,6 +125,7 @@ def render_pdf(specification, audience='internal'):
             total = len(self.saved)
             for state in self.saved:
                 self.__dict__.update(state)
+                self.setFillColor(colors.HexColor('#202020'))
                 self.setFont(font,10)
                 self.drawString(42,height-31,'产品规格书')
                 revisions = document_revisions(payload)
@@ -143,6 +144,11 @@ def render_pdf(specification, audience='internal'):
     for index, body in enumerate(chapter_bodies(payload,lifecycle,audience)):
         if index == 1: story.append(PageBreak())
         if index: story.append(paragraph(f'{index+1}. {chapter_names(audience)[index]}',styles['h2']))
+        if index == 2:
+            from .type_specification_drawing import section_drawing
+            drawing = section_drawing(payload, document.width, font)
+            if drawing is not None:
+                story.append(drawing)
         story.extend(flowables(body))
     if audience == 'internal':
         story.append(PageBreak())
@@ -159,4 +165,3 @@ def render_pdf(specification, audience='internal'):
             arranged.append(item)
     document.build(arranged,canvasmaker=NumberedCanvas)
     return output.getvalue()
-

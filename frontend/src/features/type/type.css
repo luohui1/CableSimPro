@@ -87,6 +87,9 @@
 .type-root .dialog-content .table-scroll{max-height:calc(var(--space-12)*5);flex-shrink:0}
 .type-meta{padding:var(--space-3) var(--space-4);font-size:var(--text-note);color:var(--text-secondary)}
 .type-property-wrapper{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--panel);overflow:auto}
+.type-agent-panel{display:flex;flex:1;min-width:0;min-height:0}
+.type-agent-panel[hidden]{display:none}
+.type-agent-panel>.agent-panel{min-width:0;flex:1}
 .type-property-wrapper>.property-panel{height:auto;border:0}
 .type-root .property-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.5fr);gap:var(--space-3);align-items:start}
 .type-root .property-row dt,.type-root .property-row dd{min-width:0;white-space:normal;overflow-wrap:anywhere}

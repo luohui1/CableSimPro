@@ -13,7 +13,7 @@ CHAPTERS = [
     '封面', '型号与执行标准', '结构尺寸表', '电气参数', '载流量表', '短路容量',
     '标准核对结论与偏离表', '修订记录',
 ]
-CUSTOMER_CHAPTERS = [*CHAPTERS[:6], '标准条款声明', '文档修订记录']
+CUSTOMER_CHAPTERS = [*CHAPTERS[:6], '标准核对表', '文档修订记录与来源']
 SECTIONS = ('cover', 'standards', 'structure', 'electrical', 'rating', 'short-circuit', 'checks', 'revisions')
 CHANNELS = {
     'geometry': 'x-cablesim.cad-model', 'electrical': 'x-cablesim.type-electrical',
@@ -54,6 +54,10 @@ def clean_name(text):
     text = re.sub(r'[（(][^）)]*演示[^）)]*[）)]', '', text)
     text = re.sub(r'\s*[·（(]\s*(?:资料核对|合成验收数据|(?:典型)?结构演示|演示)[^·）)]*[）)]?', '', text)
     return text.strip(' ·') or '型号'
+
+
+def readable_version(value):
+    return str(value or '待提供').replace('+engineering', '（工程版）')
 
 
 def text(value):
@@ -151,11 +155,23 @@ def parameter_table(rows, empty, short_circuit=False):
 
 
 def geometry_tables(payload, audience='internal'):
+    from .type_specification_drawing import section_svg
     cable = payload['document']['cable_types'][0]
     geometry = payload['results'].get('geometry', {}).get('artifact', {})
     rows = structure_rows(cable, payload['document']['materials'], audience=='customer')
+    pins = payload.get('resource_bindings', {}).get('material', {})
+    cores = cable['cores']
+    shared = audience == 'customer' and len(cores)>1 and all(
+        core['conductor']==cores[0]['conductor'] and core['layers']==cores[0]['layers'] for core in cores[1:])
+    identities = [identity for core in (cores[:1] if shared else cores)
+                  for identity in [core['conductor']['material'], *[layer['material'] for layer in core['layers']]]]
+    identities.extend(layer['material'] for layer in cable['common_layers'])
+    for row, identity in zip(rows, identities):
+        # Bind by input identity; equal display names do not imply equal resource versions.
+        pin = pins.get(identity, {})
+        row[2] += ' · '+readable_version(pin['version']) if pin else ' · 未绑定资源'
     single = len(cable['cores']) == 1
-    body = table(['结构层', '材料', '尺寸 / mm', '截面 / mm²'] if single else ['对象', '结构层', '材料', '尺寸 / mm', '截面 / mm²'],
+    body = section_svg(payload)+'<h3>分层结构与材料版本</h3>'+table(['结构层', '材料', '尺寸 / mm', '截面 / mm²'] if single else ['对象', '结构层', '材料', '尺寸 / mm', '截面 / mm²'],
                  [row[1:] for row in rows] if single else rows,
                  widths=[1.2,2.8,1.3,1.2] if single else [.8,1.2,2.8,1.3,1.2])
     body += '<h3>外径与理论用料</h3>'
@@ -165,27 +181,38 @@ def geometry_tables(payload, audience='internal'):
         ['成品外径', number(geometry.get('outer_diameter_m'), 1, 1000) + ' mm', '结构推导'],
         ['单位长度用料', number(geometry.get('mass_kg_per_km'), 0) + ' kg/km' if geometry.get('mass_kg_per_km') is not None
          else '未计算（缺少完整密度或构造输入）', '理论用料，非成品实测重量']], widths=[2,2,3])
-    if audience == 'customer':
-        return body
     body += table(
-        ['保存结构层', '推导外径 / mm', '用料 / kg/km', '依据 / 缺项'],
-        [[LAYER_NAMES.get(row['role'], '结构层'), number(row.get('outer_radius_m'), 1, 2000), number(row.get('mass_kg_per_km'), 0),
-          '；'.join(row.get('quantity_missing') or []) or row.get('quantity_basis') or '保存的实体积分']
+        ['结构层', '内径 → 外径 / mm', '体积 / m³/km', '用料 / kg/km', '推导依据 / 缺项'],
+        [[row.get('label') or LAYER_NAMES.get(row['role'], '结构层'),
+          number(row.get('inner_radius_m'), 2, 2000)+' → '+number(row.get('outer_radius_m'), 2, 2000),
+          number(row.get('material_volume_m3'), 3, 1000/geometry['length_m']) if geometry.get('length_m',0)>0 else '未提供', number(row.get('mass_kg_per_km'), 0),
+          human_note('；'.join(row.get('quantity_missing') or []) or row.get('quantity_basis') or '保存的实体积分')]
          for row in geometry.get('layers', [])],
-        '未计算（尚无分层用料结果）。', [1.2,1.4,1.4,3.2],
+        '未计算（尚无分层用料结果）。', [1.2,1.5,1.1,1.1,2.8],
     )
+    body += '<p class="spec-note">用料按保存模型长度折算到 1 km；推导尺寸与理论用料不替代制造公差、实测尺寸或称重。</p>'
     return body
 
 
-def check_tables(standards, checks):
-    verdicts = {'passed': '满足', 'failed': '不满足', 'missing': '缺项', 'uncovered': '范围外'}
-    return table(
-        ['要求', '标准 / 条款', '要求值', '当前值', '单位', '判定', '偏离 / 缺项'],
-        [[row['title'], row.get('standard', '') + ' ' + row.get('clause', ''),
-          number(row.get('limit'), 6, trim=True), number(row.get('actual'), 6, trim=True), '—' if row.get('unit') == '1' else row.get('unit') or '—',
-          verdicts.get(row.get('verdict'), row.get('verdict')), human_note(row.get('reason')) or '—'] for row in standards],
-        '未计算（尚无标准核对结果）。', [1.7,2.0,1,1,.9,.8,2.6],
-    ) + '<h3>发布前待完成事项</h3>' + table(['校核事项'], [[human_note(check['message'])] for check in checks], '当前未发现阻止发布的计算校核项；批准状态仍以签署记录为准。')
+def check_tables(standards, checks, document=None):
+    verdicts = {'passed': '满足', 'failed': '不满足', 'missing': '缺项', 'uncovered': '未覆盖'}
+    def value(row, key):
+        if row.get(key) is None:
+            return '未提供' if key == 'actual' else '—'
+        if key == 'actual' and row.get('unit') == '1' and document:
+            return standard_declaration(row, document)
+        digits = 4 if row.get('unit') == 'Ω/km' else 2
+        return number(row[key], digits, trim=True)+(' '+row['unit'] if row.get('unit') not in (None,'1') else '')
+    body = table(
+        ['要求与条款', '要求值', '实际值', '余量', '判定 / 缺项'],
+        [[row['title']+'\n'+row.get('standard', '')+' '+row.get('clause', '')+
+          (f" · 印刷页 {row['printed_page']}" if row.get('printed_page') is not None else ''),
+          {'>=':'≥ ', '<=':'≤ ', '=':'= '}.get(row.get('comparison'),'')+value(row,'limit'), value(row,'actual'), value(row,'margin'),
+          verdicts.get(row.get('verdict'), row.get('verdict'))+'\n'+(human_note(row.get('reason')) or '—')]
+         for row in standards], '未计算（尚无标准核对结果）。', [2.8,1.1,1.1,1,2.5])
+    if checks is not None:
+        body += '<h3>发布前待完成事项</h3>' + table(['校核事项'], [[human_note(check['message'])] for check in checks], '当前未发现阻止发布的计算校核项；批准状态仍以签署记录为准。')
+    return body
 
 
 def rating_tables(item, empty, audience='internal'):
@@ -238,7 +265,7 @@ def combined_core_rows(rows, core_ids):
     expected=set(core_ids)
     if len(expected)<2:return rows
     groups={}
-    keys=('value','actual','limit','comparison','unit','status','verdict','standard','clause','formula',
+    keys=('value','actual','limit','margin','comparison','unit','status','verdict','reason','standard','clause','printed_page','pdf_page','source_status','formula',
           'formula_inputs','source_digest','basis','input_source')
     for row in rows:
         target=row.get('target',{})
@@ -252,15 +279,6 @@ def combined_core_rows(rows, core_ids):
             merged[id(group[0])]={**group[0],'title':f'各芯 · '+re.sub(r'^芯\s*\d+\s*·\s*','',group[0]['title'])}
             hidden.update(id(row) for row in group[1:])
     return [merged.get(id(row),row) for row in rows if id(row) not in hidden]
-
-
-def declaration_table(rows, empty, short_circuit=False, core_ids=()):
-    rows=combined_core_rows(rows,core_ids)
-    return table(['声明参数', '声明值', '单位', '计算依据'],
-        [[row['title'], *quantity(row.get('value'), row.get('unit'), short_circuit),
-          '；'.join(filter(None, [row.get('standard'), row.get('clause')]))]
-         for row in rows if row.get('status') == 'available' and row.get('value') is not None],
-        empty, [2.4,1.1,1,3.5])
 
 
 def calculation_conditions(rows, short_circuit=False):
@@ -317,11 +335,9 @@ def chapter_bodies(payload, lifecycle, audience='internal'):
     cable, results = payload['document']['cable_types'][0], payload['results']
     internal = audience == 'internal'
     standards = artifact_rows(results, 'standards')
-    declared = [row for row in standards if row.get('verdict') == 'passed']
     core_ids=[core['id'] for core in cable['cores']]
-    if not internal:declared=combined_core_rows(declared,core_ids)
     groups = {}
-    for row in standards if internal else declared:
+    for row in standards:
         if row.get('standard'):
             groups.setdefault(row['standard'], []).append(row.get('clause', ''))
     standard_rows = [[name, '；'.join(dict.fromkeys(filter(None, clauses)))] for name, clauses in groups.items()]
@@ -331,12 +347,16 @@ def chapter_bodies(payload, lifecycle, audience='internal'):
     revisions = document_revisions(payload)
     revision = revisions[-1] if revisions else {}
     latest = revision.get('created', '')[:10] or '待编制'
-    cover += table(['文件项目','内容'], [
-        ['型号规格', payload['name']], ['额定电压 U0/U', voltage(cable)],
-        ['执行标准', '；'.join(groups) or '待标准核对确认'], ['编制单位','待填写'],
-        ['编制日期（UTC）',latest], ['编制人',revision.get('author') or '待填写'],
-        ['文件版本',revision.get('version') or '编制草稿'], ['基准型号版本',payload['base_reference']['version']],
-        ['文件状态',STATUS_NAMES.get(lifecycle['status'], '待核对') + ('；'+human_note(lifecycle['version_status']['display_name']) if lifecycle.get('version_status', {}).get('status')=='stale' else '')]], widths=[1.5,4.5])
+    geometry = results.get('geometry', {}).get('artifact', {})
+    execution_standards = approved_standards(payload)
+    area = ' / '.join(number(core['conductor']['nominal_area'],1,1e6,trim=True) for core in cable['cores'])+' mm²'
+    cover += table(['型号摘要', '规格', '文件项目', '内容'], [
+        ['额定电压 U0/U', voltage(cable), '文件版本', revision.get('version') or '编制草稿'],
+        ['芯数 × 截面', str(len(cable['cores']))+' × '+area, '基准版本', readable_version(payload['base_reference']['version'])],
+        ['成品外径（推导）', number(geometry.get('outer_diameter_m'),1,1000)+' mm' if geometry else '未计算',
+         '文件状态', STATUS_NAMES.get(lifecycle['status'], '待核对')],
+        ['执行标准', '；'.join(execution_standards) or '未声明（在要求与标准里批准）', '编制日期', latest],
+        ['编制单位', '待填写', '编制人', revision.get('author') or '待填写']], widths=[1.4,2.5,1.1,1.6])
     cover += '<h3>编制与审核签字</h3>' + table(['职责','签字','日期'],
         [['编制','________________','________________'],['审核','________________','________________'],['批准','________________','________________']], widths=[1,2.5,2.5])
     cover += '<p class="spec-note">签字栏供人工填写；电子批准及发布状态以系统记录为准。</p>'
@@ -346,21 +366,76 @@ def chapter_bodies(payload, lifecycle, audience='internal'):
         cover,
         table(['产品项目','规格'], [['额定电压 U0/U',voltage(cable)], ['芯数',len(cable['cores'])],
               ['导体标称截面',' / '.join(number(core['conductor']['nominal_area'],1,1e6,trim=True) for core in cable['cores'])+' mm²']], widths=[1.5,4.5])
-        + table(['执行标准','相关条款'], standard_rows, missing_reason(payload,'standards'), [1.7,4.3]),
+        + table(['核对依据（不代替执行标准批准）','相关条款'], standard_rows, missing_reason(payload,'standards'), [1.7,4.3]),
         geometry_tables(payload, audience),
-        calculation_conditions(artifact_rows(results,'electrical')) + (parameter_table(artifact_rows(results,'electrical'),missing_reason(payload,'electrical')) if internal else declaration_table(artifact_rows(results,'electrical'),missing_reason(payload,'electrical'),core_ids=core_ids)),
+        calculation_conditions(artifact_rows(results,'electrical')) + parameter_table(artifact_rows(results,'electrical') if internal else combined_core_rows(artifact_rows(results,'electrical'),core_ids),missing_reason(payload,'electrical')),
         rating_tables(results.get('rating', {}), missing_reason(payload,'rating'), audience),
-        calculation_conditions(artifact_rows(results,'short_circuit'), True) + (parameter_table(artifact_rows(results,'short_circuit'),missing_reason(payload,'short_circuit'),True) if internal else declaration_table(artifact_rows(results,'short_circuit'),missing_reason(payload,'short_circuit'),True,core_ids)),
-        check_tables(standards, payload['checks']) + inapplicable_list(payload) if internal else
-            '<p class="spec-conditions">以下仅声明已核对满足的条款，不作为完整产品认证。</p>' + table(
-                ['声明项目','声明值','单位','满足的标准条款'],
-                [[row['title'],standard_declaration(row,payload['document']),'—' if row.get('unit') == '1' else row.get('unit') or '—',
-                  row.get('standard','')+' '+row.get('clause','')] for row in declared],
-                '尚无可声明的标准条款。', [2,1,1,4]),
+        calculation_conditions(artifact_rows(results,'short_circuit'), True) + parameter_table(artifact_rows(results,'short_circuit') if internal else combined_core_rows(artifact_rows(results,'short_circuit'),core_ids),missing_reason(payload,'short_circuit'),True),
+        check_tables(standards, payload['checks'], payload['document']) + inapplicable_list(payload) if internal else
+            '<p class="spec-conditions">判定与余量逐项引用保存的插件结果；缺项和未覆盖不视为满足。本表不替代完整产品认证。</p>' +
+            check_tables(combined_core_rows(standards,core_ids), None, payload['document']),
         table(['文件版本', '变更摘要', '编制人', '日期（UTC）'],
               [[row['version'], row['summary'], row['author'], row['created'][:10]] for row in revisions],
-              '尚未提交文档评审。', [1.2,3.4,1.2,1.5]),
+              '尚未提交文档评审。', [1.2,3.4,1.2,1.5]) + customer_sources(payload),
     ]
+
+
+def approved_standards(payload):
+    from .requirements import Requirements
+    source = next((row for row in payload.get('sources', []) if row.get('channel') == 'standards'), {})
+    if source.get('freshness') != 'current' or not source.get('method'):
+        return []
+    approved = {}
+    for review in payload.get('requirement_reviews', []):
+        receipt = review.get('receipt', {})
+        if receipt.get('decision') == 'approved':
+            for item in receipt.get('items', []):
+                approved[item['id']] = item['definition_digest']
+    names = []
+    for row in artifact_rows(payload['results'], 'standards'):
+        # 缺对象、条款或版本定义的行不能成为可绑定要求，只是不计入执行标准，不让整份规格书失败
+        try:
+            proposal = Requirements.proposal(row, source['method'])
+        except KeyError:
+            continue
+        if proposal['bindable'] and approved.get(proposal['id']) == proposal['definition_digest'] and row['standard'] not in names:
+            names.append(row['standard'])
+    return names
+
+
+def customer_sources(payload):
+    """Human-readable provenance; immutable IDs stay in the host audit record."""
+    base = payload.get('base_reference', {})
+    rows = [['基准型号', clean_name(base.get('name') or payload['name']), readable_version(base.get('version'))]]
+    creation = payload.get('creation_source', {})
+    origin = creation.get('origin')
+    if origin:
+        source = creation.get('source', {})
+        rows.append([{'library':'库引用','published':'发布型号引用','standard':'标准结构提案','import':'批准的资料','blank':'空白设计'}.get(origin,'设计来源'),
+                     clean_name(source.get('name') or payload['name']), readable_version(source.get('version'))])
+        for reference in source.get('references', []):
+            if reference.get('page') is not None:
+                rows.append(['资料页码', reference.get('title') or '批准的资料原件', '第 '+str(reference['page'])+' 页'])
+        for fact in source.get('rows', []):
+            citation = fact.get('source', {})
+            if citation.get('standard') and citation.get('clause'):
+                rows.append(['标准提案依据', citation['standard']+' '+citation['clause'],
+                             '印刷页 '+str(citation['printed_page']) if citation.get('printed_page') is not None else 'PDF 页 '+str(citation['pdf_page']) if citation.get('pdf_page') is not None else '标准值'])
+    for source in payload.get('sources', []):
+        method = source.get('method', {})
+        rows.append([CHANNEL_NAMES.get(source.get('channel'), '保存结果'),
+                     METHOD_NAMES.get(method.get('plugin_id'), '计算方法'),
+                     readable_version(method.get('version'))+' · '+STATUS_NAMES.get(source.get('freshness'),'待核对')])
+    for role in ('material','standard'):
+        for pin in payload.get('resource_bindings', {}).get(role, {}).values():
+            rows.append(['材料资源' if role == 'material' else '标准资源', pin['name'], readable_version(pin['version'])])
+    body = '<h3>来源与版本</h3>'+table(['来源类别','名称 / 方法','版本与时效'], rows, widths=[1.2,3.4,1.5])
+    source = payload.get('document', {}).get('provenance', {})
+    notes = list(dict.fromkeys(value.get('note') for value in source.values() if value.get('note')))
+    # Free-text engineering provenance is retained, while opaque audit keys are omitted.
+    body += ''.join('<p>'+text(human_note(note))+'</p>' for note in notes
+                    if not re.search(r'[0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f-]{27,}', str(note)))
+    return body
 
 
 def source_evidence(payload, digest):

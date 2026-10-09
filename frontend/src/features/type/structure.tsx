@@ -56,7 +56,6 @@ export function TypeStructure({ tab, cable, selected, onSelect }: { tab: string;
     onDimensionChange={edit => { const row = rows.find(row => row.id === targetId(edit.target)); if (!row) throw new Error('所选结构层已不存在'); state.edit(row.path, edit.valueM); }} />;
   return <><StructureActions cable={cable} selected={selected} onSelect={onSelect} />{state.workspace?.raw.historical === true && tab === 'table' && <StaleBanner description="历史型号输入保持只读。" />}
     {tab === 'table' ? <LayerTable rows={rows} selected={selected} onSelect={onSelect} /> : <div className="type-structure-split">{section}<LayerTable rows={rows} selected={selected} onSelect={onSelect} compact /></div>}
-    {state.dirty && <p className="type-notice">结构修改待保存；已保存的外径、用料和校核结果已标为历史。</p>}
   </>;
 }
 /** 工作窗口画布：电缆截面（可直接拖改尺寸）或三维剥切，上方是增删结构层的操作。 */

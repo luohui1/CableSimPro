@@ -11,7 +11,7 @@ from backend.main import create_app
 from backend.kernel.scenarios import system_models
 from backend.kernel.specification_pdf import render_pdf
 from backend.kernel.type_versions import check_results
-from backend.kernel.type_specification import combined_core_rows, structure_rows, human_note
+from backend.kernel.type_specification import combined_core_rows, structure_rows, human_note, check_tables, geometry_tables, approved_standards
 
 
 def test_document_notes_show_method_names_and_preserve_versions_and_missing_data():
@@ -146,3 +146,76 @@ def test_selected_rating_scope_refusal_blocks_publication():
     check_results({'rating':{'run':{'freshness':'current','status':'partial'},
         'rows':[{'case_id':'air','name':'空气工况','value_a':None,'status':'超出范围','reason':'当前方法只覆盖地下稳态。'}]}}, checks)
     assert any(item['id'] == 'rating/air' and item['blocking'] for item in checks)
+
+
+def test_customer_checks_keep_literal_margin_and_uncovered_reason():
+    rows = [{'id':'example:insulation', 'title':'绝缘标称厚度', 'standard':'GB/T 12706.2-2020',
+             'clause':'表 6', 'unit':'mm', 'actual':5.8, 'limit':5.5, 'margin':.125,
+             'verdict':'passed', 'reason':None},
+            {'id':'example:minimum', 'title':'绝缘最薄点', 'standard':'GB/T 12706.2-2020',
+             'clause':'16.5', 'unit':'mm', 'actual':None, 'limit':4.85, 'margin':None,
+             'verdict':'missing', 'reason':'尚无工厂实测值'},
+            {'id':'example:rule', 'title':'完整产品核对', 'verdict':'uncovered', 'reason':'插件未覆盖'}]
+    original = deepcopy(rows)
+    html = check_tables(rows, None)
+    assert all(value in html for value in ('5.8 mm','5.5 mm','0.13 mm','余量','GB/T 12706.2-2020','表 6','缺项','尚无工厂实测值','未覆盖'))
+    # Display the saved margin (0.125); do not replace it with a host subtraction (0.3).
+    assert '0.3 mm' not in html and rows == original
+
+
+def test_material_versions_bind_by_identity_and_saved_drawing_is_vector(tmp_path):
+    with TestClient(create_app(tmp_path/'vector.sqlite')) as client:
+        model = next(m for m in system_models() if m['id']=='system.cu-xlpe-al-compacted-400')
+        workspace = client.post('/api/design/type-workspaces', json={'model_id':model['id'],'content_sha256':model['content_sha256']}).json()
+        spec = client.get(f"/api/types/{workspace['id']}/specification").json()
+    payload = spec['payload']
+    cable = payload['document']['cable_types'][0]
+    first = cable['cores'][0]['conductor']['material']
+    # Print-only saved-artifact contract fixture, not a fabricated engineering run.
+    payload['resource_bindings'] = {'material':{first:{'name':'铜资源','version':'2.1.0'}}}
+    payload['results']['geometry'] = {'artifact':{'length_m':1, 'outer_diameter_m':.025, 'mass_kg_per_km':None,
+        'layers':[{'role':'conductor','label':'导体','material':first,'inner_radius_m':0,'outer_radius_m':.0125,
+                   'material_volume_m3':None,'mass_kg_per_km':None,'quantity_missing':['导体绞入系数'],
+                   'section_profile':{'outer':{'kind':'circle','x':0,'z':0,'radius':.0125,'offset':0}}}]}}
+    original = deepcopy(payload)
+    html = geometry_tables(payload, 'customer')
+    assert '2.1.0' in html and '未绑定资源' in html and '<svg' in html and '0.00 → 25.00' in html
+    assert '导体绞入系数' in html and '未计算' in html
+    with fitz.open(stream=render_pdf(spec,'customer'),filetype='pdf') as pdf:
+        assert '型号摘要' in pdf[0].get_text() and '签字' in pdf[0].get_text()
+        assert '结构截面' in pdf[1].get_text() and len(pdf[1].get_drawings()) > 5
+        all_text = ''.join(page.get_text() for page in pdf)
+        assert '来源与版本' in all_text and not re.search(r'[0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f-]{27,}', ''.join(all_text.split()))
+    assert payload == original
+    payload['results']['geometry']['artifact']['layers'][0]['section_profile']['outer']['kind'] = 'unsupported'
+    assert '截面图未生成' in geometry_tables(payload,'customer')
+
+
+def test_missing_print_environment_keeps_html_preview_explicit(monkeypatch):
+    import builtins
+    from backend.kernel.type_specification_drawing import section_svg
+    original = builtins.__import__
+    def unavailable(name, *args, **kwargs):
+        if name.startswith('reportlab'):
+            raise ImportError('isolated missing PDF environment')
+        return original(name, *args, **kwargs)
+    monkeypatch.setattr(builtins, '__import__', unavailable)
+    html = section_svg({'results':{}})
+    assert '截面预览环境缺失' in html and 'ReportLab' in html and '已保存的结构和核对结果保留' in html
+
+
+def test_cover_execution_standard_requires_matching_current_approval():
+    from backend.kernel.requirements import Requirements
+    row = {'id':'insulation:nominal', 'title':'绝缘厚度', 'target':{'scope':'common','role':'insulation'},
+           'standard':'GB/T 12706.2-2020','clause':'表 7','limit':5.5,'unit':'mm','verdict':'passed',
+           'source_digest':'a'*64,'source_status':'original-verified'}
+    method = {'plugin_id':'cablesim.standard-check','version':'1.0.0'}
+    source = {'channel':'standards','freshness':'current','method':method}
+    payload = {'sources':[source],'results':{'standards':{'artifact':{'rows':[row]}}}}
+    assert approved_standards(payload) == []
+    payload['requirement_reviews'] = [{'receipt':{'decision':'approved','items':[Requirements.proposal(row,method)]}}]
+    assert approved_standards(payload) == ['GB/T 12706.2-2020']
+    row['limit'] = 6
+    assert approved_standards(payload) == []
+    row['limit'] = 5.5; source['freshness'] = 'historical'
+    assert approved_standards(payload) == []

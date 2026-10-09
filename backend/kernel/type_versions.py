@@ -752,7 +752,7 @@ class Types:
             resource_view = self._resources(db, wid, row, state)
             submitted = db.execute('SELECT * FROM type_submissions WHERE workspace=? ORDER BY rowid DESC LIMIT 1', (wid,)).fetchone()
             published = db.execute('SELECT * FROM engineering_type_releases WHERE workspace=?', (wid,)).fetchone()
-        payload = {'schema': 'cablesim.type-specification/1', 'renderer': 'type-specification/2',
+        payload = {'schema': 'cablesim.type-specification/1', 'renderer': 'type-specification/3',
                    'workspace_id': wid, 'revision': row['revision'], 'name': clean_name(t['label']),
                    'purpose': 'demo' if '演示' in t['label'] or '合成验收数据' in t['label'] or any(s.get('kind')=='demo' for s in d.get(
                        'provenance',
@@ -762,6 +762,7 @@ class Types:
                    'sources': sources, 'results': data, 'checks': checks, 'revisions': history,
                    'requirement_reviews': requirement_reviews,
                    'source_design': {'id': wid, 'revision': row['revision']},
+                   'creation_source': deepcopy(state.get('type_creation', {})),
                    'resource_bindings': deepcopy(state.get('type_resource_bindings', {}))}
         for target in resource_view['targets']:
             if target['state'] == 'outdated':

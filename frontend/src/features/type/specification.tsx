@@ -27,7 +27,7 @@ export function TypeSpecification({ tab }: { tab: string }) {
   currentState.current = state;
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const spec = query.data, status = text(spec?.lifecycle.status), checks = spec ? array(spec.payload.checks, '规格书校核').map(optionalRecord) : [], sources = spec ? array(spec.payload.sources, '规格书来源').map(optionalRecord) : [];
-  const historical = !!spec?.lifecycle.stale || sources.some(source => source.freshness !== 'current');
+  const historical = state.dirty || !!spec?.lifecycle.stale || sources.some(source => source.freshness !== 'current');
   const differentRevision = !!spec && numeric(spec.payload.revision) !== state.workspace!.revision;
   const reason = differentRevision ? '此接口返回当前规格书，不能代替所选历史型号版本。' : state.dirty ? '请先保存型号与方法条件' : '';
   const bodyState = busy && !action || query.isPending ? 'loading' : query.error || differentRevision ? 'error' : !sources.length ? 'empty' : historical || state.readOnly ? 'historical' : 'success';
@@ -71,7 +71,7 @@ export function TypeSpecification({ tab }: { tab: string }) {
       await lifecycleAction(state.workspace!.id, action, body); setAction(null); await refresh(); await queries.invalidateQueries({ queryKey: ['type-list'] });
     } catch (failure) { setError(message(failure)); } finally { pending.current = false; setBusy(false); }
   }
-  const chapters = spec ? array(spec.payload.chapters, '规格书章节').map((value, index) => audience === 'customer' && index === 6 ? '标准条款声明' : index === 7 ? '文档修订记录' : text(value)) : [];
+  const chapters = spec ? array(spec.payload.chapters, '规格书章节').map((value, index) => audience === 'customer' && index === 6 ? '标准核对表' : index === 7 ? '文档修订记录与来源' : text(value)) : [];
   const markers = ['cover', 'standards', 'structure', 'electrical', 'rating', 'short-circuit', 'checks', 'revisions'];
   let iframeHtml = spec?.html || '';
   if (spec && tab === 'content') {
