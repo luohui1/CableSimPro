@@ -27,9 +27,9 @@
     },
     {
       "plugin_id": "cablesim.iec60287",
-      "version": "1.0.2",
+      "version": "1.1.0",
       "manifest": "plugins/cablesim.iec60287/plugin.json",
-      "release_digest": "a6619874d1a5e78c2a0fa066e89297e0a55744ffb8d66bdf161757aaa2f332ac"
+      "release_digest": "344a3589878f4068615dd38b0b530db1723f6aa9a825956b8db6b2f997424203"
     },
     {
       "plugin_id": "cablesim.native-reference",

@@ -1,7 +1,26 @@
 import { queryOptions, type QueryClient } from "@tanstack/react-query";
 import { api, ApiError, optionalRecord, record, responseData } from "@/api/client";
-import { methodCatalog, projectStudy, studyIndex, studyRuns } from "@/api/research";
+import { methodCatalog, projectStudy, studyIndex, type StudyDefinition } from "@/api/research";
 import { inputContracts } from "@/api/input-contracts";
+import { rootModule } from '@/lib/study-config';
+
+/** 同一响应供上下文与运行读取共用；工程大输入的传输不挡住运行详情。 */
+function savedStudyQuery(workspace: string, sid: string) {
+  return queryOptions({
+    queryKey: ['study-context', workspace, sid, 'response'],
+    queryFn: async ({signal}) => {
+      const value = await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}', {params:{path:{wid:workspace,sid}},signal})).catch(async error => {
+        if (!(error instanceof ApiError) || error.status !== 404) throw error;
+        const rows = await responseData(api.GET('/api/workspaces/{wid}/studies', {params:{path:{wid:workspace}},signal}));
+        const found = Array.isArray(rows) ? rows.find(row => optionalRecord(row).id === sid) : undefined;
+        if (!found) throw error;
+        return found;
+      });
+      return record(value, '研究');
+    },
+    staleTime: 30000,
+  });
+}
 
 /**
  * 研究工作区的查询定义。组件与路由 loader 共用同一份 key 和请求，
@@ -13,14 +32,7 @@ export function studyContextQuery(client: QueryClient, workspace: string | undef
     queryFn: async ({ signal }) => {
       if (!workspace) return studyIndex(signal);
       const [study, state] = await Promise.all([
-        responseData(api.GET('/api/workspaces/{wid}/studies/{sid}', { params: { path: { wid: workspace, sid } }, signal })).catch(async error => {
-          // Older running hosts expose the formal list route but not the single-study GET.
-          if (!(error instanceof ApiError) || error.status !== 404) throw error;
-          const rows = await responseData(api.GET('/api/workspaces/{wid}/studies', { params: { path: { wid: workspace } }, signal }));
-          const found = Array.isArray(rows) ? rows.find(row => optionalRecord(row).id === sid) : undefined;
-          if (!found) throw error;
-          return found;
-        }),
+        client.fetchQuery(savedStudyQuery(workspace, sid)),
         responseData(api.GET('/api/workspaces/{wid}', { params: { path: { wid: workspace } }, signal })).then(value => record(value, '工程')),
       ]);
       // 同一次请求已拿到工程，直接写入工程缓存，避免组件挂载后再请求一遍。
@@ -37,19 +49,24 @@ export function workspaceQuery(wid: string | undefined) {
   });
 }
 
-export function studyRunsQuery(wid: string | undefined, sid: string, run: string) {
+export function studyRunsQuery(client: QueryClient, wid: string | undefined, sid: string, run: string, module = '') {
   return queryOptions({
-    queryKey: ["runs", wid, sid, run || 'all'],
-    queryFn: async ({ signal }) => {
-      const detail = async (rid: string) => record(await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/runs/{rid}', { params: { path: { wid: wid!, sid, rid } }, signal })), '运行详情');
+    queryKey: ["runs", wid, sid, run || 'latest', run ? '' : module],
+    queryFn: async () => {
+      const detail = (rid: string) => client.fetchQuery({queryKey:['saved-run',wid,sid,rid],
+        queryFn:({signal: detailSignal}) => responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/runs/{rid}', {params:{path:{wid:wid!,sid,rid}},signal:detailSignal})).then(value => record(value,'运行详情')),
+        staleTime: query => ['accepted','queued','running','validating'].includes(String(query.state.data?.status)) ? 0 : 30000});
       if (run) return [await detail(run)];
-      const summaries = await studyRuns(wid!, sid, signal, 'summary');
-      // Keep every history identity/status, but load result arrays only for the
-      // latest run of each configured module. Fixed history uses its detail URL.
-      const latest = new Map<string, unknown>();
-      for (const item of summaries) latest.set(String(optionalRecord(item.snapshot).module || ''), item.id);
-      return Promise.all(summaries.map(item => latest.get(String(optionalRecord(item.snapshot).module || '')) === item.id
-        ? detail(String(item.id)) : item));
+      if (!wid) return [];
+      const study = await client.fetchQuery(savedStudyQuery(wid, sid));
+      const definition = optionalRecord(study.definition) as StudyDefinition;
+      // Only the requested module's current saved run. History belongs to the drawer.
+      const configured = !!definition.modules?.[module];
+      const latest = optionalRecord(study.latest_module_run_ids);
+      const id = configured ? latest[module]
+        : !module || module === rootModule(definition) ? (latest[''] || optionalRecord(study.latest_run).id)
+          : optionalRecord(study.latest_run).id;
+      return id ? [await detail(String(id))] : [];
     },
   });
 }
@@ -67,6 +84,12 @@ export function prefetchStudy(client: QueryClient, workspace: string, sid: strin
   if (!workspace) return client.prefetchQuery(studyContextQuery(client, workspace, sid));
   return Promise.all([
     client.prefetchQuery(studyContextQuery(client, workspace, sid)),
-    client.prefetchQuery(studyRunsQuery(workspace, sid, run)),
+    client.prefetchQuery(studyRunsQuery(client, workspace, sid, run)),
+    client.fetchQuery(savedStudyQuery(workspace, sid)).then(study => {
+      // 场图是这些研究的默认画布；在等待工程输入时准备组件，
+      // 不等完整运行回来后再串行下载，也不读取证明或全网格。
+      if ((run || study.latest_run) && ['ampacity','thermal-field','selection'].includes(rootModule(optionalRecord(study.definition) as StudyDefinition)))
+        void import('@/features/field/field-view').catch(() => { /* 画布自身保留加载失败状态。 */ });
+    }).catch(() => { /* 页面保留请求失败状态。 */ }),
   ]);
 }

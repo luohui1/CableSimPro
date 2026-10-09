@@ -314,6 +314,11 @@ def chapters(runs, audience):
             body+=grouped_results(run['output'].get('cases',[]),names,document)
         cases=[c for c in run['output'].get('cases',[]) if c['status']=='succeeded' and (not preferred or c['case_id']==preferred)]
         trace=next((c.get('artifacts',{}).get('x-cablesim.iec60287-trace') for c in cases if c.get('artifacts',{}).get('x-cablesim.iec60287-trace')), {})
+        if trace.get('crossing_derating'):
+            row=trace['crossing_derating'][0]
+            body+='<h3>交叉热源降额</h3>'+table(['降额前 / A','降额后 / A','降额系数','交叉温升 / K'],[[number(row['baseline_current_a']),number(row['derated_current_a']),number(row['derating_factor'],4),number(row['crossing_rise_k'],2)]],[1,1,1,1])
+            body+=paragraph(row['clause'])+paragraph(row['scope'])
+            body+=table(['热源','轴线深度 / m','净距 / m','交叉角 / rad','发热 / W/m','出处'],[[s['label'],number(s['depth_m'],3),number(s['net_clearance_m'],3),number(s['angle_rad'],3),number(s['heat_w_m'],2),s['source']] for s in row['sources']],[1,1,1,1,1,2])
         if selection and selected and trace:
             body+='<h3>推荐型号：保存负荷下的温度与损耗</h3>'
             states=trace.get('operating',{}).get('cable_states',[])

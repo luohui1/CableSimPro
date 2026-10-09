@@ -26,6 +26,7 @@ import {
 } from "@/lib/format";
 import type { PropertyGroup } from "./property-panel";
 import { StudyDrawing } from "./study-drawing";
+import { StudyCrossingInputs } from './study-crossing-inputs';
 
 export type InputSelection = {
   id: string;
@@ -392,6 +393,7 @@ export function ConditionsInputs({ document, historical }: InputProps) {
   return (
     <div className="input-module">
       {historical && <StaleBanner description="固定运行工况 · 只读" />}
+      <StudyCrossingInputs historical={historical} />
       {document.load_cases.map((load) => (
         <InputSection key={load.id} title={entityLabel(document, load.id)}>
           <div className="input-form-grid">

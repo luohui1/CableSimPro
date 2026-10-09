@@ -32,6 +32,9 @@ def task_answer(run):
     if armour:
         return '<p class="answer">'+escape('三芯钢丝铠装SL热路：允许电流 '+formatted(armour['ampacity_a'],3)+' A，λ₂='+formatted(armour['lambda2'],8)+'；同一工作点输入，限定范围。')+'</p>'
     artifact = next((v for v in case.get('artifacts', {}).values() if isinstance(v, dict) and 'goal_checks' in v), {})
+    if artifact.get('crossing_derating'):
+        row=artifact['crossing_derating'][0]
+        return '<p class="answer">'+escape(f"交叉热源降额：{row['baseline_current_a']:.1f} A → {row['derated_current_a']:.1f} A，系数 {row['derating_factor']:.4f}；{row['clause']}。")+'</p>'
     all_checks = artifact.get('goal_checks', [])
     checks = {key: min((g for g in all_checks if g['key'] == key),key=lambda g:g.get('margin') if g.get('margin') is not None else float('inf'),default=None)
               for key in ('ampacity','conductor_temperature')}

@@ -120,7 +120,11 @@ def prepare_case(case):
     if case['input'].get('schema_version')=='cablesim.iec60287.armoured-sl/1':
         from cablesim_iec60287.armour import ArmouredRating
         return ArmouredRating.model_validate(case['input'])
-    return prepare(case['input'],case.get('parameters',{}))
+    group=prepare(case['input'],case.get('parameters',{}))
+    if isinstance(group,GroupRating):
+        from cablesim_iec60287.crossing import sources_for
+        sources_for(group)
+    return group
 
 
 def armoured(case,out):
@@ -168,6 +172,9 @@ CAPABILITIES = {'iec60853-emergency':emergency_response,'model-completion':model
 
 def group_rating(case, group, out):
     payload = rate_group(group)
+    from cablesim_iec60287.crossing import apply as apply_crossing
+    payload = apply_crossing(group,payload)
+    payload['method_version'] = '1.1.0'
     results, goals = [], []
     selected = case.get('parameters', {}).get('target_circuit_id', group.circuits[0]['id'])
     target = case.get('parameters', {}).get('target_current_a')
@@ -198,6 +205,11 @@ def group_rating(case, group, out):
             result.update({'status':'unavailable', 'reason':simultaneous['error']} if simultaneous['ampacity_a'] is None else
                           {'status':'available', 'value':simultaneous['ampacity_a']})
             results.append(result)
+    for crossing in payload.get('crossing_derating',[])[:1]:
+        for key,field,unit,title in [('x-cablesim.iec60287.crossing.baseline_ampacity','baseline_current_a','A','降额前允许电流'),
+            ('x-cablesim.iec60287.crossing.derating_factor','derating_factor','1','交叉热源降额系数'),
+            ('x-cablesim.iec60287.crossing.temperature_rise','crossing_rise_k','K','交叉热源导体温升')]:
+            results.append({'key':key,'type':'quantity','entity':crossing['entity'],'case':'rating','status':'available','value':crossing[field],'unit':unit,'title':title})
     fields = [
         ('conductor_temperature','conductor_temperature_c','K'), ('sheath_temperature','sheath_temperature_c','K'),
         ('surface_temperature','surface_temperature_c','K'), ('losses.conductor','conductor_loss_w_m','W/m'),
@@ -308,7 +320,7 @@ def main() -> int:
         return handler(case,out)
     cases = [run_case(invoke, case, out) for case in request['cases']]
     result = {'protocol': PROTOCOL, 'cases': cases,
-              'environment': {'python': platform.python_version(), 'method': {'iec60853-emergency':'1.0.0','armoured-sl-rating':'1.0.0','tb880-reference-rating':'1.0.0','tb880-wire-foil-rating':'1.0.0','reference-rating':METHOD_VERSION}.get(request['capability'],GROUP_METHOD_VERSION), 'legacy_method': METHOD_VERSION}}
+              'environment': {'python': platform.python_version(), 'method': {'steady-rating':'1.1.0','iec60853-emergency':'1.0.0','armoured-sl-rating':'1.0.0','tb880-reference-rating':'1.0.0','tb880-wire-foil-rating':'1.0.0','reference-rating':METHOD_VERSION}.get(request['capability'],GROUP_METHOD_VERSION), 'legacy_method': METHOD_VERSION}}
     from cablesim_sdk.result_answers import attach_witnesses
     attach_witnesses(request,result,Path(__file__).resolve().parents[2]/'plugin.json')
     (out / 'result.json').write_text(json.dumps(result, ensure_ascii=False, allow_nan=False), 'utf-8')

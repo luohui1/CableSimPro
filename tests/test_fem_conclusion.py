@@ -21,6 +21,21 @@ def evidence_fixture():
     return final,workflow,runs
 
 
+def test_old_boundary_uses_saved_bundle_never_current_defaults():
+    from backend.kernel.fem_evidence import saved_boundary
+    run,_=saved_fixture();before=deepcopy(run)
+    run['snapshot']['cases'][0]['parameters'].pop('outer_boundary',None)
+    artifacts=run['output']['cases'][0]['artifacts']
+    artifacts['x-cablesim.simulation-bundle']={'result':{'outer_boundary':{'kind':'kennelly_image'}}}
+    frozen=deepcopy(run)
+    assert saved_boundary(run,'case-0')=='kennelly_image' and run==frozen
+    artifacts.pop('x-cablesim.simulation-bundle')
+    assert saved_boundary(run,'case-0')=='ambient_truncated'
+    run['snapshot']['cases'][0]['parameters']['outer_boundary']='ambient_truncated'
+    artifacts['x-cablesim.simulation-bundle']={'result':{'outer_boundary':{'kind':'kennelly_image'}}}
+    assert saved_boundary(run,'case-0')=='ambient_truncated'
+
+
 def test_bound_mesh_and_domain_proof_is_verified_not_just_status(monkeypatch):
     run,workflow,runs=evidence_fixture();research=SimpleNamespace(get_run=lambda wid,rid:deepcopy(runs[rid]))
     monkeypatch.setattr('backend.kernel.fem_evidence.workflow_for',lambda *a:deepcopy(workflow))
@@ -41,6 +56,7 @@ def test_no_convergence_never_returns_numeric_conclusion(monkeypatch):
 
 def test_first_screen_does_not_start_image_renderer_but_report_can_prepare(monkeypatch):
     import sqlite3
+    from backend.plugin_host.manifest import ParameterSchema
     from contextlib import nullcontext
     run,_=saved_fixture()
     run['snapshot']['cases'][0]['input'].update(cable_types=[],circuits=[])
@@ -49,7 +65,8 @@ def test_first_screen_does_not_start_image_renderer_but_report_can_prepare(monke
     queued=[]
     research=SimpleNamespace(store=SimpleNamespace(db=lambda:nullcontext(db)),
         delivery_jobs=SimpleNamespace(worker=SimpleNamespace(submit=lambda *args:queued.append(args))),
-        resolve=lambda _: (SimpleNamespace(manifest=SimpleNamespace(capabilities=[SimpleNamespace(id='iec-thermal-field',parameter_schema={})])),None))
+        registry=lambda _: SimpleNamespace(get=lambda _: SimpleNamespace(manifest=SimpleNamespace(capabilities=[SimpleNamespace(id='iec-thermal-field',parameter_schema=ParameterSchema(type='object',properties={}))]))),
+        resolve=lambda _: (_ for _ in ()).throw(HTTPException(409,'旧运行不应重新绑定当前方法发行。')))
     monkeypatch.setattr('backend.kernel.fem_evidence.display_read',lambda *args:deepcopy(run))
     monkeypatch.setattr('backend.kernel.fem_evidence.proof',lambda *args,**kw:{'status':'converged','tolerance_k':.1,'reference_case_id':'case-0'})
     try:

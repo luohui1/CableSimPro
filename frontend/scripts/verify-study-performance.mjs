@@ -101,7 +101,11 @@ try{
     assert.ok(row.firstScreenMs<=(row.kind==='fem'?3000:1500),`${row.kind} ${row.cache} #${row.sample}: ${row.firstScreenMs.toFixed(0)} ms`);
     assert.ok(!row.requests.some(r=>r.path.endsWith('/view')),'Verified saved display artifact must not be fetched twice');
     assert.ok(!row.requests.some(r=>r.path.includes('/convergence')||r.path.endsWith('/sample')),'Proof and sampling are not first-screen reads');
-    if(!latest)assert.ok(!row.requests.some(r=>/\/studies\/[^/]+\/runs$/.test(r.path)),'Saved-run history is loaded only when opened');
+    assert.ok(!row.requests.some(r=>/\/studies\/[^/]+\/runs$/.test(r.path)),'Saved-run history is loaded only when opened');
+    const details=row.requests.filter(r=>/\/studies\/[^/]+\/runs\/[^/]+$/.test(r.path));
+    assert.equal(details.length,1,'Loader, hover and component use one saved-run cache');
+    const studyResponses=row.requests.filter(r=>/\/studies\/[^/]+$/.test(r.path));
+    assert.equal(studyResponses.length,1,'Context and latest-run lookup share one study response');
   }
   if(process.env.STUDY_PERFORMANCE_PHASE!=='before') {
     const item=cases[0];

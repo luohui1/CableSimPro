@@ -279,6 +279,9 @@ class Research:
         latest = db.execute('SELECT '+RUN_COLUMNS+' FROM study_runs WHERE workspace=? AND study=? ORDER BY sequence DESC LIMIT 1', (wid, sid)).fetchone()
         value['latest_run_id'] = latest['id'] if latest else None
         value['latest_run'] = summary(self, latest, revision, value, cache) if latest else None
+        value['latest_module_run_ids'] = {row['module']: row['id'] for row in db.execute(
+            "SELECT id,coalesce(json_extract(snapshot,'$.module'),'') AS module FROM study_runs WHERE workspace=? AND study=? AND sequence IN (SELECT max(sequence) FROM study_runs WHERE workspace=? AND study=? GROUP BY coalesce(json_extract(snapshot,'$.module'),''))",
+            (wid,sid,wid,sid))}
         value['version_status'] = {'status': 'empty', 'reasons': [], 'display_name': '尚无运行'}
         if latest:
             value['version_status'] = value['latest_run']['version_status']

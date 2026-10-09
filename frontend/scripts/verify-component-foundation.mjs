@@ -12,6 +12,10 @@ if(process.env.COMPONENT_PERFORMANCE_ONLY==='1') {
   await import('./verify-study-performance.mjs');
   process.exit(0);
 }
+if(process.env.COMPONENT_CROSSING_ONLY==='1') {
+  await import('./verify-crossing.mjs');
+  process.exit(0);
+}
 if(process.env.COMPONENT_FEM_BOOKS_ONLY==='1') {
   await import('./verify-fem-report.mjs');
   process.exit(0);

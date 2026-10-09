@@ -176,6 +176,7 @@ def report_chapter(research,wid,rid,iec_id,convergence_id=None):
     chosen=next(c for c in fem['output']['cases'] if c['case_id']==data['fem']['case_id'])
     field=chosen['artifacts']['x-cablesim.temperature-field']
     data.update(schema_version='cablesim.fem-report-chapter/1',title='有限元温度场与 IEC 对照',convergence=conv,
+        outer_boundary=saved_boundary(fem,chosen['case_id']),
         boundary=chosen['artifacts'].get('x-cablesim.simulation-bundle',{}).get('result',{}).get('outer_boundary'),
         execution={**(fem.get('execution') or {}),'core_hours':(fem.get('execution') or {}).get('actual_cpu_seconds',0)/3600},
         preflight_jobs=list(workflow['preflight_executions'].values()) if workflow else [],
@@ -200,6 +201,18 @@ def projection_run(run):
             artifacts['x-cablesim.simulation-bundle']={k:v for k,v in artifacts['x-cablesim.simulation-bundle'].items() if k!='field_storage'}
         cases.append({**case,'artifacts':artifacts})
     return {**run,'output':{**run['output'],'cases':cases}}
+
+
+def saved_boundary(run, case_id=None):
+    """Frozen parameter, then frozen bundle, then the historical truncated boundary.
+
+    Current plugin defaults must never relabel an old result.
+    """
+    original=next(c for c in run['snapshot']['cases'] if not case_id or c['case_id']==case_id)
+    case=next(c for c in run['output']['cases'] if c['case_id']==original['case_id'])
+    return (original.get('parameters',{}).get('outer_boundary') or
+        case.get('artifacts',{}).get('x-cablesim.simulation-bundle',{}).get('result',{}).get('outer_boundary',{}).get('kind') or
+        'ambient_truncated')
 
 
 def display_observation(run,case_id,kind):
@@ -264,16 +277,17 @@ def conclusion(research, wid, rid, *, prepare_report=False):
         try:data=compare(projection_run(run),iec,evidence.get('reference_case_id'))
         except ValueError:continue
         response['reference']={'fem_run_id':rid,'iec_run_id':identifier,'convergence_id':evidence.get('id')}
-        response['boundary_label']=data['scope'][0]['fem']
         response['comparison']=[{'quantity':r['key'],'entity':r['entity'],'label':'最热导体' if r['entity']=='maximum' else names.get(r['entity'],names.get(r['entity'].split('/',1)[-1],'整体工况')),
             'condition':r['case'],'unit':r['unit'],'fem':r['fem'],'iec':r['iec'],'delta':r['delta'],'relative_percent':r['relative_percent']} for r in data['rows']]
         break
-    if not response.get('boundary_label'):
-        original=next(c for c in run['snapshot']['cases'] if c['case_id']==evidence.get('reference_case_id',run['snapshot']['cases'][0]['case_id']))
-        plugin,_=research.resolve(run['snapshot']['definition']['method'])
-        capability=next(c for c in plugin.manifest.capabilities if c.id=='iec-thermal-field')
-        schema=capability.parameter_schema
-        response['boundary_label']=schema.get('properties',{}).get('outer_boundary',{}).get('x-enum-labels',{}).get(original['parameters'].get('outer_boundary'),'保存边界')
+    boundary=saved_boundary(run,evidence.get('reference_case_id'))
+    # Labels may use installed presentation metadata; the frozen result is not
+    # a new execution and must not require its old release to be installed.
+    method=run['snapshot']['definition']['method']
+    plugin=research.registry(method['plugin_id']).get(method['plugin_id'])
+    capability=next(c for c in plugin.manifest.capabilities if c.id=='iec-thermal-field')
+    schema=capability.parameter_schema.model_dump(mode='json',by_alias=True)
+    response['boundary_label']=schema.get('properties',{}).get('outer_boundary',{}).get('x-enum-labels',{}).get(boundary,boundary)
     jobs=getattr(research,'delivery_jobs',None)
     if prepare_report and jobs is not None:
         from .report_reads import saved_field_image

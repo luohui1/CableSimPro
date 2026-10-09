@@ -57,6 +57,24 @@ def test_internal_book_appends_source_summary(run):
         assert json.loads(doc.embfile_get('saved-runs.json')) == [run]
 
 
+def test_crossing_chapter_uses_saved_capacity_factor_and_source(run):
+    from math import pi
+    run['snapshot']['definition']['driver']={'kind':'single'}
+    run['output']['assessment']=[]
+    trace=run['output']['cases'][0]['artifacts']['x-cablesim.iec60287-trace']
+    trace['crossing_derating']=[{'baseline_current_a':565.5,'derated_current_a':510.0,
+        'derating_factor':510/565.5,'crossing_rise_k':13.06,
+        'clause':'IEC 60287-3-3:2007 4.1–4.3','scope':'水平固定热源，正净距。',
+        'sources':[{'label':'热力管','depth_m':.6,'net_clearance_m':.3,'angle_rad':pi/2,
+            'heat_w_m':50,'source':'工程师给定 · 热管测量记录'}]}]
+    run['input_digest']=fingerprint(run['snapshot']);run['output_digest']=fingerprint(run['output'])
+    before=deepcopy(run)
+    text=pdf_text(render_pdf([run]))
+    for phrase in ['交叉热源降额','降额前','降额后','565.5','510','0.9019',
+        'IEC 60287-3-3:2007','热力管','热管测量记录']:assert phrase in text
+    assert run==before
+
+
 @pytest.mark.parametrize('audience',['customer','internal'])
 @pytest.mark.parametrize('label',['当前版本','基于旧版本方法 0.9.0（cablesim.iec60287）；当前安装版本 0.10.0'])
 def test_cover_displays_run_version_status(run,audience,label):

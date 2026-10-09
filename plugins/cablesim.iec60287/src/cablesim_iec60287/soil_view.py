@@ -130,6 +130,8 @@ def attach(request,case,group,payload,out):
     """Write the trace first, then bind the optional field to its exact file bytes."""
     field=None
     try:
+        if payload.get('crossing_derating'):
+            raise ValueError('交叉降额未求三维给定负荷温度，不生成未校正的二维场图。')
         field=build(group,payload)
         payload['soil_view']={'status':'available','condition':'operating','surface_checks':field['analytical_soil_view']['surface_checks'],
                               'surface_check_tolerance_k':.1,'limitations':LIMITATIONS}

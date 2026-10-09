@@ -110,6 +110,7 @@ export function StudyResults({
       ? (optionalRecord(trace?.operating).cable_states as unknown[])
       : []
   ).map(optionalRecord);
+  const crossing=(Array.isArray(trace?.crossing_derating) ? trace.crossing_derating : []).map(optionalRecord)[0];
   const operating = states
     .filter((state) => !rating || state.circuit === rating.entityId)
     .sort(
@@ -218,13 +219,15 @@ export function StudyResults({
               : "；限制电缆未提供")
           : hottest?.entity || "该运行未提供温度结论"
       }
-      description={noRating ? [rating!.reason, description].filter(Boolean).join(" ") : description}
+      description={crossing ? text(crossing.clause) : noRating ? [rating!.reason, description].filter(Boolean).join(" ") : description}
       historical={run.freshness === "historical" || isVersionStale(run)}
       metrics={[
+        ...(crossing ? [{label:'降额前允许电流',value:numeric(crossing.baseline_current_a),unit:'A',quantity:'ampacity'},
+          {label:'交叉降额系数',value:numeric(crossing.derating_factor),unit:'1',quantity:'derating_factor'}] : []),
         ...(rating && !noRating
           ? [
               {
-                label: "允许电流",
+                label: crossing ? "降额后允许电流" : "允许电流",
                 value: rating.value,
                 unit: rating.unit,
                 quantity: "ampacity",
@@ -234,7 +237,7 @@ export function StudyResults({
         ...(simultaneous && (noRating || simultaneous.value !== rating?.value)
           ? [{ label: "同时额定", value: simultaneous.value, unit: simultaneous.unit, quantity: "ampacity" }]
           : []),
-        {
+        ...(!crossing ? [{
           label: "最热导体",
           value: hottest?.value ?? null,
           unit: hottest?.unit || "K",
@@ -245,7 +248,7 @@ export function StudyResults({
           value: margin,
           unit: "K",
           quantity: "temperature_margin",
-        },
+        }] : []),
       ]}
     />
   );

@@ -44,6 +44,7 @@ class StudyResponse(PublicResponse):
     can_redo: bool = Field(default=False, description='Later configuration on the active history branch exists.')
     latest_run_id: UUID | None = Field(default=None, description='Most recently accepted run; null before first execution.')
     latest_run: 'RunSummary | None' = Field(default=None, description='Verified latest-run status and producer headlines from the same read snapshot. No history, full field arrays or physical recalculation; null before execution.')
+    latest_module_run_ids: dict[str, UUID] = Field(default_factory=dict, description='Latest saved run ID per configured module, from this read snapshot; allows on-demand module reads without loading history.')
     version_status: VersionStatus | None = Field(default=None, description='Version status of latest_run_id, computed at read time.')
     workspace_revision: int | None = Field(default=None, description='Current workspace revision for this read.', json_schema_extra={'readOnly': True})
     model_reference: ModelReference | None = Field(default=None, description='Model display identity from the saved workspace binding or local domain; null for standalone study input. Does not load the complete workspace payload.', json_schema_extra={'readOnly': True})

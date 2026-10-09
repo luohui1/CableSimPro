@@ -77,7 +77,7 @@ export function StudyMethodForm({
       const choices=options || (Array.isArray(field.enum) && field.enum.every(v=>typeof v==='string') ? field.enum.map(v=>({value:String(v),label:text(labels[String(v)]) || displayName(String(v))})) : undefined);
       return choices && field.type==='string' ? [{key,field,choices}] : [];
     });
-    return {selects,remaining:{...expand(root,root),properties:Object.fromEntries(Object.entries(properties).filter(([key])=>!selects.some(item=>item.key===key)))}};
+    return {selects,remaining:{...expand(root,root),properties:Object.fromEntries(Object.entries(properties).filter(([key])=>key!=='crossing_heat_sources' && !selects.some(item=>item.key===key)))}};
   },[contracts.data,configuration?.method,references]);
   if (!configuration)
     return <EmptyState description="" title="当前研究没有该模块的方法配置" />;

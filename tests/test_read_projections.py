@@ -52,6 +52,7 @@ def test_latest_run_summary_matches_history_and_readers_do_not_wait_for_writer(c
     history = client.get(root+'/runs?view=summary').json()['items'][-1]
     detail = client.get(root).json()
     assert detail['latest_run']['id'] == saved['id']
+    assert detail['latest_module_run_ids'][''] == saved['id']
     assert detail['latest_run'] == history
     assert detail['version_status'] == history['version_status']
     with service.store.read_snapshot() as reader:

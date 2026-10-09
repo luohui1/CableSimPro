@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.iec60287",
-  "version": "1.0.2",
+  "version": "1.1.0",
   "name": "IEC 60287 载流量",
   "description": "计算声明范围内单芯或独立屏蔽三芯直埋、排管与矩形回填的稳态温度和允许电流，输出逐源互热、屏蔽与磁性铠装损耗及核对表。",
   "icon": "assets/icon.svg",
@@ -2747,7 +2747,7 @@
       "kind": "method",
       "id": "steady-rating",
       "title": "地下稳态（IEC 60287-1-1 / 2-1:2023，多回路直埋 / 排管 / 矩形回填）",
-      "method_version": "1.0.0",
+      "method_version": "1.1.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -2876,6 +2876,24 @@
           "type": "quantity",
           "per": "cable",
           "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.crossing.baseline_ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.crossing.derating_factor",
+          "type": "quantity",
+          "per": "circuit",
+          "required": false
+        },
+        {
+          "key": "x-cablesim.iec60287.crossing.temperature_rise",
+          "type": "quantity",
+          "per": "circuit",
+          "required": false
         }
       ],
       "artifacts": [
@@ -2920,7 +2938,8 @@
         "ks、kp 及管道常数 U、V、Y 须显式给定；工程计算使用 2023 表 2，范围外或无法核实的节点拒算。水平护套涡流按 1-1:2023 5.3.7.1(2)，已用 TB 880 单点接地与两端接地变体验证。",
         "reference_basis=tb880_reference 仅复现 TB 880 所用旧版电容、等效回填半径和接触品字形热阻约定，结果标为参考复现，不能作为 IEC 2023 工程结论。",
         "验证夹具来自受控资料，不随公开仓库分发；验证只覆盖所列算例与分支，不构成合规认证。",
-        "快速土壤场采用保存负荷的Kennelly镜像线热源；均匀土壤、地表等温；排管为外部近似、内部不出值；不替代有限元。表面64点周向平均误差不大于0.1 K；回填、分层及接触等效组不发布。"
+        "快速土壤场采用保存负荷的Kennelly镜像线热源；均匀土壤、地表等温；排管为外部近似、内部不出值；不替代有限元。表面64点周向平均误差不大于0.1 K；回填、分层及接触等效组不发布。",
+        "交叉热源降额按IEC60287-3-3:2007 4.1–4.3；仅一根三芯直埋缆，固定W/m热源且交叉位置重合；不给定电流温度，不联合求解热源载流量。"
       ],
       "category": "calculation",
       "description": "地下稳态、恒温地表、均匀原土或单一矩形回填区；不支持分层土壤、多介质分区或土壤干燥。；单芯自动电损耗适用于完整平衡三相单回路或1-2验证的双回平排温度分支；其他单芯多回路、任意排列或不平衡三相须外部损耗系数与来源。",
@@ -3595,6 +3614,197 @@
             "x-range-basis": {
               "kind": "engineering",
               "reference": "plugins/cablesim.iec60287/src 的 steady-rating 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "crossing_heat_sources": {
+            "type": "array",
+            "title": "交叉热源",
+            "description": "IEC 60287-3-3:2007 4.1–4.3：水平、同一交叉位置的固定W/m热源；正净距，均匀土壤三芯直埋单回。表面温度不能直接当作W/m。",
+            "maxItems": 20,
+            "items": {
+              "additionalProperties": false,
+              "properties": {
+                "label": {
+                  "maxLength": 120,
+                  "minLength": 1,
+                  "title": "热源名称",
+                  "type": "string",
+                  "description": "热源名称；数值为SI，具体出处随每条热源保存。",
+                  "x-unit": {
+                    "si": "1",
+                    "display": "1",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "physics",
+                  "x-order": 0,
+                  "x-level": "advanced",
+                  "x-range-basis": {
+                    "kind": "engineering",
+                    "reference": "IEC 60287-3-3:2007 1/4.1–4.3；正埋深、正净距和非平行水平线热源；字符串长度与20条上限为宿主输入限制。"
+                  }
+                },
+                "depth_m": {
+                  "description": "从地表至热源轴线的埋深，m。",
+                  "exclusiveMinimum": 0,
+                  "title": "热源轴线埋深",
+                  "type": "number",
+                  "x-unit": {
+                    "si": "m",
+                    "display": "m",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "physics",
+                  "x-order": 1,
+                  "x-level": "advanced",
+                  "x-range-basis": {
+                    "kind": "engineering",
+                    "reference": "IEC 60287-3-3:2007 1/4.1–4.3；正埋深、正净距和非平行水平线热源；字符串长度与20条上限为宿主输入限制。"
+                  }
+                },
+                "diameter_m": {
+                  "description": "热源实际外径，m；用于拒绝相互接触。",
+                  "exclusiveMinimum": 0,
+                  "title": "热源外径",
+                  "type": "number",
+                  "x-unit": {
+                    "si": "m",
+                    "display": "m",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "physics",
+                  "x-order": 2,
+                  "x-level": "advanced",
+                  "x-range-basis": {
+                    "kind": "engineering",
+                    "reference": "IEC 60287-3-3:2007 1/4.1–4.3；正埋深、正净距和非平行水平线热源；字符串长度与20条上限为宿主输入限制。"
+                  }
+                },
+                "angle_rad": {
+                  "description": "水平轴线的锐交叉角，rad；平行热源须用平行模型。",
+                  "exclusiveMinimum": 0,
+                  "maximum": 1.5707963267948966,
+                  "title": "交叉角",
+                  "type": "number",
+                  "x-unit": {
+                    "si": "rad",
+                    "display": "rad",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "physics",
+                  "x-order": 3,
+                  "x-level": "advanced",
+                  "x-range-basis": {
+                    "kind": "engineering",
+                    "reference": "IEC 60287-3-3:2007 1/4.1–4.3；正埋深、正净距和非平行水平线热源；字符串长度与20条上限为宿主输入限制。"
+                  }
+                },
+                "heat_w_m": {
+                  "description": "热源固定总发热，W/m；不能直接用表面温度替代。",
+                  "minimum": 0,
+                  "title": "单位长度发热",
+                  "type": "number",
+                  "x-unit": {
+                    "si": "W/m",
+                    "display": "W/m",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "physics",
+                  "x-order": 4,
+                  "x-level": "advanced",
+                  "x-range-basis": {
+                    "kind": "engineering",
+                    "reference": "IEC 60287-3-3:2007 1/4.1–4.3；正埋深、正净距和非平行水平线热源；字符串长度与20条上限为宿主输入限制。"
+                  }
+                },
+                "source": {
+                  "description": "几何与固定发热的具体出处；区分厂家资料、测量和工程师给定。",
+                  "maxLength": 1000,
+                  "minLength": 1,
+                  "title": "参数来源",
+                  "type": "string",
+                  "x-unit": {
+                    "si": "1",
+                    "display": "1",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "physics",
+                  "x-order": 5,
+                  "x-level": "advanced",
+                  "x-range-basis": {
+                    "kind": "engineering",
+                    "reference": "IEC 60287-3-3:2007 1/4.1–4.3；正埋深、正净距和非平行水平线热源；字符串长度与20条上限为宿主输入限制。"
+                  }
+                }
+              },
+              "required": [
+                "label",
+                "depth_m",
+                "diameter_m",
+                "angle_rad",
+                "heat_w_m",
+                "source"
+              ],
+              "title": "交叉热源参数",
+              "type": "object",
+              "description": "交叉热源参数；数值为SI，具体出处随每条热源保存。",
+              "x-unit": {
+                "si": "1",
+                "display": "1",
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "physics",
+              "x-order": 90,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "engineering",
+                "reference": "IEC 60287-3-3:2007 1/4.1–4.3；正埋深、正净距和非平行水平线热源；字符串长度与20条上限为宿主输入限制。"
+              }
+            },
+            "x-group": "physics",
+            "x-order": 90,
+            "x-range-basis": {
+              "kind": "standard",
+              "reference": "IEC 60287-3-3:2007 1/4.1–4.3, printed pp.6–11"
+            },
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-level": "advanced"
+          },
+          "crossing_conductor_material": {
+            "type": "string",
+            "title": "交叉段导体材料（型号未声明时填写）",
+            "enum": [
+              "copper",
+              "aluminium"
+            ],
+            "x-enum-labels": {
+              "copper": "铜",
+              "aluminium": "铝"
+            },
+            "x-group": "physics",
+            "x-order": 91,
+            "description": "优先采用型号材料 standard_kind；缺项时由工程师明确选择。标准式(4)导体纵向热阻率铜0.0026、铝0.0049 K·m/W。",
+            "x-unit": {
+              "si": "1",
+              "display": "1",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "IEC 60287-3-3:2007 1/4.1–4.3；正埋深、正净距和非平行水平线热源；字符串长度与20条上限为宿主输入限制。"
             }
           }
         },
@@ -7063,6 +7273,11 @@
       "size_bytes": 3399
     },
     {
+      "path": "src/cablesim_iec60287/crossing.py",
+      "sha256": "d5f85e5812d9028bc02a5fe74fa6b706edf6d5e53ae0124ea7af3abe8f4b974c",
+      "size_bytes": 10663
+    },
+    {
       "path": "src/cablesim_iec60287/domain.py",
       "sha256": "69f331f57296b003ac577c0e8eef6ecdedba9d5d16aa8785d35681e679c14961",
       "size_bytes": 6510
@@ -7114,8 +7329,8 @@
     },
     {
       "path": "src/cablesim_iec60287/main.py",
-      "sha256": "96870fa0c0cd8c0d0c44d5566b569843a5048c08dcd9051c9c62c166b94cf314",
-      "size_bytes": 22312
+      "sha256": "c56c2938ac2af5bbd304d0ceb4eb037990cc249ee3886fd6c5263e42da6aa49b",
+      "size_bytes": 23223
     },
     {
       "path": "src/cablesim_iec60287/method.py",
@@ -7134,8 +7349,8 @@
     },
     {
       "path": "src/cablesim_iec60287/soil_view.py",
-      "sha256": "a239dc06cb0bcaa2f8f7005b0c29b1d8694f5032e282b25705469646b056c09e",
-      "size_bytes": 9103
+      "sha256": "a0c66eaa0398e7a0e8d2ab49fffe26f94d3e9ba0122a5a2317d20a7b8de1a242",
+      "size_bytes": 9262
     },
     {
       "path": "src/cablesim_iec60287/tb880_reference.py",

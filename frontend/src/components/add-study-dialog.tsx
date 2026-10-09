@@ -24,7 +24,7 @@ const AMPACITY_TASKS: [Task, string, string, string][] = hostTasks.map(row => [r
 
 /**
  * 在当前工程里新建研究：工程模型（敷设截面、电缆、工况）原样带入，只选任务、方法和名称。
- * 方法参数按“本工程同方法研究 → 引用型号的推荐值 → 方法契约默认值”的顺序沿用，并记录来源；
+ * 默认采用插件契约默认值；工程师可明确选择沿用本工程同方法的最近研究，并记录来源；
  * 建好后在右侧“方法”页按分组修改。缺必填参数时宿主会拒绝，界面如实显示原因。
  */
 export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, projectName }: {
@@ -36,6 +36,7 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
   const [methodId, setMethodId] = useState("");
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
+  const [parameterSource, setParameterSource] = useState('defaults');
   const workspace = useQuery({ ...workspaceQuery(workspaceId), enabled: open });
   const methods = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal), enabled: open });
   const studies = useQuery({ queryKey: ["study-index"], queryFn: ({ signal }) => studyIndex(signal), enabled: open });
@@ -77,13 +78,12 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
   const options = choices.filter((choice) => choice.task === task);
   const chosen = options.find((choice) => choice.id === methodId) || options[0];
 
-  // 参数来源：本工程同方法的最近研究 → 引用型号的推荐方法参数 → 方法契约默认值
+  // 同方法仅用于工程师主动选择沿用；不把旧研究边界冒充当前插件默认值。
   const same = (studies.data || []).filter((row) => row.workspace === workspaceId && chosen &&
     row.definition.method?.plugin_id === chosen.method.plugin_id && row.definition.method?.capability === chosen.method.capability)
     .sort((a, b) => b.updated.localeCompare(a.updated))[0];
-  const reference = optionalRecord(workspace.data?.study_cable_reference);
-  const recommended = chosen ? optionalRecord(optionalRecord(reference.method_defaults)[chosen.method.plugin_id]) : {};
-  const origin = same ? `沿用本工程研究「${same.title}」的方法参数` : Object.keys(recommended).length ? `采用引用型号 ${text(reference.name)} 的推荐方法参数` : "采用方法契约声明的默认值";
+  const inherit = parameterSource === 'recent' && !!same;
+  const origin = inherit ? `沿用本工程研究「${same.title}」已保存的方法参数（包含显式边界）` : "采用当前插件契约声明的默认值";
 
   const create = useMutation({
     retry: false,
@@ -92,8 +92,8 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
       if (!chosen) throw new ApiError(422, "所选任务没有可用方法");
       const revision = numeric(workspace.data?.revision);
       if (revision === null) throw new ApiError(409, "工程修订不可用，请刷新后重试");
-      let parameters: Record<string, unknown> = same ? structuredClone(optionalRecord(same.definition.parameters)) : { ...recommended };
-      if (!same && !Object.keys(recommended).length) {
+      let parameters: Record<string, unknown> = inherit ? structuredClone(optionalRecord(same.definition.parameters)) : {};
+      if (!inherit) {
         const schema = optionalRecord(exactContract(await inputContracts(), chosen.method).parameter_schema);
         parameters = Object.fromEntries(Object.entries(optionalRecord(schema.properties)).flatMap(([key, value]) => "default" in optionalRecord(value) ? [[key, optionalRecord(value).default]] : []));
       }
@@ -117,7 +117,7 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
     onError: (problem) => {
       // 宿主按方法契约逐项拒绝缺失的必填参数；翻成中文并说明为什么没有默认值
       const missing = [...message(problem).matchAll(/parameters\.([\w.]+)：Field required/g)].map((match) => displayName(match[1]));
-      setError(missing.length ? `该方法有必填参数没有默认值：${missing.join("、")}。本工程还没有同方法的研究可沿用，插件也未声明默认值，因此不能自动建立。` : message(problem));
+      setError(missing.length ? `请补齐没有插件默认值的参数：${missing.join("、")}；可选择沿用已保存的同方法研究参数。` : message(problem));
     },
   });
 
@@ -139,7 +139,9 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
           </fieldset>
           {options.length > 1 ? <Select label="计算方法" value={chosen?.id} onChange={setMethodId} options={options.map((choice) => ({ value: choice.id, label: `${choice.label} · ${choice.hpc ? "超算" : "本机"}` }))} />
             : chosen && <p className="add-study-method"><span className="muted">计算方法</span>{chosen.label} · {chosen.hpc ? "超算" : "本机"}</p>}
-          {chosen && <p className="muted">{origin}；建好后在右侧“方法”页修改。</p>}
+          {chosen && <><Select label="方法参数来源" value={inherit ? 'recent' : 'defaults'} onChange={setParameterSource}
+            options={[{value:'defaults',label:'插件默认值'},...(same ? [{value:'recent',label:`沿用最近研究 · ${same.title}`}] : [])]} />
+            <p className="muted">{origin}；旧研究与运行保持原值。</p></>}
           {error && <p className="field-error" role="alert">{error}</p>}
           <button type="submit" className="visually-hidden" tabIndex={-1} aria-hidden="true">建立研究</button>
         </form>}

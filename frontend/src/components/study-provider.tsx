@@ -106,7 +106,7 @@ export function StudyProvider() {
   const wid = study?.workspace || search.workspace;
   const workspace = useQuery({ ...workspaceQuery(wid), enabled: !!study });
   const runs = useQuery({
-    ...studyRunsQuery(wid, sid, search.run),
+    ...studyRunsQuery(queries, wid, sid, search.run, location.pathname.split('/')[3] || ''),
     enabled: !!study,
     refetchInterval: (query) =>
       query.state.data?.some((run) =>

@@ -5,6 +5,7 @@ import { Icon } from "./icon";
 import { SourceBadge } from "./source-badge";
 import type { PropertyGroup } from "./property-panel";
 import { CableInputs, ConditionsInputs, DomainNumber, type InputSelection } from "./study-inputs";
+import { StudyCrossingInputs } from './study-crossing-inputs';
 import { inspectorViews } from './study-workbench-config';
 import { Dialog } from './ui/dialog';
 import { Button } from './ui/button';
@@ -75,6 +76,8 @@ export function WorkbenchInspector({ view = "input", onView, methodPanel, agentP
     {document && <Block icon="object/conditions" title="工况" id="inspector-conditions">
       <div className="inspector-conditions"><ConditionsInputs document={document} historical={historical} tab="inputs" onSelect={() => {}} /></div>
     </Block>}
+    {/* 独立研究的几何输入只读，交叉热源仍属于可编辑的方法工况。 */}
+    {!document && <div className="inspector-conditions"><StudyCrossingInputs historical={historical} /></div>}
     {document && <div className="inspector-layers"><span>分层参数</span><Button size="compact" variant="ghost" onClick={() => setLayers(true)}>查看</Button></div>}
     <Dialog open={layers} onOpenChange={setLayers} title="电缆分层" initialFocus="form">
       {layers && <CableInputs tab="layers" document={document} historical={historical} onSelect={() => {}} />}

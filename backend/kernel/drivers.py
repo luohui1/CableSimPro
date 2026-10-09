@@ -131,6 +131,9 @@ def compare(runs):
     differences = []
     for run in runs[1:]:
         values = quantities(run)
+        titles = {(c['case_id'], r.get('case', 'unspecified'), r['key'], r['entity'], r.get('unit')): r['title']
+                  for c in run['output']['cases'] if c['status'] == 'succeeded'
+                  for r in c['results'] if r.get('title')}
         other_checks = run['snapshot']['definition'].get('crosschecks', [])
         base_checks = runs[0]['snapshot']['definition'].get('crosschecks', [])
         differences.append({'run_id': run['id'], 'baseline_run_id': runs[0]['id'],
@@ -141,6 +144,7 @@ def compare(runs):
                                             and [c['method'] for c in other_checks] == [c['method'] for c in base_checks]),
                             'unmatched': [list(k) for k in sorted(set(values) ^ set(baseline))],
                             'quantities': [{'case_id': k[0], 'condition': k[1], 'key': k[2], 'entity': k[3], 'unit': k[4],
+                                            **({'title': titles[k]} if k in titles else {}),
                                             'baseline': baseline[k], 'value': values[k], 'difference': values[k] - baseline[k]}
                                            for k in sorted(set(values) & set(baseline))]})
     return {'kind': 'method-comparison', 'interpretation': '绝对数值对照；不同输入、边界或方法不代表优化收益。',

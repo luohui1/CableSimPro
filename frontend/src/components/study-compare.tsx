@@ -619,7 +619,7 @@ export function StudyCompare({
                       "来源",
                     ],
                     ...rows.map((row) => [
-                      row.key,
+                      text(row.title) || displayName(text(row.key)),
                       row.entity,
                       row.condition,
                       row.baseline,
@@ -645,7 +645,7 @@ export function StudyCompare({
               {
                 id: "quantity",
                 label: "物理量",
-                render: (row) => displayName(text(row.key)),
+                render: (row) => text(row.title) || displayName(text(row.key)),
               },
               {
                 id: "entity",
