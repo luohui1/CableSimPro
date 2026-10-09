@@ -12,6 +12,7 @@ import pytest
 from backend.harness.contracts import Limits
 from backend.harness.providers import OpenAICompatibleProvider
 from test_research import client,study
+from test_index_reproductions import library
 
 FAKE_KEY='test-only-model-credential'
 

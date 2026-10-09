@@ -1,7 +1,36 @@
-"""Bounded Agent views of the exact cards used by the read-only index API."""
+"""Bounded Agent views; full cards remain in the read-only index API."""
+from copy import deepcopy
 from backend.index import get_index
 from .contracts import ToolResult
-from .context_builder import fits, RESULT_BYTES
+from .context_builder import encoded, fits, RESULT_BYTES
+
+
+def card_view(card):
+    """Omit whole limitation entries, with counts and a pinned source identity."""
+    evidence=card.get('validation')
+    if not evidence:return card
+    view=deepcopy(card);compact=view['validation'];limitations=evidence['limitations']
+    compact['limitations']=[]
+    compact['total_limitations']=len(limitations)
+    compact['detail_ref']={'kind':'validation','id':card['id'],
+        'snapshot_digest':evidence['snapshot_digest'],'view':'results'}
+    def note():
+        omitted=len(limitations)-len(compact['limitations'])
+        compact['omitted_limitations']=omitted
+        compact['omission_note']=f'限制说明共 {len(limitations)} 条，省略 {omitted} 条；全文在此验证对象的家（结果页），按 detail_ref 查看保存快照。'
+    note()
+    for limitation in limitations:
+        # Never cut a sentence or let unbounded prose displace numeric evidence.
+        if len(encoded(compact['limitations']+[limitation]))>640:continue
+        compact['limitations'].append(limitation);note()
+        if not fits(view,RESULT_BYTES-1536):compact['limitations'].pop();note()
+    return view
+
+
+def entry_view(group,row):
+    if group=='items':return card_view(row)
+    if group in ('uses','used_by'):return {**row,'target':card_view(row['target'])}
+    return row
 
 
 def read(research,name,args):
@@ -17,9 +46,10 @@ def read(research,name,args):
         data={group:[] for group in ('uses','used_by','unresolved')}
         data.update(total=total,offset=offset,next_offset=None)
     result=ToolResult(status='ok',summary='已读取统一索引名片与保存关联；未批准或修改对象。',data=data)
+    result.data['source_errors']=page.get('source_errors',[])
     count=0
     for group,row in entries:
-        result.data[group].append(row)
+        result.data[group].append(entry_view(group,row))
         result.data['next_offset']=offset+count+1 if offset+count+1<total else None
         if not fits(result.model_dump(mode='json'),RESULT_BYTES-256):
             result.data[group].pop();break

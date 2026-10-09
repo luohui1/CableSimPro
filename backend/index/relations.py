@@ -92,7 +92,8 @@ def resource_edges(index,card,row):
 
 def build(index):
     for card in list(index.cards.values()):
-        if card['kind']=='validation':index.link(index.get('plugin',card['parent']['id']),card,'validation')
+        if card['kind']=='validation' and card.get('parent'):
+            index.link(index.get('plugin',card['parent']['id']),card,'validation')
     for row in index.raw['assets']:
         card=index.get('asset',row['id']) or index.get('cable_version',row['id'])
         for ref in decoded(row['dependencies'],[]):

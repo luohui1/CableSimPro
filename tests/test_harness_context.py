@@ -2,6 +2,7 @@
 from copy import deepcopy
 from collections import OrderedDict
 import json
+from test_index_reproductions import library
 from threading import Event
 from time import perf_counter
 

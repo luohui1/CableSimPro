@@ -1,6 +1,7 @@
 """Type input/approval behavior only: no native solver or real model credential."""
 from copy import deepcopy
 import json
+from test_index_reproductions import library
 from time import perf_counter
 
 import pytest

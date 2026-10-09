@@ -30,16 +30,26 @@ def parent(card):
 
 
 class Snapshot:
-    def __init__(self,research,db):
+    def __init__(self,research,db,reproductions=None,reproduction_error=None):
         self.research,self.db=research,db
         self.raw=project(db);self.cards={};self.meta={};self.edges=[];self.unresolved={};self.todos=[]
-        self.receipts=[]
+        self.receipts=[];self.reproduction_error=reproduction_error
         self.registry=research.registry()
         self.cache={'registries':{pid:self.registry for pid in self.registry.plugins}}
         self.workspaces={r['id']:r for r in self.raw['workspaces']}
         self.studies={r['id']:r for r in self.raw['studies']}
         self.run_states={}
         self.build_cards()
+        if reproductions is not None:
+            from .reproductions import build as reproduction_cards,invalid
+            baseline_cards=self.cards.copy();baseline_meta=self.meta.copy()
+            try:reproduction_cards(self,reproductions)
+            except (ValueError,KeyError,TypeError,AttributeError,IndexError) as error:
+                self.cards=baseline_cards;self.meta=baseline_meta;self.edges.clear();self.unresolved.clear()
+                self.reproduction_error=invalid(error).detail
+        if self.reproduction_error:
+            from .reproductions import unavailable
+            unavailable(self,self.reproduction_error)
         from .relations import build
         build(self)
         from .inbox import build as inbox
@@ -142,7 +152,7 @@ class Snapshot:
                     vid=pid+':'+sha256(name.encode()).hexdigest()[:24]
                     if not self.get('validation',vid):self.add('validation',vid,name,'declared',version=manifest.version,
                         reason='插件清单声明的验证条目；不是本次验证执行或工程批准记录。',updated=updated,owner=card,
-                        source={'kind':'plugin','label':manifest.name})
+                        source={'kind':'plugin','label':manifest.name},subtype='declared')
         from backend.kernel.scenarios import system_models
         for model in system_models():
             self.add('cable_version',model['id'],model['name'],model['state'],version=model['version'],
@@ -236,6 +246,8 @@ class Index:
         self.next_expiry=None;self.expiry_generation=0
         self.runtime_generation=0;self.runtime_hash=None
         self.warm_done=Event();self.warm_state='pending'
+        from .reproductions import library
+        self.reproduction_library=library()
 
     def warm(self,stop=None):
         if stop is not None and stop.is_set():return
@@ -259,9 +271,17 @@ class Index:
         return sha256(json.dumps(receipts,sort_keys=True,ensure_ascii=False).encode()).digest()
 
     def load(self):
+        from .reproductions import invalid,identity
+        reproduction_error=None;reproductions=None
+        try:
+            observed=identity(self.reproduction_library)
+            reproductions=self.reproduction_library.snapshot()
+            if identity(self.reproduction_library)!=observed:raise ValueError('读取期间复现库变化，请重试。')
+        except (OSError,ValueError,KeyError,TypeError,AttributeError,IndexError,HTTPException) as error:
+            reproductions=None;reproduction_error=invalid(error).detail
         with self.research.store.db() as db:
             db.execute('PRAGMA query_only=ON');db.execute('PRAGMA busy_timeout=250');db.execute('BEGIN')
-            view=Snapshot(self.research,db)
+            view=Snapshot(self.research,db,reproductions,reproduction_error)
         self.runs=[(r['id'],view.state(r)['snapshot']['definition']['method']) for r in view.raw['runs']
             if view.state(r)['snapshot'].get('definition',{}).get('method')]
         # Baseline exactly the receipts used for these cards. A fresh reread here
@@ -270,7 +290,8 @@ class Index:
         now=time();deadlines=[r['expires'] for r in view.raw['agent_proposals'] if not r['decision'] and r['expires'] and r['expires']>now]
         self.next_expiry=min(deadlines,default=None)
         return json.dumps({'cards':list(view.cards.values()),'edges':view.edges,
-            'unresolved':[[*key,notes] for key,notes in view.unresolved.items()],'todos':view.todos},ensure_ascii=False,allow_nan=False).encode()
+            'unresolved':[[*key,notes] for key,notes in view.unresolved.items()],'todos':view.todos,
+            'reproduction_error':view.reproduction_error},ensure_ascii=False,allow_nan=False).encode()
 
     def snapshot(self):
         # Leave room for the HTTP error response within the public wait budget.
@@ -285,14 +306,23 @@ class Index:
             if self.runtime_hash is not None and observed!=self.runtime_hash:
                 self.runtime_generation+=1
             self.runtime_hash=observed
-            key=('object-index',self.expiry_generation,self.runtime_generation)
+            from .reproductions import identity,invalid
+            try:reproduction_identity=identity(self.reproduction_library)
+            except (OSError,ValueError,KeyError,TypeError,AttributeError,IndexError,HTTPException) as error:
+                path=self.reproduction_library.root/'index.json'
+                try:
+                    stat=path.stat();stamp=(stat.st_mtime_ns,stat.st_ctime_ns,stat.st_size,stat.st_ino)
+                except OSError:stamp=None
+                reproduction_identity=('invalid',stamp,type(error).__name__,str(error))
+            key=('object-index',self.expiry_generation,self.runtime_generation,reproduction_identity)
             cache=self.research.read_responses
             payload=cache.get(key,True)
             if payload is None:payload=cache.build(key,None,self.load,True)
             value=json.loads(payload)
             return SimpleNamespace(cards={(card['kind'],card['id']):card for card in value['cards']},
                 edges=[(tuple(source),edge) for source,edge in value['edges']],
-                unresolved={(kind,id):notes for kind,id,notes in value['unresolved']},todos=value['todos'])
+                unresolved={(kind,id):notes for kind,id,notes in value['unresolved']},todos=value['todos'],
+                reproduction_error=value.get('reproduction_error'))
         except sqlite3.OperationalError as error:
             raise HTTPException(503,{'code':'INDEX_UNAVAILABLE','message':'统一索引暂时无法读取；原数据未改变，请稍后重试。'},headers={'Retry-After':'1'}) from error
         except (PluginHostError,OSError) as error:
@@ -306,19 +336,37 @@ class Index:
             raise HTTPException(422,{'code':'INDEX_KIND_INVALID','path':'/kind','message':'请选择已注册的对象类别。'})
         if not 1<=limit<=100 or offset<0 or len(q)>200:raise HTTPException(422,'索引查询参数超出范围。')
         snapshot=self.snapshot();term=q.casefold().strip()
+        if kind=='validation' and snapshot.reproduction_error:
+            # Exact declared-card identities remain readable even when the
+            # independent reproduction source is unavailable.
+            declared=next((card for card in snapshot.cards.values() if card.get('subtype')=='declared'
+                and term in (card['id'].casefold(),card['name'].casefold())),None)
+            if declared is None:raise HTTPException(503,snapshot.reproduction_error)
         items=[card for card in snapshot.cards.values() if (kind is None or card['kind']==kind)
             and (not term or term in card['name'].casefold() or term in card['id'].casefold())]
         items.sort(key=lambda card:(card['updated'] or '',card['kind'],card['id']),reverse=True)
-        return ObjectList(items=items[offset:offset+limit],total=len(items)).model_dump(mode='json')
+        if kind=='validation':
+            items.sort(key=lambda card:(bool((card.get('validation') or {}).get('metrics')),
+                (card.get('validation') or {}).get('convergence_passed') is True,
+                card.get('subtype')=='reproduced'),reverse=True)
+        return ObjectList(items=items[offset:offset+limit],total=len(items),
+            source_errors=[snapshot.reproduction_error] if snapshot.reproduction_error else []).model_dump(mode='json')
 
     def relations(self,kind,id):
         snapshot=self.snapshot();key=(kind,id)
+        if kind=='validation' and snapshot.reproduction_error and (snapshot.cards.get(key) or {}).get('subtype')!='declared':
+            raise HTTPException(503,snapshot.reproduction_error)
         if key not in snapshot.cards:raise HTTPException(404,{'code':'INDEX_OBJECT_NOT_FOUND','message':'对象未在现有索引中登记。'})
         uses=[edge for source,edge in snapshot.edges if source==key]
+        if kind=='plugin':
+            uses.sort(key=lambda edge:(bool((edge['target'].get('validation') or {}).get('metrics')),
+                (edge['target'].get('validation') or {}).get('convergence_passed') is True),reverse=True)
         used_by=[{**edge,'target':snapshot.cards[source]} for source,edge in snapshot.edges if (edge['target']['kind'],edge['target']['id'])==key]
-        return Relations(uses=uses,used_by=used_by,unresolved=snapshot.unresolved.get(key,[])).model_dump(mode='json')
+        return Relations(uses=uses,used_by=used_by,unresolved=snapshot.unresolved.get(key,[]),
+            source_errors=[snapshot.reproduction_error] if snapshot.reproduction_error else []).model_dump(mode='json')
 
     def inbox(self,snapshot=None):
         snapshot=snapshot if snapshot is not None else self.snapshot();items=snapshot.todos
         items.sort(key=lambda item:(item['created'] or '',item['category'],item['object']['id']),reverse=True)
-        return Inbox(items=items,counts={key:sum(item['category']==key for item in items) for key in ('review','stale','missing','running')}).model_dump(mode='json')
+        return Inbox(items=items,counts={key:sum(item['category']==key for item in items) for key in ('review','stale','missing','running')},
+            source_errors=[snapshot.reproduction_error] if snapshot.reproduction_error else []).model_dump(mode='json')

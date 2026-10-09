@@ -2,6 +2,7 @@
 from contextlib import contextmanager
 from copy import deepcopy
 import json
+from test_index_reproductions import library
 import sqlite3
 from time import perf_counter
 from uuid import uuid4

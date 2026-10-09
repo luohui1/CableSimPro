@@ -1,6 +1,7 @@
 """Claim conversion, bounded private repairs and usable evidence fallback."""
 from copy import deepcopy
 import json
+from test_index_reproductions import library
 
 from fastapi import HTTPException
 import pytest

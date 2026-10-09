@@ -1,6 +1,7 @@
 """Saved type identities, partial bindings and publication pins; no solver runs."""
 from copy import deepcopy
 import json
+from test_index_reproductions import library
 from uuid import uuid4
 
 from backend.kernel.workspace import fingerprint,stamp

@@ -24,6 +24,37 @@ class Parent(StrictModel):
     name: str
 
 
+class ValidationMetric(StrictModel):
+    id: str
+    variant: str
+    quantity: str
+    unit: str | None = None
+    reference: float | None = None
+    open_source: float | None = None
+    comsol: float | None = None
+    difference: float | None = None
+    relative_difference: float | None = None
+    relative_difference_percent: float | None = None
+    status: str
+    source: str | dict | None = None
+    tolerance: dict | None = None
+
+
+class ValidationEvidence(StrictModel):
+    snapshot_digest: str
+    citation: str
+    reference_location: str
+    source_pages: list[dict]
+    scope: str
+    metrics: list[ValidationMetric]
+    total_metrics: int
+    outside_tolerance: int
+    convergence_passed: bool | None = None
+    limitations: list[str]
+    runs: list[dict]
+    report_tolerance: dict | None = None
+
+
 class ObjectCard(StrictModel):
     kind: Kind
     id: str
@@ -34,12 +65,14 @@ class ObjectCard(StrictModel):
     source: Source | None = None
     updated: str | None
     parent: Parent | None = None
-    subtype: Literal['material','component','assembly','installation','study_template','rule'] | None = None
+    subtype: Literal['material','component','assembly','installation','study_template','rule','declared','reproduced'] | None = None
+    validation: ValidationEvidence | None = None
 
 
 class ObjectList(StrictModel):
     items: list[ObjectCard]
     total: int
+    source_errors: list[dict] = Field(default_factory=list)
 
 
 class Pin(StrictModel):
@@ -66,11 +99,12 @@ class Relations(StrictModel):
     uses: list[Relation]
     used_by: list[Relation]
     unresolved: list[Unresolved] = Field(default_factory=list)
+    source_errors: list[dict] = Field(default_factory=list)
 
 
 class InboxItem(StrictModel):
     category: Literal['review','stale','missing','running']
-    origin: Literal['agent','document','asset','type','study','job']
+    origin: Literal['agent','document','asset','type','study','job','validation']
     title: str
     object: ObjectCard
     reason: str
@@ -80,4 +114,4 @@ class InboxItem(StrictModel):
 class Inbox(StrictModel):
     items: list[InboxItem]
     counts: dict[Literal['review','stale','missing','running'],int]
-
+    source_errors: list[dict] = Field(default_factory=list)

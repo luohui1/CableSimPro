@@ -1,6 +1,7 @@
 """Summary routing, pressure recovery and saved FEM hand comparisons; no solver."""
 from copy import deepcopy
 import json
+from test_index_reproductions import library
 import sqlite3
 from time import perf_counter
 

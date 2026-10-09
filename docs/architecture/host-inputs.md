@@ -107,7 +107,9 @@
 
 当前23个宿主工具为workspace_list/read、study_list/read、run_list/read、plugin_inspect、cable_model_read、propose_domain_changes、propose_method_parameters、study_preflight、study_preview、project_digest、study_baseline、sensitivity_inputs、recipe_execute、fem_comparison_read、propose_fem_verification、object_find、object_relations、type_read、propose_type_changes、inbox_read。另从已安装清单的可调用能力生成插件工具，总数由status.tools返回，实际目录以tools为准。模型请求省略宿主参数schema中的重复description注释，保留所有校验约束；/contract保留完整说明，工具头说明显示单位和权限。插件工具未绑定研究时只生成新建研究方案，批准后只保存Study；绑定研究时必须与该研究的准确方法一致，只有preview且非远程能力可本机试算。原生或HPC预检需要人工执行，不通过LLM触发远程作业。
 
-`object_find({kind?,q?,limit?,offset?})`与`object_relations({kind,id,limit?,offset?})`使用下文统一索引的同一张名片，覆盖整个工程库；只读元数据，不授予跨工程修改权限。工具默认10项、上限20项，结果紧凑UTF-8 JSON不超过6KiB，名片保持完整。`data.total/offset/next_offset`供继续分页；关联按uses、used_by、unresolved顺序分页。状态、名称和过期原因按名片引用，工程量仍须从project_digest或保存运行证据读取。两个工具照常进入计划、步骤、预算与审计。
+`object_find({kind?,q?,limit?,offset?})`与`object_relations({kind,id,limit?,offset?})`使用下文统一索引的同一对象身份，覆盖整个工程库；只读元数据，不授予跨工程修改权限。工具默认10项、上限20项，结果紧凑UTF-8 JSON不超过6KiB。API名片保留完整限制说明，Agent验证视图保留状态、关键偏差及单位、收敛、出处与保存版本，limitations仅选取预算内的完整条目（最多640字节），不截断句子。validation增添`total_limitations,omitted_limitations,omission_note,detail_ref:{kind:"validation",id,snapshot_digest,view:"results"}`；明确省略几条、全文在验证对象的家（结果页）。采用独立紧凑视图是为避免长说明挤掉证据，不改变原件或API名片；不能将省略内容说成已检查。`data.total/offset/next_offset`供继续分页；关联按uses、used_by、unresolved顺序分页，data.source_errors保留源错误。状态、名称和过期原因按名片引用，工程量仍须从project_digest或保存运行证据读取。两个工具照常进入计划、步骤、预算与审计。
+
+精度/公开算例问题复用上述两个工具，不新增配方：先按插件ID查validation关联，再以`object_find({kind:"validation",q:<目标ID>})`读取该验证名片；也可按公开标准名称搜索并分页。这样插件验证页与Agent共用同一保存证据，不固化特定算例流程。只有`subtype:"reproduced"`的`validation.metrics`是已校验复现快照的量值，按目标、行、字段路径与snapshot_digest纳入回答数值核验；relative_difference_percent仅为保存比值×100的百分数显示投影。引用不能把另一个目标的偏差移到当前目标。清单声明不提供量值证明；部分复现、偏差超限不能称作整体验证通过，收敛通过独立说明，项目门槛不能称作缺证据的报告工程容差。违反时返回UNSUPPORTED_VALIDATION_CLAIM，经原修正/收尾回路重写；兜底也保留保存状态和限制。正文对象名称加引号，SSE的object_refs引用同一验证名片。
 
 `inbox_read({category?,limit?,offset?,expected_digest?})`读取与`GET /api/index/inbox`同一份完整索引快照，范围为全库跨工程只读，不按会话工程过滤，也不授予跨工程修改权限。category为review/stale/missing/running；默认10项，上限20项，offset从0开始。返回`data:{scope:"library_read_only",category,counts,total,offset,items,next_offset,next_page,inbox_digest}`；counts为全库四类计数，total为筛选后条数。items保留InboxItem全部字段和原因原文，增添`home:ObjectCard,next_step,handled_by,requires_human_approval`。home只沿保存父对象找原工作台，方法版本只读安装名片；不猜缺字段值、审批人姓名或资源绑定。整个ToolResult紧凑UTF-8不超过6KiB，单项过大返回INBOX_ITEM_TOO_LARGE，不截断原因；next_page保留筛选、limit与摘要。分页期间待办变化返回INBOX_CHANGED（/expected_digest），从offset=0重读，不拼接不同版本清单。
 
@@ -180,17 +182,29 @@ Agent常用场景回归一条命令：`python -m pytest -q -s tests/test_harness
 
 ## 统一索引
 
+复现验证前端接入：插件“验证”页签读取plugin的validation关联，按target.subtype区分清单声明和保存复现；Relation.reason已带状态、关键偏差与出处，完整结构见target.validation。现有关联面板位于插件“使用情况”页签，需要前端将验证引用放到“验证”页签；source.kind=reproduction_library的名片按kind/id导航到该算例结果页（`/validation/{id}/results`），并以validation.snapshot_digest保留当前引用版本。本接口不返回页面地址。
+
+kind=validation的查询及plugin的关联优先展示有保存结果的目标，其中已有收敛证据的先展示，再展示其余复现目标和清单声明；同级沿用原更新时间顺序。这个顺序表示证据可供读取，不表示复现状态通过，partial与超限仍保留原值；避免精度查询先读完清单声明而漏掉真实算例。
+
 `backend/index/`在同一只读数据库快照中投影已有元数据，不初始化表、不迁移数据、不求解、不刷新远端作业，也不加载厂家原件、结果正文、计算书HTML或场数组。仅研究配置与运行的冻结方法/锁/型号引用参与当前性检查。页面导航由前端按kind换算，API不返回地址。
-元数据投影复用宿主ReadResponses的有界缓存；SQLite提交与封签源码通知使缓存失效。方案有效期到点、调度回执内容变化也会触发重建，不用固定TTL保留旧待办。三个接口与Agent工具共用该投影。宿主完成数据库初始化后，在同一study-read-warmup后台线程先预建统一索引，再预热研究目录；不阻塞启动、不加载历史运行正文。构建期间其他读取最多等待3秒，超时返回503、Retry-After: 1及`detail:{code:"INDEX_BUILDING",state:"building",message,max_wait_seconds:3}`，不返回部分items。内存不足返回INDEX_RESOURCE_PRESSURE；预建失败后普通读取仍可重试，保留原数据。
+元数据投影复用宿主ReadResponses的有界缓存；SQLite提交与封签源码通知使缓存失效。方案有效期到点、调度回执内容变化、复现库index.json字节或当前快照文件身份变化也会触发重建，不用固定TTL保留旧待办。三个接口与Agent工具共用该投影。宿主完成数据库初始化后，在同一study-read-warmup后台线程先预建统一索引，再预热研究目录；不阻塞启动、不加载历史运行正文。构建期间其他读取最多等待3秒，超时返回503、Retry-After: 1及`detail:{code:"INDEX_BUILDING",state:"building",message,max_wait_seconds:3}`，不返回部分items。内存不足返回INDEX_RESOURCE_PRESSURE；预建失败后普通读取仍可重试，保留原数据。
 
 
 | 接口 | 请求与结果 |
 | --- | --- |
-| GET `/api/index/objects` | 可选kind、q（名称或ID，最多200字符）、limit（1–100，默认50）、offset（非负）；返回`{items:ObjectCard[],total}`，按更新时间降序 |
-| GET `/api/index/objects/{kind}/{id}/relations` | 返回`{uses:Relation[],used_by:Relation[],unresolved:[{role,freshness:"unknown",reason}]}`；对象不存在404 |
-| GET `/api/index/inbox` | 返回`{items:InboxItem[],counts:{review,stale,missing,running}}`；同一类别、来源与对象只出现一次 |
+| GET `/api/index/objects` | 可选kind、q（名称或ID，最多200字符）、limit（1–100，默认50）、offset（非负）；返回`{items:ObjectCard[],total,source_errors:[]}`，按更新时间降序 |
+| GET `/api/index/objects/{kind}/{id}/relations` | 返回`{uses:Relation[],used_by:Relation[],unresolved:[{role,freshness:"unknown",reason}],source_errors:[]}`；对象不存在404 |
+| GET `/api/index/inbox` | 返回`{items:InboxItem[],counts:{review,stale,missing,running},source_errors:[]}`；同一类别、来源与对象只出现一次 |
 
-`ObjectCard={kind,id,name,version?,revision?,status:{code,label,reason?},source?:{kind,label},updated,parent?:{kind,id,name},subtype?}`。kind包含project、study、type、cable_version、asset、run、job、delivery、plugin、validation、document、proposal、agent_task，以及供运行引用的input_snapshot。asset的subtype为material、component、assembly、installation、study_template、rule。缺少持久时间或可选字段时为null，不编造更新时间。input_snapshot与对应run共用ID、kind不同；超算job来自本机保存的调度回执，收敛工作流job用`convergence:<保存ID>`。系统教学型号明确标示来源，不称厂家实测。validation只代表安装清单的验证声明，不代表验证执行成功或工程批准。
+`ObjectCard={kind,id,name,version?,revision?,status:{code,label,reason?},source?:{kind,label},updated,parent?:{kind,id,name},subtype?,validation?}`。kind包含project、study、type、cable_version、asset、run、job、delivery、plugin、validation、document、proposal、agent_task，以及供运行引用的input_snapshot。asset的subtype为material、component、assembly、installation、study_template、rule。缺少持久时间或可选字段时为null，不编造更新时间。input_snapshot与对应run共用ID、kind不同；超算job来自本机保存的调度回执，收敛工作流job用`convergence:<保存ID>`。系统教学型号明确标示来源，不称厂家实测。
+
+validation分为`subtype:declared|reproduced`。declared保留插件清单原声明，validation=null，不代表执行成功。reproduced来自宿主同根目录`CABLESIM_REPRODUCTION_LIBRARY`（默认`.data/simulation/library`），调用ReproductionLibrary.snapshot校验当前不可变快照；每个目标一张卡，id/title保持原文，状态为reproduced/partial/missing_data/capability_gap，中文为已复现/部分复现/缺资料/能力未覆盖。subtype表示来自复现库，不表示目标通过。`source:{kind:"reproduction_library",label:"保存的复现结果"}`，updated取快照时间；前端按此来源导航到验证对象的家，不按清单声明的父插件导航。
+
+`validation={snapshot_digest,citation,reference_location,source_pages,scope,metrics,total_metrics,outside_tolerance,convergence_passed,limitations,runs,report_tolerance}`。metrics最多三条关键结果，按超限、不可直接比较、已匹配、未评估排序，保留`id,variant,quantity,unit,reference,open_source,comsol,difference,relative_difference,relative_difference_percent,status,source,tolerance`；not_comparable原样保留，不能把其偏差当作同条件验证通过。relative_difference保留原比值，percent为其×100。total_metrics及outside_tolerance统计所有原行，未展示明细保留在原验证页。source_pages只取保存输入的pdf_page/printed_page与出处；convergence_passed缺证据为null。runs保留plugin_id/plugin_version/method_version/source_sha256/engineering_approval已有字段，不替换为当前安装版本。report_tolerance缺失为null，不能当作项目门槛；limitations保持来源限制。数字为公开复现量值，不是当前工程计算结果。
+
+按保存runs[].plugin_id去重建立plugin→validation（role:validation），pinned.digest固定复现快照摘要；一张验证卡可以被多个插件引用，不按名称猜插件。freshness:current表示引用对应当前库快照，不表示当前安装插件版本通过，保存方法版本见runs。没有保存插件引用的缺资料目标仍可查找，但不猜关联。JSON损坏、快照摘要不符、被指向的文件缺失或格式不合法时，kind=validation列表及真实验证对象的关联返回503 `detail:{code:"INDEX_REPRODUCTION_INVALID",state:"invalid",source:"reproduction_library",message,reason}`，不返回空复现库、旧卡或半成品；明确按清单声明的完整ID或名称查询仍可读取declared名片，其关联也照常返回。其他类别、跨类别搜索、首页与待办返回200，source_errors带上述错误；插件保留清单声明的validation关联，同时unresolved增加真实复现库错误，不猜受影响算例。待办missing增加一条`origin:"validation"`、标题“复现库校验失败”，对象`kind:"validation",id:"reproduction-library",status.code:"unavailable",source.kind:"reproduction_library"`代表库状态而非算例，前端应导航验证首页；inbox_triage给出在验证页核对当前快照并由复现库维护人修复的下一步，不触发计算。修复后下一次读取删除错误与该待办。读取期间快照变化也限定在此源，可重试。尚未登记index.json时不制造复现目标。失效检测读小型目录并检查当前快照文件身份，重建才读取并校验完整快照；不读网格或原始求解工件、不运行求解器、不持有额外数据库连接。
+
+对象工具与索引回归使用测试内生成的复现库，通过CABLESIM_REPRODUCTION_LIBRARY隔离；夹具含完整长限制、偏差超限及测试中构造的损坏快照，不依赖.data/simulation/library发布时机。一条命令：`python -m pytest -q tests/test_index_reproductions.py tests/test_harness_validation.py tests/test_harness_index.py tests/test_harness_recipes.py::test_digest_pages_saved_quantities_and_cold_catalog_avoids_input_contracts`；不用真实密钥或原生求解器。
 
 研究只使用最新保存运行，状态在索引快照内算一次：没有运行为not_run；运行未结束为running；成功且宿主`read_models.run_state`判为当前为current；成功但方法/锁/研究配置/工程修订/绑定型号变化为outdated；失败、中断或部分成功为failed。outdated.reason必须非空，复用`version_status.inspect`的方法与型号版本诊断，再补已保存输入修订变化；同版本发行摘要改变也明确说明。索引不验证结果正文完整性，也不提供工程量，读取工程结果仍走原运行证据核验。前端各处消费此study.status，不重新推断“正常/历史”。
 

@@ -2,6 +2,7 @@
 from copy import deepcopy
 from dataclasses import replace
 import json
+from test_index_reproductions import library
 from time import perf_counter
 
 from backend.harness.contracts import Limits

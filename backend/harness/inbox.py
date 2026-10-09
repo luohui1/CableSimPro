@@ -50,7 +50,9 @@ def guidance(snapshot,item):
         action+='。保存研究后由人点“预检并运行”重算；有限元或超算须先由人确认核时再提交，旧运行保留为历史。'
         return target,action,'研究负责人（人工确认运行与核时）',False
     if category=='missing':
-        if card['kind']=='cable_version':
+        if origin=='validation':
+            return target,'在验证页核对复现库当前快照、目录与摘要；由复现库维护人修复或重新发布证据，再重新读取。此条不表示没有算例，也不触发计算。','复现库维护人',False
+        elif card['kind']=='cable_version':
             action='在电缆型号版本 '+name+' 查看原因所列缺项，逐项补齐字段、单位和可核对来源；如来自厂家资料，在原件的导入工作台核对并批准完整提案后生成新版本，不改写已发布版本。'
         else:
             action='在厂家资料 '+name+' 的导入工作台核对原件、提取范围及失败原因，修正后由人点“开始离线提取”；新提案仍需人工核对并批准。'

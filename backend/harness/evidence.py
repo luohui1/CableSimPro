@@ -106,6 +106,9 @@ def quantity_facts(observations):
     facts=[]
     def visit(item,path,identity):
         if isinstance(item,dict):
+            if item.get('kind')=='validation' and item.get('subtype')=='reproduced' and item.get('validation'):
+                from .validation_evidence import facts as validation_facts
+                facts.extend(validation_facts(item,path))
             identity={**identity,**{key:item[key] for key in ('run_id','case_id','entity','condition','proposal_id') if item.get(key)}}
             if isinstance(item.get('case'),str) and not item.get('condition'):identity['condition']=item['case']
             key=item.get('key') or item.get('path') or item.get('label') or ''
@@ -195,7 +198,10 @@ def attributed(fact,named):
 
 def grounded_text(text,observations,*,current=None,proposals=None,users=None,proof=None):
     """Check each claim; rejected drafts remain private audit data, never chat content."""
-    facts=quantity_facts(observations);issues=[];matches=[]
+    from .validation_evidence import issues as validation_issues
+    facts=quantity_facts(observations);issues=validation_issues(text,current if current is not None else observations);matches=[]
+    from .validation_evidence import cards as validation_cards
+    observed_validation={card['id']:card for card in validation_cards(observations)}
     def issue(match,code,rule,message,available=(),unit=None):
         issues.append({'code':code,'rule':rule,'fragment':text[match.start():match.end()],
             'start':match.start(),'end':match.end(),'value':(float(match[1]) if math.isfinite(float(match[1])) else match[1]) if code.startswith('UNGROUNDED') and re.fullmatch(NUMBER,match[1]) else None,
@@ -224,10 +230,26 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
     for start,end,source in names(observations):
         clean=clean[:start]+' '*(end-start)+clean[end:]
         matches.append({'fragment':text[start:end],'rule':'quoted_object_name','sources':[source]})
+    # Saved validation method versions are identities, not computed quantities.
+    # Mask only exact observed version strings; unknown versions remain checked.
+    for card in observed_validation.values():
+        for run in (card.get('validation') or {}).get('runs',[]):
+            for field in ('plugin_version','method_version'):
+                version=run.get(field)
+                if not isinstance(version,str) or not version:continue
+                for match in re.finditer(r'(?<![\w.])'+re.escape(version)+r'(?![\w.])',text):
+                    clean=clean[:match.start()]+' '*(match.end()-match.start())+clean[match.end():]
+                    matches.append({'fragment':match[0],'rule':'saved_validation_method_version',
+                        'sources':[card['validation']['snapshot_digest']+'/'+card['id']+'/runs/'+field]})
     def sentence(position):
         start=max(clean.rfind(mark,0,position) for mark in '。；;\n')+1
         ends=[found for found in (clean.find(mark,position) for mark in '。；;\n') if found>=0]
         return start,min(ends) if ends else len(clean)
+    def validation_attributed(fact,position):
+        if not fact.get('validation_id'):return True
+        start,end=sentence(position)
+        named={card['id'] for card in observed_validation.values() if card['name'] in text[start:end] or card['id'] in text[start:end]}
+        return not named or fact['validation_id'] in named
     # The change of one quantity between two evidence records (saved run vs preview, proposal before/after):
     # same key, entity, condition and unit but different sources. It may be cited anywhere ("上升 12.6 K",
     # "下降 20.6 A", "+20%"); differences across unrelated quantities still need operands in their sentence.
@@ -243,6 +265,7 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
         for rows in changes.values():
             for i,first in enumerate(rows):
                 for second in rows[i+1:]:
+                    if not validation_attributed(first,match.start()) or not validation_attributed(second,match.start()):continue
                     if first['source']==second['source'] or math.isclose(first['value'],second['value']):continue
                     a,b=first['value'],second['value']
                     if unit=='%':options=[(b-a)/a*100,(a-b)/a*100,(a-b)/b*100,(b-a)/b*100] if a and b else []
@@ -295,6 +318,7 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
             value=converted(fact,unit,delta=delta)
             if not rounded_match(number,value) and not (fact['delta'] and exceedance and value is not None and value<0 and rounded_match(number,-value)):continue
             if not attributed(fact,named_entities):continue
+            if not validation_attributed(fact,match.start()):continue
             # Only a current introduced directly by 允许电流/载流量 must be an ampacity ("允许电流 362.2 A（低于 400 A）").
             if unit=='A' and re.search(r'(?:允许电流|载流量)[^0-9]{0,12}$',clause):
                 if fact['key'] not in ('ampacity','x-cablesim.emergency-current'):continue
@@ -460,7 +484,10 @@ def evidence_summary(record):
             if changes:lines.append('同一原工况前后对比：'+'；'.join(changes)+'。')
             else:lines.append('试算与原运行未返回可直接比较的同口径量值。')
         else:lines.append('试算未绑定已读取的原运行/工况，未推算前后差值。')
-    if len(lines)==1:lines.append('尚未取得保存研究结论、字段方案或试算证据。')
+    from .validation_evidence import summary as validation_summary
+    validation_lines,validation_refs=validation_summary([step.get('result') for step in record['steps']])
+    lines.extend(validation_lines);refs.extend(validation_refs)
+    if len(lines)==1:lines.append('尚未取得保存研究结论、字段方案、试算或公开复现证据。')
     for step in record['steps']:
         result=step.get('result') or {}
         if result.get('status')=='error':
