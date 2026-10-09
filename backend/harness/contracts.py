@@ -45,8 +45,16 @@ class CreateSession(StrictModel):
     study_id: UUID | None = None
 
 
+class SessionContext(StrictModel):
+    kind: Literal['project','type']
+    id: UUID
+    default_proposal_kind: Literal['domain','type']
+    default_recipe: Literal['type_review'] | None = None
+
+
 class SessionId(StrictModel):
     id: UUID
+    context: SessionContext | None = None
 
 
 class ModelSettingsUpdate(StrictModel):
@@ -174,6 +182,7 @@ class SessionRecord(StrictModel):
     id: UUID
     workspace_id: UUID
     study_id: UUID | None
+    context: SessionContext | None = None
     workspace_revision: int
     study_revision: int | None
     state: TaskState

@@ -94,18 +94,18 @@
 | PUT `/api/agent/settings` | `{base_url,model,api_key?,instructions,model_timeout_s?}`；api_key 省略则保留原密钥，空串清除；非敏感项写入工程库 `agent_settings`，密钥只进系统凭据库或进程内存；保存的设置优先于 `CABLESIM_LLM_*` 环境变量 |
 | DELETE `/api/agent/settings` | 清除界面设置与保存的密钥，回到环境变量配置 |
 | POST `/api/agent/settings/test` | `{base_url?,model?,api_key?}`，缺项取当前生效值；发一次最小对话请求，返回 `{ok,latency_ms?,model?,code?,message?}`，不保存任何内容 |
-| GET `/api/agent/tools` | `[{name,title,kind,description,plugin_id?,hpc}]`；kind为read/propose/run，宿主工具不带plugin_id；直接从已校验清单构建发现信息，后续沿用源码通知缓存；完整封签核验仍在能力检查与执行边界进行 |
-| GET `/api/agent/recipes` | `[{id,name,description,parameters}]`；parameters为所需参数的JSON Schema，供前端“/”菜单展示与填参；未给study_id时使用会话绑定研究 |
+| GET `/api/agent/tools` | `[{name,title,kind,description,plugin_id?,hpc}]`；可选session_id或workspace_id（二者不能同时给）筛选适用工具；kind为read/propose/run，宿主工具不带plugin_id；沿用源码通知缓存，完整封签核验仍在能力检查与执行边界进行 |
+| GET `/api/agent/recipes` | `[{id,name,description,parameters}]`；可选session_id或workspace_id筛选适用配方；parameters为JSON Schema，供“/”菜单填参；型号会话只返回type_review，type_id默认且限定为绑定工作区；未筛选时保留完整目录 |
 | GET `/api/agent/sessions?workspace_id=` | 任务列表，按更新时间新到旧：绑定、状态/等待原因、首条提问作标题、未决方案数；不含消息正文与结果 |
-| POST `/api/agent/sessions` | `{workspace_id,study_id:null或UUID}` → `{id}`；校验工程与研究归属，记录固定修订及本机快速执行授权 |
+| POST `/api/agent/sessions` | `{workspace_id,study_id:null或UUID}` → `{id,context:{kind:"project"|"type",id,default_proposal_kind:"domain"|"type",default_recipe:null|"type_review"}}`；型号设计也使用workspace_id，记录固定修订与适用范围，不扩大执行授权 |
 | POST `/api/agent/sessions/{id}/messages` | `{content,recipe?:{id,parameters}}` → `text/event-stream`；省略recipe沿用自由提问；每会话同时只处理一条消息，冲突409 |
-| GET `/api/agent/sessions/{id}` | 绑定、任务状态/等待原因、预算、消息、工具调用/结果摘要、方案、计划、步骤、按序审计事件 |
+| GET `/api/agent/sessions/{id}` | 绑定、context（同创建响应）、任务状态/等待原因、预算、消息、工具调用/结果摘要、方案、计划、步骤、按序审计事件 |
 | POST `/api/agent/proposals/{id}/approve` | 无正文；人工批准后普通保存，返回`{status:approved}`；修订/锁/封签/有效期冲突409中文原因 |
 | POST `/api/agent/proposals/{id}/reject` | 无正文；`{status:rejected}`，不改工程或研究；同决定重放幂等，反向决定409 |
 | POST `/api/agent/sessions/{id}/reconcile` | 无正文；查询原Run，返回`{resolved,unknown,reissued:false}`；不重新执行未知预览或提交作业 |
 | GET `/api/agent/contract` | 生成的事件、节点和实际模型工具参数JSON Schema；SSE事件schema也写入OpenAPI的x-sse-events |
 
-当前22个宿主工具为workspace_list/read、study_list/read、run_list/read、plugin_inspect、cable_model_read、propose_domain_changes、propose_method_parameters、study_preflight、study_preview、project_digest、study_baseline、sensitivity_inputs、recipe_execute、fem_comparison_read、propose_fem_verification、object_find、object_relations、type_read、propose_type_changes。另从51个已安装能力生成工具，总计73。模型请求省略宿主参数schema中的重复description注释，保留所有校验约束；/contract保留完整说明，工具头说明显示单位和权限。插件工具未绑定研究时只生成新建研究方案，批准后只保存Study；绑定研究时必须与该研究的准确方法一致，只有preview且非远程能力可本机试算。原生或HPC预检需要人工执行，不通过LLM触发远程作业。
+当前22个宿主工具为workspace_list/read、study_list/read、run_list/read、plugin_inspect、cable_model_read、propose_domain_changes、propose_method_parameters、study_preflight、study_preview、project_digest、study_baseline、sensitivity_inputs、recipe_execute、fem_comparison_read、propose_fem_verification、object_find、object_relations、type_read、propose_type_changes。另从已安装清单的可调用能力生成插件工具，总数由status.tools返回，实际目录以tools为准。模型请求省略宿主参数schema中的重复description注释，保留所有校验约束；/contract保留完整说明，工具头说明显示单位和权限。插件工具未绑定研究时只生成新建研究方案，批准后只保存Study；绑定研究时必须与该研究的准确方法一致，只有preview且非远程能力可本机试算。原生或HPC预检需要人工执行，不通过LLM触发远程作业。
 
 `object_find({kind?,q?,limit?,offset?})`与`object_relations({kind,id,limit?,offset?})`使用下文统一索引的同一张名片，覆盖整个工程库；只读元数据，不授予跨工程修改权限。工具默认10项、上限20项，结果紧凑UTF-8 JSON不超过6KiB，名片保持完整。`data.total/offset/next_offset`供继续分页；关联按uses、used_by、unresolved顺序分页。状态、名称和过期原因按名片引用，工程量仍须从project_digest或保存运行证据读取。两个工具照常进入计划、步骤、预算与审计。
 
@@ -114,6 +114,10 @@
 `propose_type_changes({type_id,changes:[{path,value,unit}],reason})`只接受当前会话绑定型号工作区的稳定标量路径；工程量必须给显示单位，长度用mm。材料切换只接受该文档已有材料ID，外部材料版本须先在工作台显式导入；不能修改来源、身份或审核状态。单位、范围、路径和锁错误含`diagnostics[].path`。公开方案增加`kind:"type"/type_id/base_revision`，差异包含普通编辑器产生的联动字段；只进入原人工审核、右栏和统一review待办。人工approve调用工作台同一`save_domain`服务，重新核验候选摘要、锁和基准修订，原子保存及记决定，重复批准不重复保存；修订冲突返回409，方案保留pending。不采纳版本、不发布，不宣称改动已通过标准或计算。
 
 `type_review`配方参数schema由GET `/api/agent/recipes`返回，必填type_id，可选after、limit、expected_revision，view固定review。宿主先执行type_read并按next_page续读，每步保存计划、预算和审计，随后一次无工具请求解释缺项、已保存标准判定和改进建议；没有标准证据时明确未覆盖。仅建议，不生成修改或运行。
+
+型号工作台创建会话时传其工作区UUID（study_id通常省略），前端“/”菜单用`GET /api/agent/recipes?session_id=<会话ID>`，尚未创建会话时可用workspace_id。`session.context`审计固定kind与默认方案类型，旧会话按绑定修订的来源字段识别；人工批准改变修订不改变工作区类别。型号会话只开放type_read、propose_type_changes、object_find、object_relations、workspace_list、cable_model_read、plugin_inspect、recipe_execute，不向模型展示工程/研究工具或可执行插件能力。绕过目录调用研究工具也返回`TYPE_TOOL_NOT_APPLICABLE`；指定研究配方在消息开始前422 `RECIPE_NOT_APPLICABLE`。type_read与propose_type_changes可省略type_id，默认绑定型号；type_read保留显式读取其他型号的能力，propose_type_changes的显式ID只能为本会话型号，避免跨型号写入。
+
+型号会话的普通消息先由宿主执行一页type_read(summary)，结果进入计划、步骤、预算、数值证据与`context.loaded`审计（含status与固定修订），再交模型；分页未展开部分不得称为已检查。自由提问“检查这个型号的问题”由宿主选择type_review，或由前端显式携带`recipe:{id:"type_review",parameters:{}}`，按next_page读完后一次无工具解释。自动选择的`recipe.requested.source=host.intent`，显式选择为human.message；保留思考回传和回答核验。新建来源按type_creation识别；空白/资料导入草稿的空字段作为路径缺项，不伪造数值。完整型号修改仍使用普通保存的范围、锁与修订校验；不完整草稿的修改方案返回TYPE_DRAFT_INCOMPLETE与请求字段path，指引先在型号工作台补齐必填结构、额定要求及来源。
 
 回答正文保持纯文本。首个`message.delta`增加`object_refs:ObjectCard[]`，从统一索引按正文首次出现顺序、kind/id去重；后续分片不重复附带，前端需在本条回答中保留并按kind渲染引用。会话GET的assistant消息也保留object_refs，普通作答、修正、收尾和证据兜底共用此规则；引用不替代数值核验。优先使用工具读取的对象身份；同名且身份不明时不猜指向。对象类别限project、study、run、type、cable_version、plugin；索引暂不可用返回空数组并记object_refs.unavailable，不编造名片。
 
@@ -184,6 +188,10 @@ Agent常用场景回归一条命令：`python -m pytest -q -s tests/test_harness
 
 研究只使用最新保存运行，状态在索引快照内算一次：没有运行为not_run；运行未结束为running；成功且宿主`read_models.run_state`判为当前为current；成功但方法/锁/研究配置/工程修订/绑定型号变化为outdated；失败、中断或部分成功为failed。outdated.reason必须非空，复用`version_status.inspect`的方法与型号版本诊断，再补已保存输入修订变化；同版本发行摘要改变也明确说明。索引不验证结果正文完整性，也不提供工程量，读取工程结果仍走原运行证据核验。前端各处消费此study.status，不重新推断“正常/历史”。
 
-`Relation={role,target:ObjectCard,pinned?:{version?,revision?,digest?},freshness:"current"|"outdated"|"unknown",reason?}`；uses是该对象保存的引用，used_by是反向引用。主要role为workspace、type、method、cable_version、study、input_snapshot、delivery、source_run、specification、source_design、published_cable_version、source_document、source_proposal、dependency、validation、agent_task；型号改动方案以type关联目标型号，pinned.revision记录基准修订。厂家来源保存了document_id时才建立关联，页码写在reason；原件摘要入pinned.digest。保存的ID未登记时，target名片标unknown；从未保存目标ID时放入unresolved，不能造一个目标来填Relation。型号设计按保存的type_resource_bindings（cablesim.type-resource-bindings/1）读取material、standard角色，使用resource_id及version/content_sha256关联资源；仅显示冻结资源身份，材料与标准适用性仍由型号工作台核验。未知schema、没有绑定或未有发布记录时明确unknown；不按名称配对。已保存的engineering_type_releases、规格书提交和厂家提案new_model才建立发布/来源链。
+`Relation={role,target:ObjectCard,pinned?:{version?,revision?,digest?},freshness:"current"|"outdated"|"unknown",reason?}`；uses是该对象保存的引用，used_by是反向引用。主要role为workspace、type、method、cable_version、source、study、input_snapshot、delivery、source_run、specification、source_design、published_cable_version、source_document、source_proposal、dependency、validation、agent_task；型号改动方案以type关联目标型号，pinned.revision记录基准修订。厂家来源保存了document_id时才建立关联，页码写在reason；原件摘要入pinned.digest。保存的ID未登记时，target名片标unknown；从未保存目标ID时放入unresolved，不能造一个目标来填Relation。不按名称配对，适用性仍由原工作台核验。
+
+型号设计资源角色读取type_resource_bindings（cablesim.type-resource-bindings/1），resource_id关联资源，version/content_sha256固定版本与摘要。复用型号工作台的_resource_targets：仅枚举结构使用的材料及已核对标准目标，当前材料fingerprint与绑定input_digest不同则material关联outdated、reason="材料参数在绑定后被修改"；目标已移除则说明解除引用，旧绑定缺输入摘要为unknown。部分绑定中每个未绑定目标保留unresolved unknown，reason含“未绑定资源”和目标名称/ID，即使库里同名也不自动补配。投影只增读材料事实、结构引用与要求审核回执，不读运行正文。
+
+发布关系来自engineering_type_releases：published_cable_version固定资产version/content_sha256；source_design使用发布记录冻结的规格书payload.source_design.revision，旧记录回退payload.revision，不使用当前设计或提交修订代替发布修订。sources.reference结构化source_design由这条关系消费，不再重复列为缺document_id的unknown来源；与发布记录submission/digest完全一致的宿主规格书出处由source_specification消费，固定发布规格书摘要。新建来源以[型号工作区引用契约](../../frontend/src/features/type/README.md#材料执行标准与发布版本引用契约)为准：type_origin_reference的保存ID建source关联（含从型号库复制的固定资产版本）；type_creation.kind=standard读source.methods[].method封签身份，import读source.document_id/proposal_id/references的文档、提案和页码。缺字段保持unknown，空白设计不猜来源。索引不持有额外SQLite连接；复用的研究只读缓存由research.close在workspace_store.close之前关闭，避免只读连接晚关留下WAL。
 
 `InboxItem={category:"review"|"stale"|"missing"|"running",origin:"agent"|"document"|"asset"|"type"|"study"|"job",title,object:ObjectCard,reason,created}`。review汇总有效未决定Agent方案、厂家提案、draft/reviewed资源、submitted/approved型号规格书；人作出决定或发布后，下次读取即消失。stale为过期研究及其原因；missing为不完整型号与失败/中断资料提取；running为研究、作业、资料提取或批量数据集的保存状态。created缺少持久日期时为null。不存在待办记录时items为空且四项计数均为0。

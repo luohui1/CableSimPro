@@ -24,6 +24,7 @@ from .project_digest import project_digest, study_baseline
 from .fem import comparisons, propose as propose_fem
 from .resilience import retry
 from .object_index import read as read_index
+from .session_scope import require_tool,is_type
 
 
 def failure(code,message,path=None,actions=None):
@@ -116,6 +117,7 @@ class ToolBroker:
                 'next_actions':['使用 '+candidate+'，或 workspace_read 不带 paths 读取稳定字段路径。' for candidate in closest]}) from None
 
     def identity(self,task,node,tool):
+        require_tool(task,node['tool'])
         args=node['arguments'];identity=deepcopy(node['input_identity'])
         if tool and (tool.method or tool.name in ('study_read','run_list','run_read','study_baseline','sensitivity_inputs','propose_method_parameters','study_preflight','study_preview')):
             sid=self.study_id(task,args) if args.get('run_id') else args.get('study_id') or task['study_id']
@@ -137,6 +139,7 @@ class ToolBroker:
 
     def execute(self,task,node,tool):
         try:
+            require_tool(task,node['tool'])
             if tool is None:return failure('TOOL_NOT_ALLOWED','此工具未注册；模型不能调用批准、发布或任意命令。')
             errors=sorted(Draft202012Validator(tool.model()['function']['parameters']).iter_errors(node['arguments']),key=lambda item:str(list(item.path)))
             if errors:
@@ -169,10 +172,11 @@ class ToolBroker:
             from .type_design import read
             return read(self.research,task,args)
         if name=='propose_type_changes':
-            public=self.proposals.type_changes(task,args['type_id'],args['changes'],args['reason'])
+            type_id=args.get('type_id',wid)
+            public=self.proposals.type_changes(task,type_id,args['changes'],args['reason'])
             from backend.index import get_index
             return ToolResult(status='ok',summary='型号字段方案已生成，等待人工保存；未改变型号输入或发布。',
-                data={'proposal':public,'object':get_index(self.research).snapshot().cards.get(('type',args['type_id']))},
+                data={'proposal':public,'object':get_index(self.research).snapshot().cards.get(('type',type_id))},
                 next_actions=['审阅字段差异后人工批准或拒绝；保存后在型号工作台更新受影响的运行。'])
         if name=='workspace_list':
             with self.research.store.db() as db:
@@ -292,7 +296,7 @@ class ToolBroker:
             selected=[entry for entry in entries if (not args.get('plugin_id') or entry['method']['plugin_id']==args['plugin_id'])
                 and (not args.get('capability') or entry['method']['capability']==args['capability'])]
             if not selected:raise HTTPException(404,'没有匹配的已安装插件能力。')
-            enabled=[tool.name for tool in self.registry.tools().values() if tool.method==selected[0]['method']] if len(selected)==1 and args.get('capability') else []
+            enabled=[tool.name for tool in self.registry.tools().values() if tool.method==selected[0]['method']] if not is_type(task) and len(selected)==1 and args.get('capability') else []
             if args.get('schema_path'):
                 if len(selected)!=1:raise HTTPException(422,'按字段读取契约须明确一个插件能力。')
                 spec=selected[0]

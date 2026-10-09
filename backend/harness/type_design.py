@@ -23,7 +23,7 @@ def reject(code, path, message):
 
 
 def validate_type(state):
-    if not state.get('type_origin_reference') or state.get('study_cable_reference') or len(state.get('domain', {}).get('cable_types', [])) != 1:
+    if not (state.get('type_origin_reference') or state.get('type_creation')) or state.get('study_cable_reference') or len(state.get('domain', {}).get('cable_types', [])) != 1:
         reject('TYPE_WORKSPACE_REQUIRED', '/type_id', '请选择独立的型号设计工作区；工程内锁定的型号版本引用不能作为型号设计修改。')
 
 
@@ -50,6 +50,9 @@ def diagnostic_path(error, document, fallback):
 
 def candidate(state, changes, proposal_id):
     check_edits(changes); validate_type(state)
+    if state['domain'].get('schema_version')!='cablesim.domain/1':
+        reject('TYPE_DRAFT_INCOMPLETE',changes[0]['path'],
+            '此型号仍是不完整草稿；请先在型号工作台补齐必填结构、额定要求及来源，再提出可保存的型号改动方案。')
     document = deepcopy(state['domain']); edits = []
     cable = document['cable_types'][0]; prefix = pointer('cable_types', cable['id'])
     for change in changes:
@@ -88,7 +91,7 @@ def candidate(state, changes, proposal_id):
 
 
 def read(research, task, args):
-    wid = args['type_id']; view = args.get('view', 'summary')
+    wid = args.get('type_id',task['workspace_id']); view = args.get('view', 'summary')
     types = Types(research, None)
     with research.store.db() as db:
         row, state = types._type(db, wid); validate_type(state)
@@ -106,7 +109,18 @@ def read(research, task, args):
     entries = []; document = state['domain']; cable = document['cable_types'][0]
     source = {'kind':'saved_type_input','type_id':wid,'revision':row['revision'],'digest':fingerprint(document)}
     def add(section, **values): entries.append({'section':section, **values})
-    add('overview', object=card, construction=cable['construction'], base_reference=state['type_origin_reference'],
+    base=state.get('type_origin_reference') or {}
+    creation=state.get('type_creation') or {}
+    identity_keys=('id','name','version','content_sha256','source','document_id','proposal_id')
+    created_source=creation.get('source') or {}
+    # Imported provenance and standard proposal tables may be large. The
+    # overview carries saved identities, not another copy of those documents.
+    creation_summary={key:creation[key] for key in ('id','kind','created') if key in creation}
+    if creation:
+        creation_summary['source']={key:created_source[key] for key in identity_keys if key in created_source}
+        creation_summary['source']['methods']=[item.get('method') for item in created_source.get('methods',[]) if isinstance(item,dict)]
+    add('overview', object=card, construction=cable['construction'], base_reference={key:base[key] for key in identity_keys if key in base} or None,
+        creation=creation_summary or None,
         locks=describe_locks(state), source=source)
     if view in ('summary', 'structure', 'review'):
         def fields(item, tokens):
@@ -115,11 +129,15 @@ def read(research, task, args):
                     if key != 'id': fields(child, [*tokens, key])
             elif isinstance(item, list):
                 for child in item: fields(child, [*tokens, child.get('id') or child.get('role')])
-            elif item is not None:
+            else:
                 path = pointer(*tokens)
                 try: spec = metadata(path)
                 except HTTPException: return  # No guessed unit for unregistered fields.
                 if view == 'review' and tokens[-1] not in ('thickness','material','u0','u','um'): return
+                if item is None:
+                    if document.get('schema_version')=='cablesim.type-draft/1':
+                        add('checks',id=path,path=path,label=spec['title'],message='草稿字段尚未填写；请在型号工作台核对所需输入及来源。',blocking=True,source=source)
+                    return
                 add('structure', path=path, label=spec['title'], value=displayed(item, spec['x-unit']), unit=spec['x-unit']['display'],
                     source={**source,'path':path,'provenance':document.get('provenance',{}).get(path)},
                     material=next(({'id':m['id'],'name':m['label'],'source':document.get('provenance',{}).get(pointer('materials',m['id']))}

@@ -21,13 +21,14 @@ from .planner import prepare
 from .proposals import Proposals
 from .providers import OpenAICompatibleProvider
 from .recipe_compiler import compile_calls
-from .recipes import recipe_schema,validate_request
+from .recipes import recipe_schema,validate_request,recipes
 from .security import redact
 from .task_store import TaskStore
 from .tool_broker import ToolBroker,failure
 from .tool_registry import ToolRegistry
 from .resilience import category
 from .object_refs import references
+from .session_scope import is_type,load_context
 
 
 class Harness:
@@ -58,17 +59,35 @@ class Harness:
         configured,model=self.model.status()
         return {'configured':configured,'model':model,'tools':self.registry.count()}
 
-    def tools(self):
+    def catalog_context(self,session_id=None,workspace_id=None):
+        if session_id and workspace_id:raise HTTPException(422,'请选择 session_id 或 workspace_id 之一。')
+        if session_id:
+            with self.tasks.db() as db:return self.tasks.load(db,session_id)['context']
+        if workspace_id:
+            with self.research.store.db() as db:
+                row,_=self.research.store.load(db,workspace_id,allow_domain=True)
+                return load_context(db,{'id':'','workspace_id':workspace_id,'workspace_revision':row['revision']})
+        return None
+
+    def tools(self,session_id=None,workspace_id=None):
+        context=self.catalog_context(session_id,workspace_id)
+        if context and context['kind']=='type':
+            return [tool.info() for tool in self.registry.visible({'context':context,'workspace_id':context['id'],'steps':[]}).values()]
         return self.registry.info()
+
+    def recipes(self,session_id=None,workspace_id=None):
+        return recipes(self.catalog_context(session_id,workspace_id))
 
     def create(self,body):
         wid=str(body.workspace_id);sid=str(body.study_id) if body.study_id else None
         with self.research.store.db() as db:
-            row,_=self.research.store.load(db,wid)
+            row,_=self.research.store.load(db,wid,allow_domain=True)
             study=self.research.definition(db,wid,sid) if sid else None
         timeout=self.settings.model_timeout()
         limits=replace(self.tasks.limits,model_timeout_s=timeout) if timeout else None
-        return {'id':self.tasks.create(wid,sid,row['revision'],study['revision'] if study else None,limits)}
+        tid=self.tasks.create(wid,sid,row['revision'],study['revision'] if study else None,limits)
+        with self.tasks.db() as db:context=self.tasks.load(db,tid)['context']
+        return {'id':tid,'context':context}
 
     def emit(self,tid,kind,data,*,persist=True):
         data=redact(data)
@@ -77,9 +96,13 @@ class Harness:
         return 'event: '+kind+'\ndata: '+json.dumps(data,ensure_ascii=False,separators=(',',':'),allow_nan=False)+'\n\n'
 
     def begin(self,tid,content,recipe=None):
-        self.tasks.record(tid)
-        recipe=validate_request(recipe) if recipe is not None else None
-        return self.tasks.begin_turn(tid,redact(content),redact(recipe) if recipe else None)
+        record=self.tasks.record(tid)
+        source='human.message'
+        if recipe is None and is_type(record) and re.search(r'检查|审查|缺项|问题|type_review',content) and not re.search(r'改成|改为|修改|调为|调整|换成|更换|替换|设为|增加|减少|删除',content):
+            recipe={'id':'type_review','parameters':{}}
+            source='host.intent'
+        recipe=validate_request(recipe,record['context']) if recipe is not None else None
+        return self.tasks.begin_turn(tid,redact(content),redact(recipe) if recipe else None,recipe_source=source)
 
     def stream(self,tid,turn):
         normal=False
@@ -95,12 +118,21 @@ class Harness:
             if requested:
                 waiting=yield from self.run_recipe(tid,turn,requested,record)
                 if waiting:state,reason='waiting',waiting
+            elif is_type(record):
+                # A durable host read supplies the default context and quantity
+                # evidence before the first model request, using normal budgets.
+                plan=compile_calls([{'id':'host-type-context-'+str(uuid4()),'name':'type_read',
+                    'arguments':{'type_id':record['workspace_id'],'view':'summary'}}],
+                    self.registry.visible(record),record['workspace_id'],record['workspace_revision'])
+                yield from self.execute_plan(tid,turn,plan,self.registry.visible(record),record,source='host')
+                self.tasks.emit(tid,'context.loaded',{'turn_id':turn,'kind':'type','tool':'type_read','view':'summary',
+                    'status':record['steps'][-1]['result']['status'],'workspace_revision':record['workspace_revision']})
             while True:
                 record=self.tasks.record(tid)
                 snapshot=record
                 tools=self.registry.visible(record)
                 user=next(message for message in reversed(record['messages']) if message['role']=='user')
-                summary=bool(re.search(r'汇总|总结|概览|conclusion_summary',user['content']) and re.search(r'研究|结论|载流量|conclusion_summary',user['content'])
+                summary=bool(not is_type(record) and re.search(r'汇总|总结|概览|conclusion_summary',user['content']) and re.search(r'研究|结论|载流量|conclusion_summary',user['content'])
                     and not re.search(r'改成|修改|试算|细节|具体输入',user['content']))
                 current=self.turn_steps(record,turn)
                 digest=next((step['result']['data'] for step in reversed(current) if step.get('result')
@@ -122,7 +154,7 @@ class Harness:
                 if summary:
                     schema=recipe_schema();schema['properties']['recipe']['enum']=['conclusion_summary'];schema['oneOf']=schema['oneOf'][:1]
                     shown['recipe_execute']=replace(shown['recipe_execute'],parameters=schema)
-                prompt,definitions=prepare(record,shown,self.registry.directory() if not summary and not answer_only else [],
+                prompt,definitions=prepare(record,shown,self.registry.directory(record) if not summary and not answer_only else [],
                     closing=answer_reason,
                     instructions=self.settings.instructions())
                 configured,model=self.model.status()
@@ -253,7 +285,9 @@ class Harness:
 
     def run_recipe(self,tid,turn,request,record):
         """User-selected finite steps run before any model request, with normal authority."""
-        self.tasks.emit(tid,'recipe.requested',{'turn_id':turn,**request,'source':'human.message','engineering_approval':False})
+        source=next((event['data'].get('recipe_source','human.message') for event in reversed(record['events'])
+            if event['type']=='chat.message' and event['data'].get('turn_id')==turn and event['data'].get('role')=='user'),'human.message')
+        self.tasks.emit(tid,'recipe.requested',{'turn_id':turn,**request,'source':source,'engineering_approval':False})
         arguments={'recipe':request['id'],'parameters':request['parameters']}
         pages=set();waiting=None
         while True:

@@ -8,7 +8,6 @@ from pydantic import TypeAdapter
 from starlette.background import BackgroundTask
 
 from .contracts import AgentStatus,ToolInfo,RecipeInfo,CreateSession,SessionId,SessionSummary,ModelSettingsUpdate,ModelSettingsTest,Message,SessionRecord,ProposalDecision,StreamEvent,PlanNode
-from .recipes import recipes
 
 
 def make_router(harness):
@@ -31,10 +30,12 @@ def make_router(harness):
     def test_settings(body:ModelSettingsTest):return harness.test_model(body)
 
     @router.get('/tools',response_model=list[ToolInfo],response_model_exclude_none=True)
-    def tools():return harness.tools()
+    def tools(session_id:UUID|None=None,workspace_id:UUID|None=None):
+        return harness.tools(str(session_id) if session_id else None,str(workspace_id) if workspace_id else None)
 
     @router.get('/recipes',response_model=list[RecipeInfo])
-    def recipe_catalog():return recipes()
+    def recipe_catalog(session_id:UUID|None=None,workspace_id:UUID|None=None):
+        return harness.recipes(str(session_id) if session_id else None,str(workspace_id) if workspace_id else None)
 
     @router.post('/sessions',response_model=SessionId)
     def create(body:CreateSession):return harness.create(body)

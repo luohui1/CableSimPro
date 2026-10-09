@@ -13,7 +13,9 @@ def compile_calls(calls,tools,workspace_id,workspace_revision):
         tool=tools.get(call['name'])
         if tool and call['name']=='recipe_execute' and not list(Draft202012Validator(tool.parameters).iter_errors(call['arguments'])):
             children=[]
-            for index,(name,arguments,bindings) in enumerate(expand(call['arguments'])):
+            selected=deepcopy(call['arguments'])
+            if selected['recipe']=='type_review':selected['parameters'].setdefault('type_id',workspace_id)
+            for index,(name,arguments,bindings) in enumerate(expand(selected)):
                 child=compile_calls([{'id':call['id'],'name':name,'arguments':arguments}],tools,workspace_id,workspace_revision)['nodes'][0]
                 child['input_identity'].update(recipe=call['arguments']['recipe'],recipe_version=1,recipe_step=index+1)
                 child['depends_on']=[children[-1]['id']] if children else ([previous] if previous else [])

@@ -68,7 +68,8 @@ def test_agent_common_scenarios_are_bounded_grounded_and_human_reviewed(client,f
     script.extend([call('type_read',{'type_id':model['id'],'view':'structure'}),
         call('propose_type_changes',{'type_id':model['id'],'changes':[{'path':path,'value':15.8,'unit':'mm'}],'reason':'场景回归核对厚度'}),answer(text)])
     events,record=turn('type_proposal',tid,'把绝缘厚度改成 15.8 mm 并说明影响')
-    assert final_text(events)==text and record['budget']['tool_calls']==2
+    assert final_text(events)==text and record['budget']['tool_calls']==3
+    assert record['steps'][0]['tool']=='type_read' and record['steps'][0]['result']['data']['view']=='summary'
     proposal=record['proposals'][0];assert proposal['kind']=='type' and proposal['base_revision']==model['revision']
     assert client.get('/api/workspaces/'+model['id']).json()['revision']==model['revision']
     inbox=client.get('/api/index/inbox').json()

@@ -15,7 +15,10 @@ def project(db):
     workspaces=rows('workspaces',"id,revision,created,updated,COALESCE(json_extract(state,'$.domain.name'),json_extract(state,'$.scenario.name')) AS name,"
         "json_array_length(state,'$.domain.cable_types') AS cable_count,json_type(state,'$.study_cable_reference') AS study_reference_type,"
         +reference('$.study_cable_reference')+' AS cable_reference,'+reference('$.type_origin_reference')+' AS origin_reference,'
-        "json_extract(state,'$.type_resource_bindings') AS resource_bindings")
+        "json_extract(state,'$.type_resource_bindings') AS resource_bindings,"
+        "json_extract(state,'$.type_creation') AS type_creation,"
+        "json_extract(state,'$.domain.materials') AS material_facts,"
+        "json_extract(state,'$.domain.cable_types') AS type_structure")
     studies=rows('studies','s.id,s.workspace,s.revision,v.created,v.definition',
         's JOIN study_versions v ON v.study=s.id AND v.revision=s.revision')
     snapshot=("json_object('workspace_id',json_extract(snapshot,'$.workspace_id'),"
@@ -41,7 +44,8 @@ def project(db):
         'type_plans':rows('type_plans','workspace,family,name,status,created,base_reference'),
         'submissions':rows('type_submissions',"id,workspace,status,created,digest,asset,json_extract(payload,'$.name') AS name,"
             "json_extract(payload,'$.revision') AS revision,json_extract(payload,'$.sources') AS sources"),
-        'releases':rows('engineering_type_releases','asset,family,workspace,submission,sequence','ORDER BY sequence'),
+        'releases':rows('engineering_type_releases',"asset,family,workspace,submission,sequence,digest,"
+            "json_extract(payload,'$.revision') AS revision,json_extract(payload,'$.source_design') AS source_design",'ORDER BY sequence'),
         'deliveries':rows('deliveries','id,workspace,sources,renderer,digest,created'),
         'tasks':rows('agent_tasks',"id,workspace_id,workspace_revision,study_id,state,waiting_reason,created,updated," 
             "(SELECT substr(json_extract(e.data,'$.content'),1,80) FROM agent_events e WHERE e.task_id=agent_tasks.id "

@@ -32,14 +32,25 @@ CATALOG = [
 ]
 
 
-def recipes():
-    return deepcopy(CATALOG)
+def recipes(context=None):
+    rows=deepcopy(CATALOG)
+    if context and context.get('kind')=='type':
+        rows=[row for row in rows if row['id']=='type_review']
+        rows[0]['parameters']['required']=[]
+        rows[0]['parameters']['properties']['type_id'].update(const=context['id'],default=context['id'])
+    return rows
 
 
-def validate_request(request):
+def validate_request(request,context=None):
+    request=deepcopy(request)
+    if context and context.get('kind')=='type':
+        if request['id']!='type_review':
+            raise HTTPException(422,{'code':'RECIPE_NOT_APPLICABLE','path':'/recipe/id',
+                'message':'型号设计会话只适用 type_review；研究配方请在工程或研究会话使用。'})
+        request['parameters'].setdefault('type_id',context['id'])
     try:encoded(request)
     except (ValueError,TypeError):raise HTTPException(422,{'code':'RECIPE_PARAMETERS_INVALID','path':'/recipe/parameters','message':'配方参数须为有限数值和合法 JSON。'}) from None
-    row=next((row for row in CATALOG if row['id']==request['id']),None)
+    row=next((row for row in recipes(context) if row['id']==request['id']),None)
     if row is None:raise HTTPException(422,{'code':'RECIPE_INVALID','path':'/recipe/id','message':'请选择已注册的工程配方。'})
     errors=sorted(Draft202012Validator(row['parameters']).iter_errors(request['parameters']),key=lambda error:str(list(error.path)))
     if errors:
@@ -51,10 +62,11 @@ def validate_request(request):
     return deepcopy(request)
 
 
-def recipe_schema():
-    return {**obj({'recipe':{'type':'string','enum':[row['id'] for row in CATALOG]},
+def recipe_schema(context=None):
+    catalog=recipes(context)
+    return {**obj({'recipe':{'type':'string','enum':[row['id'] for row in catalog]},
         'parameters':{'type':'object','description':'按所选配方的参数契约填写；可省略会话已绑定的study_id。'}},('recipe','parameters')),
-        'oneOf':[obj({'recipe':{'const':row['id']},'parameters':row['parameters']},('recipe','parameters')) for row in CATALOG]}
+        'oneOf':[obj({'recipe':{'const':row['id']},'parameters':row['parameters']},('recipe','parameters')) for row in catalog]}
 
 
 def expand(arguments):

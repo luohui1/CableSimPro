@@ -14,6 +14,7 @@ from .contracts import Limits
 from .security import redact
 from .resilience import transaction
 from .context_builder import compress_result
+from .session_scope import load_context
 
 
 def encode(value):
@@ -88,6 +89,7 @@ class TaskStore:
         if row is None:raise HTTPException(404,'Agent 会话不存在。')
         value = dict(row)
         value['limits'] = json.loads(value['limits'])
+        value['context'] = load_context(db,value)
         return value
 
     @transaction
@@ -98,9 +100,11 @@ class TaskStore:
             self.workspace.load(db,wid,wrev,allow_domain=True)
             db.execute('INSERT INTO agent_tasks(id,workspace_id,study_id,workspace_revision,study_revision,state,owner_epoch,deadline,limits,created,updated) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
                 (tid,wid,sid,wrev,srev,'created',self.owner_epoch,time()+limits.lifetime_s,encode(asdict(limits)),created,created))
+            context=load_context(db,{'id':tid,'workspace_id':wid,'workspace_revision':wrev})
             self.event(db,tid,'execution.authorization',{'source':'human.session','workspace_id':wid,'workspace_revision':wrev,
-                'study_id':sid,'study_revision':srev,'effects':['read','propose','preflight','local_fast_preview'],
+                'study_id':sid,'study_revision':srev,'effects':['read','propose'] if context['kind']=='type' else ['read','propose','preflight','local_fast_preview'],
                 'limits':asdict(limits),'formal_run':False,'hpc_submit':False,'engineering_approval':False})
+            self.event(db,tid,'session.context',context)
         return tid
 
     def budget(self,task,*,model=False,tool=False):
@@ -128,16 +132,17 @@ class TaskStore:
         return None
 
     @transaction
-    def begin_turn(self,tid,content,recipe=None):
+    def begin_turn(self,tid,content,recipe=None,*,recipe_source='human.message'):
         turn = str(uuid4())
         with self.db(True) as db:
             task = self.load(db,tid)
             if task['active_turn']:raise HTTPException(409,'此 Agent 会话正在处理消息，请等待当前步骤完成。')
             db.execute("UPDATE agent_tasks SET active_turn=?,owner_epoch=?,state='planning',waiting_reason=NULL,tool_calls=0,model_requests=0,steps_used=0,elapsed_ms=0,prompt_tokens=0,completion_tokens=0,deadline=?,limits=?,updated=? WHERE id=?",
                 (turn,self.owner_epoch,time()+self.limits.lifetime_s,encode(asdict(self.limits)),stamp(),tid))
-            self.event(db,tid,'chat.message',{'role':'user','content':content,'turn_id':turn,**({'recipe':recipe} if recipe else {})})
+            self.event(db,tid,'chat.message',{'role':'user','content':content,'turn_id':turn,
+                **({'recipe':recipe,'recipe_source':recipe_source} if recipe else {})})
             self.event(db,tid,'turn.read_policy',{'turn_id':turn,'max_read_tool_calls':self.limits.max_read_tool_calls,
-                'scope':'message','explicit_recipe':bool(recipe)})
+                'scope':'message','explicit_recipe':bool(recipe and recipe_source=='human.message')})
         return turn
 
     @transaction
@@ -278,7 +283,7 @@ class TaskStore:
                 if private:
                     _,_,decision=self.proposal(db,private['id'])
                     proposals.append({**private['public'],'status':decision['status'] if decision else 'pending'})
-        return {'id':tid,'workspace_id':task['workspace_id'],'study_id':task['study_id'],
+        return {'id':tid,'workspace_id':task['workspace_id'],'study_id':task['study_id'],'context':task['context'],
             'workspace_revision':task['workspace_revision'],'study_revision':task['study_revision'],
             'state':task['state'],'waiting_reason':task['waiting_reason'],'created':task['created'],'updated':task['updated'],
             'budget':{'limits':task['limits'],'tool_calls':task['tool_calls'],'model_requests':task['model_requests'],
@@ -307,6 +312,7 @@ class TaskStore:
             user=db.execute("SELECT json_extract(data,'$.turn_id') FROM agent_events WHERE task_id=? AND type='chat.message' AND json_extract(data,'$.role')='user' ORDER BY sequence DESC LIMIT 1",(tid,)).fetchone()
             totals=db.execute("SELECT COALESCE(SUM(json_extract(data,'$.usage.prompt_tokens')),0),COALESCE(SUM(json_extract(data,'$.usage.completion_tokens')),0),COALESCE(MIN(json_extract(data,'$.usage_available')),1) FROM agent_events WHERE task_id=? AND type='model.result'",(tid,)).fetchone()
             head={key:task[key] for key in ('id','workspace_id','study_id','workspace_revision','study_revision','state','waiting_reason','created','updated')}
+            head['context']=task['context']
             head['budget']={key:task[key] for key in ('limits','tool_calls','model_requests','steps_used','elapsed_ms','prompt_tokens','completion_tokens','deadline')}
             head['budget'].update(scope='message',turn_id=task['active_turn'] or (user[0] if user else None),
                 session_totals=dict(zip(('prompt_tokens','completion_tokens'),totals[:2])),usage_reported_only=True,usage_complete=bool(totals[2]))

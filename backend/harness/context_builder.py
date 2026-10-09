@@ -96,7 +96,7 @@ def messages(record):
 
 def summary(record):
     identity={key:record[key] for key in ('id','workspace_id','workspace_revision','study_id','study_revision')}
-    return {**identity,'budget':record['budget'],
+    return {**identity,'context':record.get('context'),'budget':record['budget'],
         'proposals':[{'id':value['id'],'title':value['title'],'status':value['status']} for value in record['proposals']],
         'unknown_operations':[step['operation_id'] for step in record['steps'] if step['state']=='unknown']}
 

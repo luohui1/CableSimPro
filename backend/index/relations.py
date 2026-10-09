@@ -2,6 +2,7 @@
 import json
 
 from backend.kernel.version_status import methods
+from backend.kernel.type_versions import Types
 from .contracts import ObjectCard
 from .sources import decoded
 
@@ -30,8 +31,19 @@ def sources(index,card,values):
     for source in rows:
         if not isinstance(source,dict):continue
         reference=source.get('reference')
+        if source.get('kind')=='project_input' and isinstance(reference,str) and any(
+            release['asset']==card['id'] and reference=='规格书 '+release['submission']+' sha256:'+release['digest']
+            for release in index.raw['releases']):
+            continue  # The exact saved receipt is consumed by source_specification.
         try:reference=json.loads(reference) if isinstance(reference,str) else reference
         except (ValueError,TypeError):reference=None
+        if isinstance(reference,dict) and isinstance(reference.get('source_design'),dict):
+            ref=reference['source_design'];target=index.workspace(ref.get('id'))
+            if target and target['kind']=='type':index.link(card,target,'source_design',pin=pin(ref),
+                freshness='unknown' if ref.get('revision') is None else None,
+                reason='保存来源未标明发布修订。' if ref.get('revision') is None else None)
+            else:index.missing((card['kind'],card['id']),'source_design','保存的来源型号设计未在本库登记。')
+            if not reference.get('document_id'):continue
         if not isinstance(reference,dict) or not reference.get('document_id'):
             index.missing((card['kind'],card['id']),'standard' if source.get('kind')=='standard' else 'source',
                 '保存的出处没有关联文档或规则资源的稳定 ID；不能按名称推定关联。')
@@ -42,6 +54,40 @@ def sources(index,card,values):
         pages=[reference['page']] if reference.get('page') is not None else [s['page'] for s in reference.get('selections',[]) if 'page' in s]
         reason='来源页码：'+', '.join(map(str,sorted(set(pages)))) if pages else '保存出处未标注页码。'
         index.link(card,document,'source_document',pin={'digest':reference.get('original_sha256')},reason=reason)
+
+
+def resource_edges(index,card,row):
+    bindings=decoded(row['resource_bindings'],{})
+    if not isinstance(bindings,dict) or bindings.get('schema')!='cablesim.type-resource-bindings/1':bindings={}
+    # Use the same target identities/fingerprints as the type workspace. These
+    # projections contain input facts and review receipts, never solver outputs.
+    state={'domain':{'materials':decoded(row['material_facts'],[]),
+        'cable_types':decoded(row['type_structure'],[])},'type_resource_bindings':{
+            role:{key:{**ref,'name':ref.get('name') or key} for key,ref in bindings.get(role,{}).items() if isinstance(ref,dict)}
+            for role in ('material','standard') if isinstance(bindings.get(role,{}),dict)}}
+    targets=Types(index.research,None)._resource_targets(index.db,row['id'],state)
+    for role in ('material','standard'):
+        selected=[target for target in targets if target['role']==role]
+        if not selected:index.missing(('type',row['id']),role,'未绑定资源：没有保存可识别的'+('材料' if role=='material' else '标准')+'目标。')
+        for item in selected:
+            ref=state['type_resource_bindings'].get(role,{}).get(item['id'])
+            if not ref or not ref.get('resource_id'):
+                index.missing(('type',row['id']),role,'未绑定资源：'+item['name']+'（'+item['id']+'）。')
+                continue
+            target=index.get('asset',ref['resource_id'])
+            if target is None:
+                target=ObjectCard(kind='asset',id=ref['resource_id'],name=ref['name'],version=ref.get('version'),
+                    status={'code':'unknown','label':'资源未登记','reason':'型号保存的资源版本未在本库登记。'},updated=None).model_dump(mode='json')
+            freshness=None;reason='型号保存的资源绑定：'+item['id']
+            if item['input_digest'] is None:
+                freshness='outdated';reason='目标已不属于当前型号或已批准标准，请解除该引用。'
+            elif ref.get('input_digest') is None:
+                freshness='unknown';reason='绑定未保存输入摘要，无法判断绑定后是否变化。'
+            elif ref['input_digest']!=item['input_digest']:
+                freshness='outdated';reason='材料参数在绑定后被修改' if role=='material' else '执行标准在绑定后被修改'
+            elif target['status']['code'] not in ('published','unknown'):
+                freshness='outdated';reason='绑定资源已不处于发布状态，请重新核对。'
+            index.link(card,target,role,pin=pin(ref),freshness=freshness,reason=reason)
 
 
 def build(index):
@@ -61,30 +107,26 @@ def build(index):
         card=index.workspace(row['id'])
         reference=decoded(row['cable_reference'],{})
         if not reference.get('id'):reference=decoded(row['origin_reference'],{})
-        if reference.get('id'):index.link(card,index.reference(reference),'cable_version',pin=pin(reference))
+        if reference.get('id'):index.link(card,index.reference(reference),'source' if card['kind']=='type' else 'cable_version',pin=pin(reference))
         if card['kind']=='type':
             key=('type',row['id'])
             if not any(r['workspace']==row['id'] for r in index.raw['releases']):
                 index.missing(key,'published_cable_version','本设计没有保存的发布记录；不能推定其对应的型号版本。')
-            bindings=decoded(row['resource_bindings'],{})
-            if not isinstance(bindings,dict):bindings={}
-            for role in ('material','standard'):
-                saved=bindings.get(role,{}) if bindings.get('schema')=='cablesim.type-resource-bindings/1' else {}
-                if not isinstance(saved,dict):saved={}
-                if not saved:
-                    index.missing(key,role,'设计没有保存可识别的'+('材料' if role=='material' else '标准')+'资源版本绑定。')
-                for target_id,ref in saved.items():
-                    if not isinstance(ref,dict):
-                        index.missing(key,role,'资源绑定 '+target_id+' 没有完整的版本引用。')
-                        continue
-                    resource_id=ref.get('resource_id')
-                    target=index.get('asset',resource_id)
-                    if target is None and resource_id:
-                        target=ObjectCard(kind='asset',id=resource_id,name=ref.get('name') or resource_id,
-                            version=ref.get('version'),status={'code':'unknown','label':'资源未登记',
-                            'reason':'型号保存的资源版本未在本库登记。'},updated=None).model_dump(mode='json')
-                    if target is None:index.missing(key,role,'资源绑定 '+target_id+' 未保存稳定资源 ID。')
-                    else:index.link(card,target,role,pin=pin(ref),reason='型号保存的资源绑定：'+target_id)
+            resource_edges(index,card,row)
+            creation=decoded(row['type_creation'],{})
+            source=creation.get('source',{}) if isinstance(creation,dict) else {}
+            if creation.get('kind')=='standard':
+                if not source.get('methods'):index.missing(key,'method','新建来源未保存完整方法身份。')
+                for method in source.get('methods',[]):
+                    if isinstance(method,dict) and method.get('method'):method_edges(index,card,{'method':method['method']})
+                    else:index.missing(key,'method','新建来源未保存完整方法身份。')
+            if creation.get('kind')=='import':
+                refs=source.get('references',{})
+                sources(index,card,refs)
+                if not refs and source.get('document_id'):sources(index,card,[{'reference':source}])
+                index.link(card,index.get('proposal',source.get('proposal_id')),'source_proposal')
+            if not reference.get('id') and not source:
+                index.missing(key,'source','没有保存来源版本；空白设计不推定来源。')
     for row in index.raw['studies']:
         card=index.get('study',row['id']);workspace=index.workspace(row['workspace']);definition=decoded(row['definition'])
         index.link(card,workspace,'workspace')
@@ -115,9 +157,13 @@ def build(index):
             else:index.missing(('delivery',row['id']),'source_run','交付的保存运行 '+source['run_id']+' 未在本库登记。')
     for row in index.raw['releases']:
         card=index.get('cable_version',row['asset']);design=index.workspace(row['workspace'])
-        index.link(card,design,'source_design')
-        index.link(card,index.get('delivery',row['submission']),'source_specification')
-        index.link(design,card,'published_cable_version')
+        origin=decoded(row.get('source_design'),{})
+        revision=origin.get('revision',row.get('revision'))
+        index.link(card,design,'source_design',pin={'revision':revision} if revision is not None else None,
+            freshness='unknown' if revision is None else None,reason='发布记录未保存来源修订。' if revision is None else None)
+        index.link(card,index.get('delivery',row['submission']),'source_specification',pin={'digest':row['digest']})
+        if card:index.link(design,card,'published_cable_version',pin={'version':card['version'],
+            'digest':index.meta.get(('cable_version',card['id']),{}).get('digest')})
     for row in index.raw['document_proposals']:
         proposal=index.get('proposal',row['id']);document=index.get('document',row['document'])
         index.link(proposal,document,'source_document')

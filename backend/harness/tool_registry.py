@@ -1,11 +1,12 @@
 """The model's actual registry: narrow host actions plus sealed manifest capabilities."""
 from copy import deepcopy
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, replace
 from hashlib import sha256
 import json
 from threading import RLock
 
 from .recipes import recipe_schema
+from .session_scope import is_type,TYPE_TOOLS
 from backend.index.contracts import Kind
 from typing import get_args
 
@@ -263,9 +264,20 @@ class ToolRegistry:
         return self.catalog_count
 
     def visible(self,record):
+        if is_type(record):
+            # Each tool owns its schema: shared TEXT objects in the catalog
+            # must not carry the proposal's bound-ID const into read tools.
+            visible={tool.name:deepcopy(tool) for tool in self.hosts if tool.name in TYPE_TOOLS}
+            visible['recipe_execute']=replace(visible['recipe_execute'],parameters=recipe_schema(record['context']))
+            for name in ('type_read','propose_type_changes'):
+                visible[name].parameters['properties']['type_id'].update(default=record['workspace_id'])
+                visible[name].parameters['required'].remove('type_id')
+            visible['propose_type_changes'].parameters['properties']['type_id']['const']=record['workspace_id']
+            return visible
         enabled={name for step in record['steps'] if step['tool']=='plugin_inspect' and step.get('result')
             and step['result']['status']=='ok' for name in step['result']['data'].get('enabled_tools',[])}
         return {name:tool for name,tool in self.tools().items() if not tool.plugin_id or name in enabled}
 
-    def directory(self):
+    def directory(self,record=None):
+        if record and is_type(record):return []
         return [[tool.name,tool.title] for tool in self.tools().values() if tool.plugin_id]
