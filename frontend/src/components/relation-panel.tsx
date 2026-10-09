@@ -4,6 +4,7 @@ import { message } from "@/api/client";
 import { KIND_LABELS, ObjectChip } from "./object-link";
 import { StatusMark } from "./status-mark";
 import { ErrorState, InlineEmpty, LoadingState } from "./states";
+import { useInView } from "@/lib/use-deferred-start";
 
 const ROLES: Record<string, string> = {
   workspace: "所属工程", method: "方法", cable_version: "型号版本", study: "研究", input_snapshot: "输入快照", delivery: "交付",
@@ -45,8 +46,10 @@ function UsedBy({ rows }: { rows: Relation[] }) {
  * 数据来自统一索引，不在页面里各自拼关系。
  */
 export function RelationPanel({ kind, id }: { kind: ObjectKind; id: string }) {
-  const relations = useQuery({ queryKey: ["object-relations", kind, id], queryFn: ({ signal }) => objectRelations(kind, id, signal), enabled: !!id });
-  if (relations.isPending) return <LoadingState title="正在读取关联" description="" />;
+  // 滚到可见时才读：关联是次要信息，不和首屏的主要数据抢宿主
+  const [anchor, visible] = useInView<HTMLDivElement>();
+  const relations = useQuery({ queryKey: ["object-relations", kind, id], queryFn: ({ signal }) => objectRelations(kind, id, signal), enabled: !!id && visible });
+  if (!visible || relations.isPending) return <div ref={anchor}><LoadingState title="正在读取关联" description="" /></div>;
   if (relations.error) return <ErrorState title="关联读取失败" description={message(relations.error)} />;
   const { uses, used_by: usedBy, unresolved } = relations.data;
   return <div className="relation-panel">

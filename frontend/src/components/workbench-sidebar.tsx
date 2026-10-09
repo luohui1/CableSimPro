@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-route
 import { useQuery } from '@tanstack/react-query';
 import { studyIndex, typeIndex, workspaces } from '@/api/research';
 import { indexInbox } from '@/api/object-index';
+import { useIdleStart } from '@/lib/use-deferred-start';
 import { text } from '@/api/client';
 import { rootModule, studyEntryTab } from '@/lib/study-config';
 import { Icon } from './icon';
@@ -30,7 +31,9 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
   const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal) });
   const studies = useQuery({ queryKey: ['study-index'], queryFn: ({ signal }) => studyIndex(signal) });
   // 待办数：需要人处理的审核、过期与缺项；进行中的作业不计入
-  const inbox = useQuery({ queryKey: ['index-inbox'], queryFn: ({ signal }) => indexInbox(signal), refetchInterval: 60_000, retry: false });
+  // 待办数在浏览器空闲后再读，不和页面首屏抢宿主
+  const idle = useIdleStart();
+  const inbox = useQuery({ queryKey: ['index-inbox'], queryFn: ({ signal }) => indexInbox(signal), refetchInterval: 60_000, retry: false, enabled: idle });
   const todo = inbox.data ? inbox.data.counts.review + inbox.data.counts.stale + inbox.data.counts.missing : 0;
   const activeStudy = pathname.match(/^\/studies\/([^/]+)/)?.[1] || '';
   const activeType = pathname.match(/^\/types\/([^/]+)/)?.[1] || '';
