@@ -31,6 +31,7 @@ const RECIPE_TEXT: Record<string, string> = {
   missing_inputs: "检查工程模型和各研究还缺哪些输入，按影响排序",
   proposal_comparison: "给出修改方案并快速试算对比：",
   sensitivity_advice: "给出参数敏感性研究建议：",
+  type_review: "检查这个型号的缺项、与执行标准不一致处和可改进点",
 };
 const SIDE_KEY = "cablesim:agent:side-open";
 const readSide = () => { try { return localStorage.getItem(SIDE_KEY) !== "false"; } catch { return true; } };
@@ -47,8 +48,6 @@ export function AgentPage() {
   const { ready, canSend, label: model } = useAgentStatus();
   const tools = useQuery({ queryKey: ["agent-tools"], queryFn: ({ signal }) => agentTools(signal), retry: false, staleTime: 60_000 });
   const kinds = useMemo(() => new Map((tools.data || []).map((tool) => [tool.name, tool.kind])), [tools.data]);
-  const recipes = useQuery({ queryKey: ["agent-recipes"], queryFn: ({ signal }) => agentRecipes(signal), retry: false, staleTime: 300_000 });
-  const commands: PromptCommand[] = (recipes.data || []).map((row) => ({ key: row.id, name: row.name, description: row.description, text: RECIPE_TEXT[row.id] || `${row.name}：` }));
   const sessions = useQuery({ queryKey: ["agent-sessions"], queryFn: ({ signal }) => agentSessions(undefined, signal), retry: false });
   const projects = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
   const types = useQuery({ queryKey: ["type-index"], queryFn: ({ signal }) => typeIndex(signal) });
@@ -58,6 +57,8 @@ export function AgentPage() {
   const summary = sessions.data?.find((row) => row.id === search.task);
   const workspaceId = summary?.workspace_id || options.find((row) => row.id === search.workspace)?.id || options[0]?.id;
   const project = options.find((row) => row.id === workspaceId);
+  const recipes = useQuery({ queryKey: ["agent-recipes", search.task || "", workspaceId || ""], queryFn: ({ signal }) => agentRecipes({ session: search.task, workspace: workspaceId }, signal), retry: false, staleTime: 300_000 });
+  const commands: PromptCommand[] = (recipes.data || []).map((row) => ({ key: row.id, name: row.name, description: row.description, text: RECIPE_TEXT[row.id] || `${row.name}：` }));
   const workspace = useQuery({ ...workspaceQuery(workspaceId), enabled: !!workspaceId });
   const domain = workspace.data?.domain as DomainDocument | undefined;
   const label = (entity: string) => entityLabel(domain, entity);

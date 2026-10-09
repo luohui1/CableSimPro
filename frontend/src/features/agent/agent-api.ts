@@ -55,7 +55,11 @@ export const agentStatus = (signal?: AbortSignal) => fetch("/api/agent/status", 
 
 /** 宿主审过的工程配方（结论汇总、检查缺项、方案试算对比……）；模型按配方编排既有工具，权限不放宽。 */
 export type AgentRecipe = { id: string; name: string; description: string; parameters: Record<string, unknown> };
-export const agentRecipes = (signal?: AbortSignal) => fetch("/api/agent/recipes", { signal }).then((response) => json<AgentRecipe[]>(response));
+/** 配方按会话或工作区筛选：型号会话只列型号适用的配方（host-inputs.md）。 */
+export const agentRecipes = (scope: { session?: string; workspace?: string }, signal?: AbortSignal) => {
+  const query = scope.session ? `?session_id=${encodeURIComponent(scope.session)}` : scope.workspace ? `?workspace_id=${encodeURIComponent(scope.workspace)}` : "";
+  return fetch("/api/agent/recipes" + query, { signal }).then((response) => json<AgentRecipe[]>(response));
+};
 
 export const agentTools = (signal?: AbortSignal) => fetch("/api/agent/tools", { signal }).then((response) => json<AgentTool[]>(response));
 
