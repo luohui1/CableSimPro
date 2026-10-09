@@ -14,7 +14,9 @@ from threading import Lock
 from fastapi import APIRouter, Header, HTTPException
 from fastapi.responses import Response
 from hashlib import sha256
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator, ValidationError
+from jsonschema import Draft202012Validator
+from ..plugin_host.registry import PluginHostError
 
 from ..domain.models import CableType, DomainDocument
 from ..foundation.contracts import AssetRef, AssetRelease, SourceReference
@@ -61,6 +63,133 @@ class MigrateResources(Adopt):
     operation: Literal['migrate_resource_bindings'] = 'migrate_resource_bindings'
 
 
+class NewType(StrictModel):
+    request_id: UUID
+    origin: Literal['library', 'standard', 'import', 'blank']
+    name: str = Field(min_length=1, max_length=80)
+    construction: Literal['single_core', 'three_core'] | None = None
+    resource_id: UUID | None = None
+    content_sha256: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
+    proposal_id: UUID | None = None
+    human_confirmed: bool = Field(default=False, strict=True)
+
+    @model_validator(mode='after')
+    def choice(self):
+        self.name = self.name.strip()
+        if not self.name:
+            raise ValueError('name：请输入型号名称。')
+        if self.origin == 'blank' and self.construction is None or self.origin == 'library' and (self.resource_id is None or self.content_sha256 is None) or self.origin in ('standard', 'import') and (self.proposal_id is None or self.content_sha256 is None):
+            raise ValueError('origin：所选起点缺少结构、来源身份或内容摘要。')
+        return self
+
+
+class NewTypeProposal(StrictModel):
+    request_id: UUID
+    input: dict
+
+
+class SaveTypeDocument(Adopt):
+    operation: Literal['save_type_document'] = 'save_type_document'
+    document: dict
+
+
+def skeleton(construction, name):
+    return {'schema_version': 'cablesim.type-draft/1', 'name': name,
+        'materials': [{'id': 'material/conductor', 'label': '待选导体材料', 'category': 'conductor'},
+                      {'id': 'material/insulation', 'label': '待选绝缘材料', 'category': 'insulation'}],
+        'cable_types': [{'id': 'cable_type/design', 'label': name, 'construction': construction,
+            'rating': {'u0': None, 'u': None, 'max_conductor_temperature': {}},
+            'cores': [{'id': f'core/{i+1}', 'x': None, 'z': None,
+                'conductor': {'material': 'material/conductor', 'form': 'unspecified', 'nominal_area': None, 'diameter': None},
+                'layers': [{'role': 'insulation', 'material': 'material/insulation', 'thickness': None}]} for i in range(1 if construction == 'single_core' else 3)],
+            'common_layers': []}], 'circuits': [], 'sections': [], 'load_cases': [], 'criteria': {}, 'provenance': {}, 'measurements': []}
+
+
+def structure_context(document):
+    """Explicit unit-length display context; contains no operating load or environment."""
+    if document['circuits']:
+        return
+    cable = document['cable_types'][0]
+    document['circuits'] = [{'id': 'circuit/structure', 'label': '非运行结构查看', 'system': {'kind': 'dc', 'frequency': 0},
+        'cable_type': cable['id'], 'cables': [{'id': 'cable/structure', 'phase': '+'}], 'bonding': {'kind': 'unspecified'}}]
+    document['sections'] = [{'id': 'section/structure', 'label': '单位长度结构查看', 'kind': 'air', 'length': 1,
+        'medium': {}, 'placements': [{'cable': 'cable/structure', 'x': 0, 'z': 0}], 'enclosures': [], 'soil_layers': [], 'backfill': None}]
+    document['load_cases'] = [{'id': 'load/structure', 'kind': 'time_series', 'currents': {}, 'profile': {}, 'base_current': {}}]
+    for path in ('/circuits/circuit~1structure', '/sections/section~1structure', '/load_cases/load~1structure'):
+        document['provenance'][path] = {'kind': 'derived', 'reference': '单位长度结构查看上下文；无运行负荷、环境或接地方案，不作计算工况。', 'reviewed': False}
+
+
+def imported_provenance(payload, cable):
+    from backend.domain.guards import pointer
+    result = {}
+    for path, source in payload['sources'].items():
+        if not path.startswith('/cable_type/'):
+            result[path] = deepcopy(source)
+            continue
+        parts = path.strip('/').split('/')[1:]
+        try:
+            if 'cores' in parts:
+                index = parts.index('cores') + 1
+                core = cable['cores'][int(parts[index])]
+                parts[index] = core['id']
+                if 'layers' in parts:
+                    index = parts.index('layers') + 1
+                    parts[index] = core['layers'][int(parts[index])]['role']
+            elif 'common_layers' in parts:
+                index = parts.index('common_layers') + 1
+                parts[index] = cable['common_layers'][int(parts[index])]['role']
+            result[pointer('cable_types', cable['id'], *parts)] = deepcopy(source)
+        except (ValueError, IndexError):
+            raise HTTPException(422, '资料来源路径不属于已批准结构，请重新核对资料版本。') from None
+    if payload.get('specification'):
+        for core in cable['cores']:
+            for field, suffix in [('conductor_diameter', ('conductor','diameter')), ('r20', ('conductor','r20')), ('insulation_thickness', ('layers','insulation','thickness'))]:
+                fact = payload['specification']['values'].get(field)
+                if fact:
+                    result[pointer('cable_types',cable['id'],'cores',core['id'],*suffix)] = deepcopy(payload['sources'][fact['source']])
+    return result
+
+
+def checked_type_document(document):
+    """Incomplete drafts use a separate tag; strict solver input remains unchanged."""
+    document = deepcopy(document)
+    cables = document.get('cable_types', [])
+    if len(cables) != 1:
+        raise HTTPException(422, {'field': '/cable_types', 'message': '一个型号设计须包含一个电缆型号。'})
+    if document.get('schema_version') == 'cablesim.domain/1':
+        return DomainDocument.model_validate(document).model_dump(mode='json')
+    schema = deepcopy(DomainDocument.model_json_schema())
+    schema['properties']['schema_version']['const'] = 'cablesim.type-draft/1'
+    for model, fields in [('Conductor', ('nominal_area', 'diameter')), ('Layer', ('thickness',)), ('Core', ('x', 'z')), ('Rating', ('u0',))]:
+        for field in fields:
+            original = schema['$defs'][model]['properties'][field]
+            schema['$defs'][model]['properties'][field] = {'anyOf': [original, {'type': 'null'}]}
+    errors = sorted(Draft202012Validator(schema).iter_errors(document), key=lambda e: str(list(e.path)))
+    if errors:
+        error = errors[0]
+        raise HTTPException(422, {'field': '/'+ '/'.join(map(str, error.path)), 'message': '请核对该字段的范围、单位或结构：'+error.message})
+    cable = document['cable_types'][0]
+    cable.setdefault('common_layers', [])
+    for core in cable['cores']:
+        core.setdefault('x', None)
+        core.setdefault('z', None)
+        core.setdefault('layers', [])
+    if len(cable['cores']) != (3 if cable['construction'] == 'three_core' else 1):
+        raise HTTPException(422, {'field': '/cable_types/0/cores', 'message': '芯数须与单芯 / 三芯结构一致。'})
+    materials = [m['id'] for m in document['materials']]
+    if len(set(materials)) != len(materials) or len({c['id'] for c in cable['cores']}) != len(cable['cores']):
+        raise HTTPException(422, '材料或芯身份重复。')
+    refs = [c['conductor']['material'] for c in cable['cores']] + [l['material'] for c in cable['cores'] for l in c['layers']] + [l['material'] for l in cable['common_layers']]
+    if any(ref not in materials for ref in refs):
+        raise HTTPException(422, {'field': '/materials', 'message': '结构引用的材料未定义，请选择已存在的材料。'})
+    missing = cable['rating']['u0'] is None or any(c['conductor']['nominal_area'] is None or c['conductor']['diameter'] is None or c['x'] is None or c['z'] is None or any(l['thickness'] is None for l in c['layers']) for c in cable['cores']) or any(l['thickness'] is None for l in cable['common_layers'])
+    if missing:
+        document.setdefault('provenance', {})
+        return document
+    document['schema_version'] = 'cablesim.domain/1'
+    return DomainDocument.model_validate(document).model_dump(mode='json')
+
+
 def source_identity(source):
     """Structured saved identity only; a display name is never a resource key."""
     try:
@@ -101,6 +230,188 @@ class Types:
     def __init__(self, research, assets):
         self.research, self.store, self.assets = research, research.store, assets
         self.generation_lock = Lock()
+        self.creation_lock = Lock()
+
+    def creation_options(self):
+        methods = []
+        for plugin in self.research.registry().plugins.values():
+            for cap in plugin.manifest.capabilities:
+                if any(a.type == 'x-cablesim.cable-design-proposal' for a in cap.artifacts):
+                    methods.append({'method': {**self.research.pin(plugin), 'capability': cap.id},
+                        'title': cap.title, 'schema': cap.input_contract.standalone_schema.model_dump(mode='json', by_alias=True, exclude_none=True)})
+        with self.store.db() as db:
+            imports = [{'id': r['id'], 'name': json.loads(r['payload'])['draft']['name'], 'version': json.loads(r['payload'])['draft']['version'],
+                        'content_sha256': r['digest'], 'document_id': r['document']} for r in db.execute("SELECT * FROM document_proposals WHERE status='approved' ORDER BY rowid DESC")]
+        return {'library': self.library()['items'], 'imports': imports, 'generation': methods}
+
+    def _proposal_method(self, artifact):
+        choices = [(plugin, cap) for plugin in self.research.registry().plugins.values() for cap in plugin.manifest.capabilities if any(a.type == artifact for a in cap.artifacts)]
+        if len(choices) != 1:
+            raise HTTPException(501, {'code': 'PROPOSAL_METHOD_UNAVAILABLE', 'message': '没有唯一的已安装结构提案方法；请检查插件安装。'})
+        plugin, cap = choices[0]
+        method = {**self.research.pin(plugin), 'capability': cap.id}
+        self.research.resolve(method)
+        return plugin, cap, method
+
+    def _invoke_proposal(self, artifact, values):
+        plugin, cap, method = self._proposal_method(artifact)
+        result = self.research.executor.run(plugin.manifest.id, cap.id, [{'case_id': 'design', 'input': values, 'parameters': {}}], timeout_s=10, expected_manifest=plugin.manifest)
+        case = result.cases[0]
+        if case.status != 'succeeded' or artifact not in case.artifacts:
+            raise HTTPException(422, case.error or {'code': 'PROPOSAL_MISSING', 'message': '方法未提供结构提案，未创建草稿。'})
+        return case.artifacts[artifact], {'method': method, 'input_digest': result.request_sha256, 'output_digest': case.artifact_digests[artifact]}
+
+    def propose_type(self, body):
+        digest = fingerprint(body.model_dump(mode='json'))
+        with self.creation_lock:
+            with self.store.db() as db:
+                prior = db.execute('SELECT * FROM type_creation_proposals WHERE request_id=?', (str(body.request_id),)).fetchone()
+                if prior:
+                    if prior['request_digest'] != digest:
+                        raise HTTPException(409, '提案请求标识已用于其他输入。')
+                    return json.loads(prior['payload'])
+            proposal, standard = self._invoke_proposal('x-cablesim.cable-design-proposal', body.input)
+            geometry, layout = self._invoke_proposal('x-cablesim.core-layout-proposal', proposal['next_input'])
+            document = deepcopy(proposal['document'])
+            for change in geometry['changes']:
+                target = document
+                parts = change['path'].strip('/').split('/')
+                for part in parts[:-1]:
+                    target = target[int(part)] if isinstance(target, list) else target[part]
+                target[parts[-1]] = change['value']
+            from backend.domain.guards import pointer
+            for core in document['cable_types'][0]['cores']:
+                for key in ('conductor/diameter', 'conductor/form', 'x', 'z'):
+                    path = pointer('cable_types', document['cable_types'][0]['id'], 'cores', core['id'])+'/'+key
+                    document['provenance'][path] = {'kind': 'derived' if body.input['form'] == 'solid_round' or key in ('x', 'z') else 'user',
+                        'reference': json.dumps({'method': layout['method'], 'output_digest': layout['output_digest'], 'limitations': geometry['limitations']}, ensure_ascii=False), 'reviewed': False}
+            for key in ('rating/u0', 'rating/u', 'construction'):
+                document['provenance']['/cable_types/cable_type~1design/'+key] = {'kind': 'user', 'reference': '工程师在新建型号对话框选择', 'reviewed': False}
+            structure_context(document)
+            document = checked_type_document(document)
+            payload = {'document': document, 'rows': proposal['rows'] + geometry['rows'], 'limitations': proposal['limitations'] + geometry['limitations'], 'methods': [standard, layout]}
+            pid = str(uuid4())
+            result = {'id': pid, 'content_sha256': fingerprint(payload), **payload}
+            with self.store.db(True) as db:
+                db.execute('INSERT INTO type_creation_proposals VALUES (?,?,?,?,?,?)', (pid, str(body.request_id), digest, json.dumps(result, ensure_ascii=False), result['content_sha256'], stamp()))
+            return result
+
+    def create_type(self, body, actor):
+        digest = fingerprint(body.model_dump(mode='json'))
+        with self.store.db(True) as db:
+            prior = db.execute('SELECT * FROM type_create_requests WHERE request_id=?', (str(body.request_id),)).fetchone()
+            if prior:
+                if prior['request_digest'] != digest:
+                    raise HTTPException(409, '新建请求标识已用于其他输入。')
+                return self.store.snapshot(prior['workspace'], db)
+            source, bindings = None, {}
+            if body.origin == 'library':
+                row = db.execute('SELECT a.*,t.payload,t.digest,t.receipt FROM engineering_type_releases t JOIN engineering_assets a ON a.id=t.asset WHERE a.id=?', (str(body.resource_id),)).fetchone()
+                if not row or row['status'] != 'published' or row['content_sha256'] != body.content_sha256:
+                    raise HTTPException(409, '请重新选择已发布的固定型号版本及摘要。')
+                self.assets._detail(db, self.assets._load(db, row['id']))
+                self._receipt(row['receipt'])
+                saved = json.loads(row['payload'])
+                if fingerprint(saved) != row['digest']:
+                    raise HTTPException(409, '发布记录摘要不一致。')
+                document = deepcopy(saved['document'])
+                bindings = deepcopy(saved.get('resource_bindings', {}))
+                source = {'id': row['id'], 'asset_id': row['asset_id'], 'name': row['name'], 'version': row['version'], 'content_sha256': row['content_sha256'], 'source': 'published_type'}
+            elif body.origin == 'standard':
+                reviewer = self._human(actor)
+                if not body.human_confirmed:
+                    raise HTTPException(409, '请人工确认标准值、推导条件与缺项后建立草稿。')
+                row = db.execute('SELECT * FROM type_creation_proposals WHERE id=?', (str(body.proposal_id),)).fetchone()
+                if not row or row['digest'] != body.content_sha256:
+                    raise HTTPException(409, '结构提案不存在或摘要不一致。')
+                saved = json.loads(row['payload'])
+                if fingerprint({k:v for k,v in saved.items() if k not in ('id', 'content_sha256')}) != row['digest']:
+                    raise HTTPException(409, '结构提案正文摘要不一致。')
+                for method in saved['methods']:
+                    self.research.resolve(method['method'])
+                document = deepcopy(saved['document'])
+                source = {'proposal_id': saved['id'], 'content_sha256': row['digest'], 'methods': saved['methods'], 'rows': saved['rows'], 'limitations': saved['limitations'], 'reviewer': reviewer, 'confirmed_at': stamp()}
+            elif body.origin == 'import':
+                row = db.execute("SELECT * FROM document_proposals WHERE id=? AND status='approved'", (str(body.proposal_id),)).fetchone()
+                if not row or row['digest'] != body.content_sha256 or not row['new_model']:
+                    raise HTTPException(409, '资料提案须已批准，且引用其固定摘要。')
+                saved = json.loads(row['payload']); approval = json.loads(row['approval'])
+                original = db.execute('SELECT * FROM source_documents WHERE id=?', (row['document'],)).fetchone()
+                if fingerprint(saved) != row['digest'] or approval['proposal_sha256'] != row['digest'] or not original or sha256(bytes(original['original'])).hexdigest() != original['sha256']:
+                    raise HTTPException(409, '资料原件、提案或批准摘要不一致。')
+                from .candidates import read
+                model = read(db, row['new_model'])
+                if model['payload'] != saved['draft']:
+                    raise HTTPException(409, '已批准资料版本与提案不一致。')
+                payload = model['payload']
+                if payload.get('cable_type'):
+                    document = skeleton(payload['cable_type']['construction'], body.name)
+                    document['cable_types'] = [deepcopy(payload['cable_type'])]
+                    document['materials'] = deepcopy(payload['materials'])
+                else:
+                    spec = payload['specification']
+                    if spec['cores'] not in (1, 3):
+                        raise HTTPException(422, '当前新建入口只覆盖单芯 / 三芯；资料中的其他结构未覆盖。')
+                    document = skeleton('single_core' if spec['cores'] == 1 else 'three_core', body.name)
+                    cable = document['cable_types'][0]
+                    cable['rating'].update(u0=spec['u0_v'], u=spec['voltage_v'])
+                    document['materials'][0].update(label='铜' if spec['conductor'].startswith('copper') else '铝', standard_kind=spec['conductor'])
+                    for core in cable['cores']:
+                        core['conductor']['nominal_area'] = spec['area_m2']
+                        for name, target, key in [('conductor_diameter', core['conductor'], 'diameter'), ('insulation_thickness', core['layers'][0], 'thickness')]:
+                            if name in spec['values']:
+                                target[key] = spec['values'][name]['value']
+                        if 'r20' in spec['values']:
+                            fact = spec['values']['r20']
+                            # A declared catalogue limit is retained as a limit;
+                            # it must not silently become a measured resistance.
+                            core['conductor']['r20'] = fact['value']
+                            core['conductor']['r20_basis'] = 'manufacturer_limit' if fact['basis'] in ('manufacturer', 'standard_limit') else 'design'
+                    if spec['cores'] == 1:
+                        cable['cores'][0].update(x=0., z=0.)
+                document['provenance'] = imported_provenance(payload, document['cable_types'][0])
+                source = {'id': model['id'], 'version': payload['version'], 'name': payload['name'], 'content_sha256': model['digest'], 'source': 'manufacturer', 'document_id': row['document'], 'proposal_id': row['id'], 'references': payload['sources']}
+                source['declared_specification'] = deepcopy(payload.get('specification'))
+                structure_context(document)
+            else:
+                document = skeleton(body.construction, body.name)
+                structure_context(document)
+            document['name'] = body.name
+            document['cable_types'][0]['label'] = body.name
+            document = checked_type_document(document)
+            wid, now = str(uuid4()), stamp()
+            state = {'scenario': {'name': body.name}, 'domain': document, 'locks': [], 'sources': [],
+                     'type_creation': {'id': wid, 'kind': body.origin, 'source': source, 'initial_document_sha256': fingerprint(document), 'created': now}}
+            if body.origin in ('library', 'import'):
+                state['type_origin_reference'] = deepcopy(source)
+            if bindings:
+                state['type_resource_bindings'] = bindings
+            encoded = json.dumps(state, ensure_ascii=False, allow_nan=False)
+            db.execute('INSERT INTO workspaces VALUES (?,?,?,?,?,?)', (wid, 1, 0, encoded, now, now))
+            db.execute('INSERT INTO workspace_history VALUES (?,?,?,?)', (wid, 0, encoded, '新建型号设计'))
+            self.store.archive(db, wid, 1, state)
+            self.store.audit(db, wid, 1, '新建型号设计', json.dumps(state['type_creation'], ensure_ascii=False))
+            self._register(db, wid, state)
+            db.execute('INSERT INTO type_create_requests VALUES (?,?,?)', (str(body.request_id), digest, wid))
+            return self.store.snapshot(wid, db)
+
+    def save_document(self, wid, body):
+        with self.store.db(True) as db:
+            replay = self._replay(db, wid, body)
+            if replay:
+                return replay
+            row, state = self._type(db, wid, body.expected_revision)
+            if not state.get('type_creation'):
+                raise HTTPException(422, '既有型号请使用完整领域文档保存接口。')
+            document = checked_type_document(body.document)
+            if document['cable_types'][0]['id'] != state['domain']['cable_types'][0]['id']:
+                raise HTTPException(422, '不能更换型号身份。')
+            state['domain'] = document
+            state['scenario']['name'] = document['name']
+            self.store.commit(db, row, state, '保存新建型号草稿')
+            result = self.store.snapshot(wid, db)
+            self._remember(db, wid, body, result)
+            return result
 
     def _resource_targets(self, db, wid, state):
         used = {layer['material'] for cable in state['domain']['cable_types'] for layer in
@@ -208,6 +519,8 @@ class Types:
     def initialize(self):
         with self.store.db(True) as db:
             for sql in (
+                '''CREATE TABLE IF NOT EXISTS type_create_requests (request_id TEXT PRIMARY KEY, request_digest TEXT NOT NULL, workspace TEXT NOT NULL)''',
+                '''CREATE TABLE IF NOT EXISTS type_creation_proposals (id TEXT PRIMARY KEY, request_id TEXT UNIQUE NOT NULL, request_digest TEXT NOT NULL, payload TEXT NOT NULL, digest TEXT NOT NULL, created TEXT NOT NULL)''',
                 '''CREATE TABLE IF NOT EXISTS type_families (
                   id TEXT PRIMARY KEY, name TEXT NOT NULL, base_reference TEXT NOT NULL,
                   base_document TEXT NOT NULL, head INTEGER NOT NULL DEFAULT 0)''',
@@ -242,6 +555,9 @@ class Types:
     @staticmethod
     def _base(state):
         base = state.get('type_origin_reference')
+        if not base and state.get('type_creation'):
+            creation = state['type_creation']
+            return {'id': creation['id'], 'name': state['domain']['name'], 'version': '0.1.0-draft', 'content_sha256': creation['initial_document_sha256'], 'source': creation['kind']}
         if not base or not base.get('id') or not base.get('version') or not base.get('content_sha256'):
             raise HTTPException(422, '方案须基于带内容摘要的明确型号版本。')
         return base
@@ -249,6 +565,8 @@ class Types:
     @classmethod
     def _family_id(cls, state):
         base, cable = cls._base(state), state['domain']['cable_types'][0]
+        if state.get('type_creation'):
+            return 'type/'+state['type_creation']['id']
         if base.get('source') == 'published_type':
             return base['id']
         # Imported manufacturer documents can originate from the same UI scaffold.
@@ -882,6 +1200,27 @@ def next_version(version):
 
 def make_router(service):
     router = APIRouter(prefix='/api/types', tags=['Type versions'])
+    def creation_call(call):
+        try:
+            return call()
+        except PluginHostError as error:
+            raise HTTPException(error.status, {'code': error.code, 'message': error.message}) from None
+        except ValidationError as error:
+            raise HTTPException(422, {'message': '请补齐或修正结构字段。', 'fields': [{'field': '/'+ '/'.join(map(str, e['loc'])), 'message': e['msg']} for e in error.errors()]}) from None
+        except ValueError as error:
+            raise HTTPException(422, {'message': str(error)}) from None
+    @router.get('/creation-options')
+    def creation_options():
+        return creation_call(service.creation_options)
+    @router.post('/creation-proposals')
+    def creation_proposal(body: NewTypeProposal):
+        return creation_call(lambda: service.propose_type(body))
+    @router.post('', status_code=201)
+    def create(body: NewType, x_cablesim_actor: str | None = Header(default=None)):
+        return creation_call(lambda: service.create_type(body, x_cablesim_actor))
+    @router.put('/{wid}/document')
+    def save_document(wid: str, body: SaveTypeDocument):
+        return creation_call(lambda: service.save_document(wid, body))
     @router.get('/library')
     def library():
         return service.library()

@@ -13,7 +13,7 @@ try {
   for (const width of [1366, 1920]) for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width, height: width === 1366 ? 768 : 1080 }); await page.goto(`${fixture.url}/types?theme=${theme}`);
     await expect(page.locator('[data-type-page=list]')).toHaveAttribute('data-type-state', 'success'); await expect(page.getByRole('table', { name: '型号', exact: true })).toBeVisible(); await layout(); result.states.push('success');
-    await page.getByRole('button', { name: '新建型号', exact: true }).click(); await expect(page.getByRole('dialog', { name: '新建型号草稿', exact: true })).toBeVisible(); await layout(); await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('button', { name: '新建型号', exact: true }).click(); await expect(page.getByRole('dialog', { name: '新建型号设计', exact: true })).toBeVisible(); await layout(); await page.keyboard.press('Escape'); await expect(page.getByRole('dialog')).toHaveCount(0);
   }
   await page.getByRole('searchbox', { name: '查找型号', exact: true }).fill('没有匹配的型号检索'); await expect(page.getByText('没有匹配的型号设计', { exact: true })).toBeVisible();
   await page.getByRole('searchbox', { name: '查找型号', exact: true }).fill(''); await page.getByRole('table', { name: '型号', exact: true }).locator('.object-link').first().focus(); await page.keyboard.press('Enter'); await expect(page.locator('[data-drawing-canvas=cable]')).toBeVisible();

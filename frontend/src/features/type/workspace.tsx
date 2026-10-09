@@ -25,7 +25,7 @@ import { useTypeWorkspace } from './provider';
 import { typePath, useTypeNavigation } from './navigation';
 import './type.css';
 import { cleanLabel } from './labels';
-import { StructurePropertyInputs } from './property-inputs';
+import { StructurePropertyInputs, TypeRatingInputs } from './property-inputs';
 import { TypeInspectorContext } from './inspector';
 import { TypeModulePage } from './module-page';
 import { DesignCard } from './design-card';
@@ -95,7 +95,7 @@ export function TypeWorkspace() {
   useEffect(() => { setDockMax(['specification', 'requirements', 'comparison', 'standard-check'].includes(location.module) || location.tab === 'quantities'); }, [location.module, location.tab]);
   useEffect(() => { if (location.module === 'structure' && location.layer) { const row = rows.find(row => row.id === location.layer); if (row) { setSelected(row.target); setCollapsed(false); } } }, [location.module, location.layer, cable?.id]);
   useEffect(() => {
-    if (location.module !== 'structure' || !location.field || !row) return;
+    if (location.module !== 'structure' || !location.field) return;
     const frame = requestAnimationFrame(() => {
       const node = [...window.document.querySelectorAll<HTMLElement>('.type-property-fields [data-field-path]')].find(node => node.dataset.fieldPath === location.field);
       if (!node) return;
@@ -166,7 +166,7 @@ export function TypeWorkspace() {
       <label className="text-field">型号名称<input className="type-name-input" value={cleanLabel(document.name)} disabled={state.busy || state.readOnly} onChange={event => state.edit('/name', event.target.value)} /></label>
       {document.cable_types.length > 1 && <Select label="电缆结构" value={cable?.id} disabled={state.busy} options={document.cable_types.map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={value => { setCableId(value); choose(null); }} />}
     </section>}
-    {property}
+    {property}{location.module === 'structure' && !row && !!state.workspace?.raw.type_creation && document && <TypeRatingInputs />}
   </div>;
   return <TypeCommandSlot.Provider value={slot}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<StatusMark kind={status} label={(location.run ? '运行快照 · 只读' : statusLabel) + (demo ? ' · 演示' : '')} detail={state.error || (demo ? '型号基准含演示来源，请核对各字段工程依据。' : state.readOnly ? '所选输入快照只读；基准版本与来源见型号名片。' : state.dirty ? '保存后更新型号输入；原运行结果保留并标为过期。' : '当前编辑已保存；各模块保存结果的状态见型号浏览器。')} />}
     activeNavigation="型号" theme={location.theme} onTheme={onTheme} onUnavailable={name => setInfo(name + '入口尚未接入')}

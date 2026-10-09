@@ -3,6 +3,7 @@ import { cableShape } from '@/features/drawing/cable-geometry';
 import type { DomainDocument } from '@/lib/domain-fields';
 import { formatNumber } from '@/lib/format';
 import { cleanLabel } from './labels';
+import { missingTypeInputs } from './missing';
 
 export type DesignStatus = 'draft' | 'review' | 'published';
 export function versionLabel(value: string) { return value.replace(/\+engineering$/, '（工程版）').replace(/\+[^\s]+$/, '（定制版）') || '未提供'; }
@@ -36,10 +37,13 @@ export function designSummary(document: DomainDocument, raw: Record<string, unkn
   const declared = raw.declared_standards;
   const standards = Array.isArray(declared) ? declared.map(v => typeof v === 'string' ? v : text(optionalRecord(v).name)).filter(Boolean).join('、') : '';
   let diameter: number | null = null;
-  try { if (cable) diameter = cableShape(cable, document.materials).radiusM * 2000; } catch { /* Missing/invalid geometry must remain explicit. */ }
+  try { if (cable && !missingTypeInputs(document).some(item => !item.path.includes('/rating/'))) diameter = cableShape(cable, document.materials).radiusM * 2000; } catch { /* Missing/invalid geometry must remain explicit. */ }
   const kinds = new Set(Object.values(document.provenance || {}).map(v => v.kind));
-  const source = kinds.has('asset') ? '库引用' : kinds.has('manufacturer') ? '厂家资料' : kinds.has('user') ? '用户录入' : kinds.has('standard') ? '标准值' : kinds.has('demo') ? '演示' : '未提供';
+  const creation = optionalRecord(raw.type_creation), saved = optionalRecord(creation.source);
+  const references = optionalRecord(saved.references);
+  const pages = [...new Set(Object.values(references).flatMap(value => { try { const reference = JSON.parse(text(optionalRecord(value).reference)); return Array.isArray(reference.selections) ? reference.selections.map((v: { page?: number }) => v.page).filter(Boolean) : reference.page ? [reference.page] : []; } catch { return []; } }))];
+  const source = creation.kind === 'library' ? '库引用 · 版本 ' + versionLabel(text(saved.version)) : creation.kind === 'standard' ? '标准生成 · 人工确认' : creation.kind === 'import' ? '资料' + (pages.length ? ' · 第 ' + pages.join('、') + ' 页' : ' · 页码见来源') : creation.kind === 'blank' ? '空白 · 用户录入' : kinds.has('asset') ? '库引用' : kinds.has('manufacturer') ? '厂家资料' : kinds.has('user') ? '用户录入' : kinds.has('standard') ? '标准值' : kinds.has('demo') ? '演示' : '未提供';
   return { name: cleanLabel(document.name), version: versionLabel(text(origin.version)), voltage: [...new Set(ratings)].join('、'), area: [...new Set(sections)].join('、'),
-    standards: standards || '未声明', source, sourceDetail: text(origin.source), originName: cleanLabel(text(origin.name)), originId: text(origin.id),
+    standards: standards || '未声明', source, sourceDetail: creation.kind ? JSON.stringify(saved) : text(origin.source), originName: cleanLabel(text(origin.name)), originId: text(origin.id),
     updated: localTime(text(raw.updated_at)), diameter, layers: cable ? cable.common_layers.length + cable.cores.reduce((n, core) => n + core.layers.length + 1, 0) : null };
 }

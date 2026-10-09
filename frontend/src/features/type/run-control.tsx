@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { useTypeWorkspace } from './provider';
 import { methodLabel } from './evidence';
+import { missingTypeInputs } from './missing';
 
 type Definition = Omit<components['schemas']['CreateStudy'], 'expected_revision'>;
 type Prepared = { study: components['schemas']['StudyResponse']; preflight: components['schemas']['PreflightResponse']; revision: number };
@@ -78,7 +79,7 @@ export function TypeRunControl({ channel, label, definition, onBusy, unavailable
       if (mounted.current) { setPrepared({ study, preflight, revision: state.workspace.revision }); setOpen(true); }
     } catch (error) { if (mounted.current) setError(message(error)); } finally { pending.current = false; running(false); }
   }
-  const reason = unavailable || (state.dirty ? '请先保存型号输入' : state.readOnly ? state.workspace?.raw.fixed_run ? '运行快照保持只读' : '历史或已发布型号保持只读' : '');
+  const reason = unavailable || (state.document && missingTypeInputs(state.document).length ? '结构缺项 · 先补齐型号名片中的字段' : state.dirty ? '请先保存型号输入' : state.readOnly ? state.workspace?.raw.fixed_run ? '运行快照保持只读' : '历史或已发布型号保持只读' : '');
   return <div className="type-run-control"><Button variant={primary ? 'primary' : 'default'} size="compact" loading={busy} disabled={!!reason || !state.workspace} onClick={() => void prepare()}>{attempt.current ? '查询同一运行' : label}</Button>
     {reason && <span className="muted">{reason}</span>}{error && <p className="field-error" role="alert">{error}</p>}
     <Dialog open={open} onOpenChange={value => { if (!busy) setOpen(value); }} title={label + ' · 预检'} description={prepared?.preflight.ready ? '保存输入已通过预检，确认范围后运行。' : '当前输入未通过预检，修正后重新提交。'}

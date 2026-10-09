@@ -13,6 +13,10 @@ function Numeric({ spec, integer }: { spec: NumericInput; integer?: boolean }) {
     locked={state.locked(spec.path)} disabled={state.busy} draftText={state.draft?.fields[spec.path]?.value} onDraftChange={value => state.setField(spec, value)}
     onCommit={value => state.edit(spec.path, value === null ? null : (value - (spec.offset || 0)) / (spec.scale || 1))} source={sourceKind(source)} sourceDetail={text(source.reference) || undefined} />;
 }
+export function TypeRatingInputs() {
+  const state = useTypeWorkspace(), cable = state.document!.cable_types[0];
+  return <div className="type-property-fields" aria-label="额定电压输入">{(['u0', 'u'] as const).map(key => <Numeric key={key} spec={{ path: pointer('cable_types', cable.id, 'rating', key), label: key === 'u0' ? '额定电压 U₀' : '额定电压 U', unit: 'kV', scale: .001, precision: 1, required: true, min: 0, minExclusive: true }} />)}</div>;
+}
 export function StructurePropertyInputs({ row }: { row: LayerRow }) {
   const state = useTypeWorkspace(), root = row.path.slice(0, row.path.lastIndexOf('/'));
   const conductor = row.target.role === 'conductor', form = text(at(state.document, root + '/form'));

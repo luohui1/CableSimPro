@@ -7,11 +7,12 @@ import { approvedStandardNames, publicationStatus, type DesignStatus } from './d
 export type Workspace = { id: string; revision: number; document: DomainDocument; raw: Record<string, unknown> };
 export type TypeRow = { id: string; name: string; version: string; updated: string; status: DesignStatus; raw: Record<string, unknown>; document: DomainDocument; standards: string[]; standardsReason: string };
 export type ModelChoice = { id: string; name: string; version: string; digest: string; workspace?: string; raw: Record<string, unknown> };
+const documentAttempts = new Map<string, { input: string; request: string }>();
 
 export function projectWorkspace(value: unknown): Workspace {
   const raw = record(value, '型号工作区');
   const id = text(raw.id), revision = numeric(raw.revision), domain = record(raw.domain, '型号领域输入');
-  if (!id || revision === null || revision < 1 || domain.schema_version !== 'cablesim.domain/1' || !text(domain.name))
+  if (!id || revision === null || revision < 1 || !['cablesim.domain/1', 'cablesim.type-draft/1'].includes(text(domain.schema_version)) || !text(domain.name))
     throw new ApiError(502, '型号响应缺少身份、修订或领域文档');
   if (raw.study_cable_reference) throw new ApiError(422, '这是研究工作区，请从型号列表选择型号');
   for (const key of ['cable_types', 'materials', 'circuits', 'sections', 'load_cases']) array(domain[key], key);
@@ -88,6 +89,14 @@ export async function createType(model: ModelChoice, requestId: string) {
   return result.id;
 }
 export async function saveType(base: Workspace, document: DomainDocument) {
+  if (base.raw.type_creation) {
+    const input = JSON.stringify({ expected_revision: base.revision, document });
+    if (documentAttempts.get(base.id)?.input !== input) documentAttempts.set(base.id, { input, request: crypto.randomUUID() });
+    const attempt = documentAttempts.get(base.id)!;
+    const response = await fetch(`/api/types/${encodeURIComponent(base.id)}/document`, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expected_revision: base.revision, request_id: attempt.request, document }), signal: AbortSignal.timeout(30000) });
+    const result: unknown = await response.json(); if (!response.ok) { const detail = optionalRecord(result).detail; throw new ApiError(response.status, typeof detail === 'string' ? detail : text(optionalRecord(detail).message) || '草稿保存失败', detail); }
+    const saved = projectWorkspace(result); documentAttempts.delete(base.id); return saved;
+  }
   await responseData(api.PUT('/api/workspaces/{wid}/domain', { params: { path: { wid: base.id } }, body: { expected_revision: base.revision, document } }));
   return loadWorkspace(base.id);
 }

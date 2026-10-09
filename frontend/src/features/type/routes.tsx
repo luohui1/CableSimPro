@@ -7,6 +7,7 @@ const TypeProvider = lazyRouteComponent(() => import('./provider'), 'TypeProvide
 const TypeWorkspace = lazyRouteComponent(() => import('./workspace'), 'TypeWorkspace');
 
 export function typeSearch(value: Record<string, unknown>) { return { theme: value.theme === 'dark' ? 'dark' as const : 'light' as const,
+  create: value.create === '1' || value.create === 1 || value.create === true ? true : undefined,
   revision: Number.isInteger(Number(value.revision)) && Number(value.revision) >= 1 ? Number(value.revision) : undefined,
   run: typeof value.run === 'string' && value.run ? value.run : undefined, layer: typeof value.layer === 'string' && value.layer.length <= 200 ? value.layer : undefined,
   field: typeof value.field === 'string' && value.field.startsWith('/') && value.field.length <= 800 ? value.field : undefined }; }
@@ -22,7 +23,7 @@ function Navigation({ children, location }: { children: React.ReactNode; locatio
 export function createTypeRoutes(root: AnyRootRoute) {
   const list = createRoute({ getParentRoute: () => root, path: '/types', validateSearch: typeSearch, component: function TypeIndexRoute() {
     const search = useSearch({ strict: false });
-    const location = { module: 'list', tab: '', theme: search.theme === 'dark' ? 'dark' as const : 'light' as const };
+    const location = { module: 'list', tab: '', ...typeSearch(search as Record<string, unknown>) };
     return <Navigation location={location}><TypeListPage /></Navigation>;
   } });
   const parent = createRoute({ getParentRoute: () => root, path: '/types/$wid', validateSearch: typeSearch, component: function TypeWorkspaceRoute() {

@@ -11,6 +11,7 @@ from base64 import b64encode
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cablesim_sdk.cross_sections import core_profile, profile_radius, profiles_overlap
 
 PROTOCOL = 'cablesim.run/2'
@@ -874,6 +875,26 @@ def main():
     request = json.loads(Path('input/request.json').read_text('utf-8'))
     from cablesim_sdk.parameter_units import decode_request
     request = decode_request(request, Path(__file__).resolve().parents[2]/'plugin.json')
+    if request.get('protocol') == PROTOCOL and request.get('capability') == 'core-layout-proposal' and request.get('phase') in ('check', 'run'):
+        from cablesim_cable_geometry.proposal import propose
+        cases = []
+        for case in request['cases']:
+            try:
+                artifact = propose(case['input'])
+                result = {}
+                if request['phase'] == 'run':
+                    name = case['case_id'] + '.proposal.json'
+                    Path('output', name).write_text(json.dumps(artifact, ensure_ascii=False, allow_nan=False), 'utf-8')
+                    result = {'results': [{'key': 'x-cablesim.proposed-conductor-diameter', 'type': 'quantity', 'entity': 'cable_type/design', 'status': 'available', 'value': artifact['rows'][0]['value'], 'unit': 'm'}],
+                              'artifacts': [{'type': 'x-cablesim.core-layout-proposal', 'path': 'output/' + name}]}
+                cases.append({'case_id': case['case_id'], 'status': 'succeeded', **result})
+            except (KeyError, ValueError, TypeError) as exc:
+                cases.append({'case_id': case['case_id'], 'status': 'not_applicable', 'error': {'code': 'LAYOUT_INPUT_UNSUPPORTED', 'message': str(exc)}})
+        from cablesim_sdk.result_answers import attach_witnesses
+        attach_witnesses(request, {'cases': cases}, Path(__file__).resolve().parents[2]/'plugin.json')
+        Path('output/result.json').write_text(json.dumps({'protocol': PROTOCOL, 'cases': cases,
+            'environment': {'python': platform.python_version(), 'method': '1.0.0', 'native_kernel_loaded': False}}, ensure_ascii=False, allow_nan=False), 'utf-8')
+        return
     if request.get('protocol') != PROTOCOL or request.get('capability') not in (
         'concentric-model',
         'installation-scene',
@@ -940,4 +961,3 @@ def resident_main():
 
 if __name__ == '__main__':
     main()
-

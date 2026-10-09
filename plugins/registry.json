@@ -3,9 +3,9 @@
   "plugins": [
     {
       "plugin_id": "cablesim.cable-geometry",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "manifest": "plugins/cablesim.cable-geometry/plugin.json",
-      "release_digest": "6881154d8fe198991f69e5219f50031954d65d63c0b11dce7466a59e950f6d20"
+      "release_digest": "f672366a7af3c331f012b4917f0de4d051e111f57829968d7840f244c54370ea"
     },
     {
       "plugin_id": "cablesim.comsol-bridge",
@@ -45,9 +45,9 @@
     },
     {
       "plugin_id": "cablesim.standard-check",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "manifest": "plugins/cablesim.standard-check/plugin.json",
-      "release_digest": "c53fe3ef21f688046a77dcb046d7575fb9511e2258752ea9b74fd668bad5bbf2"
+      "release_digest": "1872d8572cdbd83cdcfb7adf0d8f526e394cbd272d518b74bd1d4cc099737420"
     },
     {
       "plugin_id": "cablesim.thermal-network",

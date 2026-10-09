@@ -2,7 +2,8 @@ import { useEffect } from 'react';
 import { DataTable } from '@/components/data-table';
 import { SourceBadge } from '@/components/source-badge';
 import { NumberField } from '@/components/ui/number-field';
-import { EmptyState, ErrorState, StaleBanner } from '@/components/states';
+import { EmptyState, ErrorState, StaleBanner, InlineEmpty } from '@/components/states';
+import { missingTypeInputs } from './missing';
 import { CableSection } from '@/features/drawing';
 import { targetId } from '@/features/drawing/cable-geometry';
 import { at, displayed, fieldSource } from '@/lib/domain-fields';
@@ -49,7 +50,7 @@ export function TypeStructure({ tab, cable, selected, onSelect }: { tab: string;
   try { rows = layerRows(state.document, cable); } catch (error) { return <ErrorState title="结构不可绘制" description={error instanceof Error ? error.message : String(error)} />; }
   if (tab === 'quantities') return <TypeQuantities cable={cable} />;
   if (tab === 'three') return <div className="type-canvas-frame"><StructureActions cable={cable} selected={selected} onSelect={onSelect} /><TypeGeometry cable={cable} selected={selected} onSelect={onSelect} /></div>;
-  const section = <CableSection cableType={cable} materials={state.document.materials} selectedObject={selected} onSelectionChange={onSelect}
+  const section = missingTypeInputs(state.document).some(item => !item.path.includes('/rating/')) ? <InlineEmpty title="结构尺寸待补齐，请在分层表填写。" /> : <CableSection cableType={cable} materials={state.document.materials} selectedObject={selected} onSelectionChange={onSelect}
     state={state.workspace?.raw.historical ? 'historical' : 'success'} editable={!state.readOnly && !state.busy} showDimensions onCommand={command => { if (command === 'save') void state.save(); if (command === 'undo') void state.undo(); }}
     isLocked={target => { const row = rows.find(row => row.id === targetId(target)); return !row || state.locked(row.path); }}
     onDimensionChange={edit => { const row = rows.find(row => row.id === targetId(edit.target)); if (!row) throw new Error('所选结构层已不存在'); state.edit(row.path, edit.valueM); }} />;
@@ -66,7 +67,7 @@ export function TypeCanvas({ view, cable, selected, onSelect }: { view: 'section
   try { rows = layerRows(state.document, cable); } catch (error) { return <ErrorState title="结构不可绘制" description={error instanceof Error ? error.message : String(error)} />; }
   return <div className="type-canvas-frame">
     <StructureActions cable={cable} selected={selected} onSelect={onSelect} />
-    {view === 'three' ? <TypeGeometry cable={cable} selected={selected} onSelect={onSelect} /> : <CableSection cableType={cable} materials={state.document.materials} selectedObject={selected} onSelectionChange={onSelect}
+    {missingTypeInputs(state.document).some(item => !item.path.includes('/rating/')) ? <InlineEmpty title="结构尺寸待补齐，请在分层表填写。" /> : view === 'three' ? <TypeGeometry cable={cable} selected={selected} onSelect={onSelect} /> : <CableSection cableType={cable} materials={state.document.materials} selectedObject={selected} onSelectionChange={onSelect}
       state={state.workspace?.raw.historical ? 'historical' : 'success'} editable={!state.readOnly && !state.busy} showDimensions onCommand={command => { if (command === 'save') void state.save(); if (command === 'undo') void state.undo(); }}
       isLocked={target => { const row = rows.find(row => row.id === targetId(target)); return !row || state.locked(row.path); }}
       onDimensionChange={edit => { const row = rows.find(row => row.id === targetId(edit.target)); if (!row) throw new Error('所选结构层已不存在'); state.edit(row.path, edit.valueM); }} />}

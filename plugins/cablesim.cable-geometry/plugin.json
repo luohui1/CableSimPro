@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.cable-geometry",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "name": "电缆实体建模",
   "icon": "assets/icon.svg",
   "description": "单芯及多芯电缆实体、显式扇形轮廓、间隙填充、内衬、双带与丝铠装；结构推导外径和理论用料；同源 OCCT 实体与 STEP。",
@@ -411,6 +411,230 @@
         }
       ],
       "study_tasks": []
+    },
+    {
+      "kind": "method",
+      "id": "core-layout-proposal",
+      "title": "圆形线芯布局提案",
+      "method_version": "1.0.0",
+      "analysis": "geometry_proposal",
+      "input_schema": "cablesim.core-layout-request/1",
+      "outputs": [
+        {
+          "key": "x-cablesim.proposed-conductor-diameter",
+          "type": "quantity",
+          "per": "cable",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.core-layout-proposal",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": false
+        }
+      ],
+      "validation": {
+        "level": "interface-tested",
+        "cases": [
+          "plugin-tests/test_type_proposals.py"
+        ]
+      },
+      "limitations": [
+        "仅待人工确认的结构提案；不批准要求，不运行求解器，不发布型号。",
+        "缺少的物性、制造数据及外层结构保持缺项。"
+      ],
+      "description": "由明确输入提出圆形 XLPE 结构；提案须人工确认，未覆盖与缺项保留。",
+      "parameter_schema": {
+        "type": "object",
+        "properties": {},
+        "$defs": {},
+        "additionalProperties": false
+      },
+      "input_contract": {
+        "input_sources": [
+          "study"
+        ],
+        "standalone_schema": {
+          "type": "object",
+          "properties": {
+            "schema_version": {
+              "title": "输入契约版本",
+              "description": "输入契约版本；缺项不得推测。",
+              "x-unit": {
+                "scale": 1.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 0,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "本能力仅提供所声明的圆形 XLPE 结构提案；范围是方法边界，标准限值来自封签厚度表。"
+              },
+              "type": "string",
+              "const": "cablesim.core-layout-request/1"
+            },
+            "construction": {
+              "title": "结构类型",
+              "description": "结构类型；缺项不得推测。",
+              "x-unit": {
+                "scale": 1.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 1,
+              "x-level": "basic",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "本能力仅提供所声明的圆形 XLPE 结构提案；范围是方法边界，标准限值来自封签厚度表。"
+              },
+              "type": "string",
+              "enum": [
+                "single_core",
+                "three_core"
+              ]
+            },
+            "area_m2": {
+              "title": "导体标称截面",
+              "description": "导体标称截面；缺项不得推测。",
+              "x-unit": {
+                "si": "m2",
+                "display": "mm²",
+                "scale": 1000000.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 2,
+              "x-level": "basic",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "本能力仅提供所声明的圆形 XLPE 结构提案；范围是方法边界，标准限值来自封签厚度表。"
+              },
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.0025
+            },
+            "form": {
+              "title": "圆形导体模型",
+              "description": "圆形导体模型；缺项不得推测。",
+              "x-unit": {
+                "scale": 1.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 3,
+              "x-level": "basic",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "本能力仅提供所声明的圆形 XLPE 结构提案；范围是方法边界，标准限值来自封签厚度表。"
+              },
+              "type": "string",
+              "enum": [
+                "solid_round",
+                "unspecified"
+              ]
+            },
+            "diameter_m": {
+              "title": "给定导体外径",
+              "description": "给定导体外径；缺项不得推测。",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 4,
+              "x-level": "basic",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "本能力仅提供所声明的圆形 XLPE 结构提案；范围是方法边界，标准限值来自封签厚度表。"
+              },
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.2
+            },
+            "gap_m": {
+              "title": "三芯芯间净距",
+              "description": "三芯芯间净距；缺项不得推测。",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 5,
+              "x-level": "basic",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "本能力仅提供所声明的圆形 XLPE 结构提案；范围是方法边界，标准限值来自封签厚度表。"
+              },
+              "type": "number",
+              "minimum": 0,
+              "maximum": 0.2
+            },
+            "thickness_m": {
+              "title": "绝缘标称厚度",
+              "description": "绝缘标称厚度；缺项不得推测。",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 6,
+              "x-level": "basic",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "本能力仅提供所声明的圆形 XLPE 结构提案；范围是方法边界，标准限值来自封签厚度表。"
+              },
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.1
+            }
+          },
+          "$defs": {},
+          "additionalProperties": false,
+          "required": [
+            "schema_version",
+            "construction",
+            "area_m2",
+            "form",
+            "thickness_m"
+          ]
+        }
+      },
+      "x-groups": [
+        {
+          "id": "model",
+          "title": "结构与输入",
+          "order": 0
+        }
+      ],
+      "x-headline": [
+        {
+          "key": "x-cablesim.proposed-conductor-diameter",
+          "title": "导体建议外径",
+          "unit": {
+            "si": "m",
+            "display": "mm",
+            "scale": 1000.0,
+            "offset": 0.0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.core-layout-proposal"
+        }
+      ],
+      "preview": true,
+      "preview_timeout_s": 8,
+      "study_tasks": []
     }
   ],
   "files": [
@@ -431,8 +655,13 @@
     },
     {
       "path": "src/cablesim_cable_geometry/main.py",
-      "sha256": "489c649c2476ca08d8b88d76b2293277edb6b3ec76a6e4f68b8d99e7991d806d",
-      "size_bytes": 54774
+      "sha256": "d9d3981ebf89d0851255b35f5ea5e61b062ce81d4d4f3c82a5396b82435c544a",
+      "size_bytes": 56507
+    },
+    {
+      "path": "src/cablesim_cable_geometry/proposal.py",
+      "sha256": "aef2b29ffa319d7f97a308bd48c089d8d75955db577f5b4580d5a31f7e1fa70d",
+      "size_bytes": 2223
     },
     {
       "path": "src/host-dependencies.json",

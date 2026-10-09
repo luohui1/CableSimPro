@@ -9,6 +9,7 @@ import platform
 import sys
 
 sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
 VERSION = '1.0.0'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
@@ -957,12 +958,23 @@ def main():
     request = json.loads(Path('input/request.json').read_text('utf-8'))
     from cablesim_sdk.parameter_units import decode_request
     request = decode_request(request, Path(__file__).resolve().parents[2]/'plugin.json')
-    if request.get('protocol') != 'cablesim.run/2' or request.get('capability') != 'dimensions' or request.get('phase') not in ('check', 'run'):
+    if request.get('protocol') != 'cablesim.run/2' or request.get('capability') not in ('dimensions', 'structure-proposal') or request.get('phase') not in ('check', 'run'):
         raise ValueError('不支持的执行协议。')
     cases = []
     for case in request['cases']:
         base = {'case_id': case['case_id']}
         try:
+            if request['capability'] == 'structure-proposal':
+                from cablesim_standard_check.proposal import propose
+                artifact = propose(case['input'], insulation_limit, SOURCES, DATA)
+                result = {}
+                if request['phase'] == 'run':
+                    name = case['case_id'] + '.proposal.json'
+                    Path('output', name).write_text(json.dumps(artifact, ensure_ascii=False, allow_nan=False), 'utf-8')
+                    result = {'results': [{'key': 'x-cablesim.proposed-insulation', 'type': 'quantity', 'entity': 'cable_type/design', 'status': 'available', 'value': artifact['rows'][0]['value'], 'unit': 'm'}],
+                              'artifacts': [{'type': 'x-cablesim.cable-design-proposal', 'path': 'output/' + name}]}
+                cases.append({**base, 'status': 'succeeded', **result})
+                continue
             cable, *_ = prepare(case['input'], case.get('parameters', {}))
             result = {}
             if request['phase'] == 'run':

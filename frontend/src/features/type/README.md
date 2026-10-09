@@ -6,7 +6,7 @@
 
 公共路由负责人从本目录 `index.ts` 引入 `createTypeRoutes`，在现有 `rootRoute.addChildren(...)` 中加入 `...createTypeRoutes(rootRoute)`。公共“型号”入口指向 `/types`。父路由保留结构、工况与方法条件、未完成输入文本和首次编辑修订；不可把 TypeProvider 移入会随模块卸载的子页面。
 
-地址为 `/types`、`/types/:wid/:module/:tab`。`theme`、`revision`、`run`、`layer`、`field` 进入 URL；`field` 为领域字段指针，定位后展开对应属性组并聚焦数值框。历史修订和固定运行保持只读。`preview.tsx` 和 `preview.config.ts` 只供目录内隔离验收，不能作为第二个生产入口注册。
+地址为 `/types`、`/types/:wid/:module/:tab`。`/types?create=1` 自动打开统一新建对话框，供公共侧栏“新建 → 新建型号”引用；`theme`、`revision`、`run`、`layer`、`field` 进入 URL；`field` 为领域字段指针，定位后展开对应属性组并聚焦数值框。历史修订和固定运行保持只读。`preview.tsx` 和 `preview.config.ts` 只供目录内隔离验收，不能作为第二个生产入口注册。
 
 ## 功能范围
 
@@ -43,6 +43,7 @@ node src/features/type/tests/verify-integration.mjs
 node --test src/features/type/tests/organization.test.mjs
 node src/features/type/tests/verify-organization.mjs
 node src/features/type/tests/verify-organization-save.mjs
+node src/features/type/tests/verify-creation.mjs
 ```
 
 所有业务脚本通过 `tests/fixture.mjs` 只读备份真实数据库到随机临时路径、启动独立服务和浏览器，结束核对零标签页、停止服务并删除临时数据库。当前轮次的五态、两尺寸和两主题采用自动断言，检查越界、控件重叠、13 px 字号和文字对比度；每个改动页面只留 1–2 张截图。验收只执行明确授权的 IEC 标准代数、轻量标准核对和 CAD；有限元、批量仿真、收敛研究及性能基准仍走超算。列表源无已发布型号，列表历史态没有伪造批准数据。产物在 `.data/frontend-type/`，不入库。
@@ -84,5 +85,20 @@ node src/features/type/tests/verify-organization-save.mjs
 1. 公共路由与导航已注册；正式构建脚本仍由前端线程管理。目录内 preview 只作隔离验收。
 2. 公共参数字段复用 MethodParameterFields；规格书与结构扩展契约已纳入生成客户端，操作引用仍核验当前服务响应。
 3. 宿主尚无已保存方法配置的撤销接口；方法与工况页 Ctrl+Z 只撤销未保存条件，已保存时明确提示，不能误撤销型号结构。
-4. 新建空白型号、文件导入、规格书固定修订读取等未提供的能力保持明确缺项。完整阻抗和未覆盖标准分支仍受宿主发布校核约束，前端不能通过省略问题解除门禁。
+4. 规格书固定修订读取、完整阻抗和未覆盖标准分支仍受宿主发布校核约束，前端不能通过省略问题解除门禁。
 5. `organization.test.mjs` 已纳入 `npm test`。两个浏览器命令见上文，分别依赖 8100 只读来源与隔离数据库。
+
+## 新建型号的四个起点
+
+`GET /api/types/creation-options` 返回固定发布库版本、已批准资料提案和已安装标准提案能力的输入契约。`POST /api/types` 接收 `request_id/name/origin`，按起点增加：
+
+- `library`：`resource_id`（发布资产 UUID）与 `content_sha256`；复制发布记录的固定领域文档和资源版本，不复制保存运行、审批、发布状态，不加入原型号族。
+- `standard`：`proposal_id/content_sha256/human_confirmed:true`，请求头 `X-CableSim-Actor:human`；必须先调用 `POST /api/types/creation-proposals`，正文 `{request_id,input}`。输入 schema 为 `cablesim.cable-design-request/1`，包含 SI `area_m2`、电压表组合 `voltage`（如 `600/1000`）、`construction`、`conductor`、`form`；非实心圆须明确 `diameter_m`，三芯须明确 `gap_m`（相切显式填 0）。执行封签的标准 `structure-proposal` 与几何 `core-layout-proposal`，只作表值与轻量几何提案，不加载 OCCT 或运行原生求解。返回固定提案身份、摘要、逐行参数、标准版本 / 条款 / 页码、方法发行与输入输出摘要、缺项和适用范围。提案不建立设计，也不批准型号。UI 人工确认后建立草稿。
+- `import`：`proposal_id/content_sha256`（资料提案的 `id/sha256`）。只有已批准提案可以转设计；校验原件、提案、批准记录及生成资料版本的摘要，完整结构直接复制，缺项规格只填已声明值，不由成品外径猜层厚或芯位置。其余已批准规格保存在来源的 `declared_specification`，保持原单位与性质。资料页负责人在 `/resources/cables/imports` 的批准结果旁加“新建型号设计”，调用本接口后导航 `/types/{response.id}/structure/section` 即可；资料提取和批准流程保持原接口。
+- `blank`：`construction:single_core|three_core`，只建立芯、待选导体 / 绝缘材料及绝缘层骨架，未知的截面、尺寸、位置、电压保存 null。名片逐项列出缺项并定位输入。
+
+前三种来源保存于 `state.type_creation:{id,kind,source,initial_document_sha256,created}`。库与资料同时保存 `type_origin_reference:{id,version,content_sha256,...}`，供现有关联读取；库 `id` 是发布资产 UUID，资料 `id` 是已批准生成的 domain_cable_models UUID。独立新型号族为 `type/{creation.id}`。来源显示为库引用及版本、标准生成及人工确认、资料及页码、空白及用户录入；完整标识只放悬停。统一索引负责人可把来源关系改为 `source`，并读取标准来源的 `type_creation.source.methods[].method` 及其固定发行、资料的 `document_id/proposal_id/references`。本模块只复用 RelationPanel，不私自生成关系。
+
+未知几何使用独立 `cablesim.type-draft/1` 标签；求解输入的 `cablesim.domain/1` 校验不放宽。中性单位长度展示上下文明确标“非运行结构查看”，不提供运行负荷、介质物性或接地方案。`PUT /api/types/{wid}/document` 接收 `expected_revision/request_id/document`，范围校验、CAS、请求重放与历史保存；必需几何和电压补齐后经严格领域校验转为完整文档。画布不画空值几何，标准核对与用料入口明确显示缺项；旧型号仍用原领域保存接口。
+
+`verify-creation.mjs` 采用正式构建、一个页面、随机端口和隔离库。先在服务启动前通过 `test_type_creation.seed_browser` 准备明确标为隔离目录契约的发布样例及生成 PDF 的批准资料，未伪称真实工程审批；标准提案经真实插件执行。检查四条创建 / 来源 / 进入结构工作台、空白字段定位与 Ctrl+S、人工确认门禁、两尺寸两主题空 / 加载 / 错误 / 成功 / 历史状态的布局与对比度。四张 1366 浅色截图和断言记录放 `.data/type-creation/`。后端 `tests/test_type_creation.py` 对拍 GB/T 12706.1—2020 6.2 表 7 的 70 mm²、1.1 mm 与 GB/T 11017.2—2024 6.2.2 表 2 的 800 mm²、16 mm；`plugin-tests/test_type_proposals.py` 仅检查同一标准表和等截面积 / 芯中心距手算，没有原生环境调用。
