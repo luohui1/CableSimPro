@@ -21,7 +21,7 @@ export async function reportSectionImages(run: Record<string, unknown>) {
   if(document.sections.length > 3)throw Error('本次有超过三个敷设截面，请按工况分别生成计算书。');
   const annotations: Record<string,{text:string;emphasis?:boolean}> = {};
   const trace = optionalRecord(optionalRecord(chosen.artifacts)['x-cablesim.iec60287-trace']);
-  for (const state of array(optionalRecord(trace.operating).cable_states).map(optionalRecord)) {
+  for (const state of array(optionalRecord(trace.operating).cable_states ?? []).map(optionalRecord)) {
     if (typeof state.conductor_temperature_c === 'number') annotations[text(state.entity)] = {text:`${state.conductor_temperature_c.toFixed(1)} °C`,emphasis:Number(state.margin_k) < 0};
   }
   for (const result of array(chosen.results).map(optionalRecord)) {

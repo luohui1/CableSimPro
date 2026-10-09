@@ -58,6 +58,7 @@ class CadReportImage(StrictModel):
 class FemChapterReference(StrictModel):
     fem_run_id: UUID = Field(description='Saved, converged FEM run in this workspace.')
     iec_run_id: UUID = Field(description='Saved IEC run with matching input and electrical parameters.')
+    convergence_id: UUID | None = Field(default=None, description='Saved mesh/domain convergence workflow bound to the final FEM run; no unit.')
 
 
 class SectionReportImage(StrictModel):
@@ -99,7 +100,10 @@ def prepare(research, wid, ids, images, fem_reference, section_images=None):
         if field and not any(f['case_id']==image['case_id'] for f in attachments['field_images']):
             if saved.get('artifact_status',{}).get(image['case_id'],{}).get('x-cablesim.temperature-field',{}).get('status')!='verified':raise HTTPException(409,'温度场工件来源校验失败，不能纳入计算书。')
             from .convergence import has_temperature_field
-            if has_temperature_field(saved) and saved.get('convergence',{}).get('status')!='converged':raise HTTPException(422,'温度场未收敛，不能进入正式计算书。')
+            if has_temperature_field(saved):
+                from .fem_evidence import proof
+                if proof(research,saved,(fem_reference or {}).get('convergence_id'))['status']!='converged':raise HTTPException(422,'温度场未收敛，不能进入正式计算书。')
+            if fem_reference:continue  # Its frozen chapter includes this same saved field.
             from .batch_field_chapter import field_png
             raw=field_png(field)
             analytic=field.get('source',{}).get('binding')=='iec-trace'
@@ -136,11 +140,19 @@ def prepare(research, wid, ids, images, fem_reference, section_images=None):
         fem_id, iec_id = str(fem_reference['fem_run_id']), str(fem_reference['iec_run_id'])
         if primary not in (fem_id, iec_id): raise HTTPException(409, '有限元章节必须包含所选源运行。')
         from .batch_field_chapter import chapter, selected_case, field_png
-        data = chapter(research, None, wid, fem_id, iec_id)
-        if (data.get('convergence') or {}).get('status') != 'converged':
+        from .batch_convergence import Refinements
+        from .fem_evidence import workflow_for
+        workflow=workflow_for(research,wid,fem_id)
+        convergence_id=fem_reference.get('convergence_id') or (workflow or {}).get('id')
+        data = chapter(research, Refinements(research) if convergence_id else None, wid, fem_id, iec_id, convergence_id)
+        convergence=data.get('convergence') or {}
+        # Workflow completion is not the physical verdict. Chapter verifies the
+        # saved observations; use that verdict for the delivery gate.
+        verdict=convergence.get('verdict',convergence)
+        if verdict.get('status') != 'converged' or not 0<verdict.get('tolerance_k',.1)<=.1:
             raise HTTPException(422, '有限元未收敛，不能进入正式计算书。')
         fem = research.get_run(wid, fem_id)
-        chosen, _ = selected_case(fem)
+        chosen, _ = selected_case(fem,data['convergence']['rows'][-1]['case_id'] if convergence_id else None)
         raw = field_png(chosen['artifacts']['x-cablesim.temperature-field'])
         attachments['fem_chapter'] = {'data': data, 'png_base64': b64encode(raw).decode(), 'image_sha256': sha256(raw).hexdigest()}
         for rid in (fem_id, iec_id):
@@ -164,9 +176,22 @@ def chapter_html(attachments, audience='internal'):
     fem = attachments.get('fem_chapter')
     if fem:
         data = fem['data']; conv = data['convergence']
-        bodies.append('<h2>有限元温度场与 IEC 对照</h2><p>收敛状态：'+escape(conv['status'])+'</p>'+
-            table(['对象','物理量','有限元','IEC','差值','单位'], [[r['entity'],r['key'],r['fem'],r['iec'],r['delta'],r['unit']] for r in data['rows']])+
-            table(['工况','网格 / m','最热点 / K','变化 / K'], [[r.get('case_id'),r.get('mesh_size_m'),r.get('hotspot_k'),r.get('change_k')] for r in conv['rows']])+
-            table(['边界口径','有限元','IEC'], [[r['item'],r['fem'],r['iec']] for r in data['scope']])+
+        from .study_pdf import number
+        def value(v,unit):return '未计算' if v is None else number(v-273.15 if unit=='K' else v,1)
+        compared=[[('最热导体' if r['entity']=='maximum' else r['entity']),
+            '导体温度 / °C' if r['key']=='conductor_temperature' else '共同能力 / A' if r.get('case')=='rating-simultaneous' else '条件能力 / A',
+            value(r['fem'],r['unit']),value(r['iec'],r['unit']),number(r['delta'],2) if r['delta'] is not None else '—',
+            number(r.get('relative_percent'),2)+'%' if r.get('relative_percent') is not None else '—'] for r in data['rows'] if r['fem'] is not None]
+        source=data.get('boundary_source') or {}
+        boundary_source=' '.join(str(source.get(k,'')) for k in ('standard','clause'))
+        if source.get('printed_page'):boundary_source+=f" · 印刷第 {source['printed_page']} 页 / PDF 第 {source['pdf_page']} 页"
+        bodies.append('<h2>有限元温度场与 IEC 对照</h2><p>已收敛：网格与扩域均通过；门槛 '+number(conv.get('verdict',conv).get('tolerance_k',.1))+' K。两类均须连续两级满足，结果来自保存运行。</p>'+
+            table(['对象','量值','有限元','IEC','差值 K / A','相对差'],compared)+
+            '<p>温度相对差以 IEC 绝对温度 K 为分母；载流量仅按相同口径比较。未计算的口径不借用另一方法的数值。</p>'+
+            '<h3>逐级收敛记录</h3>'+table(['级别','网格 / mm','最热点 / °C','变化 / K'], [[{'mesh':'网格','domain':'扩域','rating':'额定校核'}.get(r.get('kind'),'核验')+' '+str(i),number(r['mesh_size_m']*1000,2),number(r['hotspot_k']-273.15,3),number(r.get('change_k'),4) if r.get('change_k') is not None else '—'] for i,r in enumerate(conv['rows'],1)])+
+            '<h3>边界与来源</h3>'+table(['边界口径','有限元','IEC'], [[r['item'],r['fem'],r['iec']] for r in data['scope']])+
+            '<p>'+escape(boundary_source+'；'+source.get('scope','保存参数定义的边界。'))+'</p>'+
+            '<p>本次收敛流程核时 '+number(conv.get('actual_core_hours'),3)+'；最终运行核时 '+number(data.get('execution',{}).get('core_hours'),3)+'，最终运行已包含在流程总量中，不重复累加。</p>'+
+            ('<p>承接核验历史核时 '+number(conv['validation_history']['actual_core_hours'],3)+'；历史与本次合计 '+number(conv['validation_history']['actual_core_hours']+conv['actual_core_hours'],3)+'，历史包含失败作业的核时。</p>' if conv.get('validation_history') else '')+
             '<p>图来自保存温度场工件'+(' '+escape(data['field']['artifact_digest']) if audience=='internal' else '')+'；差异提示不是标准验收限值。</p>')
     return bodies

@@ -22,6 +22,7 @@ import { isVersionStale } from '@/lib/version-status';
 import type { CadImage } from '@/features/cad/types';
 import { hpcJson, savedRunLabel } from '@/features/field/run-label';
 import { reportSectionImages } from './study-report-drawing';
+import { useFemEvidence } from './study-fem-conclusion';
 
 export function StudyReport(props: ComponentProps<typeof CurrentReport>) {
   const search = useSearch({ strict: false });
@@ -73,10 +74,15 @@ function CurrentReport({
   });
   const savedRuns = [...new Map([...runs, ...(related.data || [])].map(row => [text(row.id), row])).values()]
     .filter(row => row.integrity === 'verified' && row.freshness === 'current' && !isVersionStale(row) && ['succeeded','partial'].includes(text(row.status)));
-  const chapterReference = primaryFem ? (iecId ? {fem_run_id:text(run?.id),iec_run_id:iecId} : undefined)
-    : femId ? {fem_run_id:femId,iec_run_id:text(run?.id)} : undefined;
-  const chapter = useQuery({queryKey:['report-fem-chapter',wid,chapterReference?.fem_run_id,chapterReference?.iec_run_id], enabled:!!chapterReference && !did,
-    queryFn:({signal}) => hpcJson(`/workspaces/${encodeURIComponent(wid)}/chapters/${encodeURIComponent(chapterReference!.fem_run_id)}?iec_run_id=${encodeURIComponent(chapterReference!.iec_run_id)}`, {signal})});
+  const femEvidence=useFemEvidence(primaryFem ? run : savedRuns.find(row=>text(row.id)===femId));
+  const defaultReference=optionalRecord(femEvidence.data?.reference);
+  const selectedIec=iecId || text(defaultReference.iec_run_id);
+  const chapterReference = primaryFem ? (selectedIec ? {fem_run_id:text(run?.id),iec_run_id:selectedIec,convergence_id:text(defaultReference.convergence_id) || undefined} : undefined)
+    : femId ? {fem_run_id:femId,iec_run_id:text(run?.id),convergence_id:text(defaultReference.convergence_id) || undefined} : undefined;
+  const chapter = useQuery({queryKey:['report-fem-chapter',wid,chapterReference?.fem_run_id,chapterReference?.iec_run_id,chapterReference?.convergence_id], enabled:!!chapterReference && !did && !!femEvidence.data,
+    queryFn:({signal}) => hpcJson(`/workspaces/${encodeURIComponent(wid)}/chapters/${encodeURIComponent(chapterReference!.fem_run_id)}?iec_run_id=${encodeURIComponent(chapterReference!.iec_run_id)}${chapterReference!.convergence_id ? '&convergence_id='+encodeURIComponent(chapterReference!.convergence_id) : ''}`, {signal})});
+  const convergence=optionalRecord(chapter.data?.convergence);
+  const chapterConverged=text(optionalRecord(convergence.verdict).status || convergence.status)==='converged';
   const current =
     !!run &&
     run.freshness === "current" &&
@@ -127,7 +133,7 @@ function CurrentReport({
       const source = await fresh();
       const rid = text(source.id);
       if (primaryFem && !chapterReference) throw new ApiError(422, '请选择输入匹配的 IEC 对照运行。');
-      if (chapterReference && (!chapter.data || chapter.error || chapter.isFetching)) throw new ApiError(422, '请先核对有限元章节；未收敛或输入不一致不能交付。');
+      if (chapterReference && (!chapterConverged || chapter.error || chapter.isFetching)) throw new ApiError(422, '请先核对有限元章节；未收敛或输入不一致不能交付。');
       const cadImages = includeImage && cadImage ? [{metadata:cadImage.metadata,png_base64:await pngBase64(cadImage.blob)}] : [];
       const sectionImages = await reportSectionImages(source);
       const payload = {run_ids:[rid], request_id:'', cad_images:cadImages, section_images:sectionImages, fem_chapter:chapterReference || null};
@@ -157,12 +163,12 @@ function CurrentReport({
   });
   const generated = useRef('');
   useEffect(() => {
-    if (autoGenerate && current && !did && !primaryFem && generated.current !== text(run?.id)) {
+    if (autoGenerate && current && !did && (!primaryFem || chapterConverged && !chapter.isFetching && !chapter.error) && generated.current !== text(run?.id)) {
       generated.current = text(run?.id);
       create.mutate();
       onGenerateConsumed?.();
     }
-  }, [autoGenerate, current, did]);
+  }, [autoGenerate, current, did, primaryFem, chapterConverged, chapter.isFetching, chapter.error]);
   function verify(
     book: Record<string, unknown>,
     source: Record<string, unknown>,
@@ -198,7 +204,7 @@ function CurrentReport({
         }
       />
     );
-  const error = create.error || download.error || document.error || previewError || chapter.error;
+  const error = create.error || download.error || document.error || previewError || chapter.error || ((primaryFem || femId) ? femEvidence.error : undefined);
   let boundError: Error | undefined;
   if (document.data)
     try {
@@ -230,7 +236,7 @@ function CurrentReport({
             size="compact"
             onClick={() => create.mutate()}
             loading={create.isPending}
-            disabled={primaryFem && !chapterReference || !!chapterReference && (!chapter.data || chapter.isFetching || !!chapter.error || text(optionalRecord(chapter.data.convergence).status) !== 'converged')}
+            disabled={primaryFem && !chapterReference || !!chapterReference && (!chapterConverged || chapter.isFetching || !!chapter.error)}
           >
             生成客户计算书
           </Button>
@@ -238,12 +244,12 @@ function CurrentReport({
       </div>
       {!did && <section aria-label="计算书附图与章节" className="report-toolbar">
         {cadImage && <label><input type="checkbox" checked={includeImage} disabled={create.isPending} onChange={event => setIncludeImage(event.target.checked)} /> 插入三维导出图（含色标与来源）</label>}
-        {primaryFem ? <Select label="IEC 对照运行" value={iecId} disabled={create.isPending || related.isFetching} onChange={setIecId}
+        {primaryFem ? <Select label="IEC 对照运行" value={selectedIec} disabled={create.isPending || related.isFetching} onChange={setIecId}
           options={[{value:'',label:'选择保存的 IEC 运行'},...savedRuns.filter(row => methodOf(row).plugin_id === 'cablesim.iec60287').map(row => ({value:text(row.id),label:savedRunLabel(row)}))]} />
           : methodOf(run).plugin_id === 'cablesim.iec60287' && <Select label="有限元章节" value={femId} disabled={create.isPending || related.isFetching} onChange={setFemId}
             options={[{value:'',label:'仅所选 IEC 运行'},...savedRuns.filter(row => methodOf(row).capability === 'iec-thermal-field').map(row => ({value:text(row.id),label:savedRunLabel(row)}))]} />}
-        {chapter.isFetching && <span role="status">正在核对保存章节</span>}
-        {chapter.data && !chapter.isFetching && <span role="status">有限元章节已核对 · {text(optionalRecord(chapter.data.convergence).status) === 'converged' ? '已收敛' : '未收敛'}</span>}
+        {(chapter.isFetching || femEvidence.isFetching) && <span role="status">正在核对保存章节与收敛证明</span>}
+        {chapter.data && !chapter.isFetching && <span role="status">有限元章节已核对 · {chapterConverged ? '已收敛' : '未收敛'}</span>}
       </section>}
       {!did && related.error && <ErrorState title="引用运行读取失败" description={message(related.error)} action={<Button size="compact" onClick={() => void related.refetch()}>重新读取</Button>} />}
       {(error || boundError) && (

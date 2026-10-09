@@ -38,6 +38,7 @@ import { StudyValidation } from "@/components/study-validation";
 import { rootModule, studyEntryTab, moduleConfiguration } from "@/lib/study-config";
 import { modelViews, hostTasks } from '@/components/study-workbench-config';
 import { SavedRunConclusion } from '@/components/study-saved-conclusion';
+import { FemConclusionBar, FemSavedComparison } from '@/components/study-fem-conclusion';
 import {
   CableInputs,
   ConditionsInputs,
@@ -289,6 +290,7 @@ export function StudyWorkspace() {
           definition={methodHistorical ? ((optionalRecord(run?.snapshot).study_definition || optionalRecord(run?.snapshot).definition) as StudyDefinition) : undefined} />;
   // 答案条：先回答这次计算的结论（选型推荐 / 允许电流与最热导体），切换底部页签时保持可见
   const answer = pendingRun || !run ? null
+    : savedMethod.capability === 'iec-thermal-field' && module !== 'report' ? <FemConclusionBar run={run} />
     : module === "selection" && view && !selectionError ? <StudySelection theme={theme} run={run} selectedId={selectedRow?.id} onSelect={(row) => setSelected(row)} dirty={context.dirty} part="conclusion" />
       : module === 'ampacity' ? <StudyResults run={run} onSelect={inputProps.onSelect} part="conclusion" />
         : moduleBehavior.resultConclusion.has(module) ? <SavedRunConclusion run={run} />
@@ -552,6 +554,8 @@ export function StudyWorkspace() {
             <StudyNativeArtifact run={run} kind="history" />
           ) : module === "sheath-losses" && tab === "losses" ? (
             <StudyNativeArtifact run={run} kind="losses" />
+          ) : module === 'thermal-field' && run && tab === 'results' ? (
+            <FemSavedComparison run={run} />
           ) : ["thermal-field", "electrothermal", "transient"].includes(module) && !run ? (
             <SimulationSetup module={module} />
           ) : ["thermal-field", "electrothermal", "transient"].includes(

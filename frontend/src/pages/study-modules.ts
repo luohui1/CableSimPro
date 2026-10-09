@@ -49,6 +49,7 @@ export const moduleDefinitions: Record<
     label: "温度场",
     icon: "calc/thermal-field",
     tabs: [
+      { id: "results", label: "结果与 IEC 对照" },
       { id: "field", label: "场图" },
       { id: "samples", label: "取样" },
       { id: "parameters", label: "方法参数" },

@@ -2,7 +2,7 @@
 from html import escape
 import json
 
-RENDERER = 'cablesim.study-html/19'
+RENDERER = 'cablesim.study-html/20'
 
 
 def formatted(value, digits=1):

@@ -997,6 +997,13 @@ class Research:
             from .report_attachments import prepare
             ids, attachments = prepare(self, wid, ids, cad_images or [], fem_chapter, section_images)
         runs = self.verified_runs(wid, ids)
+        if attachments and attachments.get('fem_chapter'):
+            evidence=attachments['fem_chapter']['data']
+            for run in runs:
+                if run['id']==evidence['fem']['run_id']:
+                    convergence=evidence['convergence']
+                    run['convergence']={**convergence,'status':convergence.get('verdict',convergence)['status'],'reference_case_id':convergence['rows'][-1]['case_id']}
+                    run['fem_evidence']=evidence
         from .convergence import has_temperature_field
         if any(has_temperature_field(r) and r.get('convergence',{}).get('status') != 'converged' for r in runs):
             raise HTTPException(422, '温度场未收敛：须完成至少三档网格及计算域加倍，热点变化小于 0.1 K 后才能纳入计算书。')
@@ -1011,7 +1018,7 @@ class Research:
                     raise HTTPException(422,'IEC/FEM 比较未通过网格与计算域收敛，不能纳入计算书。')
         if current_only and any(r['freshness'] != 'current' for r in runs):
             raise HTTPException(409, '计算书只能纳入当前保存输入的运行；请重新计算或重新选择。')
-        html = render(runs, attachments=attachments)
+        html = render(runs, attachments=attachments) if attachments else render(runs)
         source = [{'run_id': r['id'], 'input_digest': r['input_digest'], 'output_digest': r['output_digest']} for r in runs]
         did, renderer = str(uuid4()), RENDERER
         digest = fingerprint({'renderer': renderer, 'sources': source, 'html': html})

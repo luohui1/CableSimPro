@@ -20,6 +20,7 @@ from .report_attachments import CadReportImage, FemChapterReference, SectionRepo
 from .responses import VersionStatus
 from .workspace import fingerprint
 from .simulation_contract import ProblemContract, contract as problem_contract
+from .fem_evidence import FemConclusion, conclusion as fem_conclusion
 
 
 class ApiErrorDetail(StrictModel):
@@ -216,6 +217,11 @@ def make_router(research, previews):
     router = APIRouter(prefix='/api', tags=['Host inputs and delivery'])
     from .database_ops import make_router as database_router
     router.include_router(database_router(research.store))
+
+    @router.get('/workspaces/{wid}/runs/{rid}/fem-conclusion',response_model=FemConclusion,responses=ERRORS)
+    def saved_fem_conclusion(wid:UUID,rid:UUID):
+        try:return host_call(fem_conclusion,research,str(wid),str(rid))
+        except (ValueError,KeyError,StopIteration):fail(422,'FEM_EVIDENCE_INVALID','保存有限元证据不完整或不满足核验条件，请检查诊断与收敛记录。')
 
     @router.get('/simulation/problem-contract',response_model=ProblemContract,responses=ERRORS)
     def simulation_problem_contract():

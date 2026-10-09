@@ -42,7 +42,8 @@ def pdf_text(data):
 
 def test_customer_book_has_real_selection_precision_and_no_internal_sources(run):
     before=deepcopy(run);text=pdf_text(render_pdf([run],generated_at='2026-10-05T01:02:03+00:00'))
-    for phrase in ['测试工程','测试询价','研究修订 2','2026-10-05 01:02:03','编制','校核','审核','批准','推荐 试验型号 3×400','423 A','23 A','缺少真实尺寸','历史运行复现','IEC 60287-1-1:2023','85.1','31.71']:
+    from backend.kernel.study_pdf import local_time
+    for phrase in ['测试工程','测试询价','研究修订 2',local_time('2026-10-05T01:02:03+00:00'),'编制','校核','审核','批准','推荐 试验型号 3×400','423 A','23 A','缺少真实尺寸','历史运行复现','IEC 60287-1-1:2023','85.1','31.71']:
         assert phrase in text
     assert 'v0 ' not in text and '内部私有来源摘要' not in text and not re.search('[a-f0-9]{64}',text)
     assert run==before
@@ -127,3 +128,30 @@ def test_paper_sources_keep_field_evidence_without_identity_metadata():
     assert '/soil/id' not in html and '/soil/label' not in html
     assert '热阻率' in paper_text([], '/materials/soil/thermal_resistivity')
     assert document==before
+
+
+def test_cover_short_digest_local_minutes_and_distinct_surface_heading(run):
+    from backend.kernel.study_pdf import local_time,grouped_results,_names
+    run['created']='2026-10-05T05:12:09.045960+00:00'
+    with fitz.open(stream=render_pdf([run]),filetype='pdf') as document:
+        text=document[0].get_text()
+        assert '输入 '+run['input_digest'][:8] in text
+        assert '结果 '+run['output_digest'][:8] in text
+        assert run['input_digest'][:12] not in text.split('运行编号与摘要',1)[1].split('日期',1)[0]
+        full='\n'.join(page.get_text() for page in document)
+        assert '.045960' not in full and local_time(run['created']) in full
+    keys=['ampacity','x-cablesim.iec60287.current','conductor_temperature','sheath_temperature','surface_temperature']
+    rows=[{'entity':'cable1','key':key,'unit':'A' if 'current' in key or key=='ampacity' else 'K','value':320.,'status':'available'} for key in keys]
+    domain=run['snapshot']['cases'][0]['input']
+    html=grouped_results([{'status':'succeeded','results':rows}],_names(domain),domain)
+    assert html.count('<h3>温度与电流</h3>')==1 and '<h3>表面温度</h3>' in html
+
+
+def test_cover_uses_standards_from_bound_saved_reference(run):
+    first=deepcopy(run)
+    first['output']['cases'][0]['artifacts']={}
+    first['output_digest']=fingerprint(first['output'])
+    with fitz.open(stream=render_pdf([first,run]),filetype='pdf') as document:
+        cover=document[0].get_text()
+        assert 'IEC 60287-1-1:2023' in cover
+        assert '保存运行未登记引用标准' not in cover

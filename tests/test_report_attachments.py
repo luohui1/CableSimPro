@@ -58,6 +58,7 @@ def test_cad_image_delivery_is_frozen_retry_safe_and_pdf_contains_image(client, 
 
 
 def test_linear_saved_fem_chapter_is_rebuilt_and_unconverged_is_blocked(monkeypatch):
+    monkeypatch.setattr('backend.kernel.fem_evidence.workflow_for',lambda *a:None)
     fem, iec = saved_fixture()
     fem['convergence']={'status':'converged','reason':'三档网格及计算域通过', 'reference_case_id':'case-0',
         'rows':[{'case_id':f'mesh-{i}','mesh_size_m':h,'hotspot_k':t,'change_k':delta}

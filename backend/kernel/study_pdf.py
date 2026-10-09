@@ -15,7 +15,7 @@ import re
 from .specification_pdf import _Blocks, _font_lock
 from .workspace import fingerprint
 
-RENDERER = 'cablesim.study-pdf/2'
+RENDERER = 'cablesim.study-pdf/3'
 PLUGIN_NAMES = {'cablesim.iec60287':'IEC 60287 稳态载流量', 'cablesim.thermal-network':'热网络交叉校核',
     'cablesim.simulation':'数值仿真', 'cablesim.hybrid-rating':'混合载流量参考',
     'cablesim.native-reference':'原生算法参考', 'cablesim.comsol-bridge':'COMSOL 仿真'}
@@ -43,6 +43,11 @@ def number(value, digits=1):
 
 def clean(value):
     return re.sub(r'\s+', ' ', str(value or '')).strip()
+
+
+def local_time(value):
+    if not value:return '未记录'
+    return datetime.fromisoformat(str(value).replace('Z','+00:00')).astimezone().strftime('%Y-%m-%d %H:%M')
 
 
 def human_name(value, fallback):
@@ -227,6 +232,13 @@ def input_sources(document, definition, candidate=None):
 def summary(run):
     """Use the recommended case and its actual operating state, never a new solve."""
     from .report import recommended_case, task_answer
+    if run.get('fem_evidence'):
+        from .fem_evidence import values
+        metrics,_=values(run,run['convergence'])
+        hottest=metrics['hottest_temperature_k'];margin=metrics['margin_k']
+        boundary=run['fem_evidence']['scope'][0]['fem']
+        answer=('保存负荷超出温限' if margin is not None and margin<0 else '保存负荷满足温限' if margin is not None else '保存温度场已核验')+'；有限元 · 已收敛（网格与扩域均 < '+number(run['convergence'].get('verdict',{}).get('tolerance_k',.1))+' K）· '+boundary+'。'
+        return answer,[number(metrics['allowable_current_a'],1)+' A',number(hottest-273.15 if hottest is not None else None)+' °C',number(margin)+' K']
     definition=run['snapshot']['definition'];driver=definition.get('driver',{})
     selection=driver.get('kind')=='selection'
     preferred,selected,answer,_=_selection(run) if selection else (recommended_case(run) if driver else None,None,None,None)
@@ -266,7 +278,8 @@ def grouped_results(cases, names, document):
                 for entity,values in by_entity.items():
                     label=names.get(entity,'整体工况');parts=label.split(' · ',1)
                     rows.append([parts[0],parts[1] if len(parts)>1 else '整体',*[values.get(k,'—') for k in columns]])
-                html+='<h3>'+title+'</h3>'+table(['回路','相别',*[QUANTITIES[k]+' / '+units[k] for k in columns]],rows,[1.2,.7]+[1.2]*len(columns))
+                heading='表面温度' if columns==['surface_temperature'] else title
+                html+='<h3>'+heading+'</h3>'+table(['回路','相别',*[QUANTITIES[k]+' / '+units[k] for k in columns]],rows,[1.2,.7]+[1.2]*len(columns))
     return html
 
 
@@ -277,13 +290,15 @@ def chapters(runs, audience):
     for run in runs:
         definition=run['snapshot']['definition'];selection=definition['driver']['kind']=='selection'
         preferred,selected,answer,comparison=_selection(run) if selection else (recommended_case(run),None,None,None)
+        if run.get('fem_evidence'):answer=summary(run)[0]
         if answer is None:
             parsed=_Blocks(task_answer(run)).blocks
             answer=next((p['text'] for p in parsed if p['kind']=='p'),'未取得可用结论。')
         document=_input(run,preferred);names=_names(document)
         if run.get('freshness')!='current':answer='历史运行结论：'+answer
         body='<h2>1. 计算结论</h2>'+paragraph(answer)
-        body+=paragraph('载流量口径：'+('全回路同时等负荷。' if _basis(run)=='simultaneous' else '逐回路条件允许电流，其他回路保持保存负荷；各回路上限不能同时使用。'))
+        common_fem=any(r.get('key')=='ampacity' and r.get('case')=='rating-simultaneous' for r in run.get('fem_evidence',{}).get('rows',[]))
+        body+=paragraph('载流量口径：'+('全回路同时等负荷。' if common_fem or _basis(run)=='simultaneous' else '逐回路条件允许电流，其他回路保持保存负荷；各回路上限不能同时使用。'))
         if run.get('freshness')!='current':body+=paragraph('该运行与当前输入或已安装方法版本不同。本文仅复现保存工况，不能作为当前版本的重新校核。')
         body+='<h2>2. 工况与输入</h2>'+table(['输入项目','保存值'],_condition_rows(document),[1.25,3.75])
         engineering_html=''
@@ -310,7 +325,7 @@ def chapters(runs, audience):
                 if isinstance(artifact,dict):clauses.extend(c for c in artifact.get('clauses',[]) if c not in clauses)
         body='<h2>4. 计算依据与方法版本</h2>'+table(['项目','采用版本'],[
             ['计算方法',PLUGIN_NAMES.get(method['plugin_id'],'已保存插件方法')],
-            ['插件版本',method['version']],['方法能力',{'steady-rating':'稳态载流量','steady':'稳态计算'}.get(method['capability'],'保存的计算能力')],['运行时间（UTC）',clean(run.get('finished') or run.get('created')).replace('T',' ').replace('+00:00','')],
+            ['插件版本',method['version']],['方法能力',{'steady-rating':'稳态载流量','steady':'稳态计算'}.get(method['capability'],'保存的计算能力')],['运行时间（本地）',local_time(run.get('finished') or run.get('created'))],
             ['输入 / 研究修订',str(run['snapshot'].get('workspace_revision','未记录'))+' / '+str(run['snapshot'].get('study_revision','未记录'))]], [1.3,3.7])
         body+='<h3>标准条款</h3>'+''.join(paragraph(c) for c in clauses or ['该保存运行未提供可引用条款；不补写推测依据。'])
         if trace.get('electrical_basis'):body+='<h3>方法适用口径</h3>'+paragraph(trace['electrical_basis'])
@@ -347,7 +362,7 @@ def render_pdf(runs, audience='customer', *, generated_at=None, attachments=None
     font='CableChinese'
     with _font_lock:
         if font not in pdfmetrics.getRegisteredFontNames():pdfmetrics.registerFont(TTFont(font,BytesIO(fitz.Font('cjk').buffer)))
-    timestamp=(generated_at or datetime.now(timezone.utc).isoformat(timespec='seconds')).replace('T',' ').replace('+00:00','')
+    timestamp=local_time(generated_at or datetime.now(timezone.utc).isoformat(timespec='seconds'))
     first=runs[0];definition=first['snapshot']['definition'];study=definition.get('title','研究计算书')
     project=first['snapshot'].get('workspace_state',{}).get('domain',{}).get('name') or '未记录工程名称'
     version='输入修订 '+str(first['snapshot'].get('workspace_revision','—'))+' / 研究修订 '+str(first['snapshot'].get('study_revision','—'))
@@ -396,8 +411,8 @@ def render_pdf(runs, audience='customer', *, generated_at=None, attachments=None
     version_labels=[label for label in version_labels if label]
     cover_rows=[['工程名称',project],['研究名称',study],
         ['图号 / 文件号','CS-'+first['input_digest'][:12].upper()],['修订',version],
-        ['运行编号与摘要','运行 '+str(first.get('sequence') or 1)+' · 输入 '+first['input_digest'][:12]+' · 结果 '+first['output_digest'][:12]],
-        ['日期（UTC）',timestamp],['文档版本',edition],
+        ['运行编号与摘要','运行 '+str(first.get('sequence') or 1)+' · 输入 '+first['input_digest'][:8 if audience=='customer' else 12]+' · 结果 '+first['output_digest'][:8 if audience=='customer' else 12]],
+        ['日期（本地）',timestamp],['文档版本',edition],
         ['文件状态','历史运行复现 · 待人工审核' if historical else '待人工审核']]
     if version_labels:cover_rows.append(['版本状态','；'.join(version_labels)])
     cover='<h1>研究计算书</h1>'+table(['文件信息','保存内容'],cover_rows,[1.4,3.6])
@@ -409,12 +424,16 @@ def render_pdf(runs, audience='customer', *, generated_at=None, attachments=None
     cover+='<h2>结论摘要</h2>'+paragraph(answer)+table(['允许电流','最热导体温度','温限余量'],[metrics],[1,1,1])
     cover+=paragraph('适用方法：'+PLUGIN_NAMES.get(definition['method']['plugin_id'],'保存方法')+' '+definition['method']['version']+'；具体标准条款见计算依据。')
     references=[]
-    for case in first['output'].get('cases',[]):
-        for artifact in case.get('artifacts',{}).values():
-            if isinstance(artifact,dict):references.extend(str(r) for r in artifact.get('sources',[]) + artifact.get('clauses',[]))
+    for source_run in runs:
+        references.append(str(source_run.get('fem_evidence',{}).get('boundary_source',{}).get('standard','')))
+        for case in source_run['output'].get('cases',[]):
+            for artifact in case.get('artifacts',{}).values():
+                if isinstance(artifact,dict):references.extend(str(r) for r in artifact.get('sources',[]) + artifact.get('clauses',[]))
     standards=list(dict.fromkeys(re.findall(r'IEC \d+(?:-\d+)+(?::\d{4})?',' '.join(references))))
     cover+=paragraph('适用标准：'+'；'.join(standards or ['保存运行未登记引用标准']))
-    cover+=paragraph('载流量口径：'+('全回路共同能力，所有回路同时等负荷提升。' if _basis(first)=='simultaneous' else '条件上限，其他回路维持保存负荷；单回路工况即单回路能力。'))
+    fem_basis=first.get('fem_evidence',{}).get('rows',[])
+    common_fem=any(r.get('key')=='ampacity' and r.get('case')=='rating-simultaneous' for r in fem_basis)
+    cover+=paragraph('载流量口径：'+('全回路共同能力，所有回路同时等负荷提升。' if common_fem or _basis(first)=='simultaneous' else '条件上限，其他回路维持保存负荷；单回路工况即单回路能力。'))
     story=flow(cover)
     if attachments:
         from base64 import b64decode
