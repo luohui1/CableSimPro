@@ -199,6 +199,27 @@ def source_identity(source):
         return {}
 
 
+def declared_execution_standards(document):
+    """An explicit edition declaration is distinct from approving any limits.
+
+    The saved source record is written by the ordinary document/CAS workflow.
+    Arbitrary reference prose and unaudited declarations never become bindings.
+    """
+    source = document.get('provenance', {}).get('/execution_standards', {})
+    declaration = source_identity(source)
+    if (source.get('kind') != 'standard' or source.get('reviewed') is not True
+            or declaration.get('schema') != 'cablesim.execution-standards/1'):
+        return []
+    items = declaration.get('items')
+    if not isinstance(items, list) or len(items) > 64:
+        return []
+    return [{'standard': item['standard'].strip(), 'source_digest': item['source_digest']}
+            for item in items if isinstance(item, dict) and isinstance(item.get('standard'), str)
+            and 0 < len(item['standard'].strip()) <= 128
+            and isinstance(item.get('source_digest'), str)
+            and re.fullmatch(r'[a-f0-9]{64}', item['source_digest'])]
+
+
 class Submit(Adopt):
     specification_digest: str = Field(pattern=r'^[a-f0-9]{64}$')
     acknowledge_checks: bool = Field(strict=True)
@@ -420,6 +441,10 @@ class Types:
                       'identity': source_identity(state['domain'].get('provenance', {}).get('/materials/'+str(i), {})) or {'asset_id': m['id']}}
                      for i, m in enumerate(state['domain']['materials']) if m['id'] in used]
         standards = {}
+        for item in declared_execution_standards(state['domain']):
+            key = fingerprint(item)
+            standards[key] = {'role': 'standard', 'id': key, 'name': item['standard'], 'input_digest': key,
+                              'identity': {'source_digest': item['source_digest']}, 'declaration': True}
         latest = {item['id']: item for review in self._requirement_reviews(db, wid) for item in review['receipt']['items']}
         for item in latest.values():
             definition = item['definition']

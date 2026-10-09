@@ -130,6 +130,9 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     receipt = json.loads(database.with_suffix('.seed.json').read_text(encoding='utf-8'))
     assert receipt['complete'] and len(receipt['studies']) == 4 and len(receipt['types']) == 2
     assert receipt['identity'] == seed.release_identity()
+    assert receipt['identity']['engineering_resources']
+    assert len(receipt['engineering_resources']) == 28
+    assert all(row['resource_bindings']['bound'] >= 2 for row in receipt['types'])
     assert sum(bool(row.get('run')) for row in receipt['studies']) == 3
     assert any('需在超算运行' in row['title'] and not row.get('run') for row in receipt['studies'])
     hv=next(row for row in receipt['studies'] if '110 kV' in row['title'])
@@ -137,6 +140,8 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     with closing(sqlite3.connect(database)) as connection:
         assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == 4
         assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status='succeeded'").fetchone()[0] == 3
+        assert connection.execute("SELECT COUNT(*) FROM engineering_assets WHERE kind='material' AND status='published'").fetchone()[0] == 21
+        assert connection.execute("SELECT COUNT(*) FROM engineering_assets WHERE kind='rule' AND status='published'").fetchone()[0] == 7
         candidates=[json.loads(r[0]) for r in connection.execute('SELECT payload FROM domain_cable_models')]
         public=[c for c in candidates if c.get('specification')]
         assert len(public)==10 and len(candidates)==12
@@ -160,7 +165,7 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     assert development.read_bytes() == b'development database sentinel'
 
 
-@pytest.mark.parametrize('change', ['plugins', 'models'])
+@pytest.mark.parametrize('change', ['plugins', 'models', 'engineering_resources'])
 def test_release_version_change_backs_up_user_data_before_replacement(tmp_path, monkeypatch, change):
     spec=importlib.util.spec_from_file_location('upgraded_seed',Path(__file__).resolve().parents[1]/'frontend/scripts/seed-engineering-demo.py')
     seed=importlib.util.module_from_spec(spec);spec.loader.exec_module(seed)

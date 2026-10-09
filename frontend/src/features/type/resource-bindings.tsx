@@ -11,7 +11,7 @@ import { InlineEmpty, LoadingState, ErrorState } from '@/components/states';
 import { useTypeWorkspace } from './provider';
 
 type Resource = { id: string; resource_id?: string; asset_id: string; version: string; content_sha256: string; name: string; kind: string };
-type Target = { id: string; role: 'material' | 'standard'; name: string; state: string; reason: string; unique_match: string | null; match_reason: string; binding: Resource | null };
+type Target = { id: string; role: 'material' | 'standard'; name: string; state: string; reason: string; unique_match: string | null; match_reason: string; binding: Resource | null; declaration?: boolean };
 type ResourceView = { revision: number; targets: Target[]; resources: Resource[]; changed?: string[] };
 async function request(wid: string, action = '', body?: unknown, signal?: AbortSignal): Promise<ResourceView> {
   let response: Response;
@@ -36,6 +36,19 @@ function card(resource: Resource): ObjectCard { return { kind: 'asset', id: reso
 export function StandardResourceCell({ reference }: { reference: unknown }) {
   const resource = optionalRecord(reference);
   return text(resource.resource_id) ? <ObjectLink card={card(resource as Resource)}>{text(resource.name)} · {text(resource.version)}</ObjectLink> : <span className="muted">未绑定资源</span>;
+}
+export function DeclaredStandardReferences() {
+  const state = useTypeWorkspace(), query = useResources();
+  const fixed = optionalRecord(optionalRecord(state.workspace?.raw.type_resource_bindings).standard);
+  const targets = state.readOnly ? Object.entries(fixed).flatMap(([id, value]) => {
+    const pin = optionalRecord(value);
+    return text(pin.resource_id) ? [{ id, binding: pin as Resource, name: text(pin.name), reason: '所选输入修订保存的固定版本引用。' }] : [];
+  }) : query.data?.targets.filter(t => t.role === 'standard' && t.declaration);
+  if (!targets?.length) return null;
+  return <div className="type-result-summary" aria-label="已声明执行标准">
+    <StatusMark kind={state.readOnly ? 'historical' : 'draft'} label={state.readOnly ? '历史执行版本' : '执行版本已声明'} detail="固定标准来源版本；要求和计算结果仍需分别核对与批准。" />
+    {targets.map(target => <span key={target.id} title={target.reason}><StandardResourceCell reference={target.binding} />{!target.binding && <span> · {target.name}</span>}</span>)}
+  </div>;
 }
 export function MaterialResourceCell({ id, name }: { id: string; name: string }) {
   const state = useTypeWorkspace(), query = useResources();
@@ -88,7 +101,7 @@ export function ResourceBindings({ materialId, role = 'material' }: { materialId
     {notice && <span role="status">{notice}</span>}
     <Dialog open={open} onOpenChange={value => { if (!mutation.isPending) setOpen(value); }} title={role === 'material' ? '绑定材料资源版本' : '绑定执行标准版本'}
       actions={<Button variant="primary" disabled={disabled || !target} loading={mutation.isPending} onClick={() => mutation.mutate(false)}>确认绑定</Button>}>
-      {query.isPending ? <LoadingState title="正在读取资源版本" /> : query.error ? <ErrorState title="资源不可用" description={message(query.error)} /> : !targets.length ? <InlineEmpty title="尚无已批准执行标准；先在要求清单里核对并批准。" /> : <div className="type-create-fields">
+      {query.isPending ? <LoadingState title="正在读取资源版本" /> : query.error ? <ErrorState title="资源不可用" description={message(query.error)} /> : !targets.length ? <InlineEmpty title="尚无已核对的执行版本或已批准要求；在要求清单里核对来源。" /> : <div className="type-create-fields">
         <Select label={role === 'material' ? '设计材料' : '执行标准'} value={target?.id || ''} options={targets.map(t => ({ value: t.id, label: t.name }))} onChange={id => { setChosen(id); setResourceId(targets.find(t => t.id === id)?.binding?.resource_id || ''); }} />
         <Select label="资源版本" value={resourceId} options={[{ value: '', label: '未绑定资源' }, ...(query.data?.resources || []).filter(r => r.kind === (role === 'material' ? 'material' : 'rule')).map(r => ({ value: r.id, label: r.name + ' · ' + r.version }))]} onChange={setResourceId} />
         {!query.data?.resources.some(r => r.kind === (role === 'material' ? 'material' : 'rule')) && <InlineEmpty title="资源库尚无对应类别的已发布版本" />}

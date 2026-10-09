@@ -225,6 +225,34 @@ def release_hv_model():
     return hv_payload()
 
 
+def import_release_reproductions(folder, expected_snapshot):
+    """Import repository-bundled saved evidence, never development/test libraries."""
+    from backend.foundation.reproduction_library import bundled_evidence, ReproductionLibrary
+    from backend.kernel.database_ops import atomic_json
+    value, raw, snapshot_id = bundled_evidence()
+    if snapshot_id != expected_snapshot:
+        raise RuntimeError('生成期间随附验证证据已更新；停止导入，请重新启动。')
+    folder = Path(folder)
+    snapshots = folder/'snapshots'; snapshots.mkdir(parents=True, exist_ok=True)
+    destination = snapshots/(snapshot_id+'.json')
+    if destination.exists():
+        if destination.read_bytes() != raw:
+            raise RuntimeError('发布验证证据已损坏；保留现场，停止导入。')
+    else:
+        from tempfile import NamedTemporaryFile
+        with NamedTemporaryFile(dir=snapshots, suffix='.part', delete=False) as stream:
+            temporary = Path(stream.name)
+            stream.write(raw)
+        try:temporary.replace(destination)
+        finally:temporary.unlink(missing_ok=True)
+    index = folder/'index.json'
+    existing = ReproductionLibrary(folder).snapshot() if index.exists() else None
+    history = existing['history'] if existing else []
+    history = [{'id':snapshot_id,'created_at':value['created_at']}] + [row for row in history if row['id'] != snapshot_id]
+    atomic_json(index, {'current':snapshot_id,'history':history})
+    return {'snapshot_id':snapshot_id,'targets':len(value['items']),'kind':'saved_evidence'}
+
+
 def release_identity():
     """Pin installed releases and the bundled model/input versions, not local edits."""
     from backend.plugin_host.registry import Registry
@@ -232,12 +260,14 @@ def release_identity():
     from backend.kernel.scenarios import system_models
     from backend.kernel.model_series import bundled_series, bundled_hv
     from backend.kernel.workspace import fingerprint
+    from frontend.scripts.engineering_resources import identity as resource_identity
+    from backend.foundation.reproduction_library import bundled_evidence
     registry = Registry()
     for plugin in registry.plugins.values():
         plugin.verify()
     series, digest = bundled_series()
     hv,hv_digest = bundled_hv()
-    return {'seed_revision':3,
+    return {'seed_revision':4, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
             'plugins':{key:Research.pin(plugin) for key,plugin in sorted(registry.plugins.items())},
             'models':{item['id']:{'version':item['version'],'sha256':item['content_sha256']} for item in system_models()},
             'manufacturer_series':{'id':series['id'],'version':series['version'],'sha256':digest},
@@ -264,6 +294,8 @@ def build_release_seed(staged, database, identity):
                     raise RuntimeError(f'{method} {path}: {response.status_code} {response.text}')
                 return response.json()
 
+            from frontend.scripts.engineering_resources import publish_resources, bind_demo_resources
+            result['engineering_resources'] = publish_resources(api)
             method = next(row['method'] for row in api('/api/methods') if row['method']['plugin_id']=='cablesim.iec60287')
             method = {**method, 'capability':'steady-rating'}
             from backend.kernel.model_series import import_yjv22, bundled_hv, hv_study_document
@@ -294,7 +326,10 @@ def build_release_seed(staged, database, identity):
             for model, status in ((mv,'公开尺寸与有来源的工程参数草稿，未批准'),
                                   (hv,'公开结构与声明的工程参考参数，未批准')):
                 draft = create_workspace(model,model['payload']['name'],type_draft=True)
-                result['types'].append({'name':model['payload']['name'],'workspace':draft['id'],'status':status})
+                bindings = bind_demo_resources(api,draft['id'],'mv' if model is mv else 'hv')
+                result['types'].append({'name':model['payload']['name'],'workspace':draft['id'],'status':status,
+                    'resource_bindings': {'bound':sum(t['state']=='current' for t in bindings['targets']),
+                                          'unbound':[{'name':t['name'],'reason':t['match_reason']} for t in bindings['targets'] if t['state']=='unbound']}})
             workspace = create_workspace(mv,'城北变电站 · 10 kV 三回排管',
                                          target_current_a=400,three_core_layout='three_core_ducts_horizontal')
             hv_workspace = create_workspace(hv,'城南线路 · 110 kV 直埋单回',target_current_a=600)
@@ -373,6 +408,7 @@ def build_release_seed(staged, database, identity):
                     run = api(f'/api/workspaces/{item["workspace"]}/studies/{item["study"]}/runs/{item["run"]}')
                     if run['freshness']!='current' or run['version_status']['status']!='current':
                         raise RuntimeError('发布种子出现过期结果：'+item['title'])
+            result['reproduction_library'] = import_release_reproductions(database.parent/'library',identity['reproduction_snapshot'])
         return result
     finally:
         for key,value in previous.items():

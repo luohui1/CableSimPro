@@ -81,11 +81,23 @@ node src/features/type/tests/verify-modules.mjs
 
 引用保存在 `workspaces.state.type_resource_bindings`，schema 为 `cablesim.type-resource-bindings/1`：`material[领域材料 ID]` 与 `standard[SHA256({standard,source_digest})]` 各保存 `{resource_id,id,asset_id,version,content_sha256,name,kind,input_digest}`。`resource_id` 是 `engineering_assets.id`，`asset_id` 是资源逻辑身份。材料目标只包含结构层实际引用的材料，不把模板里未使用的土壤等材料列为缺项。每层仍通过领域材料 ID 查到同一固定资源版本，避免更改 SDK 物理契约。材料 `input_digest` 是保存材料事实的宿主 fingerprint；标准是上述键。编辑材料事实或替换已批准标准后绑定过期，历史修订保留原引用；已移除的目标可解除引用。
 
-迁移不比较名称：材料采用领域材料稳定 ID 或 `/materials/{index}` 来源 reference 内结构化 `{asset_id,version?,content_sha256?}`；标准只收录摘要通过的已批准要求，匹配资源 sources.reference 内 JSON 的 `source_digest`。多个资源版本或没有明确身份均不写入。按型号点击“核对唯一匹配”；此功能不会在启动或读取时自动迁移演示库。
+迁移不比较名称：材料采用领域材料稳定 ID 或 `/materials/{index}` 来源 reference 内结构化 `{asset_id,version?,content_sha256?}`；标准收录摘要通过的已批准要求，或明确核对的执行版本声明，匹配资源 sources.reference 内 JSON 的 `source_digest`。声明保存于领域 `provenance['/execution_standards']`，`kind=standard/reviewed=true/reference=JSON({schema:'cablesim.execution-standards/1',items:[{standard,source_digest}]})`；它只声明使用哪个标准版本，不批准条款、设计或计算结果。目标 `declaration=true` 时，“要求与标准”的执行标准页在尚无运行时也显示固定资源链接。多个资源版本或没有明确身份均不写入。按型号点击“核对唯一匹配”；此功能不会在启动或读取时自动迁移演示库。
+
+### 离线材料与标准参考库
+
+`frontend/scripts/engineering_resources.py` 是发布种子的受控摘录数据及导入入口，由 `build_release_seed` 调用。7 个标准版本、21 个材料用途条目均经过普通资源 API 创建草稿、确认核对来源、发布；内容冲突拒绝覆盖，重复导入不增加资源或审核事件。`release_identity.engineering_resources` 是定义内容摘要，变化时沿用已备份再重建流程；不依赖本地 PDF、联网服务或 8100 数据。两个随附源设计的明确材料 ID 映射写入来源身份，再调用唯一匹配；缓冲带、泛称纤维填料等缺明确资源身份的材料保留未绑定，不按名称猜。绑定不替换型号物性。
+
+资源数值带 `standard_reference` 语义，采用 `release.sources[].reference` 中的 JSON `schema='cablesim.reference-data/1'`，数值行包含 `property/value/unit/standard/table/printed_page/pdf_page/source_digest/condition`；缺项行包含 `missing/reason`，标准条目包含 `edition/file/source_digest/pdf_page/scope/rights`。Quantity 当前不支持 Ω·m、K⁻¹和无量纲单位，故这些值完整保存在固定版本的来源记录中；热阻率同时保存在原生 parameters。没有改公共物理契约、捏造量纲或把来源摘要当作参数。资源页负责人可解析此 schema 为“参考物性 / 条件 / 出处 / 缺项”，不必显示原始 JSON。源文件全文不入库，授权凭据仍为 not_assessed/not_registered。
+
+IEC 60287-1-1:2023 现行正文表1（印刷35 / CMV PDF83）、表3（印刷37 / PDF85）；IEC 60287-2-1:2023 表1（印刷33 / PDF89）逐页核对。铝导体与铝护套、EPR/XLPE电压和填充条件、PVC绝缘与保护护层分别保留，未赋统一默认值；表中没有密度，铜屏蔽组没有独立电阻率行，这些保留缺项。导体类别及最大R20引用独立GB/T3956与IEC60228版本，不把它们当成金属体电阻率表。
+
+浏览器回归：`node frontend/src/features/type/tests/verify-reference-library.mjs`，使用单页、隔离数据库和已构建 `.data/material-library/frontend`，检查两类资源目录、两型号的引用、执行版本声明及双尺寸/双主题，不写演示服务。默认只读备份发布库，结果在 `.data/material-library/`。原有 `verify-resources.mjs` 的绑定、撤销、断线重试与五态验证保留。对应单元核验 `tests/test_type_resource_seed.py`，收尾还须跑型号相关范围及 `tests/test_release_demo.py`。
 
 发布沿用 `engineering_type_releases` 的固定版本（资源目录已读取 `/api/types/library`），不再生成重复对象。规格书快照增加 `source_design:{id:workspace_id,revision}` 与 `resource_bindings`；发布的 assembly.dependencies 固定材料 / 标准资源 `asset_id/version/content_sha256`，sources.reference 保存 JSON `source_design`。library 和 publish 响应也返回 `source_design`，未发布设计没有 library 条目。旧发布记录由其已保存 payload.revision 投影来源修订，不回写或伪造审批。
 
 统一索引使用 `$.type_resource_bindings.material/standard`，按 `resource_id` 产生 `material/standard` 角色、按 `version/content_sha256` 设置 pin；无法解析及部分绑定时剩余的未绑定目标应保留 unknown。需继续接入 `input_digest` 对应的材料事实 fingerprint，变化时标过期。发布记录的 `payload.revision`（兼容旧记录）或 `payload.source_design.revision` 用于 `source_design` 的 revision pin；`published_cable_version` 使用资产版本 / 摘要 pin。sources.reference 的结构化 source_design 应由此关系消费，不再列为无文档 ID 的 unknown source。本模块继续复用 `RelationPanel(kind="type")`，不拼装第二套关系。新接口需由公共 API 负责人运行客户端生成；目录内临时使用有响应检查、10 秒超时和同一请求重试的同源客户端。
+
+执行版本声明还需索引负责人接入轻量投影：`backend/index/sources.py` 的工作区查询增加 `json_extract(state, '$.domain.provenance."/execution_standards"') AS execution_standards`；`relations.py` 在调用 `_resource_targets` 前将该字段还原为 `domain.provenance['/execution_standards']`。不用读取完整状态或运行工件。缺这项时绑定资源及版本链接正确，但已声明标准会被错误标成过期；隔离浏览器将此实际接入缺口单独记录为 `indexProjectionGaps`，不算作通过的当前性断言。
 
 隔离浏览器验证：`node src/features/type/tests/verify-resources.mjs`，使用 `typeFixture` 的私有数据库副本、单页面并清理服务和数据库；`E2E_DATABASE_SOURCE` 可指定只读种子。截图与断言记录在 `.data/type-resources/`。温度标注回归复用 CAD `verify-composition.mjs`。
 
