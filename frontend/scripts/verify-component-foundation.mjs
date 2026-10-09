@@ -11,7 +11,7 @@ if(process.env.E2E_ISOLATED!=='1')throw Error('Only run against an isolated data
 const base=process.env.FRONTEND_URL, expect=baseExpect.configure({timeout:30000});
 const session=await openHeadlessBrowser(),{page,context}=session;
 page.setDefaultTimeout(30000);
-const out=path.join(outputRoot,'round2'), report={checks:[],variants:[],errors:[],writes:[],initialJavaScript:[]};
+const out=path.join(outputRoot,process.env.COMPONENT_ASSOCIATIONS_ONLY==='1'?'study-associations':'round2'), report={checks:[],variants:[],errors:[],writes:[],initialJavaScript:[]};
 await fs.mkdir(out,{recursive:true});
 page.on('pageerror',e=>report.errors.push(e.message));
 page.on('request',r=>{if(['PUT','PATCH','POST'].includes(r.method()))report.writes.push({url:r.url(),method:r.method(),body:r.postDataJSON()});});
@@ -29,7 +29,141 @@ async function sweepContrast() {
     });
   });
 }
+async function verifyAssociations() {
+  await page.setViewportSize({width:1366,height:768});
+  const all=[];
+  for(const workspace of await request(base,'/api/workspaces')) {
+    for(const study of await request(base,`/api/workspaces/${workspace.id}/studies`)) all.push({workspace,study});
+  }
+  const target=all.find(({study})=>study.definition.title.includes('城北')&&study.definition.driver.kind==='selection');
+  assert.ok(target,'Real 城北 inquiry is required');
+  const {workspace,study}=target, prefix=`/api/workspaces/${workspace.id}/studies/${study.id}`;
+  const runs=(await request(base,prefix+'/runs?view=summary')).items;
+  const saved=runs.findLast(run=>run.integrity==='verified'&&['succeeded','partial'].includes(run.status));
+  assert.ok(saved,'Saved selection results are required');
+  const url=run=>`/studies/${study.id}/selection/results?workspace=${workspace.id}&run=${run.id}`;
+  // Older seed runs predate field artifacts. Compute one real current run in
+  // the isolated library; do not substitute a fabricated plot for this check.
+  const freshWorkspace=await request(base,`/api/workspaces/${workspace.id}`),freshStudy=await request(base,prefix);
+  let current=await request(base,prefix+'/recalculate','POST',{expected_revision:freshWorkspace.revision,expected_study_revision:freshStudy.revision,request_id:randomUUID(),scope_acknowledged:true});
+  const start=performance.now();
+  while(['accepted','queued','running','validating'].includes(current.status)&&performance.now()-start<180000) {
+    await page.waitForTimeout(500);current=await request(base,prefix+'/runs/'+current.id);
+  }
+  assert.ok(['succeeded','partial'].includes(current.status)&&current.integrity==='verified','Current selection must calculate');
+  await go(url(current));
+  await expect(page.locator('.field-view')).toBeVisible();
+  const tabs=page.getByRole('tablist',{name:'属性分页'});
+  // Preload Agent with the plot removed, then switch with the soil plot mounted.
+  await page.getByRole('button',{name:'敷设截面',exact:true}).click();
+  await tabs.getByRole('tab',{name:'Agent',exact:true}).click();
+  await expect(page.locator('.inspector-agent .agent-panel-model')).toBeVisible();
+  await tabs.getByRole('tab',{name:'输入',exact:true}).click();
+  await page.getByRole('button',{name:'土壤温度场',exact:true}).click();
+  await expect(page.locator('.field-view')).toBeVisible();
+  report.agentSwitchMs=[];
+  for(const size of [{width:1366,height:768},{width:1920,height:1080}]) for(const theme of ['light','dark']) {
+    await page.setViewportSize(size);
+    await page.evaluate(value=>document.documentElement.dataset.theme=value,theme);
+    const field=await page.locator('.field-view').elementHandle(), started=performance.now();
+    await tabs.getByRole('tab',{name:'Agent',exact:true}).click({timeout:5000});
+    await expect(page.locator('.inspector-agent .agent-panel-model')).toBeVisible({timeout:5000});
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    const elapsedMs=Math.round(performance.now()-started);
+    assert.ok(elapsedMs<2000,`Field → Agent took ${elapsedMs} ms`);
+    assert.ok(await field.evaluate(node=>node.isConnected),'Agent switching must retain the mounted field');
+    await field.dispose();
+    await assertLayout(page,'询价场图与 Agent');
+    report.agentSwitchMs.push({...size,theme,elapsedMs});
+    await tabs.getByRole('tab',{name:'输入',exact:true}).click();
+  }
+  report.checks.push('询价场图切 Agent：预加载后不冻结、场图保持挂载、两种尺寸与深浅主题');
+  await page.setViewportSize({width:1366,height:768});
+  await page.evaluate(()=>document.documentElement.dataset.theme='light');
+  await go(url(saved));
+  const top=page.locator('.topbar > .status-wrap > .status-mark');
+  await expect(top).toHaveCount(1);
+  if((await top.innerText()).includes('已过期')) {
+    await expect(page.locator('.command-state')).toContainText('已过期');
+    await expect(page.locator('.inspector-list').filter({hasText:'状态'})).toContainText('已过期');
+    await expect(page.locator('.explorer-calc[aria-current="page"] .status-mark')).toHaveText('已过期');
+    await expect(page.locator('.study-history-line')).toContainText('历史');
+    await expect(page.getByRole('table').first()).toBeVisible();
+    await expect(page.locator('.workbench-dock-body')).not.toContainText('尚无运行');
+    await top.click();await expect(page.locator('.topbar .status-detail')).toContainText(/→|修改|变化/);
+    await top.click();
+  }
+  await page.waitForTimeout(250);await page.screenshot({path:path.join(out,'workspace-light.png')});
+  await go(`/studies?workspace=${workspace.id}`);
+  const table=page.getByRole('table',{name:'本工程研究'});
+  await expect(table.getByRole('columnheader',{name:'结论',exact:true})).toBeVisible();
+  assert.ok(await table.evaluate(node=>node.scrollWidth<=node.parentElement.clientWidth+1),'Project table must fit its workspace, including status');
+  assert.equal(await page.locator('.answer-bar').count(),0,'Project homepage has no metric banner');
+  assert.equal(await page.locator('.project-explorer .project-switch').count(),0);
+  await variants('工程首页结论与状态');
+  await page.setViewportSize({width:1366,height:768});await page.evaluate(()=>document.documentElement.dataset.theme='light');
+  await page.screenshot({path:path.join(out,'project-light.png')});
+  if(await page.getByRole('button',{name:'全部重算',exact:true}).count()) {
+    await page.getByRole('button',{name:'全部重算',exact:true}).click();
+    await expect(page.locator('.study-history-line')).toContainText('依次确认');
+    await page.getByRole('button',{name:'结束队列',exact:true}).click();
+  }
+  report.checks.push('研究五区统一过期状态与可读原因；历史结果可见；工程结论列与逐项重算队列');
+  await go(url(current)+'&view=section');
+  await expect(page.locator('[data-drawing-canvas="laying"]')).toBeVisible();
+  report.drawingTools=await page.evaluate(()=>['.workbench-canvas','.study-drawing','.drawing-frame','.drawing-toolbar','.workbench-views'].map(selector=>{const element=document.querySelector(selector);return {selector,box:element?.getBoundingClientRect().toJSON(),top:element?getComputedStyle(element).top:undefined};}));
+  console.log('DRAWING_TOOLS',JSON.stringify(report.drawingTools));
+  report.compactResultLabels=await page.locator('[data-result-label]').count();
+  if(report.compactResultLabels<3)report.followUp='1366 截面有部分温度退为 title：SectionLabels 优先放名称；需三维线程优先保留全部三根电缆温度标注。';
+  await page.setViewportSize({width:1920,height:1080});
+  await expect(page.locator('[data-result-label]').first()).toBeVisible();
+  await page.setViewportSize({width:1366,height:768});
+  await page.getByRole('button',{name:'试算模式',exact:true}).click();
+  await expect(page.getByRole('button',{name:'试算模式',exact:true})).toHaveAttribute('aria-pressed','true');
+  const cable=page.locator('[data-drawing-canvas="laying"] [data-section-object^="cable/"] .drawing-hit-area').first();
+  const box=await cable.boundingBox();assert.ok(box);
+  const beforeWorkspace=await request(base,`/api/workspaces/${workspace.id}`);
+  const previewResponse=page.waitForResponse(r=>r.request().method()==='POST'&&new URL(r.url()).pathname===prefix+'/preview');
+  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();
+  await page.mouse.move(box.x+box.width/2-25,box.y+box.height/2,{steps:6});
+  const released=performance.now();await page.mouse.up();
+  const response=await previewResponse;assert.equal(response.status(),200);
+  const trial=await response.json();assert.equal(trial.persisted,false);assert.equal(trial.engineering_approval,false);
+  await expect(page.locator('[data-what-if-delta]').first()).toContainText(/[-+]\d+\.\d K/);
+  report.previewMs=Math.round(performance.now()-released);assert.ok(report.previewMs<=2000,`${report.previewMs} ms > 2000 ms`);
+  await page.screenshot({path:path.join(out,'workspace-trial-light.png')});
+  await page.getByRole('button',{name:'把这个布置写成方案',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'审核几何方案',exact:true});
+  await expect(dialog.getByRole('table',{name:'几何方案改动'})).toBeVisible();
+  await dialog.getByRole('button',{name:'采纳为草稿',exact:true}).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator('.topbar .status-mark')).toContainText('未保存');
+  assert.equal((await request(base,`/api/workspaces/${workspace.id}`)).revision,beforeWorkspace.revision,'Proposal adoption cannot save the engineering database');
+  await page.keyboard.press('Control+z');
+  await expect(page.locator('.topbar .status-mark')).not.toContainText('未保存');
+  report.checks.push('保存运行导体温度上图；真实几何试算 2 秒内；审核采纳进入草稿、数据库不写入、Ctrl+Z 撤销');
+  // Fault injection changes transport/state metadata only; all numeric evidence
+  // remains the same genuine saved run, and no new calculation is submitted.
+  for(const state of ['empty','loading','error','success','historical']) {
+    let release;
+    const gate=new Promise(resolve=>release=resolve),mask='**'+prefix+'/runs?*';
+    const body=state==='error'?{detail:{message:'运行记录暂不可用'}}:{items:state==='empty'||state==='loading'?[]:[state==='historical'?{...current,freshness:'historical'}:current]};
+    const savedRunMask='**'+prefix+'/runs/'+current.id;
+    if(state==='historical')await context.route(savedRunMask,route=>route.fulfill({contentType:'application/json',body:JSON.stringify({...current,freshness:'historical'})}));
+    await context.route(mask,async route=>{if(state==='loading')await gate;await route.fulfill({status:state==='error'?503:200,contentType:'application/json',body:JSON.stringify(body)}).catch(()=>{});});
+    try {
+      await go(`/studies/${study.id}/selection/results?workspace=${workspace.id}&view=section`);
+      const label={empty:'未运行',loading:'读取中',error:'失败',success:'当前',historical:'已过期'}[state];
+      await expect(page.locator('.topbar > .status-wrap > .status-mark')).toContainText(label);
+      await expect(page.locator('.command-state')).toHaveText(label);
+      await variants('研究工作台·'+state);
+    } finally {release();await context.unroute(mask,{behavior:'wait'});if(state==='historical')await context.unroute(savedRunMask,{behavior:'wait'});}
+  }
+  report.checks.push('空、加载、错误、成功、历史五态：两种尺寸、深浅主题、字号/对比度/不越界自动断言');
+  assert.deepEqual(report.errors,[]);
+}
 try{verification:{
+  if(process.env.COMPONENT_ASSOCIATIONS_ONLY==='1'){await verifyAssociations();break verification;}
   report.catalogFirstHttpMs={};for(const endpoint of ['/api/input-contracts','/api/methods']){const started=performance.now();const reply=await fetch(base+endpoint);assert.ok(reply.ok);await reply.json();const elapsed=Math.round(performance.now()-started);report.catalogFirstHttpMs[endpoint]={elapsed,cache:reply.headers.get('X-CableSim-Read-Cache'),serverTiming:reply.headers.get('Server-Timing')};assert.ok(elapsed<300,`${endpoint}: ${JSON.stringify(report.catalogFirstHttpMs[endpoint])} >= 300 ms`);}
   const scripts=[]; const listener=response=>{if(response.request().resourceType()==='script'&&response.url().includes('/assets/'))scripts.push(response.body().then(body=>({url:new URL(response.url()).pathname,gzip:gzipSync(body).length})));};
   page.on('response',listener);await go('/studies');await expect(page.getByRole('table').first()).toBeVisible();await page.waitForTimeout(17000);page.off('response',listener);
@@ -83,14 +217,14 @@ try{verification:{
   const parameterSave=page.waitForResponse(r=>r.request().method()==='PUT'&&new URL(r.url()).pathname===prefix);
   await page.getByRole('button',{name:'保存修改',exact:true}).click();assert.equal((await parameterSave).status(),200);
   const saved=(await request(base,`/api/workspaces/${w.id}/studies`)).find(row=>row.id===s.id);assert.equal(saved.definition.parameters.ks,0.8);report.checks.push('Buzzform范围校验定位字段、正式保存与读回');
-  await go(url('ampacity/results')+'&view=cable');await page.getByRole('button',{name:'分层参数',exact:true}).click();await expect(page.locator('[role="grid"]')).toBeVisible();await variants('真实分层表');
+  await go(url('ampacity/results')+'&view=cable');await page.locator('.inspector-layers').getByRole('button',{name:'查看',exact:true}).click();await expect(page.locator('[role="grid"]')).toBeVisible();await variants('真实分层表');
   report.grid=await page.locator('[role="grid"]').innerText();report.gridCells=await page.locator('[role="gridcell"]').evaluateAll(nodes=>nodes.slice(0,24).map(n=>({text:n.textContent,attrs:[...n.attributes].map(a=>[a.name,a.value])})));
   await page.setViewportSize({width:1366,height:768});await page.evaluate(()=>document.documentElement.dataset.theme='light');
   console.log('分层表完成');
   await fs.writeFile(path.join(out,'verification.json'),JSON.stringify(report,null,2));
   await expect(page.locator('[role="gridcell"][data-column-id="diameter"]').first()).toHaveAttribute('data-readonly','true');
   const unlocked=all.find(({w,s})=>w.id==='b9ee1ceb-92d4-48ed-8f3b-bd7b8818b88c'&&s.definition.driver.kind==='single');assert.ok(unlocked);
-  await page.keyboard.press('Escape');await go(`/studies/${unlocked.s.id}/ampacity/results?workspace=${unlocked.w.id}&view=cable`);await page.getByRole('button',{name:'分层参数',exact:true}).click();await expect(page.locator('[role="grid"]')).toBeVisible();
+  await page.keyboard.press('Escape');await go(`/studies/${unlocked.s.id}/ampacity/results?workspace=${unlocked.w.id}&view=cable`);await page.locator('.inspector-layers').getByRole('button',{name:'查看',exact:true}).click();await expect(page.locator('[role="grid"]')).toBeVisible();
   const cells=page.locator('[role="gridcell"][data-column-id="thickness"]:not([data-readonly])');assert.ok(await cells.count()>=2);
   console.log('分层编辑开始');
   const initial=await cells.allTextContents();await cells.first().dblclick();const editor=page.locator('[role="gridcell"][data-editing] input');await editor.fill('2.5');await editor.press('Enter');await expect(cells.first()).toHaveText('2.5');

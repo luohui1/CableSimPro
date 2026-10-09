@@ -103,7 +103,7 @@ try {
   await expect(page.getByRole('button', { name: '预测', exact: true })).toBeEnabled();
   const saved = await json('/api/workspaces/' + workspaceId + '/domain');
   if (Math.abs(-saved.document.sections[0].placements[0].z - amended) > .001) throw Error('Ctrl+S未保存实际工况'); checks.push('save');
-  await expect(page.getByRole('button', { name: /历史结果$/ })).toBeVisible(); checks.push('historical');
+  await expect(page.locator('.topbar .status-mark')).toContainText('已过期'); checks.push('historical');
   await layout('history-1366', 1366, 768);
   await page.getByRole('tab', { name: '模型验证', exact: true }).click();
   await expect(page.getByRole('table', { name: '混合模型验证' })).toBeVisible();

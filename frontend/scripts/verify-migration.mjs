@@ -114,7 +114,7 @@ try {
         if (name === "home" || name === "studies")
           await expect(
             page.getByRole("table", {
-              name: name === "home" ? "最近研究" : "研究列表",
+              name: name === "home" ? "继续工作" : "研究列表",
             }),
           ).toBeVisible();
         if (name === "selection")

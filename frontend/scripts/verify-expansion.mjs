@@ -106,17 +106,17 @@ try {
   ).toHaveAttribute("href", /types/);
   await variants("home");
   await capture("home");
-  await page.getByRole("button", { name: "型号", exact: true }).click();
+  await page.getByRole("link", { name: "型号设计", exact: true }).click();
   await expect(page).toHaveURL(/\/types/);
   await ready();
   await variants("types");
   await capture("types");
   for (const [url, label] of [
     ["/studies", "studies"],
-    ["/library", "library"],
+    ["/resources/materials", "materials"],
     ["/plugins", "plugins"],
     ["/settings", "settings"],
-    ["/library/reproductions", "reproductions"],
+    ["/validation", "reproductions"],
   ]) {
     await go(url + "?theme=light");
     await ready();
@@ -130,10 +130,10 @@ try {
     .first()
     .click()
     .catch(async () => {
-      await go("/library/reproductions/E02/results?theme=light");
+      await go("/validation/E02/results?theme=light");
     });
   for (const tab of ["results", "overlay", "convergence", "sources", "scope"]) {
-    await go("/library/reproductions/E02/" + tab + "?theme=light");
+    await go("/validation/E02/" + tab + "?theme=light");
     await ready();
     await variants("reproduction-" + tab);
     if (tab === "results") await capture("reproduction-detail");
@@ -141,7 +141,7 @@ try {
   const history = await request(base, "/api/foundation/reproductions");
   if (history.history.length > 1) {
     await go(
-      "/library/reproductions/E02/results?theme=light&snapshot=" +
+      "/validation/E02/results?theme=light&snapshot=" +
         history.history[1].id,
     );
     await ready();

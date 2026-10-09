@@ -72,7 +72,7 @@ try{
   const domain=await json(`/api/workspaces/${wid}/domain`);
   domain.document.sections[0].medium.surface_temperature+=1;
   await json(`/api/workspaces/${wid}/domain`,{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({expected_revision:domain.revision,document:domain.document})});
-  await page.reload();await expect(page.getByRole('button',{name:/历史结果$/})).toBeVisible();checks.push('historical');
+  await page.reload();await expect(page.locator('.topbar .status-mark')).toContainText('已过期');checks.push('historical');
   await page.getByRole('tab',{name:'结果',exact:true}).click();await layout('history-1366',1366,768);
   // Real read transport failure must leave the saved server-side run intact.
   await page.route('**'+endpoint+'*',route=>route.abort('internetdisconnected'));

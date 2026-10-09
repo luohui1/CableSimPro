@@ -244,6 +244,7 @@ export function StudyDrawing({
         <LayingSection
           key={section?.id}
           annotations={annotations}
+          preview={preview} onPropose={onPropose} run={run} fieldCase={fieldCase}
           document={document}
           sectionId={section?.id || ""}
           state={historical ? "historical" : section ? "success" : "empty"}

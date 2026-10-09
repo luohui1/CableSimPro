@@ -26,7 +26,7 @@ async function go(route) {
   });
   await settle(page);
   const inputView = new URL(route,base).hash;
-  if (inputView === '#layers') await page.getByRole('button',{name:'分层参数',exact:true}).click();
+  if (inputView === '#layers') await page.locator('.inspector-layers').getByRole('button',{name:'查看',exact:true}).click();
   if (inputView === '#coordinates') await page.locator('.drawing-object[role="button"][data-section-object^="cable/"]').first().click();
   if (inputView === '#three-dimensional') await page.getByRole('button',{name:'三维',exact:true}).click();
   await expect(
@@ -116,14 +116,14 @@ try {
     "/",
     "/studies",
     "/types",
-    "/library",
+    "/resources/cables",
     "/plugins",
     "/settings",
-    "/library/reproductions",
+    "/validation",
     "/plugins/cablesim.iec60287",
   ];
   for (const tab of ["results", "overlay", "convergence", "sources", "scope"])
-    routes.push("/library/reproductions/E02/" + tab);
+    routes.push("/validation/E02/" + tab);
   const studyTabs = {
     cable: ["section", "layers", "references"],
     section: ["section", "three-dimensional", "coordinates", "media"],
@@ -254,7 +254,7 @@ try {
   const saved = runs.find((r) => r.integrity === "verified");
   await go(route(sweep, "sweep", "curve") + "&run=" + saved.id);
   assert.equal(saved.freshness,'historical');
-  await expect(page.getByRole('button',{name:/历史结果/}).first()).toBeVisible();
+  await expect(page.locator('.topbar .status-mark')).toContainText('已过期');
   await variants("扫描历史");
   const inquiryRuns = (
     await get(`/api/workspaces/${inquiry.wid}/studies/${inquiry.id}/runs`)

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { methodCatalog, workspaces } from "@/api/research";
 import { displayName } from '@/lib/display-names';
@@ -10,11 +10,12 @@ import { Button, IconButton } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { RunRecordsDrawer } from "@/components/run-records-drawer";
-import { VersionNotice } from '@/components/version-notice';
+import { studyPresentation, StudyRecalculate } from '@/components/study-status';
+import { StudyGeometryProposal, type GeometryProposal } from '@/components/study-geometry-proposal';
 import { isVersionStale } from '@/lib/version-status';
 import { missingInputDestination, focusPreflightField } from "@/lib/missing-input";
 import { StatusMark } from "@/components/status-mark";
-import { EmptyState, ErrorState, LoadingState } from "@/components/states";
+import { EmptyState, ErrorState, InlineEmpty, LoadingState } from "@/components/states";
 import { WorkbenchInspector } from "@/components/workbench-inspector";
 import { ProjectExplorer, singleAnswer } from "@/components/project-explorer";
 import { PreviewControls, PreviewStrip, useStudyPreview } from "@/components/study-preview";
@@ -33,7 +34,7 @@ import { selectionView, type SelectionRow } from "@/lib/selection-view";
 import { StudyHeatDetail } from "@/components/study-heat-detail";
 import { StudyValidation } from "@/components/study-validation";
 import { rootModule, studyEntryTab, moduleConfiguration } from "@/lib/study-config";
-import { modelViews, runStates } from '@/components/study-workbench-config';
+import { modelViews } from '@/components/study-workbench-config';
 import { SavedRunConclusion } from '@/components/study-saved-conclusion';
 import {
   CableInputs,
@@ -98,6 +99,9 @@ export function StudyWorkspace() {
   const [edit, setEdit] = useState(false);
   const [records, setRecords] = useState(false);
   const [reportImage, setReportImage] = useState<{runId: string; image: CadImage}>();
+  const [geometryProposal, setGeometryProposal] = useState<GeometryProposal>();
+  const geometryRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => geometryRequest.current?.abort(), [sid, module]);
   const [inputSelection, setInputSelection] = useState<
     InputSelection | undefined
   >();
@@ -161,9 +165,6 @@ export function StudyWorkspace() {
   }, [run, pendingRun, fieldCase]);
   // 场值换算只做一次：每次渲染都新建数组会让场图重算等温线和定位网格，切换属性页时整页卡死
   const fieldValues = useMemo(() => fieldView?.temperatures.map((kelvin) => kelvin - 273.15), [fieldView]);
-  const historical =
-    (run?.freshness === "historical" || isVersionStale(run)) &&
-    (!moduleBehavior.input.has(module) || !!search.run);
   const inputModule = moduleBehavior.input.has(module);
   const snapshotInput = inputModule && !!search.run;
   const inputDocument = (
@@ -197,7 +198,7 @@ export function StudyWorkspace() {
   const canvasView = search.view || (fieldView ? "field" : "section");
   const drawingCase = fieldCase || text(fieldView?.case.case_id) || undefined;
   const drawingInput = useQuery({queryKey:['drawing-saved-input',run?.id,drawingCase],
-    enabled:canvasView === 'three' && !!run && !pendingRun && !context.dirty,
+    enabled:['three','section'].includes(canvasView) && !!run && !pendingRun && !context.dirty,
     queryFn:({signal}) => hydrateCaseInputs(caseRun(run!, drawingCase), signal)});
   const drawingRun = drawingInput.data || run;
   const savedDrawingCase = (Array.isArray(optionalRecord(drawingRun?.snapshot).cases) ? optionalRecord(drawingRun?.snapshot).cases as unknown[] : []).map(optionalRecord).find(row => row.case_id === drawingCase);
@@ -208,25 +209,38 @@ export function StudyWorkspace() {
   const methodPin = optionalRecord(moduleConfiguration(shownDefinition, module)?.method || shownDefinition.method);
   const pluginEntry = (catalog.data || []).map(optionalRecord).find((row) => text(optionalRecord(row.method).plugin_id) === text(methodPin.plugin_id));
   const capabilityEntry = (Array.isArray(pluginEntry?.capabilities) ? pluginEntry!.capabilities : []).map(optionalRecord).find((cap) => text(cap.id) === text(methodPin.capability));
-  const lastRun = run;
+  const edits = context.dirty ? Math.max(1, Object.keys(context.domainDraft?.fields || {}).length + Object.keys(context.draft?.parameterFields || {}).length) : 0;
+  const presentation = studyPresentation(study, run, edits, context.runError, context.loadingRuns);
+  const recalculateTarget = { wid: study.workspace, sid, module: (search.run || module === 'report' ? text(optionalRecord(run?.snapshot).module) : configuredModule) || undefined };
+  const onRecalculated = (next: Record<string, unknown>) => { const resultModule = text(optionalRecord(next.snapshot).module) || calculatedModule; return navigate({ params: { sid, module: resultModule, tab: studyEntryTab(resultModule) }, search: { ...currentSearch(), run: text(next.id), delivery: '', generate: false } }); };
+  const recalculate = presentation.code === 'outdated' ? <StudyRecalculate value={presentation.staleValue} target={recalculateTarget} disabledReason={context.dirty ? '请先保存修改' : undefined} onComplete={onRecalculated} /> : undefined;
   const methodInfo = {
     name: text(pluginEntry?.name) || displayName(text(methodPin.plugin_id)),
     version: text(methodPin.version),
     hpc: text(optionalRecord(pluginEntry?.execution_policy).backend) === "slurm",
     kind: text(capabilityEntry?.title),
-    run: !lastRun ? "尚未运行" : `${runStates[text(lastRun.status)]?.label || text(lastRun.status)} · ${new Date(text(lastRun.created)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}`,
+    run: presentation.label,
   };
   // 快速试算：插件声明 preview 且在本机运行的能力，单次计算的研究查看当前输入时开放（选型、扫描的答案跨候选或样本，不用单工况试算代替）
   const preview = useStudyPreview({ module, available: capabilityEntry?.preview === true && !methodInfo.hpc && !search.run && singleAnswer(study) });
-  const status = context.dirty
-    ? "draft"
-    : context.runError
-      ? "error"
-      : historical
-        ? "historical"
-        : context.loadingRuns
-          ? "running"
-          : "saved";
+  async function geometryPreview(document: DomainDocument) {
+    if (context.dirty) throw Error('请先保存当前修改，再进行几何试算。');
+    geometryRequest.current?.abort();
+    const controller = new AbortController(); geometryRequest.current = controller;
+    const timer = window.setTimeout(() => controller.abort(), 9000);
+    try {
+      const parameters = optionalRecord(savedDrawingCase?.parameters);
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(study.workspace)}/studies/${encodeURIComponent(sid)}/preview`, {
+        method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,
+        body:JSON.stringify({expected_revision:workspace.revision,expected_study_revision:study.revision,domain:document,
+          ...(configuredModule ? {module:configuredModule} : {}), ...(Object.keys(parameters).length ? {parameters} : {})}),
+      });
+      const body=await response.json();
+      if(!response.ok) throw Error(text(optionalRecord(optionalRecord(body).detail).message) || text(optionalRecord(body).detail) || `试算失败（${response.status}）`);
+      return optionalRecord(body);
+    } catch(error) { if(controller.signal.aborted) throw Error('几何试算已取消或超过 9 秒，草稿保留，可重试。'); throw error; }
+    finally { window.clearTimeout(timer); }
+  }
   const title = draft?.title || study.title;
   const projectName = text((projectIndex.data || []).find((space) => text(space.id) === study.workspace)?.name);
   function currentSearch() {
@@ -261,8 +275,6 @@ export function StudyWorkspace() {
   // 命令栏：只放“做什么”——保存、运行、交付；最右侧给出当前状态
   const runnable = moduleBehavior.runnable.has(module) ||
     (module === "method-compare" && (!!study.definition.modules?.["method-compare"] || calculatedModule === "method-compare") && !search.compare);
-  const latestRun = runs.at(-1);
-  const runState = !latestRun ? "尚未运行" : `最近运行 ${new Date(text(latestRun.created)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })} · ${runStates[text(latestRun.status)]?.label || text(latestRun.status)}`;
   const commandBar = (
     <div className="command-bar" role="toolbar" aria-label="工程命令">
       <div className="command-group" role="group" aria-label="模型">
@@ -311,9 +323,9 @@ export function StudyWorkspace() {
       </div>
       <div className="command-group" role="group" aria-label="交付">
         <span className="command-caption">交付</span>
-        <Button size="compact" variant="ghost" disabled={!run || context.dirty || !['succeeded','partial'].includes(text(run.status))} onClick={() => navigate({ params: { sid, module: "report", tab: "preview" }, search: { ...currentSearch(), run: text(run?.id), delivery: '', generate: true } })}><Icon name="result/report" />生成计算书</Button>
+        <Button size="compact" variant="ghost" disabled={!run || context.dirty || presentation.historical || !['succeeded','partial'].includes(text(run.status))} onClick={() => navigate({ params: { sid, module: "report", tab: "preview" }, search: { ...currentSearch(), run: text(run?.id), delivery: '', generate: true } })}><Icon name="result/report" />生成计算书</Button>
       </div>
-      <span className="command-state" role="status">{context.dirty ? "模型有未保存修改" : runState}</span>
+      <span className="command-state" role="status" title={presentation.reason}>{presentation.label}</span>
     </div>
   );
   return (
@@ -331,22 +343,12 @@ export function StudyWorkspace() {
           title={projectName && title.startsWith(projectName.split(" · ")[0] + " · ") ? title.slice(projectName.split(" · ")[0].length + 3) : title}
           path={projectName}
           status={
-            isVersionStale(run) || isVersionStale(study.raw) ? <VersionNotice value={isVersionStale(run) ? run : study.raw} target={{ wid: study.workspace, sid, module: (search.run || module === 'report' ? text(optionalRecord(run?.snapshot).module) : configuredModule) || undefined }} disabledReason={context.dirty ? '请先保存修改' : undefined} onComplete={next => { const resultModule = text(optionalRecord(next.snapshot).module) || calculatedModule; return navigate({ params: { sid, module: resultModule, tab: studyEntryTab(resultModule) }, search: { ...currentSearch(), run: text(next.id), delivery: '', generate: false } }); }} /> : <StatusMark
-              kind={status}
-              label={
-                context.dirty
-                  ? "未保存"
-                  : historical
-                    ? demo
-                      ? "演示工况 · 历史结果"
-                      : "历史结果"
-                    : demo
-                      ? "演示工况 · 已保存"
-                      : "已保存"
-              }
+            <StatusMark
+              kind={presentation.mark}
+              label={(demo ? '演示 · ' : '') + presentation.label}
               detail={
                 <div className="status-actions">
-                  <span>{`${displayName(text(optionalRecord(study.definition.method).plugin_id))} ${text(optionalRecord(study.definition.method).version)}`}</span>
+                  <span>{presentation.reason}</span>{recalculate}
                   <Button
                     variant="ghost"
                     size="compact"
@@ -394,7 +396,7 @@ export function StudyWorkspace() {
         >
           {commandBar}
           <div className="workbench-frame">
-          <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={context.domain} activeStudy={sid} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
+          <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={context.domain} activeStudy={sid} activeState={presentation} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
           <div className={`workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-dock={dockMax ? "max" : undefined}>
           {(answer || preview.result || preview.error) && <section className="answer-bar" aria-label="结论">{answer}<PreviewStrip preview={preview} saved={run?.headlines} /></section>}
           {showCanvas && (
@@ -408,7 +410,7 @@ export function StudyWorkspace() {
                 {canvasView === 'three' && reportImage?.runId === run?.id && <StatusMark kind="saved" label="三维图已选入计算书" />}
               </div>
               {canvasView === "field" && fieldView ? (
-                <FieldView
+                <div className="study-field-slot"><FieldView
                   label={fieldView.kind === "iec" ? "土壤温度场（IEC 解析）" : "温度场"}
                   points={fieldView.points}
                   triangles={fieldView.triangles}
@@ -421,10 +423,12 @@ export function StudyWorkspace() {
                   hotspot={{ point: fieldView.hotspot.point, value: fieldView.hotspot.temperature - 273.15, label: fieldView.kind === "iec" ? "土壤最高" : "最高" }}
                   // IEC 解析场只有土壤区域，导体温限画在色标上没有意义
                   limit={conductorLimit === undefined || fieldView.kind === "iec" ? undefined : { value: conductorLimit, label: `${conductorLimit.toFixed(0)} 限值` }}
-                />
-              ) : canvasView === 'three' && drawingInput.isFetching && !drawingInput.data ? <LoadingState title="正在读取保存工况的三维输入" />
-                : canvasView === 'three' && drawingInput.error ? <ErrorState description={message(drawingInput.error)} action={<Button onClick={() => void drawingInput.refetch()}>重新读取</Button>} /> : (
-                <StudyDrawing document={canvasView === 'three' ? drawingDocument! : canvasDocument!} historical={viewingOldInput} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} run={drawingRun} fieldCase={drawingCase} onSelect={inputProps.onSelect} annotations={annotations} onExport={async image => {
+                /></div>
+              ) : ['three','section'].includes(canvasView) && drawingInput.isFetching && !drawingInput.data ? <LoadingState title="正在读取保存工况的模型输入" />
+                : ['three','section'].includes(canvasView) && drawingInput.error ? <ErrorState description={message(drawingInput.error)} action={<Button onClick={() => void drawingInput.refetch()}>重新读取</Button>} /> : (
+                <StudyDrawing document={canvasView === 'cable' || context.dirty ? canvasDocument! : drawingDocument!} historical={viewingOldInput} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} run={drawingRun} fieldCase={drawingCase} onSelect={inputProps.onSelect} annotations={annotations}
+                  preview={capabilityEntry?.preview === true && !methodInfo.hpc && !viewingOldInput ? geometryPreview : undefined}
+                  onPropose={changes => { if(context.dirty) throw Error('请先保存当前修改，再审核几何方案。'); setGeometryProposal({changes,revision:Number(workspace.revision),studyRevision:study.revision}); }} onExport={async image => {
                   if (!run || context.dirty || image.metadata.field?.provisional || image.metadata.field?.runId !== run.id) throw Error('请从所选保存运行的三维结果导出，试算图不能进入计算书。');
                   setReportImage({runId: text(run.id), image});
                   downloadBlob(image.blob, '三维视图.png');
@@ -447,6 +451,7 @@ export function StudyWorkspace() {
               {showCanvas && <IconButton variant="ghost" icon={dockMax ? "action/chevron-down" : "action/chevron-up"} label={dockMax ? "还原结果面板" : "放大结果面板"} onClick={() => setDockMax(!dockMax)} />}
             </div>
           <TabsContent value={tab} className="workbench-dock-body">
+          {(presentation.historical || context.dirty) && run && <div className="study-history-line" role="status"><StatusMark kind="historical" label="历史" /><span>{context.dirty ? '与当前输入不一致' : presentation.reason}</span>{recalculate}</div>}
           {!!context.saveError && (
             <ErrorState
               title="保存失败，编辑保留"
@@ -548,10 +553,7 @@ export function StudyWorkspace() {
                 part="details"
               />
             ) : (
-              <EmptyState
-                title="尚无选型运行"
-                description="输入已保存，预检后运行候选比较。"
-              />
+              <InlineEmpty title="尚未运行，预检后比较候选。" />
             )
           ) : module === "selection" && tab === "settings" ? (
             <StudyMethodForm module="selection" historical={!!search.run} />
@@ -631,6 +633,7 @@ export function StudyWorkspace() {
         </label>
       </Dialog>
       <AddStudyDialog open={creating} onOpenChange={setCreating} theme={theme} workspaceId={study.workspace} projectName={projectName} />
+      <StudyGeometryProposal proposal={geometryProposal} onClose={()=>setGeometryProposal(undefined)} />
       <RunRecordsDrawer
         workspace={study.workspace}
         studyId={sid}

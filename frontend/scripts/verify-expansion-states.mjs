@@ -66,7 +66,7 @@ try {
   const fixture = { wid: workspace.id, sid: created.id },
     root = "/studies/" + fixture.sid,
     query = "?workspace=" + fixture.wid;
-  await go("/library");
+  await go("/resources/materials");
   await page.getByRole("button", { name: "导入资源草稿", exact: true }).click();
   await page.getByRole("textbox", { name: "定义内容" }).fill("{");
   await page.getByRole("button", { name: "校验并导入" }).click();
@@ -104,16 +104,16 @@ try {
   for (const [url, endpoint, selector] of process.env.E2E_FLOWS_ONLY === "1"
     ? []
     : [
-        ["/library", "/api/foundation/assets", '[data-page="library"]'],
+        ["/resources/materials", "/api/foundation/assets", '[data-page="library"]'],
         ["/plugins", "/api/methods", '[data-page="plugins"]'],
         ["/settings", "/api/health", '[data-page="settings"]'],
         [
-          "/library/reproductions",
+          "/validation",
           "/api/foundation/reproductions",
           '[data-page="reproductions"]',
         ],
         [
-          "/library/reproductions/E02/results",
+          "/validation/E02/results",
           "/api/foundation/reproductions/E02",
           '[data-page="reproduction-detail"]',
         ],
@@ -176,7 +176,7 @@ try {
     checks.push(url + "加载/错误/成功/断网保留缓存布局");
     console.log("状态断言通过：" + url);
   }
-  await go("/library");
+  await go("/resources/materials");
   await page
     .getByRole("textbox", { name: "检索", exact: true })
     .fill("没有此资源-" + randomUUID());
@@ -185,7 +185,7 @@ try {
     "empty",
   );
   await variants("library-empty");
-  await go("/library/reproductions");
+  await go("/validation");
   await page
     .getByRole("textbox", { name: "检索", exact: true })
     .fill("不存在的目标");

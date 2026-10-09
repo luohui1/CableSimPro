@@ -51,7 +51,7 @@ async function go(url) {
   await page.goto(target.href);
   await settle(page);
   // The former input-page checks now exercise their real workbench controls.
-  if (oldInput?.[3] === 'layers') await page.getByRole('button', { name: '分层参数', exact: true }).click();
+  if (oldInput?.[3] === 'layers') await page.locator('.inspector-layers').getByRole('button', { name: '查看', exact: true }).click();
   if (oldInput?.[3] === 'coordinates') await page.locator('.drawing-object[role="button"][data-section-object^="cable/"]').first().click();
   if (oldInput?.[3] === 'three-dimensional') await page.getByRole('button', { name: '三维', exact: true }).click();
 }
@@ -153,7 +153,7 @@ try {
     "工况非法草稿跨模块保留、无非法请求、Celsius/SI保存、工程师来源、服务端撤销",
   );
 
-  await page.getByRole('button', { name: '分层参数', exact: true }).click();
+  await page.locator('.inspector-layers').getByRole('button', { name: '查看', exact: true }).click();
   await expect(
     page.locator('[role="gridcell"][data-column-id="area"]').first(),
   ).toHaveAttribute("data-readonly", "true");

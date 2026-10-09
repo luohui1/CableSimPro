@@ -1,16 +1,17 @@
 import { useEffect, useState } from "react";
 import { useQueries, useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { methodCatalog, studyIndex, studyRuns, typeIndex, workspaces, type StudyRow } from "@/api/research";
+import { methodCatalog, studyIndex, studyRuns, workspaces, type StudyRow } from "@/api/research";
 import { message, optionalRecord, text } from "@/api/client";
 import { AppShell } from "@/components/app-shell";
-import { Conclusion } from "@/components/conclusion";
 import { AddStudyDialog } from "@/components/add-study-dialog";
 import { DataTable, type Column } from "@/components/data-table";
 import { Icon } from "@/components/icon";
 import { calculationKind, headlineText, ProjectExplorer } from "@/components/project-explorer";
-import { EmptyState, ErrorState, LoadingState } from "@/components/states";
-import { StatusMark, type StatusKind } from "@/components/status-mark";
+import { InlineEmpty, ErrorState, LoadingState } from "@/components/states";
+import { StatusMark } from "@/components/status-mark";
+import {StudyRecalculate, studyPresentation} from '@/components/study-status';
+import '@/components/workbench-inspector.css';
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { AgentPanel } from "@/features/agent/agent-panel";
@@ -19,8 +20,7 @@ import { LayingSection } from "@/features/drawing/laying-section";
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { workspaceQuery } from "@/lib/study-queries";
-import { isVersionStale } from "@/lib/version-status";
-import { modelViews, projectSuggestions, runStates } from '@/components/study-workbench-config';
+import { modelViews, projectSuggestions } from '@/components/study-workbench-config';
 
 type Theme = "light" | "dark";
 
@@ -30,17 +30,6 @@ const shortTitle = (title: string, project: string) => {
   const prefix = project.split(" · ")[0] + " · ";
   return title.startsWith(prefix) && title.length > prefix.length ? title.slice(prefix.length) : title;
 };
-
-/** 运行摘要 → 状态标记；只读状态，不读结果正文。 */
-function runStatus(run: Record<string, unknown> | undefined, stale: boolean): [StatusKind, string] {
-  const status = text(run?.status);
-  if (stale || run?.freshness === "historical") return ["historical", "历史结果"];
-  if (!run) return ["draft", "未运行"];
-  const state = runStates[status];
-  if (state?.phase === 'complete') return ["current", state.label];
-  if (state?.phase === 'queued' || state?.phase === 'running') return ["running", state.label];
-  return ["error", state?.label || status];
-}
 
 /**
  * 工程首页：与研究工作台同一骨架。命令栏（模型 / 计算 / 交付）、左侧工程浏览器、
@@ -54,27 +43,27 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
   const [view, setView] = useState<"section" | "cable">("section");
   const [chosen, setChosen] = useState("");
   const [inspector, setInspector] = useState<"project" | "agent">("project");
+  const [recalculateQueue,setRecalculateQueue] = useState<StudyRow[]>([]);
   const workspace = useQuery(workspaceQuery(workspaceId));
   const projects = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
   const studies = useQuery({ queryKey: ["study-index"], queryFn: ({ signal }) => studyIndex(signal) });
   const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
-  const types = useQuery({ queryKey: ["type-index"], queryFn: ({ signal }) => typeIndex(signal) });
   const rows = (studies.data || []).filter((row) => row.workspace === workspaceId).sort((a, b) => b.updated.localeCompare(a.updated));
   const runs = useQueries({
     queries: rows.map((row) => ({
       queryKey: ["runs", row.workspace, row.id, "summary"],
       queryFn: ({ signal }: { signal: AbortSignal }) => studyRuns(row.workspace, row.id, signal, "summary"),
-      enabled: !isVersionStale(row.raw),
     })),
   });
   const latest = new Map(rows.map((row, index) => [row.id, runs[index]?.data?.at(-1)]));
   const name = text((projects.data || []).find((row) => text(row.id) === workspaceId)?.name) || "工程";
-  const isType = (types.data || []).some((row) => text(row.id) === workspaceId);
   const document = workspace.data?.domain as DomainDocument | undefined;
   const reference = optionalRecord(workspace.data?.study_cable_reference);
   const section = document?.sections.find((item) => item.id === chosen) || document?.sections[0];
   const cable = document?.cable_types.find((item) => item.id === chosen) || document?.cable_types[0];
-  const done = rows.filter((row) => runStatus(latest.get(row.id), isVersionStale(row.raw))[0] === "current").length;
+  const states = new Map(rows.map((row,index)=>[row.id,studyPresentation(row,latest.get(row.id),0,runs[index]?.error,runs[index]?.isPending)]));
+  const done = rows.filter(row=>states.get(row.id)?.code==='current').length;
+  const outdated = rows.filter(row=>states.get(row.id)?.code==='outdated');
   const open = (row: StudyRow, extra: Record<string, unknown> = {}) => navigate({
     to: "/studies/$sid/$module/$tab",
     params: { sid: row.id, module: rootModule(row.definition), tab: studyEntryTab(rootModule(row.definition)) },
@@ -88,17 +77,13 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
         <Icon name={kind.icon} /><span>{shortTitle(row.title, name)}</span>
       </Link>;
     } },
-    { id: "kind", label: "任务", render: (row) => calculationKind(row, catalog.data || []).label },
+    { id: "kind", label: "任务", wrap: true, render: (row) => calculationKind(row, catalog.data || []).label },
     { id: "method", label: "插件", wrap: true, render: (row) => `${calculationKind(row, catalog.data || []).methodName} ${text(row.definition.method?.version)} · ${calculationKind(row, catalog.data || []).hpc ? "超算" : "本机"}` },
-    { id: "answer", label: "结论", wrap: true, numeric: true, render: (row) => { const run = latest.get(row.id); return run?.freshness !== "historical" && headlineText(run?.headlines, 2) || "—"; } },
-    { id: "state", label: "状态", render: (row) => { const [kind, label] = runStatus(latest.get(row.id), isVersionStale(row.raw)); return <StatusMark kind={kind} label={label} />; } },
+    { id: "answer", label: "结论", wrap: true, numeric: true, render: (row) => { const run = latest.get(row.id); return <span>{headlineText(run?.headlines, 1) || '—'}{states.get(row.id)?.historical && <small> · 历史</small>}</span>; } },
+    { id: "state", label: "状态", wrap: true, render: (row) => { const state=states.get(row.id)!; return <span title={state.reason}><StatusMark kind={state.mark} label={state.label} /></span>; } },
   ];
 
-  const facts = document ? [
-    `${document.sections.length} 个敷设截面`, `${document.cable_types.length} 种电缆`, `${document.load_cases.length} 个工况`,
-  ].join(" · ") : "";
-
-  const inspectorPanel = <aside className="workbench-inspector" aria-label="属性">
+  const inspectorPanel = <aside className="workbench-inspector study-inspector" aria-label="属性">
     <div className="inspector-switch" role="tablist" aria-label="属性分页">
       <button type="button" role="tab" aria-selected={inspector === "project"} onClick={() => setInspector("project")}><Icon name="object/folder" />工程</button>
       <button type="button" role="tab" aria-selected={inspector === "agent"} onClick={() => setInspector("agent")}><Icon name="agent/agent" />Agent</button>
@@ -120,7 +105,6 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
           {document.cable_types.map((item) => <div key={item.id}><dt>电缆</dt><dd>{item.label || entityLabel(document, item.id)}</dd></div>)}
           {document.load_cases.map((item) => <div key={item.id}><dt>工况</dt><dd>{entityLabel(document, item.id)}</dd></div>)}
         </dl>
-        <p className="inspector-note">模型由本工程全部研究共用；在任一研究里修改并保存，其他研究的结果会标为待重算。</p>
       </section>}
     </>}
   </aside>;
@@ -133,12 +117,13 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
     <div className="command-group" role="group" aria-label="计算">
       <span className="command-caption">计算</span>
       <Button size="compact" variant="primary" onClick={() => setCreating(true)}><Icon name="action/add" />新建研究</Button>
+      {outdated.length>1 && <Button size="compact" variant="ghost" disabled={!!recalculateQueue.length} onClick={()=>setRecalculateQueue(outdated)}>全部重算</Button>}
     </div>
     <div className="command-group" role="group" aria-label="交付">
       <span className="command-caption">交付</span>
-      <Button size="compact" variant="ghost" onClick={() => void navigate({ to: "/library/deliveries", search: { theme, workspace: workspaceId, delivery: "" } })}><Icon name="result/report" />交付记录</Button>
+      <Button size="compact" variant="ghost" onClick={() => void navigate({ to: "/deliveries", search: { theme, workspace: workspaceId, delivery: "" } })}><Icon name="result/report" />交付记录</Button>
     </div>
-    <span className="command-state" role="status">{studies.isPending ? "读取中" : `${rows.length} 个研究 · ${done} 个已有结果`}</span>
+    <span className="command-state" role="status">{studies.isPending ? "读取中" : `${rows.length} 个研究 · ${done} 个当前结果${outdated.length ? ` · ${outdated.length} 项需要重算` : ''}`}</span>
   </div>;
 
   const canvas = !document ? null : <section className="workbench-canvas" aria-label="工程模型">
@@ -162,19 +147,18 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
       {commandBar}
       <div className="workbench-frame">
         <ProjectExplorer workspaceId={workspaceId} projectName={name} document={document} activeStudy="" view="" theme={theme} onCreate={() => setCreating(true)} />
-        <div className={`workbench has-answer ${document ? "" : "workbench-no-canvas"}`}>
-          <section className="answer-bar" aria-label="工程概况">
-            <Conclusion title={isType ? "型号工程" : "工程"} model={name} description={facts || (workspace.isPending ? "读取工程模型" : "工程模型不可用")}
-              metrics={[{ label: "研究", value: rows.length, unit: "个" }, { label: "已有结果", value: done, unit: "个" }, { label: "未运行或待重算", value: rows.length - done, unit: "个" }]} />
-          </section>
+        <div className={`workbench ${document ? "" : "workbench-no-canvas"}`}>
           {canvas}
           <section className="workbench-dock" aria-label="本工程研究">
             <div className="workbench-dock-bar"><span className="workbench-dock-title">本工程研究</span></div>
-            <div className="workbench-dock-body">
+            <div className="workbench-dock-body project-study-table">
+              {recalculateQueue[0] && <div className="study-history-line"><span>依次确认：{shortTitle(recalculateQueue[0].title,name)}（剩余 {recalculateQueue.length} 项）</span>
+                <StudyRecalculate key={recalculateQueue[0].id} value={states.get(recalculateQueue[0].id)?.staleValue} target={{wid:workspaceId,sid:recalculateQueue[0].id}} onComplete={()=>setRecalculateQueue(queue=>queue.slice(1))} />
+                <Button size="compact" variant="ghost" onClick={()=>setRecalculateQueue([])}>结束队列</Button></div>}
               {studies.isPending ? <LoadingState title="正在读取研究" />
                 : studies.isError ? <ErrorState description={message(studies.error)} action={<Button onClick={() => void studies.refetch()}>重新读取</Button>} />
                   : rows.length ? <DataTable label="本工程研究" columns={columns} groups={[{ id: "calculations", label: "研究", rows }]} showGroups={false} rowLabel={(row) => row.title} onSelect={(row) => void open(row)} />
-                    : <EmptyState title="还没有研究" description="新建一个研究：选择任务和插件，工程模型会自动带入。" action={<Button variant="primary" onClick={() => setCreating(true)}>新建研究</Button>} />}
+                    : <InlineEmpty title="本工程尚无研究" action={<Button variant="primary" onClick={() => setCreating(true)}>新建研究</Button>} />}
             </div>
           </section>
         </div>

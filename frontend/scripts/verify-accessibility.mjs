@@ -24,7 +24,7 @@ try {
   for (let run = 0; run < 3; run++) {
     await page.goto('about:blank');
     await page.goto(base + '/', { waitUntil: 'domcontentloaded' });
-    await page.getByRole('heading', { name: '最近研究', exact: true }).waitFor();
+    await page.getByRole('heading', { name: '继续工作', exact: true }).waitFor();
     await page.locator('tbody tr').first().waitFor();
     await page.evaluate(() => document.fonts.ready);
     const timing = await page.evaluate(() => ({ renderMs: performance.now(), fcpMs: performance.getEntriesByName('first-contentful-paint')[0]?.startTime, scripts: performance.getEntriesByType('resource').filter(x => new URL(x.name).pathname.endsWith('.js')).map(x => new URL(x.name).pathname) }));
@@ -38,8 +38,8 @@ try {
     const workspaces = await get('/api/workspaces'), studies = [];
     for (const w of workspaces) for (const s of await get('/api/workspaces/' + w.id + '/studies')) studies.push({ ...s, wid: w.id });
     const types = await get('/api/design/type-workspaces');
-    const routes = ['/', '/studies', '/types', '/library', '/library/documents', '/plugins', '/settings', '/library/reproductions', '/plugins/cablesim.iec60287'];
-    for (const tab of ['results', 'overlay', 'convergence', 'sources', 'scope']) routes.push('/library/reproductions/E02/' + tab);
+    const routes = ['/', '/studies', '/types', '/resources/cables', '/resources/cables/imports', '/plugins', '/settings', '/validation', '/plugins/cablesim.iec60287'];
+    for (const tab of ['results', 'overlay', 'convergence', 'sources', 'scope']) routes.push('/validation/E02/' + tab);
     const modules = { cable: ['section','layers','references'], section: ['section','three-dimensional','coordinates','media'], conditions:['inputs'], ampacity:['results','parameters'], selection:['results','settings'], 'thermal-field':['field','samples','parameters','diagnostics','convergence'], sweep:['curve','points','settings'], batch:['space','results','execution'], 'method-compare':['inputs','results','evidence'], simulation:['inputs','results','evidence'], report:['content','sources','preview'], hybrid:['results','validation','sources'], transient:['results','history','field','samples','diagnostics','convergence','parameters'], 'sheath-losses':['results','losses','parameters'], electrothermal:['results','field','samples','parameters','diagnostics','convergence'] };
     for (const [module,tabs] of Object.entries(modules)) {
       const study = studies.find(s => module === 'sweep' ? s.definition.driver.kind === 'sweep' : module === 'method-compare' ? s.definition.driver.kind === 'crosscheck' : ['thermal-field','electrothermal'].includes(module) ? s.definition.title.includes('温度场') : s.definition.driver.kind === 'selection') || studies[0];
@@ -58,7 +58,7 @@ try {
       await page.goto(base + route, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await settle(page);
       const inputView=new URL(route,base).hash;
-      if(inputView==='#layers')await page.getByRole('button',{name:'分层参数',exact:true}).click();
+      if(inputView==='#layers')await page.locator('.inspector-layers').getByRole('button',{name:'查看',exact:true}).click();
       if(inputView==='#coordinates')await page.locator('.drawing-object[role="button"][data-section-object^="cable/"]').first().click();
       if(inputView==='#three-dimensional')await page.getByRole('button',{name:'三维',exact:true}).click();
       await page.locator('.provider-state [aria-busy="true"]').waitFor({state:'hidden',timeout:30000});
@@ -109,7 +109,7 @@ try {
         console.log(route+' '+theme+': '+violations.reduce((n,v)=>n+v.nodes.length,0));
         await save();
       }
-      if(['/types','/plugins','/library/reproductions'].includes(route)) {
+      if(['/types','/plugins','/validation'].includes(route)) {
         const row=page.locator('tr.data-row[tabindex="0"]').first();await row.focus();await page.keyboard.press('Enter');await page.waitForURL(url=>url.pathname!==route,{timeout:10000});
       }
     }

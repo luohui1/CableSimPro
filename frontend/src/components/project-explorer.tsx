@@ -1,15 +1,17 @@
 import type { ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link, useNavigate } from "@tanstack/react-router";
-import { methodCatalog, studyIndex, studyRuns, typeIndex, workspaces, type StudyRow } from "@/api/research";
+import { Link } from "@tanstack/react-router";
+import { methodCatalog, studyIndex, studyRuns, type StudyRow } from "@/api/research";
 import { deliveries } from "@/api/delivery";
 import { optionalRecord, text } from "@/api/client";
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
 import { significantNumber } from "@/lib/format";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { Icon } from "./icon";
-import { driverViews, runStates } from "./study-workbench-config";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
+import { driverViews } from "./study-workbench-config";
+import {StatusMark} from './status-mark';
+import {studyPresentation, type StudyPresentation} from './study-status';
+import './workbench-inspector.css';
 
 type Theme = "light" | "dark";
 type Plugin = Record<string, unknown>;
@@ -28,14 +30,10 @@ export function calculationKind(study: StudyRow, catalog: Plugin[]) {
 }
 
 /** 运行状态：来自运行摘要，不读结果正文。有插件声明的关键结论时直接显示答案（如允许电流），否则显示状态点。 */
-function RunDot({ study }: { study: StudyRow }) {
+function RunDot({ study, state }: { study: StudyRow; state?: StudyPresentation }) {
   const runs = useQuery({ queryKey: ["runs", study.workspace, study.id, "summary"], queryFn: ({ signal }) => studyRuns(study.workspace, study.id, signal, "summary") });
-  const latest = runs.data?.at(-1), status = text(latest?.status);
-  const phase = runStates[status]?.phase;
-  const kind = phase === "complete" ? "is-ok" : phase === "failed" ? "is-error" : phase ? "is-running" : "is-off";
-  const answer = kind === "is-ok" && latest?.freshness !== "historical" ? headlineText(latest?.headlines, 1) : "";
-  if (answer) return <span className="explorer-answer" title={headlineText(latest?.headlines)}>{answer}</span>;
-  return <span className={`status-dot ${kind}`} title={kind === "is-ok" ? "已有结果" : kind === "is-error" ? "运行失败" : kind === "is-running" ? "运行中" : "未运行"} />;
+  const shown = state || studyPresentation(study,runs.data?.at(-1),0,runs.error,runs.isPending);
+  return <span className="explorer-state" title={shown.reason}><StatusMark kind={shown.mark} label={shown.label} /></span>;
 }
 
 /**
@@ -61,24 +59,13 @@ function Section({ icon, title, count, children }: { icon: string; title: string
  * 工程浏览器：侧栏右侧的第二层，只列本工程真实存在的对象。
  * 模型 = 工程模型里的敷设截面、电缆、负荷工况；研究 = 本工程的研究；交付 = 已封存的计算书。
  */
-export function ProjectExplorer({ workspaceId, projectName, document, activeStudy, view, theme, onCreate }: {
-  workspaceId: string; projectName: string; document?: DomainDocument; activeStudy: string; view: string; theme: Theme; onCreate: () => void;
+export function ProjectExplorer({ workspaceId, projectName, document, activeStudy, activeState, view, theme, onCreate }: {
+  workspaceId: string; projectName: string; document?: DomainDocument; activeStudy: string; activeState?: StudyPresentation; view: string; theme: Theme; onCreate: () => void;
 }) {
   const studies = useQuery({ queryKey: ["study-index"], queryFn: ({ signal }) => studyIndex(signal) });
   const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
   const books = useQuery({ queryKey: ["deliveries", workspaceId], queryFn: ({ signal }) => deliveries(workspaceId, signal) });
-  const projects = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
-  const types = useQuery({ queryKey: ["type-index"], queryFn: ({ signal }) => typeIndex(signal) });
-  const typeIds = new Set((types.data || []).map((row) => text(row.id)));
-  const navigate = useNavigate();
   const rows = (studies.data || []).filter((row) => row.workspace === workspaceId);
-  // 切换工程：打开该工程最近的计算；没有计算的工程打开工程页
-  const openProject = (id: string) => {
-    const entry = (studies.data || []).find((row) => row.workspace === id);
-    if (!entry) return void navigate({ to: "/studies", search: { theme, workspace: id } });
-    const module = rootModule(entry.definition);
-    void navigate({ to: "/studies/$sid/$module/$tab", params: { sid: entry.id, module, tab: studyEntryTab(module) }, search: { workspace: id, theme, run: "", delivery: "" } });
-  };
   const current = rows.find((row) => row.id === activeStudy) || rows[0];
   const plugins = (catalog.data || []).map(optionalRecord);
   const at = (study: StudyRow, module: string, tab: string, extra: Record<string, string> = {}) => ({
@@ -89,13 +76,7 @@ export function ProjectExplorer({ workspaceId, projectName, document, activeStud
   const head = projectName.split(" · ")[0];
   return <nav className="project-explorer" aria-label="工程浏览器">
     <header>
-      <span className="explorer-kicker"><Icon name="object/folder" />工程</span>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild><button type="button" className="explorer-switch" title="切换工程"><strong>{projectName}</strong><Icon name="action/chevrons-up-down" /></button></DropdownMenuTrigger>
-        <DropdownMenuContent align="start">
-          {(projects.data || []).filter((row) => !typeIds.has(text(row.id))).map((row) => <DropdownMenuItem key={text(row.id)} onSelect={() => openProject(text(row.id))}>{text(row.name)}</DropdownMenuItem>)}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <strong>{projectName}</strong>
     </header>
     {current && document && <Section icon="object/overview" title="模型">
       {document.sections.map((section) => <Link key={section.id} className="explorer-item" {...at(current, calc, studyEntryTab(calc), { view: "section" })} aria-current={view === "section" ? "true" : undefined}>
@@ -111,7 +92,7 @@ export function ProjectExplorer({ workspaceId, projectName, document, activeStud
         const module = rootModule(study.definition), kind = calculationKind(study, plugins);
         const name = head && study.title.startsWith(head + " · ") ? study.title.slice(head.length + 3) : study.title;
         return <Link key={study.id} className="explorer-item explorer-calc" {...at(study, module, studyEntryTab(module))} aria-current={study.id === activeStudy ? "page" : undefined} title={study.title}>
-          <Icon name={kind.icon} /><span><b>{name}</b><small>{kind.label}{kind.hpc ? " · 超算" : ""}</small></span><RunDot study={study} />
+          <Icon name={kind.icon} /><span><b>{name}</b><small>{kind.label}{kind.hpc ? " · 超算" : ""}</small></span><RunDot study={study} state={study.id===activeStudy ? activeState : undefined} />
         </Link>;
       })}
       <button type="button" className="explorer-item explorer-add" onClick={onCreate}><Icon name="action/add" /><span>新建研究</span></button>

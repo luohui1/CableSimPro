@@ -45,7 +45,7 @@ try{
   const archive=await api(root+'/deliveries','POST',{run_ids:[run.id]});
   const archiveList=await api(root+'/deliveries');assert.ok(archiveList.find(x=>x.id===archive.id));
   console.log('交付存档回归');
-  await go(`/library/deliveries?workspace=${w.id}&delivery=${archive.id}`);
+  await go(`/deliveries?workspace=${w.id}&delivery=${archive.id}`);
   await expect(page.getByRole('table',{name:'计算书与规格书历史'})).toBeVisible();
   await expect(page.getByTitle('交付存档预览')).toBeVisible();
   const row=page.getByRole('row',{name:`计算书 · 第 ${archiveList.find(x=>x.id===archive.id).version} 版`,exact:true});
@@ -60,7 +60,7 @@ try{
   await row.getByRole('button',{name:'HTML 存档'}).click();await expect(page.getByText('下载工件与计算书摘要不一致，拒绝导出')).toBeVisible();
   await page.unroute(`**/deliveries/${archive.id}/file`);
   for(const item of archives.filter(a=>a.kind==='specification').slice(0,1)){
-    await go(`/library/deliveries?workspace=${item.workspace}&delivery=${item.id}`);
+    await go(`/deliveries?workspace=${item.workspace}&delivery=${item.id}`);
     await expect(page.getByTitle('交付存档预览')).toBeVisible();
     filePromise=page.waitForEvent('download');await page.getByRole('row',{name:`规格书 · 第 ${item.version} 版`,exact:true}).getByRole('button',{name:'HTML 存档'}).click();file=await downloaded(filePromise);assert.match(file.name,/规格书/);
     const book=await api(`/api/workspaces/${item.workspace}/deliveries/${item.id}`);assert.equal(file.bytes.toString(),book.html);report.checks.push('已有规格书存档下载与原文一致');
@@ -136,7 +136,7 @@ try{
       await route.fulfill({status:state==='error'?503:200,contentType:'application/json',body:JSON.stringify(state==='error'?{detail:'交付历史暂不可用'}:[])}).catch(()=>{});
     });
     try{
-      await go(`/library/deliveries?workspace=${w.id}`);
+      await go(`/deliveries?workspace=${w.id}`);
       await expect(state==='empty'?page.getByText('尚无交付存档',{exact:true}):state==='loading'?page.getByText('正在读取交付历史',{exact:true}):page.getByText('交付历史暂不可用',{exact:false})).toBeVisible();
       await variants('交付历史'+state);
     }finally{release();await page.unrouteAll({behavior:'wait'});}

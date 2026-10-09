@@ -24,7 +24,7 @@ import { hpcJson, savedRunLabel } from '@/features/field/run-label';
 
 export function StudyReport(props: ComponentProps<typeof CurrentReport>) {
   const search = useSearch({ strict: false });
-  return <><div className="report-toolbar"><Link to="/library/deliveries" search={{ workspace: props.wid, delivery: props.did, theme: search.theme === "dark" ? "dark" : "light" }}>交付历史 · 计算书与规格书</Link></div><CurrentReport {...props} /></>;
+  return <><div className="report-toolbar"><Link to="/deliveries" search={{ workspace: props.wid, delivery: props.did, theme: search.theme === "dark" ? "dark" : "light" }}>交付历史 · 计算书与规格书</Link></div><CurrentReport {...props} /></>;
 }
 function CurrentReport({
   wid,

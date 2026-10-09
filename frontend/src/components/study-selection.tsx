@@ -183,15 +183,14 @@ export function StudySelection({
       (group) => group.rows.length && (filter === "all" || filter === group.id),
     );
   const recommended = view.recommendation;
+  const recommendationBasis = recommended?.dependencies.length
+    ? "结论依赖工程师给定参数；按已保存判定排序。"
+    : "按已保存判定选择的最小满足截面。";
   const conclusion = recommended ? (
         <Conclusion
           title={view.historical ? "历史最小满足候选" : "推荐型号"}
           model={recommended.name}
-          description={
-            recommended.dependencies.length
-              ? "结论依赖工程师给定参数；按已保存判定排序。"
-              : "按已保存判定选择的最小满足截面。"
-          }
+          description={part === "conclusion" ? "" : recommendationBasis}
           metrics={[
             {
               label: "允许电流",
@@ -213,7 +212,7 @@ export function StudySelection({
             },
           ]}
           historical={view.historical}
-          conditions={<SelectionConditions run={run} theme={theme} />}
+          conditions={part === "conclusion" ? undefined : <SelectionConditions run={run} theme={theme} />}
         />
       ) : (
         <EmptyState
@@ -224,10 +223,10 @@ export function StudySelection({
   if (part === "conclusion") return conclusion;
   return (
     <>
-      {view.historical && (
+      {part === "all" && view.historical && (
         <StaleBanner description="以下为历史运行，仅供追溯，不能用于当前计算书。" />
       )}
-      {dirty && (
+      {part === "all" && dirty && (
         <StaleBanner description="有未保存修改；以下结果对应已保存研究。" />
       )}
       {part === "all" && conclusion}
@@ -261,6 +260,10 @@ export function StudySelection({
         onSelect={onSelect}
         rowLabel={(row) => `选择 ${row.name}`}
       />
+      {part === "details" && <div className="selection-conditions">
+        <p className="muted">{recommendationBasis}</p>
+        <SelectionConditions run={run} theme={theme} />
+      </div>}
     </>
   );
 }

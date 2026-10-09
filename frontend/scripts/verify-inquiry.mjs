@@ -25,10 +25,10 @@ async function variants(label) {
 async function shot(name) { await page.setViewportSize({width:1366,height:768});await page.evaluate(()=>document.documentElement.dataset.theme='light');await page.screenshot({path:path.join(output,name+'.png')}); }
 try {
   await go('/');
-  await expect(page.getByRole('table',{name:'最近型号'})).toBeVisible();
-  await expect(page.getByRole('table',{name:'最近研究'})).toBeVisible({timeout:90000});
-  assert.doesNotMatch(await page.getByRole('table',{name:'最近型号'}).innerText(),/\d{4}-\d\d-\d\dT/);
-  await variants('首页');await shot('home');report.checks.push('最近型号时间与研究列表格式一致');
+  await expect(page.getByRole('table',{name:'继续工作'})).toBeVisible({timeout:90000});
+  await expect(page.getByRole('region',{name:'需要处理'})).toBeVisible();
+  assert.doesNotMatch(await page.getByRole('table',{name:'继续工作'}).innerText(),/\d{4}-\d\d-\d\dT/);
+  await variants('首页');await shot('home');report.checks.push('继续工作合并研究与型号；更新时间使用本地格式');
   for(const mode of process.env.INQUIRY_RESULTS_ONLY === '1' ? [] : ['paste','autofill','silent','enter','invalid']) {
     console.log('输入回归：'+mode);
     if(new URL(page.url()).pathname!=='/') await go('/');

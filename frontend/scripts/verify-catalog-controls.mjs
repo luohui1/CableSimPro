@@ -33,7 +33,7 @@ async function axis(levels = '2') {
 }
 try {
   await page.setViewportSize({ width: 1366, height: 768 });
-  await page.goto(base + "/library/reproductions/E02/results");
+  await page.goto(base + "/validation/E02/results");
   await settle(page);
   await expect(page.getByRole("combobox", { name: "记录版本" })).toContainText(
     "当前记录",

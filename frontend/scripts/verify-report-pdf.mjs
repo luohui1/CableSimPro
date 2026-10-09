@@ -53,7 +53,7 @@ try{
   await variants('研究 PDF 下载');await shot('study-pdf');
   report.checks.push('生成后预览真实客户 PDF，点击下载；切换内部版后字节与封存版本一致；HTML 为独立次入口');
   }
-  await go(`/library/deliveries?workspace=${study.workspace}&delivery=${did}`);
+  await go(`/deliveries?workspace=${study.workspace}&delivery=${did}`);
   const list=await get(root+'/deliveries'),version=list.find(x=>x.id===did).version;
   const row=page.getByRole('row',{name:`计算书 · 第 ${version} 版`,exact:true});
   await expect(row).toBeVisible();await expect(page.getByRole('combobox',{name:'PDF 版本'})).toContainText('客户版');
@@ -80,7 +80,7 @@ try{
   }
   report.checks.push('负向注入：旧存档缺 PDF、外部地址及非 PDF 字节均拒绝，不静默切换版本或格式');
   assert.ok(report.requests.every(url=>new URL(url).origin===base),'新前端场景不访问其他服务');
-  const child=spawn(process.execPath,['scripts/capture-handoff.mjs',`--route=/library/deliveries?workspace=${study.workspace}&delivery=${did}`],{cwd:process.cwd(),env:{...process.env,CAPTURE_DIRECTORY:'frontend-only'},windowsHide:true,stdio:'inherit'});
+  const child=spawn(process.execPath,['scripts/capture-handoff.mjs',`--route=/deliveries?workspace=${study.workspace}&delivery=${did}`],{cwd:process.cwd(),env:{...process.env,CAPTURE_DIRECTORY:'frontend-only'},windowsHide:true,stdio:'inherit'});
   const [code]=await once(child,'exit');assert.equal(code,0);
   const manifest=JSON.parse(await fs.readFile(path.join(outputRoot,'frontend-only','manifest.json'),'utf8'));
   assert.equal(manifest.pages.length,1);assert.deepEqual(manifest.blockedWrites,[]);assert.equal(new URL(manifest.pages[0].route,base).origin,base);

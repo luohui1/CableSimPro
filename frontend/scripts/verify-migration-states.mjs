@@ -145,7 +145,7 @@ try {
     await go(route);
     await expect(
       page.getByRole("table", {
-        name: name === "home" ? "最近研究" : "研究列表",
+        name: name === "home" ? "继续工作" : "研究列表",
       }),
     ).toBeVisible();
     await expect(page.getByText("读取中", { exact: true })).toHaveCount(0);
@@ -201,8 +201,8 @@ try {
     await capture(module + "-success");
     await page.goto(base + target(module, historic, historicalRun));
     await expect(
-      page.getByRole("button", { name: "历史结果", exact: true }),
-    ).toBeVisible();
+      page.locator('.topbar .status-mark'),
+    ).toContainText('已过期');
     await capture(module + "-historical");
     if (module === "report")
       await expect(

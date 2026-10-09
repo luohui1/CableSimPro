@@ -18,7 +18,7 @@ try{
   const fixture=JSON.parse(await fs.readFile(path.join(repositoryRoot,'plugins/cablesim.datasheet-extract/validation/batch-example.json'),'utf8')),source=fixture.source;
   const file=path.join(repositoryRoot,'.data/datasheet-import/sources',source.file);
   assert.equal(createHash('sha256').update(await fs.readFile(file)).digest('hex'),source.sha256);
-  await page.goto(base+'/library/documents');await settle(page);
+  await page.goto(base+'/resources/cables/imports');await settle(page);
   const uploaded=page.waitForResponse(r=>r.url().endsWith('/api/documents')&&r.request().method()==='POST',{timeout:120000});await page.getByLabel('上传 PDF 文件').setInputFiles(file);assert.equal((await uploaded).status(),201);const doc=(await api('/api/documents')).find(d=>d.sha256===source.sha256);assert.ok(doc?.id);console.log('真实厂家原件已上传');
   const runs=[];
   for(const row of fixture.rows){let run=await api(`/api/documents/${doc.id}/extractions`,{request_id:randomUUID(),method:'rules',model:{designation:source.designation,specification:String(row.area_mm2),identity_note:'Bahra single-core copper CU/XLPE/LC/PVC 6/10 kV, lead sheathed'},selections:source.selections});
@@ -27,7 +27,7 @@ try{
     runs.push(run);
     console.log('提取 '+row.area_mm2+' mm²：'+run.result.candidates.length+' 项');
   }
-  await page.goto(base+`/library/documents?document=${doc.id}&extraction=${runs[0].id}`);await settle(page);
+  await page.goto(base+`/resources/cables/imports?document=${doc.id}&extraction=${runs[0].id}`);await settle(page);
   await expect(page.getByRole('combobox',{name:'规格',exact:true}).locator('option')).toHaveCount(5);
   const firstForm=page.getByRole('form',{name:'逐项核对'});await firstForm.getByLabel('核对人',{exact:true}).fill('批量验收工程师');
   const sheath=runs[0].result.candidates.find(c=>c.field==='oversheath_thickness');await page.locator(`[data-candidate-id="${sheath.id}"]`).click();await expect(page.locator(`[data-candidate-id="${sheath.id}"]`).locator('xpath=../..')).toContainText('2.0 mm');
@@ -63,7 +63,7 @@ try{
   await expect.poll(async()=>{guarded=await api(`/api/documents/${doc.id}/extractions/${guarded.id}`);return guarded.status;},{timeout:120000}).toBe('succeeded');
   const denied=guarded.result.candidates.slice(0,3).map(c=>c.id), routePattern=`**/extractions/${guarded.id}`;
   await context.route(routePattern,async route=>{const r=await route.fetch(),data=await r.json();data.result.candidates[0].ambiguities=['测试注入：待人工消歧'];data.result.candidates[1].bbox_pt=[0,0,10,10];data.result.candidates[2].raw_value+=1;await route.fulfill({response:r,json:data});});
-  await page.goto(base+`/library/documents?document=${doc.id}&extraction=${guarded.id}`);await settle(page);
+  await page.goto(base+`/resources/cables/imports?document=${doc.id}&extraction=${guarded.id}`);await settle(page);
   await page.getByRole('form',{name:'逐项核对'}).getByLabel('核对人',{exact:true}).fill('门禁验收');
   const gate=page.waitForResponse(r=>r.url().endsWith('/reviews')&&r.request().method()==='POST');await page.getByRole('button',{name:/确认本规格 [1-9]/}).click();const response=await gate;const decisions=response.request().postDataJSON().decisions;
   assert.ok(decisions.length>0 && decisions.every(d=>!denied.includes(d.candidate_id)));await context.unroute(routePattern);

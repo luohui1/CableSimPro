@@ -27,7 +27,7 @@ try {
   assert.ok(target, 'Requires saved E17 evidence; never synthesizes solver values');
   const detail = await request(base, '/api/foundation/reproductions/E17');
   assert.ok(detail.rows.some(row => row.reference === 0.000177)); assert.ok(detail.evidence.length);
-  await go('/library/reproductions');
+  await go('/validation');
   const table = page.getByRole('table', { name: '复现目标', exact: true });
   await expect(table.locator('tbody tr')).toHaveCount(catalog.items.length);
   let total = 0;
@@ -65,21 +65,21 @@ try {
   // Formal UI uses its list link and search field instead of prototype-global Escape/CtrlZ.
   await page.getByPlaceholder('目标、来源或编号').fill('不存在的复现目标');
   await expect(page.getByText('没有匹配的复现目标', { exact: true })).toBeVisible();
-  await go('/library/reproductions'); await expect(table.locator('tbody tr')).toHaveCount(catalog.items.length);
+  await go('/validation'); await expect(table.locator('tbody tr')).toHaveCount(catalog.items.length);
   const pattern = '**/api/foundation/reproductions';
   await context.route(pattern, route => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ...catalog, items: [] }) }));
-  await go('/library/reproductions'); await expect(page.locator('[data-page=reproductions]')).toHaveAttribute('data-state', 'empty');
+  await go('/validation'); await expect(page.locator('[data-page=reproductions]')).toHaveAttribute('data-state', 'empty');
   await context.unroute(pattern); await page.getByRole('button', { name: '刷新', exact: true }).click(); await expect(table.locator('tbody tr')).toHaveCount(catalog.items.length);
   report.checks.push('搜索空结果和真实空目录响应分别覆盖；刷新恢复全部记录');
   for (const width of [1366, 1920, 390]) for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width, height: width === 1920 ? 1080 : 844 });
-    await go('/library/reproductions/E17/overlay?theme=' + theme);
+    await go('/validation/E17/overlay?theme=' + theme);
     for (const series of ['reference', 'open_source', 'comsol']) await expect(page.locator(`[data-series=${series}]`)).toBeVisible();
     const toggle = page.getByRole('checkbox', { name: 'COMSOL', exact: true });
     await toggle.focus(); await page.keyboard.press('Space'); await expect(page.locator('[data-series=comsol]')).not.toBeVisible();
     await page.keyboard.press('Space'); await expect(page.locator('[data-series=comsol]')).toBeVisible(); await geometry();
     if (width === 1366 && theme === 'light') await page.screenshot({ path: path.join(out, 'overlay.png') });
-    await go('/library/reproductions/C06/convergence?theme=' + theme);
+    await go('/validation/C06/convergence?theme=' + theme);
     await expect(page.locator('.series-point').first()).toBeVisible(); assert.ok(await page.locator('.series-point').count() >= 3); await geometry();
   }
   report.checks.push('三方曲线、COMSOL 键盘开关、收敛至少三点、刻度间距、有效 SVG、桌面和手机无横向溢出');

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { Suspense, useState, type ReactNode } from "react";
 import { displayText } from "@/lib/display-names";
 import type { DomainDocument } from "@/lib/domain-fields";
 import { Icon } from "./icon";
@@ -8,6 +8,8 @@ import { CableInputs, ConditionsInputs, DomainNumber, type InputSelection } from
 import { inspectorViews } from './study-workbench-config';
 import { Dialog } from './ui/dialog';
 import { Button } from './ui/button';
+import { LoadingState } from './states';
+import './workbench-inspector.css';
 
 /** 输入字段按路径归类，决定保存时的说明（电缆 / 敷设 / 工况）。 */
 const scopeOf = (path: string) => path.startsWith("/cable_types") ? "cable" : path.startsWith("/load_cases") ? "conditions" : "section";
@@ -48,12 +50,12 @@ export function WorkbenchInspector({ view = "input", onView, methodPanel, agentP
   demo: boolean;
 }) {
   const [layers, setLayers] = useState(false);
-  return <aside className="workbench-inspector" aria-label="属性">
+  return <aside className="workbench-inspector study-inspector" aria-label="属性">
     {(methodPanel || agentPanel) && <div className="inspector-switch" role="tablist" aria-label="属性分页">
       {inspectorViews.filter(item => item.id === 'input' || item.id === 'method' && methodPanel || item.id === 'agent' && agentPanel).map(item =>
         <button key={item.id} type="button" role="tab" aria-selected={view === item.id} onClick={() => onView?.(item.id)}><Icon name={item.icon} />{item.label}</button>)}
     </div>}
-    {agentPanel && view === "agent" ? <div className="inspector-agent">{agentPanel}</div> : methodPanel && view === "method" ? <div className="inspector-method">{methodPanel}</div> : <>
+    {agentPanel && view === "agent" ? <div className="inspector-agent"><Suspense fallback={<LoadingState title="正在读取 Agent" />}>{agentPanel}</Suspense></div> : methodPanel && view === "method" ? <div className="inspector-method">{methodPanel}</div> : <>
     {candidate ? <Block icon="calc/selection" title={candidate.title}><Groups groups={candidate.groups} /></Block>
       : selection ? <Block icon="object/section" title={selection.title}>
         {selection.fields?.length && document
@@ -71,7 +73,7 @@ export function WorkbenchInspector({ view = "input", onView, methodPanel, agentP
     {document && <Block icon="object/conditions" title="工况" id="inspector-conditions">
       <div className="inspector-conditions"><ConditionsInputs document={document} historical={historical} tab="inputs" onSelect={() => {}} /></div>
     </Block>}
-    {document && <Button size="compact" variant="ghost" onClick={() => setLayers(true)}>分层参数</Button>}
+    {document && <div className="inspector-layers"><span>分层参数</span><Button size="compact" variant="ghost" onClick={() => setLayers(true)}>查看</Button></div>}
     <Dialog open={layers} onOpenChange={setLayers} title="电缆分层" initialFocus="form">
       {layers && <CableInputs tab="layers" document={document} historical={historical} onSelect={() => {}} />}
     </Dialog>
