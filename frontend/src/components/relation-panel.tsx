@@ -9,7 +9,7 @@ const ROLES: Record<string, string> = {
   workspace: "所属工程", method: "方法", cable_version: "型号版本", study: "研究", input_snapshot: "输入快照", delivery: "交付",
   source_run: "来源运行", specification: "规格书", source_design: "来源设计", published_cable_version: "发布版本",
   source_document: "厂家资料", source_proposal: "来源方案", dependency: "依赖", validation: "验证", agent_task: "Agent 任务",
-  material: "材料", standard: "标准",
+  material: "材料", standard: "标准", source: "来源", source_specification: "来源规格书",
 };
 const SHOWN = 3;
 

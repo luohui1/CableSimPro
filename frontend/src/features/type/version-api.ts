@@ -3,7 +3,9 @@ import type { components } from '@/api/generated/schema';
 import { projectWorkspace, type Workspace } from './api';
 
 export type ComparisonMetric = Record<string, unknown> & { value: number | null; unit: string; state: string };
-export type ComparisonItem = Record<string, unknown> & { workspace: string; name: string; revision: number; document: Workspace['document']; values: Record<string, ComparisonMetric> };
+export type ComparisonRequirement = { id: string; title?: string; standard?: string; clause?: string };
+export type ComparisonCheck = { verdict?: string | null; state: string; actual?: number | null; margin?: number | null; unit?: string | null; reason?: string | null; source?: Record<string, unknown> | null };
+export type ComparisonItem = Record<string, unknown> & { workspace: string; name: string; revision: number; document: Workspace['document']; values: Record<string, ComparisonMetric>; requirements: Record<string, ComparisonCheck> };
 export async function typeComparison(wid: string, signal?: AbortSignal) {
   const data = record(await responseData(api.GET('/api/types/{wid}/comparison', { params: { path: { wid } }, signal })), '型号方案对比');
   const items = array(data.items, '方案').map(value => {
@@ -11,10 +13,14 @@ export async function typeComparison(wid: string, signal?: AbortSignal) {
     if (!workspace || !text(item.name) || revision === null) throw new ApiError(502, '方案缺少身份、名称或修订');
     for (const value of Object.values(values)) { const metric = record(value, '保存指标'); if (metric.value !== null && numeric(metric.value) === null || !['missing', 'historical', 'current'].includes(text(metric.state)) || !text(metric.unit)) throw new ApiError(502, '保存指标缺少有限数值、单位或状态'); }
     const document = projectWorkspace({ id: workspace, revision, domain: item.document }).document;
-    return { ...item, workspace, revision, document, name: text(item.name), values } as ComparisonItem;
+    return { ...item, workspace, revision, document, name: text(item.name), values, requirements: optionalRecord(item.requirements) } as ComparisonItem;
   });
   if (new Set(items.map(item => item.workspace)).size !== items.length) throw new ApiError(502, '方案工作区身份重复');
-  return { ...data, items };
+  const requirements = (Array.isArray(data.requirements) ? data.requirements : []).map(value => {
+    const row = record(value, '对比要求'); if (!text(row.id)) throw new ApiError(502, '对比要求缺少身份');
+    return { id: text(row.id), title: text(row.title), standard: text(row.standard), clause: text(row.clause) } as ComparisonRequirement;
+  });
+  return { ...data, items, requirements };
 }
 export type SpecificationAudience = 'customer' | 'internal';
 export type Specification = { payload: Record<string, unknown>; digest: string; lifecycle: Record<string, unknown>; ready: boolean; html: string; audience: SpecificationAudience; revisionDraft: Record<string, unknown>; exportEndpoint?: string; generationEndpoint?: string };

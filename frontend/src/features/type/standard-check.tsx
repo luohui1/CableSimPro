@@ -19,7 +19,7 @@ import { SavedRunPicker } from './saved-run-picker';
 const verdicts: Record<string, { kind: StatusKind; label: string }> = { passed: { kind: 'satisfied', label: '满足' }, failed: { kind: 'unsatisfied', label: '不满足' }, missing: { kind: 'unknown', label: '待补数据' }, uncovered: { kind: 'unknown', label: '未覆盖' } };
 type StandardRow = Record<string, unknown> & { id: string };
 function resultCounts(rows: StandardRow[]) { return Object.fromEntries(Object.keys(verdicts).map(key => [key, rows.filter(row => row.verdict === key).length])); }
-function resultValue(value: unknown, row: StandardRow) {
+export function resultValue(value: unknown, row: StandardRow) {
   const number = numeric(value); if (number === null) return '—';
   const percent = row.unit === '1' && /率|偏差/.test(text(row.title));
   return formatNumber(percent ? number * 100 : number, row.unit === 'Ω/km' ? 4 : percent ? 1 : 2) + (percent ? ' %' : row.unit === '1' ? '' : ' ' + text(row.unit));

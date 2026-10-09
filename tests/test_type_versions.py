@@ -125,6 +125,57 @@ def test_branch_isolation_fixed_base_and_idempotence(client):
     assert client.post(f"/api/types/{w['id']}/plans",json=req(w,name='stale',expected_revision=w['revision']-1)).status_code==409
 
 
+def test_comparison_keeps_unrun_and_uncovered_requirements_when_candidate_checks_less(client, monkeypatch):
+    base = workspace(client)
+    child_id = client.post(f"/api/types/{base['id']}/plans", json=req(base, name='部分覆盖方案')).json()['workspace_id']
+    child = client.get('/api/workspaces/'+child_id).json()
+    seed_evidence(client, base, monkeypatch, uncovered=True)
+    compared = client.get(f"/api/types/{base['id']}/comparison")
+    assert compared.status_code == 200, compared.text
+    data = compared.json()
+    assert len(data['requirements']) == 1
+    requirement = data['requirements'][0]['id']
+    original = next(item for item in data['items'] if item['workspace'] == base['id'])
+    candidate = next(item for item in data['items'] if item['workspace'] == child['id'])
+    assert original['requirements'][requirement]['verdict'] == 'uncovered'
+    assert candidate['requirements'][requirement]['state'] == 'unrun'
+    assert candidate['requirements'][requirement]['source'] is None
+    assert not candidate['is_baseline']
+
+
+def test_comparison_adoption_preserves_exact_input_and_missing_result_references(client, monkeypatch):
+    base = workspace(client)
+    child_id = client.post(f"/api/types/{base['id']}/plans", json=req(base, name='新草稿方案')).json()['workspace_id']
+    child = client.get('/api/workspaces/'+child_id).json()
+    runs = seed_evidence(client, child, monkeypatch, uncovered=True)
+    body = req(child)
+    adopted = client.post(f"/api/types/{child_id}/adopt", json=body)
+    assert adopted.status_code == 200, adopted.text
+    assert client.post(f"/api/types/{child_id}/adopt", json=body).json() == adopted.json()
+    spec = client.get(f"/api/types/{child_id}/specification").json()
+    assert spec['payload']['document'] == child['domain']
+    assert spec['payload']['revision'] == child['revision']
+    assert spec['payload']['plan_reference']['name'] == '新草稿方案'
+    assert spec['payload']['plan_reference']['status'] == 'version_draft'
+    assert spec['ready'] is False and spec['lifecycle']['approval'] is None
+    assert {source['run_id'] for source in spec['payload']['sources']} == set(runs)
+    plan = next(item for item in client.get(f"/api/types/{base['id']}/comparison").json()['items'] if item['workspace'] == child_id)
+    assert plan['status'] == 'version_draft' and plan['adopted_revision'] == child['revision']
+    assert client.get('/api/types/library').json()['items'] == []
+
+
+def test_comparison_exposes_historical_verdict_and_literal_plugin_margin(client, monkeypatch):
+    base = workspace(client)
+    runs = seed_evidence(client, base, monkeypatch)
+    checked = next(run for run in runs.values() if 'x-cablesim.standard-check' in run['output']['cases'][0]['artifacts'])
+    checked['freshness'] = 'historical'
+    checked['output']['cases'][0]['artifacts']['x-cablesim.standard-check']['rows'][0]['margin'] = 0.125
+    data = client.get(f"/api/types/{base['id']}/comparison").json()
+    result = next(iter(data['items'][0]['requirements'].values()))
+    assert result['state'] == 'historical' and result['verdict'] == 'passed'
+    assert result['margin'] == 0.125
+
+
 def resource_fixture(client, asset_id, version='1.0.0', kind='material', name='资源绑定契约测试', source=None):
     """Isolated persistence fixture, not an engineering approval or numerical result."""
     service = client.app.state.types

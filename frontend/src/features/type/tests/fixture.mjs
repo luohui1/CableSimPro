@@ -49,7 +49,7 @@ export async function typeFixture({ main = false, build, setup } = {}) {
     const errors = []; browser.page.on('pageerror', error => errors.push(error.message));
     browser.page.on('console', message => { if (message.type() === 'error' && !message.text().includes('Failed to load resource')) errors.push(message.text()); });
     const writes = []; browser.page.on('request', request => { if (new URL(request.url()).origin !== url && !['GET', 'HEAD', 'OPTIONS'].includes(request.method())) throw Error('跨环境写入被拒绝'); if (request.url().includes('/api/') && !['GET', 'HEAD'].includes(request.method())) writes.push({ method: request.method(), url: request.url() }); });
-    return { ...browser, url, database, errors, writes, close, log: () => backendOutput,
+    return { ...browser, url, database, errors, writes, close, runtime: { backendPid:backend.pid, frontendPid:preview.pid, backendPort, frontendPort }, log: () => backendOutput,
       api: async (endpoint, method = 'GET', body, headers = {}) => { const response = await fetch(url + endpoint, { method, headers: { 'Content-Type': 'application/json', ...headers }, body: body === undefined ? undefined : JSON.stringify(body) }); const value = await response.json(); if (!response.ok) throw Error(endpoint + ':' + response.status + ' ' + JSON.stringify(value)); return value; } };
   } catch (error) { await close(); throw error; }
 }

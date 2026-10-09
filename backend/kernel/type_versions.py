@@ -752,6 +752,7 @@ class Types:
             resource_view = self._resources(db, wid, row, state)
             submitted = db.execute('SELECT * FROM type_submissions WHERE workspace=? ORDER BY rowid DESC LIMIT 1', (wid,)).fetchone()
             published = db.execute('SELECT * FROM engineering_type_releases WHERE workspace=?', (wid,)).fetchone()
+            plan = db.execute('SELECT * FROM type_plans WHERE workspace=?', (wid,)).fetchone()
         payload = {'schema': 'cablesim.type-specification/1', 'renderer': 'type-specification/3',
                    'workspace_id': wid, 'revision': row['revision'], 'name': clean_name(t['label']),
                    'purpose': 'demo' if '演示' in t['label'] or '合成验收数据' in t['label'] or any(s.get('kind')=='demo' for s in d.get(
@@ -763,6 +764,9 @@ class Types:
                    'requirement_reviews': requirement_reviews,
                    'source_design': {'id': wid, 'revision': row['revision']},
                    'creation_source': deepcopy(state.get('type_creation', {})),
+                   'plan_reference': ({'name': plan['name'], 'status': plan['status'],
+                                       'adopted_revision': plan['adopted_revision'],
+                                       'source': deepcopy(state.get('type_plan_source', {}))} if plan else None),
                    'resource_bindings': deepcopy(state.get('type_resource_bindings', {}))}
         for target in resource_view['targets']:
             if target['state'] == 'outdated':
@@ -1039,8 +1043,29 @@ class Types:
         if not any(p['workspace'] == wid for p in plans):
             plans.insert(0, {'workspace': wid, 'family': fid, 'name': '基准方案', 'status': 'draft', 'base_reference': json.dumps(base)})
         items = []
+        requirements = {}
         for plan in plans:
             row, state, channels, failures = self.evidence(plan['workspace'])
+            with self.store.db() as db:
+                reviews = self._requirement_reviews(db, plan['workspace'])
+            checked = channels.get('standards')
+            requirement_values = {}
+            if checked:
+                source = self._source('standards', checked)
+                for result in checked.get('artifact', {}).get('rows', []):
+                    identity = comparison_requirement(result)
+                    requirements.setdefault(identity['id'], identity)
+                    requirement_values[identity['id']] = {
+                        'verdict': result.get('verdict', 'uncovered'),
+                        'state': 'current' if source['freshness'] == 'current' else 'historical',
+                        'actual': result.get('actual'), 'margin': result.get('margin'),
+                        'unit': result.get('unit'), 'reason': result.get('reason'), 'source': source,
+                    }
+            for review in reviews:
+                for requirement in review.get('items', []):
+                    definition = requirement.get('definition', {})
+                    identity = {'id': requirement['id'], **{key: definition.get(key) for key in ('title', 'standard', 'clause', 'target')}}
+                    requirements.setdefault(identity['id'], identity)
             values = {}
             handlers = {
                 'geometry': geometry_metrics, 'rating': rating_metrics,
@@ -1052,11 +1077,24 @@ class Types:
             for key, unit in (('outer_diameter','m'),('mass','kg/km'),('copper_mass','kg/km')):
                 values.setdefault(key, metric(None, unit, None))
             items.append({**plan, 'base_reference': json.loads(plan['base_reference']), 'revision': row['revision'],
-                          'document': state['domain'], 'values': values, 'sources': [self._source(
+                          'document': state['domain'], 'values': values, 'requirements': requirement_values,
+                          'is_baseline': not bool(state.get('type_plan_source')),
+                          'sources': [self._source(
                               k,
                               v,
                           ) for k,v in channels.items()], 'issues': failures})
-        return {'family_id': fid, 'name': family['name'] if family else clean_name(base.get('name', '型号')), 'items': items}
+        # Compare the union of bound requirements and every saved check row. A
+        # shorter artifact must never silently improve a candidate's coverage.
+        for item in items:
+            for identity in requirements:
+                item['requirements'].setdefault(identity, {
+                    'state': 'unrun', 'verdict': None, 'actual': None, 'margin': None,
+                    'unit': None, 'reason': '本方案尚无此要求的保存判定；请执行标准核对。', 'source': None,
+                })
+            if 'standards' in item['values']:
+                item['values']['standards']['total'] = len(requirements)
+        return {'family_id': fid, 'name': family['name'] if family else clean_name(base.get('name', '型号')),
+                'items': items, 'requirements': list(requirements.values())}
 
     def library(self):
         with self.store.db() as db:
@@ -1077,6 +1115,17 @@ class Types:
                                'definition_endpoint':'/api/types/'+row['workspace']+'/specification',
                                'approval':self._receipt(row['receipt'])})
         return {'items': result}
+
+
+def comparison_requirement(result):
+    from .requirements import Requirements
+    try:
+        identity = Requirements.proposal(result, {})['id']
+    except (KeyError, TypeError, ValueError, AttributeError):
+        # Incomplete older artifacts remain visible but cannot become bound
+        # requirements. Preserve their row identity without inventing targets.
+        identity = 'check/'+fingerprint({key: result.get(key) for key in ('id', 'target', 'standard', 'clause')})
+    return {'id': identity, **{key: result.get(key) for key in ('title', 'standard', 'clause', 'target')}}
 
 
 def geometry_metrics(state, item, source):

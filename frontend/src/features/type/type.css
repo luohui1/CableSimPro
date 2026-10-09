@@ -116,6 +116,9 @@
 .type-metric-cell .source-badge span{display:none}
 .type-metric-cell>button:first-child{display:flex;align-items:center;gap:var(--space-2);background:transparent;border:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
 .type-comparison-sections{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));flex:1;overflow:auto;min-height:0}
+.type-comparison-tables{flex:1;min-height:0;overflow:auto}
+.type-comparison-tables>.table-scroll{overflow:visible}
+.type-comparison-geometry{display:flex;flex:1;min-height:0}
 .type-comparison-sections>section{display:flex;flex-direction:column;min-height:calc(var(--space-12)*7);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
 .type-comparison-sections h2,.type-specification-checks h2{font-size:var(--text-subheading);padding:var(--space-3) var(--space-4);margin:0}
 .type-comparison-sections .drawing-frame{flex:1;min-height:0;border:0;border-radius:unset}

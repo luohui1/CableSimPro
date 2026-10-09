@@ -407,6 +407,9 @@ def customer_sources(payload):
     """Human-readable provenance; immutable IDs stay in the host audit record."""
     base = payload.get('base_reference', {})
     rows = [['基准型号', clean_name(base.get('name') or payload['name']), readable_version(base.get('version'))]]
+    plan = payload.get('plan_reference')
+    if plan:
+        rows.append(['引用方案', clean_name(plan['name']), '新版本草稿' if plan['status'] == 'version_draft' else '方案草稿'])
     creation = payload.get('creation_source', {})
     origin = creation.get('origin')
     if origin:

@@ -8,9 +8,14 @@ const frontend = fileURLToPath(new URL('../../../../', import.meta.url));
 const server = await createServer({ configFile: false, root: frontend, server: { middlewareMode: true }, optimizeDeps: { noDiscovery: true, include: [] }, resolve: { alias: { '@': path.join(frontend, 'src') } } });
 after(() => server.close());
 const { designSummary, versionLabel, publicationStatus, approvedStandardNames } = await server.ssrLoadModule('/src/features/type/design-summary.ts');
-const { commandResultLabel, latestModuleRun, moduleResultStatus, moduleEvidenceState, methodLabel } = await server.ssrLoadModule('/src/features/type/evidence.ts');
+const { commandResultLabel, latestModuleRun, moduleResultStatus, moduleEvidenceState, methodLabel, chooseEvidence, currentEvidence } = await server.ssrLoadModule('/src/features/type/evidence.ts');
 const { quantityLayer, quantityMissingInputs } = await server.ssrLoadModule('/src/features/type/quantity-inputs.ts');
 const { pointer } = await server.ssrLoadModule('/src/lib/domain-fields.ts');
+const { resultValue } = await server.ssrLoadModule('/src/features/type/standard-check.tsx');
+test('Comparison uses the standard table precision: resistance margin and unitless percentages remain legible', () => {
+  assert.equal(resultValue(.00104,{id:'r20',unit:'Ω/km',title:'导体R20'}),'0.0010 Ω/km');
+  assert.equal(resultValue(.15,{id:'overlap',unit:'1',title:'搭盖率'}),'15.0 %');
+});
 const document = { name: '测试型号', provenance: {}, materials: [{ id:'cu',category:'conductor' },{ id:'xlpe',category:'insulation' }], cable_types: [{ id:'cable', construction:'single_core', rating:{u0:8700,u:15000}, cores:[{id:'core',conductor:{diameter:.02,nominal_area:300e-6,material:'cu',form:'round'},layers:[{role:'insulation',thickness:.003,material:'xlpe'}]}],common_layers:[] }] };
 test('Missing quantities resolve the saved core and material IDs, including escaped pointers; never fill inputs', () => {
   const row = { target:{scope:'core',coreId:'core/2',role:'conductor'},path:pointer('cable_types','cable','cores','core/2','conductor','diameter'),material:{id:'material/cu'} };
@@ -75,6 +80,12 @@ test('Invalid integrity and failed cases cannot be labeled current', () => {
   const failed=structuredClone(run); failed.output.cases[0].status='failed';
   assert.equal(moduleEvidenceState([{run:failed,study}],'electrical',4,false),'none');
   assert.equal(moduleResultStatus([],'electrical',4,false,[{...method,platform_supported:false}]).label,'未接入');
+});
+test('Failed top-level run cannot supply a current result even if a successful case remains', () => {
+  const failed={...run,status:'failed'};
+  assert.equal(chooseEvidence([{run:failed,study}], 'cablesim.type-analysis/1'),null);
+  assert.equal(currentEvidence(failed,4,false),false);
+  assert.equal(currentEvidence({...run,integrity:'invalid'},4,false),false);
 });
 test('Display method labels keep release identity out of visible text', () => {
   assert.doesNotMatch(methodLabel({snapshot:{definition:{method:{plugin_id:'cablesim.type-electrical',version:'0.3.0',release_digest:'a'.repeat(64)}}}}),/cablesim\.|[a-f0-9]{64}/);
