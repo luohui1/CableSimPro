@@ -2,16 +2,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { gzipSync } from 'node:zlib';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { expect as baseExpect } from '@playwright/test';
-import { openHeadlessBrowser, settle, outputRoot } from './browser.mjs';
+import { openHeadlessBrowser, settle, outputRoot, repositoryRoot } from './browser.mjs';
 import { request } from './research-fixtures.mjs';
 import { assertLayout } from './layout-assertions.mjs';
 if(process.env.E2E_ISOLATED!=='1')throw Error('Only run against an isolated database');
 const base=process.env.FRONTEND_URL, expect=baseExpect.configure({timeout:30000});
 const session=await openHeadlessBrowser(),{page,context}=session;
 page.setDefaultTimeout(30000);
-const out=path.join(outputRoot,process.env.COMPONENT_ASSOCIATIONS_ONLY==='1'?'study-associations':'round2'), report={checks:[],variants:[],errors:[],writes:[],initialJavaScript:[]};
+const out=path.join(outputRoot,process.env.COMPONENT_RELATIONS_ONLY==='1'?'study-relations':process.env.COMPONENT_ASSOCIATIONS_ONLY==='1'?'study-associations':'round2'), report={checks:[],variants:[],errors:[],writes:[],initialJavaScript:[]};
 await fs.mkdir(out,{recursive:true});
 page.on('pageerror',e=>report.errors.push(e.message));
 page.on('request',r=>{if(['PUT','PATCH','POST'].includes(r.method()))report.writes.push({url:r.url(),method:r.method(),body:r.postDataJSON()});});
@@ -162,7 +162,77 @@ async function verifyAssociations() {
   report.checks.push('空、加载、错误、成功、历史五态：两种尺寸、深浅主题、字号/对比度/不越界自动断言');
   assert.deepEqual(report.errors,[]);
 }
+async function verifyRelations() {
+  const workspace=(await request(base,'/api/workspaces')).find(item=>item.name.includes('城北'));
+  assert.ok(workspace,'Real inquiry project required');
+  const study=(await request(base,`/api/workspaces/${workspace.id}/studies`)).find(item=>item.definition.driver.kind==='selection');
+  assert.ok(study);
+  const route=`/studies/${study.id}/selection/results?workspace=${workspace.id}&view=section`;
+  const relationPath=`/api/index/objects/study/${study.id}/relations`;
+  const relations=await request(base,relationPath);
+  assert.ok(relations.uses.some(row=>row.role==='workspace'&&row.target.id===workspace.id));
+  assert.ok(relations.uses.some(row=>row.role==='cable_version'&&row.pinned?.digest),'Saved model version digest is required');
+  await go(route);
+  const panel=page.locator('.workbench-inspector .relation-panel');
+  await expect(panel.getByRole('heading',{name:'用到了',exact:true})).toBeVisible();
+  await expect(panel.getByRole('link',{name:workspace.name,exact:true})).toHaveAttribute('href',/\/studies\?.*workspace=/);
+  await expect(panel.locator('.relation-role').filter({hasText:'电缆型号版本'})).toBeVisible();
+  for(const link of await panel.getByRole('link').all())assert.ok((await link.getAttribute('href'))?.startsWith('/'));
+  await expect(page.locator('.workbench-inspector')).not.toContainText(/\+engineering/);
+  if((await panel.innerText()).includes('public-sample'))report.followUp='共享 ObjectChip 尚未翻译 public-sample；RelationPanel 未显示当前来源的页码 reason，需 Agent 线程收口。';
+  await variants('研究关联·成功');
+  await page.setViewportSize({width:1366,height:768});await page.evaluate(()=>document.documentElement.dataset.theme='light');
+  await panel.scrollIntoViewIfNeeded();
+  await page.screenshot({path:path.join(out,'study-light.png')});
+  for(const state of ['empty','loading','error','historical']) {
+    let release;const gate=new Promise(resolve=>release=resolve);
+    const mask='**'+relationPath;
+    await context.route(mask,async intercepted=>{
+      if(state==='loading'){await gate;return intercepted.fallback();}
+      return intercepted.fulfill({status:state==='error'?503:200,contentType:'application/json',body:JSON.stringify(state==='error'?{detail:'关联服务连接中断'}:state==='empty'?{uses:[],used_by:[],unresolved:[]}:{...relations,uses:relations.uses.map(row=>({...row,freshness:'outdated',reason:'测试状态：引用版本已变化'}))})});
+    });
+    try {
+      await go(route);
+      await expect(page.locator('.workbench-inspector')).toContainText({empty:'没有引用其他对象',loading:'正在读取关联',error:'关联读取失败',historical:'已变化'}[state]);
+      await variants('研究关联·'+state);
+    }finally{release();await context.unroute(mask,{behavior:'wait'});}
+  }
+  await go(`/studies?workspace=${workspace.id}`);
+  const projectPanel=page.getByRole('region',{name:'工程关联'});
+  await expect(projectPanel.getByRole('heading',{name:'被用于',exact:true})).toBeVisible();
+  await expect(page.locator('.workbench-inspector .inspector-list').first()).not.toContainText(/\+engineering|public-sample/);
+  await variants('工程关联·成功');
+  await page.setViewportSize({width:1366,height:768});await page.evaluate(()=>document.documentElement.dataset.theme='light');
+  await projectPanel.scrollIntoViewIfNeeded();
+  await page.screenshot({path:path.join(out,'project-light.png')});
+  const method=relations.uses.find(row=>row.role==='method');assert.ok(method);
+  await go(route);await panel.getByRole('link').filter({hasText:method.target.name}).click();await expect(page).toHaveURL(/\/plugins\//);
+  report.checks.push('研究/工程共用索引关联；型号摘要固定；可读版本；插件跳转；两尺寸深浅主题五态');
+  // Public annotated original, real offline extraction and explicitly reviewed
+  // proposal. All writes occur only in this script's disposable database.
+  const sample=JSON.parse(await fs.readFile(path.join(repositoryRoot,'plugins/cablesim.datasheet-extract/validation/labels.json'),'utf8')).samples[0];
+  const bytes=await fs.readFile(path.join(repositoryRoot,'.data/datasheet-import/sources',sample.file));
+  assert.equal(createHash('sha256').update(bytes).digest('hex'),sample.sha256);
+  const upload=new FormData();upload.append('file',new Blob([bytes],{type:'application/pdf'}),sample.file);
+  const response=await fetch(base+'/api/documents',{method:'POST',body:upload});assert.equal(response.status,201);
+  const document=await response.json(), prefix=`/api/documents/${document.id}`;
+  let extraction=await request(base,prefix+'/extractions','POST',{request_id:randomUUID(),method:'rules',model:sample.model,selections:sample.selections});
+  await expect.poll(async()=>{extraction=await request(base,prefix+'/extractions/'+extraction.id);return extraction.status;},{timeout:120000}).toBe('succeeded');
+  const reviewed=await request(base,prefix+'/extractions/'+extraction.id+'/reviews','POST',{request_id:randomUUID(),expected_revision:0,reviewer:'公开样本标注核验',decisions:extraction.result.candidates.map(c=>({candidate_id:c.id,action:sample.truth[c.field]&&Math.abs(sample.truth[c.field].value_si-c.value_si)<1e-10&&!c.ambiguities.length?'accept':'reject',reason:'与厂家原件及独立标注的行列数值核对'}))});
+  const proposal=await request(base,prefix+'/proposals','POST',{request_id:randomUUID(),extraction_id:extraction.id,expected_review_revision:reviewed.revision,version:'原文核对稿',new_model:{name:'Bahra 6/10 kV 1×185 · 关联验收',manufacturer:'Bahra',designation:sample.model.designation,u0_v:6000,voltage_v:10000,cores:1,area_m2:.000185,conductor:'copper_bare',identity_reference:'公开样本 PDF20–21，CU/XLPE/LC/PVC 单芯铜185mm² 6/10kV，与标注一致'}});
+  const approved=await request(base,prefix+'/proposals/'+proposal.id+'/approval','POST',{request_id:randomUUID(),proposal_sha256:proposal.sha256,approver:'关联验收工程师',human_approved:true});
+  const model=(await request(base,'/api/domain-cable-models')).find(item=>item.id===approved.new_model_id);
+  const source=JSON.parse(model.payload.sources.source_document.reference);
+  assert.equal(source.document_id,document.id);assert.equal(source.original_sha256,sample.sha256);
+  const modelRelations=await request(base,`/api/index/objects/cable_version/${model.id}/relations`);
+  const original=modelRelations.uses.find(row=>row.role==='source_document'&&row.target.id===document.id);
+  assert.equal(original.freshness,'current');assert.equal(original.pinned.digest,sample.sha256);assert.match(original.reason,/20.*21/);
+  report.documentAssociation={manufacturer:'Bahra',pages:source.selections.map(item=>item.page),sha256:sample.sha256,modelVersion:model.payload.version};
+  report.checks.push('真实厂家 PDF→离线提取→逐项核对→批准新型号→统一索引原件ID/页码/SHA256关系');
+  assert.deepEqual(report.errors,[]);
+}
 try{verification:{
+  if(process.env.COMPONENT_RELATIONS_ONLY==='1'){await verifyRelations();break verification;}
   if(process.env.COMPONENT_ASSOCIATIONS_ONLY==='1'){await verifyAssociations();break verification;}
   report.catalogFirstHttpMs={};for(const endpoint of ['/api/input-contracts','/api/methods']){const started=performance.now();const reply=await fetch(base+endpoint);assert.ok(reply.ok);await reply.json();const elapsed=Math.round(performance.now()-started);report.catalogFirstHttpMs[endpoint]={elapsed,cache:reply.headers.get('X-CableSim-Read-Cache'),serverTiming:reply.headers.get('Server-Timing')};assert.ok(elapsed<300,`${endpoint}: ${JSON.stringify(report.catalogFirstHttpMs[endpoint])} >= 300 ms`);}
   const scripts=[]; const listener=response=>{if(response.request().resourceType()==='script'&&response.url().includes('/assets/'))scripts.push(response.body().then(body=>({url:new URL(response.url()).pathname,gzip:gzipSync(body).length})));};
@@ -177,23 +247,46 @@ try{verification:{
       for(const study of await request(base,`/api/workspaces/${workspace.id}/studies`)){
         if(study.definition.method.capability!=='iec-thermal-field')continue;
         const runs=(await request(base,`/api/workspaces/${workspace.id}/studies/${study.id}/runs?view=summary`)).items;
-        const run=runs.findLast(value=>value.integrity==='verified'&&value.status==='succeeded');
+        const run=runs.findLast(value=>value.integrity==='verified'&&value.status==='succeeded'&&(!process.env.COMPONENT_FEM_RUN||value.id===process.env.COMPONENT_FEM_RUN));
         if(run){target={workspace,study,run};break;}
       }
       if(target)break;
     }
     assert.ok(target,'Saved real FEM run required; no local solver is started');
     const {workspace,study,run}=target;
+    const viewUrl=`/api/hpc/workspaces/${workspace.id}/fields/${run.id}/view`, loads=[];
+    const listener=response=>{if(new URL(response.url()).pathname===viewUrl)loads.push(response.json());};page.on('response',listener);
+    const started=performance.now();
     await go(`/studies/${study.id}/thermal-field/field?workspace=${workspace.id}&run=${run.id}`);
     await expect(page.locator('.workbench-canvas .field-view')).toBeVisible();
     await expect(page.locator('.workbench-canvas .field-canvas')).toBeVisible();
     assert.equal(await page.locator('.workbench-canvas .field-object:not(.field-object-outline)').count(),0,'FEM conductor temperatures must not be masked');
+    report.fieldOpenMs=Math.round(performance.now()-started);
+    const propertyTabs=page.getByRole('tablist',{name:'属性分页'}), mountedField=await page.locator('.workbench-canvas .field-view').elementHandle(), switchStarted=performance.now();
+    await propertyTabs.getByRole('tab',{name:'Agent',exact:true}).click();
+    await expect(page.locator('.inspector-agent .agent-panel-model')).toBeVisible();
+    report.fieldAgentSwitchMs=Math.round(performance.now()-switchStarted);
+    assert.ok(report.fieldAgentSwitchMs<2000,'Large saved field must remain interactive when switching Agent');
+    assert.ok(await mountedField.evaluate(element=>element.isConnected));await mountedField.dispose();
+    await propertyTabs.getByRole('tab',{name:'输入',exact:true}).click();
+    assert.ok(loads.length,'Main canvas must use the verified /view projection');
+    const projected=await loads[0];
+    assert.ok(projected.output.cases.every(row=>Object.keys(row.artifacts||{}).every(key=>!key.startsWith('x-cablesim.field-'))),'Lossless shards must stay on server');
+    const field=projected.output.cases.map(row=>row.artifacts?.['x-cablesim.temperature-field']).find(Boolean);
+    report.displayNodes=field.mesh.points.length;report.fullMeshNodes=field.convergence?.full_mesh_nodes;
+    if(field.convergence?.display_decimated){
+      const sample=page.waitForResponse(response=>response.request().method()==='POST'&&new URL(response.url()).pathname.endsWith(`/fields/${run.id}/sample`),{timeout:30000});
+      await page.locator('.workbench-canvas .field-view').hover({position:{x:150,y:150}});
+      const response=await sample;assert.ok(response.ok());const value=await response.json();assert.equal(value.mesh,'full');assert.ok(value.temperature_k.every(n=>typeof n==='number'));
+      report.fullMeshSample=value.temperature_k;await page.mouse.move(10,10);
+    }
+    page.off('response',listener);
     await variants('保存有限元运行画布');
     await page.setViewportSize({width:1366,height:768});await page.evaluate(()=>document.documentElement.dataset.theme='light');
     await page.screenshot({path:path.join(out,'fem-workbench-light.png')});
     await page.getByRole('button',{name:'运行记录',exact:true}).click();
     await expect(page.getByRole('dialog',{name:'运行记录',exact:true})).toContainText('成功');
-    assert.deepEqual(report.writes,[],'Saved FEM verification must not calculate or mutate inputs');
+    assert.deepEqual(report.writes.filter(item=>!(item.method==='POST'&&new URL(item.url).pathname===`/api/hpc/workspaces/${workspace.id}/fields/${run.id}/sample`)),[],'Saved FEM verification permits read-only full-mesh sampling, but must not calculate or mutate inputs');
     report.checks.push('真实保存有限元运行：主画布不遮蔽导体、运行记录、深浅主题和两种尺寸');
     report.femRun={id:run.id,sequence:run.sequence};break verification;
   }

@@ -282,6 +282,12 @@ class Documents:
     else:
      self.bind_structural(payload,field,value,body.field_bindings.get(field,[]),source,changes[-1],item['basis'] if review['action']=='accept' else 'engineer_given')
    if not accepted:fail('NO_ACCEPTED_VALUES','没有接受的字段，请先核对候选。')
+   # Version-level provenance is approved with the draft, alongside the exact
+   # field evidence. Use stored IDs/hashes/pages; never infer a catalogue match.
+   pages=sorted({items[cid]['page'] for cid,review in decisions.items() if review['action']!='reject'})
+   payload['sources']['source_document']={'kind':'manufacturer','reviewed':True,'reference':encoded({
+    'document_id':did,'original_sha256':record['document_sha256'],'extraction_id':record['id'],
+    'selections':[{'page':page} for page in pages]})}
    payload['version']=body.version;payload['confirmed']=False
    if spec and not spec['missing']:spec['missing']=['完整结构和材料物性需另行核对']
    candidates.CableModelVersion.model_validate(payload)

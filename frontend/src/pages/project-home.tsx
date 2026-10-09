@@ -21,6 +21,9 @@ import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { workspaceQuery } from "@/lib/study-queries";
 import { modelViews, projectSuggestions } from '@/components/study-workbench-config';
+import { readableCableVersion } from '@/components/study-workbench-config';
+import { RelationPanel } from '@/components/relation-panel';
+import { ObjectChip } from '@/components/object-link';
 
 type Theme = "light" | "dark";
 
@@ -95,7 +98,10 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
           <div><dt>名称</dt><dd>{name}</dd></div>
           <div><dt>模型修订</dt><dd>{workspace.data ? `第 ${String(workspace.data.revision)} 版` : "—"}</dd></div>
           <div><dt>更新</dt><dd>{workspace.data ? new Date(text(workspace.data.updated_at)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</dd></div>
-          <div><dt>引用型号</dt><dd>{text(reference.name) ? `${text(reference.name)} ${text(reference.version)}` : "—"}</dd></div>
+          <div><dt>引用型号</dt><dd>{text(reference.id) ? <ObjectChip status={false} card={{
+            kind:'cable_version',id:text(reference.id).replace(/^candidate:/,''),name:text(reference.name),
+            version:readableCableVersion(text(reference.version)),status:{code:'unknown',label:'引用版本'},
+          }} /> : "—"}</dd></div>
         </dl>
       </section>
       {document && <section className="inspector-block" aria-label="工程模型">
@@ -106,6 +112,7 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
           {document.load_cases.map((item) => <div key={item.id}><dt>工况</dt><dd>{entityLabel(document, item.id)}</dd></div>)}
         </dl>
       </section>}
+      <section className="inspector-block" aria-label="工程关联"><header><Icon name="object/folder" /><h2>关联</h2></header><RelationPanel kind="project" id={workspaceId} /></section>
     </>}
   </aside>;
 

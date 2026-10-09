@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { displayName } from "@/lib/display-names";
+import { savedRunLabel } from '@/features/field/run-label';
 import { isVersionStale } from '@/lib/version-status';
 import {
   optionalRecord,
@@ -248,7 +249,7 @@ export function StudyResults({
       {part === "all" && conclusion}
       <Toolbar>
         <h2>结果明细</h2>
-        <SourceBadge kind="calculation" detail={text(optionalRecord(optionalRecord(snapshot.definition).method).plugin_id) + " · " + text(run.id)} />
+        <SourceBadge kind="calculation" detail={displayName(text(optionalRecord(optionalRecord(snapshot.definition).method).plugin_id)) + " · " + savedRunLabel(run)} />
         <div className="spacer" />
         {ratings.length > 1 && (
           <Select

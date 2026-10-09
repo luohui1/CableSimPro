@@ -67,6 +67,8 @@ def test_demo_pin_preserves_library_facts_but_allows_research_goals(client):
     assert client.post(bind, json={'expected_revision': w['revision'], 'model_id': m['id'], 'content_sha256': m['content_sha256']}).status_code == 409
     chosen = client.post(bind, json={'expected_revision': revision, 'model_id': m['id'], 'content_sha256': m['content_sha256']})
     assert chosen.status_code == 200, chosen.text
+    assert chosen.json()['study_cable_reference']['id'] == m['id']
+    assert chosen.json()['study_cable_reference']['version'] == m['version']
     assert chosen.json()['study_cable_reference']['content_sha256'] == m['content_sha256']
     assert chosen.json()['domain']['cable_types'][0]['cores'][0]['conductor']['nominal_area'] == pytest.approx(.00024)
     assert chosen.json()['domain']['criteria']['max_conductor_temperature'] == 358.15
@@ -157,6 +159,9 @@ def test_real_operating_goals_and_current_only_delivery(client, monkeypatch):
     s = saved_study(client, w)
     run = execute(client, w, s)
     assert run['status'] == 'succeeded', run
+    binding = run['snapshot']['workspace_state']['study_cable_reference']
+    for key in ('id', 'version', 'content_sha256'):
+        assert binding[key] == w['study_cable_reference'][key]
     checks = run['output']['cases'][0]['artifacts']['x-cablesim.thermal-network-rating']['goal_checks']
     temperature = next(g for g in checks if g['key'] == 'conductor_temperature')
     assert temperature['current_a'] == 350
@@ -172,13 +177,15 @@ def test_real_operating_goals_and_current_only_delivery(client, monkeypatch):
     d['load_cases'][0]['currents'][d['circuits'][0]['id']] = 360
     from backend.kernel import report as renderer
     original = renderer.render
-    def edit_during_render(runs):
+    def edit_during_render(runs, *, attachments=None):
         assert client.put(f"/api/workspaces/{w['id']}/domain", json={'expected_revision': w['revision'], 'document': d}).status_code == 200
-        return original(runs)
+        return original(runs, attachments=attachments)
     monkeypatch.setattr(renderer, 'render', edit_during_render)
     with pytest.raises(HTTPException) as error:
         client.app.state.research.deliver(w['id'], [run['id']], current_only=True)
     assert error.value.status_code == 409
+    history = client.get(f"/api/workspaces/{w['id']}/studies/{s['id']}/runs/{run['id']}").json()
+    assert history['snapshot']['workspace_state']['study_cable_reference'] == binding
     with client.app.state.workspace_store.db() as db:
         assert db.execute('SELECT count(*) FROM deliveries').fetchone()[0] == 1
     with pytest.raises(HTTPException) as error:

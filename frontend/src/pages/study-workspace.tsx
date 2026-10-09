@@ -17,6 +17,7 @@ import { missingInputDestination, focusPreflightField } from "@/lib/missing-inpu
 import { StatusMark } from "@/components/status-mark";
 import { EmptyState, ErrorState, InlineEmpty, LoadingState } from "@/components/states";
 import { WorkbenchInspector } from "@/components/workbench-inspector";
+import { RelationPanel } from "@/components/relation-panel";
 import { ProjectExplorer, singleAnswer } from "@/components/project-explorer";
 import { PreviewControls, PreviewStrip, useStudyPreview } from "@/components/study-preview";
 import { AddStudyDialog } from "@/components/add-study-dialog";
@@ -52,6 +53,7 @@ import type { StudyDefinition } from "@/api/research";
 import type { CadImage } from '@/features/cad/types';
 import { caseRun, hydrateCaseInputs } from '@/features/cad/saved-field-controls';
 import { downloadBlob } from '@/lib/download';
+import { hpcJson } from '@/features/field/run-label';
 
 import { moduleDefinitions, moduleBehavior } from "./study-modules";
 // Optional result viewers load only when opened, leaving the input workbench
@@ -159,10 +161,21 @@ export function StudyWorkspace() {
     selected && view?.rows.find((row) => row.id === selected.id);
   // 运行若带温度场工件（有限元，或插件输出的 IEC 土壤温度场），画布默认显示真实温度场；选型显示所选或推荐候选的工况
   const fieldCase = module === "selection" ? selectedRow?.id || view?.recommendation?.id : undefined;
+  const savedFieldCases = (Array.isArray(optionalRecord(run?.output).cases) ? optionalRecord(run?.output).cases as unknown[] : []).map(optionalRecord);
+  const hasFemField = savedFieldCases.some(item => {
+    const field = optionalRecord(optionalRecord(item.artifacts)['x-cablesim.temperature-field']);
+    return !!field.schema_version && optionalRecord(field.source).binding !== 'iec-trace';
+  });
+  const savedMethod = optionalRecord(optionalRecord(optionalRecord(run?.snapshot).definition).method);
+  const remoteMethod = (catalog.data || []).map(optionalRecord).find(item => optionalRecord(item.method).plugin_id === savedMethod.plugin_id);
+  const needsFieldProjection = !!run && !pendingRun && (hasFemField || !run.output && text(optionalRecord(remoteMethod?.execution_policy).backend) === 'slurm');
+  const fieldProjection = useQuery({queryKey:['saved-field-view',run?.workspace,run?.id], enabled:needsFieldProjection,
+    queryFn:({signal}) => hpcJson(`/workspaces/${text(run?.workspace)}/fields/${text(run?.id)}/view`, {signal}), retry:false});
+  const fieldRun = needsFieldProjection ? fieldProjection.data : run;
   const fieldView = useMemo(() => {
-    if (!run || pendingRun) return undefined;
-    try { return temperatureView(run, fieldCase); } catch { return undefined; }
-  }, [run, pendingRun, fieldCase]);
+    if (!fieldRun || pendingRun) return undefined;
+    try { return temperatureView(fieldRun, fieldCase); } catch { return undefined; }
+  }, [fieldRun, pendingRun, fieldCase]);
   // 场值换算只做一次：每次渲染都新建数组会让场图重算等温线和定位网格，切换属性页时整页卡死
   const fieldValues = useMemo(() => fieldView?.temperatures.map((kelvin) => kelvin - 273.15), [fieldView]);
   const inputModule = moduleBehavior.input.has(module);
@@ -191,11 +204,16 @@ export function StudyWorkspace() {
   // 工作窗口：模型画布（历史运行显示当时保存的模型）、右侧检查器的方法信息
   // 只有查看已过期的运行时才显示当时保存的模型并只读；刚运行完的当前结果仍可直接继续编辑
   const viewingOldInput = !!search.run && (run?.freshness === "historical" || isVersionStale(run));
-  const canvasDocument = (viewingOldInput ? (run ? savedDomain(run) : undefined) : context.domain) as DomainDocument | undefined;
-  const showCanvas = module !== "report" && !!canvasDocument && study.definition.input_source !== "study";
+  const studyInput = optionalRecord((draft?.definition || study.definition).method_input);
+  const canvasDocument = (viewingOldInput ? (run ? savedDomain(fieldRun || run) : undefined)
+    : study.definition.input_source === 'study' ? (studyInput.schema_version === 'cablesim.domain/1' ? studyInput : undefined) : context.domain) as DomainDocument | undefined;
+  const showCanvas = module !== "report" && !!canvasDocument;
+  // Independent method inputs have their own editor; workspace edits must not
+  // accidentally rewrite their geometry through the shared drawing inspector.
+  const canvasReadOnly = viewingOldInput || study.definition.input_source === 'study';
   const conductorLimits = (canvasDocument?.cable_types || []).map((cable) => numeric(optionalRecord(optionalRecord(cable.rating).max_conductor_temperature).normal)).filter((value): value is number => value !== null);
   const conductorLimit = conductorLimits.length ? Math.min(...conductorLimits) - 273.15 : undefined;
-  const canvasView = search.view || (fieldView ? "field" : "section");
+  const canvasView = search.view || (fieldView || needsFieldProjection ? "field" : "section");
   const drawingCase = fieldCase || text(fieldView?.case.case_id) || undefined;
   const drawingInput = useQuery({queryKey:['drawing-saved-input',run?.id,drawingCase],
     enabled:['three','section'].includes(canvasView) && !!run && !pendingRun && !context.dirty,
@@ -363,11 +381,12 @@ export function StudyWorkspace() {
           actions={null}
           property={module === "report" ? undefined : (
             <WorkbenchInspector
+              relationPanel={<RelationPanel kind="study" id={sid} />}
               view={search.inspector === "agent" ? "agent" : methodPanel && search.inspector === "method" ? "method" : "input"}
               agentPanel={<AgentPanel workspaceId={study.workspace} studyId={sid} context={title} />}
               onView={(value) => navigate({ search: { ...currentSearch(), inspector: value }, replace: true })}
               methodPanel={methodPanel}
-              document={canvasDocument}
+              document={study.definition.input_source === 'study' && !viewingOldInput ? undefined : canvasDocument}
               historical={viewingOldInput}
               selection={inputSelection}
               candidate={module === "selection" && selectedRow ? { title: selectedRow.name, groups: selectedProperties(selectedRow) } : undefined}
@@ -402,7 +421,7 @@ export function StudyWorkspace() {
           {showCanvas && (
             <section className="workbench-canvas" aria-label="模型">
               <div className="workbench-views" role="group" aria-label="模型视图">
-                {([...(fieldView ? [["field", "calc/thermal-field", fieldView.kind === "iec" ? "土壤温度场" : "温度场"]] : []), ...modelViews.map(item => [item.id, item.icon, item.label]), ["three", "result/field", "三维"]] as ["field" | "section" | "cable" | "three", string, string][]).map(([value, icon, label]) => (
+                {([...(fieldView || needsFieldProjection ? [["field", "calc/thermal-field", fieldView?.kind === "iec" ? "土壤温度场" : "温度场"]] : []), ...modelViews.map(item => [item.id, item.icon, item.label]), ["three", "result/field", "三维"]] as ["field" | "section" | "cable" | "three", string, string][]).map(([value, icon, label]) => (
                   <button key={value} type="button" aria-pressed={canvasView === value} onClick={() => navigate({ search: { ...currentSearch(), view: value }, replace: true })}>
                     <Icon name={icon} />{label}
                   </button>
@@ -415,6 +434,13 @@ export function StudyWorkspace() {
                   points={fieldView.points}
                   triangles={fieldView.triangles}
                   values={fieldValues!}
+                  samplePoint={optionalRecord(fieldView.field.convergence).display_decimated === true ? async point => {
+                    const value = await hpcJson(`/workspaces/${text(run?.workspace)}/fields/${text(run?.id)}/sample?case_id=${encodeURIComponent(text(fieldView.case.case_id))}`, {
+                      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify([point])});
+                    const kelvin = numeric((Array.isArray(value.temperature_k) ? value.temperature_k : [])[0]);
+                    if (kelvin === null) throw Error('该取样点没有有效温度，请选择计算域内的位置。');
+                    return kelvin - 273.15;
+                  } : undefined}
                   maskObjects={fieldView.kind === "iec"}
                   circles={fieldView.excluded.length
                     ? fieldView.excluded.map((region) => ({ x: region.x, z: region.z, r: region.r, label: canvasDocument ? entityLabel(canvasDocument, region.label) : region.label }))
@@ -424,11 +450,14 @@ export function StudyWorkspace() {
                   // IEC 解析场只有土壤区域，导体温限画在色标上没有意义
                   limit={conductorLimit === undefined || fieldView.kind === "iec" ? undefined : { value: conductorLimit, label: `${conductorLimit.toFixed(0)} 限值` }}
                 /></div>
-              ) : ['three','section'].includes(canvasView) && drawingInput.isFetching && !drawingInput.data ? <LoadingState title="正在读取保存工况的模型输入" />
+              ) : canvasView === 'field' && needsFieldProjection && fieldProjection.isPending ? <LoadingState title="正在读取保存场图" />
+                : canvasView === 'field' && fieldProjection.error ? <ErrorState title="场图读取失败" description={message(fieldProjection.error)} action={<Button onClick={() => void fieldProjection.refetch()}>重新读取</Button>} />
+                : canvasView === 'field' ? <InlineEmpty title="该保存运行没有温度场" />
+                : ['three','section'].includes(canvasView) && drawingInput.isFetching && !drawingInput.data ? <LoadingState title="正在读取保存工况的模型输入" />
                 : ['three','section'].includes(canvasView) && drawingInput.error ? <ErrorState description={message(drawingInput.error)} action={<Button onClick={() => void drawingInput.refetch()}>重新读取</Button>} /> : (
-                <StudyDrawing document={canvasView === 'cable' || context.dirty ? canvasDocument! : drawingDocument!} historical={viewingOldInput} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} run={drawingRun} fieldCase={drawingCase} onSelect={inputProps.onSelect} annotations={annotations}
-                  preview={capabilityEntry?.preview === true && !methodInfo.hpc && !viewingOldInput ? geometryPreview : undefined}
-                  onPropose={changes => { if(context.dirty) throw Error('请先保存当前修改，再审核几何方案。'); setGeometryProposal({changes,revision:Number(workspace.revision),studyRevision:study.revision}); }} onExport={async image => {
+                <StudyDrawing document={canvasView === 'cable' || context.dirty ? canvasDocument! : drawingDocument!} historical={canvasReadOnly} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} run={drawingRun} fieldCase={drawingCase} onSelect={inputProps.onSelect} annotations={annotations}
+                  preview={capabilityEntry?.preview === true && !methodInfo.hpc && !canvasReadOnly ? geometryPreview : undefined}
+                  onPropose={canvasReadOnly ? undefined : changes => { if(context.dirty) throw Error('请先保存当前修改，再审核几何方案。'); setGeometryProposal({changes,revision:Number(workspace.revision),studyRevision:study.revision}); }} onExport={async image => {
                   if (!run || context.dirty || image.metadata.field?.provisional || image.metadata.field?.runId !== run.id) throw Error('请从所选保存运行的三维结果导出，试算图不能进入计算书。');
                   setReportImage({runId: text(run.id), image});
                   downloadBlob(image.blob, '三维视图.png');

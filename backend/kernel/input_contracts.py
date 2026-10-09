@@ -96,8 +96,11 @@ def contracts(research, *, encoded=False, catalog_preload=True):
                 # execution. Four readers overlap Windows path/byte I/O while
                 # keeping every package's normal digest/import-closure check.
                 from concurrent.futures import ThreadPoolExecutor
-                with ThreadPoolExecutor(max_workers=4) as readers:
-                    list(readers.map(lambda plugin: plugin.verify(), registry.plugins.values()))
+                try:
+                    with ThreadPoolExecutor(max_workers=4) as readers:
+                        list(readers.map(lambda plugin: plugin.verify(), registry.plugins.values()))
+                except OSError as exc:
+                    raise PluginHostError('PLUGIN_SEAL_INVALID', '插件封签文件无法核验；请检查安装文件与读取权限。'+str(exc), 409) from None
                 cache['verified'] = {pid: None for pid in registry.plugins}
             # Every hit rechecks the exact installed bytes, including presentation.
             for entry in entries:

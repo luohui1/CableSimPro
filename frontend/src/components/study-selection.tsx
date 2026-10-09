@@ -6,6 +6,7 @@ import {
 } from "@/lib/selection-view";
 import { optionalRecord, text, numeric } from "@/api/client";
 import { formatNumber } from "@/lib/format";
+import { displayName } from '@/lib/display-names';
 import { DataTable, type Column } from "./data-table";
 import { Conclusion } from "./conclusion";
 import { Toolbar } from "./toolbar";
@@ -17,6 +18,7 @@ import type { PropertyGroup } from "./property-panel";
 import { Tooltip } from "./ui/tooltip";
 import { savedDomain } from "@/lib/domain-fields";
 import { Link } from "@tanstack/react-router";
+import { readableCableVersion } from './study-workbench-config';
 
 export function selectedProperties(row?: SelectionRow): PropertyGroup[] {
   if (!row) return [];
@@ -90,13 +92,9 @@ export function selectedProperties(row?: SelectionRow): PropertyGroup[] {
         {
           label: "型号版本",
           value: (
-            <Tooltip content={row.version}>
+            <Tooltip content={readableCableVersion(row.version)}>
               <span tabIndex={0}>
-                {row.version === "public-sample+engineering"
-                  ? "公开样本 + 工程师给定参数"
-                  : row.version === "public-sample"
-                    ? "公开样本"
-                    : row.version}
+                {readableCableVersion(row.version)}
               </span>
             </Tooltip>
           ),
@@ -234,7 +232,7 @@ export function StudySelection({
         <h2>候选结果</h2>
         <SourceBadge
           kind="calculation"
-          detail={`${text(view.method.plugin_id)} ${text(view.method.version)} · 固定运行输出`}
+          detail={`${displayName(text(view.method.plugin_id))} ${text(view.method.version)} · 固定运行输出`}
         />
         <span className="muted">{view.rows.length} 项</span>
         <div className="spacer" />

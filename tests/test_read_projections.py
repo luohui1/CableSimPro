@@ -17,6 +17,53 @@ from backend.plugin_host.registry import Registry
 from test_research import client, study, request
 
 
+@pytest.mark.parametrize('output', [None, {'cases': [{'case_id': 'saved', 'artifacts': {
+    'x-cablesim.field-shard/0': {'binary': 'full-mesh'},
+    'x-cablesim.temperature-field': {'mesh': 'display'},
+    'x-cablesim.iec60287-trace': {'source': 'saved'},
+}}]}])
+def test_detail_omits_lossless_field_shards_but_full_keeps_evidence(output):
+    from types import SimpleNamespace
+    from backend.kernel.run_details import detail
+    original = {'study': 's', 'integrity': 'verified', 'output': output,
+                'output_digest': 'original-evidence', 'snapshot': {'cases': []}}
+    evidence = deepcopy(original)
+    research = SimpleNamespace(get_run=lambda *_: original)
+    projected = detail(research, 'w', 's', 'r')
+    assert projected['output_digest'] == original['output_digest']
+    if output is None:
+        assert projected['output'] is None
+    else:
+        assert set(projected['output']['cases'][0]['artifacts']) == {
+            'x-cablesim.temperature-field', 'x-cablesim.iec60287-trace'}
+    assert original == evidence
+    assert detail(research, 'w', 's', 'r', 'full') == evidence
+
+
+def test_sharded_detail_uses_verified_display_reader_before_loading_arrays(monkeypatch):
+    import sqlite3
+    from types import SimpleNamespace
+    from contextlib import nullcontext
+    from backend.kernel import batch_field_projection
+    from backend.kernel.run_details import detail
+    db = sqlite3.connect(':memory:')
+    db.row_factory = sqlite3.Row
+    db.execute('CREATE TABLE study_runs(workspace TEXT,id TEXT,output TEXT,request_id TEXT,request_digest TEXT,owner_epoch TEXT,execution_nonce TEXT)')
+    db.execute('INSERT INTO study_runs VALUES(?,?,?,?,?,?,?)', ('w', 'r', '{"x-cablesim.field-shard/0":{}}', 'request', 'digest', 'epoch', 'nonce'))
+    calls = []
+    def display(research, wid, rid):
+        calls.append((wid, rid))
+        return {'study': 's', 'snapshot': {'cases': []}, 'output': None, 'integrity': 'verified'}
+    research = SimpleNamespace(store=SimpleNamespace(db=lambda: nullcontext(db)),
+                               get_run=lambda *_: pytest.fail('Detail loaded lossless arrays'))
+    monkeypatch.setattr(batch_field_projection, 'read_display', display)
+    result = detail(research, 'w', 's', 'r')
+    assert result['integrity'] == 'verified'
+    assert (result['request_id'], result['request_digest'], result['owner_epoch'], result['execution_nonce']) == ('request', 'digest', 'epoch', 'nonce')
+    assert calls == [('w', 'r')]
+    db.close()
+
+
 @pytest.mark.parametrize('fails', [False, True])
 def test_catalog_concurrent_miss_has_one_loader_and_shared_outcome(monkeypatch, fails):
     from concurrent.futures import Future, ThreadPoolExecutor

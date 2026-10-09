@@ -86,6 +86,14 @@ def test_individual_human_review_and_approval_create_new_draft_only(client):
  assert unchanged['digest']==base['digest'] and new['state']=='incomplete'
  assert new['payload']['specification']['values']['outer_diameter']['value']==pytest.approx(.087)
  assert any(doc['sha256'] in s['reference'] and 'bbox_pt' in s['reference'] for s in new['payload']['sources'].values())
+ source=json.loads(new['payload']['sources']['source_document']['reference'])
+ assert source['document_id']==did and source['original_sha256']==doc['sha256']
+ assert source['selections']==[{'page':1}]
+ relations=client.get(f"/api/index/objects/cable_version/{new['id']}/relations")
+ assert relations.status_code==200,relations.text
+ links=[row for row in relations.json()['uses'] if row['role']=='source_document']
+ assert links and all(row['target']['id']==did for row in links)
+ assert all(row['freshness']=='current' and '1' in row['reason'] for row in links)
 
 @pytest.mark.parametrize('value',[1,'true',False])
 def test_confirmation_is_literal_human_boolean(client,value):

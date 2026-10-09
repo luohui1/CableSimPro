@@ -13,6 +13,10 @@ export const hostTasks = [
   { task: "rating" as const, label: "额定载流量", icon: "calc/ampacity", output: "ampacity" },
   { task: "operating" as const, label: "运行温度", icon: "calc/thermal-field", output: "conductor_temperature" },
 ];
+/** Legacy catalogue labels remain immutable identities; translate only their display. */
+export function readableCableVersion(version: string) {
+  return version.replace(/^public-sample/, '公开样本').replace(/\+engineering$/, '（工程版）') || '版本未提供';
+}
 export const driverViews: Record<string, { label: string; icon: string }> = {
   selection: { label: "客户问询选型", icon: "calc/selection" }, sweep: { label: "参数扫描", icon: "calc/sweep" },
   batch: { label: "批量仿真", icon: "nav/simulation" }, crosscheck: { label: "方法对比", icon: "module/method-compare" },

@@ -35,13 +35,14 @@ function Groups({ groups }: { groups: PropertyGroup[] }) {
  * 工作窗口右侧检查器：所选对象（截面中的电缆、排管、介质，或结果表中的候选）在上，
  * 工况始终可改，计算方法在最下。字段直接编辑，进入同一份模型草稿。
  */
-export function WorkbenchInspector({ view = "input", onView, methodPanel, agentPanel, document, historical, selection, candidate, method }: {
+export function WorkbenchInspector({ view = "input", onView, methodPanel, agentPanel, relationPanel, document, historical, selection, candidate, method }: {
   /** 右侧“改输入”分两页：输入（所选对象、工况）与方法（方法参数、问询条件、扫描设置）。 */
   view?: "input" | "method" | "agent";
   onView?: (view: "input" | "method" | "agent") => void;
   methodPanel?: ReactNode;
   /** Agent 与“改输入”同处右侧：它只提出方案，批准由人完成。 */
   agentPanel?: ReactNode;
+  relationPanel?: ReactNode;
   document?: DomainDocument;
   historical: boolean;
   selection?: InputSelection;
@@ -77,6 +78,7 @@ export function WorkbenchInspector({ view = "input", onView, methodPanel, agentP
     <Dialog open={layers} onOpenChange={setLayers} title="电缆分层" initialFocus="form">
       {layers && <CableInputs tab="layers" document={document} historical={historical} onSelect={() => {}} />}
     </Dialog>
+    {relationPanel && <Block icon="object/study" title="关联">{relationPanel}</Block>}
     </>}
   </aside>;
 }

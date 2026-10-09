@@ -135,7 +135,7 @@ def make_router(research):
 
     @router.get('/workspaces/{wid}/studies/{sid}/runs/{rid}', response_model=RunResponse | RunDetailResponse, response_model_exclude_unset=True)
     async def run(wid: str, sid: str, rid: str,
-                  view: Literal['detail', 'full'] = Query('detail', description='detail omits snapshot.cases[*].input and supplies immutable input references. full returns the original complete snapshot. Both validate the original stored input and output before projecting.')):
+                  view: Literal['detail', 'full'] = Query('detail', description='detail omits snapshot.cases[*].input and lossless field shards, supplying immutable input references and the verified display mesh. Full-mesh sampling uses /api/hpc/workspaces/{wid}/fields/{rid}/sample. full returns the original complete evidence. Both validate the original stored input and output before projecting.')):
         from .run_details import detail
         model = RunResponse if view == 'full' else RunDetailResponse
         return await read_response(research, ('run-detail',wid,sid,rid,view), model,

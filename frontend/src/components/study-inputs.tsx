@@ -1,4 +1,5 @@
 import { Suspense, type ReactNode } from "react";
+import { readableCableVersion as versionLabel } from './study-workbench-config';
 import { cableLayerGrid } from '@/lib/heavy-components';
 const CableLayerGrid = cableLayerGrid.Component;
 import { optionalRecord, text, numeric } from "@/api/client";
@@ -774,13 +775,7 @@ export function SectionInputs({
     </div>
   );
 }
-export function versionLabel(version: string) {
-  return version === "public-sample+engineering"
-    ? "公开样本 + 工程师给定参数"
-    : version === "public-sample"
-      ? "公开样本"
-      : version || "版本未提供";
-}
+export { readableCableVersion as versionLabel } from './study-workbench-config';
 function layerName(role: string) {
   return (
     (
