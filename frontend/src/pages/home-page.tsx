@@ -104,7 +104,7 @@ export function HomePage() {
                   ]} />}
             </section>
             <section className="home-section" aria-label="需要处理">
-              <header><h2>需要处理</h2><Link to="/inbox" search={{ theme }}>全部待办</Link></header>
+              <header><h2>需要处理</h2><span className="home-section-links"><Link to="/agent" search={{ theme, ask: "inbox" }}>让 Agent 整理</Link><Link to="/inbox" search={{ theme }}>全部待办</Link></span></header>
               {inbox.isPending ? <LoadingState title="正在汇总" />
                 : inbox.error ? <ErrorState description={message(inbox.error)} action={<Button onClick={() => void inbox.refetch()}>重新读取</Button>} />
                 : <NeedsAttention items={inbox.data.items} studies={rows} theme={theme} />}

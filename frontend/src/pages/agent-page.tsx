@@ -32,6 +32,7 @@ const RECIPE_TEXT: Record<string, string> = {
   proposal_comparison: "给出修改方案并快速试算对比：",
   sensitivity_advice: "给出参数敏感性研究建议：",
   type_review: "检查这个型号的缺项、与执行标准不一致处和可改进点",
+  inbox_triage: "帮我理一下待办",
 };
 const SIDE_KEY = "cablesim:agent:side-open";
 const readSide = () => { try { return localStorage.getItem(SIDE_KEY) !== "false"; } catch { return true; } };
@@ -92,6 +93,15 @@ export function AgentPage() {
     void agent.send(value, recipe ? { id: recipe.id, parameters: {} } : undefined);
     setDraft("");
   };
+  // 首页“让 Agent 整理”：带 ask=inbox 打开时，新建任务并按宿主配方整理待办；只发一次，随后从地址里去掉
+  const asked = useRef(false);
+  useEffect(() => {
+    if (search.ask !== "inbox" || asked.current || !canSend || !project || !recipes.data || agent.sending) return;
+    asked.current = true;
+    send(RECIPE_TEXT.inbox_triage);
+    void navigate({ to: "/agent", search: { theme, workspace: workspaceId }, replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search.ask, canSend, project, recipes.data]);
   const toggleSide = () => setSide((open) => { storeSide(!open); return !open; });
 
   const turns = agent.live ? [...agent.turns, agent.live] : agent.turns;

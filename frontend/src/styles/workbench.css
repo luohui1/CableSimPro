@@ -554,3 +554,6 @@
 .relation-group { display: flex; flex-direction: column; gap: var(--space-1); }
 .relation-role { color: var(--text-secondary); font-size: var(--text-note); }
 .relation-note { color: var(--text-secondary); font-size: var(--text-note); }
+.home-section-links { display: inline-flex; gap: var(--space-4); }
+.home-section-links a { color: var(--text-secondary); font-size: var(--text-note); }
+.home-section-links a:hover { color: var(--text); }
