@@ -105,7 +105,9 @@
 | POST `/api/agent/sessions/{id}/reconcile` | 无正文；查询原Run，返回`{resolved,unknown,reissued:false}`；不重新执行未知预览或提交作业 |
 | GET `/api/agent/contract` | 生成的事件、节点和实际模型工具参数JSON Schema；SSE事件schema也写入OpenAPI的x-sse-events |
 
-当前18个宿主工具为workspace_list/read、study_list/read、run_list/read、plugin_inspect、cable_model_read、propose_domain_changes、propose_method_parameters、study_preflight、study_preview、project_digest、study_baseline、sensitivity_inputs、recipe_execute、fem_comparison_read、propose_fem_verification。另从51个已安装能力生成工具，总计69。插件工具未绑定研究时只生成新建研究方案，批准后只保存Study；绑定研究时必须与该研究的准确方法一致，只有preview且非远程能力可本机试算。原生或HPC预检需要人工执行，不通过LLM触发远程作业。
+当前20个宿主工具为workspace_list/read、study_list/read、run_list/read、plugin_inspect、cable_model_read、propose_domain_changes、propose_method_parameters、study_preflight、study_preview、project_digest、study_baseline、sensitivity_inputs、recipe_execute、fem_comparison_read、propose_fem_verification、object_find、object_relations。另从51个已安装能力生成工具，总计71。插件工具未绑定研究时只生成新建研究方案，批准后只保存Study；绑定研究时必须与该研究的准确方法一致，只有preview且非远程能力可本机试算。原生或HPC预检需要人工执行，不通过LLM触发远程作业。
+
+`object_find({kind?,q?,limit?,offset?})`与`object_relations({kind,id,limit?,offset?})`使用下文统一索引的同一张名片，覆盖整个工程库；只读元数据，不授予跨工程修改权限。工具默认10项、上限20项，结果紧凑UTF-8 JSON不超过6KiB，名片保持完整。`data.total/offset/next_offset`供继续分页；关联按uses、used_by、unresolved顺序分页。状态、名称和过期原因按名片引用，工程量仍须从project_digest或保存运行证据读取。两个工具照常进入计划、步骤、预算与审计。
 
 `project_digest({after?,limit?,case_after?})`返回本工程各研究最新保存运行：`data.studies[]`含`study_id/title/study_revision/run_state/latest_run`，run_state为`not_run/stale/failed/normal/running`；latest_run带方法版本与发行摘要、输入/输出摘要、headlines（实体、工况、SI及显示单位）、各口径允许电流、导体温度、温限余量、限制对象与最热导体。`cases[].input_fields`只来自冻结工况，含土壤热阻率、负荷与埋深；地下敷设的负z坐标投影为正埋深并保留`saved_z`和投影说明，地上敷设保留z坐标；不以当前工程冒充历史输入。完整性失败不提供量值，有限元未收敛只给诊断。整个工具结果UTF-8紧凑JSON不超过6KiB；`next_page`非空时以该对象参数继续配方分页，含研究游标和必要的工况分段游标，保留全部工况量值而不丢弃大研究。`next_cursor`保留研究分页兼容字段。结论汇总取得完整摘要后进入无工具解释请求，仅用户追问细节再读运行。未绑定研究的`run_list`直接返回此摘要，不再发STUDY_REQUIRED。
 
@@ -155,3 +157,23 @@ data: {"usage":{"prompt_tokens":120,"completion_tokens":20}}
 每次请求审计增加`turn_id/request_number/phase/definition_bytes/prompt_bytes`，`model.result`记录对应实际`usage`；`phase=closing`为一次无工具收尾。预算规则统一见[模块设计 §14.3](../design/MODULE_DESIGN.md#143-权限保存与预算)。会话预算`scope=message`，done报告本条消息已报告token，`session_totals`保留会话合计；提供方缺失用量时`usage_complete=false`。SSE工具卡片事件字段保持不变，完整结果在`results/steps`读取，`tool.observation`为有界审计副本。未知预览仍保持unknown，不重新执行。
 
 验证见`tests/test_harness.py`，使用本地OpenAI兼容假HTTP服务，不请求真实模型；真实提供方冒烟仅在设置CABLESIM_LLM_API_KEY时启用，交由真实环境联调。CAD分析资格、有限元自动修复及通用HPC授权执行不在本轮实现范围。
+
+## 统一索引
+
+`backend/index/`在同一只读数据库快照中投影已有元数据，不初始化表、不迁移数据、不求解、不刷新远端作业，也不加载厂家原件、结果正文、计算书HTML或场数组。仅研究配置与运行的冻结方法/锁/型号引用参与当前性检查。页面导航由前端按kind换算，API不返回地址。
+元数据投影复用宿主ReadResponses的有界缓存；SQLite提交与封签源码通知使缓存失效。方案有效期到点、调度回执内容变化也会触发重建，不用固定TTL保留旧待办。三个接口与Agent工具共用该投影。
+
+
+| 接口 | 请求与结果 |
+| --- | --- |
+| GET `/api/index/objects` | 可选kind、q（名称或ID，最多200字符）、limit（1–100，默认50）、offset（非负）；返回`{items:ObjectCard[],total}`，按更新时间降序 |
+| GET `/api/index/objects/{kind}/{id}/relations` | 返回`{uses:Relation[],used_by:Relation[],unresolved:[{role,freshness:"unknown",reason}]}`；对象不存在404 |
+| GET `/api/index/inbox` | 返回`{items:InboxItem[],counts:{review,stale,missing,running}}`；同一类别、来源与对象只出现一次 |
+
+`ObjectCard={kind,id,name,version?,revision?,status:{code,label,reason?},source?:{kind,label},updated,parent?:{kind,id,name},subtype?}`。kind包含project、study、type、cable_version、asset、run、job、delivery、plugin、validation、document、proposal、agent_task，以及供运行引用的input_snapshot。asset的subtype为material、component、assembly、installation、study_template、rule。缺少持久时间或可选字段时为null，不编造更新时间。input_snapshot与对应run共用ID、kind不同；超算job来自本机保存的调度回执，收敛工作流job用`convergence:<保存ID>`。系统教学型号明确标示来源，不称厂家实测。validation只代表安装清单的验证声明，不代表验证执行成功或工程批准。
+
+研究只使用最新保存运行，状态在索引快照内算一次：没有运行为not_run；运行未结束为running；成功且宿主`read_models.run_state`判为当前为current；成功但方法/锁/研究配置/工程修订/绑定型号变化为outdated；失败、中断或部分成功为failed。outdated.reason必须非空，复用`version_status.inspect`的方法与型号版本诊断，再补已保存输入修订变化；同版本发行摘要改变也明确说明。索引不验证结果正文完整性，也不提供工程量，读取工程结果仍走原运行证据核验。前端各处消费此study.status，不重新推断“正常/历史”。
+
+`Relation={role,target:ObjectCard,pinned?:{version?,revision?,digest?},freshness:"current"|"outdated"|"unknown",reason?}`；uses是该对象保存的引用，used_by是反向引用。主要role为workspace、method、cable_version、study、input_snapshot、delivery、source_run、specification、source_design、published_cable_version、source_document、source_proposal、dependency、validation、agent_task。厂家来源保存了document_id时才建立关联，页码写在reason；原件摘要入pinned.digest。保存的ID未登记时，target名片标unknown；从未保存目标ID时放入unresolved，不能造一个目标来填Relation。类型设计到材料/标准资源版本未有稳定绑定，或未有发布记录时明确未建立；不按名称配对。已保存的engineering_type_releases、规格书提交和厂家提案new_model才建立发布/来源链。
+
+`InboxItem={category:"review"|"stale"|"missing"|"running",origin:"agent"|"document"|"asset"|"type"|"study"|"job",title,object:ObjectCard,reason,created}`。review汇总有效未决定Agent方案、厂家提案、draft/reviewed资源、submitted/approved型号规格书；人作出决定或发布后，下次读取即消失。stale为过期研究及其原因；missing为不完整型号与失败/中断资料提取；running为研究、作业、资料提取或批量数据集的保存状态。created缺少持久日期时为null。不存在待办记录时items为空且四项计数均为0。

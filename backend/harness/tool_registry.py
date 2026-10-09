@@ -6,6 +6,8 @@ import json
 from threading import RLock
 
 from .recipes import recipe_schema
+from backend.index.contracts import Kind
+from typing import get_args
 
 
 def object_schema(properties=None,required=None):
@@ -103,6 +105,12 @@ def prune_definitions(schema):
 
 def host_tools():
     specs=[
+        ('object_find','查找对象','read','按统一索引查对象名称、类别与唯一状态；不返回工程计算量。next_offset 非空时继续分页。',object_schema({
+            'kind':{'enum':list(get_args(Kind))},'q':{'type':'string','maxLength':200},
+            'limit':{'type':'integer','minimum':1,'maximum':20},'offset':{'type':'integer','minimum':0}})),
+        ('object_relations','查关联','read','读取同一名片的保存引用、版本与当前性；unresolved 表示缺少绑定，不猜关联。保持 kind/id 并按next_offset分页。',object_schema({
+            'kind':{'enum':list(get_args(Kind))},'id':{'type':'string','minLength':1,'maxLength':200},
+            'limit':{'type':'integer','minimum':1,'maximum':20},'offset':{'type':'integer','minimum':0}},['kind','id'])),
         ('workspace_list','列出工程','read','读取工程身份与修订，供明确选择上下文。',object_schema()),
         ('workspace_read','读取工程输入','read','读取会话固定版本的工程事实、字段与单位；不修改输入。',object_schema({
             'paths':{'type':'array','maxItems':8,'items':{'type':'string'},'description':'可选稳定领域路径；省略返回有界工程概览。'}})),

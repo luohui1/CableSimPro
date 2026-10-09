@@ -128,6 +128,8 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(requirements_router(research))
     app.include_router(rating_table_router(research))
     app.include_router(agent_router(harness))
+    from .index import make_router as index_router
+    app.include_router(index_router(research))
     app.state.types, app.state.assets = types, assets
     app.state.research, app.state.batches = research, batches
     app.state.previews = previews

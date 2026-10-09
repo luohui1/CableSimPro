@@ -208,6 +208,22 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
         match=re.search(r'方案(?:已经|已)?(?:生成|创建|提出)',text)
         issue(match,'UNSUPPORTED_OPERATION_CLAIM','proposal_receipt','没有生成方案的工具回执。')
     clean=reference_text(text).replace('−','-')
+    # Exact quoted object names are identifiers, not quantity claims. Keep their
+    # offsets and source in the proof; numbers outside the quote still need
+    # engineering evidence. Do not turn a bare metadata voltage into a fact.
+    def names(item,path='observations'):
+        if isinstance(item,dict):
+            if {'kind','id','name','status','updated'}<=item.keys() and isinstance(item['name'],str):
+                for opening,closing in (('“','”'),('「','」'),('《','》'),('`','`')):
+                    quoted=opening+item['name']+closing
+                    for match in re.finditer(re.escape(quoted),text):
+                        yield match.start(),match.end(),path+'/name'
+            for key,child in item.items():yield from names(child,path+'/'+str(key))
+        elif isinstance(item,list):
+            for index,child in enumerate(item):yield from names(child,path+'/'+str(index))
+    for start,end,source in names(observations):
+        clean=clean[:start]+' '*(end-start)+clean[end:]
+        matches.append({'fragment':text[start:end],'rule':'quoted_object_name','sources':[source]})
     def sentence(position):
         start=max(clean.rfind(mark,0,position) for mark in '。；;\n')+1
         ends=[found for found in (clean.find(mark,position) for mark in '。；;\n') if found>=0]

@@ -23,6 +23,7 @@ from .security import redact
 from .project_digest import project_digest, study_baseline
 from .fem import comparisons, propose as propose_fem
 from .resilience import retry
+from .object_index import read as read_index
 
 
 def failure(code,message,path=None,actions=None):
@@ -163,6 +164,7 @@ class ToolBroker:
 
     def dispatch(self,task,args,tool,identity):
         wid=task['workspace_id'];name=tool.name
+        if name in ('object_find','object_relations'):return read_index(self.research,name,args)
         if name=='workspace_list':
             with self.research.store.db() as db:
                 rows=[{'id':row['id'],'revision':row['revision'],'name':row['name'],'updated':row['updated']}

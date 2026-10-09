@@ -31,7 +31,7 @@ def test_digest_pages_saved_quantities_and_cold_catalog_avoids_input_contracts(c
     original=harness.registry.tools
     monkeypatch.setattr(harness.registry,'tools',lambda:pytest.fail('status built tool specs'))
     started=perf_counter();status=client.get('/api/agent/status');status_ms=(perf_counter()-started)*1000
-    assert status.status_code==200 and status.json()['tools']==69
+    assert status.status_code==200 and status.json()['tools']==71
     import backend.kernel.input_contracts as contracts
     original_contracts=contracts.contracts
     def forbid_request_contracts(*args,**kwargs):
@@ -45,7 +45,7 @@ def test_digest_pages_saved_quantities_and_cold_catalog_avoids_input_contracts(c
     try:
         started=perf_counter();tools=client.get('/api/agent/tools');cold_ms=(perf_counter()-started)*1000
     finally:research.contract_read_lock.release()
-    assert tools.status_code==200 and len(tools.json())==69
+    assert tools.status_code==200 and len(tools.json())==71
     registry=research.registry
     def forbid_request_rediscovery(*args,**kwargs):
         if current_thread().name=='study-read-warmup':return registry(*args,**kwargs)
