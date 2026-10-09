@@ -13,6 +13,10 @@ import { SourceBadge } from "./source-badge";
 import { downloadJson } from "@/lib/download";
 import { moduleConfiguration, withConfiguration } from "@/lib/study-config";
 import { entityLabel } from "@/lib/domain-fields";
+import { expand } from '@/lib/contract-schema';
+import { savedDomain } from '@/lib/domain-fields';
+import { array } from '@/api/client';
+import './study-method-form.css';
 import { Suspense, useMemo } from 'react';
 import { contractFields } from '@/lib/heavy-components';
 const ContractFields = contractFields.Component;
@@ -24,16 +28,18 @@ export function StudyMethodForm({
   module,
   historical,
   definition: snapshot,
+  savedRun,
 }: {
   module: string;
   historical: boolean;
   definition?: StudyDefinition;
+  savedRun?: Record<string, unknown>;
 }) {
   const context = useStudy();
   const definition =
     snapshot || context.draft?.definition || context.study.definition;
   const configuration = moduleConfiguration(definition, module);
-  const domain = context.domain;
+  const domain = historical && savedRun ? savedDomain(savedRun) : context.domain;
   const references = useMemo(() => {
     if (!domain) return undefined;
     const option = (id: string) => ({ value: id, label: entityLabel(domain, id) });
@@ -57,6 +63,22 @@ export function StudyMethodForm({
     queryKey: ["method-catalog"],
     queryFn: ({ signal }) => methodCatalog(signal),
   });
+  // The form engine keys its field state by schema identity. Keep the filtered
+  // schema stable across its change notifications to avoid a reset/render loop.
+  const selectLayout = useMemo(() => {
+    let root: unknown = {};
+    try { if(contracts.data && configuration)root=exactContract(contracts.data,configuration.method).parameter_schema; } catch { /* The existing contract error below remains authoritative. */ }
+    const properties=optionalRecord(expand(root,root).properties);
+    const selects=Object.entries(properties).flatMap(([key,raw])=>{
+      const field=expand(raw,root),bind=field['x-bind'],bindType=typeof bind==='string' ? bind : text(optionalRecord(bind).type);
+      const refs=references as Record<string,{value:string;label:string}[]> | undefined;
+      const options=refs?.[key] || refs?.[bindType.replace('domain.','')] || refs?.[bindType.replace('domain.','')+'_id'];
+      const labels=optionalRecord(field['x-enum-labels']);
+      const choices=options || (Array.isArray(field.enum) && field.enum.every(v=>typeof v==='string') ? field.enum.map(v=>({value:String(v),label:text(labels[String(v)]) || displayName(String(v))})) : undefined);
+      return choices && field.type==='string' ? [{key,field,choices}] : [];
+    });
+    return {selects,remaining:{...expand(root,root),properties:Object.fromEntries(Object.entries(properties).filter(([key])=>!selects.some(item=>item.key===key)))}};
+  },[contracts.data,configuration?.method,references]);
   if (!configuration)
     return <EmptyState description="" title="当前研究没有该模块的方法配置" />;
   if (contracts.isPending || methods.isPending)
@@ -105,13 +127,16 @@ export function StudyMethodForm({
     available.unshift({
       value: savedKey,
       label:
-        configuration.method.plugin_id +
+        displayName(configuration.method.plugin_id) +
         " · 保存版本 " +
         configuration.method.version,
       method: configuration.method,
     });
+  const root = contract?.parameter_schema || {};
+  const {selects,remaining}=selectLayout;
+  const parameters: Record<string,unknown>=historical && savedRun ? {...optionalRecord(configuration.parameters),...optionalRecord(array(optionalRecord(savedRun.snapshot).cases).map(optionalRecord)[0]?.parameters)} : optionalRecord(configuration.parameters);
   return (
-    <div className="parameter-form">
+    <div className="parameter-form study-method-config">
       {historical && <StaleBanner description="固定运行方法配置 · 只读" />}
       <Select
         label="方法版本"
@@ -151,11 +176,17 @@ export function StudyMethodForm({
               </span>
             </Tooltip>
           </div>
+          {historical ? <dl className="report-sources" aria-label="保存运行实际方法参数">{savedParameterRows(root,parameters,references || {}).map(([label,value],index)=><div key={index}><dt>{label}</dt><dd>{value}</dd></div>)}</dl> : <>
+          {selects.map(({key,field,choices}) => <Select key={key} label={displayName(key,text(field.title) || key)} value={text(parameters[key])} placeholder="未单独指定" disabled={context.saving || optionalRecord(field['x-bind']).read_only === true} options={[{value:'',label:'未单独指定'},...choices]} onChange={value=>{
+            const next: Record<string,unknown>={...optionalRecord(configuration.parameters)};if(value)next[key]=value;else delete next[key];
+            update({...configuration,parameters:next,input_sources:{...configuration.input_sources,['/parameters/'+key]:{kind:'user',reference:'工程师按匹配的输入契约填写',reviewed:false}}});
+          }} />)}
           <Suspense fallback={<LoadingState title="正在读取参数表单" />}><ContractFields
+            key={`${savedKey}:${historical ? 'history' : 'current'}:${context.study.revision}`}
             module={module}
-            schema={contract.parameter_schema}
+            schema={remaining}
             root={{ ...contract.parameter_schema, "x-groups": (contract as unknown as Record<string, unknown>)["x-groups"] }}
-            values={configuration.parameters || {}}
+            values={parameters}
             prefix=""
             draftFields={context.draft?.parameterFields}
             onDraftChange={context.editParameterText}
@@ -186,9 +217,10 @@ export function StudyMethodForm({
                 },
               });
             }}
-          /></Suspense>
+          /></Suspense></>}
         </>
       )}
+      {!contract && historical && <dl className="report-sources" aria-label="保存运行实际方法参数">{savedParameterRows({properties:Object.fromEntries(Object.keys(parameters).map(key=>[key,{title:displayName(key)}]))},parameters,references || {}).map(([label,value],index)=><div key={index}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>}
       {!contract && (
         <div className="source-line">
           <span className="muted">参数已保存；契约恢复后可查看单位与范围。</span>
@@ -197,4 +229,25 @@ export function StudyMethodForm({
       )}
     </div>
   );
+}
+
+function savedParameterRows(schema:unknown, values:Record<string,unknown>, references:Record<string,{value:string;label:string}[]>, root=schema, prefix=''): [string,string][] {
+  const model=expand(schema,root), properties=optionalRecord(model.properties);
+  const rows: [string,string][]=[];
+  for(const [key,raw] of Object.entries(properties)) {
+    if(/_sha256$/.test(key) || ['run_id','case_id','artifact_type'].includes(key))continue;
+    const field=expand(raw,root),value=values[key],label=[prefix,displayName(key,text(field.title) || key)].filter(Boolean).join(' · ');
+    if(field.type==='object' && field.properties) {rows.push(...savedParameterRows(field,optionalRecord(value),references,root,label));continue;}
+    const unit=optionalRecord(field['x-unit']), options=Object.values(references).flat();
+    const render=(item:unknown):string=>{
+      if(item === undefined || item === null)return '未单独指定（保存配置）';
+      if(typeof item==='number')return `${Number((item*Number(unit.scale ?? 1)+Number(unit.offset ?? 0)).toPrecision(6))}${text(unit.display || unit.si) ? ' '+text(unit.display || unit.si) : ''}`;
+      if(typeof item==='boolean')return item ? '是' : '否';
+      if(typeof item==='string')return options.find(option=>option.value===item)?.label || text(optionalRecord(field['x-enum-labels'])[item]) || displayName(item);
+      if(Array.isArray(item))return item.map(render).join('；');
+      return Object.entries(optionalRecord(item)).map(([key,v])=>(options.find(option=>option.value===key)?.label || displayName(key))+'：'+render(v)).join('；');
+    };
+    rows.push([label,render(value)]);
+  }
+  return rows.length ? rows : [['方法参数','该保存配置没有单独的方法参数']];
 }

@@ -11,7 +11,7 @@ from PIL import Image
 import pytest
 from fastapi import HTTPException
 
-from backend.kernel.report_attachments import CadReportImage, prepare
+from backend.kernel.report_attachments import CadReportImage, SectionReportImage, prepare
 from test_research import client, study, request
 from test_hpc_convergence import saved_fixture
 
@@ -100,3 +100,24 @@ def test_image_contract_and_source_binding_reject_foreign_case_and_invalid_png()
     with pytest.raises(HTTPException):prepare(research,fem['workspace'],[fem['id']],[image],None)
     image['metadata']['field']['caseId']='case-0';image['png_base64']='bm90LWEtUE5H'
     with pytest.raises(OSError):prepare(research,fem['workspace'],[fem['id']],[image],None)
+
+
+def test_section_image_is_bound_to_saved_input_and_frozen_without_solving(client,monkeypatch):
+    w,s=study(client);root,body=request(client,w,s)
+    run=client.post(root+'/runs',json=body).json()
+    saved=client.app.state.research.get_run(w['id'],run['id'])
+    domain=saved['snapshot']['cases'][0]['input']
+    png=image_for(run)['png_base64']
+    image=SectionReportImage.model_validate({'run_id':run['id'],'case_id':'case-0','section_id':domain['sections'][0]['id'],
+        'input_digest':run['input_digest'],'width':80,'height':40,'png_base64':png}).model_dump(mode='json')
+    monkeypatch.setattr(client.app.state.research.executor,'run',lambda *a,**kw:pytest.fail('report invoked solver'))
+    payload={'run_ids':[run['id']],'request_id':str(uuid4()),'section_images':[image]}
+    endpoint=f"/api/workspaces/{w['id']}/deliveries/current"
+    reply=client.post(endpoint,json=payload);assert reply.status_code==201,reply.text
+    book=reply.json();assert client.post(endpoint,json=payload).json()['id']==book['id']
+    pdf=b64decode(re.search(r'data-report-pdf="customer"[^>]+base64,([^"]+)',book['html'])[1])
+    with fitz.open(stream=pdf,filetype='pdf') as document:
+        assert document[1].get_images() and '敷设截面与电缆详图' in document[1].get_text()
+    for key,value in [('input_digest','0'*64),('case_id','other-case'),('section_id','foreign'),('run_id',str(uuid4()))]:
+        bad=deepcopy(payload);bad['request_id']=str(uuid4());bad['section_images'][0][key]=value
+        assert client.post(endpoint,json=bad).status_code==409

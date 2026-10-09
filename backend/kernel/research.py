@@ -976,9 +976,13 @@ class Research:
     def comparison(self, wid, ids):
         return compare(self.verified_runs(wid, ids))
 
-    def deliver(self, wid, ids, request_id=None, *, current_only=False, cad_images=None, fem_chapter=None):
+    def deliver(self, wid, ids, request_id=None, *, current_only=False, cad_images=None, fem_chapter=None, section_images=None):
         from .report import RENDERER, render
-        encoded_ids = encode([str(rid) for rid in ids]) if not (cad_images or fem_chapter) else encode({'runs': [str(rid) for rid in ids], 'cad_images': cad_images or [], 'fem_chapter': fem_chapter})
+        identity = [str(rid) for rid in ids]
+        if cad_images or fem_chapter or section_images:
+            identity = {'runs': identity, 'cad_images': cad_images or [], 'fem_chapter': fem_chapter}
+            if section_images:identity['section_images'] = section_images
+        encoded_ids = encode(identity)
         if request_id is not None:
             with self.store.db() as db:
                 prior = db.execute('SELECT * FROM delivery_requests WHERE workspace=? AND request_id=?', (wid, str(request_id))).fetchone()
@@ -987,11 +991,11 @@ class Research:
                     raise HTTPException(409, '同一请求标识不能用于不同源运行。')
                 return self.delivery(wid, prior['delivery'])
         attachments = None
-        if cad_images or fem_chapter:
+        if cad_images or fem_chapter or section_images:
             if len(ids) != 1:
                 raise HTTPException(422, '带附图或有限元章节的计算书请选择一个主运行。')
             from .report_attachments import prepare
-            ids, attachments = prepare(self, wid, ids, cad_images or [], fem_chapter)
+            ids, attachments = prepare(self, wid, ids, cad_images or [], fem_chapter, section_images)
         runs = self.verified_runs(wid, ids)
         from .convergence import has_temperature_field
         if any(has_temperature_field(r) and r.get('convergence',{}).get('status') != 'converged' for r in runs):

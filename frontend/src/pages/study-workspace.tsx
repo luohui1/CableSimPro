@@ -281,10 +281,11 @@ export function StudyWorkspace() {
   // Keep old deep links, but open the current inspector rather than rendering
   // a second method form in the result dock.
   if (methodTab && tab === methodTab) return <Redirect to="/studies/$sid/$module/$tab" params={{ sid, module, tab: dockTabs[0].id }} search={{ ...currentSearch(), inspector: 'method' }} replace />;
-  const methodHistorical = !!search.run;
+  const methodHistorical = viewingOldInput;
   const methodPanel = !methodTab ? undefined
     : module === "sweep" ? <StudySweep run={run} tab="settings" readOnly={methodHistorical} onSelect={inputProps.onSelect} />
       : <StudyMethodForm module={module} historical={methodHistorical}
+          savedRun={methodHistorical ? run : undefined}
           definition={methodHistorical ? ((optionalRecord(run?.snapshot).study_definition || optionalRecord(run?.snapshot).definition) as StudyDefinition) : undefined} />;
   // 答案条：先回答这次计算的结论（选型推荐 / 允许电流与最热导体），切换底部页签时保持可见
   const answer = pendingRun || !run ? null

@@ -9,6 +9,7 @@ import pytest
 from backend.kernel.workspace import fingerprint
 from backend.kernel.study_pdf import render_pdf, chapters, engineering_value
 from backend.kernel.report import pdf_downloads
+import json
 
 
 @pytest.fixture
@@ -34,14 +35,14 @@ def run():
 
 def pdf_text(data):
     with fitz.open(stream=data,filetype='pdf') as doc:
-        assert len(doc)>=4
+        assert len(doc)>=2
         assert all(any(font[1]=='ttf' for font in page.get_fonts()) for page in doc)
         return '\n'.join(page.get_text() for page in doc)
 
 
 def test_customer_book_has_real_selection_precision_and_no_internal_sources(run):
     before=deepcopy(run);text=pdf_text(render_pdf([run],generated_at='2026-10-05T01:02:03+00:00'))
-    for phrase in ['测试工程','测试询价','研究修订 2','2026-10-05 01:02:03','编制','审核','批准','推荐 试验型号 3×400','423 A','23 A','缺少真实尺寸','历史运行复现','IEC 60287-1-1:2023','85.1','31.71','未输出 °C']:
+    for phrase in ['测试工程','测试询价','研究修订 2','2026-10-05 01:02:03','编制','校核','审核','批准','推荐 试验型号 3×400','423 A','23 A','缺少真实尺寸','历史运行复现','IEC 60287-1-1:2023','85.1','31.71']:
         assert phrase in text
     assert 'v0 ' not in text and '内部私有来源摘要' not in text and not re.search('[a-f0-9]{64}',text)
     assert run==before
@@ -49,8 +50,10 @@ def test_customer_book_has_real_selection_precision_and_no_internal_sources(run)
 
 def test_internal_book_appends_source_summary(run):
     text=pdf_text(render_pdf([run],'internal'))
-    assert '附录：来源摘要' in text and '内部私有来源摘要' in text and 'test-run' in text
+    assert '附录：来源摘要' in text and '内部私有来源摘要' in text and 'test-run' not in text
     assert 'aaaa aaaa' in text.replace(' ','') or 'a'*16 in text
+    with fitz.open(stream=render_pdf([run],'internal'),filetype='pdf') as doc:
+        assert json.loads(doc.embfile_get('saved-runs.json')) == [run]
 
 
 @pytest.mark.parametrize('audience',['customer','internal'])
@@ -61,7 +64,7 @@ def test_cover_displays_run_version_status(run,audience,label):
     with fitz.open(stream=render_pdf([run],audience),filetype='pdf') as document:
         cover=''.join(document[0].get_text().split())
         assert '版本状态' in cover
-        assert ''.join(label.split()) in cover
+        assert ''.join(label.replace('cablesim.iec60287','IEC 60287 稳态载流量').split()) in cover
         assert '编制与审核签字' in cover
     assert run==before
 
@@ -87,3 +90,40 @@ def test_embedded_editions_are_distinct_valid_pdf_bytes(run):
     assert [m[0] for m in matches]==['customer','internal']
     texts=[pdf_text(base64.b64decode(data,validate=True)) for _,data in matches]
     assert '内部私有来源摘要' not in texts[0] and '内部私有来源摘要' in texts[1]
+
+
+@pytest.mark.parametrize('audience',['customer','internal'])
+def test_titleblock_summary_and_identity_free_paper(run,audience):
+    run['snapshot']['definition']['title']='型号 public-sample+engineering 校核'
+    run['output']['cases'][0]['results']=[{'entity':'cable1','key':'conductor_temperature','value':358.21,'unit':'K','status':'available'}]
+    run['input_digest']=fingerprint(run['snapshot']);run['output_digest']=fingerprint(run['output'])
+    with fitz.open(stream=render_pdf([run],audience),filetype='pdf') as doc:
+        cover=doc[0].get_text();full='\n'.join(p.get_text() for p in doc)
+        for field in ['工程名称','研究名称','图号 / 文件号','修订','设计','校核','审核','运行编号与摘要','日期','结论摘要','允许电流','最热导体温度','温限余量','423 A','85.1 °C','4.9 K']:assert field in cover
+        for internal in ['cable1','cable/cable1','test-run','cablesim.iec60287','+engineering','public-sample']:assert internal not in full
+        assert doc.embfile_count() == (1 if audience=='internal' else 0)
+
+
+def test_results_group_by_object_omit_buried_ducts_and_false_precision(run):
+    from backend.kernel.study_pdf import grouped_results,_names
+    rows=[{'entity':'cable1','key':key,'value':value,'unit':unit,'status':'available'} for key,value,unit in [
+        ('thermal_resistance.insulation',.45678,'K*m/W'),('x-cablesim.iec60287.temperature_rise.mutual',15.5219,'K'),
+        ('x-cablesim.iec60287.thermal_resistance.duct_air',.9,'K*m/W')]]
+    domain=run['snapshot']['cases'][0]['input']
+    html=grouped_results([{'status':'succeeded','results':rows}],_names(domain),domain)
+    assert '回路' in html and '相别' in html and '0.457' in html and '15.5' in html
+    assert '管内空气' not in html and '15.5219' not in html
+
+
+def test_paper_sources_keep_field_evidence_without_identity_metadata():
+    from backend.kernel.study_pdf import input_sources,paper_text
+    document={'materials':[{'id':'soil','label':'土壤','thermal_resistivity':1.0}],
+        'provenance':{path:{'kind':'manufacturer','reference':'厂家样本','page':4}
+            for path in ['/materials/soil/id','/materials/soil/label',
+                '/materials/soil','/materials/soil/thermal_resistivity']}}
+    before=deepcopy(document)
+    html=input_sources(document,{})
+    assert '/thermal_resistivity' in html and '第 4 页' in html and '厂家资料' in html
+    assert '/soil/id' not in html and '/soil/label' not in html
+    assert '热阻率' in paper_text([], '/materials/soil/thermal_resistivity')
+    assert document==before

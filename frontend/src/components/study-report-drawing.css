@@ -1,0 +1,15 @@
+/* Off-screen paper export; the existing light token palette and drawing CSS
+   remain authoritative, including when the workbench is in dark mode. */
+.study-report-drawing-export {
+  position: fixed;
+  left: -2000px;
+  top: 0;
+  width: 1000px;
+  height: 620px;
+  background: var(--panel);
+  color: var(--text);
+  pointer-events: none;
+}
+.study-report-drawing-export .drawing-frame {
+  height: 100%;
+}

@@ -60,10 +60,61 @@ class FemChapterReference(StrictModel):
     iec_run_id: UUID = Field(description='Saved IEC run with matching input and electrical parameters.')
 
 
-def prepare(research, wid, ids, images, fem_reference):
+class SectionReportImage(StrictModel):
+    """Presentation only: calculated values remain in the saved source run."""
+    run_id: UUID = Field(description='Saved source run identity; no unit.')
+    case_id: str = Field(min_length=1, max_length=120, description='Saved successful case identity.')
+    section_id: str = Field(min_length=1, max_length=120, description='Section identity in that case input.')
+    input_digest: str = Field(pattern=r'^[0-9a-f]{64}$', description='SHA256 of the immutable run input snapshot.')
+    width: int = Field(gt=0, le=8192, description='PNG width, pixels.')
+    height: int = Field(gt=0, le=8192, description='PNG height, pixels.')
+    png_base64: str = Field(min_length=1, max_length=12_000_000, description='Light-paper section PNG from the workbench drawing; at most 8 MiB decoded.')
+
+
+def checked_png(image, width, height):
+    raw = b64decode(image, validate=True)
+    from PIL import Image
+    with Image.open(BytesIO(raw)) as png:
+        if png.format != 'PNG' or png.width * png.height > 16_000_000 or png.size != (width, height) or len(raw) > 8*1024*1024:
+            raise ValueError('导出 PNG 尺寸或大小不符合契约。')
+        png.verify()
+    return sha256(raw).hexdigest()
+
+
+def prepare(research, wid, ids, images, fem_reference, section_images=None):
     ids = list(dict.fromkeys(str(value) for value in ids))
     primary = ids[0]
-    attachments = {'cad_images': [], 'fem_chapter': None}
+    attachments = {'section_images': [], 'field_images': [], 'cad_images': [], 'fem_chapter': None}
+    for image in section_images or []:
+        saved = research.get_run(wid, primary)
+        case = next((c for c in saved['snapshot']['cases'] if c['case_id'] == image['case_id']), None)
+        valid = any(c['case_id'] == image['case_id'] and c['status'] == 'succeeded' for c in saved['output']['cases'])
+        section = next((s for s in (case or {}).get('input', {}).get('sections', []) if s.get('id') == image['section_id']), None)
+        if str(image['run_id']) != primary or saved['integrity'] != 'verified' or image['input_digest'] != saved['input_digest'] or not valid or section is None:
+            raise HTTPException(409, '截面图必须引用所选保存运行的成功工况、截面和输入摘要。')
+        attachments['section_images'].append({**image, 'label': section.get('label') or '敷设截面',
+            'image_sha256': checked_png(image['png_base64'], image['width'], image['height'])})
+        output_case=next(c for c in saved['output']['cases'] if c['case_id']==image['case_id'])
+        field=output_case.get('artifacts',{}).get('x-cablesim.temperature-field')
+        if field and not any(f['case_id']==image['case_id'] for f in attachments['field_images']):
+            if saved.get('artifact_status',{}).get(image['case_id'],{}).get('x-cablesim.temperature-field',{}).get('status')!='verified':raise HTTPException(409,'温度场工件来源校验失败，不能纳入计算书。')
+            from .convergence import has_temperature_field
+            if has_temperature_field(saved) and saved.get('convergence',{}).get('status')!='converged':raise HTTPException(422,'温度场未收敛，不能进入正式计算书。')
+            from .batch_field_chapter import field_png
+            raw=field_png(field)
+            analytic=field.get('source',{}).get('binding')=='iec-trace'
+            if analytic:
+                # Reuse the saved-triangle renderer, but label the actual IEC
+                # soil projection instead of its default FEM footer.
+                from PIL import Image,ImageDraw,ImageFont
+                with Image.open(BytesIO(raw)) as png:
+                    draw=ImageDraw.Draw(png);draw.rectangle((0,546,png.width,png.height),fill='white')
+                    draw.text((45,570),'Saved IEC trace projection | soil only | x / z: m',fill='black',font=ImageFont.load_default(size=18))
+                    stream=BytesIO();png.save(stream,format='PNG');raw=stream.getvalue()
+            attachments['field_images'].append({'case_id':image['case_id'],'png_base64':b64encode(raw).decode(),'image_sha256':sha256(raw).hexdigest(),
+                'basis':'IEC 解析土壤场投影；显示网格，电缆与排管内部不出值。' if analytic else '已通过收敛核验的有限元温度场。',
+                'source_digest':output_case.get('artifact_digests',{}).get('x-cablesim.temperature-field'),
+                'minimum_c':min(field['temperature_k'])-273.15,'maximum_c':max(field['temperature_k'])-273.15})
     for image in images:
         field = image['metadata']['field']
         if str(field['runId']) != primary or field['provisional']:
@@ -80,13 +131,7 @@ def prepare(research, wid, ids, images, fem_reference):
             if field_digest and field_digest not in ref['source']:
                 raise HTTPException(409, '三维图引用的温度场摘要不一致。')
             if str(ref['runId']) not in ids: ids.append(str(ref['runId']))
-        raw = b64decode(image['png_base64'], validate=True)
-        from PIL import Image
-        with Image.open(BytesIO(raw)) as png:
-            if png.format != 'PNG' or png.width * png.height > 16_000_000 or png.size != (image['metadata']['width'], image['metadata']['height']) or len(raw) > 8*1024*1024:
-                raise ValueError('三维导出 PNG 尺寸或大小不符合契约。')
-            png.verify()
-        attachments['cad_images'].append({**image, 'image_sha256': sha256(raw).hexdigest()})
+        attachments['cad_images'].append({**image, 'image_sha256': checked_png(image['png_base64'], image['metadata']['width'], image['metadata']['height'])})
     if fem_reference:
         fem_id, iec_id = str(fem_reference['fem_run_id']), str(fem_reference['iec_run_id'])
         if primary not in (fem_id, iec_id): raise HTTPException(409, '有限元章节必须包含所选源运行。')
@@ -107,6 +152,10 @@ def chapter_html(attachments, audience='internal'):
     """The same frozen chapter text is used by HTML and both PDF editions."""
     from .report import table
     bodies = []
+    for image in attachments.get('section_images', []):
+        bodies.append('<h2>敷设截面与电缆详图</h2><p>'+escape(image['label'])+'；尺寸按保存输入绘制，温度标注按该工况保存结果绘制。</p><p>来源：所选运行的输入快照与结果；附图由工作台同一二维绘图组件导出。</p>')
+    for image in attachments.get('field_images', []):
+        bodies.append('<h2>保存温度场</h2><p>色标 '+f"{image['minimum_c']:.1f} ～ {image['maximum_c']:.1f}"+' °C；'+escape(image['basis'])+'来源为保存且已校验的温度场工件，工件摘要 '+escape(str(image['source_digest']))+'</p>')
     for image in attachments.get('cad_images', []):
         m = image['metadata']; f = m['field']
         bodies.append('<h2>三维结果图</h2><p>保存结果的显示图；色标 '+escape(str(f['minimum']))+' ～ '+escape(str(f['maximum']))+

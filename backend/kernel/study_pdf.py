@@ -15,7 +15,7 @@ import re
 from .specification_pdf import _Blocks, _font_lock
 from .workspace import fingerprint
 
-RENDERER = 'cablesim.study-pdf/1'
+RENDERER = 'cablesim.study-pdf/2'
 PLUGIN_NAMES = {'cablesim.iec60287':'IEC 60287 稳态载流量', 'cablesim.thermal-network':'热网络交叉校核',
     'cablesim.simulation':'数值仿真', 'cablesim.hybrid-rating':'混合载流量参考',
     'cablesim.native-reference':'原生算法参考', 'cablesim.comsol-bridge':'COMSOL 仿真'}
@@ -46,7 +46,7 @@ def clean(value):
 
 
 def human_name(value, fallback):
-    value=clean(value)
+    value=clean(value).replace('~1','/').replace('~0','~')
     return fallback if not value or value.lower().startswith('v0 ') else value
 
 
@@ -74,17 +74,21 @@ def _names(document):
         label=human_name(circuit.get('label'),f'回路 {index}')
         names[circuit['id']]=label
         for cable in circuit.get('cables',[]):
-            names[cable['id']]=label+(' · 三相整缆' if cable.get('phase')=='L1L2L3' else ' · '+str(cable.get('phase','电缆')))
+            phase={'A':'A 相','B':'B 相','C':'C 相','L1':'A 相','L2':'B 相','L3':'C 相','L1L2L3':'三相整缆'}.get(cable.get('phase'),'电缆')
+            names[cable['id']]=label+' · '+phase
     return names
 
 
 def _input(run, case_id=None):
     cases=run['snapshot'].get('cases',[])
-    return next((c.get('input',{}) for c in cases if c['case_id']==case_id),cases[0].get('input',{}) if cases else {})
+    saved=next((c.get('input',{}) for c in cases if c['case_id']==case_id),cases[0].get('input',{}) if cases else {})
+    if saved:return saved
+    definition=run['snapshot']['definition']
+    return definition.get('method_input') if definition.get('input_source')=='study' else run['snapshot'].get('workspace_state',{}).get('domain',{}) or {}
 
 
 def _basis(run):
-    driver=run['snapshot']['definition']['driver']
+    driver=run['snapshot']['definition'].get('driver',{})
     return driver.get('rating_basis','individual')
 
 
@@ -158,7 +162,112 @@ def _metric(row):
     if unit=='K' and 'temperature' in row['key'] and 'rise' not in row['key']:return number(value-273.15), '°C'
     if unit=='F/m':return number(value*1e9,4),'μF/km'
     if unit=='Ω/m':return number(value*1000,5),'Ω/km'
-    return number(value,0 if unit=='A' else 2 if unit=='W/m' else 4), '—' if unit=='1' else unit
+    if unit=='1' and value and abs(value)<.001:return f'{value:.2e}','—'
+    return number(value,0 if unit=='A' else 1 if unit=='K' else 2 if unit=='W/m' else 3), {'1':'—','K*m/W':'K·m/W'}.get(unit,unit)
+
+
+def paper_text(runs, value):
+    """Human labels on paper; exact machine identities remain in the audit attachment."""
+    value=clean(value).replace('~1','/').replace('~0','~')
+    aliases={}
+    for index,run in enumerate(runs,1):
+        aliases[run['id']]=f'运行 {run.get("sequence") or index}'
+        aliases.update(_names(_input(run)))
+        domain=run['snapshot'].get('workspace_state',{}).get('domain',{})
+        for collection in ('materials','cable_types','sections','load_cases'):
+            for i,item in enumerate(domain.get(collection,[]),1):
+                if item.get('id'):aliases[item['id']]=human_name(item.get('label'),{'materials':'材料','cable_types':'电缆型号','sections':'截面','load_cases':'负荷工况'}[collection]+f' {i}')
+        for case in run['snapshot'].get('cases',[]):
+            aliases[case['case_id']]=human_name(case.get('label'),'保存工况')
+    for key,label in sorted(aliases.items(),key=lambda item:len(item[0]),reverse=True):
+        value=re.sub(r'(?<![\w.-])(?:cable/|circuit/)?'+re.escape(key)+r'(?![\w.-])',lambda _:label,value)
+    for key,label in PLUGIN_NAMES.items():value=value.replace(key,label)
+    value=re.sub(r'\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b','保存记录',value)
+    value=re.sub(r'(?:public-sample)?\+engineering','（工程版）',value).replace('public-sample','公开资料版')
+    value=re.sub(r'(?:cable|circuit|section)/[\w.-]+','计算对象',value)
+    value=re.sub(r'x-cablesim\.[\w.-]+','方法扩展量',value)
+    value=re.sub(r'\bcablesim\.[\w.-]+','保存方法',value)
+    value=value.replace('v0 area/fill_factor','截面积与填充系数推导（保存来源记录）')
+    if value.startswith('/'):
+        fields={'condition':'工况','parameters':'方法参数','materials':'材料','thermal_resistivity':'热阻率','cable_types':'型号','cores':'绝缘线芯','conductor':'导体','diameter':'外径','nominal_area':'标称截面','layers':'层结构','common_layers':'公共层','thickness':'厚度','insulation':'绝缘','screen':'金属屏蔽','sheath':'护套','bedding':'内衬','armour':'铠装','sections':'敷设截面','placements':'电缆位置','circuits':'回路','load_cases':'负荷工况','currents':'电流','medium':'环境介质','surface_temperature':'地表温度','max_temperature':'温限','conductor_screen':'导体屏蔽','insulation_screen':'绝缘屏蔽','oversheath':'外护套','material':'材料引用','form':'构造形式','lay_direction':'绞合方向','lay_length':'节距','overlap':'搭盖率','role':'层功能','tape_width':'带宽','wire_count':'根数','wire_diameter':'单丝直径','title':'研究名称','driver':'任务','crosschecks':'对照方法','normal':'正常运行','rating':'额定参数','resistance_20':'20 °C 电阻','r20':'20 °C 电阻','core':'线芯','x':'横向位置','z':'竖向位置','category':'材料类别','electrical_resistivity_20':'20 °C 电阻率','temperature_coefficient_20':'电阻温度系数','relative_permittivity':'相对介电常数','loss_tangent':'介质损耗角正切','max_conductor_temperature':'导体温限','criteria':'校核要求','bonding':'接地方式','kind':'类型','u0':'额定相电压','u':'额定线电压','um':'最高系统电压'}
+        value=' · '.join(fields.get(part,PARAMETERS.get(part,part)) for part in value.split('/') if part and not part.isdigit())
+    return value
+
+
+def input_sources(document, definition, candidate=None):
+    """Keep per-field provenance; repeated bibliography entries are printed once."""
+    sources=[];references=[]
+    origins={'user':'工程师给定','standard':'标准值','derived':'推导','manufacturer':'厂家资料','document':'厂家资料','library':'型号库','asset':'型号库'}
+    for path,source in document.get('provenance',{}).items():
+        # Identity/display metadata and container origins remain in the full
+        # audit snapshot; the paper bibliography lists actual input fields.
+        if path.rsplit('/',1)[-1] in ('id','label','name','schema_version'):continue
+        value=document
+        for part in path.strip('/').split('/'):
+            part=part.replace('~1','/').replace('~0','~')
+            if isinstance(value,list):value=value[int(part)] if part.isdigit() and int(part)<len(value) else next((v for v in value if isinstance(v,dict) and v.get('id')==part),None)
+            elif isinstance(value,dict):value=value.get(part)
+            else:value=None
+        if value is not None and not isinstance(value,(dict,list)):
+            sources.append((source.get('label') or source.get('field_name') or path,source))
+    sources.extend((source.get('label') or path,source) for path,source in (candidate or {}).get('sources',{}).items())
+    # Engineer-entered method/condition sources are also explicit input evidence.
+    sources.extend((path,source) for path,source in definition.get('input_sources',{}).items() if source.get('kind'))
+    rows=[]
+    for label,source in sources:
+        ref=source.get('reference') or '未记录出处';page=source.get('page') or source.get('page_number')
+        if page:ref+=f' · 第 {page} 页'
+        if ref not in references:references.append(ref)
+        if str(label).startswith('/cable_types/'):
+            label='/'+ '/'.join(str(label).split('/')[-2:]) if len(str(label).split('/'))>3 else '电缆结构与物性'
+        rows.append([label,origins.get(source.get('kind'),'保存来源'),f'依据 {references.index(ref)+1}'])
+    return table(['输入项目','来源类型','依据'],rows or [['工况与结构','保存输入','未逐项登记来源']],[2.5,1,1.5])+''.join(paragraph(f'依据 {i}：{ref}') for i,ref in enumerate(references,1))
+
+
+def summary(run):
+    """Use the recommended case and its actual operating state, never a new solve."""
+    from .report import recommended_case, task_answer
+    definition=run['snapshot']['definition'];driver=definition.get('driver',{})
+    selection=driver.get('kind')=='selection'
+    preferred,selected,answer,_=_selection(run) if selection else (recommended_case(run) if driver else None,None,None,None)
+    if answer is None:
+        answer=next((b['text'] for b in _Blocks(task_answer(run)).blocks if b['kind']=='p'),'未取得可用结论。') if driver else '保存温度场结果；详细校核见结果表。'
+    cases=[c for c in run['output'].get('cases',[]) if c['status']=='succeeded' and (not preferred or c['case_id']==preferred)]
+    trace=next((c.get('artifacts',{}).get('x-cablesim.iec60287-trace') for c in cases if c.get('artifacts',{}).get('x-cablesim.iec60287-trace')), {})
+    states=trace.get('operating',{}).get('cable_states',[])
+    currents=[r['value'] for c in cases for r in c.get('results',[]) if r['key']=='ampacity' and r.get('status')=='available']
+    temperatures=[r['value']-273.15 for c in cases for r in c.get('results',[]) if r['key']=='conductor_temperature' and r.get('status')=='available']
+    margins=[s['margin_k'] for s in states if s.get('margin_k') is not None]
+    if states:temperatures=[s['conductor_temperature_c'] for s in states if s.get('conductor_temperature_c') is not None]
+    capacity=selected[0].get('value') if selected else min(currents,default=None)
+    return answer, [number(capacity,0)+' A',number(max(temperatures,default=None))+' °C',number(min(margins,default=None))+' K']
+
+
+def grouped_results(cases, names, document):
+    groups=[('温度与电流',['ampacity','x-cablesim.iec60287.current','conductor_temperature','sheath_temperature','surface_temperature']),
+        ('损耗',['losses.conductor','losses.sheath','x-cablesim.iec60287.losses.armour','losses.dielectric','losses.total']),
+        ('热阻',['thermal_resistance.insulation','x-cablesim.iec60287.thermal_resistance.bedding','thermal_resistance.oversheath','thermal_resistance.external','x-cablesim.iec60287.thermal_resistance.duct_air','x-cablesim.iec60287.thermal_resistance.duct_wall']),
+        ('电气参数',['ac_resistance','capacitance','loss_factor.sheath','x-cablesim.iec60287.loss_factor.armour','x-cablesim.iec60287.temperature_rise.mutual'])]
+    duct=any(d.get('type')=='duct' for s in document.get('sections',[]) for d in s.get('enclosures',[]))
+    html=''
+    for case in cases:
+        if case['status']!='succeeded':
+            html+=paragraph((case.get('error') or {}).get('message','工况未取得结果。'));continue
+        results=[r for r in case.get('results',[]) if r.get('status')=='available' and (duct or not r['key'].endswith(('duct_air','duct_wall')))]
+        for title,keys in groups:
+            keys=[k for k in keys if any(r['key']==k for r in results)]
+            if not keys:continue
+            for offset in range(0,len(keys),4):
+                columns=keys[offset:offset+4];units={k:_metric(next(r for r in results if r['key']==k))[1] for k in columns}
+                by_entity={}
+                for r in results:
+                    if r['key'] in columns:by_entity.setdefault(r.get('entity'),{})[r['key']]=_metric(r)[0]
+                rows=[]
+                for entity,values in by_entity.items():
+                    label=names.get(entity,'整体工况');parts=label.split(' · ',1)
+                    rows.append([parts[0],parts[1] if len(parts)>1 else '整体',*[values.get(k,'—') for k in columns]])
+                html+='<h3>'+title+'</h3>'+table(['回路','相别',*[QUANTITIES[k]+' / '+units[k] for k in columns]],rows,[1.2,.7]+[1.2]*len(columns))
+    return html
 
 
 def chapters(runs, audience):
@@ -187,14 +296,7 @@ def chapters(runs, audience):
         body='<h2>3. '+('候选比较与推荐' if selection else '结果表')+'</h2>'
         if comparison:body+=comparison
         else:
-            rows=[]
-            for case in run['output'].get('cases',[]):
-                label=case.get('label') or next((x.get('label') for x in run['snapshot'].get('cases',[]) if x['case_id']==case['case_id']),None) or '保存工况'
-                if case['status']!='succeeded':rows.append([label,'工况状态',(case.get('error') or {}).get('message','未取得结果'),'—']);continue
-                for row in case.get('results',[]):
-                    if row['key'] not in QUANTITIES and audience=='customer':continue
-                    value,unit=_metric(row);rows.append([label+' · '+names.get(row.get('entity'),'计算对象'),QUANTITIES.get(row['key'],row['key']),value,unit])
-            body+=table(['对象 / 工况','物理量','数值','单位'],rows or [['研究','结果','未输出','—']],[1.3,2.0,1.2,1])
+            body+=grouped_results(run['output'].get('cases',[]),names,document)
         cases=[c for c in run['output'].get('cases',[]) if c['status']=='succeeded' and (not preferred or c['case_id']==preferred)]
         trace=next((c.get('artifacts',{}).get('x-cablesim.iec60287-trace') for c in cases if c.get('artifacts',{}).get('x-cablesim.iec60287-trace')), {})
         if selection and selected and trace:
@@ -207,15 +309,17 @@ def chapters(runs, audience):
             for artifact in case.get('artifacts',{}).values():
                 if isinstance(artifact,dict):clauses.extend(c for c in artifact.get('clauses',[]) if c not in clauses)
         body='<h2>4. 计算依据与方法版本</h2>'+table(['项目','采用版本'],[
-            ['计算方法',PLUGIN_NAMES.get(method['plugin_id'],'已保存插件方法')],['插件标识',method['plugin_id']],
-            ['插件版本',method['version']],['方法能力',{'steady-rating':'稳态载流量','steady':'稳态计算'}.get(method['capability'],method['capability'])],['运行时间（UTC）',clean(run.get('finished') or run.get('created')).replace('T',' ').replace('+00:00','')],
+            ['计算方法',PLUGIN_NAMES.get(method['plugin_id'],'已保存插件方法')],
+            ['插件版本',method['version']],['方法能力',{'steady-rating':'稳态载流量','steady':'稳态计算'}.get(method['capability'],'保存的计算能力')],['运行时间（UTC）',clean(run.get('finished') or run.get('created')).replace('T',' ').replace('+00:00','')],
             ['输入 / 研究修订',str(run['snapshot'].get('workspace_revision','未记录'))+' / '+str(run['snapshot'].get('study_revision','未记录'))]], [1.3,3.7])
         body+='<h3>标准条款</h3>'+''.join(paragraph(c) for c in clauses or ['该保存运行未提供可引用条款；不补写推测依据。'])
         if trace.get('electrical_basis'):body+='<h3>方法适用口径</h3>'+paragraph(trace['electrical_basis'])
         body+=engineering_html
+        body+='<h3>逐项输入来源</h3>'+input_sources(document,definition,selected[1]['payload'] if selected else None)
+        body+=paragraph('客户版保留结论、工况、结果和依据；内部审核版另附完整输入快照、诊断和验证证据。')
         sections.append(body)
         if audience=='internal':
-            body='<h2>附录：来源摘要</h2>'+table(['证据','保存记录'],[['源运行',run['id']],['输入 SHA256',run['input_digest']],['输出 SHA256',run['output_digest']],['方法发行 SHA256',method.get('release_digest','未记录')],['结果完整性',run.get('integrity','未记录')],['运行状态',run.get('status')],['时效状态',run.get('freshness')]], [1.1,3.9])
+            body='<h2>附录：来源摘要</h2>'+paragraph('完整输入快照、完整精度结果、诊断与验证证据保存在本 PDF 的 JSON 附件中，可由支持附件的 PDF 阅读器导出。原始字段和标识完整保留，纸面使用工程名称。')+table(['证据','保存记录'],[['源运行',run['id']],['输入 SHA256',run['input_digest']],['输出 SHA256',run['output_digest']],['方法发行 SHA256',method.get('release_digest','未记录')],['结果完整性',run.get('integrity','未记录')],['运行状态',run.get('status')],['时效状态',run.get('freshness')]], [1.1,3.9])
             body+=table(['输入位置','来源及核对状态'],[[p,clean(s.get('reference'))+'；'+('已核对' if s.get('reviewed') else '未核对')] for p,s in definition.get('input_sources',{}).items()] or [['来源','未记录']],[1.3,3.7])
             for candidate in run['snapshot'].get('candidate_snapshots',[]):
                 body+='<h3>'+escape(candidate['payload']['name'])+'</h3>'+table(['证据','摘要'],[['候选内容 SHA256',candidate['digest']],['候选状态',candidate['state']],['原始记录 SHA256',candidate.get('origin',{}).get('digest','未记录')],['补全工件 SHA256',candidate.get('preparation',{}).get('artifact_sha256','未记录')]], [1.3,3.7])
@@ -252,13 +356,15 @@ def render_pdf(runs, audience='customer', *, generated_at=None, attachments=None
     output=BytesIO();width,height=A4
     doc=SimpleDocTemplate(output,pagesize=A4,leftMargin=42,rightMargin=42,topMargin=58,bottomMargin=52,
         title=study+' · 研究计算书',subject=edition,creator='CableSimPro',author='')
-    normal=ParagraphStyle('Body',fontName=font,fontSize=10.5,leading=16,wordWrap='CJK',spaceAfter=10)
-    styles={'p':normal,'h1':ParagraphStyle('Title',parent=normal,fontSize=27,leading=36,spaceBefore=12,spaceAfter=18,keepWithNext=True),
-        'h2':ParagraphStyle('Chapter',parent=normal,fontSize=16,leading=23,spaceBefore=18,spaceAfter=12,keepWithNext=True),
-        'h3':ParagraphStyle('Section',parent=normal,fontSize=12,leading=18,spaceBefore=14,spaceAfter=8,keepWithNext=True),
+    normal=ParagraphStyle('Body',fontName=font,fontSize=10.5,leading=16,wordWrap='CJK',spaceAfter=8)
+    styles={'p':normal,'h1':ParagraphStyle('Title',parent=normal,fontSize=21,leading=28,spaceAfter=12,keepWithNext=True),
+        'h2':ParagraphStyle('Chapter',parent=normal,fontSize=15,leading=21,spaceBefore=12,spaceAfter=9,keepWithNext=True),
+        'h3':ParagraphStyle('Section',parent=normal,fontSize=12,leading=18,spaceBefore=10,spaceAfter=7,keepWithNext=True),
         'cell':ParagraphStyle('Cell',parent=normal,leading=15,spaceAfter=0)}
     def p(value,style):
-        value=escape(str(value)).replace('\n','<br/>')
+        value=paper_text(runs,value)
+        if audience=='customer':value=re.sub(r'[a-f0-9]{64}',lambda m:m[0][:12],value)
+        value=escape(value).replace('\n','<br/>')
         value=re.sub(r'[a-f0-9]{64}',lambda m:'<font name="Courier" size="9">'+' '.join(m[0][i:i+16] for i in range(0,64,16))+'</font>',value)
         return Paragraph(value,style)
     def flow(html):
@@ -269,7 +375,7 @@ def render_pdf(runs, audience='customer', *, generated_at=None, attachments=None
             t=LongTable([[p(c,styles['cell']) for c in row] for row in rows],colWidths=[doc.width*w/sum(weights) for w in weights],repeatRows=1,splitByRow=1,spaceAfter=14,hAlign='LEFT')
             t.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),('BACKGROUND',(0,0),(-1,0),colors.HexColor('#eeeeee')),
                 ('GRID',(0,0),(-1,-1),.25,colors.HexColor('#cccccc')),('LINEBELOW',(0,0),(-1,0),.6,colors.HexColor('#808080')),
-                ('LEFTPADDING',(0,0),(-1,-1),7),('RIGHTPADDING',(0,0),(-1,-1),7),('TOPPADDING',(0,0),(-1,-1),7),('BOTTOMPADDING',(0,0),(-1,-1),7)]))
+                ('LEFTPADDING',(0,0),(-1,-1),6),('RIGHTPADDING',(0,0),(-1,-1),6),('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5)]))
             out.append(t)
         return out
     class NumberedCanvas(canvas.Canvas):
@@ -288,27 +394,41 @@ def render_pdf(runs, audience='customer', *, generated_at=None, attachments=None
             super().save()
     version_labels=list(dict.fromkeys(clean((run.get('version_status') or {}).get('display_name')) for run in runs))
     version_labels=[label for label in version_labels if label]
-    cover_rows=[
-        ['工程名称',project],['研究名称',study],['版本号',version],['生成时间（UTC）',timestamp],['文档版本',edition],
+    cover_rows=[['工程名称',project],['研究名称',study],
+        ['图号 / 文件号','CS-'+first['input_digest'][:12].upper()],['修订',version],
+        ['运行编号与摘要','运行 '+str(first.get('sequence') or 1)+' · 输入 '+first['input_digest'][:12]+' · 结果 '+first['output_digest'][:12]],
+        ['日期（UTC）',timestamp],['文档版本',edition],
         ['文件状态','历史运行复现 · 待人工审核' if historical else '待人工审核']]
     if version_labels:cover_rows.append(['版本状态','；'.join(version_labels)])
-    cover='<h1>研究计算书</h1><h2>'+escape(study)+'</h2>'+table(['文件项目','内容'],cover_rows,[1.2,3.8])
-    cover+='<h3>编制与审核签字</h3>'+table(['职责','签字','日期'],[[name,'________________','________________'] for name in ['编制','审核','批准']],[1,2,2])
-    cover+=paragraph('签字栏供人工填写；本文由指定运行的保存结果编制，导出未重新计算。')
-    cover+=paragraph('本文为设计计算资料，不代替厂家试验、完整产品认证或现场校核。')
+    cover='<h1>研究计算书</h1>'+table(['文件信息','保存内容'],cover_rows,[1.4,3.6])
+    cover+='<h3>编制与审核签字</h3>'+table(['设计（编制）','校核','审核（批准）'],[['签字：____________','签字：____________','签字：____________'],['日期：____________','日期：____________','日期：____________']],[1,1,1])
+    answer,metrics=summary(first)
+    saved_input=_input(first)
+    currents=sorted({i for load in saved_input.get('load_cases',[]) for i in load.get('currents',{}).values() if isinstance(i,(int,float))})
+    if currents:answer=' / '.join(number(i,0) for i in currents)+' A 工况：'+answer
+    cover+='<h2>结论摘要</h2>'+paragraph(answer)+table(['允许电流','最热导体温度','温限余量'],[metrics],[1,1,1])
+    cover+=paragraph('适用方法：'+PLUGIN_NAMES.get(definition['method']['plugin_id'],'保存方法')+' '+definition['method']['version']+'；具体标准条款见计算依据。')
+    references=[]
+    for case in first['output'].get('cases',[]):
+        for artifact in case.get('artifacts',{}).values():
+            if isinstance(artifact,dict):references.extend(str(r) for r in artifact.get('sources',[]) + artifact.get('clauses',[]))
+    standards=list(dict.fromkeys(re.findall(r'IEC \d+(?:-\d+)+(?::\d{4})?',' '.join(references))))
+    cover+=paragraph('适用标准：'+'；'.join(standards or ['保存运行未登记引用标准']))
+    cover+=paragraph('载流量口径：'+('全回路共同能力，所有回路同时等负荷提升。' if _basis(first)=='simultaneous' else '条件上限，其他回路维持保存负荷；单回路工况即单回路能力。'))
     story=flow(cover)
-    for body in chapters(runs,audience):story.append(PageBreak());story.extend(flow(body))
     if attachments:
         from base64 import b64decode
         from .report_attachments import chapter_html
         from reportlab.platypus import Image
-        items = attachments.get('cad_images', []) + ([attachments['fem_chapter']] if attachments.get('fem_chapter') else [])
+        items = attachments.get('section_images', []) + attachments.get('field_images', []) + attachments.get('cad_images', []) + ([attachments['fem_chapter']] if attachments.get('fem_chapter') else [])
         for body, item in zip(chapter_html(attachments, audience), items):
             story.append(PageBreak());story.extend(flow(body))
             image = Image(BytesIO(b64decode(item['png_base64'], validate=True)))
             factor = min(doc.width/image.imageWidth, (doc.height*0.65)/image.imageHeight)
             image.drawWidth = image.imageWidth*factor; image.drawHeight = image.imageHeight*factor
             story.append(image)
+    for body in chapters(runs,audience):
+        story.extend(flow(body))
     arranged=[]
     for item in story:
         if isinstance(item,LongTable) and item.wrap(doc.width,doc.height)[1]<doc.height-45:
@@ -317,6 +437,11 @@ def render_pdf(runs, audience='customer', *, generated_at=None, attachments=None
             arranged.append(KeepTogether([*headings,item]))
         else:arranged.append(item)
     doc.build(arranged,canvasmaker=NumberedCanvas)
+    if audience=='internal':
+        import json
+        with fitz.open(stream=output.getvalue(),filetype='pdf') as audit:
+            audit.embfile_add('saved-runs.json',json.dumps(runs,ensure_ascii=False,indent=2).encode('utf-8'),filename='saved-runs.json',desc='完整输入快照、完整精度结果、诊断及验证证据；未重新计算。')
+            return audit.tobytes(garbage=3,deflate=True)
     return output.getvalue()
 
 

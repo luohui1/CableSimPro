@@ -16,7 +16,7 @@ from ..plugin_host import Executor, PluginHostError
 from ..plugin_host.resident import ResidentRunner
 from ..schemas import Scenario, StrictModel
 from .contracts import Method
-from .report_attachments import CadReportImage, FemChapterReference
+from .report_attachments import CadReportImage, FemChapterReference, SectionReportImage
 from .responses import VersionStatus
 from .workspace import fingerprint
 from .simulation_contract import ProblemContract, contract as problem_contract
@@ -107,6 +107,7 @@ class CurrentDeliveryRequest(StrictModel):
     run_ids: list[UUID] = Field(min_length=1, max_length=2, description='One current study run, or geometry plus rating-table runs for a specification.')
     request_id: UUID | None = Field(default=None, description='Retry identity; reuse with identical source runs.')
     cad_images: list[CadReportImage] = Field(default_factory=list, max_length=1, description='One exported CAD display image with colour scale and saved-run provenance.')
+    section_images: list[SectionReportImage] = Field(default_factory=list, max_length=3, description='Section drawings from saved case inputs, with dimensions and saved conductor temperatures; no solver invocation.')
     fem_chapter: FemChapterReference | None = Field(default=None, description='Host rebuilds the chapter from these saved runs; client values are never trusted.')
 
 
@@ -270,6 +271,7 @@ def make_router(research, previews):
         try:
             return host_call(research.deliver, str(wid), body.run_ids, request_id=body.request_id, current_only=True,
                              cad_images=[v.model_dump(mode='json', by_alias=True) for v in body.cad_images],
+                             section_images=[v.model_dump(mode='json') for v in body.section_images],
                              fem_chapter=body.fem_chapter.model_dump(mode='json') if body.fem_chapter else None)
         except (ValueError, OSError) as exc:
             fail(422, 'REPORT_ATTACHMENT_INVALID', str(exc))

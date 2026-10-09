@@ -32,11 +32,11 @@ async function step(name, action) {
   report.steps.push({name,seconds:Math.round((performance.now()-start)/10)/100});
   console.log(name+'：'+report.steps.at(-1).seconds+' s');
 }
-async function variants(label) {
+async function variants(label,includeFrames=true) {
   const start=performance.now();measuring=false;
   for(const size of [{width:1366,height:768},{width:1920,height:1080}])for(const theme of ['light','dark']) {
     await page.setViewportSize(size);await page.evaluate(theme=>document.documentElement.dataset.theme=theme,theme);
-    await page.waitForTimeout(200);await assertLayout(page,label);report.layouts.push({label,...size,theme});
+    await page.waitForTimeout(200);await assertLayout(page,label,{includeFrames});report.layouts.push({label,...size,theme});
   }
   await page.setViewportSize({width:1366,height:768});await page.evaluate(()=>document.documentElement.dataset.theme='light');
   measuring=true;return performance.now()-start;
@@ -96,6 +96,14 @@ try {
   await step('预检与实际 IEC 运行',async()=>{report.inquiry=await run();});
   await expect(page.locator('.conclusion')).toBeVisible();
   await expect(page.locator('.conclusion')).toContainText(/500.*满足温限.*最热/);
+  if(process.env.SCENARIO_BOOKS_ONLY==='1') {
+    await page.getByRole('tab',{name:'方法',exact:true}).click();
+    await expect(page.getByRole('combobox',{name:'方法版本',exact:true})).toBeEnabled();
+    await expect(page.getByText('固定运行方法配置 · 只读',{exact:true})).toHaveCount(0);
+    await expect.poll(async()=>page.locator('.workbench-inspector [role="combobox"]').allTextContents()).not.toContain('请选择');
+    await variants('当前方法配置可编辑');
+    await page.screenshot({path:path.join(out,'method-current.png')});
+  }
   report.conclusion=await page.locator('.conclusion').allTextContents();
   await page.screenshot({path:path.join(out,'inquiry.png')});
   await step('生成与下载客户计算书',async()=>{
@@ -105,12 +113,26 @@ try {
     await page.getByRole('button',{name:'下载 PDF',exact:true}).click();
     const file=await download; await file.saveAs(path.join(out,'customer.pdf'));
     const bytes=await fs.readFile(path.join(out,'customer.pdf'));assert.equal(bytes.subarray(0,5).toString(),'%PDF-');
+    if(process.env.SCENARIO_BOOKS_ONLY==='1') {
+      await choose('PDF 版本','内部审核版');
+      const pending=page.waitForEvent('download');await page.getByRole('button',{name:'下载 PDF',exact:true}).click();
+      await (await pending).saveAs(path.join(out,'internal.pdf'));
+      const delivered=await request(base,`/api/workspaces/${wid}/deliveries/${new URL(page.url()).searchParams.get('delivery')}`);
+      const attachment=JSON.parse(delivered.html.match(/data-report-attachments>(.*?)<\/script>/s)[1]);
+      assert.equal(attachment.section_images.length,1,'客户计算书自动插入保存截面');
+      assert.equal(attachment.section_images[0].run_id,report.inquiry.id);
+      assert.equal(attachment.section_images[0].input_digest,report.inquiry.input_digest);
+      // Chrome's built-in PDF viewer is not an application DOM frame. Paper
+      // layout is verified separately from the downloaded PDF with PyMuPDF.
+      await variants('客户与内部计算书预览',false);
+    }
   });
   report.inquirySeconds=+( (performance.now()-inquiryStart-excluded)/1000).toFixed(2);
   report.inquiryClicks=report.actions.filter(action=>action.kind==='click').length;
   report.inquiryFieldEdits=report.actions.filter(action=>action.kind==='field').length;
   assert.ok(report.inquirySeconds<180,'客户问询必须在 3 分钟内完成');
   report.threeSecondTests.push({screen:'校核结论',purpose:'判断客户负荷',conclusion:report.conclusion.join(' '),next:'生成计算书 → 下载 PDF'});
+  if(process.env.SCENARIO_BOOKS_ONLY!=='1') {
   excluded=0;const sensitivityStart=performance.now(),sensitivityActionStart=report.actions.length;
   await step('打开同一研究并设置扫描',async()=>{
     await page.locator('.explorer-calc[aria-current="page"]').click();
@@ -211,6 +233,19 @@ try {
   await page.unroute('**/api/input-contracts');
   await page.getByRole('button',{name:'重新读取契约',exact:true}).click();
   await expect(page.getByText('方法契约不可用',{exact:true})).toHaveCount(0);
+  } else {
+    const savedWorkspace=await request(base,`/api/workspaces/${wid}`);
+    savedWorkspace.domain.name+=' · 历史方法检查';
+    await request(base,`/api/workspaces/${wid}/domain`,'PUT',{expected_revision:savedWorkspace.revision,document:savedWorkspace.domain});
+    await page.goto(base+`/studies/${sid}/ampacity/results?workspace=${wid}&run=${report.inquiry.id}&inspector=method&theme=light`);
+    await expect(page.getByText('固定运行方法配置 · 只读',{exact:true})).toBeVisible();
+    await expect(page.getByRole('combobox',{name:'方法版本',exact:true})).toBeDisabled();
+    await expect(page.locator('[aria-label="保存运行实际方法参数"]')).toBeVisible();
+    assert.ok((await page.locator('[aria-label="保存运行实际方法参数"]').innerText()).includes('精确'),'历史显示实际保存值');
+    await expect(page.locator('.workbench-inspector')).not.toContainText('请选择');
+    await variants('历史方法实际保存值');
+    await page.screenshot({path:path.join(out,'method-historical.png')});
+  }
   assert.deepEqual(report.errors,[]);
   console.log(JSON.stringify({inquiry:{seconds:report.inquirySeconds,clicks:report.inquiryClicks},sensitivity:{seconds:report.sensitivitySeconds,clicks:report.sensitivityClicks},out}));
   report.screen=await page.locator('body').innerText();

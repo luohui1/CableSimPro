@@ -2,7 +2,7 @@
 from html import escape
 import json
 
-RENDERER = 'cablesim.study-html/18'
+RENDERER = 'cablesim.study-html/19'
 
 
 def formatted(value, digits=1):
@@ -362,7 +362,7 @@ def attachment_html(attachments):
     if not attachments: return ''
     from .report_attachments import chapter_html
     parts = chapter_html(attachments)
-    images = attachments.get('cad_images', []) + ([attachments['fem_chapter']] if attachments.get('fem_chapter') else [])
+    images = attachments.get('section_images', []) + attachments.get('field_images', []) + attachments.get('cad_images', []) + ([attachments['fem_chapter']] if attachments.get('fem_chapter') else [])
     body = ''.join('<section data-report-attachment="saved">'+part+'<img style="max-width:100%" alt="保存结果图" src="data:image/png;base64,'+image['png_base64']+'"></section>' for part, image in zip(parts, images))
     return body + '<script type="application/json" data-report-attachments>'+json.dumps(attachments,ensure_ascii=False).replace('<','\\u003c')+'</script>'
 

@@ -21,6 +21,7 @@ import { downloadBlob } from "@/lib/download";
 import { isVersionStale } from '@/lib/version-status';
 import type { CadImage } from '@/features/cad/types';
 import { hpcJson, savedRunLabel } from '@/features/field/run-label';
+import { reportSectionImages } from './study-report-drawing';
 
 export function StudyReport(props: ComponentProps<typeof CurrentReport>) {
   const search = useSearch({ strict: false });
@@ -128,7 +129,8 @@ function CurrentReport({
       if (primaryFem && !chapterReference) throw new ApiError(422, '请选择输入匹配的 IEC 对照运行。');
       if (chapterReference && (!chapter.data || chapter.error || chapter.isFetching)) throw new ApiError(422, '请先核对有限元章节；未收敛或输入不一致不能交付。');
       const cadImages = includeImage && cadImage ? [{metadata:cadImage.metadata,png_base64:await pngBase64(cadImage.blob)}] : [];
-      const payload = {run_ids:[rid], request_id:'', cad_images:cadImages, fem_chapter:chapterReference || null};
+      const sectionImages = await reportSectionImages(source);
+      const payload = {run_ids:[rid], request_id:'', cad_images:cadImages, section_images:sectionImages, fem_chapter:chapterReference || null};
       const identity = JSON.stringify({...payload,request_id:undefined});
       if (request.current.run !== identity) request.current = { run: identity, id: crypto.randomUUID() };
       payload.request_id = request.current.id;
