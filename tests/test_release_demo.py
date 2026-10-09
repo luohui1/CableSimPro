@@ -177,6 +177,7 @@ def test_release_version_change_backs_up_user_data_before_replacement(tmp_path, 
     with closing(sqlite3.connect(database)) as db, db:
         db.execute('CREATE TABLE user_data (value TEXT)')
         db.execute("INSERT INTO user_data VALUES ('keep in backup')")
+        db.execute("INSERT INTO agent_settings VALUES ('model','\"deepseek-flash\"','2026-10-07T14:55:28')")
     identity=seed.release_identity()
     old=json.loads(json.dumps(identity));old[change]={}
     receipt={'complete':True,'identity':old,'user_note':'keep this too'}
@@ -199,6 +200,8 @@ def test_release_version_change_backs_up_user_data_before_replacement(tmp_path, 
     assert current['identity']==identity and current['complete']
     with closing(sqlite3.connect(database)) as db:
         assert db.execute("SELECT name FROM sqlite_master WHERE name='user_data'").fetchone() is None
+        # 模型连接设置是用户配置，重建后沿用
+        assert db.execute("SELECT value FROM agent_settings WHERE name='model'").fetchone()[0]=='"deepseek-flash"'
 
 
 def test_failed_release_rebuild_preserves_database_and_receipt(tmp_path, monkeypatch):

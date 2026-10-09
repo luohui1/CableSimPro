@@ -421,6 +421,21 @@ def build_release_seed(staged, database, identity):
             else: os.environ[key] = value
 
 
+def carry_model_settings(old, new):
+    """模型连接设置是用户配置，不是演示数据：重建发布库时带到新库（密钥在系统凭据库，不在库里）。"""
+    from contextlib import closing
+    import sqlite3
+    with closing(sqlite3.connect(f'file:{old}?mode=ro', uri=True)) as source:
+        try:rows = source.execute('SELECT name,value,updated FROM agent_settings').fetchall()
+        except sqlite3.OperationalError:return 0
+    if rows:
+        with closing(sqlite3.connect(new)) as target, target:
+            target.execute('CREATE TABLE IF NOT EXISTS agent_settings (name TEXT PRIMARY KEY, value TEXT NOT NULL, updated TEXT NOT NULL)')
+            target.executemany('INSERT INTO agent_settings(name,value,updated) VALUES (?,?,?) '
+                               'ON CONFLICT(name) DO UPDATE SET value=excluded.value,updated=excluded.updated', rows)
+    return len(rows)
+
+
 def seed_release(database):
     """Keep current data; rebuild changed releases only after a verified backup."""
     from contextlib import closing
@@ -469,6 +484,9 @@ def seed_release(database):
                         raise RuntimeError('旧库尚未关闭，已保留备份且未替换。')
                 result['previous_backup'] = str(backup)
                 print('旧发布库已备份：'+str(backup),flush=True)
+                if carry_model_settings(database, staged):
+                    validate(staged)
+                    print('已沿用 Agent 模型连接设置。',flush=True)
             staged.replace(database)
             result['complete'] = True
             atomic_json(marker,result)

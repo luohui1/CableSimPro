@@ -7,6 +7,7 @@ responses or logs. Saved settings take precedence over CABLESIM_LLM_* variables.
 """
 from hashlib import sha256
 import json
+from pathlib import Path
 import os
 import threading
 from urllib.parse import urlsplit
@@ -31,7 +32,8 @@ class KeyStore:
     """OS credential store per database, or process memory when none is usable."""
 
     def __init__(self, database_path):
-        self.account = 'agent-model-api-key:' + sha256(str(database_path).encode()).hexdigest()[:16]
+        # 按库文件的真实路径区分账户：相对路径、目录联接指向同一个库时取到同一把密钥
+        self.account = 'agent-model-api-key:' + sha256(str(Path(database_path).resolve()).encode()).hexdigest()[:16]
         self.memory = ''
         self.cached = None
         self.backend = None
