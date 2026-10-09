@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { studyIndex, typeIndex, workspaces } from '@/api/research';
+import { indexInbox } from '@/api/object-index';
 import { text } from '@/api/client';
 import { rootModule, studyEntryTab } from '@/lib/study-config';
 import { Icon } from './icon';
@@ -28,6 +29,9 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
   const spaces = useQuery({ queryKey: ['workspace-index'], queryFn: ({ signal }) => workspaces(signal) });
   const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal) });
   const studies = useQuery({ queryKey: ['study-index'], queryFn: ({ signal }) => studyIndex(signal) });
+  // 待办数：需要人处理的审核、过期与缺项；进行中的作业不计入
+  const inbox = useQuery({ queryKey: ['index-inbox'], queryFn: ({ signal }) => indexInbox(signal), refetchInterval: 60_000, retry: false });
+  const todo = inbox.data ? inbox.data.counts.review + inbox.data.counts.stale + inbox.data.counts.missing : 0;
   const activeStudy = pathname.match(/^\/studies\/([^/]+)/)?.[1] || '';
   const activeType = pathname.match(/^\/types\/([^/]+)/)?.[1] || '';
   const inGallery = pathname.startsWith('/gallery');
@@ -55,6 +59,7 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
     </DropdownMenu>
     <nav className="sidebar-scroll" aria-label="对象">
       <Link className="module-item" to="/" search={{ theme }} activeOptions={{ exact: true }}><Icon name="nav/home" /><span>首页</span></Link>
+      <Link className="module-item" to="/inbox" search={{ theme }}><Icon name="status/pending" /><span>待办</span>{!!todo && <span className="sidebar-count">{todo}</span>}</Link>
       <div className="tree-caption">工作</div>
       <Link className="module-item" to="/studies" search={{ theme }} activeOptions={{ exact: true }}><Icon name="object/folder" /><span>工程</span></Link>
       {spaces.isPending ? <div className="tree-empty">读取中</div> : spaces.isError ? <div className="tree-empty">工程读取失败</div> : projects.map(project => {

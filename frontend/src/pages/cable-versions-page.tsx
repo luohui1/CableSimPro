@@ -6,6 +6,7 @@ import { message, numeric, optionalRecord, text } from "@/api/client";
 import { CatalogShell, usePageTheme } from "@/components/catalog-shell";
 import { DataTable } from "@/components/data-table";
 import { PropertyPanel } from "@/components/property-panel";
+import { RelationPanel } from "@/components/relation-panel";
 import { StatusMark } from "@/components/status-mark";
 import { Toolbar } from "@/components/toolbar";
 import { Button } from "@/components/ui/button";
@@ -89,6 +90,7 @@ export function CableVersionsPage() {
           collapsed={false}
           title={current.name}
           onToggle={() => setSelected("")}
+          extra={<section aria-label="关联"><h3>关联</h3><RelationPanel kind="cable_version" id={current.id} /></section>}
           groups={[
             {
               label: "名片",
@@ -102,12 +104,16 @@ export function CableVersionsPage() {
             },
             {
               label: "来源",
-              items: current.sources.map((source, index) => ({
-                label: `${SOURCE[source.kind]?.label || source.kind} ${index + 1}`,
-                value: source.reviewed ? "已核对" : "待核对",
-                source: SOURCE[source.kind]?.badge || "document",
-                sourceDetail: `${source.path}\n${source.reference}`,
-              })),
+              // 按出处类别合并成一行：几项、已核对几项；逐条出处在悬停里看
+              items: [...new Set(current.sources.map((source) => source.kind))].map((kind) => {
+                const rows = current.sources.filter((source) => source.kind === kind);
+                return {
+                  label: SOURCE[kind]?.label || kind,
+                  value: `${rows.length} 项 · 已核对 ${rows.filter((source) => source.reviewed).length}`,
+                  source: SOURCE[kind]?.badge || "document",
+                  sourceDetail: rows.map((source) => `${source.path}\n${source.reference}`).join("\n\n"),
+                };
+              }),
             },
           ]}
         />

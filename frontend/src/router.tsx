@@ -23,6 +23,7 @@ const AssetsPage = lazyRouteComponent(() => import('./pages/library-page'), 'Ass
 const CableVersionsPage = lazyRouteComponent(() => import('./pages/cable-versions-page'), 'CableVersionsPage');
 const RunsPage = lazyRouteComponent(() => import('./pages/runs-page'), 'RunsPage');
 const HomePage = lazyRouteComponent(() => import('./pages/home-page'), 'HomePage');
+const InboxPage = lazyRouteComponent(() => import('./pages/inbox-page'), 'InboxPage');
 const DocumentsPage = lazyRouteComponent(() => import('./pages/documents-page'), 'DocumentsPage');
 const DeliveriesPage = lazyRouteComponent(() => import('./pages/deliveries-page'), 'DeliveriesPage');
 const PluginsPage = lazyRouteComponent(() => import('./pages/plugins-page'), 'PluginsPage');
@@ -64,6 +65,8 @@ const documentsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/re
 const assetGroupRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/$group", validateSearch: themeSearch, beforeLoad: ({ params }) => { if (!["materials", "templates", "standards"].includes(params.group)) throw notFound(); }, component: AssetsPage });
 // 记录：运行与作业、交付；都是跨对象的筛选视图，各自的家在所属研究或型号里
 const runsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/runs", validateSearch: themeSearch, component: RunsPage });
+// 待办：四类审核、过期待重算、资料缺项、进行中，来自统一索引（§2.3）
+const inboxRoute = createRoute({ getParentRoute: () => rootRoute, path: "/inbox", validateSearch: themeSearch, component: InboxPage });
 const deliveriesRoute = createRoute({ getParentRoute: () => rootRoute, path: "/deliveries", validateSearch: deliverySearch, component: DeliveriesPage });
 // 旧地址只做跳转，书签与其他页面里的链接不失效
 const legacyLibraryRoute = createRoute({ getParentRoute: () => rootRoute, path: "/library", validateSearch: themeSearch, beforeLoad: ({ search }) => { throw redirect({ to: "/resources/cables", search, replace: true }); } });
@@ -200,7 +203,7 @@ const sampleEntryRoute = createRoute({
 export const router = createRouter({
   routeTree: rootRoute.addChildren([
     homeRoute,
-    cableVersionsRoute, documentsRoute, assetGroupRoute, runsRoute, deliveriesRoute,
+    cableVersionsRoute, documentsRoute, assetGroupRoute, runsRoute, deliveriesRoute, inboxRoute,
     pluginsRoute, pluginDetailRoute, settingsRoute, agentRoute,
     reproductionsRoute, reproductionDetailRoute,
     legacyLibraryRoute, legacyDeliveriesRoute, legacyDocumentsRoute, legacyReproductionsRoute, legacyReproductionDetailRoute,

@@ -11,6 +11,7 @@ import { EmptyState, InlineEmpty } from "@/components/states";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
+import { RelationPanel } from "@/components/relation-panel";
 
 type Row = Record<string, unknown>;
 
@@ -101,7 +102,7 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
           <TabsTrigger value="method">方法</TabsTrigger>
           <TabsTrigger value="capabilities">能力 {caps.length}</TabsTrigger>
           <TabsTrigger value="validation">验证</TabsTrigger>
-          <TabsTrigger value="usage">被用于 {studies.length}</TabsTrigger>
+          <TabsTrigger value="usage">关联</TabsTrigger>
           <TabsTrigger value="technical">技术信息</TabsTrigger>
         </TabsList>
         <TabsContent value="method" className="plugin-section">
@@ -143,8 +144,8 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
           <Link className="detail-link" to="/validation" search={{ theme, snapshot: "" }}>查看验证算例</Link>
         </TabsContent>
         <TabsContent value="usage" className="plugin-section">
-          {studies.length ? <ul className="plugin-usage">{studies.map((study) => <li key={study.id}><Link to="/studies" search={{ theme, workspace: study.workspace }}>{study.title}</Link></li>)}</ul>
-            : <InlineEmpty title="还没有研究使用这个插件。" />}
+          {/* 关联来自统一索引：用这个插件的研究，以及它的验证证据 */}
+          <RelationPanel kind="plugin" id={id} />
         </TabsContent>
         <TabsContent value="technical" className="plugin-section">
           <dl className="detail-meta">
