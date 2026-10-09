@@ -87,7 +87,9 @@ def test_resident_worker_honors_selected_python_and_does_not_reuse_another_envir
     environment=tmp_path/'environment'
     venv.EnvBuilder(with_pip=False).create(environment)
     selected=environment_python(environment)
-    path=entry(tmp_path,"    import sys\n    Path('output/result.json').write_text(json.dumps({'prefix':sys.prefix}))\n")
+    site = environment/('Lib/site-packages' if sys.platform == 'win32' else f'lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages')
+    (site/'csp_selected_environment_marker.py').write_text('VALUE=1\n', 'utf-8')
+    path=entry(tmp_path,"    import sys,importlib.util\n    Path('output/result.json').write_text(json.dumps({'prefix':sys.prefix,'selected_package':importlib.util.find_spec('csp_selected_environment_marker') is not None}))\n")
     runner=ResidentRunner(tmp_path/'workers')
     try:
         assert runner.warmup(path,env=minimal_environment(tmp_path),timeout=10,python_executable=selected)
@@ -95,8 +97,11 @@ def test_resident_worker_honors_selected_python_and_does_not_reuse_another_envir
         job=tmp_path/'isolated';job.mkdir();(job/'input').mkdir();(job/'output').mkdir()
         proc=runner([str(selected),'-I',str(path)],cwd=job,env=minimal_environment(job),timeout=10,stderr_limit=8000)
         assert Path(json.loads((job/'output/result.json').read_text())['prefix'])==environment
+        assert json.loads((job/'output/result.json').read_text())['selected_package'] is True
         assert proc.profiling['worker_pid']==old_pid
         other=run(runner,path,tmp_path/'host',timeout=10)
         assert other.profiling['worker_pid']!=old_pid
         assert Path(json.loads((tmp_path/'host/output/result.json').read_text())['prefix'])==Path(sys.prefix)
+        assert json.loads((tmp_path/'host/output/result.json').read_text())['selected_package'] is False
     finally:runner.close()
+    assert not list((tmp_path/'workers').iterdir())

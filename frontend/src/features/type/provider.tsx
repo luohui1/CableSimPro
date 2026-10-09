@@ -15,7 +15,7 @@ type TypeContextValue = { workspace?: Workspace; document?: DomainDocument; dirt
   ratingDraft: RatingDraft | null; setRatingDraft: (draft: RatingDraft | null | ((current: RatingDraft | null) => RatingDraft | null)) => void;
   methodDrafts: Record<string, MethodDraft>; setMethodDraft: (module: string, draft: MethodDraft | null | ((current: MethodDraft | undefined) => MethodDraft | null)) => void;
   fieldError: { path: string; message: string } | null;
-  setField: (spec: NumericInput, text: string | undefined) => void; edit: (path: string, value: unknown) => void; save: () => Promise<void>; undo: () => Promise<void>; discard: () => void; reload: () => void; locked: (path: string) => boolean };
+  setField: (spec: NumericInput, text: string | undefined) => void; edit: (path: string, value: unknown) => void; save: () => Promise<void>; commitResourceValue: (action: () => Promise<unknown>) => Promise<void>; undo: () => Promise<void>; discard: () => void; reload: () => void; locked: (path: string) => boolean };
 const Context = createContext<TypeContextValue | null>(null);
 export function useTypeWorkspace() { const value = useContext(Context); if (!value) throw new Error('型号工作区未挂载'); return value; }
 export function TypeProvider({ wid, children }: { wid: string; children: ReactNode }) {
@@ -47,9 +47,16 @@ export function TypeProvider({ wid, children }: { wid: string; children: ReactNo
     }); setError(''); setNotice('');
   }
   async function refreshResults() {
-    await Promise.all(['type-evidence', 'type-specification', 'type-comparison', 'type-studies'].map(key => queries.invalidateQueries({ queryKey: [key, wid] })));
+    await Promise.all(['type-evidence', 'type-specification', 'type-comparison', 'type-studies', 'type-material-comparison', 'type-resource-bindings'].map(key => queries.invalidateQueries({ queryKey: [key, wid] })));
+    await queries.invalidateQueries({ queryKey: ['object-relations'] });
   }
   async function refresh(next: Workspace) { queries.setQueryData(['type-workspace', wid, undefined, undefined], next); await refreshResults(); await queries.invalidateQueries({ queryKey: ['type-list'] }); }
+  async function commitResourceValue(action: () => Promise<unknown>) {
+    if (pending.current || !workspace || readOnly || dirty) throw new Error('请先保存或撤销当前修改，再采用资源值。');
+    pending.current = true; setBusy(true); setError(''); setNotice('');
+    try { await action(); await refresh(await loadWorkspace(wid)); setNotice('已采用资源值；受影响的保存结果为历史，请重算。'); }
+    finally { pending.current = false; setBusy(false); }
+  }
   async function save() {
     if (pending.current || (!draftRef.current && !ratingRef.current && !Object.keys(methodsRef.current).length) || !workspace || readOnly) return;
     pending.current = true; setBusy(true); setError(''); setNotice(''); setFieldError(null);
@@ -89,7 +96,7 @@ export function TypeProvider({ wid, children }: { wid: string; children: ReactNo
   }
   return <Context.Provider value={{ workspace, document, dirty, busy, loading: query.isPending, error: error || (query.error ? message(query.error) : ''), notice, readOnly: !!readOnly, draft,
     ratingDraft, methodDrafts, setMethodDraft: (module, value) => { if (!readOnly && !busy) { const next = { ...methodsRef.current }, draft = typeof value === 'function' ? value(next[module]) : value; if (draft) next[module] = draft; else delete next[module]; methodsRef.current = next; setMethodDrafts(next); setError(''); setNotice(''); setFieldError(null); } }, fieldError, setRatingDraft: value => { if (!readOnly && !busy) { const next = typeof value === 'function' ? value(ratingRef.current) : value; ratingRef.current = next; setRatingDraft(next); setError(''); setNotice(''); setFieldError(null); } },
-    setField, edit, save, undo, discard: () => { setDraft(null); setRatingDraft(null); setMethodDrafts({}); setError(''); }, reload: () => { void query.refetch(); }, locked: path => !!readOnly || isLocked(workspace?.raw.locks, path) }}>{children}
+    setField, edit, save, commitResourceValue, undo, discard: () => { setDraft(null); setRatingDraft(null); setMethodDrafts({}); setError(''); }, reload: () => { void query.refetch(); }, locked: path => !!readOnly || isLocked(workspace?.raw.locks, path) }}>{children}
     <Dialog open={blocker.status === 'blocked'} onOpenChange={open => { if (!open) blocker.reset?.(); }} title="型号有未保存修改" description="保存后再离开，或放弃本次草稿。"
       actions={<Button onClick={() => { setDraft(null); setRatingDraft(null); setMethodDrafts({}); blocker.proceed?.(); }}>放弃修改并离开</Button>} />
   </Context.Provider>;

@@ -2,6 +2,7 @@
 import ast
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,14 +16,41 @@ from .process import run_process
 from .registry import PluginHostError
 
 
+def worker_launch(python_executable, environment):
+    """Use the selected Windows venv without its nested redirector process.
+
+    A cold venv redirector can block inside CreateProcess with the atomic Job
+    Object assignment. CPython's redirector normally launches home/python.exe
+    with __PYVENV_LAUNCHER__; retain exactly that prefix/site-packages selection
+    while assigning the real interpreter to the controlled job at creation.
+    Never substitute the host interpreter or run an uncontrolled priming job.
+    """
+    # Keep a venv's executable spelling on POSIX: resolving bin/python's
+    # symlink would silently select the base environment instead.
+    selected = Path(os.path.abspath(python_executable))
+    config = selected.parent.parent / 'pyvenv.cfg'
+    env = dict(environment)
+    env.pop('__PYVENV_LAUNCHER__', None)
+    if os.name == 'nt' and selected.parent.name.lower() == 'scripts' and config.is_file():
+        settings = {key.strip(): value.strip() for key, value in (line.split('=', 1) for line in config.read_text('utf-8').splitlines() if '=' in line)}
+        home = settings.get('home', '').strip()
+        base = Path(home) / 'python.exe'
+        if not home or not base.is_absolute() or not base.is_file():
+            raise PluginHostError('ENVIRONMENT_MISSING', '所选 Python 虚拟环境的基础解释器缺失；请重新准备该环境。', 503)
+        env['__PYVENV_LAUNCHER__'] = str(selected)
+        return str(base), env
+    return str(selected), env
+
+
 class ResidentWorker:
     def __init__(self, entry, root, environment, python_executable):
+        executable, launch_env = worker_launch(python_executable, environment)
         self.entry=entry
         self.allowed_root=Path(root).resolve();self.closed=False
         self.mailbox=Path(tempfile.mkdtemp(prefix='csp-worker-',dir=root))
         self.stop=Event();self.completed=Event();self.lock=Lock();self.error=None
-        self.args=[str(python_executable),'-I',str(Path(__file__).with_name('resident_worker.py')),str(entry),str(self.mailbox)]
-        self.environment={**environment,**{k:str(self.mailbox) for k in ('HOME','USERPROFILE','TMP','TEMP','TMPDIR')}}
+        self.args=[executable,'-I',str(Path(__file__).with_name('resident_worker.py')),str(entry),str(self.mailbox)]
+        self.environment={**launch_env,**{k:str(self.mailbox) for k in ('HOME','USERPROFILE','TMP','TEMP','TMPDIR')}}
         self.thread=Thread(target=self._run,daemon=True,name='cablesim-preview-worker')
         self.thread.start()
 
@@ -108,7 +136,10 @@ class ResidentRunner:
         functions={n.name for n in ast.parse(raw).body if isinstance(n,ast.FunctionDef)}
         if not {'resident_main','resident_warmup'}<=functions:
             return None
-        key=(str(entry),sha256(raw).hexdigest(),env.get('CABLESIM_WORKER_RELEASE',''),str(python_executable))
+        selected = Path(os.path.abspath(python_executable))
+        config = selected.parent.parent/'pyvenv.cfg'
+        environment_digest = sha256(config.read_bytes()).hexdigest() if config.is_file() else ''
+        key=(str(entry),sha256(raw).hexdigest(),env.get('CABLESIM_WORKER_RELEASE',''),str(selected),environment_digest)
         with self.lock:
             worker=self.workers.get(key)
             if worker and worker.completed.is_set():worker.close();del self.workers[key];worker=None

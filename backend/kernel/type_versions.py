@@ -7,6 +7,7 @@ from copy import deepcopy
 import json
 import getpass
 import re
+from math import isfinite
 from typing import Literal
 from uuid import UUID, uuid4
 from threading import Lock
@@ -61,6 +62,14 @@ class BindResource(Adopt):
 
 class MigrateResources(Adopt):
     operation: Literal['migrate_resource_bindings'] = 'migrate_resource_bindings'
+
+
+class AdoptMaterialValue(Adopt):
+    operation: Literal['adopt_material_value'] = 'adopt_material_value'
+    material_id: str = Field(pattern=r'^material/[A-Za-z0-9_-]+$')
+    property: str = Field(min_length=1, max_length=80)
+    resource_id: UUID
+    content_sha256: str = Field(pattern=r'^[a-f0-9]{64}$')
 
 
 class NewType(StrictModel):
@@ -218,6 +227,163 @@ def declared_execution_standards(document):
             and 0 < len(item['standard'].strip()) <= 128
             and isinstance(item.get('source_digest'), str)
             and re.fullmatch(r'[a-f0-9]{64}', item['source_digest'])]
+
+
+MATERIAL_PROPERTIES = {
+    'thermal_resistivity': ('热阻率', 'K.m/W'),
+    'electrical_resistivity_20': ('20 °C 电阻率', 'ohm.m'),
+    'temperature_coefficient_20': ('20 °C 温度系数', 'K^-1'),
+    'relative_permittivity': ('相对介电常数', '1'), 'loss_tangent': ('损耗角正切', '1'),
+    'density': ('密度', 'kg/m³'), 'volumetric_heat_capacity': ('体积热容', 'J/(m³.K)'),
+    'relative_permeability': ('相对磁导率', '1'), 'emissivity': ('发射率', '1'),
+    'solar_absorptivity': ('太阳吸收率', '1'), 'dry_thermal_resistivity': ('干态热阻率', 'K.m/W'),
+    'critical_temperature_rise': ('临界温升', 'K'),
+}
+
+
+def material_condition(document, material, reference):
+    """Conservative matching of the controlled reference vocabulary, never names.
+
+    Unknown wording, unknown formulation, mixed uses or missing voltage refuse
+    comparison. A reviewed explicit resource identity may identify formulation;
+    a hand-bound resource name alone does not establish it.
+    """
+    cable = document['cable_types'][0]
+    uses = [l for core in cable['cores'] for l in [dict(core['conductor'], role='conductor'), *core['layers']]] + cable['common_layers']
+    uses = [l for l in uses if l['material'] == material['id']]
+    roles = {l['role'] for l in uses}
+    condition = reference.get('condition', '')
+    if not isinstance(condition, str) or not condition:
+        return '资源未声明可核对的适用条件。'
+    if not roles:
+        return '材料已不用于当前结构。'
+    protective = {'oversheath', 'bedding', 'binder', 'separator'}
+    required = {'导体': {'conductor'}, '护套与铠装': {'metallic_sheath', 'armour'},
+                '保护护层': protective, '半导电': {'conductor_screen', 'insulation_screen'},
+                '波纹铝护套上的': protective, '绝缘': {'insulation'}}
+    match = next((allowed for word, allowed in required.items() if condition.startswith(word)), None)
+    if match is None and re.match(r'^(?:未填充|填充)?(?:XLPE|EPR|PVC)', condition):
+        match = {'insulation'}
+    if match is None or not roles <= match:
+        return '材料用途与资源条件不符；混合用途不能共用一个参考值。'
+    index = document['materials'].index(material)
+    source = document.get('provenance', {}).get('/materials/'+str(index), {})
+    identity = source_identity(source)
+    # A reviewed source identity establishes composition; a display label or
+    # manual pin cannot. Reject an explicit conflicting material class as well.
+    families = {'导体铜': {'copper-conductor'}, '导体铝': {'aluminium-conductor'},
+                '护套与铠装铝': {'aluminium-sheath'}, '护套与铠装铅': {'lead-sheath'},
+                '护套与铠装钢': {'steel-armour'}, '保护护层PVC': {'pvc-reference', 'pvc-covering-mv', 'pvc-covering-hv'}}
+    expected = next((values for word, values in families.items() if condition.startswith(word)), None)
+    if condition.startswith(('XLPE', '未填充XLPE', '填充XLPE')):
+        expected = {'xlpe-mv', 'xlpe-hv', 'xlpe-filled-hv'}
+    elif condition.startswith('EPR'):
+        expected = {'epr-lv', 'epr-mv', 'epr-hv'}
+    elif condition.startswith('PVC绝缘'):
+        expected = {'pvc-reference', 'pvc-insulation-lv', 'pvc-insulation-mv'}
+    if expected and (source.get('reviewed') is not True or identity.get('asset_id') not in {'material/'+key for key in expected}):
+        return '型号未核对资源要求的材料组成身份。'
+    kinds = {'copper-conductor': {'copper_bare', 'copper_coated'}, 'aluminium-conductor': {'aluminium'},
+             'aluminium-sheath': {'aluminium'}, 'lead-sheath': {'lead'}, 'steel-armour': {'steel_galvanized'},
+             'xlpe-mv': {'XLPE'}, 'xlpe-hv': {'XLPE'}, 'xlpe-filled-hv': {'XLPE'},
+             'epr-lv': {'EPR'}, 'epr-mv': {'EPR'}, 'epr-hv': {'EPR'}, 'pvc-reference': {'PVC'},
+             'pvc-covering-mv': {'PVC'}, 'pvc-covering-hv': {'PVC'}, 'pvc-insulation-lv': {'PVC'}, 'pvc-insulation-mv': {'PVC'}}
+    actual_kind = material.get('standard_kind')
+    declared_kinds = kinds.get(identity.get('asset_id', '').removeprefix('material/'))
+    if actual_kind is not None and declared_kinds and actual_kind not in declared_kinds:
+        return '型号材料类别与已核对的资源组成身份冲突。'
+    if condition.startswith(('半导电', '保护护层PE', '波纹铝护套上的')):
+        index = document['materials'].index(material)
+        source = document.get('provenance', {}).get('/materials/'+str(index), {})
+        identity = source_identity(source)
+        suffix = 'semiconductor-epr' if condition.startswith('半导电EPR') else 'semiconductor-pe' if condition.startswith('半导电') else 'pe-covering' if condition.startswith('保护护层PE') else 'corrugated-covering'
+        if source.get('reviewed') is not True or identity.get('asset_id') != 'material/'+suffix:
+            return '型号未核对资源要求的聚合物 / 构造材料身份。'
+    if condition.startswith('未填充') or condition.startswith('填充'):
+        index = document['materials'].index(material)
+        identity = source_identity(document.get('provenance', {}).get('/materials/'+str(index), {}))
+        source = document.get('provenance', {}).get('/materials/'+str(index), {})
+        suffix = 'xlpe-filled-hv' if condition.startswith('填充') else 'xlpe-mv' if '≤18/30' in condition else 'xlpe-hv'
+        if source.get('reviewed') is not True or identity.get('asset_id') != 'material/'+suffix:
+            return '型号未核对填充 / 未填充配方条件。'
+    voltage = re.search(r'(≤|>)\s*(3|35) kV', condition)
+    pair = re.search(r'(≤|>)18/30', condition)
+    rating = cable.get('rating', {})
+    if voltage or pair:
+        u, u0 = rating.get('u'), rating.get('u0')
+        if u is None or pair and u0 is None:
+            return '型号电压未给齐，不能核对资源电压条件。'
+        if voltage:
+            op, bound = voltage.groups()
+            valid = u <= float(bound)*1000 if op == '≤' else u > float(bound)*1000
+        else:
+            valid = u <= 30000 and u0 <= 18000 if pair[1] == '≤' else u > 30000 and u0 > 18000
+        if not valid:
+            return '型号额定电压与资源适用电压不符。'
+    if '工频' in condition:
+        circuits = document.get('circuits', [])
+        if not circuits or any(c.get('system', {}).get('kind') not in ('ac_three_phase', 'ac_single_phase') or c.get('system', {}).get('frequency') not in (50, 60) for c in circuits):
+            return '型号未声明与资源一致的工频交流条件。'
+    if condition.startswith('波纹铝护套上的') and not any(l['role'] == 'metallic_sheath' and l.get('form') == 'corrugated' and
+            any(source_identity(document.get('provenance', {}).get('/materials/'+str(i), {})).get('asset_id') == 'material/aluminium-sheath'
+                and document.get('provenance', {}).get('/materials/'+str(i), {}).get('reviewed') is True
+                for i, m in enumerate(document['materials']) if m['id'] == l['material']) for l in cable['common_layers']):
+        return '型号未声明波纹铝护套构造。'
+    return None
+
+
+def compare_material(document, material, resource):
+    from ..domain.guards import pointer
+    def finite_record(record):
+        try:
+            json.dumps(record, allow_nan=False)
+            return True
+        except (ValueError, TypeError):
+            return False
+    records = [source_identity(source) for source in resource['release']['sources']]
+    records = [r for r in records if r.get('schema') == 'cablesim.reference-data/1']
+    provenance = document.get('provenance', {})
+    rows = []
+    aliases = {'Ω·m': 'ohm.m', 'Ω.m': 'ohm.m', 'K·m/W': 'K.m/W', '1/K': 'K^-1'}
+    for prop, (label, unit) in MATERIAL_PROPERTIES.items():
+        candidates = [r for r in records if r.get('property') == prop or prop == 'thermal_resistivity' and str(r.get('property', '')).startswith('thermal_resistivity_')]
+        checked = [(r, material_condition(document, material, r)) for r in candidates]
+        applicable = [r for r, reason in checked if reason is None and r.get('basis') == 'standard_reference' and finite_record(r)
+                      and all(isinstance(r.get(k), str) and r[k].strip() for k in ('standard', 'table'))
+                      and all(isinstance(r.get(k), int) and not isinstance(r[k], bool) and r[k] > 0 for k in ('printed_page', 'pdf_page'))
+                      and isinstance(r.get('source_digest'), str) and re.fullmatch(r'[a-f0-9]{64}', r['source_digest'])
+                      and aliases.get(r.get('unit'), r.get('unit')) == unit
+                      and isinstance(r.get('value'), (int, float)) and not isinstance(r['value'], bool) and isfinite(r['value'])]
+        reference = applicable[0] if len(applicable) == 1 else None
+        actual = material.get(prop)
+        path = pointer('materials', material['id'], prop)
+        source = next((provenance[p] for p in (path, '/materials/'+str(document['materials'].index(material))+'/'+prop,
+                       pointer('materials', material['id']), '/materials/'+str(document['materials'].index(material)), '/materials') if p in provenance),
+                      {'kind': 'unknown', 'reference': '型号未记录该物性出处。'})
+        reason = ''
+        if not candidates:
+            status = 'resource_missing'
+            reason = next((r.get('reason', '') for r in records if prop in r.get('missing', [])), '固定资源未提供该物性及条件。')
+        elif not reference:
+            status = 'condition_mismatch'
+            reason = '存在多个适用参考值，需核对后选择。' if len(applicable) > 1 else next((reason for _, reason in checked if reason), '资源单位、数值、出处或条件无法核对；不作换算猜测。')
+        elif actual is None:
+            status = 'design_missing'
+            reason = '型号未给此项。'
+        else:
+            status = 'same' if actual == reference['value'] else 'different'  # numerical equality, no engineering tolerance
+        delta = actual-reference['value'] if reference and actual is not None else None
+        percent = delta/reference['value']*100 if delta is not None and reference['value'] != 0 else None
+        if delta is not None and not isfinite(delta) or percent is not None and not isfinite(percent):
+            reason = '差值或百分比超出有限数值范围；请核对保存值的 SI 单位与数量级。'
+            delta = delta if delta is not None and isfinite(delta) else None
+            percent = None
+        rows.append({'id': prop, 'label': label, 'unit': unit, 'path': path, 'actual': actual,
+                     'reference': reference, 'reference_candidates': [r for r in candidates if isinstance(r.get('value'), (int, float))
+                         and not isinstance(r['value'], bool) and isfinite(r['value']) and finite_record(r)], 'status': status, 'reason': reason,
+                     'delta': delta, 'percent': percent,
+                     'design_source': source, 'adoptable': reference is not None and status in ('different', 'design_missing')})
+    return rows
 
 
 class Submit(Adopt):
@@ -499,6 +665,69 @@ class Types:
         with self.store.db() as db:
             row, state = self._type(db, wid)
             return self._resources(db, wid, row, state)
+
+    def material_comparison(self, wid, revision=None):
+        with self.store.db() as db:
+            row, state = self._type(db, wid)
+            if revision is not None:
+                archived = db.execute('SELECT state,digest FROM workspace_revisions WHERE workspace=? AND revision=?', (wid, revision)).fetchone()
+                if not archived:
+                    raise HTTPException(404, '所选型号输入修订不存在。')
+                state = json.loads(archived['state'])
+                if fingerprint(state) != archived['digest']:
+                    raise HTTPException(409, '型号历史修订摘要不一致。')
+            materials = []
+            for mid, pin in state.get('type_resource_bindings', {}).get('material', {}).items():
+                material = next((m for m in state['domain']['materials'] if m['id'] == mid), None)
+                if not material:
+                    continue
+                asset = db.execute('SELECT * FROM engineering_assets WHERE id=?', (pin['resource_id'],)).fetchone()
+                if not asset:
+                    materials.append({'id': mid, 'name': material['label'], 'resource': pin, 'rows': [], 'reason': '固定资源不可用；请核对绑定。'})
+                    continue
+                resource = self.assets._detail(db, asset)
+                if any(resource[key] != pin[key] for key in ('asset_id', 'version', 'content_sha256')):
+                    raise HTTPException(409, '固定材料资源版本或摘要不一致，停止核对。')
+                rows = compare_material(state['domain'], material, resource)
+                for item in rows:
+                    item['adoptable'] = item['adoptable'] and revision is None and resource['status'] == 'published' and not resource['issues']
+                materials.append({'id': mid, 'name': material['label'], 'resource': pin, 'rows': rows, 'reason': None})
+            return {'workspace_id': wid, 'revision': revision or row['revision'], 'historical': revision is not None, 'materials': materials}
+
+    def adopt_material_value(self, wid, body):
+        from ..domain.guards import check_locks
+        with self.store.db(True) as db:
+            replay = self._replay(db, wid, body)
+            if replay:
+                return replay
+            row, state = self._type(db, wid, body.expected_revision)
+            self.store.assert_mutable(db, wid)
+            pin = state.get('type_resource_bindings', {}).get('material', {}).get(body.material_id)
+            if not pin or pin['resource_id'] != str(body.resource_id) or pin['content_sha256'] != body.content_sha256:
+                raise HTTPException(409, '材料绑定已变化；请重新读取并确认固定资源版本。')
+            resource = self.assets._detail(db, self.assets._load(db, pin['resource_id']))
+            if resource['status'] != 'published' or resource['issues'] or any(resource[k] != pin[k] for k in ('asset_id', 'version', 'content_sha256')):
+                raise HTTPException(409, '资源版本不可新引用；请核对资源状态。')
+            material = next((m for m in state['domain']['materials'] if m['id'] == body.material_id), None)
+            item = next((r for r in compare_material(state['domain'], material, resource) if r['id'] == body.property), None) if material else None
+            if not item or not item['adoptable']:
+                raise HTTPException(422, {'field': item['path'] if item else body.material_id, 'message': item['reason'] or '该值已一致，无需新建修订。' if item else '请选择可核对的物性；不替换缺项或条件不符的值。'})
+            document = deepcopy(state['domain'])
+            saved = next(m for m in document['materials'] if m['id'] == body.material_id)
+            saved[body.property] = item['reference']['value']
+            document.setdefault('provenance', {})[item['path']] = {'kind': 'asset', 'reviewed': False, 'reference': json.dumps({
+                'schema': 'cablesim.adopted-material-value/1', 'asset_id': pin['asset_id'], 'version': pin['version'],
+                'content_sha256': pin['content_sha256'], 'resource_id': pin['resource_id'], 'property': body.property,
+                'reference_value': item['reference'], 'previous_value': item['actual'], 'previous_source': item['design_source']}, ensure_ascii=False)}
+            document = checked_type_document(document)
+            check_locks(state, document)
+            state['domain'] = document
+            # Explicitly re-confirm the same fixed resource against the new fact.
+            state['type_resource_bindings']['material'][body.material_id]['input_digest'] = fingerprint(next(m for m in document['materials'] if m['id'] == body.material_id))
+            self.store.commit(db, row, state, '采用材料资源值：'+material['label']+' · '+item['label'])
+            result = self.store.snapshot(wid, db)
+            self._remember(db, wid, body, result)
+            return result
 
     def bind_resources(self, wid, body, *, migrate=False):
         with self.store.db(True) as db:
@@ -1311,6 +1540,12 @@ def make_router(service):
     @router.post('/{wid}/resources/migrate')
     def migrate_resources(wid: str, body: MigrateResources):
         return service.bind_resources(wid, body, migrate=True)
+    @router.get('/{wid}/material-comparison')
+    def material_comparison(wid: str, revision: int | None = None):
+        return service.material_comparison(wid, revision)
+    @router.post('/{wid}/material-comparison/adopt')
+    def adopt_material_value(wid: str, body: AdoptMaterialValue):
+        return creation_call(lambda: service.adopt_material_value(wid, body))
     @router.post('/{wid}/plans', status_code=201)
     def branch(wid: str, body: Branch):
         return service.branch(wid, body)

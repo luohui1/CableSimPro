@@ -20,6 +20,7 @@ import { formatNumber } from '@/lib/format';
 import type { LayerTarget } from '@/features/drawing/types';
 import { targetId } from '@/features/drawing/cable-geometry';
 import { TypeStructure, TypeNumericField, TypeCanvas, LayerTable, nominalArea } from './structure';
+import { MaterialComparison } from './material-comparison';
 import { layerRows } from './layers';
 import { useTypeWorkspace } from './provider';
 import { typePath, useTypeNavigation } from './navigation';
@@ -44,7 +45,7 @@ export function TypeWorkspace() {
   const module = typeModules.find(module => module.id === location.module);
   const activeTab = module?.tabs.some(([id]) => id === location.tab) ? location.tab : module?.tabs[0][0] || location.tab;
   const [cableId, setCableId] = useState(''), [selected, setSelected] = useState<LayerTarget | null>(null), [collapsed, setCollapsed] = useState(false), [info, setInfo] = useState('');
-  const [view, setView] = useState<'section' | 'three'>(location.tab === 'three' ? 'three' : 'section'), [dockMax, setDockMax] = useState(['specification', 'requirements', 'comparison', 'standard-check'].includes(location.module) || location.tab === 'quantities');
+  const [view, setView] = useState<'section' | 'three'>(location.tab === 'three' ? 'three' : 'section'), [dockMax, setDockMax] = useState(['specification', 'requirements', 'comparison', 'standard-check'].includes(location.module) || ['quantities', 'materials'].includes(location.tab));
   const [resultProperty, setResultProperty] = useState<{ title: string; groups: PropertyGroup[] } | null>(null);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   // 电气参数、短路容量的方法参数属于“改输入”，放在右侧方法页；数据区只留结果
@@ -95,7 +96,7 @@ export function TypeWorkspace() {
   }
   useEffect(() => { setInfo(''); setResultProperty(null); setCollapsed(false); }, [location.module, location.tab, selected]);
   // 文档型模块（规格书、要求清单、方案对比）默认放大下方面板
-  useEffect(() => { setDockMax(['specification', 'requirements', 'comparison', 'standard-check'].includes(location.module) || location.tab === 'quantities'); }, [location.module, location.tab]);
+  useEffect(() => { setDockMax(['specification', 'requirements', 'comparison', 'standard-check'].includes(location.module) || ['quantities', 'materials'].includes(location.tab)); }, [location.module, location.tab]);
   useEffect(() => { if (location.module === 'structure' && location.layer) { const row = rows.find(row => row.id === location.layer); if (row) { setSelected(row.target); setCollapsed(false); } } }, [location.module, location.layer, cable?.id]);
   useEffect(() => {
     if (location.module !== 'structure' || !location.field) return;
@@ -121,8 +122,8 @@ export function TypeWorkspace() {
     : resultProperty ? <PropertyPanel title={resultProperty.title} groups={resultProperty.groups} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} />
       : document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} /> : null;
   // 型号工作窗口：画布 = 电缆截面 / 三维剥切；下方停靠栏 = 当前模块的页签；右侧 = 型号名称 + 所选结构层或结果
-  const dockTabs = module?.id === 'structure' ? module.tabs.filter(([id]) => id === 'table' || id === 'quantities') : methodModule ? module!.tabs.filter(([id]) => id !== 'parameters') : module?.tabs || [];
-  const dockTab = module?.id === 'structure' ? (location.tab === 'quantities' ? 'quantities' : 'table') : methodModule && activeTab === 'parameters' ? 'results' : activeTab;
+  const dockTabs = module?.id === 'structure' ? module.tabs.filter(([id]) => id === 'table' || id === 'materials' || id === 'quantities') : methodModule ? module!.tabs.filter(([id]) => id !== 'parameters') : module?.tabs || [];
+  const dockTab = module?.id === 'structure' ? (location.tab === 'quantities' ? 'quantities' : location.tab === 'materials' ? 'materials' : 'table') : methodModule && activeTab === 'parameters' ? 'results' : activeTab;
   const groups: [string, string, string[]][] = [['结构', 'module/structure', ['structure']], ['要求', 'module/standard-check', ['requirements', 'standard-check']], ['分析', 'calc/electrical-params', ['electrical', 'short-circuit', 'rating-table', 'comparison']], ['交付', 'module/datasheet', ['specification']]];
   // 型号浏览器：侧栏右侧第二层。结构下列出型号里真实的电缆结构，其余为型号的设计与分析环节
   const explorer = <nav className="project-explorer" aria-label="型号浏览器">
@@ -191,7 +192,7 @@ export function TypeWorkspace() {
           {state.error && document && <p className="type-notice is-error" role="alert">{state.error}</p>}{(info || state.notice) && <p className="type-notice" role="status">{info || state.notice}</p>}
           {state.dirty && <p className="type-notice">结构修改待保存；已保存的外径、用料和校核结果已标为历史。</p>}
           {!document || state.loading ? null : !module ? <ErrorState title="型号模块不存在" description="此地址未注册为型号模块。" />
-            : location.module === 'structure' ? (dockTab === 'quantities' ? <TypeStructure tab="quantities" cable={cable} selected={selected} onSelect={choose} /> : <LayerTable rows={rows} selected={selected} onSelect={choose} />)
+            : location.module === 'structure' ? (dockTab === 'materials' ? <MaterialComparison /> : dockTab === 'quantities' ? <TypeStructure tab="quantities" cable={cable} selected={selected} onSelect={choose} /> : <LayerTable rows={rows} selected={selected} onSelect={choose} />)
               : location.tab !== activeTab ? <ErrorState title="页签不存在" description="选择此模块的有效页签继续。" action={<Button onClick={() => go(location.module, activeTab)}>打开默认页签</Button>} />
                 : <TypeModulePage module={location.module} tab={methodModule ? dockTab : location.tab} />}
         </div></TabsContent>

@@ -362,6 +362,10 @@ def chapter_bodies(payload, lifecycle, audience='internal'):
     cover += '<p class="spec-note">签字栏供人工填写；电子批准及发布状态以系统记录为准。</p>'
     if not internal and lifecycle['status'] != 'published':
         cover += '<p class="spec-note">客户版编制草稿 · 未批准发布。</p>'
+    version_status = lifecycle.get('version_status', {})
+    if version_status.get('status') == 'stale':
+        reasons = list(dict.fromkeys(human_note(reason.get('message')) for reason in version_status.get('reasons', []) if reason.get('message')))
+        cover += '<p class="spec-note" data-version-status="stale">历史结果 · '+text('；'.join(reasons) or '来源版本已变化')+'；请重算后生成当前规格书。</p>'
     return [
         cover,
         table(['产品项目','规格'], [['额定电压 U0/U',voltage(cable)], ['芯数',len(cable['cores'])],

@@ -1,5 +1,5 @@
 export const typeModules = [
-  { id: 'structure', label: '结构设计', icon: 'module/structure', tabs: [['section', '截面'], ['three', '三维剥切'], ['table', '分层表'], ['quantities', '外径与用料']] },
+  { id: 'structure', label: '结构设计', icon: 'module/structure', tabs: [['section', '截面'], ['three', '三维剥切'], ['table', '分层表'], ['materials', '材料核对'], ['quantities', '外径与用料']] },
   { id: 'requirements', label: '要求与标准', icon: 'module/standard-check', tabs: [['list', '要求清单'], ['standards', '执行标准'], ['pending', '待批准导入']] },
   { id: 'standard-check', label: '标准核对', icon: 'module/standard-check', tabs: [['results', '标准核对']] },
   { id: 'electrical', label: '电气参数', icon: 'module/electrical', tabs: [['results', '结果'], ['parameters', '方法参数']] },
