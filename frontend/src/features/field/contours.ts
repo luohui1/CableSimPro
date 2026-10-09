@@ -27,6 +27,10 @@ export function contourSegments(points: readonly Point[], triangles: readonly Tr
     return [points[a][0] + t * (points[b][0] - points[a][0]), points[a][1] + t * (points[b][1] - points[a][1])];
   };
   for (const [a, b, c] of triangles) {
+    const va = values[a], vb = values[b], vc = values[c];
+    // Most triangles are entirely on one side of this level. Skip them before
+    // allocating edges/crossings; repeated workbench renders use the same field.
+    if (level <= Math.min(va, vb, vc) || level > Math.max(va, vb, vc)) continue;
     const crossings: Point[] = [];
     for (const [p, q] of [[a, b], [b, c], [c, a]] as const) {
       const vp = values[p], vq = values[q];

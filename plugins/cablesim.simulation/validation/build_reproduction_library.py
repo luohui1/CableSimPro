@@ -218,6 +218,80 @@ def tutorials(items):
             if ident=='C01':item['count_as_source']=False
 
 
+def tb880_fields(items):
+    """Import the Slurm worker's two cases without recalculation or fitting.
+
+    Reproduce with validation/tb880_fem.py; native execution requires dg83.
+    Report tolerance is absent: the explicit 0.001 A local reproduction gate
+    must never be presented as a CIGRE engineering tolerance.
+    """
+    evidence={'evidence':[]}
+    report=load('.data/simulation/tb880-fem/report.json',evidence)
+    if not report:return
+    boundaries=load('.data/simulation/tb880-fem/boundaries.json',evidence)
+    for case in report['cases']:
+        ident=case['id'];item=items.get(ident)
+        if item is None:continue
+        item['rows']=[r for r in item['rows'] if not r.get('variant','').startswith('有限元 · ') and r.get('variant')!='IEC 2023 · 同输入']
+        item['convergence']=[r for r in item['convergence'] if not r.get('variant','').startswith('有限元 · ')]
+        item['evidence'].extend(r for r in evidence['evidence'] if r['sha256'] not in {v['sha256'] for v in item['evidence']})
+        item['status']='partial'
+        item['scope']='TB 880 相切单芯热场；P2有限元、等温金属约束、实际变温IEC电损耗与Kennelly远场；验证用途'
+        item['reference_location']='TB 880:2022 Fig.25–26 pp.63–64；§4.2.4–4.2.5 pp.65–66；'+(
+            '§4.5.3.1 p.75（公布载流量）' if ident=='B02-1' else '§4.7 pp.83–87；§4.7.5 p.87（公布载流量）')
+        item['inputs']=[{'source':'TB 880:2022 Fig.25–26','pdf_page':63,'printed_page':63,
+            'note':'630 mm² 铜芯；导体直径30.3 mm、总外径75.5 mm；完整SI输入随证据保存。','values':case['input'],
+            'pdf_sha256':case['source']['pdfSha256'],'fixture_sha256':case['fixture_sha256'],'semantics':'validation'},
+            {'source':'TB 880:2022 §4.2.2','pdf_page':64,'printed_page':64,'note':'R20=28.3 µΩ/m；铝套电阻率2.84×10⁻⁸ Ω·m；绝缘热阻率3.5 K·m/W；介质损耗角0.001。'},
+            {'source':'TB 880:2022 §4.2.4–4.2.5','pdf_page':65,'printed_page':65,'note':'相切品字形，以三缆中心平均深度1 m定位；土壤1.0 K·m/W、环境20 °C、导体温限90 °C见p.66。'},
+            {'source':'TB 880:2022 §4.5.3.1' if ident=='B02-1' else 'TB 880:2022 §4.7.5',
+                'pdf_page':75 if ident=='B02-1' else 87,'printed_page':75 if ident=='B02-1' else 87,
+                'note':f"公布允许电流 {case['reference_current_a']:.10f} A；报告未给数值容差。"}]
+        if ident=='B02-2':item['inputs'].append({'source':'TB 880:2022 §4.7','pdf_page':83,'printed_page':83,
+            'note':'HDPE管外径140 mm、内径119.4 mm，相切排列；管壁热阻率3.5 K·m/W；管内空气经验系数见后续计算页。'})
+        converged=case.get('convergence',{}).get('passed',False)
+        item['mesh_note']=('网格与扩域连续两级均 < 0.1 K' if converged else '未达到两类连续两级 0.1 K 门槛')
+        item['convergence_summary']=case.get('convergence',{})
+        item['report_tolerance']=None
+        item['limitations']=[
+            '报告未给数值容差；±0.001 A 为本项目复现检查门槛，不是 CIGRE 工程容差。',
+            '金属域等温约束与报告零金属热阻口径一致；未补造金属热导率。相切几何未添加间隙。',
+            '管内空气为有来源的IEC等效导热层；没有求解自然对流流场。有限元分辨角向热流，IEC为热阻网络。',
+            '原文采用旧版 ln(2u) 外热阻；本次同输入 IEC 使用 2023 精确式。结果未自动批准。']
+        if case.get('failure'):item['limitations'].append(case['failure']['message'])
+        item['runs']=[r for r in item.get('runs',[]) if not (r.get('plugin_id')=='cablesim.simulation' and r.get('job_id')==report['job_id'])]+[{
+            'plugin_id':'cablesim.simulation','plugin_version':report.get('base_plugin_version'),
+            'method_version':'tb880-isothermal-p2/1','job_id':report['job_id'],
+            'source_sha256':report.get('source_sha256'),'outer_boundary':'kennelly_image',
+            'actual_core_hours':case.get('actual_core_hours'),'wall_seconds':case.get('wall_seconds'),
+            'convergence_core_hours':case.get('convergence_core_hours'),
+            'wall_seconds_scope':'仅逐级收敛；载流量求解与封存开销计入共享作业',
+            'job_accounting':report.get('accounting'),
+            'evidence_path':'.data/simulation/tb880-fem/report.json','engineering_approval':False}]
+        if boundaries:
+            item['boundary_comparison']={'job_id':boundaries['job_id'],'rows':[
+                {key:row[key] for key in ('extent_m','outer_boundary','nodes','hotspot_k','wall_seconds','energy_relative_residual')}
+                for row in boundaries['rows'] if row['case_id']==ident]}
+        for level in case['levels']:
+            item['convergence'].append({'variant':'有限元 · '+('网格' if level['kind']=='mesh' else '扩域'),
+                'quantity':'conductor_max_temperature_k','solver':'open_source','nodes':level['nodes'],
+                'mesh_size_m':level['mesh_size_m'],'bounds_m':level['bounds_m'],'value':level['hotspot_k'],
+                'wall_seconds':level['wall_seconds'],'actual_core_hours':level.get('actual_core_hours'),'job_id':report['job_id']})
+        rows=[('有限元 · 收敛网格','ampacity_a','A',case.get('ampacity_a'),case['reference_current_a'],.001),
+              ('IEC 2023 · 同输入','ampacity_a','A',case['iec']['circuit_ratings'][0]['ampacity_a'],case['reference_current_a'],.001)]
+        if case['levels']:
+            rows.append(('有限元 · 公布电流工况','conductor_max_temperature_k','K',case['levels'][-1]['hotspot_k'],363.15,.1))
+        for variant,quantity,unit,calculated,reference,tolerance in rows:
+            delta=calculated-reference if calculated is not None else None
+            item['rows'].append({'id':variant+'/'+quantity,'variant':variant,'quantity':quantity,'unit':unit,
+                'reference':reference,'open_source':calculated,'difference':delta,
+                'relative_difference':delta/reference if delta is not None and unit=='A' else None,
+                'tolerance':{'absolute':tolerance,'unit':unit,'source':'本项目复现门槛；非报告容差'},
+                'status':'missing_reference' if delta is None else 'matched' if abs(delta)<=tolerance else 'outside_tolerance',
+                'reason':'报告未给数值容差；项目门槛内' if delta is not None and abs(delta)<=tolerance else '偏差超限（项目门槛，非报告容差）；几何热流、IEC热阻近似及边界口径见覆盖与限制',
+                'source':item['reference_location']})
+
+
 def build():
     items=base_items()
     example=load('.data/simulation/insulated-wire/report.json',items['B01'])
@@ -232,7 +306,7 @@ def build():
         item['convergence']=[{'variant':'default','quantity':'centre-rise','solver':'open_source','nodes':r['nodes'],'mesh_size_m':r['mesh_size_m'],'value':r['centre_rise_k']} for r in example['rows']]
     for ident,name in [('E02','thermal-cywinski'),('E03','thermal-jorgens'),('E05','eddy-lunca'),('E17','eddy-twin'),('E18','eddy-induced'),('E19','eddy-two-round')]:
         paper(items[ident],name)
-    standard_cases(items);tutorials(items)
+    standard_cases(items);tutorials(items);tb880_fields(items)
     for item in items.values():
         item['has_results']=any(r.get('open_source') is not None for r in item['rows'])
         deviations=[abs(r['relative_difference']) for r in item['rows'] if r.get('relative_difference') is not None and not r.get('reference_approximate')]
@@ -242,6 +316,10 @@ def build():
         temperatures=[abs(r['comsol_difference']) for r in item['rows'] if r.get('unit')=='K' and r.get('comsol_difference') is not None]
         item['max_comsol_temperature_difference_k']=max(temperatures) if temperatures else None
         item['assumptions']=list(dict.fromkeys(item.get('assumptions',[])))
+    publish(items)
+
+
+def publish(items):
     created=datetime.now(timezone.utc).isoformat()
     snapshot={'schema':'cablesim.reproduction-library/1','created_at':created,'items':list(items.values()),
         'counting_rule':'Only distinct papers, named standard cases, or COMSOL tutorials with actual results. Partial and reproduced are separate. Meshes and physical variants do not add sources.'}
@@ -254,4 +332,23 @@ def build():
     print(json.dumps({'targets':len(items),'snapshot':key,'with_results':[(i['id'],i['status']) for i in items.values() if i['has_results']]},ensure_ascii=False))
 
 
-if __name__=='__main__':build()
+def publish_tb880_fields():
+    """Update these two existing targets while preserving other teams' records."""
+    folder=DATA/'library';original=(folder/'index.json').read_bytes();index=json.loads(original)
+    raw=(folder/'snapshots'/(index['current']+'.json')).read_bytes()
+    if sha256(raw).hexdigest()!=index['current']:raise ValueError('Library snapshot integrity failed')
+    snapshot=json.loads(raw);items={item['id']:item for item in snapshot['items']}
+    tb880_fields(items)
+    for ident in ('B02-1','B02-2'):
+        item=items[ident];item['has_results']=any(r.get('open_source') is not None for r in item['rows'])
+        differences=[abs(r['relative_difference']) for r in item['rows'] if r.get('relative_difference') is not None]
+        item['max_relative_deviation']=max(differences) if differences else None
+    if (folder/'index.json').read_bytes()!=original:raise ValueError('Concurrent library publication; retry from current snapshot')
+    publish(items)
+
+
+if __name__=='__main__':
+    import argparse
+    parser=argparse.ArgumentParser();parser.add_argument('--tb880-only',action='store_true')
+    if parser.parse_args().tb880_only:publish_tb880_fields()
+    else:build()

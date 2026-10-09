@@ -8,6 +8,13 @@ import path from 'node:path';
 import { openHeadlessBrowser, settle, repositoryRoot } from '../../../scripts/browser.mjs';
 import { assertLayout } from '../../../scripts/layout-assertions.mjs';
 
+// Production main-canvas regression (separate from the component fixture).
+if (process.env.HPC_WORKSPACE_ONLY === '1') {
+  const { verifyWorkspace } = await import('./verify-workspace.mjs');
+  await verifyWorkspace(process.argv[2]);
+  process.exit(0);
+}
+
 const url = process.env.FRONTEND_URL || 'http://127.0.0.1:8118';
 const realOnly = process.env.HPC_REAL_ONLY === '1';
 assert(!realOnly || process.argv[2], 'HPC_REAL_ONLY requires a saved acceptance receipt');

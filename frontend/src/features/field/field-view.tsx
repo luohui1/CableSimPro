@@ -55,7 +55,7 @@ export function FieldView({ points, triangles, values, limit, circles = [], mask
     for (const value of values) { minimum = Math.min(minimum, value); maximum = Math.max(maximum, value); }
     if (limit) maximum = Math.max(maximum, limit.value);
     return { minimum, maximum: maximum > minimum ? maximum : minimum + 1 };
-  }, [values, limit]);
+  }, [values, limit?.value]);
   const bounds = useMemo(() => {
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
     for (const [x, z] of points) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
