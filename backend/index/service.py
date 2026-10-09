@@ -3,7 +3,8 @@ from datetime import datetime, timezone
 from hashlib import sha256
 import json
 import sqlite3
-from threading import RLock
+import logging
+from threading import Event, RLock
 from time import time
 from types import SimpleNamespace
 
@@ -32,6 +33,7 @@ class Snapshot:
     def __init__(self,research,db):
         self.research,self.db=research,db
         self.raw=project(db);self.cards={};self.meta={};self.edges=[];self.unresolved={};self.todos=[]
+        self.receipts=[]
         self.registry=research.registry()
         self.cache={'registries':{pid:self.registry for pid in self.registry.plugins}}
         self.workspaces={r['id']:r for r in self.raw['workspaces']}
@@ -196,6 +198,7 @@ class Snapshot:
             method=snapshot.get('definition',{}).get('method') or {}
             execution=self.research.executor.execution_status(row['id'],method['plugin_id'],method['capability']) if method and hasattr(self.research.executor,'execution_status') else None
             if execution:
+                self.receipts.append((row['id'],execution))
                 status=row['status'] if row['status'] in ('validating','succeeded','partial','failed','interrupted','cancelled') else execution.get('state',row['status'])
                 self.add('job',row['id'],(owner['name'] if owner else '保存运行')+' · 超算作业',
                     status,updated=execution.get('finished') or execution.get('started') or row['created'],owner=card,
@@ -226,9 +229,24 @@ class Snapshot:
 
 
 class Index:
+    MAX_WAIT_SECONDS = 3
+
     def __init__(self,research):
         self.research=research;self.lock=RLock();self.runs=[]
         self.next_expiry=None;self.expiry_generation=0
+        self.runtime_generation=0;self.runtime_hash=None
+        self.warm_done=Event();self.warm_state='pending'
+
+    def warm(self,stop=None):
+        if stop is not None and stop.is_set():return
+        self.warm_state='building'
+        try:
+            self.snapshot()
+            self.warm_state='ready'
+        except Exception:
+            self.warm_state='unavailable'
+            logging.getLogger(__name__).warning('Object index warm-up unavailable; reads may retry',exc_info=True)
+        finally:self.warm_done.set()
 
     def runtime_identity(self):
         # Job receipts live outside SQLite. Read the executor's small local
@@ -246,28 +264,42 @@ class Index:
             view=Snapshot(self.research,db)
         self.runs=[(r['id'],view.state(r)['snapshot']['definition']['method']) for r in view.raw['runs']
             if view.state(r)['snapshot'].get('definition',{}).get('method')]
+        # Baseline exactly the receipts used for these cards. A fresh reread here
+        # could hide a completion that happened during construction.
+        self.runtime_hash=sha256(json.dumps(view.receipts,sort_keys=True,ensure_ascii=False).encode()).digest()
         now=time();deadlines=[r['expires'] for r in view.raw['agent_proposals'] if not r['decision'] and r['expires'] and r['expires']>now]
         self.next_expiry=min(deadlines,default=None)
         return json.dumps({'cards':list(view.cards.values()),'edges':view.edges,
             'unresolved':[[*key,notes] for key,notes in view.unresolved.items()],'todos':view.todos},ensure_ascii=False,allow_nan=False).encode()
 
     def snapshot(self):
+        # Leave room for the HTTP error response within the public wait budget.
+        if not self.lock.acquire(timeout=max(0,self.MAX_WAIT_SECONDS-.1)):
+            raise HTTPException(503,{'code':'INDEX_BUILDING','state':'building',
+                'message':'统一索引正在完整构建；本次等待已达上限，请稍后重试。',
+                'max_wait_seconds':self.MAX_WAIT_SECONDS},headers={'Retry-After':'1'})
         try:
-            with self.lock:
-                if self.next_expiry is not None and time()>=self.next_expiry:
-                    self.expiry_generation+=1;self.next_expiry=None
-                key=('object-index',self.expiry_generation,self.runtime_identity())
-                cache=self.research.read_responses
-                payload=cache.get(key,True)
-                if payload is None:payload=cache.build(key,None,self.load,True)
-                value=json.loads(payload)
-                return SimpleNamespace(cards={(card['kind'],card['id']):card for card in value['cards']},
-                    edges=[(tuple(source),edge) for source,edge in value['edges']],
-                    unresolved={(kind,id):notes for kind,id,notes in value['unresolved']},todos=value['todos'])
+            if self.next_expiry is not None and time()>=self.next_expiry:
+                self.expiry_generation+=1;self.next_expiry=None
+            observed=self.runtime_identity()
+            if self.runtime_hash is not None and observed!=self.runtime_hash:
+                self.runtime_generation+=1
+            self.runtime_hash=observed
+            key=('object-index',self.expiry_generation,self.runtime_generation)
+            cache=self.research.read_responses
+            payload=cache.get(key,True)
+            if payload is None:payload=cache.build(key,None,self.load,True)
+            value=json.loads(payload)
+            return SimpleNamespace(cards={(card['kind'],card['id']):card for card in value['cards']},
+                edges=[(tuple(source),edge) for source,edge in value['edges']],
+                unresolved={(kind,id):notes for kind,id,notes in value['unresolved']},todos=value['todos'])
         except sqlite3.OperationalError as error:
             raise HTTPException(503,{'code':'INDEX_UNAVAILABLE','message':'统一索引暂时无法读取；原数据未改变，请稍后重试。'},headers={'Retry-After':'1'}) from error
         except (PluginHostError,OSError) as error:
             raise HTTPException(503,{'code':'INDEX_SOURCE_UNAVAILABLE','message':'安装清单或保存引用暂时不可用，请核对原模块。'}) from error
+        except MemoryError as error:
+            raise HTTPException(503,{'code':'INDEX_RESOURCE_PRESSURE','message':'统一索引暂时内存不足；未返回部分索引，请稍后重试。'},headers={'Retry-After':'1'}) from error
+        finally:self.lock.release()
 
     def objects(self,*,kind=None,q='',limit=50,offset=0):
         if kind is not None and kind not in ObjectCard.model_fields['kind'].annotation.__args__:

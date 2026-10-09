@@ -96,7 +96,11 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
             with workspace_store.db(True) as db:
                 initialize(db)
             harness.initialize()
-            warmer = Thread(target=research.warm_reads, args=(warm_stop,), name='study-read-warmup', daemon=True)
+            def warm_reads():
+                from .index import get_index
+                get_index(research).warm(warm_stop)
+                research.warm_reads(warm_stop)
+            warmer = Thread(target=warm_reads, name='study-read-warmup', daemon=True)
             warmer.start()
             yield
         finally:

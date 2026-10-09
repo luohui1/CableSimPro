@@ -14,7 +14,8 @@ def project(db):
         "'version',json_extract(state,'"+path+".version'),'content_sha256',json_extract(state,'"+path+".content_sha256'))")
     workspaces=rows('workspaces',"id,revision,created,updated,COALESCE(json_extract(state,'$.domain.name'),json_extract(state,'$.scenario.name')) AS name,"
         "json_array_length(state,'$.domain.cable_types') AS cable_count,json_type(state,'$.study_cable_reference') AS study_reference_type,"
-        +reference('$.study_cable_reference')+' AS cable_reference,'+reference('$.type_origin_reference')+' AS origin_reference')
+        +reference('$.study_cable_reference')+' AS cable_reference,'+reference('$.type_origin_reference')+' AS origin_reference,'
+        "json_extract(state,'$.type_resource_bindings') AS resource_bindings")
     studies=rows('studies','s.id,s.workspace,s.revision,v.created,v.definition',
         's JOIN study_versions v ON v.study=s.id AND v.revision=s.revision')
     snapshot=("json_object('workspace_id',json_extract(snapshot,'$.workspace_id'),"

@@ -166,10 +166,12 @@ data: {"usage":{"prompt_tokens":120,"completion_tokens":20}}
 
 验证见`tests/test_harness.py`，使用本地OpenAI兼容假HTTP服务，不请求真实模型；真实提供方冒烟仅在设置CABLESIM_LLM_API_KEY时启用，交由真实环境联调。CAD分析资格、有限元自动修复及通用HPC授权执行不在本轮实现范围。
 
+Agent常用场景回归一条命令：`python -m pytest -q -s tests/test_harness_scenarios.py`。使用本地假模型和隔离工程库，经真实ASGI接口串起结论汇总、过期基准诊断、型号方案提出与人工保存、回答名片及历史读取；结论汇总最多2次模型请求且不超过40秒，其余作答最多8次请求。每阶段打印model_requests、tool_calls、elapsed_s；executed_tool_calls另记真正进入Broker的调用数，预算tool_calls仍包含依赖失败的计划节点。核验失败、证据兜底、隐式保存、重复批准导致重复修订、名片丢失均使测试失败。没有浏览器、真实密钥、原生有限元或超算提交。
+
 ## 统一索引
 
 `backend/index/`在同一只读数据库快照中投影已有元数据，不初始化表、不迁移数据、不求解、不刷新远端作业，也不加载厂家原件、结果正文、计算书HTML或场数组。仅研究配置与运行的冻结方法/锁/型号引用参与当前性检查。页面导航由前端按kind换算，API不返回地址。
-元数据投影复用宿主ReadResponses的有界缓存；SQLite提交与封签源码通知使缓存失效。方案有效期到点、调度回执内容变化也会触发重建，不用固定TTL保留旧待办。三个接口与Agent工具共用该投影。
+元数据投影复用宿主ReadResponses的有界缓存；SQLite提交与封签源码通知使缓存失效。方案有效期到点、调度回执内容变化也会触发重建，不用固定TTL保留旧待办。三个接口与Agent工具共用该投影。宿主完成数据库初始化后，在同一study-read-warmup后台线程先预建统一索引，再预热研究目录；不阻塞启动、不加载历史运行正文。构建期间其他读取最多等待3秒，超时返回503、Retry-After: 1及`detail:{code:"INDEX_BUILDING",state:"building",message,max_wait_seconds:3}`，不返回部分items。内存不足返回INDEX_RESOURCE_PRESSURE；预建失败后普通读取仍可重试，保留原数据。
 
 
 | 接口 | 请求与结果 |
@@ -182,6 +184,6 @@ data: {"usage":{"prompt_tokens":120,"completion_tokens":20}}
 
 研究只使用最新保存运行，状态在索引快照内算一次：没有运行为not_run；运行未结束为running；成功且宿主`read_models.run_state`判为当前为current；成功但方法/锁/研究配置/工程修订/绑定型号变化为outdated；失败、中断或部分成功为failed。outdated.reason必须非空，复用`version_status.inspect`的方法与型号版本诊断，再补已保存输入修订变化；同版本发行摘要改变也明确说明。索引不验证结果正文完整性，也不提供工程量，读取工程结果仍走原运行证据核验。前端各处消费此study.status，不重新推断“正常/历史”。
 
-`Relation={role,target:ObjectCard,pinned?:{version?,revision?,digest?},freshness:"current"|"outdated"|"unknown",reason?}`；uses是该对象保存的引用，used_by是反向引用。主要role为workspace、type、method、cable_version、study、input_snapshot、delivery、source_run、specification、source_design、published_cable_version、source_document、source_proposal、dependency、validation、agent_task；型号改动方案以type关联目标型号，pinned.revision记录基准修订。厂家来源保存了document_id时才建立关联，页码写在reason；原件摘要入pinned.digest。保存的ID未登记时，target名片标unknown；从未保存目标ID时放入unresolved，不能造一个目标来填Relation。类型设计到材料/标准资源版本未有稳定绑定，或未有发布记录时明确未建立；不按名称配对。已保存的engineering_type_releases、规格书提交和厂家提案new_model才建立发布/来源链。
+`Relation={role,target:ObjectCard,pinned?:{version?,revision?,digest?},freshness:"current"|"outdated"|"unknown",reason?}`；uses是该对象保存的引用，used_by是反向引用。主要role为workspace、type、method、cable_version、study、input_snapshot、delivery、source_run、specification、source_design、published_cable_version、source_document、source_proposal、dependency、validation、agent_task；型号改动方案以type关联目标型号，pinned.revision记录基准修订。厂家来源保存了document_id时才建立关联，页码写在reason；原件摘要入pinned.digest。保存的ID未登记时，target名片标unknown；从未保存目标ID时放入unresolved，不能造一个目标来填Relation。型号设计按保存的type_resource_bindings（cablesim.type-resource-bindings/1）读取material、standard角色，使用resource_id及version/content_sha256关联资源；仅显示冻结资源身份，材料与标准适用性仍由型号工作台核验。未知schema、没有绑定或未有发布记录时明确unknown；不按名称配对。已保存的engineering_type_releases、规格书提交和厂家提案new_model才建立发布/来源链。
 
 `InboxItem={category:"review"|"stale"|"missing"|"running",origin:"agent"|"document"|"asset"|"type"|"study"|"job",title,object:ObjectCard,reason,created}`。review汇总有效未决定Agent方案、厂家提案、draft/reviewed资源、submitted/approved型号规格书；人作出决定或发布后，下次读取即消失。stale为过期研究及其原因；missing为不完整型号与失败/中断资料提取；running为研究、作业、资料提取或批量数据集的保存状态。created缺少持久日期时为null。不存在待办记录时items为空且四项计数均为0。

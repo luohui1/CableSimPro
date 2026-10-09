@@ -66,8 +66,25 @@ def build(index):
             key=('type',row['id'])
             if not any(r['workspace']==row['id'] for r in index.raw['releases']):
                 index.missing(key,'published_cable_version','本设计没有保存的发布记录；不能推定其对应的型号版本。')
-            index.missing(key,'material','设计保存了工程材料事实，但未登记到材料资源版本的绑定。')
-            index.missing(key,'standard','设计出处未登记到标准规则资源版本的绑定。')
+            bindings=decoded(row['resource_bindings'],{})
+            if not isinstance(bindings,dict):bindings={}
+            for role in ('material','standard'):
+                saved=bindings.get(role,{}) if bindings.get('schema')=='cablesim.type-resource-bindings/1' else {}
+                if not isinstance(saved,dict):saved={}
+                if not saved:
+                    index.missing(key,role,'设计没有保存可识别的'+('材料' if role=='material' else '标准')+'资源版本绑定。')
+                for target_id,ref in saved.items():
+                    if not isinstance(ref,dict):
+                        index.missing(key,role,'资源绑定 '+target_id+' 没有完整的版本引用。')
+                        continue
+                    resource_id=ref.get('resource_id')
+                    target=index.get('asset',resource_id)
+                    if target is None and resource_id:
+                        target=ObjectCard(kind='asset',id=resource_id,name=ref.get('name') or resource_id,
+                            version=ref.get('version'),status={'code':'unknown','label':'资源未登记',
+                            'reason':'型号保存的资源版本未在本库登记。'},updated=None).model_dump(mode='json')
+                    if target is None:index.missing(key,role,'资源绑定 '+target_id+' 未保存稳定资源 ID。')
+                    else:index.link(card,target,role,pin=pin(ref),reason='型号保存的资源绑定：'+target_id)
     for row in index.raw['studies']:
         card=index.get('study',row['id']);workspace=index.workspace(row['workspace']);definition=decoded(row['definition'])
         index.link(card,workspace,'workspace')
