@@ -132,7 +132,17 @@ class Requirements:
         run, case, artifact = self.source(wid, rid)
         with self.store.db() as db:
             reviews = self.history(db, wid)
-        return self.catalog(wid, run, case, artifact, reviews)
+            _, state = self.store.load(db, wid)
+            bindings = state.get('type_resource_bindings', {}).get('standard', {})
+        catalog = self.catalog(wid, run, case, artifact, reviews)
+        saved_bindings = run.get('snapshot', {}).get('workspace_state', {}).get('type_resource_bindings', {}).get('standard', {})
+        # A resource reference is distinct from approving a requirement. Never rewrite receipts.
+        for item in catalog['items']:
+            definition = item['definition']
+            key = fingerprint({'standard': definition['standard'], 'source_digest': definition.get('source_digest')})
+            item['resource_reference'] = bindings.get(key)
+            item['snapshot_resource_reference'] = saved_bindings.get(key)
+        return catalog
 
     def review(self, wid, body):
         request = body.model_dump(mode='json')

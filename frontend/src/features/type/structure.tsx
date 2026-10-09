@@ -16,6 +16,7 @@ import { TypeGeometry } from './geometry';
 import { TypeQuantities } from './quantities';
 import { cleanLabel } from './labels';
 import { StructureActions } from './structure-actions';
+import { MaterialResourceCell, ResourceBindings } from './resource-bindings';
 
 export function TypeNumericField({ row }: { row: LayerRow }) {
   const state = useTypeWorkspace(), doc = state.document!, provenance = fieldSource(doc, row.path);
@@ -31,15 +32,15 @@ export function LayerTable({ rows, selected, onSelect, compact = false }: { rows
     const row = selectedId ? document.getElementById(`row-型号分层-${selectedId}`) : null;
     if (row) row.scrollIntoView({ block: row.getBoundingClientRect().bottom > window.innerHeight ? 'center' : 'nearest', inline: 'nearest' });
   }, [selectedId]);
-  return <DataTable label="型号分层" selectedId={selected ? targetId(selected) : undefined} onSelect={row => onSelect(row.target)} rowLabel={row => `${row.number} ${row.label}`} showGroups={false}
+  return <>{!compact && <ResourceBindings />}<DataTable label="型号分层" selectedId={selected ? targetId(selected) : undefined} onSelect={row => onSelect(row.target)} rowLabel={row => `${row.number} ${row.label}`} showGroups={false}
     groups={[{ id: 'layers', label: '结构层', rows }]} columns={[
       { id: 'number', label: '序号', numeric: true, render: row => row.number },
       { id: 'name', label: '层次', render: row => row.label },
-      ...(!compact ? [{ id: 'material', label: '材料', render: (row: LayerRow) => cleanLabel(row.material.label) }] : []),
+      ...(!compact ? [{ id: 'material', label: '材料', render: (row: LayerRow) => <MaterialResourceCell id={row.material.id} name={cleanLabel(row.material.label)} /> }] : []),
       { id: 'dimension', label: '尺寸', unit: 'mm', numeric: true, render: row => <div className="type-layer-input" onClick={event => { event.stopPropagation(); onSelect(row.target); }} onFocusCapture={() => onSelect(row.target)}><span className="muted">{row.target.role === 'conductor' ? row.spec.scale === 500 ? '扇高' : '直径' : '厚度'}</span><TypeNumericField row={row} /></div> },
       ...(!compact ? [{ id: 'outer', label: '绘图外径', unit: 'mm', numeric: true, render: (row: LayerRow) => <span className="type-readonly-value">{formatNumber(row.outerM === null ? null : row.outerM * 2000, 2)}{row.outerM !== null && <SourceBadge kind="derived" detail="当前结构尺寸逐层累加的截面绘图尺寸；原始实体与用料见保存的结构推导。" />}</span> }] : []),
       { id: 'source', label: '来源', render: row => { const source = fieldSource(state.document!, row.path), kind = sourceKind(source) || (source.kind === 'demo' ? 'demo' : undefined); return kind ? <span className="type-layer-source"><SourceBadge kind={kind} detail={typeof source.reference === 'string' ? source.reference : undefined} /></span> : <span className="muted">未提供</span>; } },
-    ]} />;
+    ]} /></>;
 }
 export function TypeStructure({ tab, cable, selected, onSelect }: { tab: string; cable: CableType | null; selected: LayerTarget | null; onSelect: (target: LayerTarget | null) => void }) {
   const state = useTypeWorkspace();

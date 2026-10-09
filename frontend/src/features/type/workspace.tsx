@@ -30,6 +30,7 @@ import { TypeInspectorContext } from './inspector';
 import { TypeModulePage } from './module-page';
 import { DesignCard } from './design-card';
 import { typeComparison, typeSpecification } from './version-api';
+import { ResourceBindings } from './resource-bindings';
 
 import { typeModules } from "./module-definitions";
 export { typeModules } from "./module-definitions";
@@ -111,6 +112,7 @@ export function TypeWorkspace() {
     ] }]} />
     {!collapsed && <div className="type-property-fields"><TypeNumericField row={row} />
       <div title={cleanLabel(row.material.label)}><Select label="材料引用" value={row.material.id} disabled={state.busy || state.locked(row.materialPath)} options={document.materials.filter(item => item.category === row.material.category).map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={material => state.edit(row.materialPath, material)} /></div>
+      <ResourceBindings materialId={row.material.id} />
       {!sourceKind(source) && source.kind !== 'demo' && <span className="type-field-source" title="此尺寸未提供来源；编辑后请补充工程依据。">来源未提供</span>}<StructurePropertyInputs row={row} /></div>}
   </div> : location.module === 'structure' && activeTab !== 'quantities' ? document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} /> : null
     : resultProperty ? <PropertyPanel title={resultProperty.title} groups={resultProperty.groups} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} />

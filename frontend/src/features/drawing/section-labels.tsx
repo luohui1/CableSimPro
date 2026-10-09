@@ -17,8 +17,10 @@ export function SectionLabels({ document, section, geometry, view, size, rect, a
   const occupied: Box[] = objects.map(p => ({ x: p.x - p.radius - 3, y: p.y - p.radius - 3, width: p.radius * 2 + 6, height: p.radius * 2 + 6 }));
   const names = geometry.cables.map(c => { const index = document.circuits.findIndex(v => v.cables.some(i => i.id === c.id));
     return { id: c.id, text: `回路 ${index + 1} · ${c.label}`, point: worldToScreen(c, view, size), radius: c.shape.radiusM * scale, above: false, phase: c.phase }; });
-  const items = [...(section.enclosures || []).map(e => ({ id: e.id, text: displayName(e.id), point: worldToScreen(e, view, size), radius: (e.outer_diameter || e.height || 0) * scale / 2, above: true, phase: '' })), ...names,
-    ...geometry.cables.flatMap(c => annotations?.[c.id] ? [{ ...annotationValue(annotations[c.id]), id: `${c.id}/result`, point: worldToScreen(c, view, size), radius: c.shape.radiusM * scale, above: true, phase: '' }] : [])];
+  const results = geometry.cables.flatMap(c => annotations?.[c.id] ? [{ ...annotationValue(annotations[c.id]), id: `${c.id}/result`, point: worldToScreen(c, view, size), radius: c.shape.radiusM * scale, above: true, phase: '' }] : []);
+  // Reserve readable positions for temperatures before names consume the available space.
+  const items = [...results.sort((a, b) => Number(b.limiting === true) - Number(a.limiting === true)), ...names,
+    ...(section.enclosures || []).map(e => ({ id: e.id, text: displayName(e.id), point: worldToScreen(e, view, size), radius: (e.outer_diameter || e.height || 0) * scale / 2, above: true, phase: '' }))];
   return <g className="drawing-section-labels" aria-label="对象及结果标注">{items.map(item => {
     const width = [...item.text].reduce((sum, c) => sum + (/[^\x00-\xff]/.test(c) ? 13 : 7.5), 0) + 20;
     const height = 22, candidates: Box[] = [];

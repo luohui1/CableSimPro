@@ -14,6 +14,7 @@ from backend.kernel.type_versions import CHAPTERS
 from backend.kernel.type_versions import Types
 from backend.domain.models import CableType
 from backend.kernel.workspace import fingerprint, stamp
+from backend.foundation.contracts import AssetRelease, SourceReference
 from backend.kernel.scenarios import make_router, system_models
 
 
@@ -84,7 +85,8 @@ def seed_evidence(c, w, monkeypatch, *, bad_status=False, uncovered=False):
         return value
     monkeypatch.setattr(research,'get_run',get_run)
     monkeypatch.setattr(research,'lock',lambda *args: {'digest':'fixture-lock'})
-    monkeypatch.setattr(research,'resolve',lambda *args: None)
+    actual_resolve = research.resolve
+    monkeypatch.setattr(research, 'resolve', lambda ref, *args, **kwargs: None if ref['plugin_id'] == method['plugin_id'] else actual_resolve(ref, *args, **kwargs))
     return runs
 
 
@@ -123,6 +125,112 @@ def test_branch_isolation_fixed_base_and_idempotence(client):
     assert client.post(f"/api/types/{w['id']}/plans",json=req(w,name='stale',expected_revision=w['revision']-1)).status_code==409
 
 
+def resource_fixture(client, asset_id, version='1.0.0', kind='material', name='资源绑定契约测试', source=None):
+    """Isolated persistence fixture, not an engineering approval or numerical result."""
+    service = client.app.state.types
+    with service.store.db(True) as db:
+        rid = service.assets._insert(db, AssetRelease(asset_id=asset_id, version=version, kind=kind, name=name,
+            sources=(SourceReference(kind='project_input', reference=json.dumps(source or {'test': 'resource identity'}), reviewed=True),)), '隔离测试数据')
+        db.execute("UPDATE engineering_assets SET status='published',reviewed_sha256=content_sha256 WHERE id=?", (rid,))
+    return rid
+
+
+def structural_materials(w):
+    cable = w['domain']['cable_types'][0]
+    ids = {layer['material'] for layer in [*cable['common_layers'], *(layer for core in cable['cores'] for layer in [core['conductor'], *core['layers']])]}
+    return [m for m in w['domain']['materials'] if m['id'] in ids]
+
+
+def test_resource_migration_only_unique_identity_and_never_names(client):
+    w = workspace(client)
+    material = structural_materials(w)[0]
+    unique = resource_fixture(client, material['id'])
+    # Same label is insufficient, and two published versions are deliberately ambiguous.
+    other = structural_materials(w)[1]
+    resource_fixture(client, other['id'])
+    resource_fixture(client, other['id'], '1.0.1')
+    resource_fixture(client, 'unrelated-material', name=structural_materials(w)[2]['label'])
+    before = client.get('/api/types/library').json()
+    body = req(w)
+    response = client.post(f"/api/types/{w['id']}/resources/migrate", json=body)
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result['changed'] == [material['id']]
+    assert client.post(f"/api/types/{w['id']}/resources/migrate", json=body).json() == result
+    saved = client.get('/api/workspaces/'+w['id']).json()
+    assert saved['domain'] == w['domain'] and saved['revision'] == w['revision']+1
+    assert saved['type_resource_bindings']['material'][material['id']]['resource_id'] == unique
+    assert other['id'] not in saved['type_resource_bindings']['material']
+    relations = client.get(f"/api/index/objects/type/{w['id']}/relations")
+    assert relations.status_code == 200, relations.text
+    edge = next(e for e in relations.json()['uses'] if e['role'] == 'material' and e['target']['id'] == unique)
+    assert edge['freshness'] == 'current'
+    assert edge['pinned']['version'] == '1.0.0'
+    assert edge['pinned']['digest'] == saved['type_resource_bindings']['material'][material['id']]['content_sha256']
+    assert client.get('/api/types/library').json() == before  # binding never publishes a design
+    historical = client.get(f"/api/workspaces/{w['id']}/revisions/{saved['revision']}").json()
+    assert historical['state']['type_resource_bindings'] == saved['type_resource_bindings']
+    assert client.post(f"/api/types/{w['id']}/resources/migrate", json=req(w)).status_code == 409
+
+
+def test_material_binding_tracks_facts_and_standard_binding_uses_approved_source(client):
+    w = workspace(client)
+    material = structural_materials(w)[0]
+    rid = resource_fixture(client, 'explicit-copper')
+    response = client.post(f"/api/types/{w['id']}/resources/bind", json=req(w, role='material', target_id=material['id'], resource_id=rid))
+    assert response.status_code == 200, response.text
+    w = client.get('/api/workspaces/'+w['id']).json()
+    assert next(t for t in response.json()['targets'] if t['id'] == material['id'])['state'] == 'current'
+    document = deepcopy(w['domain']); next(m for m in document['materials'] if m['id'] == material['id'])['label'] += ' 已修改'
+    assert client.put(f"/api/workspaces/{w['id']}/domain", json={'expected_revision': w['revision'], 'document': document}).status_code == 200
+    view = client.get(f"/api/types/{w['id']}/resources").json()
+    assert next(t for t in view['targets'] if t['id'] == material['id'])['state'] == 'outdated'
+    # Only approved, hash-verified requirement receipts may contribute execution standards.
+    service = client.app.state.types
+    standard = 'GB/T 12706.2-2020'; source = 'a'*64
+    rule = resource_fixture(client, 'standard-gbt12706-2', kind='rule', source={'source_digest': source})
+    with service.store.db(True) as db:
+        receipt = {'items': [{'id': 'test-standard', 'definition': {'standard': standard, 'source_digest': source, 'source_status': 'original-verified'}}]}
+        db.execute('INSERT INTO requirement_reviews VALUES (?,?,?,?,?,?,?)',
+                   (str(uuid4()), w['id'], 1, str(uuid4()), 'b'*64, json.dumps(receipt), fingerprint(receipt)))
+    view = client.get(f"/api/types/{w['id']}/resources").json()
+    targets = [t for t in view['targets'] if t['role'] == 'standard']
+    assert len(targets) == 1 and targets[0]['unique_match'] == rule
+    migrated = client.post(f"/api/types/{w['id']}/resources/migrate", json={'request_id': str(uuid4()), 'expected_revision': view['revision']})
+    assert migrated.status_code == 200, migrated.text
+    assert next(t for t in migrated.json()['targets'] if t['role'] == 'standard')['binding']['version'] == '1.0.0'
+    relations = client.get(f"/api/index/objects/type/{w['id']}/relations")
+    assert relations.status_code == 200, relations.text
+    edge = next(e for e in relations.json()['uses'] if e['role'] == 'standard' and e['target']['id'] == rule)
+    assert edge['freshness'] == 'current' and edge['pinned']['version'] == '1.0.0'
+
+
+def test_published_type_freezes_resource_dependencies(client, monkeypatch):
+    w = workspace(client)
+    material = structural_materials(w)[0]
+    rid = resource_fixture(client, material['id'])
+    bound = client.post(f"/api/types/{w['id']}/resources/migrate", json=req(w))
+    assert bound.status_code == 200, bound.text
+    w = client.get('/api/workspaces/'+w['id']).json()
+    seed_evidence(client, w, monkeypatch); adopt(client, w)
+    spec, submitted = submit(client, w)
+    human = {'X-CableSim-Actor': 'human'}
+    approval = {'request_id': str(uuid4()), 'submission_id': submitted['submission_id'], 'specification_digest': spec['digest'], 'human_confirmed': True}
+    assert client.post(f"/api/types/{w['id']}/approve", json=approval, headers=human).status_code == 200
+    publication = client.post(f"/api/types/{w['id']}/publish", json={**{k:v for k,v in approval.items() if k != 'human_confirmed'}, 'request_id': str(uuid4())}, headers=human)
+    assert publication.status_code == 200, publication.text
+    release = client.get('/api/foundation/assets/'+publication.json()['asset_id']).json()
+    resource = client.get('/api/foundation/assets/'+rid).json()
+    assert release['release']['dependencies'] == [{k:resource[k] for k in ('asset_id', 'version', 'content_sha256')}]
+    assert spec['payload']['resource_bindings'] == w['type_resource_bindings']
+    design_edges = client.get(f"/api/index/objects/type/{w['id']}/relations").json()['used_by']
+    assert any(e['role'] == 'source_design' and e['target']['id'] == release['id'] for e in design_edges)
+    version_edges = client.get(f"/api/index/objects/cable_version/{release['id']}/relations").json()['used_by']
+    assert any(e['role'] == 'published_cable_version' and e['target']['id'] == w['id'] for e in version_edges)
+    assert client.post(f"/api/types/{w['id']}/resources/bind", json=req(w, role='material', target_id=material['id'], resource_id=None)).status_code == 409
+    assert client.get(f"/api/types/{w['id']}/specification").json()['payload'] == spec['payload']
+
+
 def test_failed_source_not_selected_and_uncovered_blocks_approval(client,monkeypatch):
     w=workspace(client);seed_evidence(client,w,monkeypatch,bad_status=True,uncovered=True);adopt(client,w)
     spec,submitted=submit(client,w)
@@ -156,8 +264,10 @@ def test_local_identity_human_confirmation_and_immutable_release(client,monkeypa
     released=client.post(f"/api/types/{w['id']}/publish",json=publish,headers=human)
     assert released.status_code==200,released.text
     assert released.json()['asset_reference']['version']=='1.0.3'
+    assert released.json()['source_design'] == {'id': w['id'], 'revision': w['revision']}
     assert client.post(f"/api/types/{w['id']}/publish",json=publish,headers=human).json()==released.json()
     assert client.get('/api/types/library').json()['items'][0]['status']=='published'
+    assert client.get('/api/types/library').json()['items'][0]['source_design'] == released.json()['source_design']
     asset=client.get('/api/foundation/assets/'+released.json()['asset_id']).json()
     assert client.post('/api/foundation/assets/'+asset['id']+'/derive',json={'expected_revision':asset['revision'],'content_sha256':asset['content_sha256'],'new_version':'1.0.4'}).status_code==409
     frozen=client.get(f"/api/types/{w['id']}/specification").json()

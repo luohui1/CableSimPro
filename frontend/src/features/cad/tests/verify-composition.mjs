@@ -8,7 +8,8 @@ const base = process.env.CAD_BACKEND_URL || 'http://127.0.0.1:8100';
 const output = path.join(repositoryRoot, '.data/cad-composition'); await fs.mkdir(output, { recursive: true });
 const get = async p => { const r = await fetch(base + p); assert.ok(r.ok, p); return r.json(); };
 const workspaces = await get('/api/workspaces'), documents = {}, annotations = {}, sources = {};
-for (const [kind, match] of Object.entries({ trefoil: /110 kV 直埋/, duct: /三回排管/, single: /1×800/, three: /3×300/ })) {
+const selectedKinds = new Set((process.env.CAD_COMPOSITION_KINDS || 'trefoil,duct,single,three').split(','));
+for (const [kind, match] of Object.entries({ trefoil: /110 kV 直埋/, duct: /三回排管/, single: /1×800/, three: /3×300/ }).filter(([kind]) => selectedKinds.has(kind))) {
   const w = workspaces.find(w => match.test(w.name)); assert.ok(w, kind);
   const wp = `/api/workspaces/${w.id}`, state = await get(wp); documents[kind] = state.domain;
   if (kind === 'trefoil' || kind === 'duct') {
@@ -32,7 +33,7 @@ if (process.env.CAD_COMPOSITION_PRODUCTION !== 'only') {
 const fixture = await createBrowserFixture(), { page } = fixture, results = { layouts: [], sources };
 try {
   await page.addInitScript(({ documents, annotations }) => { window.cadCompositionDocuments = documents; window.cadCompositionAnnotations = annotations; }, { documents, annotations });
-  for (const kind of ['trefoil', 'duct', 'single', 'three']) {
+  for (const kind of ['trefoil', 'duct', 'single', 'three'].filter(kind => selectedKinds.has(kind))) {
     await navigate(fixture, 'composition', { kind });
     for (const size of [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }]) for (const theme of ['light', 'dark']) {
       await page.setViewportSize(size); await page.evaluate(theme => { document.documentElement.dataset.theme = theme; }, theme);
@@ -80,6 +81,10 @@ try {
             const diameters = await page.locator('[data-section-detail=A] .drawing-cable-shapes').evaluateAll(nodes => nodes.map(n => { const b = n.getBBox(); return b.width; }));
             assert.ok(Math.min(...diameters) >= 24, `${label}: minimum cable diameter ${Math.min(...diameters)}`);
             assert.equal(await page.locator('.drawing-object-label:not([data-result-label])').count(), documents[kind].sections[0].placements.length + (documents[kind].sections[0].enclosures || []).length, label);
+            if (kind === 'trefoil' && ['success', 'historical'].includes(state)) {
+              assert.equal(Object.keys(annotations[kind] || {}).length, 3, 'Need three temperatures from a verified saved run');
+              await expect(page.locator('[data-result-label]')).toHaveCount(3);
+            }
           }
         }
         results.layouts.push({ label, ...result });
@@ -113,9 +118,9 @@ console.log(JSON.stringify({ passed: results.passed, layouts: results.layouts.le
 if (['1', 'only'].includes(process.env.CAD_COMPOSITION_PRODUCTION)) {
   const live = await createBrowserFixture({ production: true, backend: base }), pages = [];
   try {
-    const targets = ['trefoil', 'duct'].map(kind => ({ kind, route: `/studies/${sources[kind].study}/sweep/curve?workspace=${sources[kind].workspace}&view=section&run=${sources[kind].run}`, canvas: '[data-drawing-canvas=laying]' }));
-    targets.push({ kind: 'home', route: `/studies?workspace=${sources.trefoil.workspace}`, canvas: '[data-drawing-canvas=laying]' });
-    for (const kind of ['single', 'three']) targets.push({ kind, route: `/types/${workspaces.find(w => (kind === 'single' ? /1×800/ : /3×300/).test(w.name)).id}/structure/section`, canvas: '[data-drawing-canvas=cable]' });
+    const targets = ['trefoil', 'duct'].filter(kind => selectedKinds.has(kind)).map(kind => ({ kind, route: `/studies/${sources[kind].study}/sweep/curve?workspace=${sources[kind].workspace}&view=section&run=${sources[kind].run}`, canvas: '[data-drawing-canvas=laying]' }));
+    if (selectedKinds.has('trefoil')) targets.push({ kind: 'home', route: `/studies?workspace=${sources.trefoil.workspace}`, canvas: '[data-drawing-canvas=laying]' });
+    for (const kind of ['single', 'three'].filter(kind => selectedKinds.has(kind))) targets.push({ kind, route: `/types/${workspaces.find(w => (kind === 'single' ? /1×800/ : /3×300/).test(w.name)).id}/structure/section`, canvas: '[data-drawing-canvas=cable]' });
     for (const target of targets) {
       await live.page.goto(live.url + target.route, { waitUntil: 'domcontentloaded' });
       await live.page.locator(target.canvas).waitFor({ state: 'attached' });
@@ -138,6 +143,7 @@ if (['1', 'only'].includes(process.env.CAD_COMPOSITION_PRODUCTION)) {
         });
         const label = `${target.kind} ${size.width} ${theme}`; assert.equal(metrics.overlap, false, label); assert.equal(metrics.outside, false, label);
         if (metrics.diameter !== null) assert.ok(metrics.diameter >= 24, label);
+        if (target.kind === 'trefoil') await expect(live.page.locator('[data-result-label]')).toHaveCount(3);
         if (['single', 'three'].includes(target.kind)) assert.equal((metrics.labels - (target.kind === 'three' ? 1 : 0)) / 2, documents[target.kind].cable_types[0].cores[0].layers.length + 1 + documents[target.kind].cable_types[0].common_layers.length, label);
         pages.push({ label, ...metrics });
       }

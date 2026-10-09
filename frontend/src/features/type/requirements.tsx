@@ -17,6 +17,7 @@ import { chooseEvidence, currentEvidence, useTypeEvidence } from './evidence';
 import { standardDefinition } from './standard-check';
 import { TypeRunControl } from './run-control';
 import { EvidenceDigest } from './evidence-digest';
+import { ResourceBindings, StandardResourceCell } from './resource-bindings';
 
 const states: Record<string, { label: string; kind: StatusKind }> = { proposed: { label: '待批准', kind: 'draft' }, approved: { label: '已批准', kind: 'success' }, conflict: { label: '版本冲突', kind: 'error' }, unbound: { label: '未定义 / 未覆盖', kind: 'unknown' } };
 type Row = Record<string, unknown> & { id: string };
@@ -37,7 +38,8 @@ export function TypeRequirements({ tab }: { tab: string }) {
       rows = array(ledger.data.items, '要求条目').map(value => { const row = record(value, '要求条目'); if (!text(row.id) || !text(row.row_id) || !states[text(row.state)]) throw new Error('要求条目缺少身份或批准状态'); return { ...row, id: text(row.id) }; });
       const grouped = new Map<string, Row>();
       for (const row of rows) { const definition = optionalRecord(row.definition), name = text(definition.standard); if (!grouped.has(name)) grouped.set(name, { id: name, name, clauses: new Set<string>(), verified: true, method: definition.method }); const group = grouped.get(name)!; (group.clauses as Set<string>).add(text(definition.clause)); group.verified = group.verified && definition.source_status === 'original-verified'; }
-      standards = [...grouped.values()];
+      const referenceField = state.readOnly ? 'snapshot_resource_reference' : 'resource_reference';
+      standards = [...grouped.values()].map(group => ({ ...group, resource_reference: rows.find(row => text(optionalRecord(row.definition).standard) === group.name && row[referenceField])?.[referenceField] }));
     }
   } catch (error) { parseError = message(error); }
   const eligible = (row: Row) => current && ledger.data?.source_current === true && row.bindable === true;
@@ -65,7 +67,8 @@ export function TypeRequirements({ tab }: { tab: string }) {
     {bodyState === 'loading' ? <LoadingState title="正在读取或更新要求目录" /> : bodyState === 'error' ? <ErrorState title="要求目录不可用" description={parseError || message(evidence.error || ledger.error)} action={<Button onClick={() => void Promise.all([evidence.refetch(), runId ? ledger.refetch() : Promise.resolve()])}>重新读取</Button>} /> : !saved ? <EmptyState title="尚无要求目录" description="保存型号后生成条款，再核对来源与批准状态。" /> : <>
       {!current && <StaleBanner description="当前显示历史要求；重新核对后才能批准。" />}
       <div className="type-result-summary"><strong>{rows.length} 项要求</strong><span>{numeric(ledger.data?.approved_count) || 0} 项已批准</span><span>{selected.size} 项已选</span></div>
-      {tab === 'standards' ? <DataTable label="执行标准" showGroups={false} rowLabel={row => text(row.name)} groups={[{ id: 'standards', label: '标准', rows: standards }]} columns={[{ id: 'name', label: '标准及版本', render: row => text(row.name) }, { id: 'clauses', label: '覆盖条款', wrap: true, render: row => [...row.clauses as Set<string>].join('；') }, { id: 'source', label: '来源', render: row => row.verified ? '原文已核验' : '待核验' }, { id: 'method', label: '规则版本', render: row => text(optionalRecord(row.method).version) }]} /> : <DataTable label="要求清单" selectedId={picked} onSelect={choose} rowLabel={row => text(optionalRecord(row.definition).title)} showGroups={false} groups={[{ id: 'requirements', label: '要求', rows: visible }]} columns={[
+      {tab === 'standards' && <ResourceBindings role="standard" />}
+      {tab === 'standards' ? <DataTable label="执行标准" showGroups={false} rowLabel={row => text(row.name)} groups={[{ id: 'standards', label: '标准', rows: standards }]} columns={[{ id: 'name', label: '标准及版本', render: row => text(row.name) }, { id: 'clauses', label: '覆盖条款', wrap: true, render: row => [...row.clauses as Set<string>].join('；') }, { id: 'source', label: '来源', render: row => row.verified ? '原文已核验' : '待核验' }, { id: 'resource', label: '资源版本', render: row => <StandardResourceCell reference={row.resource_reference} /> }]} /> : <DataTable label="要求清单" selectedId={picked} onSelect={choose} rowLabel={row => text(optionalRecord(row.definition).title)} showGroups={false} groups={[{ id: 'requirements', label: '要求', rows: visible }]} columns={[
         { id: 'select', label: '选择', render: row => <input type="checkbox" aria-label={'选择' + text(optionalRecord(row.definition).title)} checked={selected.has(text(row.row_id))} disabled={!eligible(row) || approve.isPending} onChange={event => { setSelected(previous => { const next = new Set(previous); if (event.target.checked) next.add(text(row.row_id)); else next.delete(text(row.row_id)); return next; }); request.current = null; }} /> },
         { id: 'title', label: '要求', wrap: true, render: row => text(optionalRecord(row.definition).title) }, { id: 'clause', label: '标准 / 条款', wrap: true, render: row => [text(optionalRecord(row.definition).standard), text(optionalRecord(row.definition).clause)].filter(Boolean).join(' · ') },
         { id: 'limit', label: '要求值', numeric: true, render: row => { const definition = optionalRecord(row.definition), value = numeric(definition.limit); return value === null ? '未定义' : formatNumber(value, 3) + (definition.unit === '1' ? '' : ' ' + text(definition.unit)); } },

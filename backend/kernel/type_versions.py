@@ -17,7 +17,7 @@ from hashlib import sha256
 from pydantic import Field, field_validator
 
 from ..domain.models import CableType, DomainDocument
-from ..foundation.contracts import AssetRelease, SourceReference
+from ..foundation.contracts import AssetRef, AssetRelease, SourceReference
 from ..schemas import StrictModel
 from .workspace import fingerprint, stamp
 from .rating_table import is_rating_table, rating_rows
@@ -48,6 +48,26 @@ class Adopt(StrictModel):
 class GenerateSpecification(Adopt):
     audience: Literal['customer', 'internal'] = 'customer'
     scope_acknowledged: Literal[True]
+
+
+class BindResource(Adopt):
+    operation: Literal['bind_resource'] = 'bind_resource'
+    role: Literal['material', 'standard']
+    target_id: str = Field(min_length=1, max_length=200)
+    resource_id: UUID | None = None
+
+
+class MigrateResources(Adopt):
+    operation: Literal['migrate_resource_bindings'] = 'migrate_resource_bindings'
+
+
+def source_identity(source):
+    """Structured saved identity only; a display name is never a resource key."""
+    try:
+        value = json.loads(source.get('reference', ''))
+        return value if isinstance(value, dict) else {}
+    except (ValueError, TypeError):
+        return {}
 
 
 class Submit(Adopt):
@@ -81,6 +101,109 @@ class Types:
     def __init__(self, research, assets):
         self.research, self.store, self.assets = research, research.store, assets
         self.generation_lock = Lock()
+
+    def _resource_targets(self, db, wid, state):
+        used = {layer['material'] for cable in state['domain']['cable_types'] for layer in
+                [*cable['common_layers'], *(layer for core in cable['cores'] for layer in [core['conductor'], *core['layers']])]}
+        materials = [{'role': 'material', 'id': m['id'], 'name': m['label'], 'input_digest': fingerprint(m),
+                      'identity': source_identity(state['domain'].get('provenance', {}).get('/materials/'+str(i), {})) or {'asset_id': m['id']}}
+                     for i, m in enumerate(state['domain']['materials']) if m['id'] in used]
+        standards = {}
+        latest = {item['id']: item for review in self._requirement_reviews(db, wid) for item in review['receipt']['items']}
+        for item in latest.values():
+            definition = item['definition']
+            digest = definition.get('source_digest')
+            if definition.get('source_status') != 'original-verified' or not digest:
+                continue
+            key = fingerprint({'standard': definition['standard'], 'source_digest': digest})
+            standards[key] = {'role': 'standard', 'id': key, 'name': definition['standard'], 'input_digest': key,
+                              'identity': {'source_digest': digest}}
+        targets = materials + list(standards.values())
+        for role in ('material', 'standard'):
+            for key, pin in state.get('type_resource_bindings', {}).get(role, {}).items():
+                if not any(t['role'] == role and t['id'] == key for t in targets):
+                    targets.append({'role': role, 'id': key, 'name': pin['name'], 'input_digest': None, 'identity': {}})
+        return targets
+
+    def _resource_catalog(self, db):
+        resources = [self.assets._detail(db, r) for r in db.execute(
+            "SELECT * FROM engineering_assets WHERE kind IN ('material','rule') AND status='published' ORDER BY asset_id,version")]
+        return [r for r in resources if not r['issues'] and r['reviewed_sha256'] == r['content_sha256']]
+
+    def _resources(self, db, wid, row, state):
+        catalog = self._resource_catalog(db)
+        bindings = state.get('type_resource_bindings', {})
+        targets = self._resource_targets(db, wid, state)
+        for target in targets:
+            pin = bindings.get(target['role'], {}).get(target['id'])
+            resource = next((r for r in catalog if pin and r['id'] == pin['resource_id']
+                             and all(r[k] == pin[k] for k in ('asset_id', 'version', 'content_sha256'))), None)
+            target['binding'] = pin
+            target['state'] = 'unbound' if not pin else 'current' if resource and pin['input_digest'] == target['input_digest'] else 'outdated'
+            target['reason'] = {'unbound': '未绑定资源；选择已发布的资源版本或核对唯一匹配。',
+                                'current': '已固定资源版本与内容摘要。', 'outdated': '输入或资源状态已变化；请重新核对绑定。'}[target['state']]
+            if target['input_digest'] is None:
+                target['reason'] = '目标已不属于当前型号或已批准标准，请解除该引用。'
+            identity = target.pop('identity')
+            def matches(resource):
+                if resource['kind'] != ('material' if target['role'] == 'material' else 'rule'):
+                    return False
+                if identity.get('source_digest'):
+                    return any(source_identity(s).get('source_digest') == identity['source_digest']
+                               for s in resource['release']['sources'])
+                return bool(identity.get('asset_id')) and resource['asset_id'] == identity['asset_id'] and all(
+                    not identity.get(k) or resource[k] == identity[k] for k in ('version', 'content_sha256'))
+            candidates = [r['id'] for r in catalog if matches(r)]
+            target['unique_match'] = candidates[0] if len(candidates) == 1 else None
+            target['match_reason'] = '唯一身份匹配' if len(candidates) == 1 else '资源身份有多个版本，需人工选择。' if candidates else '没有明确的资源身份匹配；不会按名称猜测。'
+        return {'workspace_id': wid, 'revision': row['revision'], 'targets': targets,
+                'resources': [{k: r[k] for k in ('id', 'asset_id', 'version', 'kind', 'name', 'content_sha256')} for r in catalog]}
+
+    def resources(self, wid):
+        with self.store.db() as db:
+            row, state = self._type(db, wid)
+            return self._resources(db, wid, row, state)
+
+    def bind_resources(self, wid, body, *, migrate=False):
+        with self.store.db(True) as db:
+            replay = self._replay(db, wid, body)
+            if replay:
+                return replay
+            row, state = self._type(db, wid, body.expected_revision)
+            self.store.assert_mutable(db, wid)
+            view = self._resources(db, wid, row, state)
+            targets = view['targets'] if migrate else [t for t in view['targets'] if t['role'] == body.role and t['id'] == body.target_id]
+            if not targets and not migrate:
+                raise HTTPException(422, {'field': body.target_id, 'message': '材料或已批准标准不存在，请刷新后重新选择。'})
+            bindings = state.setdefault('type_resource_bindings', {'schema': 'cablesim.type-resource-bindings/1', 'material': {}, 'standard': {}})
+            changed = []
+            for target in targets:
+                if migrate and target['binding']:
+                    continue  # migration never overwrites an explicit choice
+                resource_id = target['unique_match'] if migrate else str(body.resource_id) if body.resource_id else None
+                if migrate and not resource_id:
+                    continue
+                before = bindings.setdefault(target['role'], {}).get(target['id'])
+                if resource_id is None:
+                    bindings[target['role']].pop(target['id'], None)
+                    if before:
+                        changed.append(target['id'])
+                    continue
+                if target['input_digest'] is None:
+                    raise HTTPException(422, {'field': target['id'], 'message': '目标已移除；请解除引用，不能重新绑定。'})
+                resource = next((r for r in view['resources'] if r['id'] == resource_id and r['kind'] == ('material' if target['role'] == 'material' else 'rule')), None)
+                if not resource:
+                    raise HTTPException(422, {'field': target['id'], 'message': '请选择对应类别的已发布资源版本。'})
+                pin = {**resource, 'resource_id': resource['id'], 'input_digest': target['input_digest']}
+                if pin != before:
+                    bindings[target['role']][target['id']] = pin
+                    changed.append(target['id'])
+            if changed:
+                self.store.commit(db, row, state, '核对唯一资源绑定' if migrate else '绑定资源版本')
+            row, state = self._type(db, wid)
+            result = {**self._resources(db, wid, row, state), 'changed': changed}
+            self._remember(db, wid, body, result)
+            return result
 
     def initialize(self):
         with self.store.db(True) as db:
@@ -308,6 +431,7 @@ class Types:
         with self.store.db() as db:
             history = self._revisions(db, wid)
             requirement_reviews = self._requirement_reviews(db, wid)
+            resource_view = self._resources(db, wid, row, state)
             submitted = db.execute('SELECT * FROM type_submissions WHERE workspace=? ORDER BY rowid DESC LIMIT 1', (wid,)).fetchone()
             published = db.execute('SELECT * FROM engineering_type_releases WHERE workspace=?', (wid,)).fetchone()
         payload = {'schema': 'cablesim.type-specification/1', 'renderer': 'type-specification/2',
@@ -318,7 +442,13 @@ class Types:
                    ).values()) else 'engineering',
                    'base_reference': self._base(state), 'document': deepcopy(d), 'chapters': CHAPTERS,
                    'sources': sources, 'results': data, 'checks': checks, 'revisions': history,
-                   'requirement_reviews': requirement_reviews}
+                   'requirement_reviews': requirement_reviews,
+                   'source_design': {'id': wid, 'revision': row['revision']},
+                   'resource_bindings': deepcopy(state.get('type_resource_bindings', {}))}
+        for target in resource_view['targets']:
+            if target['state'] == 'outdated':
+                checks.append({'id': 'resource/'+target['id'], 'channel': 'resources',
+                               'message': target['name']+'：'+target['reason'], 'blocking': True})
         digest = fingerprint(payload)
         lifecycle = {'status': 'draft', 'submission_id': None, 'approval': None, 'stale': False}
         if submitted:
@@ -356,6 +486,10 @@ class Types:
         row, state = self._type(db, wid, payload['revision'])
         if fingerprint(state['domain']) != fingerprint(payload['document']):
             raise HTTPException(409, '型号输入已变化，请重新生成规格书。')
+        if state.get('type_resource_bindings', {}) != payload.get('resource_bindings', {}):
+            raise HTTPException(409, '资源版本绑定已变化，请重新生成规格书。')
+        if any(t['state'] == 'outdated' for t in self._resources(db, wid, row, state)['targets']):
+            raise HTTPException(409, '资源绑定已过期，请重新核对后提交。')
         if self._revisions(db, wid) != payload['revisions'] or self._requirement_reviews(db, wid) != payload['requirement_reviews']:
             raise HTTPException(409, '修订记录或要求批准状态已变化，请重新提交。')
         for source in payload['sources']:
@@ -534,12 +668,15 @@ class Types:
             ) != (latest['asset_id'], latest['version'], latest['content_sha256']):
                 raise HTTPException(409, '型号库已有后续版本，请基于最新发布版本建立草稿。')
             version = next_version(base['version'])
+            pins = { (p['asset_id'], p['version']): p for role in ('material', 'standard')
+                     for p in payload.get('resource_bindings', {}).get(role, {}).values() }
             asset = self.assets._insert(db, AssetRelease(asset_id=plan['family'], version=version, kind='assembly', name=payload['name'],
+                  dependencies=tuple(AssetRef(**{k: p[k] for k in ('asset_id','version','content_sha256')}) for p in pins.values()),
                   sources=(SourceReference(
                       kind='project_input',
                       reference='规格书 '+submission['id']+' sha256:'+submission['digest'],
                       reviewed=True,
-                  ),)), '人工批准的型号规格书', managed_type=True)
+                  ), SourceReference(kind='project_input', reference=json.dumps({'source_design': {'id': wid, 'revision': payload['revision']}}, separators=(',', ':')), reviewed=True))), '人工批准的型号规格书', managed_type=True)
             db.execute('INSERT INTO engineering_type_releases VALUES (?,?,?,?,?,?,?,?)',
                        (
                            asset,
@@ -567,6 +704,7 @@ class Types:
                 'asset_id': asset,
                 'asset_reference': {'id': plan['family'], 'version': version, 'content_sha256': digest},
                 'approval': receipt,
+                'source_design': {'id': wid, 'revision': payload['revision']},
             }
             self._remember(db, wid, body, result)
             return result
@@ -616,6 +754,7 @@ class Types:
                 self.assets._detail(db, self.assets._load(db, row['id']))
                 result.append({**self.assets._summary(row), 'workspace_id':row['workspace'],
                                'purpose':payload['purpose'], 'specification_digest':row['digest'],
+                               'source_design': {'id': row['workspace'], 'revision': payload['revision']},
                                'definition_endpoint':'/api/types/'+row['workspace']+'/specification',
                                'approval':self._receipt(row['receipt'])})
         return {'items': result}
@@ -749,6 +888,15 @@ def make_router(service):
     @router.get('/{wid}/comparison')
     def comparison(wid: str):
         return service.comparison(wid)
+    @router.get('/{wid}/resources')
+    def resources(wid: str):
+        return service.resources(wid)
+    @router.post('/{wid}/resources/bind')
+    def bind_resource(wid: str, body: BindResource):
+        return service.bind_resources(wid, body)
+    @router.post('/{wid}/resources/migrate')
+    def migrate_resources(wid: str, body: MigrateResources):
+        return service.bind_resources(wid, body, migrate=True)
     @router.post('/{wid}/plans', status_code=201)
     def branch(wid: str, body: Branch):
         return service.branch(wid, body)

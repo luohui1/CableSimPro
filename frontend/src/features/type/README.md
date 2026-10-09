@@ -67,6 +67,20 @@ node src/features/type/tests/verify-organization-save.mjs
 
 ## 待协调
 
+### 材料、执行标准与发布版本引用契约
+
+`GET /api/types/{wid}/resources` 只读返回当前保存修订、可绑定的已发布材料 / 规则资源，以及每个目标的 `binding/state/reason/unique_match/match_reason`。`POST .../resources/bind` 接收 `expected_revision/request_id/role(material|standard)/target_id/resource_id`（null 解除绑定）；`POST .../resources/migrate` 接收 `expected_revision/request_id`，显式写入唯一身份匹配，保留已有绑定。修订冲突拒绝写入；请求重放返回第一次结果。绑定操作不修改领域物理参数、不运行、不批准、不发布。
+
+引用保存在 `workspaces.state.type_resource_bindings`，schema 为 `cablesim.type-resource-bindings/1`：`material[领域材料 ID]` 与 `standard[SHA256({standard,source_digest})]` 各保存 `{resource_id,id,asset_id,version,content_sha256,name,kind,input_digest}`。`resource_id` 是 `engineering_assets.id`，`asset_id` 是资源逻辑身份。材料目标只包含结构层实际引用的材料，不把模板里未使用的土壤等材料列为缺项。每层仍通过领域材料 ID 查到同一固定资源版本，避免更改 SDK 物理契约。材料 `input_digest` 是保存材料事实的宿主 fingerprint；标准是上述键。编辑材料事实或替换已批准标准后绑定过期，历史修订保留原引用；已移除的目标可解除引用。
+
+迁移不比较名称：材料采用领域材料稳定 ID 或 `/materials/{index}` 来源 reference 内结构化 `{asset_id,version?,content_sha256?}`；标准只收录摘要通过的已批准要求，匹配资源 sources.reference 内 JSON 的 `source_digest`。多个资源版本或没有明确身份均不写入。按型号点击“核对唯一匹配”；此功能不会在启动或读取时自动迁移演示库。
+
+发布沿用 `engineering_type_releases` 的固定版本（资源目录已读取 `/api/types/library`），不再生成重复对象。规格书快照增加 `source_design:{id:workspace_id,revision}` 与 `resource_bindings`；发布的 assembly.dependencies 固定材料 / 标准资源 `asset_id/version/content_sha256`，sources.reference 保存 JSON `source_design`。library 和 publish 响应也返回 `source_design`，未发布设计没有 library 条目。旧发布记录由其已保存 payload.revision 投影来源修订，不回写或伪造审批。
+
+统一索引使用 `$.type_resource_bindings.material/standard`，按 `resource_id` 产生 `material/standard` 角色、按 `version/content_sha256` 设置 pin；无法解析及部分绑定时剩余的未绑定目标应保留 unknown。需继续接入 `input_digest` 对应的材料事实 fingerprint，变化时标过期。发布记录的 `payload.revision`（兼容旧记录）或 `payload.source_design.revision` 用于 `source_design` 的 revision pin；`published_cable_version` 使用资产版本 / 摘要 pin。sources.reference 的结构化 source_design 应由此关系消费，不再列为无文档 ID 的 unknown source。本模块继续复用 `RelationPanel(kind="type")`，不拼装第二套关系。新接口需由公共 API 负责人运行客户端生成；目录内临时使用有响应检查、10 秒超时和同一请求重试的同源客户端。
+
+隔离浏览器验证：`node src/features/type/tests/verify-resources.mjs`，使用 `typeFixture` 的私有数据库副本、单页面并清理服务和数据库；`E2E_DATABASE_SOURCE` 可指定只读种子。截图与断言记录在 `.data/type-resources/`。温度标注回归复用 CAD `verify-composition.mjs`。
+
 1. 公共路由与导航已注册；正式构建脚本仍由前端线程管理。目录内 preview 只作隔离验收。
 2. 公共参数字段复用 MethodParameterFields；规格书与结构扩展契约已纳入生成客户端，操作引用仍核验当前服务响应。
 3. 宿主尚无已保存方法配置的撤销接口；方法与工况页 Ctrl+Z 只撤销未保存条件，已保存时明确提示，不能误撤销型号结构。
