@@ -19,3 +19,27 @@ def test_watch_opened_and_closed_on_the_owner_thread_does_not_wait_for_itself(tm
     )
     result = subprocess.run([sys.executable, '-c', script, str(tmp_path)], cwd=ROOT, capture_output=True, text=True, timeout=60)
     assert result.returncode == 0 and result.stdout.strip() == 'closed', result.stderr
+
+
+@pytest.mark.skipif(os.name != 'nt', reason='directory notifications are Windows-only')
+def test_collecting_a_watch_never_waits_for_executor_locks(tmp_path):
+    # A thread being started can run garbage collection while another thread
+    # holds the executors' global shutdown lock; the finalizer must not wait.
+    script = (
+        "import gc,sys,threading\n"
+        "import concurrent.futures.thread as pool\n"
+        "import backend.kernel.source_watch as source\n"
+        "from backend.kernel.source_watch import DirectoryChanges,notification_owner\n"
+        "watch=DirectoryChanges(sys.argv[1],False)\n"
+        "def collect():\n"
+        "    global watch\n"
+        "    watch=None;gc.collect()\n"
+        "with pool._global_shutdown_lock:\n"
+        "    worker=threading.Thread(target=collect,daemon=True);worker.start();worker.join(10)\n"
+        "    assert not worker.is_alive(),'finalizer blocked on the executor lock'\n"
+        "notification_owner().submit(lambda:None).result(10)\n"
+        "DirectoryChanges(sys.argv[1],False).close()\n"
+        "assert not getattr(source,'_deferred',());print('released')\n"
+    )
+    result = subprocess.run([sys.executable, '-c', script, str(tmp_path)], cwd=ROOT, capture_output=True, text=True, timeout=60)
+    assert result.returncode == 0 and result.stdout.strip() == 'released', result.stderr

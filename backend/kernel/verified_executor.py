@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import suppress
 
 from ..plugin_host import Executor, PluginHostError
+from .source_watch import defer_close
 from ..plugin_host.registry import Registry
 from ..plugin_host.dependencies import LOCK_PATH
 from .workspace import fingerprint, stamp
@@ -152,7 +153,11 @@ class SealCache:
             self.readers.shutdown(wait=True)
 
     def __del__(self):
-        with suppress(Exception):self.close()
+        # Never block in a finalizer (see source_watch.defer_close): watches are
+        # handed to the notification owner; idle reader threads exit on their own
+        # once this executor is collected.
+        for watch in getattr(self,'watches',{}).values():
+            for handle in getattr(watch,'handles',()):defer_close(handle)
 
     def verify(self,plugin,*,before_execution=False):
         release=fingerprint(plugin.manifest.model_dump(mode='json',by_alias=True))

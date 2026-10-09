@@ -10,6 +10,7 @@ from contextlib import suppress
 import struct
 import json
 import logging
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from threading import local
@@ -35,11 +36,37 @@ def notification_owner():
     return _notification_owner
 
 
+# Finalizers must never block or take executor locks: a thread being started can
+# run garbage collection while another thread holds the executors' global
+# shutdown lock. Dead watches are queued here (deque.append takes no Python
+# lock) and closed by the owner at its next call; the queue keeps their
+# OVERLAPPED buffers alive until the kernel I/O is cancelled.
+_deferred = deque()
+
+
+def defer_close(watch):
+    _deferred.append(watch)
+
+
+def _drain_deferred():
+    if getattr(_notification_thread,'draining',False):return
+    _notification_thread.draining=True
+    try:
+        while _deferred:
+            try:watch=_deferred.popleft()
+            except IndexError:break
+            with suppress(Exception):watch.close()
+    finally:
+        _notification_thread.draining=False
+
+
 def owned_notification(function):
     @wraps(function)
     def wrapped(*args, **kwargs):
-        if getattr(_notification_thread,'active',False):return function(*args, **kwargs)
-        return notification_owner().submit(function,*args,**kwargs).result()
+        if getattr(_notification_thread,'active',False):
+            _drain_deferred()
+            return function(*args, **kwargs)
+        return notification_owner().submit(wrapped,*args,**kwargs).result()
     return wrapped
 
 
@@ -137,8 +164,9 @@ class DirectoryChanges:
         self.pending=False
 
     def __del__(self):
-        # OVERLAPPED and its buffer must remain alive until kernel I/O is cancelled.
-        with suppress(Exception):self.close()
+        # OVERLAPPED and its buffer must remain alive until kernel I/O is cancelled:
+        # hand the watch to the owner instead of closing (and waiting) here.
+        if self.handle is not None or self.event:defer_close(self)
 
 
 class SourceWatch:
@@ -199,4 +227,4 @@ class SourceWatch:
         self.handles=[];self.healthy=False
 
     def __del__(self):
-        with suppress(Exception):self.close()
+        for handle in getattr(self,'handles',()):defer_close(handle)
