@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "cablesim.standards-query/1",
+  "title": "标准依据只读查询",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "standard", "edition", "locator"],
+  "properties": {
+    "schema_version": {"const": "cablesim.standards-query/1"},
+    "operation": {"enum": ["resolve", "list"], "default": "resolve"},
+    "standard": {"type": "string", "minLength": 1, "maxLength": 80},
+    "edition": {"type": "string", "minLength": 1, "maxLength": 80},
+    "locator": {"type": "string", "minLength": 1, "maxLength": 80},
+    "quantity": {"type": "string", "minLength": 1, "maxLength": 180},
+    "record_id": {"type": "string", "minLength": 1, "maxLength": 180},
+    "expected_data_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "conditions": {
+      "type": "object", "additionalProperties": false,
+      "properties": {
+        "area_m2": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.01, "description": "导体标称截面积 m²"},
+        "screen_area_m2": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.01, "description": "金属屏蔽或同心导体标称截面积 m²；仅表 A.2"},
+        "diameter_m": {"type": "number", "exclusiveMinimum": 0, "maximum": 2, "description": "表或公式规定位置的假设直径 m，不能用实际外径替代"},
+        "u0_v": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000},
+        "u_v": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000},
+        "um_v": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000},
+        "core_count": {"type": "integer", "minimum": 1, "maximum": 100},
+        "conductor_class": {"type": "integer", "minimum": 1, "maximum": 100},
+        "nominal_thickness_m": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "duration_s": {"type": "number", "exclusiveMinimum": 0},
+        "insulation": {"type": "string", "minLength": 1, "maxLength": 60},
+        "conductor_material": {"type": "string", "minLength": 1, "maxLength": 60},
+        "coating": {"type": "string", "minLength": 1, "maxLength": 60},
+        "conductor_form": {"type": "string", "minLength": 1, "maxLength": 60},
+        "screened": {"type": "string", "enum": ["yes", "no"]},
+        "armour_material": {"type": "string", "minLength": 1, "maxLength": 60},
+        "armour_kind": {"type": "string", "minLength": 1, "maxLength": 60},
+        "sheath_material": {"type": "string", "minLength": 1, "maxLength": 60},
+        "layer": {"type": "string", "minLength": 1, "maxLength": 60}
+      }
+    }
+  },
+  "allOf": [{
+    "if": {"properties": {"operation": {"const": "list"}}, "required": ["operation"]},
+    "then": {"not": {"required": ["record_id"]}, "properties": {"conditions": {"maxProperties": 0}}},
+    "else": {"required": ["quantity"]}
+  }]
+}

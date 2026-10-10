@@ -1,0 +1,14 @@
+{
+  "schema": "cablesim.standards-integrity/1",
+  "version": "0.1.0",
+  "files": {
+    "basis.json": {
+      "sha256": "1358e0f953355e8fa48532ec196580dd067c8956582f8b4e78bc9087fd0a82bf",
+      "size_bytes": 2993999
+    },
+    "verification.json": {
+      "sha256": "0e04a364d4b21a5e034f967384676e812eb04c6eb4312a88a8dfe7b9d98afd12",
+      "size_bytes": 277808
+    }
+  }
+}

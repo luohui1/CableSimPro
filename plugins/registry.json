@@ -50,6 +50,12 @@
       "release_digest": "1872d8572cdbd83cdcfb7adf0d8f526e394cbd272d518b74bd1d4cc099737420"
     },
     {
+      "plugin_id": "cablesim.standards-basis",
+      "version": "0.1.0",
+      "manifest": "plugins/cablesim.standards-basis/plugin.json",
+      "release_digest": "74a22294a986b4a69ae543ec47d9bdaf69a87de6287ab855465064a261b3b27d"
+    },
+    {
       "plugin_id": "cablesim.thermal-network",
       "version": "1.0.2",
       "manifest": "plugins/cablesim.thermal-network/plugin.json",

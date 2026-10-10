@@ -17,7 +17,7 @@ ROOT=Path(__file__).resolve().parents[1]
 def test_all_capabilities_are_sealed_self_describing_and_assets_match(client):
     methods=client.get('/api/methods').json()
     contracts=client.get('/api/input-contracts').json()
-    assert len(methods)==10 and len(contracts)==54
+    assert len(methods)==11 and len(contracts)==54
     assert {'cablesim.cable-design-request/1','cablesim.core-layout-request/1'} <= {item['input_schema'] for item in contracts}
     for item in methods:
         declared=json.loads((ROOT/'plugins'/item['method']['plugin_id']/'plugin.json').read_text('utf-8'))
