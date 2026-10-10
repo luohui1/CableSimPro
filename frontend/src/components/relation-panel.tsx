@@ -15,17 +15,33 @@ const ROLES: Record<string, string> = {
 };
 const SHOWN = 3;
 
-/** 一条关联：角色、小名片；引用变了标“已变化”，当前引用的说明（如来源页码）直接写出。 */
-function Row({ row, label }: { row: Relation; label: string }) {
-  return <li className="relation-row">
-    <span className="relation-role">{label}</span>
-    <span className="relation-target">
+/** 一条关联只占一行：小名片；正常时的说明放在悬停提示里，只有引用变了或无法核实才在行上标出。 */
+function Row({ row }: { row: Relation }) {
+  return <li className="relation-row is-plain">
+    <span className="relation-target" title={row.reason || undefined}>
       <ObjectChip card={row.target} status={false} />
       {row.freshness === "outdated" && <StatusMark kind="historical" label="已变化" detail={row.reason || undefined} />}
       {row.freshness === "unknown" && <StatusMark kind="unknown" label="未核实" detail={row.reason || undefined} />}
-      {row.freshness === "current" && row.reason && <small className="relation-note">{row.reason}</small>}
     </span>
   </li>;
+}
+
+/** “用到了”按角色分组（来源、材料、标准……），每组先列几条，其余展开看。 */
+function Uses({ rows }: { rows: Relation[] }) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const roles = [...new Set(rows.map((row) => row.role))];
+  return <ul className="relation-list">{roles.map((role) => {
+    const group = rows.filter((row) => row.role === role);
+    const changed = group.filter((row) => row.freshness !== "current").length;
+    const all = open.has(role);
+    return <li key={role} className="relation-group">
+      <span className="relation-role">{ROLES[role] || role} {group.length}{changed ? ` · ${changed} 个需注意` : ""}</span>
+      <ul className="relation-list">{(all ? group : group.slice(0, SHOWN)).map((row, index) => <Row key={row.target.id + index} row={row} />)}</ul>
+      {group.length > SHOWN && <button type="button" className="relation-more" aria-expanded={all}
+        onClick={() => setOpen((current) => { const next = new Set(current); if (all) next.delete(role); else next.add(role); return next; })}>
+        {all ? "收起" : `另有 ${group.length - SHOWN} 个，展开`}</button>}
+    </li>;
+  })}</ul>;
 }
 
 /** “被用于”按引用者类别合并：每类先列最近几条，“另有 N 个”可以展开看全部。 */
@@ -61,7 +77,7 @@ export function RelationPanel({ kind, id, hideRoles = [] }: { kind: ObjectKind; 
   const unresolved = relations.data.unresolved.filter((row) => !hideRoles.includes(row.role));
   const usedBy = relations.data.used_by;
   return <div className="relation-panel">
-    <section aria-label="用到了"><h3>用到了</h3>{uses.length ? <ul className="relation-list">{uses.map((row, index) => <Row key={row.role + row.target.id + index} row={row} label={ROLES[row.role] || row.role} />)}</ul> : <InlineEmpty title="没有引用其他对象" />}</section>
+    <section aria-label="用到了"><h3>用到了</h3>{uses.length ? <Uses rows={uses} /> : <InlineEmpty title="没有引用其他对象" />}</section>
     <section aria-label="被用于"><h3>被用于</h3>{usedBy.length ? <UsedBy rows={usedBy} /> : <InlineEmpty title="还没有被引用" />}</section>
     {!!unresolved.length && <section aria-label="未建立的关联"><h3>未建立</h3><ul className="relation-list">{unresolved.map((row, index) => <li key={row.role + index} className="relation-row"><span className="relation-role">{ROLES[row.role] || row.role}</span><small className="relation-note">{row.reason}</small></li>)}</ul></section>}
   </div>;
