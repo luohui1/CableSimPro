@@ -24,6 +24,7 @@ import { modelViews, projectSuggestions } from '@/components/study-workbench-con
 import { readableCableVersion } from '@/components/study-workbench-config';
 import { RelationPanel } from '@/components/relation-panel';
 import { ObjectChip } from '@/components/object-link';
+import { WorkbenchSplitter } from '@/components/workbench-splitter';
 
 type Theme = "light" | "dark";
 
@@ -155,6 +156,7 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
         <ProjectExplorer workspaceId={workspaceId} projectName={name} document={document} activeStudy="" view="" theme={theme} onCreate={() => setCreating(true)} />
         <div className={`workbench ${document ? "" : "workbench-no-canvas"}`}>
           {canvas}
+          <WorkbenchSplitter kind="project" />
           <section className="workbench-dock" aria-label="本工程研究">
             <div className="workbench-dock-bar"><span className="workbench-dock-title">本工程研究</span></div>
             <div className="workbench-dock-body project-study-table">

@@ -27,6 +27,14 @@
 /* 侧栏按类别分组（§2.3）：类别标题、类别入口、入口下的具体对象（工程、型号设计）缩进到入口文字处 */
 .sidebar-scroll .module-item { min-height: calc(var(--control-compact) - var(--space-1)); padding-block: var(--space-1); }
 .sidebar-scroll .tree-row { min-height: calc(var(--control-compact) - var(--space-1)); padding-left: var(--space-8); color: var(--text-secondary); }
+.sidebar-scroll .tree-more { color: var(--text-secondary); font-size: var(--text-note); }
+.sidebar-scroll .tree-more:hover { color: var(--text); }
+/* 矮屏（如 1366×768）：收紧侧栏行高与间距，让全部入口不滚动也能看到 */
+@media (max-height: 860px) {
+  .workbench-sidebar { gap: var(--space-2); padding-block: var(--space-3); }
+  .sidebar-scroll .module-item, .sidebar-scroll .tree-row { min-height: calc(var(--control-compact) - var(--space-2)); padding-block: 0; }
+  .sidebar-scroll .tree-caption { padding-top: var(--space-1); padding-bottom: 0; }
+}
 .sidebar-scroll .tree-caption { padding-top: var(--space-2); }
 .sidebar-scroll .tree-row[aria-current] { color: var(--text); }
 .workbench-sidebar .module-item { color: var(--text); white-space: nowrap; }
@@ -271,10 +279,34 @@
 
 /* 工程工作窗口：上为模型画布，下为结果停靠栏，右为检查器（专业软件布局，一屏完成建模—计算—看结果） */
 .main-content:has(> .workbench) { padding: 0; overflow: hidden; display: flex; }
-.workbench { flex: 1; display: grid; grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr); min-width: 0; min-height: 0; }
-.workbench-no-canvas, .workbench[data-dock="max"] { grid-template-rows: minmax(0, 1fr); }
+/* 工作台：结论条、分隔条按自身高度，画布与结果区按比例分剩余空间（flex-basis 0，不受内容高度影响） */
+.workbench { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.workbench > * { flex: none; min-height: 0; }
+.workbench > .workbench-canvas { flex: var(--canvas-share, 1) 1 0; }
+.workbench > .workbench-dock { flex: var(--dock-share, 1) 1 0; }
+.workbench-no-canvas > .workbench-dock, .workbench[data-dock="max"] > .workbench-dock { flex: 1 1 0; }
 .workbench[data-dock="max"] .workbench-canvas { display: none; }
-.workbench-canvas { display: flex; flex-direction: column; gap: var(--space-1); min-height: 0; padding: var(--space-2) var(--space-2) 0; border-bottom: 1px solid var(--line); }
+.workbench-no-canvas > .workbench-splitter, .workbench[data-dock="max"] > .workbench-splitter { display: none; }
+/* 画布与结果区之间的分隔条：拖动、↑↓ 调整，双击复原（components/workbench-splitter.tsx） */
+.workbench-splitter { position: relative; height: var(--space-2); cursor: row-resize; touch-action: none; background: var(--panel); border-bottom: 1px solid var(--line); }
+.workbench-splitter::after { content: ""; position: absolute; top: 50%; left: 50%; width: var(--space-8); height: 2px; border-radius: var(--radius-pill); background: var(--control-border); transform: translate(-50%, -50%); }
+.workbench-splitter:hover, .workbench-splitter:focus-visible { outline: 0; background: var(--fill); }
+.workbench[data-split="15"] { --canvas-share: 0.15; --dock-share: 0.85; }
+.workbench[data-split="20"] { --canvas-share: 0.20; --dock-share: 0.80; }
+.workbench[data-split="25"] { --canvas-share: 0.25; --dock-share: 0.75; }
+.workbench[data-split="30"] { --canvas-share: 0.30; --dock-share: 0.70; }
+.workbench[data-split="35"] { --canvas-share: 0.35; --dock-share: 0.65; }
+.workbench[data-split="40"] { --canvas-share: 0.40; --dock-share: 0.60; }
+.workbench[data-split="45"] { --canvas-share: 0.45; --dock-share: 0.55; }
+.workbench[data-split="50"] { --canvas-share: 0.50; --dock-share: 0.50; }
+.workbench[data-split="55"] { --canvas-share: 0.55; --dock-share: 0.45; }
+.workbench[data-split="60"] { --canvas-share: 0.60; --dock-share: 0.40; }
+.workbench[data-split="65"] { --canvas-share: 0.65; --dock-share: 0.35; }
+.workbench[data-split="70"] { --canvas-share: 0.70; --dock-share: 0.30; }
+.workbench[data-split="75"] { --canvas-share: 0.75; --dock-share: 0.25; }
+.workbench[data-split="80"] { --canvas-share: 0.80; --dock-share: 0.20; }
+.workbench[data-split="85"] { --canvas-share: 0.85; --dock-share: 0.15; }
+.workbench-canvas { display: flex; flex-direction: column; gap: var(--space-1); min-height: 0; padding: var(--space-2) var(--space-2) 0; }
 .workbench-views { display: flex; gap: var(--space-1); flex: none; }
 .workbench-views button { display: inline-flex; align-items: center; gap: var(--space-1); height: var(--control-compact); padding: 0 var(--space-3); border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--text-note); cursor: pointer; }
 .workbench-views button:hover { background: var(--hover); color: var(--text); }
@@ -324,7 +356,7 @@
 
 /* 第二层：工程 / 型号浏览器（侧栏右侧），只列真实对象 */
 .main-content:has(> .workbench-frame) { padding: 0; overflow: hidden; display: flex; }
-.workbench-frame { flex: 1; display: grid; grid-template-columns: calc(var(--space-12) * 4 + var(--space-6)) minmax(0, 1fr); min-width: 0; min-height: 0; }
+.workbench-frame { flex: 1; display: grid; grid-template-columns: calc(var(--space-12) * 4 + var(--space-6)) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); min-width: 0; min-height: 0; }
 .workbench-frame > .workbench { min-height: 0; }
 .project-explorer { display: flex; flex-direction: column; gap: var(--space-4); min-height: 0; overflow: auto; padding: var(--space-4) var(--space-3); border-right: 1px solid var(--line); background: var(--ground); }
 .project-explorer > header { display: flex; flex-direction: column; gap: var(--space-1); padding: 0 var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); }
@@ -404,19 +436,34 @@
 .explorer-switch .icon { flex: none; color: var(--text-secondary); }
 .explorer-switch:hover strong { text-decoration: underline; text-underline-offset: 3px; }
 .command-caption { white-space: nowrap; flex: none; }
+/* 工具栏里的控件不压缩、不折行；下拉框旁已有分组名，自身标签只留给读屏 */
+.command-bar > *, .command-group, .command-group > * { flex: none; }
+.command-bar label, .command-bar .select-field { white-space: nowrap; }
+.command-bar .select-field { flex-direction: row; align-items: center; }
+.command-bar .select-field > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .inspector-list dt { flex: none; white-space: nowrap; }
 .inspector-list dd { min-width: 0; }
 .inspector-lead { color: var(--text); line-height: 1.6; }
 .gallery-field { height: calc(var(--space-12) * 11); border: 1px solid var(--line); border-radius: var(--radius-surface); overflow: hidden; }
 
 /* 答案条：工作窗口最先回答“结论是什么”，切换底部页签时始终可见 */
-.workbench.has-answer { grid-template-rows: auto minmax(0, 1.4fr) minmax(0, 1fr); }
-.workbench.has-answer.workbench-no-canvas, .workbench.has-answer[data-dock="max"] { grid-template-rows: auto minmax(0, 1fr); }
 .answer-bar { padding: var(--space-3) var(--space-6); border-bottom: 1px solid var(--line); background: var(--panel); }
 .answer-bar .conclusion { padding: 0; margin: 0; border: 0; gap: var(--space-6); }
 .answer-bar .conclusion-copy h2 { font-size: var(--text-heading); }
 .answer-bar .state-view { min-height: 0; padding: var(--space-2) 0; flex-direction: row; gap: var(--space-3); }
 .answer-bar .state-view .state-art { display: none; }
+/* 窄屏：结论句占满一行，数值另起一行，不把结论挤成三行 */
+@media (max-width: 1500px) {
+  .answer-bar .conclusion { flex-wrap: wrap; row-gap: var(--space-2); }
+  .answer-bar .conclusion-copy { flex: 1 1 100%; }
+}
+/* 矮屏（如 1366×768）：结论条去掉重复的小标题、数值小一档，把高度让给画布与结果区 */
+@media (max-height: 860px) {
+  .answer-bar { padding-block: var(--space-2); }
+  .answer-bar .conclusion-copy > span { display: none; }
+  .answer-bar .conclusion-copy h2 { margin-block: 0; }
+  .answer-bar .conclusion-metrics dd { font-size: var(--text-heading); }
+}
 .workbench-dock-bar .spacer { flex: 1; }
 
 /* 右侧属性：输入 / 方法 两页 */

@@ -6,7 +6,6 @@
 /* Reserve a host row above the drawing's trial controls. Drawing actions already
    reserve space in their own plot, so keep them over that reserved area. */
 .workbench-canvas:has(.geometry-what-if) > .workbench-views { position: static; align-self: flex-start; margin: var(--space-2); }
-.workbench.has-answer:has(.geometry-what-if) { grid-template-rows: auto minmax(0, 4fr) minmax(0, 1fr); }
 .answer-bar .conclusion-copy p:empty { display: none; }
 .study-inspector .inspector-list > div { min-height: var(--control-compact); align-items: center; padding: 0; }
 .study-inspector .number-field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: var(--space-2); align-items: center; min-height: var(--control-compact); }

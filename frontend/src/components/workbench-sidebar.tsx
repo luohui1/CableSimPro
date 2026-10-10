@@ -5,7 +5,6 @@ import { studyIndex, typeIndex, workspaces } from '@/api/research';
 import { indexInbox } from '@/api/object-index';
 import { useIdleStart } from '@/lib/use-deferred-start';
 import { text } from '@/api/client';
-import { rootModule, studyEntryTab } from '@/lib/study-config';
 import { Icon } from './icon';
 import { BrandLogo } from './brand';
 import { Button, IconButton } from './ui/button';
@@ -20,6 +19,14 @@ type Slot = (element: HTMLElement | null) => void;
  * 常驻侧栏，按对象类别排（FRONTEND_REQUIREMENTS §2.3）：首页 · 工作（工程、型号设计）· 资源 · 记录 · 方法。
  * 工作台里也保持展开；工程内部的模型、研究、交付在工作窗口左侧的工程浏览器中。
  */
+const SHOWN = 3;
+/** 侧栏里每类只列前几个；当前打开的那个不在前几个里时替换最后一个。 */
+function recent<T>(rows: T[], active: (row: T) => boolean): T[] {
+  const head = rows.slice(0, SHOWN), current = rows.find(active);
+  if (current && !head.includes(current)) head[head.length - 1] = current;
+  return head;
+}
+
 export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse }: { theme: 'light' | 'dark'; onTheme: () => void; onSlot: Slot; collapsed: boolean; onCollapse: () => void }) {
   const [create, setCreate] = useState(false);
   const navigate = useNavigate();
@@ -66,25 +73,24 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
       <Link className="module-item" to="/inbox" search={{ theme }}><Icon name="status/pending" /><span>待办</span>{!!todo && <span className="sidebar-count">{todo}</span>}</Link>
       <div className="tree-caption">工作</div>
       <Link className="module-item" to="/studies" search={{ theme }} activeOptions={{ exact: true }}><Icon name="object/folder" /><span>工程</span></Link>
-      {spaces.isPending ? <div className="tree-empty">读取中</div> : spaces.isError ? <div className="tree-empty">工程读取失败</div> : projects.map(project => {
-        const id = text(project.id), rows = (studies.data || []).filter(row => row.workspace === id);
-        const entry = rows[0];
-        const module = entry ? rootModule(entry.definition) : '';
-        return entry
-          ? <Link key={id} className="tree-row tree-object" to="/studies/$sid/$module/$tab" params={{ sid: entry.id, module, tab: studyEntryTab(module) }} search={{ workspace: id, theme, run: '', delivery: '' }} aria-current={id === activeProject ? 'page' : undefined} title={text(project.name)}>
-            <span className="tree-label">{text(project.name) || '未命名工程'}</span><span className="tree-count">{rows.length}</span>
-          </Link>
-          : <Link key={id} className="tree-row tree-object" to="/studies" search={{ theme, workspace: id }} aria-current={id === activeProject ? 'page' : undefined}>
-            <span className="tree-label">{text(project.name) || '未命名工程'}</span><span className="tree-count">0</span>
+      {spaces.isPending ? <div className="tree-empty">读取中</div> : spaces.isError ? <div className="tree-empty">工程读取失败</div> : <>
+        {/* 只列最近几个，当前打开的始终在列；其余到列表页找，侧栏不随数量无限变长 */}
+        {recent(projects, (project) => text(project.id) === activeProject).map(project => {
+          const id = text(project.id), count = (studies.data || []).filter(row => row.workspace === id).length;
+          return <Link key={id} className="tree-row tree-object" to="/studies" search={{ theme, workspace: id }} aria-current={id === activeProject ? 'page' : undefined} title={text(project.name)}>
+            <span className="tree-label">{text(project.name) || '未命名工程'}</span>{studies.data && <span className="tree-count">{count}</span>}
           </Link>;
-      })}
+        })}
+        {projects.length > SHOWN && <Link className="tree-row tree-more" to="/studies" search={{ theme }}>全部 {projects.length} 个工程</Link>}
+      </>}
       <Link className="module-item" to="/types" search={{ theme }} activeOptions={{ exact: true }}><Icon name="nav/cable-type" /><span>型号设计</span></Link>
-      {(types.data || []).map(row => {
+      {recent(types.data || [], (row) => text(row.id) === activeType).map(row => {
         const wid = text(row.id);
         return <Link key={wid} className="tree-row tree-object" to="/types/$wid/$module/$tab" params={{ wid, module: 'structure', tab: 'table' }} search={{ theme }} aria-current={wid === activeType ? 'page' : undefined} title={text(row.name)}>
           <span className="tree-label">{text(row.name)}</span>
         </Link>;
       })}
+      {(types.data || []).length > SHOWN && <Link className="tree-row tree-more" to="/types" search={{ theme }}>全部 {(types.data || []).length} 个型号设计</Link>}
       <div className="tree-caption">资源</div>
       <Link className="module-item" to="/resources/cables" search={{ theme }} aria-current={at('/resources/cables')}><Icon name="resource/cable-type" /><span>电缆型号版本</span></Link>
       <Link className="module-item" to="/resources/$group" params={{ group: 'materials' }} search={{ theme }} aria-current={at('/resources/materials')}><Icon name="resource/material" /><span>材料与部件</span></Link>
@@ -100,8 +106,7 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
     </nav>
     </>}
     <nav className="sidebar-foot" aria-label="系统">
-      {import.meta.env.DEV && <Link className="module-item" to="/gallery" search={{ theme }}><Icon name="nav/workbench" /><span>组件陈列</span></Link>}
-      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="sidebar-user"><Icon name="nav/settings" /><span>本机用户</span><Icon name="action/chevrons-up-down" /></Button></DropdownMenuTrigger><DropdownMenuContent align="start"><DropdownMenuItem onSelect={onTheme}>{theme === 'light' ? '切换深色模式' : '切换浅色模式'}</DropdownMenuItem><DropdownMenuItem onSelect={() => void navigate({ to: '/settings', search: { theme } })}>设置</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+      <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" className="sidebar-user"><Icon name="nav/settings" /><span>本机用户</span><Icon name="action/chevrons-up-down" /></Button></DropdownMenuTrigger><DropdownMenuContent align="start"><DropdownMenuItem onSelect={onTheme}>{theme === 'light' ? '切换深色模式' : '切换浅色模式'}</DropdownMenuItem><DropdownMenuItem onSelect={() => void navigate({ to: '/settings', search: { theme } })}>设置</DropdownMenuItem>{import.meta.env.DEV && <DropdownMenuItem onSelect={() => void navigate({ to: '/gallery', search: { theme } })}>组件陈列（开发）</DropdownMenuItem>}</DropdownMenuContent></DropdownMenu>
     </nav>
     <CreateStudyDialog open={create} onOpenChange={setCreate} theme={theme} />
   </aside>;

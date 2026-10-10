@@ -59,6 +59,7 @@ import { downloadBlob } from '@/lib/download';
 import { hpcJson } from '@/features/field/run-label';
 
 import { moduleDefinitions, moduleBehavior } from "./study-modules";
+import { WorkbenchSplitter } from "@/components/workbench-splitter";
 // Optional result viewers load only when opened, leaving the input workbench
 // interactive while keeping each viewer's own state and saved evidence intact.
 const FieldView = lazy(() => import('@/features/field/field-view').then(m => ({ default: m.FieldView })));
@@ -493,6 +494,7 @@ export function StudyWorkspace() {
               {canvasView === "field" && fieldView?.kind === "iec" && <p className="field-basis" title={fieldView.limitations.join("；")}>{fieldView.limitations[0]}</p>}
             </section>
           )}
+          <WorkbenchSplitter kind="study" />
           <section className="workbench-dock" aria-label="计算结果">
             <div className="workbench-dock-bar">
               <TabsList aria-label={`${definition.label}页签`}>

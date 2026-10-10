@@ -35,6 +35,7 @@ import { ResourceBindings } from './resource-bindings';
 import { AgentPanel } from '@/features/agent/agent-panel';
 
 import { typeModules } from "./module-definitions";
+import { WorkbenchSplitter } from "@/components/workbench-splitter";
 export { typeModules } from "./module-definitions";
 export function TypeWorkspace() {
   const state = useTypeWorkspace(), { location, navigate, onTheme } = useTypeNavigation();
@@ -183,6 +184,7 @@ export function TypeWorkspace() {
         {state.loading ? <LoadingState title="正在读取型号输入" /> : !document && state.error ? <ErrorState title="型号读取失败" description={state.error} action={<Button onClick={state.reload}>重新读取</Button>} /> : !document ? <EmptyState title="尚无型号输入" description="从型号列表选择型号。" /> : <TypeCanvas view={view} cable={cable} selected={selected} onSelect={choose} />}
         {structureError && <p className="type-notice is-error" role="alert">{structureError}</p>}
       </section>
+      <WorkbenchSplitter kind="type" />
       <section className="workbench-dock" aria-label={module?.label || '型号模块'}>
         <div className="workbench-dock-bar">
           {dockTabs.length > 1 ? <TabsList aria-label={(module?.label || '') + '页签'}>{dockTabs.map(([id, label]) => <TabsTrigger key={id} value={id}>{label}</TabsTrigger>)}</TabsList> : <span className="workbench-dock-title">{module?.label}</span>}
