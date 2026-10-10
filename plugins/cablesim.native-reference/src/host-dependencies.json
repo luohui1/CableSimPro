@@ -66,8 +66,8 @@
   },
   {
     "path": "backend/plugin_host/manifest.py",
-    "sha256": "9abbc83deebde964c2af3bac334c94a86731e94eb2452f0cbdf34909f7689ec6",
-    "size_bytes": 11935
+    "sha256": "aaca2f05951141f6ccb34ec3374ee2c0b1fc60692008751be6bd95cb7637ab92",
+    "size_bytes": 12446
   },
   {
     "path": "backend/plugin_host/native_arguments.py",

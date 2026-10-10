@@ -102,6 +102,17 @@
           "title": "Title",
           "type": "string"
         },
+        "solver": {
+          "default": "local",
+          "description": "求解位置：local 仅本机，slurm 仅超算，either 两者均可；省略时按 local。",
+          "enum": [
+            "local",
+            "slurm",
+            "either"
+          ],
+          "title": "Solver",
+          "type": "string"
+        },
         "method_version": {
           "maxLength": 80,
           "minLength": 1,

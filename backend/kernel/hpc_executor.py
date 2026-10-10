@@ -7,6 +7,7 @@ from hashlib import sha256
 import json
 import os
 from pathlib import Path
+import re
 import time
 from tempfile import TemporaryDirectory
 from uuid import UUID,uuid4,uuid5,NAMESPACE_URL
@@ -14,6 +15,7 @@ from uuid import UUID,uuid4,uuid5,NAMESPACE_URL
 from ..plugin_host import Executor,PluginHostError
 from ..plugin_host.executor import CaseResult,RunResult,PROTOCOL
 from ..plugin_host.registry import Registry
+from ..plugin_host.manifest import ID as PLUGIN_ID_PATTERN
 from .batch_files import atomic,digest,locked,read
 from .batch_runtime import freeze_runtime
 from .batch_slurm import SlurmBackend,RemoteDisconnected,allocation_estimate
@@ -43,6 +45,37 @@ class HpcExecutor:
     def verify_release(self,plugin):
         verifier=getattr(self.local,'verify_release',None)
         return verifier(plugin) if verifier else plugin.verify()
+
+    def profile_status(self):
+        """Allowlisted configuration metadata; never probe SSH or construct a backend."""
+        try:location=self.profile.resolve().relative_to(ROOT).as_posix()
+        except ValueError:location=None
+        result={'configured':False,'status':'not_configured','connection_checked':False,
+                'remote_plugins':[],'remote_capabilities':{},'configuration_file':location,
+                'configuration_note':'宿主读取此超算配置文件；连接参数在文件中配置。' if location else
+                                     '宿主使用外部指定的超算配置文件；连接参数在文件中配置。'}
+        try:
+            if not self.profile.is_file():return result
+            result['status']='invalid'
+            profile=read(self.profile)
+            if not isinstance(profile,dict):return result
+            plugins=profile.get('remote_plugins',[]);capabilities=profile.get('remote_capabilities',{})
+            plugin_id=lambda value:isinstance(value,str) and re.fullmatch(PLUGIN_ID_PATTERN,value)
+            capability_id=lambda value:isinstance(value,str) and re.fullmatch(r'[a-z][a-z0-9-]*',value)
+            if (not isinstance(plugins,list) or not all(plugin_id(value) for value in plugins) or
+                    not isinstance(capabilities,dict) or not all(plugin_id(key) and isinstance(values,list) and
+                        all(capability_id(value) for value in values) for key,values in capabilities.items())):
+                return result
+            result['remote_plugins']=sorted(set(plugins))
+            result['remote_capabilities']={key:sorted(set(values)) for key,values in sorted(capabilities.items())}
+            alias=profile.get('ssh_alias');root=profile.get('remote_root');python=profile.get('python')
+            if not isinstance(alias,str) or not re.fullmatch(r'[A-Za-z0-9_.-]+',alias):return result
+            if not all(isinstance(value,str) and re.fullmatch(r'/[A-Za-z0-9_./-]+',value) and
+                       '..' not in value for value in (root,python,profile.get('control_python',python))):return result
+            result.update(configured=True,status='configured')
+        except (OSError,ValueError,TypeError):
+            result['status']='invalid'
+        return result
 
     def required(self,plugin_id,capability=None):
         if os.environ.get('SLURM_JOB_ID') or not self.profile.is_file():return False

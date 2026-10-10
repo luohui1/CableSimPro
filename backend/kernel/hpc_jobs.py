@@ -161,6 +161,9 @@ def job_cards(research,refinements,values,batches=None):
 def make_router(research,batches=None):
     router=APIRouter(prefix='/api/hpc');refinements=Refinements(research);responses=StepResponses(research)
 
+    @router.get('/profile')
+    def profile():return research.executor.profile_status()
+
     @router.get('/workspaces/{wid}/studies/{sid}/step-responses')
     def step_responses(wid:UUID,sid:UUID):return {'items':responses.list(str(wid),str(sid))}
 

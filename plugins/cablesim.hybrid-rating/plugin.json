@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.hybrid-rating",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "name": "混合载流量研究",
   "description": "IEC物理基线与有限元热场修正，带适用域、预测区间及训练来源；默认仅参考。",
   "icon": "assets/icon.svg",
@@ -41,6 +41,7 @@
     {
       "kind": "method",
       "id": "training-sample",
+      "solver": "slurm",
       "title": "收敛有限元与IEC配对样本",
       "method_version": "1.0.0",
       "analysis": "steady_state",
@@ -1538,6 +1539,7 @@
     {
       "kind": "method",
       "id": "train-model",
+      "solver": "slurm",
       "title": "CPU训练与独立留出验证",
       "method_version": "1.0.0",
       "analysis": "steady_state",
@@ -1679,6 +1681,7 @@
     {
       "kind": "method",
       "id": "steady-rating",
+      "solver": "either",
       "title": "IEC基线加有限元数据修正",
       "method_version": "1.0.0",
       "analysis": "steady_state",
@@ -2639,6 +2642,7 @@
     {
       "kind": "method",
       "id": "physics-comparison",
+      "solver": "slurm",
       "title": "标准与有限元物理对比",
       "method_version": "1.0.0",
       "analysis": "steady_state",

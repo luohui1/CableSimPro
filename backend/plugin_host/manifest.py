@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 from cablesim_sdk.plugin_ui import (ParameterSchema, ParameterGroup, Headline, Presentation,
                                    InputContract, TemperatureFieldBinding, ReportTemplate, AgentSkill, validate_parameter_schema, HAN)
 
@@ -94,6 +94,8 @@ class Capability(Strict):
     kind: Literal['method', 'report-template', 'agent-skill']
     id: str = Field(pattern=r'^[a-z][a-z0-9-]*$')
     title: str = Field(min_length=1, max_length=200)
+    solver: Literal['local', 'slurm', 'either'] = Field(
+        default='local', description='求解位置：local 仅本机，slurm 仅超算，either 两者均可；省略时按 local。')
     method_version: str = Field(min_length=1, max_length=80)
     analysis: str = Field(pattern=r'^[a-z_]+$')
     input_schema: str = Field(min_length=1, max_length=120)
@@ -113,6 +115,14 @@ class Capability(Strict):
     temperature_field_binding: TemperatureFieldBinding | None = Field(default=None, alias='x-temperature-field-binding')
     report_template: ReportTemplate | None = None
     agent_skill: AgentSkill | None = None
+
+    @model_serializer(mode='wrap')
+    def serialize_solver(self, handler):
+        value = handler(self)
+        # Keep the release identity of manifests written before this optional field.
+        if 'solver' not in self.model_fields_set:
+            value.pop('solver', None)
+        return value
 
     @model_validator(mode='after')
     def unique(self):
