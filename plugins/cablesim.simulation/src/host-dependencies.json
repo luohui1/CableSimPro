@@ -110,6 +110,11 @@
     "size_bytes": 3158
   },
   {
+    "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/emergency.py",
+    "sha256": "01c52d1bf749f37a143de7330ef719926dac63f3597b4b9a8df4c4853b44e2d5",
+    "size_bytes": 4691
+  },
+  {
     "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/group.py",
     "sha256": "aad5fc771d9a07b25f4dee527976823094d070bb2eaee894fca862a4165e61a9",
     "size_bytes": 27625

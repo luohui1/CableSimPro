@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.simulation",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "name": "仿真复现基准",
   "description": "多区域稳态导热与GetDP时谐涡流、Elmer稳态/瞬态热适配，使用统一问题、网格和复现工件。",
   "icon": "assets/icon.svg",
@@ -24,7 +24,7 @@
         "media_type": "image/svg+xml"
       }
     ],
-    "validation_note": "无参考算例可发布数值数据；已声明的源码测试与适用范围见各能力validation，不据此生成验证图。"
+    "validation_note": "验证算例页列出 63 个公开复现目标（12 项复现、9 项部分复现）；部分复现只覆盖列明范围，缺项与口径差异详见各算例。"
   },
   "publisher": {
     "id": "cablesim",
@@ -59,6 +59,2453 @@
     "network": "none"
   },
   "capabilities": [
+    {
+      "kind": "method",
+      "id": "fem-step-response",
+      "title": "有限元阶跃热响应",
+      "method_version": "1.0.0",
+      "analysis": "transient",
+      "input_schema": "cablesim.fem-step-response/1",
+      "description": "引用已保存固定焦耳稳态模型，在超算计算有材料热容来源的阶跃响应，核对时间步、网格及稳态末值。",
+      "x-headline": [
+        {
+          "key": "conductor_temperature",
+          "title": "末时刻导体温度",
+          "unit": {
+            "si": "K",
+            "display": "°C",
+            "scale": 1,
+            "offset": -273.15
+          },
+          "aggregate": "maximum",
+          "artifact": "x-cablesim.simulation-bundle"
+        }
+      ],
+      "outputs": [
+        {
+          "key": "conductor_temperature",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.simulation-bundle",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.temperature-field",
+          "required": false
+        },
+        {
+          "type": "x-cablesim.emergency-input",
+          "required": false
+        }
+      ],
+      "validation": {
+        "level": "analytic-benchmark",
+        "cases": [
+          "tests/test_step_response.py: 镜像线热源 E1 解析恒温地表与稳态极限"
+        ]
+      },
+      "limitations": [
+        "仅单回路、均匀土壤、恒温地表与镜像远场，固定有来源焦耳损耗及热物性。",
+        "每个材料域须有正文页码、表号与摘要的体积热容；没有默认热容。",
+        "曲线仅供有来源响应输入，不是 IEC 60853 官方算例或完整标准热路；未收敛时不导出应急输入。"
+      ],
+      "input_contract": {
+        "input_sources": [
+          "study"
+        ],
+        "standalone_schema": {
+          "$defs": {
+            "Capacity": {
+              "additionalProperties": false,
+              "properties": {
+                "value_j_m3_k": {
+                  "exclusiveMinimum": 0,
+                  "title": "体积热容",
+                  "type": "number",
+                  "description": "体积热容；须与保存输入和正文来源一致。",
+                  "x-unit": {
+                    "si": "J/(m3*K)",
+                    "display": "J/(m3*K)",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 0,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "material": {
+                  "minLength": 1,
+                  "title": "材料",
+                  "type": "string",
+                  "description": "从领域材料库选择已有材料，采用其事实及来源。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 1,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "reference": {
+                  "minLength": 1,
+                  "title": "文献来源",
+                  "type": "string",
+                  "description": "记录数据的文件、条款或试验依据，保留原始含义。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 2,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "source_sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "title": "正文摘要",
+                  "type": "string",
+                  "description": "正文摘要；须与保存输入和正文来源一致。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 3,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "page": {
+                  "minimum": 1,
+                  "title": "正文页码",
+                  "type": "integer",
+                  "description": "正文页码；须与保存输入和正文来源一致。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 4,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "table": {
+                  "minLength": 1,
+                  "title": "表号",
+                  "type": "string",
+                  "description": "表号；须与保存输入和正文来源一致。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 5,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "density_kg_m3": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "密度",
+                  "description": "密度；须与保存输入和正文来源一致。",
+                  "x-unit": {
+                    "si": "kg/m3",
+                    "display": "kg/m3",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 6,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                },
+                "specific_heat_j_kg_k": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "比热",
+                  "description": "比热；须与保存输入和正文来源一致。",
+                  "x-unit": {
+                    "si": "J/(kg*K)",
+                    "display": "J/(kg*K)",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 7,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                },
+                "limitations": {
+                  "minLength": 1,
+                  "title": "适用范围",
+                  "type": "string",
+                  "description": "适用范围；须与保存输入和正文来源一致。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 8,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                }
+              },
+              "required": [
+                "value_j_m3_k",
+                "material",
+                "reference",
+                "source_sha256",
+                "page",
+                "table",
+                "limitations"
+              ],
+              "title": "Capacity",
+              "type": "object"
+            },
+            "CircuitBranch": {
+              "additionalProperties": false,
+              "properties": {
+                "region": {
+                  "minLength": 1,
+                  "title": "目标区域",
+                  "type": "string",
+                  "description": "从当前截面或网格选择已有区域。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 0,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "nodes": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "integer"
+                    }
+                  ],
+                  "title": "探针节点",
+                  "type": "array",
+                  "description": "选择当前网格中的探针或边界节点，不能手填无来源索引。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 1,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                }
+              },
+              "required": [
+                "region",
+                "nodes"
+              ],
+              "title": "CircuitBranch",
+              "type": "object"
+            },
+            "Condition": {
+              "additionalProperties": false,
+              "properties": {
+                "uid": {
+                  "title": "局部对象标识",
+                  "type": "string",
+                  "description": "当前模型内唯一的层、边界或激励身份。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 0,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "selector": {
+                  "enum": [
+                    "outer",
+                    "x",
+                    "z",
+                    "circle"
+                  ],
+                  "title": "边界选择器",
+                  "type": "string",
+                  "description": "使用契约支持的边界或区域选择方式，须命中当前几何。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 1,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "values": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "title": "边界选择坐标",
+                  "type": "array",
+                  "description": "outer不填坐标；x或z填一个坐标；circle按中心x、中心z、半径填写，全部保存为m。",
+                  "x-unit": {
+                    "si": "m",
+                    "display": "mm",
+                    "scale": 1000,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 2,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "kind": {
+                  "enum": [
+                    "temperature",
+                    "convection",
+                    "insulated",
+                    "magnetic_potential"
+                  ],
+                  "title": "对象类型",
+                  "type": "string",
+                  "description": "选择契约明确支持的几何、边界或激励类型，禁止任意新类型。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 3,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "value": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "边界物理值",
+                  "description": "恒温为规定温度、对流为外界温度，均保存为K；磁矢势保存为Wb/m。绝热边界不使用此值。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 4,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "h_w_m2_k": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "对流换热系数",
+                  "description": "表面热流密度与表面环境温差之比，采用边界来源。",
+                  "x-unit": {
+                    "si": "W/(m²·K)",
+                    "display": "W/(m²·K)",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 5,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                }
+              },
+              "required": [
+                "uid",
+                "selector",
+                "values",
+                "kind",
+                "value"
+              ],
+              "title": "Condition",
+              "type": "object"
+            },
+            "CurrentProbe": {
+              "additionalProperties": false,
+              "properties": {
+                "region": {
+                  "title": "目标区域",
+                  "type": "string",
+                  "description": "从当前截面或网格选择已有区域。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 0,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "point_m": {
+                  "maxItems": 2,
+                  "minItems": 2,
+                  "prefixItems": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "number"
+                    }
+                  ],
+                  "title": "采样坐标",
+                  "type": "array",
+                  "description": "截面内采样点坐标，必须位于相应求解域。",
+                  "x-unit": {
+                    "si": "m",
+                    "display": "mm",
+                    "scale": 1000,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 1,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "source": {
+                  "minLength": 1,
+                  "title": "来源说明",
+                  "type": "string",
+                  "description": "引用厂家、试验、标准条款或已验证工件，缺少来源不生成工程结果。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 2,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                }
+              },
+              "required": [
+                "region",
+                "point_m",
+                "source"
+              ],
+              "title": "CurrentProbe",
+              "type": "object"
+            },
+            "ElectricalNetwork": {
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "minLength": 1,
+                  "title": "对象标识",
+                  "type": "string",
+                  "description": "绑定当前结构中的唯一对象身份，避免手填重复编号。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 0,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "branches": {
+                  "items": {
+                    "$ref": "#/$defs/CircuitBranch"
+                  },
+                  "maxItems": 256,
+                  "minItems": 2,
+                  "title": "电网络支路",
+                  "type": "array",
+                  "description": "各支路的区域、长度及端口关系，须符合网络拓扑。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 1,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "source": {
+                  "minLength": 1,
+                  "title": "来源说明",
+                  "type": "string",
+                  "description": "引用厂家、试验、标准条款或已验证工件，缺少来源不生成工程结果。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 2,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                }
+              },
+              "required": [
+                "id",
+                "branches",
+                "source"
+              ],
+              "title": "ElectricalNetwork",
+              "type": "object"
+            },
+            "Excitation": {
+              "additionalProperties": false,
+              "properties": {
+                "regions": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "minItems": 1,
+                  "title": "区域选择",
+                  "type": "array",
+                  "description": "从当前求解域选择已有区域标识。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 0,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "kind": {
+                  "enum": [
+                    "heat_w_m",
+                    "current_rms_a",
+                    "voltage_gradient_v_m",
+                    "impressed_current_rms_a"
+                  ],
+                  "title": "对象类型",
+                  "type": "string",
+                  "description": "选择契约明确支持的几何、边界或激励类型，禁止任意新类型。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 1,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "connection": {
+                  "default": "parallel",
+                  "enum": [
+                    "parallel",
+                    "series"
+                  ],
+                  "title": "端口连接方式",
+                  "type": "string",
+                  "description": "声明电磁端口并联或串联约束，须与区域拓扑一致。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 2,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                },
+                "value": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "maxItems": 2,
+                  "minItems": 1,
+                  "title": "边界物理值",
+                  "type": "array",
+                  "description": "恒温为规定温度、对流为外界温度，均保存为K；磁矢势保存为Wb/m。绝热边界不使用此值。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 3,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "schedule": {
+                  "items": {
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "type": "array"
+                  },
+                  "title": "激励时间序列",
+                  "type": "array",
+                  "description": "逐项填写时间(s)与无量纲热源倍率；首项时间为0，时间严格递增、倍率非负，切换点须落在时间步边界。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 4,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "source": {
+                  "minLength": 1,
+                  "title": "来源说明",
+                  "type": "string",
+                  "description": "引用厂家、试验、标准条款或已验证工件，缺少来源不生成工程结果。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 5,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                }
+              },
+              "required": [
+                "regions",
+                "kind",
+                "value",
+                "source"
+              ],
+              "title": "Excitation",
+              "type": "object"
+            },
+            "Material": {
+              "additionalProperties": false,
+              "properties": {
+                "k_w_m_k": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "热导率",
+                  "description": "热流密度与温度梯度之比，采用材料有效温区内的数据。",
+                  "x-unit": {
+                    "si": "W/(m·K)",
+                    "display": "W/(m·K)",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 0,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                },
+                "heat_capacity_j_m3_k": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "体积热容量",
+                  "description": "材料单位体积升温一度所需热量，暂态求解必须有来源。",
+                  "x-unit": {
+                    "si": "J/(m³·K)",
+                    "display": "J/(m³·K)",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 1,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                },
+                "conductivity_s_m": {
+                  "anyOf": [
+                    {
+                      "minimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "电导率",
+                  "description": "材料在声明温度下的电导率，非导电区域可明确为零。",
+                  "x-unit": {
+                    "si": "S/m",
+                    "display": "S/m",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 2,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                },
+                "relative_permeability": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "相对磁导率实部",
+                  "description": "时谐磁场材料相对磁导率实部，须有材料或参考算例依据。",
+                  "x-unit": {
+                    "si": "1",
+                    "display": "1",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 3,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                },
+                "relative_permeability_loss": {
+                  "default": 0,
+                  "minimum": 0,
+                  "title": "相对磁导率损耗部",
+                  "type": "number",
+                  "description": "时谐磁场的磁损耗分量，非负且与材料来源一致。",
+                  "x-unit": {
+                    "si": "1",
+                    "display": "1",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 4,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                },
+                "relative_permittivity": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "相对介电常数",
+                  "description": "相对真空的介电常数，取适用频率和温度下的材料数据。",
+                  "x-unit": {
+                    "si": "1",
+                    "display": "1",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 5,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                },
+                "source": {
+                  "minLength": 1,
+                  "title": "来源说明",
+                  "type": "string",
+                  "description": "引用厂家、试验、标准条款或已验证工件，缺少来源不生成工程结果。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 6,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                }
+              },
+              "required": [
+                "source"
+              ],
+              "title": "Material",
+              "type": "object"
+            },
+            "Problem": {
+              "additionalProperties": false,
+              "properties": {
+                "schema_version": {
+                  "const": "cablesim.simulation-problem/1",
+                  "title": "输入契约",
+                  "type": "string",
+                  "description": "只接受该能力声明的输入结构版本，不自动猜测数据格式。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 0,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "physics": {
+                  "enum": [
+                    "steady_heat",
+                    "transient_heat",
+                    "magnetic_harmonic"
+                  ],
+                  "title": "训练物理路径",
+                  "type": "string",
+                  "description": "选择热场或电磁热反馈路径，训练标签必须使用对应真实求解结果。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 1,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "geometry": {
+                  "items": {
+                    "$ref": "#/$defs/Shape"
+                  },
+                  "maxItems": 256,
+                  "minItems": 1,
+                  "title": "护套几何",
+                  "type": "array",
+                  "description": "选择光滑或波纹护套模型，波纹模型必须提供真实构造。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 2,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "boundaries": {
+                  "items": {
+                    "$ref": "#/$defs/Condition"
+                  },
+                  "maxItems": 64,
+                  "minItems": 1,
+                  "title": "边界条件",
+                  "type": "array",
+                  "description": "声明计算域各边界的物理约束与来源。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 3,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "excitations": {
+                  "items": {
+                    "$ref": "#/$defs/Excitation"
+                  },
+                  "title": "场激励",
+                  "type": "array",
+                  "description": "显式声明区域电流或电压约束，按端口连接方式施加。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 4,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "frequency_hz": {
+                  "anyOf": [
+                    {
+                      "exclusiveMinimum": 0,
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "电源频率",
+                  "description": "时谐或交流计算频率，采用实际系统频率。",
+                  "x-unit": {
+                    "si": "Hz",
+                    "display": "Hz",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 5,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                },
+                "time": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/Time"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "暂态时间设置",
+                  "description": "初始温度、步长和积分阶次，均由当前暂态契约约束。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 6,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                },
+                "probes_m": {
+                  "items": {
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "prefixItems": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "type": "array"
+                  },
+                  "maxItems": 100,
+                  "title": "场采样点",
+                  "type": "array",
+                  "description": "需要输出场值的截面坐标列表，须位于计算域内。",
+                  "x-unit": {
+                    "si": "m",
+                    "display": "mm",
+                    "scale": 1000,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 7,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "current_probes": {
+                  "items": {
+                    "$ref": "#/$defs/CurrentProbe"
+                  },
+                  "maxItems": 100,
+                  "title": "电流积分探针",
+                  "type": "array",
+                  "description": "选择有向截面或区域积分探针，用于核验端口电流。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 8,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "temperature_regions": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "maxProperties": 100,
+                  "title": "温度统计域",
+                  "type": "object",
+                  "description": "选择需要统计平均或最高温度的网格区域。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 9,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "axial_lengths_m": {
+                  "additionalProperties": {
+                    "type": "number"
+                  },
+                  "maxProperties": 256,
+                  "title": "支路轴向长度",
+                  "type": "object",
+                  "description": "各电网络支路对应的轴向实际长度。",
+                  "x-unit": {
+                    "si": "m",
+                    "display": "mm",
+                    "scale": 1000,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 10,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "electrical_networks": {
+                  "items": {
+                    "$ref": "#/$defs/ElectricalNetwork"
+                  },
+                  "maxItems": 32,
+                  "title": "外接电网络",
+                  "type": "array",
+                  "description": "结构化声明场端口与电网络支路的连接关系。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 11,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "provenance": {
+                  "additionalProperties": true,
+                  "minProperties": 1,
+                  "title": "证据出处",
+                  "type": "object",
+                  "description": "绑定生成输入或网格的文件摘要与资料出处。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 12,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "assumptions": {
+                  "items": {
+                    "type": "string"
+                  },
+                  "title": "方法假设",
+                  "type": "array",
+                  "description": "保存有来源的简化假设，不能以此跳过物理适用范围拒绝。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 13,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                }
+              },
+              "required": [
+                "schema_version",
+                "physics",
+                "geometry",
+                "boundaries",
+                "excitations",
+                "provenance",
+                "assumptions"
+              ],
+              "title": "Problem",
+              "type": "object"
+            },
+            "SavedSource": {
+              "additionalProperties": false,
+              "properties": {
+                "run_id": {
+                  "minLength": 1,
+                  "title": "来源运行",
+                  "type": "string",
+                  "description": "从工程保存运行选择来源，历史运行不可改写。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 0,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "output_sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "title": "结果摘要",
+                  "type": "string",
+                  "description": "结果摘要；须与保存输入和正文来源一致。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 1,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "input_sha256": {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "title": "输入摘要",
+                  "type": "string",
+                  "description": "输入摘要；须与保存输入和正文来源一致。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 2,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "method": {
+                  "minLength": 1,
+                  "title": "来源方法",
+                  "type": "string",
+                  "description": "来源方法；须与保存输入和正文来源一致。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 3,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "study_name": {
+                  "minLength": 1,
+                  "title": "来源研究",
+                  "type": "string",
+                  "description": "来源研究；须与保存输入和正文来源一致。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 4,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "steady_joule_rise_k": {
+                  "exclusiveMinimum": 0,
+                  "title": "模型字段 steady_joule_rise_k",
+                  "type": "number",
+                  "description": "模型字段 steady_joule_rise_k；须与保存输入和正文来源一致。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 5,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                }
+              },
+              "required": [
+                "run_id",
+                "output_sha256",
+                "input_sha256",
+                "method",
+                "study_name",
+                "steady_joule_rise_k"
+              ],
+              "title": "SavedSource",
+              "type": "object"
+            },
+            "Shape": {
+              "additionalProperties": false,
+              "properties": {
+                "uid": {
+                  "minLength": 1,
+                  "title": "局部对象标识",
+                  "type": "string",
+                  "description": "当前模型内唯一的层、边界或激励身份。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 0,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "kind": {
+                  "enum": [
+                    "rectangle",
+                    "disk"
+                  ],
+                  "title": "对象类型",
+                  "type": "string",
+                  "description": "选择契约明确支持的几何、边界或激励类型，禁止任意新类型。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 1,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "values": {
+                  "items": {
+                    "type": "number"
+                  },
+                  "title": "边界选择坐标",
+                  "type": "array",
+                  "description": "outer不填坐标；x或z填一个坐标；circle按中心x、中心z、半径填写，全部保存为m。",
+                  "x-unit": {
+                    "si": "m",
+                    "display": "mm",
+                    "scale": 1000,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 2,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "material": {
+                  "$ref": "#/$defs/Material",
+                  "title": "材料",
+                  "description": "从领域材料库选择已有材料，采用其事实及来源。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 3,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "void": {
+                  "default": false,
+                  "title": "空洞区域",
+                  "type": "boolean",
+                  "description": "明确几何空洞的边界，不作为缺失材料数据的替代。",
+                  "x-unit": {
+                    "si": null,
+                    "display": null,
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 4,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                }
+              },
+              "required": [
+                "uid",
+                "kind",
+                "values",
+                "material"
+              ],
+              "title": "Shape",
+              "type": "object"
+            },
+            "Time": {
+              "additionalProperties": false,
+              "properties": {
+                "initial_temperature_k": {
+                  "exclusiveMinimum": 0,
+                  "title": "初始温度",
+                  "type": "number",
+                  "description": "暂态初始状态或耦合迭代初值，必须在材料有效温区内。",
+                  "x-unit": {
+                    "si": "K",
+                    "display": "°C",
+                    "scale": 1,
+                    "offset": -273.15
+                  },
+                  "x-group": "response",
+                  "x-order": 0,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "step_s": {
+                  "exclusiveMinimum": 0,
+                  "title": "时间步长",
+                  "type": "number",
+                  "description": "暂态时间离散步长，应通过时间步敏感性检查。",
+                  "x-unit": {
+                    "si": "s",
+                    "display": "s",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 1,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "steps": {
+                  "maximum": 10000,
+                  "minimum": 1,
+                  "title": "时间步数",
+                  "type": "integer",
+                  "description": "暂态计算步数，与步长共同确定时长。",
+                  "x-unit": {
+                    "si": "1",
+                    "display": "1",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 2,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  }
+                },
+                "bdf_order": {
+                  "default": 1,
+                  "enum": [
+                    1,
+                    2
+                  ],
+                  "title": "时间积分阶次",
+                  "type": "integer",
+                  "description": "后向差分时间积分阶次，仅采用实现支持的阶数。",
+                  "x-unit": {
+                    "si": "1",
+                    "display": "1",
+                    "scale": 1,
+                    "offset": 0
+                  },
+                  "x-group": "response",
+                  "x-order": 3,
+                  "x-level": "expert",
+                  "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                  "x-range-basis": {
+                    "kind": "method",
+                    "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                  },
+                  "x-default-basis": {
+                    "kind": "numerical",
+                    "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                  }
+                }
+              },
+              "required": [
+                "initial_temperature_k",
+                "step_s",
+                "steps"
+              ],
+              "title": "Time",
+              "type": "object"
+            }
+          },
+          "additionalProperties": false,
+          "properties": {
+            "schema_version": {
+              "const": "cablesim.fem-step-response/1",
+              "title": "输入契约",
+              "type": "string",
+              "description": "只接受该能力声明的输入结构版本，不自动猜测数据格式。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "response",
+              "x-order": 0,
+              "x-level": "expert",
+              "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+              }
+            },
+            "circuit_id": {
+              "minLength": 1,
+              "title": "所属回路",
+              "type": "string",
+              "description": "所属回路；须与保存输入和正文来源一致。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "response",
+              "x-order": 1,
+              "x-level": "expert",
+              "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+              }
+            },
+            "reference_current_a": {
+              "exclusiveMinimum": 0,
+              "title": "参考电流",
+              "type": "number",
+              "description": "参考电流；须与保存输入和正文来源一致。",
+              "x-unit": {
+                "si": "A",
+                "display": "A",
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "response",
+              "x-order": 2,
+              "x-level": "expert",
+              "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+              }
+            },
+            "ambient_temperature_k": {
+              "exclusiveMinimum": 0,
+              "title": "环境温度",
+              "type": "number",
+              "description": "环境温度；须与保存输入和正文来源一致。",
+              "x-unit": {
+                "si": "K",
+                "display": "K",
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "response",
+              "x-order": 3,
+              "x-level": "expert",
+              "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+              }
+            },
+            "problem": {
+              "$ref": "#/$defs/Problem",
+              "title": "保存的有限元热模型",
+              "description": "保存的有限元热模型；须与保存输入和正文来源一致。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "response",
+              "x-order": 4,
+              "x-level": "expert",
+              "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+              }
+            },
+            "conductor_regions": {
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "title": "导体区域",
+              "type": "array",
+              "description": "将当前网格的导体区域绑定到电缆导体对象。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "response",
+              "x-order": 5,
+              "x-level": "expert",
+              "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+              }
+            },
+            "joule_heat_w_m": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "title": "各区域固定焦耳损耗",
+              "type": "object",
+              "description": "各区域固定焦耳损耗；须与保存输入和正文来源一致。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "response",
+              "x-order": 6,
+              "x-level": "expert",
+              "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+              }
+            },
+            "capacities": {
+              "additionalProperties": {
+                "$ref": "#/$defs/Capacity"
+              },
+              "title": "各材料域体积热容",
+              "type": "object",
+              "description": "各材料域体积热容；须与保存输入和正文来源一致。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "response",
+              "x-order": 7,
+              "x-level": "expert",
+              "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+              }
+            },
+            "source": {
+              "minLength": 1,
+              "title": "来源说明",
+              "type": "string",
+              "description": "引用厂家、试验、标准条款或已验证工件，缺少来源不生成工程结果。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "response",
+              "x-order": 8,
+              "x-level": "expert",
+              "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+              }
+            },
+            "saved_source": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SavedSource"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "已保存稳态来源",
+              "description": "已保存稳态来源；须与保存输入和正文来源一致。",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "response",
+              "x-order": 9,
+              "x-level": "expert",
+              "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+              },
+              "x-default-basis": {
+                "kind": "numerical",
+                "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+              }
+            }
+          },
+          "required": [
+            "schema_version",
+            "circuit_id",
+            "reference_current_a",
+            "ambient_temperature_k",
+            "problem",
+            "conductor_regions",
+            "joule_heat_w_m",
+            "capacities",
+            "source"
+          ],
+          "title": "StepInput",
+          "type": "object"
+        }
+      },
+      "parameter_schema": {
+        "$defs": {
+          "MeshControls": {
+            "additionalProperties": false,
+            "properties": {
+              "size_m": {
+                "exclusiveMinimum": 0,
+                "title": "近场网格尺寸",
+                "type": "number",
+                "description": "热点及界面附近的目标单元尺寸，属于离散控制。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "response",
+                "x-order": 0,
+                "x-level": "expert",
+                "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                "x-range-basis": {
+                  "kind": "method",
+                  "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                }
+              },
+              "far_size_m": {
+                "exclusiveMinimum": 0,
+                "title": "远场网格尺寸",
+                "type": "number",
+                "description": "远离电缆区域的目标单元尺寸，属于离散控制。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "response",
+                "x-order": 1,
+                "x-level": "expert",
+                "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                "x-range-basis": {
+                  "kind": "method",
+                  "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                }
+              },
+              "transition_m": {
+                "exclusiveMinimum": 0,
+                "title": "网格过渡距离",
+                "type": "number",
+                "description": "细网格至远场粗网格的过渡带宽度。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "response",
+                "x-order": 2,
+                "x-level": "expert",
+                "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                "x-range-basis": {
+                  "kind": "method",
+                  "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                }
+              },
+              "max_nodes": {
+                "default": 60000,
+                "maximum": 4000000,
+                "minimum": 100,
+                "title": "最大节点数",
+                "type": "integer",
+                "description": "网格资源上限，超过即拒绝，属于内存保护。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "response",
+                "x-order": 3,
+                "x-level": "expert",
+                "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                "x-range-basis": {
+                  "kind": "method",
+                  "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                },
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                }
+              },
+              "probe_cell_size_m": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "探针局部尺寸",
+                "description": "场采样点附近网格的局部目标尺寸。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "response",
+                "x-order": 4,
+                "x-level": "expert",
+                "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                "x-range-basis": {
+                  "kind": "method",
+                  "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                },
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                }
+              },
+              "exterior_growth_start_m": {
+                "anyOf": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "外域增长起点",
+                "description": "无限外域坐标映射开始增长的位置；仅支持声明的求解路径。",
+                "x-unit": {
+                  "si": "m",
+                  "display": "mm",
+                  "scale": 1000,
+                  "offset": 0
+                },
+                "x-group": "response",
+                "x-order": 5,
+                "x-level": "expert",
+                "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                "x-range-basis": {
+                  "kind": "method",
+                  "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                },
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                }
+              },
+              "exterior_growth_rate": {
+                "default": 0.1,
+                "exclusiveMinimum": 0,
+                "maximum": 0.25,
+                "title": "外域增长系数",
+                "type": "number",
+                "description": "外域坐标映射的增长参数，不应作为材料或边界调参。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "response",
+                "x-order": 6,
+                "x-level": "expert",
+                "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                "x-range-basis": {
+                  "kind": "method",
+                  "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                },
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                }
+              },
+              "field_order": {
+                "anyOf": [
+                  {
+                    "enum": [
+                      1,
+                      2
+                    ],
+                    "type": "integer"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "场离散阶次",
+                "description": "有限元形函数阶次，仅限内核支持的阶次。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "response",
+                "x-order": 7,
+                "x-level": "expert",
+                "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                "x-range-basis": {
+                  "kind": "method",
+                  "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                },
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                }
+              },
+              "minimum_circle_segments": {
+                "default": 8,
+                "maximum": 512,
+                "minimum": 8,
+                "title": "圆周最少分段数",
+                "type": "integer",
+                "description": "圆形界面的最低离散分段数，属于几何离散控制。",
+                "x-unit": {
+                  "si": "1",
+                  "display": "1",
+                  "scale": 1,
+                  "offset": 0
+                },
+                "x-group": "response",
+                "x-order": 8,
+                "x-level": "expert",
+                "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+                "x-range-basis": {
+                  "kind": "method",
+                  "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+                },
+                "x-default-basis": {
+                  "kind": "numerical",
+                  "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+                }
+              }
+            },
+            "required": [
+              "size_m",
+              "far_size_m",
+              "transition_m"
+            ],
+            "title": "MeshControls",
+            "type": "object"
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "default": "step_response",
+            "enum": [
+              "steady_reference",
+              "step_response"
+            ],
+            "title": "计算任务",
+            "type": "string",
+            "description": "both 同时返回保存负荷温度与额定反求，temperature 仅正算保存负荷温度；只有本字段列出的两个模式。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "response",
+            "x-order": 0,
+            "x-level": "expert",
+            "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+            "x-range-basis": {
+              "kind": "method",
+              "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+            },
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+            },
+            "x-enum-labels": {
+              "steady_reference": "封存固定焦耳稳态参考",
+              "step_response": "阶跃热响应"
+            }
+          },
+          "mesh": {
+            "$ref": "#/$defs/MeshControls",
+            "title": "网格控制",
+            "description": "声明当前能力所需的离散参数或已验证网格，坐标一律为m。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "response",
+            "x-order": 1,
+            "x-level": "expert",
+            "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+            "x-range-basis": {
+              "kind": "method",
+              "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+            }
+          },
+          "first_time_s": {
+            "default": 10,
+            "exclusiveMinimum": 0,
+            "title": "首时间步",
+            "type": "number",
+            "description": "首时间步；须与保存输入和正文来源一致。",
+            "x-unit": {
+              "si": "s",
+              "display": "s",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "response",
+            "x-order": 2,
+            "x-level": "expert",
+            "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+            "x-range-basis": {
+              "kind": "method",
+              "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+            },
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+            }
+          },
+          "final_time_s": {
+            "default": 100000000.0,
+            "exclusiveMinimum": 0,
+            "maximum": 10000000000.0,
+            "title": "末时刻",
+            "type": "number",
+            "description": "末时刻；须与保存输入和正文来源一致。",
+            "x-unit": {
+              "si": "s",
+              "display": "s",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "response",
+            "x-order": 3,
+            "x-level": "expert",
+            "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+            "x-range-basis": {
+              "kind": "method",
+              "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+            },
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+            }
+          },
+          "intervals_per_decade": {
+            "default": 12,
+            "maximum": 100,
+            "minimum": 4,
+            "title": "每十倍时间的区间数",
+            "type": "integer",
+            "description": "每十倍时间的区间数；须与保存输入和正文来源一致。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "response",
+            "x-order": 4,
+            "x-level": "expert",
+            "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+            "x-range-basis": {
+              "kind": "method",
+              "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+            },
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+            }
+          },
+          "max_levels": {
+            "default": 4,
+            "maximum": 6,
+            "minimum": 2,
+            "title": "最多加密级数",
+            "type": "integer",
+            "description": "最多加密级数；须与保存输入和正文来源一致。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "response",
+            "x-order": 5,
+            "x-level": "expert",
+            "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+            "x-range-basis": {
+              "kind": "method",
+              "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+            },
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+            }
+          },
+          "tolerance_k": {
+            "default": 0.1,
+            "exclusiveMinimum": 0,
+            "maximum": 0.1,
+            "title": "收敛门槛",
+            "type": "number",
+            "description": "反馈迭代温度变化的停止阈值，不是工程实测误差。",
+            "x-unit": {
+              "si": "K",
+              "display": "K",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "response",
+            "x-order": 6,
+            "x-level": "expert",
+            "x-editor-reason": "保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。",
+            "x-range-basis": {
+              "kind": "method",
+              "reference": "有限元阶跃响应 1.0.0 适用范围及输入完整性约束。"
+            },
+            "x-default-basis": {
+              "kind": "numerical",
+              "reference": "有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。"
+            }
+          }
+        },
+        "required": [
+          "mesh"
+        ],
+        "title": "Controls",
+        "type": "object"
+      },
+      "parameter_groups": [
+        {
+          "id": "response",
+          "title": "阶跃响应",
+          "order": 0
+        }
+      ],
+      "category": "simulation"
+    },
     {
       "kind": "method",
       "id": "iec-thermal-field",
@@ -22091,7 +24538,7 @@
     },
     {
       "path": "assets/reproduction-evidence-index.json",
-      "sha256": "c19162222e1a3bf1c115e197a28bc9a3411b501f687aa03bbb8c331a452eaab2",
+      "sha256": "96a862e374765aa90c4f460fd1453f27cd5ea95fde1fb9d533a51ad8770fba4b",
       "size_bytes": 116
     },
     {
@@ -22101,8 +24548,8 @@
     },
     {
       "path": "assets/reproduction-evidence.json",
-      "sha256": "f32440b4a33b429d1753275c629526d4f0ccb9e45c8f13bc7784faf9d9bacb6d",
-      "size_bytes": 303245
+      "sha256": "4ae9271898476b4a1eef626083163715c701891caee5e486661b34ed1476b2a7",
+      "size_bytes": 335447
     },
     {
       "path": "src/cablesim_simulation/__init__.py",
@@ -22191,8 +24638,8 @@
     },
     {
       "path": "src/cablesim_simulation/main.py",
-      "sha256": "2a32f99af01daf374b9f18fa9b53bb5de3aacd6d9ce60ec88a3b88c75318819e",
-      "size_bytes": 11511
+      "sha256": "1d654490c38b1fa813a5228dbb757c787d79685d4d926f6a97d9798daf51e72b",
+      "size_bytes": 11681
     },
     {
       "path": "src/cablesim_simulation/problem.py",
@@ -22228,6 +24675,16 @@
       "path": "src/cablesim_simulation/solver_runtime.py",
       "sha256": "33a614dcebd7bab646866f3fab4ceb35bbfa83b6ea9fc03998412638d2f80625",
       "size_bytes": 6838
+    },
+    {
+      "path": "src/cablesim_simulation/step_contract.py",
+      "sha256": "59360fe825f8a80b0fb01b25ae8bc3475415d29fad65400a4cdaee4c0edaa7d3",
+      "size_bytes": 4146
+    },
+    {
+      "path": "src/cablesim_simulation/step_response.py",
+      "sha256": "ba766329803f25ce5d8ff588ab709126f88fcb8fe47518453ee58fd21721f7ff",
+      "size_bytes": 25050
     },
     {
       "path": "src/cablesim_simulation/thermal.py",
@@ -22346,8 +24803,8 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "09757c65f32d83e34ccf8f80a77759daee174739c8524b9e75667b5d27f94f71",
-      "size_bytes": 5308
+      "sha256": "c8f110ada42e4137dbca269dba37ed51a45db12c7a25beaeacca017c77deb945",
+      "size_bytes": 5498
     }
   ]
 }

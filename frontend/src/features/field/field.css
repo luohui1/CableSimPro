@@ -41,3 +41,5 @@
 .hpc-budget { display: grid; gap: var(--space-2); font-size: var(--text-body); }
 .hpc-budget input { padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-item); background: var(--panel); color: var(--text); font: inherit; font-variant-numeric: tabular-nums; }
 .hpc-job-list { min-width: 0; max-width: 100%; }
+.step-response { min-width: 0; }
+.step-response textarea { width: 100%; min-width: 0; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-item); background: var(--panel); color: var(--text); font: inherit; }

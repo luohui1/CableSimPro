@@ -89,6 +89,9 @@ def run_case(request, case, job):
         if not os.environ.get('SLURM_JOB_ID'):
             from cablesim_simulation.solver_runtime import EnvironmentMissing
             raise EnvironmentMissing('仿真方法的原生预检和求解必须由研究接口提交 Slurm。')
+        if request['capability']=='fem-step-response':
+            from cablesim_simulation.step_response import host_case
+            return host_case(request,case,job)
         if request['capability']=='transient-temperature':
             from cablesim_simulation.transient import host_case
             return host_case(request,case,job)

@@ -31,7 +31,7 @@ def test_six_formal_routes_have_models_and_compatible_aliases(client):
         assert formal.json()==old.json()
     contracts=client.get('/api/input-contracts').json()
     simulation=[c for c in contracts if c['method']['plugin_id']=='cablesim.simulation']
-    assert len(simulation)==16
+    assert len(simulation)==17
     assert {c['tasks'][0] for c in simulation if c['tasks']}=={'transient-temperature','sheath-losses','electrothermal-steady','iec-fem-comparison','iec-thermal-field','getdp-eddy','elmer-heat'}
     comparison=next(c for c in simulation if c['tasks']==['iec-fem-comparison'])
     assert comparison['method']['capability']=='iec-fem-comparison'

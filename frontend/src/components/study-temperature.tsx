@@ -26,6 +26,7 @@ import { AdaptiveConvergence } from '@/features/field/adaptive-convergence';
 import { FieldHistoryNotice } from '@/features/field/history-notice';
 import { savedConductorLimit } from '@/features/field/saved-temperature-limit';
 import { studyRuns } from '@/api/research';
+import { StepResponse } from '@/features/field/step-response';
 export function StudyTemperature({
   run,
   tab,
@@ -49,6 +50,7 @@ export function StudyTemperature({
   if (pendingRun && previous.data) run = {...previous.data, freshness:'historical'};
   const [selected, setSelected] = useState("");
   const [zoom, setZoom] = useState("2");
+  const [responseTab,setResponseTab]=useState(false);
   useEffect(() => {
     setZoom("2");
     setSelected("");
@@ -65,6 +67,12 @@ export function StudyTemperature({
   if (pendingRun && !previous.data) return <div className="input-module"><SavedRunProgress run={pendingRun} />
     {previous.isPending ? <LoadingState title="读取上次保存结果" /> : previous.error ? <ErrorState description={message(previous.error)} /> : <p>运行中，尚无已封存温度场。</p>}</div>;
   if (!run) return <EmptyState description="" title="尚未运行；请提交超算生成温度场。" />;
+  const stepOnly=Object.values(optionalRecord(optionalRecord(optionalRecord(run.snapshot).definition).method)).includes('fem-step-response') &&
+    optionalRecord(optionalRecord(optionalRecord(run.snapshot).definition).parameters).operation==='step_response';
+  if(tab==='step-response' || responseTab || stepOnly) return <div className="input-module">
+    {!stepOnly && <Toolbar><Button size="compact" onClick={() => setResponseTab(false)}>场图</Button><Button size="compact" role="tab" aria-selected>阶跃热响应</Button></Toolbar>}
+    <StepResponse run={run} />
+  </div>;
   if (parsed.error)
     return (
       <ErrorState title="温度场不可用" description={message(parsed.error)} />
@@ -162,6 +170,7 @@ export function StudyTemperature({
         {conclusion}
         <Toolbar>
           <h2>保存温度场</h2>
+          {data.kind === 'fem' && <Button size="compact" role="tab" aria-selected={false} onClick={() => setResponseTab(true)}>阶跃热响应</Button>}
           {optionalRecord(data.field.convergence).display_decimated === true && <span className="muted">显示已降采样，计算用全网格</span>}
           <div className="spacer" />
           {data.geometryError && (

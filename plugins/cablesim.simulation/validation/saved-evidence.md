@@ -8,4 +8,10 @@
 
 本次证据约 300 KB，保留全部目标与追溯字段，未因大小删除结果。开发复现库的限制文案可用 `python plugins/cablesim.simulation/validation/build_reproduction_library.py --duct-notes-only` 单独发布，不调用求解器。
 
+中文情形名用 `python plugins/cablesim.simulation/validation/build_reproduction_library.py --variant-names-only` 发布并更新随附证据。数值行 `id` 保持原样，内部情形键保存在 `variant_id`，中文名为 `variant_name`；`variant` 是兼容现有验证页面和索引名片的显示别名。其他值、状态、来源与敏感性表不变。
+
+阶跃响应的来源子模型见 `validation/step_response_case.py`；`python plugins/cablesim.simulation/validation/run_step_response.py` 经宿主接口保存稳态参考并派生阶跃响应，独立数据库与证据放在 `.data/simulation/step-response/`。本机不执行有限元；网格预检、暂态收敛和均质土壤 E1 解析场交叉核对均由 dg83 完成。契约元数据可用 `python -m cablesim_simulation.step_contract` 重生成，之后须重新封签。
+
+`node frontend/src/features/field/verify-step-response.mjs` 使用一个无头 Edge 页面，排队适配层为测试替身，展示及导出使用该真实 dg83 保存响应；检查预算确认、重复点击、取消、键盘导出与双尺寸、深浅主题五态。`FRONTEND_URL` 指向已有开发服务；不写正式服务数据库。
+
 浏览器回归使用 `node frontend/src/features/field/verify-reproduction-release.mjs`，环境变量 `FRONTEND_URL` 指向临时前端，`REPRODUCTION_API_URL` 指向已导入随附证据的临时 API。脚本只使用一个无头 Edge 页面，检查实际目录、覆盖页与导出，再断言两种尺寸、深浅主题下的五种状态；不写发布服务数据，也不运行求解器。

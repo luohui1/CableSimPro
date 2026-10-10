@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from .batch_files import read
 from .batch_slurm import SlurmBackend, RemoteDisconnected, allocation_estimate
 from .batch_convergence import Refinements, RefineRequest
+from .batch_step_response import StepResponses, StepRequest
 from .batch_field_chapter import chapter, selected_case, field_png
 from hashlib import sha256
 from ..plugin_host import PluginHostError
@@ -158,7 +159,25 @@ def job_cards(research,refinements,values,batches=None):
 
 
 def make_router(research,batches=None):
-    router=APIRouter(prefix='/api/hpc');refinements=Refinements(research)
+    router=APIRouter(prefix='/api/hpc');refinements=Refinements(research);responses=StepResponses(research)
+
+    @router.get('/workspaces/{wid}/studies/{sid}/step-responses')
+    def step_responses(wid:UUID,sid:UUID):return {'items':responses.list(str(wid),str(sid))}
+
+    @router.post('/workspaces/{wid}/studies/{sid}/step-responses/estimate')
+    def step_estimate(wid:UUID,sid:UUID,body:StepRequest):return responses.estimate(str(wid),str(sid),body)
+
+    @router.post('/workspaces/{wid}/studies/{sid}/step-responses',status_code=202)
+    def step_start(wid:UUID,sid:UUID,body:StepRequest):return responses.start(str(wid),str(sid),body)
+
+    @router.get('/step-responses/{identifier}')
+    def step_detail(identifier:UUID):return responses.result(str(identifier))
+
+    @router.post('/step-responses/{identifier}/cancel')
+    def step_cancel(identifier:UUID):return responses.cancel(str(identifier))
+
+    @router.post('/step-responses/{identifier}/resume',status_code=202)
+    def step_resume(identifier:UUID):return responses.resume(str(identifier))
 
     @router.get('/jobs')
     def jobs(offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100)):

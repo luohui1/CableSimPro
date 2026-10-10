@@ -366,6 +366,7 @@ def build():
     for ident,name in [('E02','thermal-cywinski'),('E03','thermal-jorgens'),('E05','eddy-lunca'),('E17','eddy-twin'),('E18','eddy-induced'),('E19','eddy-two-round')]:
         paper(items[ident],name)
     standard_cases(items);tutorials(items);tb880_fields(items);tb880_sensitivity(items)
+    readable_variants(items)
     for item in items.values():
         item['has_results']=any(r.get('open_source') is not None for r in item['rows'])
         deviations=[abs(r['relative_difference']) for r in item['rows'] if r.get('relative_difference') is not None and not r.get('reference_approximate')]
@@ -418,11 +419,50 @@ def publish_duct_notes():
     publish(items)
 
 
+def readable_variants(items):
+    """Keep stable IDs; `variant` is the compatibility display label."""
+    names={'default':'默认工况','nominal-fixed-loss':'额定固定损耗','dry':'干燥土壤','wet':'湿润土壤',
+           'both_ends':'双端接地','single_point':'单点接地','cross_bonded':'交叉互联',
+           'flat':'平面排列','trefoil':'三角排列','full-field':'完整场模型',
+           'radial_ground':'径向接地','six-terminal':'六端子模型'}
+    for item in items.values():
+        for group in ('rows','convergence'):
+            for row in item.get(group,[]):
+                ident=row.get('variant_id',row.get('variant'))
+                if not isinstance(ident,str) or re.search(r'[\u3400-\u9fff]',ident):continue
+                label=names.get(ident)
+                if ident.startswith('case') and ident[4:].isdigit():label='工况 '+ident[4:]
+                if ident.startswith('material-'):label='材料 '+ident.split('-')[-1]
+                if ident.startswith('tb880-case-'):
+                    part=ident[len('tb880-case-'):];suffix=''
+                    for token,title in [('eddy-gp31','报告涡流口径'),('exact-radical','精确根式'),('single-point-bonding','单点接地'),('eddies','含涡流'),('ssb','单点接地')]:
+                        if part.endswith('-'+token):part=part[:-len(token)-1];suffix=' · '+title;break
+                    label='TB 880 算例 '+part+suffix
+                if not label:raise ValueError('缺少中文情形名：'+ident)
+                row.update(variant_id=ident,variant_name=label,variant=label)
+    return items
+
+
+def publish_variant_names():
+    folder=DATA/'library';original=(folder/'index.json').read_bytes();index=json.loads(original)
+    raw=(folder/'snapshots'/(index['current']+'.json')).read_bytes()
+    if sha256(raw).hexdigest()!=index['current']:raise ValueError('Library snapshot integrity failed')
+    items={item['id']:item for item in json.loads(raw)['items']};readable_variants(items)
+    if (folder/'index.json').read_bytes()!=original:raise ValueError('Concurrent library publication; retry from current snapshot')
+    publish(items)
+    key=json.loads((folder/'index.json').read_text('utf-8'))['current'];saved=(folder/'snapshots'/(key+'.json')).read_bytes()
+    assets=ROOT/'plugins/cablesim.simulation/assets'
+    (assets/'reproduction-evidence.json').write_bytes(saved)
+    (assets/'reproduction-evidence-index.json').write_bytes((json.dumps({'kind':'saved_evidence','snapshot_id':key},indent=2)+'\n').encode('utf-8'))
+    (ROOT/'plugins/cablesim.simulation/validation/evidence.sha256').write_bytes((key+'\n').encode('utf-8'))
+
+
 if __name__=='__main__':
     import argparse
     parser=argparse.ArgumentParser();group=parser.add_mutually_exclusive_group()
-    group.add_argument('--tb880-only',action='store_true');group.add_argument('--duct-notes-only',action='store_true')
+    group.add_argument('--tb880-only',action='store_true');group.add_argument('--duct-notes-only',action='store_true');group.add_argument('--variant-names-only',action='store_true')
     args=parser.parse_args()
     if args.tb880_only:publish_tb880_fields()
     elif args.duct_notes_only:publish_duct_notes()
+    elif args.variant_names_only:publish_variant_names()
     else:build()
