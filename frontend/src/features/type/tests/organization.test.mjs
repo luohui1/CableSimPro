@@ -12,11 +12,29 @@ const { commandResultLabel, latestModuleRun, moduleResultStatus, moduleEvidenceS
 const { quantityLayer, quantityMissingInputs } = await server.ssrLoadModule('/src/features/type/quantity-inputs.ts');
 const { pointer } = await server.ssrLoadModule('/src/lib/domain-fields.ts');
 const { resultValue } = await server.ssrLoadModule('/src/features/type/standard-check.tsx');
+const { corrugatedDisplay } = await server.ssrLoadModule('/src/features/type/display-envelope.ts');
+const { colorScene } = await server.ssrLoadModule('/src/features/cad/saved-thermal.ts');
+const { turbo } = await server.ssrLoadModule('/src/features/field/colormap.ts');
+const { sectionComposition } = await server.ssrLoadModule('/src/features/drawing/section-composition.ts');
+test('Equal conductor temperatures use one neutral band position, without a fictitious temperature interval',()=>{
+  const scene={assets:{a:{core_id:'core'}},objects:[{id:'c',parts:[{asset_id:'a'}]}]},thermal={minimum:80,maximum:80,conductors:[{id:'c',coreId:'core',value:80}]};
+  assert.deepEqual(colorScene(scene,thermal).assets.a.display_color,turbo(.5));assert.equal(thermal.maximum,80);
+});
+test('140 px canvas: the local drawing keeps 40 mm cables at least 24 px and preserves 1.2 m burial coordinates',()=>{
+  const section={kind:'ground',enclosures:[]},geometry={cables:[-.05,0,.05].map(x=>({x,z:-1.2,shape:{radiusM:.02}})),bounds:{left:-.07,right:.07,top:0,bottom:-1.22}};
+  const result=sectionComposition(section,geometry,{width:850,height:140},8);assert.equal(result.compact,true);assert.ok(.04*850/result.main.widthM>=24);assert.equal(geometry.cables[0].z,-1.2);assert.equal(result.detail,undefined);
+  const short=sectionComposition(section,geometry,{width:590,height:90},8);assert.ok(.04*590/short.main.widthM>=24,'Footer is outside the SVG, so 90 px still leaves readable cable geometry');
+});
 test('Comparison uses the standard table precision: resistance margin and unitless percentages remain legible', () => {
   assert.equal(resultValue(.00104,{id:'r20',unit:'Ω/km',title:'导体R20'}),'0.0010 Ω/km');
   assert.equal(resultValue(.15,{id:'overlap',unit:'1',title:'搭盖率'}),'15.0 %');
 });
 const document = { name: '测试型号', provenance: {}, materials: [{ id:'cu',category:'conductor' },{ id:'xlpe',category:'insulation' }], cable_types: [{ id:'cable', construction:'single_core', rating:{u0:8700,u:15000}, cores:[{id:'core',conductor:{diameter:.02,nominal_area:300e-6,material:'cu',form:'round'},layers:[{role:'insulation',thickness:.003,material:'xlpe'}]}],common_layers:[] }] };
+test('Wave sheath display follows the nominal 20+2×3+2×1 = 28 mm section; it never declares exact volume or mass',async()=>{
+  const doc=structuredClone(document);doc.cable_types[0].cores[0].conductor.form='solid_round';doc.cable_types[0].common_layers=[{role:'metallic_sheath',material:'cu',thickness:.001,form:'corrugated'}];
+  const original=structuredClone(doc),model=await corrugatedDisplay(doc,doc.cable_types[0]);assert.ok(Math.abs(model.outer_diameter_m-.028)<1e-12);assert.equal(model.envelope,true);assert.ok(model.layers.every(l=>l.volume_m3===undefined&&l.mass_kg_per_km===undefined&&l.brep===undefined));assert.deepEqual(doc,original);
+  doc.cable_types[0].construction='three_core';await assert.rejects(corrugatedDisplay(doc,doc.cable_types[0]),/未覆盖/);
+});
 test('Missing quantities resolve the saved core and material IDs, including escaped pointers; never fill inputs', () => {
   const row = { target:{scope:'core',coreId:'core/2',role:'conductor'},path:pointer('cable_types','cable','cores','core/2','conductor','diameter'),material:{id:'material/cu'} };
   const other = { ...row,target:{...row.target,coreId:'core/1'} };

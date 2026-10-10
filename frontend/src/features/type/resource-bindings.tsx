@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
 import { Dialog } from '@/components/ui/dialog';
 import { InlineEmpty, LoadingState, ErrorState } from '@/components/states';
+import { standardVersionLabel } from './design-summary';
 import { useTypeWorkspace } from './provider';
 
 type Resource = { id: string; resource_id?: string; asset_id: string; version: string; content_sha256: string; name: string; kind: string };
@@ -35,7 +36,7 @@ function useResources() {
 function card(resource: Resource): ObjectCard { return { kind: 'asset', id: resource.resource_id || resource.id, name: resource.name, version: resource.version, subtype: resource.kind, status: { code: 'published', label: '已发布' } }; }
 export function StandardResourceCell({ reference }: { reference: unknown }) {
   const resource = optionalRecord(reference);
-  return text(resource.resource_id) ? <ObjectLink card={card(resource as Resource)}>{text(resource.name)} · {text(resource.version)}</ObjectLink> : <span className="muted">未绑定资源</span>;
+  return text(resource.resource_id) ? <ObjectLink card={card(resource as Resource)}>{text(resource.name)} · {standardVersionLabel(text(resource.version))}</ObjectLink> : <span className="muted">未绑定资源</span>;
 }
 export function DeclaredStandardReferences() {
   const state = useTypeWorkspace(), query = useResources();
@@ -103,7 +104,7 @@ export function ResourceBindings({ materialId, role = 'material' }: { materialId
       actions={<Button variant="primary" disabled={disabled || !target} loading={mutation.isPending} onClick={() => mutation.mutate(false)}>确认绑定</Button>}>
       {query.isPending ? <LoadingState title="正在读取资源版本" /> : query.error ? <ErrorState title="资源不可用" description={message(query.error)} /> : !targets.length ? <InlineEmpty title="尚无已核对的执行版本或已批准要求；在要求清单里核对来源。" /> : <div className="type-create-fields">
         <Select label={role === 'material' ? '设计材料' : '执行标准'} value={target?.id || ''} options={targets.map(t => ({ value: t.id, label: t.name }))} onChange={id => { setChosen(id); setResourceId(targets.find(t => t.id === id)?.binding?.resource_id || ''); }} />
-        <Select label="资源版本" value={resourceId} options={[{ value: '', label: '未绑定资源' }, ...(query.data?.resources || []).filter(r => r.kind === (role === 'material' ? 'material' : 'rule')).map(r => ({ value: r.id, label: r.name + ' · ' + r.version }))]} onChange={setResourceId} />
+        <Select label="资源版本" value={resourceId} options={[{ value: '', label: '未绑定资源' }, ...(query.data?.resources || []).filter(r => r.kind === (role === 'material' ? 'material' : 'rule')).map(r => ({ value: r.id, label: r.name + ' · ' + (role==='standard'?standardVersionLabel(r.version):r.version) }))]} onChange={setResourceId} />
         {!query.data?.resources.some(r => r.kind === (role === 'material' ? 'material' : 'rule')) && <InlineEmpty title="资源库尚无对应类别的已发布版本" />}
         <span className="muted">{target?.match_reason}</span>
         <span className="muted">固定来源引用；设计材料参数保持当前保存值。</span>

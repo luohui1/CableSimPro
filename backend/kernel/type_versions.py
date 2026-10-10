@@ -159,6 +159,36 @@ def imported_provenance(payload, cable):
     return result
 
 
+def candidate_design_document(payload, name):
+    """Copy fixed catalogue facts into an independent draft; retain every unknown."""
+    if payload.get('cable_type'):
+        document = skeleton(payload['cable_type']['construction'], name)
+        document['cable_types'] = [deepcopy(payload['cable_type'])]
+        document['materials'] = deepcopy(payload['materials'])
+    else:
+        spec = payload['specification']
+        if spec['cores'] not in (1, 3):
+            raise HTTPException(422, '当前新建入口只覆盖单芯 / 三芯；资料中的其他结构未覆盖。')
+        document = skeleton('single_core' if spec['cores'] == 1 else 'three_core', name)
+        cable = document['cable_types'][0]
+        cable['rating'].update(u0=spec['u0_v'], u=spec['voltage_v'])
+        document['materials'][0].update(label='铜' if spec['conductor'].startswith('copper') else '铝', standard_kind=spec['conductor'])
+        for core in cable['cores']:
+            core['conductor']['nominal_area'] = spec['area_m2']
+            for key, target, field in [('conductor_diameter', core['conductor'], 'diameter'), ('insulation_thickness', core['layers'][0], 'thickness')]:
+                if key in spec['values']:
+                    target[field] = spec['values'][key]['value']
+            if 'r20' in spec['values']:
+                fact = spec['values']['r20']
+                core['conductor']['r20'] = fact['value']
+                core['conductor']['r20_basis'] = 'manufacturer_limit' if fact['basis'] in ('manufacturer', 'standard_limit') else 'design'
+        if spec['cores'] == 1:
+            cable['cores'][0].update(x=0., z=0.)
+    document['provenance'] = imported_provenance(payload, document['cable_types'][0])
+    structure_context(document)
+    return document
+
+
 def checked_type_document(document):
     """Incomplete drafts use a separate tag; strict solver input remains unchanged."""
     document = deepcopy(document)
@@ -429,7 +459,13 @@ class Types:
         with self.store.db() as db:
             imports = [{'id': r['id'], 'name': json.loads(r['payload'])['draft']['name'], 'version': json.loads(r['payload'])['draft']['version'],
                         'content_sha256': r['digest'], 'document_id': r['document']} for r in db.execute("SELECT * FROM document_proposals WHERE status='approved' ORDER BY rowid DESC")]
-        return {'library': self.library()['items'], 'imports': imports, 'generation': methods}
+            from .candidates import initialize, read
+            initialize(db)
+            catalogue = [read(db, row['id']) for row in db.execute('SELECT id FROM domain_cable_models ORDER BY created DESC')]
+        references = [{'id': model['id'], 'name': model['payload']['name'], 'version': model['payload']['version'],
+                       'content_sha256': model['digest'], 'source': 'manufacturer' if model['payload'].get('specification') else 'catalogue',
+                       'status': model['display_status']} for model in catalogue]
+        return {'library': self.library()['items'] + references, 'imports': imports, 'generation': methods}
 
     def _proposal_method(self, artifact):
         choices = [(plugin, cap) for plugin in self.research.registry().plugins.values() for cap in plugin.manifest.capabilities if any(a.type == artifact for a in cap.artifacts)]
@@ -494,16 +530,27 @@ class Types:
             source, bindings = None, {}
             if body.origin == 'library':
                 row = db.execute('SELECT a.*,t.payload,t.digest,t.receipt FROM engineering_type_releases t JOIN engineering_assets a ON a.id=t.asset WHERE a.id=?', (str(body.resource_id),)).fetchone()
-                if not row or row['status'] != 'published' or row['content_sha256'] != body.content_sha256:
+                if row is None:
+                    from .candidates import read
+                    model = read(db, str(body.resource_id))
+                    if model['digest'] != body.content_sha256:
+                        raise HTTPException(409, '资料版本已变化，请重新选择型号。')
+                    payload = model['payload']
+                    document = candidate_design_document(payload, body.name)
+                    source = {'id': model['id'], 'name': payload['name'], 'version': payload['version'], 'content_sha256': model['digest'],
+                              'source': 'manufacturer' if payload.get('specification') else 'catalogue', 'references': payload['sources'],
+                              'declared_specification': deepcopy(payload.get('specification'))}
+                elif row['status'] != 'published' or row['content_sha256'] != body.content_sha256:
                     raise HTTPException(409, '请重新选择已发布的固定型号版本及摘要。')
-                self.assets._detail(db, self.assets._load(db, row['id']))
-                self._receipt(row['receipt'])
-                saved = json.loads(row['payload'])
-                if fingerprint(saved) != row['digest']:
-                    raise HTTPException(409, '发布记录摘要不一致。')
-                document = deepcopy(saved['document'])
-                bindings = deepcopy(saved.get('resource_bindings', {}))
-                source = {'id': row['id'], 'asset_id': row['asset_id'], 'name': row['name'], 'version': row['version'], 'content_sha256': row['content_sha256'], 'source': 'published_type'}
+                else:
+                    self.assets._detail(db, self.assets._load(db, row['id']))
+                    self._receipt(row['receipt'])
+                    saved = json.loads(row['payload'])
+                    if fingerprint(saved) != row['digest']:
+                        raise HTTPException(409, '发布记录摘要不一致。')
+                    document = deepcopy(saved['document'])
+                    bindings = deepcopy(saved.get('resource_bindings', {}))
+                    source = {'id': row['id'], 'asset_id': row['asset_id'], 'name': row['name'], 'version': row['version'], 'content_sha256': row['content_sha256'], 'source': 'published_type'}
             elif body.origin == 'standard':
                 reviewer = self._human(actor)
                 if not body.human_confirmed:

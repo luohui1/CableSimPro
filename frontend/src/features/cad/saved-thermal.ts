@@ -67,7 +67,7 @@ export function savedThermal(run: Record<string, unknown>, document: DomainDocum
     .filter((value): value is number => value !== null);
   const limit = field?.kind === 'fem' && limits.length ? Math.min(...limits) : undefined;
   const maximumValue = field ? Math.max(field.maximum - 273.15, limit ? limit - 273.15 : -Infinity) : Math.max(...conductors.map(c => c.value));
-  const maximum = maximumValue > minimum ? maximumValue : minimum + 1;
+  const maximum = maximumValue;
   const method = optionalRecord(optionalRecord(run.snapshot).definition).method || optionalRecord(run.snapshot).method;
   const pin = optionalRecord(method);
   const fieldSource = optionalRecord(field?.field.source);
@@ -84,7 +84,7 @@ export function colorScene(scene: CadScene, thermal: CadThermal | undefined, pal
     const candidates = thermal.conductors.filter(c => c.id === object?.id && (!asset.core_id || !c.coreId || c.coreId === asset.core_id));
     if (!candidates.length) return [id, asset];
     const value = Math.max(...candidates.map(c => c.value));
-    const t = (value - thermal.minimum) / span;
+    const t = thermal.maximum === thermal.minimum ? .5 : (value - thermal.minimum) / span;
     return [id, { ...asset, display_color: thermal.kind === 'difference' && palette ? fieldColor(t, true, palette[0], palette[1], palette[2]) : turbo(t) }];
   })) };
 }

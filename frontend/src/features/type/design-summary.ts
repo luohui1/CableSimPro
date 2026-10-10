@@ -7,6 +7,7 @@ import { missingTypeInputs } from './missing';
 
 export type DesignStatus = 'draft' | 'review' | 'published';
 export function versionLabel(value: string) { return value.replace(/\+engineering$/, '（工程版）').replace(/\+[^\s]+$/, '（定制版）') || '未提供'; }
+export function standardVersionLabel(value:string) { return /^\d{4}\.0\.0$/.test(value) ? value.slice(0,4)+' 版' : value; }
 export function publicationStatus(raw: Record<string, unknown>): DesignStatus {
   const state = text(optionalRecord(raw.type_lifecycle).status);
   return state === 'published' ? 'published' : ['submitted', 'approved'].includes(state) && optionalRecord(raw.type_lifecycle).stale !== true ? 'review' : 'draft';

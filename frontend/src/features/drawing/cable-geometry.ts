@@ -8,6 +8,7 @@ export interface DrawingRing {
   number: number;
   name: string;
   materialRole: MaterialRole;
+  materialId?: string;
   innerM: number;
   outerM: number;
   centerX: number;
@@ -55,7 +56,7 @@ export function cableShape(cable: CableType, materials: readonly Material[]): Ca
     number += 1;
     const coreName = target.scope === 'core' && cable.cores.length > 1 ? `芯 ${cable.cores.findIndex(core => core.id === target.coreId) + 1} · ` : '';
     rings.push({ id, target, number, name: coreName + (layerNames[target.role] || target.role),
-      materialRole: categories[material.category] || 'fill', innerM: inner, outerM: outer, centerX: x, centerZ: z,
+      materialRole: categories[material.category] || 'fill', materialId, innerM: inner, outerM: outer, centerX: x, centerZ: z,
       profile, innerProfile, holes, anchorRadiusM });
   }
   const outerProfiles: CrossSectionProfile[] = [];

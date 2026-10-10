@@ -19,6 +19,10 @@ export function cableGroupBounds(section: Section, geometry: SectionGeometry) {
 }
 export function sectionComposition(section: Section, geometry: SectionGeometry, size: PixelSize, top = 56) {
   const group = cableGroupBounds(section, geometry), overview = { ...group, top: section.kind === 'ground' ? Math.max(0, group.top) : group.top };
+  if (size.height < 220) {
+    const focus=cableGroupBounds({...section,backfill:null},geometry);
+    return {main:fitPlot(focus,size,{x:0,y:top,width:size.width,height:Math.max(40,size.height-top)},4),group,compact:true};
+  }
   const whole = fitPlot(overview, size, { x: 0, y: top, width: size.width, height: Math.max(1, size.height - top - 8) });
   const minimum = Math.min(...geometry.cables.map(c => c.shape.radiusM * 2 * size.width / whole.widthM));
   const deep = section.kind === 'ground' && -group.top > Math.max(.2, (group.top - group.bottom) * 2);

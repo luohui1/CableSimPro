@@ -2,6 +2,7 @@
 #include <emscripten/bind.h>
 #include <AIS_InteractiveContext.hxx>
 #include <AIS_Shape.hxx>
+#include <V3d_AmbientLight.hxx>
 #include <Aspect_DisplayConnection.hxx>
 #include <BRepTools.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>
@@ -302,6 +303,9 @@ val initialize(const std::string& canvasId, double r, double g, double b) {
     if (!driver->InitContext()) return failure("无法创建 WebGL 2 CAD 上下文");
     viewer = new V3d_Viewer(driver);
     viewer->SetDefaultLights();viewer->SetLightOn();
+    Handle(V3d_AmbientLight) ambient = new V3d_AmbientLight(Quantity_NOC_WHITE);
+    ambient->SetIntensity(0.65);
+    viewer->AddLight(ambient);viewer->SetLightOn(ambient);
     viewer->SetDefaultShadingModel(Graphic3d_TypeOfShadingModel_Phong);
     view = viewer->CreateView();
     view->SetImmediateUpdate(false);
@@ -630,4 +634,3 @@ EMSCRIPTEN_BINDINGS(cablesim_occt_viewer) {
   emscripten::function("outlineColors",&outlineColors);
   emscripten::function("viewportInfo",&viewportInfo);
 }
-

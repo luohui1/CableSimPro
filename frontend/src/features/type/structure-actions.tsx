@@ -70,7 +70,7 @@ export function StructureActions({ cable, selected, onSelect }: { cable: CableTy
   </div><Dialog open={mode !== null} onOpenChange={open => { if (!open) setMode(null); }} initialFocus="form"
     title={mode === 'core' ? '添加线芯' : '添加结构层'} description={mode === 'core' ? '复制所选芯的设计构造；实测值不复制。填写新芯的圆心坐标。' : '新层插入所选层之前；未选层时插入外护套之前。构造参数可在属性栏补齐。'}
     actions={<Button variant="primary" onClick={commit} disabled={disabled}>添加到草稿</Button>}>
-    <div className="type-property-fields">{mode === 'core' ? <>
+    <div className="type-create-fields">{mode === 'core' ? <>
       <Select label="模板线芯" value={source} options={cable.cores.map((core, index) => ({ value: core.id, label: `芯 ${index + 1}` }))} onChange={setSource} />
       <NumberField label="新芯位置 x" value={x} unit="mm" precision={3} required onCommit={setX} />
       <NumberField label="新芯位置 z" value={z} unit="mm" precision={3} required onCommit={setZ} />

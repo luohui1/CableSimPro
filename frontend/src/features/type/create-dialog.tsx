@@ -3,6 +3,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { message, numeric, optionalRecord, text } from '@/api/client';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
+import { RadioGroup } from 'radix-ui';
 import { Select } from '@/components/ui/select';
 import { SourceBadge } from '@/components/source-badge';
 import { LoadingState, ErrorState, InlineEmpty } from '@/components/states';
@@ -14,14 +17,16 @@ export function CreateTypeDialog({ open, onClose }: { open: boolean; onClose: ()
   const { location, navigate } = useTypeNavigation(), queries = useQueryClient();
   const options = useQuery({ queryKey: ['type-creation-options'], queryFn: ({ signal }) => creationOptions(signal), enabled: open, retry: false });
   const [origin, setOrigin] = useState<Origin>('library'), [name, setName] = useState(''), [source, setSource] = useState('');
+  const [search,setSearch] = useState('');
   const [construction, setConstruction] = useState('single_core'), [voltage, setVoltage] = useState(''), [material, setMaterial] = useState('copper_bare');
   const [area, setArea] = useState(''), [form, setForm] = useState(''), [diameter, setDiameter] = useState(''), [gap, setGap] = useState('');
   const [proposal, setProposal] = useState<Proposal | null>(null), [confirmed, setConfirmed] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const pending = useRef(false), attempts = useRef<Record<string, string>>({});
   const method = options.data?.generation[0], schema = optionalRecord(optionalRecord(method?.schema).properties);
   const choices = origin === 'library' ? options.data?.library : options.data?.imports;
+  const filteredChoices=choices?.filter(item=>text(item.name).toLowerCase().includes(search.trim().toLowerCase())||item.id===source)||[];
   function changed() { setProposal(null); setConfirmed(false); setError(''); }
-  function chooseOrigin(value: string) { setOrigin(value as Origin); setSource(''); changed(); }
+  function chooseOrigin(value: string) { setOrigin(value as Origin); setSource(''); setSearch(''); changed(); }
   function attempt(body: Record<string, unknown>) {
     const key = JSON.stringify(body), storageKey = 'cablesim:type-create-attempt';
     try { const saved = JSON.parse(sessionStorage.getItem(storageKey) || 'null'); if (saved?.input === key && typeof saved.request === 'string') attempts.current[key] = saved.request; } catch { /* In-memory identity still protects retries. */ }
@@ -76,24 +81,26 @@ export function CreateTypeDialog({ open, onClose }: { open: boolean; onClose: ()
   return <Dialog open={open} onOpenChange={value => { if (!value && !pending.current) onClose(); }} title="新建型号设计" initialFocus="form"
     actions={origin === 'standard' && !proposal ? <Button variant="primary" loading={busy} disabled={!method || !!options.error} onClick={() => void generate()}>生成结构提案</Button> : <Button variant="primary" loading={busy} disabled={!name.trim() || origin === 'standard' && (!proposal || !confirmed) || ['library', 'import'].includes(origin) && !source} onClick={() => void create()}>{origin === 'standard' ? '确认并建立草稿' : '建立草稿'}</Button>}>
     <div className="type-creation" data-origin={origin} data-creation-state={busy ? 'loading' : error ? 'error' : proposal ? 'success' : 'empty'}>
-      <fieldset disabled={busy} className="type-origin-choices"><legend>起点</legend>{([['library', '从型号库复制'], ['standard', '按标准生成'], ['import', '从资料导入'], ['blank', '空白']] as const).map(([value, label]) => <label key={value}><input type="radio" name="type-origin" value={value} checked={origin === value} onChange={() => chooseOrigin(value)} />{label}</label>)}</fieldset>
-      <label className="text-field">型号名称<input aria-label="型号名称" maxLength={80} value={name} disabled={busy} onChange={event => { setName(event.target.value); setError(''); }} /></label>
+      <RadioGroup.Root disabled={busy} className="type-origin-choices" aria-label="起点" value={origin} onValueChange={chooseOrigin}>{([['library', '从型号库复制'], ['standard', '按标准生成'], ['import', '从资料导入'], ['blank', '空白']] as const).map(([value, label]) => <label key={value} htmlFor={'type-origin-'+value}><RadioGroup.Item id={'type-origin-'+value} className="type-origin-radio" value={value} aria-label={label}><RadioGroup.Indicator /></RadioGroup.Item>{label}</label>)}</RadioGroup.Root>
+      <label className="text-field">型号名称<Input aria-label="型号名称" maxLength={80} value={name} disabled={busy} onChange={event => { setName(event.target.value); setError(''); }} /></label>
       {origin === 'blank' ? <Select label="结构类型" value={construction} disabled={busy} onChange={setConstruction} options={[{ value: 'single_core', label: '单芯' }, { value: 'three_core', label: '三芯' }]} /> : options.isPending ? <LoadingState title="正在读取起点" /> : options.error ? <ErrorState title="起点读取失败" description={message(options.error)} action={<Button onClick={() => void options.refetch()}>重新读取</Button>} /> : origin === 'standard' ? !method ? <InlineEmpty title="未安装结构提案方法，暂不能按标准生成。" /> : <>
         <div className="type-creation-grid">
           <Select label="结构类型" value={construction} disabled={busy} onChange={value => { setConstruction(value); changed(); }} options={[{ value: 'single_core', label: '单芯' }, { value: 'three_core', label: '三芯' }]} />
           <Select label="额定电压" value={voltage} disabled={busy} onChange={value => { setVoltage(value); changed(); }} options={(optionalRecord(schema.voltage).enum as string[] || []).map(value => ({ value, label: value.split('/').map(v => nominalNumber(Number(v) / 1000)).join('/') + ' kV' }))} />
           <Select label="导体材料" value={material} disabled={busy} onChange={value => { setMaterial(value); changed(); }} options={[{ value: 'copper_bare', label: '铜' }, { value: 'aluminium', label: '铝' }]} />
-          <label className="text-field">导体截面 · mm²<input aria-label="导体截面" inputMode="decimal" value={area} disabled={busy} onChange={event => { setArea(event.target.value); changed(); }} /></label>
+          <label className="text-field">导体截面（mm²）<Input aria-label="导体截面" inputMode="decimal" value={area} disabled={busy} onChange={event => { setArea(event.target.value); changed(); }} /></label>
           <Select label="导体几何" value={form} disabled={busy} onChange={value => { setForm(value); changed(); }} options={[{ value: 'solid_round', label: '等截面积实心圆 · 理想化' }, { value: 'unspecified', label: '提供圆形导体外径' }]} />
-          {form === 'unspecified' && <label className="text-field">导体外径 · mm<input aria-label="导体外径" inputMode="decimal" value={diameter} disabled={busy} onChange={event => { setDiameter(event.target.value); changed(); }} /></label>}
-          {construction === 'three_core' && <label className="text-field">芯间净距 · mm<input aria-label="芯间净距" inputMode="decimal" value={gap} disabled={busy} onChange={event => { setGap(event.target.value); changed(); }} /></label>}
+          {form === 'unspecified' && <label className="text-field">导体外径 · mm<Input aria-label="导体外径" inputMode="decimal" value={diameter} disabled={busy} onChange={event => { setDiameter(event.target.value); changed(); }} /></label>}
+          {construction === 'three_core' && <label className="text-field">芯间净距 · mm<Input aria-label="芯间净距" inputMode="decimal" value={gap} disabled={busy} onChange={event => { setGap(event.target.value); changed(); }} /></label>}
         </div>
         {proposal && <section aria-label="结构提案" className="type-creation-proposal"><table><thead><tr><th>参数</th><th>建议值</th><th>依据</th></tr></thead><tbody>{proposal.rows.map((row, index) => { const source = optionalRecord(row.source); return <tr key={index}><td>{text(row.label)}</td><td>{nominalNumber(numeric(row.value) === null ? null : Number(row.value) * 1000, 3)} mm</td><td><SourceBadge kind={row.basis === 'standard_value' ? 'standard' : row.basis === 'user' ? 'user' : 'derived'} detail={text(row.formula) || [text(source.standard), text(source.clause)].filter(Boolean).join(' · ')} />{[text(source.standard), text(source.clause)].filter(Boolean).join(' · ')}</td></tr>; })}</tbody></table>
           <details><summary>提案范围与缺项</summary><ul>{proposal.limitations.map(item => <li key={item}>{item}</li>)}</ul></details>
-          <label><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} disabled={busy} /> 已核对标准值、推导条件与缺项</label>
+          <label><Checkbox aria-label="已核对标准值、推导条件与缺项" checked={confirmed} onCheckedChange={value => setConfirmed(value===true)} disabled={busy} /> 已核对标准值、推导条件与缺项</label>
         </section>}
       </> : <>
-        {choices?.length ? <Select label={origin === 'library' ? '已发布型号版本' : '已批准资料结果'} value={source} disabled={busy} onChange={value => { setSource(value); setError(''); }} options={choices.map(item => ({ value: text(item.id), label: text(item.name) + ' · ' + versionLabel(text(item.version)) }))} /> : <InlineEmpty title={origin === 'library' ? '尚无已发布的型号版本' : '尚无已批准的资料结果'} />}
+        {!!choices?.length && <label className="text-field">查找型号<Input aria-label="查找型号版本" type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="型号或厂家名称" /></label>}
+        {choices?.length ? filteredChoices.length ? <Select label={origin === 'library' ? '型号版本' : '已批准资料结果'} value={source} disabled={busy} onChange={value => { setSource(value); setError(''); }} options={filteredChoices.map(item => ({ value: text(item.id), label: text(item.name) + ' · ' + versionLabel(text(item.version)) }))} /> : <InlineEmpty title="没有匹配的结果" action={<Button size="compact" onClick={()=>setSearch('')}>清除筛选</Button>} /> : <InlineEmpty title={origin === 'library' ? '尚无已发布的型号版本' : '尚无已批准的资料结果'} />}
+        {origin==='library'&&source&&choices?.find(item=>item.id===source)?.status&&<span className="muted">{choices.find(item=>item.id===source)?.status==='published'?'已发布':'库参考版本'} · 缺项会保留在新草稿中</span>}
         {origin === 'import' && <Button disabled={busy} onClick={() => { onClose(); navigate('/resources/cables/imports?theme=' + location.theme); }}>打开资料导入</Button>}
       </>}
       {error && <p className="field-error" role="alert">{error}</p>}

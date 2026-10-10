@@ -305,7 +305,7 @@ def release_identity():
         plugin.verify()
     series, digest = bundled_series()
     hv,hv_digest = bundled_hv()
-    return {'seed_revision':6, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
+    return {'seed_revision':8, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
             'plugins':{key:Research.pin(plugin) for key,plugin in sorted(registry.plugins.items())},
             'models':{item['id']:{'version':item['version'],'sha256':item['content_sha256']} for item in system_models()},
             'manufacturer_series':{'id':series['id'],'version':series['version'],'sha256':digest},
@@ -364,10 +364,48 @@ def build_release_seed(staged, database, identity):
             for model, status in ((mv,'公开尺寸与有来源的工程参数草稿，未批准'),
                                   (hv,'公开结构与声明的工程参考参数，未批准')):
                 draft = create_workspace(model,model['payload']['name'],type_draft=True)
-                bindings = bind_demo_resources(api,draft['id'],'mv' if model is mv else 'hv')
                 result['types'].append({'name':model['payload']['name'],'workspace':draft['id'],'status':status,
-                    'resource_bindings': {'bound':sum(t['state']=='current' for t in bindings['targets']),
-                                          'unbound':[{'name':t['name'],'reason':t['match_reason']} for t in bindings['targets'] if t['state']=='unbound']}})
+                    'resource_bindings': {}})
+            # The teaching values have their own provenance; never apply them to the
+            # 110 kV manufacturer model or to the published material references.
+            supplement_mv(api,result)
+            catalogue=api('/api/methods')
+            for item in result['types']:
+                wid=item['workspace'];target=api('/api/workspaces/'+wid)
+                bindings=bind_demo_resources(api,wid,'mv' if item['name'].startswith('YJV22') else 'hv')
+                item['resource_bindings']={'bound':sum(t['state']=='current' for t in bindings['targets']),
+                    'unbound':[{'name':t['name'],'reason':t['match_reason']} for t in bindings['targets'] if t['state']=='unbound']}
+                target=api('/api/workspaces/'+wid);cable=target['domain']['cable_types'][0]
+                prefix='/api/workspaces/'+wid+'/studies'
+                source={'kind':'demo','reviewed':False,'reference':'演示方法条件；50 Hz 与20 °C 为明示试算条件，不是厂家实测值，工程使用前须确认。'}
+                definitions=[('结构推导','cablesim.cable-geometry','concentric-model',{'cable_type_id':cable['id']}),
+                             ('标准核对','cablesim.standard-check','dimensions',{'cable_type_id':cable['id']}),
+                             ('电气参数','cablesim.type-electrical','electrical',{'cable_type_id':cable['id'],'frequency_hz':50,'temperature_k':293.15,
+                                 'sources':{'frequency_hz':source['reference'],'temperature_k':source['reference']}}),
+                             ('短路容量','cablesim.type-electrical','short-circuit',{'cable_type_id':cable['id']})]
+                studies=api(prefix)
+                for title,plugin,capability,parameters_type in definitions:
+                    if any(s['definition']['method']['plugin_id']==plugin and s['definition']['method']['capability']==capability for s in studies):continue
+                    entry=next(m for m in catalogue if m['method']['plugin_id']==plugin)
+                    if not any(c['id']==capability for c in entry['capabilities']):
+                        raise RuntimeError('缺少型号演示所需的已安装能力 '+capability)
+                    studies.append(api(prefix,'POST',{'expected_revision':target['revision'],'title':title,'input_source':'domain',
+                        'method':{**entry['method'],'capability':capability},'parameters':parameters_type,'input_sources':{'/parameters':source}}))
+                item['modules']=[]
+                for study in studies:
+                    root=prefix+'/'+study['id'];check=api(root+f'/preflight?expected_revision={target["revision"]}&expected_study_revision={study["revision"]}')
+                    saved={'title':study['definition']['title'],'study':study['id'],'ready':check['ready']}
+                    if not check['ready']:
+                        saved.update(status='缺项待补；未生成结果',preflight=check);item['modules'].append(saved);continue
+                    run=api(root+'/runs','POST',{'expected_revision':target['revision'],'expected_study_revision':study['revision'],
+                        'request_id':str(uuid4()),'scope_acknowledged':True,'lock_digest':check['lock_digest']})
+                    deadline=time.monotonic()+180
+                    while run['status'] in ('accepted','running','validating') and time.monotonic()<deadline:
+                        time.sleep(.2);run=api(root+'/runs/'+run['id'])
+                    if run['status'] not in ('succeeded','partial') or run['integrity']!='verified' or run['freshness']!='current':
+                        raise RuntimeError('型号演示计算失败：'+json.dumps({'title':saved['title'],'status':run['status'],'error':run.get('error')},ensure_ascii=False))
+                    saved.update(run=run['id'],status=run['status']);item['modules'].append(saved)
+                    print(item['name']+' · '+saved['title']+'：真实保存结果',flush=True)
             workspace = create_workspace(mv,'城北变电站 · 10 kV 三回排管',
                                          target_current_a=400,three_core_layout='three_core_ducts_horizontal')
             hv_workspace = create_workspace(hv,'城南线路 · 110 kV 直埋单回',target_current_a=600)

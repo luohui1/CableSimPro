@@ -12,6 +12,7 @@ import { StatusMark, type StatusKind } from '@/components/status-mark';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Button, IconButton } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { fieldSource } from '@/lib/domain-fields';
@@ -46,7 +47,7 @@ export function TypeWorkspace() {
   const module = typeModules.find(module => module.id === location.module);
   const activeTab = module?.tabs.some(([id]) => id === location.tab) ? location.tab : module?.tabs[0][0] || location.tab;
   const [cableId, setCableId] = useState(''), [selected, setSelected] = useState<LayerTarget | null>(null), [collapsed, setCollapsed] = useState(false), [info, setInfo] = useState('');
-  const [view, setView] = useState<'section' | 'three'>(location.tab === 'three' ? 'three' : 'section'), [dockMax, setDockMax] = useState(['specification', 'requirements', 'comparison', 'standard-check'].includes(location.module) || ['quantities', 'materials'].includes(location.tab));
+  const [view, setView] = useState<'section' | 'three'>(location.tab === 'three' ? 'three' : 'section'), [dockMax, setDockMax] = useState(location.module !== 'structure' || ['quantities', 'materials'].includes(location.tab));
   const [resultProperty, setResultProperty] = useState<{ title: string; groups: PropertyGroup[] } | null>(null);
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   // 电气参数、短路容量的方法参数属于“改输入”，放在右侧方法页；数据区只留结果
@@ -85,7 +86,8 @@ export function TypeWorkspace() {
       return { kind: stale ? 'historical' as const : 'current' as const, label: stale ? '过期' : '当前', reason: stale ? '规格书引用的输入或结果已变化，需重新生成。' : '规格书对应当前输入及保存结果。' };
     }
     if (evidence.error || methods.error) return { kind: 'error' as const, label: '读取失败', reason: message(evidence.error || methods.error) };
-    return moduleResultStatus(evidence.data, id, state.workspace?.revision, state.dirty, methods.data);
+    if (id === 'structure' && !state.inputDirty && !evidence.data?.some(item=>optionalRecord(optionalRecord(item.study.definition).method).plugin_id==='cablesim.cable-geometry' && ['succeeded','partial'].includes(text(item.run.status))) && rows.some(row => row.outerM !== null)) return {kind:'current' as const,label:'当前',reason:'参数截面对应当前输入；外径与用料尚未运行。'};
+    return moduleResultStatus(evidence.data, id, state.workspace?.revision, state.inputDirty || !!state.methodDrafts[id] || id === 'rating-table' && !!state.ratingDraft, methods.data);
   }
   function resultMark(id: string) { const value = resultStatus(id); return <Tooltip content={value.reason}><span className="type-module-status" title={value.reason} aria-label={value.label}>{value.kind === 'unknown' ? <span className="type-module-idle" aria-hidden="true" /> : <StatusMark kind={value.kind} label={value.label} />}</span></Tooltip>; }
   function choose(target: LayerTarget | null) { setSelected(target); if (target) setCollapsed(false); }
@@ -97,7 +99,7 @@ export function TypeWorkspace() {
   }
   useEffect(() => { setInfo(''); setResultProperty(null); setCollapsed(false); }, [location.module, location.tab, selected]);
   // 文档型模块（规格书、要求清单、方案对比）默认放大下方面板
-  useEffect(() => { setDockMax(['specification', 'requirements', 'comparison', 'standard-check'].includes(location.module) || ['quantities', 'materials'].includes(location.tab)); }, [location.module, location.tab]);
+  useEffect(() => { setDockMax(location.module !== 'structure' || ['quantities', 'materials'].includes(location.tab)); }, [location.module, location.tab]);
   useEffect(() => { if (location.module === 'structure' && location.layer) { const row = rows.find(row => row.id === location.layer); if (row) { setSelected(row.target); setCollapsed(false); } } }, [location.module, location.layer, cable?.id]);
   useEffect(() => {
     if (location.module !== 'structure' || !location.field) return;
@@ -123,8 +125,8 @@ export function TypeWorkspace() {
     : resultProperty ? <PropertyPanel title={resultProperty.title} groups={resultProperty.groups} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} />
       : document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} /> : null;
   // 型号工作窗口：画布 = 电缆截面 / 三维剥切；下方停靠栏 = 当前模块的页签；右侧 = 型号名称 + 所选结构层或结果
-  const dockTabs = module?.id === 'structure' ? module.tabs.filter(([id]) => id === 'table' || id === 'materials' || id === 'quantities') : methodModule ? module!.tabs.filter(([id]) => id !== 'parameters') : module?.tabs || [];
-  const dockTab = module?.id === 'structure' ? (location.tab === 'quantities' ? 'quantities' : location.tab === 'materials' ? 'materials' : 'table') : methodModule && activeTab === 'parameters' ? 'results' : activeTab;
+  const dockTabs = module?.id === 'structure' ? module.tabs.filter(([id]) => id === 'table' || id === 'materials' || id === 'quantities') : module?.tabs || [];
+  const dockTab = module?.id === 'structure' ? (location.tab === 'quantities' ? 'quantities' : location.tab === 'materials' ? 'materials' : 'table') : activeTab;
   const groups: [string, string, string[]][] = [['结构', 'module/structure', ['structure']], ['要求', 'module/standard-check', ['requirements', 'standard-check']], ['分析', 'calc/electrical-params', ['electrical', 'short-circuit', 'rating-table', 'comparison']], ['交付', 'module/datasheet', ['specification']]];
   // 型号浏览器：侧栏右侧第二层。结构下列出型号里真实的电缆结构，其余为型号的设计与分析环节
   const explorer = <nav className="project-explorer" aria-label="型号浏览器">
@@ -161,10 +163,10 @@ export function TypeWorkspace() {
       {methodModule && <button type="button" role="tab" aria-selected={inspectorView === 'method'} onClick={() => setInspectorView('method')}><Icon name="nav/plugin" />方法</button>}
       <button type="button" role="tab" aria-selected={inspectorView === 'agent'} onClick={() => setInspectorView('agent')}><Icon name="agent/agent" />Agent</button>
     </div>
-    {methodModule && inspectorView === 'method' ? <div className="inspector-method">{document && <TypeModulePage module={location.module} tab="parameters" />}</div> : inspectorView !== 'agent' && <>
+    {methodModule && inspectorView === 'method' ? <div className="inspector-method"><Button onClick={() => go(location.module, 'parameters')}>打开方法参数</Button></div> : inspectorView !== 'agent' && <>
     {document && <section className="inspector-block" aria-label="型号">
       <header><Icon name="nav/cable-type" /><h2>型号</h2></header>
-      <label className="text-field">型号名称<input className="type-name-input" value={cleanLabel(document.name)} disabled={state.busy || state.readOnly} onChange={event => state.edit('/name', event.target.value)} /></label>
+      <label className="text-field">型号名称<Textarea className="type-name-input" rows={2} value={cleanLabel(document.name)} disabled={state.busy || state.readOnly} onChange={event => state.edit('/name', event.target.value)} /></label>
       {document.cable_types.length > 1 && <Select label="电缆结构" value={cable?.id} disabled={state.busy} options={document.cable_types.map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={value => { setCableId(value); choose(null); }} />}
     </section>}
     {property}{location.module === 'structure' && !row && !!state.workspace?.raw.type_creation && document && <TypeRatingInputs />}</>}
@@ -188,11 +190,11 @@ export function TypeWorkspace() {
       <section className="workbench-dock" aria-label={module?.label || '型号模块'}>
         <div className="workbench-dock-bar">
           {dockTabs.length > 1 ? <TabsList aria-label={(module?.label || '') + '页签'}>{dockTabs.map(([id, label]) => <TabsTrigger key={id} value={id}>{label}</TabsTrigger>)}</TabsList> : <span className="workbench-dock-title">{module?.label}</span>}
-          <IconButton variant="ghost" icon={dockMax ? 'action/chevron-down' : 'action/chevron-up'} label={dockMax ? '还原结果面板' : '放大结果面板'} onClick={() => setDockMax(!dockMax)} />
+          <Button variant="ghost" size="compact" onClick={() => setDockMax(!dockMax)}><Icon name={dockMax ? 'action/chevron-down' : 'action/chevron-up'} />{dockMax ? '显示模型' : '展开结果'}</Button>
         </div>
         <TabsContent asChild value={dockTab}><div className="type-page workbench-dock-body" aria-label={module?.label || '型号模块'} data-type-page={location.module} data-type-state={state.loading ? 'loading' : !document && state.error ? 'error' : !document || !document.cable_types.length ? 'empty' : state.workspace?.raw.historical ? 'historical' : 'success'}>
           {state.error && document && <p className="type-notice is-error" role="alert">{state.error}</p>}{(info || state.notice) && <p className="type-notice" role="status">{info || state.notice}</p>}
-          {state.dirty && <p className="type-notice">结构修改待保存；已保存的外径、用料和校核结果已标为历史。</p>}
+          {state.dirty && <p className="type-notice">{state.inputDirty ? evidence.data?.length ? '结构修改待保存；受影响的保存结果为历史，请重算。' : '结构修改待保存。' : '方法条件待保存；可按当前条件试算。'}</p>}
           {!document || state.loading ? null : !module ? <ErrorState title="型号模块不存在" description="此地址未注册为型号模块。" />
             : location.module === 'structure' ? (dockTab === 'materials' ? <MaterialComparison /> : dockTab === 'quantities' ? <TypeStructure tab="quantities" cable={cable} selected={selected} onSelect={choose} /> : <LayerTable rows={rows} selected={selected} onSelect={choose} />)
               : location.tab !== activeTab ? <ErrorState title="页签不存在" description="选择此模块的有效页签继续。" action={<Button onClick={() => go(location.module, activeTab)}>打开默认页签</Button>} />

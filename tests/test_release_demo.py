@@ -134,12 +134,16 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     assert len(receipt['engineering_resources']) == 28
     assert all(row['resource_bindings']['bound'] >= 2 for row in receipt['types'])
     assert sum(bool(row.get('run')) for row in receipt['studies']) == 3
+    type_runs=[module for item in receipt['types'] for module in item['modules'] if module.get('run')]
+    assert len(type_runs)>=6
+    assert all(item['status'] in ('succeeded','partial') for item in type_runs)
+    assert all(any(m.get('run') and m['title']=='标准核对' for m in item['modules']) for item in receipt['types'])
     assert any('有限元温度场' in row['title'] and not row.get('run') for row in receipt['studies'])
     hv=next(row for row in receipt['studies'] if '110 kV' in row['title'])
     assert hv['run'] and hv['ready'] and hv['status']=='succeeded'
     with closing(sqlite3.connect(database)) as connection:
         assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == 4
-        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status='succeeded'").fetchone()[0] == 3
+        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status IN ('succeeded','partial')").fetchone()[0] == 3+len(type_runs)
         assert connection.execute("SELECT COUNT(*) FROM engineering_assets WHERE kind='material' AND status='published'").fetchone()[0] == 21
         assert connection.execute("SELECT COUNT(*) FROM engineering_assets WHERE kind='rule' AND status='published'").fetchone()[0] == 7
         candidates=[json.loads(r[0]) for r in connection.execute('SELECT payload FROM domain_cable_models')]

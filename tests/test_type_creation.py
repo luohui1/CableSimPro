@@ -90,6 +90,24 @@ def test_published_copy_independent_family_and_fixed_version(client, monkeypatch
     assert client.post('/api/types',json={**body,'request_id':str(uuid4()),'content_sha256':'f'*64}).status_code==409
 
 
+def test_catalogue_copy_lists_fixed_manufacturer_versions_and_keeps_missing(client):
+    from test_datasheet_import import seed_model
+    source = seed_model(client)
+    options = client.get('/api/types/creation-options').json()['library']
+    selected = next(item for item in options if item['id'] == source['id'])
+    assert selected['content_sha256'] == source['digest']
+    body = request(origin='library', name='库资料复制', resource_id=source['id'], content_sha256=source['digest'])
+    response = client.post('/api/types', json=body)
+    assert response.status_code == 201, response.text
+    copied = response.json()
+    assert copied['type_origin_reference']['id'] == source['id']
+    assert copied['type_origin_reference']['content_sha256'] == source['digest']
+    assert copied['type_lifecycle']['status'] == 'draft'
+    assert client.post('/api/types', json=body).json()['id'] == copied['id']
+    assert client.post('/api/types', json={**body, 'request_id':str(uuid4()), 'content_sha256':'0'*64}).status_code == 409
+    assert client.get(f"/api/workspaces/{copied['id']}/studies").json() == []
+
+
 def test_only_approved_import_creates_design_with_page_sources(client):
     from test_datasheet_import import upload,extract,seed_model
     doc=upload(client);run,_=extract(client,doc['id']);base=seed_model(client)

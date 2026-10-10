@@ -15,7 +15,7 @@ void main(){vec2 p=origin+point.x*dx+point.y*dz;gl_Position=vec4(p.x/size.x*2.-1
 const fieldFragment = `#version 300 es
 precision highp float; in float temperature; in vec2 uv; flat in vec4 cell; uniform bool regular; uniform float minimum; uniform float span; uniform bool difference; uniform vec3 negative; uniform vec3 positive; uniform vec3 neutral; out vec4 color;
 ${TURBO_GLSL}
-void main(){float value=regular?mix(mix(cell.x,cell.y,uv.x),mix(cell.w,cell.z,uv.x),uv.y):temperature;float t=clamp((value-minimum)/span,0.,1.);vec3 rgb=difference?mix(neutral,t<.5?negative:positive,abs(t*2.-1.)):turbo(t);color=vec4(rgb,.82);}`;
+void main(){float value=regular?mix(mix(cell.x,cell.y,uv.x),mix(cell.w,cell.z,uv.x),uv.y):temperature;float t=span>0.?clamp((value-minimum)/span,0.,1.):.5;vec3 rgb=difference?mix(neutral,t<.5?negative:positive,abs(t*2.-1.)):turbo(t);color=vec4(rgb,.82);}`;
 const opacity = { cable: 1, enclosure: .42, backfill: .18, soil: .08, ground: .1 };
 const priority = { ground: -1, soil: 0, backfill: 1, enclosure: 2, cable: 3 };
 type Part = { buffer: WebGLBuffer; data: Float32Array; key: string; count: number; object: SceneObject; index: number; color: readonly number[] };
@@ -124,7 +124,7 @@ function paintField() {
   if (!thermal || !view) return;
   const v = view as FieldView; target(v.width, v.height); gl.viewport(0, 0, canvas.width, canvas.height); gl.useProgram(program);
   gl.uniform2fv(uniform('origin'), v.origin); gl.uniform2fv(uniform('dx'), v.dx); gl.uniform2fv(uniform('dz'), v.dz); gl.uniform2fv(uniform('size'), v.size);
-  gl.uniform1f(uniform('minimum'), thermal.minimum); gl.uniform1f(uniform('span'), Math.max(1e-6, thermal.maximum - thermal.minimum));
+  gl.uniform1f(uniform('minimum'), thermal.minimum); gl.uniform1f(uniform('span'), thermal.maximum - thermal.minimum);
   gl.uniform1i(uniform('difference'), thermal.kind === 'difference' ? 1 : 0);
   gl.uniform1i(uniform('regular'), thermal.quads?.length ? 1 : 0);
   gl.uniform3fv(uniform('negative'), v.negative); gl.uniform3fv(uniform('positive'), v.positive); gl.uniform3fv(uniform('neutral'), v.neutral);

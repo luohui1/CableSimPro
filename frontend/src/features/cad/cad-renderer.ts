@@ -4,8 +4,8 @@ import { checked, type NativeViewer } from './occt-runtime';
 import type { CadGeometry, CadLayer, CadMode, CadScene, CadSelection, SceneAsset, SceneObject } from './types';
 
 const materialTokens: Record<string, string> = {
-  conductor: '--conductor', semiconductor: '--material-semi', insulation: '--material-insulation',
-  metal: '--material-metal', polymer: '--material-sheath', filler: '--fill',
+  conductor: '--cad-conductor', semiconductor: '--cad-semi', insulation: '--cad-insulation',
+  metal: '--cad-metal', polymer: '--cad-sheath', filler: '--cad-fill',
 };
 const priorities = { cable: 3, enclosure: 2, backfill: 1, soil: 0, ground: -1 };
 const opacities = { cable: 1, enclosure: .45, backfill: .20, soil: .08, ground: .08 };
@@ -22,6 +22,15 @@ export function tokenColor(host: HTMLElement, token: string): number[] {
   const rgb = value.match(/^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/);
   if (rgb) return rgb.slice(1, 4).map(channel => Number(channel) / 255);
   throw new Error(`画布颜色令牌 ${token} 不可用。`);
+}
+
+export function sceneMaterialColors(scene: CadScene, host: HTMLElement): CadScene {
+  return { ...scene, assets: Object.fromEntries(Object.entries(scene.assets).map(([id, asset]) => {
+    const object = scene.objects.find(o => o.parts.some(p => p.asset_id === id));
+    const token = object?.kind === 'ground' ? '--cad-ground' : object?.kind === 'soil' ? '--cad-soil'
+      : object?.kind === 'backfill' ? '--cad-fill' : object?.kind === 'enclosure' ? '--cad-metal' : materialTokens[asset.category || ''] || '--cad-sheath';
+    return [id, { ...asset, display_color: asset.display_color || tokenColor(host, token) }];
+  })) };
 }
 
 /** Only displays supplied artifacts. The envelope cache contains no engineering quantities. */
@@ -73,8 +82,8 @@ export class CadRenderer {
       ? geometry.material_sources?.find(item => item.id === layer.material) : null;
     const isCopper = layer.category === 'metal' && /copper|铜/i.test(material?.label || '');
     const token = object && object.kind !== 'cable'
-      ? object.kind === 'ground' ? '--border' : object.kind === 'soil' && object.tint_index ? '--material-metal' : '--text-secondary'
-      : isCopper ? '--conductor' : materialTokens[layer.category || ''] || '--material-sheath';
+      ? object.kind === 'ground' ? '--cad-ground' : object.kind === 'soil' ? '--cad-soil' : '--cad-fill'
+      : isCopper ? '--cad-conductor' : materialTokens[layer.category || ''] || '--cad-sheath';
     return [
       ...('display_color' in layer && layer.display_color ? layer.display_color : tokenColor(this.host, token)),
       !object || object.kind === 'cable' ? ['conductor', 'metal'].includes(layer.category || '') : false,

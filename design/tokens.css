@@ -31,6 +31,15 @@
   --material-insulation: #ECEAE4;
   --material-metal: #AEB5BD;
   --material-sheath: #24272B;
+  /* 三维材料在照明下仍保持可辨认；二维图纸保留原材料色。 */
+  --cad-conductor: #D79559;
+  --cad-semi: #737C88;
+  --cad-insulation: #ECEAE4;
+  --cad-metal: #BBC8D5;
+  --cad-sheath: #586575;
+  --cad-fill: #CABDA6;
+  --cad-soil: #A58E74;
+  --cad-ground: #768570;
   --phase-a: #B38F00;
   --phase-b: #2E8B57;
   --phase-c: #C0392B;
@@ -107,6 +116,14 @@
   --material-semi: #0B0C0E;
   --material-insulation: #3A3934;
   --material-sheath: #08090A;
+  --cad-conductor: #F0AF73;
+  --cad-semi: #A0ABBB;
+  --cad-insulation: #D9D6CA;
+  --cad-metal: #D6E2EF;
+  --cad-sheath: #8294AD;
+  --cad-fill: #D7C8AD;
+  --cad-soil: #C1AA8C;
+  --cad-ground: #A8BEA0;
   --phase-a: #E3C02E;
   --phase-b: #52B37A;
   --phase-c: #F07468;

@@ -7,10 +7,10 @@ import { formatNumber } from '@/lib/format';
 import type { ViewportController as CadController } from './cad-controller';
 import type { CadCamera, CadThermal } from './types';
 
-export function TemperatureSlice({ thermal, controller, camera, projectionKey, width, height, visible, onSelect, showHotspot = true, legendSide = 'right' }: {
+export function TemperatureSlice({ thermal, controller, camera, projectionKey, width, height, visible, onSelect, showHotspot = true, legendSide = 'right', showLegend = true }: {
   thermal: CadThermal; controller: Pick<CadController, 'project'>; camera?: CadCamera; projectionKey?: unknown; width: number; height: number; visible: boolean;
   onSelect: (id: string) => void;
-  showHotspot?: boolean; legendSide?: 'left' | 'right';
+  showHotspot?: boolean; legendSide?: 'left' | 'right'; showLegend?: boolean;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState('');
@@ -73,12 +73,17 @@ export function TemperatureSlice({ thermal, controller, camera, projectionKey, w
         <circle cx={hot.x} cy={hot.y} r="8" /><path d={`M${hot.x} ${hot.y}L${labelX} ${labelY}`} />
         <text x={labelX} y={labelY - 6}>{thermal.kind === 'difference' ? '最大导体温差' : '最热导体'} {formatNumber(hottest.value, 1)} {thermal.kind === 'difference' ? 'K' : '°C'}</text>
       </g>}
-      <g className="cad-thermal-legend" transform={`translate(${legendSide === 'left' ? 16 : Math.max(16, width - 104)}, 148)`} aria-label="温度色标">
+      {showLegend && (height < 310 ? <g className="cad-thermal-legend" transform={`translate(16, ${Math.max(32,height - 24)})`} aria-label="温度色标">
+        <rect x="-8" y="-17" width="242" height="36" fill="var(--panel)" />
+        <text x="0" y="4">{formatNumber(thermal.minimum,1)}</text>
+        {Array.from({length:32},(_,i)=><rect key={i} x={48+i*4} y="-9" width="4.5" height="12" fill={hex(thermal.maximum===thermal.minimum ? .5 : i/31)} />)}
+        <text x="184" y="4">{formatNumber(thermal.maximum,1)} {thermal.kind==='difference'?'K':'°C'}</text>
+      </g> : <g className="cad-thermal-legend" transform={`translate(${legendSide === 'left' ? 16 : Math.max(16, width - 104)}, ${Math.min(148,height-152)})`} aria-label="温度色标">
         <text x="0" y="-10">{thermal.kind === 'difference' ? 'ΔT / K' : '°C'}</text>
-        {Array.from({ length: 32 }, (_, i) => <rect key={i} x="0" y={i * 4} width="12" height="4.5" fill={hex(1 - i / 31)} />)}
+        {Array.from({ length: 32 }, (_, i) => <rect key={i} x="0" y={i * 4} width="12" height="4.5" fill={hex(thermal.maximum===thermal.minimum ? .5 : 1 - i / 31)} />)}
         <text x="18" y="10">{formatNumber(thermal.maximum, 1)}</text><text x="18" y="128">{formatNumber(thermal.minimum, 1)}</text>
         {thermal.kind === 'difference' && <text x="18" y="68">0</text>}
-      </g>
+      </g>)}
     </svg>
     {error && <span className="cad-slice-error" role="status">{error}</span>}
   </>;

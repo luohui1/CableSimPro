@@ -49,15 +49,24 @@ node src/features/type/tests/verify-creation.mjs
 node src/features/type/tests/verify-modification.mjs
 node src/features/type/tests/verify-modules.mjs
 node src/features/type/tests/verify-material-comparison.mjs
+node src/features/type/tests/verify-fix-round.mjs --before
+node src/features/type/tests/verify-fix-round.mjs
+node src/features/type/tests/verify-fix-round.mjs --interactions
+node src/features/type/tests/verify-fix-round.mjs --states
+node src/features/type/tests/verify-fix-round.mjs --drawing
 ```
 
 材料核对接口：`GET /api/types/{wid}/material-comparison` 返回保存输入修订、材料固定引用及逐项核对；`?revision=N` 核对只读历史输入。`POST /api/types/{wid}/material-comparison/adopt` 接收 `expected_revision`、`request_id`、`material_id`、`property`、`resource_id`、`content_sha256`。宿主重新核对条件、来源、固定版本、字段锁与输入修订后生成新修订；重复请求复用同一回执。显式采用在物性字段来源中保存 `cablesim.adopted-material-value/1`（资源身份、版本、摘要、完整参考值与原值 / 原来源），保持未审核；同时重新确认该材料的固定引用。旧运行保留为历史，Ctrl+Z 调用既有输入撤销接口恢复原值、出处与绑定；不改历史修订。未保存改动须先保存或撤销，历史或已发布型号不可采用。
 
 所有业务脚本通过 `tests/fixture.mjs` 只读备份真实数据库到随机临时路径、启动独立服务和浏览器，结束核对零标签页、停止服务并删除临时数据库。当前轮次的五态、两尺寸和两主题采用自动断言，检查越界、控件重叠、13 px 字号和文字对比度；每个改动页面只留 1–2 张截图。验收只执行明确授权的 IEC 标准代数、轻量标准核对和 CAD；有限元、批量仿真、收敛研究及性能基准仍走超算。列表源无已发布型号，列表历史态没有伪造批准数据。产物在 `.data/frontend-type/`，不入库。
 
-`verify-organization.mjs` 使用当前正式构建和指向 8100 的 GET-only 代理，一个页面串行检查目录及工作台：两尺寸、两主题、空 / 加载 / 错误 / 成功 / 真实保存修订的历史状态、名片、行式编辑、标签避让及内部标识。分层表材料名须完整单行；表头、绘图外径和来源不得越过单元格。空 / 加载 / 错误是浏览器故障注入；成功与历史来自保存输入。批准 / 冲突 / 要求离线另外使用只读接口契约注入，不声称来源库有新增批准。不写演示数据库、不运行插件。只保留一张工作台截图，产物在 `.data/type-organization/`；目录没有历史模式，历史状态在工作台检查。单元测试对拍 V→kV、m²→mm² 和逐层外径手算，并拒绝以完整性失败或失败工况作为当前结果。
+`verify-organization.mjs` 使用当前正式构建和指向 8100 的 GET-only 代理，一个页面串行检查目录及工作台：两尺寸、两主题、空 / 加载 / 错误 / 成功 / 真实保存修订的历史状态、名片、行式编辑、标签避让及内部标识。分层表材料名称与固定版本须完整显示，可换行；表头、绘图外径和来源不得越过单元格。空 / 加载 / 错误是浏览器故障注入；成功与历史来自保存输入。批准 / 冲突 / 要求离线另外使用只读接口契约注入，不声称来源库有新增批准。不写演示数据库、不运行插件。只保留一张工作台截图，产物在 `.data/type-organization/`；目录没有历史模式，历史状态在工作台检查。单元测试对拍 V→kV、m²→mm² 和逐层外径手算，并拒绝以完整性失败或失败工况作为当前结果。
 
 `verify-organization-save.mjs` 复用隔离数据库和当前正式构建，在一个页面验证新建型号、Ctrl+S、顶栏保存及重复提交保护；经 API 对拍保存名称、修订和请求数量，不调用计算方法。两个浏览器脚本串行执行。
+
+`verify-fix-round.mjs` 使用 `.data/fix-round/3d/frontend` 的独立正式构建，`E2E_DATABASE_SOURCE` 指定只读备份源；可指向本轮生成的隔离发布库。主流程覆盖两型号、研究截面 / 三维及创建 / 工况弹窗的两尺寸两主题，实际软件 WebGL 图像检查亮度和材料色，并验证真实参数试算不写输入。`--interactions` 单独复测试算、画布编辑与弹窗；`--states` 在隔离服务上注入加载、空、错误，成功与历史使用真实输入；`--drawing` 专门检查短画布最小电缆直径及保存温度切片，保存运行无场工件时断言明确缺项而不编造场。各流程串行运行，收据和截图放 `.data/fix-round/3d/`。
+
+波纹护套只能在已知名义厚度的圆形单芯结构上显示等效圆柱；标明等效显示，不输出实体体积、质量或精确拓扑，原插件对波纹缺项的拒绝保持有效。电气频率 50 Hz 是表单的明示工程试算初值，保存时记录未批准来源；历史条件不补初值。方法试算复用现有 preview 接口，不保存、不批准；修改条件或切换页面取消过时请求。
 
 ## 对象名片与状态
 
@@ -67,7 +76,7 @@ node src/features/type/tests/verify-material-comparison.mjs
 
 目录的执行标准读取当前修订、完整性通过的标准判定保存运行，调用 `GET /api/design/type-workspaces/{wid}/requirements?run_id=...`，只收录 `source_current=true`、`state=approved`、可绑定且批准定义一致的标准号并去重。无批准则显示“未声明”，悬停提示“在要求与标准里添加”，读取失败也保留具体原因；要求批准完成后会使目录缓存失效。材料来源里的参考条款不推断成执行标准；该读取不会运行、批准或保存。资源关联只链接统一目录。
 
-电压和标称截面按量纲换算后最多保留两位小数并去掉尾随零，保留 0.45 kV、0.75 mm² 等有效名义值。已保存时保留不可用线框保存按钮，维持固定入口和键盘习惯；有未保存改动才启用实心主按钮。分层表优先给材料列宽度，尺寸、绘图外径及来源列收窄；材料名保持完整单行。
+电压和标称截面按量纲换算后最多保留两位小数并去掉尾随零，保留 0.45 kV、0.75 mm² 等有效名义值。已保存时保留不可用线框保存按钮，维持固定入口和键盘习惯；有未保存改动才启用实心主按钮。分层表优先给材料列宽度，尺寸、绘图外径及来源列收窄；材料名称和固定版本保持完整，可在单元格内换行。
 
 `verify-specification.mjs` 从独立“规格书演示”型号一键生成五项真实运行和双版本 PDF，调用 `tests/check-pdf.py` 检查中文字体、工程单位、空表、版本隔离、保存截面、缺项保留及客户稿无内部身份 / 哈希，并检查两页五态、两尺寸、两主题与文档修订。演示参数明示保存，未伪造工厂实测数据；未实现的完整阻抗、故障分流和标准规则仍阻止发布。版式参考受控样本 Nexans XKDT 第 1–2 页、Prysmian N2XS2Y 第 1 页、正泰电缆手册第 21 页；仅参考信息组织，不复制品牌、认证或产品数值。
 

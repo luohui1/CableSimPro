@@ -19,7 +19,7 @@
 .cad-cut-handle rect{fill:var(--panel);stroke:var(--border);rx:var(--radius-input)}
 .cad-cut-handle path{fill:none;stroke:var(--text);stroke-width:1.5}
 .cad-cut-handle:focus-visible rect{stroke:var(--text);stroke-width:2}
-.cad-tools{position:absolute;left:var(--space-3);bottom:var(--space-3);z-index:3;display:flex;align-items:center;gap:var(--space-1);padding:var(--space-1);background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-item);max-width:calc(100% - var(--space-6));flex-wrap:wrap}
+.cad-tools{position:relative;flex:none;z-index:3;display:flex;align-items:center;gap:var(--space-1);padding:var(--space-2) var(--space-3);background:var(--panel);border-top:1px solid var(--border);flex-wrap:wrap}
 .cad-tools .select-field{flex-direction:row;align-items:center;gap:var(--space-2)}
 .cad-tools .select-field>label{position:absolute;clip-path:inset(50%);width:1px;height:1px;overflow:hidden}
 .cad-tools .select-trigger{min-width:calc(var(--space-12)*2);height:var(--control-compact)}
@@ -52,3 +52,15 @@
 .cad-canvas-host canvas[data-measure-mode=point]{cursor:crosshair}
 .cad-viewport[data-cad-exporting=true] .cad-canvas-host{pointer-events:none}
 .cad-temperature-slice[data-cad-field-ready=false]{visibility:hidden}
+.cad-layer-list{position:absolute;inset:0 auto 0 0;width:calc(var(--space-12)*4);overflow:auto;border-right:1px solid var(--line);padding:var(--space-2);background:var(--panel);z-index:2}
+.cad-layer-list>button{display:grid;gap:var(--space-1);height:auto;width:100%;padding:var(--space-2);text-align:left;white-space:normal;justify-content:start;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.cad-layer-list>button>span:nth-child(2){color:var(--text-secondary)}
+.cad-layer-list>button[aria-pressed=true]{background:var(--hover);box-shadow:inset var(--space-1) 0 var(--text);font-weight:var(--weight-strong)}
+.cad-stage[data-layer-legend=true]>.cad-canvas-host{left:calc(var(--space-12)*4)}
+.cad-stage[data-layer-legend=true]>.cad-overlay{left:calc(var(--space-12)*4);width:calc(100% - var(--space-12)*4)}
+.cad-viewport{min-height:0}
+.cad-stage{min-height:0}
+.cad-field-notice{white-space:normal;overflow:visible;text-overflow:clip}
+.cad-result-status{position:static;flex:none;max-width:none;border:0;border-bottom:1px solid var(--line);border-radius:var(--radius-input);padding:var(--space-1) var(--space-3)}
+.cad-tools{flex-wrap:nowrap;overflow-x:auto}
+.cad-tools>*{flex-shrink:0}

@@ -6,6 +6,8 @@ import { SourceBadge } from '@/components/source-badge';
 import { StatusMark } from '@/components/status-mark';
 import { EmptyState, ErrorState, LoadingState, StaleBanner } from '@/components/states';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Dialog } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/select';
 import { CableSection } from '@/features/drawing/cable-section';
@@ -93,7 +95,7 @@ export function TypeComparison({ tab }: { tab: string }) {
     <div className="type-result-toolbar"><Button variant={target ? 'secondary' : 'primary'} size="compact" disabled={!canBranch || busy} onClick={() => { request.current = ''; setOpen(true); setName(''); setError(''); }}>建立方案</Button>
       {!!candidates.length && <><Select label="采纳方案" value={target?.workspace || ''} options={candidates.map(item => ({value:item.workspace,label:cleanLabel(item.name)}))} disabled={busy} onChange={setCandidate} /><Button variant="primary" size="compact" disabled={!canBranch || busy} onClick={() => { request.current = crypto.randomUUID(); setAck(false); setError(''); setAdopting(true); }}>采纳为新版本草稿</Button></>}
       {adopted && <><StatusMark kind="draft" label="新版本草稿" /><Button size="compact" onClick={() => navigate(typePath(adopted.workspace, 'specification', 'content', location.theme))}>打开新草稿规格书</Button></>}
-      {items.map(item => <label key={item.workspace}><input type="checkbox" aria-label={'对比 ' + item.name} checked={variants.includes(item)} disabled={!variants.includes(item) && variants.length >= 4} onChange={event => setChosen(event.target.checked ? [...variants.map(item => item.workspace), item.workspace] : variants.filter(value => value.workspace !== item.workspace).map(item => item.workspace))} /> <span title={'输入修订 ' + item.revision}>{cleanLabel(item.name)}</span></label>)}</div>
+      {items.map(item => <label className="type-check-label" key={item.workspace}><Checkbox aria-label={'对比 ' + item.name} checked={variants.includes(item)} disabled={!variants.includes(item) && variants.length >= 4} onCheckedChange={checked => setChosen(checked===true ? [...variants.map(item => item.workspace), item.workspace] : variants.filter(value => value.workspace !== item.workspace).map(item => item.workspace))} /> <span title={'输入修订 ' + item.revision}>{cleanLabel(item.name)}</span></label>)}</div>
     {error && !open && !adopting && <p role="alert" className="field-error">{error}</p>}
     {query.isPending ? <LoadingState title="正在读取型号方案与保存证据" /> : query.error ? <ErrorState title="方案对比不可用" description={message(query.error)} action={<Button onClick={() => void query.refetch()}>重新读取</Button>} /> : items.length < 2 ? <EmptyState title="尚无可比较的方案" description="基于当前已保存型号建立独立方案。" /> : !variants.length ? <EmptyState title="请选择对比方案" description="最多同时比较四个已保存方案。" /> : <>
       {history && <StaleBanner description="标为历史的指标保留原运行条件；各方案来源可逐项核对。" />}
@@ -119,7 +121,7 @@ export function TypeComparison({ tab }: { tab: string }) {
       ]} />}
       </div>
     </>}
-    <Dialog open={open} onOpenChange={value => { if (!busy) setOpen(value); }} title="建立独立型号方案" description="从当前已保存版本分支；计算结果不会转成新方案的当前结果。" actions={<Button variant="primary" disabled={!name.trim()} loading={busy} onClick={() => void branch()}>建立方案</Button>}><label className="type-form-label">方案名称<input value={name} maxLength={80} onChange={event => { setName(event.target.value); request.current = ''; }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void branch(); } }} /></label>{error && <p className="field-error" role="alert">{error}</p>}</Dialog>
-    <Dialog open={adopting} onOpenChange={value => {if(!busy)setAdopting(value);}} title="采纳为新版本草稿" description={`${cleanLabel(target?.name || '')}；输入与保存结果保持对应，缺项和未覆盖项随草稿保留。`} actions={<Button variant="primary" disabled={!ack} loading={busy} onClick={() => void adopt()}>确认采纳</Button>}><label><input type="checkbox" checked={ack} disabled={busy} onChange={event => setAck(event.target.checked)} /> 已核对方案、全部要求与保存结果；采纳不代表批准或发布</label>{error && <p role="alert" className="field-error">{error}</p>}</Dialog>
+    <Dialog open={open} onOpenChange={value => { if (!busy) setOpen(value); }} title="建立独立型号方案" description="从当前已保存版本分支；计算结果不会转成新方案的当前结果。" actions={<Button variant="primary" disabled={!name.trim()} loading={busy} onClick={() => void branch()}>建立方案</Button>}><label className="type-form-label">方案名称<Input value={name} maxLength={80} onChange={event => { setName(event.target.value); request.current = ''; }} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); void branch(); } }} /></label>{error && <p className="field-error" role="alert">{error}</p>}</Dialog>
+    <Dialog open={adopting} onOpenChange={value => {if(!busy)setAdopting(value);}} title="采纳为新版本草稿" description={`${cleanLabel(target?.name || '')}；输入与保存结果保持对应，缺项和未覆盖项随草稿保留。`} actions={<Button variant="primary" disabled={!ack} loading={busy} onClick={() => void adopt()}>确认采纳</Button>}><label className="type-check-label"><Checkbox aria-label="已核对方案、全部要求与保存结果" checked={ack} disabled={busy} onCheckedChange={value => setAck(value===true)} /> 已核对方案、全部要求与保存结果；采纳不代表批准或发布</label>{error && <p role="alert" className="field-error">{error}</p>}</Dialog>
   </div>;
 }

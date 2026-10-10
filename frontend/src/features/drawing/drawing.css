@@ -82,3 +82,16 @@
 .drawing-limit-mark{fill:var(--text)}
 .composition-gallery .canvas-gallery-stage{width:min(100%,calc(var(--space-12)*18));height:calc(var(--space-12)*9);flex:none;align-self:center}
 .composition-gallery[data-height=compact] .canvas-gallery-stage{height:calc(var(--space-12)*6)}
+.drawing-frame{min-height:0}
+.drawing-stage{min-height:0}
+.drawing-frame>.drawing-toolbar,.workbench-canvas .laying-section>.drawing-toolbar{position:static;inset:auto;flex-wrap:nowrap;overflow-x:auto;flex-shrink:0;max-width:100%;background:var(--panel)}
+.drawing-toolbar>*{flex-shrink:0}
+.drawing-toolbar .what-if-toolbar{display:contents}
+.drawing-status{flex-wrap:nowrap;overflow:auto;white-space:nowrap;flex-shrink:0;padding-block:var(--space-1)}
+.drawing-selection{stroke-width:3;stroke:var(--brand-primary);vector-effect:non-scaling-stroke}
+.drawing-ring.is-selected{stroke-width:3;stroke:var(--brand-primary);vector-effect:non-scaling-stroke}
+.drawing-selected-label{max-width:none;white-space:normal;overflow:visible}
+.drawing-compact-layers{position:absolute;inset:0 0 0 auto;width:calc(var(--space-12)*4.5);overflow:auto;display:flex;flex-direction:column;border-left:1px solid var(--line);background:var(--panel)}
+.drawing-compact-layers .button{height:auto;min-height:var(--space-8);display:flex;align-items:flex-start;flex-direction:column;text-align:left;white-space:normal;border-radius:var(--radius-item);flex-shrink:0}
+.drawing-layer-detail,.drawing-result-reference,.drawing-compact-reference{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-1) var(--space-2);border-top:1px solid var(--line);flex-shrink:0;overflow:auto;white-space:nowrap;font-variant-numeric:tabular-nums}
+.drawing-temperature-ramp{display:inline-block;width:calc(var(--space-12)*3);height:var(--space-3);flex-shrink:0}

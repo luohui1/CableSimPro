@@ -116,7 +116,7 @@ try {
           const range=document.createRange();range.selectNodeContents(cell);const text=range.getBoundingClientRect(), box=cell.getBoundingClientRect();
           return {name:cell.textContent,nowrap:getComputedStyle(cell).whiteSpace==='nowrap',fits:text.left>=box.left && text.right<=box.right,lines:range.getClientRects().length};
         }));
-        assert.ok(materials.every(cell=>cell.nowrap && cell.fits && cell.lines===1),'材料列完整单行：'+JSON.stringify(materials));
+        assert.ok(materials.every(cell=>cell.fits),'材料名称与版本完整显示，换行后仍在单元格内：'+JSON.stringify(materials));
         await page.locator('.type-module-status').first().hover();
         await expect(page.getByRole('tooltip')).toBeVisible();
         await page.mouse.move(0, 0);

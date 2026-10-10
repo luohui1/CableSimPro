@@ -34,7 +34,7 @@ export function TypeQuantities({ cable }: { cable: CableType }) {
       });
     }
   } catch (failure) { error = message(failure); }
-  const current = !!saved && currentEvidence(saved.run, state.workspace?.revision, state.dirty);
+  const current = !!saved && currentEvidence(saved.run, state.workspace?.revision, state.inputDirty);
   const source = saved ? methodLabel(saved.run) + '；保存实体积分与输入快照' : '';
   const inputs = layerRows(state.document!, cable);
   function locate(layer: typeof inputs[number], field?: string) {
@@ -56,7 +56,7 @@ export function TypeQuantities({ cable }: { cable: CableType }) {
   const bodyState = running || evidence.isPending ? 'loading' : error || evidence.error ? 'error' : !saved ? 'empty' : current ? 'success' : 'historical';
   return <div className="type-page" data-type-page="quantities" data-type-state={bodyState}>
     <CommandAction><TypeRunControl channel="geometry" label="更新结构推导" onBusy={setRunning} locateIssue={reason => {
-      const layer = inputs.find(row => reason.includes('波纹层') && row.target.role === 'metallic_sheath');
+      const layer = inputs.find(row => reason.includes('波纹') && row.target.role === 'metallic_sheath');
       return layer ? <Button size="compact" onClick={() => locate(layer)}>定位金属护套</Button> : null;
     }} definition={async () => ({ title: state.document!.name + ' · 结构推导', input_source: 'domain', method: await geometryMethod(), parameters: { cable_type_id: cable.id } })} /></CommandAction>
     {saved && <div className="type-result-toolbar"><SavedRunPicker schema="cablesim.cad-model/1" /></div>}

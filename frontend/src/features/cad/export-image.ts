@@ -19,19 +19,21 @@ export async function exportCadImage(stage: HTMLElement, controller: ViewportCon
   context.fillStyle = background; context.fillRect(0, 0, width, height + footer);
   for (const element of stage.querySelectorAll<HTMLCanvasElement>('.cad-canvas-host canvas, .cad-temperature-slice')) {
     const blob = element.closest('.cad-canvas-host') && controller.capture ? await controller.capture() : captures.has(element) ? await captures.get(element)!() : await blobOf(element);
-    const bitmap = await createImageBitmap(blob); context.drawImage(bitmap, 0, 0, width, height); bitmap.close();
+    const rect = element.getBoundingClientRect(), origin = stage.getBoundingClientRect();
+    const bitmap = await createImageBitmap(blob); context.drawImage(bitmap, rect.left - origin.left, rect.top - origin.top, rect.width, rect.height); bitmap.close();
   }
   // SVG overlays retain readable screen-sized dimensions and carry resolved theme styles into PNG.
   for (const element of stage.querySelectorAll<SVGSVGElement>('svg.cad-overlay')) {
     const clone = element.cloneNode(true) as SVGSVGElement;
-    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); clone.setAttribute('width', String(width)); clone.setAttribute('height', String(height));
+    const rect = element.getBoundingClientRect(), origin = stage.getBoundingClientRect();
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg'); clone.setAttribute('width', String(rect.width)); clone.setAttribute('height', String(rect.height));
     const originals = [element, ...element.querySelectorAll('*')], copies = [clone, ...clone.querySelectorAll('*')];
     originals.forEach((node, i) => {
       const style = getComputedStyle(node);
       for (const key of ['fill', 'stroke', 'stroke-width', 'font-family', 'font-size', 'font-weight', 'font-variant-numeric', 'paint-order', 'text-anchor']) copies[i].setAttribute(key, style.getPropertyValue(key));
     });
     const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' }));
-    try { const image = new Image(); image.src = url; await image.decode(); context.drawImage(image, 0, 0, width, height); } finally { URL.revokeObjectURL(url); }
+    try { const image = new Image(); image.src = url; await image.decode(); context.drawImage(image, rect.left - origin.left, rect.top - origin.top, rect.width, rect.height); } finally { URL.revokeObjectURL(url); }
   }
   const p = controller.project(0, 0, 0), axes = [[1000, 0, 0], [0, 1000, 0], [0, 0, 1000]].map(([x, y, z]) => controller.project(x, y, z));
   const scaleMmPerPixel = 1000 / Math.hypot(...axes.map(a => a.x - p.x));
@@ -39,13 +41,16 @@ export async function exportCadImage(stage: HTMLElement, controller: ViewportCon
   const target = scaleMmPerPixel * Math.min(120, width / 4), power = 10 ** Math.floor(Math.log10(target)), n = target / power;
   const scaleMm = (n >= 5 ? 5 : n >= 2 ? 2 : 1) * power, length = scaleMm / scaleMmPerPixel;
   context.font = `${tokens.getPropertyValue('--text-note').trim()} ${tokens.getPropertyValue('--font-ui') || 'sans-serif'}`; context.fillStyle = foreground; context.strokeStyle = foreground; context.lineWidth = 1;
+  const legend = stage.querySelector<HTMLElement>('.cad-layer-list');
+  if (legend) { context.save(); context.beginPath(); context.rect(0,0,legend.clientWidth,height); context.clip();
+    for (const label of legend.querySelectorAll('button>span')) { const rect=label.getBoundingClientRect(),origin=stage.getBoundingClientRect(); context.fillText(label.textContent || '',rect.left-origin.left,rect.top-origin.top+13,rect.width); } context.restore(); }
   context.fillRect(0, height, width, footer);
   context.fillStyle = background; context.fillRect(0, height + 1, width, footer - 1); context.fillStyle = foreground;
   const y = height + 22; context.beginPath(); context.moveTo(16, y - 4); context.lineTo(16, y + 4); context.moveTo(16, y); context.lineTo(16 + length, y); context.lineTo(16 + length, y + 4); context.stroke();
   context.fillText(`${scaleMm.toLocaleString()} mm`, 16, y + 22);
   const names = { iso: '轴测', front: '正视', end: '截面', top: '俯视', free: '自由视角' };
   context.fillText(`${names[camera.view]} · 方位 ${(camera.heading * 180 / Math.PI).toFixed(1)}° · 仰角 ${(camera.elevation * 180 / Math.PI).toFixed(1)}° · 展示段 ${geometry.length_m} m`, Math.max(160, length + 40), y);
-  context.fillText(thermal ? `${thermal.kind === 'difference' ? '有限元 − IEC · 温差 K' : thermal.kind === 'fem' ? '有限元 · °C' : thermal.kind === 'iec' ? 'IEC · °C' : '导体温度 · °C'} · 工况 ${thermal.caseId}${thermal.notice ? ` · ${thermal.notice}` : ''}` : '尚无结果 · 输入几何', Math.max(160, length + 40), y + 22);
+  context.fillText(thermal ? `${thermal.kind === 'difference' ? '温差对照 · K' : thermal.kind === 'fem' ? '数值仿真 · °C' : thermal.kind === 'iec' ? '标准计算 · °C' : '导体温度 · °C'} · 保存工况${thermal.notice ? ` · ${thermal.notice}` : ''}` : '尚无结果 · 输入几何', Math.max(160, length + 40), y + 22);
   if (refs.length) refs.forEach((reference, index) => context.fillText(reference.label || '保存运行', 16, height + 76 + index * 20, width - 32));
   else context.fillText('尺寸来自同一敷设输入；表面量测为显示网格（弦差 ≤ 0.08 mm）', 16, height + 76, width - 32);
   let inputSha256 = geometry.input_sha256;

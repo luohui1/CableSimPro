@@ -81,7 +81,7 @@ class InputSceneController implements ViewportController {
   }
   private schedule() { if (!this.frame) this.frame = requestAnimationFrame(() => { this.frame = 0; this.draw(); }); }
   private async beginMove(drag: NonNullable<InputSceneController['drag']>) {
-    drag.pending = true; drag.matrix = this.matrix.slice(); drag.bounds = this.scene?.crop_bounds_m.slice();
+    drag.pending = true; drag.matrix = this.matrix.slice(); drag.bounds = this.viewBounds().slice();
     const box = this.canvas.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
     try {
       const { id } = await this.worker.request('pick', { x: Math.floor((drag.startX - box.left) * dpr), y: Math.floor((box.bottom - drag.startY) * dpr) }) as { id?: string };
@@ -102,8 +102,14 @@ class InputSceneController implements ViewportController {
       deltaZM: (m[0] * dy - m[1] * dx) / determinant / 1000, phase });
   }
   private cancelMove() { const drag = this.drag; this.drag = null; cancelAnimationFrame(this.moveFrame); this.moveFrame = 0; if (drag?.object) this.moveObject(drag, 'cancel'); }
+  private viewBounds() {
+    const scene=this.scene!;
+    if(this.host.clientHeight>=220)return scene.crop_bounds_m;
+    const objects=scene.objects.filter(o=>o.kind==='cable'||o.kind==='enclosure');
+    return objects.length?[0,1,2].map(i=>Math.min(...objects.map(o=>o.bounds_m[i]))).concat([3,4,5].map(i=>Math.max(...objects.map(o=>o.bounds_m[i])))):scene.crop_bounds_m;
+  }
   private projection() {
-    const bounds = (this.drag?.object && this.drag.bounds || this.scene!.crop_bounds_m).map(v => v * 1000), center = [0, 1, 2].map(i => (bounds[i] + bounds[i + 3]) / 2);
+    const bounds = (this.drag?.object && this.drag.bounds || this.viewBounds()).map(v => v * 1000), center = [0, 1, 2].map(i => (bounds[i] + bounds[i + 3]) / 2);
     this.pose.elevation = clamp(this.pose.elevation, -.7, Math.PI / 2); this.pose.zoom = clamp(this.pose.zoom, .65, 3);
     this.pose.panX = clamp(this.pose.panX, -.4, .4); this.pose.panY = clamp(this.pose.panY, -.4, .4);
     const c = Math.cos(this.pose.heading), s = Math.sin(this.pose.heading), e = Math.sin(this.pose.elevation), f = Math.cos(this.pose.elevation);

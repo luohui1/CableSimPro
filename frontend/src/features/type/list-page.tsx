@@ -7,6 +7,7 @@ import { InlineEmpty, ErrorState, LoadingState } from '@/components/states';
 import { StatusMark } from '@/components/status-mark';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { listTypes } from './api';
 import { CreateTypeDialog } from './create-dialog';
@@ -27,7 +28,7 @@ export function TypeListPage() {
   return <CatalogShell title="型号设计" status={<span className="muted">{types.data?.length ?? 0} 项</span>}
     property={current ? <DesignCard document={current.document} raw={current.raw} onClose={() => setPicked('')} /> : undefined}
     actions={<Button variant="primary" onClick={() => setOpen(true)}>新建型号</Button>}>
-    <div className="type-list-toolbar" role="group" aria-label="型号目录筛选"><label htmlFor="type-search">查找型号</label><input id="type-search" value={filter} onChange={event => setFilter(event.target.value)} placeholder="型号名称" type="search" />
+    <div className="type-list-toolbar" role="group" aria-label="型号目录筛选"><label htmlFor="type-search">查找型号</label><Input id="type-search" value={filter} onChange={event => setFilter(event.target.value)} placeholder="型号名称" type="search" />
       <ToggleGroup type="single" value={statusFilter} onValueChange={value => { if (value) setStatusFilter(value); }} aria-label="发布状态"><ToggleGroupItem value="all">全部</ToggleGroupItem>{Object.entries(publicationLabels).map(([value, label]) => <ToggleGroupItem key={value} value={value}>{label}</ToggleGroupItem>)}</ToggleGroup>
       <Select label="分组" value={groupBy} onChange={setGroupBy} options={[{ value: 'status', label: '按状态' }, { value: 'none', label: '不分组' }]} />
     </div>

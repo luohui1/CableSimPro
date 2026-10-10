@@ -100,12 +100,12 @@ export function useSavedFieldControls(run: Record<string, unknown> | undefined, 
   } });
   const delta = useQuery({ queryKey: ['cad-field-difference', pair.data], enabled: mode === 'difference' && !!pair.data, retry: false, queryFn: ({ signal }) => difference(pair.data!.fem, pair.data!.iec, signal) });
   const thermal = mode === 'difference' ? delta.data : mode === 'iec' ? pair.data?.iec : mode === 'fem' ? pair.data?.fem : active ? pair.data?.[active.kind] : undefined;
-  const reason = !enabled ? '' : candidates.error ? message(candidates.error) : candidates.isPending ? '读取对照运行' : !candidates.data?.length ? `尚无${active!.kind === 'fem' ? ' IEC' : '有限元'}保存场；差值未覆盖` : pair.error ? message(pair.error) : pair.isPending ? '核对同工况保存场' : mode === 'difference' && delta.error ? message(delta.error) : mode === 'difference' && delta.isPending ? '生成差值切片' : '';
+  const reason = !enabled ? '' : candidates.error ? message(candidates.error) : candidates.isPending ? '读取对照运行' : !candidates.data?.length ? '尚无另一种方法的温度结果' : pair.error ? message(pair.error) : pair.isPending ? '核对同工况保存场' : mode === 'difference' && delta.error ? message(delta.error) : mode === 'difference' && delta.isPending ? '生成差值切片' : '';
   const controls = enabled ? <>
     <Select label="三维温度场" value={mode === 'current' ? active!.kind : mode} onChange={value => setMode(value as typeof mode)} options={[
-      { value: 'iec', label: 'IEC', disabled: !pair.data && active!.kind !== 'iec' }, { value: 'fem', label: '有限元', disabled: !pair.data && active!.kind !== 'fem' }, { value: 'difference', label: '有限元 − IEC', disabled: !pair.data },
+      { value: 'iec', label: '标准计算', disabled: !pair.data && active!.kind !== 'iec' }, { value: 'fem', label: '数值仿真', disabled: !pair.data && active!.kind !== 'fem' }, { value: 'difference', label: '温差对照', disabled: !pair.data },
     ]} />
-    {!!candidates.data?.length && <Select label={active!.kind === 'fem' ? 'IEC 参考运行' : '有限元参考运行'} value={selected || pair.data?.referenceId || 'auto'} onChange={setSelected} options={[{ value: 'auto', label: '最新同工况' }, ...candidates.data.map(c => ({ value: c.id, label: c.label }))]} />}
+    {!!candidates.data?.length && <Select label={active!.kind === 'fem' ? '标准计算参考运行' : '数值仿真参考运行'} value={selected || pair.data?.referenceId || 'auto'} onChange={setSelected} options={[{ value: 'auto', label: '最新同工况' }, ...candidates.data.map(c => ({ value: c.id, label: c.label }))]} />}
     {reason && <span className="cad-field-notice" role="status" title={reason}>{reason}</span>}
     {!!(candidates.error || pair.error || delta.error) && <Button size="compact" onClick={() => { void candidates.refetch(); if (candidates.data?.length) void pair.refetch(); if (mode === 'difference' && pair.data) void delta.refetch(); }}>重试对照</Button>}
   </> : undefined;

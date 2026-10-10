@@ -4,8 +4,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, array, message, numeric, optionalRecord, record, responseData, text } from '@/api/client';
 import type { components } from '@/api/generated/schema';
 import { DataTable } from '@/components/data-table';
-import { EmptyState, ErrorState, LoadingState, StaleBanner } from '@/components/states';
+import { InlineEmpty, ErrorState, LoadingState, StaleBanner } from '@/components/states';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
 import { Dialog } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/select';
 import { StatusMark, type StatusKind } from '@/components/status-mark';
@@ -28,7 +30,7 @@ export function TypeRequirements({ tab }: { tab: string }) {
   const request = useRef<components['schemas']['ReviewRequirements'] | null>(null);
   let saved: ReturnType<typeof chooseEvidence> = null, parseError = '';
   try { saved = chooseEvidence(evidence.data, 'cablesim.standard-check/1', navigation.location.run, navigation.location.revision); } catch (error) { parseError = message(error); }
-  const runId = text(saved?.run.id), current = !!saved && currentEvidence(saved.run, state.workspace?.revision, state.dirty) && !state.readOnly;
+  const runId = text(saved?.run.id), current = !!saved && currentEvidence(saved.run, state.workspace?.revision, state.inputDirty || !!state.methodDrafts['standard-check']) && !state.readOnly;
   const ledger = useQuery({ queryKey: ['type-requirements', state.workspace!.id, runId], enabled: !!runId,
     queryFn: async ({ signal }) => record(await responseData(api.GET('/api/design/type-workspaces/{wid}/requirements', { params: { path: { wid: state.workspace!.id }, query: { run_id: runId } }, signal })), '要求目录') });
   useEffect(() => { setSelected(new Set()); setPicked(''); setAck(false); request.current = null; }, [runId]);
@@ -65,11 +67,11 @@ export function TypeRequirements({ tab }: { tab: string }) {
       {saved && tab === 'list' && <Select label="批准状态" value={filter} onChange={setFilter} options={[{ value: 'all', label: '全部要求' }, ...Object.entries(states).map(([value, item]) => ({ value, label: item.label }))]} />}
     </div>
     {tab === 'standards' && <><ResourceBindings role="standard" /><DeclaredStandardReferences /></>}
-    {bodyState === 'loading' ? <LoadingState title="正在读取或更新要求目录" /> : bodyState === 'error' ? <ErrorState title="要求目录不可用" description={parseError || message(evidence.error || ledger.error)} action={<Button onClick={() => void Promise.all([evidence.refetch(), runId ? ledger.refetch() : Promise.resolve()])}>重新读取</Button>} /> : !saved ? <EmptyState title="尚无要求目录" description="保存型号后生成条款，再核对来源与批准状态。" /> : <>
+    {bodyState === 'loading' ? <LoadingState title="正在读取或更新要求目录" /> : bodyState === 'error' ? <ErrorState title="要求目录不可用" description={parseError || message(evidence.error || ledger.error)} action={<Button onClick={() => void Promise.all([evidence.refetch(), runId ? ledger.refetch() : Promise.resolve()])}>重新读取</Button>} /> : !saved ? <InlineEmpty title={tab==='standards'?'尚无标准核对记录；使用命令栏核对已声明标准。':'尚无要求目录；使用命令栏生成要求，再核对来源。'} /> : <>
       {!current && <StaleBanner description="当前显示历史要求；重新核对后才能批准。" />}
       <div className="type-result-summary"><strong>{rows.length} 项要求</strong><span>{numeric(ledger.data?.approved_count) || 0} 项已批准</span><span>{selected.size} 项已选</span></div>
-      {tab === 'standards' ? <DataTable label="执行标准" showGroups={false} rowLabel={row => text(row.name)} groups={[{ id: 'standards', label: '标准', rows: standards }]} columns={[{ id: 'name', label: '标准及版本', render: row => text(row.name) }, { id: 'clauses', label: '覆盖条款', wrap: true, render: row => [...row.clauses as Set<string>].join('；') }, { id: 'source', label: '来源', render: row => row.verified ? '原文已核验' : '待核验' }, { id: 'resource', label: '资源版本', render: row => <StandardResourceCell reference={row.resource_reference} /> }]} /> : <DataTable label="要求清单" selectedId={picked} onSelect={choose} rowLabel={row => text(optionalRecord(row.definition).title)} showGroups={false} groups={[{ id: 'requirements', label: '要求', rows: visible }]} columns={[
-        { id: 'select', label: '选择', render: row => <input type="checkbox" aria-label={'选择' + text(optionalRecord(row.definition).title)} checked={selected.has(text(row.row_id))} disabled={!eligible(row) || approve.isPending} onChange={event => { setSelected(previous => { const next = new Set(previous); if (event.target.checked) next.add(text(row.row_id)); else next.delete(text(row.row_id)); return next; }); request.current = null; }} /> },
+      {tab === 'standards' ? <DataTable label="执行标准" showGroups={false} rowLabel={row => text(row.name)} groups={[{ id: 'standards', label: '标准', rows: standards }]} columns={[{ id: 'name', label: '标准及版本', render: row => text(row.name) }, { id: 'clauses', label: '覆盖条款', wrap: true, render: row => [...row.clauses as Set<string>].join('；') }, { id: 'source', label: '来源', render: row => row.verified ? '原文已核验' : '待核验' }, { id: 'resource', label: '资源版本', render: row => <StandardResourceCell reference={row.resource_reference} /> }]} /> : !visible.length?<InlineEmpty title={tab==='pending'?'没有待批准的要求。':'没有匹配的要求；请调整筛选。'} />:<DataTable label="要求清单" selectedId={picked} onSelect={choose} rowLabel={row => text(optionalRecord(row.definition).title)} showGroups={false} groups={[{ id: 'requirements', label: '要求', rows: visible }]} columns={[
+        { id: 'select', label: '选择', render: row => <Checkbox aria-label={'选择' + text(optionalRecord(row.definition).title)} checked={selected.has(text(row.row_id))} disabled={!eligible(row) || approve.isPending} onCheckedChange={checked => { setSelected(previous => { const next = new Set(previous); if (checked===true) next.add(text(row.row_id)); else next.delete(text(row.row_id)); return next; }); request.current = null; }} /> },
         { id: 'title', label: '要求', wrap: true, render: row => text(optionalRecord(row.definition).title) }, { id: 'clause', label: '标准 / 条款', wrap: true, render: row => [text(optionalRecord(row.definition).standard), text(optionalRecord(row.definition).clause)].filter(Boolean).join(' · ') },
         { id: 'limit', label: '要求值', numeric: true, render: row => { const definition = optionalRecord(row.definition), value = numeric(definition.limit); return value === null ? '未定义' : formatNumber(value, 3) + (definition.unit === '1' ? '' : ' ' + text(definition.unit)); } },
         { id: 'state', label: '批准状态', render: row => <StatusMark {...states[text(row.state)]} /> },
@@ -77,7 +79,7 @@ export function TypeRequirements({ tab }: { tab: string }) {
       {Array.isArray(saved.artifact.not_applicable) && saved.artifact.not_applicable.length > 0 && <details><summary>不适用条款</summary>{array(saved.artifact.not_applicable).map((value, index) => { const row = optionalRecord(value); return <p key={index}>{text(row.title)}：{text(row.reason)}</p>; })}</details>}
     </>}
     <Dialog open={open} onOpenChange={value => { if (!approve.isPending) setOpen(value); }} title="批准所选要求" description="确认来源与判定绑定；此操作不批准计算结果或发布型号。" initialFocus="form" actions={<Button variant="primary" disabled={!current || !ack || !reviewer.trim() || !selected.size} loading={approve.isPending} onClick={() => approve.mutate()}>批准所选要求</Button>}>
-      <div className="type-create-fields"><label className="type-form-label">审批人<input className="type-name-input" value={reviewer} disabled={approve.isPending} maxLength={120} onChange={event => { setReviewer(event.target.value); request.current = null; }} /></label><label><input type="checkbox" checked={ack} disabled={!current || approve.isPending} onChange={event => setAck(event.target.checked)} /> 本人已核对所选要求的来源和判定绑定</label></div>{approve.error && <p className="field-error" role="alert">{message(approve.error)}</p>}
+      <div className="type-create-fields"><label className="type-form-label">审批人<Input className="type-name-input" value={reviewer} disabled={approve.isPending} maxLength={120} onChange={event => { setReviewer(event.target.value); request.current = null; }} /></label><label className="type-check-label"><Checkbox aria-label="本人已核对所选要求的来源和判定绑定" checked={ack} disabled={!current || approve.isPending} onCheckedChange={checked => setAck(checked===true)} /> 本人已核对所选要求的来源和判定绑定</label></div>{approve.error && <p className="field-error" role="alert">{message(approve.error)}</p>}
     </Dialog>
   </div>;
 }

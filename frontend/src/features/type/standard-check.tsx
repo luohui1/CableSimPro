@@ -48,7 +48,7 @@ export function TypeStandardCheck() {
       if (Object.entries(counts).some(([key, value]) => !(key in actual) || numeric(value) !== actual[key])) throw new ApiError(502, '要求统计与保存的逐行判定不一致，未给出合规结论');
     }
   } catch (failure) { error = message(failure); }
-  const current = !!saved && currentEvidence(saved.run, state.workspace?.revision, state.dirty);
+  const current = !!saved && currentEvidence(saved.run, state.workspace?.revision, state.inputDirty || !!state.methodDrafts['standard-check']);
   async function definition() {
     return standardDefinition(state.workspace!.id, state.document!.name, state.document!.cable_types[0].id, saved && current ? text(saved.run.id) : undefined);
   }

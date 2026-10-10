@@ -11,7 +11,7 @@ import { saveRating, type RatingDraft } from './rating-api';
 import { saveMethod, type MethodDraft } from './method-draft';
 import { committedParameter } from '@/lib/study-config';
 
-type TypeContextValue = { workspace?: Workspace; document?: DomainDocument; dirty: boolean; busy: boolean; loading: boolean; error: string; notice: string; readOnly: boolean; draft: DomainDraft | null;
+type TypeContextValue = { workspace?: Workspace; document?: DomainDocument; dirty: boolean; inputDirty: boolean; busy: boolean; loading: boolean; error: string; notice: string; readOnly: boolean; draft: DomainDraft | null;
   ratingDraft: RatingDraft | null; setRatingDraft: (draft: RatingDraft | null | ((current: RatingDraft | null) => RatingDraft | null)) => void;
   methodDrafts: Record<string, MethodDraft>; setMethodDraft: (module: string, draft: MethodDraft | null | ((current: MethodDraft | undefined) => MethodDraft | null)) => void;
   fieldError: { path: string; message: string } | null;
@@ -86,15 +86,15 @@ export function TypeProvider({ wid, children }: { wid: string; children: ReactNo
   async function undo() {
     setFieldError(null);
     if (pending.current || !workspace || readOnly) return;
-    if (location.module === 'electrical' || location.module === 'short-circuit') { if (methodsRef.current[location.module]) { setMethodDrafts(current => { const remaining = { ...current }; delete remaining[location.module]; methodsRef.current = remaining; return remaining; }); setError(''); setNotice('已撤销未保存方法条件'); } else setError('宿主尚未提供已保存方法配置的撤销接口'); return; }
-    if (location.module === 'rating-table') { if (ratingRef.current) { setRatingDraft(null); setError(''); setNotice('已撤销未保存工况修改'); await queries.invalidateQueries({ queryKey: ['type-studies', wid] }); } else { setError('宿主尚未提供已保存方法配置的撤销接口；型号结构保持原状'); } return; }
+    if (location.module === 'electrical' || location.module === 'short-circuit') { if (methodsRef.current[location.module]) { setMethodDrafts(current => { const remaining = { ...current }; delete remaining[location.module]; methodsRef.current = remaining; return remaining; }); setError(''); setNotice('已撤销未保存方法条件'); } else setError('已保存的方法条件不能撤销，可在方法参数中重新修改'); return; }
+    if (location.module === 'rating-table') { if (ratingRef.current) { setRatingDraft(null); setError(''); setNotice('已撤销未保存工况修改'); await queries.invalidateQueries({ queryKey: ['type-studies', wid] }); } else { setError('已保存的方法条件不能撤销，可在方法参数中重新修改；型号结构保持原状'); } return; }
     if (draftRef.current || ratingRef.current || Object.keys(methodsRef.current).length) { setDraft(null); setRatingDraft(null); setMethodDrafts({}); setError(''); setNotice('已撤销未保存修改'); return; }
     if (workspace.raw.can_undo !== true) { setError('没有可撤销的已保存型号版本'); return; }
     pending.current = true; setBusy(true); setError('');
     try { await refresh(await historyType(workspace, 'undo')); setNotice('已恢复上一份型号输入'); } catch (error) { setError(message(error)); }
     finally { pending.current = false; setBusy(false); }
   }
-  return <Context.Provider value={{ workspace, document, dirty, busy, loading: query.isPending, error: error || (query.error ? message(query.error) : ''), notice, readOnly: !!readOnly, draft,
+  return <Context.Provider value={{ workspace, document, dirty, inputDirty: !!draft, busy, loading: query.isPending, error: error || (query.error ? message(query.error) : ''), notice, readOnly: !!readOnly, draft,
     ratingDraft, methodDrafts, setMethodDraft: (module, value) => { if (!readOnly && !busy) { const next = { ...methodsRef.current }, draft = typeof value === 'function' ? value(next[module]) : value; if (draft) next[module] = draft; else delete next[module]; methodsRef.current = next; setMethodDrafts(next); setError(''); setNotice(''); setFieldError(null); } }, fieldError, setRatingDraft: value => { if (!readOnly && !busy) { const next = typeof value === 'function' ? value(ratingRef.current) : value; ratingRef.current = next; setRatingDraft(next); setError(''); setNotice(''); setFieldError(null); } },
     setField, edit, save, commitResourceValue, undo, discard: () => { setDraft(null); setRatingDraft(null); setMethodDrafts({}); setError(''); }, reload: () => { void query.refetch(); }, locked: path => !!readOnly || isLocked(workspace?.raw.locks, path) }}>{children}
     <Dialog open={blocker.status === 'blocked'} onOpenChange={open => { if (!open) blocker.reset?.(); }} title="型号有未保存修改" description="保存后再离开，或放弃本次草稿。"

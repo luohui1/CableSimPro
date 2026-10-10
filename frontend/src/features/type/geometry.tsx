@@ -11,6 +11,7 @@ import { layerRows } from './layers';
 import { chooseEvidence } from './evidence';
 import { typeEvidence } from './api';
 import { methodForArtifact } from './run-control';
+import { corrugatedDisplay, hasCorrugatedSheath } from './display-envelope';
 
 function matchesTarget(layer: CadModel['layers'][number], target: LayerTarget) {
   const source = layer.source_target;
@@ -34,6 +35,8 @@ export function TypeGeometry({ cable, selected, onSelect }: { cable: CableType; 
   const preview = useQuery({ queryKey: ['type-preview', state.workspace?.id, state.workspace?.revision, cable.id, stable], enabled: !!stable && !!state.workspace && !state.readOnly,
     queryFn: async ({ signal }) => {
       const method = await geometryMethod(signal);
+      const currentCable = stable!.cable_types.find(value => value.id === cable.id)!;
+      if (hasCorrugatedSheath(currentCable)) return { model: await corrugatedDisplay(stable!, currentCable), method };
       const result = await responseData(api.POST('/api/workspaces/{wid}/geometry-preview', { params: { path: { wid: state.workspace!.id } }, body: { expected_revision: state.workspace!.revision, document: stable!, method, parameters: { cable_type_id: cable.id, include_exact: false } }, signal }));
       if (!result || result.effect !== 'preview' || result.base_revision !== state.workspace!.revision) throw new ApiError(409, '几何预览基准与型号输入不一致');
       return { model: previewModel(result.artifacts['x-cablesim.cad-model']), method };
@@ -46,15 +49,17 @@ export function TypeGeometry({ cable, selected, onSelect }: { cable: CableType; 
         return { model: previewModel(saved.artifact), method: optionalRecord(optionalRecord(saved.run.snapshot).definition).method as components['schemas']['Method'] };
       }
       const method = await geometryMethod(signal);
+      if (hasCorrugatedSheath(cable)) return { model: await corrugatedDisplay(state.document!, cable), method };
       const result = await responseData(api.POST('/api/workspaces/{wid}/geometry-preview', { params: { path: { wid: state.workspace!.id } }, body: { expected_revision: state.workspace!.revision, document: state.document!, method, parameters: { cable_type_id: cable.id, include_exact: false } }, signal }));
       if (!result) throw new ApiError(502, '历史型号预览未返回工件'); return { model: previewModel(result.artifacts['x-cablesim.cad-model']), method };
     }, retry: false });
   const active = state.readOnly ? saved : preview;
   const rows = state.document ? layerRows(state.document, cable) : [];
   const pickedLayer = selected ? active.data?.model.layers.find(layer => matchesTarget(layer, selected)) : undefined;
-  return <CadViewport geometry={active.data?.model || null} state={active.error ? 'error' : active.isPending ? 'loading' : state.workspace?.raw.historical ? 'historical' : 'success'} error={active.error ? message(active.error) : undefined}
+  return <CadViewport geometry={active.data?.model || null} state={active.error ? 'error' : active.isPending ? 'loading' : state.workspace?.raw.historical ? 'historical' : 'success'} error={active.error ? message(active.error).replace(/core\/\d+\.layers/g, '线芯结构层') : undefined}
+    resultStatus={hasCorrugatedSheath(cable) ? '波纹按等效厚度显示' : null}
     selectedObject={pickedLayer ? { kind: 'layer', id: layerId(pickedLayer) } : null} onSelectionChange={selection => { const layer = selection ? active.data?.model.layers.find(layer => layerId(layer) === selection.id) : undefined; onSelect(layer ? rows.find(row => matchesTarget(layer, row.target))?.target || null : null); }} onRetry={() => void active.refetch()}
-    loadExact={active.data && !state.workspace?.raw.historical ? async (_model, signal) => {
+    loadExact={active.data && !hasCorrugatedSheath(cable) && !state.workspace?.raw.historical ? async (_model, signal) => {
       const result = await responseData(api.POST('/api/workspaces/{wid}/geometry-preview', { params: { path: { wid: state.workspace!.id } }, body: { expected_revision: state.workspace!.revision, document: stable!, method: active.data!.method, parameters: { cable_type_id: cable.id, include_exact: true } }, signal }));
       if (!result) throw new ApiError(502, '精确几何未返回工件'); return previewModel(result.artifacts['x-cablesim.cad-model']);
     } : undefined} />;

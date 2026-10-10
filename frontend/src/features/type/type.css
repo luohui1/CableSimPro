@@ -177,3 +177,43 @@
 .type-root .status-mark,[data-type-page=list] .status-mark,.type-design-card .status-mark{color:var(--text)}
 .type-root .type-property-wrapper .source-badge span{display:none}
 .type-root .type-property-wrapper .select-trigger>span:first-child{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.type-root .data-table[aria-label="型号分层"]{min-width:calc(var(--space-12)*11);width:100%;table-layout:fixed}
+.type-root .data-table[aria-label="型号分层"] th:first-child{width:var(--space-8)}
+.type-root .data-table[aria-label="型号分层"] th:nth-child(2){width:calc(var(--space-12)*1.8)}
+.type-root .data-table[aria-label="型号分层"] th:nth-child(3){width:calc(var(--space-12)*4)}
+.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) th:nth-child(4){width:calc(var(--space-12)*4)}
+.type-root .data-table[aria-label="型号分层"] th:last-child{width:var(--space-12)}
+.type-root .data-table[aria-label="型号分层"] td{white-space:normal;overflow-wrap:anywhere;padding:var(--space-2)}
+.type-root .type-resource-cell{flex-wrap:wrap;gap:var(--space-1)}
+.type-root .type-resource-cell .object-link{flex-basis:100%}
+.type-method-fields .number-input{min-width:calc(var(--space-12)*3.5)}
+.type-method-fields .buzzform-contract{grid-column:1/-1}
+.type-method-fields .buzzform-contract .parameter-group{display:block}
+.type-root .data-table[aria-label="型号分层"] td{height:var(--control-standard)}
+.type-root .type-resource-cell{white-space:normal;overflow-wrap:anywhere;align-items:flex-start}
+.type-root .type-resource-cell .object-link{white-space:normal;overflow:visible;text-overflow:clip;word-break:normal}
+.type-root .type-layer-input .number-input{flex-shrink:0;min-width:calc(var(--space-12)*2.75)}
+.type-root .type-layer-input>span{white-space:nowrap;flex-shrink:0}
+.type-root .explorer-item b{overflow:visible;text-overflow:clip;white-space:normal;overflow-wrap:anywhere}
+.type-root .type-name-input:is(textarea){height:auto;min-height:calc(var(--control-compact)*2);width:100%;font:inherit;padding:var(--space-2);resize:vertical;color:var(--text)}
+.type-method-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-4);padding:var(--space-4);overflow:auto;min-height:0}
+.type-method-fields>.parameter-fields{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-4)}
+.type-method-fields .parameter-field,.type-method-fields .select-field{min-width:0}
+.type-trial-results{max-height:calc(var(--space-12)*6);overflow:auto;flex:none;border-top:1px solid var(--line)}
+.type-specification-layout{display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto}
+.type-specification-layout nav{display:flex;flex-wrap:wrap;border:0;border-bottom:1px solid var(--line);gap:var(--space-1);max-height:calc(var(--space-12)*2);overflow:auto}
+.type-specification-layout nav button{width:auto;padding:var(--space-2)}
+.type-specification-layout iframe{width:100%;height:100%}
+.type-specification-checks{max-width:none;max-height:calc(var(--space-12)*2.5);border-left:0;border-top:1px solid var(--line);padding:var(--space-2) var(--space-3)}
+.type-specification-checks h2{display:none}
+.type-root .type-result-toolbar>label,.type-root .type-create-fields>label:has([role=checkbox]){display:flex;gap:var(--space-2);align-items:center}
+.type-root [role=checkbox]{flex-shrink:0}
+.type-origin-radio{display:grid;place-items:center;flex:none;width:var(--space-4);height:var(--space-4);border:1px solid var(--text-secondary);border-radius:var(--radius-pill);background:var(--panel);color:var(--text);cursor:pointer}
+.type-origin-radio>span{width:var(--space-2);height:var(--space-2);border-radius:var(--radius-pill);background:var(--text)}
+.type-origin-radio:focus-visible{outline:2px solid var(--text);outline-offset:var(--space-1)}
+.type-root .type-result-toolbar>label{white-space:normal}
+.type-root .inspector-block .text-field:has(textarea){display:grid;gap:var(--space-2);align-items:start}
+[data-type-page=list] .data-table [data-column=name] .object-link{white-space:normal;overflow:visible;text-overflow:clip}
+[data-type-page=list] .object-link{white-space:normal;overflow:visible;text-overflow:clip;color:var(--text);text-align:left}
+.type-check-label{display:flex;align-items:center;gap:var(--space-2)}
+.type-root .dialog-content .select-field,.type-root .dialog-content .number-field{margin-block:var(--space-2)}
