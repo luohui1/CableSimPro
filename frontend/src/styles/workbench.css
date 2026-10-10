@@ -140,7 +140,10 @@
 .topbar-path { display: inline-flex; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-size: var(--text-note); white-space: nowrap; flex: none; }
 
 /* 空状态：插画 + 一句标题 + 一句说明，居中 */
-.state-empty { align-items: center; text-align: center; padding-block: var(--space-12); }
+.state-empty { align-items: center; text-align: center; gap: var(--space-2); padding-block: var(--space-8); }
+.state-empty.has-art { padding-block: var(--space-12); }
+.state-empty > .icon-large { color: var(--text-secondary); }
+.state-empty h2 { font-size: var(--text-body); font-weight: var(--weight-strong); }
 .state-art { width: calc(var(--space-12) * 6); max-width: 100%; height: auto; mix-blend-mode: multiply; opacity: .9; }
 [data-theme="dark"] .state-art { mix-blend-mode: normal; filter: invert(.88) hue-rotate(180deg); opacity: .75; }
 

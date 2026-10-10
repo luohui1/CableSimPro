@@ -10,9 +10,13 @@ import { illustration } from '@/lib/illustrations';
  * 未指定时按标题区分：检索无匹配用 no-results，其余「尚无…」用 not-run。
  */
 export type EmptyArt = 'not-run' | 'no-results' | 'queued' | 'missing-data' | 'plugin' | 'report' | 'simulation' | 'standard-check';
+/**
+ * 空状态：图标、一句标题、怎么继续、下一步按钮。默认不配大插图——同一张插图在十几个页面重复、
+ * 和内容无关还占半屏（实测 2026-10-09）；只有整页级的空状态才显式传 art。
+ */
 export function EmptyState({ title = '尚无选型结果', description = '选择候选型号后运行选型。', action, art }: { title?: string; description?: string; action?: ReactNode; art?: EmptyArt }) {
-  const src = illustration('empty-' + (art || (/^(没有匹配|未找到)/.test(title) ? 'no-results' : 'not-run')));
-  return <div className="state-view state-empty">{src ? <img className="state-art" src={src} alt="" /> : <Icon name="result/table" className="icon-large" />}<h2>{title}</h2>{description && <p className="muted">{description}</p>}{action}</div>;
+  const src = art ? illustration('empty-' + art) : null;
+  return <div className={`state-view state-empty ${src ? 'has-art' : ''}`}>{src ? <img className="state-art" src={src} alt="" /> : <Icon name={/^(没有匹配|未找到)/.test(title) ? 'action/search' : 'status/info'} className="icon-large" />}<h2>{displayText(title)}</h2>{description && <p className="muted">{displayText(description)}</p>}{action}</div>;
 }
 /** 行内空状态（FRONTEND_REQUIREMENTS §2.4）：一行原因加一个下一步按钮，放在内容区顶部，不配大插图。 */
 export function InlineEmpty({ title, action }: { title: string; action?: ReactNode }) {
