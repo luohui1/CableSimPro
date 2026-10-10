@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { studyIndex, typeIndex, workspaces } from '@/api/research';
@@ -19,6 +19,9 @@ type Slot = (element: HTMLElement | null) => void;
  * 常驻侧栏，按对象类别排（FRONTEND_REQUIREMENTS §2.3）：首页 · 工作（工程、型号设计）· 资源 · 记录 · 方法。
  * 工作台里也保持展开；工程内部的模型、研究、交付在工作窗口左侧的工程浏览器中。
  */
+const LAST_KEY = 'cablesim.last-workbench';
+const rememberWorkbench = (href: string) => { try { window.sessionStorage.setItem(LAST_KEY, href); } catch { /* 无痕窗口：不记 */ } };
+const lastWorkbench = () => { try { return window.sessionStorage.getItem(LAST_KEY); } catch { return null; } };
 const SHOWN = 3;
 /** 侧栏里每类只列前几个；当前打开的那个不在前几个里时替换最后一个。 */
 function recent<T>(rows: T[], active: (row: T) => boolean): T[] {
@@ -33,7 +36,15 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
   const search = useSearch({ strict: false }) as { workspace?: string };
   const pathname = useLocation({ select: location => location.pathname });
   const mode = pathname.startsWith('/agent') ? 'agent' : 'workbench';
-  const setMode = (next: string) => { if (next !== mode) void navigate({ to: next === 'agent' ? '/agent' : '/studies', search: { theme } }); };
+  // 从 Agent 切回工作台时回到离开前的页面，而不是每次落到研究列表
+  const href = useLocation({ select: location => location.href });
+  useEffect(() => { if (mode === 'workbench') rememberWorkbench(href); }, [mode, href]);
+  const setMode = (next: string) => {
+    if (next === mode) return;
+    const back = next === 'workbench' ? lastWorkbench() : null;
+    if (back) void navigate({ href: back });
+    else void navigate({ to: next === 'agent' ? '/agent' : '/studies', search: { theme } });
+  };
   const spaces = useQuery({ queryKey: ['workspace-index'], queryFn: ({ signal }) => workspaces(signal) });
   const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal) });
   // 全库研究列表（只用于各工程的研究数）和待办数在浏览器空闲后再读，不和页面首屏抢宿主；
@@ -69,10 +80,10 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
       </DropdownMenuContent>
     </DropdownMenu>
     <nav className="sidebar-scroll" aria-label="对象">
-      <Link className="module-item" to="/" search={{ theme }} activeOptions={{ exact: true }}><Icon name="nav/home" /><span>首页</span></Link>
-      <Link className="module-item" to="/inbox" search={{ theme }}><Icon name="status/pending" /><span>待办</span>{!!todo && <span className="sidebar-count">{todo}</span>}</Link>
+      <Link className="module-item" to="/" search={{ theme }} activeOptions={{ exact: true }} title="首页"><Icon name="nav/home" /><span>首页</span></Link>
+      <Link className="module-item" to="/inbox" search={{ theme }} title="待办"><Icon name="status/pending" /><span>待办</span>{!!todo && <span className="sidebar-count">{todo}</span>}</Link>
       <div className="tree-caption">工作</div>
-      <Link className="module-item" to="/studies" search={{ theme }} activeOptions={{ exact: true }}><Icon name="object/folder" /><span>工程</span></Link>
+      <Link className="module-item" to="/studies" search={{ theme }} activeOptions={{ exact: true }} title="工程"><Icon name="object/folder" /><span>工程</span></Link>
       {spaces.isPending ? <div className="tree-empty">读取中</div> : spaces.isError ? <div className="tree-empty">工程读取失败</div> : <>
         {/* 只列最近几个，当前打开的始终在列；其余到列表页找，侧栏不随数量无限变长 */}
         {recent(projects, (project) => text(project.id) === activeProject).map(project => {
@@ -83,7 +94,7 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
         })}
         {projects.length > SHOWN && <Link className="tree-row tree-more" to="/studies" search={{ theme }}>全部 {projects.length} 个工程</Link>}
       </>}
-      <Link className="module-item" to="/types" search={{ theme }} activeOptions={{ exact: true }}><Icon name="nav/cable-type" /><span>型号设计</span></Link>
+      <Link className="module-item" to="/types" search={{ theme }} activeOptions={{ exact: true }} title="型号设计"><Icon name="nav/cable-type" /><span>型号设计</span></Link>
       {recent(types.data || [], (row) => text(row.id) === activeType).map(row => {
         const wid = text(row.id);
         return <Link key={wid} className="tree-row tree-object" to="/types/$wid/$module/$tab" params={{ wid, module: 'structure', tab: 'table' }} search={{ theme }} aria-current={wid === activeType ? 'page' : undefined} title={text(row.name)}>
@@ -92,16 +103,16 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
       })}
       {(types.data || []).length > SHOWN && <Link className="tree-row tree-more" to="/types" search={{ theme }}>全部 {(types.data || []).length} 个型号设计</Link>}
       <div className="tree-caption">资源</div>
-      <Link className="module-item" to="/resources/cables" search={{ theme }} aria-current={at('/resources/cables')}><Icon name="resource/cable-type" /><span>电缆型号版本</span></Link>
-      <Link className="module-item" to="/resources/$group" params={{ group: 'materials' }} search={{ theme }} aria-current={at('/resources/materials')}><Icon name="resource/material" /><span>材料与部件</span></Link>
-      <Link className="module-item" to="/resources/$group" params={{ group: 'templates' }} search={{ theme }} aria-current={at('/resources/templates')}><Icon name="resource/section-template" /><span>模板与计算方案</span></Link>
-      <Link className="module-item" to="/resources/$group" params={{ group: 'standards' }} search={{ theme }} aria-current={at('/resources/standards')}><Icon name="source/from-standard" /><span>标准与规则</span></Link>
+      <Link className="module-item" to="/resources/cables" search={{ theme }} aria-current={at('/resources/cables')} title="电缆型号版本"><Icon name="resource/cable-type" /><span>电缆型号版本</span></Link>
+      <Link className="module-item" to="/resources/$group" params={{ group: 'materials' }} search={{ theme }} aria-current={at('/resources/materials')} title="材料与部件"><Icon name="resource/material" /><span>材料与部件</span></Link>
+      <Link className="module-item" to="/resources/$group" params={{ group: 'templates' }} search={{ theme }} aria-current={at('/resources/templates')} title="模板与计算方案"><Icon name="resource/section-template" /><span>模板与计算方案</span></Link>
+      <Link className="module-item" to="/resources/$group" params={{ group: 'standards' }} search={{ theme }} aria-current={at('/resources/standards')} title="标准与规则"><Icon name="source/from-standard" /><span>标准与规则</span></Link>
       <div className="tree-caption">记录</div>
-      <Link className="module-item" to="/runs" search={{ theme }} aria-current={at('/runs')}><Icon name="run/run" /><span>运行与作业</span></Link>
-      <Link className="module-item" to="/deliveries" search={{ theme, workspace: '', delivery: '' }} aria-current={at('/deliveries')}><Icon name="object/delivery" /><span>交付</span></Link>
+      <Link className="module-item" to="/runs" search={{ theme }} aria-current={at('/runs')} title="运行与作业"><Icon name="run/run" /><span>运行与作业</span></Link>
+      <Link className="module-item" to="/deliveries" search={{ theme, workspace: '', delivery: '' }} aria-current={at('/deliveries')} title="交付"><Icon name="object/delivery" /><span>交付</span></Link>
       <div className="tree-caption">方法</div>
-      <Link className="module-item" to="/plugins" search={{ theme }} aria-current={at('/plugins')}><Icon name="nav/plugin" /><span>插件</span></Link>
-      <Link className="module-item" to="/validation" search={{ theme, snapshot: '' }} aria-current={at('/validation')}><Icon name="result/evidence" /><span>验证算例</span></Link>
+      <Link className="module-item" to="/plugins" search={{ theme }} aria-current={at('/plugins')} title="插件"><Icon name="nav/plugin" /><span>插件</span></Link>
+      <Link className="module-item" to="/validation" search={{ theme, snapshot: '' }} aria-current={at('/validation')} title="验证算例"><Icon name="result/evidence" /><span>验证算例</span></Link>
       {inGallery && <nav ref={onSlot} className="sidebar-modules" aria-label="陈列导航" />}
     </nav>
     </>}

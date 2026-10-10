@@ -34,6 +34,15 @@ const RECIPE_TEXT: Record<string, string> = {
   type_review: "检查这个型号的缺项、与执行标准不一致处和可改进点",
   inbox_triage: "帮我理一下待办",
 };
+/** “/ 任务”里给人看的一句话：它会做什么。后端配方说明是写给模型的规则，不直接显示。 */
+const RECIPE_HINT: Record<string, string> = {
+  conclusion_summary: "读取各研究最新保存的结论，列出允许电流和限制因素",
+  missing_inputs: "逐项列出工程模型和研究还缺的输入，按影响排序",
+  proposal_comparison: "提出修改方案并试算对比；只出方案，由你批准",
+  sensitivity_advice: "建议哪些参数值得做敏感性分析，以及取值范围",
+  type_review: "检查型号缺项、与执行标准不一致处和可改进点",
+  inbox_triage: "整理待办：处理顺序、原因和该由谁处理",
+};
 const SIDE_KEY = "cablesim:agent:side-open";
 const readSide = () => { try { return localStorage.getItem(SIDE_KEY) !== "false"; } catch { return true; } };
 const storeSide = (open: boolean) => { try { localStorage.setItem(SIDE_KEY, String(open)); } catch { /* 隐私模式只保留本次 */ } };
@@ -59,7 +68,7 @@ export function AgentPage() {
   const workspaceId = summary?.workspace_id || options.find((row) => row.id === search.workspace)?.id || options[0]?.id;
   const project = options.find((row) => row.id === workspaceId);
   const recipes = useQuery({ queryKey: ["agent-recipes", search.task || "", workspaceId || ""], queryFn: ({ signal }) => agentRecipes({ session: search.task, workspace: workspaceId }, signal), retry: false, staleTime: 300_000 });
-  const commands: PromptCommand[] = (recipes.data || []).map((row) => ({ key: row.id, name: row.name, description: row.description, text: RECIPE_TEXT[row.id] || `${row.name}：` }));
+  const commands: PromptCommand[] = (recipes.data || []).map((row) => ({ key: row.id, name: row.name, description: RECIPE_HINT[row.id] || "", text: RECIPE_TEXT[row.id] || `${row.name}：` }));
   const workspace = useQuery({ ...workspaceQuery(workspaceId), enabled: !!workspaceId });
   const domain = workspace.data?.domain as DomainDocument | undefined;
   const label = (entity: string) => entityLabel(domain, entity);
