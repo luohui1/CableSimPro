@@ -1,6 +1,5 @@
 """Type-bound default context, host review recipe and tool authority regression."""
 import json
-from test_index_reproductions import library
 from time import perf_counter
 from uuid import uuid4
 
@@ -32,11 +31,11 @@ def test_type_session_catalog_context_host_review_and_default_type_proposal(clie
     response=answer(text);response['choices'][0]['message']['reasoning_content']='只解释宿主型号检查。';script.append(response)
     start=perf_counter();events=send(client,tid,'检查这个型号的问题');elapsed=perf_counter()-start
     record=h.tasks.record(tid)
-    assert len(requests)==1 and not requests[0].get('tools') and final_text(events)==text
+    assert len(requests)==1 and requests[0].get('tools') and final_text(events)==text
     assert record['messages'][-1]['object_refs'][0]['id']==w['id']
     assert record['messages'][-1]['reasoning_content']=='只解释宿主型号检查。'
     assert all(step['tool']=='type_read' and step['state']=='succeeded' for step in record['steps'])
-    assert any(e['type']=='recipe.compiled' and e['data']['recipes']==['type_review'] for e in record['events'])
+    assert any(e['type']=='context.loaded' and e['data']['kind']=='type' for e in record['events'])
     print('\n型号绑定检查 '+json.dumps(metrics(record,elapsed),ensure_ascii=False))
     tid=session(client,w)
     script.extend([call('propose_type_changes',{'changes':[{'path':path,'value':15.8,'unit':'mm'}],'reason':'明确型号字段修改'}),

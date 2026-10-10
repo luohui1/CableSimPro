@@ -5,7 +5,7 @@ from time import perf_counter
 import pytest
 from fastapi import HTTPException
 
-from test_index_reproductions import library,client
+from test_index_reproductions import client
 from test_research import study
 from test_harness import fake_model,session,send,call,answer
 from test_harness_recipes import final_text,metrics

@@ -128,10 +128,26 @@ def report(steps):
         group=[item for item in items if item['category']==category]
         if not group:continue
         lines.append(LABELS[category]+'：')
+        combined={}
         for item in group:
-            lines.extend(['“'+item['object']['name']+'”', '原因：'+item['reason'],
-                '下一步：'+item['next_step'],'处理人：'+item['handled_by']+('；需人批准。' if item['requires_human_approval'] else '。')])
-            refs.extend([item['object'],item['home']])
+            # Home names personalise a shared operation; only remove that exact
+            # saved name when comparing actions, never rewrite the source reason.
+            action=item['next_step'].replace(' “'+item['home']['name']+'”','')
+            key=(item['reason'],action,item['handled_by'],item['requires_human_approval'])
+            combined.setdefault(key,[]).append(item)
+        for (reason,action,who,approval),members in combined.items():
+            lines.append('、'.join('“'+item['object']['name']+'”' for item in members))
+            if len(members)>1:
+                homes={}
+                for item in members:
+                    target=item['home']
+                    if (target['kind'],target['id'])!=(item['object']['kind'],item['object']['id']):
+                        homes.setdefault((target['kind'],target['id']),target)
+                if homes:lines.append('对象的家：'+'、'.join('“'+target['name']+'”' for target in homes.values()))
+            lines.extend(['原因：'+reason,
+                '下一步：'+(action if len(members)>1 else members[0]['next_step']),
+                '处理人：'+who+('；需人批准。' if approval else '。')])
+            for item in members:refs.extend([item['object'],item['home']])
     if not items:lines.append('本次筛选范围内没有待办；未执行任何业务操作。')
     if first_offset:lines.append('此前待办尚未展开；本次从位置 '+str(first_offset)+' 开始整理。')
     if cursor:

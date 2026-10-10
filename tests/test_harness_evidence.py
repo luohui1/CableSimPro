@@ -1,7 +1,6 @@
 """Claim conversion, bounded private repairs and usable evidence fallback."""
 from copy import deepcopy
 import json
-from test_index_reproductions import library
 
 from fastapi import HTTPException
 import pytest
@@ -77,7 +76,9 @@ def test_rejected_draft_is_private_redacted_feedback_and_repaired_over_http(clie
     assert rejected['issues'][0]['available_values'][0]['unit']=='A'
     feedback=json.loads(requests[-1]['messages'][-1]['content'])
     assert requests[-1]['messages'][-1]['role']=='tool' and feedback['data']['issues'][0]['fragment']=='9999 A'
-    assert len(requests)==3 and all('tools' not in row for row in requests[2:])
+    assert len(requests)==3
+    visible=harness.registry.visible(record)
+    assert all(visible[tool['function']['name']].kind=='read' for row in requests[2:] for tool in row.get('tools',[]))
     assert [event['data']['phase'] for event in record['events'] if event['type']=='model.request']==['tools','tools','repair']
     assert record['budget']['prompt_tokens']==30 and record['budget']['completion_tokens']==15
     print('\n问题1（本地假模型，合成token）：'+json.dumps({'requests':3,'prompt_tokens':30,'completion_tokens':15,'repairs':1,'answer':text},ensure_ascii=False))
@@ -120,7 +121,9 @@ def test_exhausted_repairs_and_closing_return_real_proposal_preview_comparison(c
     assert len([event for event in record['events'] if event['type']=='answer.fallback'])==1
     phases=[event['data']['phase'] for event in record['events'] if event['type']=='model.request']
     assert phases==['tools']*4+['repair']*2+['closing'] and len(requests)==7
-    assert all('tools' not in row for row in requests[4:])
+    visible=harness.registry.visible(record)
+    assert all(visible[tool['function']['name']].kind=='read' for row in requests[4:6] for tool in row.get('tools',[]))
+    assert not requests[-1].get('tools')
     assert record['proposals'][0]['status']=='pending'
     assert client.get(f'/api/workspaces/{w["id"]}/domain').json()['revision']==w['revision']
     print('\n问题2（本地假模型，合成token）：'+json.dumps({'requests':7,'prompt_tokens':70,'completion_tokens':35,'repairs':2,'answer':final},ensure_ascii=False))

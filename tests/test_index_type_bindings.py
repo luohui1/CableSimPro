@@ -1,7 +1,6 @@
 """Saved type identities, partial bindings and publication pins; no solver runs."""
 from copy import deepcopy
 import json
-from test_index_reproductions import library
 from uuid import uuid4
 
 from backend.kernel.workspace import fingerprint,stamp
@@ -89,3 +88,34 @@ def test_publication_and_library_copy_use_fixed_source_pins_without_unknown_docu
             (json.dumps(payload),fingerprint(payload),submitted['submission_id']))
         db.execute('UPDATE engineering_type_releases SET payload=? WHERE asset=?',(json.dumps(payload),asset['id']))
     assert next(e for e in relations(client,'cable_version',asset['id'])['uses'] if e['role']=='source_design')['pinned']==source[0]['pinned']
+
+
+def test_execution_standard_declaration_projection_uses_host_identity_and_public_resource_names(client):
+    w=workspace(client);service=client.app.state.types;store=service.store
+    # Fixture for an already human-reviewed declaration saved by the type CAS
+    # workflow. No fake standard limit or approval action is supplied by Agent.
+    with store.db(True) as db:
+        row,state=service._type(db,w['id'])
+        state['domain'].setdefault('provenance',{})['/execution_standards']={
+            'kind':'standard','reviewed':True,'reference':json.dumps({
+                'schema':'cablesim.execution-standards/1','items':[{'standard':'GB/T 11017.2-2024','source_digest':'e'*64}]})}
+        store.commit(db,row,state,'执行标准声明夹具')
+    view=client.get(f'/api/types/{w["id"]}/resources').json()
+    target=next(t for t in view['targets'] if t['role']=='standard' and t['name']=='GB/T 11017.2-2024')
+    rule=resource_fixture(client,'execution-rule',kind='rule',name='已核对执行标准')
+    response=client.post(f'/api/types/{w["id"]}/resources/bind',json={
+        'expected_revision':view['revision'],'request_id':str(uuid4()),'role':'standard','target_id':target['id'],'resource_id':rule})
+    assert response.status_code==200,response.text
+    edge=next(e for e in relations(client,'type',w['id'])['uses'] if e['role']=='standard')
+    assert edge['freshness']=='current' and edge['pinned']['version']=='1.0.0'
+    assert edge['reason']=='型号保存的资源绑定：已核对执行标准 1.0.0'
+    assert target['id'] not in edge['reason'] and rule==edge['target']['id']
+    for remove in (False,True):
+        with store.db(True) as db:
+            row,state=service._type(db,w['id'])
+            provenance=state['domain']['provenance']
+            if remove:provenance.pop('/execution_standards')
+            else:provenance['/execution_standards']['reviewed']=False
+            store.commit(db,row,state,'撤销声明或审核的夹具')
+        edge=next(e for e in relations(client,'type',w['id'])['uses'] if e['role']=='standard')
+        assert edge['freshness']=='unknown' and '未声明或未批准' in edge['reason']

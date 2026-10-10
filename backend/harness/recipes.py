@@ -19,7 +19,7 @@ CHANGES = {'type':'array','minItems':1,'maxItems':12,'items':obj({
     'value':{'type':['number','string','boolean','null']},
     'unit':{'type':['string','null'],'maxLength':40}}, ('path','value'))}
 CATALOG = [
-    {'id':'conclusion_summary','name':'结论汇总','description':'结论汇总问题必须用此配方：一次读取各口径电流、工况、热点、温限余量、限制对象、土壤/坐标/负荷与状态；next_page分页。取得完整摘要后直接解释，仅用户追问细节再读运行。',
+    {'id':'conclusion_summary','name':'结论汇总','description':'结论汇总快捷配方：一次读取各口径电流、工况、热点、温限余量、限制对象、土壤/坐标/负荷与状态；next_page分页。摘要覆盖的目标可直接解释；其他缺失证据按用户目标补读。',
      'parameters':obj(PAGE)},
     {'id':'missing_inputs','name':'检查缺项','description':'读取工程字段并预检指定研究；不自动补物性，正式或超算预检仍需人工。',
      'parameters':obj(STUDY)},

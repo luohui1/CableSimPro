@@ -18,6 +18,7 @@ def project(db):
         "json_extract(state,'$.type_resource_bindings') AS resource_bindings,"
         "json_extract(state,'$.type_creation') AS type_creation,"
         "json_extract(state,'$.domain.materials') AS material_facts,"
+        "json_extract(state,'$.domain.provenance.\"/execution_standards\"') AS execution_standards,"
         "json_extract(state,'$.domain.cable_types') AS type_structure")
     studies=rows('studies','s.id,s.workspace,s.revision,v.created,v.definition',
         's JOIN study_versions v ON v.study=s.id AND v.revision=s.revision')

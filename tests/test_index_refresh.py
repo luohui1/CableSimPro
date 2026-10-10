@@ -1,6 +1,5 @@
 """Startup and immediate metadata refresh through ordinary host operations."""
 import json
-from test_index_reproductions import library
 import os
 from hashlib import sha256
 from pathlib import Path

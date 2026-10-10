@@ -142,7 +142,8 @@ class TaskStore:
             self.event(db,tid,'chat.message',{'role':'user','content':content,'turn_id':turn,
                 **({'recipe':recipe,'recipe_source':recipe_source} if recipe else {})})
             self.event(db,tid,'turn.read_policy',{'turn_id':turn,'max_read_tool_calls':self.limits.max_read_tool_calls,
-                'scope':'message','explicit_recipe':bool(recipe and recipe_source=='human.message')})
+                'scope':'message','mode':'consecutive_unproductive_reads',
+                'explicit_recipe':bool(recipe and recipe_source=='human.message')})
         return turn
 
     @transaction

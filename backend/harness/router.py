@@ -1,6 +1,7 @@
 """Frontend-compatible human session, streaming and proposal decision endpoints."""
 from uuid import UUID
 from itertools import chain
+from contextlib import asynccontextmanager
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -11,7 +12,22 @@ from .contracts import AgentStatus,ToolInfo,RecipeInfo,CreateSession,SessionId,S
 
 
 def make_router(harness):
-    router=APIRouter(prefix='/api/agent',tags=['agent'])
+    @asynccontextmanager
+    async def lifespan(app):
+        harness.platform.bind(app)
+        try:yield
+        finally:harness.platform.bind(None)
+    router=APIRouter(prefix='/api/agent',tags=['agent'],lifespan=lifespan)
+
+    @router.get('/capabilities')
+    def capabilities(module:str|None=None,q:str|None=None,offset:int=0,limit:int=10):
+        from fastapi import HTTPException
+        if offset<0 or not 1<=limit<=20:raise HTTPException(422,'offset须非负，limit须为1至20。')
+        cards=[card for _,card,_ in harness.platform.catalog().values()]
+        cards=[card for card in cards if (not module or card['module']==module)
+            and (not q or q.casefold() in str(card).casefold())]
+        return {'items':cards[offset:offset+limit],'total':len(cards),
+            'next_offset':offset+limit if offset+limit<len(cards) else None}
 
     @router.get('/status',response_model=AgentStatus)
     def status():return harness.status()

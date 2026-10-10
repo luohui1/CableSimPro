@@ -1,7 +1,6 @@
 """Bounded saved evidence, deterministic recipe steps and convergent diagnostics."""
 from copy import deepcopy
 import json
-from test_index_reproductions import library
 from threading import current_thread
 from time import perf_counter
 

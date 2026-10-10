@@ -59,6 +59,10 @@ class Tool:
                 if isinstance(node,list):return [compact(value) for value in node]
                 return node
             definition['function']['parameters']=compact(definition['function']['parameters'])
+            # Keep a complete purpose clause. Repeated authority/usage prose is
+            # in the system prompt; the full descriptions remain in /tools.
+            authority={'read':'只读','propose':'待人工批准的方案','run':'宿主许可执行'}[self.kind]
+            definition['function']['description']=self.title+'（'+authority+'）'
         if self.plugin_id and len(json.dumps(definition,ensure_ascii=False).encode())>4096:
             definition['function']['parameters']=object_schema({**STUDY,'parameters':{
                 'type':'object','description':'按 plugin_inspect 读取的封签参数契约提供SI值；可用 schema_path 分字段读取。'},'title':TEXT})
@@ -116,6 +120,23 @@ def prune_definitions(schema):
 
 def host_tools():
     specs=[
+        ('platform_capabilities','发现平台能力或检查契约','read','来自实际注册API的能力目录；operation检查平台参数契约，tool检查已开放宿主工具，schema_path可按字段读取。目录不授予执行权限。',object_schema({
+            'operation':TEXT,'tool':TEXT,'module':TEXT,'q':{'type':'string','maxLength':200},
+            'schema_path':{'type':'string','maxLength':500},'offset':{'type':'integer','minimum':0},
+            'limit':{'type':'integer','minimum':1,'maximum':20}})),
+        ('platform_read','调用平台只读接口','read','先检查operation；按平台参数契约读取JSON，保持会话修订；view是返回对象内路径，offset/limit按整项分页。禁止写接口、任意URL、请求头和大工件。',object_schema({
+            'operation':TEXT,'path_parameters':{'type':'object'},'query':{'type':'object'},
+            'view':{'type':'string','maxLength':500},'offset':{'type':'integer','minimum':0},
+            'limit':{'type':'integer','minimum':1,'maximum':20}},['operation'])),
+        ('platform_prepare','准备平台人工执行请求','propose','先检查operation；只准备结构合规的参数和人工交接，不执行接口，不生成工程批准。文件上传、凭据、系统管理仍由人操作。',object_schema({
+            'operation':TEXT,'path_parameters':{'type':'object'},'query':{'type':'object'},'body':{},
+            },['operation'])),
+        ('task_plan','记录任务目标','read','复杂任务可列出全部目标和每项目标所需的工具及参数；宿主根据本条消息实际成功回执计算完成状态。可修订计划，不执行工程操作、不批准。',object_schema({
+            'goals':{'type':'array','minItems':1,'maxItems':8,'items':object_schema({
+                'id':{'type':'string','minLength':1,'maxLength':60},
+                'description':{'type':'string','minLength':1,'maxLength':300},
+                'requires':{'type':'array','minItems':1,'maxItems':8,'items':object_schema({
+                    'tool':TEXT,'arguments':{'type':'object'}},['tool','arguments'])}},['id','description','requires'])}},['goals'])),
         ('inbox_read','读取统一待办','read','跨工程只读首页同一待办索引：完整对象名片、类别、原因原文及人工下一步；不代办。默认10项、上限20项、6KiB，按next_page继续；不能把未展开条目称为已处理。',object_schema(deepcopy(INBOX))),
         ('type_read','读取型号设计','read','读取型号工作区的保存结构、要求、方案、最近运行及规格书；数值带单位来源，按next_page分页，缺保存运行不推算外径或标准符合性。',object_schema({
             'type_id':TEXT,'view':{'enum':['summary','structure','requirements','plans','runs','specification','review']},

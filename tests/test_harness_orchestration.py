@@ -2,7 +2,6 @@
 from copy import deepcopy
 from dataclasses import replace
 import json
-from test_index_reproductions import library
 from time import perf_counter
 
 from backend.harness.contracts import Limits
@@ -44,13 +43,15 @@ def test_host_recipe_pages_before_one_answer_validates_and_preserves_thinking(cl
     script.extend([answer('保存允许电流9999 A。'),answer(text)])
     events=send(client,tid,'继续汇总',{'id':'conclusion_summary','parameters':{}});audit=h.tasks.record(tid)
     assert final_text(events)==text and audit['budget']['model_requests']==2
-    assert requests[-2]['messages'][0]['role']=='system' and not requests[-2].get('tools') and not requests[-1].get('tools')
+    assert requests[-2]['messages'][0]['role']=='system' and not requests[-2].get('tools')
+    visible=h.registry.visible(audit)
+    assert all(visible[tool['function']['name']].kind=='read' for tool in requests[-1].get('tools',[]))
     assert any(m.get('reasoning_content')=='保留这段原始思考。' for m in requests[-1]['messages'])
     assert any(e['type']=='answer.rejected' and '9999' in e['data']['draft'] for e in audit['events'])
     assert not any(e['type']=='answer.fallback' for e in audit['events'])
 
 
-def test_free_read_limit_and_complete_digest_disable_next_tools_per_turn(client,fake_model,monkeypatch):
+def test_productive_reads_and_digest_keep_additional_evidence_available_per_turn(client,fake_model,monkeypatch):
     monkeypatch.setenv('CABLESIM_AGENT_MAX_READ_TOOL_CALLS','2')
     assert Limits.configured().max_read_tool_calls==2
     w,s,run=saved_run(client);h=client.app.state.harness;h.tasks.limits=replace(h.tasks.limits,max_read_tool_calls=2)
@@ -59,21 +60,22 @@ def test_free_read_limit_and_complete_digest_disable_next_tools_per_turn(client,
     script.extend([call('study_read',{'run_id':run['id']}),call('run_read',{'run_id':run['id']}),answer(text)])
     started=perf_counter();events=send(client,tid);audit=h.tasks.record(tid)
     assert final_text(events)==text and audit['budget']['tool_calls']==2 and audit['budget']['model_requests']==3
-    assert requests[0].get('tools') and requests[1].get('tools') and not requests[2].get('tools')
-    policy=next(e['data'] for e in audit['events'] if e['type']=='turn.answer_only')
-    assert policy['reason']=='read_limit' and policy['read_tool_calls']==2 and policy['max_read_tool_calls']==2
+    assert all(request.get('tools') for request in requests[:3])
+    policy=next(e['data'] for e in audit['events'] if e['type']=='turn.read_policy')
+    assert policy['mode']=='consecutive_unproductive_reads' and policy['max_read_tool_calls']==2
+    assert not any(e['type']=='turn.answer_only' for e in audit['events'])
     assert not any(e['type']=='answer.fallback' for e in audit['events'])
     print('\n自由读取 '+json.dumps(metrics(audit,perf_counter()-started),ensure_ascii=False))
     script.extend([call('project_digest'),answer('摘要已覆盖保存研究，详细输入尚未展开。')])
     send(client,tid,'汇总各研究的载流量结论和限制因素');audit=h.tasks.record(tid)
-    assert audit['budget']['model_requests']==2 and audit['budget']['tool_calls']==1 and not requests[-1].get('tools')
-    assert [e['data']['reason'] for e in audit['events'] if e['type']=='turn.answer_only'][-1]=='summary_covered'
+    assert audit['budget']['model_requests']==2 and audit['budget']['tool_calls']==1 and requests[-1].get('tools')
+    assert not any(e['type']=='turn.answer_only' for e in audit['events'])
     # An empty tail page does not prove that earlier studies were read.
     script.extend([call('project_digest',{'after':1000000}),call('project_digest'),answer('摘要已覆盖保存研究。')])
     send(client,tid,'汇总各研究的载流量结论和限制因素');audit=h.tasks.record(tid)
     assert audit['budget']['model_requests']==3 and audit['budget']['tool_calls']==2
-    assert requests[-2].get('tools') and not requests[-1].get('tools')
-    assert [e['data']['reason'] for e in audit['events'] if e['type']=='turn.answer_only'][-1]=='summary_covered'
+    assert requests[-2].get('tools') and requests[-1].get('tools')
+    assert not any(e['type']=='turn.answer_only' for e in audit['events'])
 
 
 def test_stale_baseline_has_reasons_workbench_actions_and_no_proposal_or_preview(client,fake_model,monkeypatch):

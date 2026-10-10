@@ -2,7 +2,6 @@
 from contextlib import contextmanager
 from copy import deepcopy
 import json
-from test_index_reproductions import library
 import sqlite3
 from time import perf_counter
 from uuid import uuid4
@@ -144,17 +143,17 @@ def test_inbox_pages_share_the_api_and_change_or_oversize_never_claim_complete(c
         assert h.broker.execute(task,node,tool).diagnostics[0].code=='TOOL_ARGUMENTS_INVALID'
 
 
-def test_free_triage_auto_recipe_stops_write_intents_and_exposes_remaining_page(client,fake_model,monkeypatch):
+def test_explicit_triage_recipe_stops_write_intents_and_exposes_remaining_page(client,fake_model,monkeypatch):
     w,s=seed(client);h=client.app.state.harness;tid=session(client,w)
     before=business_state(h.research.store);forbid_writes(client,monkeypatch)
     script,requests=fake_model
     script.extend([call('study_preview'),answer('待办整理只提供人工下一步；运行与审核尚未执行。')])
-    started=perf_counter();events=send(client,tid,'帮我理一下待办');elapsed=perf_counter()-started;record=h.tasks.record(tid)
+    started=perf_counter();events=send(client,tid,'帮我理一下待办',{'id':'inbox_triage','parameters':{}});elapsed=perf_counter()-started;record=h.tasks.record(tid)
     assert record['budget']['model_requests']==2 and not any(request.get('tools') for request in requests)
     assert all(step['tool']=='inbox_read' for step in record['steps']) and not record['proposals']
     assert business_state(h.research.store)==before
     assert any(k=='error' and d['code']=='TOOLS_NOT_ALLOWED' for k,d in events)
-    assert any(e['type']=='recipe.requested' and e['data']['source']=='host.intent' for e in record['events'])
+    assert any(e['type']=='recipe.requested' and e['data']['source']=='human.message' for e in record['events'])
     first_metrics=metrics(record,elapsed)
     # A caller can explicitly continue at a bounded offset; do not describe
     # unobserved earlier items as checked or processed.
@@ -173,7 +172,7 @@ def test_free_triage_auto_recipe_stops_write_intents_and_exposes_remaining_page(
         answer('先由人工核对待审核项，本次其余条目尚未展开。')])
     events=send(client,tid,'先看审核队列')
     record=h.tasks.record(tid)
-    assert record['budget']['model_requests']==2 and not requests[-1].get('tools')
+    assert record['budget']['model_requests']==2 and requests[-1].get('tools')
     assert record['budget']['tool_calls']==1 and '其余待办尚未展开' in final_text(events)
     assert business_state(h.research.store)==before
     script.append({'http_status':500})
@@ -183,3 +182,30 @@ def test_free_triage_auto_recipe_stops_write_intents_and_exposes_remaining_page(
     assert record['budget']['model_requests']==1 and record['messages'][-1]['object_refs']
     assert business_state(h.research.store)==before
     print('\n待办写意图被拒绝 '+json.dumps(first_metrics,ensure_ascii=False))
+
+
+def test_triage_groups_identical_causes_actions_preserves_all_homes_and_writes_nothing(client,fake_model,monkeypatch):
+    w,s=study(client);h=client.app.state.harness;tid=session(client,w)
+    reason='三芯成缆位置及节距；填料热阻率'
+    names=['YJV22-8.7/15 kV 3×'+str(n) for n in (35,50,70,95,120,150,185,240,300,400)]
+    with h.research.store.db(True) as db:
+        for name,cause in [*[(name,reason) for name in names],('独立规格的资料','外护套来源缺失')]:
+            payload={'name':name,'version':'1.0.0','specification':{'missing':[cause]}}
+            db.execute('INSERT INTO domain_cable_models VALUES(?,?,?,?,?)',
+                (str(uuid4()),json.dumps(payload),fingerprint(payload),'incomplete',stamp()))
+    before=business_state(h.research.store);forbid_writes(client,monkeypatch)
+    script,requests=fake_model;script.append(answer('按缺项类别整理，由资料负责人逐一核对来源后补齐；本次只读，不执行审核或保存。'))
+    started=perf_counter();events=send(client,tid,'整理同类资料缺项',{'id':'inbox_triage','parameters':{}})
+    elapsed=perf_counter()-started;record=h.tasks.record(tid);text=final_text(events)
+    assert len(requests)==record['budget']['model_requests']==1
+    assert record['budget']['tool_calls']<=MAX_TRIAGE_PAGES
+    assert text.count('原因：'+reason)==1 and text.count('原因：外护套来源缺失')==1
+    assert text.count('下一步：')==text.count('处理人：')==2
+    assert all('“'+name+'”' in text for name in names)
+    cards=record['messages'][-1]['object_refs']
+    assert set(names)<=set(card['name'] for card in cards)
+    assert all(card['kind']=='cable_version' for card in cards)
+    assert business_state(h.research.store)==before and not record['proposals']
+    assert not any(e['type'] in ('answer.rejected','answer.fallback') for e in record['events'])
+    assert next(e['data'] for e in record['events'] if e['type']=='inbox.triaged')['complete']
+    print('\n同类待办合并 '+json.dumps(metrics(record,elapsed),ensure_ascii=False))

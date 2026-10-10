@@ -5,6 +5,7 @@ from hashlib import sha256
 from backend.kernel.workspace import fingerprint
 
 RESULT_BYTES=6*1024
+METADATA_PROJECTIONS=frozenset({'task_progress','capability_catalog','capability_contract','capability_request'})
 
 
 def encoded(value):
@@ -27,6 +28,9 @@ def content_digest(value):
 
 def compress_result(value,maximum=RESULT_BYTES):
     """Project a model observation; durable steps always retain the original JSON."""
+    data=value.get('data') or {}
+    if data.get('projection')=='platform_read' and 'agent_projection' in data:
+        value={**value,'data':data['agent_projection']}
     if fits(value,maximum):return value
     result={key:value[key] for key in ('status','summary','execution_ref') if key in value}
     result.update(truncated=True,reason='已截断，可按 paths / key 继续读取',

@@ -62,7 +62,8 @@ def resource_edges(index,card,row):
     # Use the same target identities/fingerprints as the type workspace. These
     # projections contain input facts and review receipts, never solver outputs.
     state={'domain':{'materials':decoded(row['material_facts'],[]),
-        'cable_types':decoded(row['type_structure'],[])},'type_resource_bindings':{
+        'cable_types':decoded(row['type_structure'],[]),
+        'provenance':{'/execution_standards':decoded(row['execution_standards'],{})}},'type_resource_bindings':{
             role:{key:{**ref,'name':ref.get('name') or key} for key,ref in bindings.get(role,{}).items() if isinstance(ref,dict)}
             for role in ('material','standard') if isinstance(bindings.get(role,{}),dict)}}
     targets=Types(index.research,None)._resource_targets(index.db,row['id'],state)
@@ -72,15 +73,16 @@ def resource_edges(index,card,row):
         for item in selected:
             ref=state['type_resource_bindings'].get(role,{}).get(item['id'])
             if not ref or not ref.get('resource_id'):
-                index.missing(('type',row['id']),role,'未绑定资源：'+item['name']+'（'+item['id']+'）。')
+                index.missing(('type',row['id']),role,'未绑定资源：'+item['name']+'。')
                 continue
             target=index.get('asset',ref['resource_id'])
             if target is None:
                 target=ObjectCard(kind='asset',id=ref['resource_id'],name=ref['name'],version=ref.get('version'),
                     status={'code':'unknown','label':'资源未登记','reason':'型号保存的资源版本未在本库登记。'},updated=None).model_dump(mode='json')
-            freshness=None;reason='型号保存的资源绑定：'+item['id']
+            freshness=None;reason='型号保存的资源绑定：'+target['name']+((' '+target['version']) if target.get('version') else '')
             if item['input_digest'] is None:
-                freshness='outdated';reason='目标已不属于当前型号或已批准标准，请解除该引用。'
+                freshness='unknown' if role=='standard' else 'outdated'
+                reason='未声明或未批准的执行标准，无法确认资源绑定。' if role=='standard' else '目标已不属于当前型号，请解除该引用。'
             elif ref.get('input_digest') is None:
                 freshness='unknown';reason='绑定未保存输入摘要，无法判断绑定后是否变化。'
             elif ref['input_digest']!=item['input_digest']:

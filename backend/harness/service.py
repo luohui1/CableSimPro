@@ -1,6 +1,5 @@
 """Bounded native conversation loop; the model never owns a business write path."""
 import json
-import re
 import sqlite3
 from dataclasses import replace
 from time import perf_counter,time
@@ -21,7 +20,7 @@ from .planner import prepare
 from .proposals import Proposals
 from .providers import OpenAICompatibleProvider
 from .recipe_compiler import compile_calls
-from .recipes import recipe_schema,validate_request,recipes
+from .recipes import validate_request,recipes
 from .security import redact
 from .task_store import TaskStore
 from .tool_broker import ToolBroker,failure
@@ -30,6 +29,8 @@ from .resilience import category
 from .object_refs import references
 from .session_scope import is_type,load_context
 from .inbox import report as inbox_report,MAX_TRIAGE_PAGES
+from .progress import state as task_progress
+from .platform import Platform
 
 
 class Harness:
@@ -40,7 +41,9 @@ class Harness:
         self.tasks=TaskStore(research.store,research.owner_epoch,limits)
         self.registry=ToolRegistry(research)
         self.proposals=Proposals(research,self.tasks)
+        self.platform=Platform(research,self.tasks,self.registry)
         self.broker=ToolBroker(research,self.tasks,self.registry,self.proposals)
+        self.broker.platform=self.platform
 
     def initialize(self):
         self.tasks.initialize()
@@ -99,12 +102,6 @@ class Harness:
     def begin(self,tid,content,recipe=None):
         record=self.tasks.record(tid)
         source='human.message'
-        if recipe is None and re.search(r'待办|需要处理',content) and re.search(r'整理|理一下|梳理|说明|处理顺序',content):
-            recipe={'id':'inbox_triage','parameters':{}}
-            source='host.intent'
-        elif recipe is None and is_type(record) and re.search(r'检查|审查|缺项|问题|type_review',content) and not re.search(r'改成|改为|修改|调为|调整|换成|更换|替换|设为|增加|减少|删除',content):
-            recipe={'id':'type_review','parameters':{}}
-            source='host.intent'
         recipe=validate_request(recipe,record['context']) if recipe is not None else None
         return self.tasks.begin_turn(tid,redact(content),redact(recipe) if recipe else None,recipe_source=source)
 
@@ -135,36 +132,28 @@ class Harness:
                 record=self.tasks.record(tid)
                 snapshot=record
                 tools=self.registry.visible(record)
-                user=next(message for message in reversed(record['messages']) if message['role']=='user')
-                summary=bool(not is_type(record) and re.search(r'汇总|总结|概览|conclusion_summary',user['content']) and re.search(r'研究|结论|载流量|conclusion_summary',user['content'])
-                    and not re.search(r'改成|修改|试算|细节|具体输入',user['content']))
                 current=self.turn_steps(record,turn)
-                inbox_recipe=any(step['input_identity'].get('recipe')=='inbox_triage' for step in current)
+                progress=task_progress(record,tools)
                 digest=next((step['result']['data'] for step in reversed(current) if step.get('result')
                     and step['result']['status']=='ok' and 'studies' in step['result']['data'] and 'next_page' in step['result']['data']),None)
-                covered=summary and self.digest_complete(current)
                 reads=self.read_count(record,turn,tools)
                 baseline=self.baseline_problem(record,turn)
-                answer_reason=('宿主已执行所选配方。只解释已取得的结果与诊断，不再调用工具。' if requested or inbox_recipe else
-                    '试算对比基准不可用。说明诊断原因和工作台重算步骤；方案与试算未执行，不引用历史结果作当前结论。' if baseline else
-                    '结论汇总摘要已覆盖本工程研究。直接解释保存证据；运行输入细节尚未展开，可供用户追问。' if covered else
-                    '只读工具已达到本条消息的软上限。按现有证据回答，明确尚未展开的对象或细节，不继续读取。' if reads>=record['budget']['limits']['max_read_tool_calls'] else None)
+                answer_reason=('宿主已执行所选配方。解释结果、诊断及尚未覆盖的目标。' if requested else
+                    '连续读取没有取得新证据。说明已完成目标、缺口及可执行下一步。' if progress['consecutive_unproductive_reads']>=record['budget']['limits']['max_read_tool_calls'] else None)
                 answer_only=answer_reason is not None
                 if baseline:state,reason='waiting','missing_input'
                 if answer_only:self.tasks.emit(tid,'turn.answer_only',{'turn_id':turn,
-                    'reason':'recipe_complete' if requested or inbox_recipe else 'baseline_unavailable' if baseline else 'summary_covered' if covered else 'read_limit',
+                    'reason':'recipe_complete' if requested else 'evidence_stalled',
                     'read_tool_calls':reads,'max_read_tool_calls':record['budget']['limits']['max_read_tool_calls'],
+                    'consecutive_unproductive_reads':progress['consecutive_unproductive_reads'],
                     'tools_allowed':False,'remaining_page':digest.get('next_page') if digest else None})
-                shown={name:tool for name,tool in tools.items() if name in ('recipe_execute','project_digest')} if summary else tools
-                if summary:
-                    schema=recipe_schema();schema['properties']['recipe']['enum']=['conclusion_summary'];schema['oneOf']=schema['oneOf'][:1]
-                    shown['recipe_execute']=replace(shown['recipe_execute'],parameters=schema)
-                prompt,definitions=prepare(record,shown,self.registry.directory(record) if not summary and not answer_only else [],
+                shown=tools
+                prompt,definitions=prepare(record,shown,self.registry.directory(record) if not answer_only else [],
                     closing=answer_reason,
-                    instructions=self.settings.instructions())
+                    instructions=self.settings.instructions(),progress=progress)
                 configured,model=self.model.status()
                 if not configured:raise ModelError('LLM_NOT_CONFIGURED','模型未配置；请在宿主环境中配置模型地址、模型名与密钥。')
-                metrics={**request_summary(model,prompt,definitions),**({'phase':'recipe_answer' if requested or inbox_recipe else 'answer_only'} if answer_only else {})}
+                metrics={**request_summary(model,prompt,definitions),**({'phase':'recipe_answer' if requested else 'answer_only'} if answer_only else {})}
                 with self.research.store.db() as db:task=self.tasks.load(db,tid)
                 closing=self.tasks.closing_reason(task,metrics['prompt_bytes'],metrics['definition_bytes'])
                 if closing:
@@ -194,17 +183,17 @@ class Harness:
                     break
                 if answer_only:raise HTTPException(422,{'code':'TOOLS_NOT_ALLOWED','message':'本次仅解释已取得证据与诊断，不能继续调用工具。'})
                 plan=compile_calls(reply.tool_calls,shown,record['workspace_id'],record['workspace_revision'])
-                for node in plan['nodes']:
-                    if summary and node['tool'] not in shown:
-                        node['preparation_error']={'code':'SUMMARY_RECIPE_REQUIRED','message':'结论汇总只需 conclusion_summary；请直接读取完整摘要。'}
                 waiting=yield from self.execute_plan(tid,turn,plan,tools,record,reasoning=reply.reasoning,soft_limit=True)
                 if waiting=='scope_confirmation':
                     state,reason='waiting',waiting
-                    yield from self.closing(tid,turn,'所选能力需要人工确认正式或超算运行，尚未执行。')
+                    yield from self.closing(tid,turn,'所选操作需要人工确认；按工具诊断到对应模块核对并执行，当前尚未执行。')
                     break
             record=self.tasks.record(tid)
             if state=='completed' and any(proposal['status']=='pending' for proposal in record['proposals']):
                 state,reason='reviewing','human_review'
+            elif state=='completed' and any(step['tool']=='platform_prepare' and (step.get('result') or {}).get('status')=='ok'
+                    for step in self.turn_steps(record,turn)):
+                state,reason='waiting','scope_confirmation'
             normal=True
         except (ModelError,HTTPException) as error:
             if isinstance(error,ModelError):code,message=error.code,error.message
@@ -253,23 +242,6 @@ class Harness:
         except (MemoryError,sqlite3.OperationalError):record=snapshot
         usage={name:record['budget'][name] if record else 0 for name in ('prompt_tokens','completion_tokens')}
         yield self.emit(tid,'done',{'usage':usage},persist=False)
-
-    @staticmethod
-    def digest_complete(steps):
-        cursor=None;identity=None;studies=set();complete=False
-        for step in steps:
-            result=step.get('result') or {};data=result.get('data') or {}
-            if result.get('status')!='ok' or 'studies' not in data or 'next_page' not in data:continue
-            args=step.get('arguments') or {}
-            position=(args.get('after',0),args.get('case_after',0))
-            current=(data.get('workspace_revision'),data.get('total_studies'))
-            if position==(0,0):cursor=(0,0);identity=current;studies=set();complete=False
-            if position!=cursor or current!=identity:continue
-            studies.update(item['study_id'] for item in data['studies'])
-            page=data['next_page']
-            cursor=(page.get('after',0),page.get('case_after',0)) if page else None
-            complete=page is None and len(studies)==data.get('total_studies')
-        return complete
 
     @staticmethod
     def turn_steps(record,turn):
@@ -335,9 +307,9 @@ class Harness:
         self.tasks.emit(tid,'chat.message',{'role':'assistant','content':None,'turn_id':turn,**({'reasoning_content':reasoning} if reasoning else {}),
             'tool_calls':[{'id':node['id'],'name':node['tool'],'arguments':node['arguments']} for node in plan['nodes']]})
         for index,node in enumerate(plan['nodes']):
-            if soft_limit and self.read_count(self.tasks.record(tid),turn,tools)>=task['limits']['max_read_tool_calls']:
+            if soft_limit and task_progress(self.tasks.record(tid),tools)['consecutive_unproductive_reads']>=task['limits']['max_read_tool_calls']:
                 self.tasks.emit(tid,'plan.read_limit',{'turn_id':turn,'revision':revision,'executed':False,
-                    'skipped_node_ids':[row['id'] for row in plan['nodes'][index:]]})
+                    'reason':'evidence_stalled','skipped_node_ids':[row['id'] for row in plan['nodes'][index:]]})
                 break
             tool=tools.get(node['tool'])
             if node['input_identity'].get('recipe'):
@@ -364,7 +336,7 @@ class Harness:
                 'title':tool.title if tool else '未注册工具','arguments':node['arguments']})
             self.tasks.running(tid,operation);started=perf_counter()
             result=(failure('DIAGNOSTIC_ALREADY_REPORTED','同一工具与输入的诊断已给出，未重复执行；请处理原缺项。',
-                        actions=['读取原诊断并修正输入；结论汇总可直接使用 project_digest。']) if prior
+                        actions=['读取原诊断并修正输入，或补充所缺证据；已有结果可直接引用。']) if prior
                 else failure(**node['preparation_error']) if node.get('preparation_error')
                 else ToolResult.model_validate(reused['result']) if reused else self.broker.execute(task,node,tool))
             if prior:self.tasks.emit(tid,'tool.diagnostic_reused',{'turn_id':turn,'node_id':node['id'],'source_operation_id':prior['operation_id']})
@@ -384,8 +356,9 @@ class Harness:
 
     def respond(self,tid,turn,text,*,safe=False,phase='answer',attempt=0,suffix='',reasoning=''):
         record=self.tasks.record(tid)
-        observations=[step['result'] for step in record['steps'] if step.get('result')]
-        current=[step['result'] for step in self.turn_steps(record,turn) if step.get('result')]
+        metadata={'task_plan','platform_capabilities','platform_prepare'}
+        observations=[step['result'] for step in record['steps'] if step.get('result') and step['tool'] not in metadata]
+        current=[step['result'] for step in self.turn_steps(record,turn) if step.get('result') and step['tool'] not in metadata]
         baseline=self.baseline_problem(record,turn)
         if baseline:observations=current  # Earlier previews cannot prove a new comparison that was stopped.
         text=redact(text).strip() or '未取得可用解释，请根据工具诊断补充输入；当前请求尚未完成。'
@@ -395,12 +368,16 @@ class Harness:
                 users=[message['content'] for message in record['messages'] if message['role']=='user'],proof=proof)
             except HTTPException as error:
                 self.tasks.emit(tid,'answer.rejected',redact({'turn_id':turn,'phase':phase,'attempt':attempt,
-                    'draft':text,'issues':error.detail['issues']}))
+                    'draft':text,'issues':error.detail['issues'],**({'reasoning_content':reasoning} if reasoning else {})}))
                 raise
             self.tasks.emit(tid,'answer.accepted',{'turn_id':turn,'phase':phase,'attempt':attempt,'matches':proof})
         if baseline and not ('工作台' in text and '重算' in text):
             text+='\n'+baseline['summary']+'\n下一步：'+'；'.join(baseline['next_actions'])
         text+=suffix
+        progress=task_progress(record,self.registry.visible(record))
+        self.tasks.emit(tid,'task.progress',{'turn_id':turn,**progress})
+        pending=[goal['description'] for goal in progress['goals'] if goal['status']=='pending']
+        if pending:text+='\n尚未取得完整证据的目标：'+'；'.join(pending)+'。请补充对应资料或按工具诊断在工作台处理。'
         # The model's explanation is verified first. Exact saved reasons and
         # human-only actions come from the host, not unverified model claims.
         checklist,known_refs,triage=inbox_report(self.turn_steps(record,turn))
@@ -429,21 +406,32 @@ class Harness:
     def answer_loop(self,tid,turn,text,reasoning=''):
         record=self.tasks.record(tid);limit=record['budget']['limits']['max_repair_attempts']
         for attempt in range(limit+1):
-            try:
-                yield from self.respond(tid,turn,text,phase='repair' if attempt else 'answer',attempt=attempt,reasoning=reasoning)
-                return
-            except HTTPException as error:
-                yield self.emit(tid,'error',{'code':error.detail['code'],'message':error.detail['message']})
+            if text is not None:
+                try:
+                    yield from self.respond(tid,turn,text,phase='repair' if attempt else 'answer',attempt=attempt,reasoning=reasoning)
+                    return
+                except HTTPException as error:
+                    yield self.emit(tid,'error',{'code':error.detail['code'],'message':error.detail['message']})
             record=self.tasks.record(tid)
             feedback=next(event['data'] for event in reversed(record['events']) if event['type']=='answer.rejected' and event['data']['turn_id']==turn)
             if attempt==limit:break
-            prompt,definitions=prepare(record,{},closing='只重写被拦的解释，不执行任何业务动作。',feedback=feedback,instructions=self.settings.instructions())
+            # Same-unit alternatives do not prove that the requested field was
+            # read (thermal resistance is not soil thermal resistivity). Let the
+            # model either correct the draft or acquire the missing read evidence.
+            needs_evidence=any(issue['code'].startswith('UNGROUNDED') for issue in feedback['issues'])
+            visible=self.registry.visible(record)
+            recovery_tools={name:tool for name,tool in visible.items() if tool.kind=='read' and name!='task_plan'} if needs_evidence else {}
+            progress=task_progress(record,visible)
+            if progress['consecutive_unproductive_reads']>=record['budget']['limits']['max_read_tool_calls']:recovery_tools={}
+            prompt,definitions=prepare(record,recovery_tools,closing=None if recovery_tools else '只重写被拦的解释，不执行任何业务动作。',
+                feedback=feedback,instructions=self.settings.instructions(),progress=progress)
             _,model=self.model.status();metrics={**request_summary(model,prompt,definitions),'phase':'repair'}
             with self.research.store.db() as db:task=self.tasks.load(db,tid)
             reason=self.tasks.closing_reason(task,metrics['prompt_bytes'],metrics['definition_bytes'],repair=True)
             if reason:break
             self.tasks.emit(tid,'answer.repair',{'turn_id':turn,'attempt':attempt+1,'feedback':compress_result({
-                'status':'error','summary':'根据核验问题重写解释','data':{'issues':feedback['issues']}})})
+                'status':'error','summary':'根据核验问题补取只读证据或重写解释','data':{'issues':feedback['issues']}}),
+                'read_tools_allowed':bool(recovery_tools),'engineering_writes_allowed':False})
             task=self.tasks.begin_model(tid,turn,metrics)
             timeout=min(task['limits']['model_timeout_s'],max(.001,(task['limits']['max_active_ms']-task['elapsed_ms'])/1000),max(.001,task['deadline']-time()))
             started=perf_counter()
@@ -455,8 +443,13 @@ class Harness:
             self.tasks.model_finished(tid,turn,(perf_counter()-started)*1000,reply.usage,{'status':'ok','phase':'repair',
                 'usage_available':all(key in reply.usage for key in ('prompt_tokens','completion_tokens'))})
             if reply.tool_calls:
-                self.tasks.emit(tid,'answer.repair_rejected',{'turn_id':turn,'attempt':attempt+1,'code':'TOOLS_NOT_ALLOWED'})
-                break
+                if not recovery_tools or any(call['name'] not in recovery_tools for call in reply.tool_calls):
+                    self.tasks.emit(tid,'answer.repair_rejected',{'turn_id':turn,'attempt':attempt+1,'code':'TOOLS_NOT_ALLOWED'})
+                    break
+                plan=compile_calls(reply.tool_calls,recovery_tools,record['workspace_id'],record['workspace_revision'])
+                yield from self.execute_plan(tid,turn,plan,recovery_tools,record,reasoning=reply.reasoning,source='model',soft_limit=True)
+                text=None
+                continue
             text,reasoning=reply.text,reply.reasoning
         yield from self.closing(tid,turn,'解释修正次数或可用预算已到上限。')
 

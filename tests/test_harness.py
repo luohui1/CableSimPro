@@ -12,7 +12,6 @@ import pytest
 from backend.harness.contracts import Limits
 from backend.harness.providers import OpenAICompatibleProvider
 from test_research import client,study
-from test_index_reproductions import library
 
 FAKE_KEY='test-only-model-credential'
 
@@ -49,10 +48,11 @@ def fake_model(monkeypatch):
             choice=response['choices'][0];message=choice['message']
             deltas=[]
             if message.get('tool_calls'):
-                tool=message['tool_calls'][0];arguments=tool['function']['arguments'];middle=len(arguments)//2
-                deltas=[{'tool_calls':[{'index':0,'id':tool['id'],'type':'function','function':{
-                    'name':tool['function']['name'],'arguments':arguments[:middle]}}]},
-                    {'tool_calls':[{'index':0,'function':{'arguments':arguments[middle:]}}]}]
+                for index,tool in enumerate(message['tool_calls']):
+                    arguments=tool['function']['arguments'];middle=len(arguments)//2
+                    deltas.extend([{'tool_calls':[{'index':index,'id':tool['id']+'-'+str(index),'type':'function','function':{
+                        'name':tool['function']['name'],'arguments':arguments[:middle]}}]},
+                        {'tool_calls':[{'index':index,'function':{'arguments':arguments[middle:]}}]}])
             else:
                 text=message['content'];middle=len(text)//2
                 deltas=[{'content':text[:middle]},{'content':text[middle:]}]
@@ -183,7 +183,9 @@ def test_thinking_mode_reasoning_is_passed_back_on_every_later_request(client,fa
     assert all('reasoning_content' in message for message in requests[-1]['messages'] if message['role']=='assistant')
     # 被核验退回重写时，宿主构造的草稿消息同样带上该字段
     script.extend([answer('工程里共有 987654 个输入。'),answer('已读取工程。')]);send(client,tid,'输入有多少？')
-    assert 'tools' not in requests[-1] and all('reasoning_content' in message for message in requests[-1]['messages'] if message['role']=='assistant')
+    visible=client.app.state.harness.registry.visible(client.app.state.harness.tasks.record(tid))
+    assert all(visible[row['function']['name']].kind=='read' for row in requests[-1]['tools'])
+    assert all('reasoning_content' in message for message in requests[-1]['messages'] if message['role']=='assistant')
 
 
 def test_domain_proposals_show_display_units_and_reject_without_writing(client,fake_model):

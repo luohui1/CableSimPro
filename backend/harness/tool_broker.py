@@ -127,6 +127,9 @@ class ToolBroker:
                 identity.update(study_id=sid,study_revision=study['revision'])
                 if tool.method is None:identity['method']=self.research.module_definition(study['definition'],args.get('module'))['method']
         if args.get('run_id'):identity['run_id']=args['run_id']
+        if tool and tool.name in ('platform_read','platform_prepare') and args.get('operation'):
+            contract=self.platform.schema(args['operation'])
+            identity.update(platform_operation=args['operation'],platform_contract_digest=contract['contract_digest'])
         if tool and tool.name in ('run_read','study_read') and args.get('run_id'):
             with self.research.store.db() as db:
                 row=db.execute('SELECT revision FROM workspaces WHERE id=?',(task['workspace_id'],)).fetchone()
@@ -167,6 +170,12 @@ class ToolBroker:
 
     def dispatch(self,task,args,tool,identity):
         wid=task['workspace_id'];name=tool.name
+        if name=='platform_capabilities':return self.platform.discover(task,args)
+        if name=='platform_read':return self.platform.read(task,args)
+        if name=='platform_prepare':return self.platform.prepare(task,args)
+        if name=='task_plan':
+            from .progress import update
+            return update(self.tasks,self.registry,task,args)
         if name=='inbox_read':
             from .inbox import read
             return read(self.research,args)

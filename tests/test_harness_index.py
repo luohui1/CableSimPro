@@ -6,7 +6,6 @@ import pytest
 from test_harness import fake_model,session,send,call,answer
 from test_harness_recipes import final_text,metrics
 from test_research import client,study
-from test_index_reproductions import library
 from time import perf_counter
 import json
 

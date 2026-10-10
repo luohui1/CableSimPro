@@ -25,7 +25,8 @@ class Limits:
     max_repair_attempts: int = 2
     lifetime_s: int = 1800
     model_timeout_s: int = 30
-    max_read_tool_calls: int = 6
+    platform_read_timeout_s: int = 8
+    max_read_tool_calls: int = 6  # Consecutive reads adding no new evidence; productive reads use the total budget.
 
     @classmethod
     def configured(cls):

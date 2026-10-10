@@ -1,7 +1,6 @@
 """Summary routing, pressure recovery and saved FEM hand comparisons; no solver."""
 from copy import deepcopy
 import json
-from test_index_reproductions import library
 import sqlite3
 from time import perf_counter
 
@@ -21,7 +20,7 @@ def saved_run(client):
     return w,s,run
 
 
-def test_summary_contains_all_cases_and_inputs_then_disables_detail_reads(client,fake_model,monkeypatch):
+def test_summary_contains_all_cases_and_inputs_without_forbidding_detail_reads(client,fake_model,monkeypatch):
     w,s,run=saved_run(client);h=client.app.state.harness;tid=session(client,w)
     data=project_digest(h.research,h.tasks.record(tid),{}).data
     latest=data['studies'][0]['latest_run'];case=latest['cases'][0]
@@ -65,7 +64,7 @@ def test_summary_contains_all_cases_and_inputs_then_disables_detail_reads(client
     script.extend([first,answer(text)])
     started=perf_counter();events=send(client,tid,'汇总各研究的载流量结论和限制因素');elapsed=perf_counter()-started
     audit=h.tasks.record(tid)
-    assert final_text(events)==text and not requests[-1].get('tools')
+    assert final_text(events)==text and requests[-1].get('tools')
     assert requests[-1]['messages'][2]['reasoning_content']=='摘要足够作答。'
     assert audit['budget']['model_requests']==2 and audit['budget']['tool_calls']==1
     assert not any(e['type'] in ('answer.rejected','answer.fallback') for e in audit['events'])
@@ -153,6 +152,8 @@ def test_saved_fem_comparison_hand_delta_unconverged_refusal_and_proposal_no_job
     script.extend([call('fem_comparison_read',{'run_id':'saved-fem','iec_run_id':'saved-iec'}),answer('有限元尚未收敛，不给出可用偏差结论。')]);send(client,tid)
     assert h.tasks.record(tid)['results'][-1]['data']['comparisons']==[]
     assert run_points(h.research,fem)['cases'][0]['results']==[]
+    from backend.harness.platform import evidence_view
+    assert evidence_view(h.research,fem)['cases'][0]['results']==[]  # Generic API reads keep the same qualification.
     # Explicit finite-element boundaries and mesh are reviewable candidate
     # parameters, not derived engineering results or an HPC authorization.
     doc=iec['snapshot']['cases'][0]['input'];params={'domain_options':{'section_id':doc['sections'][0]['id'],

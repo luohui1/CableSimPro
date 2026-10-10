@@ -4,7 +4,6 @@ Real ASGI workflows and saved algebraic plugin evidence; scripted local model,
 no real credential, browser, native FEM, engineering approval or HPC submission.
 """
 import json
-from test_index_reproductions import library
 from time import perf_counter
 
 from backend.harness.evidence import quantity_facts,run_points
