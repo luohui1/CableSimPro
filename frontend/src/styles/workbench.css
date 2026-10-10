@@ -520,6 +520,8 @@
 .plugin-figure img { width: 100%; max-height: calc(var(--space-12) * 8); object-fit: contain; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--panel); }
 .plugin-figure figcaption { display: flex; flex-direction: column; gap: var(--space-1); color: var(--text-secondary); font-size: var(--text-note); line-height: 1.6; }
 .plugin-figure figcaption b { color: var(--text); }
+/* 插件示意图是透明底深色线条：深色主题下当作一张印刷插图放在浅色底上，不反相（反相会把底也反成灰色） */
+[data-theme="dark"] .plugin-figure img { background: var(--text); border-color: var(--text); }
 .capability-description { color: var(--text-secondary); line-height: 1.6; }
 .capability-headlines { display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: var(--text-note); }
 .capability-headlines > span:not(.muted) { padding: 0 var(--space-2); border-radius: var(--radius-item); background: var(--fill); }

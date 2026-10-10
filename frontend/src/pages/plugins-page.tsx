@@ -21,6 +21,9 @@ import { RelationPanel } from "@/components/relation-panel";
 
 type Row = Record<string, unknown>;
 
+/** 清单说明多是逐条拼接的：收掉“。；”这类重复标点，标准号与年份之间补空格（IEC60853 → IEC 60853）。 */
+const prose = (value: string) => value.replace(/[。．.]\s*；/g, "；").replace(/；\s*；/g, "；").replace(/(IEC|GB\/T|GB)(\d)/g, "$1 $2");
+
 /** 插件类别：以清单 presentation.category 为准；早期清单没有声明时按分析类型与运行位置推断。 */
 const CATEGORIES: [string, string][] = [["calculation", "计算方法"], ["modeling", "建模"], ["simulation", "仿真"], ["data-standard", "数据与标准"], ["report", "报告"], ["agent-skill", "Agent 技能"]];
 function pluginGroup(row: Row): string {
@@ -138,7 +141,7 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
       {art && <img src={art} alt="" />}
       <div>
         <h1>{text(row.name)}<span className="muted">{text(method.version)}</span>{text(presentation.category_title) && <span className="tag">{text(presentation.category_title)}</span>}</h1>
-        <p className="plugin-description">{text(row.description)}</p>
+        <p className="plugin-description">{prose(text(row.description))}</p>
       </div>
     </header>
     <div className="detail-body">
@@ -173,11 +176,11 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
                     <span className={`tag ${isBenchmarked(text(validation.level)) ? "tag-good" : ""}`}>{text(validation.level) ? validationLevel(text(validation.level)) : "未声明验证"}</span>
                   </span>
                 </div>
-                {text(cap.description) && <p className="capability-description">{text(cap.description)}</p>}
+                {text(cap.description) && <p className="capability-description">{prose(text(cap.description))}</p>}
                 {!!headlines.length && <p className="capability-headlines"><span className="muted">关键结论</span>{headlines.map((item) => <span key={text(item.key)}>{text(item.title)}{text(optionalRecord(item.unit).display) && ` / ${text(optionalRecord(item.unit).display)}`}</span>)}</p>}
                 <p className="capability-meta">{!!outputs.length && <span>输出 {outputs.length} 项</span>}{!!parameters.length && <span>参数 {parameters.length} 项（常用 {basic}）</span>}</p>
                 {!!cases.length && <details><summary>参考算例 {cases.length}</summary><ul>{cases.map((c) => <li key={c}>{c}</li>)}</ul></details>}
-                {!!limits.length && <details><summary>适用范围 {limits.length}</summary><ul>{limits.map((c) => <li key={c}>{c}</li>)}</ul></details>}
+                {!!limits.length && <details><summary>适用范围 {limits.length}</summary><ul>{limits.map((c) => <li key={c}>{prose(c)}</li>)}</ul></details>}
               </li>;
             })}
           </ol>
