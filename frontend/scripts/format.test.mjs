@@ -44,8 +44,8 @@ test("复合SI单位不截断为温度或长度，明确契约单位优先", () 
   assert.equal(parameterUnit("unknown", {}), "—");
 });
 test("微小的非零结果保留数量级，真实零值与缺项不变", () => {
-  assert.equal(engineeringQuantity("relative", 2.5e-10, "1").text, "2.50e−10");
-  assert.equal(engineeringQuantity("relative", -2.5e-10, "1").text, "−2.50e−10");
+  assert.equal(engineeringQuantity("relative", 2.5e-10, "1").text, "2.50 × 10⁻¹⁰");
+  assert.equal(engineeringQuantity("relative", -2.5e-10, "1").text, "−2.50 × 10⁻¹⁰");
   assert.equal(engineeringQuantity("relative", 0, "1").text, "0");
   assert.equal(engineeringQuantity("relative", null, "1").text, "—");
   assert.equal(engineeringQuantity("current", 531.1, "A").text, "531.1");

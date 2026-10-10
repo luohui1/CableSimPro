@@ -22,7 +22,9 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Tooltip } from "@/components/ui/tooltip";
 import { downloadJson } from "@/lib/download";
 import { DuctSensitivity } from "@/features/field/duct-sensitivity";
-import { METRIC_STATES, VALIDATION_QUANTITIES, VALIDATION_STATES } from "@/lib/validation-labels";
+import { METRIC_STATES, VALIDATION_STATES, quantityLabel } from "@/lib/validation-labels";
+import { ComparisonDots } from "@/components/comparison-dots";
+import { displayUnit } from "@/lib/display-names";
 const kinds: Record<string, string> = {
   paper: "论文",
   standard: "标准算例",
@@ -96,12 +98,15 @@ export function ReproductionPage() {
     });
   }
   const groups = new Map<string, CatalogRow[]>();
+  // 比较量下拉的显示名：网格收敛按“情形 · 量”，结果对照按“量（单位）”
+  const groupNames = new Map<string, string>();
   if (activeTab === "convergence")
     for (const value of Array.isArray(detail.data?.convergence)
       ? detail.data.convergence
       : []) {
       const row = optionalRecord(value),
         key = text(row.variant) + " · " + text(row.quantity);
+      groupNames.set(key, `${text(row.variant)} · ${quantityLabel(text(row.quantity))}`);
       groups.set(key, [
         ...(groups.get(key) || []),
         { ...row, id: String(groups.get(key)?.length || 0) },
@@ -110,6 +115,7 @@ export function ReproductionPage() {
   else
     for (const row of rows) {
       const key = text(row.quantity) + " · " + text(row.unit);
+      groupNames.set(key, `${quantityLabel(text(row.quantity))}${text(row.unit) && text(row.unit) !== "1" ? `（${displayUnit(text(row.unit))}）` : ""}`);
       groups.set(key, [...(groups.get(key) || []), row]);
     }
   const chosen = groups.get(metric) || groups.values().next().value || [];
@@ -357,8 +363,7 @@ export function ReproductionPage() {
                                 content={text(row.reason) || text(row.variant)}
                               >
                                 <span tabIndex={0}>
-                                  {VALIDATION_QUANTITIES[text(row.quantity)] ||
-                                    text(row.quantity)}{" "}
+                                  {quantityLabel(text(row.quantity))}{" "}
                                   · {text(row.variant)}
                                 </span>
                               </Tooltip>
@@ -418,12 +423,18 @@ export function ReproductionPage() {
                               : groups.keys().next().value
                           }
                           onChange={setMetric}
-                          options={[...groups.keys()].map((value) => ({
-                            value,
-                            label: value,
-                          }))}
+                          options={[...groups.keys()].map((value) => ({ value, label: groupNames.get(value) || value }))}
                         />
-                        <SeriesChart
+                        {activeTab === "overlay" ? (
+                          <ComparisonDots
+                            unit={unit}
+                            rows={chosen.map((row) => ({
+                              id: row.id,
+                              label: text(row.variant) || text(row.id),
+                              values: { reference: numeric(row.reference), open_source: numeric(row.open_source), comsol: numeric(row.comsol) },
+                            }))}
+                          />
+                        ) : <SeriesChart
                           key={target + '/' + activeTab + '/' + metric}
                           controls
                           quantity={quantity}
@@ -433,7 +444,7 @@ export function ReproductionPage() {
                               ? "网格节点数"
                               : "样本序号"
                           }
-                          yLabel={VALIDATION_QUANTITIES[quantity] || quantity}
+                          yLabel={quantityLabel(quantity)}
                           series={
                             activeTab === "convergence"
                               ? ["open_source", "comsol"].map((solver) => ({
@@ -470,12 +481,8 @@ export function ReproductionPage() {
                                   }),
                                 )
                           }
-                        />
-                        <p className="muted">
-                          {activeTab === "convergence"
-                            ? text(detail.data?.mesh_note)
-                            : "连线仅连接保存样本；缺失值留空。"}
-                        </p>
+                        />}
+                        {activeTab === "convergence" && <p className="muted">{text(detail.data?.mesh_note)}</p>}
                       </>
                     ) : (
                       <EmptyState

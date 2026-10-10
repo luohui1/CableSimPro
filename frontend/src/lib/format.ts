@@ -61,6 +61,7 @@ export type EngineeringPresentation = {
   offset: number;
 };
 
+const SUPERSCRIPT: Record<string, string> = { "-": "⁻", "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴", "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹" };
 export function significantNumber(
   value: number | null | undefined,
   digits = 3,
@@ -69,8 +70,11 @@ export function significantNumber(
   if (value === 0) return "0";
   const rounded = Number(value.toPrecision(digits));
   const exponent = Math.floor(Math.log10(Math.abs(rounded)));
-  if (exponent < -4 || exponent >= 7)
-    return rounded.toExponential(digits - 1).replaceAll("-", "−");
+  if (exponent < -4 || exponent >= 7) {
+    // 工程写法 a × 10ⁿ，不用程序式的 e 记数
+    const [mantissa, power] = rounded.toExponential(digits - 1).split("e");
+    return `${mantissa.replace("-", "−")} × 10${power.replace("+", "").split("").map((c) => SUPERSCRIPT[c] ?? c).join("")}`;
+  }
   return formatNumber(rounded, Math.max(0, digits - 1 - exponent));
 }
 
