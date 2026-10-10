@@ -49,7 +49,7 @@ export function AgentTaskList({ theme }: { theme: "light" | "dark" }) {
                 const state = taskState(row);
                 return <Link key={row.id} className="agent-task" to="/agent" search={{ theme, task: row.id, workspace: row.workspace_id }} aria-current={row.id === search.task ? "page" : undefined}>
                   <span className={`agent-task-mark is-${state.tone}`}>{state.tone === "running" ? <WorkingMark state="working" /> : <Icon name={state.tone === "review" ? "agent/proposal" : state.tone === "done" ? "agent/approve" : state.tone === "error" ? "status/warning" : "status/pending"} />}</span>
-                  <span className="agent-task-title">{row.title || "未命名任务"}</span>
+                  <span className="agent-task-title" title={row.title || undefined}>{row.title || "未命名任务"}</span>
                   <time>{when(row.updated)}</time>
                   <span className="agent-task-detail">{state.text}</span>
                 </Link>;

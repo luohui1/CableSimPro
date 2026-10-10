@@ -15,7 +15,9 @@ export const useShellSlot = () => useContext(ShellSlot);
  */
 const COLLAPSED_KEY = 'cablesim:shell:sidebar-collapsed';
 const WIDTH_KEY = 'cablesim:shell:sidebar-width-px';
-const MIN_WIDTH = 220, MAX_WIDTH = 400, DEFAULT_WIDTH = 240;
+const MIN_WIDTH = 220, MAX_WIDTH = 400;
+// 没调过宽度时按屏幕给默认值：大屏宽一些，工程与型号名称少截断
+const defaultWidth = () => (typeof window !== 'undefined' && window.innerWidth >= 1600 ? 280 : 240);
 const clampWidth = (value: number) => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, value)));
 function readStored(key: string) { try { return localStorage.getItem(key); } catch { return null; } }
 function store(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* 隐私模式下只保留本次会话 */ } }
@@ -46,7 +48,7 @@ export function ShellLayout() {
   // 首帧同步读出收起状态和宽度，不在 effect 里修正，刷新时侧栏不跳。
   const [collapsed, setCollapsed] = useState(() => readStored(COLLAPSED_KEY) === 'true');
   const [animating, setAnimating] = useState(false);
-  const width = useRef(clampWidth(Number(readStored(WIDTH_KEY)) || DEFAULT_WIDTH));
+  const width = useRef(clampWidth(Number(readStored(WIDTH_KEY)) || defaultWidth()));
   useLayoutEffect(() => applyWidth(width.current), []);
   // 过渡只在用户主动开合的那一次加上，平时不挂，窗口缩放不会触发一串中间尺寸（ZCode useAnimatedResizablePanel）。
   // 侧栏只随人手动开合（§2：所有页面保持展开），不随进入工作窗口自动收起
@@ -88,7 +90,7 @@ export function ShellLayout() {
     {/* 换页时旧页面保留到新页面就绪；顶部细进度条给出即时反馈（延迟 150 ms 出现，快的跳转看不到）。 */}
     <div className="route-progress" data-active={loading || undefined} aria-hidden="true" />
     <WorkbenchSidebar theme={theme} onTheme={onTheme} onSlot={setSlot} collapsed={collapsed} onCollapse={toggle} />
-    {!collapsed && <div className="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="调整侧栏宽度" aria-valuemin={MIN_WIDTH} aria-valuemax={MAX_WIDTH} aria-valuenow={width.current} tabIndex={0} onPointerDown={startResize} onKeyDown={resizeByKey} onDoubleClick={(event) => { width.current = DEFAULT_WIDTH; applyWidth(DEFAULT_WIDTH); store(WIDTH_KEY, String(DEFAULT_WIDTH)); event.currentTarget.setAttribute('aria-valuenow', String(DEFAULT_WIDTH)); }} />}
+    {!collapsed && <div className="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="调整侧栏宽度" aria-valuemin={MIN_WIDTH} aria-valuemax={MAX_WIDTH} aria-valuenow={width.current} tabIndex={0} onPointerDown={startResize} onKeyDown={resizeByKey} onDoubleClick={(event) => { const reset = defaultWidth(); width.current = reset; applyWidth(reset); store(WIDTH_KEY, String(reset)); event.currentTarget.setAttribute('aria-valuenow', String(reset)); }} />}
     <ShellSlot.Provider value={slot}><Outlet /></ShellSlot.Provider>
   </div>;
 }

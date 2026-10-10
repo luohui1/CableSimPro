@@ -5,7 +5,6 @@ import { studyIndex, typeIndex, workspaces } from "@/api/research";
 import { text } from "@/api/client";
 import { AppShell } from "@/components/app-shell";
 import { usePageTheme } from "@/components/catalog-shell";
-import { StatusMark } from "@/components/status-mark";
 import { InlineEmpty } from "@/components/states";
 import { Icon } from "@/components/icon";
 import { Button, IconButton } from "@/components/ui/button";
@@ -160,7 +159,7 @@ export function AgentPage() {
   </aside>;
 
   return (
-    <AppShell title={title} status={state ? <span className={`agent-state is-${state.tone}`}>{state.text}</span> : <StatusMark kind="draft" label="新任务" />}
+    <AppShell title={title} status={state ? <span className={`agent-state is-${state.tone}`}>{state.text}</span> : null}
       actions={<>
         {summary?.study_id && <Button size="compact" variant="ghost" onClick={() => openStudy(summary.study_id!)}><Icon name="nav/workbench" />在工作台打开</Button>}
         {!side && <IconButton variant="ghost" icon="nav/sidebar" label={pending ? `展开右栏（${pending} 项改动待审核）` : "展开右栏"} onClick={toggleSide} />}

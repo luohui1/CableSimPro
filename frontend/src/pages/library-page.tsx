@@ -202,7 +202,7 @@ export function AssetsPage() {
       }
     >
       {!filtered && !pending && !failure && !rows.length ? (
-        <InlineEmpty title={`${group.empty}。导入资源草稿，审核发布后研究才能引用。`} action={<Button size="compact" onClick={openImport}>导入资源草稿</Button>} />
+        <InlineEmpty title={`${group.empty}。用右上角“导入资源草稿”导入，审核发布后研究才能引用。`} />
       ) : (
         <>
           <Toolbar label="资源筛选">

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { objectRelations, type ObjectKind, type Relation } from "@/api/object-index";
 import { message } from "@/api/client";
@@ -27,16 +28,20 @@ function Row({ row, label }: { row: Relation; label: string }) {
   </li>;
 }
 
-/** “被用于”按引用者类别合并：每类最近几条，其余只给数量，避免几十个运行把面板撑满。 */
+/** “被用于”按引用者类别合并：每类先列最近几条，“另有 N 个”可以展开看全部。 */
 function UsedBy({ rows }: { rows: Relation[] }) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
   const kinds = [...new Set(rows.map((row) => row.target.kind))];
   return <ul className="relation-list">{kinds.map((kind) => {
     const group = rows.filter((row) => row.target.kind === kind).sort((a, b) => (b.target.updated || "").localeCompare(a.target.updated || ""));
     const changed = group.filter((row) => row.freshness === "outdated").length;
+    const all = open.has(kind);
     return <li key={kind} className="relation-group">
       <span className="relation-role">{KIND_LABELS[kind] || kind} {group.length}{changed ? ` · ${changed} 个已变化` : ""}</span>
-      <ul className="relation-list">{group.slice(0, SHOWN).map((row, index) => <li key={row.target.id + index} className="relation-row is-plain"><span className="relation-target"><ObjectChip card={row.target} status={false} /></span></li>)}</ul>
-      {group.length > SHOWN && <small className="relation-note">另有 {group.length - SHOWN} 个</small>}
+      <ul className="relation-list">{(all ? group : group.slice(0, SHOWN)).map((row, index) => <li key={row.target.id + index} className="relation-row is-plain"><span className="relation-target"><ObjectChip card={row.target} status={false} /></span></li>)}</ul>
+      {group.length > SHOWN && <button type="button" className="relation-more" aria-expanded={all}
+        onClick={() => setOpen((current) => { const next = new Set(current); if (all) next.delete(kind); else next.add(kind); return next; })}>
+        {all ? "收起" : `另有 ${group.length - SHOWN} 个，展开`}</button>}
     </li>;
   })}</ul>;
 }

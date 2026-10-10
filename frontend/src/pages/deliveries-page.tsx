@@ -66,7 +66,8 @@ export function DeliveriesPage() {
     <Toolbar label="交付筛选">
       <Select label="所属" value={filter || "all"} onChange={value => go(value === "all" ? "" : value, "")}
         options={[{ value: "all", label: "全部工程与型号" }, ...owners.map(owner => ({ value: owner.wid, label: owner.name }))]} />
-      <Select label="PDF 版本" value={audience} disabled={download.isPending} onChange={value => setAudience(value as ReportAudience)} options={[{value:"customer",label:"客户版"},{value:"internal",label:"内部审核版"}]} />
+      {/* 没有交付时不显示下载版本选择 */}
+      {!!rows.length && <Select label="PDF 版本" value={audience} disabled={download.isPending} onChange={value => setAudience(value as ReportAudience)} options={[{value:"customer",label:"客户版"},{value:"internal",label:"内部审核版"}]} />}
     </Toolbar>
     {pending ? <LoadingState title="正在读取交付" />
       : failure ? <ErrorState description={message(failure)} action={<Button onClick={() => { void spaces.refetch(); lists.forEach(list => void list.refetch()); }}>重新读取</Button>} />

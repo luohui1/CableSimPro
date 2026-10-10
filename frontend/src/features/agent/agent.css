@@ -190,7 +190,7 @@
 .agent-task-mark.is-review { color: var(--agent); }
 .agent-task-mark.is-done { color: var(--success); }
 .agent-task-mark.is-error { color: var(--attention); }
-.agent-task-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-body); }
+.agent-task-title { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-height: 1.4; overflow-wrap: anywhere; font-size: var(--text-body); }
 .agent-task time { color: var(--text-weak); font-size: var(--text-note); font-variant-numeric: tabular-nums; }
 .agent-task-detail { grid-column: 2 / 4; color: var(--text-secondary); font-size: var(--text-note); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

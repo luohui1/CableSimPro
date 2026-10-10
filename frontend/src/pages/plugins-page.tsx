@@ -52,7 +52,7 @@ export function PluginsPage() {
 
   return (
     <CatalogShell title="插件" status={<span className="muted">已安装 {rows.length} 个 · 计算方法全部来自插件</span>}
-      actions={<Tooltip content="宿主尚未提供插件安装接口"><span><Button size="compact" disabled>从文件安装</Button></span></Tooltip>}>
+      actions={<Tooltip content="本版本暂不支持从文件安装插件；插件随软件发布，更新软件即可获得新版本"><span><Button size="compact" disabled>从文件安装</Button></span></Tooltip>}>
       <div data-page={pid ? "plugin-detail" : "plugins"} className="plugins-page">
         <QueryState query={catalog} empty={!rows.length && "尚无已安装插件"}>
           <nav className="plugin-list" aria-label="已安装插件">
