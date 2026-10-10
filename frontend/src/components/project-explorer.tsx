@@ -25,7 +25,7 @@ export function calculationKind(study: StudyRow, catalog: Plugin[]) {
   const hpc = text(optionalRecord(plugin?.execution_policy).backend) === "slurm";
   const icon = driverViews[kind]?.icon || (hpc || text(capability?.analysis) === "transient" ? "calc/thermal-field" : text(capability?.analysis) === "geometry" ? "object/section" : "calc/ampacity");
   // 能力标题里的括注（标准条款、适用场景）留给方法页，列表只用主名
-  return { icon, label: driverViews[kind]?.label || text(capability?.title) || text(study.definition.task) || text(pin.capability),
+  return { icon, label: driverViews[kind]?.label || study.task,
     methodName: text(plugin?.name) || text(pin.plugin_id), hpc };
 }
 
@@ -79,7 +79,7 @@ export function ProjectExplorer({ workspaceId, projectName, document, activeStud
   const head = projectName.split(" · ")[0];
   return <nav className="project-explorer" aria-label="工程浏览器">
     <header>
-      <strong>{projectName}</strong>
+      <strong title={projectName}>{projectName}</strong>
     </header>
     {current && document && <Section icon="object/overview" title="模型">
       {document.sections.map((section) => <Link key={section.id} className="explorer-item" {...at(current, calc, studyEntryTab(calc), { view: "section" })} aria-current={view === "section" ? "true" : undefined}>
@@ -104,7 +104,7 @@ export function ProjectExplorer({ workspaceId, projectName, document, activeStud
       {(books.data || []).map((book) => <Link key={book.id} className="explorer-item" {...at(current, "report", "preview", { delivery: book.id })}>
         <Icon name="result/report" /><span><b>{book.kind === "specification" ? "规格书" : "计算书"} 第 {book.version} 版</b><small>{new Date(book.created).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</small></span>
       </Link>)}
-      <Link className="explorer-item explorer-add" {...at(current, "report", "content")}><Icon name="action/add" /><span>{books.data?.length ? "生成新版计算书" : "生成计算书"}</span></Link>
+      <Link className="explorer-item explorer-add" {...at(current, "report", "content")}><Icon name="result/report" /><span>计算书内容</span></Link>
     </Section>}
   </nav>;
 }

@@ -57,6 +57,12 @@ def preview(research, wid, sid, body, *, max_timeout_s=None):
             if spec['key']=='ampacity':spec['condition']='rating-simultaneous'
     snapshot = {'cases': [case], 'definition': {**definition,'driver':{'kind':'single'}},
                 'headline_contract': headline_specs}
+    # The preview's labels and annotations must use the input actually evaluated,
+    # rather than the saved workspace or a stale independent input.
+    if definition['input_source'] == 'domain':
+        snapshot['workspace_state'] = {'domain': document}
+    else:
+        snapshot['definition']['method_input'] = document
     snapshot['artifact_source_contracts']={fingerprint(definition['method']):{
         'manifest_sha256':sha256((plugin.directory/'plugin.json').read_bytes()).hexdigest(),
         'temperature_field_binding':capability.temperature_field_binding.model_dump(mode='json') if capability.temperature_field_binding else None}}
@@ -68,4 +74,5 @@ def preview(research, wid, sid, body, *, max_timeout_s=None):
             'execution_id': result.run_id, 'method': definition['method'],
             'input_digest': fingerprint({'input': document, 'parameters': parameters}),
             'elapsed_ms': (perf_counter() - started) * 1000, 'cases': cases,
-            'artifact_status': statuses_by_artifact, 'headlines': project(snapshot, output, statuses_by_artifact)}
+            'artifact_status': statuses_by_artifact, 'snapshot': snapshot,
+            'headlines': project(snapshot, output, statuses_by_artifact)}

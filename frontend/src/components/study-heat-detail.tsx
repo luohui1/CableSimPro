@@ -3,7 +3,8 @@ import { optionalRecord, numeric, text } from '@/api/client';
 import { EmptyState } from './states';
 import { Select } from './ui/select';
 import { displayName } from '@/lib/display-names';
-import { savedDomain } from '@/lib/domain-fields';
+import { savedDomain, entityLabel } from '@/lib/domain-fields';
+import { readableEvidence } from './study-workbench-config';
 
 type Row = Record<string, unknown>;
 const K = 273.15;
@@ -28,9 +29,9 @@ function cableNames(run: Row, caseId: string) {
   const input = optionalRecord(snapshotCase?.input ?? savedDomain(run));
   const circuits = Array.isArray(input.circuits) ? input.circuits as unknown[] : [];
   const names = new Map<string, string>();
-  circuits.map(optionalRecord).forEach((circuit, i) => {
+  circuits.map(optionalRecord).forEach(circuit => {
     const cables = (Array.isArray(circuit.cables) ? circuit.cables : []).map(optionalRecord);
-    cables.forEach((cable, j) => names.set(text(cable.id), cables.length > 1 ? `回路 ${i + 1} · ${j + 1}` : `回路 ${i + 1}`));
+    cables.forEach(cable => names.set(text(cable.id), entityLabel(input, text(cable.id))));
   });
   return names;
 }
@@ -73,7 +74,7 @@ export function StudyHeatDetail({ run, cases, initialCase }: { run?: Row; cases:
     if (rise !== null) heat.set(`${text(h.source)}|${text(h.target)}`, rise);
   }
   const evidence = optionalRecord(current.evidence);
-  const sources = (Array.isArray(trace.sources) ? trace.sources : []).map(text).filter(Boolean);
+  const sources = (Array.isArray(trace.sources) ? trace.sources : []).map(text).filter(Boolean).map(readableEvidence);
   const name = (id: string) => names.get(id) || id.replace(/^cable\//, '');
 
   return <div className="heat-detail">
@@ -105,7 +106,7 @@ export function StudyHeatDetail({ run, cases, initialCase }: { run?: Row; cases:
       <h3>热路 <span className="muted">K·m/W</span></h3>
       <ol className="thermal-ladder">
         <li className="ladder-end is-hot">导体<b>{fmt(v('conductor_temperature') === undefined ? undefined : v('conductor_temperature')! - K)} °C</b></li>
-        {ladder.map(([label, value]) => value === undefined ? null : <li key={label}><b className="numeric">{value.toFixed(3)}</b><span>{label}</span></li>)}
+        {ladder.map(([label, value]) => value === undefined || value === 0 ? null : <li key={label}><b className="numeric">{value.toFixed(3)}</b><span>{label}</span></li>)}
         <li className="ladder-end">环境<b>互热 {fmt(v('x-cablesim.iec60287.temperature_rise.mutual'))} K</b></li>
       </ol>
     </section>
@@ -122,7 +123,7 @@ export function StudyHeatDetail({ run, cases, initialCase }: { run?: Row; cases:
       <h3>计算口径</h3>
       <dl>
         <div><dt>迭代</dt><dd>{numeric(evidence.iterations) ?? '—'} 次</dd></div>
-        <div><dt>热平衡残差</dt><dd>{numeric(evidence.residual_k)?.toExponential(1) ?? '—'} K</dd></div>
+        <div><dt>热平衡残差</dt><dd>{numeric(evidence.residual_k) === null ? '—' : numeric(evidence.residual_k)! < 0.001 ? '< 0.001' : numeric(evidence.residual_k)!.toFixed(3)} K</dd></div>
         <div><dt>交流电阻</dt><dd>{v('ac_resistance') === undefined ? '—' : (v('ac_resistance')! * 1e3).toFixed(4)} Ω/km</dd></div>
         <div><dt>方法</dt><dd>{displayName(text(output.plugin_id))} {text(output.plugin_version)}</dd></div>
       </dl>

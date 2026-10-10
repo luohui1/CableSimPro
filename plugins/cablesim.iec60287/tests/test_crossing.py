@@ -60,7 +60,9 @@ def test_integrated_rating_and_scope_gates_keep_baseline_evidence(tmp_path):
     assert actual.status=='succeeded',actual.error
     assert actual.value('ampacity','circuit/c1')==pytest.approx(result['derated_current_a'])
     assert 'x-cablesim.temperature-field' not in actual.artifacts
-    assert actual.artifacts['x-cablesim.iec60287-trace']['source']['plugin_version']=='1.1.0'
+    from backend.plugin_host.registry import Registry
+    version = Registry(plugin_id='cablesim.iec60287').get('cablesim.iec60287').manifest.version
+    assert actual.artifacts['x-cablesim.iec60287-trace']['source']['plugin_version'] == version
     from backend.kernel.drivers import compare
     from dataclasses import asdict
     saved={'id':'a','snapshot':{'cases':[{'input':doc,'parameters':{}}],'definition':{'method':{}}},

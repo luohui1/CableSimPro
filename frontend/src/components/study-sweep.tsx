@@ -9,7 +9,7 @@ import { optionalRecord, numeric, text, message } from "@/api/client";
 import { engineeringQuantity } from "@/lib/format";
 import { displayName, displayUnit } from "@/lib/display-names";
 import { sweepSummary } from "@/lib/sweep-summary";
-import { savedDomain } from "@/lib/domain-fields";
+import { savedDomain, entityLabel } from "@/lib/domain-fields";
 import type { DomainDocument } from "@/lib/domain-fields";
 import { domainInputChoices } from "@/lib/domain-input-choices";
 import { sweepView } from "@/lib/sweep-view";
@@ -34,6 +34,11 @@ type ScanForm = {
   step: string;
   source: string;
 };
+function readableSource(value:unknown){
+  const reference=text(value);
+  if(reference.startsWith('扫描设置：'))try{return text(optionalRecord(JSON.parse(reference.slice(5))).source);}catch{/* 保留原有人工来源。 */}
+  return reference;
+}
 export function StudySweep({
   run,
   tab,
@@ -70,6 +75,17 @@ export function StudySweep({
     } catch {
       /* older snapshot retains its explicit samples */
     }
+  // 早期研究只保存实际采样点：按保存值回填，不从空表单猜范围。
+  const samples=configuration?.driver?.samples || [];
+  if(!metadata.path && samples.length){
+    const paths=Object.keys(samples[0].changes || {});
+    if(paths.length===1){
+      const path=paths[0],values=samples.map(sample=>Number(sample.changes?.[path]));
+      const step=values[1]-values[0];
+      if(values.every(Number.isFinite))metadata={path,minimum:String(values[0]),maximum:String(values.at(-1)),
+        step:values.length>1&&values.every((value,index)=>!index || Math.abs(value-values[index-1]-step)<1e-9)?String(Number(step.toPrecision(12))):'',source:saved || '沿用已保存研究的采样点'};
+    }
+  }
   const form = (context.moduleInputs.sweep?.value || {
     path: metadata.path || candidates[0]?.value || "",
     minimum: metadata.minimum || "",
@@ -282,6 +298,7 @@ export function StudySweep({
                     </Button>
                   )}
                 </div>
+                <p role="status" className="muted">{form.minimum.trim() && form.maximum.trim() && Number(form.step)>0 ? `共 ${Math.floor((Number(form.maximum)-Number(form.minimum))/Number(form.step)+1e-9)+1} 个采样点；应用后保存并运行。` : samples.length ? `已保存 ${samples.length} 个采样点；填写范围后可替换。` : '填写范围与步长，应用后保存并运行。'}</p>
               </>
             )}
             {configuration && (
@@ -364,39 +381,41 @@ export function StudySweep({
               [
                 [
                   "采样",
-                  "变量 / SI",
+                  "变量",
                   "物理量",
-                  "实体",
-                  "结果 / SI",
+                  "对象",
+                  "结果",
                   "单位",
                   "状态",
                   "原因",
                   "判定",
-                  "方法",
-                  "运行",
+                  "方法版本",
                   "来源",
                 ],
                 ...rows.map((row) => [
                   row.label,
-                  JSON.stringify(row.changes),
-                  row.key,
-                  row.entity,
-                  row.value,
-                  row.unit,
-                  row.status,
+                  `${variable?.label || variableLabel}：${engineeringQuantity('parameter',row.x,variable?.unit || variableUnit).text} ${displayUnit(variable?.unit || variableUnit)}`,
+                  selected?.label || displayName(row.key),
+                  entityLabel(run ? savedDomain(run) : undefined,row.entity),
+                  engineeringQuantity(row.key,row.value,row.unit).text,
+                  engineeringQuantity(row.key,row.value,row.unit).unit,
+                  displayName(row.status),
                   row.reason,
-                  row.verdict,
-                  JSON.stringify(data.definition.method),
-                  run?.id,
-                  row.source.reference,
+                  ({satisfied:'满足',not_satisfied:'不满足',unavailable:'无法判断'} as Record<string,string>)[row.verdict] || '未提供',
+                  displayName(text(optionalRecord(data.definition.method).plugin_id))+' '+text(optionalRecord(data.definition.method).version),
+                  readableSource(row.source.reference),
                 ]),
               ],
-              "sweep-results.csv",
+              "参数扫描结果.csv",
             )
           }
         >
           导出逐点 CSV
         </Button>
+        <Button size="compact" variant="ghost" onClick={()=>downloadCsv([
+          ['采样','变量路径与完整 SI 值','物理量键','对象标识','完整 SI 数值','SI 单位','方法发行摘要','运行标识','输入摘要','输出摘要','来源'],
+          ...rows.map(row=>[row.label,JSON.stringify(row.changes),row.key,row.entity,row.value,row.unit,optionalRecord(data.definition.method).release_digest,run?.id,run?.input_digest,run?.output_digest,row.source.reference]),
+        ],'参数扫描完整精度与追溯.csv')}>完整精度与追溯</Button>
       </Toolbar>
       {tab === "curve" && (
         <SeriesChart
@@ -419,7 +438,7 @@ export function StudySweep({
           ]}
         />
       )}
-      <DataTable
+      {tab !== 'curve' && <DataTable
         label="扫描点结果"
         rowLabel={(row) => row.label}
         showGroups={false}
@@ -527,7 +546,7 @@ export function StudySweep({
             render: (row: (typeof rows)[number]) => row.reason || "—",
           }] : []),
         ]}
-      />
+      />}
     </div>
   );
 }

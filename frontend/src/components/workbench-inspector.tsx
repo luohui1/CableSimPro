@@ -1,10 +1,11 @@
-import { Suspense, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
+import { useLocation } from '@tanstack/react-router';
 import { displayText } from "@/lib/display-names";
 import type { DomainDocument } from "@/lib/domain-fields";
 import { Icon } from "./icon";
 import { SourceBadge } from "./source-badge";
 import type { PropertyGroup } from "./property-panel";
-import { CableInputs, ConditionsInputs, DomainNumber, type InputSelection } from "./study-inputs";
+import { CableInputs, ConditionsInputs, SectionInputs, DomainNumber, type InputSelection } from "./study-inputs";
 import { StudyCrossingInputs } from './study-crossing-inputs';
 import { inspectorViews } from './study-workbench-config';
 import { Dialog } from './ui/dialog';
@@ -53,6 +54,10 @@ export function WorkbenchInspector({ view = "input", onView, methodPanel, agentP
 }) {
   const [layers, setLayers] = useState(false);
   const [relations,setRelations]=useState(false);
+  const hash=useLocation({select:location=>location.hash});
+  const [section,setSection]=useState(false);
+  const [sectionTab,setSectionTab]=useState('coordinates');
+  useEffect(()=>{if(hash==='edit-model' && document && !historical)setSection(true);},[hash,!!document,historical]);
   return <aside className="workbench-inspector study-inspector" aria-label="属性">
     {(methodPanel || agentPanel) && <div className="inspector-switch" role="tablist" aria-label="属性分页">
       {inspectorViews.filter(item => item.id === 'input' || item.id === 'method' && methodPanel || item.id === 'agent' && agentPanel).map(item =>
@@ -78,7 +83,12 @@ export function WorkbenchInspector({ view = "input", onView, methodPanel, agentP
     </Block>}
     {/* 独立研究的几何输入只读，交叉热源仍属于可编辑的方法工况。 */}
     {!document && <div className="inspector-conditions"><StudyCrossingInputs historical={historical} /></div>}
-    {document && <div className="inspector-layers"><span>分层参数</span><Button size="compact" variant="ghost" onClick={() => setLayers(true)}>查看</Button></div>}
+    {document && <div className="inspector-layers"><span>敷设参数</span><Button size="compact" variant="ghost" onClick={() => setSection(true)}>{historical?'查看':'编辑'}</Button></div>}
+    <Dialog open={section} onOpenChange={setSection} title="编辑工程模型" description="坐标与介质修改进入本地草稿；保存后影响本工程相关研究。" initialFocus="form">
+      <div role="tablist" aria-label="模型参数"><Button variant={sectionTab==='coordinates'?'primary':'ghost'} onClick={()=>setSectionTab('coordinates')}>坐标与尺寸</Button><Button variant={sectionTab==='media'?'primary':'ghost'} onClick={()=>setSectionTab('media')}>介质参数</Button></div>
+      {section && <SectionInputs tab={sectionTab} document={document} historical={historical} onSelect={()=>{}} />}
+    </Dialog>
+    {document && <div className="inspector-layers"><span>分层参数</span><Button size="compact" variant="ghost" onClick={() => setLayers(true)}>{historical?'查看':'编辑'}</Button></div>}
     <Dialog open={layers} onOpenChange={setLayers} title="电缆分层" initialFocus="form">
       {layers && <CableInputs tab="layers" document={document} historical={historical} onSelect={() => {}} />}
     </Dialog>

@@ -790,12 +790,13 @@ class Research:
             if not intact:
                 return {**value, 'integrity': 'corrupt', 'freshness': 'unknown'}
             study = self.definition(db, wid, value['study'])
-            current = row['revision'] == snapshot['workspace_revision']
+            from .read_models import same_workspace_input
+            current = same_workspace_input(self, snapshot, wid, row['revision'], cache)
             try:
                 selected = self.module_definition(study['definition'], snapshot.get('module'))
                 # Editing another module does not invalidate unchanged physical inputs.
                 current = current and StudyConfiguration.model_validate({k:v for k,v in selected.items() if k!='modules'}).model_dump() == StudyConfiguration.model_validate({k:v for k,v in snapshot['definition'].items() if k!='modules'}).model_dump()
-                current = current and self.lock(db, wid, row['revision'], selected['method']) == snapshot['lock']
+                current = current and selected['method'] == snapshot['lock']['method']
             except HTTPException:
                 current = False
         availability = {'status': 'available', 'error': None}
@@ -1011,6 +1012,11 @@ class Research:
                 raise HTTPException(422, '带附图或有限元章节的计算书请选择一个主运行。')
             from .report_attachments import prepare
             ids, attachments = prepare(self, wid, ids, cad_images or [], fem_chapter, section_images)
+        # 先固定生成起点，后续读取和渲染期间任何保存操作均触发冲突。
+        with self.store.read_snapshot() as db:
+            generation_revision = self.store.load(db, wid)[0]['revision']
+            generation_studies = {str(rid): db.execute('SELECT study FROM study_runs WHERE workspace=? AND id=?', (wid, str(rid))).fetchone() for rid in ids}
+            generation_studies = {row['study']: self.definition(db, wid, row['study'])['revision'] for row in generation_studies.values() if row}
         runs = self.verified_runs(wid, ids)
         if attachments and attachments.get('fem_chapter'):
             evidence=attachments['fem_chapter']['data']
@@ -1033,6 +1039,7 @@ class Research:
                     raise HTTPException(422,'IEC/FEM 比较未通过网格与计算域收敛，不能纳入计算书。')
         if current_only and any(r['freshness'] != 'current' for r in runs):
             raise HTTPException(409, '计算书只能纳入当前保存输入的运行；请重新计算或重新选择。')
+        # 输入恢复为相同内容后可使用原运行；生成期间的并发修改仍按当前修订严格拒绝。
         checkpoint('pdf')
         html = render(runs, attachments=attachments) if attachments else render(runs)
         source = [{'run_id': r['id'], 'input_digest': r['input_digest'], 'output_digest': r['output_digest']} for r in runs]
@@ -1045,8 +1052,8 @@ class Research:
                 for run in runs:
                     snapshot = run['snapshot']
                     study = self.definition(db, wid, run['study'])
-                    if (row['revision'] != snapshot['workspace_revision'] or study['revision'] != snapshot['study_revision']
-                            or self.lock(db, wid, row['revision'], self.module_definition(study['definition'], snapshot.get('module'))['method']) != snapshot['lock']):
+                    if (row['revision'] != generation_revision or study['revision'] != generation_studies[run['study']]
+                            or self.module_definition(study['definition'], snapshot.get('module'))['method'] != snapshot['lock']['method']):
                         raise HTTPException(409, '生成期间输入或研究已改变；请重新计算后生成计算书。')
                     for comparison in snapshot['definition']['crosschecks']:
                         self.resolve(comparison['method'])

@@ -149,7 +149,7 @@ function InputTable({
       id: "name",
       label: "对象",
       render: (row) => (
-        <Tooltip content={row.id}>
+        <Tooltip content={row.label}>
           <span tabIndex={0}>{row.label}</span>
         </Tooltip>
       ),

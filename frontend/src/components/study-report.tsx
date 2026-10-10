@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRef, useEffect, useState } from "react";
+import { displayName } from '@/lib/display-names';
 import { delivery, deliveryFile, deliveryPdf, type ReportAudience } from "@/api/delivery";
 import { Select } from "./ui/select";
 import {
@@ -32,7 +33,7 @@ function CurrentReport({
   wid,
   sid,
   run,
-  did,
+  did: requestedDelivery,
   tab,
   dirty,
   onDelivery,
@@ -53,6 +54,9 @@ function CurrentReport({
   runs?: Record<string, unknown>[];
 }) {
   const queries = useQueryClient();
+  const [createdDelivery,setCreatedDelivery]=useState('');
+  const did=createdDelivery || requestedDelivery;
+  useEffect(()=>setCreatedDelivery(''),[run?.id,requestedDelivery]);
   const [audience, setAudience] = useState<ReportAudience>("customer");
   const [includeImage, setIncludeImage] = useState(true);
   const [femId, setFemId] = useState('');
@@ -180,6 +184,8 @@ function CurrentReport({
     },
     onSuccess: (value) => {
       queries.setQueryData(['delivery', wid, text(value.id)], value);
+      setCreatedDelivery(text(value.id));
+      void queries.invalidateQueries({queryKey:['deliveries',wid]});
       onDelivery(text(value.id));
     },
   });
@@ -228,7 +234,7 @@ function CurrentReport({
         description="计算书只从一次成功的运行生成。先在计算模块运行，再回到这里生成。"
       />
     );
-  if (!current)
+  if (!current && !did)
     return (
       <StaleBanner
         description={
@@ -307,14 +313,21 @@ function CurrentReport({
           <dl className="report-sources">
             <div>
               <dt>源运行</dt>
-              <dd>{new Date(text(run.finished)).toLocaleString("zh-CN")}</dd>
+              <dd>{savedRunLabel(run)}</dd>
             </div>
             <div>
               <dt>结果一致性</dt>
               <dd>已由宿主校验</dd>
             </div>
+            <div><dt>所用方法</dt><dd>{displayName(text(methodOf(run).plugin_id))} {text(methodOf(run).version)}</dd></div>
+            <div><dt>输入来源</dt><dd>按所选保存运行的输入快照与逐项来源生成；完整输入与诊断见内部审核版。</dd></div>
           </dl>
-        ) : (
+        ) : tab === 'content' ? <section aria-label="计算书内容" className="report-sources">
+          <h2>{text(optionalRecord(optionalRecord(run.snapshot).definition).title) || '计算书'}</h2>
+          <p>{audience==='customer'?'客户版：结论、敷设图、分组结果与方法依据。':'内部审核版：另含完整输入、诊断与验证证据。'}</p>
+          <ol>{Array.from(new DOMParser().parseFromString(text(document.data.html),'text/html').querySelectorAll('h2')).map(node=>node.textContent?.trim()).filter(Boolean).slice(0,12).map((title,index)=><li key={index}>{title}</li>)}</ol>
+          <p>在“来源”核对保存运行，在“预览”查看并下载纸面计算书。</p>
+        </section> : (
           <iframe
             className="report-frame"
             title="计算书预览"

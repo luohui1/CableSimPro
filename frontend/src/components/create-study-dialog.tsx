@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -23,19 +23,26 @@ import { sourceKind } from "@/lib/selection-view";
 import { modelArtifacts } from "@/api/model-artifacts";
 import { inputContracts, exactContract } from "@/api/input-contracts";
 import { CreateInquiryDialog } from "./create-inquiry-dialog";
+import { AddStudyDialog } from './add-study-dialog';
 
 export function CreateStudyDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   theme: "light" | "dark";
 }) {
-  const [task, setTask] = useState("selection");
+  const [task, setTask] = useState("operating");
+  const [workspaceId,setWorkspaceId]=useState('');
+  const workspaces=useQuery({queryKey:['workspaces'],queryFn:async()=>responseData(api.GET('/api/workspaces')),enabled:props.open});
+  const projects=(Array.isArray(workspaces.data)?workspaces.data:[]).map(optionalRecord);
+  const selected=projects.find(item=>text(item.id)===workspaceId);
+  const picker=<Select label="所属工程" value={workspaceId || 'new-project'} onChange={value=>setWorkspaceId(value==='new-project'?'':value)} options={[{value:'new-project',label:'新建工程'},...projects.map(item=>({value:text(item.id),label:text(item.name)||text(item.title)||text(optionalRecord(item.design).title)||'工程'}))]} />;
+  if(selected)return <AddStudyDialog {...props} key={workspaceId} workspaceId={workspaceId} projectName={text(selected.name)||text(selected.title)||text(optionalRecord(selected.design).title)||'工程'} workspacePicker={picker} />;
   return task === "selection" ? (
     <CreateInquiryDialog
       {...props}
       onOpenChange={(value) => {
         props.onOpenChange(value);
-        if (!value) setTask("selection");
+        if (!value) setTask("operating");
       }}
       onOtherTask={setTask}
     />
@@ -44,10 +51,11 @@ export function CreateStudyDialog(props: {
       {...props}
       key={task}
       initialTask={task}
+      workspacePicker={picker}
       onInquiry={() => setTask("selection")}
       onOpenChange={(value) => {
         props.onOpenChange(value);
-        if (!value) setTask("selection");
+        if (!value) setTask("operating");
       }}
     />
   );
@@ -58,12 +66,14 @@ function GenericCreateStudyDialog({
   theme,
   initialTask,
   onInquiry,
+  workspacePicker,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   theme: "light" | "dark";
   initialTask: string;
   onInquiry: () => void;
+  workspacePicker?:ReactNode;
 }) {
   const navigate = useNavigate();
   const queries = useQueryClient();
@@ -466,6 +476,7 @@ function GenericCreateStudyDialog({
             submit();
           }}
         >
+          {workspacePicker}
           <Select
             label="研究任务"
             value={task || undefined}

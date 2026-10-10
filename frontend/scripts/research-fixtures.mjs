@@ -12,7 +12,9 @@ export async function request(base, endpoint, method = "GET", body) {
     body: body ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(180000),
   });
-  const value = await response.json();
+  const raw=await response.text();
+  let value;
+  try{value=JSON.parse(raw);}catch{throw Error(`${method} ${endpoint}: ${response.status} ${raw.slice(0,500)}`);}
   if (!response.ok)
     throw Error(
       `${method} ${endpoint}: ${response.status} ${JSON.stringify(value)}`,

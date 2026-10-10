@@ -67,10 +67,11 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
   const cable = document?.cable_types.find((item) => item.id === chosen) || document?.cable_types[0];
   const states = new Map(rows.map((row,index)=>[row.id,studyPresentation(row,latest.get(row.id),0,runs[index]?.error,runs[index]?.isPending)]));
   const outdated = rows.filter(row=>states.get(row.id)?.code==='outdated');
-  const open = (row: StudyRow, extra: Record<string, unknown> = {}) => navigate({
+  const open = (row: StudyRow, extra: Record<string, unknown> = {}, hash = '') => navigate({
     to: "/studies/$sid/$module/$tab",
     params: { sid: row.id, module: rootModule(row.definition), tab: studyEntryTab(rootModule(row.definition)) },
     search: { workspace: row.workspace, theme, run: "", delivery: "", ...extra },
+    hash,
   });
 
   const columns: Column<StudyRow>[] = [
@@ -119,7 +120,7 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
   const commandBar = <div className="command-bar" role="toolbar" aria-label="工程命令">
     <div className="command-group" role="group" aria-label="模型">
       <span className="command-caption">模型</span>
-      <Button size="compact" variant="ghost" disabled={!rows.length} onClick={() => rows[0] && void open(rows[0], { view: "section" })}><Icon name="action/edit" />编辑模型</Button>
+      <Button size="compact" variant="ghost" title={!rows.length ? '请先新建研究，在研究中编辑共用模型' : '进入研究的模型输入与敷设编辑'} disabled={!rows.length} onClick={() => rows[0] && void open(rows[0], { view: "section", inspector: 'input' }, 'edit-model')}><Icon name="action/edit" />编辑模型</Button>
     </div>
     <div className="command-group" role="group" aria-label="计算">
       <span className="command-caption">计算</span>

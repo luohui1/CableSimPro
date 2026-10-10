@@ -12,7 +12,7 @@ import { savedRunLabel } from '@/features/field/run-label';
 import { StudyRemoteProgress } from './study-run-control';
 
 const statusLabel = (status: string) => runStates[status]?.label || status;
-const time = (value: unknown) => text(value) ? new Date(text(value)).toLocaleString('zh-CN') : '时间未提供';
+const time = (value: unknown) => text(value) ? new Date(text(value)).toLocaleString('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '时间未提供';
 export default function RunRecordsContent({runs, selectedId, onSelect, workspace, studyId, disabledReason}: {
   runs: Record<string, unknown>[]; selectedId?: string; onSelect: (id: string) => void; workspace?: string; studyId?: string; disabledReason?: string;
 }) {
@@ -21,7 +21,7 @@ export default function RunRecordsContent({runs, selectedId, onSelect, workspace
   const items: BackgroundRun[] = [...runs].reverse().map(run => {
     const status = text(run.status), historical = run.freshness === 'historical' || isVersionStale(run);
     const method = optionalRecord(run.method || optionalRecord(optionalRecord(run.snapshot).definition).method);
-    return { id: text(run.id), label: time(run.created), status: ['accepted','queued'].includes(status) ? 'queued' : ['running','validating'].includes(status) ? 'running' : ['succeeded','partial'].includes(status) ? 'complete' : 'failed',
+    return { id: text(run.id), label: savedRunLabel(run), status: ['accepted','queued'].includes(status) ? 'queued' : ['running','validating'].includes(status) ? 'running' : ['succeeded','partial'].includes(status) ? 'complete' : 'failed',
       detail: [historical ? '历史结果' : '', statusLabel(status), displayName(text(method.plugin_id))].filter(Boolean).join(' · '),
       updatedAt: run.finished ? time(run.finished) : undefined };
   });

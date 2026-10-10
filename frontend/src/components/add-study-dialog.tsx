@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { api, ApiError, message, numeric, optionalRecord, record, responseData, text } from "@/api/client";
@@ -27,8 +27,8 @@ const AMPACITY_TASKS: [Task, string, string, string][] = hostTasks.map(row => [r
  * 默认采用插件契约默认值；工程师可明确选择沿用本工程同方法的最近研究，并记录来源；
  * 建好后在右侧“方法”页按分组修改。缺必填参数时宿主会拒绝，界面如实显示原因。
  */
-export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, projectName }: {
-  open: boolean; onOpenChange: (open: boolean) => void; theme: "light" | "dark"; workspaceId: string; projectName: string;
+export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, projectName, workspacePicker }: {
+  open: boolean; onOpenChange: (open: boolean) => void; theme: "light" | "dark"; workspaceId: string; projectName: string; workspacePicker?:ReactNode;
 }) {
   const navigate = useNavigate();
   const queries = useQueryClient();
@@ -57,7 +57,7 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
       const pin = optionalRecord(item.method);
       return (Array.isArray(item.capabilities) ? item.capabilities : []).map(optionalRecord)
         .filter((cap) => (Array.isArray(cap.outputs) ? cap.outputs : []).some((entry) => optionalRecord(entry).key === output) &&
-          cap.analysis !== "crosscheck" && cap.input_schema === "cablesim.domain/1" && item.platform_supported !== false)
+          cap.analysis !== "crosscheck" && cap.input_schema === "cablesim.domain/1" && pin.plugin_id !== 'cablesim.hybrid-rating' && !text(cap.id).includes('benchmark') && item.platform_supported !== false)
         .map((cap) => ({
           id: `${value}:${text(pin.plugin_id)}:${text(cap.id)}`, task: value,
           method: { ...pin, capability: text(cap.id) } as Method,
@@ -75,7 +75,7 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
     ...AMPACITY_TASKS.filter(([value]) => choices.some((choice) => choice.task === value)).map(([value, label, icon]) => [value, label, icon] as [Task, string, string]),
     ...(simulation.data || []).map((item) => [text(item.task) as Task, text(item.label), "nav/simulation"] as [Task, string, string]),
   ];
-  const options = choices.filter((choice) => choice.task === task);
+  const options = choices.filter((choice) => choice.task === task).sort((a,b) => Number(b.method.plugin_id === 'cablesim.iec60287') - Number(a.method.plugin_id === 'cablesim.iec60287'));
   const chosen = options.find((choice) => choice.id === methodId) || options[0];
 
   // 同方法仅用于工程师主动选择沿用；不把旧研究边界冒充当前插件默认值。
@@ -129,6 +129,7 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
     {loading ? <LoadingState title="正在读取工程与方法" />
       : failure ? <ErrorState description={message(failure)} />
         : <form className="create-study-form add-study-form" onSubmit={(event) => { event.preventDefault(); setError(""); create.mutate(); }}>
+          {workspacePicker}
           <label className="text-field">研究名称<input value={title} maxLength={120} aria-invalid={!!error && !title.trim()} placeholder="如：排管段 · 夏季高温工况" onChange={(event) => setTitle(event.target.value)} /></label>
           <fieldset className="task-choices">
             <legend>要回答的问题</legend>

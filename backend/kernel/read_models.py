@@ -52,6 +52,7 @@ def run_facts(research, row):
                 'workspace_id', 'workspace_revision', 'study_revision', 'module', 'definition', 'lock')}
             compact['workspace_state'] = {name: reference(state[name]) for name in (
                 'study_cable_reference', 'type_origin_reference') if state.get(name)}
+            compact['workspace_state_digest'] = fingerprint(state)
             facts = {'integrity': 'verified', 'snapshot': compact,
                      'method': snapshot['definition']['method'],
                      'headlines': project(snapshot, output, research.artifact_status({'snapshot': snapshot, 'output': output})) if snapshot.get('headline_contract') else [],
@@ -66,14 +67,27 @@ def run_facts(research, row):
     return facts
 
 
+def same_workspace_input(research, snapshot, wid, revision, cache):
+    """Undo/redo can restore identical input under a new optimistic-lock revision."""
+    if revision == snapshot['workspace_revision']:
+        return True
+    key = ('workspace_content', wid, revision)
+    if key not in cache:
+        with research.store.read_snapshot() as db:
+            row, state = research.store.load(db, wid)
+        cache[key] = fingerprint(state) if row['revision'] == revision else None
+    saved = snapshot.get('workspace_state_digest') or fingerprint(snapshot['workspace_state'])
+    return cache[key] == saved
+
+
 def run_state(research, snapshot, wid, revision, study, cache):
-    current = revision == snapshot['workspace_revision']
+    current = same_workspace_input(research, snapshot, wid, revision, cache)
     try:
         selected = research.module_definition(study['definition'], snapshot.get('module'))
         normalize = lambda value: StudyConfiguration.model_validate(
             {key: item for key, item in value.items() if key != 'modules'}).model_dump()
         current = current and normalize(selected) == normalize(snapshot['definition'])
-        current = current and research.lock(None, wid, revision, selected['method']) == snapshot['lock']
+        current = current and selected['method'] == snapshot['lock']['method']
     except HTTPException:
         current = False
     availability = {'status': 'available', 'error': None}

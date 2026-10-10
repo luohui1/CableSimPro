@@ -67,7 +67,7 @@ export function StudyMethodForm({
   // schema stable across its change notifications to avoid a reset/render loop.
   const selectLayout = useMemo(() => {
     let root: unknown = {};
-    try { if(contracts.data && configuration)root=exactContract(contracts.data,configuration.method).parameter_schema; } catch { /* The existing contract error below remains authoritative. */ }
+    try { if(contracts.data && configuration){const value=exactContract(contracts.data,configuration.method);root={...value.parameter_schema,'x-groups':(value as unknown as Record<string,unknown>)['x-groups'] || value.parameter_schema['x-groups']};} } catch { /* The existing contract error below remains authoritative. */ }
     const properties=optionalRecord(expand(root,root).properties);
     const selects=Object.entries(properties).flatMap(([key,raw])=>{
       const field=expand(raw,root),bind=field['x-bind'],bindType=typeof bind==='string' ? bind : text(optionalRecord(bind).type);
@@ -77,7 +77,7 @@ export function StudyMethodForm({
       const choices=options || (Array.isArray(field.enum) && field.enum.every(v=>typeof v==='string') ? field.enum.map(v=>({value:String(v),label:text(labels[String(v)]) || displayName(String(v))})) : undefined);
       return choices && field.type==='string' ? [{key,field,choices}] : [];
     });
-    return {selects,remaining:{...expand(root,root),properties:Object.fromEntries(Object.entries(properties).filter(([key])=>key!=='crossing_heat_sources' && !selects.some(item=>item.key===key)))}};
+    return {selects,root,remaining:visibleRequiredSchema({...expand(root,root),properties:Object.fromEntries(Object.entries(properties).filter(([key])=>key!=='crossing_heat_sources' && !selects.some(item=>item.key===key)))},root)};
   },[contracts.data,configuration?.method,references]);
   if (!configuration)
     return <EmptyState description="" title="当前研究没有该模块的方法配置" />;
@@ -177,15 +177,22 @@ export function StudyMethodForm({
             </Tooltip>
           </div>
           {historical ? <dl className="report-sources" aria-label="保存运行实际方法参数">{savedParameterRows(root,parameters,references || {}).map(([label,value],index)=><div key={index}><dt>{label}</dt><dd>{value}</dd></div>)}</dl> : <>
-          {selects.map(({key,field,choices}) => <Select key={key} label={displayName(key,text(field.title) || key)} value={text(parameters[key])} placeholder="未单独指定" disabled={context.saving || optionalRecord(field['x-bind']).read_only === true} options={[{value:'',label:'未单独指定'},...choices]} onChange={value=>{
+          {selects.map(({key,field,choices}) => <div key={key} data-field-path={'/'+key}><Select label={displayName(key,text(field.title) || key)+(Array.isArray(optionalRecord(root).required)&&(optionalRecord(root).required as string[]).includes(key) ? '（必填）' : '')} value={text(parameters[key] ?? field.default ?? field.const)} placeholder="请选择" disabled={context.saving || optionalRecord(field['x-bind']).read_only === true} options={[{value:'',label:'请选择'},...choices]} onChange={value=>{
             const next: Record<string,unknown>={...optionalRecord(configuration.parameters)};if(value)next[key]=value;else delete next[key];
             update({...configuration,parameters:next,input_sources:{...configuration.input_sources,['/parameters/'+key]:{kind:'user',reference:'工程师按匹配的输入契约填写',reviewed:false}}});
-          }} />)}
+          }} /></div>)}
+          {Array.isArray(optionalRecord(root).required) && (optionalRecord(root).required as string[]).map(key=>{
+            const field=expand(optionalRecord(optionalRecord(root).properties)[key],root);
+            return field.type==='object' && !Object.keys(optionalRecord(parameters[key])).length ? <div key={key} className="method-required-group" data-field-path={'/'+key}>
+              <p role="alert">{text(field.title) || displayName(key)}必填；请填写下方参数。</p>
+              {Object.keys(requiredDefaults(field,root)).length>0 && <Button size="compact" onClick={()=>update({...configuration,parameters:{...configuration.parameters,[key]:requiredDefaults(field,root)},input_sources:{...configuration.input_sources,['/parameters/'+key]:{kind:'derived',reference:'采用当前插件契约的默认值；由工程师确认',reviewed:false}}})}>采用此组插件默认值</Button>}
+            </div> : null;
+          })}
           <Suspense fallback={<LoadingState title="正在读取参数表单" />}><ContractFields
             key={`${savedKey}:${historical ? 'history' : 'current'}:${context.study.revision}`}
             module={module}
             schema={remaining}
-            root={{ ...contract.parameter_schema, "x-groups": (contract as unknown as Record<string, unknown>)["x-groups"] }}
+            root={selectLayout.root}
             values={parameters}
             prefix=""
             draftFields={context.draft?.parameterFields}
@@ -229,6 +236,25 @@ export function StudyMethodForm({
       )}
     </div>
   );
+}
+
+/** 必填组不能藏在高级折叠区；展开引用后的契约仍是唯一字段来源。 */
+function visibleRequiredSchema(schema:unknown,root:unknown,parentRequired=false,depth=0):Record<string,unknown>{
+  const field=expand(schema,root);if(depth>6)return field;
+  const required=Array.isArray(field.required)?field.required:[];
+  return {...field,...(parentRequired?{'x-level':'basic'}:{}),...(field.properties?{properties:Object.fromEntries(Object.entries(optionalRecord(field.properties)).map(([key,raw])=>{
+    const needed=parentRequired || required.includes(key),child=visibleRequiredSchema(raw,root,needed,depth+1);
+    return [key,{...child,...(required.includes(key) && child.type==='object'?{title:(text(child.title)||displayName(key))+'（必填）'}:{})}];
+  }))}:{})};
+}
+function requiredDefaults(schema:unknown,root:unknown,depth=0):Record<string,unknown>{
+  if(depth>6)return {};
+  return Object.fromEntries(Object.entries(optionalRecord(expand(schema,root).properties)).flatMap(([key,raw])=>{
+    const field=expand(raw,root);if(field.default!==undefined)return [[key,field.default]];
+    if(field.const!==undefined)return [[key,field.const]];
+    const child=field.type==='object'?requiredDefaults(field,root,depth+1):{};
+    return Object.keys(child).length?[[key,child]]:[];
+  }));
 }
 
 function savedParameterRows(schema:unknown, values:Record<string,unknown>, references:Record<string,{value:string;label:string}[]>, root=schema, prefix=''): [string,string][] {

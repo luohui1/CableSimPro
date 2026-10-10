@@ -134,6 +134,7 @@ export function StudyProvider() {
   const [notice, setNotice] = useState("");
   const writing = useRef(false);
   const [restoring, setRestoring] = useState(false);
+  const [savedHistory, setSavedHistory] = useState<{direction: 'undo' | 'redo'; scope: 'model' | 'study'; label: string; revision: number; studyRevision: number} | null>(null);
   const historyRequest = useRef<{ key: string; id: string } | null>(null);
   const restoreConfiguration = useCallback(async (direction: "undo" | "redo") => {
     if (!study || !workspace.data || writing.current) return;
@@ -253,6 +254,20 @@ export function StudyProvider() {
   const modelEditing = domainHistory.past.length > 0 || domainHistory.future.length > 0 || !!domainDraft;
   // 只有查看已过期的运行才视为固定只读；刚运行完的当前运行仍可继续编辑
   const pinnedRun = !!search.run && (runs.data || []).find((item) => item.id === search.run)?.freshness !== "current";
+  const restoreModel = async (direction: 'undo' | 'redo') => {
+    if(writing.current)return;
+    writing.current=true;setRestoring(true);
+    try{
+      const value = await undoDomain(wid, workspace.data!, direction);
+      queries.setQueryData(['workspace', wid], value);
+      await Promise.all(['study-index','study-context','runs'].map(key => queries.invalidateQueries({queryKey:[key]})));
+    }finally{writing.current=false;setRestoring(false);}
+  };
+  const askHistory = (direction: 'undo' | 'redo', scope: 'model' | 'study') => {
+    const source = scope === 'model' ? workspace.data : study?.raw;
+    const label = scope === 'model' ? `工程模型第 ${workspace.data?.revision} 版 · ${text(source?.[direction + '_label']) || '已保存修改'}` : `研究「${study?.title}」第 ${study?.revision} 版配置`;
+    setSavedHistory({direction,scope,label,revision:numeric(workspace.data?.revision)!,studyRevision:study!.revision});
+  };
   const undo = useCallback(async () => {
     if (writing.current) return;
     if (pinnedRun) {
@@ -270,17 +285,11 @@ export function StudyProvider() {
       return;
     }
     if (!modelEditing) {
-      await restoreConfiguration("undo");
+      askHistory("undo", workspace.data?.can_undo ? 'model' : 'study');
       return;
     }
     try {
-      const value = await undoDomain(wid, workspace.data!);
-      queries.setQueryData(["workspace", wid], value);
-      await Promise.all([
-        queries.invalidateQueries({ queryKey: ["study-index"] }),
-        queries.invalidateQueries({ queryKey: ["study-context"] }),
-        queries.invalidateQueries({ queryKey: ["runs", wid, sid] }),
-      ]);
+      askHistory("undo", 'model');
     } catch (error) {
       setNotice(message(error));
     }
@@ -310,7 +319,7 @@ export function StudyProvider() {
         setNotice("请先保存或放弃草稿，再重做已保存版本。");
         return;
       }
-      await restoreConfiguration("redo");
+      askHistory("redo", workspace.data?.can_redo ? 'model' : 'study');
       return;
     }
     if (domainHistory.future.length) {
@@ -322,13 +331,7 @@ export function StudyProvider() {
       return;
     }
     try {
-      const value = await undoDomain(wid, workspace.data!, "redo");
-      queries.setQueryData(["workspace", wid], value);
-      await Promise.all([
-        queries.invalidateQueries({ queryKey: ["study-index"] }),
-        queries.invalidateQueries({ queryKey: ["study-context"] }),
-        queries.invalidateQueries({ queryKey: ["runs", wid, sid] }),
-      ]);
+      askHistory("redo", 'model');
     } catch (error) {
       setNotice(message(error));
     }
@@ -557,19 +560,27 @@ export function StudyProvider() {
       !!(
         modelEditing
           ? domainHistory.past.length || (!domainDraft && !draft && workspace.data.can_undo)
-          : !domainDraft && !draft && study.raw.can_undo
+          : !domainDraft && !draft && (workspace.data.can_undo || study.raw.can_undo)
       ),
     canRedo:
       !pinnedRun && !restoring && !Object.keys(moduleInputs).length &&
       !!(
         modelEditing
           ? domainHistory.future.length || (!domainDraft && !draft && workspace.data.can_redo)
-          : !domainDraft && !draft && study.raw.can_redo
+          : !domainDraft && !draft && (workspace.data.can_redo || study.raw.can_redo)
       ),
   };
   return (
     <Context.Provider value={value}>
       <Outlet />
+      <Dialog open={!!savedHistory} onOpenChange={open => {if(!open)setSavedHistory(null);}}
+        title={savedHistory?.direction === 'redo' ? '重做已保存修改' : '撤销已保存修改'}
+        description={`本地草稿已到边界。将${savedHistory?.direction === 'redo' ? '重做' : '撤销'}「${savedHistory?.label || ''}」，影响${savedHistory?.scope === 'model' ? '本工程共用模型' : '本研究配置'}。保存运行保留，是否当前按输入内容判断。`}
+        actions={<><Button onClick={()=>setSavedHistory(null)}>取消</Button><Button variant="primary" loading={restoring} onClick={async()=>{
+          const selected=savedHistory;if(!selected)return;
+          if(selected.revision!==workspace.data.revision || selected.studyRevision!==study.revision){setSavedHistory(null);setNotice('保存版本已变化，请刷新并重新核对要恢复的修改。');return;}
+          try{if(selected.scope==='model')await restoreModel(selected.direction);else await restoreConfiguration(selected.direction);setSavedHistory(null);}catch(error){setNotice(message(error));}
+        }}>确认{savedHistory?.direction === 'redo' ? '重做' : '撤销'}</Button></>} />
       <Dialog
         open={blocker.status === "blocked"}
         onOpenChange={(open) => {

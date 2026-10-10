@@ -1,4 +1,5 @@
 """Numerical evidence gates: independent differences, binding and delivery refusal."""
+from contextlib import contextmanager
 import pytest
 from backend.kernel.convergence import temperature_convergence
 from backend.kernel.contracts import ThermalConvergence
@@ -59,7 +60,15 @@ def test_threshold_cannot_be_relaxed_and_single_run_is_unconverged():
 def test_unconverged_field_refused_by_delivery_service(monkeypatch):
     from backend.kernel.research import Research
     from fastapi import HTTPException
+    class Snapshot:
+        def execute(self,*a):return self
+        def fetchone(self):return None
+    class Store:
+        @contextmanager
+        def read_snapshot(self):yield Snapshot()
+        def load(self,db,wid,*a,**k):return {'revision':1},{}
     service=object.__new__(Research)
+    service.store=Store()
     monkeypatch.setattr(service,'verified_runs',lambda *a:[evidence()])
     with pytest.raises(HTTPException) as caught:service.deliver('workspace',['run'])
     assert caught.value.status_code==422

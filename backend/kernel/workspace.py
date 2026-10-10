@@ -136,7 +136,9 @@ class WorkspaceStore:
             maximum = db.execute('SELECT MAX(position) FROM workspace_history WHERE workspace=?', (wid,)).fetchone()[0]
             audit = [dict(r) for r in db.execute('SELECT * FROM workspace_audit WHERE workspace=? ORDER BY rowid DESC LIMIT 100', (wid,))]
             runs = [dict(r) for r in db.execute('SELECT id,revision,input_hash,created FROM workspace_runs WHERE workspace=? ORDER BY rowid DESC LIMIT 30', (wid,))]
-            previous = db.execute('SELECT state FROM workspace_history WHERE workspace=? AND position=?', (wid, row['cursor'] - 1)).fetchone()
+            previous = db.execute('SELECT state,label FROM workspace_history WHERE workspace=? AND position=?', (wid, row['cursor'] - 1)).fetchone()
+            step = db.execute('SELECT label FROM workspace_history WHERE workspace=? AND position=?', (wid, row['cursor'])).fetchone()
+            following = db.execute('SELECT label FROM workspace_history WHERE workspace=? AND position=?', (wid, row['cursor'] + 1)).fetchone()
             can_undo = previous is not None and ('domain' not in state or 'domain' in json.loads(previous['state']))
             type_lifecycle = None
             if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='type_plans'").fetchone():
@@ -146,7 +148,10 @@ class WorkspaceStore:
                     if plan['status'] == 'published':
                         can_undo = False
         frozen = type_lifecycle and type_lifecycle['status'] == 'published'
-        return {'id': wid, 'revision': row['revision'], **state, 'type_lifecycle': type_lifecycle, 'can_undo': can_undo, 'can_redo': row['cursor'] < maximum and not frozen, 'audit': audit, 'runs': runs, 'updated_at': row['updated']}
+        return {'id': wid, 'revision': row['revision'], **state, 'type_lifecycle': type_lifecycle, 'can_undo': can_undo, 'can_redo': row['cursor'] < maximum and not frozen,
+                'undo_label': step['label'] if can_undo and step else None,
+                'redo_label': following['label'] if following and not frozen else None,
+                'audit': audit, 'runs': runs, 'updated_at': row['updated']}
 
     def create(self, scenario):
         wid, now = str(uuid4()), stamp()

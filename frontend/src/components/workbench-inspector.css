@@ -27,12 +27,26 @@
 .project-study-table .status-mark { white-space: nowrap; }
 .project-study-table .data-table { table-layout: fixed; }
 .project-study-table .data-table .cell-wrap { min-width: 0; max-width: none; overflow-wrap: anywhere; }
-.project-study-table th:nth-child(1) { width: 29%; }
-.project-study-table th:nth-child(2) { width: 13%; }
-.project-study-table th:nth-child(3) { width: 24%; }
+.project-study-table th:nth-child(1) { width: 27%; }
+.project-study-table th:nth-child(2) { width: 18%; }
+.project-study-table th:nth-child(3) { width: 21%; }
 .project-study-table th:nth-child(4) { width: 16%; }
 .project-study-table th:nth-child(5) { width: 18%; }
 .project-study-table .project-calc { max-width: 100%; }
 .project-study-table .project-calc > span { min-width: 0; overflow-wrap: anywhere; }
 .command-bar .command-state { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .project-explorer .explorer-calc > .explorer-state { flex: none; white-space: nowrap; }
+.project-explorer .explorer-item > span, .project-explorer .explorer-item b, .project-explorer header strong { white-space: normal; overflow-wrap: anywhere; overflow: visible; text-overflow: clip; }
+.study-inspector .inspector-lead { white-space: normal; overflow-wrap: anywhere; }
+.study-inspector .select-trigger { height: auto; min-height: var(--control-compact); white-space: normal; }
+.study-inspector .select-trigger > span { white-space: normal; overflow-wrap: anywhere; }
+.study-inspector .number-field > label { overflow-wrap: anywhere; }
+.study-selection-table .data-table { table-layout: fixed; width: 100%; }
+.study-selection-table .data-table th { white-space: normal; }
+.study-selection-table .data-table th:nth-child(1) { width: 25%; }
+.study-selection-table .data-table th:nth-child(2) { width: 10%; }
+.study-selection-table .data-table th:nth-child(3) { width: 14%; }
+.study-selection-table .data-table th:nth-child(4) { width: 16%; }
+.study-selection-table .data-table th:nth-child(5) { width: 12%; }
+.study-selection-table .data-table th:nth-child(6) { width: 23%; }
+.study-selection-table .cell-wrap { min-width: 0; max-width: none; overflow-wrap: anywhere; }

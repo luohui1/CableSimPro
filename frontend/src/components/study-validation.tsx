@@ -3,6 +3,7 @@ import { optionalRecord, text } from '@/api/client';
 import { methodCatalog } from '@/api/research';
 import { EmptyState } from './states';
 import { validationLevel } from '@/lib/plugin-labels';
+import { readableEvidence } from './study-workbench-config';
 
 type Row = Record<string, unknown>;
 const list = (value: unknown) => (Array.isArray(value) ? value : []);
@@ -44,8 +45,8 @@ export function StudyValidation({ run }: { run?: Row }) {
     {executions.map((execution, index) => {
       const method = optionalRecord(execution.method);
       const validation = optionalRecord(execution.validation);
-      const cases = list(validation.cases).map(text).filter(Boolean);
-      const limits = list(execution.limitations).map(text).filter(Boolean);
+      const cases = list(validation.cases).map(text).filter(Boolean).map(readableEvidence);
+      const limits = list(execution.limitations).map(text).filter(Boolean).map(readableEvidence);
       return <section key={index} className="validation-block" aria-label="方法验证">
         <h2>{named(text(method.plugin_id), text(method.capability)).plugin} · {named(text(method.plugin_id), text(method.capability)).capability} <span className="muted">{text(method.version)}</span></h2>
         <div className="validation-columns">

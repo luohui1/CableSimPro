@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { message, numeric, optionalRecord, text } from "@/api/client";
 import { commitFields } from "@/lib/domain-fields";
 import { formatNumber, significantNumber } from "@/lib/format";
-import { moduleConfiguration } from "@/lib/study-config";
+import { moduleConfiguration, commitParameters } from "@/lib/study-config";
 import { Icon } from "./icon";
 import { useStudy } from "./study-provider";
 import { Button } from "./ui/button";
 
 /** 宿主从插件声明的关键结论里投影出的答案（值来自已校验工件，带显示单位）。 */
 export type Headline = { key: string; title: string; value: number; unit: string; display_unit?: string | null; display_value: number; entity?: string; condition?: string | null; case_id?: string };
-type PreviewResult = { status: string; elapsed_ms: number; headlines: Headline[]; input_digest: string; cases: Record<string, unknown>[] };
+type PreviewResult = { status: string; elapsed_ms: number; headlines: Headline[]; input_digest: string; cases: Record<string, unknown>[]; view: Record<string,unknown> };
 
 const headlinesOf = (value: unknown): Headline[] => (Array.isArray(value) ? value : []).map(optionalRecord)
   .filter((row) => numeric(row.display_value) !== null && !!text(row.key))
@@ -27,6 +27,9 @@ export function useStudyPreview({ module, available }: { module: string; availab
   const [live, setLive] = useState(false);
   const controller = useRef<AbortController | null>(null);
   const { study, workspace, domainDraft, draft } = context;
+  const inputKey = JSON.stringify([module, available, study.id, study.revision, workspace.revision, domainDraft, draft?.definition, draft?.parameterFields]);
+  // 每个试算只属于当时草稿；撤销、恢复或继续编辑后先清除旧值，不能冒充当前结果。
+  useEffect(()=>{controller.current?.abort();setResult(null);setError('');setRunning(false);},[inputKey]);
 
   const run = useCallback(async () => {
     if (!available) return;
@@ -38,7 +41,7 @@ export function useStudyPreview({ module, available }: { module: string; availab
       let domain: unknown;
       try { domain = domainDraft ? commitFields(domainDraft) : undefined; }
       catch (problem) { throw new Error("模型草稿有未完成的输入：" + message(problem)); }
-      const configuration = draft?.definition ? moduleConfiguration(draft.definition, module) : undefined;
+      const configuration = draft ? moduleConfiguration(commitParameters(draft.definition || study.definition,draft.parameterFields || {}),module) : undefined;
       const response = await fetch(`/api/workspaces/${encodeURIComponent(study.workspace)}/studies/${encodeURIComponent(study.id)}/preview`, {
         method: "POST", headers: { "Content-Type": "application/json" }, signal: abort.signal,
         body: JSON.stringify({
@@ -54,13 +57,15 @@ export function useStudyPreview({ module, available }: { module: string; availab
       if (!response.ok) throw new Error(text(optionalRecord(optionalRecord(body).detail).message) || text(optionalRecord(body).detail) || `试算失败（${response.status}）`);
       const value = optionalRecord(body);
       if (value.persisted !== false || value.preview !== true) throw new Error("宿主返回的不是预览结果");
-      setResult({ status: text(value.status), elapsed_ms: numeric(value.elapsed_ms) ?? 0, headlines: headlinesOf(value.headlines), input_digest: text(value.input_digest), cases: (Array.isArray(value.cases) ? value.cases : []).map(optionalRecord) });
+      if(abort.signal.aborted)return;
+      setResult({ status: text(value.status), elapsed_ms: numeric(value.elapsed_ms) ?? 0, headlines: headlinesOf(value.headlines), input_digest: text(value.input_digest), cases: (Array.isArray(value.cases) ? value.cases : []).map(optionalRecord),
+        view:{status:value.status,integrity:'verified',snapshot:value.snapshot,artifact_status:value.artifact_status,headlines:value.headlines,output:{cases:value.cases},preview:true} });
     } catch (problem) {
       if (!abort.signal.aborted) setError(message(problem));
     } finally {
       if (controller.current === abort) setRunning(false);
     }
-  }, [available, domainDraft, draft?.definition, module, study.definition.modules, study.id, study.revision, study.workspace, workspace.revision]);
+  }, [available, domainDraft, draft?.definition, draft?.parameterFields, module, study.definition, study.id, study.revision, study.workspace, workspace.revision]);
 
   // 实时：草稿变化后 600 ms 自动试算；关闭时不再请求
   useEffect(() => {
@@ -92,9 +97,12 @@ export function PreviewStrip({ preview, saved }: { preview: ReturnType<typeof us
       : preview.result!.headlines.length ? preview.result!.headlines.map((row) => {
         const before = savedRows.find((item) => item.key === row.key && item.condition === row.condition);
         const delta = before ? row.display_value - before.display_value : null;
+        const physical = ['A', '°C', 'K'].includes(row.display_unit || row.unit);
+        const shown = physical ? formatNumber(row.display_value, 1) : significantNumber(row.display_value, 4);
+        const difference = delta === null ? '' : physical ? formatNumber(delta, 1) : significantNumber(delta, 3);
         return <span key={row.key + (row.condition || "")} className="preview-value">
-          <small>{row.title}</small><b>{significantNumber(row.display_value, 4)}</b>{row.display_unit && <span className="unit">{row.display_unit}</span>}
-          {delta !== null && Math.abs(delta) > 1e-9 && <span className="preview-delta" title="相对已保存结果">{delta > 0 ? "+" : ""}{significantNumber(delta, 3)}</span>}
+          <small>{row.title}</small><b>{shown}</b>{row.display_unit && <span className="unit">{row.display_unit}</span>}
+          {delta !== null && <span className="preview-delta" title="相对已保存结果">较保存值 {delta > 0 && difference !== '0.0' ? "+" : ""}{difference}{row.key.includes('temperature') ? ' K' : row.display_unit ? ' ' + row.display_unit : ''}</span>}
         </span>;
       }) : <span className="muted">{preview.result!.status === "failed" ? "插件未得出结果，见运行明细。" : "插件没有声明关键结论。"}</span>}
     {preview.result && <span className="muted">{formatNumber(preview.result.elapsed_ms)} ms</span>}

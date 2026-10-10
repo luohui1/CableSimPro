@@ -8,6 +8,10 @@ import { openHeadlessBrowser, settle, outputRoot, repositoryRoot } from './brows
 import { request } from './research-fixtures.mjs';
 import { assertLayout } from './layout-assertions.mjs';
 if(process.env.E2E_ISOLATED!=='1')throw Error('Only run against an isolated database');
+if(process.env.COMPONENT_FIXES_ONLY==='1') {
+  await import('./verify-research-fixes.mjs');
+  process.exit(0);
+}
 if(process.env.COMPONENT_PERFORMANCE_ONLY==='1') {
   await import('./verify-study-performance.mjs');
   process.exit(0);

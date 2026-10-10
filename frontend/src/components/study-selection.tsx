@@ -129,7 +129,7 @@ export function StudySelection({
     error: "计算失败",
   } as const;
   const columns: Column<SelectionRow>[] = [
-    { id: "name", label: "候选型号", render: (row) => row.name },
+    { id: "name", label: "候选型号", wrap:true, render: (row) => <span title={row.name}>{row.name}</span> },
     {
       id: "area",
       label: "截面",
@@ -166,7 +166,7 @@ export function StudySelection({
       label: "判定",
       render: (row) => <StatusMark kind={row.verdict} />,
     },
-    { id: "reason", label: "限制原因", render: (row) => row.reason },
+    { id: "reason", label: "限制原因", wrap:true, render: (row) => <span title={row.reason}>{row.reason}</span> },
   ];
   const groups = (Object.keys(labels) as SelectionRow["verdict"][])
     .map((verdict) => ({
@@ -249,7 +249,7 @@ export function StudySelection({
           ]}
         />
       </Toolbar>
-      <DataTable
+      <div className="study-selection-table"><DataTable
         label="真实选型候选"
         historical={view.historical}
         columns={columns}
@@ -257,7 +257,7 @@ export function StudySelection({
         selectedId={selectedId}
         onSelect={onSelect}
         rowLabel={(row) => `选择 ${row.name}`}
-      />
+      /></div>
       {part === "details" && <div className="selection-conditions">
         <p className="muted">{recommendationBasis}</p>
         <SelectionConditions run={run} theme={theme} />
