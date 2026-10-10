@@ -7,6 +7,8 @@ import { CatalogShell, usePageTheme } from "@/components/catalog-shell";
 import { DataTable } from "@/components/data-table";
 import { PropertyPanel } from "@/components/property-panel";
 import { RelationPanel } from "@/components/relation-panel";
+import { indexObjects, type ObjectCard } from "@/api/object-index";
+import { versionLabel } from "@/components/object-link";
 import { StatusMark } from "@/components/status-mark";
 import { Toolbar } from "@/components/toolbar";
 import { Button } from "@/components/ui/button";
@@ -77,6 +79,10 @@ export function CableVersionsPage() {
   const [origin, setOrigin] = useState("all");
   const models = useQuery({ queryKey: ["domain-cable-models"], queryFn: ({ signal }) => cableModels(signal) });
   const all = rows(models.data || []);
+  // 系统自带的教学型号：不在厂家 / 设计版本表里，但研究会引用、搜索能找到，在这里单列，链接才有落脚处
+  const system = useQuery({ queryKey: ["index-objects", "cable_version", "system"], queryFn: ({ signal }) => indexObjects({ kind: "cable_version", q: "system.", limit: 50 }, signal) });
+  const teaching = ((system.data?.items || []) as (ObjectCard & { id: string })[]).filter((card) => card.id.startsWith("system."));
+  const teachingCard = teaching.find((card) => card.id === selected);
   const kindsOf = (row: Version) => new Set(row.sources.map((source) => source.kind));
   const visible = all.filter((row) => origin === "all" || kindsOf(row).has(origin));
   const series = [...new Set(visible.map((row) => row.series))].sort();
@@ -88,7 +94,19 @@ export function CableVersionsPage() {
       title="电缆型号版本"
       status={<span className="muted">{all.length} 项 · 研究按版本引用</span>}
       actions={<Button variant="primary" size="compact" onClick={openImport}>从厂家资料导入</Button>}
-      property={current ? (
+      property={teachingCard ? (
+        <PropertyPanel
+          collapsed={false}
+          title={teachingCard.name}
+          onToggle={() => setSelected("")}
+          extra={<section aria-label="关联"><h3>关联</h3><RelationPanel kind="cable_version" id={teachingCard.id} /></section>}
+          groups={[{ label: "名片", items: [
+            { label: "版本", value: versionLabel(teachingCard.version || "—") },
+            { label: "状态", value: teachingCard.status.label },
+            { label: "来源", value: teachingCard.source?.label || "系统教学型号", stacked: true },
+          ] }]}
+        />
+      ) : current ? (
         <PropertyPanel
           collapsed={false}
           title={current.name}
@@ -148,6 +166,22 @@ export function CableVersionsPage() {
               />
             )}
           </div>
+          {!!teaching.length && <section className="object-section" aria-label="系统教学示例">
+            <header><h2>系统教学示例</h2><span className="muted">{teaching.length} 项 · 演示结构与规格书用，不是厂家实测，不能作为工程型号引用</span></header>
+            <DataTable<ObjectCard & { id: string }>
+              label="系统教学示例"
+              showGroups={false}
+              selectedId={selected}
+              onSelect={(row) => setSelected(row.id)}
+              rowLabel={(row) => row.name}
+              groups={[{ id: "teaching", label: "教学示例", rows: teaching }]}
+              columns={[
+                { id: "name", label: "型号", wrap: true, render: (row) => row.name },
+                { id: "version", label: "版本", render: (row) => versionLabel(row.version || "—") },
+                { id: "status", label: "状态", render: (row) => <StatusMark kind="draft" label={row.status.label} /> },
+              ]}
+            />
+          </section>}
         </>}
     </CatalogShell>
   );

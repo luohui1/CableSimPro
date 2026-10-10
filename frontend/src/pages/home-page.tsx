@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { studyIndex, type StudyRow } from "@/api/research";
 import { indexInbox, indexObjects, type InboxItem, type ObjectCard } from "@/api/object-index";
@@ -56,11 +56,21 @@ export function HomePage() {
   const { theme, navigate } = usePageTheme();
   const [create, setCreate] = useState(false);
   const [q, setQ] = useState("");
+  const [active, setActive] = useState(0);
+  const searchBox = useRef<HTMLInputElement>(null), resultsBox = useRef<HTMLElement>(null);
   const needle = q.trim();
+  // Ctrl+K / ⌘K 聚焦搜索
+  useEffect(() => {
+    const focus = (event: KeyboardEvent) => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") { event.preventDefault(); searchBox.current?.focus(); } };
+    window.addEventListener("keydown", focus);
+    return () => window.removeEventListener("keydown", focus);
+  }, []);
   const studyCards = useQuery({ queryKey: ["index-objects", "study"], queryFn: ({ signal }) => indexObjects({ kind: "study", limit: 100 }, signal) });
   const typeCards = useQuery({ queryKey: ["index-objects", "type"], queryFn: ({ signal }) => indexObjects({ kind: "type", limit: 100 }, signal) });
   const inbox = useQuery({ queryKey: ["index-inbox"], queryFn: ({ signal }) => indexInbox(signal) });
-  const found = useQuery({ queryKey: ["index-search", needle], queryFn: ({ signal }) => indexObjects({ q: needle, limit: 60 }, signal), enabled: !!needle });
+  // 输入稳定后再查；新结果回来前保留上一批，不每敲一个字就闪成骨架
+  const query = useDeferredValue(needle);
+  const found = useQuery({ queryKey: ["index-search", query], queryFn: ({ signal }) => indexObjects({ q: query, limit: 60 }, signal), enabled: !!query, placeholderData: keepPreviousData });
   // 过期研究的“重算”沿用工作台的确认流程，需要研究的修订号
   const studies = useQuery({ queryKey: ["study-index"], queryFn: ({ signal }) => studyIndex(signal) });
 
@@ -78,16 +88,27 @@ export function HomePage() {
       <div className="home-page" data-page="home">
         <label className="home-search">
           <Icon name="action/search" />
-          <input value={q} onChange={(event) => setQ(event.target.value)} placeholder="搜索工程、研究、型号、电缆型号版本、资源或插件" aria-label="搜索" />
+          <input ref={searchBox} value={q} onChange={(event) => { setQ(event.target.value); setActive(0); }} placeholder="搜索工程、研究、型号、电缆型号版本、资源或插件（Ctrl+K）" aria-label="搜索"
+            aria-controls="home-search-results" aria-activedescendant={needle ? `home-result-${active}` : undefined}
+            onKeyDown={(event) => {
+              // ↓↑ 在结果里移动，回车打开，Esc 清空
+              const links = [...(resultsBox.current?.querySelectorAll<HTMLAnchorElement>("[data-result] a") || [])];
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); if (links.length) setActive((value) => (value + (event.key === "ArrowDown" ? 1 : -1) + links.length) % links.length); }
+              else if (event.key === "Enter" && links[active]) { event.preventDefault(); links[active].click(); }
+              else if (event.key === "Escape") setQ("");
+            }} />
         </label>
-        {needle ? <section className="home-section" aria-label="搜索结果">
-          {found.isPending ? <LoadingState title="正在搜索" description="" />
+        {needle ? <section ref={resultsBox} id="home-search-results" className="home-section" aria-label="搜索结果">
+          {found.isPending && !found.data ? <LoadingState title="正在搜索" description="" />
             : found.error ? <ErrorState description={message(found.error)} />
             : !found.data?.items.length ? <InlineEmpty title="没有匹配的对象" />
-            : SEARCH_KINDS.map((kind) => {
-              const items = found.data.items.filter((item) => item.kind === kind).slice(0, 6);
-              return items.length ? <div key={kind} className="home-results"><h2>{KIND_LABELS[kind]}</h2><ul>{items.map((item) => <li key={item.id}><ObjectLink card={item} />{item.parent && <span className="muted"> · {item.parent.name}</span>}</li>)}</ul></div> : null;
-            })}
+            : (() => {
+              let index = -1;
+              return SEARCH_KINDS.map((kind) => {
+                const items = found.data.items.filter((item) => item.kind === kind).slice(0, 6);
+                return items.length ? <div key={kind} className="home-results"><h2>{KIND_LABELS[kind]}</h2><ul>{items.map((item) => { index += 1; return <li key={item.id} id={`home-result-${index}`} data-result aria-selected={index === active} className={index === active ? "is-active" : undefined}><ObjectLink card={item} />{item.parent && <span className="muted"> · {item.parent.name}</span>}</li>; })}</ul></div> : null;
+              });
+            })()}
         </section> : <>
           <div className="home-columns">
             <section className="home-section" aria-label="继续工作">

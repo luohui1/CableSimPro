@@ -183,7 +183,7 @@ input { caret-color: var(--text); }
 .data-row:hover { background: var(--hover); }
 .data-row[data-selected] { background: var(--fill); }
 .data-row[data-selected] td:first-child { box-shadow: inset 2px 0 0 var(--text); }
-.data-table .cell-wrap { white-space: normal; min-width: calc(var(--space-12) * 3); max-width: calc(var(--space-12) * 6); line-height: 1.5; }
+.data-table .cell-wrap { white-space: normal; min-width: calc(var(--space-12) * 2); max-width: calc(var(--space-12) * 6); line-height: 1.5; }
 .data-row:focus-visible { outline-offset: -2px; }
 .group-row th { padding: var(--space-1) var(--space-2); border: 0; background: var(--fill); }
 .group-row button { display: flex; align-items: center; gap: var(--space-2); padding: 0; border: 0; background: transparent; font-size: var(--text-note); color: var(--text); }
