@@ -136,7 +136,10 @@ export function DocumentsPage() {
               }
             />
           ) : !catalog.data?.length ? (
-            <InlineEmpty title="尚无厂家资料" />
+            <EmptyState
+              title="本机尚未导入厂家原件"
+              description="电缆型号版本里标为“厂家资料”的数值来自随附的公开规格摘录，厂家原件不随软件分发；出处在各型号版本的“来源”里。导入原件后可在这里逐项核对、生成型号草稿。"
+            />
           ) : (
             <table className="document-catalog">
               <thead>
