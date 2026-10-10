@@ -15,7 +15,7 @@ import {
 import { CatalogShell, usePageTheme } from "@/components/catalog-shell";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
-import { EmptyState, ErrorState, InlineEmpty, LoadingState } from "@/components/states";
+import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { StatusMark } from "@/components/status-mark";
 import { displayName, displayText, displayUnit } from "@/lib/display-names";
 import { downloadJson } from "@/lib/download";
