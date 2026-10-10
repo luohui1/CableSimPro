@@ -55,7 +55,9 @@ export function SeriesChart({
     ymax = Math.max(...all.map((p) => p.y));
   const axis = niceAxis(ymin, ymax),
     { low, high } = axis;
-  const xTicks = [...new Set([xmin, xmin + (xmax - xmin) / 2, xmax])];
+  // 数据点不多（如网格收敛的几级网格）时，每个点都标出自己的横坐标；点多时取首、中、尾
+  const distinctX = [...new Set(all.map((p) => p.x))].sort((a, b) => a - b);
+  const xTicks = distinctX.length <= 8 ? distinctX : [...new Set([xmin, xmin + (xmax - xmin) / 2, xmax])];
   const xPrecision = tickPrecision(xTicks);
   const left = 88,
     right = width - 24,
@@ -80,7 +82,10 @@ export function SeriesChart({
                 y2="6"
               />
             </svg>
-            {controls ? <label><input type="checkbox" checked={!hidden.includes(item.id)} onChange={() => setHidden(current => current.includes(item.id) ? current.filter(id => id !== item.id) : [...current, item.id])} /> {item.label}</label> : item.label}
+            {/* 没有任何有效点的系列在图例里写明“无数据”，不留一个勾着却看不到的选项 */}
+            {!item.points.some((point) => point.y !== null && Number.isFinite(point.y) && Number.isFinite(point.x))
+              ? <span className="muted">{item.label}（无数据）</span>
+              : controls ? <label><input type="checkbox" checked={!hidden.includes(item.id)} onChange={() => setHidden(current => current.includes(item.id) ? current.filter(id => id !== item.id) : [...current, item.id])} /> {item.label}</label> : item.label}
           </span>
         ))}
       </div>
