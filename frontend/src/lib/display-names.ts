@@ -287,7 +287,7 @@ export const displayNames: Readonly<Record<string, string>> = {
   "cablesim.cable-geometry": "电缆实体建模",
   "cablesim.standard-check": "产品标准尺寸核对",
   "cablesim.type-electrical": "型号电气参数与短路容量",
-  "cablesim.simulation": "仿真复现基准",
+  "cablesim.simulation": "电缆有限元仿真",
   "cablesim.hybrid-ampacity": "混合载流量",
   "cablesim.hybrid-rating": "混合载流量研究",
   HOST_DEPENDENCIES_MISMATCH: "宿主依赖校验失败",
