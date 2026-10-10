@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
 import { assetCatalog, assetDetail, importAsset } from "@/api/catalogs";
@@ -13,7 +13,7 @@ import { Toolbar } from "@/components/toolbar";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/select";
 import { Dialog } from "@/components/ui/dialog";
-import { EmptyState, ErrorState, InlineEmpty, LoadingState } from "@/components/states";
+import { ErrorState, InlineEmpty, LoadingState } from "@/components/states";
 import { displayUnit } from "@/lib/display-names";
 import { propertyLabel, referenceCitation, referenceData, referenceNumber, rightsLabel } from "@/lib/reference-data";
 
@@ -124,7 +124,9 @@ export function AssetsPage() {
     [status, setStatus] = useState("all"),
     [open, setOpen] = useState(false),
     [raw, setRaw] = useState(""),
-    [fileError, setFileError] = useState("");
+    [fileError, setFileError] = useState(""),
+    [fileName, setFileName] = useState("");
+  const filePicker = useRef<HTMLInputElement>(null);
   // 接口一次只按一个类别筛选：本组每个类别各取一页再合并，避免在前端截断分页
   const shown = kind === "all" ? group.kinds : [kind as AssetKind];
   const pages = useQueries({
@@ -172,16 +174,19 @@ export function AssetsPage() {
   const openImport = () => {
     importing.reset();
     setFileError("");
+    setFileName("");
     setOpen(true);
   };
   const filtered = !!q || kind !== "all" || status !== "all";
+  // 筛选后选中的那条不在结果里：面板不再显示它（地址里的 item 保留，清空筛选后恢复）
+  const showing = selected && (!filtered || pending || rows.some((row) => row.id === selected)) ? selected : "";
   return (
     <CatalogShell
       title={group.title}
       status={<span className="muted">{rows.length} 项 · 研究按版本引用</span>}
       actions={<Button variant="primary" size="compact" onClick={openImport}>导入资源草稿</Button>}
       property={
-        selected ? (
+        showing ? (
           <PropertyPanel
             collapsed={false}
             title={text(detail.data?.name) || "所选资源"}
@@ -266,7 +271,7 @@ export function AssetsPage() {
           if (!importing.isPending) setOpen(value);
         }}
         title="导入资源草稿"
-        description="JSON 定义将由宿主整体校验，保存为未发布草稿。"
+        description="导入后系统整体校验定义，保存为未发布草稿；审核发布后研究才能引用。"
         initialFocus="form"
         actions={
           <Button variant="primary" loading={importing.isPending} disabled={!raw.trim() || !!fileError} onClick={() => importing.mutate()}>
@@ -274,14 +279,22 @@ export function AssetsPage() {
           </Button>
         }
       >
-        <label className="text-field">
+        <div className="text-field">
           资源 JSON
+          {/* 原生文件控件显示英文且样式不统一：隐藏它，用统一按钮触发，并写出已选文件名 */}
+          <span className="file-pick">
+            <Button size="compact" onClick={() => filePicker.current?.click()}>选择 JSON 文件</Button>
+            <span className="muted">{fileName || "未选择文件；也可以直接粘贴到下方"}</span>
+          </span>
           <input
+            ref={filePicker}
             type="file"
+            hidden
             accept=".json,application/json"
             onChange={async (event) => {
               const file = event.target.files?.[0];
               if (!file) return;
+              setFileName(file.name);
               if (file.size > 120 * 1024) {
                 setFileError("文件超过 120 KB，请缩小 JSON 定义。");
                 return;
@@ -291,7 +304,7 @@ export function AssetsPage() {
               importing.reset();
             }}
           />
-        </label>
+        </div>
         <label className="text-field">
           定义内容
           <textarea
@@ -307,7 +320,6 @@ export function AssetsPage() {
             {fileError || message(importing.error)}
           </p>
         )}
-        {!raw && <EmptyState title="选择有来源的资源定义" description="" />}
       </Dialog>
     </CatalogShell>
   );
