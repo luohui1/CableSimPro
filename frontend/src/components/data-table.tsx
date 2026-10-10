@@ -158,7 +158,13 @@ export function DataTable<T extends { id: string }>({
                         onSelect ? selectedId === row.id : undefined
                       }
                       tabIndex={onSelect || onActivate ? 0 : undefined}
-                      onClick={() => onActivate ? onActivate(row) : onSelect?.(row)}
+                      onClick={(event) => {
+                        if (onActivate) onActivate(row);
+                        else if (onSelect) onSelect(row);
+                        // 没有选中动作的表格：点行的空白处等于点这一行的第一个链接（点在控件或链接上时不代劳）
+                        else if (!(event.target instanceof HTMLElement && event.target.closest("a,button,input,select,textarea,label,[role=combobox]")))
+                          event.currentTarget.querySelector<HTMLAnchorElement>("a[href]")?.click();
+                      }}
                       onKeyDown={(event) => {
                         if (!onSelect && !onActivate) return;
             if(event.target instanceof HTMLElement && event.target!==event.currentTarget && event.target.closest("input,button,select,textarea,[role=combobox]"))return;
