@@ -8,7 +8,7 @@
     "doi": "10.3390/en13246716",
     "url": "https://www.mdpi.com/1996-1073/13/24/6716"
   },
-  "scope": "Table 1 c=1 twin line: complete 2D skin/proximity FEM, opposing RMS currents.",
+  "scope": "表1 c=1 双导线：完整二维集肤与邻近效应有限元模型，施加方向相反的有效值电流。",
   "frozen_inputs": [
     {
       "paths": [

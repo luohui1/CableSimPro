@@ -8,7 +8,7 @@
     "doi": "10.3390/app13106328",
     "url": "https://www.mdpi.com/2076-3417/13/10/6328"
   },
-  "scope": "2D magnetic-quasistatic finite elements and coupled shield network; includes skin/proximity and shield eddy/circulating currents. Finite-domain boundary replaces Maxwell balloon, checked separately.",
+  "scope": "二维磁准静态有限元与护套网络耦合，包含集肤与邻近效应、护套涡流与环流；用有限计算域代替无限远边界，另行核对截断影响。",
   "frozen_inputs": [
     {
       "paths": [

@@ -134,7 +134,7 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     assert len(receipt['engineering_resources']) == 28
     assert all(row['resource_bindings']['bound'] >= 2 for row in receipt['types'])
     assert sum(bool(row.get('run')) for row in receipt['studies']) == 3
-    assert any('需在超算运行' in row['title'] and not row.get('run') for row in receipt['studies'])
+    assert any('有限元温度场' in row['title'] and not row.get('run') for row in receipt['studies'])
     hv=next(row for row in receipt['studies'] if '110 kV' in row['title'])
     assert hv['run'] and hv['ready'] and hv['status']=='succeeded'
     with closing(sqlite3.connect(database)) as connection:

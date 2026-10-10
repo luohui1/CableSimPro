@@ -8,7 +8,7 @@
     "url": "https://journals.riverpublishers.com/index.php/ACES/article/view/8089",
     "journal": "ACES Journal 34(12), 1922-1930"
   },
-  "scope": "One source current and one zero-net-current passive conductor; Table1 passive-conductor induced surface density, not source total density.",
+  "scope": "一个激励导体和一个净电流为零的被动导体；对照表1的被动导体感应表面电流密度，不代表激励导体的总电流密度。",
   "frozen_inputs": [
     {
       "paths": [

@@ -219,6 +219,39 @@ def ensure_temperature(client, result):
     result['studies'].append({'title':title,'workspace':workspace['id'],'study':saved['id'],'module':'thermal-field','status':'已保存输入；待补方法参数与超算预检','ready':False})
 
 
+def release_temperature_study(api, workspace, iec_parameters):
+    """A complete thermal FEM input; no mesh or native solve on the seed host."""
+    contract = next(item for item in api('/api/input-contracts') if item['method']['capability']=='iec-thermal-field')
+    document=workspace['domain'];section=document['sections'][0];load=document['load_cases'][0]
+    source=('城北三回排管参考设计；截面、负荷、土壤及绝缘材料沿用本工程保存事实及来源；'
+            '三芯热层等效，不代表三维电磁求解或工程批准。地表恒温，均匀土壤镜像远场。')
+    reference=('Alliander cable-thermal-model c1d4c5df9372097991798d8afa1d1af29033a4ba，'
+        'data/material_properties.csv；SHA256 9b4314d07b7892e194f4181a0f24bba1236e0ddd2eb6d925642e81e18a0fda3a；'
+        '公开材料参考值，非厂家试验值。')
+    properties={}
+    for cable in document['cable_types']:
+        copper={core['conductor']['material'] for core in cable['cores']}
+        copper.update(layer['material'] for core in cable['cores'] for layer in core['layers'] if layer['role']=='metallic_screen')
+        steel={layer['material'] for layer in cable['common_layers'] if layer['role']=='armour'}
+        for material in document['materials']:
+            if material.get('thermal_resistivity') is not None:continue
+            if material['id'] in copper:properties[material['id']]={'thermal_resistivity':0.002493766,'source':reference+'行 cmCu。'}
+            elif material['id'] in steel:properties[material['id']]={'thermal_resistivity':0.0133,'source':reference+'行 samSteel。'}
+    iec=deepcopy(iec_parameters);iec.update(operation='both',rating_mode='simultaneous')
+    configuration={'title':'城北变电站 · 排管段有限元温度场','task':'operating',
+        'method':contract['method'],'input_source':'domain','driver':{'kind':'single'},
+        'parameters':{'domain_options':{'section_id':section['id'],'load_id':load['id'],
+            'bounds_m':[-8.,-8.,8.,0.],'equivalent_layers_acknowledged':True,'source':source},
+            'iec':iec,'material_thermal_resistivity':properties,'outer_boundary':'kennelly_image',
+            'mesh':{'size_m':0.0022,'far_size_m':0.125,'transition_m':0.3,'max_nodes':4000000,
+                    'field_order':2,'minimum_circle_segments':256}},
+        'input_sources':{'/parameters':{'kind':'user','reference':source+'；网格是收敛研究起点，尚未产生结果。','reviewed':False}}}
+    saved=api('/api/workspaces/'+workspace['id']+'/studies','POST',{
+        **configuration,'modules':{'thermal-field':deepcopy(configuration)},'expected_revision':workspace['revision']})
+    return {'title':configuration['title'],'workspace':workspace['id'],'study':saved['id'],
+            'module':'thermal-field','status':'未运行；配置超算后确认核时并提交','ready':False}
+
+
 def release_hv_model():
     """Sourced Qifan reference design; never a factory ampacity declaration."""
     from backend.kernel.model_series import hv_payload
@@ -272,7 +305,7 @@ def release_identity():
         plugin.verify()
     series, digest = bundled_series()
     hv,hv_digest = bundled_hv()
-    return {'seed_revision':5, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
+    return {'seed_revision':6, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
             'plugins':{key:Research.pin(plugin) for key,plugin in sorted(registry.plugins.items())},
             'models':{item['id']:{'version':item['version'],'sha256':item['content_sha256']} for item in system_models()},
             'manufacturer_series':{'id':series['id'],'version':series['version'],'sha256':digest},
@@ -398,16 +431,7 @@ def build_release_seed(staged, database, identity):
                        {'kind':'single'},parameters=deepcopy(hv_data['parameters']),
                        input_sources={'/parameters':{'kind':'user','reviewed':False,
                            'reference':hv_data['scope']+'；'+hv_data['sources']['buffer_reference']['reference']+'；'+hv_data['sources']['geometry_reference']['reference']}})
-            contracts = api('/api/input-contracts')
-            contract = next(item for item in contracts if item['method']['capability']=='electrothermal-steady')
-            title = '城北变电站 · 排管段温度场（需在超算运行）'
-            configuration = {'title':title,'task':'operating','method':contract['method'],'input_source':'domain',
-                             'parameters':{key:value['default'] for key,value in contract['parameter_schema'].get('properties',{}).items() if 'default' in value},
-                             'driver':{'kind':'single'}}
-            thermal = api('/api/workspaces/'+workspace['id']+'/studies','POST',{
-                **configuration,'modules':{'thermal-field':deepcopy(configuration)},'expected_revision':workspace['revision']})
-            result['studies'].append({'title':title,'workspace':workspace['id'],'study':thermal['id'],
-                                      'module':'thermal-field','status':'需在超算运行；补齐参数并预检后提交','ready':False})
+            result['studies'].append(release_temperature_study(api,workspace,parameters))
             # Later seed operations must not silently age an earlier result.
             for item in result['studies']:
                 if item.get('run'):

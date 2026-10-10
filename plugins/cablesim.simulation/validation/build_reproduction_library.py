@@ -457,12 +457,37 @@ def publish_variant_names():
     (ROOT/'plugins/cablesim.simulation/validation/evidence.sha256').write_bytes((key+'\n').encode('utf-8'))
 
 
+def publish_scope_names():
+    """Translate saved coverage only; do not regenerate or solve any case."""
+    folder=DATA/'library';original=(folder/'index.json').read_bytes();index=json.loads(original)
+    raw=(folder/'snapshots'/(index['current']+'.json')).read_bytes()
+    if sha256(raw).hexdigest()!=index['current']:raise ValueError('Library snapshot integrity failed')
+    items={item['id']:item for item in json.loads(raw)['items']}
+    scopes={
+        'E05':'二维磁准静态有限元与护套网络耦合，包含集肤与邻近效应、护套涡流与环流；用有限计算域代替无限远边界，另行核对截断影响。',
+        'B02':'11组算例、多种电缆与敷设；331页',
+        'E17':'表1 c=1 双导线：完整二维集肤与邻近效应有限元模型，施加方向相反的有效值电流。',
+        'E18':'一个激励导体和一个净电流为零的被动导体；对照表1的被动导体感应表面电流密度，不代表激励导体的总电流密度。',
+        'E19':'表1的三种电流组合、六个材料侧表面取样点及其幅值和相位；不覆盖论文中的全部参数化研究。',
+    }
+    for identifier,scope in scopes.items():items[identifier]['scope']=scope
+    items['B02-2']['sensitivity']['scope']='局部加密诊断，不替代原始网格与扩域收敛证据。'
+    if (folder/'index.json').read_bytes()!=original:raise ValueError('Concurrent library publication; retry from current snapshot')
+    publish(items)
+    key=json.loads((folder/'index.json').read_text('utf-8'))['current']
+    assets=ROOT/'plugins/cablesim.simulation/assets'
+    (assets/'reproduction-evidence.json').write_bytes((folder/'snapshots'/(key+'.json')).read_bytes())
+    (assets/'reproduction-evidence-index.json').write_bytes((json.dumps({'kind':'saved_evidence','snapshot_id':key},indent=2)+'\n').encode('utf-8'))
+    (ROOT/'plugins/cablesim.simulation/validation/evidence.sha256').write_bytes((key+'\n').encode('utf-8'))
+
+
 if __name__=='__main__':
     import argparse
     parser=argparse.ArgumentParser();group=parser.add_mutually_exclusive_group()
-    group.add_argument('--tb880-only',action='store_true');group.add_argument('--duct-notes-only',action='store_true');group.add_argument('--variant-names-only',action='store_true')
+    group.add_argument('--tb880-only',action='store_true');group.add_argument('--duct-notes-only',action='store_true');group.add_argument('--variant-names-only',action='store_true');group.add_argument('--scope-names-only',action='store_true')
     args=parser.parse_args()
     if args.tb880_only:publish_tb880_fields()
     elif args.duct_notes_only:publish_duct_notes()
     elif args.variant_names_only:publish_variant_names()
+    elif args.scope_names_only:publish_scope_names()
     else:build()

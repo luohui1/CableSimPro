@@ -265,6 +265,16 @@ def make_router(research,batches=None):
         return {'estimated_nodes':None,'node_limit':max((n for n in limits if n is not None),default=None),
                 'estimate_status':'mesh_preflight_required','budget_core_hours':budget['upper_core_hours'],'case_count':count}
 
+    @router.get('/workspaces/{wid}/studies/{sid}/availability')
+    def availability(wid:UUID,sid:UUID,module:str|None=None):
+        # Configuration lookup only: never prepare inputs, mesh or submit a job.
+        with research.store.db() as db:
+            definition=research.definition(db,str(wid),str(sid))['definition']
+        configuration=definition.get('modules',{}).get(module,definition) if module else definition
+        method=configuration['method']
+        return {'configured':research.executor.required(method['plugin_id'],method['capability']),
+                'location':'slurm','local_solver_allowed':False}
+
     @router.post('/workspaces/{wid}/studies/{sid}/convergence',status_code=202)
     def start(wid:str,sid:str,body:RefineRequest):return refinements.start(wid,sid,body)
 

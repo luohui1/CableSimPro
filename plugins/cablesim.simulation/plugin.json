@@ -1,8 +1,8 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.simulation",
-  "version": "1.3.0",
-  "name": "仿真复现基准",
+  "version": "1.3.1",
+  "name": "电缆有限元仿真",
   "description": "多区域稳态导热与GetDP时谐涡流、Elmer稳态/瞬态热适配，使用统一问题、网格和复现工件。",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -12,14 +12,14 @@
       {
         "role": "cover",
         "path": "assets/cover.webp",
-        "title": "仿真复现基准封面",
+        "title": "电缆有限元仿真封面",
         "description": "仓库既有插件封面，随发行包封签。",
         "media_type": "image/webp"
       },
       {
         "role": "method",
         "path": "assets/method.svg",
-        "title": "仿真复现基准方法示意",
+        "title": "电缆有限元仿真方法示意",
         "description": "按实际模型手工绘制的示意图；不包含虚构结果。",
         "media_type": "image/svg+xml"
       }
@@ -2509,7 +2509,7 @@
     {
       "kind": "method",
       "id": "iec-thermal-field",
-      "title": "三芯IEC损耗与有限元温度反馈",
+      "title": "三芯电缆有限元热场（IEC 损耗反馈）",
       "method_version": "1.4.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
@@ -24533,12 +24533,12 @@
     },
     {
       "path": "assets/method.svg",
-      "sha256": "a782a8b00f5127eac7c77bcaca88a58bfe95255b5c702a59dc45aba69fc135ac",
-      "size_bytes": 3206
+      "sha256": "bd9b99a9d414b0af6dc5b918e198fea17dced912114d74377e79d906d30d847f",
+      "size_bytes": 1487
     },
     {
       "path": "assets/reproduction-evidence-index.json",
-      "sha256": "96a862e374765aa90c4f460fd1453f27cd5ea95fde1fb9d533a51ad8770fba4b",
+      "sha256": "ff8d7c8f6ccf5d987a6c528a40068bc7a09b9321f82a7570e9cb6d9560987c80",
       "size_bytes": 116
     },
     {
@@ -24548,8 +24548,8 @@
     },
     {
       "path": "assets/reproduction-evidence.json",
-      "sha256": "4ae9271898476b4a1eef626083163715c701891caee5e486661b34ed1476b2a7",
-      "size_bytes": 335447
+      "sha256": "15477ceffb1f46bd9ca20381c2d8e5cb9a9120d2f0a08766bb6d5206ae2d19ca",
+      "size_bytes": 335539
     },
     {
       "path": "src/cablesim_simulation/__init__.py",
@@ -24748,23 +24748,23 @@
     },
     {
       "path": "src/cases/eddy-induced.json",
-      "sha256": "73099ba9ca9311f03f654fdc2d745aa081eb8e1075362920da85ecf39dee01d4",
-      "size_bytes": 5868
+      "sha256": "1d86dcd241d52096a8e7e4821a3e553bbd0be878ab8d304b8dab1879978e2dfd",
+      "size_bytes": 5884
     },
     {
       "path": "src/cases/eddy-lunca.json",
-      "sha256": "49e2909b9af07a3e05f210134b7f45f753f9f66a1dbd33f6277d60cd4302db63",
-      "size_bytes": 11071
+      "sha256": "9714694aad9d5b56d831c407bf89972126362edcd8b9ca0b5c0fe09bd567f844",
+      "size_bytes": 11047
     },
     {
       "path": "src/cases/eddy-twin.json",
-      "sha256": "16e858f16a976d16653ee486bc019cfc5727c511be13065704917b52cd77e0ad",
-      "size_bytes": 4022
+      "sha256": "f71b42af0369872076bb419d1e9e207c01df52b847980d81548af6e742267873",
+      "size_bytes": 4056
     },
     {
       "path": "src/cases/eddy-two-round.json",
-      "sha256": "570cb653e5c73a46a523cd26cc07f5596f9330818433d95d4e92d83105232836",
-      "size_bytes": 16540
+      "sha256": "2da72ce6eaf0ca2f5bc2365c154bb8084f490da9a3269f63cc4beed69ff8a7e0",
+      "size_bytes": 16535
     },
     {
       "path": "src/cases/electrothermal-coaxial.json",

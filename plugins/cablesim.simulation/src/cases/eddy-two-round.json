@@ -9,7 +9,7 @@
     "url": "https://doi.org/10.3390/en12183584",
     "local_pdf": ".data/papers/em-sixth/jablonski-2019.pdf"
   },
-  "scope": "Table1 three current combinations, six material-side surface probes, magnitudes and phases; not all parametric studies in the paper.",
+  "scope": "表1的三种电流组合、六个材料侧表面取样点及其幅值和相位；不覆盖论文中的全部参数化研究。",
   "frozen_inputs": [
     {
       "paths": [

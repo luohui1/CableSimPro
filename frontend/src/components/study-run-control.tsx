@@ -16,9 +16,12 @@ import { Button } from "./ui/button";
 import { PreflightDialog, needsScopeConfirmation } from "./preflight-dialog";
 import { modelVersions } from "@/api/research";
 import { displayName } from "@/lib/display-names";
-import { missingInputDestination } from "@/lib/missing-input";
+import { missingInputDestination, matchingFieldPath } from "@/lib/missing-input";
 import type { components } from "@/api/generated/schema";
 import { ErrorState } from "./states";
+import { inputContracts, exactContract } from '@/api/input-contracts';
+import { preflightFieldLabel, readablePreflight } from '@/features/field/preflight-labels';
+import { hpcJson } from '@/features/field/run-label';
 
 export function StudyRunControl({
   module,
@@ -52,9 +55,18 @@ export function StudyRunControl({
     lock: string;
   } | null>(null);
   const configuration = moduleConfiguration(context.study.definition, module);
+  const remoteOnly = configuration?.method.plugin_id === 'cablesim.simulation' &&
+    ['iec-thermal-field','electrothermal-steady','transient-temperature','contact-electrothermal-field','fem-step-response'].includes(configuration.method.capability);
+  const availability = useQuery({ queryKey: ['simulation-availability', context.study.id, module], enabled: remoteOnly, retry: false,
+    queryFn: ({signal}) => hpcJson(`/workspaces/${context.study.workspace}/studies/${context.study.id}/availability?` +
+      new URLSearchParams(context.study.definition.modules?.[module] ? {module} : {}), {signal}) });
+  const contracts = useQuery({ queryKey: ['input-contracts'], queryFn: ({signal}) => inputContracts(signal), enabled: open });
+  let parameterSchema: Record<string, unknown> = {};
+  try { if (configuration && contracts.data) parameterSchema = exactContract(contracts.data, configuration.method).parameter_schema; } catch { /* Preserve preflight's version diagnosis. */ }
   const activeRun = context.runs.some(item => ["accepted", "queued", "running", "validating"].includes(text(item.status)) && (!item.module || item.module === module));
   const requestKey = `cablesim.pending-run:${context.study.workspace}:${context.study.id}:${module}`;
   const submitGuard = useRef(false);
+  const focusTimer = useRef<number | undefined>(undefined);
   const models = useQuery({ queryKey: ["model-versions"], queryFn: ({ signal }) => modelVersions(signal), enabled: open && configuration?.driver?.kind === "selection" });
   const configuredModule = context.study.definition.modules?.[module]
     ? module
@@ -65,6 +77,8 @@ export function StudyRunControl({
       if (context.dirty)
         throw new ApiError(409, "请先保存输入和研究配置，再预检");
       if (!configuration) throw new ApiError(422, "该模块没有保存的方法配置");
+      if (remoteOnly && availability.data?.configured !== true)
+        throw new ApiError(422, '本方法只能在超算求解；请先在设置 → 计算位置配置超算。输入已保存。');
       const source = {
         wid: context.study.workspace,
         sid: context.study.id,
@@ -159,7 +173,8 @@ export function StudyRunControl({
       <Button
         variant={secondary ? "default" : "run"}
         size="compact"
-        disabled={context.dirty || context.saving || !configuration || activeRun || execution.isPending || preflight.isPending}
+        disabled={context.dirty || context.saving || !configuration || activeRun || execution.isPending || preflight.isPending || (remoteOnly && availability.data?.configured !== true)}
+        title={remoteOnly && availability.data?.configured !== true ? '请先在设置 → 计算位置配置超算；本方法不能在本机求解。' : undefined}
         onClick={() => {
           setOpen(true);
           setAck(false);
@@ -174,7 +189,7 @@ export function StudyRunControl({
         summary={remoteBudget && <section aria-label="超算核时预算" className="input-section">
           <strong>提交 {text(remoteBudget.partition)} · 本次核时预算上限 {Number(remoteBudget.upper_core_hours).toFixed(3)} 核时</strong>
           <p>预计占用不超过上述资源上限；实际核时以 Slurm 记账为准。共 {Number(remoteBudget.case_count)} 个工况，单任务时限 {Number(remoteBudget.wall_seconds)} 秒。</p>
-          {checkedCases.map((item, index) => { const evidence = optionalRecord(item.evidence); return <p key={text(item.case_id)}>工况 {index + 1}：{numeric(evidence.mesh_nodes) ?? "未提供"} 节点 · {numeric(evidence.mesh_elements) ?? "未提供"} 单元</p>; })}
+          {checkedCases.map((item, index) => { const evidence = optionalRecord(item.evidence); return <p key={text(item.case_id)}>工况 {index + 1}：{numeric(evidence.mesh_nodes) ?? "未提供"} {numeric(evidence.field_order) === 2 ? '自由度' : '节点'} · {numeric(evidence.mesh_elements) ?? "未提供"} 单元</p>; })}
         </section>}
         caseLabel={(id, index) => {
           const match = /case-(\d+)$/.exec(id);
@@ -186,7 +201,7 @@ export function StudyRunControl({
           return id.startsWith("crosscheck-") ? `${label} · 交叉核对` : label;
         }}
         missingLabel={(field) =>
-          missingInputDestination(field, module, currentInput).label
+          field.startsWith('/parameters') ? preflightFieldLabel(field, parameterSchema) : missingInputDestination(field, module, currentInput).label
         }
         open={open}
         onOpenChange={(value) => {
@@ -194,14 +209,14 @@ export function StudyRunControl({
         }}
         method={
           configuration
-            ? displayName(configuration.method.plugin_id) +
+            ? (configuration.method.plugin_id === 'cablesim.simulation' ? '电缆有限元仿真' : displayName(configuration.method.plugin_id)) +
               " · " +
               configuration.method.version
             : ""
         }
         loading={preflight.isPending}
         error={preflight.error}
-        data={preflight.data}
+        data={readablePreflight(preflight.data, parameterSchema)}
         ack={ack}
         onAck={setAck}
         running={execution.isPending}
@@ -211,6 +226,25 @@ export function StudyRunControl({
         onMissing={(field) => {
           setOpen(false);
           onMissing?.(field);
+          // Wait for the exiting dialog's focus scope, then the lazy form.
+          window.clearInterval(focusTimer.current);
+          if (field) {
+            const deadline = Date.now() + 10000;
+            focusTimer.current = window.setInterval(() => {
+              if (Date.now() > deadline || !location.pathname.includes(context.study.id)) { window.clearInterval(focusTimer.current); return; }
+              if (document.querySelector('[role="dialog"]')) return;
+              const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-field-path]'));
+              const path = matchingFieldPath(field, nodes.map(node => node.dataset.fieldPath || ''), context.domain);
+              const node = nodes.find(node => path !== undefined && node.dataset.fieldPath === path);
+              const input = node?.matches('input,select,textarea,button') ? node : node?.querySelector<HTMLElement>('input,select,textarea,button');
+              if (!input) return;
+              node?.closest('details')?.setAttribute('open', '');
+              input.focus();
+              if (document.activeElement !== input) return;
+              input.scrollIntoView({ block: 'center' });
+              window.clearInterval(focusTimer.current);
+            }, 50);
+          }
         }}
       />
       {(activeRun || ["failed", "interrupted"].includes(text(context.runs.at(-1)?.status))) && <StudyRemoteProgress />}
