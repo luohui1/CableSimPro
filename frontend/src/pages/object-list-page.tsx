@@ -1,10 +1,9 @@
 import { useEffect, useState } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
 import {
   workspaces,
   studyIndex,
-  studyRuns,
   methodCatalog,
   type StudyRow,
 } from "@/api/research";
@@ -24,6 +23,8 @@ import {
 import { Toolbar } from "@/components/toolbar";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { VersionNotice } from '@/components/version-notice';
+import { indexAll } from '@/api/object-index';
+import { statusMark } from '@/components/object-link';
 import { isVersionStale } from '@/lib/version-status';
 
 const SIMULATION_MODULES = ["simulation", "electrothermal", "transient", "sheath-losses", "thermal-field", "batch"];
@@ -40,14 +41,9 @@ export function ObjectListPage() {
     queryKey: ["study-index"],
     queryFn: ({ signal }) => studyIndex(signal),
   });
-  const runQueries = useQueries({
-    queries: (studies.data || []).map((row) => ({
-      queryKey: ["runs", row.workspace, row.id, "summary"],
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        studyRuns(row.workspace, row.id, signal, "summary"),
-      enabled: !isVersionStale(row.raw),
-    })),
-  });
+  // 研究状态一律取统一索引（与首页、工程页同一说法，过期带原因），不再逐个研究读取运行再自行推算
+  const cards = useQuery({ queryKey: ["index-objects", "study", "all"], queryFn: ({ signal }) => indexAll("study", signal) });
+  const stateOf = new Map((cards.data?.items || []).map((card) => [card.id, card.status]));
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
@@ -55,9 +51,6 @@ export function ObjectListPage() {
   const pluginNames = new Map((catalog.data || []).map((row) => [text(optionalRecord(row.method).plugin_id), text(row.name)]));
   const projects = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
   const projectName = (wid: string) => text((projects.data || []).find((space) => text(space.id) === wid)?.name) || "未命名工程";
-  const statuses = new Map(
-    (studies.data || []).map((row, index) => [row.id, runQueries[index]]),
-  );
   const columns: Column<StudyRow>[] = [
     {
       id: "name",
@@ -91,48 +84,13 @@ export function ObjectListPage() {
     },
     {
       id: "state",
-      label: "最近运行",
+      label: "状态",
       render: (row) => {
-        const query = statuses.get(row.id);
+        const state = stateOf.get(row.id);
+        // 版本已变化的研究保留“重算”入口
         if (isVersionStale(row.raw)) return <VersionNotice value={row.raw} target={{ wid: row.workspace, sid: row.id, revision: row.workspaceRevision, studyRevision: row.revision, title: row.title }} />;
-        if (query?.isPending)
-          return <StatusMark kind="queued" label={query.fetchStatus === 'paused' ? '等待网络连接' : '读取中'} />;
-        if (query?.isError)
-          return (
-            <span className="status-actions"><span className="field-error">{message(query.error)}</span><Button size="compact" variant="ghost" onClick={() => void query.refetch()}>重试</Button></span>
-          );
-        const latest = query?.data?.at(-1);
-        if (isVersionStale(row.raw) || isVersionStale(latest)) return <VersionNotice value={isVersionStale(row.raw) ? row.raw : latest} target={{ wid: row.workspace, sid: row.id, revision: row.workspaceRevision, studyRevision: row.revision, title: row.title }} />;
-        return latest ? (
-          <StatusMark
-            kind={
-              latest.freshness === "historical"
-                ? "historical"
-                : ["accepted", "running", "validating"].includes(
-                      text(latest.status),
-                    )
-                  ? "running"
-                  : ["succeeded", "partial"].includes(text(latest.status))
-                    ? "current"
-                    : "error"
-            }
-            label={
-              latest.freshness === "historical"
-                ? "历史"
-                : text(latest.status) === "partial"
-                  ? "部分成功"
-                  : text(latest.status) === "succeeded"
-                    ? "成功"
-                    : ["accepted", "running", "validating"].includes(
-                          text(latest.status),
-                        )
-                      ? "执行中"
-                      : "失败"
-            }
-          />
-        ) : (
-          <StatusMark kind="draft" label="未运行" />
-        );
+        if (!state) return cards.isError ? <StatusMark kind="unknown" label="状态读取失败" detail={message(cards.error)} /> : <StatusMark kind="queued" label="读取中" />;
+        return <StatusMark kind={statusMark(state.code)} label={state.label} detail={state.reason || undefined} />;
       },
     },
     {
@@ -152,16 +110,7 @@ export function ObjectListPage() {
       value.toLowerCase().includes(filter.toLowerCase()),
     ),
   );
-  const rank = (row: StudyRow) => {
-    const latest = statuses.get(row.id)?.data?.at(-1);
-    return latest?.freshness === "current" &&
-      latest.integrity === "verified" &&
-      ["succeeded", "partial"].includes(text(latest.status))
-      ? 0
-      : latest?.freshness === "historical"
-        ? 2
-        : 1;
-  };
+  const rank = (row: StudyRow) => ({ current: 0, running: 1, not_run: 2, failed: 3, outdated: 4 } as Record<string, number>)[stateOf.get(row.id)?.code || ""] ?? 2;
   matching.sort(
     (a, b) => rank(a) - rank(b) || b.updated.localeCompare(a.updated),
   );
@@ -178,7 +127,7 @@ export function ObjectListPage() {
   return (
     <>
       <AppShell
-        title={search.kind === "simulation" ? "电缆仿真研究" : "研究"}
+        title={search.kind === "simulation" ? "电缆仿真研究" : search.kind === "ampacity" ? "载流量研究" : "工程与研究"}
         status={
           (studies.isError || studies.isFetching) && <StatusMark
             kind={
@@ -241,20 +190,17 @@ export function ObjectListPage() {
           <StaleBanner description="连接中断，保留上次读取的列表。" />
         )}
         <section className="object-section">
-          <header>
-            <h2>研究列表</h2>
-          </header>
           {(
             <Toolbar label="研究检索">
               <label className="search-field">
-                筛选研究
+                检索
                 <input
                   value={filter}
                   onChange={(event) => setFilter(event.target.value)}
                   placeholder="名称、任务或型号"
                 />
               </label>
-              <span className="muted">{rows.length} 项</span>
+              <span className="muted">{tableGroups.length} 个工程 · {rows.length} 项研究</span>
             </Toolbar>
           )}
           {studies.isPending ? (
@@ -273,11 +219,7 @@ export function ObjectListPage() {
               groups={tableGroups}
               rowLabel={(row) => row.title}
               showGroups={tableGroups.length > 1}
-              rowClassName={(row) =>
-                statuses.get(row.id)?.data?.at(-1)?.freshness === "historical"
-                  ? "is-historical"
-                  : undefined
-              }
+              rowClassName={(row) => stateOf.get(row.id)?.code === "outdated" ? "is-historical" : undefined}
             />
           ) : (
             <EmptyState

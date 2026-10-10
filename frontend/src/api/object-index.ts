@@ -44,6 +44,16 @@ export function indexObjects(filters: { kind?: ObjectKind; q?: string; limit?: n
   for (const [key, value] of Object.entries(filters)) if (value !== undefined && value !== "") query.set(key, String(value));
   return read<{ items: ObjectCard[]; total: number }>(`/api/index/objects?${query}`, signal);
 }
+/** 某一类的全部名片：接口每页最多 100 条，按页读到 total 为止。 */
+export async function indexAll(kind: ObjectKind, signal?: AbortSignal) {
+  const items: ObjectCard[] = [];
+  for (let page = 0; page < 50; page++) {
+    const batch = await indexObjects({ kind, limit: 100, offset: items.length }, signal);
+    items.push(...batch.items);
+    if (!batch.items.length || items.length >= batch.total) return { items, total: batch.total };
+  }
+  return { items, total: items.length };
+}
 export function objectRelations(kind: ObjectKind, id: string, signal?: AbortSignal) {
   return read<Relations>(`/api/index/objects/${encodeURIComponent(kind)}/${encodeURIComponent(id)}/relations`, signal);
 }
