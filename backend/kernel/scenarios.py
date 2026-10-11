@@ -482,6 +482,7 @@ class ChooseModel(StrictModel):
 
 
 class CreateStudyWorkspace(ChooseModel):
+    project_name: str | None = Field(default=None,min_length=1,max_length=120,description='工程师填写的客户与工程名称；单位：无。未提供时保持原有教学研究命名。')
     candidate_completion: CandidateCompletion | None = None
     example_id: str | None = None
     three_core_layout: Literal['three_core_buried_single','three_core_buried_horizontal','three_core_ducts_horizontal','three_core_ducts_2x3','three_core_ducts_3x3'] | None = None
@@ -546,6 +547,7 @@ def make_router(store,research=None):
     @router.post('/study-workspaces', status_code=201)
     def create(body: CreateStudyWorkspace):
         body=CreateStudyWorkspace.model_validate(body.model_dump())
+        if body.project_name is not None and not body.project_name.strip():raise HTTPException(422,{'code':'PROJECT_NAME_REQUIRED','path':'/project_name','message':'请填写客户与工程名称。'})
         if body.candidate_completion:
             from .candidates import read
             if research is None or not body.model_id.startswith('candidate:'):raise HTTPException(422,'请选择型号库原始规格后补工程参数。')
@@ -595,6 +597,10 @@ def make_router(store,research=None):
                 state['domain'] = apply_example(state['domain'],example)
                 state['scenario']['name'] = example['title']
                 state['engineering_example'] = deepcopy(example)
+            if body.project_name:
+                state['domain']['name']=body.project_name.strip()
+                state['scenario']['name']=state['domain']['name']
+                state['domain']['provenance']['/name']={'kind':'user','reference':'工程师填写的客户与工程名称','reviewed':False}
             store.commit(db, row, state, '显式选择系统演示型号版本与直埋模板')
         return store.snapshot(created['id'])
 

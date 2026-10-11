@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useLocation } from '@tanstack/react-router';
+import { Link, useLocation } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { message, numeric, optionalRecord, text } from '@/api/client';
 import { moduleConfiguration } from '@/lib/study-config';
@@ -35,12 +35,19 @@ export function SimulationSetup({ module }: { module: string }) {
     enabled: !!configuration, retry: false,
     queryFn: ({ signal }) => hpcJson(`/workspaces/${context.study.workspace}/studies/${context.study.id}/availability?` +
       new URLSearchParams(context.study.definition.modules?.[module] ? { module } : {}), { signal }) });
-  const active = context.runs.some(run => ['accepted', 'queued', 'running', 'validating'].includes(text(run.status)));
+  const active = context.runs.some(run => ['accepted', 'queued', 'running', 'validating'].includes(text(run.status)) && (!run.module || run.module === module));
   const query = useQuery({ queryKey: ['simulation-estimate', context.study.id, context.study.revision, context.workspace.revision, module],
     enabled: availability.data?.configured === true && !!configuration && !active && !context.dirty, retry: false,
     queryFn: ({ signal }) => hpcJson(`/workspaces/${context.study.workspace}/studies/${context.study.id}/estimate?` +
       new URLSearchParams({ expected_revision: String(context.workspace.revision), expected_study_revision: String(context.study.revision),
         ...(context.study.definition.modules?.[module] ? { module } : {}) }), { signal }) });
+  if (!configuration) return <section className="input-section" aria-label="模块配置">
+    <p role="status">尚未配置该模块</p>
+    <p>请先选择计算方法并保存参数，再检查输入和运行。</p>
+    <Link to="/studies/$sid/$module/$tab" params={{ sid: context.study.id, module, tab: 'parameters' }}
+      search={previous => ({ ...previous, theme: previous.theme === 'dark' ? 'dark' : 'light',
+        workspace: context.study.workspace, run: '', delivery: '', inspector: 'method' })}>配置方法与参数</Link>
+  </section>;
   if (active) return <StudyRemoteProgress />;
   const input = context.moduleInputs[module]?.value ?? configuration?.method_input ?? context.domain;
   const boundary = configuration?.method?.capability === 'iec-thermal-field'

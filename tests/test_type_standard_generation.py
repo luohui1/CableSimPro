@@ -109,11 +109,24 @@ def test_missing_basis_installation_is_actionable_without_creating_draft():
     assert '安装' in error.value.detail['message']
 
 
-def test_35kv_requirement_query_uses_its_own_insulation_table():
-    from types import SimpleNamespace
-    from cablesim_standard_check.basis import queries
-    checker=SimpleNamespace(family='mv3',materials={'xlpe':{'standard_kind':'XLPE'}},
-        cable={'rating':{'u0':26000,'u':35000},'cores':[{'id':'core','conductor':{'nominal_area':400e-6},'layers':[{'role':'insulation','material':'xlpe'}]}], 'common_layers':[]},
-        rows=[{'id':'core:insulation-nominal','target':{'core_id':'core'}}])
-    query=queries(checker)['core:insulation-nominal']
+def test_35kv_requirement_query_uses_its_own_insulation_table(client):
+    """Save a complete 26/35 kV input, then resolve its criterion via real Executor."""
+    import json
+    from backend.kernel.scenarios import system_models
+    from backend.kernel.type_versions import structure_context
+    from backend.domain.models import DomainDocument
+    from test_standard_check import example
+    model=next(m for m in system_models() if m['id']=='system.cu-xlpe-al-400')
+    created=client.post('/api/design/type-workspaces',json={'model_id':model['id'],'content_sha256':model['content_sha256']})
+    assert created.status_code==201,created.text
+    workspace=created.json();document=example(26000,35000,False,400)
+    document.update(circuits=[],sections=[],load_cases=[]);structure_context(document)
+    document['provenance']['/execution_standards']={'kind':'standard','reviewed':True,'reference':json.dumps({'schema':'cablesim.execution-standards/1','items':[{'standard':method.SOURCES[key]['standard'],'source_digest':method.SOURCES[key]['sha256']} for key in ('mv3','conductor')]})}
+    saved=client.put('/api/workspaces/'+workspace['id']+'/domain',json={'expected_revision':workspace['revision'],'document':DomainDocument.model_validate(document).model_dump(mode='json')})
+    assert saved.status_code==200,saved.text
+    answer=client.post('/api/design/type-workspaces/'+workspace['id']+'/requirements/basis',json={'request_id':str(uuid4()),'expected_revision':saved.json()['revision']})
+    assert answer.status_code==200,answer.text
+    reference=next(ref for ref in answer.json()['parameters']['basis_references'].values() if ref['record']['quantity']['key']=='insulation_nominal')
+    query=reference['query']
     assert (query['standard'],query['edition'],query['locator'])==('GB/T 12706.3','2020','表 6')
+    assert (reference['record']['value'],reference['record']['printed_page'])==(10.5,6)

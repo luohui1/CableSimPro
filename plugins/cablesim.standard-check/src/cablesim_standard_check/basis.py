@@ -15,30 +15,46 @@ def queries(checker):
     standard, edition = ('GB/T 11017.2', '2024') if hv else ('GB/T 12706.'+{'mv1':'1','mv2':'2','mv3':'3'}.get(family,'2'), '2020')
     result = {}
     for row in checker.rows:
+        row['basis_missing_fields'] = []
         key, target = row['id'].rsplit(':', 1)[-1], row['target']
         core = next((c for c in cable['cores'] if c['id'] == target.get('core_id')), cable['cores'][0])
+        escape = lambda token: token.replace('~', '~0').replace('/', '~1')
+        root = '/cable_types/'+escape(cable['id'])+'/cores/'+escape(core['id'])
+        def missing(field, label):
+            row['basis_missing_fields'].append({'field':field,'label':label})
         conditions = {'area_m2':core['conductor']['nominal_area'], 'u0_v':cable['rating']['u0'], 'u_v':cable['rating']['u']}
         query = {'schema_version':'cablesim.standards-query/1', 'standard':standard, 'edition':edition, 'conditions':{}}
         if key == 'insulation-nominal':
             layer = next((l for l in core['layers']+cable['common_layers'] if l['role']=='insulation'), {})
             kind = checker.materials.get(layer.get('material'), {}).get('standard_kind')
+            if kind is None:
+                missing('/materials/'+escape(layer.get('material',''))+'/standard_kind','绝缘材料标准类别')
             if hv and kind != 'XLPE': continue
             query.update(locator='表 2' if hv else '表 6' if family=='mv3' else '表 7',quantity='insulation_nominal',conditions=conditions if hv else {**conditions,'insulation':kind})
         elif key == 'r20':
             kind = checker.materials[core['conductor']['material']].get('standard_kind')
+            if kind is None:
+                missing('/materials/'+escape(core['conductor']['material'])+'/standard_kind','导体材料标准类别')
             if kind not in ('copper_bare','copper_coated','aluminium'): continue
-            query.update(standard='GB/T 3956',edition='2008',locator='表 2',quantity='resistance_20_max',conditions={
+            if core['conductor'].get('conductor_class') is None:
+                missing(root+'/conductor/conductor_class','导体类别')
+            query.update(standard='GB/T 3956',edition='2008',locator={1:'表 1',2:'表 2',5:'表 3',6:'表 4'}.get(core['conductor'].get('conductor_class'),'表 2'),quantity='resistance_20_max',conditions={
                 'area_m2':core['conductor']['nominal_area'],'conductor_class':core['conductor'].get('conductor_class'),
                 'conductor_material':'aluminium' if kind=='aluminium' else 'copper','coating':'metal_coated' if kind=='copper_coated' else 'plain'})
             if kind=='aluminium': query['conditions'].pop('coating')
         elif key=='oversheath-nominal':
             query.update(locator='表 4' if hv else '14.3' if family!='mv1' else '13.3',quantity='oversheath_nominal',conditions=conditions if hv else {'core_count':len(cable['cores'])})
+        elif key=='sheath-nominal' and hv:
+            layer=next((l for l in core['layers']+cable['common_layers'] if l['role']=='metallic_sheath'), {})
+            if layer.get('material') and checker.materials.get(layer['material'],{}).get('standard_kind') is None:
+                missing('/materials/'+escape(layer['material'])+'/standard_kind','金属材料标准类别')
+            continue
         elif key=='oversheath-minimum' and not hv:
             query.update(locator='17.5.3' if family!='mv1' else '15.5.3',quantity='nonmetal_sheath_min')
         elif key=='insulation-minimum' and not hv:
             query.update(locator='17.5.2' if family!='mv1' else '15.5.2',quantity='insulation_min')
         else: continue
-        if all(v is not None for v in query['conditions'].values()): result[row['id']]=query
+        if not row['basis_missing_fields'] and all(v is not None for v in query['conditions'].values()): result[row['id']]=query
     return result
 
 def criterion(reference, unit, inputs):
@@ -80,12 +96,16 @@ def validate(ref,query):
 
 def apply(checker,parameters):
     plan=queries(checker)
-    for row in checker.rows: row['basis_query']=plan.get(row['id'])
+    for row in checker.rows:
+        row['basis_query']=plan.get(row['id'])
+        if row['basis_missing_fields']:
+            row.update(limit=None,margin=None,verdict='missing',source_status='input-missing',reason='缺字段：'+'、'.join(item['label'] for item in row['basis_missing_fields'])+'；补齐后按固定标准版本查询依据。')
     if 'basis_references' not in parameters: return
     if parameters.get('basis_cable_sha256')!=digest(checker.cable): raise ValueError('basis_references：型号输入已变化，请重新取依据。')
     refs=parameters['basis_references']
     if not isinstance(refs,dict): raise ValueError('basis_references：请提供逐项固定依据引用。')
     for row in checker.rows:
+        if row['basis_missing_fields']: continue
         ref=refs.get(row['id'])
         if not ref or row['id'] not in plan:
             row.update(limit=None,margin=None,verdict='uncovered',source_status='not-collected',reason='本库暂未收录 · 下一轮；保留此标准版本与要求。');continue

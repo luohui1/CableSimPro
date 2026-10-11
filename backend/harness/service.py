@@ -154,12 +154,15 @@ class Harness:
                     and step['result']['status']=='ok' and 'studies' in step['result']['data'] and 'next_page' in step['result']['data']),None)
                 reads=self.read_count(record,turn,tools)
                 baseline=self.baseline_problem(record,turn)
-                answer_reason=('宿主已执行所选配方。解释结果、诊断及尚未覆盖的目标。' if requested else
+                method_block=self.method_problem(record,turn)
+                answer_reason=('研究保存的方法发行已变化，预检尚未执行。根据结构化原因说明阻断及人工下一步，不重复预检、不宣称缺项已检查。' if method_block else
+                    '宿主已执行所选配方。解释结果、诊断及尚未覆盖的目标。' if requested else
                     '连续读取没有取得新证据。说明已完成目标、缺口及可执行下一步。' if progress['consecutive_unproductive_reads']>=record['budget']['limits']['max_read_tool_calls'] else None)
                 answer_only=answer_reason is not None
                 if baseline:state,reason='waiting','missing_input'
+                if method_block:state,reason='waiting','missing_input'
                 if answer_only:self.tasks.emit(tid,'turn.answer_only',{'turn_id':turn,
-                    'reason':'recipe_complete' if requested else 'evidence_stalled',
+                    'reason':'method_release_changed' if method_block else 'recipe_complete' if requested else 'evidence_stalled',
                     'read_tool_calls':reads,'max_read_tool_calls':record['budget']['limits']['max_read_tool_calls'],
                     'consecutive_unproductive_reads':progress['consecutive_unproductive_reads'],
                     'tools_allowed':False,'remaining_page':digest.get('next_page') if digest else None})
@@ -282,6 +285,10 @@ class Harness:
             and any(row['code'] in ('BASELINE_INVALID','BASELINE_REQUIRED','BASELINE_NOT_FOUND','BASELINE_CASE_INVALID')
                 for row in step['result']['diagnostics'])),None)
 
+    def method_problem(self,record,turn):
+        return next((step['result'] for step in reversed(self.turn_steps(record,turn)) if step.get('result')
+            and any(row['code']=='METHOD_RELEASE_CHANGED' for row in step['result']['diagnostics'])),None)
+
     def run_recipe(self,tid,turn,request,record):
         """User-selected finite steps run before any model request, with normal authority."""
         source=next((event['data'].get('recipe_source','human.message') for event in reversed(record['events'])
@@ -326,7 +333,7 @@ class Harness:
             'recipes':sorted(recipes),'nodes':[{'id':node['id'],'tool':node['tool'],
                 'recipe':node['input_identity'].get('recipe'),'bindings':node.get('bindings',{})} for node in plan['nodes']],
             'engineering_approval':False})
-        self.tasks.emit(tid,'chat.message',{'role':'assistant','content':None,'turn_id':turn,**({'reasoning_content':reasoning} if reasoning else {}),
+        self.tasks.emit(tid,'chat.message',{'role':'assistant','content':None,'turn_id':turn,'source':source,**({'reasoning_content':reasoning} if reasoning else {}),
             'tool_calls':[{'id':node['id'],'name':node['tool'],'arguments':node['arguments']} for node in plan['nodes']]})
         for index,node in enumerate(plan['nodes']):
             if soft_limit and task_progress(self.tasks.record(tid,model_context=True),tools)['consecutive_unproductive_reads']>=task['limits']['max_read_tool_calls']:
@@ -373,6 +380,10 @@ class Harness:
             codes={row['code'] for row in result['diagnostics']}
             if 'DIAGNOSTIC_ALREADY_REPORTED' in codes:raise HTTPException(422,{'code':'DIAGNOSTIC_ALREADY_REPORTED','message':'重复动作已停止；请按原诊断修正输入。'})
             if 'HUMAN_EXECUTION_REQUIRED' in codes:return 'scope_confirmation'
+            if 'METHOD_RELEASE_CHANGED' in codes:
+                self.tasks.emit(tid,'plan.blocked',{'turn_id':turn,'revision':revision,'reason':'method_release_changed',
+                    'skipped_node_ids':[row['id'] for row in plan['nodes'][index+1:]],'retry_requires_human':True})
+                return 'missing_input'
             if result['status']=='error' and self.repeated_error(tid,node,result)>=task['limits']['max_repair_attempts']:
                 raise HTTPException(422,{'code':'REPAIR_LIMIT_EXCEEDED','message':'同一错误已达到修正次数上限，请人工补充输入或能力；没有无限重试。'})
 
@@ -444,7 +455,7 @@ class Harness:
             visible=self.registry.visible(record)
             recovery_tools={name:tool for name,tool in visible.items() if tool.kind=='read' and name!='task_plan'} if needs_evidence else {}
             progress=task_progress(record,visible)
-            if progress['consecutive_unproductive_reads']>=record['budget']['limits']['max_read_tool_calls']:recovery_tools={}
+            if self.method_problem(record,turn) or progress['consecutive_unproductive_reads']>=record['budget']['limits']['max_read_tool_calls']:recovery_tools={}
             prompt,definitions=prepare(record,recovery_tools,closing=None if recovery_tools else '只重写被拦的解释，不执行任何业务动作。',
                 feedback=feedback,instructions=self.settings.instructions(),progress=progress)
             _,model=self.model.status();metrics={**request_summary(model,prompt,definitions),'phase':'repair'}
@@ -477,6 +488,12 @@ class Harness:
 
     def fallback(self,tid,turn):
         record=self.tasks.record(tid,model_context=True)
+        method_block=self.method_problem(record,turn)
+        if method_block:
+            self.tasks.emit(tid,'answer.diagnostic',{'turn_id':turn,'model_explanation_verified':False,
+                'code':'METHOD_RELEASE_CHANGED','diagnostics':method_block['diagnostics']})
+            yield from self.respond(tid,turn,method_block['summary']+'\n下一步：'+'；'.join(method_block['next_actions']),safe=True)
+            return
         if any(step['tool']=='inbox_read' for step in self.turn_steps(record,turn)):
             self.tasks.emit(tid,'answer.fallback',{'turn_id':turn,'sources':['inbox_read'],
                 'model_explanation_verified':False})

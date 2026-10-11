@@ -1,0 +1,19 @@
+.validation-scope {
+  padding-block: var(--space-4);
+  border-block: 1px solid var(--border);
+}
+.validation-scope h2, .validation-scope h3 {
+  font-size: var(--text-body);
+  margin-block: var(--space-3) var(--space-2);
+}
+.validation-scope h2:first-child { margin-top: 0; }
+.validation-scope p, .validation-purpose-note { margin-block: var(--space-2); }
+.validation-scope ul, .validation-limit-list {
+  padding-inline-start: var(--space-6);
+  margin-block: var(--space-2);
+}
+.validation-scope li, .validation-limit-list li {
+  margin-block: var(--space-2);
+  overflow-wrap: anywhere;
+}
+.validation-scope a { display: inline-block; margin-top: var(--space-2); }

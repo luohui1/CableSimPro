@@ -2,7 +2,7 @@
 from html import escape
 import json
 
-RENDERER = 'cablesim.study-html/21'
+RENDERER = 'cablesim.study-html/22'
 
 
 def formatted(value, digits=1):
@@ -78,7 +78,9 @@ def task_answer(run):
 
 
 def shared_input_summary(run):
-    preferred=recommended_case(run)
+    from .report_selection import context
+    chosen=context(run)
+    preferred=chosen['case_id'] if chosen else recommended_case(run)
     case = next((c for c in run['snapshot'].get('cases',[]) if c['case_id']==preferred),next(iter(run['snapshot'].get('cases', [])), {}))
     document = case.get('input', {})
     if document.get('schema_version') != 'cablesim.domain/1':
@@ -134,8 +136,11 @@ def selection_answer(run):
     method=definition['method']
     if qualified and qualified[0][4].get('engineering_parameters'):
         conclusion+=' 结论依赖工程师给定参数：'+'、'.join(qualified[0][4]['dependencies'])+'。'
-    basis = next((a['rating_basis'] for a in run['output'].get('assessment',[]) if a.get('value') is not None and 'rating_basis' in a),definition['driver'].get('rating_basis','individual'))
-    conclusion += ' 选型口径：'+('全回路等负荷允许电流，所有回路同时采用相同平衡电流。' if basis == 'simultaneous' else '逐回路允许电流，其他回路维持保存负荷，各上限不能同时使用。')
+    from .report_selection import context, basis_text
+    chosen=context(run)
+    if chosen:
+        from .study_pdf import _names
+        conclusion=chosen['answer']+' 选型口径：'+basis_text(chosen['basis'],_names(chosen['document']))
     references=sorted({(s['kind'],s['reference']) for c in candidates for s in c['payload'].get('sources',{}).values()})
     evidence='<h3>型号来源依据</h3>'+table(['来源类型','出处与原文SHA256'],references) if references else ''
     engineering=[];present=[qualified[0][4]] if qualified and not demo else candidates
@@ -322,6 +327,8 @@ def sweep_answer(run):
 
 
 def render(runs, *, attachments=None):
+    from .report_reads import checkpoint
+    checkpoint('html')
     from .report_reads import archive_runs
     from .version_status import cover_status
     from .rating_table import is_rating_table
@@ -339,7 +346,9 @@ def render(runs, *, attachments=None):
         return render_run_specification(runs)
     blocks = []
     for run in runs:
-        preferred=recommended_case(run)
+        from .report_selection import context
+        chosen=context(run)
+        preferred=chosen['case_id'] if chosen else recommended_case(run)
         rows = []
         for case in run['output']['cases']:
             if preferred and case['case_id']!=preferred:continue

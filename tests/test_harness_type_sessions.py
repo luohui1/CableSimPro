@@ -45,7 +45,10 @@ def test_type_session_catalog_context_host_review_and_default_type_proposal(clie
     assert record['proposals'][0]['kind']=='type' and record['proposals'][0]['type_id']==w['id']
     assert record['budget']['model_requests']==2 and record['budget']['tool_calls']==2
     assert all({t['function']['name'] for t in request.get('tools',[])}<=TYPE_TOOLS for request in requests)
-    assert any(m['role']=='tool' and json.loads(m['content']).get('data',{}).get('type_id')==w['id'] for m in requests[-2]['messages'])
+    observations=[row for m in requests[-2]['messages'] if m['role']=='user' and m['content'].startswith('{')
+        for row in json.loads(m['content']).get('host_observations',[])]
+    assert any(row['tool']=='type_read' and row['result']['data']['type_id']==w['id'] for row in observations)
+    assert not any(m['role']=='assistant' and m.get('tool_calls') for m in requests[-2]['messages'])
     assert not any(e['type'] in ('answer.rejected','answer.fallback') for e in record['events'])
     print('\n型号默认方案 '+json.dumps(metrics(record,elapsed),ensure_ascii=False))
     # Hidden research calls are also rejected at the durable broker boundary.

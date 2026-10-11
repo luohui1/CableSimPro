@@ -89,12 +89,18 @@
 .workbench-canvas>.study-canvas-toolbar{position:relative;inset:auto;display:flex;align-items:center;width:100%;box-sizing:border-box;flex-shrink:0;gap:var(--space-2);border-bottom:1px solid var(--line);background:var(--panel);padding:var(--space-1)}
 .study-view-switch{display:flex;gap:var(--space-1);flex-shrink:0;white-space:nowrap}
 @media(max-width:1600px){.study-view-switch button[aria-pressed=false] .study-view-label{display:none}}
-.study-canvas-toolbar [data-drawing-toolbar-slot]{min-width:0;flex:1;overflow-x:auto;margin-left:auto}
-.workbench-canvas .study-canvas-toolbar .drawing-toolbar{position:static;inset:auto;border:0;padding:0;overflow:visible;justify-content:flex-start;min-width:max-content;background:transparent;box-shadow:none;flex-wrap:nowrap}
+.study-canvas-toolbar [data-drawing-toolbar-slot]{min-width:0;flex:1;overflow:visible;margin-left:auto}
+.workbench-canvas .study-canvas-toolbar .drawing-toolbar{position:static;inset:auto;border:0;padding:0;overflow:visible;justify-content:flex-start;min-width:0;background:transparent;box-shadow:none;flex-wrap:wrap}
 .workbench-canvas .study-canvas-toolbar .select-field{width:auto;min-width:max-content;flex-shrink:0}
 .workbench-canvas .study-canvas-toolbar .select-trigger{width:auto;min-width:calc(var(--space-12)*3)}
 .workbench-canvas .study-canvas-toolbar .select-field>label{white-space:nowrap;flex-shrink:0}
-.workbench-canvas:has(.study-template-action)>.study-canvas-toolbar{padding-right:calc(var(--space-12)*2)}
+.workbench-canvas:has(.drawing-toolbar[data-template-collected])>.study-canvas-toolbar{padding-right:var(--space-1)}
+.workbench-canvas:has(.drawing-toolbar[data-template-collected]) .study-template-action{display:none}
+.drawing-secondary-tools{display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);width:calc(var(--space-12)*6);max-width:calc(100vw - var(--space-6));padding:var(--space-3)}
+.study-canvas-toolbar .geometry-what-if{flex:1;flex-wrap:wrap;min-width:0;padding:0;border:0;background:transparent}
+.study-canvas-toolbar .drawing-toolbar:has(.geometry-what-if)>.spacer{display:none}
+.study-canvas-toolbar .geometry-what-if .what-if-status{flex:1 0 calc(var(--space-12)*2);max-width:100%;white-space:nowrap}
+.study-canvas-toolbar .geometry-what-if .what-if-deltas{flex-wrap:wrap;white-space:normal;overflow:visible}
 .workbench-canvas:has(>.study-canvas-toolbar) .study-template-action{top:var(--space-1);right:var(--space-2)}
 .study-report-image-status{position:absolute;right:var(--space-3);bottom:var(--space-3);z-index:3;font-size:var(--text-note)}
 .drawing-toolbar .what-if-toolbar{display:contents}

@@ -26,4 +26,7 @@
 .study-method-config > [data-field-path] > .select-field { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); align-items: center; gap: var(--space-2); }
 .study-method-config .method-required-group { padding: var(--space-2); color: var(--text); border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .study-method-config .method-required-group p { margin: 0 0 var(--space-2); }
+.study-method-workspace { padding: var(--space-3); }
+.study-method-workspace > h3 { font-size: var(--text-body); margin: 0 0 var(--space-2); }
+.study-method-workspace .study-method-config { max-width: 100%; }
 .study-method-config :is(.select-trigger,.parameter-structured-label) { white-space: normal; height: auto; min-height: var(--control-compact); overflow-wrap: anywhere; }

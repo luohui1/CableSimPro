@@ -15,7 +15,7 @@ type TypeContextValue = { workspace?: Workspace; document?: DomainDocument; dirt
   ratingDraft: RatingDraft | null; setRatingDraft: (draft: RatingDraft | null | ((current: RatingDraft | null) => RatingDraft | null)) => void;
   methodDrafts: Record<string, MethodDraft>; setMethodDraft: (module: string, draft: MethodDraft | null | ((current: MethodDraft | undefined) => MethodDraft | null)) => void;
   fieldError: { path: string; message: string } | null;
-  setField: (spec: NumericInput, text: string | undefined) => void; edit: (path: string, value: unknown) => void; save: () => Promise<void>; commitResourceValue: (action: () => Promise<unknown>) => Promise<void>; undo: () => Promise<void>; discard: () => void; reload: () => void; locked: (path: string) => boolean };
+  setField: (spec: NumericInput, text: string | undefined) => void; edit: (path: string, value: unknown) => void; save: () => Promise<void>; commitResourceValue: (action: () => Promise<unknown>,notice?:string) => Promise<void>; undo: () => Promise<void>; discard: () => void; reload: () => void; locked: (path: string) => boolean };
 const Context = createContext<TypeContextValue | null>(null);
 export function useTypeWorkspace() { const value = useContext(Context); if (!value) throw new Error('型号工作区未挂载'); return value; }
 export function TypeProvider({ wid, children }: { wid: string; children: ReactNode }) {
@@ -51,10 +51,10 @@ export function TypeProvider({ wid, children }: { wid: string; children: ReactNo
     await queries.invalidateQueries({ queryKey: ['object-relations'] });
   }
   async function refresh(next: Workspace) { queries.setQueryData(['type-workspace', wid, undefined, undefined], next); await refreshResults(); await queries.invalidateQueries({ queryKey: ['type-list'] }); }
-  async function commitResourceValue(action: () => Promise<unknown>) {
+  async function commitResourceValue(action: () => Promise<unknown>, notice='已采用资源值；受影响的保存结果为历史，请重算。') {
     if (pending.current || !workspace || readOnly || dirty) throw new Error('请先保存或撤销当前修改，再采用资源值。');
     pending.current = true; setBusy(true); setError(''); setNotice('');
-    try { await action(); await refresh(await loadWorkspace(wid)); setNotice('已采用资源值；受影响的保存结果为历史，请重算。'); }
+    try { await action(); await refresh(await loadWorkspace(wid)); setNotice(notice); }
     finally { pending.current = false; setBusy(false); }
   }
   async function save() {

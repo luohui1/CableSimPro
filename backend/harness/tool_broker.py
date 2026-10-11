@@ -73,6 +73,32 @@ class ToolBroker:
     def __init__(self,research,tasks,registry,proposals):
         self.research,self.tasks,self.registry,self.proposals=research,tasks,registry,proposals
 
+    def changed_method(self,task,args):
+        sid=self.study_id(task,args)
+        with self.research.store.db() as db:study=self.research.definition(db,task['workspace_id'],sid)
+        selected=self.research.module_definition(study['definition'],args.get('module'))
+        methods=[selected['method'],*[row['method'] for row in selected.get('crosschecks',[])],
+            *[row['method'] for row in selected.get('candidate_completions',{}).values()]]
+        changes=[]
+        for saved in methods:
+            plugin=self.research.registry(saved['plugin_id']).get(saved['plugin_id'])
+            installed=self.research.pin(plugin)
+            if installed!={key:saved[key] for key in ('plugin_id','version','release_digest')}:
+                changes.append({'saved_method':saved,'installed_method':installed,'method_name':plugin.manifest.name})
+        if not changes:return None
+        title=study['definition']['title']
+        reasons=[row['method_name']+' '+row['saved_method']['version']+' → '+row['installed_method']['version']
+            if row['saved_method']['version']!=row['installed_method']['version'] else row['method_name']+' 的发行内容已更新（版本号未变）'
+            for row in changes]
+        location='型号工作台' if is_type(task) else '研究工作台'
+        action='在'+location+'打开“'+title+'”，先用“升级方法”选择当前安装的发行并核对参数，保存后重新预检；需要更新结论时再由人确认并运行。旧运行保留为历史。'
+        summary='“'+title+'”保存的方法发行已变化：'+'；'.join(reasons)+'。预检未执行，因此尚不能判断还缺哪些输入；这不是已确认的输入缺项。'
+        return ToolResult(status='error',summary=summary,
+            data={'study_id':sid,'study_title':title,'module':args.get('module'),'method_changes':changes,
+                'preflight_executed':False,'retry_requires_human':True},
+            diagnostics=[Diagnostic(code='METHOD_RELEASE_CHANGED',message=summary,recoverable=True,
+                details={'method_changes':changes,'retry_requires_human':True})],next_actions=[action])
+
     def study_id(self,task,args):
         sid=args.get('study_id') or task['study_id']
         if args.get('run_id'):
@@ -155,6 +181,9 @@ class ToolBroker:
                 if recovered:self.tasks.emit(task['id'],'runtime.retry',{'tool':tool.name,'exceptions':recovered,'read_only':True})
             return ToolResult.model_validate(redact(value.model_dump(mode='json'))) if isinstance(value,ToolResult) else ToolResult.model_validate(redact(value))
         except HTTPException as error:
+            if error.status_code==409 and tool.name in ('study_preflight','study_preview'):
+                changed=self.changed_method(task,node['arguments'])
+                if changed:return changed
             detail=error.detail
             return failure(detail.get('code','HOST_REQUEST_REJECTED') if isinstance(detail,dict) else 'HOST_REQUEST_REJECTED',
                 redact(detail.get('message') or str(detail)) if isinstance(detail,dict) else redact(str(detail)),

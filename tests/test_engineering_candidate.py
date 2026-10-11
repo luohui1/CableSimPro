@@ -2,6 +2,8 @@
 from importlib.util import spec_from_file_location,module_from_spec
 from pathlib import Path
 from uuid import uuid4
+from copy import deepcopy
+import pytest
 from fastapi.testclient import TestClient
 from backend.main import create_app
 from backend.plugin_host import Executor
@@ -17,6 +19,10 @@ def test_new_inquiry_completion_snapshot_report_and_replay(tmp_path):
     with TestClient(create_app(tmp_path/'inquiry.sqlite')) as client:
         client.app.state.research.executor=Executor()
         payload,parameters=fixture();item=client.post('/api/domain-cable-models',json=payload).json()
+        # Two real saved versions with identical declared structure: solve both,
+        # then verify tie-breaking against their actual saved digests.
+        another_payload=deepcopy(payload);another_payload['version']='2'
+        another=client.post('/api/domain-cable-models',json=another_payload).json()
         entry=next(m for m in client.get('/api/methods').json() if m['method']['plugin_id']=='cablesim.iec60287')
         completion={'method':{**entry['method'],'capability':'model-completion'},'parameters':parameters}
         chosen={'model_id':'candidate:'+item['id'],'content_sha256':item['digest'],'three_core_layout':'three_core_ducts_horizontal','target_current_a':250}
@@ -29,14 +35,20 @@ def test_new_inquiry_completion_snapshot_report_and_replay(tmp_path):
         w=response.json();d=w['domain'];rating={**entry['method'],'capability':'steady-rating'}
         config={'title':'工程给定参数选型','task':'target','method':rating,'input_source':'domain',
             'parameters':{**METHOD_DEFAULTS['cablesim.iec60287'],'target_current_a':250,'target_circuit_id':d['circuits'][0]['id'],'solver':{**METHOD_DEFAULTS['cablesim.iec60287']['solver'],'max_iterations':300}},
-            'driver':{'kind':'selection','candidate_ids':[item['id']],'minimum':250,'target_entities':[c['id'] for c in d['circuits']]},
-            'candidate_completions':{item['id']:completion},'expected_revision':w['revision']}
+            'driver':{'kind':'selection','candidate_ids':[item['id'],another['id']],'minimum':250,'target_entities':[c['id'] for c in d['circuits']]},
+            'candidate_completions':{item['id']:completion,another['id']:completion},'expected_revision':w['revision']}
         response=client.post(f'/api/workspaces/{w["id"]}/studies',json=config);assert response.status_code==201,response.text
         s=response.json();root=f'/api/workspaces/{w["id"]}/studies/{s["id"]}'
         pre=client.get(root+'/preflight',params={'expected_revision':w['revision'],'expected_study_revision':s['revision']}).json()
         body={'request_id':str(uuid4()),'expected_revision':w['revision'],'expected_study_revision':s['revision'],'lock_digest':pre['lock_digest'],'scope_acknowledged':True}
         response=client.post(root+'/runs',json=body);assert response.status_code==200,response.text
         run=response.json();assert run['output']['assessment'][0]['status']=='satisfied',run['output']['assessment']
+        from backend.kernel.report import recommended_case
+        assessments=run['output']['assessment']
+        assert len(assessments)==2 and all(a['status']=='satisfied' for a in assessments)
+        assert assessments[0]['value']==assessments[1]['value']
+        expected=min(range(2),key=lambda i:run['snapshot']['candidate_snapshots'][i]['digest'])
+        assert recommended_case(run)==assessments[expected]['case_id']
         prepared=run['snapshot']['candidate_snapshots'][0]
         assert prepared['state']=='engineering_input' and prepared['origin']['digest']==item['digest']
         assert prepared['engineering_parameters']==parameters
@@ -49,7 +61,7 @@ def test_new_inquiry_completion_snapshot_report_and_replay(tmp_path):
         assert prepared['preparation']['artifact_sha256'] in book and '2.152' in book
 
 
-def test_equal_capacity_versions_have_one_stable_report_recommendation():
+def test_incomplete_candidate_summary_cannot_generate_a_report():
     from backend.kernel.report import recommended_case,selection_answer
     candidates=[{'state':'reviewed','digest':digest*64,'payload':{'name':'同名型号','version':str(i),
         'cable_type':{'cores':[{'conductor':{'nominal_area':.0003}}]},'sources':{}}} for i,digest in enumerate(('b','a'))]
@@ -57,4 +69,7 @@ def test_equal_capacity_versions_have_one_stable_report_recommendation():
         'method':{'plugin_id':'report-test','version':'1'}}},'output':{'assessment':[
         {'case_id':'case-'+str(i),'status':'satisfied','value':380,'margin':30,'reason':None} for i in range(2)]}}
     assert recommended_case(run)=='case-1'
-    assert 'data-result="selection"' in selection_answer(run)
+    # Corrupted/partial storage is a negative case, not a fabricated successful
+    # report. The real host/plugin workflow above retains the HTML assertion.
+    with pytest.raises(ValueError,match='候选没有唯一的已保存成功工况'):
+        selection_answer(run)

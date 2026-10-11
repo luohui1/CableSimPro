@@ -215,7 +215,9 @@ export function StudySelection({
       ) : (
         <EmptyState
           title={view.demo ? "候选尚未完成核对" : "当前条件下没有合格型号"}
-          description="保留逐候选的失败与不适用记录，不补造推荐。"
+          description={view.rows.length > 0 && view.rows.every(row=>row.verdict==='unsatisfied' && row.current!==null)
+            ? `目标 ${formatNumber(view.target,1)} A；候选允许电流最高 ${formatNumber(Math.max(...view.rows.map(row=>row.current!)),1)} A。请调整型号范围、敷设或负荷后重算。`
+            : '请在候选表查看各型号的限制原因；补齐缺项或调整工况后重算。'}
         />
       );
   if (part === "conclusion") return conclusion;

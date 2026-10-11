@@ -1028,6 +1028,7 @@ class Research:
             generation_revision = self.store.load(db, wid)[0]['revision']
             generation_studies = {str(rid): db.execute('SELECT study FROM study_runs WHERE workspace=? AND id=?', (wid, str(rid))).fetchone() for rid in ids}
             generation_studies = {row['study']: self.definition(db, wid, row['study'])['revision'] for row in generation_studies.values() if row}
+        checkpoint('source')
         runs = self.verified_runs(wid, ids)
         if attachments and attachments.get('fem_chapter'):
             evidence=attachments['fem_chapter']['data']
@@ -1052,7 +1053,10 @@ class Research:
             raise HTTPException(409, '计算书只能纳入当前保存输入的运行；请重新计算或重新选择。')
         # 输入恢复为相同内容后可使用原运行；生成期间的并发修改仍按当前修订严格拒绝。
         checkpoint('pdf')
-        html = render(runs, attachments=attachments) if attachments else render(runs)
+        try:
+            html = render(runs, attachments=attachments) if attachments else render(runs)
+        except ValueError as error:
+            raise HTTPException(422, {'code':'REPORT_SOURCE_INCONSISTENT','message':str(error)}) from None
         source = [{'run_id': r['id'], 'input_digest': r['input_digest'], 'output_digest': r['output_digest']} for r in runs]
         did, renderer = str(uuid4()), RENDERER
         digest = fingerprint({'renderer': renderer, 'sources': source, 'html': html})

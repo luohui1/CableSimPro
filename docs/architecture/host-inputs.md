@@ -147,7 +147,7 @@
 
 `inbox_read({category?,limit?,offset?,expected_digest?})`读取与`GET /api/index/inbox`同一份完整索引快照，范围为全库跨工程只读，不按会话工程过滤，也不授予跨工程修改权限。category为review/stale/missing/running；默认10项，上限20项，offset从0开始。返回`data:{scope:"library_read_only",category,counts,total,offset,items,next_offset,next_page,inbox_digest}`；counts为全库四类计数，total为筛选后条数。items保留InboxItem全部字段和原因原文，增添`home:ObjectCard,next_step,handled_by,requires_human_approval`。home只沿保存父对象找原工作台，方法版本只读安装名片；不猜缺字段值、审批人姓名或资源绑定。整个ToolResult紧凑UTF-8不超过6KiB，单项过大返回INBOX_ITEM_TOO_LARGE，不截断原因；next_page保留筛选、limit与摘要。分页期间待办变化返回INBOX_CHANGED（/expected_digest），从offset=0重读，不拼接不同版本清单。
 
-`inbox_triage`配方参数与inbox_read相同，工程和型号会话均适用。宿主只执行inbox_read，最多续读四页，每步照常记录计划、步骤、预算与审计，然后一次无工具模型请求解释处理顺序。宿主在通过核验的解释后附处理清单：同一类别中原因原文、下一步、处理人及人工审批要求相同的对象合成一组，列出全部对象名称，只展示一次原因与操作；比较操作时只去掉已保存home的准确名称，不模糊匹配不同原因或动作。每个对象及其home仍保留在object_refs，逐项原文仍在工具结果；审计items仍是对象数，分页完整性规则不变。模型不复述清单。不执行重算、批准、发布、提取或超算提交，也不猜输入生成补字段方案。用户后续明确对象、路径、值和单位时，须在该对象绑定会话按现有提案机制提出，由人批准。`inbox.triaged`审计含items、complete、category、offset、next_page、inbox_digest及engineering_writes:false；分页上限/源变化显式说明未展开范围，next_page可作为下一条recipe参数继续。自由提问由模型按完整目标选择inbox_read或配方，也可组合其他只读证据；宿主不按关键词自动把整条消息改成配方。首页入口显式携带recipe时仍确定性执行、禁止代办。
+`inbox_triage`配方参数与inbox_read相同，工程和型号会话均适用。宿主只执行inbox_read，最多续读四页，每步照常记录计划、步骤、预算与审计，然后一次无工具模型请求解释处理顺序。宿主在通过核验的解释后附处理清单：同一类别中原因原文、下一步、处理人及人工审批要求相同的对象合成一组，列出全部对象名称，只展示一次原因与操作；比较操作时只去掉已保存home的准确名称，不模糊匹配不同原因或动作。每个对象及其home仍保留在object_refs，逐项原文仍在工具结果；审计items仍是对象数，分页完整性规则不变。型号模块沿保存parent引用找到所属型号；名片保持索引原文，title为“型号名 · 模块名”，home为型号名片，next_step指向型号工作台对应模块，不按名称猜归属。清单同时列型号与模块；不同模块操作不合并。模型不复述清单。不执行重算、批准、发布、提取或超算提交，也不猜输入生成补字段方案。用户后续明确对象、路径、值和单位时，须在该对象绑定会话按现有提案机制提出，由人批准。`inbox.triaged`审计含items、complete、category、offset、next_page、inbox_digest及engineering_writes:false；分页上限/源变化显式说明未展开范围，next_page可作为下一条recipe参数继续。自由提问由模型按完整目标选择inbox_read或配方，也可组合其他只读证据；宿主不按关键词自动把整条消息改成配方。首页入口显式携带recipe时仍确定性执行、禁止代办。
 
 首页“让 Agent 整理”调用：先用当前工程UUID（没有选中时从统一索引选现有project；也可用现有type工作区）POST `/api/agent/sessions` `{workspace_id,study_id:null}`，再POST `/api/agent/sessions/{id}/messages` `{content:"帮我理一下待办",recipe:{id:"inbox_triage",parameters:{}}}`并读SSE。绑定仅为会话归档锚点，整理仍覆盖整个库；不必绑定研究。不为整理创建虚构工程，库内没有任何工程/型号时保留待办列表并禁用此入口。后续修改其他工程或型号必须新建该对象会话。首个message.delta与会话消息的object_refs照常带待办对象及原工作台名片；正文保持纯文本。
 
@@ -172,6 +172,10 @@
 自由提问不按关键词限制成某一配方，也不因累计读取次数或已有摘要而强制结束。有新证据的读取继续使用模型/工具/时间总预算；连续读取没有新增工具数据或诊断达到`CABLESIM_AGENT_MAX_READ_TOOL_CALLS`（默认6）时关闭下一请求工具，要求说明已完成部分与缺口。配置字段名保留，语义为连续无进展读取，task_plan不计入无进展读取。`turn.read_policy.mode=consecutive_unproductive_reads`；`turn.answer_only.reason=recipe_complete|evidence_stalled`，同时记录读取总数、连续无进展数和阈值。同批意图被中止时`plan.read_limit.reason=evidence_stalled/skipped_node_ids`标明未执行节点。显式配方有限步骤及总预算不变。
 
 `study_baseline`过期、历史、部分成功或无保存运行时返回error，不生成方案或预览；`diagnostics[].code=BASELINE_INVALID|BASELINE_REQUIRED`，`details`与`data.baseline`含`reasons:[{code,message,...源版本/修订}]`、`requested_run/latest_run/available_runs`（最近最多3个，仅身份、状态、方法与修订）、`actions:[{id,label,target,workspace_id,study_id,module,requires_human:true}]`和`stale_reference_allowed:false/proposal_executed:false/preview_executed:false`。运行摘要的`usable_as_baseline`仅表示运行级状态满足，扫描/批量仍须选成功主工况。常见原因包括`METHOD_VERSION_CHANGED/METHOD_UNAVAILABLE/MODEL_VERSION_CHANGED/INPUT_REVISION_CHANGED/STUDY_INPUT_CHANGED/PARTIAL_SUCCESS/HISTORICAL_BASELINE/SESSION_REVISION_MISMATCH/MODULE_MISMATCH`。动作`rerun_study`指导工作台先更新升级的方法/型号来源、核对工况，再人工重算保存；`new_session`指导重算后新建当前研究会话。任务等待`missing_input`；显式配方的下一请求无工具，自由提问可继续读取诊断证据或处理其他目标，过期基准仍不执行试算；解释仍失败时由宿主返回该可执行诊断并记录`answer.diagnostic`，不会只给“模型解释未通过核验”。本轮不允许把过期基准作参照试算。
+
+方法发行变化阻断预检或试算时，`diagnostics[].code=METHOD_RELEASE_CHANGED`，data及details保留saved_method/installed_method、准确方法名和retry_requires_human，data.preflight_executed=false。宿主停止本批后续节点，plan.blocked列skipped_node_ids；下一请求关闭工具，turn.answer_only.reason=method_release_changed，任务等待missing_input。普通回答说明尚未检查输入缺项，指导在对应工作台升级方法、核对参数并保存，再预检；需要当前结果时由人重算，不展示内部码。模型解释失败时宿主返回同一人话诊断与下一步，不拼内部码证据摘要。
+
+模型返回的工具调用与reasoning_content保留在原历史中。宿主配方及型号预读的chat.message另标source=host，模型上下文把它们投影为host_observations（准确工具、参数与回执），不伪造缺少思考内容的assistant工具调用；旧宿主记录按计划provider_call_id识别，真实模型思考仍原样回传。步骤、计划及审计原件不改变。
 
 同条消息中完全相同的工具、参数与输入身份已返回错误时，宿主不再执行该动作；`tool.diagnostic_reused`引用原操作，后续返回DIAGNOSTIC_ALREADY_REPORTED并进入一次收尾。修改输入或进入新消息可重新检查。
 
@@ -212,9 +216,9 @@ data: {"usage":{"prompt_tokens":120,"completion_tokens":20}}
 
 每次请求审计增加`turn_id/request_number/phase/definition_bytes/prompt_bytes`，`model.result`记录对应实际`usage`；`phase=closing`为一次无工具收尾。预算规则统一见[模块设计 §14.3](../design/MODULE_DESIGN.md#143-权限保存与预算)。会话预算`scope=message`，done报告本条消息已报告token，`session_totals`保留会话合计；提供方缺失用量时`usage_complete=false`。SSE工具卡片事件字段保持不变，完整结果在`results/steps`读取，`tool.observation`为有界审计副本。未知预览仍保持unknown，不重新执行。
 
-验证见`tests/test_harness.py`，使用本地OpenAI兼容假HTTP服务，不请求真实模型；真实提供方冒烟仅在设置CABLESIM_LLM_API_KEY时启用，交由真实环境联调。CAD分析资格、有限元自动修复及通用HPC授权执行不在本轮实现范围。
+`tests/test_harness.py`保留历史离线回归，不作为Agent功能验收；真实使用入口见下段，通过平台读取系统凭据，不要求把密钥放入环境变量。
 
-Agent常用场景回归一条命令：`python -m pytest -q -s tests/test_harness_scenarios.py`。使用本地假模型和隔离工程库，经真实ASGI接口串起结论汇总、过期基准诊断、型号方案提出与人工保存、回答名片及历史读取；结论汇总最多2次模型请求且不超过40秒，其余作答最多8次请求。每阶段打印model_requests、tool_calls、elapsed_s；executed_tool_calls另记真正进入Broker的调用数，预算tool_calls仍包含依赖失败的计划节点。核验失败、证据兜底、隐式保存、重复批准导致重复修订、名片丢失均使测试失败。没有浏览器、真实密钥、原生有限元或超算提交。
+Agent功能验收使用真实已配置deepseek-flash和发布库隔离副本：PowerShell先设`$env:CABLESIM_AGENT_REAL_USE='1'`，再运行`python -m pytest -q -s tests/test_harness_real_use.py`。串起待办配方、真实方法发行变化诊断、型号单项提案→人工批准→普通工作区history/undo撤销；待办最多2次模型请求，其余最多8次。每阶段记录模型/工具次数、耗时、回答、名片及实际审批修订，保存到`.data/agent-live/real-use-r20.json`。只复用来源库的Windows凭据账户标识，由平台鉴权，不读取或复制密钥；不写8100/8200，不提交求解作业，临时服务关闭时核对端口。来源库或模型不可用时明确未覆盖，不改用假数据；默认不开真实模型计费开关。已有离线回归保留，但不作为真实使用验收证据。
 
 ## 统一索引
 

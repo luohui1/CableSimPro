@@ -76,7 +76,7 @@ class NewType(StrictModel):
     request_id: UUID
     origin: Literal['library', 'standard', 'import', 'blank']
     name: str = Field(min_length=1, max_length=80)
-    construction: Literal['single_core', 'three_core'] | None = None
+    construction: Literal['single_core', 'three_core', 'four_core'] | None = None
     resource_id: UUID | None = None
     content_sha256: str | None = Field(default=None, pattern=r'^[a-f0-9]{64}$')
     proposal_id: UUID | None = None
@@ -103,14 +103,15 @@ class SaveTypeDocument(Adopt):
 
 
 def skeleton(construction, name):
-    return {'schema_version': 'cablesim.type-draft/1', 'name': name,
+    count = 1 if construction == 'single_core' else 3 if construction == 'three_core' else 4
+    return {'schema_version': 'cablesim.type-draft/2' if count==4 else 'cablesim.type-draft/1', 'name': name,
         'materials': [{'id': 'material/conductor', 'label': '待选导体材料', 'category': 'conductor'},
                       {'id': 'material/insulation', 'label': '待选绝缘材料', 'category': 'insulation'}],
-        'cable_types': [{'id': 'cable_type/design', 'label': name, 'construction': construction,
+        'cable_types': [{'id': 'cable_type/design', 'label': name, 'construction': 'multi_core' if count==4 else construction,
             'rating': {'u0': None, 'u': None, 'max_conductor_temperature': {}},
             'cores': [{'id': f'core/{i+1}', 'x': None, 'z': None,
                 'conductor': {'material': 'material/conductor', 'form': 'unspecified', 'nominal_area': None, 'diameter': None},
-                'layers': [{'role': 'insulation', 'material': 'material/insulation', 'thickness': None}]} for i in range(1 if construction == 'single_core' else 3)],
+                'layers': [{'role': 'insulation', 'material': 'material/insulation', 'thickness': None}]} for i in range(count)],
             'common_layers': []}], 'circuits': [], 'sections': [], 'load_cases': [], 'criteria': {}, 'provenance': {}, 'measurements': []}
 
 
@@ -219,12 +220,11 @@ def checked_type_document(document):
         raise HTTPException(422, {'field': '/cable_types', 'message': '一个型号设计须包含一个电缆型号。'})
     if document.get('schema_version') == 'cablesim.domain/1':
         return DomainDocument.model_validate(document).model_dump(mode='json')
-    schema = deepcopy(DomainDocument.model_json_schema())
-    schema['properties']['schema_version']['const'] = 'cablesim.type-draft/1'
-    for model, fields in [('Conductor', ('nominal_area', 'diameter')), ('Layer', ('thickness',)), ('Core', ('x', 'z')), ('Rating', ('u0',))]:
-        for field in fields:
-            original = schema['$defs'][model]['properties'][field]
-            schema['$defs'][model]['properties'][field] = {'anyOf': [original, {'type': 'null'}]}
+    from cablesim_sdk.type_design import type_draft_schema
+    try:
+        schema = type_draft_schema(document.get('schema_version'))
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from None
     errors = sorted(Draft202012Validator(schema).iter_errors(document), key=lambda e: str(list(e.path)))
     if errors:
         error = errors[0]
@@ -235,8 +235,9 @@ def checked_type_document(document):
         core.setdefault('x', None)
         core.setdefault('z', None)
         core.setdefault('layers', [])
-    if len(cable['cores']) != (3 if cable['construction'] == 'three_core' else 1):
-        raise HTTPException(422, {'field': '/cable_types/0/cores', 'message': '芯数须与单芯 / 三芯结构一致。'})
+    count = len(cable['cores'])
+    if (cable['construction'] == 'single_core' and count != 1 or cable['construction'] == 'three_core' and count != 3 or cable['construction'] == 'multi_core' and not 2 <= count <= 16):
+        raise HTTPException(422, {'field': '/cable_types/0/cores', 'message': '芯数须与所选结构一致；多芯须提供各芯独立截面与位置。'})
     materials = [m['id'] for m in document['materials']]
     if len(set(materials)) != len(materials) or len({c['id'] for c in cable['cores']}) != len(cable['cores']):
         raise HTTPException(422, '材料或芯身份重复。')
@@ -543,7 +544,7 @@ class Types:
                 document['provenance']['/cable_types/cable_type~1design/'+key] = {'kind': 'user', 'reference': '工程师在新建型号对话框选择', 'reviewed': False}
             structure_context(document)
             document = checked_type_document(document)
-            payload = {'document': document, 'rows': proposal['rows'] + geometry['rows'], 'limitations': proposal['limitations'] + geometry['limitations'], 'methods': [standard, layout]}
+            payload = {'document': document, 'design_request': deepcopy(body.input), 'rows': proposal['rows'] + geometry['rows'], 'limitations': proposal['limitations'] + geometry['limitations'], 'methods': [standard, layout]}
             pid = str(uuid4())
             result = {'id': pid, 'content_sha256': fingerprint(payload), **payload}
             with self.store.db(True) as db:
@@ -595,7 +596,24 @@ class Types:
                 for method in saved['methods']:
                     self.research.resolve(method['method'])
                 document = deepcopy(saved['document'])
-                source = {'proposal_id': saved['id'], 'content_sha256': row['digest'], 'methods': saved['methods'], 'rows': saved['rows'], 'limitations': saved['limitations'], 'reviewer': reviewer, 'confirmed_at': stamp()}
+                # The engineer confirms the displayed fixed standard versions
+                # at this creation gate. This declares editions only; it does
+                # not approve requirements, calculation results or publication.
+                declared = {}
+                for item in saved['rows']:
+                    reference = item.get('source', {})
+                    record = reference.get('record', {}) if isinstance(reference, dict) else {}
+                    if (item.get('basis') == 'standard_value' and record.get('standard')
+                            and record.get('edition') and record.get('source_sha256')):
+                        name = record['standard'] + '—' + record['edition']
+                        declared[name] = {'standard': name, 'source_digest': record['source_sha256']}
+                if declared:
+                    document.setdefault('provenance', {})['/execution_standards'] = {
+                        'kind': 'standard', 'reviewed': True,
+                        'reference': json.dumps({'schema': 'cablesim.execution-standards/1',
+                            'items': list(declared.values()), 'reviewer': reviewer,
+                            'confirmed_at': stamp()}, ensure_ascii=False)}
+                source = {'proposal_id': saved['id'], 'content_sha256': row['digest'], 'design_request': saved.get('design_request'), 'methods': saved['methods'], 'rows': saved['rows'], 'limitations': saved['limitations'], 'reviewer': reviewer, 'confirmed_at': stamp()}
             elif body.origin == 'import':
                 row = db.execute("SELECT * FROM document_proposals WHERE id=? AND status='approved'", (str(body.proposal_id),)).fetchone()
                 if not row or row['digest'] != body.content_sha256 or not row['new_model']:

@@ -129,20 +129,21 @@ export function LayingSection(input: LayingSectionProps) {
   return <div className={`drawing-frame laying-section ${props.className || ''}`} aria-label={props.label || '敷设截面编辑器'}
     data-laying-section-state={error ? 'error' : state} aria-busy={busy || state === 'loading'} onKeyDown={keyDown}>
     {state === 'historical' && <StaleBanner description="历史敷设截面保持只读。" />}
-    <CanvasToolbar label="敷设截面工具">
-      {trial.controls}
-      <IconButton icon="tool/select" label="选择 V" aria-pressed={tool === 'select'} onClick={() => setTool('select')} />
-      <IconButton icon="tool/pan" label="平移 H" aria-pressed={tool === 'pan'} onClick={() => setTool('pan')} />
-      <IconButton icon="tool/fit" label="适配敷设截面 F" onClick={() => setView(null)} disabled={!currentGeometry} />
+    <CanvasToolbar label="敷设截面工具" secondary={<>
       <IconButton icon="tool/snap" label="捕捉 S" aria-pressed={snap} onClick={() => setSnap(value => !value)} />
       <IconButton icon="tool/zoom-in" label="放大敷设截面" disabled={!currentGeometry} onClick={() => setView(zoomView(camera, 1 / 1.2, { x: size.width / 2, y: size.height / 2 }, size))} />
       <IconButton icon="tool/zoom-out" label="缩小敷设截面" disabled={!currentGeometry} onClick={() => setView(zoomView(camera, 1.2, { x: size.width / 2, y: size.height / 2 }, size))} />
       <Button size="compact" aria-pressed={showDimensions} onClick={() => setShowDimensions(value => !value)}>尺寸链</Button>
       <Button size="compact" aria-pressed={showResults} disabled={!availableAnnotations || !Object.keys(availableAnnotations).length} onClick={() => setShowResults(value => !value)}>图上显示</Button>
       <Button size="compact" aria-pressed={followEnclosure} onClick={() => setFollowEnclosure(value => !value)}>管缆联动</Button>
-      {!trial.enabled && props.onTemplateRequest && <><Select label="模板" value={template} options={(props.templates || defaultTemplates).map(option => ({ value: option.id, label: option.label, disabled: option.disabled }))}
-        onChange={setTemplate} disabled={!editable || !props.onTemplateRequest} />
-      <Button size="compact" onClick={() => void applyTemplate()} disabled={!editable || !props.onTemplateRequest} loading={busy}>应用模板</Button></>}
+      {!trial.enabled&&props.onTemplateRequest&&<><Select label="模板" value={template} options={(props.templates||defaultTemplates).map(option=>({value:option.id,label:option.label,disabled:option.disabled}))} onChange={setTemplate} disabled={!editable}/><Button size="compact" onClick={()=>void applyTemplate()} disabled={!editable} loading={busy}>应用模板</Button></>}
+      <IconButton icon="action/undo" label="撤销 Ctrl+Z" disabled={!props.canUndo || !props.onCommand || state === 'historical'} onClick={() => props.onCommand?.('undo')} />
+      <IconButton icon="action/redo" label="重做 Ctrl+Y" disabled={!props.canRedo || !props.onCommand || state === 'historical'} onClick={() => props.onCommand?.('redo')} />
+    </>}>
+      {trial.controls}
+      <IconButton icon="tool/select" label="选择 V" aria-pressed={tool === 'select'} onClick={() => setTool('select')} />
+      <IconButton icon="tool/pan" label="平移 H" aria-pressed={tool === 'pan'} onClick={() => setTool('pan')} />
+      <IconButton icon="tool/fit" label="适配敷设截面 F" onClick={() => setView(null)} disabled={!currentGeometry} />
       <span className="spacer" />
       {/* 对象操作只在选中对象且宿主提供命令时出现，避免一排灰按钮占位 */}
       {selected && !!props.onObjectCommand && (!props.objectCommands || props.objectCommands.length > 0) && <div className="drawing-object-tools" role="toolbar" aria-label="所选敷设对象操作">
@@ -152,8 +153,6 @@ export function LayingSection(input: LayingSectionProps) {
             || ['parallel', 'trefoil'].includes(command) && selected.kind !== 'cable'}
           onClick={() => props.onObjectCommand?.(command, selected)}>{({ duplicate: '复制', delete: '删除', parallel: '平排', trefoil: '品字', align: '对齐' })[command]}</Button>)}
       </div>}
-      <IconButton icon="action/undo" label="撤销 Ctrl+Z" disabled={!props.canUndo || !props.onCommand || state === 'historical'} onClick={() => props.onCommand?.('undo')} />
-      <IconButton icon="action/redo" label="重做 Ctrl+Y" disabled={!props.canRedo || !props.onCommand || state === 'historical'} onClick={() => props.onCommand?.('redo')} />
     </CanvasToolbar>
     {trial.enabled && section && <div className="what-if-dimension-slot"><WhatIfDimensions section={section} selected={selected} commit={(next, edit) => trial.commit(next, edit, input.isLocked)} /></div>}
     {problem && <div className="drawing-error" role="alert">{problem}</div>}

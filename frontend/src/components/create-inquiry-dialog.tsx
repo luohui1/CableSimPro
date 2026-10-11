@@ -32,6 +32,10 @@ import './workbench-inspector.css';
 import './study-inquiry.css';
 type Source = components["schemas"]["Source"];
 type Given = { value: string; source: Source["kind"]; reference: string };
+function areaRange(models: Record<string, unknown>[]) {
+  const areas=models.map(model=>numeric(optionalRecord(optionalRecord(model.payload).specification).area_m2)!).map(area=>area*1e6);
+  return `${formatNumber(Math.min(...areas))}–${formatNumber(Math.max(...areas))} mm²`;
+}
 export function CreateInquiryDialog({
   open,
   onOpenChange,
@@ -47,6 +51,8 @@ export function CreateInquiryDialog({
     queries = useQueryClient();
   const search = useSearch({ strict: false }) as { workspace?: string };
   const [workspaceId, setWorkspaceId] = useState(search.workspace || '');
+  const [projectName,setProjectName]=useState('');
+  const projectNameInput=useRef<HTMLInputElement>(null);
   const projects = useQuery({ queryKey: ['workspace-index'], queryFn: ({ signal }) => workspaces(signal), enabled: open });
   const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal), enabled: open });
   const typeIds = new Set((types.data || []).map(item => text(item.id)));
@@ -63,6 +69,9 @@ export function CreateInquiryDialog({
   useEffect(() => { if (open) { setWorkspaceId(search.workspace || ''); allocated.current = null; } }, [open, search.workspace]);
   const targetInput = useRef<HTMLInputElement>(null);
   function continueInquiry() {
+    if(!workspaceId && !projectName.trim()){
+      setFailure('请填写客户与工程名称');projectNameInput.current?.focus();return;
+    }
     const raw = targetInput.current?.value.trim() ?? "";
     const current = Number(raw);
     if (!raw || !Number.isFinite(current) || current <= 0) {
@@ -97,8 +106,7 @@ export function CreateInquiryDialog({
     if (
       !text(model.id).startsWith("candidate:") ||
       area === null ||
-      area < 300e-6 - 1e-12 ||
-      area > 400e-6 + 1e-12
+      area <= 0
     )
       continue;
     const key = [
@@ -243,6 +251,7 @@ export function CreateInquiryDialog({
           await responseData(
             api.POST("/api/design/study-workspaces", {
               body: {
+                ...{project_name:projectName.trim()},
                 model_id: text(candidates[0].id),
                 content_sha256: text(candidates[0].content_sha256),
                 candidate_completion: completionValue,
@@ -304,8 +313,8 @@ export function CreateInquiryDialog({
           target_unit: "A",
           allow_demo_candidates: false,
           candidate_filters: {
-            minimum_area_m2: 300e-6,
-            maximum_area_m2: 400e-6,
+            minimum_area_m2: Math.min(...candidates.map(item => numeric(optionalRecord(optionalRecord(item.payload).specification).area_m2)!)),
+            maximum_area_m2: Math.max(...candidates.map(item => numeric(optionalRecord(optionalRecord(item.payload).specification).area_m2)!)),
             voltage_v: numeric(
               optionalRecord(
                 optionalRecord(candidates[0].payload).specification,
@@ -412,6 +421,7 @@ export function CreateInquiryDialog({
           >
             <Select label="所属工程" value={workspaceId || 'new-project'} onChange={value => { setWorkspaceId(value === 'new-project' ? '' : value); allocated.current = null; }}
               options={[{ value: 'new-project', label: '新建工程' }, ...projectOptions.map(project => ({ value: text(project.id), label: text(project.name) || '未命名工程' }))]} />
+            {!workspaceId && <label className="text-field">工程名称<input ref={projectNameInput} value={projectName} onChange={event=>setProjectName(event.target.value)} maxLength={120} required placeholder="填写客户与项目名称" /></label>}
             <Select
               label="研究任务"
               value="selection"
@@ -448,7 +458,7 @@ export function CreateInquiryDialog({
               />
             </label>
             <fieldset className="inquiry-range">
-              <legend>候选型号范围 · 300–400 mm²</legend>
+              <legend>候选型号范围 · 型号库已保存规格</legend>
               {[...ranges].map(([key, items]) => (
                 <label key={key}>
                   <input
@@ -466,7 +476,7 @@ export function CreateInquiryDialog({
                       optionalRecord(items[0].payload).specification,
                     ).designation,
                   )}{" "}
-                  · {formatNumber(numeric(optionalRecord(optionalRecord(items[0].payload).specification).u0_v)! / 1000, 1)}/{formatNumber(numeric(optionalRecord(optionalRecord(items[0].payload).specification).voltage_v)! / 1000, 1)} kV · {numeric(optionalRecord(optionalRecord(items[0].payload).specification).cores)} 芯 · {items.length} 个型号 · 300–400 mm²
+                  · {formatNumber(numeric(optionalRecord(optionalRecord(items[0].payload).specification).u0_v)! / 1000, 1)}/{formatNumber(numeric(optionalRecord(optionalRecord(items[0].payload).specification).voltage_v)! / 1000, 1)} kV · {numeric(optionalRecord(optionalRecord(items[0].payload).specification).cores)} 芯 · {items.length} 个型号 · {areaRange(items)}
                   <SourceBadge kind="document" detail={text(items[0].source)} />
                 </label>
               ))}
@@ -474,7 +484,7 @@ export function CreateInquiryDialog({
             {!ranges.size && (
               <EmptyState
                 title="没有此范围的厂家候选"
-                description="型号库缺少 300–400 mm² 原始规格。"
+                description="请先导入有来源的厂家候选规格。"
               />
             )}
             {/* 新建默认工况来自宿主 scenarios.CreateStudyWorkspace；已有工程沿用其保存模型。 */}

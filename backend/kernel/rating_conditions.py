@@ -22,6 +22,7 @@ class RatingRow(StrictModel):
     depth_m: float = Field(default=.8, gt=0, le=20)
     soil_rho_k_m_w: float = Field(default=1, gt=0, le=100)
     ambient_temperature_c: float = Field(default=20, ge=-50, le=100)
+    frequency_hz: float = Field(default=50, gt=0, le=1000, description='工况模板的明示交流频率 / Hz；不取型号草稿的直流占位回路')
     spacing_m: float | None = Field(default=None, gt=0, le=10)
     bonding: Literal['both_ends', 'single_point', 'unspecified'] = 'both_ends'
     rating_basis: Literal['simultaneous', 'individual'] = Field(default='simultaneous', description='多回路共同等负荷，或首回路变化而其他回路保持保存负荷；不同口径不可混用')
@@ -79,7 +80,7 @@ def condition_input(document, row):
     three_core = cable['construction'] == 'three_core'
     if three_core != row.layout.startswith('three_core_'):
         raise ValueError('layout：三芯型号请选择三芯工况，单芯型号请选择单芯排列。')
-    circuit['system']['kind'] = 'ac_three_phase'
+    circuit['system'].update(kind='ac_three_phase', frequency=row.frequency_hz)
     circuit['cables'] = [{'id': 'cable/rating-ABC', 'phase': 'L1L2L3'}] if three_core else [
         {'id': 'cable/rating-'+p, 'phase': p, 'parallel_index': 1} for p in ('A', 'B', 'C')]
     source = {'kind': 'user', 'reference': row.source, 'reviewed': False}
@@ -119,7 +120,7 @@ def condition_input(document, row):
     section['layout_template'] = {**row.model_dump(), 'kind': row.layout}
     # A stale workspace criterion cannot supersede the current type's temperature.
     d['criteria'].pop('max_conductor_temperature', None)
-    for path in [pointer('sections',section['id'],'medium'), pointer('materials',soil_id),
+    for path in [pointer('circuits',circuit['id'],'system','frequency'), pointer('sections',section['id'],'medium'), pointer('materials',soil_id),
                  pointer('circuits',circuit['id'],'bonding'), pointer('load_cases','load/rating')]:
         d['provenance'][path] = source
     for place in section['placements']:

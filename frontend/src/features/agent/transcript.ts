@@ -13,6 +13,9 @@ export type Turn = {
   notices: Notice[]; proposals: string[]; previews: Preview[]; runs: SavedRun[]; started?: string; finished?: string; running: boolean;
   /** 回答里提到的对象，按首次出现顺序（统一索引名片） */
   refs: ObjectCard[];
+  /** 终态来自宿主任务记录；断流只说明浏览器连接，不推断服务器任务失败。 */
+  task?: { state: string; reason?: string | null };
+  interrupted?: boolean;
 };
 const cards = (value: unknown): ObjectCard[] => Array.isArray(value) ? value.filter((item): item is ObjectCard => !!item && typeof item === "object" && "kind" in item && "id" in item) : [];
 
@@ -92,10 +95,11 @@ export function buildTurns(source: AgentRecord): Turn[] {
       // 记录里一轮以 task.state 收尾（completed / failed / cancelled / waiting…），流里才有 done
       turn.finished = turn.finished || event.created;
       turn.running = false;
+      if (event.type === 'task.state') turn.task = { state: String(data.state), reason: typeof data.waiting_reason === 'string' ? data.waiting_reason : undefined };
     }
   }
   // 会话已不在进行中时，最后一轮也不能显示“正在思考”
-  if (turn && !ACTIVE.has(source.state)) turn.running = false;
+  if (turn) { turn.task = { state: source.state, reason: source.waiting_reason }; if (!ACTIVE.has(source.state)) turn.running = false; }
   return turns;
 }
 

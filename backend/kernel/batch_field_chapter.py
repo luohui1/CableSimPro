@@ -66,11 +66,13 @@ def compare(fem,iec,case_id=None):
 
 
 def field_png(field):
-    """Rasterize the saved display triangles using FieldView's Turbo coefficients.
+    """Rasterize saved display triangles using FieldView's temperature tokens.
 
     Barycentric interpolation is display-only. It does not refine the FEM mesh.
     """
     import numpy as np
+    import re
+    from pathlib import Path
     from PIL import Image,ImageDraw,ImageFont
     if field.get('temperature_unit')!='K' or field.get('association')!='node':raise ValueError('不支持的场图单位或节点关联。')
     points=np.asarray(field['mesh']['points'],dtype=float);values=np.asarray(field['temperature_k'],dtype=float)-273.15
@@ -91,11 +93,16 @@ def field_png(field):
         b=((p[2,1]-p[0,1])*(xx-p[2,0])+(p[0,0]-p[2,0])*(yy-p[2,1]))/denominator
         mask=(a>=-1e-8)&(b>=-1e-8)&(a+b<=1+1e-8)
         raster[y0:y1+1,x0:x1+1][mask]=(a*temps[0]+b*temps[1]+(1-a-b)*temps[2])[mask]
+    tokens=(Path(__file__).resolve().parents[2]/'design'/'tokens.css').read_text(encoding='utf-8')
+    palette=[]
+    for index in range(1,7):
+        match=re.search(r'--temperature-'+str(index)+r'\s*:\s*#([0-9a-fA-F]{6})\s*;',tokens)
+        if not match:raise ValueError('温度色阶配置不完整。')
+        palette.append([int(match[1][start:start+2],16) for start in (0,2,4)])
+    palette=np.asarray(palette,dtype=float)
     def color(x):
-        coefficients=[[.13572138,4.61539260,-42.66032258,132.13108234,-152.94239396,59.28637943],
-                      [.09140261,2.19418839,4.84296658,-14.18503333,4.27729857,2.82956604],
-                      [.10667330,12.64194608,-60.58204836,110.36276771,-89.90310912,27.34824973]]
-        return np.stack([np.clip(np.polynomial.polynomial.polyval(x,c),0,1)*255 for c in coefficients],axis=-1).astype(np.uint8)
+        position=np.clip(x,0,1)*5;index=np.minimum(4,np.floor(position).astype(int))
+        return np.floor(palette[index]+(palette[index+1]-palette[index])*(position-index)[...,None]+.5).astype(np.uint8)
     t=np.clip(np.nan_to_num((raster-vmin)/span),0,1);rgb=color(np.floor(t*14)/14);rgb[~np.isfinite(raster)]=255
     image=Image.fromarray(rgb);draw=ImageDraw.Draw(image);font=ImageFont.load_default(size=18)
     # Isotherms from the same piecewise-linear saved triangles.

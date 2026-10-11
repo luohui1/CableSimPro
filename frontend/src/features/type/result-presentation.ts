@@ -24,6 +24,9 @@ export function issuePresentation(row:Record<string,unknown>, module:string, cab
   const status=text(row.verdict)||text(row.status), target=optionalRecord(row.target), role=text(target.role), core=text(target.core_id);
   const layer=role?(target.scope==='core'?core:'common')+'/'+role:'';
   const standard=[text(row.standard),text(row.clause)].filter(Boolean).join(' · ');
+  const basisFields=Array.isArray(row.basis_missing_fields)?row.basis_missing_fields.map(item=>optionalRecord(item)):[];
+  if(basisFields.length)return {kind:'field',label:'缺字段',reason:basisFields.map(item=>text(item.label)).join('、')+'；补齐后按固定标准版本查询依据',module:'requirements',tab:'list',layer:'',field:text(basisFields[0].field),action:'填写'+text(basisFields[0].label)};
+  if(Array.isArray(row.missing_input_fields)&&row.missing_input_fields.length)return {kind:'field',label:'缺字段',reason:displayText(text(row.reason)).replace(/^缺字段[：:]\s*/,''),module:'structure',tab:'table',layer,field:'',action:'核对金属组件与来源'};
   if(status==='uncovered'||status==='not_applicable')return {kind:'coverage',label:'标准未覆盖',reason:[standard,displayText(text(row.reason))||'本方法尚未覆盖此判据'].filter(Boolean).join('：'),module:'requirements',tab:'list',layer:'',field:'',action:'查看依据与范围'};
   const names:Record<string,string>={metal_initial_temperature_k:'金属组件初温',metal_final_temperature_k:'金属组件终温',inner_thermal_resistivity:'内侧介质热阻率',outer_thermal_resistivity:'外侧介质热阻率',inner_volumetric_heat_capacity:'内侧体积热容',outer_volumetric_heat_capacity:'外侧体积热容',arrangement:'排列方式'};
   const declared=Array.isArray(row.missing_parameters)?row.missing_parameters.filter((name):name is string=>typeof name==='string'):[];

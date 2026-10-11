@@ -17,7 +17,7 @@ import { hostTasks } from './study-workbench-config';
 
 type Method = components["schemas"]["Method"];
 type Task = NonNullable<components["schemas"]["CreateStudy"]["task"]>;
-type Choice = { id: string; task: Task; taskKey?: string; taskTitle?: string; method: Method; label: string; hpc: boolean };
+type Choice = { id: string; task: Task; taskKey?: string; taskTitle?: string; method: Method; label: string; hpc: boolean; limitations?: string[] };
 
 /** 载流量类任务按插件声明的输出判断；仿真任务由宿主的任务清单给出方法。 */
 const AMPACITY_TASKS: [Task, string, string, string][] = hostTasks.map(row => [row.task, row.label, row.icon, row.output]);
@@ -66,6 +66,7 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
           // workflow. Its displayed task title comes from the capability.
           taskKey: cap.analysis === 'ampacity_correction' ? `${text(pin.plugin_id)}:${text(cap.id)}` : value,
           taskTitle: cap.analysis === 'ampacity_correction' ? text(cap.title) : undefined,
+          limitations: cap.analysis === 'ampacity_correction' && Array.isArray(cap.limitations) ? cap.limitations.map(text) : undefined,
           method: { ...pin, capability: text(cap.id) } as Method,
           label: `${text(item.name)} · ${text(cap.title).replace(/\s*[（(][^（）()]*[）)]\s*$/, "")} ${text(pin.version)}`,
           hpc: hpcOf(text(pin.plugin_id)),
@@ -150,6 +151,9 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
           {chosen && <><Select label="方法参数来源" value={inherit ? 'recent' : 'defaults'} onChange={setParameterSource}
             options={[{value:'defaults',label:'插件默认值'},...(same ? [{value:'recent',label:`沿用最近研究 · ${same.title}`}] : [])]} />
             <p className="muted">{origin}；旧研究与运行保持原值。</p></>}
+          {!!chosen?.limitations?.length && <section aria-label="方法适用范围"><h4>先核对基准与敷设条件</h4>
+            {chosen.limitations.map((limit,index)=><p key={index}>{limit}</p>)}
+          </section>}
           {error && <p className="field-error" role="alert">{error}</p>}
           <button type="submit" className="visually-hidden" tabIndex={-1} aria-hidden="true">建立研究</button>
         </form>}

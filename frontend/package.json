@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test:real-use": "node scripts/isolated-e2e.mjs verify-real-use.mjs",
+    "test:forms-real-use": "node scripts/isolated-e2e.mjs verify-form-real-use.mjs",
     "test:visible-text": "node scripts/isolated-e2e.mjs verify-visible-text.mjs",
     "test:visible-text-states": "node scripts/isolated-e2e.mjs verify-visible-text-states.mjs",
     "test:public-workflows": "node scripts/isolated-e2e.mjs verify-public-workflows.mjs",

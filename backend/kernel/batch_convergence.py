@@ -274,7 +274,9 @@ class Refinements:
     def resume(self,identifier):
         with self.guard:
             value=self.load(identifier)
-            if value['status']!='interrupted':return value
+            execution=value.get('current_execution') or {}
+            collection_failed=value['status']=='failed' and value.get('current_run_id') and execution.get('state')=='collecting' and execution.get('slurm_states') and all(s=='COMPLETED' for s in execution['slurm_states'])
+            if value['status']!='interrupted' and not collection_failed:return value
             if self.active:raise HTTPException(409,'请等待当前自动收敛任务完成。')
             value.update(owner=self.research.owner_epoch,status='queued',reason=None);self.save(value);self.launch(identifier)
         return self.load(identifier)
@@ -385,7 +387,8 @@ class Refinements:
             execution=run.get('execution') or {}
             self.charge(value,'run_executions',run['id'],execution);self.save(value)
             preparing=execution.get('plan_id') and not execution.get('job_id')
-            if preparing or execution.get('state')=='disconnected' or run['status']=='interrupted' or (run.get('error') or {}).get('code') in ('REMOTE_DISCONNECTED','PermissionError','OSError'):
+            completed_collection=execution.get('job_id') and execution.get('slurm_states') and all(s=='COMPLETED' for s in execution['slurm_states'])
+            if preparing or completed_collection or execution.get('state')=='disconnected' or run['status']=='interrupted' or (run.get('error') or {}).get('code') in ('REMOTE_DISCONNECTED','PermissionError','OSError'):
                 run=self.research.resume_remote(wid,sid,run['id'])
             else:raise ValueError('原作业已经失败：'+str(run.get('error') or '请查看原运行诊断')+'；原记录保留，不重复提交。')
         value['current_run_id']=run['id'];self.save(value)

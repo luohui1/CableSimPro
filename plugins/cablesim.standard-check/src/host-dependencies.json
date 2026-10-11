@@ -5,6 +5,26 @@
     "size_bytes": 81
   },
   {
+    "path": "cablesim_sdk/base.py",
+    "sha256": "65ad67798ef624e21b2c17ba5735b74d0f796048e24edda5be6baed0b92ebbf4",
+    "size_bytes": 242
+  },
+  {
+    "path": "cablesim_sdk/cross_sections.py",
+    "sha256": "c9a97fe6ba7040a8d4ea05794862fa458ffd88c5a8d2d3836b610797d15201d0",
+    "size_bytes": 3551
+  },
+  {
+    "path": "cablesim_sdk/domain.py",
+    "sha256": "fd72aeb0156b049588847d25161d6d25bff22ad0fc0ba572e9c38b5cc7fc89f2",
+    "size_bytes": 27548
+  },
+  {
+    "path": "cablesim_sdk/environment.py",
+    "sha256": "299ceb35de56925b8604b5437ae17ecaeb476c322e23537ada0c82260ac5532f",
+    "size_bytes": 924
+  },
+  {
     "path": "cablesim_sdk/parameter_units.py",
     "sha256": "5b95c5984c4e19547cb1a81c71be2c3af3e6eff7a126bafa23eb6ed19993ead3",
     "size_bytes": 4472
@@ -23,5 +43,15 @@
     "path": "cablesim_sdk/simulation.py",
     "sha256": "7eae05036fcdee8bdb2992be8b43b2e483fd46488f98e856419dfe6bb62cd809",
     "size_bytes": 10470
+  },
+  {
+    "path": "cablesim_sdk/type_design.py",
+    "sha256": "a82b564fb54eda338eae7d68f94f8fc4d5c79ec0412e12dfd34dc88948597029",
+    "size_bytes": 3535
+  },
+  {
+    "path": "cablesim_sdk/validation.py",
+    "sha256": "106aaed828610dbaa5cea6ba72cb8ba8da0f1befa0be04678501414d2ab7cd11",
+    "size_bytes": 906
   }
 ]

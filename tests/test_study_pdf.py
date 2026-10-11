@@ -26,8 +26,11 @@ def run():
         'cases':[{'case_id':f'case-{i}','input':document} for i in range(2)]}
     output={'assessment':[{'case_id':'case-0','status':'satisfied','value':423.47,'margin':23.47},
         {'case_id':'case-1','status':'not_applicable','value':None,'margin':None,'reason':{'message':'缺少真实尺寸'}}],
-        'cases':[{'case_id':'case-0','status':'succeeded','results':[],'artifacts':{'x-cablesim.iec60287-trace':{'sources':['IEC 60287-1-1:2023 4.2.1'],
-            'operating':{'cable_states':[{'entity':'cable1','current_a':400,'conductor_temperature_c':85.06,'margin_k':4.94,'total_loss_w_m':31.707}]}}}},
+        'cases':[{'case_id':'case-0','status':'succeeded','results':[
+            {'entity':'c1','key':'ampacity','value':423.47,'unit':'A','status':'available','rating_basis':{'kind':'single_circuit','fixed_currents_a':{}}},
+            {'entity':'cable1','key':'conductor_temperature','value':358.21,'unit':'K','status':'available','case':'operating'}
+        ],'artifacts':{'x-cablesim.iec60287-trace':{'sources':['IEC 60287-1-1:2023 4.2.1'],
+            'operating':{'cable_states':[{'entity':'cable1','current_a':400,'conductor_temperature_c':85.06,'temperature_limit_c':90.,'margin_k':4.94,'total_loss_w_m':31.707}]}}}},
             {'case_id':'case-1','status':'not_applicable','results':[],'error':{'message':'缺少真实尺寸'}}]}
     return {'id':'test-run','snapshot':snapshot,'output':output,'input_digest':fingerprint(snapshot),'output_digest':fingerprint(output),
         'freshness':'historical','integrity':'verified','status':'partial','created':'2026-10-05T00:00:00+00:00'}
@@ -57,7 +60,7 @@ def test_customer_book_prints_fixed_material_basis_and_difference(run, monkeypat
 def test_customer_book_has_real_selection_precision_and_no_internal_sources(run):
     before=deepcopy(run);text=pdf_text(render_pdf([run],generated_at='2026-10-05T01:02:03+00:00'))
     from backend.kernel.study_pdf import local_time
-    for phrase in ['测试工程','测试询价','研究修订 2',local_time('2026-10-05T01:02:03+00:00'),'编制','校核','审核','批准','推荐 试验型号 3×400','423 A','23 A','缺少真实尺寸','历史运行复现','IEC 60287-1-1:2023','85.1','31.71']:
+    for phrase in ['测试工程','测试询价','研究修订 2',local_time('2026-10-05T01:02:03+00:00'),'编制','校核','审核','批准','推荐 试验型号 3×400','423.5 A','23.5 A','缺少真实尺寸','历史运行复现','IEC 60287-1-1:2023','85.1','31.71']:
         assert phrase in text
     assert 'v0 ' not in text and '内部私有来源摘要' not in text and not re.search('[a-f0-9]{64}',text)
     assert run==before
@@ -128,11 +131,10 @@ def test_embedded_editions_are_distinct_valid_pdf_bytes(run):
 @pytest.mark.parametrize('audience',['customer','internal'])
 def test_titleblock_summary_and_identity_free_paper(run,audience):
     run['snapshot']['definition']['title']='型号 public-sample+engineering 校核'
-    run['output']['cases'][0]['results']=[{'entity':'cable1','key':'conductor_temperature','value':358.21,'unit':'K','status':'available'}]
     run['input_digest']=fingerprint(run['snapshot']);run['output_digest']=fingerprint(run['output'])
     with fitz.open(stream=render_pdf([run],audience),filetype='pdf') as doc:
         cover=doc[0].get_text();full='\n'.join(p.get_text() for p in doc)
-        for field in ['工程名称','研究名称','图号 / 文件号','修订','设计','校核','审核','运行编号与摘要','日期','结论摘要','允许电流','最热导体温度','温限余量','423 A','85.1 °C','4.9 K']:assert field in cover
+        for field in ['工程名称','研究名称','图号 / 文件号','修订','设计','校核','审核','运行编号与摘要','日期','结论摘要','允许电流','最热导体温度','温限余量','423.5 A','85.1 °C','4.9 K']:assert field in cover
         for internal in ['cable1','cable/cable1','test-run','cablesim.iec60287','+engineering','public-sample']:assert internal not in full
         assert doc.embfile_count() == (1 if audience=='internal' else 0)
 
@@ -181,7 +183,7 @@ def test_cover_short_digest_local_minutes_and_distinct_surface_heading(run):
 
 def test_cover_uses_standards_from_bound_saved_reference(run):
     first=deepcopy(run)
-    first['output']['cases'][0]['artifacts']={}
+    first['output']['cases'][0]['artifacts']['x-cablesim.iec60287-trace']['sources']=[]
     first['output_digest']=fingerprint(first['output'])
     with fitz.open(stream=render_pdf([first,run]),filetype='pdf') as document:
         cover=document[0].get_text()

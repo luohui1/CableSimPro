@@ -6,6 +6,7 @@ import { NumberField } from "./ui/number-field";
 import { Select } from "./ui/select";
 import { Button } from "./ui/button";
 import { EmptyState } from "./states";
+import { RangeField, isRangeField } from './ui/range-field';
 import {
   parameterUnit,
   engineeringQuantity,
@@ -91,7 +92,7 @@ export function ContractFields({
           prefix.split("/").length < 5
         )
           return (
-            <section key={path} className="input-section">
+            <section key={path} className="input-section" data-field-path={path}>
               <h2>{label}</h2>
               <ContractFields
                 module={module}
@@ -107,6 +108,11 @@ export function ContractFields({
               />
             </section>
           );
+        if (isRangeField(key, field, root)) return <section key={path} className="parameter-structured" data-field-path={path}>
+          <span className="parameter-structured-label">{label}</span>
+          <RangeField module={module} path={path} label={label} field={field} root={root} value={value} readOnly={readOnly}
+            draftFields={draftFields} onDraftChange={onDraftChange} onChange={next => onChange(path, next)} />
+        </section>;
         if (Array.isArray(field.enum))
           return (
             <Select
@@ -220,7 +226,7 @@ export function ContractFields({
         }
         if (field.type === "boolean")
           return (
-            <label key={path} className="run-ack">
+            <label key={path} className="run-ack" data-field-path={path}>
               <input
                 type="checkbox"
                 checked={value === true}
@@ -232,7 +238,7 @@ export function ContractFields({
           );
         if (field.type === "string" && !field.const)
           return (
-            <label key={path} className="text-field">
+            <label key={path} className="text-field" data-field-path={path}>
               {label}
               <input
                 value={text(value)}
@@ -290,7 +296,7 @@ function JsonField({
     }
   }
   return (
-    <label className="text-field">
+    <label className="text-field" data-field-path={path}>
       {label}
       <textarea
         value={draft ?? JSON.stringify(value ?? null, null, 2)}

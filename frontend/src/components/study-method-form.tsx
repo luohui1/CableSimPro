@@ -10,6 +10,7 @@ import { Tooltip } from "./ui/tooltip";
 import { Button } from "./ui/button";
 import { ErrorState, LoadingState, EmptyState, StaleBanner } from "./states";
 import { SourceBadge } from "./source-badge";
+import { StudyDetailGroup } from './study-detail-group';
 import { downloadJson } from "@/lib/download";
 import { moduleConfiguration, withConfiguration } from "@/lib/study-config";
 import { entityLabel } from "@/lib/domain-fields";
@@ -55,6 +56,7 @@ export function StudyMethodForm({
   const definition =
     snapshot || context.draft?.definition || context.study.definition;
   const configuration = moduleConfiguration(definition, module);
+  const parameters: Record<string,unknown>=historical && savedRun ? {...optionalRecord(configuration?.parameters),...optionalRecord(array(optionalRecord(savedRun.snapshot).cases).map(optionalRecord)[0]?.parameters)} : optionalRecord(configuration?.parameters);
   const domain = historical && savedRun ? savedDomain(savedRun) : context.domain;
   const references = useMemo(() => {
     if (!domain) return undefined;
@@ -93,8 +95,12 @@ export function StudyMethodForm({
       const choices=options || (Array.isArray(field.enum) && field.enum.every(v=>typeof v==='string') ? field.enum.map(v=>({value:String(v),label:text(labels[String(v)]) || displayName(String(v))})) : undefined);
       return choices && field.type==='string' ? [{key,field,choices}] : [];
     });
-    return {selects,root,remaining:visibleRequiredSchema({...expand(root,root),properties:Object.fromEntries(Object.entries(properties).filter(([key])=>key!=='crossing_heat_sources' && !selects.some(item=>item.key===key)))},root)};
+    return {selects,root,remaining:{...expand(root,root),properties:Object.fromEntries(Object.entries(properties).filter(([key])=>key!=='crossing_heat_sources' && !selects.some(item=>item.key===key)))}};
   },[contracts.data,configuration?.method,references]);
+  // Only missing-field membership changes the schema identity; typing a valid
+  // number must not reset the existing contract form's editor state.
+  const missingSignature=JSON.stringify(missingRequiredPaths(selectLayout.remaining,selectLayout.root,parameters));
+  const remaining=useMemo(()=>visibleRequiredSchema(selectLayout.remaining,selectLayout.root,new Set<string>(JSON.parse(missingSignature))),[selectLayout,missingSignature]);
   if (!configuration)
     return <EmptyState description="" title="当前研究没有该模块的方法配置" />;
   if (contracts.isPending || methods.isPending)
@@ -149,8 +155,7 @@ export function StudyMethodForm({
       method: configuration.method,
     });
   const root = contract?.parameter_schema || {};
-  const {selects,remaining}=selectLayout;
-  const parameters: Record<string,unknown>=historical && savedRun ? {...optionalRecord(configuration.parameters),...optionalRecord(array(optionalRecord(savedRun.snapshot).cases).map(optionalRecord)[0]?.parameters)} : optionalRecord(configuration.parameters);
+  const {selects}=selectLayout;
   return (
     <div className="parameter-form study-method-config">
       {historical && <StaleBanner description="固定运行方法配置 · 只读" />}
@@ -175,7 +180,7 @@ export function StudyMethodForm({
       )}
       {contract && (
         <>
-          <div className="source-line">
+          <StudyDetailGroup id="method-contract" title="契约与单位追溯"><div className="source-line">
             <SourceBadge
               kind="library"
               detail={
@@ -191,7 +196,7 @@ export function StudyMethodForm({
                 {displayName(contract.input_schema)}
               </span>
             </Tooltip>
-          </div>
+          </div></StudyDetailGroup>
           {historical ? <dl className="report-sources" aria-label="保存运行实际方法参数">{savedParameterRows(root,parameters,references || {}).map(([label,value],index)=><div key={index}><dt>{label}</dt><dd>{value}</dd></div>)}</dl> : <>
           {selects.map(({key,field,choices}) => <div key={key} data-field-path={'/'+key}><Select label={displayName(key,text(field.title) || key)+(Array.isArray(optionalRecord(root).required)&&(optionalRecord(root).required as string[]).includes(key) ? '（必填）' : '')} value={text(parameters[key] ?? field.default ?? field.const)} placeholder="请选择" disabled={context.saving || optionalRecord(field['x-bind']).read_only === true} options={[{value:'',label:'请选择'},...choices]} onChange={value=>{
             const next: Record<string,unknown>={...optionalRecord(configuration.parameters)};if(value)next[key]=value;else delete next[key];
@@ -254,14 +259,30 @@ export function StudyMethodForm({
   );
 }
 
-/** 必填组不能藏在高级折叠区；展开引用后的契约仍是唯一字段来源。 */
-function visibleRequiredSchema(schema:unknown,root:unknown,parentRequired=false,depth=0):Record<string,unknown>{
+/** S4 presentation policy: physical inputs stay visible; solver controls fold.
+ * The plugin contract remains the sole source of values, validation and units. */
+function visibleRequiredSchema(schema:unknown,root:unknown,missing:Set<string>,path='',physical=false,depth=0):Record<string,unknown>{
   const field=expand(schema,root);if(depth>6)return field;
   const required=Array.isArray(field.required)?field.required:[];
-  return {...field,...(parentRequired?{'x-level':'basic'}:{}),...(field.properties?{properties:Object.fromEntries(Object.entries(optionalRecord(field.properties)).map(([key,raw])=>{
-    const needed=parentRequired || required.includes(key),child=visibleRequiredSchema(raw,root,needed,depth+1);
+  const primaryMesh=['size_m','far_size_m','transition_m','max_nodes'].some(key=>path==='/mesh/'+key);
+  const visiblePhysics=physical || /^\/(domain_options|material_thermal_resistivity|thermal_boundaries|boundary|outer_boundary|section_id|load_id|load_case_id|target_current_a)(\/|$)/.test(path);
+  const level=missing.has(path)||primaryMesh||visiblePhysics?'basic':field['x-level'];
+  return {...field,...(level?{'x-level':level}:{}),...(field.properties?{properties:Object.fromEntries(Object.entries(optionalRecord(field.properties)).map(([key,raw])=>{
+    const child=visibleRequiredSchema(raw,root,missing,path+'/'+key,visiblePhysics,depth+1);
     return [key,{...child,...(required.includes(key) && child.type==='object'?{title:(text(child.title)||displayName(key))+'（必填）'}:{})}];
   }))}:{})};
+}
+function missingRequiredPaths(schema:unknown,root:unknown,values:Record<string,unknown>,prefix='',depth=0):string[]{
+  if(depth>6)return [];
+  const model=expand(schema,root),required=Array.isArray(model.required)?model.required:[];
+  return Object.entries(optionalRecord(model.properties)).flatMap(([key,raw])=>{
+    const field=expand(raw,root),value=values[key],path=prefix+'/'+key;
+    if(field.type==='object' && field.properties){
+      if(value===undefined && !required.includes(key))return [];
+      return missingRequiredPaths(field,root,optionalRecord(value),path,depth+1);
+    }
+    return required.includes(key) && (value===undefined || value===null || value==='') ? [path] : [];
+  });
 }
 function requiredDefaults(schema:unknown,root:unknown,depth=0):Record<string,unknown>{
   if(depth>6)return {};

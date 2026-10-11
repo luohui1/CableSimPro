@@ -285,6 +285,20 @@
 /* AI 模型 */
 .settings-ai { display: flex; flex-direction: column; gap: var(--space-6); }
 .settings-fields { margin: 0; padding: 0; border: 0; min-width: 0; }
+.hpc-connection-form { display: flex; flex-direction: column; gap: var(--space-4); padding: var(--space-4); min-width: 0; }
+.hpc-connection-form > .settings-fields { display: flex; flex-direction: column; gap: var(--space-4); }
+.hpc-connection-form [data-slot="field"], .hpc-connection-form .select-field { gap: var(--space-2); }
+.hpc-connection-form [data-slot="field-label"], .hpc-connection-form .select-field > label { color: var(--text-secondary); font-size: var(--text-note); font-weight: var(--weight-normal); line-height: 1.5; }
+.hpc-connection-form p { margin: 0; }
+.hpc-connection-form .settings-inline { max-width: none; }
+.hpc-connection-form .settings-inline input { min-width: 0; font-variant-numeric: tabular-nums; }
+.hpc-connection-form .settings-inline > span { flex: none; white-space: nowrap; }
+.hpc-connection[data-editable="false"] .settings-fields :disabled { opacity: 1; color: var(--text-secondary); background: var(--fill); cursor: default; }
+.hpc-connection-form .settings-help code { display: block; margin-top: var(--space-2); overflow-wrap: anywhere; }
+.hpc-notice { color: var(--text-secondary); font-size: var(--text-note); }
+.hpc-check-result { border-top: 1px solid var(--line); padding-top: var(--space-3); display: flex; flex-direction: column; gap: var(--space-3); }
+.hpc-check-result ul { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3) var(--space-6); }
+.hpc-check-result li { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--text-note); }
 .inbox-category { display: flex; flex-direction: column; gap: var(--space-3); margin-bottom: var(--space-6); }
 .inbox-category h2 { margin: 0; font-size: var(--text-subheading); }
 .inbox-group { min-width: 0; border-bottom: 1px solid var(--line); padding-block: var(--space-3); }
@@ -624,6 +638,11 @@
 /* 结构化参数：数值列表（标签）、对象数组与按对象分项（小表格），单元格内直接编辑，单位来自清单 */
 .parameter-structured { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2) 0; min-width: 0; }
 .parameter-structured-label { color: var(--text-secondary); }
+.range-field { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-3); }
+.range-field .number-field { min-width: 0; max-width: none; }
+.range-field .number-input { width: 100%; min-width: 0; }
+.range-field .number-input input { min-width: 0; width: 100%; }
+.inspector-method .range-field { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .number-list { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); }
 .number-chip { display: inline-flex; align-items: baseline; gap: var(--space-1); padding: 0 var(--space-2); border-radius: var(--radius-pill); background: var(--fill); font-variant-numeric: tabular-nums; }
 .number-chip button { border: 0; background: none; color: var(--text-secondary); font: inherit; cursor: pointer; padding: 0; }

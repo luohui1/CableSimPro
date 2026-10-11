@@ -13,9 +13,15 @@ MAX_TRIAGE_PAGES=4
 
 def home(snapshot,card):
     """Use saved parents, never infer another object's identity from its name."""
-    parent=card.get('parent')
-    if parent and card['kind'] in ('proposal','delivery','run','job'):
-        return snapshot.cards.get((parent['kind'],parent['id']),card)
+    visited=set()
+    while card.get('parent') and (card['kind'] in ('proposal','delivery','run','job')
+            or card['kind']=='study' and card['parent']['kind']=='type'):
+        parent=card['parent'];key=(parent['kind'],parent['id'])
+        if key in visited:break
+        visited.add(key)
+        target=snapshot.cards.get(key)
+        if target is None:break
+        card=target
     return card
 
 
@@ -45,10 +51,13 @@ def guidance(snapshot,item):
         methods=[edge['target'] for source,edge in snapshot.edges if source==(card['kind'],card['id'])
             and edge['role']=='method' and edge['target']['status']['code']=='installed']
         versions='；'.join('“'+method['name']+'” '+method['version'] for method in methods if method.get('version'))
-        action='在研究工作台 '+name+' 核对过期原因、输入和工况；若方法或型号引用变化，先更新到当前版本'
+        type_module=target['kind']=='type' and card['kind']=='study'
+        action=('在型号工作台 '+name+' 的“'+card['name']+'”模块核对过期原因、结构输入和方法；若方法或资源引用变化，先更新到当前版本'
+            if type_module else '在研究工作台 '+name+' 核对过期原因、输入和工况；若方法或型号引用变化，先更新到当前版本')
         if versions:action+='（当前安装方法：'+versions+'）'
-        action+='。保存研究后由人点“预检并运行”重算；有限元或超算须先由人确认核时再提交，旧运行保留为历史。'
-        return target,action,'研究负责人（人工确认运行与核时）',False
+        action+=('。保存型号后由人重新检查并运行该模块；有限元或超算须先由人确认核时再提交，旧运行保留为历史。'
+            if type_module else '。保存研究后由人点“预检并运行”重算；有限元或超算须先由人确认核时再提交，旧运行保留为历史。')
+        return target,action,('型号设计负责人（人工确认运行与核时）' if type_module else '研究负责人（人工确认运行与核时）'),False
     if category=='missing':
         if origin=='validation':
             return target,'在验证页核对复现库当前快照、目录与摘要；由复现库维护人修复或重新发布证据，再重新读取。此条不表示没有算例，也不触发计算。','复现库维护人',False
@@ -62,7 +71,8 @@ def guidance(snapshot,item):
     elif origin=='job':
         action='在运行与作业列表打开 '+name+'，查看现有作业回执和进度；需要停止或恢复时由作业负责人确认，不提交重复作业。'
     else:
-        action='在研究工作台 '+name+' 查看当前运行记录与进度，等待完成；不要重复运行。'
+        action=('在型号工作台 '+name+' 的“'+card['name']+'”模块查看当前运行记录与进度，等待完成；不要重复运行。'
+            if target['kind']=='type' else '在研究工作台 '+name+' 查看当前运行记录与进度，等待完成；不要重复运行。')
     return target,action,'原运行或提取负责人',False
 
 
@@ -88,6 +98,7 @@ def read(research,args):
     for item in selected[offset:offset+limit]:
         target,action,who,approval=guidance(snapshot,item)
         data['items'].append({**deepcopy(item),'home':target,'next_step':action,
+            'title':target['name']+' · '+item['object']['name'] if target['kind']=='type' and target['id']!=item['object']['id'] else item['title'],
             'handled_by':who,'requires_human_approval':approval})
         cursor(len(data['items']))
         if not fits(result.model_dump(mode='json'),RESULT_BYTES-256):
@@ -136,7 +147,8 @@ def report(steps):
             key=(item['reason'],action,item['handled_by'],item['requires_human_approval'])
             combined.setdefault(key,[]).append(item)
         for (reason,action,who,approval),members in combined.items():
-            lines.append('、'.join('“'+item['object']['name']+'”' for item in members))
+            lines.append('、'.join(('“'+item['home']['name']+'” · ' if item['home']['kind']=='type'
+                and item['home']['id']!=item['object']['id'] else '')+'“'+item['object']['name']+'”' for item in members))
             if len(members)>1:
                 homes={}
                 for item in members:

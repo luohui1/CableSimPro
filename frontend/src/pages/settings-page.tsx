@@ -21,13 +21,14 @@ import { ErrorState, LoadingState } from '@/components/states';
 import { formatDateTime } from '@/lib/format';
 import { agentSettings, agentStatus, resetAgentSettings, saveAgentSettings, testAgentSettings, type AgentProbe, type AgentSettings } from "@/features/agent/agent-api";
 import { AgentMemorySettings } from '@/features/agent/memory-settings';
+import { HpcConnectionSettings } from '@/components/hpc-connection-settings';
 
 type Backup = { id: string; sha256: string; size_bytes: number; created: string; download_url: string; schema_version: number };
 
 const SECTIONS = [
   { id: "general", title: "常规", icon: "nav/theme", lead: "显示偏好只影响这台电脑；保存与计算一律使用 SI。" },
   { id: "ai", title: "AI 模型", icon: "agent/agent", lead: "Agent 用哪家模型、怎么说话。它只能提出方案，批准仍由人完成。" },
-  { id: "compute", title: "计算位置", icon: "nav/simulation", lead: "按能力声明与当前配置分组；超算以 Slurm 作业提交。" },
+  { id: "compute", title: "计算位置", icon: "nav/simulation", lead: "配置超算连接，查看各方法在哪运行。" },
   { id: "data", title: "数据与备份", icon: "object/file", lead: "备份包含整个工程数据库：原件、输入版本、运行结果与计算书。" },
   { id: "report", title: "计算书", icon: "result/report", lead: "计算书只从指定运行生成，包含输入、方法版本与插件封签。" },
   { id: "about", title: "关于", icon: "status/info", lead: "宿主版本、数据契约与快捷键。" },
@@ -254,11 +255,9 @@ export function SettingsPage() {
             </table>
           </>}
           {current === "ai" && <><AiSettings onState={setAiState} /><AgentMemorySettings /></>}
-          {current === "compute" && <div className="settings-compute">
+          {current === "compute" && <><HpcConnectionSettings /><div className="settings-compute">
             {catalog.isError || profile.isError ? <ErrorState title="计算位置读取失败" description={message(catalog.error || profile.error)} action={<Button onClick={() => { void catalog.refetch(); void profile.refetch(); }}>重试</Button>} />
               : catalog.isPending || profile.isPending ? <LoadingState title="读取配置中" /> : <>
-                <p className={profile.data.status === 'invalid' ? 'field-error' : 'muted'}>{profile.data.status === 'invalid' ? '超算配置无效，请修正连接参数。' : profile.data.configured ? profile.data.connection_checked ? '连接参数已配置，连接检查已完成。' : '连接参数已配置，连接尚未检查；配置完成不代表连接可用。' : '超算连接未配置。'}</p>
-                {profile.data.configuration_file && <details className="muted"><summary>超算连接配置</summary><p>平台从配置文件读取超算连接。</p><code>{profile.data.configuration_file}</code>{profile.data.status === 'invalid' && <p>{profile.data.configuration_note}</p>}</details>}
                 {groups.map(group => <section key={group.key} className="settings-card" aria-label={`${group.title}能力`}>
                   <div className="settings-card-head"><b>{group.title}</b><span>{group.rows.length} 项能力</span></div>
                   <ul className="settings-plugins">{group.rows.map(({ plugin, capability }) => <li key={text(optionalRecord(plugin.method).plugin_id) + ':' + capability.id}>
@@ -267,7 +266,7 @@ export function SettingsPage() {
                   </li>)}{!group.rows.length && <li className="muted">没有能力</li>}</ul>
                 </section>)}
               </>}
-          </div>}
+          </div></>}
           {current === "compute" && <p className="settings-link"><Link to="/runs" search={{ theme }}>超算作业在“运行与作业”中查看<Icon name="action/arrow-right" /></Link></p>}
           {current === "data" && <>
             {restoreState === "pending_restart" && <p className="settings-banner" role="status">已安排恢复，重启宿主后生效。</p>}

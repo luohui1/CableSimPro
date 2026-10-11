@@ -2,6 +2,7 @@ import type { components } from "@/api/generated/schema";
 import type { StudyDefinition } from "@/api/research";
 import { ApiError } from "@/api/client";
 import { parseInput, type NumericInput } from "./domain-fields";
+import { pointerParts } from './missing-input';
 export type Configuration = components["schemas"]["StudyConfiguration"];
 export type ParameterDraft = {
   module: string;
@@ -70,7 +71,8 @@ export function parameterChange(
   const next = structuredClone(definition),
     config = moduleConfiguration(next, module);
   if (!config) throw new ApiError(422, "参数所属模块不存在");
-  const parts = path.split("/").filter(Boolean);
+  const parts = pointerParts(path);
+  if (!parts.length) throw new ApiError(422, '参数字段路径无效');
   const owner = crosscheck === undefined ? config : config.crosschecks?.[crosscheck];
   if (!owner) throw new ApiError(422, "对照方法配置不存在");
   const params = owner.parameters || {};
@@ -78,13 +80,14 @@ export function parameterChange(
   for (const key of parts.slice(0, -1)) {
     if (
       !target[key] ||
-      typeof target[key] !== "object" ||
-      Array.isArray(target[key])
+      typeof target[key] !== "object"
     )
       target[key] = {};
     target = target[key] as Record<string, unknown>;
   }
-  if (value === undefined) delete target[parts.at(-1)!];
+  // 空数组元素保留位置，不能删除后把左右/上下坐标错位。
+  if (value === undefined && Array.isArray(target)) target[Number(parts.at(-1)!)] = null;
+  else if (value === undefined) delete target[parts.at(-1)!];
   else target[parts.at(-1)!] = value;
   owner.parameters = params;
   config.input_sources = {

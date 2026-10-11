@@ -62,11 +62,12 @@ function CurrentReport({
   const [includeImage, setIncludeImage] = useState(true);
   const [femId, setFemId] = useState('');
   const [iecId, setIecId] = useState('');
+  const generating = useRef(false);
   useEffect(() => { setFemId(''); setIecId(''); }, [run?.id]);
   const methodOf = (value: Record<string, unknown>) => optionalRecord(value.method || optionalRecord(optionalRecord(value.snapshot).definition).method);
   const primaryFem = methodOf(run || {}).capability === 'iec-thermal-field';
   const related = useQuery({
-    queryKey: ['report-source-runs', wid], enabled: !did && !!run,
+    queryKey: ['report-source-runs', wid], enabled: !did && !!run && !autoGenerate && !generating.current,
     queryFn: async ({signal}) => {
       const studies = await responseData(api.GET('/api/workspaces/{wid}/studies', {params:{path:{wid}}, signal}));
       const found: Record<string, unknown>[] = [];
@@ -106,11 +107,13 @@ function CurrentReport({
   const request = useRef({ run: "", id: "" });
   const [generation, setGeneration] = useState<Record<string,unknown>>();
   const cancelRequested = useRef(false);
-  const generating = useRef(false);
-  const progressLabels: Record<string,string> = {source:'读取保存运行',evidence:'核验收敛与来源',pdf:'排版与生成 PDF',save:'保存交付',done:'已生成'};
+  const progressLabels: Record<string,string> = {source:'读取保存运行',drawing:'导出敷设截面',evidence:'核验收敛与来源',field_image:'绘制保存场图',pdf:'准备计算书',html:'整理保存结果',consistency:'核对摘要与候选',layout_customer:'排版客户版',layout_internal:'排版内部审核版',pdf_customer:'生成客户版 PDF',pdf_internal:'生成内部审核版 PDF',archive:'附入审核证据',save:'保存交付',done:'已生成'};
   async function jobRequest(path: string, init?: RequestInit) {
-    const response=await fetch(path,init),data=await response.json();
-    if(!response.ok)throw new ApiError(response.status,text(optionalRecord(data.detail).message) || text(data.detail) || '计算书任务不可用');
+    const response=await fetch(path,init);let data:unknown;
+    try {data=await response.json();}
+    catch {throw new ApiError(response.ok ? 502 : response.status,'计算书服务未返回有效状态，请重试；保存的运行不变。');}
+    const payload=optionalRecord(data);
+    if(!response.ok)throw new ApiError(response.status,text(optionalRecord(payload.detail).message) || text(payload.detail) || '计算书任务不可用');
     return record(data);
   }
   async function cancelGeneration() {
@@ -160,6 +163,7 @@ function CurrentReport({
       if (primaryFem && !chapterReference) throw new ApiError(422, '请选择输入匹配的 IEC 对照运行。');
       if (chapterReference && (!chapterConverged || chapter.error || chapter.isFetching)) throw new ApiError(422, '请先核对有限元章节；未收敛或输入不一致不能交付。');
       const cadImages = includeImage && cadImage ? [{metadata:cadImage.metadata,png_base64:await pngBase64(cadImage.blob)}] : [];
+      setGeneration({state:'running',stage:'drawing'});
       const sectionImages = await reportSectionImages(source);
       if(cancelRequested.current)throw new ApiError(499,'已取消生成，保存运行未改变。');
       const payload = {run_ids:[rid], request_id:'', cad_images:cadImages, section_images:sectionImages, fem_chapter:chapterReference || null};

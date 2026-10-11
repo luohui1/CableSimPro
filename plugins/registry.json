@@ -3,9 +3,9 @@
   "plugins": [
     {
       "plugin_id": "cablesim.cable-geometry",
-      "version": "1.0.4",
+      "version": "1.1.0",
       "manifest": "plugins/cablesim.cable-geometry/plugin.json",
-      "release_digest": "3b10dbc8b894901a187291c79580f9726c98677abfb475d5363315a9f5ae80a2"
+      "release_digest": "b9327e4c6dc08a7aa16f4bc9558a760a0b18d468bac6a597bb4d4e6134935609"
     },
     {
       "plugin_id": "cablesim.comsol-bridge",
@@ -51,9 +51,9 @@
     },
     {
       "plugin_id": "cablesim.standard-check",
-      "version": "1.2.0",
+      "version": "1.3.1",
       "manifest": "plugins/cablesim.standard-check/plugin.json",
-      "release_digest": "6134718fec05a74b2ea6805e875d8e42aa9d21141c6f0c47499330577f403ed2"
+      "release_digest": "bd3de67393e085d2fdb4382db3170cb3d3ffd581006764e52ce2495481a7ce33"
     },
     {
       "plugin_id": "cablesim.standards-basis",
@@ -69,9 +69,9 @@
     },
     {
       "plugin_id": "cablesim.type-electrical",
-      "version": "1.0.3",
+      "version": "1.0.5",
       "manifest": "plugins/cablesim.type-electrical/plugin.json",
-      "release_digest": "ac75060cf87aaee23ca67dcbd14b689c86720f97a3435f8fcab488a052158047"
+      "release_digest": "ad5692cac91ccb91a6d017c2647bb31eae89c465843a5202674e06ecb91a13ce"
     }
   ]
 }

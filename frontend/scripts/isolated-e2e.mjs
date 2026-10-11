@@ -14,9 +14,11 @@ const script = process.argv[2];
 if (!script || path.dirname(script) !== ".")
   throw Error("只能执行 frontend/scripts 中的验收脚本");
 const visibleTextScript = ['verify-visible-text.mjs', 'verify-visible-text-states.mjs'].includes(script);
+const realUseScript = script === 'verify-real-use.mjs';
+const formsUseScript = script === 'verify-form-real-use.mjs';
 const source = path.resolve(
   process.env.E2E_DATABASE_SOURCE ||
-    path.join(root, visibleTextScript ? '.data/release/engineering.sqlite' : script === 'verify-type-resilience.mjs' ? '.data/standard-check/validation.sqlite' : ['verify-workbench.mjs','verify-component-foundation.mjs','verify-version-status.mjs','verify-host-connections.mjs','verify-inquiry.mjs','verify-display-names.mjs','verify-documents.mjs','verify-document-batch.mjs','verify-accessibility.mjs'].includes(script) ? '.data/engineering-demo/engineering.sqlite' : ".data/frontend-integration/engineering.sqlite"),
+    path.join(root, visibleTextScript || realUseScript || formsUseScript ? '.data/release/engineering.sqlite' : script === 'verify-type-resilience.mjs' ? '.data/standard-check/validation.sqlite' : ['verify-workbench.mjs','verify-component-foundation.mjs','verify-version-status.mjs','verify-host-connections.mjs','verify-inquiry.mjs','verify-display-names.mjs','verify-documents.mjs','verify-document-batch.mjs','verify-accessibility.mjs'].includes(script) ? '.data/engineering-demo/engineering.sqlite' : ".data/frontend-integration/engineering.sqlite"),
 );
 const scratchRoot = path.resolve(root, ".tmp/frontend-e2e");
 const scratch = path.join(scratchRoot, randomUUID());
@@ -81,14 +83,24 @@ try {
   const environment = {
     ...process.env,
     CABLESIM_DB: database,
-    // 验收库的 Agent 密钥只放进程内存，不碰本机系统凭据库
-    CABLESIM_AGENT_KEY_STORE: "memory",
+    // 普通验收禁用系统凭据；真实使用仅让平台按来源库账户正常鉴权，不改模型或密钥。
+    CABLESIM_AGENT_KEY_STORE: realUseScript ? 'system' : 'memory',
     CABLESIM_DATASETS_DIR: path.join(scratch, "datasets"),
     TEMP: scratch,
     TMP: scratch,
     BACKEND_URL: "http://127.0.0.1:" + backendPort,
     E2E_SEED_RECEIPT: seedReceipt,
+    ...(realUseScript ? { E2E_SOURCE_DATABASE: source } : {}),
   };
+  if (realUseScript) {
+    // Only non-secret deployed connection values enter the form. The actual editor starts empty.
+    const deployed = JSON.parse(await fs.readFile(path.join(root, '.data/hpc/config.json'), 'utf8'));
+    const envPath = deployed.environment?.path || (typeof deployed.python === 'string' && deployed.python.endsWith('/bin/python') ? deployed.python.slice(0, -11) : null);
+    if (!envPath || !deployed.remote_root?.endsWith('/jobs')) throw Error('真实环境路径尚未登记，不能猜测超算目录');
+    environment.E2E_HPC_INPUT = JSON.stringify({ ssh_alias: 'dghpc', partition: 'dg83', remote_workdir: deployed.remote_root.slice(0, -5), environment: { kind: deployed.environment?.kind || 'python', path: envPath }, budget_core_hours: 2000, total_budget_core_hours: 20000 });
+    await fs.mkdir(path.join(scratch, '.data/hpc'), { recursive: true });
+    if (process.env.REAL_USE_MODE === 'readonly') await fs.copyFile(path.join(root, '.data/hpc/config.json'), path.join(scratch, 'administrator-profile.json'));
+  }
   if (
     [
       "verify-research.mjs",
@@ -107,7 +119,7 @@ try {
       [path.join(frontend, "scripts/seed-research-fixtures.py")],
       { env: environment, stdio: "inherit" },
     );
-  const isolatedCad = visibleTextScript || ["verify-accessibility.mjs", "verify-research-refinement.mjs", "verify-expansion.mjs", "verify-expansion-states.mjs", "verify-display-names.mjs"].includes(script);
+  const isolatedCad = visibleTextScript || realUseScript || formsUseScript || ["verify-accessibility.mjs", "verify-research-refinement.mjs", "verify-expansion.mjs", "verify-expansion-states.mjs", "verify-display-names.mjs"].includes(script);
   const launchArgs = isolatedCad
     ? [
         "-c",
@@ -117,6 +129,14 @@ try {
           "from backend.main import app",
           "from backend.plugin_host.resident import ResidentRunner",
           "root=Path(os.environ['TEMP']).resolve()",
+          ...(realUseScript || formsUseScript ? [
+            "import backend.kernel.hpc_jobs as hpc_api",
+            "hpc_api.ROOT=root",
+            "app.state.research.executor.profile=root/('administrator-profile.json' if os.environ.get('REAL_USE_MODE')=='readonly' else '.data/hpc/config.json')",
+            "app.state.research.executor.root=root/'hpc-runs'",
+            "app.state.research.executor.ledger=root/'hpc-budget.sqlite'",
+            ...(realUseScript ? ["from backend.harness.model_settings import KeyStore", "app.state.harness.settings.keys.account=KeyStore(os.environ['E2E_SOURCE_DATABASE']).account"] : []),
+          ] : []),
           "app.state.previews.jobs=root/'cad-jobs'",
           "app.state.previews.jobs.mkdir()",
           "app.state.previews.runner=ResidentRunner(root/'cad-workers')",
@@ -165,14 +185,14 @@ try {
     ].join('\n'), environment.BACKEND_URL, seedReceipt], {env:environment,stdio:'inherit'});
   }
   // The visible-text audit must keep the frontend snapshot stable while other threads build.
-  if (visibleTextScript && process.env.E2E_DEV !== '1')
-    await fs.cp(path.join(frontend, 'dist'), path.join(scratch, 'preview-dist'), { recursive: true });
+  if ((visibleTextScript || realUseScript || formsUseScript) && process.env.E2E_DEV !== '1')
+    await fs.cp(process.env.E2E_FRONTEND_DIST || path.join(frontend, 'dist'), path.join(scratch, 'preview-dist'), { recursive: true });
   const preview = spawn(
     process.execPath,
     [
       path.join(frontend, "node_modules/vite/bin/vite.js"),
       ...(process.env.E2E_DEV === '1' ? [] : ['preview']),
-      ...(visibleTextScript && process.env.E2E_DEV !== '1' ? ['--outDir', path.join(scratch, 'preview-dist')] : []),
+      ...((visibleTextScript || realUseScript || formsUseScript) && process.env.E2E_DEV !== '1' ? ['--outDir', path.join(scratch, 'preview-dist')] : []),
       "--host",
       "127.0.0.1",
       "--port",
@@ -193,6 +213,11 @@ try {
     stdio: "inherit",
   });
 } finally {
+  if (realUseScript && process.env.REAL_USE_CAPTURE_DATABASE === '1' && existsSync(database)) {
+    // Keep actual saved sessions for subsequent read-only inspection.
+    const evidence = path.join(root, '.data/fix-round/shared-shell/real-use/observed.sqlite');
+    await run(python, ['-c', "import sqlite3,sys; from pathlib import Path; a=sqlite3.connect(Path(sys.argv[1]).resolve().as_uri()+'?mode=ro',uri=True); b=sqlite3.connect(sys.argv[2]); a.backup(b); b.close(); a.close()", database, evidence], {stdio:'inherit'}).catch(error => console.error('真实使用记录备份失败：' + error.message));
+  }
   if (previewShutdownUrl) {
     const response = await fetch(previewShutdownUrl, {
       method: "POST",

@@ -119,6 +119,13 @@ class Requirements:
             artifact=case.artifacts['x-cablesim.standard-check']
             declarations={re.sub(r'\s+','',item['standard']).replace('—','-').replace(':','-') for item in declared_execution_standards(document)}
             plans={r['id']:r['basis_query'] for r in artifact['rows'] if r.get('basis_query') and re.sub(r'\s+','',r['basis_query']['standard']+'-'+r['basis_query']['edition']) in declarations}
+            missing_fields=[{'row_id':r['id'],'fields':r['basis_missing_fields'],'reason':r['reason']} for r in artifact['rows'] if r.get('basis_missing_fields')]
+            undeclared={}
+            for r in artifact['rows']:
+                q=r.get('basis_query')
+                if q and r['id'] not in plans:
+                    name=q['standard']+'—'+q['edition']
+                    undeclared[name]={'standard':name,'source_digest':r['source_digest']}
             queries={fingerprint(q):q for q in plans.values()}
             ids={key:'basis-'+str(i) for i,key in enumerate(queries)}
             result=self.research.executor.run(basis.manifest.id,'lookup',[{'case_id':ids[key],'input':q,'parameters':{}} for key,q in queries.items()],expected_manifest=basis.manifest) if queries else None
@@ -139,7 +146,8 @@ class Requirements:
                  'release_digest':self.research.pin(basis)['release_digest'],'artifact_digest':output.artifact_digests['x-cablesim.standards-basis']}
             resolved[key]=ref
         payload={'parameters':{'basis_references':{rid:resolved[fingerprint(q)] for rid,q in plans.items() if fingerprint(q) in resolved},'basis_cable_sha256':artifact['basis_cable_sha256']},
-                 'workspace_revision':body.expected_revision,'missing':missing,'unbound_standard_count':len(artifact['rows'])-len(plans)}
+                 'workspace_revision':body.expected_revision,'missing':missing,'missing_fields':missing_fields,
+                 'undeclared_standards':list(undeclared.values()),'unbound_standard_count':len(artifact['rows'])-len(plans)}
         with self.store.db(True) as db:
             self.store.load(db,wid,body.expected_revision,allow_domain=True)
             db.execute('INSERT OR IGNORE INTO requirement_basis_queries VALUES (?,?,?,?,?)',(wid,str(body.request_id),body.expected_revision,json.dumps(payload,ensure_ascii=False),fingerprint(payload)))
@@ -183,6 +191,7 @@ class Requirements:
                     and bool(re.fullmatch(r'[0-9a-f]{64}', row.get('source_digest') or ''))
                     and bool(row['standard'].strip()) and bool(row['clause'].strip()) and bool(row['target'].get('role')))
         return {'id': 'requirement/' + fingerprint(identity), 'row_id': row['id'],
+                'basis_missing_fields': row.get('basis_missing_fields', []), 'basis_reason':row.get('reason'),
                 'definition': definition, 'definition_digest': fingerprint({k: v for k, v in definition.items() if k != 'title'}), 'bindable': bindable}
 
     def history(self, db, wid):

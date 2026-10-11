@@ -33,6 +33,8 @@ export function pointerParts(path: string): string[] {
   return path.slice(1).split('/').map(part => part.replace(/~1/g, '/').replace(/~0/g, '~'));
 }
 
+export const appendFieldPath = (path: string, part: string | number) => path + '/' + String(part).replace(/~/g, '~0').replace(/\//g, '~1');
+
 export function matchingFieldPath(errorPath: string, available: string[], domain?: unknown): string | undefined {
   const wanted = pointerParts(errorPath);
   if (wanted[0] === 'parameters') wanted.shift();
@@ -51,11 +53,12 @@ export function matchingFieldPath(errorPath: string, available: string[], domain
     }
   }
   if (!wanted.length) return undefined;
-  const matches = available.map(path => ({ path, parts: pointerParts(path) })).filter(item => item.parts.length && item.parts.every((part, index) => part === wanted[index]));
+  const partsOf = (path: string) => { const parts = pointerParts(path); if (parts[0] === 'parameters') parts.shift(); return parts; };
+  const matches = available.map(path => ({ path, parts: partsOf(path) })).filter(item => item.parts.length && item.parts.every((part, index) => part === wanted[index]));
   const exact = matches.find(item => item.parts.length === wanted.length);
   if (exact) return exact.path;
   // A parameter-group error may focus its first actual child, without parsing prose.
-  return available.find(path => { const parts = pointerParts(path); return parts.length > wanted.length && wanted.every((part, index) => part === parts[index]); });
+  return available.find(path => { const parts = partsOf(path); return parts.length > wanted.length && wanted.every((part, index) => part === parts[index]); });
 }
 
 export function focusPreflightField(path: string, domain?: unknown) {
@@ -63,9 +66,10 @@ export function focusPreflightField(path: string, domain?: unknown) {
     const nodes = Array.from(document.querySelectorAll<HTMLElement>('[data-field-path]'));
     const matched = matchingFieldPath(path, nodes.map(node => node.dataset.fieldPath || ''), domain);
     const node = nodes.find(item => matched !== undefined && item.dataset.fieldPath === matched);
-    const input = node?.querySelector<HTMLElement>('input,select,textarea,button');
+    const input = node?.matches('input,select,textarea,button') ? node : node?.querySelector<HTMLElement>('input,select,textarea,button');
     if (!input) return false;
-    node?.closest('details')?.setAttribute('open', ''); input.focus(); input.scrollIntoView({ block: 'center' }); return true;
+    for (let parent: HTMLElement | null = node || null; parent; parent = parent.parentElement) if (parent.tagName === 'DETAILS') parent.setAttribute('open', '');
+    input.focus(); input.scrollIntoView({ block: 'center' }); return document.activeElement === input;
   };
   if (focus()) return;
   const observer = new MutationObserver(() => { if (focus()) observer.disconnect(); });

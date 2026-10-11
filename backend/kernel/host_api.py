@@ -134,7 +134,9 @@ class DeliveryJob(StrictModel):
     workspace: UUID
     request_id: UUID = Field(description='Idempotent retry identity for the exact source and attachments.')
     state: Literal['queued','running','succeeded','cancelled','failed']
-    stage: Literal['queued','source','evidence','pdf','save','done'] = Field(description='Observed formatting phase; cancellation is accepted until save begins.')
+    stage: Literal['queued','source','evidence','field_image','pdf','html','consistency','layout_customer','layout_internal','pdf_customer','pdf_internal','archive','save','done'] = Field(description='Observed formatting phase; cancellation is accepted until save begins.')
+    timings_seconds: dict[str,float] = Field(default_factory=dict,description='Completed formatting phases and elapsed time; unit s. Measured from this job, not estimated.')
+    elapsed_seconds: float | None = Field(default=None,description='Total job execution duration; unit s. Present after successful commit.')
     created: str = Field(description='UTC ISO 8601 admission time.')
     finished: str | None = Field(description='UTC ISO 8601 terminal time.')
     delivery_id: UUID | None = Field(description='Saved delivery identity, present only after successful commit.')

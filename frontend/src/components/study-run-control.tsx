@@ -209,13 +209,15 @@ export function StudyRunControl({
           {(remoteOnly || inputCheck) && <section aria-label="预检步骤" className="input-section">
             <p>输入完整性与范围：{inputCheck ? inputCheck.input_ready === true ? '已通过输入检查' : '请修正下列缺项' : preflight.isPending ? '正在本机检查' : '等待检查'}</p>
             <p><SolverLocation pluginId={configuration?.method.plugin_id || ''} capability={capability} /></p>
-            {remoteOnly && availability.data?.configured === true && <p>原生环境：{preflight.data?.local_only ? '输入修正后检查' : preflight.isPending ? '正在检查' : '预检完成后显示结论'}</p>}
+            {remoteOnly && availability.data?.configured === true && <p>原生环境：{preflight.data?.local_only ? '输入修正后检查' : preflight.isPending ? '正在检查' : preflight.data?.ready === true ? '已通过超算原生预检' : preflight.data ? '未通过，请核对下列说明' : '尚未完成检查'}</p>}
             {(availability.error || preflight.error) && !preflight.isPending && <Button variant="ghost" size="compact" onClick={() => preflight.mutate()}>重新检查</Button>}
           </section>}
           {remoteBudget && <section aria-label="超算核时预算" className="input-section">
           <strong>提交 {text(remoteBudget.partition)} · 本次核时预算上限 {Number(remoteBudget.upper_core_hours).toFixed(3)} 核时</strong>
           <p>预计占用不超过上述资源上限；实际核时以 Slurm 记账为准。共 {Number(remoteBudget.case_count)} 个工况，单任务时限 {Number(remoteBudget.wall_seconds)} 秒。</p>
-          {checkedCases.map((item, index) => { const evidence = optionalRecord(item.evidence); return <p key={text(item.case_id)}>工况 {index + 1}：{numeric(evidence.mesh_nodes) ?? "未提供"} {numeric(evidence.field_order) === 2 ? '自由度' : '节点'} · {numeric(evidence.mesh_elements) ?? "未提供"} 单元</p>; })}
+          {checkedCases.map((item, index) => { const evidence = optionalRecord(item.evidence), execution = optionalRecord(evidence.preflight_execution);
+            return <div key={text(item.case_id)}><p>工况 {index + 1}：{numeric(evidence.mesh_nodes) ?? "未提供"} {numeric(evidence.field_order) === 2 ? '自由度' : '节点'} · {numeric(evidence.mesh_elements) ?? "未提供"} 单元</p>
+              {text(execution.job_id) && <p>预检作业 {text(execution.job_id)} · 实际 {(Number(execution.actual_cpu_seconds || 0) / 3600).toFixed(4)} 核时</p>}</div>; })}
         </section>}
         </>}
         caseLabel={(id, index) => {

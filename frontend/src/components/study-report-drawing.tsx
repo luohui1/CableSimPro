@@ -12,7 +12,9 @@ export async function reportSectionImages(run: Record<string, unknown>) {
   const cases = array(output.cases).map(optionalRecord).filter(row => row.status === 'succeeded');
   const definition=optionalRecord(optionalRecord(run.snapshot).definition);
   const recommended = optionalRecord(definition.driver).kind === 'selection' ? selectionView(run).recommendation?.id : undefined;
-  const chosen = cases.find(row => row.case_id === recommended) || cases[0];
+  const nearest=array(output.assessment || []).map(optionalRecord).filter(row=>row.status==='not_satisfied' && typeof row.value==='number')
+    .sort((a,b)=>Number(b.value)-Number(a.value) || text(b.case_id).localeCompare(text(a.case_id)))[0];
+  const chosen = cases.find(row => row.case_id === (recommended || (optionalRecord(definition.driver).kind==='selection' ? nearest?.case_id : undefined))) || cases[0];
   if (!chosen) return [];
   const hydrated = await hydrateCaseInputs(caseRun(run,text(chosen.case_id)),AbortSignal.timeout(9000));
   const saved = array(optionalRecord(hydrated.snapshot).cases).map(optionalRecord).find(row => row.case_id === chosen.case_id);

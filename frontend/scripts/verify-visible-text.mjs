@@ -9,7 +9,7 @@ import { categories, identifyText, exceptionFor, whitelist, findingOwner, readOn
 
 assert.equal(process.env.E2E_ISOLATED, '1', '文字巡检只能在隔离副本运行');
 const base = process.env.FRONTEND_URL;
-const phase = ['before', 'modules', 'gaps', 'catalog'].includes(process.env.VISIBLE_TEXT_PASS) ? process.env.VISIBLE_TEXT_PASS : 'after';
+const phase = ['before', 'modules', 'gaps', 'catalog', 'real-use', 'real-use-config', 'forms-real-use'].includes(process.env.VISIBLE_TEXT_PASS) ? process.env.VISIBLE_TEXT_PASS : 'after';
 const out = path.join(repositoryRoot, '.data/fix-round/shared-shell/visible-text', phase);
 await fs.mkdir(out, { recursive: true });
 const session = await openHeadlessBrowser({ executable: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });

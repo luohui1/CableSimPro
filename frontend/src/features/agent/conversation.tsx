@@ -88,12 +88,12 @@ export function WorkSteps({ turn, kinds }: { turn: Turn; kinds: Map<string, stri
   const steps = turn.steps;
   if (!steps.length && !turn.running) return null;
   const current = [...steps].reverse().find((step) => step.status === "running");
-  const failed = !turn.running && steps.some((step) => step.status === "error" && step.tool !== "answer-check");
+  const failed = !turn.running && (['blocked', 'failed'].includes(turn.task?.state || '') || turn.interrupted || steps.some((step) => step.status === "error" && step.tool !== "answer-check"));
   const expanded = open || (turn.running && steps.length > 0);
   return <div className={`agent-steps ${expanded ? "is-open" : ""}`}>
     <button type="button" className="agent-steps-head" aria-expanded={expanded} onClick={() => setOpen((value) => !value)} disabled={turn.running}>
       <WorkingMark state={turn.running ? "working" : failed ? "error" : "done"} />
-      <span>{turn.running ? (current ? `正在${current.title}` : "正在思考") : `已完成 ${steps.length} 步，用时`}</span>
+      <span>{turn.running ? (current ? `正在${current.title}` : "正在思考") : `${failed ? '已结束' : '已完成'} ${steps.length} 步，用时`}</span>
       <time>{seconds(elapsed)}</time>
       {!turn.running && <Icon name="action/chevron-down" className="agent-steps-chevron" />}
     </button>
@@ -162,7 +162,7 @@ export function ProposalCard({ proposal, onDecide, busy, error, receipt }: { pro
   return <article className={`agent-review-card is-${proposal.status}`}>
     <header><Icon name="agent/proposal" /><b>{proposal.title}</b><span>{proposal.status === "approved" ? "已批准" : proposal.status === "rejected" ? "已拒绝" : `待审核 · ${proposal.changes.length} 项`}</span></header>
     {proposal.base_revision != null && <p className="agent-card-meta">基于第 {proposal.base_revision} 修订</p>}
-    {receipt && receipt.status === proposal.status && <p className="agent-card-meta">{receipt.actor ? `${receipt.actor} · ` : ''}{formatDateTime(receipt.created)} · {receipt.status === 'approved' ? '已保存输入，工程结果尚未批准' : '已拒绝方案'}</p>}
+    {receipt && receipt.status === proposal.status && <p className="agent-card-meta">{receipt.actor ? `${receipt.actor === 'human' ? '人工' : receipt.actor} · ` : ''}{formatDateTime(receipt.created)} · {receipt.status === 'approved' ? '已保存输入，工程结果尚未批准' : '已拒绝方案'}</p>}
     <div className="agent-diff">{proposal.changes.map((change) => {
       const places = Math.max(decimals(change.before), decimals(change.after));
       return <div key={change.path} className="agent-diff-hunk">
@@ -186,11 +186,21 @@ function ProposalLine({ proposal }: { proposal: AgentProposal }) {
     <b>{proposal.status === "approved" ? "已批准" : proposal.status === "rejected" ? "已拒绝" : "在右侧审核"}</b></div>;
 }
 
-export function TurnView({ turn, kinds, proposals, label, review, onOpenStudy, onRetry }: {
+export function TurnView({ turn, kinds, proposals, label, review, onOpenStudy, onRetry, onRefresh, onOpenWorkspace, onReview }: {
   turn: Turn; kinds: Map<string, string>; proposals: Map<string, AgentProposal>; label: Label;
   review: "aside" | ((proposal: AgentProposal) => ReactNode); onOpenStudy?: (studyId: string) => void; onRetry?: () => void;
+  onRefresh?: () => void; onOpenWorkspace?: () => void; onReview?: () => void;
 }) {
   const evidence = turn.evidenceOnly ? turn.answer.slice(EVIDENCE_LABEL.length).trim() : turn.answer;
+  const pending = turn.proposals.some(id => proposals.get(id)?.status === 'pending');
+  const state = turn.task?.state, reason = turn.task?.reason;
+  const waiting = state === 'waiting' || state === 'reviewing', blocked = state === 'blocked', failed = state === 'failed';
+  const status = turn.interrupted ? '对话连接已结束，任务以服务器记录为准。'
+    : pending ? '请核对方案中的字段差异，再决定是否批准。'
+      : waiting || blocked ? ({ missing_input: '请先在工作台补齐输入，再继续提问。', human_review: '等待你审核方案。', scope_confirmation: '请到工作台确认运行范围；Agent 不会代你提交。', external_job: '正在等待外部作业，可以更新任务状态。', budget: '本次任务预算已用尽，请核对已有过程后再安排后续任务。', capability: '当前步骤无法继续，请查看说明并在工作台处理。' } as Record<string, string>)[reason || ''] || '当前任务需要人工处理，请查看说明并在工作台处理。'
+        : failed ? '本次任务未完成，已读取的内容仍保留。' : '';
+  const refresh = turn.interrupted || reason === 'external_job';
+  const retry = !turn.interrupted && !pending && !waiting && !blocked && (failed || !turn.answer && turn.notices.length > 0);
   return <section className="agent-turn">
     <p className="agent-question">{turn.question}</p>
     <WorkSteps turn={turn} kinds={kinds} />
@@ -201,8 +211,22 @@ export function TurnView({ turn, kinds, proposals, label, review, onOpenStudy, o
     {turn.evidenceOnly && <p className="agent-evidence-tag"><Icon name="result/evidence" />证据摘要 · 模型的解释没有通过数值核对，下面只列工具结果</p>}
     {evidence && <AnswerText text={evidence} />}
     {/* 回答里提到的对象：同一张名片，点了回到它的家（§2.3） */}
-    {!turn.running && turn.refs.length > 0 && <div className="agent-refs" aria-label="提到的对象">{turn.refs.map((card) => <ObjectChip key={card.kind + card.id} card={card} />)}</div>}
-    {turn.notices.map((notice, index) => <p key={index} className="agent-notice" role="alert"><Icon name="status/warning" />{notice.text}</p>)}
-    {onRetry && !turn.running && !turn.answer && turn.notices.length > 0 && <Button size="compact" variant="outline" className="agent-retry" onClick={onRetry}><Icon name="agent/retry" />重新发送</Button>}
+    {!turn.running && turn.refs.length > 0 && (turn.refs.length > 4
+      ? <details className="agent-ref-details"><summary>相关对象 · {turn.refs.length} 项</summary><div className="agent-refs" aria-label="提到的对象">{turn.refs.map((card) => <ObjectChip key={card.kind + card.id} card={card} />)}</div></details>
+      : <div className="agent-refs" aria-label="提到的对象">{turn.refs.map((card) => <ObjectChip key={card.kind + card.id} card={card} />)}</div>)}
+    {turn.notices.map((notice, index) => {
+      const technical = /reasoning_content|request_id|模型服务拒绝了请求（HTTP/.test(notice.text);
+      return <div key={index}>
+        <p className="agent-notice" role="alert"><Icon name="status/warning" />{technical ? '模型服务拒绝了请求，请稍后重试。技术详情可供管理员排查。' : notice.text}</p>
+        {technical && <details className="agent-notice-details"><summary>技术详情</summary><pre>{notice.text}</pre></details>}
+      </div>;
+    })}
+    {!turn.running && status && <div className="agent-next-step" role="status" data-task-state={turn.interrupted ? 'interrupted' : state}>
+      <p>{status}</p>
+      {pending && onReview ? <Button size="compact" variant="outline" onClick={onReview}>查看待审核方案</Button>
+        : refresh && onRefresh ? <Button size="compact" variant="outline" onClick={onRefresh}>更新任务状态</Button>
+          : (waiting || blocked) && onOpenWorkspace ? <Button size="compact" variant="outline" onClick={onOpenWorkspace}>在工作台处理</Button> : null}
+    </div>}
+    {onRetry && !turn.running && retry && <Button size="compact" variant="outline" className="agent-retry" onClick={onRetry}><Icon name="agent/retry" />重试这次提问</Button>}
   </section>;
 }

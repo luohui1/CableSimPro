@@ -15,7 +15,7 @@ import re
 from .specification_pdf import _Blocks, _font_lock
 from .workspace import fingerprint
 
-RENDERER = 'cablesim.study-pdf/4'
+RENDERER = 'cablesim.study-pdf/5'
 PLUGIN_NAMES = {'cablesim.iec60287':'IEC 60287 稳态载流量', 'cablesim.thermal-network':'热网络交叉校核',
     'cablesim.gb50217-correction':'GB 50217 载流量校正',
     'cablesim.simulation':'数值仿真', 'cablesim.hybrid-rating':'混合载流量参考',
@@ -86,6 +86,10 @@ def _names(document):
 
 
 def _input(run, case_id=None):
+    if case_id is None:
+        from .report_selection import context
+        selected=context(run)
+        case_id=selected['case_id'] if selected else run.get('convergence',{}).get('reference_case_id') or next((c['case_id'] for c in run.get('output',{}).get('cases',[]) if c['status']=='succeeded'),None)
     cases=run['snapshot'].get('cases',[])
     saved=next((c.get('input',{}) for c in cases if c['case_id']==case_id),cases[0].get('input',{}) if cases else {})
     if saved:return saved
@@ -94,8 +98,13 @@ def _input(run, case_id=None):
 
 
 def _basis(run):
-    driver=run['snapshot']['definition'].get('driver',{})
-    return driver.get('rating_basis','individual')
+    from .report_selection import context, basis_text
+    selected=context(run)
+    if selected:return basis_text(selected['basis'],_names(selected['document']))
+    quantities=[q for c in run['output'].get('cases',[]) for q in c.get('results',[]) if q.get('key')=='ampacity' and q.get('status')=='available' and q.get('rating_basis')]
+    if quantities:
+        return '；'.join(dict.fromkeys(basis_text(q['rating_basis'],_names(_input(run))) for q in quantities))
+    return '该保存运行未输出可核验的载流量口径，不补写当前方法默认值。'
 
 
 def _condition_rows(document):
@@ -129,9 +138,10 @@ def _condition_rows(document):
 
 def _selection(run):
     from collections import Counter
-    from .report import recommended_case
-    candidates=run['snapshot'].get('candidate_snapshots',[]);rows=[];recommended=recommended_case(run)
-    selected=None
+    from .report_selection import context
+    source=context(run)
+    candidates=run['snapshot'].get('candidate_snapshots',[]);rows=[];recommended=source['case_id'] if source else None
+    selected=(source['assessment'],source['candidate']) if source else None
     for assessment in run['output'].get('assessment',[]):
         index=int(assessment['case_id'].rsplit('-',1)[-1]);candidate=candidates[index];payload=candidate['payload']
         cable=payload.get('cable_type') or {};cores=cable.get('cores',[])
@@ -143,13 +153,11 @@ def _selection(run):
         detail=assessment.get('reason') or {}
         if detail.get('actual_k') is not None and detail.get('limit_k') is not None:
             reason='目标负荷下导体 '+number(detail['actual_k']-273.15)+' °C，超过 '+number(detail['limit_k']-273.15)+' °C。'
-        rows.append([name,number(area,0),number(assessment['value'],0) if assessment.get('value') is not None else '—',
-            number(assessment['margin'],0) if assessment.get('margin') is not None else '—',status_name,reason])
-        if assessment['case_id']==recommended:selected=(assessment,candidate)
+        rows.append([name,number(area,0),number(assessment['value'],1) if assessment.get('value') is not None else '—',
+            number(assessment['margin'],1) if assessment.get('margin') is not None else '—',status_name,reason])
     driver=run['snapshot']['definition']['driver'];target=driver.get('minimum')
     if selected:
-        a,c=selected;conclusion='推荐 '+c['payload']['name']+'；目标 '+number(target,0)+' A，允许电流 '+number(a.get('value'),0)+' A，余量 '+number(a.get('margin'),0)+' A。'
-        conclusion+='推荐按满足条件的最小标称截面排序，不包含价格比较。'
+        conclusion=source['answer']
     elif driver.get('allow_demo_candidates'):
         conclusion='候选尚需完成型号核对，本次不作工程型号推荐。'
     else:conclusion='本次未取得可推荐候选；不满足、不适用及计算失败的原因见比较表。'
@@ -172,21 +180,12 @@ def _metric(row):
     return number(value,0 if unit=='A' else 1 if unit=='K' else 2 if unit=='W/m' else 3), {'1':'—','K*m/W':'K·m/W'}.get(unit,unit)
 
 
-def paper_text(runs, value):
+def paper_text(runs, value, *, aliases=None):
     """Human labels on paper; exact machine identities remain in the audit attachment."""
     value=clean(value).replace('~1','/').replace('~0','~')
-    aliases={}
-    for index,run in enumerate(runs,1):
-        aliases[run['id']]=f'运行 {run.get("sequence") or index}'
-        aliases.update(_names(_input(run)))
-        domain=run['snapshot'].get('workspace_state',{}).get('domain',{})
-        for collection in ('materials','cable_types','sections','load_cases'):
-            for i,item in enumerate(domain.get(collection,[]),1):
-                if item.get('id'):aliases[item['id']]=human_name(item.get('label'),{'materials':'材料','cable_types':'电缆型号','sections':'截面','load_cases':'负荷工况'}[collection]+f' {i}')
-        for case in run['snapshot'].get('cases',[]):
-            aliases[case['case_id']]=human_name(case.get('label'),'保存工况')
-    for key,label in sorted(aliases.items(),key=lambda item:len(item[0]),reverse=True):
-        value=re.sub(r'(?<![\w.-])(?:cable/|circuit/)?'+re.escape(key)+r'(?![\w.-])',lambda _:label,value)
+    if aliases is None:aliases=paper_aliases(runs)
+    for key,label in aliases:
+        value=key.sub(lambda _:label,value)
     for key,label in PLUGIN_NAMES.items():value=value.replace(key,label)
     value=re.sub(r'\b[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\b','保存记录',value)
     value=re.sub(r'(?:public-sample)?\+engineering','（工程版）',value).replace('public-sample','公开资料版')
@@ -198,6 +197,21 @@ def paper_text(runs, value):
         fields={'condition':'工况','parameters':'方法参数','materials':'材料','thermal_resistivity':'热阻率','cable_types':'型号','cores':'绝缘线芯','conductor':'导体','diameter':'外径','nominal_area':'标称截面','layers':'层结构','common_layers':'公共层','thickness':'厚度','insulation':'绝缘','screen':'金属屏蔽','sheath':'护套','bedding':'内衬','armour':'铠装','sections':'敷设截面','placements':'电缆位置','circuits':'回路','load_cases':'负荷工况','currents':'电流','medium':'环境介质','surface_temperature':'地表温度','max_temperature':'温限','conductor_screen':'导体屏蔽','insulation_screen':'绝缘屏蔽','oversheath':'外护套','material':'材料引用','form':'构造形式','lay_direction':'绞合方向','lay_length':'节距','overlap':'搭盖率','role':'层功能','tape_width':'带宽','wire_count':'根数','wire_diameter':'单丝直径','title':'研究名称','driver':'任务','crosschecks':'对照方法','normal':'正常运行','rating':'额定参数','resistance_20':'20 °C 电阻','r20':'20 °C 电阻','core':'线芯','x':'横向位置','z':'竖向位置','category':'材料类别','electrical_resistivity_20':'20 °C 电阻率','temperature_coefficient_20':'电阻温度系数','relative_permittivity':'相对介电常数','loss_tangent':'介质损耗角正切','max_conductor_temperature':'导体温限','criteria':'校核要求','bonding':'接地方式','kind':'类型','u0':'额定相电压','u':'额定线电压','um':'最高系统电压'}
         value=' · '.join(fields.get(part,PARAMETERS.get(part,part)) for part in value.split('/') if part and not part.isdigit())
     return value
+
+
+def paper_aliases(runs):
+    aliases={}
+    for index,run in enumerate(runs,1):
+        aliases[run['id']]=f'运行 {run.get("sequence") or index}'
+        aliases.update(_names(_input(run)))
+        domain=run['snapshot'].get('workspace_state',{}).get('domain',{})
+        for collection in ('materials','cable_types','sections','load_cases'):
+            for i,item in enumerate(domain.get(collection,[]),1):
+                if item.get('id'):aliases[item['id']]=human_name(item.get('label'),{'materials':'材料','cable_types':'电缆型号','sections':'截面','load_cases':'负荷工况'}[collection]+f' {i}')
+        for case in run['snapshot'].get('cases',[]):
+            aliases[case['case_id']]=human_name(case.get('label'),'保存工况')
+    return [(re.compile(r'(?<![\w.-])(?:cable/|circuit/)?'+re.escape(key)+r'(?![\w.-])'),label)
+            for key,label in sorted(aliases.items(),key=lambda item:len(item[0]),reverse=True)]
 
 
 def input_sources(document, definition, candidate=None):
@@ -242,10 +256,16 @@ def summary(run):
         return answer,[number(metrics['allowable_current_a'],1)+' A',number(hottest-273.15 if hottest is not None else None)+' °C',number(margin)+' K']
     definition=run['snapshot']['definition'];driver=definition.get('driver',{})
     selection=driver.get('kind')=='selection'
+    if selection:
+        from .report_selection import context
+        source=context(run)
+        if source:return source['answer'],[number(source['quantity']['value'],1)+' A',number(source['temperature_c'])+' °C',number(source['margin_k'])+' K']
+        return _selection(run)[2],['未输出 A','未输出 °C','未输出 K']
     preferred,selected,answer,_=_selection(run) if selection else (recommended_case(run) if driver else None,None,None,None)
     if answer is None:
         answer=next((b['text'] for b in _Blocks(task_answer(run)).blocks if b['kind']=='p'),'未取得可用结论。') if driver else '保存温度场结果；详细校核见结果表。'
-    cases=[c for c in run['output'].get('cases',[]) if c['status']=='succeeded' and (not preferred or c['case_id']==preferred)]
+    cases=[c for c in run['output'].get('cases',[]) if c['status']=='succeeded' and (not preferred or c['case_id']==preferred)][:1]
+    if driver.get('kind') in ('sweep','batch') and cases:answer='首个成功保存工况的摘要；全部扫描点见结果表。'+answer
     correction=next((c.get('artifacts',{}).get('x-cablesim.gb50217-correction') for c in cases if c.get('artifacts',{}).get('x-cablesim.gb50217-correction')),None)
     if correction:
         return answer,[number(correction['corrected_current_a'])+' A',number(correction['baseline']['baseline_current_a'])+' A',number(correction['total_factor'],4)]
@@ -270,6 +290,12 @@ def grouped_results(cases, names, document):
         if case['status']!='succeeded':
             html+=paragraph((case.get('error') or {}).get('message','工况未取得结果。'));continue
         results=[r for r in case.get('results',[]) if r.get('status')=='available' and (duct or not r['key'].endswith(('duct_air','duct_wall')))]
+        capacities=[r for r in results if r['key']=='ampacity' and r.get('rating_basis')]
+        if capacities:
+            from .report_selection import basis_text
+            html+='<h3>允许电流与口径</h3>'+table(['回路','允许电流 / A','保存口径'],[
+                [names.get(r.get('entity'),'整体工况'),number(r['value'],1),basis_text(r['rating_basis'],names)] for r in capacities],[1.2,1.2,2.6])
+            results=[r for r in results if r not in capacities]
         for title,keys in groups:
             keys=[k for k in keys if any(r['key']==k for r in results)]
             if not keys:continue
@@ -303,7 +329,7 @@ def chapters(runs, audience):
         body='<h2>1. 计算结论</h2>'+paragraph(answer)
         common_fem=any(r.get('key')=='ampacity' and r.get('case')=='rating-simultaneous' for r in run.get('fem_evidence',{}).get('rows',[]))
         correction_method=definition['method']['plugin_id']=='cablesim.gb50217-correction'
-        body+=paragraph('载流量口径：'+('有出处的单根基准按保存工况校正；不输出负荷温度，不等同于 IEC 热路求解。' if correction_method else '全回路同时等负荷。' if common_fem or _basis(run)=='simultaneous' else '逐回路条件允许电流，其他回路保持保存负荷；各回路上限不能同时使用。'))
+        body+=paragraph('载流量口径：'+('有出处的单根基准按保存工况校正；不输出负荷温度，不等同于 IEC 热路求解。' if correction_method else '全回路共同能力，所有回路同时等负荷。' if common_fem else _basis(run)))
         if run.get('freshness')!='current':body+=paragraph('该运行与当前输入或已安装方法版本不同。本文仅复现保存工况，不能作为当前版本的重新校核。')
         body+='<h2>2. 工况与输入</h2>'+table(['输入项目','保存值'],_condition_rows(document),[1.25,3.75])
         engineering_html=''
@@ -332,7 +358,8 @@ def chapters(runs, audience):
             body+=paragraph(row['clause'])+paragraph(row['scope'])
             body+=table(['热源','轴线深度 / m','净距 / m','交叉角 / rad','发热 / W/m','出处'],[[s['label'],number(s['depth_m'],3),number(s['net_clearance_m'],3),number(s['angle_rad'],3),number(s['heat_w_m'],2),s['source']] for s in row['sources']],[1,1,1,1,1,2])
         if selection and selected and trace:
-            body+='<h3>推荐型号：保存负荷下的温度与损耗</h3>'
+            from .report_selection import context
+            body+='<h3>'+('推荐型号' if context(run)['recommended'] else '最接近候选（不满足）')+'：保存负荷下的温度与损耗</h3>'
             states=trace.get('operating',{}).get('cable_states',[])
             body+=table(['回路','负荷 / A','导体 / °C','温限余量 / K','总损耗 / W/m'],[[names.get(s['entity'],'电缆'),number(s['current_a'],0),number(s['conductor_temperature_c']),number(s['margin_k']),number(s['total_loss_w_m'],2)] for s in states],[1.8,1,1,1.2,1.2])
         sections.append(body)
@@ -373,6 +400,10 @@ def validate_sources(runs):
     for run in runs:
         if run.get('integrity')!='verified' or fingerprint(run['snapshot'])!=run['input_digest'] or fingerprint(run['output'])!=run['output_digest']:
             raise ValueError('计算书源运行完整性校验失败。')
+        from .report_selection import context
+        context(run)
+        for assessment in run['output'].get('assessment',[]):
+            if assessment.get('value') is not None:context(run,assessment['case_id'])
 
 
 def render_pdf(runs, audience='customer', *, generated_at=None, attachments=None):
@@ -382,9 +413,13 @@ def render_pdf(runs, audience='customer', *, generated_at=None, attachments=None
 
 def render_editions(runs, *, generated_at=None, attachments=None):
     """Validate once, format both editions from the same private source objects."""
-    validate_sources(runs)
-    return {audience:_render_pdf(runs,audience,generated_at=generated_at,attachments=attachments)
-            for audience in ('customer','internal')}
+    from .report_reads import checkpoint
+    checkpoint('consistency');validate_sources(runs)
+    editions={}
+    for audience in ('customer','internal'):
+        checkpoint('pdf_'+audience)
+        editions[audience]=_render_pdf(runs,audience,generated_at=generated_at,attachments=attachments)
+    return editions
 
 
 def _render_pdf(runs, audience, *, generated_at=None, attachments=None):
@@ -415,8 +450,12 @@ def _render_pdf(runs, audience, *, generated_at=None, attachments=None):
         'h2':ParagraphStyle('Chapter',parent=normal,fontSize=15,leading=21,spaceBefore=12,spaceAfter=9,keepWithNext=True),
         'h3':ParagraphStyle('Section',parent=normal,fontSize=12,leading=18,spaceBefore=10,spaceAfter=7,keepWithNext=True),
         'cell':ParagraphStyle('Cell',parent=normal,leading=15,spaceAfter=0)}
+    from .report_reads import checkpoint
+    checkpoint('layout_'+audience)
+    aliases=paper_aliases(runs);texts={}
     def p(value,style):
-        value=paper_text(runs,value)
+        if value not in texts:texts[value]=paper_text(runs,value,aliases=aliases)
+        value=texts[value]
         if audience=='customer':value=re.sub(r'[a-f0-9]{64}',lambda m:m[0][:12],value)
         value=escape(value).replace('\n','<br/>')
         value=re.sub(r'[a-f0-9]{64}',lambda m:'<font name="Courier" size="9">'+' '.join(m[0][i:i+16] for i in range(0,64,16))+'</font>',value)
@@ -473,7 +512,7 @@ def _render_pdf(runs, audience, *, generated_at=None, attachments=None):
     cover+=paragraph('适用标准：'+'；'.join(standards or ['保存运行未登记引用标准']))
     fem_basis=first.get('fem_evidence',{}).get('rows',[])
     common_fem=any(r.get('key')=='ampacity' and r.get('case')=='rating-simultaneous' for r in fem_basis)
-    cover+=paragraph('载流量口径：'+('单根基准按实际敷设校正；不输出负荷温度。' if correction_method else '全回路共同能力，所有回路同时等负荷提升。' if common_fem or _basis(first)=='simultaneous' else '条件上限，其他回路维持保存负荷；单回路工况即单回路能力。'))
+    cover+=paragraph('载流量口径：'+('单根基准按实际敷设校正；不输出负荷温度。' if correction_method else '全回路共同能力，所有回路同时等负荷提升。' if common_fem else _basis(first)))
     story=flow(cover)
     if attachments:
         from base64 import b64decode
@@ -495,8 +534,10 @@ def _render_pdf(runs, audience, *, generated_at=None, attachments=None):
             while arranged and isinstance(arranged[-1],Paragraph) and arranged[-1].getKeepWithNext():headings.insert(0,arranged.pop())
             arranged.append(KeepTogether([*headings,item]))
         else:arranged.append(item)
+    checkpoint('pdf_'+audience)
     doc.build(arranged,canvasmaker=NumberedCanvas)
     if audience=='internal':
+        checkpoint('archive')
         import json
         from .report_reads import archive_runs
         with fitz.open(stream=output.getvalue(),filetype='pdf') as audit:

@@ -104,7 +104,7 @@ def unbound_checks(research,linked):
         if not execution.get('job_id'):continue
         execution={**execution,'plan_id':plan['id'],'cancel_requested':(path.parent/'cancel-request.json').is_file()}
         result.append({'id':'unbound:'+plan['id'],'kind':'preflight','workspace':None,'study':None,
-            'study_name':'历史预检（研究归属未记录）','sequence':None,
+            'study_name':'超算预检（研究归属未记录）','sequence':None,
             'created':datetime.fromtimestamp(path.stat().st_mtime,timezone.utc).isoformat(),
             'created_basis':'local_plan_record_time','started':execution.get('started'),'finished':execution.get('finished'),
             'execution':execution,'core_hours':execution.get('actual_cpu_seconds',0)/3600,

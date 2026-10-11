@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standard-check",
-  "version": "1.2.0",
+  "version": "1.3.1",
   "name": "产品标准尺寸核对",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -64,7 +64,7 @@
       "kind": "method",
       "id": "dimensions",
       "title": "GB 产品标准结构尺寸与电阻核对",
-      "method_version": "1.1.0",
+      "method_version": "1.2.1",
       "analysis": "standard_check",
       "solver": "local",
       "input_schema": "cablesim.domain/1",
@@ -227,10 +227,10 @@
       "kind": "method",
       "id": "structure-proposal",
       "title": "XLPE 标准结构提案",
-      "method_version": "1.1.0",
+      "method_version": "1.2.0",
       "analysis": "geometry_proposal",
       "solver": "local",
-      "input_schema": "cablesim.cable-design-request/1",
+      "input_schema": "cablesim.cable-design-request/2",
       "outputs": [
         {
           "key": "x-cablesim.proposed-insulation",
@@ -306,7 +306,10 @@
                 "reference": "本能力仅提供所声明的圆形 XLPE 结构提案；范围是方法边界，标准限值来自封签厚度表。"
               },
               "type": "string",
-              "const": "cablesim.cable-design-request/1"
+              "enum": [
+                "cablesim.cable-design-request/1",
+                "cablesim.cable-design-request/2"
+              ]
             },
             "construction": {
               "title": "结构类型",
@@ -325,7 +328,9 @@
               "type": "string",
               "enum": [
                 "single_core",
-                "three_core"
+                "three_core",
+                "four_core",
+                "three_plus_one"
               ]
             },
             "area_m2": {
@@ -480,6 +485,86 @@
               "x-group": "model",
               "x-order": 8,
               "x-level": "basic"
+            },
+            "neutral_area_m2": {
+              "title": "中性线标称截面",
+              "description": "中性线标称截面；须明确给定，不自动填制造默认值。",
+              "x-unit": {
+                "si": "m2",
+                "display": "mm²",
+                "scale": 1000000.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 30,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "工程师给定或固定依据中的正值尺寸；3+1 中性线截面须小于相线。"
+              },
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.0025
+            },
+            "neutral_diameter_m": {
+              "title": "中性线实际外径",
+              "description": "中性线实际外径；须明确给定，不自动填制造默认值。",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 31,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "工程师给定或固定依据中的正值尺寸；3+1 中性线截面须小于相线。"
+              },
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.2
+            },
+            "filler_thickness_m": {
+              "title": "填充外包径向厚度",
+              "description": "填充外包径向厚度；须明确给定，不自动填制造默认值。",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 32,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "工程师给定或固定依据中的正值尺寸；3+1 中性线截面须小于相线。"
+              },
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.05
+            },
+            "binder_thickness_m": {
+              "title": "包带连续等效厚度",
+              "description": "包带连续等效厚度；须明确给定，不自动填制造默认值。",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 33,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "工程师给定或固定依据中的正值尺寸；3+1 中性线截面须小于相线。"
+              },
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.05
             }
           },
           "$defs": {},
@@ -549,8 +634,8 @@
     },
     {
       "path": "src/cablesim_standard_check/basis.py",
-      "sha256": "4e12b55bfdf9e248a5e9d59337f326143a1fbc5b0c6b457dbfa586bf2e0f96ac",
-      "size_bytes": 8343
+      "sha256": "455c2a3890b88b4395b814beca1933e44513bc6d10eb715b7d49c3003cb7e7b0",
+      "size_bytes": 9940
     },
     {
       "path": "src/cablesim_standard_check/basis_catalog.py",
@@ -564,13 +649,13 @@
     },
     {
       "path": "src/cablesim_standard_check/main.py",
-      "sha256": "bfe2e3df238b0e163043df851e6b748a28eb1fe908cadb5f376b3725a03e78fe",
-      "size_bytes": 56296
+      "sha256": "2446162c4493ed806a63ea49ff94c74581c5d259e7cc99795b7cc9ace1d40fda",
+      "size_bytes": 57755
     },
     {
       "path": "src/cablesim_standard_check/proposal.py",
-      "sha256": "70aa3e9584ed8fdccfbd16fb41901e85ed4b0628d159c5d1a90016200f224b45",
-      "size_bytes": 6770
+      "sha256": "604e9522e3c22910c74861a61be10e712249dd0f62ca40f74503b35b27fb7fbd",
+      "size_bytes": 9236
     },
     {
       "path": "src/cablesim_standard_check/sources.json",
@@ -579,8 +664,8 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "94b7125ec38aca1c70ebd4b3771ab07dcea01c81dede192cbbdd9b5201640f57",
-      "size_bytes": 791
+      "sha256": "dd4c78ca230afd589202841c0c6d8abf0c8d8b87f94c9ddcb606995e555c401a",
+      "size_bytes": 1721
     }
   ]
 }

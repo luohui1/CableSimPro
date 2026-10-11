@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.cable-geometry",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "name": "电缆实体建模",
   "icon": "assets/icon.svg",
   "description": "单芯及多芯电缆实体、显式扇形轮廓、间隙填充、内衬、双带与丝铠装；结构推导外径和理论用料；同源 OCCT 实体与 STEP。",
@@ -418,10 +418,10 @@
       "kind": "method",
       "id": "core-layout-proposal",
       "title": "圆形线芯布局提案",
-      "method_version": "1.0.0",
+      "method_version": "1.1.0",
       "analysis": "geometry_proposal",
       "solver": "local",
-      "input_schema": "cablesim.core-layout-request/1",
+      "input_schema": "cablesim.core-layout-request/2",
       "outputs": [
         {
           "key": "x-cablesim.proposed-conductor-diameter",
@@ -479,7 +479,10 @@
                 "reference": "本能力仅提供所声明的圆形 XLPE 结构提案；范围是方法边界，标准限值来自封签厚度表。"
               },
               "type": "string",
-              "const": "cablesim.core-layout-request/1"
+              "enum": [
+                "cablesim.core-layout-request/1",
+                "cablesim.core-layout-request/2"
+              ]
             },
             "construction": {
               "title": "结构类型",
@@ -498,7 +501,9 @@
               "type": "string",
               "enum": [
                 "single_core",
-                "three_core"
+                "three_core",
+                "four_core",
+                "three_plus_one"
               ]
             },
             "area_m2": {
@@ -600,6 +605,106 @@
               "type": "number",
               "exclusiveMinimum": 0,
               "maximum": 0.1
+            },
+            "neutral_area_m2": {
+              "title": "中性线标称截面",
+              "description": "中性线标称截面；须明确给定，不自动填制造默认值。",
+              "x-unit": {
+                "si": "m2",
+                "display": "mm²",
+                "scale": 1000000.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 33,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "工程师给定或固定依据中的正值尺寸；3+1 中性线截面须小于相线。"
+              },
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.0025
+            },
+            "neutral_diameter_m": {
+              "title": "中性线实际外径",
+              "description": "中性线实际外径；须明确给定，不自动填制造默认值。",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 34,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "工程师给定或固定依据中的正值尺寸；3+1 中性线截面须小于相线。"
+              },
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.2
+            },
+            "filler_thickness_m": {
+              "title": "填充外包径向厚度",
+              "description": "填充外包径向厚度；须明确给定，不自动填制造默认值。",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 35,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "工程师给定或固定依据中的正值尺寸；3+1 中性线截面须小于相线。"
+              },
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.05
+            },
+            "binder_thickness_m": {
+              "title": "包带连续等效厚度",
+              "description": "包带连续等效厚度；须明确给定，不自动填制造默认值。",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 36,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "工程师给定或固定依据中的正值尺寸；3+1 中性线截面须小于相线。"
+              },
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.05
+            },
+            "neutral_thickness_m": {
+              "title": "中性线绝缘厚度",
+              "description": "中性线绝缘厚度；须明确给定，不自动填制造默认值。",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-group": "model",
+              "x-order": 37,
+              "x-level": "advanced",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "工程师给定或固定依据中的正值尺寸；3+1 中性线截面须小于相线。"
+              },
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 0.05
             }
           },
           "$defs": {},
@@ -663,8 +768,8 @@
     },
     {
       "path": "src/cablesim_cable_geometry/proposal.py",
-      "sha256": "aef2b29ffa319d7f97a308bd48c089d8d75955db577f5b4580d5a31f7e1fa70d",
-      "size_bytes": 2223
+      "sha256": "2ae9340fb8c6d5f6266acae5b2b782850b57191974925ea95047644baf6ae301",
+      "size_bytes": 5388
     },
     {
       "path": "src/host-dependencies.json",

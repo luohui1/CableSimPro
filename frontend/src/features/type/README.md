@@ -26,6 +26,14 @@
 
 ## 验收
 
+`node src/features/type/tests/verify-high-voltage-use.mjs` 从发布库只读备份复制起帆 110 kV 固定版本，经真实浏览器确认执行标准、核对依据、保存电气及短路运行、查看载流量工况并导出内部审核规格书；软件 WebGL、两种视口与主题串行验证。截图、逐步耗时及保存工件在 `.data/type-real-use-hv/`。波纹金属套缺实际载流截面时保持缺项，不使用显示用等效圆柱的面积。缺导体类别可在要求行就地填写，保存新修订后自动经 Executor 查询固定标准依据；旧判定和审批保持原样。
+
+`node src/features/type/tests/verify-real-use.mjs` 从发布数据库的只读备份建立隔离库，在一个浏览器页面中真实操作四芯标准提案、人工确认、保存运行、方法条件和内部审核规格书。包含 4×95 与 3×95+1×50 的真实实体几何 / 手算体积核对，以及两种视口与主题下的研究试算工具栏收纳。输出 `.data/type-real-use/`；不修改演示服务数据库，不模拟计算结果。只修改工具栏布局后的复测可加 `--toolbar-only`，仍操作同一个真实研究入口，另存 `toolbar-record.json`，不覆盖四芯运行记录。
+
+四芯设计使用 `cablesim_sdk/type_design.py` 的 `cablesim.cable-design-request/2` 和 `cablesim.type-draft/2`，旧第一版仍可读取。`four_core` 为四芯等截面；`three_plus_one` 必须给定较小的 `neutral_area_m2`，第四芯为中性线；非实心圆须另外给出 `neutral_diameter_m`。所有多芯须明确 `gap_m`，相切时填 0。可选 `filler_thickness_m`、`binder_thickness_m` 是工程师输入的等效径向厚度，不是标准或制造默认值。几何提案使用 `cablesim.core-layout-request/2`，中性线绝缘厚度由单独的固定标准查询给出。
+
+实体仍保存为 `cablesim.domain/1` 的 `multi_core` 和四个独立的截面、外径及坐标；原始第二版设计请求固定在提案及创建来源中。四芯采用明确的正方形芯中心排列，3+1 多出的中性线间隙计入填充空间，不声称是紧压最优布局。标准核对逐芯取依据，护层附录分支缺项保留；电气及短路仅在各自适用范围内逐芯输出，四芯载流量尚未覆盖，不能套用三芯结果。默认 50 Hz 可在首次方法页直接确认保存，仍属于未经批准的工程条件。
+
 `node src/features/type/tests/verify-audit.mjs` 使用隔离库副本、一个浏览器页面，核对两视口深浅主题下的命令栏、默认结构取景、载流结果列、分芯合并、审核原因分组、方法字段深链及真实库复制。加 `--states` 串行检查读取空 / 加载 / 失败，以及真实插件保存运行与修改输入后的当前 / 历史状态；故障注入不伪造工程结果。输出 `.data/type-audit/`，构建目录为该目录下的 `frontend`。
 
 运行摘要由插件保存工件和工况的 `evidence.headline` 提供，不由页面重新算数。结构、标准核对、电气和短路均有中文结论；有缺项的标准核对不能显示“全部满足”。电气与短路另输出可校验的 `x-cablesim.headline-witness`，关联物理量和同一结果工件。三芯结果仅在未舍入值、条件、依据及缺项完全一致时合并，分芯工件始终保留。
@@ -82,6 +90,8 @@ node src/features/type/tests/verify-fix-round.mjs --drawing
 `verify-fix-round.mjs` 使用 `.data/fix-round/3d/frontend` 的独立正式构建，`E2E_DATABASE_SOURCE` 指定只读备份源；可指向本轮生成的隔离发布库。主流程覆盖两型号、研究截面 / 三维及创建 / 工况弹窗的两尺寸两主题，实际软件 WebGL 图像检查亮度和材料色，并验证真实参数试算不写输入。`--interactions` 单独复测试算、画布编辑与弹窗；`--states` 在隔离服务上注入加载、空、错误，成功与历史使用真实输入；`--drawing` 专门检查短画布最小电缆直径及保存温度切片，保存运行无场工件时断言明确缺项而不编造场。各流程串行运行，收据和截图放 `.data/fix-round/3d/`。
 
 波纹护套只能在已知名义厚度的圆形单芯结构上显示等效圆柱；标明等效显示，不输出实体体积、质量或精确拓扑，原插件对波纹缺项的拒绝保持有效。电气频率 50 Hz 是表单的明示工程试算初值，保存时记录未批准来源；历史条件不补初值。方法试算复用现有 preview 接口，不保存、不批准；修改条件或切换页面取消过时请求。
+
+要求依据查询将缺失的行条件返回为 `missing_fields`；要求目录行保留 `basis_missing_fields` 与 `basis_reason`，不改变批准定义摘要。导体类别和材料标准类别可在要求行就地填写；保存产生新修订，随后经 Executor 重新查询固定版本依据，旧判定保持历史。执行版本声明需要工程师确认，不代替要求批准。尚未声明的版本在 `undeclared_standards` 中返回，不能当成依据库未收录。载流量工况的 `frequency_hz` 为明确交流频率，模板初值 50 Hz；不能沿用结构查看回路的直流占位频率 0 Hz。缺方法参数时预检给出中文字段名和填写入口，原始契约路径留在追溯层。
 
 ## 对象名片与状态
 
@@ -142,7 +152,7 @@ IEC 60287-1-1:2023 现行正文表1（印刷35 / CMV PDF83）、表3（印刷37 
 - `library`：`resource_id`（发布资产 UUID）与 `content_sha256`；复制发布记录的固定领域文档和资源版本，不复制保存运行、审批、发布状态，不加入原型号族。
 - `standard`：`proposal_id/content_sha256/human_confirmed:true`，请求头 `X-CableSim-Actor:human`；必须先调用 `POST /api/types/creation-proposals`，正文 `{request_id,input}`。输入 schema 为 `cablesim.cable-design-request/1`，包含 SI `area_m2`、电压表组合 `voltage`（如 `600/1000`）、`construction`、`conductor`、`form`；非实心圆须明确 `diameter_m`，三芯须明确 `gap_m`（相切显式填 0）。执行封签的标准 `structure-proposal` 与几何 `core-layout-proposal`，只作表值与轻量几何提案，不加载 OCCT 或运行原生求解。返回固定提案身份、摘要、逐行参数、标准版本 / 条款 / 页码、方法发行与输入输出摘要、缺项和适用范围。提案不建立设计，也不批准型号。UI 人工确认后建立草稿。
 - `import`：`proposal_id/content_sha256`（资料提案的 `id/sha256`）。只有已批准提案可以转设计；校验原件、提案、批准记录及生成资料版本的摘要，完整结构直接复制，缺项规格只填已声明值，不由成品外径猜层厚或芯位置。其余已批准规格保存在来源的 `declared_specification`，保持原单位与性质。资料页负责人在 `/resources/cables/imports` 的批准结果旁加“新建型号设计”，调用本接口后导航 `/types/{response.id}/structure/section` 即可；资料提取和批准流程保持原接口。
-- `blank`：`construction:single_core|three_core`，只建立芯、待选导体 / 绝缘材料及绝缘层骨架，未知的截面、尺寸、位置、电压保存 null。名片逐项列出缺项并定位输入。
+- `blank`：`construction:single_core|three_core|four_core`，只建立芯、待选导体 / 绝缘材料及绝缘层骨架，未知的截面、尺寸、位置、电压保存 null。名片逐项列出缺项并定位输入。四芯用第二版草稿，不默认假设中性线截面。
 
 前三种来源保存于 `state.type_creation:{id,kind,source,initial_document_sha256,created}`。库与资料同时保存 `type_origin_reference:{id,version,content_sha256,...}`，供现有关联读取；库 `id` 是发布资产 UUID，资料 `id` 是已批准生成的 domain_cable_models UUID。独立新型号族为 `type/{creation.id}`。来源显示为库引用及版本、标准生成及人工确认、资料及页码、空白及用户录入；完整标识只放悬停。统一索引负责人可把来源关系改为 `source`，并读取标准来源的 `type_creation.source.methods[].method` 及其固定发行、资料的 `document_id/proposal_id/references`。本模块只复用 RelationPanel，不私自生成关系。
 

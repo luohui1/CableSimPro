@@ -2,7 +2,8 @@ import { api, ApiError, array, numeric, record, responseData, text } from '@/api
 import type { components } from '@/api/generated/schema';
 import { committedParameter, type ParameterDraft } from '@/lib/study-config';
 
-export type RatingBody = Omit<components['schemas']['RatingTableDefinition'], 'expected_revision'>;
+export type RatingCondition = components['schemas']['RatingRow'] & { frequency_hz?: number };
+export type RatingBody = Omit<components['schemas']['RatingTableDefinition'], 'expected_revision' | 'rows'> & { rows: RatingCondition[] };
 export type RatingDraft = { body: RatingBody; revision: number; study?: components['schemas']['StudyResponse']; fields: Record<string, string>; parameterFields?: Record<string, ParameterDraft> };
 export async function typeStudies(wid: string, signal?: AbortSignal) { return array(await responseData(api.GET('/api/workspaces/{wid}/studies', { params: { path: { wid } }, signal })), '型号方法').map(value => record(value, '型号方法') as unknown as components['schemas']['StudyResponse']); }
 export function isRatingDefinition(value: unknown) { const definition = record(value, '方法配置'); const driver = definition.driver as Record<string, unknown> | undefined; return driver?.kind === 'batch' && Array.isArray(driver.cases) && driver.cases.length > 0 && driver.cases.every(value => (value as Record<string, unknown>)?.metadata && ((value as Record<string, unknown>).metadata as Record<string, unknown>).kind === 'type-rating-table'); }

@@ -2,6 +2,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from threading import RLock
 from uuid import uuid4
+from time import perf_counter
 from fastapi import HTTPException
 from .research import encode
 from .report_reads import progress_scope,byte_digest
@@ -57,18 +58,25 @@ class DeliveryJobs:
             return self.read(wid,jid)
 
     def execute(self,wid,jid,body):
+        started=perf_counter();last=started;previous='queued';timings={}
         def progress(stage):
+            nonlocal last,previous
             with self.lock:
                 job=self.jobs[jid]
                 if job['state']=='cancelled':raise Cancelled()
-                job.update(state='running',stage=stage)
+                now=perf_counter();timings[previous]=timings.get(previous,0)+now-last
+                job.update(state='running',stage=stage,timings_seconds={k:round(v,4) for k,v in timings.items()})
+                previous=stage;last=now
         try:
             progress('source')
             with progress_scope(progress):
                 saved=self.research.deliver(wid,body['run_ids'],request_id=body['request_id'],current_only=True,
                     cad_images=body.get('cad_images'),section_images=body.get('section_images'),fem_chapter=body.get('fem_chapter'))
-            with self.lock:self.jobs[jid].update(state='succeeded',stage='done',delivery_id=saved['id'],finished=stamp())
+            progress('done')
+            with self.lock:self.jobs[jid].update(state='succeeded',stage='done',delivery_id=saved['id'],finished=stamp(),elapsed_seconds=round(perf_counter()-started,4))
         except Cancelled:pass
         except Exception as exc:
-            with self.lock:self.jobs[jid].update(state='failed',finished=stamp(),error={
-                'code':getattr(exc,'code','REPORT_GENERATION_FAILED'),'message':str(getattr(exc,'detail',exc))})
+            detail=getattr(exc,'detail',exc)
+            error=({'code':detail.get('code','REPORT_GENERATION_FAILED'),'message':str(detail.get('message','计算书来源校验失败。'))}
+                   if isinstance(detail,dict) else {'code':getattr(exc,'code','REPORT_GENERATION_FAILED'),'message':str(detail)})
+            with self.lock:self.jobs[jid].update(state='failed',finished=stamp(),error=error)

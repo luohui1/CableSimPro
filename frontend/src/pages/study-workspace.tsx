@@ -237,7 +237,10 @@ export function StudyWorkspace() {
   const studyInput = optionalRecord((draft?.definition || study.definition).method_input);
   const canvasDocument = (viewingOldInput ? (run ? savedDomain(fieldRun || run) : undefined)
     : study.definition.input_source === 'study' ? (studyInput.schema_version === 'cablesim.domain/1' ? studyInput : undefined) : context.domain) as DomainDocument | undefined;
-  const showCanvas = module !== "report" && !!canvasDocument && canvasExpanded;
+  // S4: the complete simulation contract belongs in the work area when
+  // editing its method, rather than inside the narrow properties column.
+  const workspaceMethod = search.inspector === 'method' && ['thermal-field','transient','sheath-losses','electrothermal'].includes(module);
+  const showCanvas = module !== "report" && !workspaceMethod && !!canvasDocument && canvasExpanded;
   // Independent method inputs have their own editor; workspace edits must not
   // accidentally rewrite their geometry through the shared drawing inspector.
   const canvasReadOnly = viewingOldInput || study.definition.input_source === 'study';
@@ -319,6 +322,7 @@ export function StudyWorkspace() {
   if (methodTab && tab === methodTab) return <Redirect to="/studies/$sid/$module/$tab" params={{ sid, module, tab: dockTabs[0].id }} search={{ ...currentSearch(), inspector: 'method' }} replace />;
   const methodHistorical = viewingOldInput;
   const methodPanel = !methodTab ? undefined
+    : workspaceMethod ? <p className="muted">方法参数在工作区填写；修改进入草稿，确认后保存。</p>
     : module === "sweep" ? <StudySweep run={run} tab="settings" readOnly={methodHistorical} onSelect={inputProps.onSelect} />
       : <StudyMethodForm module={module} historical={methodHistorical}
           savedRun={methodHistorical ? run : undefined}
@@ -529,7 +533,12 @@ export function StudyWorkspace() {
               description={message(context.saveError)}
             />
           )}
-          {inputModule && !snapshotInput ? (
+          {workspaceMethod ? <div className="study-method-workspace" aria-label="有限元方法参数">
+            <h3>本次计算参数</h3>
+            <p className="muted">先核对网格、计算域、材料来源和热边界；数值求解选项在“高级参数”。</p>
+            <StudyMethodForm module={module} historical={methodHistorical} savedRun={methodHistorical ? run : undefined}
+              definition={methodHistorical ? ((optionalRecord(run?.snapshot).study_definition || optionalRecord(run?.snapshot).definition) as StudyDefinition) : undefined} />
+          </div> : inputModule && !snapshotInput ? (
             module === "cable" ? (
               <CableInputs {...inputProps} />
             ) : module === "conditions" ? (

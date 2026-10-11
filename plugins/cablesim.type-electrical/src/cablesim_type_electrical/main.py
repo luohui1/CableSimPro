@@ -13,7 +13,7 @@ from cablesim_iec60287.electrical import skin, effect_x, proximity
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cablesim_type_electrical.inputs import ElectricalParameters, ShortCircuitParameters
 
-VERSION = '1.0.1'
+VERSION = '1.1.1'
 METHOD_VERSIONS = {'electrical':VERSION, 'short-circuit':VERSION}
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 CONSTANTS = {'copper_bare': (226, 234.5, 3.45e6), 'copper_coated': (226, 234.5, 3.45e6),
@@ -30,9 +30,9 @@ def prepare(document, parameters):
     if document.get('schema_version') != 'cablesim.domain/1':
         raise ValueError('schema_version：需要 cablesim.domain/1。')
     cable = next((c for c in document.get('cable_types', []) if c['id'] == parameters.get('cable_type_id')), None)
-    if cable is None or cable.get('construction') not in ('single_core', 'three_core'):
-        raise ValueError('parameters.cable_type_id：请选择单芯或三芯型号。')
-    if len(cable['cores']) != (1 if cable['construction'] == 'single_core' else 3):
+    if cable is None or cable.get('construction') not in ('single_core', 'three_core','multi_core'):
+        raise ValueError('parameters.cable_type_id：请选择圆形单芯、三芯或四芯型号。')
+    if len(cable['cores']) != (1 if cable['construction'] == 'single_core' else 3 if cable['construction']=='three_core' else 4):
         raise ValueError('cable_types.cores：芯数与结构不一致。')
     if parameters.get('circuit_id') is not None and not any(c['id'] == parameters['circuit_id'] and c['cable_type'] == cable['id'] for c in document.get('circuits', [])):
         raise ValueError('parameters.circuit_id：请选择引用当前型号的回路。')
@@ -131,7 +131,7 @@ def calculate(document, parameters, capability, *, _include_curve=True):
                'reason': reason, 'basis': basis, 'input_source': input_source,
                'target': {'scope': 'core' if core else 'common', 'core_id': core, 'role': role}}
         needed = list(dependencies.get(key, []))
-        if capability == 'electrical' and len(cable['cores']) == 3 and key in ('dc', 'ys', 'yp', 'ac', 'capacitance', 'charging', 'dielectric'):
+        if capability == 'electrical' and len(cable['cores']) > 1 and key in ('dc', 'ys', 'yp', 'ac', 'capacitance', 'charging', 'dielectric'):
             needed.append('core_lay_factor')
         if role in ('metallic_screen', 'metallic_sheath') and capability == 'short-circuit':
             needed = ['duration_s', 'metal_initial_temperature_k', 'metal_final_temperature_k']
@@ -258,7 +258,14 @@ def calculate(document, parameters, capability, *, _include_curve=True):
                 area = layer['tape_count']*layer['tape_width']*layer['nominal_tape_thickness']*1e6
             mi, mf = parameter('metal_initial_temperature_k'), parameter('metal_final_temperature_k')
             iad = adiabatic(area, const[0], const[1], mi-273.15, mf-273.15, duration) if const and all(v is not None for v in (area, mi, mf, duration)) else None
-            add(role+'-adiabatic', ('芯 '+str(next(i+1 for i,c in enumerate(cable['cores']) if c['id']==cid))+' · ' if cid else '')+'金属组件绝热允许电流', iad, 'A', '第 3 章；表 I；5.3 / 6.2 / 6.3', 9, source='iec60949', core=cid, role=role, formula='I_AD=K S √{ln[(θ_f+β)/(θ_i+β)]/t}', inputs={'S_mm2': area, **area_geometry, 'K': const[0] if const else None, 'beta_K': const[1] if const else None, 'theta_i_K': mi, 'theta_f_K': mf, 't_s': duration}, status='uncovered' if not const else None, input_source=obs['source'] if obs else {'kind':'derived','reference':'同心光滑护套保存尺寸的环形设计截面；非实测截面。','reviewed':False} if area_geometry else None, reason='金属组件容量单独列出；多个并联组件不能直接相加。')
+            metal_reason=('缺字段：波纹铝护套实际载流金属截面及制造或试验报告；等效圆柱仅用于显示，不能作为短路计算截面。' if area is None and form=='corrugated' else '缺字段：金属屏蔽或护套实际截面及来源。' if area is None else '缺字段：金属材料标准类别；请在材料属性中明确铜、铝或铅。' if not const else '金属组件容量单独列出；多个并联组件不能直接相加。')
+            if kind is not None and not const:
+                metal_reason='此金属材料的 IEC 60949 常数分支未覆盖；请核对材料与方法范围。'
+            metal=add(role+'-adiabatic', ('芯 '+str(next(i+1 for i,c in enumerate(cable['cores']) if c['id']==cid))+' · ' if cid else '')+'金属组件绝热允许电流', iad, 'A', '第 3 章；表 I；5.3 / 6.2 / 6.3', 9, source='iec60949', core=cid, role=role, formula='I_AD=K S √{ln[(θ_f+β)/(θ_i+β)]/t}', inputs={'S_mm2': area, **area_geometry, 'K': const[0] if const else None, 'beta_K': const[1] if const else None, 'theta_i_K': mi, 'theta_f_K': mf, 't_s': duration}, status='uncovered' if kind is not None and not const else 'missing' if not const else None, input_source=obs['source'] if obs else {'kind':'derived','reference':'同心光滑护套保存尺寸的环形设计截面；非实测截面。','reviewed':False} if area_geometry else None, reason=metal_reason)
+            if area is None:
+                metal['missing_input_fields']=[{'label':'实际载流金属截面','quantity':'screen_area','unit':'m2','role':role}]
+            if kind is None:
+                metal.setdefault('missing_input_fields',[]).append({'label':'金属材料标准类别','material_id':layer['material'],'field':'standard_kind'})
             eps, m = None, None
             rho_i, rho_o, cv_i, cv_o = (parameter(k) for k in ('inner_thermal_resistivity', 'outer_thermal_resistivity', 'inner_volumetric_heat_capacity', 'outer_volumetric_heat_capacity'))
             contact = parameter('contact_factor')

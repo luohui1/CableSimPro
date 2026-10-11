@@ -10,11 +10,12 @@ import { parseInput, type NumericInput } from '@/lib/domain-fields';
 import { EmptyState } from './states';
 import { expand } from '@/lib/contract-schema';
 import { KeyedMapEditor, NumberListEditor, RowsEditor } from './structured-parameter';
+import { RangeField, isRangeField } from './ui/range-field';
 
 type Props = ComponentProps<typeof ContractFields>;
 type Entry = { name: string; path: string; label: string; ownLabel: string; group: string; groupOrder: number; level: 'basic' | 'advanced' | 'expert'; order: number; field?: CoreField; source: Record<string, unknown>; spec?: NumericInput; integer?: boolean; json?: boolean;
   /** 结构化参数：数值列表、对象数组、按模型对象分项的映射；不进入表单引擎，直接按 SI 写回。 */
-  structure?: 'list' | 'rows' | 'map'; keys?: { value: string; label: string }[] };
+  structure?: 'range' | 'list' | 'rows' | 'map'; keys?: { value: string; label: string }[] };
 /**
  * 插件清单的参数界面元数据：x-group / x-order / x-level 决定分组、顺序与折叠，x-unit 给显示单位与换算，
  * x-bind 声明引用的工程模型对象，x-enum-labels 给选项中文名，x-default-basis 写默认值依据。
@@ -49,7 +50,8 @@ function compile(schema: unknown, root: unknown, prefix: string, module: string,
     const bound = references[bindKey(source['x-bind']) || key];
     const enumLabels = optionalRecord(source['x-enum-labels']), declaredUnit = optionalRecord(source['x-unit']);
     const items = source.type === 'array' ? expand(source.items, root) : {}, mapped = source.type === 'object' && !source.properties ? expand(source.additionalProperties, root) : {};
-    if (source.type === 'array' && (items.type === 'number' || items.type === 'integer')) structure = 'list';
+    if (isRangeField(key, source, root)) structure = 'range';
+    else if (source.type === 'array' && (items.type === 'number' || items.type === 'integer')) structure = 'list';
     else if (source.type === 'array' && items.type === 'object' && items.properties) structure = 'rows';
     else if (source.type === 'object' && !source.properties && Object.keys(mapped).length) { structure = 'map'; keys = bound || []; }
     if (structure) { /* 结构化编辑器在分组里单独渲染 */ }
@@ -125,11 +127,12 @@ export function BuzzformContractFields(props: Props) {
   // 一组参数 = 标题 + 名称/数值两列的属性表；高级与专家参数收进折叠区（普通渲染函数，避免每次重绘重新挂载表单）
   const structured = (entry: Entry) => {
     const props = { field: entry.source, root, value: valueAt(entry), readOnly: readOnly || optionalRecord(entry.source['x-bind']).read_only === true, label: entry.ownLabel };
-    return <div key={entry.name} className="parameter-structured">
+    return <div key={entry.name} className="parameter-structured" data-field-path={entry.path}>
       <span className="parameter-structured-label" title={text(entry.source.description) || undefined}>{entry.ownLabel}</span>
-      {entry.structure === 'list' ? <NumberListEditor {...props} onChange={value => onChange(entry.path, value)} />
-        : entry.structure === 'rows' ? <RowsEditor {...props} onChange={value => onChange(entry.path, value)} />
-          : <KeyedMapEditor {...props} keys={entry.keys || []} onChange={value => onChange(entry.path, value)} />}
+      {entry.structure === 'range' ? <RangeField {...props} module={module} path={entry.path} draftFields={draftFields} onDraftChange={onDraftChange} onChange={value => onChange(entry.path, value)} />
+        : entry.structure === 'list' ? <NumberListEditor {...props} path={entry.path} onChange={value => onChange(entry.path, value)} />
+          : entry.structure === 'rows' ? <RowsEditor {...props} path={entry.path} onChange={value => onChange(entry.path, value)} />
+            : <KeyedMapEditor {...props} path={entry.path} keys={entry.keys || []} onChange={value => onChange(entry.path, value)} />}
     </div>;
   };
   const parameterGroup = ({ group, entries: items }: { group: string; entries: Entry[] }) => {

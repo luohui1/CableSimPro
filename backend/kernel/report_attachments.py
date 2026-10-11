@@ -88,6 +88,10 @@ def prepare(research, wid, ids, images, fem_reference, section_images=None):
     attachments = {'section_images': [], 'field_images': [], 'cad_images': [], 'fem_chapter': None}
     for image in section_images or []:
         saved = research.get_run(wid, primary)
+        from .report_selection import context
+        selection=context(saved)
+        if selection and image['case_id']!=selection['case_id']:
+            raise HTTPException(422, {'code':'REPORT_SOURCE_INCONSISTENT','message':'截面附图必须使用首页推荐型号或最接近候选的同一保存工况。'})
         case = next((c for c in saved['snapshot']['cases'] if c['case_id'] == image['case_id']), None)
         valid = any(c['case_id'] == image['case_id'] and c['status'] == 'succeeded' for c in saved['output']['cases'])
         section = next((s for s in (case or {}).get('input', {}).get('sections', []) if s.get('id') == image['section_id']), None)
@@ -105,7 +109,10 @@ def prepare(research, wid, ids, images, fem_reference, section_images=None):
                 if proof(research,saved,(fem_reference or {}).get('convergence_id'))['status']!='converged':raise HTTPException(422,'温度场未收敛，不能进入正式计算书。')
             if fem_reference:continue  # Its frozen chapter includes this same saved field.
             from .report_reads import saved_field_image
+            from .report_reads import checkpoint
+            checkpoint('field_image')
             raw=saved_field_image(field)
+            checkpoint('evidence')
             analytic=field.get('source',{}).get('binding')=='iec-trace'
             if analytic:
                 # Reuse the saved-triangle renderer, but label the actual IEC

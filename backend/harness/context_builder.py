@@ -73,6 +73,11 @@ def messages(record):
     # Completed results are durable even if delivery of their SSE event was interrupted.
     outcomes={step['node_id']:step.get('result') for step in record['steps'] if step.get('result')}
     arguments={step['node_id']:step['arguments'] for step in record['steps'] if step.get('result')}
+    # Host orchestration did not produce a model tool-call or a chain of thought.
+    # Keep its receipts as observations, rather than inventing assistant history
+    # that thinking providers require us to replay with reasoning_content.
+    host_nodes={node['id'] for plan in record.get('plans',[]) for node in plan['body'].get('nodes',[])
+        if str(node.get('provider_call_id','')).startswith(('host-recipe-','host-type-context-'))}
     # 思考模式（DeepSeek 等）：带工具的请求必须回传全部历史 reasoning_content；
     # 只在服务确实返回过思维链时才带这个字段，宿主自己生成的回答补空串，其他服务看不到它。
     thinking=any(message.get('reasoning_content') for message in record['messages'])
@@ -82,6 +87,11 @@ def messages(record):
             result.append({'role':'user','content':message['content']})
         elif message['role']=='assistant':
             calls=message.get('tool_calls') or []
+            if calls and (message.get('source')=='host' or all(call['id'] in host_nodes for call in calls)):
+                observed=[{'tool':call['name'],'arguments':arguments.get(call['id'],call['arguments']),
+                    'result':compress_result(outcomes[call['id']])} for call in calls if call['id'] in outcomes]
+                if observed:result.append({'role':'user','content':encoded({'host_observations':observed}).decode()})
+                continue
             row={'role':'assistant','content':message.get('content') or None}
             if thinking:row['reasoning_content']=message.get('reasoning_content') or ''
             if calls:

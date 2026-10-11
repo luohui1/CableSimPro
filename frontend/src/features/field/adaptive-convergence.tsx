@@ -29,6 +29,8 @@ export function AdaptiveConvergence({ run }: { run: Record<string, unknown> }) {
   const verifiedDomains = verdict.mesh_passed ? domains.map((row, index) => ({ row, levels: index + 1 })).filter(({ levels }) => levels >= 2 && domains.slice(levels - 2, levels).every(row => numeric(row.change_k) !== null && Number(row.change_k) < savedTolerance)) : [];
   const selectedDomainLevels = verifiedDomains.some(value => value.levels === Number(retainDomains)) ? Number(retainDomains) : verifiedDomains[0]?.levels;
   const execution = optionalRecord(item?.current_execution), pending = optionalRecord(item?.pending);
+  const queued = execution.state === 'queued' || (Array.isArray(execution.slurm_states) && execution.slurm_states.includes('PENDING'));
+  const collectionFailed = item?.status === 'failed' && execution.state === 'collecting' && Array.isArray(execution.slurm_states) && execution.slurm_states.length > 0 && execution.slurm_states.every(state => state === 'COMPLETED');
   const savedProof = optionalRecord(run.convergence), tolerance = Math.min(.1, numeric(savedProof.tolerance_k) ?? .1);
   const sourceTitle = text(optionalRecord(optionalRecord(run.snapshot).definition).title) || '保存研究';
   const parameters = optionalRecord(optionalRecord(item?.definition).parameters ?? optionalRecord(optionalRecord(run.snapshot).definition).parameters);
@@ -68,7 +70,7 @@ export function AdaptiveConvergence({ run }: { run: Record<string, unknown> }) {
   return <section className="input-section" aria-label="自动加密与扩域">
     <div className="hpc-actions"><h3>自动加密与扩域</h3>{!item && <Button disabled={busy || history.isPending || !!history.error} onClick={() => setOpen(true)}>设置收敛预算</Button>}
       {active && <Button variant="ghost" disabled={busy || !!item.cancel_requested} onClick={() => void perform('cancel')}>{item.cancel_requested ? '取消待确认' : '停止后续级别'}</Button>}
-      {item?.status === 'interrupted' && <Button disabled={busy} onClick={() => void perform('resume')}>恢复原作业</Button>}
+      {(item?.status === 'interrupted' || collectionFailed) && <Button disabled={busy} onClick={() => void perform('resume')}>{collectionFailed ? '回收原作业结果' : '恢复原作业'}</Button>}
       {continuation && <Button disabled={busy} onClick={() => setOpen(true)}>用当前版本继续</Button>}
       {history.error && <Button variant="ghost" onClick={() => void history.refetch()}>重试</Button>}
     </div>
@@ -78,13 +80,13 @@ export function AdaptiveConvergence({ run }: { run: Record<string, unknown> }) {
         <div><dt>门槛</dt><dd>网格与扩域各连续两级变化均小于 {numeric(verdict.tolerance_k) ?? .1} K</dd></div>
         <div><dt>边界</dt><dd>{boundary} · 地表等温</dd></div>
         {records(validation.rows).length > 0 && <div><dt>最终计算域</dt><dd>深 {selectedDepth ?? '—'} m · 后续扩域验证保留为历史</dd></div>}
-        {active && <div><dt>当前级别</dt><dd>第 {rows.length+1} 级 · {pending.kind === 'domain' ? '扩域' : pending.kind === 'rating' ? '最终载流量' : '网格'} · 排队位置 {numeric(execution.queue_position) ?? '尚未提供'}</dd></div>}
+        {active && <div><dt>当前级别</dt><dd>第 {rows.length+1} 级 · {pending.kind === 'domain' ? '扩域' : pending.kind === 'rating' ? '最终载流量' : '网格'} · {queued ? `排队位置 ${numeric(execution.queue_position) ?? '调度器未提供'}` : hpcStatus(text(execution.state) || text(item.status))}</dd></div>}
         <div><dt>核时</dt><dd>{(numeric(item.live_core_hours) ?? numeric(item.actual_core_hours))?.toFixed(5)} / {numeric(optionalRecord(item.request).max_core_hours)} 核时</dd></div>
         <div><dt>后续一级预算</dt><dd>预检与求解上限 {numeric(item.per_step_upper_core_hours)?.toFixed(3)} 核时</dd></div>
       </dl>
       {verdict.status !== 'converged' && <p role="status">尚未收敛：{verdict.mesh_passed ? '扩域' : verdict.domain_passed ? '网格' : '网格与扩域'}未达到连续两级门槛{item.reason ? `；${text(item.reason)}` : '。'}</p>}
       {item.status === 'failed' && verdict.status === 'converged' && <p role="status">温度收敛已达标；最终允许电流运行失败：{text(item.reason)}</p>}
-      {records(item.attempts).filter(row => row.status === 'preflight_failed').map((row, index) => <p key={index}>{row.kind === 'mesh' ? '网格加密' : '计算域扩展'}：{records(row.errors).map(error => error.path === '/parameters/mesh/max_nodes' ? text(error.message).split('；')[0] + '；需提高可保存网格容量，保留原场阶次。' : text(error.message)).join('；')}</p>)}
+      {records(item.attempts).filter(row => row.status === 'preflight_failed').map((row, index) => <p key={index}>{row.kind === 'mesh' ? '网格加密' : '计算域扩展'}：{records(row.errors).map(error => error.path === '/parameters/mesh/max_nodes' ? text(error.message).split('；')[0] + '；请增大起始网格尺寸并重新验证，保留原场阶次与收敛门槛。' : text(error.message)).join('；')}</p>)}
     </>}
     {rows.length > 0 && <>
       <ConvergenceChart label="逐级网格热点温差" unit="K" threshold={tolerance} values={rows.filter(row => row.kind === 'mesh').map(row => numeric(row.change_k))} />

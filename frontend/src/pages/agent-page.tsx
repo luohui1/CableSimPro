@@ -91,6 +91,11 @@ export function AgentPage() {
     const module = rootModule(row.definition);
     void navigate({ to: "/studies/$sid/$module/$tab", params: { sid, module, tab: studyEntryTab(module) }, search: { workspace: row.workspace, theme, run, delivery: "" } });
   };
+  const openWorkbench = () => {
+    if (summary?.study_id) { openStudy(summary.study_id); return; }
+    if (workspaceId && typeIds.has(workspaceId)) { void navigate({ to: '/types/$wid/$module/$tab', params: { wid: workspaceId, module: 'structure', tab: 'table' }, search: { theme } }); return; }
+    if (workspaceId) void navigate({ to: '/studies', search: { workspace: workspaceId, theme } });
+  };
   const references: PromptReference[] = [
     ...projectStudies.map((row) => ({ key: row.id, name: row.title, description: row.task, icon: "object/study" })),
     ...(types.data || []).map((row) => ({ key: text(row.id), name: text(row.name), description: "型号", icon: "object/cable" })),
@@ -181,6 +186,9 @@ export function AgentPage() {
                   : <div className="agent-start-grid">{SUGGESTIONS.map((item) => <button key={item} type="button" disabled={!project} onClick={() => send(item)}><Icon name="agent/message" />{item}</button>)}</div>}
               </div>
                 : turns.map((turn, index) => <TurnView key={turn.id} turn={turn} kinds={kinds} proposals={agent.proposals} label={label} review="aside" onOpenStudy={openStudy}
+                  onRefresh={index === turns.length - 1 && !agent.sending ? () => void agent.reload() : undefined}
+                  onOpenWorkspace={index === turns.length - 1 ? openWorkbench : undefined}
+                  onReview={() => { setSide(true); storeSide(true); setSideTab('changes'); }}
                   onRetry={index === turns.length - 1 && canSend && !agent.sending ? () => send(turn.question) : undefined} />)}
         </div>
         <div className="agent-prompt">

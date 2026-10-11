@@ -15,6 +15,7 @@ export const whitelist = [
   { id: 'plugin-version', reason: '真实插件发行版本（例如 1.2.3）用于复现结果，保留原版本；年度标准的四位年份加三段版本形式仍列为问题。' },
   { id: 'mathematical-notation', reason: '坐标 x/z、物理符号比值 Y/C、sigma/epsilon、sigma/mu、k/mu、I2/I1，角度序列 Angles0/90/180，以及边界名 Dirichlet/Robin 和积分方法 BDF1/2，均为工程数学记号，不能当成 JSON 路径。只允许这些完整记号。' },
   { id: 'source-terminology', reason: '仅允许已核对的 TB 880 书目标题中的 rating 和公开算例“Unit RMS current normalization”中的 current；它们是原文工程术语，不是任务或状态枚举。其他位置仍检查。' },
+  { id: 'connection-directory', reason: '仅允许设置 → 计算位置的远程工作目录、环境目录输入值；工程师必须查看、编辑完整绝对路径。按页面和两个字段定位限制，不能豁免其他界面的内部标识、错误或结果。' },
 ];
 export function identifyText(text) {
   const matches = [], occupied = [];
@@ -41,6 +42,7 @@ export function identifyText(text) {
 }
 export function exceptionFor(hit) {
   if (['hover', 'folded', 'technical'].includes(hit.layer)) return whitelist.find(item => item.id === hit.layer);
+  if (/^\/settings\/compute(?:\?|$)/.test(hit.page || '') && ['#hpc-directory', '#hpc-environment'].includes(hit.selector) && /^\/(?:[A-Za-z0-9._-]+\/)*[A-Za-z0-9._-]+\/?$/.test(hit.text)) return whitelist.find(item => item.id === 'connection-directory');
   if (hit.category === 'internal' && /^(?:A|W)\/km$/.test(hit.token)) return whitelist.find(item => item.id === 'engineering-notation');
   if (hit.category === 'internal' && ['x/z', 'Y/C', 'sigma/epsilon', 'sigma/mu', 'k/mu', 'I2/I1', 'Angles0/90/180', 'Dirichlet/Robin', 'BDF1/2'].includes(hit.token)) return whitelist.find(item => item.id === 'mathematical-notation');
   if (hit.category === 'enum' && ((hit.token === 'rating' && hit.text === 'CIGRE WG B1.56 (2022). TB 880: Power cable rating examples for calculation tool verification. 官方目录') || (hit.token === 'current' && hit.text === 'R1=R2=1mm,d=2.5mm,sigma=55MS/m,f=40kHz. Unit RMS current normalization.'))) return whitelist.find(item => item.id === 'source-terminology');

@@ -76,3 +76,39 @@ def test_concurrent_basis_request_returns_one_immutable_receipt(tmp_path):
             answers=list(pool.map(lambda _:client.post(endpoint,json=body),range(2)))
         assert all(answer.status_code==200 for answer in answers),[answer.text for answer in answers]
         assert answers[0].json()==answers[1].json()==client.post(endpoint,json=body).json()
+
+
+def test_missing_query_fields_are_not_missing_standards(tmp_path):
+    """An engineer clears class/material, then saves class 2 and re-queries the real library."""
+    with TestClient(create_app(tmp_path/'input-repair.sqlite')) as client:
+        model=next(m for m in system_models() if m['id']=='system.cu-xlpe-al-240')
+        workspace=client.post('/api/design/type-workspaces',json={'model_id':model['id'],'content_sha256':model['content_sha256']}).json()
+        document=example(64000,110000,False,800)
+        document.update(circuits=[],sections=[],load_cases=[]);structure_context(document)
+        document['provenance']['/execution_standards']={'kind':'standard','reviewed':True,'reference':json.dumps({'schema':'cablesim.execution-standards/1','items':[{'standard':plugin.SOURCES[key]['standard'],'source_digest':plugin.SOURCES[key]['sha256']} for key in ('hv','conductor')]})}
+        document['cable_types'][0]['cores'][0]['conductor']['conductor_class']=None
+        next(m for m in document['materials'] if m.get('standard_kind')=='XLPE')['standard_kind']=None
+        def save_and_query():
+            nonlocal workspace
+            document_checked=DomainDocument.model_validate(document).model_dump(mode='json')
+            saved=client.put('/api/workspaces/'+workspace['id']+'/domain',json={'expected_revision':workspace['revision'],'document':document_checked})
+            assert saved.status_code==200,saved.text
+            workspace={**workspace,'revision':saved.json()['revision']}
+            response=client.post('/api/design/type-workspaces/'+workspace['id']+'/requirements/basis',json={'request_id':str(uuid4()),'expected_revision':workspace['revision']})
+            assert response.status_code==200,response.text
+            answer=response.json()
+            return answer,plugin.check(document_checked,{'cable_type_id':document_checked['cable_types'][0]['id'],**answer['parameters']})
+        missing,checked=save_and_query()
+        assert {f['label'] for row in missing['missing_fields'] for f in row['fields']}=={'导体类别','绝缘材料标准类别'}
+        for key in ('r20','insulation-nominal'):
+            row=item(checked,key)
+            assert row['verdict']=='missing' and row['source_status']=='input-missing'
+            assert '缺字段' in row['reason'] and '未收录' not in row['reason']
+        document['cable_types'][0]['cores'][0]['conductor']['conductor_class']=2
+        next(m for m in document['materials'] if m['id']=='material/xlpe')['standard_kind']='XLPE'
+        resolved,checked=save_and_query()
+        assert resolved['missing_fields']==[]
+        # GB/T 3956—2008 table 2, 800 mm² bare copper, 0.0221 Ω/km, printed page 4.
+        resistance=item(checked,'r20')
+        assert (resistance['limit'],resistance['printed_page'],resistance['source_status'])==(.0221,4,'original-verified')
+        assert checked['rows'] and client.get('/api/workspaces/'+workspace['id']+'/revisions/'+str(workspace['revision']-1)).json()['state']['domain']['cable_types'][0]['cores'][0]['conductor']['conductor_class'] is None

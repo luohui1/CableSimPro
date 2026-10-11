@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
-VERSION = '1.1.0'
+VERSION = '1.2.1'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 DATA = json.loads(Path(__file__).with_name('dimensions.json').read_text('utf-8'))
 AREAS = DATA['areas_mm2']
@@ -65,8 +65,11 @@ def prepare(document, parameters):
     if family is None:
         raise ValueError(root + '.rating.u0：额定电压组合不在已核验产品标准范围内，请核对 U₀/U。')
     cores = cable.get('cores', [])
-    if cable.get('construction') not in ('single_core', 'three_core') or len(cores) != (1 if cable['construction'] == 'single_core' else 3):
-        raise ValueError(root + '.construction：当前支持单芯或三芯结构。')
+    expected = {'single_core': 1, 'three_core': 3, 'multi_core': 4}.get(cable.get('construction'))
+    if expected is None or len(cores) != expected:
+        raise ValueError('结构类型与芯数不一致；当前支持单芯、三芯及低压四芯。')
+    if len(cores) == 4 and family != 'mv1':
+        raise ValueError('四芯标准核对当前只覆盖 GB/T 12706.1 的低压绝缘线芯；其他电压未覆盖。')
     if family == 'hv' and len(cores) != 1:
         raise ValueError(root + '.construction：GB/T 11017.2 的本实现只支持单芯 64/110 kV。')
     materials = {m['id']: m for m in document.get('materials', [])}
@@ -858,6 +861,17 @@ class _Check:
         row = self.row
         find_layer = self.find_layer
         trace = self.trace
+        if len(cable['cores']) == 4:
+            # Physical square-centre geometry is not Appendix A's fictitious
+            # diameter. Keep covering requirements until executable references
+            # and the actual covering construction are both available.
+            why = '四芯及 3+1 护层假设直径尚未接入完整附录依据；请补齐内衬、铠装和外护套构造，不能用实体外径代替标准假设直径。'
+            row('bedding-nominal', '内衬层标称厚度 / 省略条件', root + '.common_layers', uncovered=True, reason=why, rule_key='bedding-missing')
+            sheath, path = find_layer(common, 'oversheath')
+            row('oversheath-nominal', '外护套标称厚度', path + '.thickness', actual=sheath.get('thickness')*1000 if sheath.get('thickness') is not None else None, uncovered=True, reason=why, inputs={'D_os_mm': None})
+            row('oversheath-minimum', '外护套最薄点', path + '.minimum_thickness', actual=sheath.get('minimum_thickness')*1000 if sheath.get('minimum_thickness') is not None else None, uncovered=True, reason=why, basis='measurement', inputs={'t_n_mm': None})
+            trace.append({'stage': '四芯护层假设直径', 'D_f_mm': None, 'missing': why})
+            return
         dc_values = [v for v, _ in core_diameters]
         why = next((w for v, w in core_diameters if v is None), None)
         if len(set(v for v in dc_values if v is not None)) > 1:

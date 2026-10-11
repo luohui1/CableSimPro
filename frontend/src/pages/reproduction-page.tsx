@@ -25,12 +25,36 @@ import { DuctSensitivity } from "@/features/field/duct-sensitivity";
 import { METRIC_STATES, VALIDATION_STATES, quantityLabel } from "@/lib/validation-labels";
 import { ComparisonDots } from "@/components/comparison-dots";
 import { displayUnit } from "@/lib/display-names";
+import '@/features/field/reproduction-scope.css';
 const kinds: Record<string, string> = {
   paper: "论文",
-  standard: "标准算例",
-  comsol: "COMSOL 教程",
-  benchmark: "教学基准",
+  standard: "标准与报告",
+  comsol: "商业软件参考",
+  benchmark: "解析与教学基准",
 };
+// Source type describes the document, not whether the complete model was verified.
+function evidencePurpose(row: CatalogRow) {
+  if (row.kind === 'standard') return row.has_results === true ? '公开算例 · 保存对拍' : '标准与报告参考';
+  if (row.kind === 'benchmark') return '解析交叉核对';
+  if (row.kind === 'comsol') return '软件方法参考';
+  return '文献方法参考';
+}
+const variantName = (row: CatalogRow) => text(row.variant_name) || text(row.variant) || '情形未命名';
+const strings = (value: unknown) => Array.isArray(value) ? value.map(text).filter(Boolean) : [];
+async function readEvidence<T>(read: () => Promise<T>): Promise<T> {
+  try { return await read(); }
+  catch (error) {
+    if (error instanceof TypeError) throw new Error(navigator.onLine
+      ? '证据服务暂不可达；已保存数据保留，请检查连接后重新读取。'
+      : '网络连接已断开；已保存数据保留，请恢复网络后重新读取。');
+    throw error;
+  }
+}
+function sourceLocation(row: CatalogRow) {
+  const pages = [numeric(row.pdf_page) !== null ? `PDF 第 ${numeric(row.pdf_page)} 页` : '',
+    numeric(row.printed_page) !== null ? `印刷第 ${numeric(row.printed_page)} 页` : ''].filter(Boolean);
+  return pages.join(' · ') || text(row.locator) || text(row.section) || text(row.revision) || '见来源文件或网页定位';
+}
 const STATE_ORDER: Record<string, number> = { reproduced: 0, partial: 1, capability_gap: 2, missing_data: 3 };
 const tabs = {
   results: "结果对照",
@@ -53,11 +77,13 @@ export function ReproductionPage() {
     [metric, setMetric] = useState("");
   const catalog = useQuery({
     queryKey: ["reproductions", snapshot],
-    queryFn: ({ signal }) => reproductions(snapshot, signal),
+    queryFn: ({ signal }) => readEvidence(() => reproductions(snapshot, signal)),
+    networkMode: 'always', retry: false,
   });
   const detail = useQuery({
     queryKey: ["reproduction", target, snapshot],
-    queryFn: ({ signal }) => reproductionDetail(target!, snapshot, signal),
+    queryFn: ({ signal }) => readEvidence(() => reproductionDetail(target!, snapshot, signal)),
+    networkMode: 'always', retry: false,
     enabled: !!target,
   });
   const query = target ? detail : catalog,
@@ -106,7 +132,7 @@ export function ReproductionPage() {
       : []) {
       const row = optionalRecord(value),
         key = text(row.variant) + " · " + text(row.quantity);
-      groupNames.set(key, `${text(row.variant)} · ${quantityLabel(text(row.quantity))}`);
+      groupNames.set(key, `${variantName(row as CatalogRow)} · ${quantityLabel(text(row.quantity))}`);
       groups.set(key, [
         ...(groups.get(key) || []),
         { ...row, id: String(groups.get(key)?.length || 0) },
@@ -129,6 +155,9 @@ export function ReproductionPage() {
       : chosen[0];
   const unit = text(representative?.unit),
     quantity = text(representative?.quantity);
+  const limitations = strings(detail.data?.limitations);
+  const keyLimits = [...limitations.filter(value => value.includes('口径差异')),
+    ...limitations.filter(value => !value.includes('口径差异'))].slice(0, 3);
   return (
     <Tabs
       value={activeTab}
@@ -215,7 +244,7 @@ export function ReproductionPage() {
               to="/validation"
               search={{ theme, snapshot }}
             >
-              全部复现目标
+              全部验证目标
             </Link>
             <div className="spacer" />
             <Select
@@ -232,7 +261,7 @@ export function ReproductionPage() {
               !data
                 ? "尚无复现记录"
                 : !target && !items.length
-                  ? (catalog.data?.items || []).length ? "没有匹配的复现目标" : "尚无复现记录：在研究里运行「仿真复现」后，结果与证据保存在这里"
+                  ? (catalog.data?.items || []).length ? "没有匹配的验证目标" : "尚无保存验证证据；请由管理员导入经校验的证据快照。"
                   : false
             }
           >
@@ -241,6 +270,7 @@ export function ReproductionPage() {
             )}
             {!target ? (
               <>
+                <p className="validation-purpose-note">验证目标包含公开算例、方法参考和解析基准。复现状态仅说明列明范围内的保存对拍，不代表未覆盖工况已验证。</p>
                 <Toolbar label="复现检索">
                   <label className="search-field">
                     检索
@@ -290,7 +320,7 @@ export function ReproductionPage() {
                   columns={[
                     {
                       id: "name",
-                      label: "复现目标",
+                      label: "验证目标",
                       wrap: true,
                       render: (row) => (
                         <Tooltip content={text(row.title)}>
@@ -299,6 +329,12 @@ export function ReproductionPage() {
                           </span>
                         </Tooltip>
                       ),
+                    },
+                    {
+                      id: "purpose",
+                      label: "证据用途",
+                      wrap: true,
+                      render: evidencePurpose,
                     },
                     {
                       id: "kind",
@@ -330,7 +366,7 @@ export function ReproductionPage() {
                     },
                     {
                       id: "scope",
-                      label: "范围",
+                      label: "保存对拍范围",
                       wrap: true,
                       render: (row) => text(row.scope),
                     },
@@ -344,7 +380,15 @@ export function ReproductionPage() {
                     <h2>
                       {VALIDATION_STATES[text(detail.data?.status)] || "复现状态未提供"}
                     </h2>
-                    <p className="muted">{text(detail.data?.scope)}</p>
+                    <p>{evidencePurpose((detail.data || {}) as CatalogRow)} · 来源：{kinds[text(detail.data?.kind)] || '来源类型未登记'}</p>
+                  </section>
+                  <section className="validation-scope" aria-label="适用范围与关键限制">
+                    <h2>保存对拍范围</h2>
+                    <p>{text(detail.data?.scope) || '范围未登记，不能据此判断工程适用性。'}</p>
+                    {keyLimits.length ? <><h3>关键限制</h3><ul>{keyLimits.map(value => <li key={value}>{value}</li>)}</ul></>
+                      : <p>限制未登记；不表示所有工况均已覆盖。</p>}
+                    {activeTab !== 'scope' && limitations.length > keyLimits.length && <Link to="/validation/$target/$tab"
+                      params={{ target: target!, tab: 'scope' }} search={{ theme, snapshot }}>查看全部 {limitations.length} 项限制与假设</Link>}
                   </section>
                   {activeTab === "results" ? (
                     rows.length ? (
@@ -364,7 +408,7 @@ export function ReproductionPage() {
                               >
                                 <span tabIndex={0}>
                                   {quantityLabel(text(row.quantity))}{" "}
-                                  · {text(row.variant)}
+                                  · {variantName(row)}
                                 </span>
                               </Tooltip>
                             ),
@@ -430,7 +474,7 @@ export function ReproductionPage() {
                             unit={unit}
                             rows={chosen.map((row) => ({
                               id: row.id,
-                              label: text(row.variant) || text(row.id),
+                              label: variantName(row),
                               values: { reference: numeric(row.reference), open_source: numeric(row.open_source), comsol: numeric(row.comsol) },
                             }))}
                           />
@@ -476,7 +520,7 @@ export function ReproductionPage() {
                                     points: chosen.map((row, index) => ({
                                       x: index + 1,
                                       y: numeric(row[key]),
-                                      label: text(row.variant),
+                                      label: variantName(row),
                                     })),
                                   }),
                                 )
@@ -540,12 +584,9 @@ export function ReproductionPage() {
                           },
                           {
                             id: "location",
-                            label: "页码",
-                            render: (row) =>
-                              "PDF " +
-                              (numeric(row.pdf_page) ?? "—") +
-                              " · 印刷 " +
-                              (numeric(row.printed_page) ?? "—"),
+                            label: "来源定位",
+                            wrap: true,
+                            render: sourceLocation,
                           },
                           {
                             id: "input",
@@ -576,19 +617,14 @@ export function ReproductionPage() {
                         <h2>已覆盖范围</h2>
                         <p>{text(detail.data?.coverage)}</p>
                       </section>
-                      <section className="input-section">
-                        <h2>限制与假设</h2>
-                        {[
-                          ...(Array.isArray(detail.data?.limitations)
-                            ? detail.data.limitations
-                            : []),
-                          ...(Array.isArray(detail.data?.assumptions)
-                            ? detail.data.assumptions
-                            : []),
-                        ].map((value, index) => (
-                          <p key={index}>{String(value)}</p>
-                        ))}
-                      </section>
+                      {limitations.length > keyLimits.length && <section className="input-section">
+                        <h2>其余限制</h2>
+                        <ul className="validation-limit-list">{limitations.filter(value => !keyLimits.includes(value)).map(value => <li key={value}>{value}</li>)}</ul>
+                      </section>}
+                      {!!strings(detail.data?.assumptions).length && <section className="input-section">
+                        <h2>计算假设</h2>
+                        <ul className="validation-limit-list">{strings(detail.data?.assumptions).map(value => <li key={value}>{value}</li>)}</ul>
+                      </section>}
                       {/* 有保存的敏感性诊断（如 TB 880 排管）才显示；其他算例不放空表 */}
                       {detail.data?.sensitivity ? <DuctSensitivity data={detail.data} historical={historical} /> : null}
                     </>

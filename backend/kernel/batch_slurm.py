@@ -249,13 +249,20 @@ print(json.dumps(parts))'''
         archive=folder/'results.tar.gz'
         self.download(details['path'],archive,details['sha256'])
         replica=directory/'replicas'/token;replica.mkdir(parents=True,exist_ok=True)
-        with tarfile.open(archive,'r:gz') as bundle:
-            for entry in bundle.getmembers():
+        # Full-grid compressed fields can exceed 100 MiB at the validated
+        # four-million-node capacity. Extract sequentially with a fixed buffer;
+        # retain path/type checks and explicit per-file/total disk bounds.
+        total_size=0;entries=0
+        with tarfile.open(archive,'r|gz') as bundle:
+            for entry in bundle:
+                total_size+=entry.size;entries+=1
                 path=(replica/entry.name).resolve()
-                if not entry.isfile() or not path.is_relative_to(replica.resolve()) or entry.size>100*1024*1024:
-                    raise ValueError('UNSAFE_REMOTE_RESULT')
+                if not entry.isfile() or not path.is_relative_to(replica.resolve()):
+                    raise ValueError('远端结果含非法路径或非普通文件；原作业与结果保留，尚未导入。')
+                if entry.size>512*1024*1024 or total_size>2*1024*1024*1024 or entries>4096:
+                    raise ValueError('远端结果超过回收容量（单文件 512 MiB、总计 2 GiB、4096 项）；原作业与结果保留，尚未导入。')
                 path.parent.mkdir(parents=True,exist_ok=True)
-                with bundle.extractfile(entry) as source,path.open('wb') as target:shutil.copyfileobj(source,target)
+                with bundle.extractfile(entry) as source,path.open('wb') as target:shutil.copyfileobj(source,target,length=1024*1024)
         imported=0;replicated=0
         if plan.get('schema_version') in ('cablesim.native-test-plan/1','cablesim.remote-run-plan/1'):
             if plan.get('case_array'):

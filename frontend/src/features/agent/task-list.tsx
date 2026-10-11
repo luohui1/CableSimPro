@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { WorkingMark } from "./conversation";
 import { agentSessions, type AgentSessionSummary } from "./agent-api";
 
-const WAITING: Record<string, string> = { missing_input: "缺输入", scope_confirmation: "待确认运行", external_job: "等外部作业", capability: "需人工处理", budget: "预算用尽", human_review: "待审核" };
+const WAITING: Record<string, string> = { missing_input: "待补齐输入", scope_confirmation: "待确认运行范围", external_job: "等待外部作业", capability: "需人工处理", budget: "预算已用尽", human_review: "待审核方案" };
 
 /** 任务状态说明：一句话说清停在哪里。 */
 export function taskState(task: Pick<AgentSessionSummary, "state" | "waiting_reason" | "pending_proposals">) {
@@ -18,7 +18,7 @@ export function taskState(task: Pick<AgentSessionSummary, "state" | "waiting_rea
     case "completed": return { tone: "done", text: "已完成" };
     case "waiting": return { tone: "waiting", text: `等待 · ${WAITING[task.waiting_reason || ""] || "人工处理"}` };
     case "blocked": return { tone: "error", text: `受阻 · ${WAITING[task.waiting_reason || ""] || "需要人工处理"}` };
-    case "failed": return { tone: "error", text: "失败" };
+    case "failed": return { tone: "error", text: "任务未完成" };
     case "cancelled": return { tone: "waiting", text: "已取消" };
     default: return { tone: "waiting", text: "未开始" };
   }

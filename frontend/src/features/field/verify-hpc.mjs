@@ -8,6 +8,12 @@ import path from 'node:path';
 import { openHeadlessBrowser, settle, repositoryRoot } from '../../../scripts/browser.mjs';
 import { assertLayout } from '../../../scripts/layout-assertions.mjs';
 
+// Real release-copy workflow; no mocked Slurm or page fixture.
+if (process.env.HPC_REAL_STUDY === '1') {
+  await import('./verify-real-study.mjs');
+  process.exit(0);
+}
+
 // Production main-canvas regression (separate from the component fixture).
 if (process.env.HPC_WORKSPACE_ONLY === '1') {
   const { verifyWorkspace } = await import('./verify-workspace.mjs');
