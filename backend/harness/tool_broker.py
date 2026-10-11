@@ -170,6 +170,11 @@ class ToolBroker:
 
     def dispatch(self,task,args,tool,identity):
         wid=task['workspace_id'];name=tool.name
+        if name in ('draft_read','draft_update','draft_geometry','simulation_prepare','draft_propose'):
+            from .drafts import Drafts
+            operation={'draft_read':'read','draft_update':'update','draft_geometry':'geometry',
+                'simulation_prepare':'simulation','draft_propose':'propose'}[name]
+            return getattr(Drafts(self),operation)(task,args)
         if name=='platform_capabilities':return self.platform.discover(task,args)
         if name=='platform_read':return self.platform.read(task,args)
         if name=='platform_prepare':return self.platform.prepare(task,args)

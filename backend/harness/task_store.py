@@ -102,7 +102,7 @@ class TaskStore:
                 (tid,wid,sid,wrev,srev,'created',self.owner_epoch,time()+limits.lifetime_s,encode(asdict(limits)),created,created))
             context=load_context(db,{'id':tid,'workspace_id':wid,'workspace_revision':wrev})
             self.event(db,tid,'execution.authorization',{'source':'human.session','workspace_id':wid,'workspace_revision':wrev,
-                'study_id':sid,'study_revision':srev,'effects':['read','propose'] if context['kind']=='type' else ['read','propose','preflight','local_fast_preview'],
+                'study_id':sid,'study_revision':srev,'effects':['read','propose','local_geometry_preview'] if context['kind']=='type' else ['read','propose','preflight','local_fast_preview','local_geometry_preview'],
                 'limits':asdict(limits),'formal_run':False,'hpc_submit':False,'engineering_approval':False})
             self.event(db,tid,'session.context',context)
         return tid
@@ -264,14 +264,24 @@ class TaskStore:
         return summaries
 
     @transaction
-    def record(self,tid):
+    def record(self,tid,*,model_context=False):
         with self.db() as db:
             db.execute('BEGIN')
             task=self.load(db,tid)
             events=[{'sequence':row['sequence'],'type':row['type'],'created':row['created'],'data':json.loads(row['data'])}
                 for row in db.execute('SELECT * FROM agent_events WHERE task_id=? ORDER BY sequence',(tid,))]
-            plans=[{'revision':row['revision'],'digest':row['digest'],'created':row['created'],'body':json.loads(row['body'])}
-                for row in db.execute('SELECT * FROM agent_plan_revisions WHERE task_id=? ORDER BY revision',(tid,))]
+            # Internal planning needs candidate identities and public proposals,
+            # not a new Python copy of every full document/parameter dictionary.
+            # HTTP history and approval continue reading the untouched originals.
+            body="""CASE json_extract(body,'$.kind')
+                WHEN 'draft' THEN json_remove(body,'$.document')
+                WHEN 'simulation' THEN json_remove(body,'$.definition.parameters')
+                WHEN 'proposal' THEN json_object('kind','proposal','proposal',json_object(
+                    'id',json_extract(body,'$.proposal.id'),'public',json_extract(body,'$.proposal.public')))
+                ELSE json_object('kind',json_extract(body,'$.kind')) END""" if model_context else 'body'
+            plans=[{'revision':row['revision'],'digest':row['digest'],'created':row['created'],'body':json.loads(row['body']),
+                **({'body_projected':True} if model_context else {})}
+                for row in db.execute(f'SELECT revision,digest,created,{body} AS body FROM agent_plan_revisions WHERE task_id=? ORDER BY revision',(tid,))]
             steps=[]
             for row in db.execute('SELECT * FROM agent_steps WHERE task_id=? ORDER BY rowid',(tid,)):
                 value=dict(row)
@@ -282,9 +292,14 @@ class TaskStore:
             for plan in plans:
                 private=plan['body'].get('proposal')
                 if private:
-                    _,_,decision=self.proposal(db,private['id'])
+                    if model_context:
+                        decision=next((event['data'] for event in reversed(events) if event['type']=='proposal.decision'
+                            and event['data'].get('id')==private['id']),None)
+                    else:_,_,decision=self.proposal(db,private['id'])
                     proposals.append({**private['public'],'status':decision['status'] if decision else 'pending'})
+            current=db.execute('SELECT revision FROM workspaces WHERE id=?',(task['workspace_id'],)).fetchone() if model_context else None
         return {'id':tid,'workspace_id':task['workspace_id'],'study_id':task['study_id'],'context':task['context'],
+            **({'current_workspace_revision':current['revision']} if current else {}),
             'workspace_revision':task['workspace_revision'],'study_revision':task['study_revision'],
             'state':task['state'],'waiting_reason':task['waiting_reason'],'created':task['created'],'updated':task['updated'],
             'budget':{'limits':task['limits'],'tool_calls':task['tool_calls'],'model_requests':task['model_requests'],

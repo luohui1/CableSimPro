@@ -51,18 +51,24 @@ class Tool:
         definition=self.model()
         if not self.plugin_id:
             # Repeated per-field prose (including recipe alternatives) must not
-            # crowd out an inspected capability. Keep every validation keyword;
-            # full argument descriptions remain in /contract and tool.model().
+            # crowd out an inspected capability. Full schemas remain available
+            # through platform_capabilities and are used by broker validation.
             def compact(node):
                 if isinstance(node,dict):return {key:compact(value) for key,value in node.items()
-                    if key!='description' or not isinstance(value,str)}
+                    if key not in ('title','default','examples') and (key!='description' or not isinstance(value,str))}
                 if isinstance(node,list):return [compact(value) for value in node]
                 return node
             definition['function']['parameters']=compact(definition['function']['parameters'])
+            if self.name=='recipe_execute':
+                # The recipe-specific alternatives are inspected on demand;
+                # don't replay every workflow's parameters in every request.
+                definition['function']['parameters'].pop('oneOf',None)
             # Keep a complete purpose clause. Repeated authority/usage prose is
             # in the system prompt; the full descriptions remain in /tools.
             authority={'read':'只读','propose':'待人工批准的方案','run':'宿主许可执行'}[self.kind]
             definition['function']['description']=self.title+'（'+authority+'）'
+            if self.name=='recipe_execute':
+                definition['function']['description']+='；参数先按platform_capabilities(tool=recipe_execute)检查。'
         if self.plugin_id and len(json.dumps(definition,ensure_ascii=False).encode())>4096:
             definition['function']['parameters']=object_schema({**STUDY,'parameters':{
                 'type':'object','description':'按 plugin_inspect 读取的封签参数契约提供SI值；可用 schema_path 分字段读取。'},'title':TEXT})
@@ -119,7 +125,26 @@ def prune_definitions(schema):
 
 
 def host_tools():
+    from backend.kernel.scenarios import LayoutPreview
+    from backend.kernel.contracts import Method
+    method_schema=Method.model_json_schema()
     specs=[
+        ('draft_read','读取或比较输入草稿','read','input读取固定输入或准确draft_id；catalog分页找本会话草稿/分析配置，保留过期原因；changes比较指定草稿与保存基准或compare_to草稿，只比较输入，不推算工程影响。',object_schema({
+            'draft_id':TEXT,'view':{'enum':['input','catalog','changes']},'compare_to':TEXT,
+            'offset':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':20},
+            'expected_catalog_revision':{'type':'integer','minimum':0},
+            'paths':{'type':'array','maxItems':8,'items':{'type':'string','maxLength':500}}})),
+        ('draft_update','编辑输入草稿','propose','只修改草稿，不保存。changes 为现有标量字段：型号长度mm、工程长度m。template 明确选择宿主模板和埋深/间距m，会重排截面并保留演示来源；不可暗中替用户采用模板假设。',object_schema({
+            'draft_id':TEXT,'changes':PATCH,'template':object_schema({
+                'kind':LayoutPreview.model_json_schema()['properties']['kind'],
+                'depth':{'type':'number','exclusiveMinimum':0},'spacing':{'type':'number','exclusiveMinimum':0},
+                'unit':{'const':'m'}},['kind','depth','spacing','unit'])})),
+        ('draft_geometry','检查草稿几何','run','复用普通几何预览：只允许本机geometry/domain能力，parameters按plugin_inspect准确契约填写。实际生成同源工件，返回有界量值；不保存、不提交超算，显示工件没有分析网格资格。',object_schema({
+            'draft_id':TEXT,'method':method_schema,'parameters':{'type':'object'}},['method','parameters'])),
+        ('simulation_prepare','准备草稿分析研究','propose','按封签方法与参数核对草稿，生成仿真配置；不会预检、建网格或求解。与草稿绑定，输入变化须重建配置。预算待批准保存后从研究estimate读取，不猜数值。',object_schema({
+            'draft_id':TEXT,'method':method_schema,'parameters':{'type':'object'},'title':TEXT},['method','parameters','title'])),
+        ('draft_propose','提交草稿审核方案','propose','将同版本草稿及可选仿真配置转成完整审核差异。人批准后原子保存输入和新研究；不会运行、发布或提交超算。',object_schema({
+            'draft_id':TEXT,'simulation_plan_id':TEXT,'title':TEXT},['title'])),
         ('platform_capabilities','发现平台能力或检查契约','read','来自实际注册API的能力目录；operation检查平台参数契约，tool检查已开放宿主工具，schema_path可按字段读取。目录不授予执行权限。',object_schema({
             'operation':TEXT,'tool':TEXT,'module':TEXT,'q':{'type':'string','maxLength':200},
             'schema_path':{'type':'string','maxLength':500},'offset':{'type':'integer','minimum':0},

@@ -3,20 +3,24 @@ from uuid import UUID
 from itertools import chain
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import TypeAdapter
 from starlette.background import BackgroundTask
 
 from .contracts import AgentStatus,ToolInfo,RecipeInfo,CreateSession,SessionId,SessionSummary,ModelSettingsUpdate,ModelSettingsTest,Message,SessionRecord,ProposalDecision,StreamEvent,PlanNode
+from .memory_contracts import MemorySettings, MemoryEdit
 
 
 def make_router(harness):
     @asynccontextmanager
     async def lifespan(app):
         harness.platform.bind(app)
+        harness.memories.start()
         try:yield
-        finally:harness.platform.bind(None)
+        finally:
+            try:harness.memories.close()
+            finally:harness.platform.bind(None)
     router=APIRouter(prefix='/api/agent',tags=['agent'],lifespan=lifespan)
 
     @router.get('/capabilities')
@@ -44,6 +48,40 @@ def make_router(harness):
 
     @router.post('/settings/test')
     def test_settings(body:ModelSettingsTest):return harness.test_model(body)
+
+    @router.get('/memory/settings')
+    def memory_settings():return harness.memories.status()
+
+    @router.put('/memory/settings')
+    def save_memory_settings(body:MemorySettings):return harness.memories.configure(body)
+
+    @router.get('/memories')
+    def memories(workspace_id:UUID,study_id:UUID|None=None,q:str=Query('',max_length=256),
+                 limit:int=Query(10,ge=1,le=20),offset:int=Query(0,ge=0)):
+        return harness.memories.listing(str(workspace_id),str(study_id) if study_id else None,q,limit,offset)
+
+    @router.put('/memories/{id}')
+    def correct_memory(id:UUID,body:MemoryEdit):return harness.memories.edit(str(id),body)
+
+    @router.delete('/memories/{id}')
+    def delete_memory(id:UUID,expected_revision:int=Query(ge=1)):
+        return harness.memories.edit(str(id),expected_revision=expected_revision)
+
+    @router.get('/sessions/{id}/memory')
+    def session_memory(id:str):
+        record=harness.model_record(id)
+        return {'context':record['memory'],'jobs':harness.memories.jobs(id)}
+
+    @router.post('/sessions/{id}/memory')
+    def remember_session(id:str):
+        record=harness.tasks.record(id,model_context=True)
+        with harness.tasks.db() as db:task=harness.tasks.load(db,id)
+        if task['active_turn']:raise HTTPException(409,{'code':'MEMORY_TURN_ACTIVE','message':'本条消息尚未结束，不能提前抽取。'})
+        if not harness.memories.settings().enabled:
+            raise HTTPException(409,{'code':'MEMORY_DISABLED','message':'请先启用长期记忆，再抽取会话。'})
+        turn=next((message.get('turn_id') for message in reversed(record['messages']) if message['role']=='user'),None)
+        if not turn:raise HTTPException(422,{'code':'MEMORY_TURN_NOT_FOUND','message':'尚无可抽取的用户消息。'})
+        return {'job_id':harness.memories.enqueue(id,turn)}
 
     @router.get('/tools',response_model=list[ToolInfo],response_model_exclude_none=True)
     def tools(session_id:UUID|None=None,workspace_id:UUID|None=None):

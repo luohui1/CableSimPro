@@ -77,7 +77,7 @@ def numbers(value):
         if type(item) in (int,float) and math.isfinite(item):result.add(float(item))
         elif isinstance(item,dict):
             if item.get('projection') in METADATA_PROJECTIONS:return
-            if item.get('projection')=='platform_read':
+            if item.get('projection') in ('platform_read','draft_geometry'):
                 visit(item.get('evidence',{}));return
             for child in item.values():visit(child)
         elif isinstance(item,list):
@@ -111,7 +111,7 @@ def quantity_facts(observations):
     def visit(item,path,identity):
         if isinstance(item,dict):
             if item.get('projection') in METADATA_PROJECTIONS:return
-            if item.get('projection')=='platform_read':
+            if item.get('projection') in ('platform_read','draft_geometry'):
                 visit(item.get('evidence',{}),path+'/evidence',identity);return
             if item.get('kind')=='validation' and item.get('subtype')=='reproduced' and item.get('validation'):
                 from .validation_evidence import facts as validation_facts
@@ -209,6 +209,11 @@ def attributed(fact,named):
 
 def grounded_text(text,observations,*,current=None,proposals=None,users=None,proof=None):
     """Check each claim; rejected drafts remain private audit data, never chat content."""
+    def geometry_evidence(rows):
+        return [{**row,'data':row['data'].get('evidence',{})} if row.get('data',{}).get('projection')=='draft_geometry' else row
+                for row in rows]
+    observations=geometry_evidence(observations)
+    if current is not None:current=geometry_evidence(current)
     from .validation_evidence import issues as validation_issues
     from .claim_scope import ClaimScope
     facts=quantity_facts(observations);issues=validation_issues(text,current if current is not None else observations);matches=[]
@@ -448,7 +453,7 @@ def evidence_counts(observations):
     def visit(item):
         if isinstance(item,dict):
             if item.get('projection') in METADATA_PROJECTIONS:return
-            if item.get('projection')=='platform_read':
+            if item.get('projection') in ('platform_read','draft_geometry'):
                 visit(item.get('evidence',{}));return
             for key,value in item.items():
                 if key in ('cases','circuits','load_cases') and isinstance(value,list):counts.update(range(1,len(value)+1))
@@ -552,7 +557,7 @@ def evidence_summary(record):
 
 def reconcile(research,tasks,tid,*,persist=False):
     """Query original Run references; an unknown ephemeral preview is never resubmitted."""
-    record=tasks.record(tid);unresolved=[];resolved=[]
+    record=tasks.record(tid,model_context=True);unresolved=[];resolved=[]
     for step in record['steps']:
         if step['state']!='unknown':continue
         reference=step.get('execution_ref') or {}

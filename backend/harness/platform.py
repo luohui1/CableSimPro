@@ -174,7 +174,7 @@ class Platform:
 
     def discover(self, task, arguments):
         if arguments.get('tool'):
-            tool=self.registry.visible(self.tasks.record(task['id'])).get(arguments['tool'])
+            tool=self.registry.visible(self.tasks.record(task['id'],model_context=True)).get(arguments['tool'])
             if not tool or tool.plugin_id:fail('TOOL_INSPECTION_REQUIRED', '宿主工具须在本会话可见；插件能力用plugin_inspect检查并启用。', '/tool')
             return ToolResult(status='ok',summary='宿主工具完整参数与权限契约，不是工程证据。',data={
                 'projection':'capability_contract','tool':tool.info(),
@@ -205,7 +205,7 @@ class Platform:
         identifier = arguments['operation']
         route, card, _ = self.operation(identifier)
         schema = self.schema(identifier)
-        record = self.tasks.record(task['id'])
+        record = self.tasks.record(task['id'],model_context=True)
         if not any(row['type'] == 'platform.inspected' and row['data']['operation'] == identifier
                    and row['data']['contract_digest'] == schema['contract_digest'] for row in record['events']):
             fail('PLATFORM_INSPECTION_REQUIRED', '先用platform_capabilities(operation)读取当前参数契约。', '/operation')

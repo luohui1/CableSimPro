@@ -31,6 +31,7 @@ from .session_scope import is_type,load_context
 from .inbox import report as inbox_report,MAX_TRIAGE_PAGES
 from .progress import state as task_progress
 from .platform import Platform
+from .memory import Memories
 
 
 class Harness:
@@ -44,11 +45,26 @@ class Harness:
         self.platform=Platform(research,self.tasks,self.registry)
         self.broker=ToolBroker(research,self.tasks,self.registry,self.proposals)
         self.broker.platform=self.platform
+        self.memories=Memories(self)
 
     def initialize(self):
         self.tasks.initialize()
         self.settings.initialize()
         self.registry.initialize()
+        self.memories.initialize()
+
+    def model_record(self,tid,turn=None):
+        record=self.tasks.record(tid,model_context=True)
+        try:record['memory']=self.memories.recall(record)
+        except Exception as error:
+            record['memory']={'enabled':True,'items':[],'code':type(error).__name__,'engineering_evidence':False}
+        if turn and record['memory']['enabled'] and not any(event['type']=='memory.recalled'
+                and event['data'].get('turn_id')==turn for event in record['events']):
+            try:self.tasks.emit(tid,'memory.recalled',{'turn_id':turn,'items':[
+                    {'id':item['id'],'revision':item['revision']} for item in record['memory']['items']],
+                    'code':record['memory'].get('code'),'engineering_evidence':False})
+            except (sqlite3.OperationalError,MemoryError):pass
+        return record
 
     def test_model(self,body):
         """Probe a candidate connection; omitted fields fall back to the one in use."""
@@ -100,7 +116,7 @@ class Harness:
         return 'event: '+kind+'\ndata: '+json.dumps(data,ensure_ascii=False,separators=(',',':'),allow_nan=False)+'\n\n'
 
     def begin(self,tid,content,recipe=None):
-        record=self.tasks.record(tid)
+        record=self.tasks.record(tid,model_context=True)
         source='human.message'
         recipe=validate_request(recipe,record['context']) if recipe is not None else None
         return self.tasks.begin_turn(tid,redact(content),redact(recipe) if recipe else None,recipe_source=source)
@@ -113,7 +129,7 @@ class Harness:
             recovery=reconcile(self.research,self.tasks,tid,persist=True)
             if recovery['unknown']:
                 raise HTTPException(409,{'code':'UNKNOWN_OPERATION','message':'原工具步骤结果未知；请先对账，未重新执行或提交作业。'})
-            record=self.tasks.record(tid);snapshot=record
+            record=self.tasks.record(tid,model_context=True);snapshot=record
             requested=next(event['data'].get('recipe') for event in reversed(record['events'])
                 if event['type']=='chat.message' and event['data'].get('turn_id')==turn and event['data'].get('role')=='user')
             if requested:
@@ -129,7 +145,7 @@ class Harness:
                 self.tasks.emit(tid,'context.loaded',{'turn_id':turn,'kind':'type','tool':'type_read','view':'summary',
                     'status':record['steps'][-1]['result']['status'],'workspace_revision':record['workspace_revision']})
             while True:
-                record=self.tasks.record(tid)
+                record=self.model_record(tid,turn)
                 snapshot=record
                 tools=self.registry.visible(record)
                 current=self.turn_steps(record,turn)
@@ -188,7 +204,7 @@ class Harness:
                     state,reason='waiting',waiting
                     yield from self.closing(tid,turn,'所选操作需要人工确认；按工具诊断到对应模块核对并执行，当前尚未执行。')
                     break
-            record=self.tasks.record(tid)
+            record=self.tasks.record(tid,model_context=True)
             if state=='completed' and any(proposal['status']=='pending' for proposal in record['proposals']):
                 state,reason='reviewing','human_review'
             elif state=='completed' and any(step['tool']=='platform_prepare' and (step.get('result') or {}).get('status')=='ok'
@@ -209,7 +225,7 @@ class Harness:
                     yield from self.fallback(tid,turn)
                 except HTTPException:
                     yield from self.fallback(tid,turn)
-            elif any(step.get('result') for step in self.tasks.record(tid)['steps']):
+            elif any(step.get('result') for step in self.tasks.record(tid,model_context=True)['steps']):
                 yield from self.fallback(tid,turn)
             normal=True
         except (MemoryError,sqlite3.OperationalError) as error:
@@ -238,7 +254,13 @@ class Harness:
             # Disconnecting the stream does not assert that a solver/job was cancelled.
             try:self.tasks.finish_turn(tid,turn,state if normal else 'waiting',reason if normal else 'capability')
             except (MemoryError,sqlite3.OperationalError):pass  # Durable running intent remains unknown, never reissued.
-        try:record=self.tasks.record(tid)
+        if normal and state in ('completed','reviewing','waiting'):
+            try:self.memories.enqueue(tid,turn)
+            except Exception as error:
+                try:self.tasks.emit(tid,'memory.unavailable',{'exception_type':type(error).__name__,
+                    'code':error.detail.get('code') if isinstance(error,HTTPException) and isinstance(error.detail,dict) else None})
+                except (sqlite3.OperationalError,MemoryError):pass
+        try:record=self.tasks.record(tid,model_context=True)
         except (MemoryError,sqlite3.OperationalError):record=snapshot
         usage={name:record['budget'][name] if record else 0 for name in ('prompt_tokens','completion_tokens')}
         yield self.emit(tid,'done',{'usage':usage},persist=False)
@@ -268,11 +290,11 @@ class Harness:
         arguments={'recipe':request['id'],'parameters':request['parameters']}
         pages=set();waiting=None
         while True:
-            tools=self.registry.visible(self.tasks.record(tid))
+            tools=self.registry.visible(self.tasks.record(tid,model_context=True))
             plan=compile_calls([{'id':'host-recipe-'+str(uuid4()),'name':'recipe_execute','arguments':arguments}],
                 tools,record['workspace_id'],record['workspace_revision'])
             waiting=yield from self.execute_plan(tid,turn,plan,tools,record,source='host')
-            current=self.tasks.record(tid)
+            current=self.tasks.record(tid,model_context=True)
             if request['id'] not in ('conclusion_summary','type_review','inbox_triage') or waiting:break
             result=current['steps'][-1].get('result')
             next_page=result['data'].get('next_page') if result and result['status']=='ok' else None
@@ -307,13 +329,13 @@ class Harness:
         self.tasks.emit(tid,'chat.message',{'role':'assistant','content':None,'turn_id':turn,**({'reasoning_content':reasoning} if reasoning else {}),
             'tool_calls':[{'id':node['id'],'name':node['tool'],'arguments':node['arguments']} for node in plan['nodes']]})
         for index,node in enumerate(plan['nodes']):
-            if soft_limit and task_progress(self.tasks.record(tid),tools)['consecutive_unproductive_reads']>=task['limits']['max_read_tool_calls']:
+            if soft_limit and task_progress(self.tasks.record(tid,model_context=True),tools)['consecutive_unproductive_reads']>=task['limits']['max_read_tool_calls']:
                 self.tasks.emit(tid,'plan.read_limit',{'turn_id':turn,'revision':revision,'executed':False,
                     'reason':'evidence_stalled','skipped_node_ids':[row['id'] for row in plan['nodes'][index:]]})
                 break
             tool=tools.get(node['tool'])
             if node['input_identity'].get('recipe'):
-                outcomes={step['node_id']:step for step in self.tasks.record(tid)['steps']}
+                outcomes={step['node_id']:step for step in self.tasks.record(tid,model_context=True)['steps']}
                 dependencies=[outcomes.get(identifier) for identifier in node['depends_on']]
                 if any(step and step['state']!='succeeded' for step in dependencies):
                     node['preparation_error']={'code':'RECIPE_DEPENDENCY_FAILED',
@@ -355,7 +377,7 @@ class Harness:
                 raise HTTPException(422,{'code':'REPAIR_LIMIT_EXCEEDED','message':'同一错误已达到修正次数上限，请人工补充输入或能力；没有无限重试。'})
 
     def respond(self,tid,turn,text,*,safe=False,phase='answer',attempt=0,suffix='',reasoning=''):
-        record=self.tasks.record(tid)
+        record=self.tasks.record(tid,model_context=True)
         metadata={'task_plan','platform_capabilities','platform_prepare'}
         observations=[step['result'] for step in record['steps'] if step.get('result') and step['tool'] not in metadata]
         current=[step['result'] for step in self.turn_steps(record,turn) if step.get('result') and step['tool'] not in metadata]
@@ -404,7 +426,7 @@ class Harness:
             return []
 
     def answer_loop(self,tid,turn,text,reasoning=''):
-        record=self.tasks.record(tid);limit=record['budget']['limits']['max_repair_attempts']
+        record=self.tasks.record(tid,model_context=True);limit=record['budget']['limits']['max_repair_attempts']
         for attempt in range(limit+1):
             if text is not None:
                 try:
@@ -412,7 +434,7 @@ class Harness:
                     return
                 except HTTPException as error:
                     yield self.emit(tid,'error',{'code':error.detail['code'],'message':error.detail['message']})
-            record=self.tasks.record(tid)
+            record=self.model_record(tid)
             feedback=next(event['data'] for event in reversed(record['events']) if event['type']=='answer.rejected' and event['data']['turn_id']==turn)
             if attempt==limit:break
             # Same-unit alternatives do not prove that the requested field was
@@ -454,7 +476,7 @@ class Harness:
         yield from self.closing(tid,turn,'解释修正次数或可用预算已到上限。')
 
     def fallback(self,tid,turn):
-        record=self.tasks.record(tid)
+        record=self.tasks.record(tid,model_context=True)
         if any(step['tool']=='inbox_read' for step in self.turn_steps(record,turn)):
             self.tasks.emit(tid,'answer.fallback',{'turn_id':turn,'sources':['inbox_read'],
                 'model_explanation_verified':False})
@@ -472,7 +494,7 @@ class Harness:
         yield from self.respond(tid,turn,text,safe=True)
 
     def closing(self,tid,turn,reason):
-        record=self.tasks.record(tid)
+        record=self.model_record(tid)
         feedback=next((event['data'] for event in reversed(record['events']) if event['type']=='answer.rejected' and event['data']['turn_id']==turn),None)
         prompt,definitions=prepare(record,{},closing=reason,feedback=feedback,instructions=self.settings.instructions())
         configured,model=self.model.status()
@@ -497,14 +519,14 @@ class Harness:
 
     def repeated_error(self,tid,node,result):
         signature=[(item['code'],item.get('path')) for item in result['diagnostics']]
-        record=self.tasks.record(tid)
+        record=self.tasks.record(tid,model_context=True)
         began=next(event['created'] for event in reversed(record['events']) if event['type']=='chat.message' and event['data'].get('role')=='user')
         return sum(step['tool']==node['tool'] and step['arguments_digest']==node['arguments_digest']
             and [(item['code'],item.get('path')) for item in step['result']['diagnostics']]==signature
             for step in record['steps'] if step.get('result') and step['result']['status']=='error' and step['created']>=began)
 
     def previous_error(self,tid,node):
-        record=self.tasks.record(tid)
+        record=self.tasks.record(tid,model_context=True)
         began=next(event['created'] for event in reversed(record['events'])
             if event['type']=='chat.message' and event['data'].get('role')=='user')
         physical=lambda identity:{key:value for key,value in identity.items() if key not in ('recipe','recipe_version','recipe_step')}
@@ -517,7 +539,7 @@ class Harness:
         if node['tool']!='run_read':return None
         view=lambda args:{key:args[key] for key in ('run_id','case_id','entity','key','input_paths') if args.get(key) is not None}
         physical=lambda identity:{key:value for key,value in identity.items() if key not in ('recipe','recipe_version','recipe_step')}
-        return next((step for step in reversed(self.tasks.record(tid)['steps']) if step['tool']=='run_read'
+        return next((step for step in reversed(self.tasks.record(tid,model_context=True)['steps']) if step['tool']=='run_read'
             and step['state']=='succeeded' and step.get('result') and view(step['arguments'])==view(node['arguments'])
             and physical(step['input_identity'])==physical(node['input_identity'])),None)
 

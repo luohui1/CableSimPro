@@ -1,4 +1,4 @@
-"""Immutable scalar edit proposals; only the human route calls ordinary save services."""
+"""Immutable edit proposals; only the human route calls ordinary save services."""
 from copy import deepcopy
 import getpass
 import json
@@ -268,7 +268,29 @@ class Proposals:
             if decision=='approved':
                 row,state=self.workspace.load(db,task['workspace_id'],proposal['workspace_revision'],allow_domain=True)
                 self.workspace.assert_mutable(db,task['workspace_id'])
-                if proposal['kind']=='type':
+                if proposal['kind']=='draft_workflow':
+                    document=resolve_edit(state,DraftDomainDocument.model_validate(proposal['document']))
+                    if fingerprint(document)!=proposal['candidate_digest']:
+                        raise HTTPException(409,'草稿输入或派生规则已变化，请重新生成审核方案。')
+                    planned=proposal.get('simulation')
+                    if planned:
+                        _,cap=self.research.resolve(planned['definition']['method'])
+                        schema=cap.parameter_schema.model_dump(mode='json',by_alias=True,exclude_none=True)
+                        if fingerprint(schema)!=planned['schema_digest'] or planned['input_digest']!=fingerprint(document):
+                            raise HTTPException(409,'仿真配置的输入或封签参数契约已变化。')
+                        check_locks(state,document,planned['definition']['parameters'])
+                        validate_case(cap,{'input':document,'parameters':planned['definition']['parameters']})
+                    revision=proposal['workspace_revision']
+                    if fingerprint(document)!=fingerprint(state['domain']):
+                        saved=save_domain(self.workspace,task['workspace_id'],SaveDomain(
+                            expected_revision=revision,document=DraftDomainDocument.model_validate(document)),db)
+                        revision=saved['revision']
+                    receipt={'workspace_revision':revision}
+                    if planned:
+                        saved=self.research.save(task['workspace_id'],CreateStudy.model_validate({
+                            **planned['definition'],'expected_revision':revision}),connection=db)
+                        receipt.update(study_id=saved['id'],study_revision=saved['revision'])
+                elif proposal['kind']=='type':
                     from .type_design import candidate
                     if proposal['type_id']!=task['workspace_id']:raise HTTPException(409,'型号方案归属已变化。')
                     document,_,_=candidate(state,proposal['changes'],pid)
@@ -312,7 +334,12 @@ class Proposals:
             self.tasks.event(db,task['id'],'proposal.decision',{'id':pid,'status':decision,'actor':getpass.getuser(),
                 'source':'human.route','engineering_approval':False,**receipt})
             if decision=='approved':
-                if proposal['kind'] in ('domain','type'):
+                if proposal['kind']=='draft_workflow':
+                    db.execute('UPDATE agent_tasks SET workspace_revision=? WHERE id=?',(receipt['workspace_revision'],task['id']))
+                    if receipt.get('study_id'):
+                        db.execute('UPDATE agent_tasks SET study_id=?,study_revision=? WHERE id=?',
+                            (receipt['study_id'],receipt['study_revision'],task['id']))
+                elif proposal['kind'] in ('domain','type'):
                     db.execute('UPDATE agent_tasks SET workspace_revision=? WHERE id=?',(receipt['workspace_revision'],task['id']))
                 elif proposal['kind']=='study' and task['study_id'] is None:
                     db.execute('UPDATE agent_tasks SET study_id=?,study_revision=? WHERE id=?',(receipt['study_id'],receipt['study_revision'],task['id']))

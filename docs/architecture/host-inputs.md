@@ -104,6 +104,10 @@
 | PUT `/api/agent/settings` | `{base_url,model,api_key?,instructions,model_timeout_s?}`；api_key 省略则保留原密钥，空串清除；非敏感项写入工程库 `agent_settings`，密钥只进系统凭据库或进程内存；保存的设置优先于 `CABLESIM_LLM_*` 环境变量 |
 | DELETE `/api/agent/settings` | 清除界面设置与保存的密钥，回到环境变量配置 |
 | POST `/api/agent/settings/test` | `{base_url?,model?,api_key?}`，缺项取当前生效值；发一次最小对话请求，返回 `{ok,latency_ms?,model?,code?,message?}`，不保存任何内容 |
+| GET / PUT `/api/agent/memory/settings` | 查看或保存`{enabled,recall_limit}`，默认关闭、召回5条（1至8）；状态含`engine:"langmem",version,available,code,retrieval:"sqlite_lexical_and_scope",worker_running,worker_error,engineering_evidence:false`。运行时未按requirements安装时启用返回503，不影响普通会话 |
+| GET `/api/agent/memories?workspace_id=&study_id=&q=&limit=&offset=` | 本工作区记忆与可选同研究记忆，`{items,total}`；每页1至20条，按查询词匹配与更新时间排序。条目含`id,kind,topic,content,revision,status,reason,sources:[{task_id,sequence}],workspace_revision,study_revision,methods,created,updated,engineering_evidence:false,authority:false` |
+| PUT / DELETE `/api/agent/memories/{id}` | 人工纠正用`{expected_revision,content}`；删除用查询参数`expected_revision`。冲突409，不覆盖人工修改；删除清空记忆文本和来源副本、保留身份墓碑。原始会话审计仍保留，删除记忆不等于删除聊天历史 |
+| GET / POST `/api/agent/sessions/{id}/memory` | GET返回本会话有界召回`context`与后台`jobs`（状态、原因码、独立请求数/tokens/耗时）；POST对已结束的最近消息入队，返回`{job_id}`，同一turn幂等，不重新计费抽取。关闭时409，活动消息409 |
 | GET `/api/agent/tools` | `[{name,title,kind,description,plugin_id?,hpc}]`；可选session_id或workspace_id（二者不能同时给）筛选适用工具；kind为read/propose/run，宿主工具不带plugin_id；沿用源码通知缓存，完整封签核验仍在能力检查与执行边界进行 |
 | GET `/api/agent/recipes` | `[{id,name,description,parameters}]`；可选session_id或workspace_id筛选适用配方；parameters为JSON Schema，供“/”菜单填参；型号会话返回type_review及只读inbox_triage，type_review的type_id默认且限定为绑定工作区；未筛选时保留完整目录 |
 | GET `/api/agent/sessions?workspace_id=` | 任务列表，按更新时间新到旧：绑定、状态/等待原因、首条提问作标题、未决方案数；不含消息正文与结果 |
@@ -115,7 +119,27 @@
 | POST `/api/agent/sessions/{id}/reconcile` | 无正文；查询原Run，返回`{resolved,unknown,reissued:false}`；不重新执行未知预览或提交作业 |
 | GET `/api/agent/contract` | 生成的事件、节点和实际模型工具参数JSON Schema；SSE事件schema也写入OpenAPI的x-sse-events |
 
-当前23个宿主工具为workspace_list/read、study_list/read、run_list/read、plugin_inspect、cable_model_read、propose_domain_changes、propose_method_parameters、study_preflight、study_preview、project_digest、study_baseline、sensitivity_inputs、recipe_execute、fem_comparison_read、propose_fem_verification、object_find、object_relations、type_read、propose_type_changes、inbox_read。另从已安装清单的可调用能力生成插件工具，总数由status.tools返回，实际目录以tools为准。模型请求省略宿主参数schema中的重复description注释，保留所有校验约束；/contract保留完整说明，工具头说明显示单位和权限。插件工具未绑定研究时只生成新建研究方案，批准后只保存Study；绑定研究时必须与该研究的准确方法一致，只有preview且非远程能力可本机试算。原生或HPC预检需要人工执行，不通过LLM触发远程作业。
+宿主工具目录以tools为准，另从已安装清单的可调用能力生成插件工具，总数由status.tools返回。模型请求省略宿主参数schema中的重复description/title/default/examples注释；recipe_execute保留配方ID及参数对象，具体配方参数通过platform_capabilities(tool="recipe_execute")按需检查。/contract和broker保留完整校验约束，不以紧凑模型定义替代执行校验。插件工具未绑定研究时只生成新建研究方案，批准后只保存Study；绑定研究时必须与该研究的准确方法一致，只有preview且非远程能力可本机试算。原生或HPC预检需要人工执行，不通过LLM触发远程作业。
+
+长期记忆使用LangMem的结构化抽取API，复用当前ModelPort、密钥管理和思考模式回传；不替换会话执行器，不优化系统提示。启用后，正常结束的消息自动进入单个宿主后台线程；只提供本条消息的原始用户文本、宿主状态回执与失败诊断（不带工具结果正文），不提供助手解释、思维链、被拦草稿或厂家全文。记忆限preference/goal/decision/lesson，每条引用真实事件序号；宿主核对来源并原子保存整批提议，非法来源整批失败。pending/running/completed/failed/cancelled、异常类别及真实用量写入agent_memory_jobs，终态清空抽取输入副本；后台失败不改变已完成的对话。每批最多3次模型请求、30秒、48KiB请求上下文，单次15秒；用量独立于前台消息预算并在memory.extracted/failed审计，重启时未完成调用明确记为MEMORY_INTERRUPTED，不重放。关闭记忆取消队列，正在返回的旧抽取也不能提交；宿主关闭时先结束记忆线程，数据库连接仅在短事务内使用。
+
+记忆在同一SQLite库按工作区和研究隔离保存，人工纠正/删除带乐观修订及空间generation，后台不能覆盖期间的人工改动。只抽取本条消息，删除后的旧用户原文不会在下一条消息中再次送给抽取器。召回采用本地词匹配（中文双字词、英文单词）和对象范围，最多6KiB；目前没有向量相似度、跨工程用户画像或独立用户ACL。偏好可跨输入修订保留；目标、决策及经验按输入/研究修订和已有方法发行引用判断过期，过期条目仍可查看但不装入模型。上下文memory单独标为历史参考，不进入工程数值证据或审批授权；最新用户说明优先，回答仍需从真实工具读取数值。前端可接上述人工管理及启用接口，本轮未新增记忆页面。
+
+敷设、参数化CAD与仿真准备共用不可变领域草稿，模型按目标自主组合工具，不按问句匹配固定流程：
+
+| 工具 | 参数与实际效果 |
+| --- | --- |
+| draft_read | `{view?:input|catalog|changes,draft_id?,paths?,compare_to?,offset?,limit?,expected_catalog_revision?}`；input为默认，省略ID读固定保存输入（persisted=true），带ID读本会话草稿（persisted=false）。稳定路径、显示单位和input_digest，最多8条路径；大结果的read_hint保留准确草稿ID。catalog只投影候选身份，分页列草稿与分析配置、parent_id、基准修订、摘要及available/expired/outdated原因；目录元数据不作数值证据，按ID使用时重新核验原件。changes须指定draft_id，compare_to省略与保存基准比，指定则比较两个本会话候选；只比较输入，不推算工程影响。catalog/changes返回完整行分页total/offset/next_page，上限6KiB，单行过大明确拒绝而不截断字段。limit默认10、上限20，offset默认0；next_page保留准确对象与catalog_revision，目录变化返回DRAFT_CATALOG_CHANGED须从0重读；各视图不接受无效组合参数。 |
+| draft_update | `{draft_id?,changes:[{path,value,unit}]}`或`{draft_id?,template:{kind,depth,spacing,unit:"m"}}`，二选一；普通领域/型号编辑校验及锁，返回新的draft_id，不保存工程。型号长度mm，工程长度m，工程量必须显式单位。模板kind取普通section-template契约，必须明确埋深与间距；会重排截面，保留教学来源和未审核物性，不能视为工程优化结论。 |
+| draft_geometry | `{draft_id?,method,parameters}`；Method固定四项封签身份，parameters先查plugin_inspect。只执行普通本机geometry/domain预览；远程能力、完整STEP/BRep导出转人工。聊天步骤只记录工件摘要、已核对量值和省略说明，不复制CAD网格；原显示网格保留在普通几何预览服务，detail_ref指向工作区/草稿几何预览，网格并未成为保存运行。模型仅读6KiB紧凑投影中的工件类型、真实外径量值、输入/方法/请求摘要与警告。核对回执及各工件的输入摘要、方法与修订；source分别保留本次调用的host_request_digest和插件执行回执request_sha256，两者的请求格式不同，不能相互比较。仿真配置参数及显示网格不提供温度/载流量证据。 |
+| simulation_prepare | `{draft_id?,method,parameters,title}`；按接受domain的封签分析契约核对结构和输入锁，保存不可变simulation_plan_id，与具体草稿/输入摘要绑定；不物理预检、不建网格、不求解。预算`{status:"requires_saved_study",core_hours:null,reason}`，不猜算力。 |
+| draft_propose | `{draft_id?,simulation_plan_id?,title}`；完整字段差异和可选新研究配置进入原审核，`kind:"draft_workflow",base_revision`，型号另有type_id。公开差异上限64KiB，超过拒绝，不隐藏待批准变更。 |
+
+草稿与分析配置在agent_plan_revisions保存，分别kind=draft/simulation；draft.created及simulation.prepared记录身份、摘要、修订和过期时间，完整原件留在计划，工具步骤照常进预算与审计。草稿上限1MiB、有效期1小时；共享修订变化返回DRAFT_BASE_CHANGED，跨会话ID、过期、错误单位、锁、非法路径返回具体诊断；草稿变化后旧分析配置返回SIMULATION_DRAFT_MISMATCH。几何检查沿用普通几何服务超时与错误，剩余预算小于能力超时上限时拒绝启动。人批准draft_workflow时重新核验全部输入、派生规则、锁和方法参数摘要，在同一事务调用普通save_domain及research.save；任一步冲突全部回滚，重复批准幂等。仅保存输入及研究，不运行、不发布、不提交超算。批准后会话采用新修订及新研究身份，可经平台只读接口读availability/estimate与已有人工作业；预检、确认预算和提交仍在普通研究工作台执行。
+
+模型上下文独立保留最近6份候选身份、总数、省略数及catalog读取提示，历史工具消息裁剪后仍能找回候选。内部record(model_context=true)由SQLite投影计划，只加载候选元数据和公开审核差异，不反复反序列化完整草稿、私有方案输入或分析参数；计划原件及原摘要保持不变，HTTP会话历史仍流式返回完整原件，人工批准仍读取完整方案。投影的body_projected标记说明body不等于原digest对应内容；候选不是保存运行，也不授予审批或执行权限。
+
+这条链让CAD检查与分析配置引用同一领域输入，未建立BRep→分析网格资格桥。draft_geometry的analysis_qualification="not_connected"；显示工件不能冒充求解网格、收敛结论或已保存运行。完整STEP/BRep、自由绘图编辑和超算提交仍由普通模块的人审入口处理。新增草稿方案沿用proposal.created事件，前端需识别draft_workflow，并完整展示结构增删和新研究的对象差异；会话步骤提供几何量值及工件摘要，完整网格须由普通几何预览读取，本轮不提供新的渲染事件。
 
 `object_find({kind?,q?,limit?,offset?})`与`object_relations({kind,id,limit?,offset?})`使用下文统一索引的同一对象身份，覆盖整个工程库；只读元数据，不授予跨工程修改权限。工具默认10项、上限20项，结果紧凑UTF-8 JSON不超过6KiB。API名片保留完整限制说明，Agent验证视图保留状态、关键偏差及单位、收敛、出处与保存版本，limitations仅选取预算内的完整条目（最多640字节），不截断句子。validation增添`total_limitations,omitted_limitations,omission_note,detail_ref:{kind:"validation",id,snapshot_digest,view:"results"}`；明确省略几条、全文在验证对象的家（结果页）。采用独立紧凑视图是为避免长说明挤掉证据，不改变原件或API名片；不能将省略内容说成已检查。`data.total/offset/next_offset`供继续分页；关联按uses、used_by、unresolved顺序分页，data.source_errors保留源错误。状态、名称和过期原因按名片引用，工程量仍须从project_digest或保存运行证据读取。两个工具照常进入计划、步骤、预算与审计。
 
@@ -133,7 +157,7 @@
 
 `type_review`配方参数schema由GET `/api/agent/recipes`返回，必填type_id，可选after、limit、expected_revision，view固定review。宿主先执行type_read并按next_page续读，每步保存计划、预算和审计，随后一次无工具请求解释缺项、已保存标准判定和改进建议；没有标准证据时明确未覆盖。仅建议，不生成修改或运行。
 
-型号工作台创建会话时传其工作区UUID（study_id通常省略），前端“/”菜单用`GET /api/agent/recipes?session_id=<会话ID>`，尚未创建会话时可用workspace_id。`session.context`审计固定kind与默认方案类型，旧会话按绑定修订的来源字段识别；人工批准改变修订不改变工作区类别。型号会话只开放type_read、propose_type_changes、object_find、object_relations、workspace_list、cable_model_read、plugin_inspect、recipe_execute、inbox_read，不向模型展示工程/研究工具或可执行插件能力。绕过目录调用研究工具也返回`TYPE_TOOL_NOT_APPLICABLE`；指定研究配方在消息开始前422 `RECIPE_NOT_APPLICABLE`。type_read与propose_type_changes可省略type_id，默认绑定型号；type_read保留显式读取其他型号的能力，propose_type_changes的显式ID只能为本会话型号，避免跨型号写入。
+型号工作台创建会话时传其工作区UUID（study_id通常省略），前端“/”菜单用`GET /api/agent/recipes?session_id=<会话ID>`，尚未创建会话时可用workspace_id。`session.context`审计固定kind与默认方案类型，旧会话按绑定修订的来源字段识别；人工批准改变修订不改变工作区类别。型号会话开放type_read、propose_type_changes、对象工具、目录读取、task_plan及platform能力发现/只读/人工请求准备，也可用draft_read/update/geometry/propose检查型号草稿；不展示工程研究工具、simulation_prepare或直接执行插件工具。型号草稿不接受工程敷设模板。绕过目录调用研究工具也返回`TYPE_TOOL_NOT_APPLICABLE`；指定研究配方在消息开始前422 `RECIPE_NOT_APPLICABLE`。type_read与propose_type_changes可省略type_id，默认绑定型号；type_read保留显式读取其他型号的能力，propose_type_changes的显式ID只能为本会话型号，避免跨型号写入。
 
 型号会话的普通消息先由宿主执行一页type_read(summary)，结果进入计划、步骤、预算、数值证据与`context.loaded`审计（含status与固定修订），再交模型；分页未展开部分不得称为已检查。自由提问由模型结合摘要和全部目标选择type_review、补读或提出明确字段方案；宿主不按“检查”等关键词改写任务。前端显式携带`recipe:{id:"type_review",parameters:{}}`时仍按next_page读完后一次无工具解释，`recipe.requested.source=human.message`；保留思考回传和回答核验。新建来源按type_creation识别；空白/资料导入草稿的空字段作为路径缺项，不伪造数值。完整型号修改仍使用普通保存的范围、锁与修订校验；不完整草稿返回TYPE_DRAFT_INCOMPLETE与请求字段path，指引在型号工作台补齐必填结构、额定要求及来源。
 

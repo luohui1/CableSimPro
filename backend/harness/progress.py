@@ -74,7 +74,7 @@ def update(tasks, registry, task, arguments):
     if len({goal['id'] for goal in goals}) != len(goals):
         raise HTTPException(422, {'code': 'TASK_GOAL_DUPLICATE', 'path': '/goals',
                                   'message': '目标ID须唯一；保留用户全部目标，不重复建项。'})
-    available = registry.visible(tasks.record(task['id']))
+    available = registry.visible(tasks.record(task['id'],model_context=True))
     for index, goal in enumerate(goals):
         for required in goal['requires']:
             if required['tool'] not in available or required['tool'] in ('task_plan', 'recipe_execute'):
@@ -85,7 +85,7 @@ def update(tasks, registry, task, arguments):
                 raise HTTPException(422, {'code': 'TASK_GOAL_ARGUMENTS_INVALID', 'path': f'/goals/{index}/requires',
                                           'message': '证据要求的参数不符合该工具契约：' + errors[0].message})
     event = {'turn_id': task['active_turn'], 'goals': goals, 'source': 'model', 'engineering_writes': False}
-    candidate = tasks.record(task['id'])
+    candidate = tasks.record(task['id'],model_context=True)
     candidate['events'].append({'type': 'task.goals', 'data': event})
     result = ToolResult(status='ok', summary='任务目标已记录；完成状态由实际成功工具回执确定，未执行工程操作。',
                         data=state(candidate, available))

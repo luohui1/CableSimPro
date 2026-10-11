@@ -149,7 +149,7 @@ class Proposal(StrictModel):
     changes: list[ProposalChange]
     checks: list[str]
     status: Literal['pending','approved','rejected'] = 'pending'
-    kind: Literal['domain','parameters','study','type'] | None = None
+    kind: Literal['domain','parameters','study','type','draft_workflow'] | None = None
     type_id: UUID | None = None
     base_revision: int | None = None
 
@@ -230,7 +230,7 @@ class ProposalCreated(StrictModel):
     title: str
     changes: list[ProposalChange]
     checks: list[str]
-    kind: Literal['domain','parameters','study','type'] | None = None
+    kind: Literal['domain','parameters','study','type','draft_workflow'] | None = None
     type_id: UUID | None = None
     base_revision: int | None = None
 
