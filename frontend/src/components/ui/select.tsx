@@ -43,7 +43,7 @@ function LabeledSelect({
           className="select-trigger"
         >
           <Primitive.Value placeholder={loading ? "加载中" : placeholder} />
-          <Primitive.Icon>
+          <Primitive.Icon className="select-chevron" data-select-arrow>
             <Icon name="action/chevron-down" />
           </Primitive.Icon>
         </Primitive.Trigger>
@@ -92,7 +92,7 @@ export const SelectGroup = Primitive.Group;
 export const SelectLabel = Primitive.Label;
 export const SelectSeparator = Primitive.Separator;
 export function SelectTrigger({ className = '', children, ...props }: ComponentProps<typeof Primitive.Trigger> & { size?: 'sm' | 'default' }) {
-  return <Primitive.Trigger className={`select-trigger ${className}`} {...props}>{children}<Primitive.Icon><Icon name="action/chevron-down" /></Primitive.Icon></Primitive.Trigger>;
+  return <Primitive.Trigger className={`select-trigger ${className}`} {...props}>{children}<Primitive.Icon className="select-chevron" data-select-arrow><Icon name="action/chevron-down" /></Primitive.Icon></Primitive.Trigger>;
 }
 export function SelectContent({ className = '', children, ...props }: ComponentProps<typeof Primitive.Content>) {
   return <Primitive.Portal><Primitive.Content className={`select-content ${className}`} position="popper" sideOffset={4} {...props}><Primitive.Viewport>{children}</Primitive.Viewport></Primitive.Content></Primitive.Portal>;

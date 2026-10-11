@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { fieldColor } from './difference-colormap';
+import { temperaturePalette } from '../field/temperature-palette';
 import { tokenColor } from './cad-renderer';
 import { registerCanvasCapture } from './export-image';
 import { SceneWorkerClient } from './scene-worker-client';
@@ -41,7 +42,7 @@ export function TemperatureSlice({ thermal, controller, camera, projectionKey, w
       // Both viewport renderers are orthographic. Three projections suffice for every saved node.
       const o = view.project(0, 0, 0), x = view.project(1000, 0, 0), z = view.project(0, 0, 1000);
       return { width: Math.max(1, Math.round(w * dpr)), height: Math.max(1, Math.round(h * dpr)),
-        origin: [o.x, o.y], dx: [x.x - o.x, x.y - o.y], dz: [z.x - o.x, z.y - o.y], size: [w, h], negative: tokenColor(element, '--brand-primary'), positive: tokenColor(element, '--error'), neutral: tokenColor(element, '--fill') };
+        origin: [o.x, o.y], dx: [x.x - o.x, x.y - o.y], dz: [z.x - o.x, z.y - o.y], size: [w, h], palette: temperaturePalette(element), negative: tokenColor(element, '--brand-primary'), positive: tokenColor(element, '--error'), neutral: tokenColor(element, '--fill') };
     };
     void worker.request('init', { canvas: offscreen, kind: 'field' }, [offscreen]).then(async () => {
       if (!alive) return;
@@ -49,7 +50,8 @@ export function TemperatureSlice({ thermal, controller, camera, projectionKey, w
       upload.current = async () => {
         setReady(false);
         const expected = projected.current.thermal;
-        await worker.request('field', { thermal: expected, view: viewData() });
+        const diagnostics=await worker.request('field', { thermal: expected, view: viewData() }) as {premultiplied:boolean};
+        element.dataset.webglPremultiplied=String(diagnostics.premultiplied);
         if (alive && projected.current.thermal === expected) { window.clearTimeout(deadline); setReady(true); setError(''); }
       };
       await upload.current();

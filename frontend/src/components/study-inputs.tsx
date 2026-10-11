@@ -393,7 +393,7 @@ export function ConditionsInputs({ document, historical }: InputProps) {
   return (
     <div className="input-module">
       {historical && <StaleBanner description="固定运行工况 · 只读" />}
-      <StudyCrossingInputs historical={historical} />
+      <StudyCrossingInputs historical={historical} placement="active" />
       {document.load_cases.map((load) => (
         <InputSection key={load.id} title={entityLabel(document, load.id)}>
           <div className="input-form-grid">
@@ -619,6 +619,7 @@ export function ConditionsInputs({ document, historical }: InputProps) {
           </div>
         </InputSection>
       )}
+      <StudyCrossingInputs historical={historical} placement="optional" />
     </div>
   );
 }

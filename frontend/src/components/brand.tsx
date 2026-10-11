@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { preferences } from '@/lib/preferences';
 import intro from '@/assets/brand/logo-intro.mp4';
@@ -35,22 +35,19 @@ export function BrandWordmark() {
 
 let introPlayed = false;
 
-/** 侧栏头部标志。浅色主题下本次会话首次进入播放一次片头并停在末帧；深色或减少动态时用矢量标志。 */
+/** 片头只占标记的位置，字标在播放、媒体失败和静态模式下都保持可见。 */
 export function BrandLogo({ theme, compact = false }: { theme: 'light' | 'dark'; compact?: boolean }) {
   const video = useRef<HTMLVideoElement>(null);
   const still = compact || theme === 'dark' || preferences().reducedMotion || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const [playing, setPlaying] = useState(!still && !introPlayed);
   useEffect(() => {
     const element = video.current;
-    if (!element) return;
-    const toEnd = () => { element.currentTime = Math.max(0, (element.duration || 3.4) - 0.05); };
-    if (introPlayed) {
-      if (element.readyState >= 1) toEnd(); else element.addEventListener('loadedmetadata', toEnd, { once: true });
-      return;
-    }
+    if (!element || still || !playing) return;
     introPlayed = true;
-    element.play().catch(toEnd);
-  }, [still]);
+    element.play().catch(() => setPlaying(false));
+  }, [still, playing]);
   return <Link to="/" search={{ theme }} className="brand-logo" aria-label="CableSimPro 首页">
-    {still ? <><BrandMark />{!compact && <BrandWordmark />}</> : <video ref={video} src={intro} muted playsInline preload="auto" aria-hidden="true" />}
+    <span className="brand-symbol"><BrandMark />{!still && playing && <video ref={video} src={intro} muted playsInline preload="auto" aria-hidden="true" onEnded={() => setPlaying(false)} onError={() => setPlaying(false)} />}</span>
+    {!compact && <BrandWordmark />}
   </Link>;
 }

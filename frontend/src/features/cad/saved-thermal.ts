@@ -2,7 +2,7 @@ import { array, numeric, optionalRecord, text } from '@/api/client';
 import { savedDomain } from '@/lib/domain-fields';
 import { temperatureView } from '@/lib/temperature-view';
 import { sectionGeometry } from '../drawing/section-geometry';
-import { turbo } from '../field/colormap';
+import { temperatureRgb as turbo } from './difference-colormap';
 import { fieldColor } from './difference-colormap';
 import { savedRunLabel } from '../field/run-label';
 import { sceneIdentity } from './input-scene';
@@ -76,7 +76,7 @@ export function savedThermal(run: Record<string, unknown>, document: DomainDocum
     runLabel: savedRunLabel(run), kind: field?.kind, notice: field?.kind === 'fem' && convergence.status === 'unconverged' ? '有限元未收敛' : undefined, points: field?.points || [], triangles: field?.triangles || [], values, minimum, maximum, conductors };
 }
 
-export function colorScene(scene: CadScene, thermal: CadThermal | undefined, palette?: readonly number[][]): CadScene {
+export function colorScene(scene: CadScene, thermal: CadThermal | undefined, palette?: readonly number[][], temperaturePalette?: readonly (readonly number[])[]): CadScene {
   if (!thermal) return scene;
   const span = Math.max(thermal.maximum - thermal.minimum, 1e-6);
   return { ...scene, assets: Object.fromEntries(Object.entries(scene.assets).map(([id, asset]) => {
@@ -85,6 +85,6 @@ export function colorScene(scene: CadScene, thermal: CadThermal | undefined, pal
     if (!candidates.length) return [id, asset];
     const value = Math.max(...candidates.map(c => c.value));
     const t = thermal.maximum === thermal.minimum ? .5 : (value - thermal.minimum) / span;
-    return [id, { ...asset, display_color: thermal.kind === 'difference' && palette ? fieldColor(t, true, palette[0], palette[1], palette[2]) : turbo(t) }];
+    return [id, { ...asset, display_color: thermal.kind === 'difference' && palette ? fieldColor(t, true, palette[0], palette[1], palette[2]) : turbo(t, temperaturePalette) }];
   })) };
 }

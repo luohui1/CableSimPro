@@ -14,6 +14,7 @@ import {
 import { entityLabel, savedDomain } from "@/lib/domain-fields";
 import { engineeringQuantity } from "@/lib/format";
 import { DataTable, type Column } from "./data-table";
+import { StudyDetailGroup } from './study-detail-group';
 import { Select } from "./ui/select";
 import { SourceBadge } from "./source-badge";
 import { EmptyState, ErrorState } from "./states";
@@ -286,22 +287,16 @@ export function StudyResults({
           />
         )}
       </Toolbar>
-      <DataTable
+      {[["temperature", "温度与电流"], ["losses", "损耗"], ["thermal", "热阻"], ["electrical", "电气参数"]].map(([id, label]) => {
+        const values = rows.filter(row => groupOf(row) === id);
+        if (!values.length) return null;
+        return <StudyDetailGroup key={id} id={'results:' + id} title={label} count={values.length}><DataTable
         key={text(run.id) + text(selected.case_id)}
         label="研究物理量结果"
         historical={run.freshness === "historical" || isVersionStale(run)}
         columns={columns}
-        groups={[
-          ["temperature", "温度"],
-          ["losses", "损耗"],
-          ["thermal", "热阻"],
-          ["electrical", "电气参数"],
-        ].map(([id, label]) => ({
-          id,
-          label,
-          rows: rows.filter((row) => groupOf(row) === id),
-          defaultCollapsed: id !== "temperature",
-        }))}
+        groups={[{id, label, rows: values}]}
+        showGroups={false}
         rowLabel={(row) => row.label + " · " + row.entity}
         onSelect={(row) =>
           onSelect({
@@ -331,7 +326,8 @@ export function StudyResults({
             ],
           })
         }
-      />
+      /></StudyDetailGroup>;
+      })}
     </div>
   );
 }

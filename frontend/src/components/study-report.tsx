@@ -259,7 +259,7 @@ function CurrentReport({
         <StatusMark kind={create.isPending ? 'running' : create.error && !cancelled ? 'error' : did ? 'current' : 'saved'} label={create.isPending ? '正在生成' : cancelled ? '已取消' : create.error ? '生成失败' : did ? '已生成 · 所选运行' : '所选运行'} />
         {create.isPending && <><span role="status">{progressLabels[text(generation?.stage)] || '正在准备'}</span><Button variant="ghost" size="compact" disabled={generation?.stage==='save' || generation?.state==='cancelled'} onClick={()=>void cancelGeneration().catch(error=>setPreviewError(error as Error))}>取消生成</Button></>}
         <div className="spacer" />
-        {did ? (
+        {!create.isPending && did ? (
           <>
           <Select label="PDF 版本" value={audience} disabled={download.isPending} onChange={value => setAudience(value as ReportAudience)} options={[{value:"customer",label:"客户版"},{value:"internal",label:"内部审核版"}]} />
           <Button
@@ -272,7 +272,7 @@ function CurrentReport({
           </Button>
           <Button variant="ghost" size="compact" disabled={download.isPending} onClick={() => download.mutate({format:"html",audience})}>HTML 存档</Button>
           </>
-        ) : (
+        ) : !create.isPending ? (
           <Button
             variant="run"
             size="compact"
@@ -282,7 +282,7 @@ function CurrentReport({
           >
             生成客户计算书
           </Button>
-        )}
+        ) : null}
       </div>
       {!did && <section aria-label="计算书附图与章节" className="report-toolbar">
         {cadImage && <label><input type="checkbox" checked={includeImage} disabled={create.isPending} onChange={event => setIncludeImage(event.target.checked)} /> 插入三维导出图（含色标与来源）</label>}
@@ -301,7 +301,8 @@ function CurrentReport({
           action={!boundError && create.error ? <Button disabled={create.isPending} onClick={() => create.mutate()}>重新生成</Button> : undefined}
         />
       )}
-      {error || boundError ? null : create.isPending ? <LoadingState title="正在生成客户计算书" /> : document.isFetching ? (
+      {create.isPending && did && <p className="muted">上一份计算书仍可查看；本次生成完成后切换到新版本。</p>}
+      {error || boundError ? null : create.isPending ? (did && preview ? <iframe className="report-frame" title="上一份计算书预览" src={preview} /> : <div aria-busy="true" className="report-generating-placeholder" />) : document.isFetching ? (
         <LoadingState title="正在读取计算书" />
       ) : !did ? (
         <EmptyState

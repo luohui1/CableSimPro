@@ -15,6 +15,13 @@ const headlinesOf = (value: unknown): Headline[] => (Array.isArray(value) ? valu
   .filter((row) => numeric(row.display_value) !== null && !!text(row.key))
   .map((row) => row as unknown as Headline);
 
+/** 差值只显示到工程精度；不把数值求解噪声呈现为工程变化。 */
+export function previewDifference(delta: number, unit: string) {
+  const physical = ['A', '°C', 'K'].includes(unit);
+  const rounded = physical ? Math.abs(delta) < 0.1 ? 0 : Number(delta.toFixed(1)) : delta;
+  return { rounded, label: rounded === 0 ? '无变化' : physical ? formatNumber(rounded, 1) : significantNumber(rounded, 3) };
+}
+
 /**
  * 快速试算（Explore）：用当前未保存的模型草稿和方法参数调用同一插件执行器，结果只显示、不入库、
  * 不生成运行记录与交付。只有插件声明了 preview 且在本机运行的能力才开放；“实时”在草稿变化后自动重算。
@@ -94,15 +101,16 @@ export function PreviewStrip({ preview, saved }: { preview: ReturnType<typeof us
   return <div className={`preview-strip ${preview.error ? "is-error" : ""}`} role="status" aria-label="试算结果">
     <span className="preview-tag">试算 · 未保存</span>
     {preview.error ? <span className="preview-error">{preview.error}</span>
-      : preview.result!.headlines.length ? preview.result!.headlines.map((row) => {
+      : preview.result!.headlines.length ? preview.result!.headlines.slice(0, 4).map((row) => {
         const before = savedRows.find((item) => item.key === row.key && item.condition === row.condition);
         const delta = before ? row.display_value - before.display_value : null;
         const physical = ['A', '°C', 'K'].includes(row.display_unit || row.unit);
         const shown = physical ? formatNumber(row.display_value, 1) : significantNumber(row.display_value, 4);
-        const difference = delta === null ? '' : physical ? formatNumber(delta, 1) : significantNumber(delta, 3);
+        const difference = delta === null ? null : previewDifference(delta, row.display_unit || row.unit);
         return <span key={row.key + (row.condition || "")} className="preview-value">
-          <small>{row.title}</small><b>{shown}</b>{row.display_unit && <span className="unit">{row.display_unit}</span>}
-          {delta !== null && <span className="preview-delta" title="相对已保存结果">较保存值 {delta > 0 && difference !== '0.0' ? "+" : ""}{difference}{row.key.includes('temperature') ? ' K' : row.display_unit ? ' ' + row.display_unit : ''}</span>}
+          <small title={`${row.title}：${shown} ${row.display_unit || ''}`}>{row.title}</small>
+          {!before && <b>{shown} {row.display_unit}</b>}
+          {difference && <span className="preview-delta" title="相对已保存结果；小于 0.1 A 或 0.1 K 的差值显示为无变化">较保存值 {difference.rounded > 0 ? "+" : ""}{difference.label}{difference.rounded === 0 ? '' : row.key.includes('temperature') ? ' K' : row.display_unit ? ' ' + row.display_unit : ''}</span>}
         </span>;
       }) : <span className="muted">{preview.result!.status === "failed" ? "插件未得出结果，见运行明细。" : "插件没有声明关键结论。"}</span>}
     {preview.result && <span className="muted">{formatNumber(preview.result.elapsed_ms)} ms</span>}

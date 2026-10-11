@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { studyIndex, typeIndex, workspaces } from '@/api/research';
@@ -32,6 +32,7 @@ function recent<T>(rows: T[], active: (row: T) => boolean): T[] {
 
 export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse }: { theme: 'light' | 'dark'; onTheme: () => void; onSlot: Slot; collapsed: boolean; onCollapse: () => void }) {
   const [create, setCreate] = useState(false);
+  const scroll = useRef<HTMLElement>(null);
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as { workspace?: string };
   const pathname = useLocation({ select: location => location.pathname });
@@ -61,6 +62,15 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
   const typeIds = new Set((types.data || []).map(row => text(row.id)));
   const projects = (spaces.data || []).filter(space => !typeIds.has(text(space.id)));
   const activeProject = (typeof search.workspace === 'string' && search.workspace) || studies.data?.find(row => row.id === activeStudy)?.workspace || '';
+  useEffect(() => {
+    const container = scroll.current;
+    if (!container || collapsed) return;
+    const active = container.querySelector<HTMLElement>('.tree-row[aria-current="page"]') || container.querySelector<HTMLElement>('.module-item[aria-current="page"]');
+    if (!active) return;
+    const viewport = container.getBoundingClientRect(), item = active.getBoundingClientRect();
+    if (item.bottom > viewport.bottom) container.scrollTop += item.bottom - viewport.bottom;
+    else if (item.top < viewport.top) container.scrollTop += item.top - viewport.top;
+  }, [pathname, activeProject, activeType, collapsed, spaces.data, types.data, studies.data]);
 
   return <aside className="workbench-sidebar" aria-label="导航">
     <div className="sidebar-head">
@@ -79,7 +89,7 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
         <DropdownMenuItem onSelect={() => void navigate({ to: '/types', search: { theme, create: true } })}>新建型号</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-    <nav className="sidebar-scroll" aria-label="对象">
+    <nav ref={scroll} className="sidebar-scroll" aria-label="对象">
       <Link className="module-item" to="/" search={{ theme }} activeOptions={{ exact: true }} title="首页"><Icon name="nav/home" /><span>首页</span></Link>
       <Link className="module-item" to="/inbox" search={{ theme }} title="待办"><Icon name="status/pending" /><span>待办</span>{!!todo && <span className="sidebar-count">{todo}</span>}</Link>
       <div className="tree-caption">工作</div>

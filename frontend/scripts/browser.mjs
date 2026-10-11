@@ -10,8 +10,8 @@ export const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
 export const outputRoot = path.join(repositoryRoot, '.data', 'frontend-handoff');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-export async function openHeadlessBrowser() {
-  const executable = process.env.BROWSER_EXECUTABLE || [
+export async function openHeadlessBrowser({ headed = false, executable: requestedExecutable } = {}) {
+  const executable = requestedExecutable || process.env.BROWSER_EXECUTABLE || [
     'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
     'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
     '/usr/bin/google-chrome', chromium.executablePath(),
@@ -21,10 +21,10 @@ export async function openHeadlessBrowser() {
   const profile = path.join(scratchRoot, `browser-profile-${randomUUID()}`);
   await fs.mkdir(profile, { recursive: true });
   const child = spawn(executable, [
-    '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
+    ...(!headed ? ['--headless=new'] : []), '--remote-debugging-port=0', `--user-data-dir=${profile}`,
     '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
     '--disable-component-update', 'about:blank',
-  ], { windowsHide: true, stdio: 'ignore' });
+  ], { windowsHide: !headed, stdio: 'ignore' });
   let browser;
   try {
     let port;
@@ -33,7 +33,7 @@ export async function openHeadlessBrowser() {
       if (port) break;
       await pause(200);
     }
-    if (!port) throw new Error('Headless CDP 启动超时。');
+    if (!port) throw new Error('浏览器 CDP 启动超时。');
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
     const context = browser.contexts()[0];
     if(process.env.E2E_ISOLATED==="1")await context.route('**/api/**',route=>{
@@ -48,7 +48,7 @@ export async function openHeadlessBrowser() {
       console.log(`浏览器清理：剩余标签页 ${context.pages().length}。`);
       try {
         const cdp = await browser.newBrowserCDPSession();
-        await cdp.send('Browser.close').catch(() => {});
+        await Promise.race([cdp.send('Browser.close').catch(() => {}), pause(2000)]);
       } catch { /* A closed browser still owes profile cleanup. */ }
       await pause(800);
       if (child.exitCode === null) child.kill();

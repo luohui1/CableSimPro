@@ -3,6 +3,8 @@ import { Link, useSearch } from "@tanstack/react-router";
 import type { ObjectCard, ObjectKind } from "@/api/object-index";
 import { Icon } from "./icon";
 import { StatusMark, type StatusKind } from "./status-mark";
+import { readableRunName, statusLabel } from '@/lib/status-vocabulary';
+import { formatObjectVersion } from '@/lib/format';
 
 /** 每类东西的“家”（FRONTEND_REQUIREMENTS §2.2 / §2.3）：引用只放链接，点了回到这里。地址只在此处按 kind 换算。 */
 const ICONS: Record<ObjectKind, string> = {
@@ -25,12 +27,12 @@ const MARKS: Record<string, StatusKind> = {
 };
 export const statusMark = (code: string): StatusKind => MARKS[code] || "draft";
 /** 版本串里的内部后缀换成读得懂的写法，不露出“+engineering”“public-sample”这类内部标识。 */
-export const versionLabel = (version: string) => version.replace(/^public-sample/, "公开样本").replace(/\+engineering$/, "（工程版）");
+export const versionLabel = formatObjectVersion;
 
 export function ObjectLink({ card, children, className = "object-link" }: { card: ObjectCard; children?: ReactNode; className?: string }) {
   const search = useSearch({ strict: false }) as { theme?: string };
   const theme = search.theme === "dark" ? "dark" as const : "light" as const;
-  const body = children ?? card.name;
+  const body = children ?? (card.kind === 'run' ? readableRunName(card.name, card.parent?.name) : card.name);
   const parent = card.parent;
   switch (card.kind) {
     case "project": return <Link className={className} to="/studies" search={{ theme, workspace: card.id }}>{body}</Link>;
@@ -58,11 +60,11 @@ export function ObjectLink({ card, children, className = "object-link" }: { card
 }
 
 /** 小名片：图标、名称、版本、状态。列表、关联面板、待办都用它显示引用。 */
-export function ObjectChip({ card, status = true }: { card: ObjectCard; status?: boolean }) {
+export function ObjectChip({ card, status = true, standard = card.kind === 'asset' && ['rule', 'standard'].includes(card.subtype || '') }: { card: ObjectCard; status?: boolean; standard?: boolean }) {
   return <span className="object-chip" title={card.name}>
     <Icon name={ICONS[card.kind] || "object/file"} />
     <ObjectLink card={card}>{card.name}</ObjectLink>
-    {card.version && <span className="muted">{versionLabel(card.version)}</span>}
-    {status && <StatusMark kind={statusMark(card.status.code)} label={card.status.label} detail={card.status.reason || undefined} />}
+    {card.version && <span className="muted">{versionLabel(card.version, standard)}</span>}
+    {status && <StatusMark kind={statusMark(card.status.code)} label={statusLabel(card.status.code, card.status.label)} detail={card.status.reason || undefined} />}
   </span>;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, message, optionalRecord, record, responseData, text } from "@/api/client";
 import { methodCatalog } from "@/api/research";
@@ -13,7 +13,12 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { StatusMark } from "@/components/status-mark";
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
+import { useHpcProfile } from '@/lib/solver-location-query';
+import { solverLocation, type SolverCapability } from '@/lib/solver-location';
+import { SolverLocation } from '@/components/solver-location';
+import { ErrorState, LoadingState } from '@/components/states';
+import { formatDateTime } from '@/lib/format';
 import { agentSettings, agentStatus, resetAgentSettings, saveAgentSettings, testAgentSettings, type AgentProbe, type AgentSettings } from "@/features/agent/agent-api";
 
 type Backup = { id: string; sha256: string; size_bytes: number; created: string; download_url: string; schema_version: number };
@@ -21,7 +26,7 @@ type Backup = { id: string; sha256: string; size_bytes: number; created: string;
 const SECTIONS = [
   { id: "general", title: "常规", icon: "nav/theme", lead: "显示偏好只影响这台电脑；保存与计算一律使用 SI。" },
   { id: "ai", title: "AI 模型", icon: "agent/agent", lead: "Agent 用哪家模型、怎么说话。它只能提出方案，批准仍由人完成。" },
-  { id: "compute", title: "计算位置", icon: "nav/simulation", lead: "每个插件在清单里声明运行位置：本机插件在独立进程中运行，超算插件以 Slurm 作业提交。" },
+  { id: "compute", title: "计算位置", icon: "nav/simulation", lead: "按能力声明与当前配置分组；超算以 Slurm 作业提交。" },
   { id: "data", title: "数据与备份", icon: "object/file", lead: "备份包含整个工程数据库：原件、输入版本、运行结果与计算书。" },
   { id: "report", title: "计算书", icon: "result/report", lead: "计算书只从指定运行生成，包含输入、方法版本与插件封签。" },
   { id: "about", title: "关于", icon: "status/info", lead: "宿主版本、数据契约与快捷键。" },
@@ -52,7 +57,9 @@ function Row({ label, hint, children }: { label: string; hint?: string; children
 }
 
 /** AI 模型：连接（预设 · 地址 · 模型 · 密钥 · 测试）、自定义指令、超时。密钥只写不读。 */
-function AiSettings() {
+type AiEditState = 'loading' | 'error' | 'dirty' | 'saving' | 'saved' | 'unconfigured' | 'environment';
+function AiSettings({ onState }: { onState: (state: AiEditState) => void }) {
+  const formElement = useRef<HTMLFormElement>(null);
   const queries = useQueryClient();
   const settings = useQuery({ queryKey: ["agent-settings"], queryFn: ({ signal }) => agentSettings(signal), retry: false });
   const status = useQuery({ queryKey: ["agent-status"], queryFn: ({ signal }) => agentStatus(signal), retry: false, staleTime: 60_000 });
@@ -69,7 +76,7 @@ function AiSettings() {
   const refresh = (data: AgentSettings) => {
     queries.setQueryData(["agent-settings"], data);
     void queries.invalidateQueries({ queryKey: ["agent-status"] });
-    setForm((current) => ({ ...current, key: "" })); setClearKey(false);
+    setForm({ base_url: data.base_url, model: data.model, key: '', instructions: data.instructions, timeout: data.model_timeout_s ? String(data.model_timeout_s) : '' }); setClearKey(false);
   };
   const timeout = form.timeout.trim() ? Number(form.timeout) : null;
   const save = useMutation({
@@ -77,7 +84,7 @@ function AiSettings() {
       ...(form.key.trim() ? { api_key: form.key.trim() } : clearKey ? { api_key: "" } : {}) }),
     onSuccess: refresh,
   });
-  const reset = useMutation({ mutationFn: resetAgentSettings, onSuccess: (data) => { refresh(data); setForm({ base_url: data.base_url, model: data.model, key: "", instructions: "", timeout: "" }); } });
+  const reset = useMutation({ mutationFn: resetAgentSettings, onSuccess: refresh });
   const test = useMutation({ mutationFn: () => testAgentSettings({ base_url: form.base_url.trim(), model: form.model.trim(), ...(form.key.trim() ? { api_key: form.key.trim() } : {}) }), onSuccess: setProbe });
   const data = settings.data;
   const preset = PRESETS.find((item) => item.base === form.base_url.trim());
@@ -85,19 +92,32 @@ function AiSettings() {
   // 环境变量的密钥只在地址不变时沿用
   const keyNeeded = !!data && data.key_source === "environment" && form.base_url.trim().replace(/\/$/, "") !== data.base_url.replace(/\/$/, "") && !form.key.trim();
   const timeoutInvalid = timeout !== null && (!Number.isInteger(timeout) || timeout < 10 || timeout > 180);
+  const baseInvalid = !!form.base_url.trim() && (() => { try { return !['http:', 'https:'].includes(new URL(form.base_url.trim()).protocol); } catch { return true; } })();
+  const busy = save.isPending || reset.isPending;
+  const canSave = dirty && !busy && !timeoutInvalid && !baseInvalid && !keyNeeded && !!form.base_url.trim() && !!form.model.trim();
+  const editState: AiEditState = settings.isError || save.error || reset.error ? 'error' : settings.isPending || !loaded ? 'loading' : busy ? 'saving' : dirty ? 'dirty' : !data?.configured ? 'unconfigured' : data.source === 'environment' ? 'environment' : 'saved';
+  useEffect(() => onState(editState), [onState, editState]);
+  useEffect(() => {
+    const shortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); if (canSave) formElement.current?.requestSubmit(); }
+    };
+    window.addEventListener('keydown', shortcut);
+    return () => window.removeEventListener('keydown', shortcut);
+  }, [canSave]);
 
   if (settings.isPending) return <p className="muted">正在读取模型设置</p>;
-  if (settings.isError || !data) return <p className="field-error">模型设置读取失败：{message(settings.error)}</p>;
-  return <div className="settings-ai">
+  if (settings.isError || !data) return <ErrorState title="模型设置读取失败" description={message(settings.error)} action={<Button onClick={() => void settings.refetch()}>重新读取</Button>} />;
+  return <form ref={formElement} className="settings-ai" data-edit-state={editState} onSubmit={(event) => { event.preventDefault(); if (canSave) save.mutate(); }}>
     <div className={`settings-connection ${data.configured ? "is-ok" : ""}`}>
       <span className={`status-dot ${data.configured ? "is-ok" : "is-off"}`} />
       <div>
         <b>{data.configured ? `已配置 · ${data.model}` : "模型未配置"}</b>
-        <span>{data.configured ? `来自${SOURCE[data.source]}${data.key_hint ? ` · 密钥 ${data.key_hint}` : ""}` : "填写服务地址、模型名与密钥后保存；也可以由宿主的 CABLESIM_LLM_* 环境变量提供。"}</span>
+        <span>{data.configured ? `来自${SOURCE[data.source]}${data.key_hint ? ` · 密钥 ${data.key_hint}` : ""}` : "填写服务地址、模型名与密钥后保存。"}</span>
       </div>
       {status.data?.tools ? <span className="settings-connection-tools">可调用 {status.data.tools} 个工具</span> : null}
     </div>
 
+    <fieldset className="settings-fields" disabled={busy || !loaded}>
     <FieldGroup className="settings-form">
       <Field>
         <FieldLabel>服务商</FieldLabel>
@@ -111,16 +131,16 @@ function AiSettings() {
           {PRESETS.map((item) => <ToggleGroupItem key={item.key} value={item.key}>{item.name}</ToggleGroupItem>)}
           <ToggleGroupItem value="custom">其他兼容服务</ToggleGroupItem>
         </ToggleGroup>
-        <FieldDescription>任何 OpenAI 兼容（/chat/completions）且支持函数调用的服务都可以；预设只代填地址。</FieldDescription>
       </Field>
       <div className="settings-form-pair">
         <Field>
           <FieldLabel htmlFor="ai-base">服务地址</FieldLabel>
-          <Input id="ai-base" value={form.base_url} onChange={(event) => set("base_url")(event.target.value)} placeholder="https://api.example.com/v1" spellCheck={false} autoComplete="off" />
+          <Input id="ai-base" type="url" required aria-invalid={baseInvalid} value={form.base_url} onChange={(event) => set("base_url")(event.target.value)} placeholder="https://api.example.com/v1" spellCheck={false} autoComplete="off" />
+          {baseInvalid && <FieldError>填写以 http:// 或 https:// 开头的完整服务地址。</FieldError>}
         </Field>
         <Field>
           <FieldLabel htmlFor="ai-model">模型名</FieldLabel>
-          <Input id="ai-model" value={form.model} onChange={(event) => set("model")(event.target.value)} placeholder="例如 deepseek-chat" spellCheck={false} autoComplete="off" />
+          <Input id="ai-model" required value={form.model} onChange={(event) => set("model")(event.target.value)} placeholder="例如 deepseek-chat" spellCheck={false} autoComplete="off" />
         </Field>
       </div>
       <Field>
@@ -129,12 +149,12 @@ function AiSettings() {
           placeholder={clearKey ? "保存后清除已保存的密钥" : !data.has_key || keyNeeded ? "sk-…" : data.key_source === "environment" ? `沿用环境变量里的密钥 ${data.key_hint || ""}，留空表示不修改` : `已保存 ${data.key_hint || ""}，留空表示不修改`} />
         {keyNeeded && <FieldError>换了服务地址，环境变量里的密钥不会带过去，请填写这家服务的密钥。</FieldError>}
         <FieldDescription>
-          密钥只送到宿主，存放在{KEY_PLACE[data.key_storage]}；不写入数据库、文件与日志，页面也读不回来。{data.key_source === "environment" && " 当前密钥来自宿主环境变量。"}
-          {data.has_key && data.key_source !== "environment" && !clearKey && <> <button type="button" className="settings-link" onClick={() => { setClearKey(true); setForm((current) => ({ ...current, key: "" })); }}>清除已保存的密钥</button></>}
+          留空保留现有密钥。
+          {data.has_key && data.key_source !== "environment" && !clearKey && <> <button type="button" className="settings-link" onClick={() => { setClearKey(true); setProbe(null); setForm((current) => ({ ...current, key: "" })); }}>清除已保存的密钥</button></>}
         </FieldDescription>
       </Field>
       <div className="settings-test">
-        <Button size="compact" loading={test.isPending} disabled={!form.base_url.trim() || !form.model.trim()} onClick={() => test.mutate()}><Icon name="run/preflight" />测试连接</Button>
+        <Button type="button" size="compact" loading={test.isPending} disabled={test.isPending || !form.base_url.trim() || !form.model.trim() || keyNeeded} onClick={() => test.mutate()}><Icon name="run/preflight" />测试连接</Button>
         {probe && <span className={probe.ok ? "settings-test-ok" : "settings-test-fail"} role="status">
           <Icon name={probe.ok ? "agent/approve" : "status/warning"} />
           {probe.ok ? `连接正常 · ${probe.model} · ${probe.latency_ms} ms` : probe.message}
@@ -155,22 +175,26 @@ function AiSettings() {
         {timeoutInvalid ? <FieldError>取 10–180 之间的整数秒。</FieldError> : <FieldDescription>网络慢或模型较大时调高；新建任务起生效。留空用默认 30 秒。</FieldDescription>}
       </Field>
     </FieldGroup>
+    </fieldset>
+    <details className="settings-help muted"><summary>连接协议与密钥保存方式</summary><p>服务需兼容 OpenAI /chat/completions 并支持函数调用；预设只代填地址。也可由平台的 CABLESIM_LLM_* 环境变量提供配置。</p><p>密钥存放在{KEY_PLACE[data.key_storage] || '当前配置指定的位置'}；页面无法读回密钥，不写入数据库与日志。</p></details>
 
     <div className="settings-actions">
-      <Button variant="primary" loading={save.isPending} disabled={!dirty || timeoutInvalid || !form.base_url.trim() || !form.model.trim()} onClick={() => save.mutate()}>保存</Button>
-      {dirty && <Button variant="ghost" onClick={() => { setLoaded(false); setProbe(null); setClearKey(false); }}>放弃修改</Button>}
-      {data.source === "settings" && <Button variant="ghost" loading={reset.isPending} onClick={() => reset.mutate()}>{data.environment.api_key ? "改回环境变量配置" : "清除本页设置"}</Button>}
+      <Button type="submit" variant="primary" loading={save.isPending} disabled={!canSave}>保存</Button>
+      {dirty && <Button type="button" variant="ghost" disabled={busy} onClick={() => { setLoaded(false); setProbe(null); setClearKey(false); save.reset(); reset.reset(); }}>放弃修改</Button>}
+      {data.source === "settings" && <Button type="button" variant="ghost" disabled={busy} loading={reset.isPending} onClick={() => reset.mutate()}>{data.environment.api_key ? "改回环境变量配置" : "清除本页设置"}</Button>}
       {(save.error || reset.error) && <span className="field-error">{message(save.error || reset.error)}</span>}
-      {save.isSuccess && !dirty && <span className="muted" role="status">已保存，下一条消息起生效。</span>}
     </div>
-  </div>;
+  </form>;
 }
 
 /** 设置：左侧分类，右侧当前分类的内容；分类写在地址里，可以直接链接到“AI 模型”。 */
 export function SettingsPage() {
   const { theme, search, navigate } = usePageTheme();
   const queries = useQueryClient();
-  const current: SectionId = SECTIONS.some((item) => item.id === search.section) ? (search.section as SectionId) : "general";
+  const pathname = useLocation({ select: location => location.pathname });
+  const current: SectionId = pathname === '/settings/compute' ? 'compute' : SECTIONS.some((item) => item.id === search.section) ? (search.section as SectionId) : "general";
+  const [aiState, setAiState] = useState<AiEditState>('loading');
+  const profile = useHpcProfile(current === 'compute');
   const [reducedMotion, setReducedMotion] = useState(preferences().reducedMotion);
   const [restore, setRestore] = useState<Backup | null>(null);
   const health = useQuery({ queryKey: ["host-health"], queryFn: async ({ signal }) => record(await responseData(api.GET("/api/health", { signal })), "宿主状态") });
@@ -193,14 +217,15 @@ export function SettingsPage() {
   };
   const setMotion = (next: boolean) => { setReducedMotion(next); savePreferences({ theme, reducedMotion: next }); };
   const plugins = (catalog.data || []).map(optionalRecord);
+  const capabilities = plugins.flatMap(plugin => (Array.isArray(plugin.capabilities) ? plugin.capabilities : []).map(value => ({ plugin, capability: optionalRecord(value) as SolverCapability & { title?: string } })));
   const groups = [
-    { key: "local", title: "本机", note: "独立进程，随宿主运行", rows: plugins.filter((p) => text(optionalRecord(p.execution_policy).backend) !== "slurm") },
-    { key: "hpc", title: "超算", note: "以 Slurm 作业提交，需人工确认", rows: plugins.filter((p) => text(optionalRecord(p.execution_policy).backend) === "slurm") },
-  ];
+    { key: "local", title: "本机" },
+    { key: "slurm", title: "超算" },
+  ].map(group => ({ ...group, rows: profile.data ? capabilities.filter(({ plugin, capability }) => solverLocation(text(optionalRecord(plugin.method).plugin_id), capability, profile.data).location === group.key) : [] }));
   const restoreState = text(pending.data?.status);
 
   return (
-    <CatalogShell title="设置" status={<StatusMark kind="current" label="修改即时生效" />} actions={null}>
+    <CatalogShell title="设置" status={current === 'ai' ? <StatusMark kind={aiState === 'error' ? 'error' : aiState === 'dirty' || aiState === 'unconfigured' ? 'draft' : aiState === 'saving' || aiState === 'loading' ? 'running' : aiState === 'environment' ? 'current' : 'saved'} label={{ loading: '读取中', error: '读取或保存失败', dirty: '修改未保存', saving: '保存中', saved: '已保存 · 下一条消息起生效', unconfigured: '待配置', environment: '使用环境配置' }[aiState]} /> : current === 'general' ? <StatusMark kind="current" label="修改即时生效" /> : null} actions={null}>
       <div className="settings-page" data-page="settings" data-state={health.isPending ? "loading" : health.error ? "error" : "success"}>
         <nav className="settings-nav" aria-label="设置分类">
           {SECTIONS.map((item) => <button key={item.id} type="button" aria-current={item.id === current ? "page" : undefined} onClick={() => go(item.id)}>
@@ -227,14 +252,20 @@ export function SettingsPage() {
               </tbody>
             </table>
           </>}
-          {current === "ai" && <AiSettings />}
+          {current === "ai" && <AiSettings onState={setAiState} />}
           {current === "compute" && <div className="settings-compute">
-            {groups.map((group) => <div key={group.key} className="settings-card">
-              <div className="settings-card-head"><b>{group.title}</b><span>{catalog.isPending ? "…" : `${group.rows.length} 个插件`}</span><small>{group.note}</small></div>
-              <ul className="settings-plugins">{group.rows.map((p) => <li key={text(optionalRecord(p.method).plugin_id) || text(p.name)}>
-                <span>{text(p.name)}</span><small>{text(optionalRecord(p.method).version) || text(p.version)}</small>
-              </li>)}{!catalog.isPending && !group.rows.length && <li className="muted">没有插件</li>}</ul>
-            </div>)}
+            {catalog.isError || profile.isError ? <ErrorState title="计算位置读取失败" description={message(catalog.error || profile.error)} action={<Button onClick={() => { void catalog.refetch(); void profile.refetch(); }}>重试</Button>} />
+              : catalog.isPending || profile.isPending ? <LoadingState title="读取配置中" /> : <>
+                <p className={profile.data.status === 'invalid' ? 'field-error' : 'muted'}>{profile.data.status === 'invalid' ? '超算配置无效，请修正连接参数。' : profile.data.configured ? profile.data.connection_checked ? '连接参数已配置，连接检查已完成。' : '连接参数已配置，连接尚未检查；配置完成不代表连接可用。' : '超算连接未配置。'}</p>
+                {profile.data.configuration_file && <details className="muted"><summary>超算连接配置</summary><p>平台从配置文件读取超算连接。</p><code>{profile.data.configuration_file}</code>{profile.data.status === 'invalid' && <p>{profile.data.configuration_note}</p>}</details>}
+                {groups.map(group => <section key={group.key} className="settings-card" aria-label={`${group.title}能力`}>
+                  <div className="settings-card-head"><b>{group.title}</b><span>{group.rows.length} 项能力</span></div>
+                  <ul className="settings-plugins">{group.rows.map(({ plugin, capability }) => <li key={text(optionalRecord(plugin.method).plugin_id) + ':' + capability.id}>
+                    <div><b>{capability.title || capability.id}</b><small>{text(plugin.name)} · {text(optionalRecord(plugin.method).version)}</small></div>
+                    <SolverLocation pluginId={text(optionalRecord(plugin.method).plugin_id)} capability={capability} prefix={false} />
+                  </li>)}{!group.rows.length && <li className="muted">没有能力</li>}</ul>
+                </section>)}
+              </>}
           </div>}
           {current === "compute" && <p className="settings-link"><Link to="/runs" search={{ theme }}>超算作业在“运行与作业”中查看<Icon name="action/arrow-right" /></Link></p>}
           {current === "data" && <>
@@ -248,7 +279,7 @@ export function SettingsPage() {
               <table className="data-table">
                 <thead><tr><th>时间</th><th className="numeric">大小</th><th>校验摘要</th><th /></tr></thead>
                 <tbody>{[...(backups.data || [])].reverse().map((b) => <tr key={b.id}>
-                  <td>{new Date(b.created).toLocaleString("zh-CN")}</td>
+                  <td>{formatDateTime(b.created)}</td>
                   <td className="numeric">{(b.size_bytes / 1048576).toFixed(1)} MB</td>
                   <td className="muted"><code>{b.sha256.slice(0, 12)}…</code></td>
                   <td className="settings-row-actions"><a className="button button-ghost button-compact" href={b.download_url} download>下载</a><Button size="compact" variant="ghost" onClick={() => setRestore(b)}>恢复</Button></td>
@@ -268,7 +299,7 @@ export function SettingsPage() {
         </section>
       </div>
       <Dialog open={!!restore} onOpenChange={(open) => { if (!open) setRestore(null); }} title="恢复到这个备份？"
-        description={restore ? `将在下次重启宿主时，用 ${new Date(restore.created).toLocaleString("zh-CN")} 的备份替换当前整个工程数据库。替换前会自动保留一份当前数据。` : undefined}
+        description={restore ? `将在下次重启宿主时，用 ${formatDateTime(restore.created)} 的备份替换当前整个工程数据库。替换前会自动保留一份当前数据。` : undefined}
         actions={<><Button onClick={() => setRestore(null)}>取消</Button><Button variant="primary" loading={requestRestore.isPending} onClick={() => restore && requestRestore.mutate(restore)}>安排恢复</Button></>}>
         {requestRestore.error && <p className="field-error">{message(requestRestore.error)}</p>}
       </Dialog>

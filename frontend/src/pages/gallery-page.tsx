@@ -33,6 +33,7 @@ import { formatNumber, engineeringQuantity } from "@/lib/format";
 import { useShortcuts } from "@/lib/use-shortcuts";
 import { galleryEntries as drawingEntries } from "@/features/drawing/gallery-entry";
 import { galleryEntries as cadEntries } from "@/features/cad/gallery-entry";
+import { CommandBar } from '@/components/command-bar';
 
 const data = [
   { id: "300", name: "3×300", current: 452 },
@@ -79,7 +80,7 @@ function Section({
 
 const syntheticField = syntheticKennellyField();
 export function GalleryPage() {
-  const { theme } = galleryRoute.useSearch();
+  const { theme, example } = galleryRoute.useSearch();
   const navigate = galleryRoute.useNavigate();
   const [number, setNumber] = useState<number | null>(400);
   const [select, setSelect] = useState("one");
@@ -121,7 +122,7 @@ export function GalleryPage() {
         theme={theme}
         onTheme={() =>
           navigate({
-            search: { theme: theme === "light" ? "dark" : "light" },
+            search: { theme: theme === "light" ? "dark" : "light", example },
             replace: true,
           })
         }
@@ -150,7 +151,20 @@ export function GalleryPage() {
             ))}
           </nav>
         </div>
-        {state === "empty" ? (
+        <section className="command-bar-gallery" aria-label="命令栏收纳示例">
+          <h2>命令栏 · 编辑状态</h2>
+          <CommandBar label="命令栏收纳示例" status={state === 'historical' ? '历史结果' : state === 'loading' ? '读取中' : state === 'error' ? '读取失败' : state === 'empty' ? '未运行' : '有 2 处未保存修改'} actions={[
+            { id: 'undo', label: '撤销', icon: 'action/undo', onSelect: () => setResult(value => value + 1), priority: 10 },
+            { id: 'redo', label: '重做', icon: 'action/redo', onSelect: () => setDialog('重做已执行'), priority: 0 },
+            { id: 'inputs', label: '编辑工程模型', onSelect: () => setDialog('工程模型'), priority: 30 },
+            { id: 'snapshot', label: '查看输入快照', onSelect: () => setDialog('输入快照'), priority: 20 },
+            { id: 'records', label: '运行记录', onSelect: () => setDialog('运行记录'), priority: 40 },
+            { id: 'agent', label: '让 Agent 检查', onSelect: () => setDialog('Agent 检查'), priority: 5 },
+            { id: 'save', label: '保存修改', role: 'save', onSelect: () => setResult(value => value + 1) },
+            { id: 'report', label: '生成计算书', role: 'primary', onSelect: () => setDialog('计算书'), disabledReason: state === 'loading' ? '读取完成后可生成' : undefined },
+          ]} />
+        </section>
+        {example === 'command-bar' ? null : state === "empty" ? (
           <EmptyState
             title="陈列内容为空"
             description="切换为成功状态查看全部公共控件。"

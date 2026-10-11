@@ -15,7 +15,9 @@ export function studyPresentation(study: StudyRow, run?: Record<string, unknown>
   });
   const details = [...new Set(reasons.map(reason => {
     const versions = `${text(reason.from_version)} → ${text(reason.to_version)}`;
-    if (reason.code === 'METHOD_VERSION_CHANGED') return `方法 ${displayName(text(reason.id))} ${versions}${reason.from_version === reason.to_version ? '（发行内容变化）' : ''}`;
+    if (reason.code === 'METHOD_VERSION_CHANGED') return reason.from_version === reason.to_version
+      ? '方法发行内容已更新（版本号未变），结果需重算'
+      : `方法 ${displayName(text(reason.id))} 已更新（${versions}），结果需重算`;
     if (reason.code === 'MODEL_VERSION_CHANGED') return `引用型号 ${versions}`;
     if (reason.code === 'METHOD_UNAVAILABLE') return `方法 ${displayName(text(reason.id))} 当前不可用`;
     return text(reason.message) || '输入或引用版本已变化';
@@ -32,7 +34,8 @@ export function studyPresentation(study: StudyRow, run?: Record<string, unknown>
   const reason = edits ? `${edits} 处未保存修改` : error ? message(error) : code === 'outdated' ? details.join('；') || '输入或方法版本已变化'
     : code === 'loading' ? '正在读取保存运行' : code === 'not_run' ? '尚未运行，请预检并运行' : code === 'running' ? '运行中，保存结果保留' : code === 'failed' ? failureReason : `最近运行 ${when} · ${state.label}`;
   const staleValue = code === 'outdated' ? {version_status:{status:'stale',reasons}} : run || study.raw;
-  return {code,label,mark,reason,staleValue,historical:code === 'outdated'};
+  const releaseDetails = reasons.filter(reason => reason.code === 'METHOD_VERSION_CHANGED').map(reason => `原发行摘要：${text(reason.from_release_digest) || text(reason.from_digest) || '记录未提供'}；当前发行摘要：${text(reason.to_release_digest) || text(reason.to_digest) || '记录未提供'}`).join('\n');
+  return {code,label,mark,reason,releaseDetails,staleValue,historical:code === 'outdated'};
 }
 export type StudyPresentation = ReturnType<typeof studyPresentation>;
 

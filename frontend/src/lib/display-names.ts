@@ -1,3 +1,4 @@
+import { STATUS_WORDS } from './status-vocabulary.ts';
 /** Presentation vocabulary only. IDs, source records and saved values are never rewritten. */
 export const displayNames: Readonly<Record<string, string>> = {
   "elmer-heat": "Elmer 热传导",
@@ -115,17 +116,8 @@ export const displayNames: Readonly<Record<string, string>> = {
   electrical: "电气参数",
   geometry: "结构推导",
   standards: "标准核对",
-  succeeded: "成功",
-  failed: "失败",
-  running: "运行中",
-  queued: "排队中",
-  cancelled: "已取消",
   available: "可用",
   unavailable: "未覆盖",
-  current: "当前",
-  historical: "历史",
-  draft: "草稿",
-  published: "已发布",
   satisfied: "满足",
   not_satisfied: "不满足",
   pending: "等待中",
@@ -344,6 +336,7 @@ export const displayNames: Readonly<Record<string, string>> = {
   air_spaces: "空气间隙",
   touching: "接触",
   "XLPE/PVC": "交联聚乙烯 / 聚氯乙烯",
+  ...STATUS_WORDS,
 };
 const prefixes: Record<string, string> = {
   circuit: "回路",

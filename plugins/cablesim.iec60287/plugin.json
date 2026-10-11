@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.iec60287",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "name": "IEC 60287 载流量",
   "description": "计算声明范围内单芯或独立屏蔽三芯直埋、排管与矩形回填的稳态温度和允许电流，输出逐源互热、屏蔽与磁性铠装损耗及核对表。",
   "icon": "assets/icon.svg",
@@ -70,7 +70,7 @@
     {
       "kind": "method",
       "id": "iec60853-emergency",
-      "title": "IEC60853应急额定（给定标准阶跃响应）",
+      "title": "IEC 60853应急额定（给定标准阶跃响应）",
       "method_version": "1.0.0",
       "analysis": "transient",
       "input_schema": "cablesim.iec60853-emergency/1",
@@ -103,7 +103,7 @@
         "三回路组、周期额定和管内热路尚未完成IEC基础正文核对，明确未覆盖。"
       ],
       "category": "calculation",
-      "description": "仅热独立回路、给定且有来源的额定阶跃响应；不生成电缆/管内热网络参数。；三回路组、周期额定和管内热路尚未完成IEC基础正文核对，明确未覆盖。",
+      "description": "仅热独立回路、给定且有来源的额定阶跃响应；不生成电缆/管内热网络参数；三回路组、周期额定和管内热路尚未完成IEC基础正文核对，明确未覆盖。",
       "parameter_schema": {
         "type": "object",
         "additionalProperties": false
@@ -226,7 +226,7 @@
               "minimum": 0,
               "title": "应急前电流",
               "type": "number",
-              "description": "IEC60853应急过程前的稳态均方根电流。",
+              "description": "IEC 60853应急过程前的稳态均方根电流。",
               "x-unit": {
                 "si": "A",
                 "display": "A",
@@ -265,7 +265,7 @@
               "exclusiveMinimum": 0,
               "title": "稳态焦耳温升",
               "type": "number",
-              "description": "参考电流对应的稳态焦耳热温升，供IEC60853应急子集使用。",
+              "description": "参考电流对应的稳态焦耳热温升，供IEC 60853应急子集使用。",
               "x-unit": {
                 "si": "K",
                 "display": "K",
@@ -338,7 +338,7 @@
               "minLength": 1,
               "title": "热响应来源",
               "type": "string",
-              "description": "记录IEC60853参考热响应的计算或试验来源。",
+              "description": "记录IEC 60853参考热响应的计算或试验来源。",
               "x-unit": {
                 "si": null,
                 "display": null,
@@ -495,7 +495,7 @@
         "保留出版物历史公式，不替代IEC2023通用工程计算或审批。"
       ],
       "category": "calculation",
-      "description": "三叶形固接、平排不换位不平衡交叉互联参考结构；两金属层损耗与温度分别迭代。；保留出版物历史公式，不替代IEC2023通用工程计算或审批。",
+      "description": "三叶形固接、平排不换位不平衡交叉互联参考结构；两金属层损耗与温度分别迭代；保留出版物历史公式，不替代IEC2023通用工程计算或审批。",
       "parameter_schema": {
         "type": "object",
         "additionalProperties": false
@@ -1326,7 +1326,7 @@
         "保留TB880历史公式约定，不替代IEC2023通用工程计算。"
       ],
       "category": "calculation",
-      "description": "仅明确的三芯铅护套钢丝铠装、接触三叶形低覆盖铜线屏蔽两类参考结构。；保留TB880历史公式约定，不替代IEC2023通用工程计算。",
+      "description": "仅明确的三芯铅护套钢丝铠装、接触三叶形低覆盖铜线屏蔽两类参考结构；保留TB880历史公式约定，不替代IEC2023通用工程计算。",
       "parameter_schema": {
         "type": "object",
         "additionalProperties": false
@@ -2229,7 +2229,7 @@
         "不覆盖单芯磁性、钢带、两芯及完整多芯领域映射；TB880大截面为特定参考验证，不构成任意结构认证。"
       ],
       "category": "calculation",
-      "description": "仅三芯圆导体钢丝铠装SL热路；给定同一温限工作点Rc/Rs/λ1/T1-T4，迭代铠装温度。；非磁性护套并联替代量按§5.4.2实现；完整非磁性λ1/λ2热路未验证，拒算。",
+      "description": "仅三芯圆导体钢丝铠装SL热路；给定同一温限工作点Rc/Rs/λ1/T1-T4，迭代铠装温度；非磁性护套并联替代量按§5.4.2实现；完整非磁性λ1/λ2热路未验证，拒算。",
       "parameter_schema": {
         "type": "object",
         "additionalProperties": false
@@ -2942,7 +2942,7 @@
         "交叉热源降额按IEC60287-3-3:2007 4.1–4.3；仅一根三芯直埋缆，固定W/m热源且交叉位置重合；不给定电流温度，不联合求解热源载流量。"
       ],
       "category": "calculation",
-      "description": "地下稳态、恒温地表、均匀原土或单一矩形回填区；不支持分层土壤、多介质分区或土壤干燥。；单芯自动电损耗适用于完整平衡三相单回路或1-2验证的双回平排温度分支；其他单芯多回路、任意排列或不平衡三相须外部损耗系数与来源。",
+      "description": "地下稳态、恒温地表、均匀原土或单一矩形回填区；不支持分层土壤、多介质分区或土壤干燥；单芯自动电损耗适用于完整平衡三相单回路或1-2验证的双回平排温度分支；其他单芯多回路、任意排列或不平衡三相须外部损耗系数与来源。",
       "parameter_schema": {
         "type": "object",
         "properties": {
@@ -4160,7 +4160,7 @@
         "快速土壤场采用保存负荷的Kennelly镜像线热源；均匀土壤、地表等温；排管为外部近似、内部不出值；不替代有限元。表面64点周向平均误差不大于0.1 K；回填、分层及接触等效组不发布。"
       ],
       "category": "calculation",
-      "description": "公开完整SI原语输入，用于标准公式验证；工程研究请选择领域输入能力。；快速土壤场采用保存负荷的Kennelly镜像线热源；均匀土壤、地表等温；排管为外部近似、内部不出值；不替代有限元。表面64点周向平均误差不大于0.1 K；回填、分层及接触等效组不发布。",
+      "description": "公开完整SI原语输入，用于标准公式验证；工程研究请选择领域输入能力；快速土壤场采用保存负荷的Kennelly镜像线热源；均匀土壤、地表等温；排管为外部近似、内部不出值；不替代有限元。表面64点周向平均误差不大于0.1 K；回填、分层及接触等效组不发布。",
       "parameter_schema": {
         "type": "object",
         "properties": {
@@ -6451,7 +6451,7 @@
         "成缆、填料、径向包络和钢带参数必须有单位及出处，计算结论须注明这些依赖。"
       ],
       "category": "calculation",
-      "description": "只覆盖公开结构完整的8.7/15 kV YJV/YJV22三芯圆铜导体；缺少厂家层厚仍拒绝。；电阻推导依赖工程师给定连续接触模型；不改写厂家值、标准上限或型号审核状态。",
+      "description": "只覆盖公开结构完整的8.7/15 kV YJV/YJV22三芯圆铜导体；缺少厂家层厚仍拒绝；电阻推导依赖工程师给定连续接触模型；不改写厂家值、标准上限或型号审核状态。",
       "parameter_schema": {
         "type": "object",
         "additionalProperties": false,

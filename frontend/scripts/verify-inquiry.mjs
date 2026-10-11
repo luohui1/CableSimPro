@@ -5,6 +5,7 @@ import { expect as expectBase } from '@playwright/test';
 import { openHeadlessBrowser, settle, outputRoot } from './browser.mjs';
 import { request } from './research-fixtures.mjs';
 import { assertLayout } from './layout-assertions.mjs';
+if(process.env.INQUIRY_FULL_FLOW==='1'){await import('./verify-inquiry-flow.mjs');process.exit(0);}
 if (process.env.E2E_ISOLATED !== '1') throw Error('Requires isolated database');
 const base = process.env.FRONTEND_URL, expect = expectBase.configure({timeout:30000});
 const output = path.join(outputRoot,'inquiry');
@@ -38,7 +39,12 @@ try {
       const initial=page.getByRole('dialog',{name:'新建问询'});
       if(await initial.count()) await initial.getByRole('button',{name:'关闭',exact:true}).click();
     }
-    await page.getByRole('button',{name:'新建研究',exact:true}).click();
+    await page.getByRole('button',{name:'新建研究',exact:true}).first().click();
+    const chooser=page.getByRole('dialog',{name:'新建研究',exact:true});
+    if(await chooser.isVisible()){
+      await chooser.getByRole('combobox',{name:'研究任务',exact:true}).click();
+      await page.getByRole('option',{name:'客户问询选型',exact:true}).click();
+    }
     const dialog=page.getByRole('dialog',{name:'新建问询'}), input=dialog.getByLabel('目标电流',{exact:true});
     await expect(input).toBeVisible({timeout:90000});
     await dialog.locator('input[type=radio]').first().check();

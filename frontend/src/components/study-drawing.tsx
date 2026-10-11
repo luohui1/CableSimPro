@@ -215,7 +215,7 @@ export function StudyDrawing({
       {kind !== 'cable' && editable && <div className="study-template-action"><Button size="compact" variant="ghost" onClick={() => {
         setTemplateId(templates[0]?.id || ''); setTemplateDepth(Math.abs(section?.placements[0]?.z || 0.8)); setTemplateError(''); setTemplateOpen(true);
       }}>敷设模板</Button></div>}
-      <Dialog open={templateOpen} onOpenChange={open => {if(!templatePending.current) setTemplateOpen(open);}} title="敷设模板" initialFocus="form"
+      <Dialog open={templateOpen} onOpenChange={open => {if(!templatePending.current) setTemplateOpen(open);}} title="敷设模板" description="本研究使用的内置布置模板；不是组织发布模板。应用后进入工程模型草稿，保存会影响本工程的相关研究。" initialFocus="form"
         actions={<Button variant="primary" loading={templateBusy} onClick={() => void confirmTemplate()}>应用模板</Button>}>
         <Select label="模板" value={templateId} options={templates.map(item => ({value:item.id,label:item.label}))} onChange={setTemplateId} disabled={templateBusy} />
         <NumberField label="中心埋深" unit="m" value={templateDepth} min={0} minExclusive required precision={3} onCommit={setTemplateDepth} inputRef={templateDepthInput} disabled={templateBusy} submitOnEnter />

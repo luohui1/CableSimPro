@@ -3,9 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { indexInbox, type InboxItem } from "@/api/object-index";
 import { message } from "@/api/client";
 import { CatalogShell } from "@/components/catalog-shell";
-import { DataTable } from "@/components/data-table";
-import { KIND_LABELS, ObjectLink } from "@/components/object-link";
-import { StatusMark } from "@/components/status-mark";
+import { InboxGroup } from '@/components/inbox-group';
+import { groupInbox } from '@/lib/inbox-groups';
 import { ErrorState, InlineEmpty, LoadingState } from "@/components/states";
 import { Toolbar } from "@/components/toolbar";
 import { Button } from "@/components/ui/button";
@@ -17,7 +16,6 @@ const CATEGORIES = [
   { id: "missing", label: "资料缺项", mark: "draft" as const },
   { id: "running", label: "进行中", mark: "running" as const },
 ];
-const ORIGINS: Record<InboxItem["origin"], string> = { agent: "Agent 方案", document: "厂家资料", asset: "资源", type: "型号设计", study: "研究", job: "超算作业" };
 type Row = InboxItem & { id: string };
 
 /**
@@ -40,18 +38,10 @@ export function InboxPage() {
           <Select label="类别" value={category} onChange={setCategory} options={[{ value: "all", label: `全部 ${total}` }, ...CATEGORIES.map((item) => ({ value: item.id, label: `${item.label} ${counts?.[item.id as keyof typeof counts] ?? 0}` }))]} />
         </Toolbar>
         <div data-page="inbox" data-state={shown.length ? "success" : "empty"}>
-          {!shown.length ? <InlineEmpty title="这一类没有待办。" /> : <DataTable<Row>
-            label="待办"
-            rowLabel={(row) => row.title}
-            groups={CATEGORIES.map((item) => ({ id: item.id, label: item.label, rows: shown.filter((row) => row.category === item.id) })).filter((group) => group.rows.length)}
-            columns={[
-              { id: "title", label: "事项", wrap: true, render: (row) => <ObjectLink card={row.object}>{row.title}</ObjectLink> },
-              { id: "kind", label: "对象", render: (row) => KIND_LABELS[row.object.kind] || row.object.kind },
-              { id: "state", label: "状态", render: (row) => <StatusMark kind={CATEGORIES.find((item) => item.id === row.category)?.mark || "draft"} label={row.object.status.label} /> },
-              { id: "reason", label: "原因", wrap: true, render: (row) => row.reason || "—" },
-              { id: "origin", label: "来源", render: (row) => ORIGINS[row.origin] || row.origin },
-            ]}
-          />}
+          {!shown.length ? <InlineEmpty title="这一类没有待办。" /> : CATEGORIES.map(category => {
+            const groups = groupInbox(shown.filter(row => row.category === category.id));
+            return groups.length ? <section className="inbox-category" key={category.id} aria-label={category.label}><h2>{category.label}</h2>{groups.map(group => <InboxGroup key={group.id} group={group} />)}</section> : null;
+          })}
         </div>
       </>}
   </CatalogShell>;

@@ -4,6 +4,7 @@ import { methodCatalog } from '@/api/research';
 import { EmptyState } from './states';
 import { validationLevel } from '@/lib/plugin-labels';
 import { readableEvidence } from './study-workbench-config';
+import { StudyDetailGroup } from './study-detail-group';
 
 type Row = Record<string, unknown>;
 const list = (value: unknown) => (Array.isArray(value) ? value : []);
@@ -47,7 +48,7 @@ export function StudyValidation({ run }: { run?: Row }) {
       const validation = optionalRecord(execution.validation);
       const cases = list(validation.cases).map(text).filter(Boolean).map(readableEvidence);
       const limits = list(execution.limitations).map(text).filter(Boolean).map(readableEvidence);
-      return <section key={index} className="validation-block" aria-label="方法验证">
+      return <StudyDetailGroup key={index} id={'validation:' + text(method.plugin_id) + ':' + text(method.capability)} title={named(text(method.plugin_id), text(method.capability)).plugin + ' · 验证与适用范围'} count={cases.length + limits.length}><section className="validation-block" aria-label="方法验证">
         <h2>{named(text(method.plugin_id), text(method.capability)).plugin} · {named(text(method.plugin_id), text(method.capability)).capability} <span className="muted">{text(method.version)}</span></h2>
         <div className="validation-columns">
           <div>
@@ -59,7 +60,7 @@ export function StudyValidation({ run }: { run?: Row }) {
             {limits.length ? <ul className="validation-list">{limits.map((c) => <li key={c}>{c}</li>)}</ul> : <p className="muted">插件未声明范围限制。</p>}
           </div>
         </div>
-      </section>;
+      </section></StudyDetailGroup>;
     })}
     {!executions.length && <EmptyState title="运行记录没有方法验证信息" description="早期运行未保存插件验证声明。" />}
   </div>;

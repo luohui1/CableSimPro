@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -29,8 +29,10 @@ export function CreateStudyDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   theme: "light" | "dark";
+  initialTask?: string;
 }) {
-  const [task, setTask] = useState("operating");
+  const [task, setTask] = useState(props.initialTask || "operating");
+  useEffect(() => { if (props.open) setTask(props.initialTask || 'operating'); }, [props.open, props.initialTask]);
   const [workspaceId,setWorkspaceId]=useState('');
   const workspaces=useQuery({queryKey:['workspaces'],queryFn:async()=>responseData(api.GET('/api/workspaces')),enabled:props.open});
   const projects=(Array.isArray(workspaces.data)?workspaces.data:[]).map(optionalRecord);
@@ -42,7 +44,7 @@ export function CreateStudyDialog(props: {
       {...props}
       onOpenChange={(value) => {
         props.onOpenChange(value);
-        if (!value) setTask("operating");
+        if (!value) setTask(props.initialTask || "operating");
       }}
       onOtherTask={setTask}
     />
@@ -55,7 +57,7 @@ export function CreateStudyDialog(props: {
       onInquiry={() => setTask("selection")}
       onOpenChange={(value) => {
         props.onOpenChange(value);
-        if (!value) setTask("operating");
+        if (!value) setTask(props.initialTask || "operating");
       }}
     />
   );

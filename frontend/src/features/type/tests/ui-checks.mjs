@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 
-export async function checkLayout(page) {
+export async function checkLayout(page,selector) {
   await page.evaluate(() => document.fonts.ready);
-  const result = await page.evaluate(() => {
-    const dialog = document.querySelector('[role=dialog]'), scope = dialog || document;
+  const result = await page.evaluate(selector => {
+    const dialog = document.querySelector('[role=dialog]'), scope = selector?document.querySelector(selector):dialog || document;
     const rect = node => {
       const box = node.getBoundingClientRect(); let left = Math.max(0, box.left), top = Math.max(0, box.top), right = Math.min(innerWidth, box.right), bottom = Math.min(innerHeight, box.bottom);
       for (let parent = node.parentElement; parent; parent = parent.parentElement) { const style = getComputedStyle(parent), bounds = parent.getBoundingClientRect(); if (/(hidden|auto|scroll)/.test(style.overflowX)) { left = Math.max(left, bounds.left); right = Math.min(right, bounds.right); } if (/(hidden|auto|scroll)/.test(style.overflowY)) { top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom); } }
@@ -34,7 +34,7 @@ export async function checkLayout(page) {
       if(ratio < (large?3:4.5)-.02)contrast.push({text:node.textContent.trim().slice(0,60),ratio:Number(ratio.toFixed(2))});
     }
     return { width:innerWidth,height:innerHeight,scrollWidth:document.documentElement.scrollWidth,scrollHeight:document.documentElement.scrollHeight,overflow:document.documentElement.scrollWidth>innerWidth || document.documentElement.scrollHeight>innerHeight,minimumFont,overlap,contrast };
-  });
+  },selector);
   assert.equal(result.overflow,false,'页面越界：'+JSON.stringify(result)); assert.ok(result.minimumFont>=13,'字号小于13');
   assert.deepEqual(result.overlap,[],'交互控件重叠'); assert.deepEqual(result.contrast,[],'文字对比度不足');
   return result;

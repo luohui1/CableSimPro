@@ -12,7 +12,8 @@ import { StatusMark, type StatusKind } from '@/components/status-mark';
 import { Tooltip } from '@/components/ui/tooltip';
 import { Button, IconButton } from '@/components/ui/button';
 import { Select } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { Dialog } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { fieldSource } from '@/lib/domain-fields';
@@ -54,6 +55,7 @@ export function TypeWorkspace() {
   const methodModule = location.module === 'electrical' || location.module === 'short-circuit';
   const [inspectorView, setInspectorView] = useState<'input' | 'method' | 'agent'>(methodModule && location.tab === 'parameters' ? 'method' : 'input');
   const [agentOpened, setAgentOpened] = useState(false);
+  const [renaming, setRenaming] = useState(false), [newName, setNewName] = useState('');
   useEffect(() => { if (inspectorView === 'agent') setAgentOpened(true); }, [inspectorView]);
   // 地址指向方法参数页签（如结果空状态里的“在方法页填写参数”）时打开右侧方法页
   useEffect(() => { if (methodModule && location.tab === 'parameters') setInspectorView('method'); }, [methodModule, location.tab]);
@@ -130,12 +132,12 @@ export function TypeWorkspace() {
   const groups: [string, string, string[]][] = [['结构', 'module/structure', ['structure']], ['要求', 'module/standard-check', ['requirements', 'standard-check']], ['分析', 'calc/electrical-params', ['electrical', 'short-circuit', 'rating-table', 'comparison']], ['交付', 'module/datasheet', ['specification']]];
   // 型号浏览器：侧栏右侧第二层。结构下列出型号里真实的电缆结构，其余为型号的设计与分析环节
   const explorer = <nav className="project-explorer" aria-label="型号浏览器">
-    <header><span className="explorer-kicker"><Icon name="nav/cable-type" />型号</span><strong title={cleanLabel(document?.name || '')}>{cleanLabel(document?.name || '型号')}</strong></header>
+    <header><span className="explorer-kicker"><Icon name="nav/cable-type" />型号设计</span></header>
     {groups.map(([label, icon, ids]) => <section key={label} className="explorer-section" aria-label={label}>
       <h3><Icon name={icon} />{label}</h3>
       <div className="explorer-items">
         {label === '结构' && document ? document.cable_types.map(item => <button key={item.id} type="button" className="explorer-item" aria-current={location.module === 'structure' && cable?.id === item.id ? 'page' : undefined} onClick={() => { setCableId(item.id); choose(null); go('structure', 'table'); }}>
-          <Icon name="object/cable" /><span><b>{cleanLabel(item.label)}</b><small>{item.cores.length} 芯 · {item.common_layers.length + item.cores.reduce((n, core) => n + core.layers.length + 1, 0)} 层</small></span>{resultMark('structure')}
+          <Icon name="object/cable" /><span>结构 · {item.cores.length} 芯 · {item.common_layers.length + item.cores.reduce((n, core) => n + core.layers.length + 1, 0)} 层</span>{resultMark('structure')}
         </button>) : ids.map(id => { const item = typeModules.find(entry => entry.id === id)!; return <button key={id} type="button" className="explorer-item" aria-current={location.module === id ? 'page' : undefined} onClick={() => go(id, item.tabs[0][0])}><Icon name={item.icon} /><span>{item.label}</span>{resultMark(id)}</button>; })}
       </div>
     </section>)}
@@ -165,8 +167,6 @@ export function TypeWorkspace() {
     </div>
     {methodModule && inspectorView === 'method' ? <div className="inspector-method"><Button onClick={() => go(location.module, 'parameters')}>打开方法参数</Button></div> : inspectorView !== 'agent' && <>
     {document && <section className="inspector-block" aria-label="型号">
-      <header><Icon name="nav/cable-type" /><h2>型号</h2></header>
-      <label className="text-field">型号名称<Textarea className="type-name-input" rows={2} value={cleanLabel(document.name)} disabled={state.busy || state.readOnly} onChange={event => state.edit('/name', event.target.value)} /></label>
       {document.cable_types.length > 1 && <Select label="电缆结构" value={cable?.id} disabled={state.busy} options={document.cable_types.map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={value => { setCableId(value); choose(null); }} />}
     </section>}
     {property}{location.module === 'structure' && !row && !!state.workspace?.raw.type_creation && document && <TypeRatingInputs />}</>}
@@ -174,7 +174,7 @@ export function TypeWorkspace() {
   </div>;
   return <TypeCommandSlot.Provider value={slot}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<StatusMark kind={status} label={(location.run ? '运行快照 · 只读' : statusLabel) + (demo ? ' · 演示' : '')} detail={state.error || (demo ? '型号基准含演示来源，请核对各字段工程依据。' : state.readOnly ? '所选输入快照只读；基准版本与来源见型号名片。' : state.dirty ? '保存后更新型号输入；原运行结果保留并标为过期。' : '当前编辑已保存；各模块保存结果的状态见型号浏览器。')} />}
     activeNavigation="型号" theme={location.theme} onTheme={onTheme} onUnavailable={name => setInfo(name + '入口尚未接入')}
-    actions={<Button variant={state.dirty && !state.readOnly ? 'primary' : 'default'} loading={state.busy} disabled={!state.dirty || state.readOnly || !state.workspace} onClick={() => void state.save()}><Icon name="action/save" />保存</Button>}
+    actions={<><IconButton icon="action/edit" label="修改型号名称" disabled={state.busy || state.readOnly || !document} onClick={() => { setNewName(document?.name || ''); setRenaming(true); }} /><Button variant={state.dirty && !state.readOnly ? 'primary' : 'default'} loading={state.busy} disabled={!state.dirty || state.readOnly || !state.workspace} onClick={() => void state.save()}><Icon name="action/save" />保存</Button></>}
     property={inspector}>
     {commandBar}
     <div className="workbench-frame">{explorer}
@@ -203,5 +203,6 @@ export function TypeWorkspace() {
       </section>
     </div>
     </div>
+    <Dialog open={renaming} onOpenChange={setRenaming} title="修改型号名称" actions={<Button variant="primary" disabled={!newName.trim() || state.readOnly} onClick={() => { state.edit('/name', newName.trim()); setRenaming(false); }}>确认</Button>}><Input aria-label="新的型号名称" value={newName} maxLength={200} onChange={event => setNewName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && newName.trim()) { state.edit('/name', newName.trim()); setRenaming(false); } }} /></Dialog>
   </AppShell></Tabs></TypeInspectorContext.Provider></TypeCommandSlot.Provider>;
 }

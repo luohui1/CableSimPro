@@ -12,6 +12,7 @@ import { LoadingState, ErrorState, InlineEmpty } from "@/components/states";
 import { VersionNotice } from '@/components/version-notice';
 import { PropertyPanel } from "@/components/property-panel";
 import { RelationPanel } from "@/components/relation-panel";
+import { formatDateTime } from '@/lib/format';
 
 type Row = DeliverySummary & { wid: string; owner: string };
 
@@ -58,7 +59,7 @@ export function DeliveriesPage() {
     property={selected ? <PropertyPanel collapsed={false} title={label(selected)} onToggle={() => go(filter, "")}
       groups={[{ label: "名片", items: [
         { label: "所属", value: selected.owner },
-        { label: "生成时间", value: new Date(selected.created).toLocaleString("zh-CN") },
+        { label: "生成时间", value: formatDateTime(selected.created) },
         { label: "来源", value: `${selected.sources.length} 个固定运行` },
         { label: "存档摘要", value: selected.digest.slice(0, 12) },
       ] }]}
@@ -79,7 +80,7 @@ export function DeliveriesPage() {
           {id:"owner",label:"所属",wrap:true,render:row=>row.owner},
           {id:"kind",label:"文档",render:row=>row.kind === "specification" ? "规格书" : "计算书"},
           {id:"version",label:"版本",render:row=>`第 ${row.version} 版`},
-          {id:"created",label:"生成时间",render:row=>new Date(row.created).toLocaleString("zh-CN")},
+          {id:"created",label:"生成时间",render:row=>formatDateTime(row.created)},
           {id:"sources",label:"来源",render:row=>`${row.sources.length} 个固定运行`},
           {id:"state",label:"结果状态",render:row=><VersionNotice value={row} target={{wid:row.wid,runId:row.sources[0]?.run_id}} />},
           {id:"download",label:"操作",render:row=><div className="report-toolbar"><Button size="compact" loading={download.isPending && download.variables?.row.id===row.id} disabled={download.isPending} onClick={event=>{event.stopPropagation();download.mutate({row,format:"pdf"});}}>下载 PDF</Button><Button variant="ghost" size="compact" disabled={download.isPending} onClick={event=>{event.stopPropagation();download.mutate({row,format:"html"});}}>HTML 存档</Button></div>},

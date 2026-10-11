@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
-VERSION = '1.0.0'
+VERSION = '1.1.0'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 DATA = json.loads(Path(__file__).with_name('dimensions.json').read_text('utf-8'))
 AREAS = DATA['areas_mm2']
@@ -52,7 +52,7 @@ def number(value, path, maximum, *, integer=False, zero=False):
 
 def prepare(document, parameters):
     """Check the supported product-standard subset of a host-validated snapshot."""
-    if set(parameters) - {'cable_type_id'}:
+    if set(parameters) - {'cable_type_id','basis_references','basis_cable_sha256'}:
         raise ValueError('parameters：此方法只接受 cable_type_id，不接受替代标准限值。')
     cable = next((t for t in document.get('cable_types', []) if t['id'] == parameters.get('cable_type_id')), None)
     if cable is None:
@@ -376,7 +376,7 @@ class _Check:
                 f'芯 {i+1} · 绝缘最薄点',
                 ip + '.minimum_thickness',
                 actual=ins.get('minimum_thickness') * 1000 if ins.get('minimum_thickness') is not None else None,
-                reason='缺少 GB/T 11017.1—2024 原文，未实现其限值。',
+                reason='GB/T 11017.1—2024 本库暂未收录 · 下一轮；本项保留未覆盖。',
                 uncovered=True,
                 basis='measurement',
             )
@@ -537,7 +537,7 @@ class _Check:
                 'screen-wire-gap',
                 f'芯 {i+1} · 屏蔽铜丝平均间隙',
                 sp + '.screen_inner_diameter',
-                reason='条文引用 GB/T 11017.2—2014 的定义与算法；该版原文缺失，未用 2024 版替代。',
+                reason='本项引用 GB/T 11017.2—2014；本库暂未收录 · 下一轮，不用 2024 版替代。',
                 uncovered=True,
             )
 
@@ -619,7 +619,7 @@ class _Check:
             actual=sheath.get('minimum_thickness') * 1000 if sheath.get('minimum_thickness') is not None else None,
             uncovered=True,
             basis='measurement',
-            reason='缺少 GB/T 11017.1—2024 原文。',
+            reason='GB/T 11017.1—2024 本库暂未收录 · 下一轮。',
         )
         for role, title in [('conductor_screen', '导体半导电屏蔽最薄点'), ('insulation_screen', '绝缘半导电屏蔽最薄点')]:
             layer, lp = find_layer(single_layers, role)
@@ -642,7 +642,7 @@ class _Check:
             actual=os.get('minimum_thickness') * 1000 if os.get('minimum_thickness') is not None else None,
             uncovered=True,
             basis='measurement',
-            reason='缺少 GB/T 11017.1—2024 原文。',
+            reason='GB/T 11017.1—2024 本库暂未收录 · 下一轮。',
         )
         row('bedding-nominal', '内衬层 / 半导电缓冲层', root + '.common_layers', uncovered=True, reason='缓冲 / 阻水构造与产品协议尚未覆盖，未套用中压内衬层公式。')
 
@@ -951,7 +951,11 @@ def check(document, parameters):
     else:
         common = [(layer, root + f'.common_layers.{i}') for i, layer in enumerate(cable['common_layers'])]
         report.mv_common(common, core_diameters)
-    return report.result()
+    from cablesim_standard_check.basis import apply, digest
+    apply(report, parameters)
+    result = report.result()
+    result['basis_cable_sha256'] = digest(report.cable)
+    return result
 
 
 def main():

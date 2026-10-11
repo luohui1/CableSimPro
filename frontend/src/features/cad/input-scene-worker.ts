@@ -1,5 +1,5 @@
 import { decodeMesh, primitiveMesh } from './display-mesh';
-import { TURBO_GLSL } from '../field/colormap';
+import { TEMPERATURE_GLSL } from '../field/temperature-palette';
 import { pixelRay, surfacePoint } from './scene-measurement';
 import type { CadScene, CadThermal, SceneObject, Transform } from './types';
 
@@ -14,13 +14,13 @@ in vec2 point; in float value; in vec2 local; in vec4 corners; uniform vec2 orig
 void main(){vec2 p=origin+point.x*dx+point.y*dz;gl_Position=vec4(p.x/size.x*2.-1.,1.-p.y/size.y*2.,0.,1.);temperature=value;uv=local;cell=corners;}`;
 const fieldFragment = `#version 300 es
 precision highp float; in float temperature; in vec2 uv; flat in vec4 cell; uniform bool regular; uniform float minimum; uniform float span; uniform bool difference; uniform vec3 negative; uniform vec3 positive; uniform vec3 neutral; out vec4 color;
-${TURBO_GLSL}
-void main(){float value=regular?mix(mix(cell.x,cell.y,uv.x),mix(cell.w,cell.z,uv.x),uv.y):temperature;float t=span>0.?clamp((value-minimum)/span,0.,1.):.5;vec3 rgb=difference?mix(neutral,t<.5?negative:positive,abs(t*2.-1.)):turbo(t);color=vec4(rgb,.82);}`;
+${TEMPERATURE_GLSL}
+void main(){float value=regular?mix(mix(cell.x,cell.y,uv.x),mix(cell.w,cell.z,uv.x),uv.y):temperature;float t=span>0.?clamp((value-minimum)/span,0.,1.):.5;vec3 rgb=difference?mix(neutral,t<.5?negative:positive,abs(t*2.-1.)):temperatureColor(t);color=vec4(rgb*.48,.48);}`;
 const opacity = { cable: 1, enclosure: .42, backfill: .18, soil: .08, ground: .1 };
 const priority = { ground: -1, soil: 0, backfill: 1, enclosure: 2, cable: 3 };
 type Part = { buffer: WebGLBuffer; data: Float32Array; key: string; count: number; object: SceneObject; index: number; color: readonly number[] };
 type SceneView = { matrix: Float32Array; width: number; height: number; background: number[]; fallback: number[]; selected?: string; cut: number };
-type FieldView = { width: number; height: number; size: number[]; origin: number[]; dx: number[]; dz: number[]; negative: number[]; positive: number[]; neutral: number[] };
+type FieldView = { width: number; height: number; size: number[]; origin: number[]; dx: number[]; dz: number[]; negative: number[]; positive: number[]; neutral: number[]; palette: number[][] };
 const transform = (t: Transform, p: number[]) => [0, 1, 2].map(i => t[i * 4] * p[0] + t[i * 4 + 1] * p[1] + t[i * 4 + 2] * p[2] + t[i * 4 + 3]);
 let canvas: OffscreenCanvas, gl: WebGL2RenderingContext, program: WebGLProgram;
 let scene: CadScene | undefined, thermal: CadThermal | undefined, view: SceneView | FieldView;
@@ -128,6 +128,7 @@ function paintField() {
   gl.uniform1i(uniform('difference'), thermal.kind === 'difference' ? 1 : 0);
   gl.uniform1i(uniform('regular'), thermal.quads?.length ? 1 : 0);
   gl.uniform3fv(uniform('negative'), v.negative); gl.uniform3fv(uniform('positive'), v.positive); gl.uniform3fv(uniform('neutral'), v.neutral);
+  gl.uniform3fv(uniform('u_palette[0]'), v.palette.flat());
   gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
   if (thermal.quads?.length) gl.drawArrays(gl.TRIANGLES, 0, thermal.quads.length * 6);
   else gl.drawElements(gl.TRIANGLES, thermal.triangles.length * 3, gl.UNSIGNED_INT, 0);
@@ -135,8 +136,12 @@ function paintField() {
 function diagnostics() {
   const extension = gl.getExtension('WEBGL_debug_renderer_info'), pixels = new Uint8Array(canvas.width * canvas.height * 4);
   gl.readPixels(0, 0, canvas.width, canvas.height, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
-  const colors = new Set<string>(); for (let i = 0; i < pixels.length; i += 64) colors.add(`${pixels[i]},${pixels[i + 1]},${pixels[i + 2]}`);
-  return { renderer: extension ? gl.getParameter(extension.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER), colors: colors.size, size: [canvas.width, canvas.height] };
+  const colors = new Set<string>(); let premultiplied = true;
+  for (let i = 0; i < pixels.length; i += 64) {
+    colors.add(`${pixels[i]},${pixels[i + 1]},${pixels[i + 2]}`);
+    if(Math.max(pixels[i],pixels[i+1],pixels[i+2])>pixels[i+3]+1) premultiplied=false;
+  }
+  return { renderer: extension ? gl.getParameter(extension.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER), colors: colors.size, premultiplied, size: [canvas.width, canvas.height] };
 }
 
 self.onmessage = event => {
@@ -164,6 +169,6 @@ self.onmessage = event => {
       }
       paintScene(); self.postMessage({ id, value: { id: object?.id, point } }); return;
     }
-    if (id) { if (type === 'draw' || type === 'field') gl.finish(); self.postMessage({ id, value: type === 'scene' ? diagnostics() : true }); }
+    if (id) { if (type === 'draw' || type === 'field') gl.finish(); self.postMessage({ id, value: type === 'scene' || type === 'field' ? diagnostics() : true }); }
   } catch (error) { self.postMessage({ id, error: error instanceof Error ? error.message : String(error) }); }
 };

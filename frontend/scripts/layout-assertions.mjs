@@ -2,10 +2,11 @@ import assert from "node:assert/strict";
 import { assertVisibleNames } from './visible-names.mjs';
 export async function assertLayout(page, label, nameOptions) {
   await assertVisibleNames(page, label, nameOptions);
+  await assertDropdownArrows(page, label);
   const result = await page.evaluate(() => {
     const seen = [
       ...document.querySelectorAll(
-        "h1,h2,h3,p,span,label,button,a,td,th,dt,dd,input,select,textarea,text",
+        "h1,h2,h3,p,span,small,b,strong,summary,legend,output,label,button,a,td,th,dt,dd,input,select,textarea,text",
       ),
     ].filter((node) => {
       const box = node.getBoundingClientRect();
@@ -125,4 +126,13 @@ export async function assertLayout(page, label, nameOptions) {
   );
   assert.ok(result.primary <= 1, label + ": 多个主操作");
   return result;
+}
+
+/** 共用断言覆盖所有页面和门户下拉；浏览器原生 select 的箭头由浏览器绘制。 */
+export async function assertDropdownArrows(page, label) {
+  const oversized = await page.locator('[data-select-arrow] svg, .icon[data-icon="action/chevron-down"], .icon[data-icon="action/chevrons-up-down"]').evaluateAll(nodes => nodes.flatMap(node => {
+    const box = node.getBoundingClientRect();
+    return box.width > 16.1 || box.height > 16.1 ? [{ width: box.width, height: box.height, control: node.closest('button')?.textContent?.trim() }] : [];
+  }));
+  assert.deepEqual(oversized, [], label + ': 下拉箭头超过 16 px');
 }

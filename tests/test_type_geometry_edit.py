@@ -2,6 +2,7 @@
 from copy import deepcopy
 from math import hypot, sqrt
 from uuid import uuid4
+import json
 
 import fitz
 import pytest
@@ -105,6 +106,15 @@ def test_edit_does_not_suppress_geometry_references_or_locks(workspace_client, m
 def test_same_edit_previews_saves_invalidates_recalculates_and_exports(workspace_client):
     workspace, client = workspace_client
     wid = workspace['id']
+    # The engineer explicitly chooses editions before obtaining their criteria.
+    from test_standard_check import plugin
+    document=deepcopy(workspace['domain'])
+    document['provenance']['/execution_standards']={'kind':'standard','reviewed':True,'reference':json.dumps({
+        'schema':'cablesim.execution-standards/1','items':[{'standard':source['standard'],'source_digest':source['sha256']}
+            for source in [plugin.SOURCES['mv2'],plugin.SOURCES['conductor']]]})}
+    declared=client.put(f'/api/workspaces/{wid}/domain',json={'expected_revision':workspace['revision'],'document':document})
+    assert declared.status_code==200,declared.text
+    workspace=client.get(f'/api/workspaces/{wid}').json()
     root = f'/api/types/{wid}/specification'
 
     def generate(revision):

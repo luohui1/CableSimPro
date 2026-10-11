@@ -5,13 +5,14 @@ import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem } 
 import { EmptyState, ErrorState, LoadingState, StaleBanner } from '@/components/states';
 import { worldToScreen, zoomView } from './coordinates';
 import { sectionComposition } from './section-composition';
-import { SectionLabels } from './section-labels';
+import { SectionLabels, enclosureNumber } from './section-labels';
+import { displayName } from '@/lib/display-names';
 import { DimensionEditor, DimensionInput } from './dimension-editor';
 import { Dialog } from '@/components/ui/dialog';
 import { moveSelection, sectionGeometry, validateSectionEdit } from './section-geometry';
 import { savedThermal } from '../cad/saved-thermal';
 import { TemperatureSlice } from '../cad/temperature-slice';
-import { turbo } from '../field/colormap';
+import { temperatureRgb as turbo } from '../cad/difference-colormap';
 import { useWhatIf } from './use-what-if';
 import { WhatIfDimensions } from './what-if-dimensions';
 import { editDimension, sectionDimensions, SectionDimensions, type SectionDimension } from './section-dimensions';
@@ -23,6 +24,7 @@ import { useCanvasSize } from './use-canvas-size';
 import { useSectionGesture } from './use-section-gesture';
 import type { DrawingView, LayingSectionProps, Section, SectionEdit, TemplateOption } from './types';
 import './drawing.css';
+import { CanvasToolbar } from './canvas-toolbar';
 
 const defaultTemplates: readonly TemplateOption[] = [
   { id: 'single', label: '单回' }, { id: 'double', label: '双回' }, { id: 'duct', label: '排管' },
@@ -127,7 +129,7 @@ export function LayingSection(input: LayingSectionProps) {
   return <div className={`drawing-frame laying-section ${props.className || ''}`} aria-label={props.label || '敷设截面编辑器'}
     data-laying-section-state={error ? 'error' : state} aria-busy={busy || state === 'loading'} onKeyDown={keyDown}>
     {state === 'historical' && <StaleBanner description="历史敷设截面保持只读。" />}
-    <div className="drawing-toolbar" role="toolbar" aria-label="敷设截面工具">
+    <CanvasToolbar label="敷设截面工具">
       {trial.controls}
       <IconButton icon="tool/select" label="选择 V" aria-pressed={tool === 'select'} onClick={() => setTool('select')} />
       <IconButton icon="tool/pan" label="平移 H" aria-pressed={tool === 'pan'} onClick={() => setTool('pan')} />
@@ -152,7 +154,7 @@ export function LayingSection(input: LayingSectionProps) {
       </div>}
       <IconButton icon="action/undo" label="撤销 Ctrl+Z" disabled={!props.canUndo || !props.onCommand || state === 'historical'} onClick={() => props.onCommand?.('undo')} />
       <IconButton icon="action/redo" label="重做 Ctrl+Y" disabled={!props.canRedo || !props.onCommand || state === 'historical'} onClick={() => props.onCommand?.('redo')} />
-    </div>
+    </CanvasToolbar>
     {trial.enabled && section && <div className="what-if-dimension-slot"><WhatIfDimensions section={section} selected={selected} commit={(next, edit) => trial.commit(next, edit, input.isLocked)} /></div>}
     {problem && <div className="drawing-error" role="alert">{problem}</div>}
     <ContextMenu><ContextMenuTrigger asChild><div ref={host} className="drawing-stage" data-tool={tool} data-dragging={gesture.dragging} onContextMenuCapture={event=>{const target=(event.target as Element).closest('[data-section-object]');const identity=target?.getAttribute('data-section-object');if(identity){const slash=identity.indexOf('/');props.onSelectionChange?.({kind:identity.slice(0,slash) as NonNullable<typeof selected>['kind'],id:identity.slice(slash+1)});}}}>
@@ -227,6 +229,7 @@ export function LayingSection(input: LayingSectionProps) {
     {composition?.compact && editing && editable && <Dialog open title={`编辑${editing.label}`} onOpenChange={open=>{if(!open)dismiss();}}><DimensionInput label={editing.label} value={editing.valueM} unit="m" onCommit={commitDimension} onCancel={dismiss} /></Dialog>}
     <div className="drawing-status"><span>{section?.label || '敷设截面'} · m</span>{thermal&&!thermal.triangles.length&&!detail&&(!composition?.compact||section?.kind!=='ground')&&<span role="status">尚无土壤温度场</span>}<span>{state === 'loading' || busy ? '正在更新' : editable ? '可编辑' : '只读'}</span>
       <span>{snap ? `捕捉 ${(props.snapStepM ?? .001) * 1000} mm` : '捕捉关闭'}</span><span>{selected ? selectedName : '选择对象查看尺寸'}</span></div>
+    {!!section?.enclosures?.length && <div className="drawing-enclosure-legend" aria-label="排管编号图例">{section.enclosures.map((e,i)=><span key={e.id}>{enclosureNumber(i)} {displayName(e.id)}</span>)}</div>}
   </div>;
 }
 

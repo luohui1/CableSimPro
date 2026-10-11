@@ -22,6 +22,22 @@ import { contractFields } from '@/lib/heavy-components';
 const ContractFields = contractFields.Component;
 export { rootModule, moduleConfiguration } from "@/lib/study-config";
 
+/** 型号补录与方法页使用同一份封签参数契约；参考值另从保存研究读取。 */
+export function engineeringContractFields(schema: unknown): Record<string, unknown>[] {
+  const values = expand(optionalRecord(expand(schema, schema).properties).values, schema);
+  const required = Array.isArray(values.required) ? values.required : [];
+  return Object.entries(optionalRecord(values.properties)).map(([key, raw]) => {
+    const field = expand(raw, schema), properties = optionalRecord(field.properties);
+    const value = expand(properties.value, schema), labels = optionalRecord(value['x-enum-labels']);
+    return { key, title: text(field.title), hint: text(field.description),
+      unit: text(expand(properties.unit, schema).const), display: value['x-unit'],
+      min: numericValue(value.exclusiveMinimum ?? value.minimum), max: numericValue(value.maximum),
+      minExclusive: value.exclusiveMinimum !== undefined, optional: !required.includes(key),
+      choices: Array.isArray(value.enum) ? value.enum.map(item => [item, text(labels[String(item)]) || displayName(String(item))]) : undefined };
+  });
+}
+function numericValue(value: unknown) { return typeof value === 'number' ? value : null; }
+
 type Method = components["schemas"]["Method"];
 type Configuration = components["schemas"]["StudyConfiguration"];
 export function StudyMethodForm({

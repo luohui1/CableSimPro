@@ -8,6 +8,8 @@ import { boundaryScope } from '@/features/field/boundary-scope';
 import { useStudy } from './study-provider';
 import { StudyRunControl, StudyRemoteProgress } from './study-run-control';
 import { LoadingState, ErrorState } from './states';
+import { SolverLocation } from './solver-location';
+import type { SolverCapability } from '@/lib/solver-location';
 import '@/features/field/field.css';
 
 export function SimulationSetupStatus({ estimate, loading, error, action, boundary }: {
@@ -43,6 +45,9 @@ export function SimulationSetup({ module }: { module: string }) {
   const input = context.moduleInputs[module]?.value ?? configuration?.method_input ?? context.domain;
   const boundary = configuration?.method?.capability === 'iec-thermal-field'
     ? boundaryScope(input, configuration.parameters || {}) : undefined;
+  const solver = availability.data?.solver;
+  const capability = solver === 'slurm' || solver === 'local' || solver === 'either'
+    ? { id: configuration?.method.capability || '', solver } satisfies SolverCapability : undefined;
   const content: Record<string, string> = {
     results: '结果：封存后显示导体温度、允许电流及与标准方法的对照。',
     field: '场图：封存后显示温度分布、等温线和最热点。',
@@ -52,9 +57,9 @@ export function SimulationSetup({ module }: { module: string }) {
   };
   return <div className="input-module"><p role="status">{content[tab] || content.results}</p>
     {availability.isPending ? <LoadingState title="读取计算位置" /> : availability.error ? <ErrorState title="计算位置暂不可读" description={message(availability.error)} /> : availability.data?.configured !== true ? <section className="input-section">
-      <p>未运行 · 运行位置：超算。本方法不能在本机求解。</p>
-      <p>请在设置 → 计算位置配置超算连接，再确认核时预算并提交。输入已保存。</p>
-      <a href="/settings?section=compute">配置计算位置</a>
+      <p>未运行 · <SolverLocation pluginId={configuration?.method.plugin_id || ''} capability={capability} /></p>
+      <p>{solver === 'slurm' ? '本方法不能在本机求解。' : ''}输入检查可先完成；连接配置完成后再确认核时预算并提交。</p>
+      <StudyRunControl module={module} secondary label="检查输入" onResult={() => context.refresh()} />
     </section> : <SimulationSetupStatus estimate={query.data || { node_limit: optionalRecord(configuration?.parameters?.mesh).max_nodes }}
     boundary={boundary}
     loading={query.isFetching} error={context.dirty ? '输入有未保存修改，请先保存。' : query.error ? message(query.error) : undefined}

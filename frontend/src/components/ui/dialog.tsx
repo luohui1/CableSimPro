@@ -1,6 +1,6 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { useRef, type ReactNode, type ComponentProps } from "react";
-import { Button } from "./button";
+import { Button, IconButton } from "./button";
 import { MotionReveal } from "@/components/motion";
 
 function AppDialog({
@@ -57,13 +57,13 @@ function AppDialog({
             onOpenAutoFocus={(event) => {
               previousFocus.current = document.activeElement as HTMLElement;
               event.preventDefault();
-              content.current
+              const first = content.current
                 ?.querySelector<HTMLElement>(
                   initialFocus === "form"
                     ? 'input, [role="combobox"], .data-row button:not([disabled]), .dialog-actions button:not([disabled])'
                     : ".dialog-actions button:not([disabled])",
-                )
-                ?.focus();
+                );
+              (first || content.current?.querySelector<HTMLElement>('.drawer-close'))?.focus();
             }}
             onCloseAutoFocus={(event) => {
               event.preventDefault();
@@ -71,6 +71,7 @@ function AppDialog({
                 previousFocus.current.focus();
             }}
           >
+            {variant === 'drawer' && <DialogPrimitive.Close asChild><IconButton variant="ghost" icon="action/close" label="关闭运行记录" className="drawer-close" /></DialogPrimitive.Close>}
             <DialogPrimitive.Title className="dialog-title">
               {title}
             </DialogPrimitive.Title>
@@ -80,9 +81,9 @@ function AppDialog({
             {children}
             <div className="dialog-actions">
               {actions}
-              <DialogPrimitive.Close asChild>
+              {variant !== 'drawer' && <DialogPrimitive.Close asChild>
                 <Button variant="ghost">关闭</Button>
-              </DialogPrimitive.Close>
+              </DialogPrimitive.Close>}
             </div>
           </DialogPrimitive.Content>
         </MotionReveal>

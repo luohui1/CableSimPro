@@ -478,7 +478,11 @@ class Types:
 
     def _invoke_proposal(self, artifact, values):
         plugin, cap, method = self._proposal_method(artifact)
-        result = self.research.executor.run(plugin.manifest.id, cap.id, [{'case_id': 'design', 'input': values, 'parameters': {}}], timeout_s=10, expected_manifest=plugin.manifest)
+        # Algebraic proposals must not wait for the resident CAD worker's OCCT
+        # warmup. Keep the same seal checks and process/time limits.
+        from .verified_executor import VerifiedExecutor
+        executor = VerifiedExecutor(registry=self.research.registry()) if plugin.manifest.id == 'cablesim.cable-geometry' and self.research.resident_runner is not None else self.research.executor
+        result = executor.run(plugin.manifest.id, cap.id, [{'case_id': 'design', 'input': values, 'parameters': {}}], timeout_s=10, expected_manifest=plugin.manifest)
         case = result.cases[0]
         if case.status != 'succeeded' or artifact not in case.artifacts:
             raise HTTPException(422, case.error or {'code': 'PROPOSAL_MISSING', 'message': '方法未提供结构提案，未创建草稿。'})
@@ -1605,6 +1609,32 @@ def make_router(service):
     @router.post('/{wid}/specification/generate')
     def generate_specification(wid: str, body: GenerateSpecification):
         from .specification_generation import generate
+        from .requirements import Requirements, ResolveBasis
+        from .contracts import CreateStudy, UpdateStudy
+        from uuid import uuid5
+        registry=service.research.registry()
+        if 'cablesim.standard-check' in registry.plugins and 'cablesim.standards-basis' in registry.plugins:
+            with service.store.db() as db:
+                service._type(db,wid,body.expected_revision)
+                if service._replay(db,wid,body): return generate(service,wid,body)
+            with service.store.db() as db:
+                _,state=service._type(db,wid,body.expected_revision)
+            method={**service.research.pin(registry.plugins['cablesim.standard-check']),'capability':'dimensions'}
+            existing=next((s for s in reversed(service.research.list_studies(wid))
+                if s['definition']['method']['plugin_id']=='cablesim.standard-check' and s['definition']['method']['capability']=='dimensions'),None)
+            saved=existing['definition'].get('parameters',{}) if existing else {}
+            refs=saved.get('basis_references',{})
+            basis_pin=service.research.pin(registry.plugins['cablesim.standards-basis'])
+            reusable=(bool(refs) and saved.get('basis_cable_sha256')==fingerprint(state['domain']['cable_types'][0])
+                and all(ref.get('workspace_revision')==body.expected_revision and ref.get('release_digest')==basis_pin['release_digest'] for ref in refs.values()))
+            basis={'parameters':saved} if reusable else Requirements(service.research).resolve_basis(wid,ResolveBasis(
+                request_id=uuid5(body.request_id,'standards-basis'),expected_revision=body.expected_revision))
+            definition={**(existing['definition'] if existing else {'title':'标准核对','input_source':'domain'}),
+                'method':method,'parameters':{'cable_type_id':state['domain']['cable_types'][0]['id'],**basis['parameters']}}
+            if not existing:
+                service.research.save(wid,CreateStudy(expected_revision=body.expected_revision,**definition))
+            elif existing['definition']!=definition:
+                service.research.save(wid,UpdateStudy(expected_revision=body.expected_revision,expected_study_revision=existing['revision'],**definition),existing['id'])
         return generate(service, wid, body)
     @router.get('/{wid}/specification/file')
     def specification_file(wid: str, expected_revision: int, specification_digest: str, audience: Literal['customer', 'internal'] = 'customer'):

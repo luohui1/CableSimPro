@@ -187,7 +187,7 @@ export function StudySelection({
   const conclusion = recommended ? (
         <Conclusion
           title={view.historical ? "历史最小满足候选" : "推荐型号"}
-          model={recommended.name}
+          model={(view.historical ? '历史推荐：' : '推荐：') + recommended.name}
           description={part === "conclusion" ? "" : recommendationBasis}
           metrics={[
             {

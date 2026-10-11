@@ -1,6 +1,7 @@
 import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
 
@@ -14,11 +15,27 @@ const { pointer } = await server.ssrLoadModule('/src/lib/domain-fields.ts');
 const { resultValue } = await server.ssrLoadModule('/src/features/type/standard-check.tsx');
 const { corrugatedDisplay } = await server.ssrLoadModule('/src/features/type/display-envelope.ts');
 const { colorScene } = await server.ssrLoadModule('/src/features/cad/saved-thermal.ts');
-const { turbo } = await server.ssrLoadModule('/src/features/field/colormap.ts');
+const { temperatureRgb } = await server.ssrLoadModule('/src/features/cad/difference-colormap.ts');
+const tokens = readFileSync(path.join(frontend,'../design/tokens.css'),'utf8');
+const palette = [...tokens.matchAll(/--temperature-[1-6]:\s*(#[0-9a-fA-F]{6})/g)].slice(0,6).map(m=>[1,3,5].map(i=>parseInt(m[1].slice(i,i+2),16)/255));
 const { sectionComposition } = await server.ssrLoadModule('/src/features/drawing/section-composition.ts');
+const { leaderLayout, segmentsIntersect, layerMillimetres } = await server.ssrLoadModule('/src/features/drawing/layer-leaders.ts');
+test('Layer labels preserve 1.35 mm and show a 34.0 mm diameter without padded thickness precision',()=>{
+  assert.equal(layerMillimetres(.00135),'1.35');assert.equal(layerMillimetres(.0162),'16.2');assert.equal(layerMillimetres(.034,true),'34.0');
+});
+test('Eight layer leaders have distinct mid-radius anchors, ordered labels and no crossing segments',()=>{
+  const layers=Array.from({length:8},(_,i)=>({center:{x:300,y:220},radius:40+i*12}));
+  const leaders=leaderLayout(layers,440,850,440);
+  for(let i=0;i<leaders.length;i++) {
+    assert.ok(leaders[i].label.x<850 && leaders[i].label.y>=32 && leaders[i].label.y<=396);
+    assert.ok(Math.abs(Math.hypot(leaders[i].anchor.x-300,leaders[i].anchor.y-220)-layers[i].radius)<1e-8);
+    if(i) { assert.ok(Math.hypot(leaders[i].anchor.x-leaders[i-1].anchor.x,leaders[i].anchor.y-leaders[i-1].anchor.y)>=8);assert.ok(leaders[i].label.y-leaders[i-1].label.y>=28); }
+    for(let j=0;j<i;j++)for(let a=1;a<leaders[i].points.length;a++)for(let b=1;b<leaders[j].points.length;b++)assert.equal(segmentsIntersect(leaders[i].points[a-1],leaders[i].points[a],leaders[j].points[b-1],leaders[j].points[b]),false,`leaders ${i}/${j} segments ${a}/${b}`);
+  }
+});
 test('Equal conductor temperatures use one neutral band position, without a fictitious temperature interval',()=>{
   const scene={assets:{a:{core_id:'core'}},objects:[{id:'c',parts:[{asset_id:'a'}]}]},thermal={minimum:80,maximum:80,conductors:[{id:'c',coreId:'core',value:80}]};
-  assert.deepEqual(colorScene(scene,thermal).assets.a.display_color,turbo(.5));assert.equal(thermal.maximum,80);
+  assert.equal(palette.length,6);assert.deepEqual(colorScene(scene,thermal,undefined,palette).assets.a.display_color,temperatureRgb(.5,palette));assert.equal(thermal.maximum,80);
 });
 test('140 px canvas: the local drawing keeps 40 mm cables at least 24 px and preserves 1.2 m burial coordinates',()=>{
   const section={kind:'ground',enclosures:[]},geometry={cables:[-.05,0,.05].map(x=>({x,z:-1.2,shape:{radiusM:.02}})),bounds:{left:-.07,right:.07,top:0,bottom:-1.22}};

@@ -1,5 +1,12 @@
 import { Suspense, useEffect, useState, type ReactNode } from "react";
-import { useLocation } from '@tanstack/react-router';
+import { useLocation, useSearch } from '@tanstack/react-router';
+import { useQuery } from '@tanstack/react-query';
+import { methodCatalog } from '@/api/research';
+import { optionalRecord, text } from '@/api/client';
+import { moduleConfiguration, rootModule } from '@/lib/study-config';
+import type { SolverCapability } from '@/lib/solver-location';
+import { useStudy } from './study-provider';
+import { SolverLocation } from './solver-location';
 import { displayText } from "@/lib/display-names";
 import type { DomainDocument } from "@/lib/domain-fields";
 import { Icon } from "./icon";
@@ -15,6 +22,23 @@ import './workbench-inspector.css';
 
 /** 输入字段按路径归类，决定保存时的说明（电缆 / 敷设 / 工况）。 */
 const scopeOf = (path: string) => path.startsWith("/cable_types") ? "cable" : path.startsWith("/load_cases") ? "conditions" : "section";
+
+function StudySolverLocation() {
+  const { study, runs, loadingRuns, runError } = useStudy();
+  const module = useLocation({ select: location => location.pathname.split('/')[3] });
+  const search = useSearch({ strict: false }) as { run?: string };
+  const saved = search.run ? runs.find(run => run.id === search.run) : runs[runs.length - 1];
+  const catalog = useQuery({ queryKey: ['method-catalog'], queryFn: ({ signal }) => methodCatalog(signal) });
+  if (loadingRuns) return <span className="muted">读取执行来源中</span>;
+  if (runError) return <span className="field-error">执行来源读取失败</span>;
+  if (search.run && !saved) return <span className="muted">{runError ? '执行来源读取失败' : loadingRuns ? '读取执行来源中' : '执行来源未记录'}</span>;
+  const configuration = moduleConfiguration(study.definition, module || rootModule(study.definition)) || study.definition;
+  const pin = saved ? optionalRecord(saved.method || optionalRecord(optionalRecord(saved.snapshot).definition).method) : configuration.method;
+  const plugin = catalog.data?.find(row => text(optionalRecord(row.method).plugin_id) === pin?.plugin_id);
+  const capability = (Array.isArray(plugin?.capabilities) ? plugin.capabilities : []).map(optionalRecord).find(cap => cap.id === pin?.capability);
+  if (!saved && catalog.isError) return <span className="field-error">能力声明读取失败</span>;
+  return <SolverLocation pluginId={text(pin?.plugin_id)} capability={capability as SolverCapability | undefined} savedRun={saved} prefix={false} />;
+}
 
 /** 检查器的一节：图标 + 标题，内容紧随其后。 */
 function Block({ icon, title, aside, children, id }: { icon: string; title: string; aside?: ReactNode; children: ReactNode; id?: string }) {
@@ -70,14 +94,13 @@ export function WorkbenchInspector({ view = "input", onView, methodPanel, agentP
           ? <div className="inspector-fields">{selection.fields.map((spec) => <DomainNumber key={spec.path} spec={spec} document={document} scope={scopeOf(spec.path)} readOnly={historical} />)}</div>
           : <Groups groups={selection.groups} />}
       </Block> : null}
-    <Block icon="calc/ampacity" title="本次计算">
-      {method.kind && <p className="inspector-lead">{method.kind}</p>}
+    <details className="inspector-calculation-meta">
+      <summary title={`${method.name} ${method.version} · ${method.run}`}>{method.kind || '本次计算'}<span className="muted">方法信息</span></summary>
       <dl className="inspector-list">
-        <div><dt>插件</dt><dd>{method.name} {method.version}</dd></div>
-        <div><dt>运行位置</dt><dd>{method.hpc ? "超算（Slurm）" : "本机"}</dd></div>
-        <div><dt>状态</dt><dd>{method.run}</dd></div>
+        <div title={`${method.name} ${method.version} · ${method.run}`}><dt>方法</dt><dd>{method.name} {method.version}</dd></div>
+        <div><dt>运行位置</dt><dd><StudySolverLocation /></dd></div>
       </dl>
-    </Block>
+    </details>
     {document && <Block icon="object/conditions" title="工况" id="inspector-conditions">
       <div className="inspector-conditions"><ConditionsInputs document={document} historical={historical} tab="inputs" onSelect={() => {}} /></div>
     </Block>}

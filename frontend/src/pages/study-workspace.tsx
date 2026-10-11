@@ -101,6 +101,8 @@ export function StudyWorkspace() {
   // 以曲线为主的研究默认放大数据区；选型、载流量和温度场类研究默认模型与结果各半（温度场画在画布上）
   const plotFirst = (key: string) => moduleBehavior.plotFirst.has(key);
   const [dockMax, setDockMax] = useState(plotFirst(module));
+  const [canvasExpanded,setCanvasExpanded]=useState(module!=='selection');
+  useEffect(()=>setCanvasExpanded(module!=='selection'),[sid,module]);
   const [creating, setCreating] = useState(false);
   const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
   const [edit, setEdit] = useState(false);
@@ -233,7 +235,7 @@ export function StudyWorkspace() {
   const studyInput = optionalRecord((draft?.definition || study.definition).method_input);
   const canvasDocument = (viewingOldInput ? (run ? savedDomain(fieldRun || run) : undefined)
     : study.definition.input_source === 'study' ? (studyInput.schema_version === 'cablesim.domain/1' ? studyInput : undefined) : context.domain) as DomainDocument | undefined;
-  const showCanvas = module !== "report" && !!canvasDocument;
+  const showCanvas = module !== "report" && !!canvasDocument && canvasExpanded;
   // Independent method inputs have their own editor; workspace edits must not
   // accidentally rewrite their geometry through the shared drawing inspector.
   const canvasReadOnly = viewingOldInput || study.definition.input_source === 'study';
@@ -242,7 +244,7 @@ export function StudyWorkspace() {
   const canvasView = search.view || (fieldView || needsFieldProjection ? "field" : "section");
   const drawingCase = fieldCase || text(fieldView?.case.case_id) || undefined;
   const drawingInput = useQuery({queryKey:['drawing-saved-input',run?.id,drawingCase],
-    enabled:['three','section'].includes(canvasView) && !!run && !pendingRun && !context.dirty,
+    enabled:showCanvas && ['three','section'].includes(canvasView) && !!run && !pendingRun && !context.dirty,
     queryFn:({signal}) => hydrateCaseInputs(caseRun(run!, drawingCase), signal)});
   const drawingRun = preview.result?.view || drawingInput.data || run;
   const savedDrawingCase = (Array.isArray(optionalRecord(drawingRun?.snapshot).cases) ? optionalRecord(drawingRun?.snapshot).cases as unknown[] : []).map(optionalRecord).find(row => row.case_id === drawingCase);
@@ -331,6 +333,7 @@ export function StudyWorkspace() {
     <div className="command-bar" role="toolbar" aria-label="工程命令">
       <div className="command-group" role="group" aria-label="模型">
         <span className="command-caption">模型</span>
+        {module==='selection' && !!canvasDocument && <Button size="compact" variant="ghost" aria-expanded={canvasExpanded} onClick={()=>setCanvasExpanded(value=>!value)}>{canvasExpanded?'收起布置图':'查看布置图'}</Button>}
         <Button size="compact" variant={context.dirty ? "primary" : "ghost"} disabled={!context.dirty} loading={context.saving} onClick={() => void context.save()}><Icon name="action/save" />{context.dirty ? "保存修改" : "已保存"}</Button>
         <IconButton variant="ghost" icon="action/undo" label="撤销" disabled={!context.canUndo || context.saving} onClick={() => void context.undo()} />
         <IconButton variant="ghost" icon="action/redo" label="重做" disabled={!context.canRedo || context.saving} onClick={() => void context.redo()} />
@@ -379,7 +382,7 @@ export function StudyWorkspace() {
         <span className="command-caption">交付</span>
         {module !== 'report' && <Button size="compact" variant="ghost" title={!run ? '先运行研究，取得保存结果' : context.dirty ? '先保存修改并重新运行' : selectedPresentation.historical ? '旧结果保持为历史，请先重算' : !['succeeded','partial'].includes(text(run.status)) ? '等待运行成功后生成' : '生成所选保存运行的客户计算书'} disabled={!run || context.dirty || selectedPresentation.historical || !['succeeded','partial'].includes(text(run.status))} onClick={() => navigate({ params: { sid, module: "report", tab: "preview" }, search: { ...currentSearch(), run: text(run?.id), delivery: '', generate: true } })}><Icon name="result/report" />生成计算书</Button>}
       </div>
-      <span className="command-state" role="status" title={presentation.reason}>{presentation.label}</span>
+      {!presentation.historical && <span className="command-state" role="status" title={presentation.reason}>{presentation.label}</span>}
     </div>
   );
   return (
@@ -402,7 +405,7 @@ export function StudyWorkspace() {
               label={(demo ? '演示 · ' : '') + presentation.label}
               detail={
                 <div className="status-actions">
-                  <span>{presentation.reason}</span>{recalculate}
+                  <span title={presentation.releaseDetails}>{presentation.historical ? '查看历史结果，或在结果区按当前方法重算。' : presentation.reason}</span>
                   <Button
                     variant="ghost"
                     size="compact"
@@ -452,19 +455,21 @@ export function StudyWorkspace() {
           {commandBar}
           <div className="workbench-frame">
           <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={context.domain} activeStudy={sid} activeState={presentation} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
-          <div className={`workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-dock={dockMax ? "max" : undefined}>
+          <div className={`workbench study-workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-dock={dockMax ? "max" : undefined}>
           {(answer || preview.result || preview.error) && <section className="answer-bar" aria-label="结论">{answer}<PreviewStrip preview={preview} saved={run?.headlines || (overallRun.id === run?.id ? overallRun.headlines : undefined)} /></section>}
           {showCanvas && (
             <section className="workbench-canvas" aria-label="模型">
-              <div className="workbench-views" role="group" aria-label="模型视图">
+              <div className="workbench-views study-canvas-toolbar" role="toolbar" aria-label="视图与绘图工具">
+                <div className="study-view-switch" role="group" aria-label="模型视图">
                 {([...(fieldView || needsFieldProjection ? [["field", "calc/thermal-field", fieldView?.kind === "iec" ? "土壤温度场" : "温度场"]] : []), ...modelViews.map(item => [item.id, item.icon, item.label]), ["three", "result/field", "三维"]] as ["field" | "section" | "cable" | "three", string, string][]).map(([value, icon, label]) => (
-                  <button key={value} type="button" aria-pressed={canvasView === value} onClick={() => navigate({ search: { ...currentSearch(), view: value }, replace: true })}>
-                    <Icon name={icon} />{label}
+                  <button key={value} type="button" aria-label={label} title={label} aria-pressed={canvasView === value} onClick={() => navigate({ search: { ...currentSearch(), view: value }, replace: true })}>
+                    <Icon name={icon} /><span className="study-view-label">{label}</span>
                   </button>
                 ))}
-                {canvasView === 'three' && reportImage?.runId === run?.id && <StatusMark kind="saved" label="三维图已选入计算书" />}
+                </div><div data-drawing-toolbar-slot />
                 {canvasView==='field' && fieldView?.kind==='fem' && <Button size="compact" variant="ghost" onClick={()=>setFullFieldDomain(value=>!value)}>{fullFieldDomain ? '对准电缆区域' : '适配全域'}</Button>}
               </div>
+              {canvasView === 'three' && !!run?.id && !!reportImage?.runId && reportImage.runId === run.id && <div className="study-report-image-status"><StatusMark kind="saved" label="三维图已选入计算书" /></div>}
               {canvasView === "field" && fieldView ? (
                 <div className="study-field-slot"><FieldView
                   label={fieldView.kind === "iec" ? "土壤温度场（IEC 解析）" : "温度场"}
@@ -504,7 +509,7 @@ export function StudyWorkspace() {
               {canvasView === "field" && fieldView?.kind === "iec" && <p className="field-basis" title={fieldView.limitations.join("；")}>{fieldView.limitations[0]}</p>}
             </section>
           )}
-          <WorkbenchSplitter kind="study" />
+          {showCanvas && <WorkbenchSplitter kind="study" />}
           <section className="workbench-dock" aria-label="计算结果">
             <div className="workbench-dock-bar">
               <TabsList aria-label={`${definition.label}页签`}>
@@ -519,7 +524,7 @@ export function StudyWorkspace() {
               {showCanvas && <IconButton variant="ghost" icon={dockMax ? "action/chevron-down" : "action/chevron-up"} label={dockMax ? "还原结果面板" : "放大结果面板"} onClick={() => setDockMax(!dockMax)} />}
             </div>
           <TabsContent value={tab} className="workbench-dock-body">
-          {(selectedPresentation.historical || context.dirty) && run && <div className="study-history-line" role="status"><StatusMark kind="historical" label="历史" /><span>{context.dirty ? '与当前输入不一致' : selectedPresentation.reason}</span>{recalculate}</div>}
+          {(selectedPresentation.historical || context.dirty) && run && <div className="study-history-line" role="status"><span title={selectedPresentation.releaseDetails}>{context.dirty ? '已显示保存结果；修改尚未保存' : selectedPresentation.reason}</span>{recalculate}</div>}
           {!!context.saveError && (
             <ErrorState
               title="保存失败，编辑保留"

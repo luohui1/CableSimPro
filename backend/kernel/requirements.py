@@ -31,6 +31,7 @@ class ReviewRequirements(StrictModel):
             raise ValueError('必须由人工明确确认批准所选要求。')
         return value
 
+
     @field_validator('reviewer')
     @classmethod
     def nonblank_reviewer(cls, value):
@@ -47,6 +48,11 @@ class ReviewRequirements(StrictModel):
         return value
 
 
+class ResolveBasis(StrictModel):
+    request_id: UUID
+    expected_revision: int = Field(ge=1)
+
+
 class Requirements:
     def __init__(self, research):
         self.research, self.store = research, research.store
@@ -59,6 +65,61 @@ class Requirements:
               UNIQUE(workspace,request_id), UNIQUE(workspace,revision),
               FOREIGN KEY(workspace) REFERENCES workspaces(id));
             ''')
+            db.execute('''CREATE TABLE IF NOT EXISTS requirement_basis_queries (
+              workspace TEXT NOT NULL, request_id TEXT NOT NULL, revision INTEGER NOT NULL,
+              payload TEXT NOT NULL, digest TEXT NOT NULL, PRIMARY KEY(workspace,request_id))''')
+
+    def resolve_basis(self, wid, body):
+        """Persist read-only Executor receipts, never approve or edit engineering facts."""
+        from .type_versions import declared_execution_standards
+        from ..plugin_host.registry import PluginHostError
+        with self.store.db() as db:
+            row, state = self.store.load(db, wid, body.expected_revision, allow_domain=True)
+            old = db.execute('SELECT * FROM requirement_basis_queries WHERE workspace=? AND request_id=?',(wid,str(body.request_id))).fetchone()
+            if old:
+                if old['revision'] != body.expected_revision: raise HTTPException(409,'此依据请求已用于其他输入版本。')
+                payload=json.loads(old['payload'])
+                if fingerprint(payload)!=old['digest']: raise HTTPException(409,'依据查询记录摘要不一致。')
+                return payload
+        document=state.get('domain')
+        if not document or not document.get('cable_types'): raise HTTPException(422,'请先补齐型号结构和执行标准。')
+        registry=self.research.registry()
+        try:
+            method=registry.plugins['cablesim.standard-check']; basis=registry.plugins['cablesim.standards-basis']
+            planned=self.research.executor.run(method.manifest.id,'dimensions',[{'case_id':'plan','input':document,'parameters':{'cable_type_id':document['cable_types'][0]['id']}}],expected_manifest=method.manifest)
+            case=planned.cases[0]
+            if case.status!='succeeded': raise HTTPException(422,case.error or '当前型号不能建立要求目录。')
+            artifact=case.artifacts['x-cablesim.standard-check']
+            declarations={re.sub(r'\s+','',item['standard']).replace('—','-').replace(':','-') for item in declared_execution_standards(document)}
+            plans={r['id']:r['basis_query'] for r in artifact['rows'] if r.get('basis_query') and re.sub(r'\s+','',r['basis_query']['standard']+'-'+r['basis_query']['edition']) in declarations}
+            queries={fingerprint(q):q for q in plans.values()}
+            ids={key:'basis-'+str(i) for i,key in enumerate(queries)}
+            result=self.research.executor.run(basis.manifest.id,'lookup',[{'case_id':ids[key],'input':q,'parameters':{}} for key,q in queries.items()],expected_manifest=basis.manifest) if queries else None
+        except (KeyError, PluginHostError) as error:
+            raise HTTPException(503,{'code':'BASIS_UNAVAILABLE','message':'标准依据查询不可用，请检查已安装的准确版本后重试。'}) from error
+        resolved={}; missing=[]
+        for output in result.cases if result else []:
+            if output.status!='succeeded': raise HTTPException(422,output.error or '标准依据查询失败，请核对适用条件。')
+            answer=output.artifacts['x-cablesim.standards-basis']
+            key=next(k for k,v in ids.items() if v==output.case_id); query=queries[key]
+            if answer['status']!='resolved': missing.append({'query':query,'reason':answer.get('reason','此条件本库暂未收录 · 下一轮')});continue
+            record=answer['records'][0]
+            ref={'schema':'cablesim.standard-basis-ref/1','plugin_id':answer['plugin_id'],'plugin_version':answer['plugin_version'],
+                 'data_sha256':answer['data_sha256'],'query_sha256':answer['query_sha256'],'query':query,'record_id':record['id'],
+                 'record_sha256':record['record_sha256'],'standard':record['standard'],'edition':record['edition'],'locator':record['table'] or record['clause'],
+                 'printed_page':record['printed_page'],'pdf_page':record['pdf_page'],'source_sha256':record['source_sha256'],'record':record,
+                 'workspace_revision':body.expected_revision,'input_digest':planned.request_sha256,'request_sha256':result.request_sha256,
+                 'release_digest':self.research.pin(basis)['release_digest'],'artifact_digest':output.artifact_digests['x-cablesim.standards-basis']}
+            resolved[key]=ref
+        payload={'parameters':{'basis_references':{rid:resolved[fingerprint(q)] for rid,q in plans.items() if fingerprint(q) in resolved},'basis_cable_sha256':artifact['basis_cable_sha256']},
+                 'workspace_revision':body.expected_revision,'missing':missing,'unbound_standard_count':len(artifact['rows'])-len(plans)}
+        with self.store.db(True) as db:
+            self.store.load(db,wid,body.expected_revision,allow_domain=True)
+            db.execute('INSERT OR IGNORE INTO requirement_basis_queries VALUES (?,?,?,?,?)',(wid,str(body.request_id),body.expected_revision,json.dumps(payload,ensure_ascii=False),fingerprint(payload)))
+            saved=db.execute('SELECT payload,digest FROM requirement_basis_queries WHERE workspace=? AND request_id=?',(wid,str(body.request_id))).fetchone()
+            payload=json.loads(saved['payload'])
+            if fingerprint(payload)!=saved['digest']:raise HTTPException(409,'依据查询记录摘要不一致。')
+        return payload
 
     def source(self, wid, rid):
         run = self.research.get_run(wid, str(rid))
@@ -89,7 +150,7 @@ class Requirements:
         identity = {'rule': rule, 'target': row['target'], 'standard': row['standard'], 'clause': row['clause']}
         definition = {key: row.get(key) for key in (
             'title', 'target', 'standard', 'clause', 'source_digest', 'source_status',
-            'printed_page', 'pdf_page', 'comparison', 'limit', 'unit', 'formula', 'formula_inputs')}
+            'printed_page', 'pdf_page', 'comparison', 'limit', 'unit', 'formula', 'formula_inputs', 'basis_reference', 'citation', 'criterion')}
         definition.update(rule=rule, method=method)
         bindable = (row.get('source_status') == 'original-verified' and row.get('limit') is not None and row.get('verdict') != 'uncovered'
                     and bool(re.fullmatch(r'[0-9a-f]{64}', row.get('source_digest') or ''))
@@ -203,6 +264,10 @@ def make_router(research):
     @router.get('/{wid}/requirements')
     def read(wid: str, run_id: UUID):
         return service.read(wid, run_id)
+
+    @router.post('/{wid}/requirements/basis')
+    def resolve(wid: str, body: ResolveBasis):
+        return service.resolve_basis(wid, body)
 
     @router.post('/{wid}/requirements/reviews', status_code=201)
     def review(wid: str, body: ReviewRequirements):

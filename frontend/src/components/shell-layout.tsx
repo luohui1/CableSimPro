@@ -18,22 +18,17 @@ const WIDTH_KEY = 'cablesim:shell:sidebar-width-px';
 const MIN_WIDTH = 220, MAX_WIDTH = 400;
 // 没调过宽度时按屏幕给默认值：大屏宽一些，工程与型号名称少截断
 const defaultWidth = () => (typeof window !== 'undefined' && window.innerWidth >= 1600 ? 280 : 240);
-const clampWidth = (value: number) => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, value)));
+const clampWidth = (value: number) => Math.round(Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, value)) / 4) * 4;
 function readStored(key: string) { try { return localStorage.getItem(key); } catch { return null; } }
 function store(key: string, value: string) { try { localStorage.setItem(key, value); } catch { /* 隐私模式下只保留本次会话 */ } }
 
-/**
- * 侧栏宽度写在一张共享样式表里（--sidebar-width）。拖拽时每次 pointermove 只改样式表、不触发 React 渲染，
- * 松手再保存——照搬 ZCode WorkspaceShellLayout 的做法（Apache-2.0，github.com/zai-org/ZCode）。
- */
-const widthSheet = typeof CSSStyleSheet === 'function' ? new CSSStyleSheet() : null;
-function applyWidth(width: number) {
-  if (!widthSheet) return;
-  widthSheet.replaceSync(`.shell-workbench { --sidebar-width: ${width}px; }`);
-  if (!document.adoptedStyleSheets.includes(widthSheet)) document.adoptedStyleSheets = [...document.adoptedStyleSheets, widthSheet];
+/** 宽度以 4px 级距写 data 属性；样式与 tokens 保留在 CSS，拖拽不重渲染内容。 */
+function applyWidth(element: HTMLElement | null, width: number) {
+  if (element) element.dataset.sidebarWidth = String(width);
 }
 
 export function ShellLayout() {
+  const shell = useRef<HTMLDivElement>(null);
   const search = useSearch({ strict: false }) as { theme?: string };
   const theme = search.theme === 'dark' ? 'dark' : 'light';
   const navigate = useNavigate();
@@ -49,7 +44,7 @@ export function ShellLayout() {
   const [collapsed, setCollapsed] = useState(() => readStored(COLLAPSED_KEY) === 'true');
   const [animating, setAnimating] = useState(false);
   const width = useRef(clampWidth(Number(readStored(WIDTH_KEY)) || defaultWidth()));
-  useLayoutEffect(() => applyWidth(width.current), []);
+  useLayoutEffect(() => applyWidth(shell.current, width.current), []);
   // 过渡只在用户主动开合的那一次加上，平时不挂，窗口缩放不会触发一串中间尺寸（ZCode useAnimatedResizablePanel）。
   // 侧栏只随人手动开合（§2：所有页面保持展开），不随进入工作窗口自动收起
   const toggle = useCallback(() => {
@@ -69,7 +64,7 @@ export function ShellLayout() {
     const startX = event.clientX, start = width.current, target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
     document.documentElement.dataset.resizing = 'true';
-    const move = (next: PointerEvent) => { width.current = clampWidth(start + next.clientX - startX); applyWidth(width.current); target.setAttribute('aria-valuenow', String(width.current)); };
+    const move = (next: PointerEvent) => { width.current = clampWidth(start + next.clientX - startX); applyWidth(shell.current, width.current); target.setAttribute('aria-valuenow', String(width.current)); };
     const end = () => {
       target.removeEventListener('pointermove', move);
       delete document.documentElement.dataset.resizing;
@@ -83,14 +78,14 @@ export function ShellLayout() {
     const step = event.key === 'ArrowLeft' ? -16 : event.key === 'ArrowRight' ? 16 : 0;
     if (!step) return;
     event.preventDefault();
-    width.current = clampWidth(width.current + step); applyWidth(width.current); store(WIDTH_KEY, String(width.current));
+    width.current = clampWidth(width.current + step); applyWidth(shell.current, width.current); store(WIDTH_KEY, String(width.current));
     event.currentTarget.setAttribute('aria-valuenow', String(width.current));
   };
-  return <div className="app-shell shell-workbench" data-collapsed={collapsed || undefined} data-animating={animating || undefined}>
+  return <div ref={shell} className="app-shell shell-workbench" data-collapsed={collapsed || undefined} data-animating={animating || undefined}>
     {/* 换页时旧页面保留到新页面就绪；顶部细进度条给出即时反馈（延迟 150 ms 出现，快的跳转看不到）。 */}
     <div className="route-progress" data-active={loading || undefined} aria-hidden="true" />
     <WorkbenchSidebar theme={theme} onTheme={onTheme} onSlot={setSlot} collapsed={collapsed} onCollapse={toggle} />
-    {!collapsed && <div className="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="调整侧栏宽度" aria-valuemin={MIN_WIDTH} aria-valuemax={MAX_WIDTH} aria-valuenow={width.current} tabIndex={0} onPointerDown={startResize} onKeyDown={resizeByKey} onDoubleClick={(event) => { const reset = defaultWidth(); width.current = reset; applyWidth(reset); store(WIDTH_KEY, String(reset)); event.currentTarget.setAttribute('aria-valuenow', String(reset)); }} />}
+    {!collapsed && <div className="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="调整侧栏宽度" aria-valuemin={MIN_WIDTH} aria-valuemax={MAX_WIDTH} aria-valuenow={width.current} tabIndex={0} onPointerDown={startResize} onKeyDown={resizeByKey} onDoubleClick={(event) => { const reset = defaultWidth(); width.current = reset; applyWidth(shell.current, reset); store(WIDTH_KEY, String(reset)); event.currentTarget.setAttribute('aria-valuenow', String(reset)); }} />}
     <ShellSlot.Provider value={slot}><Outlet /></ShellSlot.Provider>
   </div>;
 }

@@ -12,5 +12,5 @@ const icons = Object.fromEntries(Object.entries(svgModules).map(([path, svg]) =>
 
 export function Icon({ name, className, ...props }: { name: string } & SVGProps<SVGSVGElement>) {
   if (!icons[name]) throw new Error(`缺少图标：${name}`);
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={cn('icon', className)} {...props} dangerouslySetInnerHTML={{ __html: icons[name] }} />;
+  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" data-icon={name} className={cn('icon', className)} {...props} dangerouslySetInnerHTML={{ __html: icons[name] }} />;
 }

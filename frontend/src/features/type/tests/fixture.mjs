@@ -6,6 +6,7 @@ import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { openHeadlessBrowser } from '../../../../scripts/browser.mjs';
+import { chromium } from '@playwright/test';
 
 export const root = fileURLToPath(new URL('../../../../../', import.meta.url));
 export const output = path.join(root, '.data/frontend-type');
@@ -18,7 +19,7 @@ async function run(command, args, options = {}) {
   const child = spawn(command, args, { cwd: root, windowsHide: true, ...options });
   const code = await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', resolve); }); if (code !== 0) throw Error(command + '退出' + code);
 }
-export async function typeFixture({ main = false, build, setup } = {}) {
+export async function typeFixture({ main = false, build, setup, software = false } = {}) {
   const python = process.env.PYTHON || path.join(root, process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python');
   const backendRoot=process.env.E2E_BACKEND_ROOT ? path.resolve(process.env.E2E_BACKEND_ROOT) : root;
   if(backendRoot!==root && (!backendRoot.startsWith(path.resolve(root,'.tmp')+path.sep)
@@ -43,9 +44,15 @@ export async function typeFixture({ main = false, build, setup } = {}) {
     for (const stream of [backend.stdout, backend.stderr]) stream.on('data', data => { backendOutput = (backendOutput + data.toString()).slice(-12000); });
     async function ready(url, child) { for (let i = 0; i < 120; i++) { if (child.exitCode !== null || child.pid === undefined) throw Error(backendOutput.slice(-3000)); try { if ((await fetch(url, { signal: AbortSignal.timeout(1500) })).ok) return; } catch {} await delay(250); } throw Error('服务启动超时：' + url + '\n' + backendOutput.slice(-3000)); }
     await ready(environment.BACKEND_URL + '/api/health', backend);
-    const preview = spawn(process.execPath, [path.join(root, 'frontend/node_modules/vite/bin/vite.js'), 'preview', '--config', main ? 'vite.config.ts' : 'src/features/type/preview.config.ts', ...(main ? ['--outDir', build || path.join(output, 'main-build')] : []), '--host', '127.0.0.1', '--port', String(frontendPort), '--strictPort'], { cwd: path.join(root, 'frontend'), env: environment, windowsHide: true, stdio: 'ignore' }); preview.on('error', error => { backendOutput += String(error); }); owned.push(preview);
+    const preview = spawn(process.execPath, [path.join(root, 'frontend/node_modules/vite/bin/vite.js'), 'preview', '--config', main ? 'vite.config.ts' : 'src/features/type/preview.config.ts', ...(main ? ['--outDir', build || path.join(output, 'main-build')] : []), '--host', '127.0.0.1', '--port', String(frontendPort), '--strictPort'], { cwd: path.join(root, 'frontend'), env: environment, windowsHide: true, stdio: ['ignore','pipe','pipe'] }); preview.on('error', error => { backendOutput += String(error); }); owned.push(preview);
+    for(const stream of [preview.stdout,preview.stderr])stream.on('data',data=>{backendOutput=(backendOutput+'\n前端服务：'+data).slice(-12000);});
     const url = 'http://127.0.0.1:' + frontendPort; await ready(url, preview);
-    process.env.FRONTEND_URL = url; process.env.E2E_ISOLATED = '1'; browser = await openHeadlessBrowser();
+    process.env.FRONTEND_URL = url; process.env.E2E_ISOLATED = '1';
+    if(software){
+      const instance=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:process.platform==='win32'?{channel:'msedge'}:{}),args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+      const context=await instance.newContext(),page=await context.newPage();
+      browser={browser:instance,context,page,close:async()=>{for(const tab of context.pages())await tab.close();console.log('浏览器清理：剩余标签页 '+context.pages().length+'。');await instance.close();}};
+    }else browser = await openHeadlessBrowser();
     const errors = []; browser.page.on('pageerror', error => errors.push(error.message));
     browser.page.on('console', message => { if (message.type() === 'error' && !message.text().includes('Failed to load resource')) errors.push(message.text()); });
     const writes = []; browser.page.on('request', request => { if (new URL(request.url()).origin !== url && !['GET', 'HEAD', 'OPTIONS'].includes(request.method())) throw Error('跨环境写入被拒绝'); if (request.url().includes('/api/') && !['GET', 'HEAD'].includes(request.method())) writes.push({ method: request.method(), url: request.url() }); });

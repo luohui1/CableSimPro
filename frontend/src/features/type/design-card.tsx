@@ -9,8 +9,8 @@ import { MissingTypeInputs } from './missing';
 
 export function DesignCard({ document, raw, onClose }: { document: DomainDocument; raw: Record<string, unknown>; onClose?: () => void }) {
   const card = designSummary(document, raw), status = publicationStatus(raw), creation = optionalRecord(raw.type_creation), source = optionalRecord(creation.source);
-  return <div className="type-design-card" data-type-card data-closable={!!onClose}><PropertyPanel title={card.name} collapsed={false} onToggle={onClose || (() => {})} groups={[
-    { label: '型号名片', items: [
+  return <div className="type-design-card" data-type-card data-closable={!!onClose}><PropertyPanel title="型号名片" collapsed={false} onToggle={onClose || (() => {})} groups={[
+    { label: '基本信息', items: [
       { label: '类别', value: '型号设计' }, { label: '基准版本', value: card.version },
       { label: '状态', value: <StatusMark kind={status === 'published' ? 'locked' : status === 'review' ? 'proposal' : 'draft'} label={publicationLabels[status]} /> },
       { label: '来源', value: <span title={card.sourceDetail}>{card.source}</span> },

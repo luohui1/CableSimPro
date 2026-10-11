@@ -161,6 +161,10 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
         hv_model=next(c for c in candidates if '起帆' in c['name'])
         assert hv_model['version']=='1.0.0'
         assert hv_model['cable_type']['cores'][0]['conductor']['r20_basis']=='manufacturer_limit'
+        assert hv_model['cable_type']['cores'][0]['conductor']['conductor_class']==2
+        class_source=hv_model['sources']['/cable_type/cores/core~11/conductor/conductor_class']
+        assert class_source['kind']=='standard' and not class_source['reviewed']
+        assert '6.1.1' in class_source['reference'] and 'PDF 第 9 页' in class_source['reference']
         assert {s['kind'] for s in hv_model['sources'].values()} >= {'manufacturer','standard','derived','user'}
         assert '不是厂家额定' in receipt['hv_series']['engineering_scope']
         # 研究模块键与运行记录的模块必须是前端已有的模块，否则研究页找不到运行、显示“未运行”

@@ -7,6 +7,7 @@ import { isVersionStale, versionReasons } from '@/lib/version-status';
 import { StatusMark } from './status-mark';
 import { Dialog } from './ui/dialog';
 import { Button } from './ui/button';
+import { STATUS_WORDS } from '@/lib/status-vocabulary';
 
 type Target = { wid: string; sid?: string; module?: string; runId?: string; revision?: number; studyRevision?: number; title?: string };
 type Prepared = { wid: string; sid: string; title: string; body: components['schemas']['RecalculateStudy'] };
@@ -67,7 +68,7 @@ export function VersionNotice({ value, target, disabledReason, onComplete }: {
   const reasons = versionReasons(value), error = prepare.error || execute.error;
   return <>
     <span className="version-notice" onClick={event => event.stopPropagation()}>
-      <StatusMark kind="historical" label="结果已过期" detail={<ul>{(reasons.length ? reasons : ['请核对输入与方法的新版本。']).map(reason => <li key={reason}>{reason}</li>)}</ul>} />
+      <StatusMark kind="historical" label={STATUS_WORDS.outdated} detail={<ul>{(reasons.length ? reasons : ['请核对输入与方法的新版本。']).map(reason => <li key={reason}>{reason}</li>)}</ul>} />
       <Button variant="ghost" size="compact" disabled={!!disabledReason || running} title={disabledReason} onClick={() => { setOpen(true); setAck(false); execute.reset(); prepare.mutate(); }}>重算</Button>
       {disabledReason && <span className="muted">{disabledReason}</span>}
     </span>

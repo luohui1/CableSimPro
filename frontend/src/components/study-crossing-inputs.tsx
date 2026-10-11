@@ -4,10 +4,11 @@ import { numeric, optionalRecord, text } from '@/api/client';
 import { useStudy } from './study-provider';
 import { NumberField } from './ui/number-field';
 import { Button } from './ui/button';
+import { Tooltip } from './ui/tooltip';
 
 /** Crossings are method inputs, not a second domain object schema. Labels,
  * units and bounds come from the selected sealed plugin contract. */
-export function StudyCrossingInputs({historical}: {historical:boolean}) {
+export function StudyCrossingInputs({historical, placement='all'}: {historical:boolean;placement?:'active'|'optional'|'all'}) {
   const context=useStudy();
   const saved=context.runs.at(-1);
   const definition=historical ? optionalRecord(optionalRecord(saved?.snapshot).definition) : context.draft?.definition || context.study.definition;
@@ -26,9 +27,13 @@ export function StudyCrossingInputs({historical}: {historical:boolean}) {
     context.editDefinition({...current,parameters:changed,input_sources:{...current.input_sources,
       '/parameters/crossing_heat_sources':{kind:'user',reference:'工程师填写交叉热源；逐条具体出处见 source。',reviewed:false}}});
   }
+  if(placement==='active' && !rows.length || placement==='optional' && rows.length)return null;
+  if(!rows.length)return <section className="study-crossing-empty" aria-label="附加热源">
+    <Tooltip content={text(field.description)}><span tabIndex={0}>附加热源</span></Tooltip><span className="muted">未设置</span>
+    {!historical && <Button size="compact" variant="ghost" disabled={context.saving} onClick={()=>write([{}])}>添加</Button>}
+  </section>;
   return <section className="input-section study-crossing-inputs" aria-label={text(field.title)}>
     <h3>{text(field.title)}</h3>
-    {!rows.length && <p className="muted">未设置交叉热源</p>}
     {rows.map((row,index)=><fieldset key={index} className="input-form-grid"><legend>{text(row.label) || `热源 ${index+1}`}</legend>
       {Object.entries(properties).map(([key,raw])=>{
         const spec=optionalRecord(raw),label=text(spec.title),unit=text(optionalRecord(spec['x-unit']).si) || text(spec['x-unit']);
@@ -41,6 +46,6 @@ export function StudyCrossingInputs({historical}: {historical:boolean}) {
       {!historical && <Button variant="ghost" onClick={()=>write(rows.filter((_,i)=>i!==index))}>移除热源 {index+1}</Button>}
     </fieldset>)}
     {!historical && <Button disabled={context.saving || rows.length>=Number(field.maxItems)} onClick={()=>write([...rows,{}])}>添加交叉热源</Button>}
-    <p className="muted">{text(field.description)}</p>
+    <Tooltip content={text(field.description)}><span tabIndex={0} className="muted">范围与依据</span></Tooltip>
   </section>;
 }

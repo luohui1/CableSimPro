@@ -170,6 +170,13 @@ def geometry_tables(payload, audience='internal'):
         # Bind by input identity; equal display names do not imply equal resource versions.
         pin = pins.get(identity, {})
         row[2] += ' · '+readable_version(pin['version']) if pin else ' · 未绑定资源'
+    standards=artifact_rows(payload['results'],'standards')
+    for row in rows:
+        role={'绝缘':'insulation','外护套':'oversheath'}.get(row[1])
+        citations=list(dict.fromkeys(item['citation'].split('（PDF')[0] for item in standards
+            if role and item.get('citation') and item.get('target',{}).get('role')==role
+            and item['id'].endswith(role+'-nominal')))
+        if citations: row[3]+='\n标准参照：'+ '；'.join(citations)
     single = len(cable['cores']) == 1
     body = section_svg(payload)+'<h3>分层结构与材料版本</h3>'+table(['结构层', '材料', '尺寸 / mm', '截面 / mm²'] if single else ['对象', '结构层', '材料', '尺寸 / mm', '截面 / mm²'],
                  [row[1:] for row in rows] if single else rows,
@@ -205,8 +212,8 @@ def check_tables(standards, checks, document=None):
         return number(row[key], digits, trim=True)+(' '+row['unit'] if row.get('unit') not in (None,'1') else '')
     body = table(
         ['要求与条款', '要求值', '实际值', '余量', '判定 / 缺项'],
-        [[row['title']+'\n'+row.get('standard', '')+' '+row.get('clause', '')+
-          (f" · 印刷页 {row['printed_page']}" if row.get('printed_page') is not None else ''),
+        [[row['title']+'\n'+(row.get('citation') or row.get('standard', '')+' '+row.get('clause', '')+
+          (f"，第 {row['printed_page']} 页" if row.get('printed_page') is not None else '')).split('（PDF')[0],
           {'>=':'≥ ', '<=':'≤ ', '=':'= '}.get(row.get('comparison'),'')+value(row,'limit'), value(row,'actual'), value(row,'margin'),
           verdicts.get(row.get('verdict'), row.get('verdict'))+'\n'+(human_note(row.get('reason')) or '—')]
          for row in standards], '未计算（尚无标准核对结果）。', [2.8,1.1,1.1,1,2.5])

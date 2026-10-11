@@ -16,35 +16,34 @@ import { Button } from "@/components/ui/button";
 import { VersionNotice } from "@/components/version-notice";
 import { rootModule } from "@/lib/study-config";
 import { isVersionStale } from "@/lib/version-status";
+import { formatDateTime } from '@/lib/format';
+import { statusLabel } from '@/lib/status-vocabulary';
+import { groupInbox } from '@/lib/inbox-groups';
+import { InboxGroup } from '@/components/inbox-group';
 
 const SIMULATION_MODULES = ["simulation", "electrothermal", "transient", "sheath-losses", "thermal-field", "batch"];
-const short = (value?: string | null) => value ? new Date(value).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—";
+const short = formatDateTime;
 const SEARCH_KINDS = ["project", "study", "type", "cable_version", "asset", "plugin", "delivery", "document"] as const;
 
-/** 需要处理：过期研究、待审核逐条列出（带原因和下一步）；资料缺项和进行中按类合并成一行。 */
-function NeedsAttention({ items, studies, theme }: { items: InboxItem[]; studies: StudyRow[]; theme: "light" | "dark" }) {
-  const listed = items.filter((item) => item.category === "stale" || item.category === "review").slice(0, 6);
-  const missing = items.filter((item) => item.category === "missing").length;
-  const running = items.filter((item) => item.category === "running").length;
-  if (!listed.length && !missing && !running) return <InlineEmpty title="没有需要处理的事项。" />;
+/** 与待办共用分组；共性原因展示一次，所有对象仍可展开查看。 */
+function NeedsAttention({ items, studies }: { items: InboxItem[]; studies: StudyRow[] }) {
+  const listed = groupInbox(items).slice(0, 6);
+  if (!listed.length) return <InlineEmpty title="没有需要处理的事项。" />;
   return <ul className="home-todo">
-    {listed.map((item) => {
+    {listed.map((group) => {
+      if (group.items.length > 1) return <li className="home-todo-group" key={group.id}><InboxGroup group={group} action={item => {
+        const study = item.object.kind === 'study' ? studies.find(row => row.id === item.object.id) : undefined;
+        return study && isVersionStale(study.raw) ? <VersionNotice value={study.raw} target={{ wid: study.workspace, sid: study.id, revision: study.workspaceRevision, studyRevision: study.revision, title: study.title }} /> : undefined;
+      }} /></li>;
+      const item = group.items[0];
       const study = item.object.kind === "study" ? studies.find((row) => row.id === item.object.id) : undefined;
       return <li key={item.category + item.object.kind + item.object.id}>
         <span className="home-todo-text"><ObjectLink card={item.object}>{item.title}</ObjectLink><small>{item.reason}</small></span>
         {study && isVersionStale(study.raw)
           ? <VersionNotice value={study.raw} target={{ wid: study.workspace, sid: study.id, revision: study.workspaceRevision, studyRevision: study.revision, title: study.title }} />
-          : <StatusMark kind={statusMark(item.object.status.code)} label={item.object.status.label} />}
+          : <StatusMark kind={statusMark(item.object.status.code)} label={statusLabel(item.object.status.code, item.object.status.label)} />}
       </li>;
     })}
-    {missing > 0 && <li>
-      <span className="home-todo-text"><Link className="object-link" to="/inbox" search={{ theme }}>{missing} 条资料缺项</Link><small>补齐并核对后，研究才能引用为完整型号</small></span>
-      <StatusMark kind="draft" label="资料缺项" />
-    </li>}
-    {running > 0 && <li>
-      <span className="home-todo-text"><Link className="object-link" to="/runs" search={{ theme }}>{running} 项正在运行</Link><small>运行与超算作业</small></span>
-      <StatusMark kind="running" label="进行中" />
-    </li>}
   </ul>;
 }
 
@@ -55,6 +54,8 @@ function NeedsAttention({ items, studies, theme }: { items: InboxItem[]; studies
 export function HomePage() {
   const { theme, navigate } = usePageTheme();
   const [create, setCreate] = useState(false);
+  const [initialTask, setInitialTask] = useState('operating');
+  const createTask = (task: string) => { setInitialTask(task); setCreate(true); };
   const [q, setQ] = useState("");
   const [active, setActive] = useState(0);
   const searchBox = useRef<HTMLInputElement>(null), resultsBox = useRef<HTMLElement>(null);
@@ -84,7 +85,7 @@ export function HomePage() {
   return <>
     <AppShell title="首页" status={null} theme={theme} onUnavailable={() => {}}
       onTheme={() => void navigate({ to: "/", search: { theme: theme === "light" ? "dark" : "light" }, replace: true })}
-      actions={<Button variant="primary" size="compact" onClick={() => setCreate(true)}>新建研究</Button>}>
+      actions={<Button variant="primary" size="compact" onClick={() => createTask('operating')}>新建研究</Button>}>
       <div className="home-page" data-page="home">
         <label className="home-search">
           <Icon name="action/search" />
@@ -119,8 +120,8 @@ export function HomePage() {
                 : <DataTable<ObjectCard & { id: string }> label="继续工作" showGroups={false} groups={[{ id: "recent", label: "最近", rows: recent }]} rowLabel={(row) => row.name}
                   columns={[
                     { id: "name", label: "名称", wrap: true, render: (row) => <ObjectLink card={row} /> },
-                    { id: "owner", label: "所属", render: (row) => row.parent?.name || KIND_LABELS[row.kind] },
-                    { id: "state", label: "状态", render: (row) => <StatusMark kind={statusMark(row.status.code)} label={row.status.label} detail={row.status.reason || undefined} /> },
+                    { id: "owner", label: "所属", wrap: true, render: (row) => row.parent?.name || KIND_LABELS[row.kind] },
+                    { id: "state", label: "状态", render: (row) => <StatusMark kind={statusMark(row.status.code)} label={statusLabel(row.status.code, row.status.label)} detail={row.status.reason || undefined} /> },
                     { id: "updated", label: "更新时间", render: (row) => short(row.updated) },
                   ]} />}
             </section>
@@ -128,17 +129,17 @@ export function HomePage() {
               <header><h2>需要处理</h2><span className="home-section-links"><Link to="/agent" search={{ theme, ask: "inbox" }}>让 Agent 整理</Link><Link to="/inbox" search={{ theme }}>全部待办</Link></span></header>
               {inbox.isPending ? <LoadingState title="正在汇总" />
                 : inbox.error ? <ErrorState description={message(inbox.error)} action={<Button onClick={() => void inbox.refetch()}>重新读取</Button>} />
-                : <NeedsAttention items={inbox.data.items} studies={rows} theme={theme} />}
+                : <NeedsAttention items={inbox.data.items} studies={rows} />}
             </section>
           </div>
           <nav className="home-domains" aria-label="新建">
-            <div><Icon name="calc/ampacity" /><Link to="/studies" search={{ theme, kind: "ampacity" }}><b>载流量计算</b><span className="muted">{rows.length - simulation} 项研究</span></Link><Button size="compact" variant="ghost" onClick={() => setCreate(true)}>新建研究</Button></div>
+            <div><Icon name="calc/ampacity" /><Link to="/studies" search={{ theme, kind: "ampacity" }}><b>载流量计算</b><span className="muted">{studies.data ? `${rows.length - simulation} 项研究` : studies.isError ? '计数读取失败' : '正在读取计数'}</span></Link>{studies.isError && <Button size="compact" variant="ghost" onClick={() => void studies.refetch()}>重试计数</Button>}<Button size="compact" variant="ghost" onClick={() => createTask('rating')}>新建研究</Button></div>
             <div><Icon name="nav/cable-type" /><Link to="/types" search={{ theme }}><b>电缆设计</b><span className="muted">{typeCards.data?.total ?? "—"} 个型号设计</span></Link><Button size="compact" variant="ghost" onClick={() => void navigate({ to: "/types", search: { theme, create: true } })}>新建型号</Button></div>
-            <div><Icon name="calc/thermal-field" /><Link to="/studies" search={{ theme, kind: "simulation" }}><b>电缆仿真</b><span className="muted">{simulation} 项研究</span></Link><Button size="compact" variant="ghost" onClick={() => setCreate(true)}>新建研究</Button></div>
+            <div><Icon name="calc/thermal-field" /><Link to="/studies" search={{ theme, kind: "simulation" }}><b>电缆仿真</b><span className="muted">{studies.data ? `${simulation} 项研究` : studies.isError ? '计数读取失败' : '正在读取计数'}</span></Link><Button size="compact" variant="ghost" onClick={() => createTask('transient-temperature')}>新建研究</Button></div>
           </nav>
         </>}
       </div>
     </AppShell>
-    <CreateStudyDialog open={create} onOpenChange={setCreate} theme={theme} />
+    <CreateStudyDialog key={initialTask} open={create} onOpenChange={setCreate} theme={theme} initialTask={initialTask} />
   </>;
 }

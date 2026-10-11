@@ -32,13 +32,13 @@
 .parameter-fields .field-value-line,
 .input-row-fields .field-value-line {
   display: grid;
-  grid-template-columns: minmax(calc(var(--space-8) * 5), 1fr) var(--space-6);
+  grid-template-columns: minmax(0, 1fr) max-content;
   gap: var(--space-2);
 }
 .input-form-grid .source-badge span,
 .parameter-fields .source-badge span,
 .input-row-fields .source-badge span {
-  display: none;
+  display: inline;
 }
 .parameter-fields > .input-section,
 .parameter-fields > .text-field {
@@ -219,8 +219,12 @@
   inset-block: var(--space-4);
   right: var(--space-4);
   max-height: none;
-  width: min(calc(var(--space-12) * 15), calc(100vw - var(--space-8)));
+  width: min(calc(var(--space-12) * 12), calc(100vw - var(--space-8)));
 }
+.record-drawer:has(.run-comparison) { width: min(calc(var(--space-12) * 19), calc(100vw - var(--space-8))); }
+.record-drawer .dialog-title { padding-right: var(--space-12); }
+.record-drawer .drawer-close { position: absolute; top: var(--space-4); right: var(--space-4); }
+.record-drawer time, .record-drawer .timeline-time, .record-drawer .background-run-time { font-family: var(--font-ui); font-variant-numeric: tabular-nums; }
 .inquiry-range {
   display: flex;
   flex-direction: column;

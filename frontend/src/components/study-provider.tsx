@@ -41,7 +41,7 @@ import {
   domainDraftReducer,
   emptyDomainHistory,
 } from "@/lib/domain-draft-history";
-import { Dialog } from "./ui/dialog";
+import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
 import { Button } from "./ui/button";
 import { ErrorState, LoadingState } from "./states";
 
@@ -265,7 +265,7 @@ export function StudyProvider() {
   };
   const askHistory = (direction: 'undo' | 'redo', scope: 'model' | 'study') => {
     const source = scope === 'model' ? workspace.data : study?.raw;
-    const label = scope === 'model' ? `工程模型第 ${workspace.data?.revision} 版 · ${text(source?.[direction + '_label']) || '已保存修改'}` : `研究「${study?.title}」第 ${study?.revision} 版配置`;
+    const label = scope === 'model' ? text(source?.[direction + '_label']) || '修改工程模型' : `修改研究「${study?.title}」的计算配置`;
     setSavedHistory({direction,scope,label,revision:numeric(workspace.data?.revision)!,studyRevision:study!.revision});
   };
   const undo = useCallback(async () => {
@@ -450,7 +450,9 @@ export function StudyProvider() {
     saving: mutation.isPending || domainMutation.isPending || restoring,
     saveError: mutation.error || domainMutation.error,
     refresh: () => {
-      index.refetch();
+      // The context also caches the immutable-looking study response. A new
+      // run changes its latest_run: invalidate both layers before rereading.
+      void queries.invalidateQueries({ queryKey: ['study-context', wid, sid] });
       workspace.refetch();
       runs.refetch();
     },
@@ -573,14 +575,17 @@ export function StudyProvider() {
   return (
     <Context.Provider value={value}>
       <Outlet />
-      <Dialog open={!!savedHistory} onOpenChange={open => {if(!open)setSavedHistory(null);}}
-        title={savedHistory?.direction === 'redo' ? '重做已保存修改' : '撤销已保存修改'}
-        description={`本地草稿已到边界。将${savedHistory?.direction === 'redo' ? '重做' : '撤销'}「${savedHistory?.label || ''}」，影响${savedHistory?.scope === 'model' ? '本工程共用模型' : '本研究配置'}。保存运行保留，是否当前按输入内容判断。`}
-        actions={<><Button onClick={()=>setSavedHistory(null)}>取消</Button><Button variant="primary" loading={restoring} onClick={async()=>{
+      <Dialog open={!!savedHistory} onOpenChange={open => {if(!open && !restoring)setSavedHistory(null);}}>
+        <DialogContent onKeyDown={event => {if(event.key==='Enter' && !(event.target instanceof HTMLButtonElement)){event.preventDefault();event.currentTarget.querySelector<HTMLButtonElement>('.button-primary')?.click();}}}>
+        <DialogTitle className="dialog-title">{savedHistory?.direction === 'redo' ? '重做上一次修改？' : '撤销上一次保存？'}</DialogTitle>
+        <DialogDescription className="muted">将{savedHistory?.direction === 'redo' ? '重新应用' : '恢复到'}“{savedHistory?.label || ''}”{savedHistory?.direction === 'redo' ? '。' : '之前。'}{savedHistory?.scope === 'model' ? '本工程所有研究共用此模型，已有运行记录不变。' : '只影响本研究的配置，已有运行记录不变。'}</DialogDescription>
+        <DialogFooter><Button disabled={restoring} onClick={()=>setSavedHistory(null)}>取消</Button><Button variant="primary" loading={restoring} onClick={async()=>{
           const selected=savedHistory;if(!selected)return;
           if(selected.revision!==workspace.data.revision || selected.studyRevision!==study.revision){setSavedHistory(null);setNotice('保存版本已变化，请刷新并重新核对要恢复的修改。');return;}
           try{if(selected.scope==='model')await restoreModel(selected.direction);else await restoreConfiguration(selected.direction);setSavedHistory(null);}catch(error){setNotice(message(error));}
-        }}>确认{savedHistory?.direction === 'redo' ? '重做' : '撤销'}</Button></>} />
+        }}>{savedHistory?.direction === 'redo' ? '重做修改' : '撤销保存'}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={blocker.status === "blocked"}
         onOpenChange={(open) => {

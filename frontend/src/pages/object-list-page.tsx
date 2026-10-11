@@ -26,6 +26,8 @@ import { VersionNotice } from '@/components/version-notice';
 import { indexAll } from '@/api/object-index';
 import { statusMark } from '@/components/object-link';
 import { isVersionStale } from '@/lib/version-status';
+import { formatDateTime } from '@/lib/format';
+import { statusLabel, taskName } from '@/lib/status-vocabulary';
 
 const SIMULATION_MODULES = ["simulation", "electrothermal", "transient", "sheath-losses", "thermal-field", "batch"];
 
@@ -71,7 +73,7 @@ export function ObjectListPage() {
         </Link>
       ),
     },
-    { id: "task", label: "任务", render: (row) => row.task },
+    { id: "task", label: "任务", render: (row) => taskName(row.definition, row.task) },
     { id: "model", label: "引用型号", wrap: true, render: (row) => row.model },
     {
       id: "method",
@@ -90,19 +92,14 @@ export function ObjectListPage() {
         // 版本已变化的研究保留“重算”入口
         if (isVersionStale(row.raw)) return <VersionNotice value={row.raw} target={{ wid: row.workspace, sid: row.id, revision: row.workspaceRevision, studyRevision: row.revision, title: row.title }} />;
         if (!state) return cards.isError ? <StatusMark kind="unknown" label="状态读取失败" detail={message(cards.error)} /> : <StatusMark kind="queued" label="读取中" />;
-        return <StatusMark kind={statusMark(state.code)} label={state.label} detail={state.reason || undefined} />;
+        return <StatusMark kind={statusMark(state.code)} label={statusLabel(state.code, state.label)} detail={state.reason || undefined} />;
       },
     },
     {
       id: "updated",
       label: "更新时间",
       render: (row) =>
-        new Date(row.updated).toLocaleString("zh-CN", {
-          month: "2-digit",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+        formatDateTime(row.updated),
     },
   ];
   const matching = (studies.data || []).filter((row) =>

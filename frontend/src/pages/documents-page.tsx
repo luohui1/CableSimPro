@@ -19,7 +19,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/states";
 import { StatusMark } from "@/components/status-mark";
 import { displayName, displayText, displayUnit } from "@/lib/display-names";
 import { downloadJson } from "@/lib/download";
-import { engineeringQuantity } from '@/lib/format';
+import { engineeringQuantity, formatDateTime } from '@/lib/format';
 import { deferredView } from '@/components/deferred-view';
 const SourcePage = deferredView(() => import('@/features/documents/source-page').then(m => ({ default: m.SourcePage })));
 import { ReviewField } from "@/features/documents/review-field";
@@ -163,7 +163,7 @@ export function DocumentsPage() {
                     </td>
                     <td>{item.page_count}</td>
                     <td>{(item.size_bytes / 1024 / 1024).toFixed(2)} MiB</td>
-                    <td>{new Date(item.created).toLocaleString("zh-CN")}</td>
+                    <td>{formatDateTime(item.created)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -709,7 +709,7 @@ function DocumentWorkspace({ did }: { did: string }) {
                 <option value="">尚无提取</option>
                 {sameSpecHistory?.map((item) => (
                   <option key={item.id} value={item.id}>
-                    {new Date(item.created).toLocaleString("zh-CN")} ·{" "}
+                    {formatDateTime(item.created)} ·{" "}
                     {statusLabels[item.status]}
                   </option>
                 ))}

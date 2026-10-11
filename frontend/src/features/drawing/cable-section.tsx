@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button, IconButton } from '@/components/ui/button';
 import { EmptyState, ErrorState, LoadingState, StaleBanner } from '@/components/states';
 import { formatNumber } from '@/lib/format';
+import { layerMillimetres } from './layer-leaders';
 import { cableShape, dimensionValue, targetId } from './cable-geometry';
 import { CableShapes, LayerNumbers } from './cable-shapes';
 import { worldToScreen, zoomView } from './coordinates';
@@ -13,6 +14,7 @@ import { sectorSize } from './cross-section-profile';
 import { fitPlot } from './section-composition';
 import type { CableSectionProps, DrawingView } from './types';
 import './drawing.css';
+import { CanvasToolbar } from './canvas-toolbar';
 
 export function CableSection(props: CableSectionProps) {
   const { host, size } = useCanvasSize();
@@ -30,10 +32,8 @@ export function CableSection(props: CableSectionProps) {
   const state = props.state || (props.cableType ? 'success' : 'empty');
   const problem = props.error || calculated.problem || (state === 'error' ? '电缆结构读取失败，请重试。' : '');
   const displayedCoreId = props.selectedObject?.scope === 'core' ? props.selectedObject.coreId : props.cableType?.cores[0]?.id;
-  const labelCount = shape?.rings.filter(r => r.target.scope === 'common' || r.target.scope === 'core' && r.target.coreId === displayedCoreId).length || 0;
-  const twoColumns = labelCount > Math.max(1, Math.floor((size.height - 136) / 34) + 1);
-  const fitted = shape ? { x: twoColumns ? 0 : shape.radiusM * .35, z: -shape.radiusM * .1,
-    widthM: 2 * shape.radiusM * size.width / Math.max(40, Math.min(size.width - (twoColumns ? 400 : 256), size.height - 160)) }
+  const fitted = shape ? { x: shape.radiusM * .65, z: 0,
+    widthM: 2 * shape.radiusM * size.width / Math.max(40, Math.min(size.width - 320, size.height - 96)) }
     : { x: 0, z: 0, widthM: .1 };
   const camera = view || (shape && compact ? fitPlot({left:-shape.radiusM,right:shape.radiusM,top:shape.radiusM,bottom:-shape.radiusM},size,{x:0,y:0,width:Math.max(80,size.width-224),height:size.height},16) : fitted);
   const selectedId = props.selectedObject ? targetId(props.selectedObject) : undefined;
@@ -74,12 +74,12 @@ export function CableSection(props: CableSectionProps) {
       if (event.key.toLowerCase() === 'f' && !event.ctrlKey && !event.metaKey) { event.preventDefault(); setView(null); }
     }}>
     {state === 'historical' && <StaleBanner description="原截面对应历史输入；尺寸保持只读。" />}
-    <div className="drawing-toolbar" role="toolbar" aria-label="电缆截面工具">
+    <CanvasToolbar label="电缆截面工具">
       <IconButton icon="tool/fit" label="适应电缆截面 F" onClick={() => setView(null)} disabled={!shape} />
       <IconButton icon="tool/zoom-out" label="缩小电缆截面" disabled={!shape} onClick={() => setView(zoomView(camera, 1.2, { x: size.width / 2, y: size.height / 2 }, size))} />
       <IconButton icon="tool/zoom-in" label="放大电缆截面" disabled={!shape} onClick={() => setView(zoomView(camera, 1 / 1.2, { x: size.width / 2, y: size.height / 2 }, size))} />
       <Button size="compact" aria-pressed={showDimensions} disabled={!shape} onClick={() => setShowDimensions(value => !value)}>图上尺寸</Button>
-    </div>
+    </CanvasToolbar>
     <div ref={host} className="drawing-stage">
       {state === 'loading' && !shape ? <LoadingState title="正在读取电缆结构" />
         : state === 'empty' || !props.cableType ? <EmptyState title="尚无电缆结构" description="选择型号或提供电缆结构后查看截面。" />
@@ -108,7 +108,7 @@ export function CableSection(props: CableSectionProps) {
                     onKeyDown={event => { if (editable && event.key === 'Enter') { event.preventDefault(); event.stopPropagation(); setEdit(true); } }}>
                     <rect x={center.x - 76} y={dimensionY + 8} width="152" height="32" />
                     <text x={center.x} y={dimensionY + 29} textAnchor="middle">
-                      {dimensionLabel} {formatNumber((value?.valueM || 0) * dimensionScale, 1)} mm
+                      {dimensionLabel} {layerMillimetres((value?.valueM || 0)*dimensionScale/1000,value?.field==='diameter')} mm
                     </text>
                   </g>
                 </> : <text x={size.width / 2} y={size.height - 32} textAnchor="middle">绘图外径 Ø {formatNumber(shape.radiusM * 2000, 1)} mm</text>}
@@ -117,10 +117,10 @@ export function CableSection(props: CableSectionProps) {
                 x={Math.max(8, Math.min(size.width - 232, center.x - 112))} y={Math.max(8, Math.min(size.height - 156, dimensionY - 24))}
                 value={value.valueM * dimensionScale} unit="mm" onCancel={dismiss} onCommit={commitDimension} />}
             </svg>}
-      {compact&&shape&&<div className="drawing-compact-layers" aria-label="结构层标注">{shape.rings.filter(r=>r.target.scope==='common'||r.target.coreId===displayedCoreId).map(r=><Button key={r.id} size="compact" variant="ghost" aria-pressed={selectedId===r.id} data-layer-number={r.number} onClick={()=>select(r.target)}>{r.number} {r.name} · {props.materials.find(m=>m.id===r.materialId)?.label||r.materialRole}<span>{r.target.role==='conductor'?'直径':'厚度'} {formatNumber((r.target.role==='conductor'?r.outerM*2:r.outerM-r.innerM)*1000,1)} mm</span></Button>)}</div>}
+      {compact&&shape&&<div className="drawing-compact-layers" aria-label="结构层标注">{shape.rings.filter(r=>r.target.scope==='common'||r.target.coreId===displayedCoreId).map(r=><Button key={r.id} size="compact" variant="ghost" aria-pressed={selectedId===r.id} data-layer-number={r.number} onClick={()=>select(r.target)}>{r.number} {r.name} · {props.materials.find(m=>m.id===r.materialId)?.label||r.materialRole}<span>{r.target.role==='conductor'?'直径':'厚度'} {layerMillimetres(r.target.role==='conductor'?r.outerM*2:r.outerM-r.innerM,r.target.role==='conductor')} mm</span></Button>)}</div>}
     </div>
     {compact && edit && selected && value && <Dialog open onOpenChange={open=>{if(!open)dismiss();}} title={`编辑${selected.name}${dimensionLabel}`}><DimensionInput label={`${selected.name}${dimensionLabel}`} value={value.valueM*dimensionScale} unit="mm" onCancel={dismiss} onCommit={commitDimension} /></Dialog>}
-    {selected&&value&&<div className="drawing-layer-detail" aria-label="所选层尺寸与材料"><span>{selected.name} · {props.materials.find(m=>m.id===selected.materialId)?.label||'材料未提供'}</span><span>本层外径 Ø {formatNumber(selected.outerM*2000,1)} mm</span><Button size="compact" variant="ghost" disabled={!editable} onDoubleClick={()=>{if(editable)setEdit(true);}} onClick={()=>{if(editable)setEdit(true);}}>{dimensionLabel} {formatNumber(value.valueM*dimensionScale,1)} mm</Button></div>}
+    {selected&&value&&<div className="drawing-layer-detail" aria-label="所选层尺寸与材料"><span>{selected.name} · {props.materials.find(m=>m.id===selected.materialId)?.label||'材料未提供'}</span><span>本层外径 Ø {formatNumber(selected.outerM*2000,1)} mm</span><Button size="compact" variant="ghost" disabled={!editable} onDoubleClick={()=>{if(editable)setEdit(true);}} onClick={()=>{if(editable)setEdit(true);}}>{dimensionLabel} {layerMillimetres(value.valueM*dimensionScale/1000,value.field==='diameter')} mm</Button></div>}
     <div className="drawing-status"><span>参数截面 · mm</span><span>{state === 'loading' ? '正在更新' : selected ? `${selected.number} ${selected.name}` : '选择结构层'}</span>
       <span>{editable ? '双击尺寸编辑' : (props.cableType?.cores.length || 0) > 1 ? `${props.cableType!.cores.length} 芯按原始位置绘制` : '等比例绘制'}</span></div>
   </div>;

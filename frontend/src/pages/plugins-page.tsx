@@ -18,11 +18,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Tooltip } from "@/components/ui/tooltip";
 import { RelationPanel } from "@/components/relation-panel";
+import { SolverLocation } from '@/components/solver-location';
+import type { SolverCapability } from '@/lib/solver-location';
+import { statusLabel } from '@/lib/status-vocabulary';
 
 type Row = Record<string, unknown>;
 
 /** 清单说明多是逐条拼接的：收掉“。；”这类重复标点，标准号与年份之间补空格（IEC60853 → IEC 60853）。 */
-const prose = (value: string) => value.replace(/[。．.]\s*；/g, "；").replace(/；\s*；/g, "；").replace(/(IEC|GB\/T|GB)(\d)/g, "$1 $2");
+const prose = (value: string) => value.replace(/[。．.]\s*；/g, "；").replace(/；\s*；/g, "；").replace(/\b(IEC|GB\/T|GB)(\d)/g, "$1 $2").replaceAll('COMSOL/ACDC/HEATTRANSFER', 'COMSOL 交流/直流模块与传热模块');
 
 /** 插件类别：以清单 presentation.category 为准；早期清单没有声明时按分析类型与运行位置推断。 */
 const CATEGORIES: [string, string][] = [["calculation", "计算方法"], ["modeling", "建模"], ["simulation", "仿真"], ["data-standard", "数据与标准"], ["report", "报告"], ["agent-skill", "Agent 技能"]];
@@ -61,10 +64,9 @@ export function PluginsPage() {
               {items.map((row) => {
                 const id = pluginId(row);
                 const art = text(resource(row, "cover")?.url) || pluginArt(id);
-                const policy = optionalRecord(row.execution_policy);
                 return <Link key={id} className="plugin-item" to="/plugins/$pid" params={{ pid: id }} search={{ theme }} aria-current={row === selected ? "page" : undefined}>
                   {art ? <img src={art} alt="" /> : <span className="plugin-item-art" />}
-                  <span className="plugin-item-text"><b>{text(row.name)}</b><span>{text(optionalRecord(row.method).version)} · {text(policy.backend) === "slurm" ? "超算" : "本机"}</span></span>
+                  <span className="plugin-item-text"><b>{text(row.name)}</b><span>{text(optionalRecord(row.method).version)} · {list(row.capabilities).length} 项能力</span></span>
                   <span className={`status-dot ${row.platform_supported === true ? "is-ok" : "is-off"}`} aria-label={row.platform_supported === true ? "支持当前平台" : "当前平台未覆盖"} />
                 </Link>;
               })}
@@ -109,7 +111,7 @@ function PluginValidation({ pluginId }: { pluginId: string }) {
       groups={[{ id: "reproduced", label: "复现", rows: reproduced }]}
       columns={[
         { id: "name", label: "算例", wrap: true, render: (row) => <ObjectLink card={row} /> },
-        { id: "status", label: "状态", render: (row) => <StatusMark kind={statusMark(row.status.code)} label={row.status.label} detail={row.status.reason || undefined} /> },
+        { id: "status", label: "状态", render: (row) => <StatusMark kind={statusMark(row.status.code)} label={statusLabel(row.status.code, row.status.label)} detail={row.status.reason || undefined} /> },
         { id: "metrics", label: "关键结果", wrap: true, render: (row) => {
           const evidence = row.validation;
           if (!evidence?.metrics.length) return "没有保存的量值";
@@ -176,6 +178,7 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
                     <span className={`tag ${isBenchmarked(text(validation.level)) ? "tag-good" : ""}`}>{text(validation.level) ? validationLevel(text(validation.level)) : "未声明验证"}</span>
                   </span>
                 </div>
+                <SolverLocation pluginId={id} capability={cap as SolverCapability} />
                 {text(cap.description) && <p className="capability-description">{prose(text(cap.description))}</p>}
                 {!!headlines.length && <p className="capability-headlines"><span className="muted">关键结论</span>{headlines.map((item) => <span key={text(item.key)}>{text(item.title)}{text(optionalRecord(item.unit).display) && ` / ${text(optionalRecord(item.unit).display)}`}</span>)}</p>}
                 <p className="capability-meta">{!!outputs.length && <span>输出 {outputs.length} 项</span>}{!!parameters.length && <span>参数 {parameters.length} 项（常用 {basic}）</span>}</p>
@@ -209,7 +212,7 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
         </TabsContent>
       </Tabs>
       <dl className="detail-card" aria-label="名片">
-        <div><dt>运行位置</dt><dd>{text(policy.backend) === "slurm" ? "超算" : "本机"}</dd></div>
+        <div><dt>求解位置</dt><dd>按能力显示，见“能力”</dd></div>
         <div><dt>验证等级</dt><dd>{best ? validationLevel(best) : "未声明"}</dd></div>
         <div><dt>能力</dt><dd>{caps.length} 项</dd></div>
         <div><dt>被研究使用</dt><dd>{studies.length} 项</dd></div>

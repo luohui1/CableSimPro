@@ -20,6 +20,39 @@ def fingerprint(scenario):
     return sha256(json.dumps(scenario, sort_keys=True, ensure_ascii=False, separators=(',', ':')).encode()).hexdigest()
 
 
+def model_edit_label(before, after, fallback):
+    """Describe saved model edits from the two facts, without exposing JSON paths."""
+    old, new = before.get('domain'), after.get('domain')
+    if not isinstance(old, dict) or not isinstance(new, dict):
+        return fallback
+    changes = []
+    circuits = {c['id']: c.get('label') or f'回路 {i + 1}' for i, c in enumerate(new.get('circuits', []))}
+    for previous, current in zip(old.get('load_cases', []), new.get('load_cases', [])):
+        if previous.get('id') != current.get('id'):
+            continue
+        for key, value in current.get('currents', {}).items():
+            was = previous.get('currents', {}).get(key)
+            if was != value:
+                label = circuits.get(key, '电缆')
+                changes.append(f'修改负荷：{label}电流 {was:g} → {value:g} A' if isinstance(was, (int, float)) else f'设置负荷：{label}电流 {value:g} A')
+    for previous, current in zip(old.get('sections', []), new.get('sections', [])):
+        if previous.get('id') != current.get('id'):
+            continue
+        if previous.get('placements') != current.get('placements'):
+            changes.append('调整敷设位置与埋深')
+        if previous.get('medium') != current.get('medium'):
+            changes.append('修改敷设环境')
+    if old.get('materials') != new.get('materials'):
+        changes.append('修改材料参数')
+    if old.get('cable_types') != new.get('cable_types'):
+        changes.append('修改电缆结构参数')
+    if old.get('circuits') != new.get('circuits'):
+        changes.append('修改回路与接地方式')
+    if changes:
+        return '；'.join(changes[:3]) + ('等' if len(changes) > 3 else '')
+    return '修改工程模型' if fallback in ('保存领域文档', '保存领域输入', '保存工程模型') else fallback
+
+
 class Create(StrictModel):
     scenario: Scenario = Field(default_factory=Scenario)
 
@@ -120,6 +153,7 @@ class WorkspaceStore:
 
     def commit(self, db, row, state, label):
         self.assert_mutable(db, row['id'])
+        label = model_edit_label(json.loads(row['state']), state, label)
         Scenario.model_validate(state['scenario'])
         rev, pos, wid = row['revision'] + 1, row['cursor'] + 1, row['id']
         encoded = json.dumps(state, ensure_ascii=False)
@@ -137,8 +171,8 @@ class WorkspaceStore:
             audit = [dict(r) for r in db.execute('SELECT * FROM workspace_audit WHERE workspace=? ORDER BY rowid DESC LIMIT 100', (wid,))]
             runs = [dict(r) for r in db.execute('SELECT id,revision,input_hash,created FROM workspace_runs WHERE workspace=? ORDER BY rowid DESC LIMIT 30', (wid,))]
             previous = db.execute('SELECT state,label FROM workspace_history WHERE workspace=? AND position=?', (wid, row['cursor'] - 1)).fetchone()
-            step = db.execute('SELECT label FROM workspace_history WHERE workspace=? AND position=?', (wid, row['cursor'])).fetchone()
-            following = db.execute('SELECT label FROM workspace_history WHERE workspace=? AND position=?', (wid, row['cursor'] + 1)).fetchone()
+            step = db.execute('SELECT state,label FROM workspace_history WHERE workspace=? AND position=?', (wid, row['cursor'])).fetchone()
+            following = db.execute('SELECT state,label FROM workspace_history WHERE workspace=? AND position=?', (wid, row['cursor'] + 1)).fetchone()
             can_undo = previous is not None and ('domain' not in state or 'domain' in json.loads(previous['state']))
             type_lifecycle = None
             if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='type_plans'").fetchone():
@@ -149,8 +183,8 @@ class WorkspaceStore:
                         can_undo = False
         frozen = type_lifecycle and type_lifecycle['status'] == 'published'
         return {'id': wid, 'revision': row['revision'], **state, 'type_lifecycle': type_lifecycle, 'can_undo': can_undo, 'can_redo': row['cursor'] < maximum and not frozen,
-                'undo_label': step['label'] if can_undo and step else None,
-                'redo_label': following['label'] if following and not frozen else None,
+                'undo_label': model_edit_label(json.loads(previous['state']), json.loads(step['state']), step['label']) if can_undo and step else None,
+                'redo_label': model_edit_label(state, json.loads(following['state']), following['label']) if following and not frozen else None,
                 'audit': audit, 'runs': runs, 'updated_at': row['updated']}
 
     def create(self, scenario):

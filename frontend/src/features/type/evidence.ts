@@ -8,7 +8,10 @@ import type { StatusKind } from '@/components/status-mark';
 
 export function useTypeEvidence() {
   const state = useTypeWorkspace();
-  return useQuery({ queryKey: ['type-evidence', state.workspace?.id], queryFn: ({ signal }) => typeEvidence(state.workspace!.id, signal), enabled: !!state.workspace,
+  return useQuery({ queryKey: ['type-evidence', state.workspace?.id], queryFn: async ({ signal }) => {
+    try { return await typeEvidence(state.workspace!.id, AbortSignal.any([signal,AbortSignal.timeout(20000)])); }
+    catch(error) { if(error instanceof Error && error.name==='TimeoutError') throw new Error('保存结果读取超过 20 秒，请重新读取。'); throw error; }
+  }, retry:false, enabled: !!state.workspace,
     refetchInterval: query => query.state.data?.some(item => pendingRun(item.run)) ? 2000 : false });
 }
 export function containsArtifact(run: Record<string, unknown>, schema: string) {

@@ -24,6 +24,7 @@ const database = path.join(scratch, "workspace.sqlite");
 const owned = [];
 const servicePorts = [];
 let backendOutput = "";
+let previewOutput = "";
 let previewShutdownUrl;
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function port() {
@@ -45,11 +46,11 @@ async function run(command, args, options = {}) {
   const [code] = await once(child, "exit");
   if (code !== 0) throw Error(command + " 退出 " + code);
 }
-async function ready(url, child) {
+async function ready(url, child, output = () => backendOutput) {
   // 后端启动时会预热研究与运行读取；大的演示库冷启动约 30 s，等待上限 60 s
   for (let attempt = 0; attempt < 240; attempt++) {
     if (child.exitCode !== null)
-      throw Error("临时服务启动失败：" + backendOutput.slice(-3000));
+      throw Error("临时服务启动失败：" + output().slice(-3000));
     try {
       if ((await fetch(url, { signal: AbortSignal.timeout(2000) })).ok) return;
     } catch {}
@@ -59,6 +60,7 @@ async function ready(url, child) {
 }
 try {
   await fs.mkdir(scratch, { recursive: true });
+  console.log('本任务隔离目录：' + scratch);
   await run(
     python,
     [
@@ -172,12 +174,13 @@ try {
       String(frontendPort),
       "--strictPort",
     ],
-    { cwd: frontend, env: environment, windowsHide: true, stdio: "ignore" },
+    { cwd: frontend, env: environment, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
   );
   owned.push(preview);
+  for (const stream of [preview.stdout, preview.stderr]) stream.on('data', chunk => { previewOutput = (previewOutput + chunk.toString()).slice(-12000); });
   console.log(`隔离服务：后端 PID ${backend.pid} / ${backendPort}；预览 PID ${preview.pid} / ${frontendPort}`);
   const url = "http://127.0.0.1:" + frontendPort;
-  await ready(url, preview);
+  await ready(url, preview, () => previewOutput);
   console.log("独立临时验收数据库已启动；开发数据库仅作为只读备份来源。");
   await run(process.execPath, [path.join(frontend, "scripts", script)], {
     cwd: frontend,

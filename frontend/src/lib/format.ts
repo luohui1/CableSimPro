@@ -1,4 +1,17 @@
 import { displayUnit } from './display-names.ts';
+/** 标准的年度版本不展示为软件版本；有修订号的版本保持原样。 */
+export function formatObjectVersion(version: string, standard = false): string {
+  if (standard && /^(19|20)\d{2}(?:\.0\.0)?$/.test(version)) return `${version.slice(0, 4)} 版`;
+  return version.replace(/^public-sample/, '公开样本').replace(/\+engineering$/, '（工程版）');
+}
+/** 全站时间使用本机时区，完整年份与分钟；无效或缺失值不抛出。 */
+export function formatDateTime(value?: string | null): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return '—';
+  const pad = (part: number) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 export function formatNumber(
   value: number | null | undefined,
   precision = 0,

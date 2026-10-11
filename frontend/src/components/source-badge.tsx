@@ -3,8 +3,8 @@ import { displayText } from '@/lib/display-names';
 import { Tooltip } from './ui/tooltip';
 
 export const sourceKinds = {
-  demo: { label: '演示', icon: 'source/from-document' },
-  user: { label: '工程师给定', icon: 'source/from-user' },
+  demo: { label: '教学', icon: 'source/from-document' },
+  user: { label: '工程师填写', icon: 'source/from-user' },
   calculation: { label: '计算', icon: 'run/run' },
   document: { label: '厂家', icon: 'source/from-document' },
   standard: { label: '标准', icon: 'source/from-standard' },

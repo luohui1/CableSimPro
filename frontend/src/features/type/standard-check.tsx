@@ -15,6 +15,7 @@ import { artifactRows, chooseEvidence, currentEvidence, methodLabel, useTypeEvid
 import { useTypeInspector } from './inspector';
 import { TypeRunControl, methodForArtifact } from './run-control';
 import { SavedRunPicker } from './saved-run-picker';
+import { basisConditions } from './basis-display';
 
 const verdicts: Record<string, { kind: StatusKind; label: string }> = { passed: { kind: 'satisfied', label: '满足' }, failed: { kind: 'unsatisfied', label: '不满足' }, missing: { kind: 'unknown', label: '待补数据' }, uncovered: { kind: 'unknown', label: '未覆盖' } };
 type StandardRow = Record<string, unknown> & { id: string };
@@ -26,13 +27,23 @@ export function resultValue(value: unknown, row: StandardRow) {
 }
 function requirement(row: StandardRow) { const sign = { '>=': '≥', '<=': '≤', '=': '=' }[text(row.comparison)]; return numeric(row.limit) === null ? '未确定' : (sign || '') + ' ' + resultValue(row.limit, row); }
 export async function standardDefinition(wid: string, name: string, cableId: string, currentRun?: string) {
+  const signal=AbortSignal.timeout(45000);
+  try {
   const method = await methodForArtifact('x-cablesim.standard-check');
   const input_sources: Record<string, { kind: 'user'; reference: string; reviewed: boolean }> = {};
   if (currentRun) {
-    const catalog = record(await responseData(api.GET('/api/design/type-workspaces/{wid}/requirements', { params: { path: { wid }, query: { run_id: currentRun } } })), '要求批准目录');
+    const catalog = record(await responseData(api.GET('/api/design/type-workspaces/{wid}/requirements', { params: { path: { wid }, query: { run_id: currentRun } }, signal })), '要求批准目录');
     if (numeric(catalog.approved_count) && text(catalog.approved_digest)) input_sources.requirements = { kind: 'user', reviewed: true, reference: `人工批准要求集 ${text(catalog.approved_digest)}；审批记录 ${array(catalog.review_references, '批准引用').join('；')}` };
   }
-  return { title: name + ' · 产品标准核对', input_source: 'domain' as const, method, parameters: { cable_type_id: cableId }, input_sources };
+  const workspace=record(await responseData(api.GET('/api/workspaces/{wid}',{params:{path:{wid}},signal})), '型号输入');
+  const response=await fetch(`/api/design/type-workspaces/${encodeURIComponent(wid)}/requirements/basis`,{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},signal,body:JSON.stringify({request_id:crypto.randomUUID(),expected_revision:numeric(workspace.revision)})});
+  const value=await response.json();if(!response.ok)throw new ApiError(response.status,text(optionalRecord(value.detail).message)||text(value.detail)||'标准依据查询失败，请核对执行标准和型号条件后重试');
+  const basis=record(value,'固定标准依据');
+  return { title: name + ' · 产品标准核对', input_source: 'domain' as const, method, parameters: { cable_type_id: cableId, ...record(basis.parameters,'依据快照') }, input_sources };
+  } catch(error) {
+    if(error instanceof Error && error.name==='TimeoutError') throw new Error('标准依据查询超过 45 秒，请重新查询；已有保存结果仍保留。');
+    throw error;
+  }
 }
 export function TypeStandardCheck() {
   const state = useTypeWorkspace(), evidence = useTypeEvidence(), inspector = useTypeInspector(), navigation = useTypeNavigation();
@@ -58,7 +69,7 @@ export function TypeStandardCheck() {
     const located = text(target.role) ? target.scope === 'core' ? `${text(target.core_id)}/${text(target.role)}` : `common/${text(target.role)}` : '';
     inspector.show(text(row.title), [
       { label: '要求与结果', items: [ { label: '要求', value: requirement(row), source: 'standard', sourceDetail: text(row.standard) + ' · ' + text(row.clause) }, { label: '实际值', value: resultValue(row.actual, row), source: 'calculation', sourceDetail: methodLabel(saved!.run) }, { label: '余量', value: resultValue(row.margin, row), source: 'calculation' }, { label: '判定', value: verdicts[text(row.verdict)].label }, { label: '原因', value: displayText(text(row.reason)) || '—' } ] },
-      { label: '依据', items: [ { label: '标准', value: text(row.standard) || '未提供' }, { label: '条款', value: text(row.clause) || '未提供' }, { label: '正文页码', value: numeric(row.printed_page) ?? '未核验' }, { label: 'PDF 页码', value: numeric(row.pdf_page) ?? '未核验' }, { label: '原文', value: row.source_status === 'original-verified' ? '已核验' : '未核验' }, { label: '输入来源', value: text(optionalRecord(row.input_source).reference) || '未提供' }, { label: '完整精度', value: row.actual === null || row.actual === undefined ? '未提供' : String(row.actual), unit: text(row.unit) } ] },
+      { label: '依据', items: [ { label: '标准', value: text(row.standard) || '未提供' }, { label: '条款', value: text(row.clause) || '未提供' }, { label: '正文页码', value: numeric(row.printed_page) ?? '本库暂未收录' }, { label: 'PDF 页码', value: numeric(row.pdf_page) ?? '本库暂未收录' }, { label: '依据', value: row.source_status === 'original-verified' ? '依据已核验' : '本库暂未收录 · 下一轮' }, { label: '输入来源', value: text(optionalRecord(row.input_source).reference) || '未提供' }, { label: '完整精度', value: row.actual === null || row.actual === undefined ? '未提供' : String(row.actual), unit: text(row.unit) } ] },
       ...(located ? [{ label: '关联结构', items: [{ label: '对象', value: <Button variant="ghost" size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, 'structure', 'table', navigation.location.theme) + '&layer=' + encodeURIComponent(located))}>定位结构层</Button> }] }] : []),
     ]);
   }
@@ -72,7 +83,7 @@ export function TypeStandardCheck() {
       <div className="type-result-summary"><strong>{!rows.length ? '暂无适用要求' : numeric(counts.failed) ? `${numeric(counts.failed)} 项不满足` : numeric(counts.missing) || numeric(counts.uncovered) ? '核对尚未完整覆盖' : '声明范围内要求满足'}</strong>
         <span>{formatNumber(numeric(counts.missing))} 项待补数据</span><span>{formatNumber(numeric(counts.uncovered))} 项未覆盖</span><SourceBadge kind="standard" detail={methodLabel(saved.run) + '；判定直接来自保存的标准工件'} /></div>
       <DataTable label="标准核对" selectedId={selected} onSelect={choose} rowLabel={row => text(row.title)} showGroups={false} groups={[{ id: 'requirements', label: '要求', rows: rows.filter(row => filter === 'all' || row.verdict === filter) }]} columns={[
-        { id: 'title', label: '要求', wrap: true, render: row => <div className="type-requirement"><strong>{text(row.title)} · {requirement(row)}</strong><small>{[text(row.standard), text(row.clause)].filter(Boolean).join(' · ') || '标准依据未覆盖'}</small>{row.verdict !== 'passed' && <small>{displayText(text(row.reason)) || '判定原因未提供'}</small>}</div> }, { id: 'actual', label: '实际值', numeric: true, render: row => resultValue(row.actual, row) },
+        { id: 'title', label: '要求', wrap: true, render: row => <div className="type-requirement"><strong>{text(row.title)} · {requirement(row)}</strong><small title={basisConditions(optionalRecord(optionalRecord(row.basis_reference).record).conditions)}>{text(row.citation)?.replace(/（PDF.*$/,'') || [text(row.standard),text(row.clause)].filter(Boolean).join(' · ') || '本库暂未收录 · 下一轮'}</small>{row.verdict !== 'passed' && <small>{displayText(text(row.reason)) || '判定原因未提供'}</small>}</div> }, { id: 'actual', label: '实际值', numeric: true, render: row => resultValue(row.actual, row) },
         { id: 'margin', label: '余量', numeric: true, render: row => resultValue(row.margin, row) }, { id: 'verdict', label: '判定', render: row => <StatusMark {...verdicts[text(row.verdict)]} /> },
       ]} />
     </>}

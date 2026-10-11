@@ -255,7 +255,16 @@ def release_temperature_study(api, workspace, iec_parameters):
 def release_hv_model():
     """Sourced Qifan reference design; never a factory ampacity declaration."""
     from backend.kernel.model_series import hv_payload
-    return hv_payload()
+    payload = hv_payload()
+    conductor = payload['cable_type']['cores'][0]['conductor']
+    # Explicit standard-based design choice, not an inferred factory property.
+    # The bundled 800 mm² design already declares compacted round strands.
+    if conductor['form'] == 'stranded_round_compacted' and conductor['conductor_class'] is None:
+        conductor['conductor_class'] = 2
+        payload['sources']['/cable_type/cores/core~11/conductor/conductor_class'] = {
+            'kind':'standard', 'reviewed':False,
+            'reference':'GB/T 11017.2—2024 6.1.1，第 3 页（PDF 第 9 页）；800 mm² 紧压绞合圆形设计明确采用 GB/T 3956 第 2 类，工程使用前确认。'}
+    return payload
 
 
 def import_release_reproductions(folder, expected_snapshot):
@@ -305,7 +314,7 @@ def release_identity():
         plugin.verify()
     series, digest = bundled_series()
     hv,hv_digest = bundled_hv()
-    return {'seed_revision':8, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
+    return {'seed_revision':10, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
             'plugins':{key:Research.pin(plugin) for key,plugin in sorted(registry.plugins.items())},
             'models':{item['id']:{'version':item['version'],'sha256':item['content_sha256']} for item in system_models()},
             'manufacturer_series':{'id':series['id'],'version':series['version'],'sha256':digest},
@@ -376,10 +385,11 @@ def build_release_seed(staged, database, identity):
                 item['resource_bindings']={'bound':sum(t['state']=='current' for t in bindings['targets']),
                     'unbound':[{'name':t['name'],'reason':t['match_reason']} for t in bindings['targets'] if t['state']=='unbound']}
                 target=api('/api/workspaces/'+wid);cable=target['domain']['cable_types'][0]
+                basis=api('/api/design/type-workspaces/'+wid+'/requirements/basis','POST',{'request_id':str(uuid4()),'expected_revision':target['revision']})
                 prefix='/api/workspaces/'+wid+'/studies'
                 source={'kind':'demo','reviewed':False,'reference':'演示方法条件；50 Hz 与20 °C 为明示试算条件，不是厂家实测值，工程使用前须确认。'}
                 definitions=[('结构推导','cablesim.cable-geometry','concentric-model',{'cable_type_id':cable['id']}),
-                             ('标准核对','cablesim.standard-check','dimensions',{'cable_type_id':cable['id']}),
+                             ('标准核对','cablesim.standard-check','dimensions',{'cable_type_id':cable['id'],**basis['parameters']}),
                              ('电气参数','cablesim.type-electrical','electrical',{'cable_type_id':cable['id'],'frequency_hz':50,'temperature_k':293.15,
                                  'sources':{'frequency_hz':source['reference'],'temperature_k':source['reference']}}),
                              ('短路容量','cablesim.type-electrical','short-circuit',{'cable_type_id':cable['id']})]

@@ -5,6 +5,7 @@ import { Select } from './ui/select';
 import { displayName } from '@/lib/display-names';
 import { savedDomain, entityLabel } from '@/lib/domain-fields';
 import { readableEvidence } from './study-workbench-config';
+import { StudyDetailGroup } from './study-detail-group';
 
 type Row = Record<string, unknown>;
 const K = 273.15;
@@ -95,31 +96,31 @@ export function StudyHeatDetail({ run, cases, initialCase }: { run?: Row; cases:
       </dl>
     </header>
 
-    <section className="heat-section" aria-label="损耗构成">
+    <StudyDetailGroup id="heat:losses" title="损耗构成"><section className="heat-section" aria-label="损耗构成">
       <h3>损耗构成</h3>
       {losses.map(([label, value]) => <div key={label} className="loss-row">
         <span>{label}</span><progress className="native-progress loss-bar" value={value ?? 0} max={total || 1} aria-label={label} /><span className="numeric">{fmt(value, 2)} W/m</span>
       </div>)}
-    </section>
+    </section></StudyDetailGroup>
 
-    <section className="heat-section" aria-label="热路">
+    <StudyDetailGroup id="heat:ladder" title="热路 · K·m/W"><section className="heat-section" aria-label="热路">
       <h3>热路 <span className="muted">K·m/W</span></h3>
       <ol className="thermal-ladder">
         <li className="ladder-end is-hot">导体<b>{fmt(v('conductor_temperature') === undefined ? undefined : v('conductor_temperature')! - K)} °C</b></li>
         {ladder.map(([label, value]) => value === undefined || value === 0 ? null : <li key={label}><b className="numeric">{value.toFixed(3)}</b><span>{label}</span></li>)}
         <li className="ladder-end">环境<b>互热 {fmt(v('x-cablesim.iec60287.temperature_rise.mutual'))} K</b></li>
       </ol>
-    </section>
+    </section></StudyDetailGroup>
 
-    {cables.length > 1 && <section className="heat-section" aria-label="回路间互热温升">
+    {cables.length > 1 && <StudyDetailGroup id="heat:mutual" title="回路间互热温升 · K"><section className="heat-section" aria-label="回路间互热温升">
       <h3>回路间互热温升 <span className="muted">热源 → 受热，K</span></h3>
       <div className="table-scroll"><table className="data-table heat-matrix">
         <thead><tr><th>热源</th>{cables.map(t => <th key={t} className="numeric">{name(t)}</th>)}</tr></thead>
         <tbody>{cables.map(s => <tr key={s}><th scope="row">{name(s)}</th>{cables.map(t => <td key={t} className={`numeric${s === t ? ' is-self' : ''}`}>{fmt(heat.get(`${s}|${t}`))}</td>)}</tr>)}</tbody>
       </table></div>
-    </section>}
+    </section></StudyDetailGroup>}
 
-    <section className="heat-section heat-basis" aria-label="计算口径">
+    <StudyDetailGroup id="heat:basis" title="计算口径与来源"><section className="heat-section heat-basis" aria-label="计算口径">
       <h3>计算口径</h3>
       <dl>
         <div><dt>迭代</dt><dd>{numeric(evidence.iterations) ?? '—'} 次</dd></div>
@@ -128,6 +129,6 @@ export function StudyHeatDetail({ run, cases, initialCase }: { run?: Row; cases:
         <div><dt>方法</dt><dd>{displayName(text(output.plugin_id))} {text(output.plugin_version)}</dd></div>
       </dl>
       {!!sources.length && <ul className="heat-sources">{sources.map(s => <li key={s}>{s}</li>)}</ul>}
-    </section>
+    </section></StudyDetailGroup>
   </div>;
 }

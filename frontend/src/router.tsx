@@ -77,6 +77,7 @@ const legacyDocumentsRoute = createRoute({ getParentRoute: () => rootRoute, path
 const pluginsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/plugins", validateSearch: themeSearch, component: PluginsPage });
 const pluginDetailRoute = createRoute({ getParentRoute: () => rootRoute, path: "/plugins/$pid", validateSearch: themeSearch, component: PluginsPage });
 const settingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings", validateSearch: (search: Record<string, unknown>): { theme: "light" | "dark"; section?: string } => ({ ...themeSearch(search), section: typeof search.section === "string" ? search.section : undefined }), component: SettingsPage });
+const computeSettingsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/settings/compute", validateSearch: themeSearch, component: SettingsPage });
 const agentRoute = createRoute({ getParentRoute: () => rootRoute, path: "/agent", validateSearch: (search: Record<string, unknown>): { theme: "light" | "dark"; workspace?: string; task?: string; ask?: "inbox" } => ({ ...themeSearch(search), workspace: typeof search.workspace === "string" ? search.workspace : undefined, task: typeof search.task === "string" ? search.task : undefined, ask: search.ask === "inbox" ? "inbox" as const : undefined }), component: AgentPage });
 const reproductionSearch = (search: Record<string, unknown>) => ({ ...themeSearch(search), snapshot: typeof search.snapshot === "string" ? search.snapshot : "" });
 // 方法：验证算例是插件的验证证据（§2.3）
@@ -118,7 +119,7 @@ export const selectionRoute = createRoute({
 export const galleryRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/gallery",
-  validateSearch: themeSearch,
+  validateSearch: (search: Record<string, unknown>): { theme: 'light' | 'dark'; example?: 'command-bar' } => ({ ...themeSearch(search), example: search.example === 'command-bar' ? 'command-bar' : undefined }),
   component: GalleryPage,
 });
 export const studyRootRoute = createRoute({
@@ -206,7 +207,7 @@ export const router = createRouter({
   routeTree: rootRoute.addChildren([
     homeRoute,
     cableVersionsRoute, documentsRoute, assetGroupRoute, runsRoute, deliveriesRoute, inboxRoute,
-    pluginsRoute, pluginDetailRoute, settingsRoute, agentRoute,
+    pluginsRoute, pluginDetailRoute, settingsRoute, computeSettingsRoute, agentRoute,
     reproductionsRoute, reproductionDetailRoute,
     legacyLibraryRoute, legacyDeliveriesRoute, legacyDocumentsRoute, legacyReproductionsRoute, legacyReproductionDetailRoute,
     simulationListRoute,

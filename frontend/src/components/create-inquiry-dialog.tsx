@@ -1,6 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
   api,
   ApiError,
@@ -12,7 +12,7 @@ import {
   text,
 } from "@/api/client";
 import { inputContracts } from "@/api/input-contracts";
-import { methodCatalog, modelVersions } from "@/api/research";
+import { methodCatalog, modelVersions, workspaces, typeIndex } from "@/api/research";
 import type { components } from "@/api/generated/schema";
 import {
   engineeringQuantity,
@@ -26,6 +26,9 @@ import { Select } from "./ui/select";
 import { Tooltip } from "./ui/tooltip";
 import { LoadingState, ErrorState, EmptyState } from "./states";
 import { SourceBadge } from "./source-badge";
+import { engineeringContractFields } from './study-method-form';
+import { declaredUnit } from '@/lib/contract-schema';
+import './workbench-inspector.css';
 type Source = components["schemas"]["Source"];
 type Given = { value: string; source: Source["kind"]; reference: string };
 export function CreateInquiryDialog({
@@ -41,13 +44,22 @@ export function CreateInquiryDialog({
 }) {
   const navigate = useNavigate(),
     queries = useQueryClient();
+  const search = useSearch({ strict: false }) as { workspace?: string };
+  const [workspaceId, setWorkspaceId] = useState(search.workspace || '');
+  const projects = useQuery({ queryKey: ['workspace-index'], queryFn: ({ signal }) => workspaces(signal), enabled: open });
+  const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal), enabled: open });
+  const typeIds = new Set((types.data || []).map(item => text(item.id)));
+  const projectOptions = (projects.data || []).filter(item => !typeIds.has(text(item.id)));
   const [target, setTarget] = useState<number | null>(null),
-    [title, setTitle] = useState(""),
+    [title, setTitle] = useState<string | null>(null),
     [range, setRange] = useState(""),
     [complete, setComplete] = useState(false),
     [values, setValues] = useState<Record<string, Given>>({}),
     [failure, setFailure] = useState("");
   const allocated = useRef<Record<string, unknown> | null>(null);
+  const completionForm = useRef<HTMLDivElement>(null);
+  const [fieldError, setFieldError] = useState<{key:string; message:string; source?:boolean}>();
+  useEffect(() => { if (open) { setWorkspaceId(search.workspace || ''); allocated.current = null; } }, [open, search.workspace]);
   const targetInput = useRef<HTMLInputElement>(null);
   function continueInquiry() {
     const raw = targetInput.current?.value.trim() ?? "";
@@ -129,14 +141,30 @@ export function CreateInquiryDialog({
       optionalRecord(optionalRecord(model.payload).specification).designation,
     ).includes("22"),
   );
-  const fields = (completion?.engineering_fields || [])
-    .map(optionalRecord)
+  const fields = engineeringContractFields(completion?.parameter_schema)
     .filter(
       (field) =>
-        (!field.armoured_only || armoured) &&
+        (armoured || !['armour_gap_ratio','steel_relative_permeability'].includes(text(field.key))) &&
         (field.key !== "screen_longitudinal_r20" ||
           values.screen_model?.value === "given_r20"),
     );
+  const reference = useQuery({
+    queryKey: ['inquiry-reference', candidates.map(model => model.id)], enabled: complete && !!candidates.length,
+    queryFn: async ({signal}) => {
+      const ids = candidates.map(model => text(model.id).replace(/^candidate:/, ''));
+      for (const project of projectOptions) {
+        const studies = await responseData(api.GET('/api/workspaces/{wid}/studies', {params:{path:{wid:text(project.id)}},signal}));
+        for (const study of (Array.isArray(studies) ? studies : []).map(optionalRecord)) {
+          const definition = optionalRecord(study.definition), completions = optionalRecord(definition.candidate_completions);
+          if (!ids.every(id => completions[id])) continue;
+          const saved = optionalRecord(completions[ids[0]]);
+          if (optionalRecord(saved.method).capability === 'model-completion')
+            return {title:text(definition.title), values:optionalRecord(optionalRecord(saved.parameters).values)};
+        }
+      }
+      return null;
+    },
+  });
   const defaults = (models.data || [])
     .map((model) =>
       optionalRecord(
@@ -145,6 +173,7 @@ export function CreateInquiryDialog({
     )
     .find((value) => Object.keys(value).length);
   function edit(key: string, patch: Partial<Given>) {
+    setFieldError(previous => previous?.key === key ? undefined : previous);
     setValues((previous) => ({
       ...previous,
       [key]: {
@@ -153,6 +182,14 @@ export function CreateInquiryDialog({
       },
     }));
   }
+  function invalid(key:string, reason:string, source=false):never {
+    setFieldError({key,message:reason,source});
+    const section=completionForm.current?.querySelector<HTMLElement>(`[data-completion-key="${key}"]`);
+    if(source){const details=section?.querySelector('details');if(details)details.open=true;}
+    section?.scrollIntoView({block:'nearest'});
+    section?.querySelector<HTMLElement>(source ? 'details input' : 'input,button[role="combobox"]')?.focus();
+    throw new ApiError(422,reason,{key});
+  }
   function prepared() {
     if (!completion) throw new ApiError(501, "缺少正式型号补录契约");
     const given: Record<string, unknown> = {};
@@ -160,21 +197,21 @@ export function CreateInquiryDialog({
       const key = text(field.key),
         entry = values[key];
       if (!entry?.value.trim()) {
-        if (field.optional && !field.armoured_only) continue;
-        throw new ApiError(422, "请填写" + text(field.title));
+        if (field.optional && !['armour_gap_ratio','steel_relative_permeability'].includes(key) && !(key==='screen_longitudinal_r20' && values.screen_model?.value==='given_r20')) continue;
+        invalid(key, "请填写" + text(field.title));
       }
       if (!entry.reference.trim() || !entry.source)
-        throw new ApiError(422, text(field.title) + "需填写来源和出处");
+        invalid(key, text(field.title) + "需填写来源和出处",true);
       const raw = Array.isArray(field.choices)
         ? entry.value
         : Number(entry.value);
       if (
         typeof raw === "number" &&
         (!Number.isFinite(raw) ||
-          (numeric(field.min) !== null && raw < numeric(field.min)!) ||
+          (numeric(field.min) !== null && (field.minExclusive ? raw <= numeric(field.min)! : raw < numeric(field.min)!)) ||
           (numeric(field.max) !== null && raw > numeric(field.max)!))
       )
-        throw new ApiError(422, text(field.title) + "超出契约范围");
+        invalid(key, text(field.title) + "超出范围；" + text(field.hint));
       given[key] = {
         value: raw,
         unit: text(field.unit),
@@ -196,6 +233,10 @@ export function CreateInquiryDialog({
       )
         throw new ApiError(422, "请选择候选范围、目标电流及已安装方法");
       const completionValue = prepared();
+      if (workspaceId) {
+        if (!projectOptions.some(project => project.id === workspaceId)) throw new ApiError(409, '所选工程已不可用，请重新选择所属工程');
+        allocated.current = record(await responseData(api.GET('/api/workspaces/{wid}', { params: { path: { wid: workspaceId } } })), '所属工程');
+      }
       if (!allocated.current)
         allocated.current = record(
           await responseData(
@@ -245,7 +286,7 @@ export function CreateInquiryDialog({
         }
       }
       const body: components["schemas"]["CreateStudy"] = {
-        title: title.trim() || `${formatNumber(target)} A 客户问询`,
+        title: title?.trim() || `${formatNumber(target)} A 客户问询`,
         task: "target",
         expected_revision: numeric(workspace.revision)!,
         method: rating!.method,
@@ -300,19 +341,34 @@ export function CreateInquiryDialog({
         },
       });
     },
-    onError: (error) => setFailure(message(error)),
+    onError: (error) => {
+      const raw = error instanceof ApiError ? error.detail : undefined, local = optionalRecord(raw);
+      if(local.key){setFailure('');return;}
+      const positions = [text(raw), text(local.path), ...(Array.isArray(raw) ? raw.map(row => (Array.isArray(optionalRecord(row).loc) ? optionalRecord(row).loc as unknown[] : []).map(text).join('/')) : [])];
+      const detail = message(error), field = fields.find(item => positions.some(path => path.split('/').includes(text(item.key))) || detail.includes('/'+text(item.key)) || detail.includes('.'+text(item.key)));
+      if(field){try{invalid(text(field.key),text(field.title)+'：请检查必填值、单位与出处。'+text(field.hint), positions.some(path=>path.endsWith('/reference')));}catch{/* mutation already failed */}setFailure('');}
+      else setFailure(detail);
+    },
   });
-  const error = models.error || methods.error || contracts.error;
-  const loading = models.isPending || methods.isPending || contracts.isPending;
+  useEffect(() => {
+    // 服务端错误回调发生时控件仍处于提交禁用态；恢复可编辑后再定位。
+    if (!complete || create.isPending || !fieldError) return;
+    const section = completionForm.current?.querySelector<HTMLElement>(`[data-completion-key="${fieldError.key}"]`);
+    if (fieldError.source) { const details = section?.querySelector('details'); if (details) details.open = true; }
+    section?.scrollIntoView({block:'nearest'});
+    section?.querySelector<HTMLElement>(fieldError.source ? 'details input' : 'input,button[role="combobox"]')?.focus();
+  }, [complete, create.isPending, fieldError]);
+  const error = models.error || methods.error || contracts.error || projects.error || types.error;
+  const loading = models.isPending || methods.isPending || contracts.isPending || projects.isPending || types.isPending;
   const formTitle =
-    title || ((target || 0) > 0 ? `${formatNumber(target)} A 客户问询` : "");
+    title ?? ((target || 0) > 0 ? `${formatNumber(target)} A 客户问询` : "");
   return (
     <>
       <Dialog
         open={open && !complete}
         onOpenChange={onOpenChange}
         title="新建问询"
-        description="固定候选范围与计算方法"
+        description="先选目标电流与候选系列，再核对工程参数和敷设工况"
         initialFocus="form"
         actions={
           <Button
@@ -337,6 +393,8 @@ export function CreateInquiryDialog({
                   models.refetch();
                   methods.refetch();
                   contracts.refetch();
+                  projects.refetch();
+                  types.refetch();
                 }}
               >
                 重新读取
@@ -351,6 +409,8 @@ export function CreateInquiryDialog({
               continueInquiry();
             }}
           >
+            <Select label="所属工程" value={workspaceId || 'new-project'} onChange={value => { setWorkspaceId(value === 'new-project' ? '' : value); allocated.current = null; }}
+              options={[{ value: 'new-project', label: '新建工程' }, ...projectOptions.map(project => ({ value: text(project.id), label: text(project.name) || '未命名工程' }))]} />
             <Select
               label="研究任务"
               value="selection"
@@ -405,7 +465,7 @@ export function CreateInquiryDialog({
                       optionalRecord(items[0].payload).specification,
                     ).designation,
                   )}{" "}
-                  · {items.length} 个型号 · 300–400 mm²
+                  · {formatNumber(numeric(optionalRecord(optionalRecord(items[0].payload).specification).u0_v)! / 1000, 1)}/{formatNumber(numeric(optionalRecord(optionalRecord(items[0].payload).specification).voltage_v)! / 1000, 1)} kV · {numeric(optionalRecord(optionalRecord(items[0].payload).specification).cores)} 芯 · {items.length} 个型号 · 300–400 mm²
                   <SourceBadge kind="document" detail={text(items[0].source)} />
                 </label>
               ))}
@@ -416,6 +476,8 @@ export function CreateInquiryDialog({
                 description="型号库缺少 300–400 mm² 原始规格。"
               />
             )}
+            {/* 新建默认工况来自宿主 scenarios.CreateStudyWorkspace；已有工程沿用其保存模型。 */}
+            <p className="muted">{candidates.length ? `已选 ${candidates.length} 个候选；方法为 IEC 60287。${workspaceId ? '沿用所选工程的敷设工况。' : '新建工程先采用单回直埋参考敷设。'}建立后在“输入”核对埋深、土壤和负荷，再运行。` : '请选择一个候选系列，再建立研究并补录结构参数。'}</p>
             <SourceBadge
               kind="library"
               detail={
@@ -454,19 +516,24 @@ export function CreateInquiryDialog({
           </Button>
         }
       >
+        <p className="muted">所属工程：{workspaceId ? text(projectOptions.find(project => project.id === workspaceId)?.name) || '所选工程' : '新建工程'}</p>
         <div className="demo-row">
           <Button
             size="compact"
-            disabled={create.isPending}
+            disabled={create.isPending || !reference.data}
+            title={reference.isPending ? '正在读取相同候选的保存参考参数' : reference.data ? `来源：保存研究「${reference.data.title}」；需核对实际构造` : '没有相同候选的保存参考参数，请逐项填写'}
             onClick={() => {
               const next: Record<string, Given> = {};
-              for (const field of fields)
-                if (field.example !== undefined)
+              for (const field of fields) {
+                const saved = optionalRecord(reference.data?.values[text(field.key)]);
+                if (saved.value !== undefined)
                   next[text(field.key)] = {
-                    value: String(field.example),
-                    source: "user",
-                    reference: text(field.reference),
+                    value: String(saved.value),
+                    source: "demo",
+                    reference: `沿用保存研究「${reference.data?.title}」的参考参数；`+text(saved.reference),
                   };
+              }
+              setFieldError(undefined); setFailure('');
               setValues(next);
             }}
           >
@@ -477,7 +544,9 @@ export function CreateInquiryDialog({
             detail="参考输入为明确的工程假设，非厂家实测；敷设模板、土壤与方法参数须按实际工况核对。"
           />
         </div>
-        <div className="engineering-completion">
+        {reference.error && <p className="field-error" role="alert">参考参数读取失败；可逐项填写，或重新读取。</p>}
+        <p className="muted">目标 {formatNumber(target)} A · {candidates.length} 个候选 · 尚缺 {fields.filter(field => !values[text(field.key)]?.value.trim()).length} 项。参考参数不代表厂家实测，须按客户工况核对。</p>
+        <div className="engineering-completion" ref={completionForm}>
           {fields.map((field) => {
             const key = text(field.key),
               entry = values[key] || {
@@ -493,13 +562,20 @@ export function CreateInquiryDialog({
             const choices = Array.isArray(field.choices)
               ? (field.choices as unknown[][])
               : null;
-            const scale = quantity.scale,
-              unit = quantity.unit;
+            const display = declaredUnit(field.display);
+            const scale = display?.scale ?? quantity.scale,
+              unit = display?.unit ?? quantity.unit;
+            const required = !field.optional || ['armour_gap_ratio','steel_relative_permeability'].includes(key) || key==='screen_longitudinal_r20' && values.screen_model?.value==='given_r20';
+            const label = text(field.title)+(required?'（必填）':'');
+            const minimum = numeric(field.min), maximum = numeric(field.max);
+            const bound = (value:number) => formatNumber(value * scale, 3).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+            const bounds = [minimum === null ? '' : `${field.minExclusive ? '>' : '≥'} ${bound(minimum)} ${unit}`, maximum === null ? '' : `≤ ${bound(maximum)} ${unit}`].filter(Boolean).join('；');
             return (
-              <section className="input-section" key={key}>
+              <section className="input-section" key={key} data-completion-key={key} data-field-path={'/parameters/values/'+key}>
                 {choices ? (
                   <Select
-                    label={text(field.title)}
+                    label={label}
+                    error={fieldError?.key===key ? fieldError.message : undefined}
                     value={entry.value || undefined}
                     options={choices.map((value) => ({
                       value: String(value[0]),
@@ -510,9 +586,12 @@ export function CreateInquiryDialog({
                   />
                 ) : (
                   <NumberField
-                    label={text(field.title)}
+                    label={label}
+                    error={fieldError?.key===key ? fieldError.message : undefined}
                     value={entry.value ? Number(entry.value) * scale : null}
                     unit={unit}
+                    required={required}
+                    minExclusive={field.minExclusive===true}
                     precision={engineeringInputPrecision(
                       key,
                       entry.value ? Number(entry.value) : null,
@@ -537,6 +616,7 @@ export function CreateInquiryDialog({
                     disabled={create.isPending}
                   />
                 )}
+                <div className="field-hint completion-field-help">{bounds && <span>范围：{bounds}</span>}<Tooltip content={text(field.hint)}><span tabIndex={0}>填写说明</span></Tooltip></div>
                 <details>
                   <summary>
                     <SourceBadge
@@ -547,7 +627,7 @@ export function CreateInquiryDialog({
                             ? "measurement"
                             : entry.source === "standard"
                               ? "standard"
-                              : "user"
+                              : entry.source === 'demo' ? 'demo' : "user"
                       }
                       detail={entry.reference || text(field.hint)}
                     />
@@ -561,6 +641,7 @@ export function CreateInquiryDialog({
                       { value: "manufacturer", label: "厂家" },
                       { value: "measurement", label: "实测" },
                       { value: "standard", label: "标准" },
+                      { value: "demo", label: "参考输入（需核对）" },
                     ]}
                     onChange={(value) =>
                       edit(key, { source: value as Source["kind"] })

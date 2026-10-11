@@ -2,6 +2,7 @@
 from decimal import Decimal, localcontext
 from uuid import uuid4
 import re
+import json
 
 import fitz
 import pytest
@@ -16,7 +17,16 @@ def create_example(client):
     model = next(item for item in system_models() if item['id'] == 'system.specification-cu-xlpe-al-400')
     result = client.post('/api/design/type-workspaces', json={'model_id':model['id'], 'content_sha256':model['content_sha256']})
     assert result.status_code == 201, result.text
-    return result.json()
+    workspace=result.json()
+    # Explicit teaching-fixture edition declaration; measured facts stay unchanged.
+    from test_standard_check import plugin
+    document=workspace['domain']
+    document['provenance']['/execution_standards']={'kind':'standard','reviewed':True,'reference':json.dumps({
+        'schema':'cablesim.execution-standards/1','items':[{'standard':source['standard'],'source_digest':source['sha256']}
+            for source in [plugin.SOURCES['mv2'],plugin.SOURCES['conductor']]]})}
+    saved=client.put('/api/workspaces/'+workspace['id']+'/domain',json={'expected_revision':workspace['revision'],'document':document})
+    assert saved.status_code==200,saved.text
+    return client.get('/api/workspaces/'+workspace['id']).json()
 
 
 def request(workspace):

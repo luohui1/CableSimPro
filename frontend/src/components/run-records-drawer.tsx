@@ -15,7 +15,7 @@ export function RunRecordsDrawer({open, onOpenChange, runs, selectedId, onSelect
     refetchInterval: query => query.state.data?.some(run => ['accepted','queued','running','validating'].includes(String(run.status))) ? 2000 : false });
   const rows = history.data || runs;
   const problem = history.error || error;
-  return <Dialog open={open} onOpenChange={onOpenChange} variant="drawer" title="运行记录" description="固定输入与方法版本" initialFocus="form">
+  return <Dialog open={open} onOpenChange={onOpenChange} variant="drawer" title="运行记录" description="查看每次计算保存的输入、方法和结果" initialFocus="form">
     {open && (problem ? <ErrorState title="运行记录读取失败" description={message(problem)} action={<Button onClick={() => {onRetry?.(); void history.refetch();}}>重新读取</Button>} />
       : loading || workspace && studyId && history.isPending ? <LoadingState title="正在读取运行记录" />
       : !rows.length ? <EmptyState title="尚无运行记录" description="完成预检并运行后，这里会保留输入和结果快照。" />

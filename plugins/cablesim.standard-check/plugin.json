@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standard-check",
-  "version": "1.0.3",
+  "version": "1.1.0",
   "name": "产品标准尺寸核对",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -64,7 +64,7 @@
       "kind": "method",
       "id": "dimensions",
       "title": "GB 产品标准结构尺寸与电阻核对",
-      "method_version": "1.0.0",
+      "method_version": "1.1.0",
       "analysis": "standard_check",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -91,16 +91,52 @@
       },
       "limitations": [
         "仅已核验的 XLPE 表内额定电压及单芯 / 三芯结构；第 2 类导体 R₂₀ 已核验条目，其他材料、导体类别或表外值保留未覆盖。",
-        "GB/T 11017.1—2024 和 11017.2—2014 原文缺失；其最薄点与中压铜丝间隙算法不由其他版本代替。",
+        "GB/T 11017.1—2024 和 11017.2—2014 本库暂未收录 · 下一轮；其最薄点与中压铜丝间隙算法不由其他版本代替。",
         "第 1 部分内衬层、护套、最薄点及成缆分支尚未覆盖；附加包带和未知构造阻止完整假定直径链。",
         "设计输入、厂家上限与实测值分别标记；缺少短路故障要求时金属屏蔽截面不作合格判定。本核对不批准要求、型号或产品认证。"
       ],
       "category": "data-standard",
-      "description": "仅已核验的 XLPE 表内额定电压及单芯 / 三芯结构；第 2 类导体 R₂₀ 已核验条目，其他材料、导体类别或表外值保留未覆盖。；GB/T 11017.1—2024 和 11017.2—2014 原文缺失；其最薄点与中压铜丝间隙算法不由其他版本代替。",
+      "description": "仅已核验的 XLPE 表内额定电压及单芯 / 三芯结构；第 2 类导体 R₂₀ 已核验条目，其他材料、导体类别或表外值保留未覆盖。；GB/T 11017.1—2024 和 11017.2—2014 本库暂未收录 · 下一轮；其最薄点与中压铜丝间隙算法不由其他版本代替。",
       "parameter_schema": {
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "basis_references": {
+            "type": "object",
+            "title": "固定标准依据",
+            "description": "由只读依据查询生成的逐项记录快照；不接受人工填写的替代阈值。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "model",
+            "x-order": 1,
+            "x-level": "advanced",
+            "additionalProperties": {
+              "type": "object"
+            }
+          },
+          "basis_cable_sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "依据输入摘要",
+            "description": "绑定依据所用的型号输入，变化后必须重新查询。",
+            "x-range-basis": {
+              "kind": "method",
+              "reference": "SHA256 身份契约；不是物理量范围或工程判据。"
+            },
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "model",
+            "x-order": 2,
+            "x-level": "advanced"
+          },
           "cable_type_id": {
             "type": "string",
             "title": "电缆型号",
@@ -460,14 +496,29 @@
       "size_bytes": 2599
     },
     {
+      "path": "src/cablesim_standard_check/basis-records.json",
+      "sha256": "2e3d7d317295ebe0f29f3f7e6b2019efb0e925079f6b3b0190962f0715a630de",
+      "size_bytes": 151942
+    },
+    {
+      "path": "src/cablesim_standard_check/basis.py",
+      "sha256": "7e0ec88841fb876f85a7e79ffe6ffbda5070d233b71b5e1bb037e18873c28e48",
+      "size_bytes": 8157
+    },
+    {
+      "path": "src/cablesim_standard_check/basis_catalog.py",
+      "sha256": "c4306fd7b667440049e5618a64a9c1467e60445d441109bed33837386d93c4d0",
+      "size_bytes": 2109
+    },
+    {
       "path": "src/cablesim_standard_check/dimensions.json",
       "sha256": "c334665b7e09f8ab5b5e1ec417555d2a810d65e1dc873d632835f9a8695d0284",
       "size_bytes": 20369
     },
     {
       "path": "src/cablesim_standard_check/main.py",
-      "sha256": "7432b0655bb661d22d253c478a32efdb26563cf6479bf8517341fc995551e867",
-      "size_bytes": 55213
+      "sha256": "d0993ed326e5eab63bbf5ecc1724fe7541da749f3adf94c71881f8d27eda535d",
+      "size_bytes": 55470
     },
     {
       "path": "src/cablesim_standard_check/proposal.py",

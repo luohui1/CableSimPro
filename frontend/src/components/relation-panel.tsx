@@ -6,6 +6,8 @@ import { KIND_LABELS, ObjectChip } from "./object-link";
 import { StatusMark } from "./status-mark";
 import { ErrorState, InlineEmpty, LoadingState } from "./states";
 import { useInView } from "@/lib/use-deferred-start";
+import { Icon } from './icon';
+import { Button } from './ui/button';
 
 const ROLES: Record<string, string> = {
   workspace: "所属工程", method: "方法", cable_version: "型号版本", study: "研究", input_snapshot: "输入快照", delivery: "交付",
@@ -19,7 +21,7 @@ const SHOWN = 3;
 function Row({ row }: { row: Relation }) {
   return <li className="relation-row is-plain">
     <span className="relation-target" title={row.reason || undefined}>
-      <ObjectChip card={row.target} status={false} />
+      <ObjectChip card={row.target} status={false} standard={row.role === 'standard' ? true : undefined} />
       {row.freshness === "outdated" && <StatusMark kind="historical" label="已变化" detail={row.reason || undefined} />}
       {row.freshness === "unknown" && <StatusMark kind="unknown" label="未核实" detail={row.reason || undefined} />}
     </span>
@@ -71,14 +73,17 @@ export function RelationPanel({ kind, id, hideRoles = [] }: { kind: ObjectKind; 
   const [anchor, visible] = useInView<HTMLDivElement>();
   const relations = useQuery({ queryKey: ["object-relations", kind, id], queryFn: ({ signal }) => objectRelations(kind, id, signal), enabled: !!id && visible });
   if (!visible || relations.isPending) return <div ref={anchor}><LoadingState title="正在读取关联" description="" /></div>;
-  if (relations.error) return <ErrorState title="关联读取失败" description={message(relations.error)} />;
+  if (relations.error) return <ErrorState title="关联读取失败" description={message(relations.error)} action={<Button onClick={() => void relations.refetch()}>重新读取</Button>} />;
   // 已在别处成表的关联（例如插件的验证算例在“验证”页签）不在这里重复
   const uses = relations.data.uses.filter((row) => !hideRoles.includes(row.role));
   const unresolved = relations.data.unresolved.filter((row) => !hideRoles.includes(row.role));
   const usedBy = relations.data.used_by;
-  return <div className="relation-panel">
+  return <details key={`${kind}:${id}`} className="relation-panel">
+    <summary className="relation-summary">用到了 {uses.length} · 被用于 {usedBy.length}{unresolved.length ? ` · 未建立 ${unresolved.length}` : ''}<Icon name="action/chevron-down" /></summary>
+    <div className="relation-body">
     <section aria-label="用到了"><h3>用到了</h3>{uses.length ? <Uses rows={uses} /> : <InlineEmpty title="没有引用其他对象" />}</section>
     <section aria-label="被用于"><h3>被用于</h3>{usedBy.length ? <UsedBy rows={usedBy} /> : <InlineEmpty title="还没有被引用" />}</section>
     {!!unresolved.length && <section aria-label="未建立的关联"><h3>未建立</h3><ul className="relation-list">{unresolved.map((row, index) => <li key={row.role + index} className="relation-row"><span className="relation-role">{ROLES[row.role] || row.role}</span><small className="relation-note">{row.reason}</small></li>)}</ul></section>}
-  </div>;
+    </div>
+  </details>;
 }
