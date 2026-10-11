@@ -32,7 +32,7 @@ export function CableSection(props: CableSectionProps) {
   const state = props.state || (props.cableType ? 'success' : 'empty');
   const problem = props.error || calculated.problem || (state === 'error' ? '电缆结构读取失败，请重试。' : '');
   const displayedCoreId = props.selectedObject?.scope === 'core' ? props.selectedObject.coreId : props.cableType?.cores[0]?.id;
-  const fitted = shape ? { x: shape.radiusM * .65, z: 0,
+  const fitted = shape && props.selectedLayerOnly && !showDimensions ? fitPlot({left:-shape.radiusM,right:shape.radiusM,top:shape.radiusM,bottom:-shape.radiusM},size,{x:0,y:0,width:size.width,height:size.height},48) : shape ? { x: shape.radiusM * .65, z: 0,
     widthM: 2 * shape.radiusM * size.width / Math.max(40, Math.min(size.width - 320, size.height - 96)) }
     : { x: 0, z: 0, widthM: .1 };
   const camera = view || (shape && compact ? fitPlot({left:-shape.radiusM,right:shape.radiusM,top:shape.radiusM,bottom:-shape.radiusM},size,{x:0,y:0,width:Math.max(80,size.width-224),height:size.height},16) : fitted);
@@ -94,7 +94,7 @@ export function CableSection(props: CableSectionProps) {
                   { x: event.clientX - bounds.left, y: event.clientY - bounds.top }, size));
               }}>
               <CableShapes shape={shape} view={camera} size={size} selectedId={selectedId} onSelect={select} />
-              {!compact && <LayerNumbers rings={shape.rings} view={camera} size={size} selectedId={selectedId} onSelect={select} equivalentCores={equivalentCores} />}
+              {!compact && (!props.selectedLayerOnly || showDimensions || selected) && <LayerNumbers rings={props.selectedLayerOnly&&!showDimensions?shape.rings.filter(r=>r.id===selectedId):shape.rings} view={camera} size={size} selectedId={selectedId} onSelect={select} equivalentCores={equivalentCores} />}
               {!compact && (showDimensions || !!selected) && <g className="drawing-dimensions" data-cable-dimensions>
                 {selected && center ? <>
                   {selected.profile.kind === 'circle' && <path d={`M${center.x - selected.outerM * scale} ${center.y}V${dimensionY + 6}M${center.x + selected.outerM * scale} ${center.y}V${dimensionY + 6}M${center.x - selected.outerM * scale} ${dimensionY}H${center.x + selected.outerM * scale}M${center.x - selected.outerM * scale - 5} ${dimensionY + 5}l10 -10M${center.x + selected.outerM * scale - 5} ${dimensionY + 5}l10 -10`} />}
@@ -117,7 +117,7 @@ export function CableSection(props: CableSectionProps) {
                 x={Math.max(8, Math.min(size.width - 232, center.x - 112))} y={Math.max(8, Math.min(size.height - 156, dimensionY - 24))}
                 value={value.valueM * dimensionScale} unit="mm" onCancel={dismiss} onCommit={commitDimension} />}
             </svg>}
-      {compact&&shape&&<div className="drawing-compact-layers" aria-label="结构层标注">{shape.rings.filter(r=>r.target.scope==='common'||r.target.coreId===displayedCoreId).map(r=><Button key={r.id} size="compact" variant="ghost" aria-pressed={selectedId===r.id} data-layer-number={r.number} onClick={()=>select(r.target)}>{r.number} {r.name} · {props.materials.find(m=>m.id===r.materialId)?.label||r.materialRole}<span>{r.target.role==='conductor'?'直径':'厚度'} {layerMillimetres(r.target.role==='conductor'?r.outerM*2:r.outerM-r.innerM,r.target.role==='conductor')} mm</span></Button>)}</div>}
+      {compact&&shape&&(!props.selectedLayerOnly||showDimensions||selected)&&<div className="drawing-compact-layers" aria-label="结构层标注">{shape.rings.filter(r=>(r.target.scope==='common'||r.target.coreId===displayedCoreId)&&(!props.selectedLayerOnly||showDimensions||r.id===selectedId)).map(r=><Button key={r.id} size="compact" variant="ghost" aria-pressed={selectedId===r.id} data-layer-number={r.number} onClick={()=>select(r.target)}>{r.number} {r.name} · {props.materials.find(m=>m.id===r.materialId)?.label||r.materialRole}<span>{r.target.role==='conductor'?'直径':'厚度'} {layerMillimetres(r.target.role==='conductor'?r.outerM*2:r.outerM-r.innerM,r.target.role==='conductor')} mm</span></Button>)}</div>}
     </div>
     {compact && edit && selected && value && <Dialog open onOpenChange={open=>{if(!open)dismiss();}} title={`编辑${selected.name}${dimensionLabel}`}><DimensionInput label={`${selected.name}${dimensionLabel}`} value={value.valueM*dimensionScale} unit="mm" onCancel={dismiss} onCommit={commitDimension} /></Dialog>}
     {selected&&value&&<div className="drawing-layer-detail" aria-label="所选层尺寸与材料"><span>{selected.name} · {props.materials.find(m=>m.id===selected.materialId)?.label||'材料未提供'}</span><span>本层外径 Ø {formatNumber(selected.outerM*2000,1)} mm</span><Button size="compact" variant="ghost" disabled={!editable} onDoubleClick={()=>{if(editable)setEdit(true);}} onClick={()=>{if(editable)setEdit(true);}}>{dimensionLabel} {layerMillimetres(value.valueM*dimensionScale/1000,value.field==='diameter')} mm</Button></div>}

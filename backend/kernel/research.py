@@ -504,6 +504,13 @@ class Research:
                 'lock': lock, 'cases': cases, 'candidate_snapshots': candidates, 'host_version': __version__,
                 'planned_environment': {'python': platform.python_version(), 'platform': platform.system()}}
         result['headline_contract'] = [value.model_dump(mode='json') for value in primary_capability.headlines]
+        # Freeze the normalized sealed manifests, bound by the saved release pins.
+        # Enables a provable presentation-only update without rewriting history.
+        result['method_manifests'] = {}
+        from .version_status import methods as frozen_methods
+        for method in frozen_methods(definition):
+            plugin, _ = self.resolve(method)
+            result['method_manifests'][method['release_digest']] = plugin.manifest.model_dump(mode='json', by_alias=True)
         # Freeze presentation metadata with the input; history comparisons must
         # not consult a subsequently installed parameter schema for units.
         result['input_contract'] = {'parameter_schema': primary_capability.parameter_schema.model_dump(mode='json')}
@@ -763,6 +770,9 @@ class Research:
                             'error': {'code':'CASE_NOT_SELECTED', 'message':'此工况未被选中，未执行计算。'},
                             'evidence': {**c.get('evidence', {}), 'stage': 'selection'}} if c['status']=='succeeded' else
                            {**c, 'evidence': {**c.get('evidence', {}), 'stage': 'preflight'}} for c in checks]
+        if plugin.manifest.id == 'cablesim.iec60287':
+            from .material_basis import freeze_basis
+            freeze_basis(executor, result)
         return result
 
     def get_run(self, wid, rid, cache=None):
@@ -801,9 +811,10 @@ class Research:
                 current = False
         availability = {'status': 'available', 'error': None}
         try:
-            self.resolve(snapshot['definition']['method'], cache)
+            from .method_identity import current_for_read
+            current_for_read(self, snapshot['definition']['method'], snapshot, cache)
             for item in snapshot['definition']['crosschecks']:
-                self.resolve(item['method'], cache)
+                current_for_read(self, item['method'], snapshot, cache)
         except (HTTPException, PluginHostError, ValueError, OSError) as exc:
             current = False
             availability = {'status': 'unavailable', 'error': {

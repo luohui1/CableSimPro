@@ -84,7 +84,7 @@ export function PreflightDialog({
         />
       ) : (
         <div className="run-checks">
-          {data && <StatusMark kind={failed.length || data.ready !== true ? "error" : "current"} label={
+          {data && data.local_only !== true && <StatusMark kind={failed.length || data.ready !== true ? "error" : "current"} label={
             failed.length ? (outOfScope.length === failed.length ? `有 ${failed.length} 项超出范围` : `有 ${failed.length} 项需要修正`) :
             data.ready === true ? "你的工况在适用范围内 ✓" : "当前没有可运行工况"
           } />}
@@ -92,7 +92,9 @@ export function PreflightDialog({
             (item) =>
               optionalRecord(item.error).code === "INPUT_INVALID" &&
               !optionalRecord(item.error).field &&
-              !optionalRecord(item.error).path,
+              !optionalRecord(item.error).path &&
+              !(Array.isArray(optionalRecord(item.error).issues) &&
+                (optionalRecord(item.error).issues as unknown[]).some(issue => text(optionalRecord(issue).path))),
           ) && <span className="muted">具体缺项位置未提供，请检查输入。</span>}
           {checks.map((item, index) => (
             <div key={text(item.case_id) || index}>

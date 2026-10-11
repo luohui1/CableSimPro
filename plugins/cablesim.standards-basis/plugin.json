@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standards-basis",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "name": "标准依据库",
   "icon": "assets/icon.svg",
   "description": "离线只读查询已逐格核验的标准尺寸、电阻和试验数值，返回适用条件、原页出处与摘要；查询不会批准工程要求。",
@@ -43,7 +43,8 @@
       "id": "lookup",
       "kind": "method",
       "title": "按标准、条款和条件查询依据",
-      "method_version": "0.1.0",
+      "method_version": "0.3.0",
+      "read_only": true,
       "analysis": "standards_lookup",
       "input_schema": "cablesim.standards-query/1",
       "description": "返回标准原值及单位、条件、页码、双路核验与SHA256；空格、缺项和版本变化明确区分。",
@@ -69,7 +70,9 @@
       "validation": {
         "level": "interface-tested",
         "cases": [
-          "tests/test_standards_basis.py"
+          "tests/test_standards_basis.py",
+          "tests/test_standards_basis_query.py",
+          "tests/test_standards_basis_round.py"
         ]
       },
       "limitations": [
@@ -87,23 +90,23 @@
     },
     {
       "path": "src/cablesim_standards_basis/basis.json",
-      "sha256": "1358e0f953355e8fa48532ec196580dd067c8956582f8b4e78bc9087fd0a82bf",
-      "size_bytes": 2993999
+      "sha256": "b00194beec86a1307a41714dd4ff63e464865d71ba594d3d3f6d75ae4327427a",
+      "size_bytes": 253797
     },
     {
       "path": "src/cablesim_standards_basis/excerpts.json",
-      "sha256": "6a19adbc081f04b1d9cd92bf62c729ef12ae0032ee151f106217145c1bd6cdfc",
-      "size_bytes": 304015
+      "sha256": "0cb78c74b58d3468728ea12eaa7c7a7ee8d8f31a1fac34358809aa9877fd7942",
+      "size_bytes": 766927
     },
     {
       "path": "src/cablesim_standards_basis/integrity.json",
-      "sha256": "6c7b3a3cf13a0d5da890929fd157ef3a60a36dbc8257e795d572e506ae300ec7",
-      "size_bytes": 372
+      "sha256": "6abc1dd36b870a04f951febabc3d398bee3303f2bce2290f7ce5d649701046a8",
+      "size_bytes": 1864
     },
     {
       "path": "src/cablesim_standards_basis/library.py",
-      "sha256": "f7c87a2391e68797cd92d0ee943cf13b9735b195d2e8b420f5fc6333afe310e8",
-      "size_bytes": 11039
+      "sha256": "0f6db599fc7a5686dd34e1c25099d6e22c0541f45d5029ce897968aaa611ac89",
+      "size_bytes": 12266
     },
     {
       "path": "src/cablesim_standards_basis/main.py",
@@ -112,18 +115,68 @@
     },
     {
       "path": "src/cablesim_standards_basis/query.schema.json",
-      "sha256": "fa50d720f0fc06fc10983cf5914f04b3c344a9519a6c0cbcd3206bb011374752",
-      "size_bytes": 2874
+      "sha256": "215414c154749095d422c28ed93052da311cc3eb1fbb6584d77a20edee6d5e88",
+      "size_bytes": 13356
     },
     {
       "path": "src/cablesim_standards_basis/rebuild.py",
-      "sha256": "7a1477978a072f1f709ee1812bb1d4e733e39226ea30de76c39cf3f3b048f7da",
-      "size_bytes": 4890
+      "sha256": "7c1e86bd762b37212076e3d89a75b4c18f1f2d7165e8fa3b3dfa1742fa9dcf91",
+      "size_bytes": 8361
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-conductor-gb.json",
+      "sha256": "3c4ec273398adce2c334b8fff79b3e29bb23800376d2e687508fba54a0dd5b88",
+      "size_bytes": 773827
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-conductor-iec.json",
+      "sha256": "056f4e12b4bfb1633a65caa67e10864662facf8d53889f0d66b6d23158607d3f",
+      "size_bytes": 827311
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-electrical.json",
+      "sha256": "42bab46005d6266246ba6c0025181393e7cf850f85185d538771f46fdb68822f",
+      "size_bytes": 131653
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-environment.json",
+      "sha256": "134e781c72e82326300c2506ebb392be1d0170fb39adb0d96783e1c68b65d592",
+      "size_bytes": 35320
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-high.json",
+      "sha256": "df5b5c486631a5fbdfab7646a7cfcf4c0e7436ece4eb7a5488f3636e05dc1e97",
+      "size_bytes": 158772
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-installation.json",
+      "sha256": "63ec9b1ace29dfecb70b583eabbf0afb3339492aa1cfb1c09c07c38bf6f612f9",
+      "size_bytes": 333134
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-lv.json",
+      "sha256": "df8f2d7dc285fc5c8802ef7004dbc0151bdef2d31502c877b56b7e639975c402",
+      "size_bytes": 599033
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-medium-high.json",
+      "sha256": "d94acfc0bffbeaabbab3b1e6cbcad0f8ec7cec2b9edc0af88ba11905bbc44586",
+      "size_bytes": 703556
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-mv.json",
+      "sha256": "739e66c63d6758f05fa36d11b208f0cd0e0db0fa91e0351151b901fe4cff9ca8",
+      "size_bytes": 671107
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-thermal.json",
+      "sha256": "109a97251c095dc4c7171da9cd48a89a523df759a9fba50aceeb613180e944a3",
+      "size_bytes": 142666
     },
     {
       "path": "src/cablesim_standards_basis/verification.json",
-      "sha256": "0e04a364d4b21a5e034f967384676e812eb04c6eb4312a88a8dfe7b9d98afd12",
-      "size_bytes": 277808
+      "sha256": "fa3b9fc169df146f6dd92ae86a847ccee25c6c66ebdc0957e21dc4a6034ff5e5",
+      "size_bytes": 592241
     }
   ]
 }

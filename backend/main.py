@@ -120,6 +120,8 @@ def create_app(db_path: str | Path | None = None) -> FastAPI:
     app.include_router(reproduction_library_router(os.environ.get('CABLESIM_REPRODUCTION_LIBRARY',str(ROOT/'.data/simulation/library'))))
     app.include_router(research_router(research))
     app.include_router(host_api_router(research, previews))
+    from .plugin_host.query_router import make_router as plugin_query_router
+    app.include_router(plugin_query_router(research.executor))
     app.include_router(batch_router(batches))
     from .kernel.hpc_jobs import make_router as hpc_jobs_router
     app.include_router(hpc_jobs_router(research, batches))

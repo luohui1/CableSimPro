@@ -58,7 +58,7 @@
         "core_lay_length": {"value": 2.152, "unit": "m", "reference": "工程师给定参考输入：CIGRE TB880:2022 Case2成缆节距2.152 m，PDF174–178页；非本型号实测。"},
         "screen_model": {"value": "continuous_contact", "unit": "1", "reference": "工程师给定：铜带搭盖处按连续导电接触的等效轴向模型计算，非厂家接触电阻声明。"},
         "screen_radial_factor": {"value": 2, "unit": "1", "reference": "工程师给定径向模型：搭盖处按两倍单带厚度包络；GB/T12706.2-2020附录A绕包屏蔽尺寸规定为参考，非实测平均厚度。"},
-        "filler_rho": {"value": 6, "unit": "K*m/W", "reference": "工程师给定纤维类填充/包带材料；IEC60287-2-1:2023表1参考6 K·m/W，PDF41/印刷39页；非厂家配方实测。"},
+        "filler_rho": {"value": 6, "unit": "K*m/W", "reference": "工程师给定纤维类填充/包带材料；IEC60287-2-1:2023表1参考6 K·m/W，PDF89/印刷33页；非厂家配方实测。"},
         "armour_gap_ratio": {"value": 0.5, "unit": "1", "reference": "工程师给定本问询间隙率0.5；GB/T12706.2-2020 §13.7规定不大于50%，不是厂家实际间隙。"},
         "steel_relative_permeability": {"value": 300, "unit": "1", "reference": "工程师给定材料模型：CIGRE TB880:2022 Case10相对磁导率300，PDF319–320页；非本型号钢带实测。"},
         "diameter_rounding": {"value": 0.00005, "unit": "m", "reference": "华远外径列示0.1 mm，半个末位0.05 mm；闭合门禁另加max(0.5 mm,外径1%)工程余量，非标准制造验收限值。"}

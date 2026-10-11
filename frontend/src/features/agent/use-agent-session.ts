@@ -24,6 +24,7 @@ export function useAgentSession({ sessionId, workspaceId, studyId, onCreated }: 
   const [live, setLive] = useState<Turn | null>(null);
   const [sending, setSending] = useState(false);
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
+  const deciding = useRef(new Set<string>());
   const liveProposals = useRef(new Map<string, AgentProposal>());
   const controller = useRef<AbortController | null>(null);
 
@@ -87,6 +88,8 @@ export function useAgentSession({ sessionId, workspaceId, studyId, onCreated }: 
   }
 
   async function decide(id: string, decision: "approve" | "reject") {
+    if (deciding.current.has(id) || proposals.get(id)?.status !== 'pending') return;
+    deciding.current.add(id);
     setDecisions((state) => ({ ...state, [id]: { busy: true } }));
     try {
       const reply = await decideProposal(id, decision);
@@ -94,12 +97,13 @@ export function useAgentSession({ sessionId, workspaceId, studyId, onCreated }: 
       // 批准会经正常保存路径改动工程：工作台的数据全部按新修订重读
       if (decision === "approve") void queries.invalidateQueries();
       else void queries.invalidateQueries({ queryKey: ["agent-sessions"] });
+      void queries.invalidateQueries({ queryKey: ['agent-session', currentRef.current] });
     } catch (error) {
       setDecisions((state) => ({ ...state, [id]: { error: error instanceof Error ? error.message : String(error) } }));
-    }
+    } finally { deciding.current.delete(id); }
   }
 
   const stop = () => controller.current?.abort();
 
-  return { id: current, turns, live, stop, proposals, decisions, sending, loading: record.isPending && !!current, error: record.error, send, decide };
+  return { id: current, turns, live, stop, proposals, decisions, sending, loading: record.isPending && !!current, error: record.error, send, decide, events: record.data?.events || [], reload: record.refetch };
 }

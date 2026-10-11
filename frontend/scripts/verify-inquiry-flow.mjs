@@ -8,7 +8,7 @@ import { assertLayout } from './layout-assertions.mjs';
 import { request } from './research-fixtures.mjs';
 if(process.env.E2E_ISOLATED!=='1')throw Error('Requires an isolated database');
 const expect=baseExpect.configure({timeout:30000}), base=process.env.FRONTEND_URL;
-const output=path.join(repositoryRoot,'.data/fix-round/research/inquiry');
+const output=path.join(repositoryRoot,process.env.INQUIRY_OUTPUT || '.data/fix-round/research/inquiry');
 await fs.mkdir(output,{recursive:true});
 const session=await openHeadlessBrowser(),{page}=session;
 const report={flows:[],checks:[],errors:[]};
@@ -44,7 +44,22 @@ try{
     await expect(completion.getByRole('button',{name:'采用参考输入',exact:true})).toBeEnabled();
     await completion.getByRole('button',{name:'采用参考输入',exact:true}).click();
     await expect(completion).toContainText('尚缺 0 项');
-    await expect(completion.locator('[data-completion-key=conductor_form]')).toContainText('教学');
+    await expect(completion.locator('.demo-row')).toContainText('教学');
+    assert.equal(await completion.locator('.completion-sources > summary').count(),1,'整批出处只折叠一处');
+    assert.equal(await completion.locator('.completion-sources').evaluate(node=>node.open),false);
+    assert.equal(await completion.locator('.completion-help').count(),await completion.locator('[data-completion-key]').count());
+    const borders=await completion.locator('.number-input input').evaluateAll(nodes=>nodes.map(node=>getComputedStyle(node).borderWidth));
+    assert.ok(borders.every(value=>parseFloat(value)===0),'NumberField 内层不再重复边框');
+    if(size.width===1366){
+      const sourceEditor=completion.locator('.completion-sources'),sourceInput=sourceEditor.locator('[data-source-key=conductor_form] input');
+      await sourceEditor.locator('summary').click();const original=await sourceInput.inputValue();
+      await sourceInput.fill('');await sourceEditor.locator('summary').click();
+      await completion.getByRole('button',{name:'保存并预检',exact:true}).click();
+      await expect(sourceInput).toBeFocused();assert.equal(await sourceEditor.evaluate(node=>node.open),true);
+      await expect(sourceEditor.getByRole('alert')).toContainText('出处');
+      await sourceInput.fill(original);await sourceEditor.locator('summary').click();
+      report.checks.push('出处缺失时自动展开集中来源区并定位；恢复出处后继续真实流程');
+    }
     await layout('参数已补录');if(size.width===1366)await shot('parameters-1366');
     if(size.width===1366){
       const rejected=async route=>route.request().method()==='POST' ? route.fulfill({status:422,contentType:'application/json',body:JSON.stringify({detail:{code:'REQUIRED',path:'/parameters/values/conductor_form',message:'请填写导体构造模型'}})}) : route.fallback();
@@ -74,6 +89,10 @@ try{
     await expect(page.getByRole('button',{name:'查看布置图',exact:true})).toBeVisible();
     assert.equal(await page.locator('.workbench-canvas').count(),0,'比较表优先，画布可展开');
     await layout('真实选型结果');await shot(`results-${size.width}`);
+    const command=page.getByRole('toolbar',{name:'工程命令'});
+    await expect(command.locator('[data-command-role=save]:visible')).toHaveCount(1);
+    const toolbarSize=await command.evaluate(node=>({width:node.clientWidth,content:node.scrollWidth}));
+    assert.ok(toolbarSize.content<=toolbarSize.width+1,'命令栏没有内部横向滚动');
     const table=page.locator('.study-selection-table').first();
     const headers=await table.locator('th').evaluateAll(nodes=>nodes.map(node=>({text:node.innerText,width:node.getBoundingClientRect().width,wrap:getComputedStyle(node).whiteSpace})));
     assert.ok(headers.every(header=>header.wrap==='nowrap'),'量名与单位不拆词');

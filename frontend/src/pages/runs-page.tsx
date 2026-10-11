@@ -1,7 +1,7 @@
 import { useDeferredValue, useState } from "react";
 import { keepPreviousData, useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
 import { indexObjects, type ObjectCard } from "@/api/object-index";
-import { message } from "@/api/client";
+import { message, text } from "@/api/client";
 import { CatalogShell } from "@/components/catalog-shell";
 import { DataTable } from "@/components/data-table";
 import { ObjectChip, ObjectLink, statusMark } from "@/components/object-link";
@@ -12,8 +12,8 @@ import { Button } from "@/components/ui/button";
 import { HpcJobList } from "@/features/field/hpc-job-list";
 import { formatDateTime } from '@/lib/format';
 import { statusLabel } from '@/lib/status-vocabulary';
-import { studyIndex, studyRuns } from '@/api/research';
-import { indexedRunName, runPresentation } from '@/lib/run-presentation';
+import { studyIndex, studyRuns, typeIndex } from '@/api/research';
+import { runOwnerName, runPresentation, scopedRunOrdinals } from '@/lib/run-presentation';
 
 const PAGE = 50;
 const short = formatDateTime;
@@ -35,13 +35,25 @@ export function RunsPage() {
   const rows = (runs.data?.pages.flatMap((page) => page.items) || []) as (ObjectCard & { id: string })[];
   const total = runs.data?.pages[0]?.total;
   const studies = useQuery({ queryKey: ['study-index'], queryFn: ({ signal }) => studyIndex(signal) });
-  const parents = [...new Set(rows.filter(row => row.parent?.kind === 'study').map(row => row.parent!.id))];
+  const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal) });
+  const typeIds = new Set((types.data || []).map(row => String(row.id)));
+  const visibleParents = new Set(rows.filter(row => row.parent?.kind === 'study').map(row => row.parent!.id));
+  const typeWorkspaces = new Set((studies.data || []).filter(study => visibleParents.has(study.id) && typeIds.has(study.workspace)).map(study => study.workspace));
+  const parents = [...new Set([...visibleParents, ...(studies.data || []).filter(study => typeWorkspaces.has(study.workspace)).map(study => study.id)])];
   const summaries = useQueries({ queries: parents.map(sid => {
     const study = studies.data?.find(row => row.id === sid);
     return { queryKey: ['run-list-summary', study?.workspace, sid], queryFn: ({ signal }: { signal: AbortSignal }) => studyRuns(study!.workspace, sid, signal, 'summary'), enabled: !!study, retry: false };
   }) });
-  const saved = new Map(summaries.flatMap(query => query.data || []).map(run => [String(run.id), runPresentation(run)]));
-  const readingSummaries = studies.isPending || summaries.some(query => query.isFetching);
+  const history = summaries.flatMap(query => query.data || []);
+  const ordinals = scopedRunOrdinals(history, typeIds);
+  const readyOrdinal = (run: Record<string, unknown>) => !types.isPending && !types.isError && (!typeIds.has(String(run.workspace)) || parents.every((sid, index) => studies.data?.find(study => study.id === sid)?.workspace !== run.workspace || summaries[index].isSuccess));
+  const saved = new Map(history.map(run => [String(run.id), runPresentation(run, readyOrdinal(run) ? ordinals.get(String(run.id)) : undefined)]));
+  const readingSummaries = studies.isPending || types.isPending || summaries.some(query => query.isFetching);
+  const owner = (row: ObjectCard) => {
+    const study = studies.data?.find(study => study.id === row.parent?.id);
+    const type = types.data?.find(type => type.id === study?.workspace);
+    return type && row.parent ? { ...row.parent, name: runOwnerName(text(type.name), row.parent.name) } : row.parent;
+  };
   const pendingSummary = (row: ObjectCard) => {
     if (row.parent?.kind !== 'study') return '此类运行未提供摘要';
     const query = summaries[parents.indexOf(row.parent.id)];
@@ -49,7 +61,7 @@ export function RunsPage() {
   };
   return (
     <CatalogShell title="运行与作业" status={<span className="muted">{total === undefined ? "读取中" : `${total} 次运行`} · 单次运行在所属研究或型号里查看</span>}>
-      <section className="object-section" aria-label="运行">
+      <section className="object-section run-record-list" aria-label="运行">
         <header><h2>运行</h2></header>
         {!!rows.length && readingSummaries && <span className="muted" role="status">正在读取方法与结论</span>}
         {(total || query) ? <Toolbar label="运行筛选">
@@ -64,14 +76,18 @@ export function RunsPage() {
           : <>
             <DataTable<ObjectCard & { id: string }> label="运行" showGroups={false} groups={[{ id: "runs", label: "运行", rows }]} rowLabel={(row) => row.name}
               columns={[
-                { id: "name", label: "运行", wrap: true, render: (row) => <ObjectLink card={row}>{saved.get(row.id)?.name || (row.parent?.kind === 'study' ? indexedRunName(row.name) : row.name)}</ObjectLink> },
-                { id: "parent", label: "所属", wrap: true, render: (row) => row.parent ? <ObjectChip card={{ ...row.parent, status: { code: "", label: "" } }} status={false} /> : "—" },
+                { id: "name", label: "运行", wrap: true, render: (row) => {
+                  const name = saved.get(row.id)?.name || (row.parent?.kind === 'study' ? '保存运行' : row.name);
+                  const [number, ...task] = name.split(' · ');
+                  return <ObjectLink card={row}><span className="run-name-part">{number}</span>{task.length > 0 && <> · <span className="run-name-part">{task.join(' · ')}</span></>}</ObjectLink>;
+                } },
+                { id: "parent", label: "所属", wrap: true, render: (row) => owner(row) ? <ObjectChip card={{ ...owner(row)!, status: { code: "", label: "" } }} status={false} /> : "—" },
                 { id: "state", label: "状态", render: (row) => <StatusMark kind={statusMark(row.status.code)} label={statusLabel(row.status.code, row.status.label)} detail={row.status.reason || undefined} /> },
                 { id: 'method', label: '方法', wrap: true, render: row => saved.get(row.id)?.method || '—' },
-                { id: 'conclusion', label: '结论摘要', wrap: true, render: row => <span title={saved.get(row.id)?.conclusion}>{saved.get(row.id)?.conclusion || (pendingSummary(row) === '摘要读取中' ? '—' : pendingSummary(row))}</span> },
+                { id: 'conclusion', label: '结论摘要', wrap: true, render: row => saved.get(row.id)?.conclusion ? <span title={saved.get(row.id)?.conclusion}>{saved.get(row.id)?.conclusion}</span> : saved.has(row.id) || row.parent?.kind !== 'study' ? <ObjectLink card={row}>查看结果</ObjectLink> : <span>{pendingSummary(row) === '摘要读取中' ? '—' : pendingSummary(row)}</span> },
                 { id: "updated", label: "时间", render: (row) => short(row.updated) },
               ]} />
-            {(studies.isError || summaries.some(query => query.isError)) && <Button size="compact" onClick={() => { void studies.refetch(); for (const query of summaries) if (query.isError) void query.refetch(); }}>重新读取摘要</Button>}
+            {(studies.isError || types.isError || summaries.some(query => query.isError)) && <Button size="compact" onClick={() => { void studies.refetch(); if (types.isError) void types.refetch(); for (const query of summaries) if (query.isError) void query.refetch(); }}>重新读取摘要</Button>}
             {runs.error ? <ErrorState description={message(runs.error)} action={<Button onClick={() => void runs.fetchNextPage()}>重新读取</Button>} />
               : runs.hasNextPage ? <div className="list-more"><Button size="compact" disabled={runs.isFetchingNextPage} onClick={() => void runs.fetchNextPage()}>{runs.isFetchingNextPage ? "读取中" : `加载更多（已显示 ${rows.length} / ${total}）`}</Button></div> : null}
           </>}

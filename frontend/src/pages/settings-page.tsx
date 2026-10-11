@@ -20,6 +20,7 @@ import { SolverLocation } from '@/components/solver-location';
 import { ErrorState, LoadingState } from '@/components/states';
 import { formatDateTime } from '@/lib/format';
 import { agentSettings, agentStatus, resetAgentSettings, saveAgentSettings, testAgentSettings, type AgentProbe, type AgentSettings } from "@/features/agent/agent-api";
+import { AgentMemorySettings } from '@/features/agent/memory-settings';
 
 type Backup = { id: string; sha256: string; size_bytes: number; created: string; download_url: string; schema_version: number };
 
@@ -197,7 +198,7 @@ export function SettingsPage() {
   const profile = useHpcProfile(current === 'compute');
   const [reducedMotion, setReducedMotion] = useState(preferences().reducedMotion);
   const [restore, setRestore] = useState<Backup | null>(null);
-  const health = useQuery({ queryKey: ["host-health"], queryFn: async ({ signal }) => record(await responseData(api.GET("/api/health", { signal })), "宿主状态") });
+  const health = useQuery({ queryKey: ["host-health"], queryFn: async ({ signal }) => record(await responseData(api.GET("/api/health", { signal })), "平台状态"), retry: false });
   const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
   const backups = useQuery({ queryKey: ["database-backups"], queryFn: async ({ signal }) => (await responseData(api.GET("/api/database/backups", { signal }))) as unknown as Backup[], enabled: current === "data" });
   const pending = useQuery({ queryKey: ["database-restore"], queryFn: async ({ signal }) => record(await responseData(api.GET("/api/database/restores/current", { signal })), "恢复状态"), enabled: current === "data" });
@@ -252,7 +253,7 @@ export function SettingsPage() {
               </tbody>
             </table>
           </>}
-          {current === "ai" && <AiSettings onState={setAiState} />}
+          {current === "ai" && <><AiSettings onState={setAiState} /><AgentMemorySettings /></>}
           {current === "compute" && <div className="settings-compute">
             {catalog.isError || profile.isError ? <ErrorState title="计算位置读取失败" description={message(catalog.error || profile.error)} action={<Button onClick={() => { void catalog.refetch(); void profile.refetch(); }}>重试</Button>} />
               : catalog.isPending || profile.isPending ? <LoadingState title="读取配置中" /> : <>
@@ -291,11 +292,11 @@ export function SettingsPage() {
             <Row label="当前模板" hint="封面、输入、方法与插件封签、结论">默认模板</Row>
             <Row label="企业抬头" hint="自定义抬头与模板需宿主支持后开放">未接入</Row>
           </div>}
-          {current === "about" && <div className="settings-card">
-            <Row label="宿主">{health.data?.status === "ok" ? "运行正常" : "状态待确认"} · {text(health.data?.version) || "版本未提供"}</Row>
-            <Row label="数据契约">{text(health.data?.model_version) || "—"}</Row>
+          {current === "about" && (health.isPending ? <LoadingState title="正在读取平台信息" /> : health.isError ? <ErrorState title="平台信息读取失败" description={message(health.error)} action={<Button onClick={() => void health.refetch()}>重新读取</Button>} /> : <div className="settings-card">
+            <Row label="平台">{health.data?.status === "ok" ? "运行正常" : "状态待确认"} · {text(health.data?.version) || "版本未提供"}</Row>
+            <Row label="输入格式"><span title={text(health.data?.model_version) || undefined}>{/^cablesim\.domain\/\d+$/.test(text(health.data?.model_version)) ? `电缆工程输入 · 第 ${text(health.data?.model_version).split('/')[1]} 版` : text(health.data?.model_version) ? '格式已声明' : '未提供'}</span></Row>
             <Row label="快捷键">Ctrl+B 侧栏 · Ctrl+S 保存 · Ctrl+Z / Ctrl+Shift+Z 撤销与重做</Row>
-          </div>}
+          </div>)}
         </section>
       </div>
       <Dialog open={!!restore} onOpenChange={(open) => { if (!open) setRestore(null); }} title="恢复到这个备份？"

@@ -4,6 +4,23 @@ import { displayName } from '@/lib/display-names';
 import { studyState } from '@/lib/study-state';
 import type { StatusKind } from './status-mark';
 import { VersionNotice } from './version-notice';
+import { formatDateTime } from '@/lib/format';
+import { statusLabel } from '@/lib/status-vocabulary';
+import { useEffect } from 'react';
+
+/** Acknowledge once per installed release, across studies sharing that method. */
+export function useMethodPresentationNotice(study: StudyRow, run: Record<string, unknown> | undefined, notify: (value: string) => void) {
+  const notices = [study.raw, run].flatMap(value => {
+    const rows = optionalRecord(optionalRecord(value).version_status).notices;
+    return (Array.isArray(rows) ? rows : []).map(optionalRecord);
+  }).filter(row => row.code === 'METHOD_PRESENTATION_UPDATED' && text(row.to_digest));
+  useEffect(() => {
+    const pending = notices.filter(row => !localStorage.getItem(`method-description:${text(row.id)}:${text(row.to_digest)}`));
+    if (!pending.length) return;
+    notify('方法说明已更新，保存结果仍有效。');
+    pending.forEach(row => localStorage.setItem(`method-description:${text(row.id)}:${text(row.to_digest)}`, 'acknowledged'));
+  }, [notices.map(row => text(row.id) + ':' + text(row.to_digest)).join('|'), notify]);
+}
 
 /** §5.5: one projection for the selected study, shared by every workbench region. */
 export function studyPresentation(study: StudyRow, run?: Record<string, unknown>, edits = 0, error?: unknown, loading = false) {
@@ -24,12 +41,12 @@ export function studyPresentation(study: StudyRow, run?: Record<string, unknown>
   }))];
   if (run?.freshness === 'historical' && !details.length) details.push('工程输入或研究配置已修改');
   const created = text(run?.created);
-  const when = created ? new Date(created).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
+  const when = formatDateTime(created);
   const failure = (Array.isArray(optionalRecord(run?.output).cases) ? optionalRecord(run?.output).cases as unknown[] : [])
     .map(optionalRecord).find(item => item.status === 'failed');
   const failureReason = text(optionalRecord(failure?.error).message) || text(failure?.message) || '请查看运行记录中的失败原因';
   const code = edits ? 'dirty' : error ? 'failed' : loading && !run ? 'loading' : state.code;
-  const label = edits ? '未保存' : error ? '失败' : code === 'loading' ? '读取中' : state.label;
+  const label = edits ? '未保存' : error ? statusLabel('failed', '失败') : code === 'loading' ? '读取中' : state.label;
   const mark: StatusKind = edits ? 'draft' : error ? 'error' : code === 'loading' ? 'running' : state.mark;
   const reason = edits ? `${edits} 处未保存修改` : error ? message(error) : code === 'outdated' ? details.join('；') || '输入或方法版本已变化'
     : code === 'loading' ? '正在读取保存运行' : code === 'not_run' ? '尚未运行，请预检并运行' : code === 'running' ? '运行中，保存结果保留' : code === 'failed' ? failureReason : `最近运行 ${when} · ${state.label}`;

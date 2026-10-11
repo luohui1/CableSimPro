@@ -37,6 +37,7 @@ export interface CableSectionProps {
   error?: string;
   onRetry?: () => void;
   showDimensions?: boolean;
+  selectedLayerOnly?: boolean;
   onCommand?: (command: DrawingCommand) => void;
   className?: string;
   label?: string;

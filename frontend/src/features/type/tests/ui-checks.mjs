@@ -9,7 +9,7 @@ export async function checkLayout(page,selector) {
       for (let parent = node.parentElement; parent; parent = parent.parentElement) { const style = getComputedStyle(parent), bounds = parent.getBoundingClientRect(); if (/(hidden|auto|scroll)/.test(style.overflowX)) { left = Math.max(left, bounds.left); right = Math.min(right, bounds.right); } if (/(hidden|auto|scroll)/.test(style.overflowY)) { top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom); } }
       return { left, top, right, bottom, width: right-left, height: bottom-top };
     };
-    const visible = node => { const box = rect(node); return box.width > 1 && box.height > 1 && getComputedStyle(node).visibility !== 'hidden' && !node.closest('[aria-hidden=true]'); };
+    const visible = node => { const folded=node.closest('details:not([open])');if(folded&&!folded.querySelector(':scope > summary')?.contains(node))return false;const box = rect(node); return box.width > 1 && box.height > 1 && getComputedStyle(node).visibility !== 'hidden' && !node.closest('[aria-hidden=true]'); };
     const nodes = [...scope.querySelectorAll('button,label,input,td,th,p,h1,h2,h3,dt,dd,span')].filter(node => node.textContent.trim() && visible(node));
     const minimumFont = Math.min(...nodes.map(node => parseFloat(getComputedStyle(node).fontSize)));
     const controls = [...scope.querySelectorAll('button,input,select,textarea,[role=combobox]')].filter(node => visible(node) && !node.closest('[role=tooltip]'));

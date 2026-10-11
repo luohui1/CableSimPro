@@ -47,21 +47,25 @@ class BudgetLedger:
         actual = row['actual_seconds'] or 0
         return actual if row['state'] == 'accounted' else max(row['estimate_seconds'], actual)
 
-    def reserve(self, token, *, tasks, cpus_per_task, wall_seconds):
+    def reserve(self, token, *, tasks, cpus_per_task, wall_seconds,
+                single_limit_core_hours=2000, total_limit_core_hours=20000):
         if not token or any(type(v) is not int or v <= 0 for v in (tasks, cpus_per_task, wall_seconds)):
             raise ValueError('budget: token、任务数、每任务核数和时间上限必须为明确的正整数。')
         estimate = tasks * cpus_per_task * wall_seconds
-        if estimate > SINGLE_LIMIT_SECONDS:
-            raise BudgetExceeded('budget: 本次资源上限超过 2000 核时，须由用户另行决定。')
+        limits=(single_limit_core_hours,total_limit_core_hours)
+        if any(isinstance(v,bool) or not isinstance(v,(int,float)) or not 0<v<=maximum for v,maximum in zip(limits,(2000,20000))):
+            raise ValueError('核时上限必须为正数，单批不超过 2000、累计不超过 20000。')
         with self.transaction() as db:
             existing = db.execute('SELECT * FROM reservations WHERE token=?', (token,)).fetchone()
             if existing:
                 if existing['estimate_seconds'] != estimate:
                     raise ValueError('budget: 同一提交标识不能改变资源预留。')
                 return dict(existing)
+            if estimate > single_limit_core_hours*3600:
+                raise BudgetExceeded(f'budget: 本次资源上限超过配置的 {single_limit_core_hours:g} 核时，未提交作业。')
             charged = sum(self._charged(r) for r in db.execute('SELECT * FROM reservations'))
-            if charged + estimate > TOTAL_LIMIT_SECONDS:
-                raise BudgetExceeded('budget: 实际用量与未结算预留合计超过 20000 核时，须由用户另行决定。')
+            if charged + estimate > total_limit_core_hours*3600:
+                raise BudgetExceeded(f'budget: 实际用量与未结算预留合计超过配置的 {total_limit_core_hours:g} 核时，未提交作业。')
             now = utc_now()
             db.execute('INSERT INTO reservations VALUES(?,?,NULL,?,?,?,?)',
                        (token, estimate, 'reserved', '[]', now, now))

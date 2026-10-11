@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { formatDateTime } from '@/lib/format';
+import { statusLabel } from '@/lib/status-vocabulary';
 import { displayName } from "@/lib/display-names";
 import { entityLabel, savedDomain } from "@/lib/domain-fields";
 import { useQuery } from "@tanstack/react-query";
@@ -32,7 +34,7 @@ import { Button } from "./ui/button";
 import { StatusMark } from "./status-mark";
 import { downloadCsv, downloadJson } from "@/lib/download";
 import type { CatalogRow } from "@/api/catalogs";
-import type { StudyDefinition } from "@/api/research";
+import { methodCatalog, type StudyDefinition } from "@/api/research";
 export function StudyCompare({
   run,
   tab,
@@ -58,6 +60,12 @@ export function StudyCompare({
     queryKey: ["input-contracts"],
     queryFn: ({ signal }) => inputContracts(signal),
   });
+  const catalog=useQuery({queryKey:['method-catalog'],queryFn:({signal})=>methodCatalog(signal)});
+  const methodLabel=(pin:Record<string,unknown>,snapshot?:unknown)=>{
+    const id=text(pin.plugin_id), fixed=Object.values(optionalRecord(optionalRecord(snapshot).method_manifests)).map(optionalRecord).find(item=>item.id===id);
+    const name=text(fixed?.name)||text(catalog.data?.find(item=>optionalRecord(item.method).plugin_id===id)?.name);
+    const fallback=displayName(id);return name||(fallback===id?'保存的计算方法':fallback);
+  };
   const [chosen, setChosen] = useState<string[]>(
       selectedRuns ? selectedRuns.split(",") : [],
     ),
@@ -140,7 +148,7 @@ export function StudyCompare({
         },
         crosschecks: [{ method: selected.method, parameters: contractDefaults(selected.parameter_schema) }],
         input_sources: {...baseline.input_sources, '/crosschecks/0/parameters': {
-          kind: 'derived' as const, reference: `采用 ${displayName(selected.method.plugin_id)} ${selected.method.version} 契约声明的默认参数，工程师需核对适用范围`, reviewed: false,
+          kind: 'derived' as const, reference: `采用 ${methodLabel(selected.method)} ${selected.method.version} 契约声明的默认参数，工程师需核对适用范围`, reviewed: false,
         }},
         candidate_completions: {},
         verification: null,
@@ -352,18 +360,17 @@ export function StudyCompare({
             {
               id: "created",
               label: "计算时间",
-              render: (row) => text(row.created) ? new Date(text(row.created)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—",
+              render: (row) => formatDateTime(text(row.created)),
             },
             {
               id: "method",
               label: "方法",
               render: (row) =>
-                displayName(text(
+                methodLabel(
                   optionalRecord(
                     row.method || optionalRecord(optionalRecord(row.snapshot).definition)
                       .method,
-                  ).plugin_id,
-                )),
+                  ),row.snapshot),
             },
             {
               id: "status",
@@ -371,7 +378,7 @@ export function StudyCompare({
               render: (row) => (
                 <StatusMark
                   kind={row.freshness === "historical" ? "historical" : "saved"}
-                  label={row.freshness === "historical" ? "历史" : "当前"}
+                  label={statusLabel(row.freshness === "historical" ? "historical" : "current", '状态未记录')}
                 />
               ),
             },
@@ -444,7 +451,7 @@ export function StudyCompare({
                     value: key(value.method),
                     disabled: key(value.method) === key(config?.method || definition.method),
                     label:
-                      displayName(value.method.plugin_id) +
+                      methodLabel(value.method) +
                       " · " +
                       value.method.version,
                   }))}
@@ -487,7 +494,7 @@ export function StudyCompare({
                   <Toolbar>
                     <h2>
                       对照方法参数 ·{" "}
-                      {displayName(crosscheck.method.plugin_id)}
+                      {methodLabel(crosscheck.method)}
                     </h2>
                     {!readOnly && (
                       <Button
@@ -567,7 +574,7 @@ export function StudyCompare({
                       .method,
                   );
                   return (
-                    displayName(text(pin.plugin_id)) +
+                    methodLabel(pin,row.snapshot) +
                     " · " +
                     text(pin.version) +
                     " · " +
@@ -596,6 +603,7 @@ export function StudyCompare({
         <>
           <section className="evidence-summary">
             <h2>{rows.length} 项同量纲结果可比较</h2>
+            {sources.length>=2 && <p>{sources.map((source,index)=>`${index===0?'基准':'对照'}：${methodLabel(optionalRecord(optionalRecord(optionalRecord(source.snapshot).definition).method),source.snapshot)}`).join('；')}</p>}
             <p className="muted">
               输入、边界与方法差异见“输入差异”；未配对结果保留在证据中。
             </p>

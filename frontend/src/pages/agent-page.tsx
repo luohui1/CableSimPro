@@ -139,9 +139,13 @@ export function AgentPage() {
         <IconButton variant="ghost" icon="nav/sidebar" label="收起右栏" onClick={toggleSide} />
       </div>
       <TabsContent value="changes">
-        {proposals.length ? proposals.map((proposal) => <ProposalCard key={proposal.id} proposal={proposal} onDecide={(id, decision) => void agent.decide(id, decision)}
-          busy={agent.decisions[proposal.id]?.busy} error={agent.decisions[proposal.id]?.error} />)
-          : <div className="agent-review-empty"><Icon name="agent/proposal" /><p>Agent 要改工程时，会把字段级改动写成方案放在这里。你核对后按住批准才会保存；拒绝不会留下任何改动。</p></div>}
+        {proposals.length ? proposals.map((proposal) => {
+          const event = [...agent.events].reverse().find(event => event.type === 'proposal.decision' && event.data.id === proposal.id);
+          return <ProposalCard key={proposal.id} proposal={proposal} onDecide={(id, decision) => void agent.decide(id, decision)}
+            receipt={event ? { created: event.created, status: String(event.data.status), actor: typeof event.data.actor === 'string' ? event.data.actor : undefined } : undefined}
+            busy={agent.decisions[proposal.id]?.busy} error={agent.decisions[proposal.id]?.error} />;
+        })
+          : <div className="agent-review-empty"><Icon name="agent/proposal" /><p>暂无待审核方案</p></div>}
       </TabsContent>
       <TabsContent value="runs">
         {previews.map((item) => <PreviewCard key={item.id} preview={item} label={label} proposalTitle={item.proposalId ? agent.proposals.get(item.proposalId)?.title : undefined}
@@ -168,10 +172,10 @@ export function AgentPage() {
       <div className="agent-page" data-page="agent">
         <div className="agent-thread" ref={thread}>
           {agent.loading ? <p className="agent-thread-note">正在读取任务记录</p>
-            : agent.error ? <p className="agent-notice" role="alert"><Icon name="status/warning" />任务记录读取失败：{agent.error.message}</p>
+            : agent.error ? <div className="agent-notice" role="alert"><Icon name="status/warning" />任务记录读取失败：{agent.error.message}<Button size="compact" onClick={() => void agent.reload()}>重新读取任务</Button></div>
               : !turns.length ? <div className="agent-start">
                 <h2>要 Agent 做什么？</h2>
-                <p>{project ? `基于「${project.name}」工作。` : "先选择一个工程。"}它调用工作台同一批模块和插件；改工程时先写成方案，由你批准。</p>
+                <p>{project ? `基于「${project.name}」工作。` : "先选择一个工程。"}</p>
                 {/* 没连模型时先说明原因和去处，建议不再整体变淡得像坏了 */}
                 {!canSend ? <InlineEmpty title="还没有连接 AI 模型。在设置里填写服务地址、模型名和密钥后即可使用。" action={<Button size="compact" onClick={() => void navigate({ to: "/settings", search: { theme, section: "ai" } })}>去设置</Button>} />
                   : <div className="agent-start-grid">{SUGGESTIONS.map((item) => <button key={item} type="button" disabled={!project} onClick={() => send(item)}><Icon name="agent/message" />{item}</button>)}</div>}
@@ -180,6 +184,7 @@ export function AgentPage() {
                   onRetry={index === turns.length - 1 && canSend && !agent.sending ? () => send(turn.question) : undefined} />)}
         </div>
         <div className="agent-prompt">
+          <details className="agent-policy"><summary>改动由你审核批准 · 了解更多</summary><p>Agent 通过平台工具读取输入、提出方案。核对字段差异后按住批准才会保存；拒绝不改工程。保存方案不等于运行、发布或提交超算，工程结论须有真实运行依据。</p></details>
           <PromptBar value={draft} onChange={setDraft} onSend={() => send(draft)} onStop={agent.stop} busy={agent.sending} canSend={canSend && !!project}
             placeholder={canSend ? "描述任务，或输入 @ 引用研究、/ 调出常用任务" : "Agent 模型未连接，暂时不能发送"}
             references={references} commands={commands}

@@ -135,21 +135,43 @@ def imported_provenance(payload, cable):
         if not path.startswith('/cable_type/'):
             result[path] = deepcopy(source)
             continue
-        parts = path.strip('/').split('/')[1:]
+        parts = [part.replace('~1', '/').replace('~0', '~') for part in path.strip('/').split('/')[1:]]
+        def member(items, token, key):
+            if token.isdecimal():
+                return items[int(token)]
+            matches = [item for item in items if item.get(key) == token]
+            if len(matches) != 1:
+                raise ValueError('no unique structural source target')
+            return matches[0]
         try:
             if 'cores' in parts:
                 index = parts.index('cores') + 1
-                core = cable['cores'][int(parts[index])]
+                core = member(cable['cores'], parts[index], 'id')
                 parts[index] = core['id']
                 if 'layers' in parts:
                     index = parts.index('layers') + 1
-                    parts[index] = core['layers'][int(parts[index])]['role']
+                    if index < len(parts):
+                        parts[index] = member(core['layers'], parts[index], 'role')['role']
             elif 'common_layers' in parts:
                 index = parts.index('common_layers') + 1
-                parts[index] = cable['common_layers'][int(parts[index])]['role']
+                if index < len(parts):
+                    parts[index] = member(cable['common_layers'], parts[index], 'role')['role']
             result[pointer('cable_types', cable['id'], *parts)] = deepcopy(source)
-        except (ValueError, IndexError):
-            raise HTTPException(422, '资料来源路径不属于已批准结构，请重新核对资料版本。') from None
+        except (ValueError, IndexError, KeyError):
+            from .type_specification import LAYER_NAMES
+            labels = {'diameter':'外径', 'thickness':'厚度', 'conductor_class':'导体类别', 'r20':'20 °C 直流电阻', 'nominal_area':'标称截面'}
+            role = next((LAYER_NAMES[p] for p in parts if p in LAYER_NAMES), '结构对象')
+            field = labels.get(parts[-1], '来源对应字段')
+            if 'cores' in parts:
+                core_token = parts[parts.index('cores') + 1] if parts.index('cores') + 1 < len(parts) else ''
+                number = next((i + 1 for i, item in enumerate(cable['cores']) if core_token in (item['id'], str(i))), None)
+                role = (f'芯 {number}' if number else '资料声明的线芯') + ' · ' + role
+            elif 'common_layers' in parts:
+                role = '公共层 · ' + role
+            raise HTTPException(422, {'code':'TYPE_SOURCE_TARGET_MISSING',
+                'message':f'“{payload.get("name", cable.get("label", "所选型号"))}”的{role} · {field}来源未对应到唯一结构对象，请核对资料结构后重新批准。',
+                'fields':[{'object':role, 'label':field, 'field':path, 'reference':source.get('reference')}],
+                'repair_url':'/resources/cables/imports'}) from None
     if payload.get('specification'):
         for core in cable['cores']:
             for field, suffix in [('conductor_diameter', ('conductor','diameter')), ('r20', ('conductor','r20')), ('insulation_thickness', ('layers','insulation','thickness'))]:
@@ -476,13 +498,13 @@ class Types:
         self.research.resolve(method)
         return plugin, cap, method
 
-    def _invoke_proposal(self, artifact, values):
+    def _invoke_proposal(self, artifact, values, parameters=None):
         plugin, cap, method = self._proposal_method(artifact)
         # Algebraic proposals must not wait for the resident CAD worker's OCCT
         # warmup. Keep the same seal checks and process/time limits.
         from .verified_executor import VerifiedExecutor
         executor = VerifiedExecutor(registry=self.research.registry()) if plugin.manifest.id == 'cablesim.cable-geometry' and self.research.resident_runner is not None else self.research.executor
-        result = executor.run(plugin.manifest.id, cap.id, [{'case_id': 'design', 'input': values, 'parameters': {}}], timeout_s=10, expected_manifest=plugin.manifest)
+        result = executor.run(plugin.manifest.id, cap.id, [{'case_id': 'design', 'input': values, 'parameters': parameters or {}}], timeout_s=10, expected_manifest=plugin.manifest)
         case = result.cases[0]
         if case.status != 'succeeded' or artifact not in case.artifacts:
             raise HTTPException(422, case.error or {'code': 'PROPOSAL_MISSING', 'message': '方法未提供结构提案，未创建草稿。'})
@@ -498,6 +520,11 @@ class Types:
                         raise HTTPException(409, '提案请求标识已用于其他输入。')
                     return json.loads(prior['payload'])
             proposal, standard = self._invoke_proposal('x-cablesim.cable-design-proposal', body.input)
+            if proposal.get('status') == 'basis_required':
+                from .requirements import lookup_references
+                references, missing = lookup_references(self.research, proposal['basis_queries'])
+                proposal, standard = self._invoke_proposal('x-cablesim.cable-design-proposal', body.input, {'basis_references':references})
+                standard['basis_missing'] = missing
             geometry, layout = self._invoke_proposal('x-cablesim.core-layout-proposal', proposal['next_input'])
             document = deepcopy(proposal['document'])
             for change in geometry['changes']:
@@ -1527,9 +1554,11 @@ def check_results(channels, checks):
                             result['id'],
                         )+'：'+str(result.get('reason') or result.get('verdict') or result.get('status'))+'。',
                         'blocking': True,
+                        'result': deepcopy(result),
                     })
         if key == 'geometry' and artifact.get('mass_kg_per_km') is None:
-            checks.append({'id': 'geometry/mass', 'channel': key, 'message': '单位长度用料缺少完整材料密度或构造输入。', 'blocking': True})
+            checks.append({'id': 'geometry/mass', 'channel': key, 'message': '单位长度用料缺少完整材料密度或构造输入。', 'blocking': True,
+                'quantities': deepcopy([row for row in artifact.get('layers', []) if row.get('mass_kg_per_km') is None])})
         if key == 'rating':
             if not item.get('rows'):
                 checks.append({'id': 'rating/empty', 'channel': key, 'message': '尚无载流量工况结果，请先配置并计算工况。', 'blocking': True})

@@ -538,6 +538,7 @@ def build(document, parameters, out, case_id, reuse_artifacts=None, native_layer
     json_started = perf_counter()
     encoded = json.dumps(payload, ensure_ascii=False, allow_nan=False)
     payload['build_stats']['json_serialization_ms'] = (perf_counter()-json_started)*1000
+    payload['headline'] = f'成品外径 {payload["outer_diameter_m"]*1000:.1f} mm'
     (out / name).write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), 'utf-8')
     results = [{'key': 'x-cablesim.outer-diameter', 'type': 'quantity', 'entity': cable['id'], 'status': 'available',
                 'value': payload['outer_diameter_m'], 'unit': 'm'}]
@@ -545,7 +546,7 @@ def build(document, parameters, out, case_id, reuse_artifacts=None, native_layer
                  'status': 'available', 'value': r['envelope_volume_m3'], 'unit': 'm3'} for r in rows]
     results += [{'key':'x-cablesim.material-volume','type':'quantity','entity':r['entity'],
                  'status':'available','value':r['material_volume_m3'],'unit':'m3'} for r in rows if r['material_volume_m3'] is not None]
-    return {'results': results, 'artifacts': [{'type': 'x-cablesim.cad-model', 'path': 'output/' + name}],
+    return {'results': results, 'evidence': {'headline': payload['headline']}, 'artifacts': [{'type': 'x-cablesim.cad-model', 'path': 'output/' + name}],
             'warnings': [{'code': 'IDEALIZED_GEOMETRY', 'message': payload['geometry_approximation']}]}
 
 
@@ -851,6 +852,7 @@ class _SceneBuild:
             payload['step_text']=path.read_text('utf-8')
             path.unlink()
         name=case_id+'.scene.json'
+        payload['headline'] = f'敷设场景展示长度 {length:g} m'
         (out/name).write_text(json.dumps(payload,ensure_ascii=False,allow_nan=False),'utf-8')
         return {'results':[{
             'key':'x-cablesim.scene-extrusion-length',
@@ -859,7 +861,7 @@ class _SceneBuild:
             'status':'available',
             'value':length,
             'unit':'m',
-        }],'artifacts':[{'type':'x-cablesim.cad-scene','path':'output/'+name}],
+        }],'evidence':{'headline':payload['headline']},'artifacts':[{'type':'x-cablesim.cad-scene','path':'output/'+name}],
             'warnings':[{'code':'SCENE_DISPLAY_DOMAIN','message':w} for w in warnings]}
 
 
@@ -883,9 +885,10 @@ def main():
                 artifact = propose(case['input'])
                 result = {}
                 if request['phase'] == 'run':
+                    artifact['headline'] = f'导体外径提案 {artifact["rows"][0]["value"]*1000:.1f} mm · 待人工确认'
                     name = case['case_id'] + '.proposal.json'
                     Path('output', name).write_text(json.dumps(artifact, ensure_ascii=False, allow_nan=False), 'utf-8')
-                    result = {'results': [{'key': 'x-cablesim.proposed-conductor-diameter', 'type': 'quantity', 'entity': 'cable_type/design', 'status': 'available', 'value': artifact['rows'][0]['value'], 'unit': 'm'}],
+                    result = {'evidence':{'headline':artifact['headline']},'results': [{'key': 'x-cablesim.proposed-conductor-diameter', 'type': 'quantity', 'entity': 'cable_type/design', 'status': 'available', 'value': artifact['rows'][0]['value'], 'unit': 'm'}],
                               'artifacts': [{'type': 'x-cablesim.core-layout-proposal', 'path': 'output/' + name}]}
                 cases.append({'case_id': case['case_id'], 'status': 'succeeded', **result})
             except (KeyError, ValueError, TypeError) as exc:

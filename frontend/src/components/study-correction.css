@@ -1,0 +1,7 @@
+.study-correction-table{table-layout:fixed;width:100%;min-width:0}
+.study-correction-table th:first-child{width:24%}
+.study-correction-table th:nth-child(2){width:12%}
+.study-correction-table th:nth-child(3){width:42%}
+.study-correction-table th:last-child{width:22%}
+.study-correction-table th,.study-correction-table td{white-space:normal;overflow-wrap:normal;vertical-align:top;padding-inline:var(--space-2)}
+.study-correction-table thead th,.study-correction-table .numeric{white-space:nowrap;font-variant-numeric:tabular-nums}

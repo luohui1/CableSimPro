@@ -970,12 +970,16 @@ def main():
         try:
             if request['capability'] == 'structure-proposal':
                 from cablesim_standard_check.proposal import propose
-                artifact = propose(case['input'], insulation_limit, SOURCES, DATA)
+                artifact = propose(case['input'], insulation_limit, SOURCES, DATA, case.get('parameters'))
                 result = {}
                 if request['phase'] == 'run':
+                    value = artifact['rows'][0]['value'] if artifact['rows'] else None
+                    artifact['headline'] = f'绝缘标称厚度提案 {value*1000:g} mm · 待人工确认' if value is not None else '正在获取固定标准依据'
                     name = case['case_id'] + '.proposal.json'
                     Path('output', name).write_text(json.dumps(artifact, ensure_ascii=False, allow_nan=False), 'utf-8')
-                    result = {'results': [{'key': 'x-cablesim.proposed-insulation', 'type': 'quantity', 'entity': 'cable_type/design', 'status': 'available', 'value': artifact['rows'][0]['value'], 'unit': 'm'}],
+                    quantity = {'key':'x-cablesim.proposed-insulation','type':'quantity','entity':'cable_type/design','unit':'m',
+                                **({'status':'available','value':value} if value is not None else {'status':'unavailable','reason':{'code':'BASIS_REQUIRED','message':'标准依据尚未固定，未提出尺寸。'}})}
+                    result = {'evidence':{'headline':artifact['headline']},'results': [quantity],
                               'artifacts': [{'type': 'x-cablesim.cable-design-proposal', 'path': 'output/' + name}]}
                 cases.append({**base, 'status': 'succeeded', **result})
                 continue
@@ -983,9 +987,12 @@ def main():
             result = {}
             if request['phase'] == 'run':
                 artifact = check(case['input'], case.get('parameters', {}))
+                counts = artifact['counts']
+                artifact['headline'] = f'{counts["failed"]} 项不满足' if counts.get('failed') else '核对尚未完整覆盖' if counts.get('missing') or counts.get('uncovered') else '全部满足'
                 name = case['case_id'] + '.requirements.json'
                 Path('output', name).write_text(json.dumps(artifact, ensure_ascii=False, allow_nan=False), 'utf-8')
                 result = {
+                    'evidence': {'headline': artifact['headline']},
                     'results': [{
                         'key': 'x-cablesim.standard-failed-count', 'type': 'quantity', 'entity': cable['id'],
                         'status': 'available', 'value': artifact['counts'].get('failed', 0), 'unit': '1',

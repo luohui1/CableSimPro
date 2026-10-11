@@ -7,12 +7,13 @@ import { optionalRecord, text } from '@/api/client';
 import { useState } from 'react';
 import { Button } from './ui/button';
 import { RunRecordsComparison } from './run-records-comparison';
-import { runStates } from './study-workbench-config';
-import { savedRunLabel } from '@/features/field/run-label';
+import { statusLabel as sharedStatus } from '@/lib/status-vocabulary';
+import { formatDateTime } from '@/lib/format';
+import { savedRunLabel } from './study-run-label';
 import { StudyRemoteProgress } from './study-run-control';
 
-const statusLabel = (status: string) => runStates[status]?.label || status;
-const time = (value: unknown) => text(value) ? new Date(text(value)).toLocaleString('zh-CN', {year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '时间未提供';
+const statusLabel = (status: string) => sharedStatus(status, '状态未记录');
+const time = (value: unknown) => formatDateTime(text(value));
 export default function RunRecordsContent({runs, selectedId, onSelect, workspace, studyId, disabledReason}: {
   runs: Record<string, unknown>[]; selectedId?: string; onSelect: (id: string) => void; workspace?: string; studyId?: string; disabledReason?: string;
 }) {

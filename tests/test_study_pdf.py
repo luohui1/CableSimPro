@@ -40,6 +40,20 @@ def pdf_text(data):
         return '\n'.join(page.get_text() for page in doc)
 
 
+def test_customer_book_prints_fixed_material_basis_and_difference(run, monkeypatch):
+    from backend.plugin_host.executor import Executor
+    monkeypatch.setattr(Executor,'run',lambda *a,**k: pytest.fail('saved book must not query current basis'))
+    run['output']['cases'][0]['evidence']={'material_basis':{'rows':[
+        {'label':'外护套热阻率','value':6.,'unit':'K·m/W','status':'different','status_label':'与依据值不同',
+         'reference_value':5.,'difference':1.,'citation':'IEC 60287-2-1:2023 表 1 · 第 33 页（PDF 第 89 页）','note':'按保存的材料角色核对。'}]}}
+    run['output_digest']=fingerprint(run['output'])
+    text=pdf_text(render_pdf([run],generated_at='2026-10-05T01:02:03+00:00'))
+    assert '材料常数与标准出处' in text and '外护套热阻率' in text
+    compact=re.sub(r'\s+','',text)
+    assert '第33页' in compact and '第89页' in compact
+    assert '与依据值不同' in compact and '依据值5.0' in compact
+
+
 def test_customer_book_has_real_selection_precision_and_no_internal_sources(run):
     before=deepcopy(run);text=pdf_text(render_pdf([run],generated_at='2026-10-05T01:02:03+00:00'))
     from backend.kernel.study_pdf import local_time

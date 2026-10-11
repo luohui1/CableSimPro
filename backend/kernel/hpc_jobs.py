@@ -14,6 +14,8 @@ from .batch_step_response import StepResponses, StepRequest
 from .batch_field_chapter import chapter, selected_case, field_png
 from hashlib import sha256
 from ..plugin_host import PluginHostError
+from .hpc_profile import HpcProfile
+from .hpc_executor import ROOT
 
 
 def study_jobs(research):
@@ -164,6 +166,30 @@ def make_router(research,batches=None):
     @router.get('/profile')
     def profile():return research.executor.profile_status()
 
+    def profile_editor():return HpcProfile(research.executor,managed_path=ROOT/'.data/hpc/config.json')
+
+    def profile_operation(action,*args):
+        try:return getattr(profile_editor(),action)(*args)
+        except OSError:raise HTTPException(503,'配置文件操作未完成，请重新读取当前配置；已有备份保留。') from None
+
+    @router.get('/profile/configuration')
+    def profile_configuration():return profile_operation('configuration')
+
+    @router.put('/profile')
+    def save_profile(body:dict):return profile_operation('save',body)
+
+    @router.post('/profile/undo')
+    def undo_profile(body:dict):return profile_operation('undo',body)
+
+    @router.post('/profile/check')
+    def check_profile():return profile_operation('check')
+
+    @router.get('/workspaces/{wid}/studies/{sid}/input-preflight')
+    def input_preflight(wid:UUID,sid:UUID,expected_revision:int=Query(...,ge=0),
+                        expected_study_revision:int=Query(...,ge=0),module:str|None=None):
+        from .hpc_preflight import local_preflight
+        return local_preflight(research,str(wid),str(sid),expected_revision,expected_study_revision,module)
+
     @router.get('/workspaces/{wid}/studies/{sid}/step-responses')
     def step_responses(wid:UUID,sid:UUID):return {'items':responses.list(str(wid),str(sid))}
 
@@ -275,8 +301,16 @@ def make_router(research,batches=None):
             definition=research.definition(db,str(wid),str(sid))['definition']
         configuration=definition.get('modules',{}).get(module,definition) if module else definition
         method=configuration['method']
-        return {'configured':research.executor.required(method['plugin_id'],method['capability']),
-                'location':'slurm','local_solver_allowed':False}
+        profile=research.executor.profile_status()
+        try:capability=research.registry(method['plugin_id']).get(method['plugin_id']).manifest.capability(method['capability'])
+        except (PluginHostError,KeyError):raise HTTPException(409,'研究的方法或能力声明暂不可读，请重新安装方法或选择可用版本；保存结果保留。') from None
+        solver=capability.solver
+        selected=method['plugin_id'] in profile['remote_plugins'] or method['capability'] in profile['remote_capabilities'].get(method['plugin_id'],[])
+        remote=solver=='slurm' or (solver=='either' and selected)
+        conflict=solver=='local' and selected
+        return {'configured':not conflict and (not remote or (profile['configured'] and selected)),
+                'location':'slurm' if remote else 'local','solver':solver,
+                'local_solver_allowed':solver!='slurm','conflict':conflict}
 
     @router.post('/workspaces/{wid}/studies/{sid}/convergence',status_code=202)
     def start(wid:str,sid:str,body:RefineRequest):return refinements.start(wid,sid,body)

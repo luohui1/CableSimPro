@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { displayName } from "@/lib/display-names";
-import { savedRunLabel } from '@/features/field/run-label';
+import { savedRunLabel } from './study-run-label';
 import { isVersionStale } from '@/lib/version-status';
 import {
   optionalRecord,
@@ -15,6 +15,8 @@ import { entityLabel, savedDomain } from "@/lib/domain-fields";
 import { engineeringQuantity } from "@/lib/format";
 import { DataTable, type Column } from "./data-table";
 import { StudyDetailGroup } from './study-detail-group';
+import { StudyMaterialBasis } from './study-material-basis';
+import { StudyCorrection } from './study-correction';
 import { Select } from "./ui/select";
 import { SourceBadge } from "./source-badge";
 import { EmptyState, ErrorState } from "./states";
@@ -75,6 +77,8 @@ export function StudyResults({
     );
   const snapshot = optionalRecord(run.snapshot),
     domain = savedDomain(run);
+  const correction=optionalRecord(selected.artifacts)['x-cablesim.gb50217-correction'];
+  if (correction) return <StudyCorrection artifact={optionalRecord(correction)} historical={run.freshness==='historical'||isVersionStale(run)} part={part} />;
   const rows: ResultRow[] = (
     Array.isArray(selected.results) ? selected.results : []
   ).map((value, index) => {
@@ -328,6 +332,7 @@ export function StudyResults({
         }
       /></StudyDetailGroup>;
       })}
+      <StudyMaterialBasis caseRow={selected} />
     </div>
   );
 }

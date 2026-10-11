@@ -23,7 +23,7 @@ def queries(checker):
             layer = next((l for l in core['layers']+cable['common_layers'] if l['role']=='insulation'), {})
             kind = checker.materials.get(layer.get('material'), {}).get('standard_kind')
             if hv and kind != 'XLPE': continue
-            query.update(locator='表 2' if hv else '表 7',quantity='insulation_nominal',conditions=conditions if hv else {**conditions,'insulation':kind})
+            query.update(locator='表 2' if hv else '表 6' if family=='mv3' else '表 7',quantity='insulation_nominal',conditions=conditions if hv else {**conditions,'insulation':kind})
         elif key == 'r20':
             kind = checker.materials[core['conductor']['material']].get('standard_kind')
             if kind not in ('copper_bare','copper_coated','aluminium'): continue
@@ -70,7 +70,8 @@ def validate(ref,query):
         actual=query['conditions'].get(key)
         if isinstance(predicate,dict):
             operators={'eq':lambda a,b:math.isclose(a,b,rel_tol=1e-12) if isinstance(a,(int,float)) and isinstance(b,(int,float)) else a==b,
-                       'gt':lambda a,b:a>b,'gte':lambda a,b:a>=b,'lt':lambda a,b:a<b,'lte':lambda a,b:a<=b,'in':lambda a,b:a in b}
+                       'gt':lambda a,b:a>b,'gte':lambda a,b:a>=b,'lt':lambda a,b:a<b,'lte':lambda a,b:a<=b,
+                       'in':lambda a,b:any(math.isclose(a,item,rel_tol=1e-12,abs_tol=0) if isinstance(a,(int,float)) and isinstance(item,(int,float)) else a==item for item in b)}
             if actual is None or any(op not in operators or not operators[op](actual,expected) for op,expected in predicate.items()):
                 raise ValueError('basis_references：依据行条件与当前型号不一致。')
         elif not (math.isclose(actual,predicate,rel_tol=1e-12) if isinstance(actual,(int,float)) and isinstance(predicate,(int,float)) else actual==predicate):

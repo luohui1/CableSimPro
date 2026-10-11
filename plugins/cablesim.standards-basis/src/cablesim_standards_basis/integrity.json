@@ -1,14 +1,54 @@
 {
   "schema": "cablesim.standards-integrity/1",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "files": {
+    "records-lv.json": {
+      "sha256": "df8f2d7dc285fc5c8802ef7004dbc0151bdef2d31502c877b56b7e639975c402",
+      "size_bytes": 599033
+    },
+    "records-mv.json": {
+      "sha256": "739e66c63d6758f05fa36d11b208f0cd0e0db0fa91e0351151b901fe4cff9ca8",
+      "size_bytes": 671107
+    },
+    "records-medium-high.json": {
+      "sha256": "d94acfc0bffbeaabbab3b1e6cbcad0f8ec7cec2b9edc0af88ba11905bbc44586",
+      "size_bytes": 703556
+    },
+    "records-conductor-gb.json": {
+      "sha256": "3c4ec273398adce2c334b8fff79b3e29bb23800376d2e687508fba54a0dd5b88",
+      "size_bytes": 773827
+    },
+    "records-conductor-iec.json": {
+      "sha256": "056f4e12b4bfb1633a65caa67e10864662facf8d53889f0d66b6d23158607d3f",
+      "size_bytes": 827311
+    },
+    "records-high.json": {
+      "sha256": "df5b5c486631a5fbdfab7646a7cfcf4c0e7436ece4eb7a5488f3636e05dc1e97",
+      "size_bytes": 158772
+    },
+    "records-installation.json": {
+      "sha256": "63ec9b1ace29dfecb70b583eabbf0afb3339492aa1cfb1c09c07c38bf6f612f9",
+      "size_bytes": 333134
+    },
+    "records-electrical.json": {
+      "sha256": "42bab46005d6266246ba6c0025181393e7cf850f85185d538771f46fdb68822f",
+      "size_bytes": 131653
+    },
+    "records-thermal.json": {
+      "sha256": "109a97251c095dc4c7171da9cd48a89a523df759a9fba50aceeb613180e944a3",
+      "size_bytes": 142666
+    },
+    "records-environment.json": {
+      "sha256": "134e781c72e82326300c2506ebb392be1d0170fb39adb0d96783e1c68b65d592",
+      "size_bytes": 35320
+    },
     "basis.json": {
-      "sha256": "1358e0f953355e8fa48532ec196580dd067c8956582f8b4e78bc9087fd0a82bf",
-      "size_bytes": 2993999
+      "sha256": "b00194beec86a1307a41714dd4ff63e464865d71ba594d3d3f6d75ae4327427a",
+      "size_bytes": 253797
     },
     "verification.json": {
-      "sha256": "0e04a364d4b21a5e034f967384676e812eb04c6eb4312a88a8dfe7b9d98afd12",
-      "size_bytes": 277808
+      "sha256": "fa3b9fc169df146f6dd92ae86a847ccee25c6c66ebdc0957e21dc4a6034ff5e5",
+      "size_bytes": 592241
     }
   }
 }

@@ -22,6 +22,9 @@ def task_answer(run):
     if case is None:
         return '<p class="answer">当前任务未取得可用结果。</p>'
     task = definition.get('task')
+    correction=case.get('artifacts',{}).get('x-cablesim.gb50217-correction')
+    if correction:
+        return '<p class="answer">'+escape(correction['headline'])+'</p>'
     if task == 'iec-fem-comparison':
         comparison=case.get('artifacts',{}).get('x-cablesim.iec-fem-comparison')
         return '<p class="answer">'+escape(comparison['conclusion'] if comparison else '比较工件缺失，无法判断。')+'</p>'
@@ -150,6 +153,19 @@ def artifact_sections(case):
     trace = artifacts.get('x-cablesim.iec60287-trace')
     network = artifacts.get('x-cablesim.thermal-network-rating')
     parts = []
+    correction=artifacts.get('x-cablesim.gb50217-correction')
+    if correction:
+        parts.append('<section data-section="gb-correction"><h3>GB 50217 载流量校正</h3>'+table(
+            ['基准载流量 / A','总校正系数','校正后允许电流 / A'],[[formatted(correction['baseline']['baseline_current_a']),formatted(correction['total_factor'],4),formatted(correction['corrected_current_a'])]])+
+            table(['校正项目','系数','表号与行列条件','出处'],[[r['label'],formatted(r['factor'],4),r['record']['table']+' · '+r['condition_text'],r['record']['citation']] for r in correction['coefficients']])+
+            '<p>'+escape(correction['baseline']['baseline_source']+' · 第 '+str(correction['baseline']['baseline_page'])+' 页；基准条件由工程师核对。')+'</p><p>'+escape(correction['scope'])+'</p></section>')
+    from .material_basis import saved_rows
+    constants = saved_rows(case)
+    if constants:
+        parts.append('<h3>材料常数与标准出处</h3>'+table(['材料常数','采用值 / 单位','标准出处与核对'],[
+            [row['label'],str(row['value'])+' '+row['unit'],row.get('citation','')+' · '+row['status_label']+
+             (f"；依据值 {row['reference_value']} {row['unit']}；差 {row['difference']:.4g}" if row['status']=='different' else '')+
+             ('；'+row['note'] if row.get('note') else '')] for row in constants]))
     comparison = artifacts.get('x-cablesim.iec-fem-comparison')
     if comparison:
         from cablesim_sdk.iec_fem import ComparisonArtifact

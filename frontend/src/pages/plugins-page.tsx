@@ -12,7 +12,7 @@ import { EmptyState, ErrorState, InlineEmpty, LoadingState } from "@/components/
 import { DataTable } from "@/components/data-table";
 import { ObjectLink, statusMark } from "@/components/object-link";
 import { StatusMark } from "@/components/status-mark";
-import { METRIC_STATES, VALIDATION_QUANTITIES, percentText } from "@/lib/validation-labels";
+import { METRIC_STATES, quantityLabel, percentText } from "@/lib/validation-labels";
 import { displayUnit } from "@/lib/display-names";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -25,7 +25,9 @@ import { statusLabel } from '@/lib/status-vocabulary';
 type Row = Record<string, unknown>;
 
 /** 清单说明多是逐条拼接的：收掉“。；”这类重复标点，标准号与年份之间补空格（IEC60853 → IEC 60853）。 */
-const prose = (value: string) => value.replace(/[。．.]\s*；/g, "；").replace(/；\s*；/g, "；").replace(/\b(IEC|GB\/T|GB)(\d)/g, "$1 $2").replaceAll('COMSOL/ACDC/HEATTRANSFER', 'COMSOL 交流/直流模块与传热模块');
+const prose = (value: string) => value.replace(/[。．.]\s*；/g, "；").replace(/；\s*；/g, "；").replace(/\b(IEC|GB\/T|GB)(\d)/g, "$1 $2").replaceAll('COMSOL/ACDC/HEATTRANSFER', 'COMSOL 交流/直流模块与传热模块').replace(/\breference_only\b/g, '仅供参考').replace(/\bx_p\b/g, 'xₚ');
+/** 测试文件位置是追溯信息：原文保留在悬停，不占图的正文说明。 */
+const figureCaption = (value: string) => !value.trim() ? '' : prose(value).replace(/\s*\btest_[A-Za-z0-9_]+\.py(?::[\d–—-]+)?[。.]?/g, '').trim().replace(/[；;]$/, '。') || '测试记录';
 
 /** 插件类别：以清单 presentation.category 为准；早期清单没有声明时按分析类型与运行位置推断。 */
 const CATEGORIES: [string, string][] = [["calculation", "计算方法"], ["modeling", "建模"], ["simulation", "仿真"], ["data-standard", "数据与标准"], ["report", "报告"], ["agent-skill", "Agent 技能"]];
@@ -90,7 +92,7 @@ function usesPlugin(definition: unknown, id: string): boolean {
 function MetricLine({ metric }: { metric: ValidationMetric }) {
   const deviation = typeof metric.relative_difference_percent === "number" ? percentText(metric.relative_difference_percent)
     : typeof metric.difference === "number" ? `${metric.difference > 0 ? "+" : metric.difference < 0 ? "−" : ""}${Math.abs(Number(metric.difference.toPrecision(3)))} ${displayUnit(metric.unit || "")}`.trim() : "";
-  return <li><span>{metric.variant}：{VALIDATION_QUANTITIES[metric.quantity] || metric.quantity} {deviation}</span> <span className="muted">{METRIC_STATES[metric.status] || metric.status}</span></li>;
+  return <li><span>{metric.variant}：{quantityLabel(metric.quantity)} {deviation}</span> <span className="muted">{METRIC_STATES[metric.status] || metric.status}</span></li>;
 }
 
 /**
@@ -143,7 +145,7 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
       {art && <img src={art} alt="" />}
       <div>
         <h1>{text(row.name)}<span className="muted">{text(method.version)}</span>{text(presentation.category_title) && <span className="tag">{text(presentation.category_title)}</span>}</h1>
-        <p className="plugin-description">{prose(text(row.description))}</p>
+              <p className="plugin-description" title={text(row.description)}>{prose(text(row.description))}</p>
       </div>
     </header>
     <div className="detail-body">
@@ -156,7 +158,7 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
           <TabsTrigger value="technical">技术信息</TabsTrigger>
         </TabsList>
         <TabsContent value="method" className="plugin-section">
-          {figure ? <figure className="plugin-figure"><img src={text(figure.url)} alt={text(figure.title)} /><figcaption><b>{text(figure.title)}</b>{text(figure.description)}</figcaption></figure>
+          {figure ? <figure className="plugin-figure"><img src={text(figure.url)} alt={text(figure.title)} /><figcaption title={text(figure.description)}><b>{text(figure.title)}</b>{figureCaption(text(figure.description))}</figcaption></figure>
             : <InlineEmpty title="插件没有提供方法示意图。" />}
         </TabsContent>
         <TabsContent value="capabilities" className="plugin-section">
@@ -179,7 +181,7 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
                   </span>
                 </div>
                 <SolverLocation pluginId={id} capability={cap as SolverCapability} />
-                {text(cap.description) && <p className="capability-description">{prose(text(cap.description))}</p>}
+                {text(cap.description) && <p className="capability-description" title={text(cap.description)}>{prose(text(cap.description))}</p>}
                 {!!headlines.length && <p className="capability-headlines"><span className="muted">关键结论</span>{headlines.map((item) => <span key={text(item.key)}>{text(item.title)}{text(optionalRecord(item.unit).display) && ` / ${text(optionalRecord(item.unit).display)}`}</span>)}</p>}
                 <p className="capability-meta">{!!outputs.length && <span>输出 {outputs.length} 项</span>}{!!parameters.length && <span>参数 {parameters.length} 项（常用 {basic}）</span>}</p>
                 {!!cases.length && <details><summary>参考算例 {cases.length}</summary><ul>{cases.map((c) => <li key={c}>{c}</li>)}</ul></details>}
@@ -189,7 +191,7 @@ function PluginDetail({ row, studies, theme }: { row: Row; studies: { id: string
           </ol>
         </TabsContent>
         <TabsContent value="validation" className="plugin-section">
-          {validationFigure && <figure className="plugin-figure"><img src={text(validationFigure.url)} alt={text(validationFigure.title)} /><figcaption><b>{text(validationFigure.title)}</b>{text(validationFigure.description)}</figcaption></figure>}
+          {validationFigure && <figure className="plugin-figure"><img src={text(validationFigure.url)} alt={text(validationFigure.title)} /><figcaption title={text(validationFigure.description)}><b>{text(validationFigure.title)}</b>{figureCaption(text(validationFigure.description))}</figcaption></figure>}
           {text(presentation.validation_note) && <p className="muted">{text(presentation.validation_note)}</p>}
           <PluginValidation pluginId={id} />
           <Link className="detail-link" to="/validation" search={{ theme, snapshot: "" }}>全部验证算例</Link>

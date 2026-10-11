@@ -9,7 +9,6 @@ import { StatusMark, type StatusKind } from '@/components/status-mark';
 import { InlineEmpty, ErrorState, LoadingState, StaleBanner } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { engineeringQuantity, formatNumber } from '@/lib/format';
-import { displayName } from '@/lib/display-names';
 import { chooseEvidence, currentEvidence, methodLabel, useTypeEvidence } from './evidence';
 import { useTypeWorkspace } from './provider';
 import { useTypeInspector } from './inspector';
@@ -21,6 +20,9 @@ import { EvidenceDigest } from './evidence-digest';
 import { TypeMethodFields } from './method-fields';
 import { typeStudies } from './rating-api';
 import { commitMethod, parameterValue, type MethodDraft, type MethodDefinition } from './method-draft';
+import { identicalCoreRows, issuePresentation } from './result-presentation';
+import { formulaInput, resultCitation, ResultTrace } from './result-detail';
+import { SavedFormula } from './saved-formula';
 
 export type AnalysisRow = Record<string, unknown> & { id: string; title: string };
 const statuses: Record<string, { kind: StatusKind; label: string }> = { available: { kind: 'success', label: '已计算' }, missing: { kind: 'unknown', label: '待补数据' }, uncovered: { kind: 'unknown', label: '未覆盖' }, not_applicable: { kind: 'inapplicable', label: '范围拒绝' } };
@@ -29,19 +31,14 @@ const units: Record<string, [number, string]> = { A: [.001, 'kA'], 'A/m': [1000,
 export function analysisValue(row: Record<string, unknown>, full = false) {
   const value = numeric(row.value); if (value === null) return '—';
   const custom = units[text(row.unit)], display = engineeringQuantity(text(row.id), value, text(row.unit));
-  if (custom) return (full ? String(value * custom[0]) : formatNumber(value * custom[0], 3)) + ' ' + custom[1];
+  if (custom) return (full ? String(value * custom[0]) : formatNumber(value * custom[0], row.unit === 'A' ? 1 : 3)) + ' ' + custom[1];
   return full ? display.complete : display.text + (display.unit === '—' ? '' : ' ' + display.unit);
 }
 function savedValue(value: unknown) { return value === undefined || value === null ? '未提供' : typeof value === 'object' ? JSON.stringify(value) : String(value); }
-function formulaValue(value: string) {
-  return value.split(/([A-Za-zθ]+_[A-Za-z0-9]+)/g).map((part, index) => {
-    const subscript = /^([A-Za-zθ]+)_([A-Za-z0-9]+)$/.exec(part);
-    return subscript ? <span key={index}>{subscript[1]}<sub>{subscript[2]}</sub></span> : part;
-  });
-}
 export function TypeAnalysis({ module, tab }: { module: 'electrical' | 'short-circuit'; tab: string }) {
   const state = useTypeWorkspace(), evidence = useTypeEvidence(), navigation = useTypeNavigation(), inspector = useTypeInspector();
   const [selected, setSelected] = useState(''), [running, setRunning] = useState(false);
+  const [curveOpen, setCurveOpen] = useState(false);
   const [trial, setTrial] = useState<Record<string,unknown> | null>(null), [trialError, setTrialError] = useState(''), [trying, setTrying] = useState(false);
   const trialRequest = useRef<AbortController | null>(null);
   useEffect(()=>()=>trialRequest.current?.abort(),[]);
@@ -95,12 +92,13 @@ export function TypeAnalysis({ module, tab }: { module: 'electrical' | 'short-ci
   function select(row: AnalysisRow) {
     setSelected(row.id); const target = optionalRecord(row.target), layer = text(target.role) ? (target.scope === 'core' ? text(target.core_id) : 'common') + '/' + text(target.role) : '';
     inspector.show(row.title, [
-      { label: '计算结果', items: [{ label: '完整显示精度', value: analysisValue(row, true), source: 'calculation', sourceDetail: methodLabel(saved!.run) }, { label: '原始 SI 数值', value: savedValue(row.value), unit: text(row.unit) }, { label: '性质', value: basis[text(row.basis)] || '未声明' }, { label: '状态', value: statuses[text(row.status)].label }, { label: '原因', value: text(row.reason) || '—' }] },
-      { label: '条款与依据', items: [{ label: '标准', value: text(row.standard) || '未提供' }, { label: '条款', value: text(row.clause) || '未提供' }, { label: '正文页码', value: numeric(row.printed_page) ?? '本库暂未收录 · 下一轮' }, { label: 'PDF 页码', value: numeric(row.pdf_page) ?? '本库暂未收录 · 下一轮' }, ...(text(row.formula) ? [{ label: '公式', value: formulaValue(text(row.formula)) }] : row.id.endsWith(':r20') ? [{ label: '数据依据', value: text(row.data_origin) || basis[text(row.basis)] || '待明确输入性质' }] : []), ...(text(optionalRecord(row.reference_table).table) ? [{ label: '标准限值参照', value: text(optionalRecord(row.reference_table).standard) + ' · ' + text(optionalRecord(row.reference_table).table) + ' · 正文 4–5 / PDF 7–8' }] : []), ...Object.entries(optionalRecord(row.formula_inputs)).map(([label, value]) => ({ label: displayName(label), value: savedValue(value), source: 'calculation' as const }))] },
-      { label: '来源与运行', items: [{ label: '输入来源', value: text(optionalRecord(row.input_source).reference) || '见保存的方法条件' }, { label: '原文摘要', value: <EvidenceDigest value={row.source_digest} /> }, { label: '输入摘要', value: <EvidenceDigest value={saved!.artifact.input_sha256} /> }, { label: '方法', value: methodLabel(saved!.run) }, { label: '运行', value: <EvidenceDigest value={saved!.run.id} /> }, ...(layer ? [{ label: '结构对象', value: <Button variant="ghost" size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, 'structure', 'table', navigation.location.theme) + '&layer=' + encodeURIComponent(layer))}>定位结构对象</Button> }] : [])] },
-    ]);
+      { label: '计算结果', items: [{ label: '数值', value: analysisValue(row), source: 'calculation', sourceDetail: methodLabel(saved!.run) }, { label: '性质', value: basis[text(row.basis)] || '未声明' }, { label: '状态', value: statuses[text(row.status)].label }, { label: '原因', value: text(row.reason) || '—' }] },
+      { label: '条款与依据', items: [{ label: '出处', value: resultCitation(row), stacked: true }, ...(text(row.formula) ? [{ label: '公式', value: <SavedFormula value={text(row.formula)} />, stacked: true }] : row.id.endsWith(':r20') ? [{ label: '数据依据', value: text(row.data_origin) || basis[text(row.basis)] || '待明确输入性质' }] : []), ...(text(optionalRecord(row.reference_table).table) ? [{ label: '标准限值参照', value: text(optionalRecord(row.reference_table).standard) + ' · ' + text(optionalRecord(row.reference_table).table) + ' · 正文 4–5 / PDF 7–8' }] : []), ...Object.entries(optionalRecord(row.formula_inputs)).map(([key, value]) => ({ ...formulaInput(key, value), source: 'calculation' as const }))] },
+      { label: '来源与运行', items: [{ label: '输入来源', value: text(optionalRecord(row.input_source).reference) || '见保存的方法条件' }, { label: '方法', value: methodLabel(saved!.run) }, ...(layer ? [{ label: '结构对象', value: <Button variant="ghost" size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, 'structure', 'table', navigation.location.theme) + '&layer=' + encodeURIComponent(layer))}>定位结构对象</Button> }] : [])] },
+    ], <ResultTrace items={[{label:'完整显示精度',value:analysisValue(row,true)},{label:'原始 SI 数值',value:savedValue(row.value)+' '+text(row.unit)},{label:'公式原始参数',value:JSON.stringify(row.formula_inputs || {})},{label:'原文摘要',value:<EvidenceDigest value={row.source_digest} />},{label:'输入摘要',value:<EvidenceDigest value={saved!.artifact.input_sha256} />},{label:'运行',value:<EvidenceDigest value={saved!.run.id} />}]} />);
   }
   const bodyState = running || evidence.isPending ? 'loading' : error || evidence.error ? 'error' : !saved ? 'empty' : current ? 'success' : 'historical';
+  const displayedRows:(AnalysisRow&{members:AnalysisRow[]})[]=module==='short-circuit'?identicalCoreRows(rows,state.document?.cable_types[0]?.cores.map(core=>core.id)||[]):rows.map(row=>({...row,members:[row]}));
   return <div className="type-page" data-type-page={module + '-results'} data-type-state={bodyState}>
     {tab==='parameters'&&!state.readOnly&&<div className="type-result-toolbar"><Button size="compact" variant="primary" loading={trying} disabled={!study||state.inputDirty||state.busy||!!contractError} onClick={()=>void preview()}>试算</Button><Button size="compact" loading={state.busy} disabled={!state.methodDrafts[module] || trying} onClick={()=>void state.save()}>保存方法条件</Button>{!study&&<span className="muted">填写参数并保存条件后试算</span>}{state.inputDirty&&<span className="muted">请先保存结构修改</span>}</div>}
     {tab !== 'parameters' && <CommandAction><TypeRunControl channel={module} label={'计算' + name} definition={definition} onBusy={setRunning} unavailable={!study ? '请先在方法参数页填写并保存条件' : undefined} /></CommandAction>}
@@ -109,8 +107,8 @@ export function TypeAnalysis({ module, tab }: { module: 'electrical' | 'short-ci
     </> : !saved ? <InlineEmpty title={study ? '尚无' + name + '结果；按当前方法条件运行。' : '尚无' + name + '结果；先填写方法参数。'} action={!study && !state.readOnly ? <Button onClick={() => navigation.navigate(typePath(state.workspace!.id, module, 'parameters', navigation.location.theme))}>在方法页填写参数</Button> : undefined} /> : <>
       {!current && <StaleBanner description="输入或方法已变化，以下为原运行保存的结果。" />}
       <div className="type-result-summary" title={methodLabel(saved.run) + '；统计来自保存的结果行'}><strong>{rows.filter(row => row.status === 'available').length} 项已计算</strong><span>{rows.filter(row => row.status === 'missing').length} 项待补数据</span><span>{rows.filter(row => row.status === 'uncovered' || row.status === 'not_applicable').length} 项未覆盖或拒绝</span></div>
-      <DataTable label={name} selectedId={selected} onSelect={select} rowLabel={row => row.title} showGroups={false} groups={[{ id: 'results', label: '结果', rows }]} columns={[{ id: 'title', label: '参数 / 组件', render: row => row.title }, { id: 'value', label: '数值', numeric: true, render: row => <span title={analysisValue(row, true)}>{analysisValue(row)}</span> }, { id: 'basis', label: '性质', render: row => basis[text(row.basis)] || '未声明' }, { id: 'status', label: '状态', render: row => <StatusMark {...statuses[text(row.status)]} /> }, {id:'reason',label:'缺项 / 未覆盖原因',wrap:true,render:row => row.status==='available' ? '—' : <span>{text(row.reason) || '保存工件未说明原因；请核对方法范围'}<Button variant="ghost" size="compact" onClick={() => {const target=optionalRecord(row.target),layer=text(target.role)?(target.scope==='core'?text(target.core_id):'common')+'/'+text(target.role):'';navigation.navigate(layer?typePath(state.workspace!.id,'structure','table',navigation.location.theme)+'&layer='+encodeURIComponent(layer):typePath(state.workspace!.id,module,'parameters',navigation.location.theme));}}>查看{ text(optionalRecord(row.target).role)?'结构字段':'方法参数'}</Button></span>}, { id: 'source', label: '依据', render: row => <SourceBadge kind="standard" detail={[text(row.standard), text(row.clause), numeric(row.printed_page) === null ? '本库暂未收录 · 下一轮' : '正文 ' + numeric(row.printed_page)].join(' · ')} /> }]} />
-      {module === 'short-circuit' && <ShortCircuitCurve artifact={saved.artifact} rows={rows} onSelect={select} />}
+      <DataTable label={name} selectedId={selected} onSelect={select} rowLabel={row => row.title} showGroups={false} groups={[{ id: 'results', label: '结果', rows:displayedRows }]} columns={[{ id: 'title', label: '参数 / 组件', render: row => <>{row.title}{row.members.length>1&&<details><summary>分芯明细</summary>{row.members.map(item=><p key={item.id}>{item.title} · {analysisValue(item)}</p>)}</details>}</> }, { id: 'value', label: '数值', numeric: true, render: row => analysisValue(row) }, { id: 'basis', label: '性质', render: row => basis[text(row.basis)] || '未声明' }, { id: 'status', label: '状态', render: row => <StatusMark {...statuses[text(row.status)]} /> }, {id:'reason',label:'缺项 / 未覆盖原因',wrap:true,render:row => row.status==='available' ? '—' : (()=>{const issue=issuePresentation(row,module,state.document!.cable_types[0].id);return <span><strong>{issue.label}</strong> · {issue.reason}<Button variant="ghost" size="compact" onClick={()=>navigation.navigate(typePath(state.workspace!.id,issue.module,issue.tab,navigation.location.theme)+(issue.layer?'&layer='+encodeURIComponent(issue.layer):'')+(issue.field?'&field='+encodeURIComponent(issue.field):''))}>{issue.action}</Button></span>;})()}, { id: 'source', label: '依据', render: row => <SourceBadge kind="standard" detail={[text(row.standard), text(row.clause), numeric(row.printed_page) === null ? '本库暂未收录 · 下一轮' : '正文 ' + numeric(row.printed_page)].join(' · ')} /> }]} />
+      {module === 'short-circuit' && <details className="type-curve-disclosure" open={curveOpen} onToggle={event=>setCurveOpen(event.currentTarget.open)}><summary>电流—持续时间曲线</summary>{curveOpen && <ShortCircuitCurve artifact={saved.artifact} rows={rows} onSelect={select} onConfigure={()=>navigation.navigate(typePath(state.workspace!.id,module,'parameters',navigation.location.theme)+'&field='+encodeURIComponent('/duration_s'))} />}</details>}
     </>}
     {tab==='parameters'&&trialError&&<p role="alert" className="type-notice is-error">{trialError}</p>}
     {tab==='parameters'&&trial&&<section aria-label="试算结果" className="type-trial-results"><p className="type-meta">试算 · 未保存 · 不作为发布依据</p><DataTable label="试算结果" showGroups={false} rowLabel={row=>text(row.title)} groups={[{id:'preview',label:'试算',rows:array(trial.rows).map((value,index)=>({...optionalRecord(value),id:String(index)} as Record<string,unknown>&{id:string}))}]} columns={[{id:'title',label:'参数',render:row=>text(row.title)},{id:'value',label:'数值',numeric:true,render:row=>analysisValue(row)},{id:'status',label:'状态',render:row=><StatusMark {...(statuses[text(row.status)]||statuses.missing)} />},{id:'reason',label:'缺项与范围',wrap:true,render:row=>text(row.reason)||'—'}]} /></section>}

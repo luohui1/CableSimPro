@@ -34,7 +34,7 @@ def run_facts(research, row):
         if previous is not None and previous[0] == key:
             research.run_read_cache.move_to_end(identity)
             return previous[1]
-    facts = {'integrity': 'corrupt', 'snapshot': {}, 'method': None, 'error': None, 'headlines': []}
+    facts = {'integrity': 'corrupt', 'snapshot': {}, 'method': None, 'error': None, 'headlines': [], 'headline': None, 'task': None, 'driver': None}
     try:
         snapshot = json.loads(row['snapshot'])
         output = json.loads(row['output']) if row['output'] else None
@@ -49,13 +49,21 @@ def run_facts(research, row):
             from .headlines import project
             state = snapshot['workspace_state']
             compact = {name: snapshot.get(name) for name in (
-                'workspace_id', 'workspace_revision', 'study_revision', 'module', 'definition', 'lock')}
+                'workspace_id', 'workspace_revision', 'study_revision', 'module', 'definition', 'lock', 'method_manifests')}
             compact['workspace_state'] = {name: reference(state[name]) for name in (
                 'study_cable_reference', 'type_origin_reference') if state.get(name)}
             compact['workspace_state_digest'] = fingerprint(state)
+            answers = project(snapshot, output, research.artifact_status({'snapshot': snapshot, 'output': output})) if snapshot.get('headline_contract') else []
+            selected_case = answers[0]['case_id'] if answers else None
+            # Only forward the producer's saved text for the same verified case.
+            # Older/missing witnesses stay empty rather than inventing a summary.
+            producer = next((case.get('evidence', {}).get('headline') for case in (output or {}).get('cases', [])
+                             if case['case_id'] == selected_case and case.get('status') == 'succeeded'), None)
             facts = {'integrity': 'verified', 'snapshot': compact,
                      'method': snapshot['definition']['method'],
-                     'headlines': project(snapshot, output, research.artifact_status({'snapshot': snapshot, 'output': output})) if snapshot.get('headline_contract') else [],
+                     'headlines': answers,
+                     'headline': producer if isinstance(producer, str) and 0 < len(producer) <= 500 else None,
+                     'task': snapshot['definition'].get('task'), 'driver': deepcopy(snapshot['definition'].get('driver')),
                      'error': {name: str(error.get(name, ''))[:512] for name in ('code', 'message')} if error else None}
     except (ValueError, TypeError, KeyError):
         pass
@@ -92,9 +100,10 @@ def run_state(research, snapshot, wid, revision, study, cache):
         current = False
     availability = {'status': 'available', 'error': None}
     try:
-        research.resolve(snapshot['definition']['method'], cache)
+        from .method_identity import current_for_read
+        current_for_read(research, snapshot['definition']['method'], snapshot, cache)
         for item in snapshot['definition']['crosschecks']:
-            research.resolve(item['method'], cache)
+            current_for_read(research, item['method'], snapshot, cache)
     except (HTTPException, PluginHostError, ValueError, OSError) as exc:
         current = False
         availability = {'status': 'unavailable', 'error': {
@@ -110,8 +119,10 @@ def summary(research, row, revision, study, cache):
     value = {name: row[name] for name in ('id', 'workspace', 'study', 'sequence', 'status', 'created', 'finished')}
     value.update(integrity=facts['integrity'], freshness='unknown', version_status=None,
                  snapshot={'module': facts['snapshot'].get('module')},
-                 method=deepcopy(facts['method']), error=deepcopy(facts['error']))
+                 method=deepcopy(facts['method']), error=deepcopy(facts['error']),
+                 task=facts['task'], driver=deepcopy(facts['driver']))
     value['headlines'] = deepcopy(facts['headlines']) if row['status'] in ('succeeded', 'partial') else []
+    value['headline'] = facts['headline'] if row['status'] in ('succeeded', 'partial') else None
     if facts['integrity'] == 'verified':
         state = run_state(research, facts['snapshot'], row['workspace'], revision, study, cache)
         value.update({name: state[name] for name in ('freshness', 'version_status')})

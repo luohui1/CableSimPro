@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.cable-geometry",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "name": "电缆实体建模",
   "icon": "assets/icon.svg",
   "description": "单芯及多芯电缆实体、显式扇形轮廓、间隙填充、内衬、双带与丝铠装；结构推导外径和理论用料；同源 OCCT 实体与 STEP。",
@@ -45,6 +45,7 @@
       "title": "电缆结构 CAD 实体",
       "method_version": "1.0.0",
       "analysis": "geometry",
+      "solver": "local",
       "input_schema": "cablesim.domain/1",
       "outputs": [
         {
@@ -226,6 +227,7 @@
       "title": "敷设截面三维场景",
       "method_version": "1.0.0",
       "analysis": "geometry",
+      "solver": "local",
       "input_schema": "cablesim.domain/1",
       "outputs": [
         {
@@ -418,6 +420,7 @@
       "title": "圆形线芯布局提案",
       "method_version": "1.0.0",
       "analysis": "geometry_proposal",
+      "solver": "local",
       "input_schema": "cablesim.core-layout-request/1",
       "outputs": [
         {
@@ -655,8 +658,8 @@
     },
     {
       "path": "src/cablesim_cable_geometry/main.py",
-      "sha256": "d9d3981ebf89d0851255b35f5ea5e61b062ce81d4d4f3c82a5396b82435c544a",
-      "size_bytes": 56507
+      "sha256": "9ec7d3560a1ae29cfc9b398a7ecdf2f0b730b6635b2f938e54f7b96408428f19",
+      "size_bytes": 56925
     },
     {
       "path": "src/cablesim_cable_geometry/proposal.py",

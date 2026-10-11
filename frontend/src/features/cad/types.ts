@@ -173,6 +173,8 @@ export interface CadViewportProps {
   className?: string;
   label?: string;
   onFallback?: () => void;
+  hasSavedInput?: boolean;
+  layerLabels?: 'all' | 'selected';
   /** null lets an enclosing toolbar own the result status without duplicating its badge. */
   resultStatus?: string | null;
   resultState?: CanvasState;

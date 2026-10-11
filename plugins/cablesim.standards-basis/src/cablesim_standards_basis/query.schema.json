@@ -4,44 +4,579 @@
   "title": "标准依据只读查询",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "standard", "edition", "locator"],
+  "required": [
+    "schema_version"
+  ],
   "properties": {
-    "schema_version": {"const": "cablesim.standards-query/1"},
-    "operation": {"enum": ["resolve", "list"], "default": "resolve"},
-    "standard": {"type": "string", "minLength": 1, "maxLength": 80},
-    "edition": {"type": "string", "minLength": 1, "maxLength": 80},
-    "locator": {"type": "string", "minLength": 1, "maxLength": 80},
-    "quantity": {"type": "string", "minLength": 1, "maxLength": 180},
-    "record_id": {"type": "string", "minLength": 1, "maxLength": 180},
-    "expected_data_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "schema_version": {
+      "const": "cablesim.standards-query/1"
+    },
+    "operation": {
+      "enum": [
+        "resolve",
+        "list",
+        "catalog"
+      ],
+      "default": "resolve"
+    },
+    "standard": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "edition": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "locator": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "quantity": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 180
+    },
+    "record_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 180
+    },
+    "expected_data_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
     "conditions": {
-      "type": "object", "additionalProperties": false,
+      "type": "object",
+      "additionalProperties": false,
       "properties": {
-        "area_m2": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.01, "description": "导体标称截面积 m²"},
-        "screen_area_m2": {"type": "number", "exclusiveMinimum": 0, "maximum": 0.01, "description": "金属屏蔽或同心导体标称截面积 m²；仅表 A.2"},
-        "diameter_m": {"type": "number", "exclusiveMinimum": 0, "maximum": 2, "description": "表或公式规定位置的假设直径 m，不能用实际外径替代"},
-        "u0_v": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000},
-        "u_v": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000},
-        "um_v": {"type": "number", "exclusiveMinimum": 0, "maximum": 1000000},
-        "core_count": {"type": "integer", "minimum": 1, "maximum": 100},
-        "conductor_class": {"type": "integer", "minimum": 1, "maximum": 100},
-        "nominal_thickness_m": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
-        "duration_s": {"type": "number", "exclusiveMinimum": 0},
-        "insulation": {"type": "string", "minLength": 1, "maxLength": 60},
-        "conductor_material": {"type": "string", "minLength": 1, "maxLength": 60},
-        "coating": {"type": "string", "minLength": 1, "maxLength": 60},
-        "conductor_form": {"type": "string", "minLength": 1, "maxLength": 60},
-        "screened": {"type": "string", "enum": ["yes", "no"]},
-        "armour_material": {"type": "string", "minLength": 1, "maxLength": 60},
-        "armour_kind": {"type": "string", "minLength": 1, "maxLength": 60},
-        "sheath_material": {"type": "string", "minLength": 1, "maxLength": 60},
-        "layer": {"type": "string", "minLength": 1, "maxLength": 60}
+        "area_m2": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 0.01
+        },
+        "u0_v": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000.0
+        },
+        "u_v": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000.0
+        },
+        "insulation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "screened": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "diameter_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100
+        },
+        "armour_material": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "screen_area_m2": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 0.01
+        },
+        "sheath_material": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "conductor_class": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "conductor_material": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "coating": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "conductor_form": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "core_count": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 200
+        },
+        "voltage_v": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000.0
+        },
+        "conductor_max_working_temperature_k": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 2000
+        },
+        "installation_medium": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "ambient_temperature_k": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 2000
+        },
+        "soil_thermal_resistivity_k_m_w": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "circuit_kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "spacing_m": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100
+        },
+        "cable_count": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 200
+        },
+        "spacing_diameter_ratio": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "tray_kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "horizontal_parallel_cable_count": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 200
+        },
+        "layer_count": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 200
+        },
+        "outdoor_unshaded": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "ground_condition": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "reference_point": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "facility_relation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "relation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "reference_temperature_k": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 2000
+        },
+        "material": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "material_role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "conductor_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "insulation_system": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "specific_construction": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "laying_mode": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "full_length": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "reference_position": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "cable_construction": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "reference_quantity": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "um_v": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000.0
+        },
+        "duration_s": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "sheath_compound": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "test_item": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "typical_model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "material_density_kg_m3": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "protection_partition": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "pipeline": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "direction": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "cable_kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "cable_armour": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "mechanical_risk": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "remaining_segment": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "route_length": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "crossing": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "protection_pipe": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "boundary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "installation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "pipe_selection": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "cable_arrangement": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "pipe_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "support_configuration": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "trench_depth_band": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "cable_class": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "formula_parameter": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "h_definition": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "support_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "cover": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "facility_type": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "quality_control_agreement": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "sampling_band": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "current_system": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "temperature_basis": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "polyethylene_density": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "filler": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "surface_material": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "surface_colour": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "laying_medium": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "solar_exposure": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "air_arrangement": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "wall_clearance_ratio": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "clear_gap_ratio": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "duct_construction": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "national_reference": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "elevation_basis": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "climate": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "burial_depth_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "soil_moisture": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "weather_pattern": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "country": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "reference_item": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
       }
     }
   },
-  "allOf": [{
-    "if": {"properties": {"operation": {"const": "list"}}, "required": ["operation"]},
-    "then": {"not": {"required": ["record_id"]}, "properties": {"conditions": {"maxProperties": 0}}},
-    "else": {"required": ["quantity"]}
-  }]
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "catalog"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "maxProperties": 2
+      },
+      "else": {
+        "required": [
+          "standard",
+          "edition",
+          "locator"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "list"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "record_id"
+          ]
+        },
+        "properties": {
+          "conditions": {
+            "maxProperties": 0
+          }
+        }
+      },
+      "else": {
+        "if": {
+          "not": {
+            "properties": {
+              "operation": {
+                "const": "catalog"
+              }
+            },
+            "required": [
+              "operation"
+            ]
+          }
+        },
+        "then": {
+          "required": [
+            "quantity"
+          ]
+        }
+      }
+    }
+  ]
 }

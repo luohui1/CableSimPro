@@ -5,7 +5,7 @@ import { methodCatalog, projectStudy, type StudyRow } from "@/api/research";
 import { deliveries } from "@/api/delivery";
 import { api, array, optionalRecord, responseData, text } from "@/api/client";
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
-import { significantNumber } from "@/lib/format";
+import { significantNumber, formatDateTime } from "@/lib/format";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { Icon } from "./icon";
 import { driverViews } from "./study-workbench-config";
@@ -102,7 +102,7 @@ export function ProjectExplorer({ workspaceId, projectName, document, activeStud
     </Section>
     {current && <Section icon="object/delivery" title="交付" count={books.data?.length}>
       {(books.data || []).map((book) => <Link key={book.id} className="explorer-item" {...at(current, "report", "preview", { delivery: book.id })}>
-        <Icon name="result/report" /><span><b>{book.kind === "specification" ? "规格书" : "计算书"} 第 {book.version} 版</b><small>{new Date(book.created).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })}</small></span>
+        <Icon name="result/report" /><span><b>{book.kind === "specification" ? "规格书" : "计算书"} 第 {book.version} 版</b><small>{formatDateTime(book.created)}</small></span>
       </Link>)}
       <Link className="explorer-item explorer-add" {...at(current, "report", "content")}><Icon name="result/report" /><span>计算书内容</span></Link>
     </Section>}

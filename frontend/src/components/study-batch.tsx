@@ -16,6 +16,7 @@ import { optionalRecord, numeric, text, message, ApiError } from "@/api/client";
 import type { components } from "@/api/generated/schema";
 import type { CatalogRow } from "@/api/catalogs";
 import { engineeringQuantity } from "@/lib/format";
+import { STATUS_WORDS } from '@/lib/status-vocabulary';
 import { domainInputChoices } from "@/lib/domain-input-choices";
 import type { DomainDocument } from "@/lib/domain-fields";
 import { downloadBlob } from "@/lib/download";
@@ -50,13 +51,9 @@ type BatchInput = {
 };
 const statusLabels: Record<string, string> = {
   preparing: "准备中",
-  queued: "排队",
-  running: "运行中",
   submitted: "已提交",
   completed: "已完成",
-  succeeded: "有效",
   pending: "待运行",
-  failed: "失败",
   nonconverged: "未收敛",
   interrupted: "已中断",
   disconnected: "连接中断",
@@ -64,6 +61,7 @@ const statusLabels: Record<string, string> = {
   timed_out: "超时",
   crashed: "进程退出",
   submission_unknown: "提交待核对",
+  ...STATUS_WORDS,
 };
 function inputFrom(meta: Record<string, unknown>): BatchInput {
   const configuration = optionalRecord(meta.configuration),
@@ -203,7 +201,7 @@ export function StudyBatch({
       throw Error("本机计算未覆盖，请明确选择超算 Slurm。");
     if (!editor.axes.length)
       throw Error("请添加至少一个来自基准输入的采样参数。");
-    if (!editor.source.trim()) throw Error("请填写参数空间的出处。");
+    if (!editor.source.trim()) throw new ApiError(422, "请填写参数空间的出处。", {field:'batch-space-source'});
     const axes = editor.axes.map((value, index) => {
       if (value.axis.choices?.length) return value.axis;
       const presentation = engineeringQuantity(
@@ -771,7 +769,7 @@ export function StudyBatch({
                 />
               ))}
             </div>
-            <label className="text-field">
+            <label className="text-field" data-field-path="batch-space-source">
               参数空间出处
               <input
                 readOnly={readOnly}

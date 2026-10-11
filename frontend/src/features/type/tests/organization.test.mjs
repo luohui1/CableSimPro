@@ -4,6 +4,8 @@ import path from 'node:path';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createServer } from 'vite';
+import {renderToStaticMarkup} from 'react-dom/server';
+import {createElement} from 'react';
 
 const frontend = fileURLToPath(new URL('../../../../', import.meta.url));
 const server = await createServer({ configFile: false, root: frontend, server: { middlewareMode: true }, optimizeDeps: { noDiscovery: true, include: [] }, resolve: { alias: { '@': path.join(frontend, 'src') } } });
@@ -20,6 +22,51 @@ const tokens = readFileSync(path.join(frontend,'../design/tokens.css'),'utf8');
 const palette = [...tokens.matchAll(/--temperature-[1-6]:\s*(#[0-9a-fA-F]{6})/g)].slice(0,6).map(m=>[1,3,5].map(i=>parseInt(m[1].slice(i,i+2),16)/255));
 const { sectionComposition } = await server.ssrLoadModule('/src/features/drawing/section-composition.ts');
 const { leaderLayout, segmentsIntersect, layerMillimetres } = await server.ssrLoadModule('/src/features/drawing/layer-leaders.ts');
+const {identicalCoreRows,issuePresentation,reviewGroups}=await server.ssrLoadModule('/src/features/type/result-presentation.ts');
+const {analysisValue}=await server.ssrLoadModule('/src/features/type/analysis.tsx');
+const {resultCitation,formulaInput}=await server.ssrLoadModule('/src/features/type/result-detail.tsx');
+const {ratingConditionNumber}=await server.ssrLoadModule('/src/features/type/rating-table.tsx');
+const {SavedFormula}=await server.ssrLoadModule('/src/features/type/saved-formula.tsx');
+const {dimensionBasis}=await server.ssrLoadModule('/src/features/type/dimension-basis.ts');
+test('Saved short-circuit expression has semantic subscripts; unknown expressions remain verbatim',()=>{
+  const html=renderToStaticMarkup(createElement(SavedFormula,{value:'I_AD=K S √{ln[(θ_f+β)/(θ_i+β)]/t}'}));
+  assert.match(html,/<sub>AD<\/sub>/);assert.match(html,/<sub>f<\/sub>/);assert.match(html,/<sub>i<\/sub>/);
+  assert.match(html,/K·S·√/);
+  assert.equal(dimensionBasis(JSON.stringify({schema:'cablesim.standard-basis-ref/1',record:{citation:'GB/T 12706.2—2020 表 7，第 7 页',value:4.5,quantity:{name:'绝缘标称厚度',unit:'mm'},id:'internal-record'}})), 'GB/T 12706.2—2020 表 7，第 7 页\n绝缘标称厚度：4.5 mm');
+  assert.match(renderToStaticMarkup(createElement(SavedFormula,{value:'X = custom(S)'})),/X = custom\(S\)/);
+});
+test('Rating conditions keep metre precision consistent with the table and counts integral',()=>{
+  assert.equal(ratingConditionNumber('depth_m',.800000000000001,'m'),'0.80');
+  assert.equal(ratingConditionNumber('circuit_count',3),'3');
+  assert.equal(ratingConditionNumber('ambient_temperature_c',20.00000000000003,'°C'),'20.0');
+});
+test('Saved current uses engineering precision while trace preserves the exact saved value',()=>{
+  const row={value:42925.05199845332,unit:'A'};
+  assert.equal(analysisValue(row),'42.9 kA');assert.equal(analysisValue(row,true),'42.92505199845332 kA');
+  assert.equal(formulaInput('I_AD_A',row.value).value,'42 925.1');
+  assert.equal(formulaInput('t_s',1.000000000000003).value,'1');
+  assert.equal(formulaInput('beta_K',234.5).unit,'K');
+  assert.equal(formulaInput('S_mm2',800).unit,'mm²');
+});
+test('Saved source joins clause and both page systems without changing evidence or formula',()=>{
+  assert.equal(resultCitation({standard:'IEC 60949:1988',clause:'第 3 章；表 I',printed_page:9,pdf_page:3}),'IEC 60949:1988 第 3 章 表 I · 第 9 页（PDF 第 3 页）');
+  assert.match(resultCitation({standard:'IEC 60949:1988',clause:'第 3 章'}),/本库暂未收录/);
+});
+test('Three identical core results collapse; different values, missing cores and different conditions remain separate',()=>{
+  const rows=['a','b','c'].map((id,i)=>({id:id+':conductor-adiabatic',title:`芯 ${i+1} · 导体允许短路电流`,target:{scope:'core',core_id:id,role:'conductor'},status:'available',value:42900,unit:'A',formula_inputs:{t_s:1}}));
+  const grouped=identicalCoreRows(rows,['a','b','c']);assert.equal(grouped.length,1);assert.match(grouped[0].title,/3 芯相同/);assert.deepEqual(grouped[0].members,rows);
+  for(const next of [rows.slice(0,2),rows.map((r,i)=>i===2?{...r,value:43000}:r),rows.map((r,i)=>i===2?{...r,formula_inputs:{t_s:2}}:r)]) assert.equal(identicalCoreRows(next,['a','b','c']).length,next.length);
+});
+test('Missing-field actions locate frequency; uncovered clauses remain distinct from historical reruns',()=>{
+  const missing=issuePresentation({status:'missing',formula_inputs:{f_hz:null,U_phase_V:null}},'electrical','cable');
+  assert.equal(missing.field,'/frequency_hz');assert.equal(missing.tab,'parameters');assert.match(missing.reason,/频率、运行相电压/);
+  const metal=issuePresentation({status:'missing',missing_parameters:['metal_initial_temperature_k','duration_s']},'short-circuit','cable');
+  assert.equal(metal.field,'/metal_initial_temperature_k');assert.match(metal.reason,/金属组件初温、短路时间/);
+  const coverage=issuePresentation({verdict:'uncovered',standard:'GB/T 11017.2—2024',clause:'表 2',reason:'未覆盖此结构'},'standard-check','cable');
+  assert.equal(coverage.kind,'coverage');assert.match(coverage.reason,/GB\/T 11017.2—2024 · 表 2/);
+  const groups=reviewGroups([{id:'old',channel:'electrical',message:'输入已过期'},{id:'gap',channel:'standards',result:{verdict:'uncovered'}},{id:'field',channel:'electrical',result:{status:'missing'}}]);
+  assert.deepEqual(groups.map(g=>g.title),['历史过期','标准未覆盖','输入与计算缺项']);
+});
 test('Layer labels preserve 1.35 mm and show a 34.0 mm diameter without padded thickness precision',()=>{
   assert.equal(layerMillimetres(.00135),'1.35');assert.equal(layerMillimetres(.0162),'16.2');assert.equal(layerMillimetres(.034,true),'34.0');
 });

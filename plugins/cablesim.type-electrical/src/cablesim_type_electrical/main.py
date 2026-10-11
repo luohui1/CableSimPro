@@ -13,8 +13,8 @@ from cablesim_iec60287.electrical import skin, effect_x, proximity
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cablesim_type_electrical.inputs import ElectricalParameters, ShortCircuitParameters
 
-VERSION = '1.0.0'
-METHOD_VERSIONS = {'electrical':VERSION, 'short-circuit':'1.0.0'}
+VERSION = '1.0.1'
+METHOD_VERSIONS = {'electrical':VERSION, 'short-circuit':VERSION}
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 CONSTANTS = {'copper_bare': (226, 234.5, 3.45e6), 'copper_coated': (226, 234.5, 3.45e6),
              'aluminium': (148, 228, 2.5e6), 'lead': (41, 230, 1.45e6)}
@@ -110,6 +110,16 @@ def calculate(document, parameters, capability, *, _include_curve=True):
     circuit = circuits[0] if len(circuits) == 1 else None
     topology = {'circuit_id': circuit['id'], 'electrical_topology': circuit.get('electrical_topology'), 'bonding': circuit.get('bonding')} if circuit else None
     rows = []
+    dependencies = {
+        'dc': ['temperature_k', 'r20_length_basis'],
+        'ys': ['temperature_k', 'r20_length_basis', 'frequency_hz', 'ks'],
+        'yp': ['temperature_k', 'r20_length_basis', 'frequency_hz', 'kp', 'spacing_m'],
+        'ac': ['temperature_k', 'r20_length_basis', 'frequency_hz', 'ks', 'kp', 'spacing_m'],
+        'charging': ['frequency_hz', 'phase_voltage_v'], 'dielectric': ['frequency_hz', 'phase_voltage_v'],
+        'geometric-inductance': ['spacing_m', 'arrangement'], 'geometric-reactance': ['spacing_m', 'frequency_hz', 'arrangement'],
+        'conductor-adiabatic': ['duration_s', 'initial_temperature_k', 'final_temperature_k'],
+        'conductor-factor': ['duration_s'], 'conductor-nonadiabatic': ['duration_s', 'initial_temperature_k', 'final_temperature_k'],
+    }
     def add(key, title, value, unit, clause, page, *, source='iec60287', formula=None, inputs=None, reason=None, status=None, core=None, role='conductor', basis='derived', input_source=None):
         if value is not None and not isfinite(value):
             raise ValueError(key + '：计算未取得有限值。')
@@ -120,6 +130,19 @@ def calculate(document, parameters, capability, *, _include_curve=True):
                'source_digest': record['sha256'], 'source_url': record.get('url'), 'formula': formula, 'formula_inputs': inputs or {},
                'reason': reason, 'basis': basis, 'input_source': input_source,
                'target': {'scope': 'core' if core else 'common', 'core_id': core, 'role': role}}
+        needed = list(dependencies.get(key, []))
+        if capability == 'electrical' and len(cable['cores']) == 3 and key in ('dc', 'ys', 'yp', 'ac', 'capacitance', 'charging', 'dielectric'):
+            needed.append('core_lay_factor')
+        if role in ('metallic_screen', 'metallic_sheath') and capability == 'short-circuit':
+            needed = ['duration_s', 'metal_initial_temperature_k', 'metal_final_temperature_k']
+            if key.endswith(('-factor', '-nonadiabatic')):
+                needed += ['inner_thermal_resistivity', 'inner_volumetric_heat_capacity']
+                metal_layers = next((item['layers'] for item in cable['cores'] if item['id'] == core), cable['common_layers'])
+                form = next((item.get('form') for item in metal_layers if item['role'] == role), None)
+                if form != 'wires':
+                    needed += ['outer_thermal_resistivity', 'outer_volumetric_heat_capacity', 'contact_factor']
+        row['missing_parameters'] = [name for name in needed if parameters.get(name) is None or
+            name not in ('r20_length_basis', 'arrangement') and not parameters.get('sources', {}).get(name)] if row['status'] == 'missing' else []
         rows.append(row)
         return row
     def parameter(key):
@@ -268,6 +291,13 @@ def calculate(document, parameters, capability, *, _include_curve=True):
             'rows': rows, 'counts': counts, 'sources': list(SOURCES.values()), 'scope': '数值按保存的输入与已核验分支计算；不批准型号、不替代出厂试验或接地拓扑。'}
     if capability == 'short-circuit' and _include_curve:
         result['curve'] = short_circuit_curve(document, parameters, rows)
+    primary = [r for r in rows if r['status'] == 'available' and r['id'].endswith(':r20' if capability == 'electrical' else ':conductor-adiabatic')]
+    if primary:
+        value = min(r['value'] for r in primary) if capability == 'short-circuit' else max(r['value'] for r in primary)
+        result['headline'] = (f'20 °C 直流电阻 {value*1000:.4f} Ω/km' if capability == 'electrical'
+                              else f'导体允许短路电流 {value/1000:.1f} kA（{parameters["duration_s"]:g} s，绝热）')
+    else:
+        result['headline'] = '电气参数待补数据' if capability == 'electrical' else '短路容量待补工况与来源'
     return result
 
 
@@ -321,9 +351,16 @@ def main():
             artifact = calculate(case['input'], case.get('parameters', {}), request['capability'])
             result = {'case_id': case['case_id'], 'status': 'succeeded'}
             if request['phase'] == 'run':
+                result['evidence'] = {'headline': artifact['headline']}
                 name = case['case_id'] + '.json'
                 Path('output', name).write_text(json.dumps(artifact, ensure_ascii=False, allow_nan=False), 'utf-8')
                 result.update(results=[{'key': 'x-cablesim.type-analysis.available-count', 'type': 'quantity', 'entity': artifact['cable_type_id'], 'status': 'available', 'value': artifact['counts'].get('available', 0), 'unit': '1'}], artifacts=[{'type': 'x-cablesim.type-' + request['capability'], 'path': 'output/' + name}])
+                suffix = ':r20' if request['capability'] == 'electrical' else ':conductor-adiabatic'
+                for row in artifact['rows']:
+                    if row['status'] == 'available' and row['id'].endswith(suffix):
+                        result['results'].append({'key':'x-cablesim.r20' if request['capability']=='electrical' else 'x-cablesim.adiabatic-current',
+                            'type':'quantity','entity':row['target']['core_id'],'status':'available','value':row['value'],
+                            'unit':row['unit'],'case':'20 °C' if request['capability']=='electrical' else f'{case["parameters"]["duration_s"]:g} s · 绝热'})
             cases.append(result)
         except (ValueError, KeyError, TypeError) as error:
             cases.append({'case_id': case['case_id'], 'status': 'not_applicable', 'error': {'code': 'TYPE_INPUT_INVALID', 'message': str(error)}})

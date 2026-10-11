@@ -14,9 +14,23 @@ const out=path.join(repositoryRoot,'.data/fix-round/research/readability',phase)
 await fs.mkdir(out,{recursive:true});
 const projects=await request(base,'/api/workspaces'),studies=[];
 for(const project of projects)studies.push(...await request(base,`/api/workspaces/${project.id}/studies`));
-const rating=studies.find(s=>s.definition.driver.kind==='single' && s.definition.method.plugin_id==='cablesim.iec60287' && s.latest_run);
+let rating=studies.find(s=>s.definition.driver.kind==='single' && s.definition.method.plugin_id==='cablesim.iec60287' && s.latest_run);
 const selection=studies.find(s=>s.definition.driver.kind==='selection' && s.latest_run);
 assert(rating && selection);
+if(previewOnly && process.env.READABILITY_FROM_SELECTION==='1'){
+ // Reuse an actual accepted, completed cable input; do not fill the release
+ // demonstration's unfinished crossing source or change its saved history.
+ const saved=await request(base,`/api/workspaces/${selection.workspace}/studies/${selection.id}/runs/${selection.latest_run.id}?view=full`);
+ const input=saved.snapshot.cases[0],methods=await request(base,'/api/methods');
+ const method={...methods.find(row=>row.method.plugin_id==='cablesim.iec60287').method,capability:'steady-rating'};
+ const created=await request(base,'/api/workspaces','POST',{});
+ const converted=await request(base,`/api/workspaces/${created.id}/domain/conversion`,'POST',{expected_revision:created.revision});
+ const workspace=await request(base,`/api/workspaces/${created.id}/domain`,'PUT',{expected_revision:converted.revision,document:input.input});
+ rating=await request(base,`/api/workspaces/${created.id}/studies`,'POST',{title:'已保存真实问询输入 · 编辑命令栏验收',task:'rating',method,
+  input_source:'domain',parameters:input.parameters,driver:{kind:'single'},expected_revision:workspace.revision});
+ await request(base,`/api/workspaces/${created.id}/studies/${rating.id}/runs`,'POST',{request_id:crypto.randomUUID(),expected_revision:workspace.revision,expected_study_revision:rating.revision,scope_acknowledged:true,lock_digest:rating.lock.digest});
+ rating=await request(base,`/api/workspaces/${created.id}/studies/${rating.id}`);
+}
 const canvasTestView=process.env.READABILITY_VIEW || 'field';
 const session=await openHeadlessBrowser(),{page}=session,report={phase,checks:[],screens:[],errors:[],consoleErrors:[],matrix:[],canvasTestView};
 page.on('pageerror',e=>report.errors.push(e.message));
@@ -38,7 +52,7 @@ async function layout(state){
    const nodes=document.querySelectorAll('.study-workbench *, .study-inspector *, .provider-state *, .route-skeleton *, [role="dialog"] *');
    for(const node of nodes){
     const box=node.getBoundingClientRect(),style=getComputedStyle(node);
-    if(!box.width||!box.height||style.visibility==='hidden'||node.closest('[disabled],[aria-hidden="true"],svg')||!Array.from(node.childNodes).some(n=>n.nodeType===3&&n.textContent.trim()))continue;
+    if(!node.checkVisibility({checkVisibilityCSS:true,contentVisibilityAuto:true})||!box.width||!box.height||style.visibility==='hidden'||node.closest('[disabled],[aria-hidden="true"],svg')||!Array.from(node.childNodes).some(n=>n.nodeType===3&&n.textContent.trim()))continue;
     const size=parseFloat(style.fontSize);minimum=Math.min(minimum,size);
     let parent=node,bg=[];while(parent){bg=color(getComputedStyle(parent).backgroundColor);if(bg.length===3||bg[3]>=1)break;parent=parent.parentElement;}
     if(bg.length<3)continue;
@@ -47,6 +61,12 @@ async function layout(state){
    }
    const metrics=[...document.querySelectorAll('.conclusion-metrics > div')].map(n=>n.getBoundingClientRect());
    const overlap=metrics.some((a,i)=>metrics.slice(i+1).some(b=>a.left<b.right&&a.right>b.left&&a.top<b.bottom&&a.bottom>b.top));
+   const bar=document.querySelector('.adaptive-command-bar');
+   if(bar){
+    if(bar.scrollWidth>bar.clientWidth+1)issues.push({text:'命令栏横向滚动'});
+    const save=bar.querySelector('[data-command-role=save]');
+    if(save){const a=save.getBoundingClientRect(),b=bar.getBoundingClientRect();if(a.width===0||a.left<b.left||a.right>b.right)issues.push({text:'保存必须可见'});}
+   }
    return {overflow:document.documentElement.scrollWidth>innerWidth,overlap,minimum,contrast,issues,roots:document.querySelectorAll('.study-workbench,.provider-state,.route-skeleton').length};
   });
   report.matrix.push({state,theme,viewport,...measured});assert(measured.roots>0,'页面不能落入路由异常边界');assert.equal(measured.overflow,false);assert.equal(measured.overlap,false);assert.deepEqual(measured.issues,[],JSON.stringify(measured.issues));
@@ -62,6 +82,24 @@ async function verifyReleaseNotice(){
   const value=studyPresentation(sample,run);return {reason:value.reason,details:value.releaseDetails};
  });
  assert.equal(notice.reason,'方法发行内容已更新（版本号未变），结果需重算');assert(notice.details.includes('old-release')&&notice.details.includes('current-release'));report.checks.push('同版本发行更新用人话说明，摘要留在详情');
+ const acknowledgements=await page.evaluate(async()=>{
+  const reactModule=await import('/node_modules/.vite/deps/react.js'),clientModule=await import('/node_modules/.vite/deps/react-dom_client.js');
+  const React=reactModule.default??reactModule,createRoot=clientModule.createRoot??clientModule.default?.createRoot;
+  const {useMethodPresentationNotice,studyPresentation}=await import('/src/components/study-status.tsx');
+  const notice={code:'METHOD_PRESENTATION_UPDATED',id:'unit-fixture',to_digest:'description-fixture',from_digest:'saved-fixture',rule:'sealed-computation-and-contract/1'};
+  const sample={raw:{version_status:{status:'current',reasons:[],notices:[notice]}},definition:{input_source:'domain'}};
+  const run={status:'succeeded',freshness:'current',version_status:sample.raw.version_status};
+  const calls=[],notify=value=>calls.push(value),target=document.createElement('div');document.body.append(target);
+  const key='method-description:unit-fixture:description-fixture';localStorage.removeItem(key);
+  const root=createRoot(target);
+  function Probe(){useMethodPresentationNotice(sample,run,notify);return null;}
+  try{
+   root.render(React.createElement(Probe));await new Promise(resolve=>setTimeout(resolve,100));
+   root.render(React.createElement(Probe));await new Promise(resolve=>setTimeout(resolve,100));
+   return {calls,state:studyPresentation(sample,run).code};
+  }finally{root.unmount();target.remove();localStorage.removeItem(key);}
+ });
+ assert.equal(acknowledgements.calls.length,1);assert.equal(acknowledgements.state,'current');report.checks.push('说明更新保持当前且跨刷新只提示一次；此项为展示单元夹具');
  const projection=await page.evaluate(async()=>{
   const {previewDifference}=await import('/src/components/study-preview.tsx');
   const {engineeringContractFields}=await import('/src/components/study-method-form.tsx');
@@ -114,8 +152,44 @@ try {
  for(const config of [definition,...Object.values(definition.modules || {})])if(config.method?.plugin_id===installed.method.plugin_id)config.method={...installed.method,capability:config.method.capability};
  await request(base,`/api/workspaces/${rating.workspace}/studies/${rating.id}`,'PUT',{...definition,expected_revision:workspace.revision,expected_study_revision:latestStudy.revision});
  await go(rating,'ampacity','results');
- const current=page.locator('.inspector-conditions').getByRole('textbox',{name:/电流/}).first();await current.fill(String(Number(await current.inputValue())+50));await current.press('Tab');
- const response=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/preview'));await page.getByRole('button',{name:'试算',exact:true}).click();const reply=await response,result=await reply.json();report.preview={httpStatus:reply.status(),status:result.status,error:result.detail};assert(reply.ok(),JSON.stringify(result));assert.equal(result.status,'succeeded');await expect(page.getByRole('status',{name:'试算结果'})).toBeVisible();await shot('preview-1366');
+ if(process.env.READABILITY_BASIS==='1'){
+  await expect(page.getByRole('button',{name:'温度场 · 无数据',exact:true})).toBeDisabled();
+  await expect(page.locator('[data-drawing-mount="laying-section"]')).toBeVisible();
+  const active=page.locator('.study-view-switch button[aria-pressed=true]');
+  await expect(active.locator('.study-view-label')).toBeVisible();
+  await shot('fallback-1366');
+  await layout('saved-no-field');
+  const basis=page.locator('.study-detail-group').filter({has:page.locator('summary', {hasText:'材料常数与标准出处'})});
+  await basis.locator(':scope > summary').click();
+  await expect(page.getByRole('table',{name:'材料常数与标准出处'})).toContainText('依据已核验');
+  await expect(page.getByRole('table',{name:'材料常数与标准出处'})).toContainText('第 33 页');
+  await expect(page.getByRole('table',{name:'材料常数与标准出处'})).toContainText('本库暂未收录');
+  const materialTable=page.getByRole('table',{name:'材料常数与标准出处'});
+  await expect(materialTable).toContainText('1.7241 × 10⁻⁸');
+  assert(await materialTable.locator('th[scope=rowgroup]').count()>0,'object names belong to group headings');
+  assert(await materialTable.locator('th[scope=row]').evaluateAll(cells=>cells.every(cell=>!cell.textContent.includes('YJV22'))),'constant rows must not repeat the model name');
+  await expect(materialTable).not.toContainText('1.7241e-8');
+  await page.getByRole('table',{name:'材料常数与标准出处'}).locator('thead').evaluate(node=>node.scrollIntoView({block:'start',inline:'nearest'}));
+  const basisOverflow=await page.getByRole('table',{name:'材料常数与标准出处'}).evaluate(table=>
+    [...table.querySelectorAll('th,td')].filter(cell=>cell.scrollWidth>cell.clientWidth+1).map(cell=>cell.textContent));
+  if(basisOverflow.length)throw new Error('材料常数与标准出处被截断：'+basisOverflow.join('；'));
+  await shot('basis-1366');await layout('saved-basis');
+  await page.setViewportSize({width:1920,height:1080});await shot('basis-1920');
+  await go(rating,'ampacity','detail');
+  const heatBasis=page.locator('.study-detail-group').filter({has:page.locator('summary',{hasText:'材料常数与标准出处'})});
+  if(await heatBasis.getAttribute('open')===null)await heatBasis.locator(':scope > summary').click();
+  await expect(page.getByRole('table',{name:'材料常数与标准出处'})).toContainText('依据已核验');
+  await page.getByRole('toolbar',{name:'工程命令'}).getByRole('button',{name:'生成计算书',exact:true}).click();
+  await expect(page.getByRole('button',{name:'下载 PDF',exact:true})).toBeEnabled({timeout:90000});
+  const download=page.waitForEvent('download');await page.getByRole('button',{name:'下载 PDF',exact:true}).click();
+  await (await download).saveAs(path.join(out,'customer.pdf'));
+  report.checks.push('缺场运行回退敷设截面；视图标记无数据；结果/热路读取保存的常数核对与页码');
+  report.outcome='passed';
+  await fs.writeFile(path.join(out,'evidence.json'),JSON.stringify(report,null,2));
+  // The finally block owns browser cleanup even for this bounded r15 branch.
+ } else {
+ const current=page.locator('.inspector-conditions').getByRole('textbox',{name:/电流/}).first();const originalLoad=await current.inputValue();await current.fill(String(Number(originalLoad)+50));await current.press('Tab');
+ const response=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/preview'));await page.getByRole('button',{name:'试算',exact:true}).click();const reply=await response,result=await reply.json();report.preview={httpStatus:reply.status(),status:result.status,error:result.detail,failures:result.cases?.filter(row=>row.status!=='succeeded')};assert(reply.ok(),JSON.stringify(result));assert.equal(result.status,'succeeded');await expect(page.getByRole('status',{name:'试算结果'})).toBeVisible();await shot('preview-1366');
  const trialLayout=await page.locator('.preview-strip').evaluate(node=>({scroll:node.scrollWidth>node.clientWidth,wrap:getComputedStyle(node).flexWrap,overflow:getComputedStyle(node).overflowX}));
  assert.equal(trialLayout.scroll,false);assert.equal(trialLayout.wrap,'wrap');report.checks.push('真实试算对比换行，无内部横向滚动条');
  const loadWidth=await current.evaluate(node=>node.getBoundingClientRect().width);
@@ -124,6 +198,9 @@ try {
   if(process.env.E2E_DEV==='1')await verifyReleaseNotice();
   assert(await page.locator('.workbench-canvas').evaluate(node=>node.getBoundingClientRect().height)>=220);
   await layout('success-preview');
+  await page.locator('.adaptive-command-bar [data-command-role=save]:visible').focus();await page.keyboard.press('Control+z');
+  await expect(current).toHaveValue(originalLoad);await expect(page.getByRole('status',{name:'试算结果'})).toHaveCount(0);
+  report.checks.push('改动后的命令栏保留 Ctrl+Z 草稿撤销');
   const optional=page.getByRole('region',{name:'附加热源',exact:true});
   await expect(optional).toContainText('未设置');
   assert(await optional.evaluate(node=>node.getBoundingClientRect().height)<=40,'未设置热源只占一行');
@@ -138,6 +215,14 @@ try {
  if(phase==='after'){assert(await page.locator('.workbench-canvas').evaluate(node=>node.getBoundingClientRect().height)>=220);report.checks.push('真实试算时画布高度至少 220 px');}
  if(phase==='after')await layout('success-preview');
  await page.setViewportSize({width:1920,height:1080});await shot('preview-1920');
+ if(previewOnly){
+  await current.fill(String(Number(originalLoad)+10));await current.press('Tab');
+  await expect(page.locator('.adaptive-command-bar [data-command-role=save]:visible')).toBeEnabled();
+  const saved=page.waitForResponse(response=>response.request().method()==='PUT'&&new URL(response.url()).pathname.endsWith('/domain'));
+  await page.keyboard.press('Control+s');assert((await saved).ok());
+  await expect(page.locator('.adaptive-command-bar [data-command-role=save]:visible')).toHaveText('已保存');
+  report.checks.push('改动后的命令栏保留 Ctrl+S 真实保存');
+ }
  if(phase==='after' && !previewOnly){
   const workspace=await request(base,`/api/workspaces/${rating.workspace}`);
   const empty=await request(base,`/api/workspaces/${rating.workspace}/studies`,'POST',{...definition,title:'可读性空状态验收',expected_revision:workspace.revision});
@@ -148,6 +233,7 @@ try {
   await expect(page.getByRole('toolbar',{name:'工程命令'})).toBeVisible();
   const fail=route=>route.abort('failed');await page.route('**/api/workspaces/**',fail);await page.goto(url(empty,'ampacity','results'));await expect(page.locator('.provider-state')).toBeVisible();await layout('error');await page.unroute('**/api/workspaces/**',fail);
   report.checks.push('五态 × 深浅主题 × 两种尺寸：字号、对比度、横向越界与结论数值重叠自动断言');
+ }
  }
  }
  assert.equal(report.errors.length,0);report.outcome='passed';

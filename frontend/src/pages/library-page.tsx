@@ -16,6 +16,9 @@ import { Dialog } from "@/components/ui/dialog";
 import { ErrorState, InlineEmpty, LoadingState } from "@/components/states";
 import { displayUnit } from "@/lib/display-names";
 import { propertyLabel, referenceCitation, referenceData, referenceNumber, rightsLabel } from "@/lib/reference-data";
+import { StandardsBrowser } from '@/features/standards/browser';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { assetCoverage } from '@/lib/asset-coverage';
 
 type AssetKind = components["schemas"]["AssetRelease"]["kind"];
 const kinds: Record<string, string> = {
@@ -126,6 +129,8 @@ export function AssetsPage() {
     [raw, setRaw] = useState(""),
     [fileError, setFileError] = useState(""),
     [fileName, setFileName] = useState("");
+  const [standardsTab, setStandardsTab] = useState('basis');
+  const browsingBasis = groupId === 'standards' && standardsTab === 'basis';
   const filePicker = useRef<HTMLInputElement>(null);
   // 接口一次只按一个类别筛选：本组每个类别各取一页再合并，避免在前端截断分页
   const shown = kind === "all" ? group.kinds : [kind as AssetKind];
@@ -147,6 +152,9 @@ export function AssetsPage() {
     queryFn: ({ signal }) => assetDetail(selected, signal),
     enabled: !!selected,
   });
+  const materialRows = groupId === 'materials' ? rows.filter(row => row.kind === 'material') : [];
+  const coverageQueries = useQueries({ queries: materialRows.map(row => ({ queryKey: ['asset-detail', row.id], queryFn: ({ signal }: { signal: AbortSignal }) => assetDetail(row.id, signal), retry: false })) });
+  const coverage = new Map(materialRows.map((row, index) => [row.id, coverageQueries[index]]));
   const importing = useMutation({
     retry: false,
     mutationFn: async () => {
@@ -183,10 +191,11 @@ export function AssetsPage() {
   return (
     <CatalogShell
       title={group.title}
-      status={<span className="muted">{rows.length} 项 · 研究按版本引用</span>}
-      actions={<Button variant="primary" size="compact" onClick={openImport}>导入资源草稿</Button>}
+      status={<span className="muted">{browsingBasis ? '只读依据 · 按版本引用' : `${rows.length} 项 · 研究按版本引用`}</span>}
+      actions={browsingBasis ? undefined : <Button variant="primary" size="compact" onClick={openImport}>导入资源草稿</Button>}
+      tabs={groupId === 'standards' ? <Tabs value={standardsTab} onValueChange={setStandardsTab}><TabsList aria-label="标准与规则视图"><TabsTrigger value="basis">依据浏览</TabsTrigger><TabsTrigger value="resources">资源版本</TabsTrigger></TabsList></Tabs> : undefined}
       property={
-        showing ? (
+        showing && !browsingBasis ? (
           <PropertyPanel
             collapsed={false}
             title={text(detail.data?.name) || "所选资源"}
@@ -201,7 +210,9 @@ export function AssetsPage() {
         ) : undefined
       }
     >
-      {!filtered && !pending && !failure && !rows.length ? (
+      {groupId === 'templates' && <details className="resource-scope"><summary>模板作用域 · 适用对象与修改影响</summary><p>本页管理组织资源版本。敷设模板用于工程或型号的布置草稿；保存到共用工程模型后，会影响该工程的相关研究。计算方案用于匹配方法与输入契约的研究，具体适用条件以资源定义为准。</p><p>研究内的内置布置模板是局部入口，并非本页已发布资源。发布新资源版本不会自动替换既有引用；必须明确选用或升级。已有运行与历史交付保留原版本。</p></details>}
+      {groupId === 'materials' && <details className="resource-scope"><summary>物性覆盖口径 · 已登记项</summary><p>比例统计本资源登记的数值物性与明确缺项，按物性名称去重；参考摘录不等于计算参数。未登记项不纳入分母，不代表满足所有计算方法。适用条件和来源在详情中核对。</p></details>}
+      {browsingBasis ? <StandardsBrowser /> : !filtered && !pending && !failure && !rows.length ? (
         <InlineEmpty title={`${group.empty}。用右上角“导入资源草稿”导入，审核发布后研究才能引用。`} />
       ) : (
         <>
@@ -250,12 +261,15 @@ export function AssetsPage() {
                   {
                     id: "status",
                     label: "状态",
-                    render: (row) => (
-                      <StatusMark
+                    render: (row) => {
+                      if (groupId !== 'materials' || row.kind !== 'material') return <StatusMark kind={row.status === "published" ? "saved" : row.status === "deprecated" ? "historical" : "draft"} label={statuses[text(row.status)] || text(row.status)} />;
+                      const query = coverage.get(row.id);
+                      const values = query?.data ? assetCoverage(optionalRecord(query.data.release)) : undefined;
+                      return <div className="asset-state"><StatusMark
                         kind={row.status === "published" ? "saved" : row.status === "deprecated" ? "historical" : "draft"}
                         label={statuses[text(row.status)] || text(row.status)}
-                      />
-                    ),
+                      />{groupId === 'materials' && row.kind === 'material' && <><span aria-hidden="true"> · </span>{values ? <details className="asset-coverage" onClick={event => event.stopPropagation()} onKeyDown={event => event.stopPropagation()}><summary aria-label={`${text(row.name)}物性覆盖`}>{values.total ? `物性 ${values.covered}/${values.total}` : '物性未登记'}{values.missing.length ? ` · 缺 ${values.missing.length} 项` : ''}</summary>{values.missing.length ? <ul>{values.missing.map(gap => <li key={gap.property}><b>{propertyLabel(gap.property)}</b><span>{gap.reason}</span></li>)}</ul> : <p>{values.total ? '已登记项未列出缺项；适用条件与未登记项仍须核对。' : '没有物性数值或缺项登记，请核对资源定义。'}</p>}</details> : query?.isError ? <button className="settings-link" onClick={event => { event.stopPropagation(); void query.refetch(); }}>物性读取失败 · 重试</button> : <span className="muted">物性读取中</span>}</>}</div>;
+                    },
                   },
                   { id: "updated", label: "更新时间", render: (row) => time(row.updated) },
                 ]}

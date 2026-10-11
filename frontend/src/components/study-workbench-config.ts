@@ -2,24 +2,25 @@
  * Plugins own capability titles, parameters, result titles, units and bases.
  * These entries describe navigation/presentation, never calculation formulas.
  */
+import { STATUS_WORDS, TASK_NAMES } from '@/lib/status-vocabulary';
 export const runStates: Record<string, { label: string; phase: "queued" | "running" | "complete" | "failed" }> = {
-  accepted: { label: "排队", phase: "queued" }, queued: { label: "排队", phase: "queued" },
-  validating: { label: "校验中", phase: "running" }, running: { label: "运行中", phase: "running" },
-  succeeded: { label: "成功", phase: "complete" }, partial: { label: "部分成功", phase: "complete" },
-  failed: { label: "失败", phase: "failed" }, rejected: { label: "已拒绝", phase: "failed" },
-  interrupted: { label: "已中断", phase: "failed" }, cancelled: { label: "已停止", phase: "failed" }, canceled: { label: "已停止", phase: "failed" },
+  accepted: { label: STATUS_WORDS.accepted, phase: "queued" }, queued: { label: STATUS_WORDS.queued, phase: "queued" },
+  validating: { label: STATUS_WORDS.validating, phase: "running" }, running: { label: STATUS_WORDS.running, phase: "running" },
+  succeeded: { label: STATUS_WORDS.succeeded, phase: "complete" }, partial: { label: STATUS_WORDS.partial, phase: "complete" },
+  failed: { label: STATUS_WORDS.failed, phase: "failed" }, rejected: { label: "已拒绝", phase: "failed" },
+  interrupted: { label: STATUS_WORDS.cancelled, phase: "failed" }, cancelled: { label: STATUS_WORDS.cancelled, phase: "failed" }, canceled: { label: STATUS_WORDS.cancelled, phase: "failed" },
 };
 export const hostTasks = [
-  { task: "rating" as const, label: "额定载流量", icon: "calc/ampacity", output: "ampacity" },
-  { task: "operating" as const, label: "运行温度", icon: "calc/thermal-field", output: "conductor_temperature" },
+  { task: "rating" as const, label: TASK_NAMES.rating, icon: "calc/ampacity", output: "ampacity" },
+  { task: "operating" as const, label: TASK_NAMES.operating, icon: "calc/thermal-field", output: "conductor_temperature" },
 ];
 /** Legacy catalogue labels remain immutable identities; translate only their display. */
 export function readableCableVersion(version: string) {
   return version.replace(/^public-sample/, '公开样本').replace(/\+engineering$/, '（工程版）') || '版本未提供';
 }
 export const driverViews: Record<string, { label: string; icon: string }> = {
-  selection: { label: "客户问询选型", icon: "calc/selection" }, sweep: { label: "参数扫描", icon: "calc/sweep" },
-  batch: { label: "批量仿真", icon: "nav/simulation" }, crosscheck: { label: "方法对比", icon: "module/method-compare" },
+  selection: { label: TASK_NAMES.selection, icon: "calc/selection" }, sweep: { label: TASK_NAMES.sweep, icon: "calc/sweep" },
+  batch: { label: TASK_NAMES.batch, icon: "nav/simulation" }, crosscheck: { label: TASK_NAMES.crosscheck, icon: "module/method-compare" },
 };
 export const modelViews = [
   { id: "section" as const, icon: "object/section", label: "敷设截面" },

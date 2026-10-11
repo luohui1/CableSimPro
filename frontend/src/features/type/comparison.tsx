@@ -20,6 +20,7 @@ import { branchType, lifecycleAction, typeComparison, type ComparisonMetric } fr
 import { EvidenceDigest } from './evidence-digest';
 import { cleanLabel } from './labels';
 import { resultValue } from './standard-check';
+import { ResultTrace } from './result-detail';
 
 const labels: Record<string, string> = { outer_diameter: '外径', mass: '单位长度用料', copper_mass: '导体铜用料', standards: '标准核对通过' };
 const methods: Record<string, string> = { 'cablesim.cable-geometry': '结构与用料推导', 'cablesim.standard-check': '标准核对', 'cablesim.iec60287': 'IEC 60287 载流量', 'cablesim.type-electrical': '电气与短路计算' };
@@ -28,7 +29,7 @@ function conditionItems(source: Record<string, unknown>) {
     depth_m: ['中心埋深', 'm'], soil_rho_k_m_w: ['土壤热阻率', 'K·m/W'], ambient_temperature_c: ['环境温度', '°C'],
     actual_spacing_m: ['实际中心距', 'm'], duration_s: ['持续时间', 's'], initial_temperature_k: ['初始温度', 'K'], final_temperature_k: ['最终温度', 'K'],
   };
-  return Object.entries(fields).flatMap(([key, [label, unit]]) => numeric(condition[key]) === null ? [] : [{ label, value: engineeringQuantity(key, numeric(condition[key]), unit).complete }]);
+  return Object.entries(fields).flatMap(([key, [label, unit]]) => {if(numeric(condition[key])===null)return [];const display=engineeringQuantity(key,numeric(condition[key]),unit);return [{label,value:display.text,unit:display.unit}];});
 }
 function leafValues(value: unknown, prefix = ''): Record<string, string> {
   if (value === null || typeof value !== 'object') return { [prefix]: value === null ? '—' : String(value) };
@@ -85,10 +86,10 @@ export function TypeComparison({ tab }: { tab: string }) {
     setSelected(key); const source = optionalRecord(metric?.source), method = optionalRecord(source.method);
     const conditions = conditionItems(source);
     inspector.show(labels[key] || text(metric?.title) || '保存指标', [
-      { label: '保存指标', items: [{ label: '原始数值', value: numeric(metric?.value) === null ? '—' : String(metric!.value), unit: text(metric?.unit) }, { label: '状态', value: metric?.state === 'historical' ? '历史结果' : metric?.state === 'current' ? '当前结果' : '缺项' }, ...(text(metric?.reason) ? [{ label: '原因', value: text(metric?.reason) }] : [])] },
+      { label: '保存指标', items: [{ label: '数值', value: engineeringQuantity(key==='outer_diameter'?'diameter':key,numeric(metric?.value),text(metric?.unit)).text, unit: engineeringQuantity(key==='outer_diameter'?'diameter':key,numeric(metric?.value),text(metric?.unit)).unit }, { label: '状态', value: metric?.state === 'historical' ? '历史结果' : metric?.state === 'current' ? '当前结果' : '缺项' }, ...(text(metric?.reason) ? [{ label: '原因', value: text(metric?.reason) }] : [])] },
       ...(conditions.length ? [{ label: '保存条件', items: conditions }] : []),
       { label: '来源与运行', items: [{ label: '方法', value: (methods[text(method.plugin_id)] || '计算方法') + ' ' + text(method.version) }, { label: '运行', value: <EvidenceDigest value={source.run_id} /> }, { label: '输入摘要', value: <EvidenceDigest value={source.input_digest} /> }, { label: '输出摘要', value: <EvidenceDigest value={source.output_digest} /> }, { label: '方案', value: <Button variant="ghost" size="compact" onClick={() => navigate(typePath(workspace, 'structure', 'table', location.theme))}>打开保存结构</Button> }] },
-    ]);
+    ], <ResultTrace items={[{label:'原始数值',value:metric?.value==null?'未提供':String(metric.value)+' '+text(metric.unit)},{label:'原始条件',value:JSON.stringify(source.condition || source.conditions || {})}]} />);
   }
   const documents = variants.map(item => leafValues(item.document)), paths = [...new Set(documents.flatMap(item => Object.keys(item)))].filter(path => new Set(documents.map(item => item[path] ?? '—')).size > 1);
   return <div className="type-page" data-type-page="comparison-results" data-type-state={bodyState}>
@@ -105,7 +106,7 @@ export function TypeComparison({ tab }: { tab: string }) {
         const metric = item.values[row.id], presentation = engineeringQuantity(row.id === 'outer_diameter' ? 'diameter' : row.id, metric?.value, text(metric?.unit));
         const display = row.id === 'outer_diameter' ? formatNumber(numeric(metric?.value) === null ? null : metric!.value! * 1000, 1) + ' mm' : row.id === 'mass' || row.id === 'copper_mass' ? formatNumber(metric?.value, 0) + ' kg/km' : presentation.text + ' ' + presentation.unit;
         const method = optionalRecord(optionalRecord(metric?.source).method);
-        return <div className="type-metric-cell"><button onClick={() => inspect(row.id, metric, item.workspace)} aria-label={item.name + ' ' + (labels[row.id] || text(metric?.title) || '保存指标')}><span title={presentation.complete}>{metric ? row.id === 'standards' ? formatNumber(metric.value, 0) + '/' + String(metric.total) : display : '—'}</span><StatusMark kind={metric?.state === 'historical' ? 'historical' : metric?.state === 'current' ? 'success' : 'unknown'} label={metric?.state === 'historical' ? '历史' : metric?.state === 'current' ? '已保存' : '缺项'} /></button>{!!metric?.source && <SourceBadge kind="calculation" detail={(methods[text(method.plugin_id)] || '保存的计算结果') + ' · ' + text(method.version)} />}</div>;
+        return <div className="type-metric-cell"><button onClick={() => inspect(row.id, metric, item.workspace)} aria-label={item.name + ' ' + (labels[row.id] || text(metric?.title) || '保存指标')}><span>{metric ? row.id === 'standards' ? formatNumber(metric.value, 0) + '/' + String(metric.total) : display : '—'}</span><StatusMark kind={metric?.state === 'historical' ? 'historical' : metric?.state === 'current' ? 'success' : 'unknown'} label={metric?.state === 'historical' ? '历史' : metric?.state === 'current' ? '已保存' : '缺项'} /></button>{!!metric?.source && <SourceBadge kind="calculation" detail={(methods[text(method.plugin_id)] || '保存的计算结果') + ' · ' + text(method.version)} />}</div>;
       } }))]} />}
       {tab === 'matrix' && <DataTable label="全部适用要求对比" rowLabel={row => row.label} showGroups={false} groups={[{id:'requirements',label:'要求',rows:(query.data?.requirements || []).map(row => ({...row,label:row.title || '保存要求'}))}]} columns={[
         {id:'requirement',label:'要求与条款',wrap:true,render:row => <span>{row.label}<br /><span className="muted">{row.standard} · {row.clause}</span></span>},
@@ -114,8 +115,8 @@ export function TypeComparison({ tab }: { tab: string }) {
           const label=result?.state==='unrun' || !result ? '未运行' : historical ? '历史' : ({passed:'满足',failed:'不满足',fail:'不满足',missing:'缺项',uncovered:'未覆盖'}[result.verdict || ''] || '无法判断');
           const targetTab=result?.verdict==='missing' ? ['structure','table'] : ['standard-check','results'];
           return <div className="type-metric-cell"><StatusMark kind={label==='满足'?'satisfied':label==='不满足'?'unsatisfied':historical?'historical':'unknown'} label={label} />
-            {numeric(result?.actual)!==null && <span title={String(result?.actual)}>{resultValue(result?.actual,{id:row.id,title:(query.data?.requirements || []).find(item=>item.id===row.id)?.title,unit:result?.unit})}</span>}
-            {numeric(result?.margin)!==null && <span title={String(result?.margin)}>余量 {resultValue(result?.margin,{id:row.id,title:(query.data?.requirements || []).find(item=>item.id===row.id)?.title,unit:result?.unit})}</span>}
+            {numeric(result?.actual)!==null && <span>{resultValue(result?.actual,{id:row.id,title:(query.data?.requirements || []).find(item=>item.id===row.id)?.title,unit:result?.unit})}</span>}
+            {numeric(result?.margin)!==null && <span>余量 {resultValue(result?.margin,{id:row.id,title:(query.data?.requirements || []).find(item=>item.id===row.id)?.title,unit:result?.unit})}</span>}
             {result?.reason && <span>{result.reason}</span>}<Button variant="ghost" size="compact" onClick={() => navigate(typePath(item.workspace, targetTab[0], targetTab[1], location.theme))}>{result?.verdict==='missing'?'补结构数据':'打开标准核对'}</Button></div>;
         }}))
       ]} />}

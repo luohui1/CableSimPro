@@ -17,6 +17,7 @@ from .workspace import fingerprint
 
 RENDERER = 'cablesim.study-pdf/4'
 PLUGIN_NAMES = {'cablesim.iec60287':'IEC 60287 稳态载流量', 'cablesim.thermal-network':'热网络交叉校核',
+    'cablesim.gb50217-correction':'GB 50217 载流量校正',
     'cablesim.simulation':'数值仿真', 'cablesim.hybrid-rating':'混合载流量参考',
     'cablesim.native-reference':'原生算法参考', 'cablesim.comsol-bridge':'COMSOL 仿真'}
 PARAMETERS = {'core_lay_length':'成缆节距', 'filler_rho':'填充材料热阻率', 'screen_model':'铜带导电接触模型',
@@ -245,6 +246,9 @@ def summary(run):
     if answer is None:
         answer=next((b['text'] for b in _Blocks(task_answer(run)).blocks if b['kind']=='p'),'未取得可用结论。') if driver else '保存温度场结果；详细校核见结果表。'
     cases=[c for c in run['output'].get('cases',[]) if c['status']=='succeeded' and (not preferred or c['case_id']==preferred)]
+    correction=next((c.get('artifacts',{}).get('x-cablesim.gb50217-correction') for c in cases if c.get('artifacts',{}).get('x-cablesim.gb50217-correction')),None)
+    if correction:
+        return answer,[number(correction['corrected_current_a'])+' A',number(correction['baseline']['baseline_current_a'])+' A',number(correction['total_factor'],4)]
     trace=next((c.get('artifacts',{}).get('x-cablesim.iec60287-trace') for c in cases if c.get('artifacts',{}).get('x-cablesim.iec60287-trace')), {})
     states=trace.get('operating',{}).get('cable_states',[])
     currents=[r['value'] for c in cases for r in c.get('results',[]) if r['key']=='ampacity' and r.get('status')=='available']
@@ -298,7 +302,8 @@ def chapters(runs, audience):
         if run.get('freshness')!='current':answer='历史运行结论：'+answer
         body='<h2>1. 计算结论</h2>'+paragraph(answer)
         common_fem=any(r.get('key')=='ampacity' and r.get('case')=='rating-simultaneous' for r in run.get('fem_evidence',{}).get('rows',[]))
-        body+=paragraph('载流量口径：'+('全回路同时等负荷。' if common_fem or _basis(run)=='simultaneous' else '逐回路条件允许电流，其他回路保持保存负荷；各回路上限不能同时使用。'))
+        correction_method=definition['method']['plugin_id']=='cablesim.gb50217-correction'
+        body+=paragraph('载流量口径：'+('有出处的单根基准按保存工况校正；不输出负荷温度，不等同于 IEC 热路求解。' if correction_method else '全回路同时等负荷。' if common_fem or _basis(run)=='simultaneous' else '逐回路条件允许电流，其他回路保持保存负荷；各回路上限不能同时使用。'))
         if run.get('freshness')!='current':body+=paragraph('该运行与当前输入或已安装方法版本不同。本文仅复现保存工况，不能作为当前版本的重新校核。')
         body+='<h2>2. 工况与输入</h2>'+table(['输入项目','保存值'],_condition_rows(document),[1.25,3.75])
         engineering_html=''
@@ -314,6 +319,13 @@ def chapters(runs, audience):
             body+=grouped_results(run['output'].get('cases',[]),names,document)
         cases=[c for c in run['output'].get('cases',[]) if c['status']=='succeeded' and (not preferred or c['case_id']==preferred)]
         trace=next((c.get('artifacts',{}).get('x-cablesim.iec60287-trace') for c in cases if c.get('artifacts',{}).get('x-cablesim.iec60287-trace')), {})
+        for case in cases:
+            correction=case.get('artifacts',{}).get('x-cablesim.gb50217-correction')
+            if correction:
+                body+='<h3>GB 50217 校正系数</h3>'+table(['校正项目','采用系数','取值条件','出处'],[
+                    [r['label'],number(r['factor'],4),r['condition_text'],r['record']['citation']] for r in correction['coefficients']],[1,1,1.5,2.5])
+                body+=paragraph('基准 '+number(correction['baseline']['baseline_current_a'])+' A；总系数 '+number(correction['total_factor'],4)+'；校正后 '+number(correction['corrected_current_a'])+' A。')
+                body+=paragraph(correction['baseline']['baseline_source']+' · 第 '+str(correction['baseline']['baseline_page'])+' 页；由工程师核对，不是厂家保证值。')+paragraph(correction['scope'])
         if trace.get('crossing_derating'):
             row=trace['crossing_derating'][0]
             body+='<h3>交叉热源降额</h3>'+table(['降额前 / A','降额后 / A','降额系数','交叉温升 / K'],[[number(row['baseline_current_a']),number(row['derated_current_a']),number(row['derating_factor'],4),number(row['crossing_rise_k'],2)]],[1,1,1,1])
@@ -334,6 +346,13 @@ def chapters(runs, audience):
             ['输入 / 研究修订',str(run['snapshot'].get('workspace_revision','未记录'))+' / '+str(run['snapshot'].get('study_revision','未记录'))]], [1.3,3.7])
         body+='<h3>标准条款</h3>'+''.join(paragraph(c) for c in clauses or ['该保存运行未提供可引用条款；不补写推测依据。'])
         if trace.get('electrical_basis'):body+='<h3>方法适用口径</h3>'+paragraph(trace['electrical_basis'])
+        from .material_basis import saved_rows
+        constants=[row for case in cases for row in saved_rows(case)]
+        if constants:
+            body+='<h3>材料常数与标准出处</h3>'+table(['材料常数','采用值 / 单位','标准出处与核对'],[
+                [row['label'],str(row['value'])+' '+row['unit'],row.get('citation','')+' · '+row['status_label']+
+                 (f"；依据值 {row['reference_value']} {row['unit']}；差 {row['difference']:.4g}" if row['status']=='different' else '')+
+                 ('；'+row['note'] if row.get('note') else '')] for row in constants],[1.6,1.1,2.3])
         body+=engineering_html
         body+='<h3>逐项输入来源</h3>'+input_sources(document,definition,selected[1]['payload'] if selected else None)
         body+=paragraph('客户版保留结论、工况、结果和依据；内部审核版另附完整输入快照、诊断和验证证据。')
@@ -441,7 +460,8 @@ def _render_pdf(runs, audience, *, generated_at=None, attachments=None):
     saved_input=_input(first)
     currents=sorted({i for load in saved_input.get('load_cases',[]) for i in load.get('currents',{}).values() if isinstance(i,(int,float))})
     if currents:answer=' / '.join(number(i,0) for i in currents)+' A 工况：'+answer
-    cover+='<h2>结论摘要</h2>'+paragraph(answer)+table(['允许电流','最热导体温度','温限余量'],[metrics],[1,1,1])
+    correction_method=definition['method']['plugin_id']=='cablesim.gb50217-correction'
+    cover+='<h2>结论摘要</h2>'+paragraph(answer)+table(['校正后允许电流','基准载流量','总校正系数'] if correction_method else ['允许电流','最热导体温度','温限余量'],[metrics],[1,1,1])
     cover+=paragraph('适用方法：'+PLUGIN_NAMES.get(definition['method']['plugin_id'],'保存方法')+' '+definition['method']['version']+'；具体标准条款见计算依据。')
     references=[]
     for source_run in runs:
@@ -449,11 +469,11 @@ def _render_pdf(runs, audience, *, generated_at=None, attachments=None):
         for case in source_run['output'].get('cases',[]):
             for artifact in case.get('artifacts',{}).values():
                 if isinstance(artifact,dict):references.extend(str(r) for r in artifact.get('sources',[]) + artifact.get('clauses',[]))
-    standards=list(dict.fromkeys(re.findall(r'IEC \d+(?:-\d+)+(?::\d{4})?',' '.join(references))))
+    standards=list(dict.fromkeys(re.findall(r'IEC \d+(?:-\d+)+(?::\d{4})?|GB 50217(?:—2018)?',' '.join(references))))
     cover+=paragraph('适用标准：'+'；'.join(standards or ['保存运行未登记引用标准']))
     fem_basis=first.get('fem_evidence',{}).get('rows',[])
     common_fem=any(r.get('key')=='ampacity' and r.get('case')=='rating-simultaneous' for r in fem_basis)
-    cover+=paragraph('载流量口径：'+('全回路共同能力，所有回路同时等负荷提升。' if common_fem or _basis(first)=='simultaneous' else '条件上限，其他回路维持保存负荷；单回路工况即单回路能力。'))
+    cover+=paragraph('载流量口径：'+('单根基准按实际敷设校正；不输出负荷温度。' if correction_method else '全回路共同能力，所有回路同时等负荷提升。' if common_fem or _basis(first)=='simultaneous' else '条件上限，其他回路维持保存负荷；单回路工况即单回路能力。'))
     story=flow(cover)
     if attachments:
         from base64 import b64decode

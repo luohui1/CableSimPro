@@ -115,6 +115,7 @@ class Capability(Strict):
     temperature_field_binding: TemperatureFieldBinding | None = Field(default=None, alias='x-temperature-field-binding')
     report_template: ReportTemplate | None = None
     agent_skill: AgentSkill | None = None
+    read_only: bool = False
 
     @model_serializer(mode='wrap')
     def serialize_solver(self, handler):
@@ -122,10 +123,14 @@ class Capability(Strict):
         # Keep the release identity of manifests written before this optional field.
         if 'solver' not in self.model_fields_set:
             value.pop('solver', None)
+        if 'read_only' not in self.model_fields_set:
+            value.pop('read_only', None)
         return value
 
     @model_validator(mode='after')
     def unique(self):
+        if self.read_only and (self.kind != 'method' or self.solver != 'local'):
+            raise ValueError('只读能力查询仅支持本地 method 能力。')
         if self.kind=='method' and (not self.outputs or self.report_template or self.agent_skill):
             raise ValueError('计算能力须声明输出，不能混入报告或技能声明。')
         if self.kind=='report-template' and (not self.report_template or self.agent_skill or self.outputs or self.preview):

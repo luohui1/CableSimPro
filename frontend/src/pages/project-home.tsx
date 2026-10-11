@@ -25,6 +25,9 @@ import { readableCableVersion } from '@/components/study-workbench-config';
 import { RelationPanel } from '@/components/relation-panel';
 import { ObjectChip } from '@/components/object-link';
 import { WorkbenchSplitter } from '@/components/workbench-splitter';
+import { CommandBar, type CommandAction } from '@/components/command-bar';
+import { formatDateTime } from '@/lib/format';
+import { STATUS_WORDS } from '@/lib/status-vocabulary';
 
 type Theme = "light" | "dark";
 
@@ -83,7 +86,7 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
     } },
     { id: "kind", label: "任务", wrap: true, render: (row) => calculationKind(row, catalog.data || []).label },
     { id: "method", label: "插件", wrap: true, render: (row) => `${calculationKind(row, catalog.data || []).methodName} ${text(row.definition.method?.version)} · ${calculationKind(row, catalog.data || []).hpc ? "超算" : "本机"}` },
-    { id: "answer", label: "结论", wrap: true, numeric: true, render: (row) => { const run = latest.get(row.id); return <span>{headlineText(run?.headlines, 1) || '—'}{states.get(row.id)?.historical && <small> · 历史</small>}</span>; } },
+    { id: "answer", label: "结论", wrap: true, numeric: true, render: (row) => { const run = latest.get(row.id); return <span>{headlineText(run?.headlines, 1) || '—'}{states.get(row.id)?.historical && <small> · {STATUS_WORDS.historical}</small>}</span>; } },
     { id: "state", label: "状态", wrap: true, render: (row) => { const state=states.get(row.id)!; return <span title={state.reason}><StatusMark kind={state.mark} label={state.label} /></span>; } },
   ];
 
@@ -98,7 +101,7 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
         <dl className="inspector-list">
           <div><dt>名称</dt><dd>{name}</dd></div>
           <div><dt>模型修订</dt><dd>{workspace.data ? `第 ${String(workspace.data.revision)} 版` : "—"}</dd></div>
-          <div><dt>更新</dt><dd>{workspace.data ? new Date(text(workspace.data.updated_at)).toLocaleString("zh-CN", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"}</dd></div>
+          <div><dt>更新</dt><dd>{workspace.data ? formatDateTime(text(workspace.data.updated_at)) : "—"}</dd></div>
           <div><dt>引用型号</dt><dd>{text(reference.id) ? <ObjectChip status={false} card={{
             kind:'cable_version',id:text(reference.id).replace(/^candidate:/,''),name:text(reference.name),
             version:readableCableVersion(text(reference.version)),status:{code:'unknown',label:'引用版本'},
@@ -117,22 +120,13 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
     </>}
   </aside>;
 
-  const commandBar = <div className="command-bar" role="toolbar" aria-label="工程命令">
-    <div className="command-group" role="group" aria-label="模型">
-      <span className="command-caption">模型</span>
-      <Button size="compact" variant="ghost" title={!rows.length ? '请先新建研究，在研究中编辑共用模型' : '进入研究的模型输入与敷设编辑'} disabled={!rows.length} onClick={() => rows[0] && void open(rows[0], { view: "section", inspector: 'input' }, 'edit-model')}><Icon name="action/edit" />编辑模型</Button>
-    </div>
-    <div className="command-group" role="group" aria-label="计算">
-      <span className="command-caption">计算</span>
-      <Button size="compact" variant="primary" onClick={() => setCreating(true)}><Icon name="action/add" />新建研究</Button>
-      {outdated.length>1 && <Button size="compact" variant="ghost" disabled={!!recalculateQueue.length} onClick={()=>setRecalculateQueue(outdated)}>全部重算</Button>}
-    </div>
-    <div className="command-group" role="group" aria-label="交付">
-      <span className="command-caption">交付</span>
-      <Button size="compact" variant="ghost" onClick={() => void navigate({ to: "/deliveries", search: { theme, workspace: workspaceId, delivery: "" } })}><Icon name="result/report" />交付记录</Button>
-    </div>
-    <span className="command-state" role="status">{studies.isPending ? "读取中" : outdated.length ? `${outdated.length} 项待重算` : '已保存'}</span>
-  </div>;
+  const commandActions: CommandAction[] = [
+    {id:'new-study',label:'新建研究',icon:'action/add',role:'primary',onSelect:()=>setCreating(true)},
+    {id:'edit',label:'编辑模型',icon:'action/edit',priority:80,variant:'ghost',disabledReason:!rows.length?'请先新建研究，在研究中编辑共用模型':undefined,onSelect:()=>{if(rows[0]) void open(rows[0],{view:'section',inspector:'input'},'edit-model');}},
+    ...(outdated.length>1 ? [{id:'recalculate',label:'全部重算',priority:60,variant:'ghost' as const,disabledReason:recalculateQueue.length?'正在逐项确认重算':undefined,onSelect:()=>setRecalculateQueue(outdated)}] : []),
+    {id:'deliveries',label:'交付记录',icon:'result/report',priority:30,variant:'ghost',onSelect:()=>void navigate({to:'/deliveries',search:{theme,workspace:workspaceId,delivery:''}})},
+  ];
+  const commandBar = <CommandBar label="工程命令" actions={commandActions} status={studies.isPending?'读取中':outdated.length?`${outdated.length} 项待重算`:'已保存'} />;
 
   const canvas = !document ? null : <section className="workbench-canvas" aria-label="工程模型">
     <div className="workbench-views" role="group" aria-label="模型视图">

@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.iec60287",
-  "version": "1.1.2",
+  "version": "1.1.4",
   "name": "IEC 60287 载流量",
   "description": "计算声明范围内单芯或独立屏蔽三芯直埋、排管与矩形回填的稳态温度和允许电流，输出逐源互热、屏蔽与磁性铠装损耗及核对表。",
   "icon": "assets/icon.svg",
@@ -69,6 +69,7 @@
   "capabilities": [
     {
       "kind": "method",
+      "solver": "local",
       "id": "iec60853-emergency",
       "title": "IEC 60853应急额定（给定标准阶跃响应）",
       "method_version": "1.0.0",
@@ -461,6 +462,7 @@
     },
     {
       "kind": "method",
+      "solver": "local",
       "id": "tb880-wire-foil-rating",
       "title": "TB880 铜丝与铝箔屏蔽参考链",
       "method_version": "1.0.0",
@@ -1292,6 +1294,7 @@
     },
     {
       "kind": "method",
+      "solver": "local",
       "id": "tb880-reference-rating",
       "title": "TB880 三芯海缆与铜线屏蔽参考链",
       "method_version": "1.0.0",
@@ -2182,6 +2185,7 @@
     },
     {
       "kind": "method",
+      "solver": "local",
       "id": "armoured-sl-rating",
       "title": "三芯圆导体钢丝铠装SL热路（IEC 60287-1-1 §5.4）",
       "method_version": "1.0.0",
@@ -2745,6 +2749,7 @@
     },
     {
       "kind": "method",
+      "solver": "local",
       "id": "steady-rating",
       "title": "地下稳态（IEC 60287-1-1 / 2-1:2023，多回路直埋 / 排管 / 矩形回填）",
       "method_version": "1.1.0",
@@ -3990,6 +3995,7 @@
     },
     {
       "kind": "method",
+      "solver": "local",
       "id": "reference-rating",
       "title": "单芯电气与热路原语对拍",
       "method_version": "1.0.0",
@@ -6418,6 +6424,7 @@
     },
     {
       "kind": "method",
+      "solver": "local",
       "id": "model-completion",
       "title": "三芯工程参数与标准推导",
       "method_version": "1.0.0",
@@ -7273,6 +7280,11 @@
       "size_bytes": 3399
     },
     {
+      "path": "src/cablesim_iec60287/constants.py",
+      "sha256": "2f56c723dc6a2750f512cb30882db231bb4017ed3a1815eb12d6e6ac17b2e967",
+      "size_bytes": 5909
+    },
+    {
       "path": "src/cablesim_iec60287/crossing.py",
       "sha256": "d5f85e5812d9028bc02a5fe74fa6b706edf6d5e53ae0124ea7af3abe8f4b974c",
       "size_bytes": 10663
@@ -7299,12 +7311,12 @@
     },
     {
       "path": "src/cablesim_iec60287/engineering.py",
-      "sha256": "0b9cdca76fe9f33afdcb10090e54fe42073a4c260c8cc8943e7231943956b355",
+      "sha256": "cfb9a5828adebfa84a678bd73426d764a198afee14b6a863e1cc64bfcfcbbc33",
       "size_bytes": 11020
     },
     {
       "path": "src/cablesim_iec60287/engineering_contract.py",
-      "sha256": "fe2c1de549f3374660d968b77f61ab45208bd24e0c66f39a092ee3d77763b26c",
+      "sha256": "2b3a6aeadea6a2638e94a0455d314ded2846702786d3343ed5d381c29da28d38",
       "size_bytes": 6796
     },
     {
@@ -7329,8 +7341,8 @@
     },
     {
       "path": "src/cablesim_iec60287/main.py",
-      "sha256": "c56c2938ac2af5bbd304d0ceb4eb037990cc249ee3886fd6c5263e42da6aa49b",
-      "size_bytes": 23223
+      "sha256": "4b9705be0aa3358e55fcfe93dfff624bf1e2da6995f9b1737948ceaf5a5176c4",
+      "size_bytes": 25643
     },
     {
       "path": "src/cablesim_iec60287/method.py",

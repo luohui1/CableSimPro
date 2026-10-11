@@ -61,6 +61,18 @@ def test_tb880_printed_resistance_intermediates_not_thermal_rating():
     assert row(result, 'zero-sequence')['value'] is None
 
 
+def test_missing_short_circuit_conditions_name_fields_without_fabricating_curve():
+    document = tb_document()
+    before = deepcopy(document)
+    result = plugin.calculate(document, params(), 'short-circuit')
+    conductor = row(result, 'conductor-adiabatic')
+    assert conductor['status'] == 'missing'
+    assert {'duration_s', 'initial_temperature_k', 'final_temperature_k'} <= set(conductor['missing_parameters'])
+    assert conductor['value'] is None
+    assert '待补' in result['headline']
+    assert document == before
+
+
 def test_live_controlled_tb880_fixture_agrees_with_printed_intermediates():
     filename = ROOT/'.data/tb880/fixtures/tb880-case-0-1.json'
     if not filename.exists():
@@ -282,10 +294,17 @@ def test_isolated_capabilities_and_no_residual_jobs(tmp_path):
     engine = Executor(jobs_root=tmp_path)
     document = deepcopy(PUBLIC[0]['input'])
     for capability in ('electrical','short-circuit'):
-        cases = [{'case_id':'case','input':document,'parameters':params(duration_s=1,initial_temperature_k=363.15,final_temperature_k=523.15) if capability=='short-circuit' else params()}]
+        cases = [{'case_id':'case','input':document if capability=='short-circuit' else tb_document(),'parameters':params(duration_s=1,initial_temperature_k=363.15,final_temperature_k=523.15) if capability=='short-circuit' else params()}]
         assert engine.check('cablesim.type-electrical',capability,cases).cases[0].status == 'succeeded'
         result = engine.run('cablesim.type-electrical',capability,cases)
         assert result.cases[0].artifacts['x-cablesim.type-'+capability]['schema'] == 'cablesim.type-analysis/1'
+        artifact=result.cases[0].artifacts['x-cablesim.type-'+capability]
+        assert result.cases[0].evidence['headline']==artifact['headline']
+        assert '允许短路电流' in artifact['headline'] if capability=='short-circuit' else '直流电阻' in artifact['headline']
+        witness=result.cases[0].artifacts['x-cablesim.headline-witness']
+        assert witness['quantities'] and all(q['unit'] in ('A','Ω/m') for q in witness['quantities'])
+        for q in witness['quantities']:
+            assert any(r['value']==q['value'] and r['target']['core_id']==q['entity'] for r in artifact['rows'])
     assert not list(tmp_path.iterdir())
 
 

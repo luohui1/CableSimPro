@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.simulation",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "name": "电缆有限元仿真",
   "description": "多区域稳态导热与GetDP时谐涡流、Elmer稳态/瞬态热适配，使用统一问题、网格和复现工件。",
   "icon": "assets/icon.svg",
@@ -24,7 +24,7 @@
         "media_type": "image/svg+xml"
       }
     ],
-    "validation_note": "验证算例页列出 63 个公开复现目标（12 项复现、9 项部分复现）；部分复现只覆盖列明范围，缺项与口径差异详见各算例。"
+    "validation_note": "验证算例页收录 63 个验证目标（12 项复现、9 项部分复现），含公开算例与方法参考；复现状态只代表列明范围内的保存对拍证据，不能用于未覆盖工况。"
   },
   "publisher": {
     "id": "cablesim",

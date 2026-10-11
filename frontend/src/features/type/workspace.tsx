@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { TypeCommandSlot } from './command-slot';
+import { CommandBar, type CommandAction } from '@/components/command-bar';
 import { commandResultLabel, latestModuleRun, moduleResultStatus, useTypeEvidence } from './evidence';
 import { nominalNumber } from './design-summary';
 import { message, optionalRecord, text } from '@/api/client';
@@ -49,8 +50,8 @@ export function TypeWorkspace() {
   const activeTab = module?.tabs.some(([id]) => id === location.tab) ? location.tab : module?.tabs[0][0] || location.tab;
   const [cableId, setCableId] = useState(''), [selected, setSelected] = useState<LayerTarget | null>(null), [collapsed, setCollapsed] = useState(false), [info, setInfo] = useState('');
   const [view, setView] = useState<'section' | 'three'>(location.tab === 'three' ? 'three' : 'section'), [dockMax, setDockMax] = useState(location.module !== 'structure' || ['quantities', 'materials'].includes(location.tab));
-  const [resultProperty, setResultProperty] = useState<{ title: string; groups: PropertyGroup[] } | null>(null);
-  const [slot, setSlot] = useState<HTMLElement | null>(null);
+  const [resultProperty, setResultProperty] = useState<{ title: string; groups: PropertyGroup[]; extra?: ReactNode } | null>(null);
+  const [primaryAction, setPrimaryAction] = useState<CommandAction | null>(null);
   // 电气参数、短路容量的方法参数属于“改输入”，放在右侧方法页；数据区只留结果
   const methodModule = location.module === 'electrical' || location.module === 'short-circuit';
   const [inspectorView, setInspectorView] = useState<'input' | 'method' | 'agent'>(methodModule && location.tab === 'parameters' ? 'method' : 'input');
@@ -59,7 +60,7 @@ export function TypeWorkspace() {
   useEffect(() => { if (inspectorView === 'agent') setAgentOpened(true); }, [inspectorView]);
   // 地址指向方法参数页签（如结果空状态里的“在方法页填写参数”）时打开右侧方法页
   useEffect(() => { if (methodModule && location.tab === 'parameters') setInspectorView('method'); }, [methodModule, location.tab]);
-  const showProperty = useCallback((title: string, groups: PropertyGroup[]) => { setResultProperty({ title, groups }); setCollapsed(false); }, []);
+  const showProperty = useCallback((title: string, groups: PropertyGroup[], extra?: ReactNode) => { setResultProperty({ title, groups, extra }); setCollapsed(false); }, []);
   const clearProperty = useCallback(() => setResultProperty(null), []);
   const document = state.document, cable = document?.cable_types.find(cable => cable.id === cableId) || document?.cable_types[0] || null;
   let rows: ReturnType<typeof layerRows> = [], structureError = '';
@@ -113,6 +114,20 @@ export function TypeWorkspace() {
     });
     return () => cancelAnimationFrame(frame);
   }, [location.module, location.field, row?.id]);
+  useEffect(()=>{
+    if(!methodModule||!location.field)return;
+    const focus=()=>{
+      const node=[...window.document.querySelectorAll<HTMLElement>('.type-method-fields [data-field-path]')].find(node=>node.dataset.fieldPath===location.field);
+      if(!node)return false;
+      for(let parent=node.parentElement;parent;parent=parent.parentElement)if(parent instanceof HTMLDetailsElement)parent.open=true;
+      node.querySelector<HTMLElement>('input,[role=combobox]')?.focus();node.scrollIntoView({block:'nearest'});
+      return true;
+    };
+    const observer=new MutationObserver(()=>{if(focus())observer.disconnect();});
+    observer.observe(window.document.body,{childList:true,subtree:true});
+    const frame=requestAnimationFrame(()=>{if(focus())observer.disconnect();});
+    return()=>{cancelAnimationFrame(frame);observer.disconnect();};
+  },[methodModule,location.field,location.tab,methods.data]);
   const property = location.module === 'structure' && activeTab !== 'quantities' && document && row ? <div className="type-property-wrapper">
     <PropertyPanel title={row.label} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} groups={[{ label: '结构输入', items: [
       { label: '材料', value: cleanLabel(row.material.label), source: sourceKind(fieldSource(document, row.materialPath)), sourceDetail: text(fieldSource(document, row.materialPath).reference) || undefined },
@@ -124,7 +139,7 @@ export function TypeWorkspace() {
       <ResourceBindings materialId={row.material.id} />
       {!sourceKind(source) && source.kind !== 'demo' && <span className="type-field-source" title="此尺寸未提供来源；编辑后请补充工程依据。">来源未提供</span>}<StructurePropertyInputs row={row} /></div>}
   </div> : location.module === 'structure' && activeTab !== 'quantities' ? document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} /> : null
-    : resultProperty ? <PropertyPanel title={resultProperty.title} groups={resultProperty.groups} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} />
+    : resultProperty ? <PropertyPanel title={resultProperty.title} groups={resultProperty.groups} extra={resultProperty.extra} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} />
       : document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} /> : null;
   // 型号工作窗口：画布 = 电缆截面 / 三维剥切；下方停靠栏 = 当前模块的页签；右侧 = 型号名称 + 所选结构层或结果
   const dockTabs = module?.id === 'structure' ? module.tabs.filter(([id]) => id === 'table' || id === 'materials' || id === 'quantities') : module?.tabs || [];
@@ -144,21 +159,12 @@ export function TypeWorkspace() {
   </nav>;
   // 命令栏与研究工作台一致：模型（保存 / 撤销）、交付（规格书）；分析在各模块里运行
   const specification = typeModules.find(entry => entry.id === 'specification');
-  const commandBar = <div className="command-bar" role="toolbar" aria-label="型号命令">
-    <div className="command-group" role="group" aria-label="模型">
-      <span className="command-caption">模型</span>
-      <IconButton variant="ghost" icon="action/undo" label="撤销" disabled={state.busy || state.readOnly || !state.dirty && state.workspace?.raw.can_undo !== true} onClick={() => void state.undo()} />
-    </div>
-    <div className="command-group command-group-slot" role="group" aria-label="计算">
-      <span className="command-caption">计算</span>
-      <span className="command-slot" ref={setSlot} />
-    </div>
-    {specification && <div className="command-group" role="group" aria-label="交付">
-      <span className="command-caption">交付</span>
-      <Button size="compact" variant="ghost" disabled={state.dirty} onClick={() => go('specification', specification.tabs[0][0])}><Icon name="result/report" />规格书</Button>
-    </div>}
-    <span className="command-state" title={resultStatus(location.module).reason}>{commandResultLabel(resultStatus(location.module), latestModuleRun(evidence.data, location.module, methods.data), state.dirty)}</span>
-  </div>;
+  const commandBar = <CommandBar label="型号命令" status={commandResultLabel(resultStatus(location.module), latestModuleRun(evidence.data, location.module, methods.data), state.dirty)} actions={[
+    { id:'save', label:'保存', icon:'action/save', role:'save', loading:state.busy, disabledReason:state.readOnly?'此版本只读':!state.dirty?'没有未保存修改':!state.workspace?'型号尚未读取':undefined, onSelect:()=>void state.save() },
+    ...(primaryAction ? [primaryAction] : []),
+    { id:'undo', label:'撤销', icon:'action/undo', priority:10, disabledReason:state.busy||state.readOnly||!state.dirty&&state.workspace?.raw.can_undo!==true?'没有可撤销的修改':undefined, onSelect:()=>void state.undo() },
+    ...(specification&&location.module!=='specification'?[{id:'specification',label:'规格书',icon:'result/report',priority:20,disabledReason:state.dirty?'请先保存修改':undefined,onSelect:()=>go('specification',specification.tabs[0][0])}]:[]),
+  ]} />;
   const inspector = <div className="type-property-wrapper">
     <div className="inspector-switch" role="tablist" aria-label="属性分页">
       <button type="button" role="tab" aria-selected={inspectorView === 'input' || inspectorView === 'method' && !methodModule} onClick={() => setInspectorView('input')}><Icon name="object/conditions" />输入</button>
@@ -172,9 +178,9 @@ export function TypeWorkspace() {
     {property}{location.module === 'structure' && !row && !!state.workspace?.raw.type_creation && document && <TypeRatingInputs />}</>}
     {agentOpened && state.workspace && <div className="type-agent-panel" hidden={inspectorView !== 'agent'}><AgentPanel key={state.workspace.id} workspaceId={state.workspace.id} context={cleanLabel(document?.name || '型号设计')} suggestions={['检查这个型号的问题', '绝缘厚度改到 15.8 mm 会怎样？', '检查规格书还缺哪些来源与结果']} /></div>}
   </div>;
-  return <TypeCommandSlot.Provider value={slot}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<StatusMark kind={status} label={(location.run ? '运行快照 · 只读' : statusLabel) + (demo ? ' · 演示' : '')} detail={state.error || (demo ? '型号基准含演示来源，请核对各字段工程依据。' : state.readOnly ? '所选输入快照只读；基准版本与来源见型号名片。' : state.dirty ? '保存后更新型号输入；原运行结果保留并标为过期。' : '当前编辑已保存；各模块保存结果的状态见型号浏览器。')} />}
+  return <TypeCommandSlot.Provider value={setPrimaryAction}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<StatusMark kind={status} label={(location.run ? '运行快照 · 只读' : statusLabel) + (demo ? ' · 演示' : '')} detail={state.error || (demo ? '型号基准含演示来源，请核对各字段工程依据。' : state.readOnly ? '所选输入快照只读；基准版本与来源见型号名片。' : state.dirty ? '保存后更新型号输入；原运行结果保留并标为过期。' : '当前编辑已保存；各模块保存结果的状态见型号浏览器。')} />}
     activeNavigation="型号" theme={location.theme} onTheme={onTheme} onUnavailable={name => setInfo(name + '入口尚未接入')}
-    actions={<><IconButton icon="action/edit" label="修改型号名称" disabled={state.busy || state.readOnly || !document} onClick={() => { setNewName(document?.name || ''); setRenaming(true); }} /><Button variant={state.dirty && !state.readOnly ? 'primary' : 'default'} loading={state.busy} disabled={!state.dirty || state.readOnly || !state.workspace} onClick={() => void state.save()}><Icon name="action/save" />保存</Button></>}
+    actions={<><IconButton icon="action/edit" label="修改型号名称" disabled={state.busy || state.readOnly || !document} onClick={() => { setNewName(document?.name || ''); setRenaming(true); }} /></>}
     property={inspector}>
     {commandBar}
     <div className="workbench-frame">{explorer}

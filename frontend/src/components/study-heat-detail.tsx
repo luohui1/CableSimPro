@@ -6,6 +6,8 @@ import { displayName } from '@/lib/display-names';
 import { savedDomain, entityLabel } from '@/lib/domain-fields';
 import { readableEvidence } from './study-workbench-config';
 import { StudyDetailGroup } from './study-detail-group';
+import { StudyMaterialBasis } from './study-material-basis';
+import { StudyCorrection } from './study-correction';
 
 type Row = Record<string, unknown>;
 const K = 273.15;
@@ -51,6 +53,8 @@ export function StudyHeatDetail({ run, cases, initialCase }: { run?: Row; cases:
   const [cable, setCable] = useState('');
   const current = runCases.find(c => text(c.case_id) === caseId);
   if (!run) return <EmptyState title="尚无运行" description="运行后在这里查看损耗、热路与互热。" />;
+  const correction=optionalRecord(current?.artifacts)['x-cablesim.gb50217-correction'];
+  if (correction) return <StudyCorrection artifact={optionalRecord(correction)} historical={run.freshness!=='current'} part="details" />;
   const trace = optionalRecord(optionalRecord(current?.artifacts)[TRACE]);
   if (!current || !Object.keys(trace).length) return <EmptyState title="此工况没有计算轨迹" description="所用方法未输出 IEC 60287 计算轨迹，无法展示热路详情。" />;
 
@@ -76,13 +80,14 @@ export function StudyHeatDetail({ run, cases, initialCase }: { run?: Row; cases:
   }
   const evidence = optionalRecord(current.evidence);
   const sources = (Array.isArray(trace.sources) ? trace.sources : []).map(text).filter(Boolean).map(readableEvidence);
-  const name = (id: string) => names.get(id) || id.replace(/^cable\//, '');
+  const name = (id?: string) => id ? names.get(id) || entityLabel(savedDomain(run), id) : '保存工况';
 
   return <div className="heat-detail">
     <div className="heat-detail-bar">
       {options.length > 1 && <Select label="候选" value={caseId} options={options.map(o => ({ value: o.id, label: o.label }))} onChange={value => { setCaseId(value); setCable(''); }} />}
       {cables.length > 1 && <Select label="电缆" value={focus} options={cables.map(id => ({ value: id, label: name(id) + (id === hottest ? '（最热）' : '') }))} onChange={setCable} />}
     </div>
+    {!cables.length && <p role="status">{text(optionalRecord(optionalRecord(trace.operating).error).message) || '该保存工况未取得运行温度；材料常数与依据仍可查看。'}</p>}
     <header className="heat-detail-head">
       <div>
         <span className="muted">{name(focus)} · 运行负荷 {fmt(v('x-cablesim.iec60287.current'))} A</span>
@@ -120,6 +125,7 @@ export function StudyHeatDetail({ run, cases, initialCase }: { run?: Row; cases:
       </table></div>
     </section></StudyDetailGroup>}
 
+    <StudyMaterialBasis caseRow={current} />
     <StudyDetailGroup id="heat:basis" title="计算口径与来源"><section className="heat-section heat-basis" aria-label="计算口径">
       <h3>计算口径</h3>
       <dl>

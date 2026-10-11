@@ -218,11 +218,14 @@ def test_run_summary_default_compatibility_pagination_and_live_state(client, mon
     assert response.status_code == 200, response.text
     value = response.json()['items'][0]
     assert set(value) == {'id','workspace','study','sequence','status','created','finished',
-                          'freshness','integrity','version_status','snapshot','method','error','headlines'}
+                          'freshness','integrity','version_status','snapshot','method','error','headlines','task','driver','headline'}
     for field in ('id','sequence','status','created','finished','freshness','integrity','version_status'):
         assert value[field] == saved[field]
     assert value['snapshot'] == {'module': saved['snapshot'].get('module')}
     assert value['method'] == saved['snapshot']['definition']['method']
+    assert value['task'] == saved['snapshot']['definition']['task']
+    assert value['driver'] == saved['snapshot']['definition']['driver']
+    assert value['headline'] == saved['output']['cases'][0]['evidence']['headline']
     assert 'output' not in value and len(response.content) < 30000
     assert client.get(root+'/runs?view=full').json() == full
     assert client.get(root+'/runs').json() == full

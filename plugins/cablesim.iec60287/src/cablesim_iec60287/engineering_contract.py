@@ -41,7 +41,7 @@ FORM_FIELDS=[
     {'key':'screen_longitudinal_r20','title':'铜带纵向 R20','unit':'ohm/m','min':0,'max':1,'scale':.001,'optional':True,
      'hint':'界面单位Ω/km；采用给定电阻模型时必填，需注明厂家数据或试验出处。'},
     {'key':'filler_rho','title':'填充与包带热阻率','unit':'K*m/W','min':0,'max':100,'scale':1,'example':6,
-     'reference':'工程师给定填充与包带材料模型：采用 IEC60287-2-1:2023 表1 纤维类材料参考值6 K·m/W，PDF41页/印刷39页；不是厂家配方实测。',
+     'reference':'工程师给定填充与包带材料模型：采用 IEC60287-2-1:2023 表1 纤维类材料参考值6 K·m/W，PDF89页/印刷33页；不是厂家配方实测。',
      'hint':'需大于0；表1纤维材料参考6 K·m/W，实际配方优先。'},
     {'key':'armour_gap_ratio','title':'钢带间隙 / 带宽','unit':'1','min':0,'max':.5,'scale':1,'example':.5,'optional':True,'armoured_only':True,
      'reference':'工程师给定：本问询采用间隙率0.5；GB/T12706.2-2020 13.7规定不大于50%，上限不代表厂家实际间隙。',

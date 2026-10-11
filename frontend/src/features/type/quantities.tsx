@@ -5,7 +5,7 @@ import { DataTable } from '@/components/data-table';
 import { InlineEmpty, ErrorState, LoadingState, StaleBanner } from '@/components/states';
 import { SourceBadge } from '@/components/source-badge';
 import { Button } from '@/components/ui/button';
-import { formatNumber } from '@/lib/format';
+import { formatNumber, significantNumber } from '@/lib/format';
 import type { CableType } from '@/features/drawing/types';
 import { useTypeWorkspace } from './provider';
 import { chooseEvidence, currentEvidence, methodLabel, useTypeEvidence } from './evidence';
@@ -17,6 +17,7 @@ import { cleanLabel } from './labels';
 import { useTypeInspector } from './inspector';
 import { quantityLayer, quantityMissingInputs } from './quantity-inputs';
 import { SavedRunPicker } from './saved-run-picker';
+import { ResultTrace } from './result-detail';
 
 type QuantityRow = Record<string, unknown> & { id: string };
 export function TypeQuantities({ cable }: { cable: CableType }) {
@@ -47,11 +48,11 @@ export function TypeQuantities({ cable }: { cable: CableType }) {
     inspector.show(cleanLabel(text(row.label)), [{ label: '保存推导', items: [
       { label: '外径', value: formatNumber(numeric(row.outer_radius_m)! * 2000, 2), unit: 'mm', source: 'derived', sourceDetail: source },
       { label: '建模长度', value: formatNumber(numeric(saved!.artifact.length_m), 3), unit: 'm' },
-      { label: '材料体积', value: row.material_volume_m3 == null ? '缺项' : formatNumber(numeric(row.material_volume_m3), 6), unit: 'm³', source: 'derived' },
+      { label: '材料体积', value: row.material_volume_m3 == null ? '缺项' : significantNumber(numeric(row.material_volume_m3),3), unit: 'm³', source: 'derived' },
       { label: '单位长度用料', value: row.mass_kg_per_km == null ? '缺项' : formatNumber(numeric(row.mass_kg_per_km), 2), unit: 'kg/km', source: 'derived' },
       { label: '依据', value: text(row.quantity_basis) || text(row.representation) || '实体积分' },
       { label: '缺项', value: (row.quantity_missing as string[]).join('、') || '无' },
-    ] }, ...(layer ? [{ label: '修正输入', items: missing.length ? missing.map(item => ({ label: item.label, value: <Button variant="ghost" size="compact" onClick={() => locate(layer, item.path)}>定位字段</Button> })) : [{ label: '结构层', value: <Button variant="ghost" size="compact" onClick={() => locate(layer)}>定位结构层</Button> }] }] : [])]);
+    ] }, ...(layer ? [{ label: '修正输入', items: missing.length ? missing.map(item => ({ label: item.label, value: <Button variant="ghost" size="compact" onClick={() => locate(layer, item.path)}>定位字段</Button> })) : [{ label: '结构层', value: <Button variant="ghost" size="compact" onClick={() => locate(layer)}>定位结构层</Button> }] }] : [])], <ResultTrace items={[{label:'完整材料体积 / m³',value:row.material_volume_m3==null?'缺项':String(row.material_volume_m3)},{label:'完整单位长度用料 / kg/km',value:row.mass_kg_per_km==null?'缺项':String(row.mass_kg_per_km)}]} />);
   }
   const bodyState = running || evidence.isPending ? 'loading' : error || evidence.error ? 'error' : !saved ? 'empty' : current ? 'success' : 'historical';
   return <div className="type-page" data-type-page="quantities" data-type-state={bodyState}>
@@ -68,7 +69,7 @@ export function TypeQuantities({ cable }: { cable: CableType }) {
       <DataTable label="外径与用料" selectedId={selected} onSelect={choose} showGroups={false} groups={[{ id: 'layers', label: '结构推导', rows: layers }]} rowLabel={row => cleanLabel(text(row.label))} columns={[
         { id: 'layer', label: '层次', render: row => cleanLabel(text(row.label)) },
         { id: 'outer', label: '实体外径', unit: 'mm', numeric: true, render: row => formatNumber(numeric(row.outer_radius_m)! * 2000, 2) },
-        { id: 'volume', label: '材料体积', unit: 'm³', numeric: true, render: row => row.material_volume_m3 == null ? '缺项' : formatNumber(numeric(row.material_volume_m3), 6) },
+        { id: 'volume', label: '材料体积', unit: 'm³', numeric: true, render: row => row.material_volume_m3 == null ? '缺项' : significantNumber(numeric(row.material_volume_m3),3) },
         { id: 'mass', label: '单位长度用料', unit: 'kg/km', numeric: true, render: row => row.mass_kg_per_km == null ? '缺项' : formatNumber(numeric(row.mass_kg_per_km), 2) },
         { id: 'basis', label: '依据与缺项', wrap: true, render: row => (row.quantity_missing as string[]).length ? (row.quantity_missing as string[]).join('、') : text(row.quantity_basis) || '保存的实体积分' },
       ]} />

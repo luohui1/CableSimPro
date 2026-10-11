@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.comsol-bridge",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "name": "COMSOL 参考对照",
   "description": "独立运行用户已安装的 COMSOL 6.2，对同一 SI 问题作可选内部基准比较；平台开源计算不依赖它。",
   "icon": "assets/icon.svg",
@@ -2090,7 +2090,8 @@
           "source_artifact": "x-cablesim.simulation-bundle"
         }
       ],
-      "study_tasks": []
+      "study_tasks": [],
+      "solver": "slurm"
     },
     {
       "kind": "method",
@@ -4462,7 +4463,8 @@
           "source_artifact": "x-cablesim.simulation-bundle"
         }
       ],
-      "study_tasks": []
+      "study_tasks": [],
+      "solver": "slurm"
     },
     {
       "kind": "method",
@@ -6833,7 +6835,8 @@
           "source_artifact": "x-cablesim.simulation-bundle"
         }
       ],
-      "study_tasks": []
+      "study_tasks": [],
+      "solver": "slurm"
     }
   ],
   "files": [

@@ -10,17 +10,17 @@ import { Input } from '@/components/ui/input';
 import { Dialog } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/select';
 import { useTypeWorkspace } from './provider';
-import { useTypeInspector } from './inspector';
 import { typePath, useTypeNavigation } from './navigation';
 import { exportSpecification, generateSpecification, lifecycleAction, typeSpecification, type Specification, type SpecificationAudience } from './version-api';
 import { EvidenceDigest } from './evidence-digest';
-import { displayText } from '@/lib/display-names';
+import { useTypeCommand } from './command-slot';
+import { ReviewIssues } from './review-issues';
 
 const statuses = { draft: '草稿', submitted: '待人工审核', approved: '已批准', published: '已发布' };
 const channelLabels: Record<string, string> = { geometry: '结构推导', electrical: '电气参数', rating: '载流量表', short_circuit: '短路容量', standards: '标准核对' };
 const destinations: Record<string, [string, string]> = { geometry: ['structure', 'quantities'], electrical: ['electrical', 'parameters'], rating: ['rating-table', 'parameters'], short_circuit: ['short-circuit', 'parameters'], standards: ['standard-check', 'results'] };
 export function TypeSpecification({ tab }: { tab: string }) {
-  const state = useTypeWorkspace(), inspector = useTypeInspector(), queries = useQueryClient(), navigation = useTypeNavigation();
+  const state = useTypeWorkspace(), queries = useQueryClient(), navigation = useTypeNavigation();
   const [audience, setAudience] = useState<SpecificationAudience>('customer');
   const query = useQuery({ queryKey: ['type-specification', state.workspace!.id, audience], queryFn: ({ signal }) => typeSpecification(state.workspace!.id, signal, audience) });
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [chapter, setChapter] = useState('cover'), [blockedChannel, setBlockedChannel] = useState('');
@@ -83,11 +83,11 @@ export function TypeSpecification({ tab }: { tab: string }) {
     const style=document.createElement('style');style.textContent='@media screen {html,body{width:auto;min-width:0;max-width:100%;margin:0}body{box-sizing:border-box;padding:var(--space-4)}table{max-width:100%;table-layout:fixed}th,td{overflow-wrap:anywhere}.page,.specification{width:auto;max-width:100%;min-width:0}}';document.head.append(style);
     iframeHtml = '<!doctype html>' + document.documentElement.outerHTML;
   }
-  const checkRows = checks.map((check, index) => ({ ...check, id: text(check.id) || String(index) }) as Record<string, unknown> & { id: string });
   const revisionRows = spec ? array(spec.payload.revisions, '文档修订记录').map((value, index) => ({ ...optionalRecord(value), id: String(index) }) as Record<string, unknown> & { id: string }) : [];
   const blockedTarget = destinations[blockedChannel];
+  const inCommand=useTypeCommand({id:'specification-generate',label:status==='published'?'导出 PDF':'生成规格书',role:'primary',loading:busy,disabledReason:!spec?'规格书尚未读取':reason||(state.readOnly&&status!=='published'?'此版本不可生成':undefined),onSelect:()=>void generate()});
   return <div className="type-page" data-type-page="specification-results" data-type-state={bodyState}>
-    <div className="type-result-toolbar"><Button variant="primary" size="compact" loading={busy} disabled={!spec || !!reason || state.readOnly && status !== 'published'} onClick={() => void generate()}>{status === 'published' ? '导出 PDF' : '生成规格书'}</Button>
+    <div className="type-result-toolbar">{!inCommand&&<Button variant="primary" size="compact" loading={busy} disabled={!spec || !!reason || state.readOnly && status !== 'published'} onClick={() => void generate()}>{status === 'published' ? '导出 PDF' : '生成规格书'}</Button>}
       <Select label="文档版本" value={audience} disabled={busy} options={[{ value: 'customer', label: '客户版' }, { value: 'internal', label: '内部审核版' }]} onChange={value => setAudience(value as SpecificationAudience)} />
       {audience === 'internal' && <Button size="compact" disabled={!spec || !!reason || busy} onClick={() => void generate(true)}>导出内部审核稿</Button>}
       {spec && <StatusMark kind={status === 'published' || status === 'approved' ? 'success' : 'draft'} label={statuses[status as keyof typeof statuses]} />}{reason && <span className="muted">{reason}</span>}
@@ -97,7 +97,7 @@ export function TypeSpecification({ tab }: { tab: string }) {
       {historical && <StaleBanner description="输入或来源已变化；重新生成后才能交付当前客户版。" />}
       {tab === 'review' ? <>
         <div className="type-result-summary"><strong>{checks.filter(check => check.blocking === true).length} 项阻止发布</strong><Button size="compact" disabled={state.dirty || state.readOnly || busy || status !== 'draft' || checks.some(check=>check.blocking===true)} onClick={() => begin('adopt')}>采纳为版本草稿</Button><Button size="compact" disabled={state.dirty || state.readOnly || busy || status === 'published' || checks.some(check=>check.blocking===true) || !spec.ready} onClick={() => begin(nextAction)}>{names[nextAction]}</Button></div>
-        <DataTable label="规格书提交前校核" rowLabel={row => displayText(text(row.message))} showGroups={false} groups={[{ id: 'checks', label: '校核', rows: checkRows }]} columns={[{ id: 'channel', label: '模块', render: row => channelLabels[text(row.channel)] || text(row.channel) }, { id: 'message', label: '问题与处理', wrap: true, render: row => <span>{displayText(text(row.message))}{destinations[text(row.channel)] && <Button variant="ghost" size="compact" onClick={()=>navigation.navigate(typePath(state.workspace!.id,...destinations[text(row.channel)],navigation.location.theme))}>去{channelLabels[text(row.channel)]}</Button>}</span> }, { id: 'blocking', label: '发布', render: row => <StatusMark kind={row.blocking === true ? 'error' : 'unknown'} label={row.blocking === true ? '先解决' : '需核对'} /> }]} onSelect={row => inspector.show('提交前校核', [{ label: '当前内容', items: [{ label: '问题', value: displayText(text(row.message)) }, { label: '规格书摘要', value: <EvidenceDigest value={spec.digest} /> }, { label: '输入修订', value: <EvidenceDigest value={spec.payload.revision} /> }] }])} />
+        <ReviewIssues checks={checks} />
       </> : tab === 'revisions' ? revisionRows.length ? <DataTable label="文档修订记录" showGroups={false} rowLabel={row => text(row.version)} groups={[{ id: 'revisions', label: '修订', rows: revisionRows }]} columns={[{ id: 'version', label: '文件版本', render: row => text(row.version) }, { id: 'summary', label: '变更摘要', wrap: true, render: row => text(row.summary) }, { id: 'author', label: '编制人', render: row => text(row.author) }, { id: 'created', label: '日期', render: row => text(row.created).slice(0, 10) }]} /> : <EmptyState title="尚未提交文档评审" description="提交时记录文件版本、变更摘要、编制人与日期。" /> : <div className="type-specification-layout">
         <div className="type-specification-navigation">{tab === 'content' && <nav aria-label="规格书章节">{chapters.map((name, index) => <button key={name} title={name} aria-label={name} aria-current={chapter === markers[index] ? 'page' : undefined} onClick={() => { setChapter(markers[index]); const section=preview.current?.contentDocument?.querySelector(`[data-specification-section="${markers[index]}"]`); const dock=preview.current?.closest('.workbench-dock-body'); if(section&&dock&&preview.current) dock.scrollTo({top:preview.current.offsetTop+(section as HTMLElement).offsetTop,behavior:'instant'}); }}>{index + 1} {chapterLabels[index] || name}</button>)}</nav>}
         {!!checks.filter(check=>check.blocking===true).length && <Button size="compact" onClick={() => { const first=checks.find(check=>check.blocking===true), destination=destinations[text(first?.channel)]; navigation.navigate(typePath(state.workspace!.id,...(destination || ['specification','review'] as [string,string]),navigation.location.theme)); }}>{checks.filter(check=>check.blocking===true).length} 项阻止发布 · 查看第一项</Button>}</div>

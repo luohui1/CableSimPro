@@ -712,3 +712,27 @@
 
 .file-pick { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
 .file-pick > .muted { overflow-wrap: anywhere; }
+/* 公共资源与 Agent 记忆：摘要先行，详情按需展开。 */
+.run-name-part { white-space: nowrap; }
+.run-record-list .object-chip { flex-wrap: nowrap; align-items: baseline; }
+.resource-scope { margin-bottom: var(--space-4); color: var(--text-secondary); font-size: var(--text-note); }
+.resource-scope summary, .asset-coverage summary, .memory-management > summary, .agent-policy summary { cursor: pointer; }
+.resource-scope p, .asset-coverage p { max-width: 75ch; line-height: 1.7; }
+.asset-state { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1); }
+.asset-coverage { min-width: 0; max-width: 100%; color: var(--text-secondary); }
+.asset-coverage ul { padding-left: var(--space-4); margin-block: var(--space-2); }
+.asset-coverage li { display: grid; gap: var(--space-1); margin-bottom: var(--space-2); overflow-wrap: anywhere; }
+.settings-memory { margin-top: var(--space-6); padding-top: var(--space-4); border-top: 1px solid var(--line); }
+.settings-memory p { margin-block: var(--space-2); line-height: 1.7; }
+.memory-management { margin-top: var(--space-4); }
+.memory-manager { display: grid; gap: var(--space-3); padding-top: var(--space-3); min-width: 0; }
+.memory-filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(var(--space-12) * 4)), 1fr)); gap: var(--space-3); }
+.memory-filters .search-field { flex-direction: column; align-items: stretch; gap: var(--space-2); }
+.memory-filters .search-field input { min-width: 0; width: 100%; }
+.memory-list { display: grid; gap: var(--space-4); }
+.memory-item { padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.memory-item header { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); }
+.memory-item p { white-space: pre-wrap; }
+.memory-editor { padding-block: var(--space-3); }
+.agent-policy { color: var(--text-secondary); font-size: var(--text-note); }
+.agent-policy p { max-width: 75ch; line-height: 1.7; margin-block: var(--space-2); }

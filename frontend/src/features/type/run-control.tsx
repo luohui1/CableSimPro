@@ -9,6 +9,7 @@ import { Dialog } from '@/components/ui/dialog';
 import { useTypeWorkspace } from './provider';
 import { methodLabel } from './evidence';
 import { missingTypeInputs } from './missing';
+import { useTypeCommand } from './command-slot';
 
 type Definition = Omit<components['schemas']['CreateStudy'], 'expected_revision'>;
 type Prepared = { study: components['schemas']['StudyResponse']; preflight: components['schemas']['PreflightResponse']; revision: number };
@@ -81,8 +82,9 @@ export function TypeRunControl({ channel, label, definition, onBusy, unavailable
     } catch (error) { if (mounted.current) setError(message(error)); } finally { pending.current = false; running(false); }
   }
   const reason = unavailable || (state.document && missingTypeInputs(state.document).length ? '结构缺项 · 先补齐型号名片中的字段' : state.dirty ? state.inputDirty?'请先保存结构修改':'请先保存方法条件；临时结果可在方法页试算' : state.readOnly ? state.workspace?.raw.fixed_run ? '运行快照保持只读' : '历史或已发布型号保持只读' : '');
-  return <div className="type-run-control"><Button variant={primary ? 'primary' : 'default'} size="compact" loading={busy} disabled={!!reason || !state.workspace} onClick={() => void prepare()}>{attempt.current ? '查询同一运行' : label}</Button>
-    {reason && <span className="muted">{reason}</span>}{error && <p className="field-error" role="alert">{error}</p>}
+  const inCommand = useTypeCommand({ id: 'run-'+channel, label: attempt.current ? '查询同一运行' : label, role: 'primary', loading: busy, disabledReason: reason || (!state.workspace ? '型号尚未读取' : undefined), onSelect: () => void prepare() });
+  return <div className="type-run-control">{!inCommand && <Button variant={primary ? 'primary' : 'default'} size="compact" loading={busy} disabled={!!reason || !state.workspace} onClick={() => void prepare()}>{attempt.current ? '查询同一运行' : label}</Button>}
+    {!inCommand && reason && <span className="muted">{reason}</span>}{error && <p className="field-error" role="alert">{error}</p>}
     <Dialog open={open} onOpenChange={value => { if (!busy) setOpen(value); }} title={label + ' · 预检'} description={prepared?.preflight.ready ? '保存输入已通过预检，确认范围后运行。' : '当前输入未通过预检，修正后重新提交。'}
       actions={<Button variant="primary" loading={busy} disabled={!ack || !prepared?.preflight.ready || state.dirty || state.workspace?.revision !== prepared?.revision} onClick={() => void execute()}>确认并运行</Button>}>
       <div className="type-create-fields">{prepared?.preflight.cases.filter(item => item.status !== 'succeeded').map(item => { const reason = text(optionalRecord(item.error).message) || item.status; return <div key={item.case_id}><p className="field-error">{reason}</p>{locateIssue?.(reason)}</div>; })}

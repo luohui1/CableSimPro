@@ -8,7 +8,7 @@ from math import isclose, isfinite
 from pathlib import Path
 import re
 
-VERSION = '0.1.0'
+VERSION = '0.3.0'
 DATA = Path(__file__).parent
 NUMERIC_FIELDS = {'area_m2', 'screen_area_m2', 'diameter_m', 'u0_v', 'u_v', 'um_v', 'core_count',
                   'conductor_class', 'nominal_thickness_m', 'duration_s'}
@@ -66,13 +66,20 @@ class BasisLibrary:
         try:
             index = json.loads((directory / 'integrity.json').read_text('utf-8'))
             contents = {}
-            for name in ('basis.json', 'verification.json'):
+            for name,item in index['files'].items():
+                if not re.fullmatch(r'(?:basis|verification|records-[a-z-]+)\.json',name):
+                    raise ValueError('索引文件名越界')
                 raw = (directory / name).read_bytes()
-                item = index['files'][name]
                 if len(raw) != item['size_bytes'] or sha256(raw).hexdigest() != item['sha256']:
                     raise ValueError('摘要不一致')
                 contents[name] = json.loads(raw)
             self.data = contents['basis.json']
+            self.data['records'] = []
+            for item in self.data['record_files']:
+                name=item['name']
+                if {k:item[k] for k in ('sha256','size_bytes')} != index['files'][name]:
+                    raise ValueError('分册摘要与索引不同')
+                self.data['records'].extend(contents[name])
             self.verification = contents['verification.json']
             self.data_sha256 = index['files']['basis.json']['sha256']
             if self.data['schema'] != 'cablesim.standards-basis/1' or self.data['version'] != VERSION:
@@ -83,7 +90,7 @@ class BasisLibrary:
                 if manifest['id'] != 'cablesim.standards-basis' or manifest['version'] != VERSION:
                     raise ValueError('发行不一致')
                 sealed = {f['path']: f for f in manifest['files']}
-                for name in ('excerpts.json', 'basis.json', 'verification.json', 'integrity.json'):
+                for name in ('excerpts.json', 'integrity.json', *index['files']):
                     raw = (directory / name).read_bytes()
                     item = sealed['src/cablesim_standards_basis/' + name]
                     if len(raw) != item['size_bytes'] or sha256(raw).hexdigest() != item['sha256']:
@@ -102,10 +109,18 @@ class BasisLibrary:
             raise BasisError('INPUT_INVALID', '/' + field, '未声明的查询字段，请按查询契约填写。')
         if request.get('schema_version') != 'cablesim.standards-query/1':
             raise BasisError('INPUT_INVALID', '/schema_version', '请使用 cablesim.standards-query/1。')
+        operation = request.get('operation', 'resolve')
+        if operation == 'catalog':
+            if set(request) != {'schema_version', 'operation'}:
+                raise BasisError('INPUT_INVALID', '/', '目录查询仅接受 schema_version 和 operation。')
+            return {'schema': 'cablesim.standards-answer/1', 'plugin_id': 'cablesim.standards-basis',
+                    'plugin_version': VERSION, 'data_sha256': self.data_sha256,
+                    'query_sha256': digest(request), 'approval': 'not_granted',
+                    'status': 'catalogued', 'tables': self.data['tables'],
+                    'not_covered': self.data['not_covered'], 'records': []}
         for field in ('standard', 'edition', 'locator'):
             if not isinstance(request.get(field), str) or not request[field].strip() or len(request[field]) > 80:
                 raise BasisError('INPUT_INVALID', '/' + field, '请填写明确的标准号、版本和条款或表号。')
-        operation = request.get('operation', 'resolve')
         if operation not in ('resolve', 'list'):
             raise BasisError('INPUT_INVALID', '/operation', '请选择 resolve（取判据）或 list（完整列出）。')
         for field in ('quantity', 'record_id'):
@@ -118,17 +133,18 @@ class BasisLibrary:
             raise BasisError('INPUT_INVALID', '/conditions', '条件须为对象，数值字段使用契约规定的 SI 单位。')
         if operation == 'list' and (conditions or request.get('record_id')):
             raise BasisError('INPUT_INVALID', '/conditions', '完整列出不接受条件或记录筛选；请改用 resolve。')
+        declared = self.data.get('condition_fields', {})
         for key, value in conditions.items():
-            if key not in CONDITION_FIELDS:
+            if key not in CONDITION_FIELDS and key not in declared:
                 raise BasisError('INPUT_INVALID', '/conditions/' + key, '未知条件；请使用依据库声明的条件名和 SI 单位。')
-            if key in NUMERIC_FIELDS:
+            if key in NUMERIC_FIELDS or declared.get(key, {}).get('type') == 'number':
                 if type(value) not in (int, float) or (type(value) is float and not isfinite(value)) or value <= 0:
                     raise BasisError('INPUT_INVALID', '/conditions/' + key, '请输入正的有限 SI 数值；截面为 m²，厚度和直径为 m，电压为 V。')
                 maximum = {'area_m2': .01, 'screen_area_m2': .01, 'diameter_m': 2, 'nominal_thickness_m': 1,
-                           'u0_v': 1e6, 'u_v': 1e6, 'um_v': 1e6}.get(key)
+                           'u0_v': 1e6, 'u_v': 1e6, 'um_v': 1e6}.get(key, declared.get(key, {}).get('maximum'))
                 if maximum is not None and value > maximum:
                     raise BasisError('INPUT_INVALID', '/conditions/' + key, '数值超过查询边界；请核对 SI 单位。')
-                if key in ('core_count', 'conductor_class') and (int(value) != value or value > 100):
+                if (key.endswith('_count') or key == 'conductor_class') and (int(value) != value or value > 100):
                     raise BasisError('INPUT_INVALID', '/conditions/' + key, '请输入正整数类别或芯数。')
             elif not isinstance(value, str) or not value or len(value) > 60:
                 raise BasisError('INPUT_INVALID', '/conditions/' + key, '请输入明确的材料、结构或分支代号。')

@@ -1,0 +1,406 @@
+{
+  "schema": "cablesim.plugin/2",
+  "id": "cablesim.gb50217-correction",
+  "version": "1.0.0",
+  "name": "GB 50217 载流量校正",
+  "description": "按附录 D 对有出处的单根基准载流量校正；表外条件拒绝，系数由标准依据库核验。",
+  "icon": "assets/icon.svg",
+  "publisher": {
+    "id": "cablesim",
+    "name": "CableSimPro"
+  },
+  "host_api": {
+    "major": 2,
+    "min_minor": 1
+  },
+  "license": {
+    "spdx": "LicenseRef-Project-Undeclared",
+    "review_required": false
+  },
+  "platforms": [
+    "windows-x64",
+    "linux-x64",
+    "darwin-arm64",
+    "darwin-x64"
+  ],
+  "runtime": {
+    "kind": "python",
+    "python": ">=3.11,<3.14",
+    "entry": "src/cablesim_gb50217_correction/main.py"
+  },
+  "permissions": [
+    "study.run",
+    "artifact.write"
+  ],
+  "dependencies": [],
+  "resources": {
+    "timeout_s": 60,
+    "memory_mb": 512,
+    "network": "none"
+  },
+  "capabilities": [
+    {
+      "kind": "method",
+      "id": "steady-rating",
+      "title": "按 GB 50217 校正",
+      "solver": "local",
+      "method_version": "1.0.0",
+      "analysis": "ampacity_correction",
+      "input_schema": "cablesim.domain/1",
+      "outputs": [
+        {
+          "key": "ampacity",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        },
+        {
+          "key": "x-cablesim.gb50217.baseline-current",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        },
+        {
+          "key": "x-cablesim.gb50217.correction-factor",
+          "type": "quantity",
+          "per": "circuit",
+          "required": true
+        }
+      ],
+      "artifacts": [
+        {
+          "type": "x-cablesim.gb50217-correction",
+          "required": true
+        },
+        {
+          "type": "x-cablesim.headline-witness",
+          "required": true
+        }
+      ],
+      "validation": {
+        "level": "analytic-benchmark",
+        "cases": [
+          "tests/test_gb50217_correction.py"
+        ]
+      },
+      "limitations": [
+        "仅 10 kV 及以下；相同型号、正常温限和中心埋深的单根基准。",
+        "覆盖 D.0.1 温度表与 D.0.2 公式、D.0.3 土壤、D.0.4 / D.0.5 单层并列；其他分支明确拒绝。",
+        "D.0.3 仅用于表 C.0.1-2；并列表不用于三相交流单芯电缆。",
+        "厂家基准由工程师核对；校正结果不是 IEC 完整热路计算，也不代表厂家保证值。"
+      ],
+      "description": "读取封签标准依据库的校正系数，将有出处的单根基准载流量换算到保存的实际工况。",
+      "parameter_schema": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline_current_a": {
+            "exclusiveMinimum": 0,
+            "title": "基准载流量",
+            "type": "number",
+            "description": "单根电缆、相同型号和正常导体温限的基准值，须有厂家样本或已保存表格出处；不是目标负荷。",
+            "x-unit": {
+              "si": "A",
+              "display": "A",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "baseline",
+            "x-order": 0,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "baseline_ambient_k": {
+            "exclusiveMinimum": 0,
+            "title": "基准环境温度",
+            "type": "number",
+            "description": "表 D.0.1 基准：空气 40 °C、土壤 25 °C。",
+            "x-unit": {
+              "si": "K",
+              "display": "°C",
+              "scale": 1,
+              "offset": -273.15
+            },
+            "x-group": "baseline",
+            "x-order": 1,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "baseline_soil_rho": {
+            "exclusiveMinimum": 0,
+            "title": "基准土壤热阻率",
+            "type": "number",
+            "description": "厂家基准与实际土壤热阻率必须相同；仅表 C.0.1-2 可使用 D.0.3。空气时此值不参与校正。",
+            "x-unit": {
+              "si": "K·m/W",
+              "display": "K·m/W",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "baseline",
+            "x-order": 2,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "baseline_kind": {
+            "pattern": "^(manufacturer|gb_c012)$",
+            "title": "基准类型",
+            "type": "string",
+            "description": "厂家或保存结果只能使用已覆盖的温度与并列校正；C.0.1-2 限 1 kV PVC、70 °C。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "baseline",
+            "x-order": 3,
+            "x-level": "basic",
+            "enum": [
+              "manufacturer",
+              "gb_c012"
+            ],
+            "x-enum-labels": {
+              "manufacturer": "厂家样本 / 已保存载流量表",
+              "gb_c012": "GB 50217 表 C.0.1-2"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "baseline_source": {
+            "maxLength": 500,
+            "minLength": 4,
+            "title": "基准原件名称与条件出处",
+            "type": "string",
+            "description": "注明资料名、规格、单根敷设、正常温限与基准环境条件；基准已分组校正的不能再次乘系数。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 4,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "baseline_sha256": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "基准原件或保存工件摘要",
+            "type": "string",
+            "description": "由原件或保存工件取得的 SHA256；人工声明，插件不会冒称已验证厂家额定值。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 5,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "baseline_page": {
+            "minimum": 1,
+            "title": "基准原文页码",
+            "type": "integer",
+            "description": "原件中的 1 起始页码；保存工件请填写可复核的页号。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 6,
+            "x-level": "advanced",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "baseline_depth_m": {
+            "exclusiveMinimum": 0,
+            "title": "基准中心埋深",
+            "type": "number",
+            "description": "直埋实际中心埋深必须与此值相同；附录 D 无通用埋深修正。",
+            "x-unit": {
+              "si": "m",
+              "display": "m",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "baseline",
+            "x-order": 7,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "baseline_reviewed": {
+            "title": "基准条件已人工核对",
+            "type": "boolean",
+            "description": "请确认基准取值与当前型号一致、单根敷设、正常温限一致且出处可追溯；不得使用已经乘过并列系数的基准。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 8,
+            "x-level": "basic",
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          },
+          "basis_release_digest": {
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "标准依据库发行摘要",
+            "type": "string",
+            "description": "固定到当前核验过的标准依据库发行；变化时拒绝静默换表。",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-order": 9,
+            "x-level": "advanced",
+            "default": "41d286cdb0e84514153e863e4537266303225ffbf3afb678a7ccee30cdee8f65",
+            "x-default-basis": {
+              "kind": "binding",
+              "reference": "当前封签标准依据库发行摘要"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "GB 50217—2018 附录 D；正值、适用基准及有效出处的输入校验"
+            }
+          }
+        },
+        "required": [
+          "baseline_current_a",
+          "baseline_ambient_k",
+          "baseline_soil_rho",
+          "baseline_kind",
+          "baseline_source",
+          "baseline_sha256",
+          "baseline_page",
+          "baseline_depth_m",
+          "baseline_reviewed",
+          "basis_release_digest"
+        ],
+        "type": "object"
+      },
+      "x-groups": [
+        {
+          "id": "baseline",
+          "title": "基准值与基准条件",
+          "order": 0
+        },
+        {
+          "id": "evidence",
+          "title": "原件出处与人工核对",
+          "order": 1
+        }
+      ],
+      "x-headline": [
+        {
+          "key": "ampacity",
+          "title": "校正后允许电流",
+          "condition": "rating-simultaneous",
+          "unit": {
+            "si": "A",
+            "display": "A",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.gb50217-correction"
+        },
+        {
+          "key": "x-cablesim.gb50217.baseline-current",
+          "title": "基准载流量",
+          "condition": "rating-simultaneous",
+          "unit": {
+            "si": "A",
+            "display": "A",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.gb50217-correction"
+        },
+        {
+          "key": "x-cablesim.gb50217.correction-factor",
+          "title": "总校正系数",
+          "condition": "rating-simultaneous",
+          "unit": {
+            "si": "1",
+            "display": "1",
+            "scale": 1,
+            "offset": 0
+          },
+          "aggregate": "first",
+          "artifact": "x-cablesim.headline-witness",
+          "source_artifact": "x-cablesim.gb50217-correction"
+        }
+      ],
+      "input_contract": {
+        "input_sources": [
+          "domain"
+        ],
+        "binding": {
+          "type": "domain",
+          "scope": "workspace"
+        }
+      },
+      "study_tasks": [
+        "rating"
+      ]
+    }
+  ],
+  "files": [
+    {
+      "path": "assets/icon.svg",
+      "sha256": "099e0bcc1c2458f871985277d1f10c1bb9955740e614984a26cd4b8fb0d0f892",
+      "size_bytes": 207
+    },
+    {
+      "path": "src/cablesim_gb50217_correction/correction.py",
+      "sha256": "4670cff763dca7fa732990b45d20b14697d604863ca1010cda36fb97b9d195de",
+      "size_bytes": 14572
+    },
+    {
+      "path": "src/cablesim_gb50217_correction/main.py",
+      "sha256": "68ae4eb0a46895a950232566bcfd082290a42b254198fae59dce8b594631b050",
+      "size_bytes": 3546
+    },
+    {
+      "path": "src/host-dependencies.json",
+      "sha256": "215a5465c5b023c90fa84fc358543e610cf9fe002344e7209fd22bd065b72cad",
+      "size_bytes": 3632
+    }
+  ]
+}

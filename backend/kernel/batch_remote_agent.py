@@ -40,8 +40,12 @@ def command(arguments):
 
 def validate_root(value):
     path=Path(value).resolve()
-    if not path.is_relative_to(Path.home()/'cablesim/jobs') or str(UUID(path.name))!=path.name:
-        raise ValueError('Batch directory must be a UUID under ~/cablesim/jobs')
+    # The installed agent is <workdir>/bin/cablesim-remote.py. Frozen copies
+    # run under <workdir>/jobs/<uuid>/submissions/<token>/agent.py.
+    agent=Path(__file__).resolve()
+    jobs=agent.parents[3] if agent.parent.parent.name=='submissions' else agent.parents[1]/'jobs'
+    if path.parent!=jobs or str(UUID(path.name))!=path.name:
+        raise ValueError('Batch directory must be a UUID under the configured workspace jobs directory')
     return path
 
 
@@ -119,7 +123,7 @@ def submit(root,request_path):
                 raise ValueError('Invalid administrator executable path')
         modules=profile.get('modules',[])
         if any(not re.fullmatch(r'[A-Za-z0-9_.+/-]+',m) for m in modules):raise ValueError('Invalid module')
-        if profile['partition']!='dg83':raise ValueError('Unapproved partition')
+        if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}',profile['partition']):raise ValueError('Invalid partition')
         if profile.get('comsol') and profile['comsol']!='/data/app/comsol/62/multiphysics/bin/comsol':raise ValueError('Invalid COMSOL installation')
         config={k:profile[k] for k in ('getdp','elmer','elmer_build','comsol','library_paths') if k in profile}
         config['comsol_lock']=str(Path.home()/'cablesim/comsol.lock')
@@ -139,7 +143,7 @@ def submit(root,request_path):
                'budget_core_hours':len(groups)*task_wall*accounting_cpus/3600}
         atomic(record,saved)
         h,rest=divmod(task_wall,3600);m,s=divmod(rest,60)
-        args=['sbatch','--parsable','--job-name',name,'--comment',token,'--partition','dg83',
+        args=['sbatch','--parsable','--job-name',name,'--comment',token,'--partition',profile['partition'],
               '--nodes','1','--ntasks','1','--cpus-per-task',str(workers),'--no-requeue',
               '--mem',str(resources['slurm_memory_mb'])+'M','--time',f'{h:02d}:{m:02d}:{s:02d}',
               '--array',f'0-{len(groups)-1}%{min(len(groups),resources["slurm_parallelism"])}',
@@ -209,7 +213,7 @@ def accounting(root,token):
     value.update(queue_position=None,queue_position_basis='not_pending')
     if not terminal and (not allocations or any(r['State'].split()[0]=='PENDING' for r in allocations)):
         try:
-            queue=command(['squeue','--noheader','--partition','dg83','--states','PENDING','--sort=-p,i','--format=%F'])
+            queue=command(['squeue','--noheader','--partition',saved['request'].get('profile',{}).get('partition','dg83'),'--states','PENDING','--sort=-p,i','--format=%F'])
             ordered=list(dict.fromkeys(queue.split()))
             value['queue_position']=ordered.index(job)+1 if job in ordered else None
             value['queue_position_basis']='partition_priority_order' if job in ordered else 'not_observed'

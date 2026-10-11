@@ -14,8 +14,11 @@ export const TASK_NAMES: Readonly<Record<string, string>> = {
   electrical: '电气参数', 'short-circuit': '短路容量', dimensions: '标准核对',
   'concentric-model': '结构推导', 'iec60853-emergency': '应急载流量',
 };
-export function taskName(definition: { task?: string | null; driver?: { kind?: string }; method?: { capability?: string } }, fallback = '计算') {
+export function taskName(definition: { task?: string | null; driver?: { kind?: string; cases?: unknown[] }; method?: { capability?: string } }, fallback = '计算') {
   const driver = definition.driver?.kind || '';
+  // 型号载流量表复用 batch 执行器；按封存工况身份区分，不能把所有 batch 改名。
+  const cases = definition.driver?.cases;
+  if (driver === 'batch' && Array.isArray(cases) && cases.length > 0 && cases.every(value => value && typeof value === 'object' && (value as { metadata?: { kind?: string } }).metadata?.kind === 'type-rating-table')) return '载流量表';
   if (driver !== 'single' && TASK_NAMES[driver]) return TASK_NAMES[driver];
   const capability = definition.method?.capability || '';
   if (capability !== 'steady-rating' && TASK_NAMES[capability]) return TASK_NAMES[capability];

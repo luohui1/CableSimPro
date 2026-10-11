@@ -33,7 +33,7 @@ export function readablePreflight(data: Record<string, unknown> | undefined, sch
       const label = preflightFieldLabel(path, schema);
       const original = text(issue.message);
       const message = /required|必填|缺少/i.test(original) ? `${label}未填写，请补齐后重新预检。`
-        : /INPUT_|\/parameters|契约|\b(?:type|enum|minimum|maximum)\b/.test(original) ? `${label}不符合方法要求，请核对单位、范围和选项。`
+        : /INPUT_|\/(?:parameters|method_input)|契约|\b(?:type|enum|minimum|maximum)\b/.test(original) || !/[\u3400-\u9fff]/.test(original) ? `${label}不符合方法要求，请核对单位、范围和选项。`
         : original || `${label}需要核对。`;
       return { ...issue, path, message };
     });

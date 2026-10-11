@@ -20,12 +20,12 @@ export type AgentEvent =
   | { type: "message.delta"; text: string; object_refs?: ObjectCard[] }
   | { type: "tool.call"; id: string; tool: string; title?: string; arguments?: Record<string, unknown> }
   | { type: "tool.result"; id: string; status: "ok" | "error"; summary: string; next_actions?: string[] }
-  | { type: "proposal.created"; id: string; title: string; changes: ProposalChange[]; checks?: string[] }
+  | { type: "proposal.created"; id: string; title: string; changes: ProposalChange[]; checks?: string[]; kind?: string; base_revision?: number | null }
   | { type: "error"; code?: string; message: string }
   | { type: "done"; usage?: { prompt_tokens?: number; completion_tokens?: number } };
 
 export type AgentSessionSummary = { id: string; workspace_id: string; study_id: string | null; state: string; waiting_reason: string | null; title: string; created: string; updated: string; pending_proposals: number };
-export type AgentProposal = { id: string; title: string; changes: ProposalChange[]; checks?: string[]; status: "pending" | "approved" | "rejected" };
+export type AgentProposal = { id: string; title: string; changes: ProposalChange[]; checks?: string[]; status: "pending" | "approved" | "rejected"; base_revision?: number | null; kind?: string | null };
 export type AgentStepRecord = { node_id: string; tool: string; arguments: Record<string, unknown> | null; result: { status: string; summary: string; data: Record<string, unknown> } | null; elapsed_ms: number | null };
 export type AgentRecord = {
   id: string; workspace_id: string; study_id: string | null; state: string; waiting_reason: string | null; created: string; updated: string;
@@ -72,6 +72,13 @@ export type AgentSettings = {
 export type AgentSettingsUpdate = { base_url: string; model: string; api_key?: string; instructions: string; model_timeout_s: number | null };
 export type AgentProbe = { ok: boolean; latency_ms?: number; model?: string; code?: string; message?: string };
 const sendJson = (method: string, body?: unknown) => ({ method, headers: { "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+export type MemorySettings = { enabled: boolean; recall_limit: number; available: boolean; code?: string | null; worker_error?: string | null; engineering_evidence: false };
+export type AgentMemory = { id: string; workspace_id: string; study_id: string | null; kind: string; topic: string; content: string; revision: number; status: string; reason: string | null; updated: string; sources: { task_id: string; sequence: number }[] };
+export const memorySettings = (signal?: AbortSignal) => fetch('/api/agent/memory/settings', { signal }).then(response => json<MemorySettings>(response));
+export const saveMemorySettings = (body: { enabled: boolean; recall_limit: number }) => fetch('/api/agent/memory/settings', sendJson('PUT', body)).then(response => json<MemorySettings>(response));
+export const agentMemories = (scope: { workspace_id: string; study_id?: string; q: string; offset: number }, signal?: AbortSignal) => fetch('/api/agent/memories?' + new URLSearchParams({ ...scope, offset: String(scope.offset), limit: '10' }), { signal }).then(response => json<{ items: AgentMemory[]; total: number }>(response));
+export const correctMemory = (memory: AgentMemory, content: string) => fetch('/api/agent/memories/' + encodeURIComponent(memory.id), sendJson('PUT', { expected_revision: memory.revision, content })).then(response => json<AgentMemory>(response));
+export const deleteMemory = (memory: AgentMemory) => fetch('/api/agent/memories/' + encodeURIComponent(memory.id) + '?expected_revision=' + memory.revision, { method: 'DELETE' }).then(response => json<AgentMemory>(response));
 export const agentSettings = (signal?: AbortSignal) => fetch("/api/agent/settings", { signal }).then((response) => json<AgentSettings>(response));
 export const saveAgentSettings = (body: AgentSettingsUpdate) => fetch("/api/agent/settings", sendJson("PUT", body)).then((response) => json<AgentSettings>(response));
 export const resetAgentSettings = () => fetch("/api/agent/settings", { method: "DELETE" }).then((response) => json<AgentSettings>(response));

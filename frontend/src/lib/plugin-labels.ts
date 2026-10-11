@@ -11,7 +11,7 @@ export const VALIDATION_LEVELS: Record<string, string> = {
   cross_validated: "交叉验证",
 };
 
-export const ANALYSIS_KINDS: Record<string, string> = { steady_state: "稳态", transient: "暂态", frequency_domain: "频域", geometry: "几何建模", mesh: "网格", model_preparation: "模型准备", postprocess: "后处理", properties: "参数计算", short_circuit: "短路", standard_check: "标准核对", crosscheck: "交叉校核", extraction: "资料提取" };
+export const ANALYSIS_KINDS: Record<string, string> = { steady_state: "稳态", transient: "暂态", frequency_domain: "频域", geometry: "几何建模", geometry_proposal: "几何修改提案", standards_lookup: "标准依据检索", ampacity_correction: "载流量校正", mesh: "网格", model_preparation: "模型准备", postprocess: "后处理", properties: "参数计算", short_circuit: "短路", standard_check: "标准核对", crosscheck: "交叉校核", extraction: "资料提取" };
 
 export const ARTIFACT_KINDS: Record<string, string> = {
   "x-cablesim.simulation-bundle": "仿真包：网格、求解器输入与日志",

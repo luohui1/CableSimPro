@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standard-check",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "name": "产品标准尺寸核对",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -66,6 +66,7 @@
       "title": "GB 产品标准结构尺寸与电阻核对",
       "method_version": "1.1.0",
       "analysis": "standard_check",
+      "solver": "local",
       "input_schema": "cablesim.domain/1",
       "outputs": [
         {
@@ -226,8 +227,9 @@
       "kind": "method",
       "id": "structure-proposal",
       "title": "XLPE 标准结构提案",
-      "method_version": "1.0.0",
+      "method_version": "1.1.0",
       "analysis": "geometry_proposal",
+      "solver": "local",
       "input_schema": "cablesim.cable-design-request/1",
       "outputs": [
         {
@@ -260,7 +262,25 @@
       "description": "由明确输入提出圆形 XLPE 结构；提案须人工确认，未覆盖与缺项保留。",
       "parameter_schema": {
         "type": "object",
-        "properties": {},
+        "properties": {
+          "basis_references": {
+            "type": "object",
+            "title": "固定标准依据",
+            "description": "由 Executor 只读查询返回的固定记录；不是用户替代阈值。",
+            "additionalProperties": {
+              "type": "object"
+            },
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "model",
+            "x-order": 0,
+            "x-level": "advanced"
+          }
+        },
         "$defs": {},
         "additionalProperties": false
       },
@@ -438,6 +458,28 @@
                 "copper_bare",
                 "aluminium"
               ]
+            },
+            "generation_mode": {
+              "type": "string",
+              "enum": [
+                "insulation",
+                "complete"
+              ],
+              "title": "生成范围",
+              "description": "完整护层需要本部分附录 A/B 的逐步计算依据；缺项时明确拒绝。",
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "本能力仅生成已核验的绝缘线芯草稿；完整护层须有固定的本部分附录 A/B 记录。"
+              },
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1,
+                "offset": 0
+              },
+              "x-group": "model",
+              "x-order": 8,
+              "x-level": "basic"
             }
           },
           "$defs": {},
@@ -496,14 +538,19 @@
       "size_bytes": 2599
     },
     {
+      "path": "src/cablesim_standard_check/annex.py",
+      "sha256": "cbeea17c0189105ba5c3be5abbabc0055249870c993404bc252a7f23a0a3e10b",
+      "size_bytes": 6004
+    },
+    {
       "path": "src/cablesim_standard_check/basis-records.json",
-      "sha256": "2e3d7d317295ebe0f29f3f7e6b2019efb0e925079f6b3b0190962f0715a630de",
-      "size_bytes": 151942
+      "sha256": "99a7ea426bfe6d3ef349bdef8afcc4b7678048caef9ebbb7f60ffdd3c20c2abb",
+      "size_bytes": 283527
     },
     {
       "path": "src/cablesim_standard_check/basis.py",
-      "sha256": "7e0ec88841fb876f85a7e79ffe6ffbda5070d233b71b5e1bb037e18873c28e48",
-      "size_bytes": 8157
+      "sha256": "4e12b55bfdf9e248a5e9d59337f326143a1fbc5b0c6b457dbfa586bf2e0f96ac",
+      "size_bytes": 8343
     },
     {
       "path": "src/cablesim_standard_check/basis_catalog.py",
@@ -517,13 +564,13 @@
     },
     {
       "path": "src/cablesim_standard_check/main.py",
-      "sha256": "d0993ed326e5eab63bbf5ecc1724fe7541da749f3adf94c71881f8d27eda535d",
-      "size_bytes": 55470
+      "sha256": "bfe2e3df238b0e163043df851e6b748a28eb1fe908cadb5f376b3725a03e78fe",
+      "size_bytes": 56296
     },
     {
       "path": "src/cablesim_standard_check/proposal.py",
-      "sha256": "012b726168d83a4d8b6bda3697c2c6367b2daafc4faed5fdc6b93cd3af85327f",
-      "size_bytes": 3385
+      "sha256": "70aa3e9584ed8fdccfbd16fb41901e85ed4b0628d159c5d1a90016200f224b45",
+      "size_bytes": 6770
     },
     {
       "path": "src/cablesim_standard_check/sources.json",

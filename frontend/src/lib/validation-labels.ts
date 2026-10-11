@@ -16,6 +16,7 @@ export const METRIC_STATES: Record<string, string> = {
   not_assessed: "未评估",
 };
 export const VALIDATION_QUANTITIES: Record<string, string> = {
+  conductor_temperature_k: "导体温度",
   conductor_max_temperature_k: "导体最高温度",
   interface_nodal_mean_k: "界面节点平均温度",
   maximum_temperature_k: "最高温度",
@@ -38,6 +39,8 @@ export const VALIDATION_QUANTITIES: Record<string, string> = {
   fiber_loss: "光纤损耗",
   surface_temperature_k: "表面温度",
   current_density: "电流密度",
+  current_density_rms: "电流密度有效值",
+  current_density_phase: "电流密度相位",
 };
 
 const PARTS: [RegExp, string][] = [

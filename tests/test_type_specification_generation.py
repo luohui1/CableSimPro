@@ -138,7 +138,16 @@ def test_connection_failure_retry_reuses_the_same_accepted_request(tmp_path, mon
 def test_missing_geometry_environment_reports_the_prepare_command(tmp_path,monkeypatch):
     monkeypatch.delenv('CABLESIM_PLUGIN_PYTHON',raising=False)
     monkeypatch.delenv('SLURM_JOB_ID',raising=False)
-    monkeypatch.setattr('backend.plugin_host.runtime.environment_python',lambda directory:tmp_path/'missing-python')
+    from backend.plugin_host import runtime
+    # environment_python receives the shared .venv directory, not a plugin
+    # directory. Select the geometry method at its real execution boundary,
+    # then exercise the actual missing-interpreter check. Other methods stay real.
+    def selected_environment(plugin):
+        if plugin.manifest.id!='cablesim.cable-geometry':return runtime.resolve_python(plugin)
+        with monkeypatch.context() as scoped:
+            scoped.setattr(runtime,'environment_python',lambda directory:tmp_path/'missing-python')
+            return runtime.resolve_python(plugin)
+    monkeypatch.setattr('backend.plugin_host.executor.resolve_python',selected_environment)
     with TestClient(create_app(tmp_path/'missing-environment.sqlite')) as client:
         workspace=create_example(client)
         response=client.post(f'/api/types/{workspace["id"]}/specification/generate',json=request(workspace))

@@ -56,7 +56,7 @@ export function TypeGeometry({ cable, selected, onSelect }: { cable: CableType; 
   const active = state.readOnly ? saved : preview;
   const rows = state.document ? layerRows(state.document, cable) : [];
   const pickedLayer = selected ? active.data?.model.layers.find(layer => matchesTarget(layer, selected)) : undefined;
-  return <CadViewport geometry={active.data?.model || null} state={active.error ? 'error' : active.isPending ? 'loading' : state.workspace?.raw.historical ? 'historical' : 'success'} error={active.error ? message(active.error).replace(/core\/\d+\.layers/g, '线芯结构层') : undefined}
+  return <CadViewport hasSavedInput={!!state.workspace} layerLabels="selected" geometry={active.data?.model || null} state={active.error ? 'error' : active.isPending ? 'loading' : state.workspace?.raw.historical ? 'historical' : 'success'} error={active.error ? message(active.error).replace(/core\/\d+\.layers/g, '线芯结构层') : undefined}
     resultStatus={hasCorrugatedSheath(cable) ? '波纹按等效厚度显示' : null}
     selectedObject={pickedLayer ? { kind: 'layer', id: layerId(pickedLayer) } : null} onSelectionChange={selection => { const layer = selection ? active.data?.model.layers.find(layer => layerId(layer) === selection.id) : undefined; onSelect(layer ? rows.find(row => matchesTarget(layer, row.target))?.target || null : null); }} onRetry={() => void active.refetch()}
     loadExact={active.data && !hasCorrugatedSheath(cable) && !state.workspace?.raw.historical ? async (_model, signal) => {

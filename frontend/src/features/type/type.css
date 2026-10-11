@@ -1,4 +1,20 @@
 .type-page{display:flex;flex-direction:column;min-height:0;flex:1;min-width:0}
+.type-review-groups{display:grid;gap:var(--space-4);padding:var(--space-4);font-size:var(--text-note)}
+.type-review-groups>section{padding-bottom:var(--space-4);border-bottom:1px solid var(--line)}
+.type-review-groups header{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
+.type-review-groups header>.button{margin-left:auto}
+.type-review-groups summary{cursor:pointer;padding-block:var(--space-2);color:var(--text-secondary)}
+.type-review-item{padding:var(--space-2) 0;display:flex;align-items:start;gap:var(--space-2);flex-wrap:wrap}
+.type-review-item>span{flex:1;min-width:50%;overflow-wrap:anywhere}
+.type-review-item>details{width:100%}
+.type-root .data-table[aria-label="载流量表"]{table-layout:fixed;width:100%;min-width:0}
+.type-root .data-table[aria-label="载流量表"] th:first-child{width:var(--space-12)}
+.type-root .data-table[aria-label="载流量表"] th:nth-child(2){width:22%}
+.type-root .data-table[aria-label="载流量表"] th:nth-child(3){width:18%}
+.type-root .data-table[aria-label="载流量表"] th:nth-child(4){width:17%}
+.type-root .data-table[aria-label="载流量表"] th:nth-child(5){width:14%}
+.type-root .data-table[aria-label="载流量表"] th,.type-root .data-table[aria-label="载流量表"] td{padding-inline:var(--space-1);white-space:normal;overflow-wrap:anywhere}
+.type-root .data-table[aria-label="载流量表"] td:nth-child(3),.type-root .data-table[aria-label="载流量表"] td:nth-child(5){white-space:nowrap;font-variant-numeric:tabular-nums}
 .type-page[data-type-page=specification-results]{flex:none;overflow:visible}
 .type-page .type-specification-layout{display:block;overflow:visible;flex:none;min-height:0}
 .type-specification-layout .type-specification-navigation{position:sticky;top:0;z-index:2;display:flex;flex-wrap:wrap;align-items:center;gap:var(--space-2);background:var(--panel);padding:var(--space-2);border-bottom:1px solid var(--line)}
@@ -22,6 +38,8 @@
 .type-binding-mark{display:inline-block;width:var(--space-2);height:var(--space-2);border:1px solid var(--text-secondary);border-radius:var(--radius-pill);flex-shrink:0}
 .type-binding-mark:not(.is-unbound){background:var(--text-secondary)}
 .type-root{height:100%;min-height:0}
+.type-root .workbench:has([data-type-page="structure"]):not([data-dock="max"])>.workbench-canvas{flex:1 1 0;min-height:50%}
+.type-root .workbench:has([data-type-page="structure"]):not([data-dock="max"])>.workbench-dock{flex:1 1 0}
 .type-root .main-content:has([data-type-page=structure]){display:flex;flex-direction:column;overflow:hidden}
 .type-list-toolbar{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-4);border-bottom:1px solid var(--line)}
 .type-list-toolbar input,.type-name-input{height:var(--control-standard);border:1px solid var(--border);border-radius:var(--radius-input);background:var(--panel);padding-inline:var(--space-3);min-width:0;font-size:var(--text-note)}
@@ -116,7 +134,7 @@
 .type-root[data-save-validation=error] .number-field .field-error{display:none}
 .type-table-empty{padding:var(--space-4);font-size:var(--text-note);color:var(--text-secondary)}
 .type-curve{flex:0 0 auto;border-top:1px solid var(--line);min-width:0}
-.type-curve svg{width:100%;height:calc(var(--space-12)*5);display:block;font:var(--text-note) var(--font-ui);fill:var(--text-secondary)}
+.type-curve svg{width:100%;height:calc(var(--space-12)*5.5);display:block;font:var(--text-note) var(--font-ui);fill:var(--text-secondary)}
 .type-curve-grid{stroke:var(--line);stroke-width:1}
 .type-curve-line{fill:none;stroke:var(--text);stroke-width:2}
 .type-curve-line.is-corrected{stroke:var(--text-secondary);stroke-dasharray:6 4}
@@ -124,7 +142,7 @@
 .type-curve-readout{display:flex;gap:var(--space-4);padding:var(--space-3) var(--space-4);font-variant-numeric:tabular-nums;flex-wrap:wrap}
 .type-curve-readout button{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--border);padding:var(--space-2);border-radius:var(--radius-pill);cursor:pointer}
 .type-rating-number{width:calc(var(--space-12)*1.3);min-width:0;text-align:right;background:var(--panel);border:1px solid var(--border);border-radius:var(--radius-input);font:inherit;font-variant-numeric:tabular-nums;padding:var(--space-2)}
-.type-rating-edit{border-top:1px solid var(--line);padding:var(--space-3) var(--space-4);overflow:auto;flex-shrink:0;max-height:calc(var(--space-12)*5)}
+.type-rating-edit{border-top:1px solid var(--line);padding:var(--space-3) var(--space-4);flex-shrink:0}
 .type-rating-edit summary{cursor:pointer;font-size:var(--text-note)}
 .type-rating-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-4);padding-block:var(--space-4)}
 .type-rating-fields label{display:grid;gap:var(--space-2);min-width:0}
@@ -223,3 +241,37 @@
 [data-type-page=list] .object-link{white-space:normal;overflow:visible;text-overflow:clip;color:var(--text);text-align:left}
 .type-check-label{display:flex;align-items:center;gap:var(--space-2)}
 .type-root .dialog-content .select-field,.type-root .dialog-content .number-field{margin-block:var(--space-2)}
+
+/* The dock owns vertical scrolling; result tables expand to their content. */
+.type-root .workbench-dock-body>.type-page{flex:none;min-height:auto}
+.type-root .workbench-dock-body .table-scroll{flex:none;min-height:auto;max-height:none;overflow:visible}
+.type-root .workbench-dock-body [data-slot=table-container]{overflow:visible}
+.type-root .workbench-dock-body :is(.type-method-fields,.type-trial-results,.type-comparison-tables,.type-comparison-sections,.type-material-comparison){flex:none;max-height:none;overflow:visible}
+.type-curve-disclosure{flex:none;border-top:1px solid var(--line)}
+.type-curve-disclosure>summary{cursor:pointer;padding:var(--space-3) var(--space-4);font-size:var(--text-note)}
+.type-result-trace{padding:var(--space-3) var(--space-4);border-top:1px solid var(--line);font-size:var(--text-note);font-variant-numeric:tabular-nums}
+.type-result-trace>summary{cursor:pointer}
+.type-result-trace dl{margin-top:var(--space-3)}
+.type-result-trace dl>div{padding-block:var(--space-2)}
+.type-result-trace dd{overflow-wrap:anywhere;margin:0}
+.type-result-trace dt{color:var(--text-secondary);margin-bottom:var(--space-1)}
+.type-root .property-panel .type-saved-formula{display:block;margin:0;text-align:left;line-height:1.8;font-variant-numeric:tabular-nums;overflow-wrap:normal;word-break:normal;white-space:normal}
+.type-saved-formula sub{vertical-align:sub;line-height:0}
+.type-rating-condition summary{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.type-rating-condition{min-width:0}
+.type-root .property-panel .property-row.is-stacked{grid-template-columns:minmax(0,1fr);align-items:start;padding-block:var(--space-1);gap:var(--space-1)}
+.type-root .property-panel .property-row.is-stacked dd{margin:0;justify-content:flex-start;text-align:left;display:block}
+.type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]){width:100%;min-width:0;table-layout:fixed}
+.type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) :is(th,td){white-space:normal;overflow-wrap:anywhere;vertical-align:top}
+.type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) :is(th,td):nth-child(2){white-space:nowrap}
+.type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) th:first-child{width:27%}
+.type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) th:nth-child(2){width:17%}
+.type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) th:nth-child(3){width:11%}
+.type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) th:nth-child(4){width:13%}
+.type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) th:nth-child(5){width:20%}
+.type-root .data-table:is([aria-label="短路容量"],[aria-label="电气参数"]) th:last-child{width:12%}
+:is(.type-root,.type-create-fields,.type-check-label) [data-slot=checkbox]{display:inline-grid;place-items:center;width:var(--space-4);height:var(--space-4);min-width:var(--space-4);padding:0;border-radius:var(--radius-flat);border:1px solid var(--control-border);background:var(--panel);color:var(--text)}
+:is(.type-root,.type-create-fields,.type-check-label) [data-slot=checkbox][data-state=checked]{background:var(--panel);color:var(--text);border-color:var(--text)}
+:is(.type-root,.type-create-fields,.type-check-label) [data-slot=checkbox][data-state=indeterminate] [data-slot=checkbox-indicator]{width:var(--space-2);border-top:2px solid var(--text)}
+:is(.type-root,.type-create-fields,.type-check-label) [data-slot=checkbox][data-state=indeterminate] svg{display:none}
+:is(.type-root,.type-create-fields,.type-check-label) [data-slot=checkbox]:focus-visible{outline:2px solid var(--text);outline-offset:var(--space-1)}

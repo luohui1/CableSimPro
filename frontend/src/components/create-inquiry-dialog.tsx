@@ -29,6 +29,7 @@ import { SourceBadge } from "./source-badge";
 import { engineeringContractFields } from './study-method-form';
 import { declaredUnit } from '@/lib/contract-schema';
 import './workbench-inspector.css';
+import './study-inquiry.css';
 type Source = components["schemas"]["Source"];
 type Given = { value: string; source: Source["kind"]; reference: string };
 export function CreateInquiryDialog({
@@ -184,10 +185,10 @@ export function CreateInquiryDialog({
   }
   function invalid(key:string, reason:string, source=false):never {
     setFieldError({key,message:reason,source});
-    const section=completionForm.current?.querySelector<HTMLElement>(`[data-completion-key="${key}"]`);
-    if(source){const details=section?.querySelector('details');if(details)details.open=true;}
+    const section=completionForm.current?.querySelector<HTMLElement>(`[${source?'data-source-key':'data-completion-key'}="${key}"]`);
+    if(source){const details=section?.closest('details');if(details)details.open=true;}
     section?.scrollIntoView({block:'nearest'});
-    section?.querySelector<HTMLElement>(source ? 'details input' : 'input,button[role="combobox"]')?.focus();
+    section?.querySelector<HTMLElement>(source ? 'input' : 'input,button[role="combobox"]')?.focus();
     throw new ApiError(422,reason,{key});
   }
   function prepared() {
@@ -353,10 +354,10 @@ export function CreateInquiryDialog({
   useEffect(() => {
     // 服务端错误回调发生时控件仍处于提交禁用态；恢复可编辑后再定位。
     if (!complete || create.isPending || !fieldError) return;
-    const section = completionForm.current?.querySelector<HTMLElement>(`[data-completion-key="${fieldError.key}"]`);
-    if (fieldError.source) { const details = section?.querySelector('details'); if (details) details.open = true; }
+    const section = completionForm.current?.querySelector<HTMLElement>(`[${fieldError.source?'data-source-key':'data-completion-key'}="${fieldError.key}"]`);
+    if (fieldError.source) { const details = section?.closest('details'); if (details) details.open = true; }
     section?.scrollIntoView({block:'nearest'});
-    section?.querySelector<HTMLElement>(fieldError.source ? 'details input' : 'input,button[role="combobox"]')?.focus();
+    section?.querySelector<HTMLElement>(fieldError.source ? 'input' : 'input,button[role="combobox"]')?.focus();
   }, [complete, create.isPending, fieldError]);
   const error = models.error || methods.error || contracts.error || projects.error || types.error;
   const loading = models.isPending || methods.isPending || contracts.isPending || projects.isPending || types.isPending;
@@ -541,11 +542,11 @@ export function CreateInquiryDialog({
           </Button>
           <SourceBadge
             kind="demo"
-            detail="参考输入为明确的工程假设，非厂家实测；敷设模板、土壤与方法参数须按实际工况核对。"
+            detail={`来源：保存研究「${reference.data?.title || '尚未读取'}」。参考参数是工程假设，非厂家实测；须按客户工况核对，逐项出处可在下方展开。`}
           />
         </div>
         {reference.error && <p className="field-error" role="alert">参考参数读取失败；可逐项填写，或重新读取。</p>}
-        <p className="muted">目标 {formatNumber(target)} A · {candidates.length} 个候选 · 尚缺 {fields.filter(field => !values[text(field.key)]?.value.trim()).length} 项。参考参数不代表厂家实测，须按客户工况核对。</p>
+        <p className="muted">目标 {formatNumber(target)} A · {candidates.length} 个候选 · 尚缺 {fields.filter(field => !values[text(field.key)]?.value.trim()).length} 项</p>
         <div className="engineering-completion" ref={completionForm}>
           {fields.map((field) => {
             const key = text(field.key),
@@ -572,6 +573,7 @@ export function CreateInquiryDialog({
             const bounds = [minimum === null ? '' : `${field.minExclusive ? '>' : '≥'} ${bound(minimum)} ${unit}`, maximum === null ? '' : `≤ ${bound(maximum)} ${unit}`].filter(Boolean).join('；');
             return (
               <section className="input-section" key={key} data-completion-key={key} data-field-path={'/parameters/values/'+key}>
+                <Tooltip content={[bounds ? `范围：${bounds}` : '', text(field.hint)].filter(Boolean).join('。')}><button type="button" className="completion-help" aria-label={text(field.title)+'填写说明'}>?</button></Tooltip>
                 {choices ? (
                   <Select
                     label={label}
@@ -616,56 +618,23 @@ export function CreateInquiryDialog({
                     disabled={create.isPending}
                   />
                 )}
-                <div className="field-hint completion-field-help">{bounds && <span>范围：{bounds}</span>}<Tooltip content={text(field.hint)}><span tabIndex={0}>填写说明</span></Tooltip></div>
-                <details>
-                  <summary>
-                    <SourceBadge
-                      kind={
-                        entry.source === "manufacturer"
-                          ? "document"
-                          : entry.source === "measurement"
-                            ? "measurement"
-                            : entry.source === "standard"
-                              ? "standard"
-                              : entry.source === 'demo' ? 'demo' : "user"
-                      }
-                      detail={entry.reference || text(field.hint)}
-                    />
-                    来源与出处
-                  </summary>
-                  <Select
-                    label={text(field.title) + "来源"}
-                    value={entry.source}
-                    options={[
-                      { value: "user", label: "工程师给定" },
-                      { value: "manufacturer", label: "厂家" },
-                      { value: "measurement", label: "实测" },
-                      { value: "standard", label: "标准" },
-                      { value: "demo", label: "参考输入（需核对）" },
-                    ]}
-                    onChange={(value) =>
-                      edit(key, { source: value as Source["kind"] })
-                    }
-                    disabled={create.isPending}
-                  />
-                  <label className="text-field">
-                    出处
-                    <input
-                      aria-label={text(field.title) + "出处"}
-                      value={entry.reference}
-                      onChange={(event) =>
-                        edit(key, { reference: event.target.value })
-                      }
-                      disabled={create.isPending}
-                    />
-                  </label>
-                  <Tooltip content={text(field.hint)}>
-                    <span tabIndex={0}>参数范围与参考依据</span>
-                  </Tooltip>
-                </details>
               </section>
             );
           })}
+          <details className="completion-sources">
+            <summary>查看与修改逐项出处</summary>
+            {fields.map(field => {
+              const key=text(field.key), entry=values[key] || {value:'',source:'user' as const,reference:''};
+              return <section className="input-section" key={key} data-source-key={key}>
+                <Select label={text(field.title)+'来源'} value={entry.source} disabled={create.isPending}
+                  options={[{value:'user',label:'工程师给定'},{value:'manufacturer',label:'厂家'},{value:'measurement',label:'实测'},{value:'standard',label:'标准'},{value:'demo',label:'参考输入（需核对）'}]}
+                  onChange={value=>edit(key,{source:value as Source['kind']})} />
+                <label className="text-field">出处<input aria-label={text(field.title)+'出处'} value={entry.reference} disabled={create.isPending}
+                  onChange={event=>edit(key,{reference:event.target.value})} /></label>
+                {fieldError?.key===key && fieldError.source && <p className="field-error" role="alert">{fieldError.message}</p>}
+              </section>;
+            })}
+          </details>
         </div>
         {failure && (
           <p className="field-error" role="alert">

@@ -1,5 +1,6 @@
 """Bounded XLPE design suggestions; table values never become measured facts."""
-def propose(values, insulation_limit, sources, data):
+def propose(values, insulation_limit, sources, data, parameters=None):
+    from cablesim_standard_check.annex import evidence, DiameterChain, decimal
     u0, u = map(int, values['voltage'].split('/'))
     family = next((family for a, b, family in data['voltage_families'] if (a, b) == (u0, u)), None)
     area = values['area_m2'] * 1e6
@@ -7,13 +8,49 @@ def propose(values, insulation_limit, sources, data):
         raise ValueError('/voltage：表外电压，未覆盖。')
     if family == 'hv' and values['construction'] != 'single_core':
         raise ValueError('/construction：GB/T 11017 高压三芯结构未覆盖。请选择单芯或其他电压。')
-    thickness = insulation_limit(family, u0, round(area, 8), 'XLPE')
-    if thickness is None:
-        raise ValueError('/area_m2：所选电压的 XLPE 厚度表不含此截面，未生成近似结构。')
-    source = sources[family]
-    rule = data['rules']['insulation-nominal'][family]
-    reference = {**source, **rule, 'pdf_page': rule['printed_page'] + source['page_offset']}
+    if values['construction'] not in ('single_core', 'three_core'):
+        raise ValueError('/construction：当前实体草稿仅支持单芯或三芯；四芯构造尚未覆盖，不套用三芯系数。')
+    standard = 'GB/T 11017.2' if family == 'hv' else 'GB/T 12706.' + {'mv1':'1','mv2':'2','mv3':'3'}[family]
+    edition = '2024' if family == 'hv' else '2020'
+    queries = {'insulation': {'schema_version':'cablesim.standards-query/1', 'standard':standard, 'edition':edition,
+        'locator':'表 2' if family == 'hv' else '表 6' if family == 'mv3' else '表 7',
+        'quantity':'insulation_nominal', 'conditions':{'area_m2':values['area_m2'],'u0_v':u0,'u_v':u,
+            **({} if family == 'hv' else {'insulation':'XLPE'})}}}
     n = 1 if values['construction'] == 'single_core' else 3
+    if values.get('generation_mode') == 'complete':
+        if family == 'hv':
+            raise ValueError('/generation_mode：110 kV 不适用 GB/T 12706 附录 A/B；完整高压结构生成尚未覆盖。')
+        for key, locator, quantity, conditions in (
+            ('conductor','表 A.1','conductor_fictitious_diameter',{'area_m2':values['area_m2']}),
+            ('rounding','B.1','fictitious_rounding',{}),
+            ('core','A.2.2','core_fictitious_parameters',{}),
+            ('bundle','A.2.3','bundle_factor',{'core_count':n}),
+        ):
+            queries[key]={'schema_version':'cablesim.standards-query/1','standard':standard,'edition':edition,
+                          'locator':locator,'quantity':quantity,'conditions':conditions}
+    if not parameters or 'basis_references' not in parameters:
+        return {'schema':'cablesim.cable-design-proposal/1','status':'basis_required',
+                'basis_queries':queries,'rows':[],'limitations':['待固定标准依据查询完成后提出尺寸，不批准或创建型号。']}
+    refs = parameters['basis_references']
+    insulation = refs.get('insulation')
+    if not insulation:
+        raise ValueError('/area_m2：所选标准版本、额定电压和截面的 XLPE 厚度本库暂未收录，不生成近似值。')
+    record = evidence(insulation, queries['insulation'])
+    if record['criterion'] != 'nominal' or record['quantity']['unit'] != 'mm':
+        raise ValueError('/basis_references：绝缘依据必须为毫米标称厚度，不能用最薄点或参考值代替。')
+    thickness = float(decimal(record['value']))
+    if values.get('generation_mode') == 'complete':
+        names = {'conductor':'导体假设直径','rounding':'数值修约','core':'绝缘线芯假设直径','bundle':'成缆系数'}
+        missing = [f'{standard}—{edition} {query["locator"]}（{names.get(key,"绝缘厚度")}）' for key,query in queries.items() if not refs.get(key)]
+        if missing:
+            raise ValueError('/generation_mode：完整护层生成缺少已核验的计算依据：'+'；'.join(missing)+'。可选择仅生成绝缘线芯草稿；本库补齐参数与页码后才能计算护层。')
+        rounding, conductor, core_rule, bundle_rule = [evidence(refs[key],queries[key]) for key in ('rounding','conductor','core','bundle')]
+        chain = DiameterChain(rounding)
+        diameter = chain.bundle(chain.core(chain.conductor(conductor),decimal(thickness),core_rule),bundle_rule)
+        # Never substitute the fictitious chain for physical material geometry.
+        raise ValueError('/generation_mode：缆芯假设直径已可计算，但屏蔽构造、内衬与铠装直径增量和制造尺寸仍缺项；不能以假设直径 '+str(diameter)+' mm 建实体护层。')
+    reference = {**insulation,
+                 'clause':record['table'] or record['clause'], 'citation':record['citation']}
     conductor = {'material': 'material/conductor', 'form': 'unspecified', 'nominal_area': values['area_m2'],
                  'diameter': None, 'r20': None, 'conductor_class': None, 'lay_factor': None}
     document = {'schema_version': 'cablesim.type-draft/1', 'name': '标准结构草稿',
@@ -32,7 +69,7 @@ def propose(values, insulation_limit, sources, data):
         document['provenance'][path] = {'kind': 'standard', 'reference': json.dumps(reference, ensure_ascii=False), 'reviewed': False}
         rows.append({'label': f'芯 {i+1} · 绝缘标称厚度', 'path': path, 'value': thickness/1000, 'unit': 'm',
                      'basis': 'standard_value', 'source': reference})
-    return {'schema': 'cablesim.cable-design-proposal/1', 'document': document, 'rows': rows,
+    return {'schema': 'cablesim.cable-design-proposal/1', 'status':'partial', 'document': document, 'rows': rows,
             'next_input': {'schema_version': 'cablesim.core-layout-request/1', 'area_m2': values['area_m2'],
                 'thickness_m': thickness/1000, 'construction': values['construction'], 'form': values['form'],
                 **{k: values[k] for k in ('diameter_m', 'gap_m') if k in values}},

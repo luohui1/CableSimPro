@@ -1,0 +1,117 @@
+[
+  {
+    "path": "backend/__init__.py",
+    "sha256": "83886d7841f43649b5a21609d4fcb64a2cde0dee7ba26cec27240a824b5e4d55",
+    "size_bytes": 127
+  },
+  {
+    "path": "backend/domain/__init__.py",
+    "sha256": "642f57baa696810691637270bf55fb3f70ba893e241147f3e230c301b8f95ad6",
+    "size_bytes": 129
+  },
+  {
+    "path": "backend/domain/models.py",
+    "sha256": "febce6c3d7a657f2bf75b4d715c210a021217b8034babe072dfaac38d8eb0902",
+    "size_bytes": 174
+  },
+  {
+    "path": "backend/plugin_host/__init__.py",
+    "sha256": "c8619e7107c8bcb2736e3c1378e640bf9adb412720537e068d647124aed9519d",
+    "size_bytes": 260
+  },
+  {
+    "path": "backend/plugin_host/dependencies.py",
+    "sha256": "e7700e9aeba305014bc5fa819928b4e468847b02c661664b1a84e0864db0e513",
+    "size_bytes": 5624
+  },
+  {
+    "path": "backend/plugin_host/executor.py",
+    "sha256": "6d7802ec1ab3124441d4546b8b7a6d64959c3f37627d43efc324f706812d2d75",
+    "size_bytes": 22762
+  },
+  {
+    "path": "backend/plugin_host/manifest.py",
+    "sha256": "f81cb764f3cde5900588f1374faa2d752a0745a0f9e2f86bbbb6c9a3eadc15c0",
+    "size_bytes": 12732
+  },
+  {
+    "path": "backend/plugin_host/parameter_contracts.py",
+    "sha256": "0879cc4c0e0a1439e8bd581a7e45bf33de18b15154913affa165783b91d942b2",
+    "size_bytes": 2385
+  },
+  {
+    "path": "backend/plugin_host/process.py",
+    "sha256": "8dc4b0dac88141e0fe1a58a6d739aea89f1c15c8e6c71d360454f3ec17be8c09",
+    "size_bytes": 8912
+  },
+  {
+    "path": "backend/plugin_host/registry.py",
+    "sha256": "54111803a5865966f22079596b74983946319d325ed706227be5f4a9686fb3f5",
+    "size_bytes": 5221
+  },
+  {
+    "path": "backend/plugin_host/runtime.py",
+    "sha256": "6c9218f4b8f94c5a42be5505b89ee015f8ec9d88d1e04c6bc22c3d97af48cb68",
+    "size_bytes": 4481
+  },
+  {
+    "path": "cablesim_sdk/__init__.py",
+    "sha256": "554b5376d66cf9961d4f6f48272abc93f4cab342a7496801d5f5c8e800806817",
+    "size_bytes": 81
+  },
+  {
+    "path": "cablesim_sdk/ampacity.py",
+    "sha256": "52febe9c3d4f96b6aca728f240a0d13ef4f2476f6f678a2f2c29965a345f2149",
+    "size_bytes": 1516
+  },
+  {
+    "path": "cablesim_sdk/base.py",
+    "sha256": "65ad67798ef624e21b2c17ba5735b74d0f796048e24edda5be6baed0b92ebbf4",
+    "size_bytes": 242
+  },
+  {
+    "path": "cablesim_sdk/cross_sections.py",
+    "sha256": "c9a97fe6ba7040a8d4ea05794862fa458ffd88c5a8d2d3836b610797d15201d0",
+    "size_bytes": 3551
+  },
+  {
+    "path": "cablesim_sdk/domain.py",
+    "sha256": "fd72aeb0156b049588847d25161d6d25bff22ad0fc0ba572e9c38b5cc7fc89f2",
+    "size_bytes": 27548
+  },
+  {
+    "path": "cablesim_sdk/environment.py",
+    "sha256": "299ceb35de56925b8604b5437ae17ecaeb476c322e23537ada0c82260ac5532f",
+    "size_bytes": 924
+  },
+  {
+    "path": "cablesim_sdk/parameter_units.py",
+    "sha256": "5b95c5984c4e19547cb1a81c71be2c3af3e6eff7a126bafa23eb6ed19993ead3",
+    "size_bytes": 4472
+  },
+  {
+    "path": "cablesim_sdk/plugin_ui.py",
+    "sha256": "42baeb72bf1cd0dae120b15797e416db9c6b80e2dae515cb7713a57bfdfbddab",
+    "size_bytes": 12296
+  },
+  {
+    "path": "cablesim_sdk/reproduction.py",
+    "sha256": "dedd26ded610c9420c42450196d1e465a382850d13d3cee23a6069084e5e6120",
+    "size_bytes": 4014
+  },
+  {
+    "path": "cablesim_sdk/result_answers.py",
+    "sha256": "d088f85c5040431a8c20c9300342e33521e118d08944891dc52c16bdb1a3dc7a",
+    "size_bytes": 4227
+  },
+  {
+    "path": "cablesim_sdk/simulation.py",
+    "sha256": "7eae05036fcdee8bdb2992be8b43b2e483fd46488f98e856419dfe6bb62cd809",
+    "size_bytes": 10470
+  },
+  {
+    "path": "cablesim_sdk/validation.py",
+    "sha256": "106aaed828610dbaa5cea6ba72cb8ba8da0f1befa0be04678501414d2ab7cd11",
+    "size_bytes": 906
+  }
+]

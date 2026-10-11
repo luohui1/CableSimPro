@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { message, numeric, optionalRecord, text } from '@/api/client';
+import { ApiError, message, numeric, optionalRecord, text } from '@/api/client';
 import { Dialog } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,16 +12,19 @@ import { LoadingState, ErrorState, InlineEmpty } from '@/components/states';
 import { creationOptions, newType, proposeType, type Origin, type Proposal } from './creation-api';
 import { nominalNumber, versionLabel } from './design-summary';
 import { typePath, useTypeNavigation } from './navigation';
+import { dimensionBasis } from './dimension-basis';
 
 export function CreateTypeDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { location, navigate } = useTypeNavigation(), queries = useQueryClient();
   const options = useQuery({ queryKey: ['type-creation-options'], queryFn: ({ signal }) => creationOptions(signal), enabled: open, retry: false });
   const [origin, setOrigin] = useState<Origin>('library'), [name, setName] = useState(''), [source, setSource] = useState('');
   const [search,setSearch] = useState('');
+  const [generationMode,setGenerationMode] = useState('insulation');
   const [construction, setConstruction] = useState('single_core'), [voltage, setVoltage] = useState(''), [material, setMaterial] = useState('copper_bare');
   const [area, setArea] = useState(''), [form, setForm] = useState(''), [diameter, setDiameter] = useState(''), [gap, setGap] = useState('');
   const [proposal, setProposal] = useState<Proposal | null>(null), [confirmed, setConfirmed] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const pending = useRef(false), attempts = useRef<Record<string, string>>({});
+  const [repair, setRepair] = useState('');
   const method = options.data?.generation[0], schema = optionalRecord(optionalRecord(method?.schema).properties);
   const choices = origin === 'library' ? options.data?.library : options.data?.imports;
   const filteredChoices=choices?.filter(item=>text(item.name).toLowerCase().includes(search.trim().toLowerCase())||item.id===source)||[];
@@ -51,11 +54,11 @@ export function CreateTypeDialog({ open, onClose }: { open: boolean; onClose: ()
     try {
       if (!voltage) invalid('额定电压', '请选择电压等级');
       if (!form) invalid('导体几何', '请选择推导条件或提供外径');
-      const input = { schema_version: 'cablesim.cable-design-request/1', voltage, conductor: material, construction, form,
+      const input = { schema_version: 'cablesim.cable-design-request/1', voltage, conductor: material, construction, form, generation_mode:generationMode,
         area_m2: number(area, '导体截面', 'area_m2', 1e6), ...(form === 'unspecified' ? { diameter_m: number(diameter, '导体外径', 'diameter_m', 1000) } : {}),
         ...(construction === 'three_core' ? { gap_m: number(gap, '芯间净距', 'gap_m', 1000) } : {}) };
       setProposal(await proposeType(input, attempt(input)));
-    } catch (failure) { const reason = message(failure); setError(reason); const key = Object.keys({ area_m2: '', diameter_m: '', gap_m: '', voltage: '', construction: '' }).find(key => reason.includes('/' + key)); if (key) requestAnimationFrame(() => focus(({area_m2:'导体截面',diameter_m:'导体外径',gap_m:'芯间净距',voltage:'额定电压',construction:'结构类型'} as Record<string,string>)[key])); } finally { pending.current = false; setBusy(false); }
+    } catch (failure) { const reason = message(failure); setError(reason.replace('/generation_mode','生成范围')); const key = Object.keys({ area_m2: '', diameter_m: '', gap_m: '', voltage: '', construction: '', generation_mode:'' }).find(key => reason.includes('/' + key)); if (key) requestAnimationFrame(() => focus(({area_m2:'导体截面',diameter_m:'导体外径',gap_m:'芯间净距',voltage:'额定电压',construction:'结构类型',generation_mode:'生成范围'} as Record<string,string>)[key])); } finally { pending.current = false; setBusy(false); }
   }
   async function create() {
     if (pending.current) return;
@@ -76,7 +79,7 @@ export function CreateTypeDialog({ open, onClose }: { open: boolean; onClose: ()
       await queries.invalidateQueries({ queryKey: ['type-list'] }); onClose(); navigate(typePath(workspace.id, 'structure', 'section', location.theme));
       delete attempts.current[JSON.stringify(base)];
       try { sessionStorage.removeItem('cablesim:type-create-attempt'); } catch { /* A confirmed response completes this attempt. */ }
-    } catch (failure) { setError(message(failure)); } finally { pending.current = false; setBusy(false); }
+    } catch (failure) { setError(message(failure)); setRepair(failure instanceof ApiError ? text(optionalRecord(failure.detail).repair_url) : ''); } finally { pending.current = false; setBusy(false); }
   }
   return <Dialog open={open} onOpenChange={value => { if (!value && !pending.current) onClose(); }} title="新建型号设计" initialFocus="form"
     actions={origin === 'standard' && !proposal ? <Button variant="primary" loading={busy} disabled={!method || !!options.error} onClick={() => void generate()}>生成结构提案</Button> : <Button variant="primary" loading={busy} disabled={!name.trim() || origin === 'standard' && (!proposal || !confirmed) || ['library', 'import'].includes(origin) && !source} onClick={() => void create()}>{origin === 'standard' ? '确认并建立草稿' : '建立草稿'}</Button>}>
@@ -85,6 +88,7 @@ export function CreateTypeDialog({ open, onClose }: { open: boolean; onClose: ()
       <label className="text-field">型号名称<Input aria-label="型号名称" maxLength={80} value={name} disabled={busy} onChange={event => { setName(event.target.value); setError(''); }} /></label>
       {origin === 'blank' ? <Select label="结构类型" value={construction} disabled={busy} onChange={setConstruction} options={[{ value: 'single_core', label: '单芯' }, { value: 'three_core', label: '三芯' }]} /> : options.isPending ? <LoadingState title="正在读取起点" /> : options.error ? <ErrorState title="起点读取失败" description={message(options.error)} action={<Button onClick={() => void options.refetch()}>重新读取</Button>} /> : origin === 'standard' ? !method ? <InlineEmpty title="未安装结构提案方法，暂不能按标准生成。" /> : <>
         <div className="type-creation-grid">
+          <Select label="生成范围" value={generationMode} disabled={busy} onChange={value=>{setGenerationMode(value);changed();}} options={[{value:'insulation',label:'绝缘线芯 · 护层待设计'},{value:'complete',label:'完整护层 · 核对附录依据'}]} />
           <Select label="结构类型" value={construction} disabled={busy} onChange={value => { setConstruction(value); changed(); }} options={[{ value: 'single_core', label: '单芯' }, { value: 'three_core', label: '三芯' }]} />
           <Select label="额定电压" value={voltage} disabled={busy} onChange={value => { setVoltage(value); changed(); }} options={(optionalRecord(schema.voltage).enum as string[] || []).map(value => ({ value, label: value.split('/').map(v => nominalNumber(Number(v) / 1000)).join('/') + ' kV' }))} />
           <Select label="导体材料" value={material} disabled={busy} onChange={value => { setMaterial(value); changed(); }} options={[{ value: 'copper_bare', label: '铜' }, { value: 'aluminium', label: '铝' }]} />
@@ -93,7 +97,7 @@ export function CreateTypeDialog({ open, onClose }: { open: boolean; onClose: ()
           {form === 'unspecified' && <label className="text-field">导体外径 · mm<Input aria-label="导体外径" inputMode="decimal" value={diameter} disabled={busy} onChange={event => { setDiameter(event.target.value); changed(); }} /></label>}
           {construction === 'three_core' && <label className="text-field">芯间净距 · mm<Input aria-label="芯间净距" inputMode="decimal" value={gap} disabled={busy} onChange={event => { setGap(event.target.value); changed(); }} /></label>}
         </div>
-        {proposal && <section aria-label="结构提案" className="type-creation-proposal"><table><thead><tr><th>参数</th><th>建议值</th><th>依据</th></tr></thead><tbody>{proposal.rows.map((row, index) => { const source = optionalRecord(row.source); return <tr key={index}><td>{text(row.label)}</td><td>{nominalNumber(numeric(row.value) === null ? null : Number(row.value) * 1000, 3)} mm</td><td><SourceBadge kind={row.basis === 'standard_value' ? 'standard' : row.basis === 'user' ? 'user' : 'derived'} detail={text(row.formula) || [text(source.standard), text(source.clause)].filter(Boolean).join(' · ')} />{[text(source.standard), text(source.clause)].filter(Boolean).join(' · ')}</td></tr>; })}</tbody></table>
+        {proposal && <section aria-label="结构提案" className="type-creation-proposal"><table><thead><tr><th>参数</th><th>建议值</th><th>依据</th></tr></thead><tbody>{proposal.rows.map((row, index) => { const source = optionalRecord(row.source); return <tr key={index}><td>{text(row.label)}</td><td>{nominalNumber(numeric(row.value) === null ? null : Number(row.value) * 1000, 3)} mm</td><td><SourceBadge kind={row.basis === 'standard_value' ? 'standard' : row.basis === 'user' ? 'user' : 'derived'} detail={dimensionBasis(JSON.stringify(source)) || text(row.formula) || [text(source.standard), text(source.clause)].filter(Boolean).join(' · ')} />{text(source.citation) || [text(source.standard), text(source.clause)].filter(Boolean).join(' · ')}</td></tr>; })}</tbody></table>
           <details><summary>提案范围与缺项</summary><ul>{proposal.limitations.map(item => <li key={item}>{item}</li>)}</ul></details>
           <label><Checkbox aria-label="已核对标准值、推导条件与缺项" checked={confirmed} onCheckedChange={value => setConfirmed(value===true)} disabled={busy} /> 已核对标准值、推导条件与缺项</label>
         </section>}
@@ -103,7 +107,7 @@ export function CreateTypeDialog({ open, onClose }: { open: boolean; onClose: ()
         {origin==='library'&&source&&choices?.find(item=>item.id===source)?.status&&<span className="muted">{choices.find(item=>item.id===source)?.status==='published'?'已发布':'库参考版本'} · 缺项会保留在新草稿中</span>}
         {origin === 'import' && <Button disabled={busy} onClick={() => { onClose(); navigate('/resources/cables/imports?theme=' + location.theme); }}>打开资料导入</Button>}
       </>}
-      {error && <p className="field-error" role="alert">{error}</p>}
+      {error && <p className="field-error" role="alert">{error}{repair&&<Button size="compact" onClick={()=>{onClose();navigate(repair+'?theme='+location.theme);}}>核对资料结构与来源</Button>}</p>}
     </div>
   </Dialog>;
 }

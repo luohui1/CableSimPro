@@ -1,0 +1,16 @@
+.engineering-completion > .input-section { position: relative; }
+.engineering-completion > .input-section .number-field > label,
+.engineering-completion > .input-section .select-field > label { padding-inline-end: var(--space-6); }
+.completion-help {
+  position: absolute; inset-block-start: 0; inset-inline-end: 0;
+  border: 0; background: transparent; color: var(--text-secondary);
+  font: inherit; cursor: help; padding: 0 var(--space-1);
+}
+/* The NumberField container owns its one border; this dialog's plain text
+   input rule must not add another border around the inner numeric input. */
+.engineering-completion .number-field input {
+  border: 0; border-radius: var(--radius-flat); background: transparent; padding: 0;
+}
+.completion-sources { grid-column: 1 / -1; }
+.completion-sources > summary { cursor: pointer; padding-block: var(--space-2); }
+.completion-sources > .input-section { margin-block-start: var(--space-3); }

@@ -108,6 +108,28 @@ def test_catalogue_copy_lists_fixed_manufacturer_versions_and_keeps_missing(clie
     assert client.get(f"/api/workspaces/{copied['id']}/studies").json() == []
 
 
+def test_library_sources_resolve_escaped_ids_or_indices_and_report_exact_broken_object():
+    from backend.kernel.type_versions import imported_provenance
+    from fastapi import HTTPException
+    cable={'id':'cable/type','label':'资料型号','cores':[{'id':'core/1','layers':[{'role':'insulation'}]}],'common_layers':[]}
+    source={'kind':'manufacturer','reference':'样本第 3 页','reviewed':True}
+    payload={'name':'起帆资料型号','sources':{
+        '/cable_type/cores/core~11/layers':source,
+        '/cable_type/cores/core~11/layers/insulation/thickness':source,
+        '/cable_type/cores/0/conductor/conductor_class':source}}
+    original=deepcopy(payload)
+    result=imported_provenance(payload,cable)
+    assert set(result)=={'/cable_types/cable~1type/cores/core~11/layers','/cable_types/cable~1type/cores/core~11/layers/insulation/thickness','/cable_types/cable~1type/cores/core~11/conductor/conductor_class'}
+    assert payload==original and all(value==source for value in result.values())
+    bad={'name':payload['name'],'sources':{'/cable_type/cores/missing/layers/insulation/thickness':source}}
+    with pytest.raises(HTTPException) as error:imported_provenance(bad,cable)
+    detail=error.value.detail
+    assert error.value.status_code==422 and detail['code']=='TYPE_SOURCE_TARGET_MISSING'
+    assert '起帆资料型号' in detail['message'] and '绝缘' in detail['message'] and '厚度' in detail['message']
+    assert detail['fields'][0]['object']=='资料声明的线芯 · 绝缘'
+    assert detail['fields'][0]['reference']=='样本第 3 页' and detail['repair_url']=='/resources/cables/imports'
+
+
 def test_only_approved_import_creates_design_with_page_sources(client):
     from test_datasheet_import import upload,extract,seed_model
     doc=upload(client);run,_=extract(client,doc['id']);base=seed_model(client)

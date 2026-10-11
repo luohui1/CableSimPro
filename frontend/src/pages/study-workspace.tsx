@@ -10,7 +10,9 @@ import { Button, IconButton } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { RunRecordsDrawer } from "@/components/run-records-drawer";
-import { studyPresentation, StudyRecalculate } from '@/components/study-status';
+import { studyPresentation, StudyRecalculate, useMethodPresentationNotice } from '@/components/study-status';
+import { CommandBar, type CommandAction } from '@/components/command-bar';
+import { taskName } from '@/lib/status-vocabulary';
 import { StudyGeometryProposal, type GeometryProposal } from '@/components/study-geometry-proposal';
 import { isVersionStale } from '@/lib/version-status';
 import { missingInputDestination, focusPreflightField } from "@/lib/missing-input";
@@ -241,7 +243,11 @@ export function StudyWorkspace() {
   const canvasReadOnly = viewingOldInput || study.definition.input_source === 'study';
   const conductorLimits = (canvasDocument?.cable_types || []).map((cable) => numeric(optionalRecord(optionalRecord(cable.rating).max_conductor_temperature).normal)).filter((value): value is number => value !== null);
   const conductorLimit = conductorLimits.length ? Math.min(...conductorLimits) - 273.15 : undefined;
-  const canvasView = search.view || (fieldView || needsFieldProjection ? "field" : "section");
+  const requestedCanvasView = search.view || (fieldView || needsFieldProjection ? "field" : "section");
+  // A saved URL may request a field absent from this candidate/run. Keep its
+  // saved geometry visible; never replace the complete canvas with a notice.
+  const missingTemperatureField = !fieldView && !needsFieldProjection;
+  const canvasView = requestedCanvasView === 'field' && missingTemperatureField ? 'section' : requestedCanvasView;
   const drawingCase = fieldCase || text(fieldView?.case.case_id) || undefined;
   const drawingInput = useQuery({queryKey:['drawing-saved-input',run?.id,drawingCase],
     enabled:showCanvas && ['three','section'].includes(canvasView) && !!run && !pendingRun && !context.dirty,
@@ -258,6 +264,7 @@ export function StudyWorkspace() {
   const edits = context.dirty ? Math.max(1, Object.keys(context.domainDraft?.fields || {}).length + Object.keys(context.draft?.parameterFields || {}).length) : 0;
   // 浏览子模块不会改变研究状态；状态来自研究保存的最近运行摘要。
   const overallRun = optionalRecord(study.raw.latest_run);
+  useMethodPresentationNotice(study, overallRun.id ? overallRun : undefined, context.notice);
   const presentation = studyPresentation(study, overallRun.id ? overallRun : undefined, edits, context.runError, context.loadingRuns && !overallRun.id);
   const selectedPresentation = studyPresentation(study, run, edits);
   const recalculateTarget = { wid: study.workspace, sid, module: (search.run || module === 'report' ? text(optionalRecord(run?.snapshot).module) : configuredModule) || undefined };
@@ -327,19 +334,17 @@ export function StudyWorkspace() {
   const runnable = moduleBehavior.runnable.has(module) ||
     (module === "method-compare" && (!!study.definition.modules?.["method-compare"] || calculatedModule === "method-compare") && !search.compare);
   const analyses = enabled.filter(key => !moduleBehavior.input.has(key) && key !== 'report' && (key !== 'thermal-field' || calculatedModule === key))
-    .map(key => ({value:key,label:key === calculatedModule ? study.task : moduleDefinitions[key].label}));
+    .map(key => ({value:key,label:key === calculatedModule ? (capabilityEntry?.analysis==='ampacity_correction' ? text(capabilityEntry.title) : taskName(study.definition, study.task)) : moduleDefinitions[key].label}));
   const currentAnalysis = module === 'report' || moduleBehavior.input.has(module) ? calculatedModule : module;
-  const commandBar = (
-    <div className="command-bar" role="toolbar" aria-label="工程命令">
-      <div className="command-group" role="group" aria-label="模型">
-        <span className="command-caption">模型</span>
-        {module==='selection' && !!canvasDocument && <Button size="compact" variant="ghost" aria-expanded={canvasExpanded} onClick={()=>setCanvasExpanded(value=>!value)}>{canvasExpanded?'收起布置图':'查看布置图'}</Button>}
-        <Button size="compact" variant={context.dirty ? "primary" : "ghost"} disabled={!context.dirty} loading={context.saving} onClick={() => void context.save()}><Icon name="action/save" />{context.dirty ? "保存修改" : "已保存"}</Button>
-        <IconButton variant="ghost" icon="action/undo" label="撤销" disabled={!context.canUndo || context.saving} onClick={() => void context.undo()} />
-        <IconButton variant="ghost" icon="action/redo" label="重做" disabled={!context.canRedo || context.saving} onClick={() => void context.redo()} />
-      </div>
-      <div className="command-group" role="group" aria-label="计算">
-        <span className="command-caption">计算</span>
+  const reportReason = !run ? '先运行研究，取得保存结果' : context.dirty ? '先保存修改并重新运行' : selectedPresentation.historical ? '旧结果保持为历史，请先重算' : !['succeeded','partial'].includes(text(run.status)) ? '等待运行成功后生成' : undefined;
+  const commandActions: CommandAction[] = [
+    {id:'save',label:context.dirty?'保存修改':'已保存',icon:'action/save',role:'save',variant:'outline',loading:context.saving,disabledReason:!context.dirty?'工程修改已保存':undefined,onSelect:()=>void context.save()},
+    {id:'undo',label:'撤销',icon:'action/undo',priority:70,variant:'ghost',disabledReason:!context.canUndo?'没有可撤销的修改':context.saving?'正在保存':undefined,onSelect:()=>void context.undo()},
+    {id:'redo',label:'重做',icon:'action/redo',priority:40,variant:'ghost',disabledReason:!context.canRedo?'没有可重做的修改':context.saving?'正在保存':undefined,onSelect:()=>void context.redo()},
+    ...(module==='selection' && canvasDocument ? [{id:'canvas',label:canvasExpanded?'收起布置图':'查看布置图',priority:20,variant:'ghost' as const,onSelect:()=>setCanvasExpanded(value=>!value)}] : []),
+    ...(module !== 'report' ? [{id:'report',label:'生成计算书',icon:'result/report',priority:80,variant:'ghost' as const,disabledReason:reportReason,onSelect:()=>void navigate({ params: { sid, module: 'report', tab: 'preview' }, search: { ...currentSearch(), run: text(run?.id), delivery: '', generate: true } })}] : []),
+  ];
+  const commandBar = <CommandBar label="工程命令" actions={commandActions} status={!presentation.historical?presentation.label:undefined} leading={<>
         {analyses.length > 1 && <Select label="分析" value={analyses.some(item => item.value === currentAnalysis) ? currentAnalysis : calculatedModule} options={analyses}
           onChange={value => navigate({params:{sid,module:value,tab:value === 'sweep' && !study.definition.modules?.sweep ? 'settings' : value === 'method-compare' && !study.definition.modules?.['method-compare'] ? 'inputs' : studyEntryTab(value)},search:{...currentSearch(),run:'',delivery:'',inspector:value === 'sweep' ? 'method' : 'input'}})} />}
         <PreviewControls preview={preview} />
@@ -377,14 +382,7 @@ export function StudyWorkspace() {
                           })
                         }
                       />}
-      </div>
-      <div className="command-group" role="group" aria-label="交付">
-        <span className="command-caption">交付</span>
-        {module !== 'report' && <Button size="compact" variant="ghost" title={!run ? '先运行研究，取得保存结果' : context.dirty ? '先保存修改并重新运行' : selectedPresentation.historical ? '旧结果保持为历史，请先重算' : !['succeeded','partial'].includes(text(run.status)) ? '等待运行成功后生成' : '生成所选保存运行的客户计算书'} disabled={!run || context.dirty || selectedPresentation.historical || !['succeeded','partial'].includes(text(run.status))} onClick={() => navigate({ params: { sid, module: "report", tab: "preview" }, search: { ...currentSearch(), run: text(run?.id), delivery: '', generate: true } })}><Icon name="result/report" />生成计算书</Button>}
-      </div>
-      {!presentation.historical && <span className="command-state" role="status" title={presentation.reason}>{presentation.label}</span>}
-    </div>
-  );
+    </>} />;
   return (
     <>
       <Tabs
@@ -461,8 +459,8 @@ export function StudyWorkspace() {
             <section className="workbench-canvas" aria-label="模型">
               <div className="workbench-views study-canvas-toolbar" role="toolbar" aria-label="视图与绘图工具">
                 <div className="study-view-switch" role="group" aria-label="模型视图">
-                {([...(fieldView || needsFieldProjection ? [["field", "calc/thermal-field", fieldView?.kind === "iec" ? "土壤温度场" : "温度场"]] : []), ...modelViews.map(item => [item.id, item.icon, item.label]), ["three", "result/field", "三维"]] as ["field" | "section" | "cable" | "three", string, string][]).map(([value, icon, label]) => (
-                  <button key={value} type="button" aria-label={label} title={label} aria-pressed={canvasView === value} onClick={() => navigate({ search: { ...currentSearch(), view: value }, replace: true })}>
+                {([["field", "calc/thermal-field", missingTemperatureField ? "温度场 · 无数据" : fieldView?.kind === "iec" ? "土壤温度场" : "温度场"], ...modelViews.map(item => [item.id, item.icon, item.label]), ["three", "result/field", "三维"]] as ["field" | "section" | "cable" | "three", string, string][]).map(([value, icon, label]) => (
+                  <button key={value} type="button" aria-label={label} title={label} disabled={value === 'field' && missingTemperatureField} aria-pressed={canvasView === value} onClick={() => navigate({ search: { ...currentSearch(), view: value }, replace: true })}>
                     <Icon name={icon} /><span className="study-view-label">{label}</span>
                   </button>
                 ))}

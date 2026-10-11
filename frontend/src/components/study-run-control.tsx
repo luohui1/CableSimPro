@@ -22,6 +22,9 @@ import { ErrorState } from "./states";
 import { inputContracts, exactContract } from '@/api/input-contracts';
 import { preflightFieldLabel, readablePreflight } from '@/features/field/preflight-labels';
 import { hpcJson } from '@/features/field/run-label';
+import { SolverLocation } from './solver-location';
+import type { SolverCapability } from '@/lib/solver-location';
+import { STATUS_WORDS } from '@/lib/status-vocabulary';
 
 export function StudyRunControl({
   module,
@@ -45,6 +48,7 @@ export function StudyRunControl({
   const context = useStudy();
   const [open, setOpen] = useState(false),
     [ack, setAck] = useState(false);
+  const [inputCheck, setInputCheck] = useState<Record<string, unknown>>();
   const request = useRef("");
   const accepted = useRef<{
     wid: string;
@@ -55,11 +59,13 @@ export function StudyRunControl({
     lock: string;
   } | null>(null);
   const configuration = moduleConfiguration(context.study.definition, module);
-  const remoteOnly = configuration?.method.plugin_id === 'cablesim.simulation' &&
-    ['iec-thermal-field','electrothermal-steady','transient-temperature','contact-electrothermal-field','fem-step-response'].includes(configuration.method.capability);
-  const availability = useQuery({ queryKey: ['simulation-availability', context.study.id, module], enabled: remoteOnly, retry: false,
+  const availability = useQuery({ queryKey: ['simulation-availability', context.study.id, module], enabled: !!configuration, retry: false,
     queryFn: ({signal}) => hpcJson(`/workspaces/${context.study.workspace}/studies/${context.study.id}/availability?` +
       new URLSearchParams(context.study.definition.modules?.[module] ? {module} : {}), {signal}) });
+  const remoteOnly = availability.data?.location === 'slurm';
+  const solver = availability.data?.solver;
+  const capability = solver === 'slurm' || solver === 'local' || solver === 'either'
+    ? { id: configuration?.method.capability || '', solver } satisfies SolverCapability : undefined;
   const contracts = useQuery({ queryKey: ['input-contracts'], queryFn: ({signal}) => inputContracts(signal), enabled: open });
   let parameterSchema: Record<string, unknown> = {};
   try { if (configuration && contracts.data) parameterSchema = exactContract(contracts.data, configuration.method).parameter_schema; } catch { /* Preserve preflight's version diagnosis. */ }
@@ -74,11 +80,10 @@ export function StudyRunControl({
   const preflight = useMutation({
     retry: false,
     mutationFn: async () => {
+      setInputCheck(undefined);
       if (context.dirty)
         throw new ApiError(409, "请先保存输入和研究配置，再预检");
       if (!configuration) throw new ApiError(422, "该模块没有保存的方法配置");
-      if (remoteOnly && availability.data?.configured !== true)
-        throw new ApiError(422, '本方法只能在超算求解；请先在设置 → 计算位置配置超算。输入已保存。');
       const source = {
         wid: context.study.workspace,
         sid: context.study.id,
@@ -86,6 +91,17 @@ export function StudyRunControl({
         studyRevision: context.study.revision,
         module: configuredModule,
       };
+      accepted.current = null;
+      // Input validation remains usable even when connection settings cannot be read.
+      const local = await hpcJson(`/workspaces/${source.wid}/studies/${source.sid}/input-preflight?` + new URLSearchParams({
+          expected_revision: String(source.revision), expected_study_revision: String(source.studyRevision),
+          ...(source.module ? { module: source.module } : {}),
+        }));
+      setInputCheck(local);
+      const remote = await availability.refetch();
+      if (remote.data?.conflict) throw new ApiError(409, '超算路由与能力声明冲突，请由管理员修正配置后重新预检。输入已保存。');
+      if (remote.error || !remote.data || (remote.data.location === 'slurm' &&
+          (local.input_ready !== true || remote.data.configured !== true))) return local;
       const value = record(
         await responseData(
           api.GET("/api/workspaces/{wid}/studies/{sid}/preflight", {
@@ -115,6 +131,8 @@ export function StudyRunControl({
   const execution = useMutation({
     retry: false,
     mutationFn: async () => {
+      if (remoteOnly && availability.data?.configured !== true)
+        throw new ApiError(409, '超算未配置，请前往设置 → 计算位置。输入已保存。');
       if (context.dirty || !preflight.data?.ready || ((needsScopeConfirmation(preflight.data) || remoteBudget) && !ack))
         throw new ApiError(409, "需保存输入并确认预检范围");
       const source = accepted.current;
@@ -173,11 +191,12 @@ export function StudyRunControl({
       <Button
         variant={secondary ? "default" : "run"}
         size="compact"
-        disabled={context.dirty || context.saving || !configuration || activeRun || execution.isPending || preflight.isPending || (remoteOnly && availability.data?.configured !== true)}
-        title={remoteOnly && availability.data?.configured !== true ? '请先在设置 → 计算位置配置超算；本方法不能在本机求解。' : undefined}
+        disabled={context.dirty || context.saving || !configuration || activeRun || execution.isPending || preflight.isPending}
+        title={remoteOnly ? '先在本机检查输入；只有提交与原生检查需要超算。' : undefined}
         onClick={() => {
           setOpen(true);
           setAck(false);
+          setInputCheck(undefined);
           execution.reset();
           preflight.mutate();
         }}
@@ -186,11 +205,19 @@ export function StudyRunControl({
       </Button>
       <PreflightDialog
         requireConfirmation={!!remoteBudget}
-        summary={remoteBudget && <section aria-label="超算核时预算" className="input-section">
+        summary={<>
+          {(remoteOnly || inputCheck) && <section aria-label="预检步骤" className="input-section">
+            <p>输入完整性与范围：{inputCheck ? inputCheck.input_ready === true ? '已通过输入检查' : '请修正下列缺项' : preflight.isPending ? '正在本机检查' : '等待检查'}</p>
+            <p><SolverLocation pluginId={configuration?.method.plugin_id || ''} capability={capability} /></p>
+            {remoteOnly && availability.data?.configured === true && <p>原生环境：{preflight.data?.local_only ? '输入修正后检查' : preflight.isPending ? '正在检查' : '预检完成后显示结论'}</p>}
+            {(availability.error || preflight.error) && !preflight.isPending && <Button variant="ghost" size="compact" onClick={() => preflight.mutate()}>重新检查</Button>}
+          </section>}
+          {remoteBudget && <section aria-label="超算核时预算" className="input-section">
           <strong>提交 {text(remoteBudget.partition)} · 本次核时预算上限 {Number(remoteBudget.upper_core_hours).toFixed(3)} 核时</strong>
           <p>预计占用不超过上述资源上限；实际核时以 Slurm 记账为准。共 {Number(remoteBudget.case_count)} 个工况，单任务时限 {Number(remoteBudget.wall_seconds)} 秒。</p>
           {checkedCases.map((item, index) => { const evidence = optionalRecord(item.evidence); return <p key={text(item.case_id)}>工况 {index + 1}：{numeric(evidence.mesh_nodes) ?? "未提供"} {numeric(evidence.field_order) === 2 ? '自由度' : '节点'} · {numeric(evidence.mesh_elements) ?? "未提供"} 单元</p>; })}
         </section>}
+        </>}
         caseLabel={(id, index) => {
           const match = /case-(\d+)$/.exec(id);
           const n = match ? Number(match[1]) : index;
@@ -221,7 +248,7 @@ export function StudyRunControl({
         onAck={setAck}
         running={execution.isPending}
         runError={execution.error}
-        disabled={context.dirty}
+        disabled={context.dirty || (remoteOnly && availability.data?.configured !== true)}
         onRun={() => { if (submitGuard.current) return; submitGuard.current = true; execution.mutate(); }}
         onMissing={(field) => {
           setOpen(false);
@@ -253,9 +280,9 @@ export function StudyRunControl({
 }
 
 const remoteStates: Record<string, string> = {
-  preparing: "准备", submitted: "已提交", queued: "排队", running: "运行",
-  collecting: "后处理", validating: "封存中", succeeded: "已封存", partial: "部分封存",
-  failed: "失败", interrupted: "连接中断", disconnected: "连接中断", cancel_requested: "正在取消",
+  preparing: "准备", submitted: "已提交", collecting: "后处理",
+  interrupted: "连接中断", disconnected: "连接中断", cancel_requested: "正在取消",
+  ...STATUS_WORDS,
 };
 
 /** Can also be placed inside the workbench run-records drawer. */
@@ -304,7 +331,7 @@ export function SavedRunProgress({ run: selected, onRefresh }: { run?: Record<st
   if (!rid || (!execution.backend && !detail.error)) return null;
   const cancelled = Array.isArray(execution.slurm_states) && execution.slurm_states.includes("CANCELLED");
   return <section className="input-section" aria-label="超算运行记录" aria-live="polite">
-    <div className="report-toolbar"><strong>{cancelled ? "已取消" : execution.cancel_requested && busy ? "正在取消" : remoteStates[status] || status}</strong>
+    <div className="report-toolbar"><strong>{cancelled ? STATUS_WORDS.cancelled : execution.cancel_requested && busy ? "正在取消" : remoteStates[status] || '状态未记录'}</strong>
       <span>作业 {text(execution.job_id) || "等待 Slurm 回执"} · 已用 {((numeric(execution.actual_cpu_seconds) || 0) / 3600).toFixed(4)} 核时{numeric(execution.budget_core_hours) !== null ? ` / 预算 ${Number(execution.budget_core_hours).toFixed(3)} 核时` : ''}</span>
       {busy && <span title="同分区待调度优先序，不保证开跑顺序">排队位置 {numeric(execution.queue_position) ?? '尚未提供'}</span>}
       {busy && <span>{workflow ? `第 ${(Array.isArray(workflow.rows) ? workflow.rows.length : 0)+1} 级 · ${optionalRecord(workflow.pending).kind === 'domain' ? '扩域' : optionalRecord(workflow.pending).kind === 'rating' ? '最终载流量' : '网格'}` : convergence.error ? '当前级别暂不可读' : '单次运行'}</span>}

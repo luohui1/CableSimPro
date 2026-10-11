@@ -71,7 +71,8 @@ export const CadViewport = forwardRef<CadViewportHandle, CadViewportProps>(funct
     {state === 'historical' && <StaleBanner description="输入已变化，保留原几何快照。" />}
     {props.controls && <div className="cad-field-tools" inert={exporting} role="toolbar" aria-label="保存温度场对照">{props.controls}</div>}
     <div ref={stage} className="cad-stage" data-layer-legend={!!ready && !scene && viewport.mode === 'peel'}>
-      {ready && displayed?.schema === 'cablesim.cad-model/1' && viewport.mode === 'peel' && <aside className="cad-layer-list" aria-label="结构层材料与厚度">{displayed.layers.map((layer, index) => {
+      {ready && displayed?.schema === 'cablesim.cad-model/1' && viewport.mode === 'peel' && (props.layerLabels!=='selected'||props.selectedObject) && <aside className="cad-layer-list" aria-label="结构层材料与厚度">{displayed.layers.map((layer, index) => {
+        if(props.layerLabels==='selected'&&layerId(layer)!==props.selectedObject?.id)return null;
         const id = layerId(layer), material = displayed.material_sources?.find(m => m.id === layer.material)?.label || '材料未命名';
         const thickness = typeof layer.construction?.thickness === 'number' ? layer.construction.thickness : layer.outer_radius_m - layer.inner_radius_m;
         return <Button variant="ghost" key={id} aria-pressed={props.selectedObject?.id === id} data-cad-layer-annotation={id} onClick={() => props.onSelectionChange?.({kind:'layer',id})}>
@@ -85,7 +86,7 @@ export const CadViewport = forwardRef<CadViewportHandle, CadViewportProps>(funct
         camera={camera} controller={instance!} width={bounds.width} height={bounds.height} points={viewport.points} cursor={viewport.measurement === 'point' ? viewport.pick : undefined} onSelect={value => props.onSelectionChange?.(value)} />}
       {!error && (state === 'empty' || !props.geometry && state !== 'loading') ? <div className="cad-state-overlay"><EmptyState title="尚无几何工件"
         description="取得型号单根电缆或敷设场景的几何工件后查看。" /></div>
-        : !ready && !error ? <div className="cad-state-overlay"><LoadingState title="正在打开三维视口" description="已有输入与结果保留。" /></div> : null}
+        : !ready && !error ? <div className="cad-state-overlay"><LoadingState title="正在打开三维视口" description={props.hasSavedInput?'已保存输入保留。':undefined} /></div> : null}
       {error && <div className={ready ? 'cad-error-bar' : 'cad-state-overlay'}><ErrorState title={ready ? '预览未更新' : '视口不可用'}
         description={error} action={<><Button size="compact" onClick={viewport.retry}>重载视口</Button>{props.onFallback && <Button size="compact" onClick={props.onFallback}>切回二维</Button>}</>} /></div>}
       {(bounds?.height||0)>=140 && <ViewCube disabled={disabled} selected={camera?.view} onView={view => instance?.view(view)} />}

@@ -53,6 +53,33 @@ class ResolveBasis(StrictModel):
     expected_revision: int = Field(ge=1)
 
 
+def lookup_references(research, queries):
+    """Execute plugin-authored queries; the host neither derives nor fills limits."""
+    registry = research.registry()
+    plugin = registry.plugins.get('cablesim.standards-basis')
+    if plugin is None:
+        raise HTTPException(503, {'code':'BASIS_UNAVAILABLE','message':'未安装标准依据库，无法按固定标准版本生成结构；请先安装已核验的依据发行。'})
+    result = research.executor.run(plugin.manifest.id,'lookup',[
+        {'case_id': key,'input': query,'parameters':{}} for key,query in queries.items()],expected_manifest=plugin.manifest)
+    references, missing = {}, []
+    for case in result.cases:
+        if case.status != 'succeeded':
+            raise HTTPException(422,case.error or '标准依据查询失败，请核对条件并重试。')
+        answer = case.artifacts['x-cablesim.standards-basis']
+        if answer['status'] != 'resolved':
+            missing.append({'key':case.case_id,'query':queries[case.case_id], 'reason':answer.get('reason','本库暂未收录 · 下一轮')})
+            continue
+        record = answer['records'][0]
+        references[case.case_id] = {'schema':'cablesim.standard-basis-ref/1','plugin_id':answer['plugin_id'],
+            'plugin_version':answer['plugin_version'],'data_sha256':answer['data_sha256'], 'query_sha256':answer['query_sha256'],
+            'query':queries[case.case_id], 'record_id':record['id'],'record_sha256':record['record_sha256'],
+            'standard':record['standard'],'edition':record['edition'],'locator':record['table'] or record['clause'],
+            'printed_page':record['printed_page'],'pdf_page':record['pdf_page'],'source_sha256':record['source_sha256'],
+            'record':record,'request_sha256':result.request_sha256,'release_digest':research.pin(plugin)['release_digest'],
+            'artifact_digest':case.artifact_digests['x-cablesim.standards-basis']}
+    return references, missing
+
+
 class Requirements:
     def __init__(self, research):
         self.research, self.store = research, research.store

@@ -114,7 +114,7 @@ export function applyEvent(turn: Turn, event: AgentEvent, proposals: Map<string,
     const step = next.steps.find((item) => item.id === event.id);
     if (step) Object.assign(step, { status: event.status, summary: event.summary });
   } else if (event.type === "proposal.created") {
-    proposals.set(event.id, { id: event.id, title: event.title, changes: event.changes, checks: event.checks, status: "pending" });
+    proposals.set(event.id, { id: event.id, title: event.title, changes: event.changes, checks: event.checks, kind: event.kind, base_revision: event.base_revision, status: "pending" });
     if (!next.proposals.includes(event.id)) next.proposals.push(event.id);
   } else if (event.type === "error") {
     if (isCheckCode(event.code)) checkStep(next, "running", "数值对不上证据，正在重写");

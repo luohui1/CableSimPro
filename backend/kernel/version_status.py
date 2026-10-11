@@ -7,10 +7,11 @@ from ..plugin_host import PluginHostError
 from .workspace import fingerprint
 
 
-def summarize(reasons):
+def summarize(reasons, notices=()):
     unique = {fingerprint(r): r for r in reasons}
     reasons = list(unique.values())
     return {'status': 'stale' if reasons else 'current', 'reasons': reasons,
+            'notices': list({fingerprint(item): item for item in notices}.values()),
             'display_name': '；'.join(r['message'] for r in reasons) if reasons else '当前版本'}
 
 
@@ -59,6 +60,7 @@ def methods(definition):
 
 def inspect(research, snapshot, cache=None):
     reasons = []
+    notices = []
     from .report_reads import read_cache
     shared=read_cache()
     cache = shared.setdefault('methods',{}) if shared is not None else {} if cache is None else cache
@@ -72,11 +74,23 @@ def inspect(research, snapshot, cache=None):
             new = pins[pid]
             if (old['version'], old['release_digest']) == (new['version'], new['release_digest']):
                 continue
-            reasons.append({'kind': 'method', 'code': 'METHOD_VERSION_CHANGED', 'id': pid,
+            plugin = (cache.get('registries', {}).get(pid) or research.registry(pid)).get(pid)
+            from .method_identity import classify, saved_manifest
+            proof = classify(old, {**new, 'capability': old['capability']},
+                             saved_manifest(snapshot, old['release_digest']),
+                             plugin.manifest.model_dump(mode='json', by_alias=True))
+            # A matching declaration alone never bypasses a broken current seal.
+            if proof['classification'] == 'presentation_only':
+                research.resolve({**new, 'capability': old['capability']}, cache)
+            change = {'kind': 'method', 'code': 'METHOD_VERSION_CHANGED', 'id': pid,
                             'from_version': old['version'], 'to_version': new['version'],
                             'from_digest': old['release_digest'], 'to_digest': new['release_digest'],
                             'message': f"基于旧版本方法 {old['version']}（{pid}）；当前安装版本 {new['version']}" +
-                                       ('（同版本号发行摘要已变化）' if old['version']==new['version'] else '')})
+                                       ('（同版本号发行摘要已变化）' if old['version']==new['version'] else ''), **proof}
+            if proof['classification'] == 'presentation_only':
+                notices.append({**change, 'code': 'METHOD_PRESENTATION_UPDATED', 'message': '方法说明已更新；保存结果仍有效。'})
+            else:
+                reasons.append(change)
         except (HTTPException, PluginHostError, ValueError, OSError) as exc:
             reasons.append({'kind': 'method', 'code': 'METHOD_UNAVAILABLE', 'id': pid,
                             'from_version': old['version'], 'to_version': None,
@@ -98,8 +112,9 @@ def inspect(research, snapshot, cache=None):
                 reason = None if own_release and not state.get('study_cable_reference') else model_reason(old, latest)
             if reason:
                 reasons.append(reason)
-    return summarize(reasons)
+    return summarize(reasons, notices)
 
 
 def cover_status(runs):
-    return summarize([reason for run in runs for reason in run.get('version_status', {}).get('reasons', [])])
+    return summarize([reason for run in runs for reason in run.get('version_status', {}).get('reasons', [])],
+                     [notice for run in runs for notice in run.get('version_status', {}).get('notices', [])])

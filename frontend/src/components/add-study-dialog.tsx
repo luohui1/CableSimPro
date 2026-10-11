@@ -17,7 +17,7 @@ import { hostTasks } from './study-workbench-config';
 
 type Method = components["schemas"]["Method"];
 type Task = NonNullable<components["schemas"]["CreateStudy"]["task"]>;
-type Choice = { id: string; task: Task; method: Method; label: string; hpc: boolean };
+type Choice = { id: string; task: Task; taskKey?: string; taskTitle?: string; method: Method; label: string; hpc: boolean };
 
 /** 载流量类任务按插件声明的输出判断；仿真任务由宿主的任务清单给出方法。 */
 const AMPACITY_TASKS: [Task, string, string, string][] = hostTasks.map(row => [row.task, row.label, row.icon, row.output]);
@@ -32,7 +32,7 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
 }) {
   const navigate = useNavigate();
   const queries = useQueryClient();
-  const [task, setTask] = useState<Task>("rating");
+  const [task, setTask] = useState<string>("rating");
   const [methodId, setMethodId] = useState("");
   const [title, setTitle] = useState("");
   const [error, setError] = useState("");
@@ -57,9 +57,15 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
       const pin = optionalRecord(item.method);
       return (Array.isArray(item.capabilities) ? item.capabilities : []).map(optionalRecord)
         .filter((cap) => (Array.isArray(cap.outputs) ? cap.outputs : []).some((entry) => optionalRecord(entry).key === output) &&
-          cap.analysis !== "crosscheck" && cap.input_schema === "cablesim.domain/1" && pin.plugin_id !== 'cablesim.hybrid-rating' && !text(cap.id).includes('benchmark') && item.platform_supported !== false)
+          cap.analysis !== "crosscheck" && cap.input_schema === "cablesim.domain/1" &&
+          (!Array.isArray(cap.study_tasks) || !cap.study_tasks.length || cap.study_tasks.includes(value)) &&
+          pin.plugin_id !== 'cablesim.hybrid-rating' && !text(cap.id).includes('benchmark') && item.platform_supported !== false)
         .map((cap) => ({
           id: `${value}:${text(pin.plugin_id)}:${text(cap.id)}`, task: value,
+          // Correction is a distinct question while reusing the host's rating
+          // workflow. Its displayed task title comes from the capability.
+          taskKey: cap.analysis === 'ampacity_correction' ? `${text(pin.plugin_id)}:${text(cap.id)}` : value,
+          taskTitle: cap.analysis === 'ampacity_correction' ? text(cap.title) : undefined,
           method: { ...pin, capability: text(cap.id) } as Method,
           label: `${text(item.name)} · ${text(cap.title).replace(/\s*[（(][^（）()]*[）)]\s*$/, "")} ${text(pin.version)}`,
           hpc: hpcOf(text(pin.plugin_id)),
@@ -71,11 +77,12 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
         label: `${text(catalog.find((entry) => text(optionalRecord(entry.method).plugin_id) === text(pin.plugin_id))?.name) || text(pin.plugin_id)} ${text(pin.version)}`, hpc: hpcOf(text(pin.plugin_id)) };
     }),
   ];
-  const tasks: [Task, string, string][] = [
+  const tasks: [string, string, string][] = [
     ...AMPACITY_TASKS.filter(([value]) => choices.some((choice) => choice.task === value)).map(([value, label, icon]) => [value, label, icon] as [Task, string, string]),
     ...(simulation.data || []).map((item) => [text(item.task) as Task, text(item.label), "nav/simulation"] as [Task, string, string]),
+    ...choices.filter(choice => choice.taskTitle).map(choice => [choice.taskKey!,choice.taskTitle!,"nav/study"] as [string,string,string]),
   ];
-  const options = choices.filter((choice) => choice.task === task).sort((a,b) => Number(b.method.plugin_id === 'cablesim.iec60287') - Number(a.method.plugin_id === 'cablesim.iec60287'));
+  const options = choices.filter((choice) => (choice.taskKey || choice.task) === task).sort((a,b) => Number(b.method.plugin_id === 'cablesim.iec60287') - Number(a.method.plugin_id === 'cablesim.iec60287'));
   const chosen = options.find((choice) => choice.id === methodId) || options[0];
 
   // 同方法仅用于工程师主动选择沿用；不把旧研究边界冒充当前插件默认值。

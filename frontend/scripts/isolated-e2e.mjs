@@ -13,9 +13,10 @@ const python = process.env.PYTHON || [path.join(root,'.venv','Scripts','python.e
 const script = process.argv[2];
 if (!script || path.dirname(script) !== ".")
   throw Error("只能执行 frontend/scripts 中的验收脚本");
+const visibleTextScript = ['verify-visible-text.mjs', 'verify-visible-text-states.mjs'].includes(script);
 const source = path.resolve(
   process.env.E2E_DATABASE_SOURCE ||
-    path.join(root, script === 'verify-type-resilience.mjs' ? '.data/standard-check/validation.sqlite' : ['verify-workbench.mjs','verify-component-foundation.mjs','verify-version-status.mjs','verify-host-connections.mjs','verify-inquiry.mjs','verify-display-names.mjs','verify-documents.mjs','verify-document-batch.mjs','verify-accessibility.mjs'].includes(script) ? '.data/engineering-demo/engineering.sqlite' : ".data/frontend-integration/engineering.sqlite"),
+    path.join(root, visibleTextScript ? '.data/release/engineering.sqlite' : script === 'verify-type-resilience.mjs' ? '.data/standard-check/validation.sqlite' : ['verify-workbench.mjs','verify-component-foundation.mjs','verify-version-status.mjs','verify-host-connections.mjs','verify-inquiry.mjs','verify-display-names.mjs','verify-documents.mjs','verify-document-batch.mjs','verify-accessibility.mjs'].includes(script) ? '.data/engineering-demo/engineering.sqlite' : ".data/frontend-integration/engineering.sqlite"),
 );
 const scratchRoot = path.resolve(root, ".tmp/frontend-e2e");
 const scratch = path.join(scratchRoot, randomUUID());
@@ -106,7 +107,7 @@ try {
       [path.join(frontend, "scripts/seed-research-fixtures.py")],
       { env: environment, stdio: "inherit" },
     );
-  const isolatedCad = ["verify-accessibility.mjs", "verify-research-refinement.mjs", "verify-expansion.mjs", "verify-expansion-states.mjs", "verify-display-names.mjs"].includes(script);
+  const isolatedCad = visibleTextScript || ["verify-accessibility.mjs", "verify-research-refinement.mjs", "verify-expansion.mjs", "verify-expansion-states.mjs", "verify-display-names.mjs"].includes(script);
   const launchArgs = isolatedCad
     ? [
         "-c",
@@ -163,11 +164,15 @@ try {
       'seed.refresh_saved_demo(sys.argv[1],receipt)',
     ].join('\n'), environment.BACKEND_URL, seedReceipt], {env:environment,stdio:'inherit'});
   }
+  // The visible-text audit must keep the frontend snapshot stable while other threads build.
+  if (visibleTextScript && process.env.E2E_DEV !== '1')
+    await fs.cp(path.join(frontend, 'dist'), path.join(scratch, 'preview-dist'), { recursive: true });
   const preview = spawn(
     process.execPath,
     [
       path.join(frontend, "node_modules/vite/bin/vite.js"),
       ...(process.env.E2E_DEV === '1' ? [] : ['preview']),
+      ...(visibleTextScript && process.env.E2E_DEV !== '1' ? ['--outDir', path.join(scratch, 'preview-dist')] : []),
       "--host",
       "127.0.0.1",
       "--port",
@@ -181,7 +186,7 @@ try {
   console.log(`隔离服务：后端 PID ${backend.pid} / ${backendPort}；预览 PID ${preview.pid} / ${frontendPort}`);
   const url = "http://127.0.0.1:" + frontendPort;
   await ready(url, preview, () => previewOutput);
-  console.log("独立临时验收数据库已启动；开发数据库仅作为只读备份来源。");
+  console.log("独立临时验收数据库已启动；来源库仅用于只读备份。");
   await run(process.execPath, [path.join(frontend, "scripts", script)], {
     cwd: frontend,
     env: { ...environment, FRONTEND_URL: url, E2E_ISOLATED: "1" },
@@ -206,13 +211,18 @@ try {
     }
   }
   for (const servicePort of servicePorts) {
-    const open = await new Promise(resolve => {
-      const socket = net.createConnection({host:'127.0.0.1',port:servicePort});
-      socket.setTimeout(800);
-      socket.once('connect',()=>{socket.destroy();resolve(true);});
-      socket.once('error',()=>resolve(false));
-      socket.once('timeout',()=>{socket.destroy();resolve(false);});
-    });
+    let open = false;
+    for (let attempt = 0; attempt < 25; attempt++) {
+      open = await new Promise(resolve => {
+        const socket = net.createConnection({host:'127.0.0.1',port:servicePort});
+        socket.setTimeout(800);
+        socket.once('connect',()=>{socket.destroy();resolve(true);});
+        socket.once('error',()=>resolve(false));
+        socket.once('timeout',()=>{socket.destroy();resolve(false);});
+      });
+      if (!open) break;
+      await delay(200); // Windows can release the listening socket just after the process exit event.
+    }
     if(open)throw Error('本任务服务端口未关闭：'+servicePort);
   }
   console.log('本任务服务与子进程退出、端口关闭已核对。');

@@ -37,7 +37,8 @@ def allocation_estimate(resources, count, configuration):
 
 class SlurmBackend:
     def __init__(self, configuration, ledger):
-        self.configuration=read(configuration) if isinstance(configuration,(str,Path)) else configuration
+        self.profile_path=Path(configuration) if isinstance(configuration,(str,Path)) else None
+        self.configuration=read(self.profile_path) if self.profile_path else configuration
         self.ledger=ledger if isinstance(ledger,BudgetLedger) else BudgetLedger(ledger)
         self.alias=self.configuration['ssh_alias']
         if not re.fullmatch(r'[A-Za-z0-9_.-]+',self.alias):raise ValueError('Invalid administrator SSH alias')
@@ -183,7 +184,17 @@ print(json.dumps(parts))'''
             if saved.is_file() and read(saved).get('job_id'):
                 return read(saved)  # historical accounting policy must not create a new allocation
             estimate=allocation_estimate(resources,len(indices),self.configuration)
-            reservation=self.ledger.reserve(token,tasks=estimate['tasks'],cpus_per_task=estimate['cpus_per_task'],wall_seconds=estimate['wall_seconds'])
+            def reserve():
+                return self.ledger.reserve(token,tasks=estimate['tasks'],cpus_per_task=estimate['cpus_per_task'],wall_seconds=estimate['wall_seconds'],
+                    single_limit_core_hours=self.configuration.get('budget_core_hours',2000),
+                    total_limit_core_hours=self.configuration.get('total_budget_core_hours',20000))
+            if self.profile_path:
+                # Serialize only the local reservation with settings writes, not
+                # network staging. The reservation then protects live bindings.
+                with locked(self.profile_path.with_suffix('.lock'),blocking=True):
+                    if read(self.profile_path)!=self.configuration:raise ValueError('超算配置已变化，请重新预检；尚未提交作业。')
+                    reservation=reserve()
+            else:reservation=reserve()
             if reservation['state']=='accounted':
                 saved=folder/'submission.json'
                 if saved.is_file():return read(saved)

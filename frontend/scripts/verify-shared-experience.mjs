@@ -91,16 +91,16 @@ async function fiveStates() {
 }
 
 async function runsOnly() {
-  await matrix('/runs', '运行计数摘要', async () => {
+  await matrix('/runs', '运行结论摘要', async () => {
     const table = page.getByRole('table', { name: '运行', exact: true });
     await expect(table).toBeVisible(); await expect(page.getByText('正在读取方法与结论', { exact: true })).toHaveCount(0);
-    await expect(table).toContainText('可用结论数 0');
-    await expect(table).not.toContainText(/可用结论数 \d+(?:\.\d+)? 1/);
-    await expect(table).not.toContainText(/可用结论数 \d+\.0+/);
+    await expect(table).not.toContainText('可用结论数');
+    await expect(table).not.toContainText('不满足项数');
+    await expect(table.getByRole('link', { name: '查看结果', exact: true }).first()).toBeVisible();
     await expect(table).toContainText('IEC 60287');
   });
-  await page.setViewportSize(sizes[0]); await go('/runs?theme=light'); await expect(page.getByText('正在读取方法与结论', { exact: true })).toHaveCount(0); await expect(page.getByRole('table', { name: '运行', exact: true })).toContainText('可用结论数 0'); await shot('runs-light');
-  report.checks.push('计数摘要保留真实零和整数，不附加无量纲 1、不补小数；单位温度/电流等保持原契约；两尺寸深浅主题与字号/对比度断言');
+  await page.setViewportSize(sizes[0]); await go('/runs?theme=light'); await expect(page.getByText('正在读取方法与结论', { exact: true })).toHaveCount(0); await shot('runs-light');
+  report.checks.push('统计数不再作为工程结论；没有 headline 时提供查看结果入口；两尺寸深浅主题与字号/对比度断言');
   assert.deepEqual(report.writes, []);
 }
 
@@ -171,7 +171,7 @@ try {
   await matrix('/runs', '运行摘要', async () => {
     await expect(page.getByRole('columnheader', { name: '结论摘要', exact: true })).toBeVisible();
     await expect(page.getByRole('columnheader', { name: '方法', exact: true })).toBeVisible();
-    if (report.runEvidence) await expect(page.getByRole('table', { name: '运行', exact: true })).toContainText(report.runEvidence.name);
+    if (report.runEvidence) await expect(page.getByRole('table', { name: '运行', exact: true })).toContainText(report.runEvidence.method);
   });
   await page.setViewportSize(sizes[0]); await go('/runs?theme=light'); await expect(page.getByRole('table', { name: '运行', exact: true })).toBeVisible(); await expect(page.getByText('正在读取方法与结论', { exact: true })).toHaveCount(0); await shot('runs-light');
   report.checks.push('运行名称、方法版本、结论摘要从实际保存运行读取；没有封存摘要时明确缺项');

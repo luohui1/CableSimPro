@@ -21,7 +21,8 @@ import type { ComponentProps } from "react";
 import { downloadBlob } from "@/lib/download";
 import { isVersionStale } from '@/lib/version-status';
 import type { CadImage } from '@/features/cad/types';
-import { hpcJson, savedRunLabel } from '@/features/field/run-label';
+import { hpcJson } from '@/features/field/run-label';
+import { savedRunLabel } from './study-run-label';
 import { reportSectionImages } from './study-report-drawing';
 import { useFemEvidence } from './study-fem-conclusion';
 

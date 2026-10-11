@@ -170,6 +170,33 @@ def emergency_response(case,out):
 CAPABILITIES = {'iec60853-emergency':emergency_response,'model-completion':model_completion,'steady-rating': steady_rating,'reference-rating':steady_rating,'armoured-sl-rating':armoured,'tb880-reference-rating':tb880_reference,'tb880-wire-foil-rating':tb880_reference}
 
 
+def group_headline(group, payload):
+    """Producer-owned wording; only actual solved values and saved conditions."""
+    def object_name(entity):
+        cable = next((item for item in group.cables if item['id'] == entity), None)
+        if cable is None:
+            return '温限对象'
+        index = next(i for i, item in enumerate(group.circuits) if item['id'] == cable['circuit'])
+        phase = cable.get('phase')
+        return (group.circuits[index].get('label') or f'回路 {index + 1}') + (f' · {phase} 相' if phase in ('A','B','C','L1','L2','L3') else ' · 三芯电缆')
+    if group.parameters.get('operation') == 'temperature':
+        states = payload['operating']['cable_states']
+        if not states:
+            return None
+        hottest = max(states, key=lambda item: item['conductor_temperature_c'])
+        verdict = '满足温限' if all(item['margin_k'] >= 0 for item in states) else '超过温限'
+        return f"最热导体 {hottest['conductor_temperature_c']:.1f} °C，{object_name(hottest['entity'])}；保存负荷下{verdict}"
+    common = payload.get('simultaneous_rating')
+    if common and common['ampacity_a'] is not None:
+        return f"允许电流 {common['ampacity_a']:.1f} A（全回路共同能力），受限于{object_name(common['limiting_cable'])}"
+    ratings = [item for item in payload['circuit_ratings'] if item['ampacity_a'] is not None]
+    if not ratings:
+        return None
+    selected = min(ratings, key=lambda item: item['ampacity_a'])
+    condition = '单回路能力' if len(group.circuits) == 1 else '其他回路维持保存负荷的条件上限'
+    return f"允许电流 {selected['ampacity_a']:.1f} A（{condition}），受限于{object_name(selected['limiting_cable'])}"
+
+
 def group_rating(case, group, out):
     payload = rate_group(group)
     from cablesim_iec60287.crossing import apply as apply_crossing
@@ -259,7 +286,7 @@ def group_rating(case, group, out):
     return {'results':results,'artifacts':artifacts,
             'warnings':[{'code':'ELECTRICAL_SCOPE','message':payload['electrical_basis']}],
             'evidence':{'iterations':payload['operating']['iterations'],'residual_k':payload['operating']['residual_k'],
-                        'decisions':payload['decisions']}}
+                        'decisions':payload['decisions'], 'headline':group_headline(group, payload)}}
 
 
 def run_case(handler, case: dict, out: Path) -> dict:
@@ -267,6 +294,9 @@ def run_case(handler, case: dict, out: Path) -> dict:
     try:
         result = handler(case, out)
         prepared = prepare_case(case)
+        if isinstance(prepared, GroupRating):
+            from cablesim_iec60287.constants import material_constants
+            result.setdefault('evidence', {})['material_constants'] = material_constants(case, prepared)
         for r in result.get('results', []):
             r.setdefault('case', 'rating')
         if case['input'].get('schema_version') == 'cablesim.domain/1' and not isinstance(prepared, GroupRating):
@@ -277,6 +307,11 @@ def run_case(handler, case: dict, out: Path) -> dict:
         for r in result.get('results', []):
             if r['key'] == 'ampacity':
                 r.setdefault('rating_basis', basis(entity=r['entity']))
+        if not result.get('evidence', {}).get('headline'):
+            capacities = [r['value'] for r in result.get('results', []) if r.get('key') == 'ampacity'
+                          and r.get('status') == 'available' and r.get('unit') == 'A']
+            if capacities:
+                result.setdefault('evidence', {})['headline'] = f"允许电流 {min(capacities):.1f} A（本次保存工况）"
         if not isinstance(prepared,dict):prepared=prepared.model_dump(mode='json')
         result.setdefault('evidence', {})['prepared_input_sha256'] = sha256(json.dumps(prepared, sort_keys=True, ensure_ascii=False, allow_nan=False).encode('utf-8')).hexdigest()
         return {**base, 'status': 'succeeded', **result}

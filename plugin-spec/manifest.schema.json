@@ -265,6 +265,11 @@
             }
           ],
           "default": null
+        },
+        "read_only": {
+          "default": false,
+          "title": "Read Only",
+          "type": "boolean"
         }
       },
       "required": [

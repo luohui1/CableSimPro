@@ -5,6 +5,7 @@ import { EmptyState } from './states';
 import { validationLevel } from '@/lib/plugin-labels';
 import { readableEvidence } from './study-workbench-config';
 import { StudyDetailGroup } from './study-detail-group';
+import { formatDateTime } from '@/lib/format';
 
 type Row = Record<string, unknown>;
 const list = (value: unknown) => (Array.isArray(value) ? value : []);
@@ -33,7 +34,7 @@ export function StudyValidation({ run }: { run?: Row }) {
       <span className={`status-dot ${text(seal.status) === 'verified' ? 'is-ok' : 'is-off'}`} />
       <div>
         <b>{text(seal.status) === 'verified' ? '插件发行封签校验通过' : '封签状态未知'}</b>
-        <span className="muted">{named(text(output.plugin_id), '').plugin} {text(output.plugin_version)}{text(seal.release_digest) ? ` · ${text(seal.release_digest).slice(0, 12)}…` : ''}{text(seal.verified_at) ? ` · ${new Date(text(seal.verified_at)).toLocaleString('zh-CN')}` : ''}</span>
+        <span className="muted">{named(text(output.plugin_id), '').plugin} {text(output.plugin_version)}{text(seal.release_digest) ? ` · ${text(seal.release_digest).slice(0, 12)}…` : ''}{text(seal.verified_at) ? ` · ${formatDateTime(text(seal.verified_at))}` : ''}</span>
       </div>
     </section>
 

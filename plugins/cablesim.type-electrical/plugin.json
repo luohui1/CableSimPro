@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.type-electrical",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "name": "型号电气参数与短路容量",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -64,10 +64,17 @@
       "id": "electrical",
       "kind": "method",
       "title": "型号电气参数（IEC 60287 原文分支）",
-      "method_version": "1.0.0",
+      "method_version": "1.0.1",
       "analysis": "properties",
+      "solver": "local",
       "input_schema": "cablesim.domain/1",
       "outputs": [
+        {
+          "key": "x-cablesim.r20",
+          "type": "quantity",
+          "per": "core",
+          "required": false
+        },
         {
           "key": "x-cablesim.type-analysis.available-count",
           "type": "quantity",
@@ -533,15 +540,15 @@
       "preview_timeout_s": 8,
       "x-headline": [
         {
-          "key": "x-cablesim.type-analysis.available-count",
-          "title": "可用结论数",
+          "key": "x-cablesim.r20",
+          "title": "20 °C 直流电阻",
           "unit": {
-            "si": "1",
-            "display": "1",
-            "scale": 1,
+            "si": "Ω/m",
+            "display": "Ω/km",
+            "scale": 1000,
             "offset": 0
           },
-          "aggregate": "first",
+          "aggregate": "maximum",
           "artifact": "x-cablesim.headline-witness",
           "source_artifact": "x-cablesim.type-electrical"
         }
@@ -552,10 +559,17 @@
       "id": "short-circuit",
       "kind": "method",
       "title": "组件绝热与非绝热短路容量（IEC 60949）",
-      "method_version": "1.0.0",
+      "method_version": "1.0.1",
       "analysis": "short_circuit",
+      "solver": "local",
       "input_schema": "cablesim.domain/1",
       "outputs": [
+        {
+          "key": "x-cablesim.adiabatic-current",
+          "type": "quantity",
+          "per": "core",
+          "required": false
+        },
         {
           "key": "x-cablesim.type-analysis.available-count",
           "type": "quantity",
@@ -1112,15 +1126,15 @@
       "preview_timeout_s": 8,
       "x-headline": [
         {
-          "key": "x-cablesim.type-analysis.available-count",
-          "title": "可用结论数",
+          "key": "x-cablesim.adiabatic-current",
+          "title": "导体允许短路电流",
           "unit": {
-            "si": "1",
-            "display": "1",
-            "scale": 1,
+            "si": "A",
+            "display": "kA",
+            "scale": 0.001,
             "offset": 0
           },
-          "aggregate": "first",
+          "aggregate": "minimum",
           "artifact": "x-cablesim.headline-witness",
           "source_artifact": "x-cablesim.type-short-circuit"
         }
@@ -1151,8 +1165,8 @@
     },
     {
       "path": "src/cablesim_type_electrical/main.py",
-      "sha256": "869b01e52863565e4a42e4a8b1c832423d47f71070783675e884b0a8c8f28b98",
-      "size_bytes": 30433
+      "sha256": "e42399f9f84f3d54b4a627bf3eb8a91eefdc2a4f42c050ca48c55e7e5ec15430",
+      "size_bytes": 33828
     },
     {
       "path": "src/cablesim_type_electrical/sources.json",

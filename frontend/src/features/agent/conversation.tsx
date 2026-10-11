@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/icon";
 import { ObjectChip } from "@/components/object-link";
-import { significantNumber } from "@/lib/format";
+import { significantNumber, formatDateTime } from "@/lib/format";
 import { EVIDENCE_LABEL, type Preview, type SavedRun, type Step, type Turn } from "./transcript";
 import type { AgentProposal } from "./agent-api";
 import "./agent.css";
@@ -150,17 +150,19 @@ export function HoldButton({ children, onConfirm, disabled, loading }: { childre
   };
   useEffect(() => stop, []);
   return <button type="button" className="agent-hold" data-holding={holding || undefined} disabled={disabled || loading}
-    onPointerDown={start} onPointerUp={stop} onPointerLeave={stop} onPointerCancel={stop}
-    onKeyDown={(event) => { if ((event.key === " " || event.key === "Enter") && !event.repeat) { event.preventDefault(); start(); } }}
+    onPointerDown={event => { if (event.button === 0) start(); }} onPointerUp={stop} onPointerLeave={stop} onPointerCancel={stop} onBlur={stop}
+    onKeyDown={(event) => { if (event.key === 'Escape') { stop(); return; } if ((event.key === " " || event.key === "Enter") && !event.repeat) { event.preventDefault(); start(); } }}
     onKeyUp={(event) => { if (event.key === " " || event.key === "Enter") stop(); }}>
     <span>{loading ? "正在保存" : children}</span>
   </button>;
 }
 
 /** 改动审核：字段级前后值；只有人能批准，批准走工作台同一保存路径。 */
-export function ProposalCard({ proposal, onDecide, busy, error }: { proposal: AgentProposal; onDecide: (id: string, decision: "approve" | "reject") => void; busy?: boolean; error?: string }) {
+export function ProposalCard({ proposal, onDecide, busy, error, receipt }: { proposal: AgentProposal; onDecide: (id: string, decision: "approve" | "reject") => void; busy?: boolean; error?: string; receipt?: { created: string; actor?: string; status: string } }) {
   return <article className={`agent-review-card is-${proposal.status}`}>
     <header><Icon name="agent/proposal" /><b>{proposal.title}</b><span>{proposal.status === "approved" ? "已批准" : proposal.status === "rejected" ? "已拒绝" : `待审核 · ${proposal.changes.length} 项`}</span></header>
+    {proposal.base_revision != null && <p className="agent-card-meta">基于第 {proposal.base_revision} 修订</p>}
+    {receipt && receipt.status === proposal.status && <p className="agent-card-meta">{receipt.actor ? `${receipt.actor} · ` : ''}{formatDateTime(receipt.created)} · {receipt.status === 'approved' ? '已保存输入，工程结果尚未批准' : '已拒绝方案'}</p>}
     <div className="agent-diff">{proposal.changes.map((change) => {
       const places = Math.max(decimals(change.before), decimals(change.after));
       return <div key={change.path} className="agent-diff-hunk">

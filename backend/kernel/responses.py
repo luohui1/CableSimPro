@@ -12,18 +12,23 @@ class PublicResponse(BaseModel):
 
 class VersionChange(PublicResponse):
     kind: Literal['method', 'model'] = Field(description='Changed installed method or referenced model family; no unit.')
-    code: str = Field(description='METHOD_VERSION_CHANGED, METHOD_UNAVAILABLE or MODEL_VERSION_CHANGED.')
+    code: str = Field(description='METHOD_VERSION_CHANGED, METHOD_UNAVAILABLE, MODEL_VERSION_CHANGED or informational METHOD_PRESENTATION_UPDATED.')
     id: str = Field(description='Stable plugin ID or model family ID, never a display-name match.')
     from_version: str = Field(description='Version frozen in the source run.')
     to_version: str | None = Field(description='Installed plugin or latest published model version; null if unavailable.')
     from_digest: str = Field(description='Frozen release/content SHA256.')
     to_digest: str | None = Field(description='Current release/content SHA256; detects changes even at the same version.')
     message: str = Field(description='Display-ready version difference.')
+    classification: Literal['presentation_only', 'calculation_changed', 'unproven'] | None = Field(default=None, description='Proven release change class. Missing historical sealed manifest fails closed as unproven.')
+    rule: str | None = Field(default=None, description='Versioned rule used to compare method version, sealed files/dependencies and executable contracts; no unit.')
+    from_computation_digest: str | None = Field(default=None, description='SHA256 of historical computation identity under rule; null when evidence is absent.')
+    to_computation_digest: str | None = Field(default=None, description='SHA256 of current computation identity under rule; equality proves presentation-only changes after both release digests are verified.')
 
 
 class VersionStatus(PublicResponse):
     status: Literal['current', 'stale', 'empty'] = Field(description='Version comparison only; execution status and input freshness are separate.')
     reasons: list[VersionChange] = Field(default_factory=list)
+    notices: list[VersionChange] = Field(default_factory=list, description='Informational presentation-only release changes; do not make the saved result stale. Clients may acknowledge once per new release digest.')
     display_name: str = Field(description='One combined status message for the result or document cover.')
 
 
@@ -197,6 +202,9 @@ class RunSummary(BaseModel):
     version_status: VersionStatus | None
     snapshot: RunSummarySnapshot
     method: Method | None = Field(description='Exact saved method release; null when the snapshot integrity cannot be established.')
+    task: str | None = Field(default=None, description='Task frozen in this accepted run; absent in older snapshots or when integrity fails. Never taken from the current study.')
+    driver: dict[str, JsonValue] | None = Field(default=None, description='Saved run driver and its SI parameters; null when historical input does not declare one or integrity fails.')
+    headline: str | None = Field(default=None, max_length=500, description='Producer-supplied conclusion from the saved successful case evidence, with quantity/unit/condition. The host selects the same verified case as its headline witness; no client inference. Null when unavailable.')
     error: dict[str, str] | None = Field(description='Saved run-level error code and message, each limited to 512 characters; full detail remains at GET runs/{rid}.')
     headlines: list[dict[str, JsonValue]] = Field(default_factory=list, max_length=3,
         description='Up to three producer-declared answers from verified sealed output; SI value and display conversion, entity, condition and same-case artifact digest. Empty when unavailable; no defaults.')

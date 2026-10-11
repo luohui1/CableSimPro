@@ -130,7 +130,7 @@ const {renderFixture}=await import('/src/features/field/browser-fixture.tsx');wi
         if (item === 'history') assert.equal(await page.getByRole('region', { name: '历史结论' }).count(), 1);
       }
       if (type === 'setup') {
-        assert(text.includes({empty:'尚未运行',loading:'读取超算预算',error:'超算连接中断',success:'排队位置 4',history:'方法版本变化 1.0.3 → 1.0.4'}[item]),label+' wrong lifecycle: '+text);
+        assert(text.includes({empty:'未运行',loading:'读取超算预算',error:'超算连接中断',success:'排队位置 4',history:'方法版本变化 1.0.3 → 1.0.4'}[item]),label+' wrong lifecycle: '+text);
         assert.equal(await page.locator('img,ol').count(),0,label+' illustrative workflow remains');
         if(item === 'empty')assert(text.includes('镜像远场（默认）'),label+' missing default boundary');
       }
