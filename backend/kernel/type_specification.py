@@ -240,7 +240,7 @@ def check_tables(standards, checks, document=None):
         ['要求与条款', '要求值', '实际值', '余量', '判定 / 缺项'],
         [[row['title']+'\n'+(row.get('citation') or row.get('standard', '')+' '+row.get('clause', '')+
           (f"，第 {row['printed_page']} 页" if row.get('printed_page') is not None else '')).split('（PDF')[0],
-          {'>=':'≥ ', '<=':'≤ ', '=':'= '}.get(row.get('comparison'),'')+value(row,'limit'), value(row,'actual'), value(row,'margin'),
+          row.get('rule_requirement') or {'>=':'≥ ', '<=':'≤ ', '=':'= '}.get(row.get('comparison'),'')+value(row,'limit'), row.get('rule_actual') or value(row,'actual'), value(row,'margin'),
           verdicts.get(row.get('verdict'), row.get('verdict'))+'\n'+(human_note(row.get('reason')) or '—')]
          for row in standards], '未计算（尚无标准核对结果）。', [2.8,1.1,1.1,1,2.5])
     measured = []
@@ -316,6 +316,8 @@ def combined_core_rows(rows, core_ids):
     keys=('value','actual','limit','margin','comparison','unit','status','verdict','reason','standard','clause','printed_page','pdf_page','source_status','formula',
           'formula_inputs','source_digest','basis','input_source')
     for row in rows:
+        if row.get('id','').endswith(':screen-area'):
+            continue  # Each core retains its own design and fault-duty identity.
         target=row.get('target',{})
         if target.get('scope')!='core' or target.get('core_id') not in expected:continue
         title=re.sub(r'^芯\s*\d+\s*·\s*','',row['title'])

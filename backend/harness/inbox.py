@@ -86,24 +86,51 @@ def read(research,args):
             'next_actions':['保留原筛选条件，从 offset=0 重读待办。']})
     category=args.get('category');offset=args.get('offset',0);limit=args.get('limit',10)
     selected=[item for item in items if category is None or item['category']==category]
-    data={'scope':'library_read_only','category':category,'counts':inbox['counts'],'total':len(selected),
+    grouped=args.get('view')=='groups'
+    data={'scope':'library_read_only','category':category,'view':'groups' if grouped else 'items','counts':inbox['counts'],'total':len(selected),
         'offset':offset,'items':[],'next_offset':None,'next_page':None,'inbox_digest':digest}
+    if grouped:data.pop('items');data['groups']=[]
+    methods={}
+    selected_keys={(row['object']['kind'],row['object']['id']) for row in selected}
+    for source,edge in snapshot.edges:
+        if source in selected_keys and edge['role']=='method':
+            target=edge['target'];methods[(target['kind'],target['id'])]=target
+    if methods:data['method_refs']=list(methods.values())
     result=ToolResult(status='ok',summary='已读取统一待办；原因保留原文，下一步仅供人工处理，未执行审核、保存、重算或超算提交。',data=data)
     data=result.data
-    base={'limit':limit,'expected_digest':digest,**({'category':category} if category else {})}
+    base={'limit':limit,'expected_digest':digest,**({'category':category} if category else {}),**({'view':'groups'} if grouped else {})}
     def cursor(count):
         next_offset=offset+count if offset+count<len(selected) else None
         data.update(next_offset=next_offset,next_page={**base,'offset':next_offset} if next_offset is not None else None)
     cursor(0)
+    accepted=0
     for item in selected[offset:offset+limit]:
         target,action,who,approval=guidance(snapshot,item)
-        data['items'].append({**deepcopy(item),'home':target,'next_step':action,
+        annotated={**deepcopy(item),'home':target,'next_step':action,
             'title':target['name']+' · '+item['object']['name'] if target['kind']=='type' and target['id']!=item['object']['id'] else item['title'],
-            'handled_by':who,'requires_human_approval':approval})
-        cursor(len(data['items']))
+            'handled_by':who,'requires_human_approval':approval}
+        if grouped:
+            shared=action.replace(' “'+target['name']+'”','')
+            key=(item['category'],item['origin'],item['reason'],shared,who,approval)
+            group=next((row for row in data['groups'] if tuple(row['_key'])==key),None)
+            if group is None:
+                group={'_key':key,'category':item['category'],'origin':item['origin'],'reason':item['reason'],
+                    'next_step':shared,'handled_by':who,'requires_human_approval':approval,'members':[]}
+                data['groups'].append(group)
+            member={key:annotated[key] for key in ('title','object','created')}
+            if target!=item['object']:member['home']=target
+            group['members'].append(member)
+        else:data['items'].append(annotated)
+        accepted+=1;cursor(accepted)
         if not fits(result.model_dump(mode='json'),RESULT_BYTES-256):
-            data['items'].pop();cursor(len(data['items']));break
-    if offset<len(selected) and not data['items']:
+            if grouped:
+                group['members'].pop()
+                if not group['members']:data['groups'].remove(group)
+            else:data['items'].pop()
+            accepted-=1;cursor(accepted);break
+    if grouped:
+        for group in data['groups']:group.pop('_key')
+    if offset<len(selected) and not accepted:
         result.status='error';result.summary='单项待办超过上下文上限，请在待办中心打开原对象；未截断原因或编造下一步。'
         data.update(next_offset=None,next_page=None)
         result.diagnostics=[Diagnostic(code='INBOX_ITEM_TOO_LARGE',message=result.summary,path='/offset',recoverable=True)]
@@ -126,7 +153,11 @@ def report(steps):
         data=result['data']
         if data['inbox_digest']!=digest:
             items=[];seen=set();digest=data['inbox_digest'];first_offset=data['offset'];filter_category=data['category']
-        for item in data['items']:
+        expanded=data.get('items',[])
+        for group in data.get('groups',[]):
+            expanded.extend({**{key:value for key,value in group.items() if key!='members'},**member,
+                'home':member.get('home',member['object'])} for member in group['members'])
+        for item in expanded:
             key=(item['category'],item['origin'],item['object']['kind'],item['object']['id'])
             if key not in seen:items.append(item);seen.add(key)
         cursor=data.get('next_page')

@@ -14,7 +14,7 @@ export function savedRunLabel(run: Record<string, unknown>, title?: string) {
 }
 
 export async function hpcJson(path: string, options?: RequestInit): Promise<Record<string, unknown>> {
-  const response = await fetch(`/api/hpc${path}`, { credentials: 'same-origin', cache: 'no-store', ...options });
+  const response = await fetch(`/api/hpc${path}`, { credentials: 'same-origin', ...options });
   const value = await response.json().catch(() => ({}));
   if (!response.ok) throw Error(typeof value.detail === 'string' ? value.detail : `超算服务读取失败（${response.status}）；已保存数据保留，可重试。`);
   return value;

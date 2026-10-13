@@ -45,6 +45,11 @@ export async function publishedTypes(signal?: AbortSignal) {
   const data = record(await responseData(api.GET('/api/types/library', { signal })), '已发布型号');
   return array(data.items, '已发布型号列表').map(value => record(value, '已发布型号'));
 }
+export async function moduleMethods(signal?: AbortSignal) {
+  const response=await fetch('/api/methods?view=summary',{signal,credentials:'same-origin'});
+  if(!response.ok)throw new ApiError(response.status,'方法目录读取失败，请重新读取');
+  return array(await response.json(),'方法目录').map(value=>record(value,'方法'));
+}
 export async function listTypes(signal?: AbortSignal): Promise<TypeRow[]> {
   const [drafts, published] = await Promise.all([typeIndex(signal), publishedTypes(signal)]);
   const ids = [...new Set([...drafts.map(item => text(item.id)), ...published.map(item => text(item.workspace_id))])];
@@ -108,13 +113,13 @@ export async function saveType(base: Workspace, document: DomainDocument) {
 export async function historyType(base: Workspace, direction: 'undo' | 'redo') {
   return projectWorkspace(await responseData(api.POST('/api/workspaces/{wid}/history/{direction}', { params: { path: { wid: base.id, direction } }, body: { expected_revision: base.revision } })));
 }
-export async function typeEvidence(wid: string, signal?: AbortSignal) {
+export async function typeEvidence(wid: string, signal?: AbortSignal, recent=false) {
   const runs=async()=>{
     const items:Record<string,unknown>[]=[];let after=0;
     // Full result artifacts stay intact. Small pages keep real saved evidence
     // within the host response-cache budget; the history bound remains 2000 runs.
     for(let page=0;page<400;page++){
-      const response=await fetch(`/api/types/${encodeURIComponent(wid)}/display-runs?after=${after}&limit=5`,{signal});
+      const response=await fetch(`/api/types/${encodeURIComponent(wid)}/display-runs?after=${after}&limit=5${recent?'&recent=true':''}`,{signal});
       const result=await response.json();if(!response.ok)throw new ApiError(response.status,text(optionalRecord(result).detail)||'型号保存结果暂不可用，请重新读取');
       const data=record(result,'型号保存结果');items.push(...array(data.items,'保存运行').map(value=>record(value,'保存运行')));
       const cursor=numeric(data.next_cursor);if(cursor===null)return items;
@@ -122,9 +127,14 @@ export async function typeEvidence(wid: string, signal?: AbortSignal) {
     }
     throw new ApiError(502,'保存运行过多，请按历史版本缩小范围');
   };
-  const [source,items]=await Promise.all([responseData(api.GET('/api/workspaces/{wid}/studies',{params:{path:{wid},query:{view:'summary'}},signal})),runs()]);
-  const studies=array(source,'型号研究').map(value=>record(value,'型号研究'));
-  return items.map(run=>{const study=studies.find(study=>study.id===run.study);if(!study)throw new ApiError(409,'保存运行所属研究已变化，请刷新');return{study,run};}).sort((a,b)=>text(b.run.created).localeCompare(text(a.run.created)));
+  const items=await runs();
+  return items.map(run=>{
+    const snapshot=record(run.snapshot,'保存运行输入'),id=text(run.study),revision=numeric(snapshot.study_revision);
+    if(!id||snapshot.study_id!==id||revision===null)throw new ApiError(502,'保存运行缺少对应研究身份与修订');
+    // Result attribution uses its immutable method definition, not a second read
+    // of every study's current definition and latest result.
+    return{study:{id,revision,definition:record(snapshot.definition,'保存运行方法')},run};
+  }).sort((a,b)=>text(b.run.created).localeCompare(text(a.run.created)));
 }
 export function runArtifact(run: Record<string, unknown>, schema: string): Record<string, unknown> | null {
   if (run.integrity !== 'verified') throw new ApiError(409, '保存运行的完整性未通过，不能显示结果');

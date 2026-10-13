@@ -73,7 +73,7 @@ export function SavedFieldComparison({ run }: { run: Record<string, unknown> }) 
   const candidate = candidates.data?.find(item => item.id === selected) || candidates.data?.at(-1);
   const comparison = useQuery({ queryKey: ["saved-field-comparison", run.id, candidate?.id], enabled: !!candidate, retry: false, queryFn: async ({ signal }) => {
     const read = async (id: string) => {
-      const response = await fetch(`/api/hpc/workspaces/${encodeURIComponent(wid)}/fields/${encodeURIComponent(id)}/view`, { signal, credentials: "same-origin", cache: "no-store" });
+      const response = await fetch(`/api/hpc/workspaces/${encodeURIComponent(wid)}/fields/${encodeURIComponent(id)}/view`, { signal, credentials: "same-origin" });
       if (!response.ok) throw Error("保存运行读取失败（" + response.status + "）");
       return record(await response.json());
     };

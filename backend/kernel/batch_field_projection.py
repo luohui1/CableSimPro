@@ -69,6 +69,27 @@ def display_only(run):
     return {**run,'output':{**output,'cases':cases}}
 
 
+def decode_display_output(db, raw):
+    """Parse authenticated JSON in SQLite before allocating lossless shards.
+
+    Only the same case-artifact keys removed by display_only are omitted. The
+    complete source is hashed above; SQLite validates its JSON, and all visible
+    physical artifacts still undergo the existing artifact_status validation.
+    Bind these exact bytes instead of rereading a potentially changed row.
+    """
+    if not raw:return None
+    try:
+        paths=[row[0] for row in db.execute(
+            "SELECT fullkey FROM json_tree(CAST(? AS TEXT)) WHERE path LIKE '$.cases[%].artifacts' AND key GLOB 'x-cablesim.field-*'",(raw,))]
+    except sqlite3.OperationalError as exc:
+        raise ValueError('保存场 JSON 格式不完整。') from exc
+    if not paths:return json.loads(raw)
+    for start in range(0,len(paths),100):
+        group=paths[start:start+100]
+        raw=db.execute('SELECT json_remove(CAST(? AS TEXT),'+','.join('?' for _ in group)+')',(raw,*group)).fetchone()[0]
+    return json.loads(raw)
+
+
 def read_display(research,wid,rid):
     """Coalesce a cold source read before fetching its large SQLite payload.
 
@@ -155,7 +176,8 @@ def _read_display(research,wid,rid):
                     except Exception:disk_key=None  # Normal run_state reports installation errors; never trust a disk receipt.
                     cached=durable_receipt(research,disk_key)
                     if cached is None:
-                        decoded={name:json.loads(value[name]) if value[name] else None for name in ('snapshot','output','error')}
+                        decoded={name:json.loads(value[name]) if value[name] else None for name in ('snapshot','error')}
+                        decoded['output']=decode_display_output(db,value['output'])
                         if not isinstance(decoded['snapshot'],dict) or (decoded['output'] is not None and not isinstance(decoded['output'],dict)):
                             raise ValueError('Invalid saved envelope')
                         projected=display_only(decoded)

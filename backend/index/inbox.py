@@ -3,7 +3,7 @@ from .service import ACTIVE
 
 
 def build(index):
-    seen=set()
+    seen={(item['category'],item['origin'],item['object']['kind'],item['object']['id']) for item in index.todos}
     def add(category,origin,card,reason,created=None):
         key=(category,origin,card['kind'],card['id'])
         if key in seen:return
@@ -12,6 +12,7 @@ def build(index):
 
     for card in index.cards.values():
         kind=card['kind'];status=card['status']['code']
+        if not index.relates((kind,card['id'])):continue
         if kind=='study':
             if status=='outdated':add('stale','study',card,card['status']['reason'])
             elif status=='running':add('running','study',card,'研究运行仍在进行中；此列表不刷新远端作业。')
@@ -27,6 +28,7 @@ def build(index):
         elif kind=='run' and card.get('source',{} ) and card['source']['kind']=='study' and status in ACTIVE:
             add('running','study',card,'批量数据集仍在进行中。')
     for row in index.raw['submissions']:
+        if not index.relates(('delivery',row['id'])):continue
         if row['status'] not in ('submitted','approved'):continue
         design=index.workspace(row['workspace']);revision=index.workspaces[row['workspace']]['revision']
         reason='型号规格书等待人工审核。' if row['status']=='submitted' else '型号规格书已批准，等待人工发布。'
@@ -34,6 +36,7 @@ def build(index):
         add('review','type',index.get('delivery',row['id']),reason,row['created'])
     # Extraction failures are missing evidence, never fabricated model results.
     for row in index.raw['extractions']:
+        if not index.relates(('document',row['document'])):continue
         document=index.get('document',row['document'])
         if document is None:continue
         if row['status'] in ('failed','interrupted'):

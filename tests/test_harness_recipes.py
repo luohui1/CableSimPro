@@ -166,7 +166,8 @@ def test_recipe_binds_proposal_and_saved_case_with_audit_and_no_engineering_writ
     assert [event['type'] for event in record['events']].count('recipe.bound')==1
     assert [event['type'] for event in record['events']].count('tool.intent')==3
     assert record['proposals'][0]['status']=='pending' and record['state']=='reviewing'
-    assert client.get(root+'/runs').json()['items'][0]['id']==run['id'] and len(client.get(root+'/runs').json()['items'])==1
+    saved_runs=client.get(root+'/runs').json()['items']
+    assert saved_runs[0]['id']==run['id'] and len(saved_runs)==1
     assert client.get(f'/api/workspaces/{w["id"]}/domain').json()['revision']==w['revision']
     assert not any(event['type'] in ('answer.rejected','answer.fallback') for event in record['events'])
     print('\n方案试算（本地假模型） '+json.dumps({**metrics(record,elapsed),'answer':texts[-1]},ensure_ascii=False))

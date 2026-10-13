@@ -618,7 +618,6 @@ class Harness:
         self.tasks.emit(tid,'preflight.scopes_satisfied',{'scopes':confirmed,
             'excluded_scopes':excluded,'input_and_seals_rechecked':True})
         result={**tools,'study_preflight':replace(tool,parameters=parameters,
-            title=tool.title+'：已完成范围不可重复，引用已有成功回执；其他研究/模块仍可检查',
             description=tool.description+' 已成功且输入和封签未变化的预检范围已从参数中排除，直接引用已有回执；其他研究和模块仍可检查。')}
         # The missing-input recipe expands to this same preflight. Excluding
         # only the direct tool leaves a second path to the identical operation.
@@ -629,7 +628,7 @@ class Harness:
             nested=[{'properties':{'recipe':{'const':'missing_inputs'},'parameters':scope},
                 'required':['recipe','parameters']} for scope in excluded]
             result['recipe_execute']=replace(recipe,parameters={**recipe.parameters,'not':{'anyOf':nested}},
-                title=recipe.title+'：已完成的缺项预检范围不可重做；引用现有回执或检查其他范围')
+                description=recipe.description+' 已完成的缺项预检范围已从参数中排除；引用现有回执或检查其他研究和模块。')
         return result
 
     def close_stream(self,tid,turn,iterator):

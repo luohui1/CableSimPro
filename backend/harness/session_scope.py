@@ -2,7 +2,7 @@
 from fastapi import HTTPException
 
 TYPE_TOOLS=frozenset({'draft_read','draft_update','draft_geometry','draft_propose','task_plan','platform_capabilities','platform_read','platform_prepare','type_read','propose_type_changes','object_find','object_relations',
-    'workspace_list','cable_model_read','plugin_inspect','recipe_execute','inbox_read'})
+    'workspace_list','cable_model_read','plugin_inspect','plugin_query','recipe_execute','inbox_read'})
 
 
 def context(workspace_id,is_type):

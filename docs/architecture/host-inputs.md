@@ -228,6 +228,14 @@ data: {"usage":{"prompt_tokens":120,"completion_tokens":20}}
 
 Agent功能验收使用真实已配置deepseek-flash和发布库隔离副本：PowerShell先设`$env:CABLESIM_AGENT_REAL_USE='1'`，再运行`python -m pytest -q -s tests/test_harness_real_use.py`。串起待办配方、真实方法发行变化诊断、型号单项提案→人工批准→普通工作区history/undo撤销；待办最多2次模型请求，其余最多8次。每阶段记录模型/工具次数、耗时、回答、名片及实际审批修订，保存到`.data/agent-live/real-use-r20.json`。只复用来源库的Windows凭据账户标识，由平台鉴权，不读取或复制密钥；不写8100/8200，不提交求解作业，临时服务关闭时核对端口。来源库或模型不可用时明确未覆盖，不改用假数据；默认不开真实模型计费开关。已有离线回归保留，但不作为真实使用验收证据。
 
+只读插件依据查询使用`plugin_query({plugin_id,capability,input?,view?,offset?,limit?})`：不带input时读取安装清单的standalone_schema，或包内已封签且$id匹配input_schema的唯一JSON查询契约；schema标识字符串不是参数定义，契约缺失须明确诊断。带input时经过实际`/api/plugin-queries/{plugin_id}/{capability_id}`入口，核对封签、read_only和本机执行限制。目录中四列记录为此类查询；不是plugin_inspect的工具名。该宿主已登记的只读POST可由platform_read读取，其他POST仍是人工操作；模型不能用参数改变权限。返回页码、条款、版本和实际依据，契约本身不当作证据。
+
+workspace_read指定容器路径时同时投影其中已有标量的明确单位；宿主layout_template的depth/spacing按其保存契约投影为m，读投影不扩展可编辑字段。study_read提供保存输入的input_fields和按封签参数契约产生的parameter_fields，不从数值后缀猜单位。冻结运行摘要保留负z原坐标与其埋深口径。领域provenance及保存方法参数source/geometry_source的声明量值只可在明确引用来源、文献或工程参考条件时引用，不能作计算结果或已批准输入；实际来源年份与方法版本是身份，不作为工程量。依据库record的quantity.unit与value沿用实际回执，不补默认值。数值列表不跨逗号借单位，已核验的同一推导量可在相同对象范围内复述；未知值、错误推导及过度验证宣称仍拒绝。
+
+`inbox_read(view:"groups")`提供紧凑分组视图：groups含category、origin、原因原文、共同next_step、handled_by、requires_human_approval和members；members保留每个object、title、created，home与object不同才重复附带。只合并相同原因和相同人工动作；offset/total仍按对象计数，next_page保持筛选、view和inbox_digest。方法引用另由method_refs提供实际名片。items视图和原配方默认行为保持兼容，普通回答优先使用分组视图；未展开条目照常注明。
+
+真实回答成对回归入口为`tests/test_harness_answer_real_use.py`，真实索引操作入口为`tests/test_index_incremental_real_use.py`；均须显式CABLESIM_AGENT_REAL_USE=1并指定发布库隔离来源。每个问题保留实际次数、耗时、首稿核验和修正记录，不以离线模型通过替代真实验收。提供方只复用经过核对的TLS信任上下文，证书文件身份或环境变化时重建；每次请求的HTTP客户端仍关闭，不缓存密钥或绕过证书校验。
+
 ## 统一索引
 
 复现验证前端接入：插件“验证”页签读取plugin的validation关联，按target.subtype区分清单声明和保存复现；Relation.reason已带状态、关键偏差与出处，完整结构见target.validation。现有关联面板位于插件“使用情况”页签，需要前端将验证引用放到“验证”页签；source.kind=reproduction_library的名片按kind/id导航到该算例结果页（`/validation/{id}/results`），并以validation.snapshot_digest保留当前引用版本。本接口不返回页面地址。
@@ -239,6 +247,7 @@ kind=validation的查询及plugin的关联优先展示有保存结果的目标�
 索引另保留一份不超过8MiB的已核验投影，避免研究详情的大响应淘汰侧栏元数据；查找仍要求相同数据库提交代次、源码通知代次、复现库及作业回执身份，变化立即重建。重建的短期只读连接启用至多1GiB文件映射，降低SQLite跨越大运行正文去读取后置元数据的页面复制开销；不把正文读入Python，不增加常驻连接，退出连接即释放映射。Index.last_build.source_timings记录各表投影耗时和行数。发布库副本的并发页面/冷关联/热列表实测入口为`CABLESIM_AGENT_REAL_USE=1 python -m pytest -s -q tests/test_index_read_real_use.py`，逐请求记录在CABLESIM_AGENT_REAL_USE_OUTPUT指定的.data文件中。
 
 同一投影身份只解码一次，API只读投影借用该对象；向其他模块提供snapshot时复制，待办排序不修改缓存。复现库保留一份经过snapshot完整核验的快照，仅根目录、index.json字节摘要、当前快照身份均一致且读取前后稳定时复用；发布、损坏、修复仍沿原失效机制重新校验，不把库故障当空数据。关闭索引生命周期时释放这些缓存。
+数据库提交后按各来源的修订、状态与摘要比较行身份，仅重读变化行；删除行立即移除。运行仍核对冻结输入/输出摘要，封签或源码变化仍重新判断方法当前性；身份不完整的旧表回退完整投影。变化对象沿实际引用传播，重新求值受影响的关联与待办，新目标会重试未解析关联；未变化的名片、冻结元数据和当前性可复用，不用TTL，也不持有新数据库连接。last_build新增affected_objects、reused_run_states；source_timings记录loaded_rows/reused_rows。真实操作验收另用独立完整投影逐项对比全部名片、关联、未解析项和待办，不能只比较数量或响应时间。
 元数据投影复用宿主ReadResponses的有界缓存；SQLite提交与封签源码通知使缓存失效。方案有效期到点、调度回执内容变化、复现库index.json字节或当前快照文件身份变化也会触发重建，不用固定TTL保留旧待办。三个接口与Agent工具共用该投影。宿主完成数据库初始化后，在同一study-read-warmup后台线程先预建统一索引，再预热研究目录；索引路由启动阶段最多等5秒再宣告服务就绪，把冷构建等待移出首个页面请求。只变更Agent任务或方案且非Agent元数据及封签来源身份完全一致时，复用已校验清单和运行当前性；研究输入、运行、资源与方法变化仍重建对应状态。不加载历史运行正文、不持有额外数据库连接。构建期间其他读取最多等待3秒，超时返回503、Retry-After: 1及`detail:{code:"INDEX_BUILDING",state:"building",message,max_wait_seconds:3}`，不返回部分items。内存不足返回INDEX_RESOURCE_PRESSURE；预建失败后普通读取仍可重试，保留原数据。
 
 运行回执按批读取：本机作业计划存在时仍调用宿主execution_status读取最新小型回执，始终重新检查计划是否存在；随附超算证据使用宿主evidence_index校验的目录，一批多项不逐项重复核验。仅目录、见证摘要、schema全部字节一致时复用已校验目录，改变任一文件立即重验，不用TTL或仅mtime信任，不读取大场工件或提交作业。缓存仅一份小目录，API回执与宿主原读接口保持一致。Index.last_read记录锁等待、回执、复现目录、缓存及解码耗时和cache_hit，便于区分热读取与来源变化后的重建，不作为工程证据。真实测速与待办验收：设置CABLESIM_AGENT_REAL_USE=1、CABLESIM_AGENT_REAL_USE_OUTPUT指向本轮.data记录，运行`python -m pytest -s -q tests/test_index_real_use.py`；发布库隔离副本经实际HTTP接口，首次读取与10次热读取分别记录，热预算200 ms，随后调用已配置的真实模型和比对已保存超算回执。

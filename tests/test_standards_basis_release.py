@@ -86,7 +86,7 @@ def test_five_engineering_queries_on_saved_release_copy(tmp_path, monkeypatch):
         reply=client.post('/api/plugin-queries/cablesim.standards-basis/lookup',json={'release_digest':pin['release_digest'],'input':incomplete})
         assert reply.status_code==422 and reply.json()['detail']['path']=='/conditions/cable_spacing_condition'
         # Actual host replies are the consumer handoff; only read the source library.
-        output=ROOT/'.data/standards-next/release';output.mkdir(parents=True,exist_ok=True)
+        output=tmp_path/'release-evidence';output.mkdir(parents=True,exist_ok=True)
         (output/'real-queries.json').write_text(json.dumps(receipts,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
         # Declared YJV22 nominal inner covering 1.8mm and steel tape 0.5mm:
         # measured minima require actual measurement, 0.8*1.8-0.2=1.24, (1-.1)*.5=.45mm.

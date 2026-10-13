@@ -159,6 +159,15 @@ def test_field_routes_project_without_mutation_and_sample_full_saved_values(tmp_
     # currentness are exercised by test_display_projection_checks_real_bytes.
     from backend.kernel.batch_field_projection import display_only
     monkeypatch.setattr('backend.kernel.batch_field_projection.read_display',lambda research,wid,rid:display_only(research.get_run(wid,rid)))
+    manager.research.store.read_snapshot=manager.research.store.db
+    # This fixture owns route projection/sample refusal, not host cache timing.
+    # Keep the real response/revalidation code, with an uncached adapter whose
+    # loader is always called after the fixture changes its integrity state.
+    manager.research.read_responses=SimpleNamespace(get=lambda *a:None,
+        build=lambda key,model,load,*a,**k:load(),gzip=__import__('gzip').compress)
+    with manager.research.store.db() as db:
+        db.execute('CREATE TABLE study_runs(id TEXT,workspace TEXT,status TEXT)')
+        db.execute('INSERT INTO study_runs VALUES (?,?,?)',(run['id'],run['workspace'],run['status']))
     app=FastAPI();app.include_router(make_router(manager.research))
     url=f"/api/hpc/workspaces/{run['workspace']}/fields/{run['id']}"
     with TestClient(app) as client:

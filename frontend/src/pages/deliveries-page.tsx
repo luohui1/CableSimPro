@@ -23,6 +23,7 @@ type Row = DeliverySummary & { wid: string; owner: string };
 export function DeliveriesPage() {
   const { search, theme, navigate } = usePageTheme();
   const [audience, setAudience] = useState<ReportAudience>("customer");
+  const [previewId, setPreviewId] = useState('');
   const filter = text(search.workspace), did = text(search.delivery);
   const spaces = useQuery({ queryKey: ["delivery-workspaces"], queryFn: ({ signal }) => workspaces(signal) });
   const owners = (spaces.data || []).map(item => ({ wid: text(item.id), name: text(item.name) || text(item.title) || "未命名工程" }));
@@ -35,18 +36,21 @@ export function DeliveriesPage() {
   const failure = spaces.error || lists.find(list => list.error)?.error;
   const rows = lists.flatMap(list => list.data || []).sort((a, b) => b.created.localeCompare(a.created));
   const selected = rows.find(item => item.id === did);
-  function verify(book: Record<string, unknown>, row: Row) {
+  function verify(book: Record<string, unknown>, row: Row, full = false) {
     if (book.id !== row.id || book.workspace !== row.wid || book.digest !== row.digest ||
       !Array.isArray(book.sources) || book.sources.length !== row.sources.length ||
-      !row.sources.every((source, index) => ["run_id", "input_digest", "output_digest"].every(key => optionalRecord(book.sources instanceof Array ? book.sources[index] : null)[key] === optionalRecord(source)[key])) || typeof book.html !== "string")
+      !row.sources.every((source, index) => ["run_id", "input_digest", "output_digest"].every(key => optionalRecord(book.sources instanceof Array ? book.sources[index] : null)[key] === optionalRecord(source)[key])) || full && typeof book.html !== "string")
       throw new ApiError(409, "交付存档与所选版本不一致，请刷新列表后重试");
     return book;
   }
-  const document = useQuery({ queryKey: ["archived-delivery", selected?.wid, did, selected?.digest],
-    queryFn: async () => verify(await delivery(selected!.wid, did), selected!), enabled: !!selected });
+  const receipt = useQuery({ queryKey: ["archived-delivery", selected?.wid, did, selected?.digest, 'summary'],
+    queryFn: async ({ signal }) => verify(await delivery(selected!.wid, did, 'summary', signal), selected!), enabled: !!selected });
+  const previewRequested = !!selected && previewId === selected.id;
+  const document = useQuery({ queryKey: ["archived-delivery", selected?.wid, did, selected?.digest, 'full'],
+    queryFn: async ({ signal }) => verify(await delivery(selected!.wid, did, 'full', signal), selected!, true), enabled: previewRequested && !!receipt.data });
   const preview = useMemo(() => document.data ? deliveryPreview(text(document.data.html)) : "", [document.data]);
   const download = useMutation({ retry: false, mutationFn: async ({row, format}: {row: Row; format: "pdf" | "html"}) => {
-    const book = verify(await delivery(row.wid, row.id), row);
+    const book = verify(await delivery(row.wid, row.id, 'full'), row, true);
     const blob = format === "pdf" ? deliveryPdf(book, audience) : await deliveryFile(row.wid, row.id, row.digest);
     const url = URL.createObjectURL(blob), link = window.document.createElement("a");
     link.href = url;
@@ -54,7 +58,7 @@ export function DeliveriesPage() {
     link.click();setTimeout(() => URL.revokeObjectURL(url), 1000);
   } });
   const label = (row: Row) => `${row.owner} · ${row.kind === "specification" ? "规格书" : "计算书"} · 第 ${row.version} 版`;
-  const go = (workspace: string, next: string) => { download.reset(); void navigate({ to: "/deliveries", search: { theme, workspace, delivery: next } }); };
+  const go = (workspace: string, next: string) => { download.reset(); setPreviewId(''); void navigate({ to: "/deliveries", search: { theme, workspace, delivery: next } }); };
   return <CatalogShell title="交付" status={<span className="muted">{pending ? "读取中" : `${rows.length} 份`} · 下载存档，不重新计算</span>}
     property={selected ? <PropertyPanel collapsed={false} title={label(selected)} onToggle={() => go(filter, "")}
       groups={[{ label: "名片", items: [
@@ -69,6 +73,7 @@ export function DeliveriesPage() {
         options={[{ value: "all", label: "全部工程与型号" }, ...owners.map(owner => ({ value: owner.wid, label: owner.name }))]} />
       {/* 没有交付时不显示下载版本选择 */}
       {!!rows.length && <Select label="PDF 版本" value={audience} disabled={download.isPending} onChange={value => setAudience(value as ReportAudience)} options={[{value:"customer",label:"客户版"},{value:"internal",label:"内部审核版"}]} />}
+      {selected && <Button variant="secondary" size="compact" disabled={!receipt.data || receipt.isError} loading={previewRequested && document.isPending} onClick={() => setPreviewId(previewRequested ? '' : selected.id)}>{previewRequested ? '收起预览' : '预览存档'}</Button>}
     </Toolbar>
     {pending ? <LoadingState title="正在读取交付" />
       : failure ? <ErrorState description={message(failure)} action={<Button onClick={() => { void spaces.refetch(); lists.forEach(list => void list.refetch()); }}>重新读取</Button>} />
@@ -87,7 +92,7 @@ export function DeliveriesPage() {
         ]} />}
     {!!download.error && <ErrorState description={message(download.error)} />}
     {did && !pending && !failure && !selected && <ErrorState description="所选交付版本已不可用，或不属于当前筛选" />}
-    {selected && (document.isPending ? <LoadingState title="正在读取保存的正文" /> : document.error ? <ErrorState description={message(document.error)} /> : document.data &&
+    {selected && (receipt.isPending ? <LoadingState title="正在核对交付版本" /> : receipt.error ? <ErrorState description={message(receipt.error)} action={<Button onClick={() => void receipt.refetch()}>重新读取</Button>} /> : !previewRequested ? null : document.isPending ? <LoadingState title="正在读取保存的正文" /> : document.error ? <ErrorState description={message(document.error)} action={<Button onClick={() => void document.refetch()}>重新读取</Button>} /> : document.data &&
       <section className="report-module" aria-label="交付存档预览"><VersionNotice value={document.data} target={{wid:selected.wid,runId:selected.sources[0]?.run_id}} /><iframe className="report-frame" title="交付存档预览" sandbox="" srcDoc={preview} /></section>)}
   </CatalogShell>;
 }

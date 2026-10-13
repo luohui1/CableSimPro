@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { exactContract, inputContracts } from "@/api/input-contracts";
+import { exactContract, inputContractQuery } from "@/api/input-contracts";
+import { methodCardsQuery } from '@/lib/study-queries';
 import { api, responseData, optionalRecord, text, numeric, message } from "@/api/client";
 import { moduleConfiguration } from "@/lib/study-config";
 import { useStudy } from "./study-provider";
@@ -39,12 +40,7 @@ export function StudySimulation({
     [error, setError] = useState(""),
     [method, setMethod] = useState(""),
     [filename, setFilename] = useState("");
-  const query = useQuery({
-    queryKey: ["input-contracts"],
-    queryFn: ({ signal }) => inputContracts(signal),
-    enabled: open,
-    staleTime: 60_000,
-  });
+  const catalog = useQuery({ ...methodCardsQuery(), enabled: open });
   const problemContract = useQuery({
     queryKey: ["simulation-problem-contract"],
     queryFn: ({ signal }) => responseData(api.GET("/api/simulation/problem-contract", { signal })),
@@ -53,9 +49,9 @@ export function StudySimulation({
   const form = optionalRecord(context.moduleInputs.simulation?.value),
     raw = text(form.raw),
     reference = text(form.reference);
-  const methods = (query.data || []).filter(
-    (value) => value.input_schema === "cablesim.simulation-problem/1",
-  );
+  const methods = (catalog.data || []).flatMap(entry => (Array.isArray(entry.capabilities) ? entry.capabilities : []).map(optionalRecord)
+    .filter(cap => cap.input_schema === 'cablesim.simulation-problem/1' && entry.platform_supported !== false)
+    .map(cap => ({ method: { ...optionalRecord(entry.method), capability: text(cap.id) } as StudyDefinition['method'], label: `${text(entry.name)} · ${text(cap.title)}` })));
   const key = (value: (typeof methods)[number]["method"]) =>
     [
       value.plugin_id,
@@ -63,6 +59,8 @@ export function StudySimulation({
       value.version,
       value.release_digest,
     ].join(":");
+  const selected = methods.find(value => key(value.method) === method);
+  const query = useQuery({ ...inputContractQuery(selected?.method || config?.method || definition.method), enabled: open && !!selected, staleTime: 60_000 });
   function adopt() {
     try {
       if (readOnly) throw Error("固定运行输入只读，请返回当前研究。");
@@ -78,7 +76,7 @@ export function StudySimulation({
       if (missing.length) throw Error("算例缺少输入格式要求的字段：" + missing.map(field => displayName(String(field))).join("、"));
       const chosen = methods.find((value) => key(value.method) === method);
       if (!chosen) throw Error("请选择声明支持该问题的准确方法版本。");
-      exactContract(query.data!, chosen.method);
+      exactContract(query.data ? [query.data] : [], chosen.method);
       if (!reference.trim()) throw Error("请填写算例来源与位置。");
       const pending = context.moduleInputs.simulation;
       if (
@@ -320,6 +318,7 @@ export function StudySimulation({
             </details>
           </section>}
         {!!query.error && <ErrorState description={message(query.error)} action={<Button onClick={() => query.refetch()}>重新读取方法</Button>} />}
+        {!!catalog.error && <ErrorState description={message(catalog.error)} action={<Button onClick={() => catalog.refetch()}>重新读取方法清单</Button>} />}
         <label className="text-field">
           算例 JSON
           <input
@@ -348,7 +347,7 @@ export function StudySimulation({
           onChange={setMethod}
           options={methods.map((value) => ({
             value: key(value.method),
-            label: displayName(value.method.plugin_id) + " · " + displayName(value.method.capability) + " · " + value.method.version,
+            label: value.label + " · " + value.method.version,
           }))}
         />
         <label className="text-field">

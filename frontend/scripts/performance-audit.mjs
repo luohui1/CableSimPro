@@ -85,11 +85,7 @@ export async function createPerformanceAudit({ page, context, root, base }) {
         navigation: performance.getEntriesByType('navigation').map(n => ({ ttfbMs: n.responseStart - n.requestStart, domContentLoadedMs: n.domContentLoadedEventEnd, transferBytes: n.transferSize })) };
     }).catch(() => null);
     state = await page.evaluate(readinessSnapshot).catch(() => state);
-    const rendering = state?.canvases.length ? await page.evaluate(() => [...document.querySelectorAll('.cad-viewport,.type-canvas-frame,canvas.field-canvas')].map(e => {
-      const r = e.getBoundingClientRect(), s = getComputedStyle(e);
-      return { selector: e.className, width: Math.round(r.width), height: Math.round(r.height), display: s.display, visibility: s.visibility, opacity: s.opacity,
-        attributes: Object.fromEntries([...e.attributes].filter(a => /^(data-cad-|aria-busy)/.test(a.name)).map(a => [a.name, a.value])) };
-    })).catch(() => []) : [];
+    const rendering = (state?.canvases || []).flatMap(canvas => canvas.rendering ? [canvas.rendering] : []);
     const frameMs = metrics?.frameMs === null ? null : metrics?.frameMs - startMs;
     const applicableFrames = (state?.canvases || []).filter(c => !c.empty);
     const horizon = Math.max(content?.mainMs || 0, metrics?.frameMs || 0, (failure || frameFailure) ? metrics?.now || 0 : 0);

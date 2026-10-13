@@ -5,6 +5,7 @@ import { useStudy } from './study-provider';
 import { NumberField } from './ui/number-field';
 import { Button } from './ui/button';
 import { Tooltip } from './ui/tooltip';
+import { methodCardsQuery } from '@/lib/study-queries';
 
 /** Crossings are method inputs, not a second domain object schema. Labels,
  * units and bounds come from the selected sealed plugin contract. */
@@ -13,11 +14,18 @@ export function StudyCrossingInputs({historical, placement='all'}: {historical:b
   const saved=context.runs.at(-1);
   const definition=historical ? optionalRecord(optionalRecord(saved?.snapshot).definition) : context.draft?.definition || context.study.definition;
   const method=optionalRecord(definition.method);
-  const contracts=useQuery(inputContractQuery(method as typeof context.study.definition.method));
+  const parameters=optionalRecord(definition.parameters);
+  const catalog=useQuery(methodCardsQuery());
+  const plugin=catalog.data?.find(row=>optionalRecord(row.method).plugin_id===method.plugin_id);
+  const capability=(Array.isArray(plugin?.capabilities) ? plugin.capabilities : []).map(optionalRecord).find(row=>row.id===method.capability);
+  // The small catalog advertises field names only. Saved crossings still read
+  // their exact historical contract even if the installed capability removed it.
+  const supportsCrossings=Array.isArray(capability?.parameter_fields) && capability.parameter_fields.includes('crossing_heat_sources');
+  const hasSavedCrossings=Array.isArray(parameters.crossing_heat_sources) && parameters.crossing_heat_sources.length>0;
+  const contracts=useQuery({...inputContractQuery(method as typeof context.study.definition.method), enabled:supportsCrossings || hasSavedCrossings});
   let field:Record<string,unknown>={};
   try {if(contracts.data)field=optionalRecord(optionalRecord(contracts.data.parameter_schema).properties).crossing_heat_sources as Record<string,unknown> || {};} catch { /* Contract failure is already shown by the method inspector. */ }
   if(!field.items)return null;
-  const parameters=optionalRecord(definition.parameters);
   const rows=(Array.isArray(parameters.crossing_heat_sources) ? parameters.crossing_heat_sources : []).map(optionalRecord);
   const properties=optionalRecord(optionalRecord(field.items).properties);
   function write(next:Record<string,unknown>[]) {

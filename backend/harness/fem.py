@@ -21,6 +21,16 @@ def latest_ids(research,wid,plugin):
 
 def comparisons(research,task,args):
     wid=task['workspace_id'];ids=[args['run_id']] if args.get('run_id') else latest_ids(research,wid,'cablesim.simulation')[:1]
+    if not args.get('run_id'):
+        # Prefer the final run explicitly pinned by a saved convergence workflow,
+        # not a newer trial that happens to have no convergence proof.
+        with research.store.db() as db:
+            if db.execute("SELECT 1 FROM sqlite_master WHERE name='hpc_convergence'").fetchone():
+                proven=db.execute("SELECT COALESCE(NULLIF(json_extract(state,'$.rating_run_id'),''),json_extract(state,'$.rows[#-1].run_id')) FROM hpc_convergence "
+                    "WHERE json_extract(state,'$.workspace')=? AND json_extract(state,'$.status') IN ('completed','converged') "
+                    "ORDER BY (NULLIF(json_extract(state,'$.rating_run_id'),'') IS NOT NULL) DESC, "
+                    "json_extract(state,'$.updated') DESC,rowid DESC LIMIT 1",(wid,)).fetchone()
+                if proven and proven[0]:ids=[proven[0]]
     if not ids:return ToolResult(status='ok',summary='尚无有限元保存运行；未推算偏差。',data={'comparisons':[],
         'limitations':['需先生成复核研究方案，由人在工作台保存、预检、确认核时并提交超算。']})
     run=saved(research,wid,ids[0]);method=run['snapshot']['definition']['method']
@@ -30,6 +40,35 @@ def comparisons(research,task,args):
     if run['status'] not in ('succeeded','partial'):
         return ToolResult(status='ok',summary='有限元运行尚未成功完成，不提供可用偏差结论。',
             data={**base,'comparisons':[],'limitations':['运行未完成或失败；保留原记录，未重新提交。']})
+    if method['capability']=='iec-thermal-field':
+        from backend.kernel.fem_evidence import conclusion,proof,display_read,saved_execution
+        result=conclusion(research,wid,run['id'])
+        if result['status']=='converged':
+            reference=result.get('reference') or {}
+            if args.get('iec_run_id') and reference.get('iec_run_id')!=args['iec_run_id']:
+                raise HTTPException(422,{'code':'IEC_REFERENCE_MISMATCH','message':'指定 IEC 运行不是宿主核对的同工况参照。','path':'/iec_run_id'})
+            source=display_read(research,wid,run['id'])
+            numerical=proof(research,source,display=True,summary=True)
+            rows=[]
+            for item in result.get('comparison',[]):
+                values=[{'key':item['quantity'],'value':item[label],'unit':item['unit'],
+                    'entity':item['entity'],'condition':item['condition'],'method':label,
+                    'run_id':reference.get(label+'_run_id')} for label in ('fem','iec') if item.get(label) is not None]
+                if item.get('delta') is not None:values.append({'key':'difference.'+item['quantity'],
+                    'value':item['delta'],'unit':item['unit'],'entity':item['entity'],'condition':item['condition']})
+                if item.get('relative_percent') is not None:values.append({'key':'relative_difference',
+                    'value':item['relative_percent'],'unit':'%','basis':'(FEM-IEC)/IEC × 100；绝对温度以 K 为分母'})
+                rows.append({'label':item['label'],'status':'converged','results':values})
+            return ToolResult(status='ok',summary='已读取宿主验证的同输入 FEM/IEC 对照及保存收敛工作流；没有重新计算或提交作业。',data={
+                **base,'iec_run_id':reference.get('iec_run_id'),'comparisons':rows,
+                'convergence':{'status':numerical['status'],'reason':numerical['reason'],
+                    'workflow_id':numerical.get('id'),'rows':[{key:r[key] for key in ('run_id','case_id','kind','output_digest') if key in r}
+                        for r in numerical.get('rows',[])],
+                    'tolerance':{'key':'convergence_temperature_difference_tolerance','value':result['tolerance_k'],'unit':'K'}},
+                'execution':saved_execution(research,wid,run['id']).get('execution'),
+                'boundary_label':result.get('boundary_label'),'source':reference,
+                'limitations':['数值收敛不等于现场准确性或人工工程批准；比较只适用于宿主核对的同输入、同参数、同边界口径。'],
+                'authority':'reference_only'})
     rows=[]
     for case in (run.get('output') or {}).get('cases',[]):
         if args.get('case_id') and case['case_id']!=args['case_id']:continue

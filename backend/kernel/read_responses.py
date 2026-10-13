@@ -2,7 +2,7 @@
 from collections import OrderedDict
 from contextlib import suppress
 from hashlib import sha256
-from threading import RLock
+from threading import Condition, RLock
 from concurrent.futures import Future
 from time import perf_counter
 from gzip import compress
@@ -23,6 +23,8 @@ class ReadResponses:
     def __init__(self, research):
         self.research = research
         self.lock = RLock()
+        self.idle = Condition(self.lock)
+        self.closed = False
         self.entries = OrderedDict()
         self.inflight = {}
         self.bytes = 0
@@ -59,6 +61,7 @@ class ReadResponses:
         # event loop only polls ready notifications and a tiny SQLite pragma.
         if self.watch is None or not self.lock.acquire(blocking=False):return None
         try:
+            if self.closed:return None
             if self.source_root != self.research.executor.registry.root.parent:return None
             # A source-only read may have initialized the cache first; the build path opens the database.
             if uses_database and self.database is None:return None
@@ -92,6 +95,8 @@ class ReadResponses:
 
     def build(self, key, model, load, uses_database, *, exclude_unset=False):
         with self.lock:
+            if self.closed:
+                raise RuntimeError('研究读取服务已关闭')
             self.initialize(uses_database)
             before = self.generation(uses_database)
             previous = self.entries.get(key)
@@ -133,10 +138,17 @@ class ReadResponses:
             pending.set_exception(exc)
             raise
         finally:
-            with self.lock:self.inflight.pop(pending_key, None)
+            with self.idle:
+                self.inflight.pop(pending_key, None)
+                self.idle.notify_all()
 
     def close(self):
-        with self.lock:
+        with self.idle:
+            # A builder loads outside the cache lock, then needs the watcher and
+            # data_version connection again to authenticate its final receipt.
+            # Stop admission first; release the lock while waiting for owners.
+            self.closed = True
+            while self.inflight:self.idle.wait()
             if self.watch is not None:self.watch.close()
             if self.database is not None:
                 with suppress(sqlite3.Error):self.database.close()
@@ -155,6 +167,7 @@ class ReadResponses:
                 return previous
         encoded = compress(payload, compresslevel=1, mtime=0)
         with self.lock:
+            if self.closed:return encoded
             if key not in self.encoded:
                 self.encoded[key] = encoded
                 self.encoded_bytes += len(encoded)

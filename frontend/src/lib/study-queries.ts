@@ -140,6 +140,11 @@ export function prefetchCatalogs(client: QueryClient) {
 
 /** 进入研究前并行预取研究、工程与运行；失败留给页面自己的错误状态处理，不在 loader 抛出。 */
 export function prefetchStudy(client: QueryClient, workspace: string, sid: string, run: string) {
+  // The ordinary entry first discovers ownership and then redirects to a tab.
+  // Download its existing workbench in parallel, rather than start that second
+  // chunk chain only after the provider has committed the verified context.
+  // The route keeps its own component loading/error handling.
+  void import('@/pages/study-workspace').catch(() => {});
   prefetchCatalogs(client);
   // On a full navigation the explicit destination is already in the address.
   // Its conclusion may start before even the study-card read; the endpoint
@@ -155,12 +160,14 @@ export function prefetchStudy(client: QueryClient, workspace: string, sid: strin
     void client.prefetchQuery(studyContextQuery(client, workspace, sid, run));
     return;
   }
-  return Promise.all([
+  // The mounted provider owns loading/error states on both entry paths. Do not
+  // make an explicit-workspace navigation wait for the router's minimum pending
+  // duration after these same verified query results have already arrived.
+  void Promise.all([
     client.prefetchQuery(studyContextQuery(client, workspace, sid)),
     client.prefetchQuery(studyRunsQuery(client, workspace, sid, run)),
     client.fetchQuery(savedStudyQuery(workspace, sid)).then(study => {
-      // The route waits for its display prefetch before mounting StudyProvider.
-      // Start the saved FEM conclusion here once study ownership/type is known,
+      // Start the saved FEM conclusion once study ownership/type is known,
       // so it does not become a second request chain after the display finishes.
       // The mounted conclusion uses this exact key; the host still verifies it.
       if (rootModule(optionalRecord(study.definition) as StudyDefinition)==='thermal-field') {

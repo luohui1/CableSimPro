@@ -112,6 +112,25 @@ def test_http_compressed_and_identity_reads_are_the_same_verified_contract(clien
     assert revalidated.headers['cache-control'] in ('private, no-cache', 'no-store')
 
 
+def test_optional_crossing_inspector_uses_real_capability_names_before_loading_schema(client):
+    full = client.get('/api/methods')
+    cards = client.get('/api/methods?view=summary')
+    assert full.status_code == cards.status_code == 200
+    originals = {(row['method']['plugin_id'], cap['id']): cap
+                 for row in full.json() for cap in row['capabilities']}
+    fields = {}
+    for row in cards.json():
+        for cap in row['capabilities']:
+            key = (row['method']['plugin_id'], cap['id'])
+            fields[key] = cap['parameter_fields']
+            assert fields[key] == list(originals[key]['parameter_schema']['properties'])
+            assert 'parameter_schema' not in cap
+    # Real plugin declarations: keep IEC crossings available without fetching
+    # the unrelated saved FEM contract on every first-screen render.
+    assert 'crossing_heat_sources' in fields['cablesim.iec60287', 'steady-rating']
+    assert 'crossing_heat_sources' not in fields['cablesim.simulation', 'iec-thermal-field']
+
+
 @pytest.fixture
 def saved_fem_projection(tmp_path):
     """A private copy of an actual published Slurm run, not invented field JSON."""
@@ -226,6 +245,48 @@ def test_catalog_concurrent_miss_has_one_loader_and_shared_outcome(monkeypatch, 
             else: assert result.result() == b'[]'
     assert calls == [1]
     assert not cache.inflight
+
+
+def test_host_shutdown_waits_for_active_verified_read_and_releases_library(tmp_path, monkeypatch):
+    """Real API/read/host lifecycle; only pause a request to reproduce the race."""
+    from concurrent.futures import ThreadPoolExecutor, TimeoutError
+    from threading import Event
+    database = tmp_path/'lifecycle.sqlite'
+    entered, release, closing = Event(), Event(), Event()
+    with TestClient(create_app(database)) as host:
+        workspace = host.post('/api/workspaces', json={}).json()
+        service = host.app.state.research
+        actual = service.list_studies
+        def paused(*args, **kwargs):
+            entered.set()
+            assert release.wait(15)
+            return actual(*args, **kwargs)
+        monkeypatch.setattr(service, 'list_studies', paused)
+        def stop():
+            closing.set()
+            service.read_responses.close()
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            read = workers.submit(host.get, f'/api/workspaces/{workspace["id"]}/studies?view=summary')
+            assert entered.wait(15)
+            stopped = workers.submit(stop)
+            assert closing.wait(15)
+            try:
+                # The active loader still owns the real monitor until its
+                # final verification; close must neither discard nor close it.
+                with pytest.raises(TimeoutError):stopped.result(timeout=.05)
+                assert service.read_responses.database is not None
+            finally:release.set()
+            response = read.result(timeout=15)
+            assert response.status_code == 200 and response.json() == []
+            stopped.result(timeout=15)
+        assert not service.read_responses.inflight
+        assert service.read_responses.database is service.read_responses.watch is None
+        with pytest.raises(RuntimeError, match='已关闭'):
+            service.read_responses.build(('late',), list, lambda:[], True)
+    # Windows refuses this deletion when any SQLite/monitor/host connection is
+    # retained. TestClient has also completed the actual application's shutdown.
+    database.unlink()
+    assert not database.exists()
 
 
 def test_metadata_startup_does_not_eagerly_validate_all_history(client,monkeypatch):

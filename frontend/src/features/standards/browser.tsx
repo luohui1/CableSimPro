@@ -6,16 +6,16 @@ import { Select } from '@/components/ui/select';
 import { Tooltip } from '@/components/ui/tooltip';
 import { ErrorState, InlineEmpty, LoadingState } from '@/components/states';
 import { ApiError, message } from '@/api/client';
-import { basisPin, basisQuery, type BasisRecord, type Answer } from './client';
+import { basisQuery, type BasisRecord, type Answer } from './client';
+import { standardsPinQuery, standardsCatalogueQuery } from '@/lib/standards-queries';
 import { conditionFactor, conditionNames, conditionsLabel, copyCitation, formulaDetails, localized, methodLabel, valueLabel } from './format';
 import './standards.css';
 import { SoilCalculator } from './soil-calculator';
 
 type GridRow = { id: string; label: string; records: BasisRecord[] };
 export function StandardsBrowser() {
-  const pin = useQuery({ queryKey: ['standards-basis-pin'], queryFn: ({ signal }) => basisPin(signal), retry: false });
-  const catalogue = useQuery({ queryKey: ['standards-basis-catalog', pin.data?.release_digest], enabled: !!pin.data,
-    queryFn: ({ signal }) => basisQuery(pin.data!, { schema_version: 'cablesim.standards-query/1', operation: 'browse', standard: 'GB/T 12706.2', edition: '2020', locator: '表 7' }, signal), retry: false, staleTime: Infinity });
+  const pin = useQuery(standardsPinQuery());
+  const catalogue = useQuery(standardsCatalogueQuery(pin.data));
   const [standard, setStandard] = useState('GB/T 12706.2—2020'), [tableId, setTableId] = useState('mv-表7');
   const [filter, setFilter] = useState(''), [quantity, setQuantity] = useState(''), [inputs, setInputs] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState(''), [history, setHistory] = useState<Answer[]>([]), [historical, setHistorical] = useState<Answer | null>(null);

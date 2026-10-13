@@ -80,6 +80,13 @@ def compare(fem,iec,case_id=None):
             'relative_temperature_basis':'kelvin', 'engineering_approval':False}
 
 
+def field_font(size=20):
+    """Use the calculation book's embedded CJK face on every platform."""
+    import fitz
+    from PIL import ImageFont
+    return ImageFont.truetype(BytesIO(fitz.Font('cjk').buffer),size=size)
+
+
 def field_png(field):
     """Rasterize saved display triangles using FieldView's temperature tokens.
 
@@ -88,7 +95,7 @@ def field_png(field):
     import numpy as np
     import re
     from pathlib import Path
-    from PIL import Image,ImageDraw,ImageFont
+    from PIL import Image,ImageDraw
     if field.get('temperature_unit')!='K' or field.get('association')!='node':raise ValueError('不支持的场图单位或节点关联。')
     points=np.asarray(field['mesh']['points'],dtype=float);values=np.asarray(field['temperature_k'],dtype=float)-273.15
     triangles=np.asarray(field['mesh']['triangles'],dtype=int)
@@ -119,7 +126,7 @@ def field_png(field):
         position=np.clip(x,0,1)*5;index=np.minimum(4,np.floor(position).astype(int))
         return np.floor(palette[index]+(palette[index+1]-palette[index])*(position-index)[...,None]+.5).astype(np.uint8)
     t=np.clip(np.nan_to_num((raster-vmin)/span),0,1);rgb=color(np.floor(t*14)/14);rgb[~np.isfinite(raster)]=255
-    image=Image.fromarray(rgb);draw=ImageDraw.Draw(image);font=ImageFont.load_default(size=18)
+    image=Image.fromarray(rgb);draw=ImageDraw.Draw(image);font=field_font()
     # Isotherms from the same piecewise-linear saved triangles.
     for indexes in triangles:
         p=screen[indexes];temps=values[indexes]
@@ -131,15 +138,15 @@ def field_png(field):
             if len(hits)==2:draw.line(hits,fill=(40,40,40),width=1)
     for y in range(50,541):
         rgb=tuple(color(np.asarray((540-y)/490)).tolist());draw.line([(915,y),(937,y)],fill=rgb)
-    draw.text((910,18),'deg C',fill='black',font=font)
+    draw.text((910,18),'°C',fill='black',font=font)
     for y,v in ((50,vmax),(530,vmin)):draw.text((942,y),f'{v:.1f}',fill='black',font=font)
     hotspot=field['hotspot'];x=45+(hotspot['point_m'][0]-low[0])*scale;y=540-(hotspot['point_m'][1]-low[1])*scale
     draw.ellipse((x-5,y-5,x+5,y+5),outline='black',fill='white',width=2)
-    label=f"Tmax {hotspot['temperature_k']-273.15:.2f} deg C";tx=max(45,min(680,x+12));ty=max(28,y-27)
+    label=f"最高温度 {hotspot['temperature_k']-273.15:.2f} °C";tx=max(45,min(680,x+12));ty=max(28,y-27)
     draw.rectangle(draw.textbbox((tx,ty),label,font=font),fill='white');draw.text((tx,ty),label,fill='black',font=font)
-    draw.text((45,570),f"x: {low[0]:g}..{high[0]:g} m   z: {low[1]:g}..{high[1]:g} m | saved FEM triangles",fill='black',font=font)
+    draw.text((45,570),f"水平范围 {low[0]:g}～{high[0]:g} m · 高程范围 {low[1]:g}～{high[1]:g} m · 保存有限元网格",fill='black',font=font)
     if field.get('convergence',{}).get('display_decimated'):
-        draw.text((45,546),f"Display decimated; calculation: full {field['convergence']['full_mesh_nodes']} nodes",fill='black',font=font)
+        draw.text((45,546),f"显示已降采样，计算用全网格 · {field['convergence']['full_mesh_nodes']} 节点",fill='black',font=font)
     stream=BytesIO();image.save(stream,format='PNG');return stream.getvalue()
 
 

@@ -34,19 +34,22 @@ def parent(card):
 class Snapshot:
     def __init__(self,research,db,reproductions=None,reproduction_error=None,*,previous=None,source_generation=None,execution_reader=None):
         self.research,self.db=research,db
-        self.source_timings={};self.raw=project(db,self.source_timings);self.cards={};self.meta={};self.edges=[];self.unresolved={};self.todos=[]
+        self.source_timings={};self.raw=project(db,self.source_timings,previous.get('raw') if previous else None)
+        self.cards={};self.meta={};self.edges=[];self.unresolved={};self.todos=[];self.relation_filter=None
+        self.previous_view=previous.get('view') if previous else None
         self.receipts=[];self.reproduction_error=reproduction_error
         self.execution_reader=execution_reader or ExecutionReceipts()
         # Agent events/proposals do not change saved engineering currentness.
         # Reuse only verified source identities and identical non-Agent metadata.
-        self.model_identity=sha256(json.dumps({key:value for key,value in self.raw.items()
-            if key not in ('tasks','agent_proposals')},sort_keys=True,ensure_ascii=False).encode()).digest()
         same_sources=source_generation is not None and previous and previous['source_generation']==source_generation
         self.registry=previous['registry'] if same_sources else research.registry()
         self.cache={'registries':{pid:self.registry for pid in self.registry.plugins}}
         self.workspaces={r['id']:r for r in self.raw['workspaces']}
         self.studies={r['id']:r for r in self.raw['studies']}
-        self.run_states=dict(previous['run_states']) if same_sources and previous['model_identity']==self.model_identity else {}
+        self.run_states={};self.run_state_tokens={};self.run_metadata={}
+        self.prior_metadata=previous.get('run_metadata',{}) if previous else {}
+        self.prior_run_states=previous['run_states'] if same_sources else {}
+        self.prior_run_tokens=previous.get('run_state_tokens',{}) if same_sources else {}
         self.build_cards()
         if reproductions is not None:
             from .reproductions import build as reproduction_cards,invalid
@@ -58,16 +61,69 @@ class Snapshot:
         if self.reproduction_error:
             from .reproductions import unavailable
             unavailable(self,self.reproduction_error)
+        self.affected=self.changed_objects()
+        if self.previous_view is not None:
+            self.edges=[edge for edge in self.edges if edge[0] in self.affected]
+            self.unresolved={key:value for key,value in self.unresolved.items() if key in self.affected}
+            self.todos=[item for item in self.todos if (item['object']['kind'],item['object']['id']) in self.affected]
+            self.edges.extend(edge for edge in self.previous_view.edges if edge[0] not in self.affected)
+            self.unresolved.update({key:value for key,value in self.previous_view.unresolved.items() if key not in self.affected})
+            self.todos.extend(item for item in self.previous_view.todos if (item['object']['kind'],item['object']['id']) not in self.affected)
+            self.relation_filter=self.affected
         from .relations import build
         build(self)
         from .inbox import build as inbox
         inbox(self)
 
+    def changed_objects(self):
+        old=self.previous_view
+        if old is None:return set(self.cards)
+        changed={key for key in set(self.cards)|set(old.cards)
+            if self.cards.get(key)!=old.cards.get(key) or self.meta.get(key)!=old.meta.get(key)}
+        kinds={'workspaces':('type','project'),'studies':('study',),'runs':('run','input_snapshot','job'),
+            'assets':('asset','cable_version'),'models':('cable_version',),'documents':('document',),
+            'document_proposals':('proposal',),'submissions':('delivery',),'releases':('cable_version',),
+            'deliveries':('delivery',),'tasks':('agent_task',),'agent_proposals':('proposal',),'datasets':('run',)}
+        for table,ids in self.raw.changed.items():
+            for id in ids:
+                changed.update((kind,id) for kind in kinds.get(table,()) if (kind,id) in self.cards or (kind,id) in old.cards)
+        for row in self.raw['extractions']:
+            if row['id'] in self.raw.changed.get('extractions',set()):changed.add(('document',row['document']))
+        for row in self.raw['convergence']:
+            if row['id'] in self.raw.changed.get('convergence',set()):changed.add(('job','convergence:'+row['id']))
+        # A newly registered target can resolve a previously unknown binding.
+        # Those source objects have no edge to traverse, so retry unresolved
+        # sources as well; never guess a missing ID from its display name.
+        if set(self.cards)!=set(old.cards):changed.update(old.unresolved)
+        for row in self.raw['deliveries']+self.raw['submissions']:
+            if ('delivery',row['id']) in changed:
+                if row.get('workspace'):changed.update({('type',row['workspace']),('project',row['workspace'])})
+                changed.update(('run',source['run_id']) for source in decoded(row.get('sources'),[])
+                    if isinstance(source,dict) and source.get('run_id'))
+        published_families={row['family'] for row in self.raw['releases']
+            if row['asset'] in self.raw.changed.get('releases',set())}
+        for row in self.raw['workspaces']:
+            if any((decoded(row[field],{}) or {}).get('id') in published_families for field in ('cable_reference','origin_reference')):
+                card=self.workspace(row['id']);changed.add((card['kind'],card['id']))
+        # Edges embed full target cards. Propagate changes through actual saved
+        # dependencies, including the source side of bidirectional delivery edges.
+        while True:
+            dependencies={source for source,edge in old.edges
+                if (edge['target']['kind'],edge['target']['id']) in changed}
+            if dependencies<=changed:break
+            changed.update(dependencies)
+        return changed
+
+    def relates(self,*keys):
+        return self.relation_filter is None or any(key in self.relation_filter for key in keys if key is not None)
+
     def add(self,kind,id,name,status,*,reason=None,updated=None,version=None,revision=None,
             source=None,owner=None,subtype=None,digest=None):
-        card=ObjectCard(kind=kind,id=id,name=name or id,version=version,revision=revision,
-            status={'code':status,'label':LABELS.get(status,status),'reason':reason},updated=updated,
-            source=source,parent=parent(owner),subtype=subtype).model_dump(mode='json')
+        values={'kind':kind,'id':id,'name':name or id,'version':version,'revision':revision,
+            'status':{'code':status,'label':LABELS.get(status,status),'reason':reason},'updated':updated,
+            'source':source,'parent':parent(owner),'subtype':subtype}
+        old=self.previous_view.cards.get((kind,id)) if self.previous_view else None
+        card=old if kind!='validation' and old is not None and all(old.get(key)==value for key,value in values.items()) else ObjectCard(**values).model_dump(mode='json')
         self.cards[kind,id]=card;self.meta[kind,id]={'digest':digest}
         return card
 
@@ -77,11 +133,13 @@ class Snapshot:
         return self.get('project',id) or self.get('type',id)
 
     def missing(self,key,role,reason):
+        if not self.relates(key):return
         value={'role':role,'freshness':'unknown','reason':reason}
         if value not in self.unresolved.setdefault(key,[]):self.unresolved[key].append(value)
 
     def link(self,source,target,role,*,pin=None,freshness=None,reason=None):
         if source is None or target is None:return
+        if not self.relates((source['kind'],source['id'])):return
         if freshness is None:
             freshness='unknown' if target['status']['code']=='unknown' else 'current'
             differences=[]
@@ -110,9 +168,21 @@ class Snapshot:
 
     def state(self,row):
         if row['id'] in self.run_states:return self.run_states[row['id']]
-        snapshot=decoded(row['meta'],{})
-        snapshot['workspace_state']={key:value for key,value in snapshot.get('workspace_state',{}).items() if value and value.get('id')}
+        snapshot=self.metadata(row)
         study=self.studies.get(row['study']);workspace=self.workspaces.get(row['workspace'])
+        references=[ref.get('id') for ref in snapshot['workspace_state'].values()]
+        # The SQL probe has already compared the frozen input/output digests.
+        # Hash its small verified identity instead of serializing a large saved
+        # definition again for every unchanged run. Unknown schemas fail closed
+        # to the full projected row rather than reusing an unverified identity.
+        run_identity=(self.raw.identities.get('study_runs') or {}).get(row['id'],row)
+        study_identity=(self.raw.identities.get('studies') or {}).get(row['study'],study)
+        token=sha256(json.dumps([run_identity,workspace['revision'] if workspace else None,study_identity,
+            [self.cache.get('version_models',{}).get(rid) for rid in references]],sort_keys=True,ensure_ascii=False).encode()).digest()
+        self.run_state_tokens[row['id']]=token
+        if self.prior_run_tokens.get(row['id'])==token and row['id'] in self.prior_run_states:
+            self.run_states[row['id']]=self.prior_run_states[row['id']]
+            return self.run_states[row['id']]
         reasons=[]
         if row['status'] in ACTIVE:code='running';reason=None
         elif row['status']!='succeeded':
@@ -148,6 +218,17 @@ class Snapshot:
         value={'code':code,'reason':reason,'snapshot':snapshot}
         self.run_states[row['id']]=value
         return value
+
+    def metadata(self,row):
+        if row['id'] not in self.run_metadata:
+            old=self.prior_metadata.get(row['id'])
+            if old is not None and old[0] is row:snapshot=old[1]
+            else:
+                snapshot=decoded(row['meta'],{})
+                snapshot['workspace_state']={key:value for key,value in snapshot.get('workspace_state',{}).items()
+                    if value and value.get('id')}
+            self.run_metadata[row['id']]=(row,snapshot)
+        return self.run_metadata[row['id']][1]
 
     def build_cards(self):
         for pid,plugin in self.registry.plugins.items():
@@ -191,7 +272,7 @@ class Snapshot:
         # type's full specification/results just to compare its reference pin.
         models=self.cache.setdefault('version_models',{})
         references=[decoded(row[key],{}) for row in self.raw['workspaces'] for key in ('cable_reference','origin_reference')]
-        references.extend(ref for row in self.raw['runs'] for ref in decoded(row['meta'],{}).get('workspace_state',{}).values() if ref)
+        references.extend(ref for row in self.raw['runs'] for ref in self.metadata(row).get('workspace_state',{}).values() if ref)
         for reference in references:
             rid=reference.get('id')
             if not rid or rid in models:continue
@@ -317,11 +398,13 @@ class Index:
             'unresolved':[[*key,notes] for key,notes in view.unresolved.items()],'todos':view.todos,
             'reproduction_error':view.reproduction_error},ensure_ascii=False,allow_nan=False).encode()
         self.last_build={'elapsed_ms':(perf_counter()-started)*1000,'cards':len(view.cards),
-            'source_timings':view.source_timings,
-            'reused_run_states':bool(self.previous and source_generation is not None
-                and self.previous['source_generation']==source_generation and self.previous['model_identity']==view.model_identity)}
-        self.previous={'source_generation':source_generation,'model_identity':view.model_identity,
-            'registry':view.registry,'run_states':view.run_states}
+            'source_timings':view.source_timings}
+        self.last_build.update(affected_objects=len(view.affected),reused_run_states=sum(
+            view.prior_run_tokens.get(rid)==token for rid,token in view.run_state_tokens.items()))
+        self.previous={'source_generation':source_generation,'run_metadata':view.run_metadata,
+            'registry':view.registry,'run_states':view.run_states,'run_state_tokens':view.run_state_tokens,
+            'raw':view.raw,'view':SimpleNamespace(cards=view.cards,meta=view.meta,edges=view.edges,
+                unresolved=view.unresolved,todos=view.todos)}
         return payload
 
     def snapshot(self,*,copy=True):

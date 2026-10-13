@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 
 export async function checkLayout(page,selector) {
-  await page.evaluate(() => document.fonts.ready);
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve)));
+    // A theme switch changes text immediately while an existing row hover can
+    // still interpolate its background. Measure the settled UI, preserving
+    // the same contrast requirement; never await infinite loading animations.
+    await Promise.all(document.getAnimations().filter(animation=>animation instanceof CSSTransition).map(animation=>animation.finished.catch(()=>{})));
+  });
   const result = await page.evaluate(selector => {
     const dialog = document.querySelector('[role=dialog]'), scope = selector?document.querySelector(selector):dialog || document;
     const rect = node => {

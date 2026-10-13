@@ -17,7 +17,6 @@ import httpx
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = Path(os.environ.get('CABLESIM_AGENT_REAL_USE_OUTPUT',ROOT / '.data/agent-live/real-use-r20.json'))
 pytestmark = pytest.mark.skipif(os.environ.get('CABLESIM_AGENT_REAL_USE') != '1',
     reason='Real provider calls require explicit CABLESIM_AGENT_REAL_USE=1; no fake fallback.')
 
@@ -33,6 +32,37 @@ def serve(database, credential_database, port, stop):
     def index_timing():
         index=app.state.research.object_index
         return {'warm_state':index.warm_state,'build':index.last_build,'startup_wait_ms':index.startup_wait_ms,'read':index.last_read}
+    @app.get('/__acceptance/index-compare',include_in_schema=False)
+    def index_compare():
+        """Compare the live incremental projection to an independent full read.
+
+        Only this isolated acceptance host exposes the diagnostic. Both paths
+        use the same host currentness rules, saved rows and installed seals.
+        """
+        from backend.index.service import Snapshot
+        from backend.index.reproductions import identity
+        from time import perf_counter
+        index=app.state.research.object_index
+        with index.lock:
+            incremental=index.snapshot(copy=False)
+            measured=index.last_build
+            observed=identity(index.reproduction_library)
+            reproductions=index.reproduction_library.snapshot()
+            assert identity(index.reproduction_library)==observed
+            started=perf_counter()
+            with app.state.research.store.db() as db:
+                db.execute('PRAGMA mmap_size=1073741824')
+                db.execute('PRAGMA query_only=ON');db.execute('BEGIN')
+                full=Snapshot(app.state.research,db,reproductions,execution_reader=index.execution_reader)
+            ordered=lambda rows:sorted(json.dumps(row,sort_keys=True,ensure_ascii=False) for row in rows)
+            differences=[]
+            for field in ('cards','unresolved'):
+                if getattr(incremental,field)!=getattr(full,field):differences.append(field)
+            for field in ('edges','todos'):
+                if ordered(getattr(incremental,field))!=ordered(getattr(full,field)):differences.append(field)
+            return {'equal_to_full':not differences,'differences':differences,
+                'full_build_ms':(perf_counter()-started)*1000,'full_source_timings':full.source_timings,
+                'incremental_build':measured}
     @app.middleware('http')
     async def timed_index(request,call_next):
         from time import perf_counter
@@ -41,11 +71,12 @@ def serve(database, credential_database, port, stop):
             response.headers['X-Acceptance-Server-Ms']=str((perf_counter()-started)*1000)
         return response
     @app.get('/__acceptance/index-profile',include_in_schema=False)
-    def index_profile(kind='study',id=None):
+    def index_profile(kind='study',id=None,uncached:bool=False):
         import cProfile
         import pstats
         profiler=cProfile.Profile()
-        if id:profiler.runcall(app.state.research.object_index.relations,kind,id)
+        if uncached:profiler.runcall(app.state.research.object_index.load)
+        elif id:profiler.runcall(app.state.research.object_index.relations,kind,id)
         else:profiler.runcall(app.state.research.object_index.objects,kind=kind,limit=100)
         stats=pstats.Stats(profiler)
         return {'total_seconds':stats.total_tt,'functions':[
@@ -70,6 +101,15 @@ def serve(database, credential_database, port, stop):
     # Reuse only the OS account identifier. The platform itself reads its key
     # through the ordinary KeyStore/provider path; the test never reads a key.
     app.state.harness.settings.keys.account = KeyStore(credential_database).account
+    if not app.state.harness.settings.saved().get('base_url'):
+        # Fresh official release seeds contain saved engineering evidence but
+        # intentionally no connection settings. Copy only the four public
+        # settings; never select a credential column or call KeyStore.get here.
+        from backend.harness.contracts import ModelSettingsUpdate
+        with closing(sqlite3.connect(Path(credential_database).resolve().as_uri()+'?mode=ro',uri=True)) as connection:
+            values={name:json.loads(value) for name,value in connection.execute(
+                "SELECT name,value FROM agent_settings WHERE name IN ('base_url','model','instructions','model_timeout_s')")}
+        app.state.harness.settings.update(ModelSettingsUpdate(**values))
     server = uvicorn.Server(uvicorn.Config(app, host='127.0.0.1', port=int(port), log_level='error'))
     def watch():
         while not Path(stop).exists() and not server.should_exit: sleep(.2)
@@ -79,15 +119,18 @@ def serve(database, credential_database, port, stop):
 
 
 class RealUse:
-    def __init__(self, client):
+    def __init__(self, client, output):
         self.client = client
-        self.report = json.loads(OUTPUT.read_text(encoding='utf-8')) if OUTPUT.exists() else {'mode':'real_deepseek_http_release_copy','tasks':[],
+        self.output = Path(output)
+        self.report = json.loads(self.output.read_text(encoding='utf-8')) if self.output.exists() else {'mode':'real_deepseek_http_release_copy','tasks':[],
             'credentials':'OS account metadata only; platform authentication; no key read or file write',
             'solver_jobs_submitted':0}
 
     def save(self):
-        OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-        OUTPUT.write_text(json.dumps(self.report, ensure_ascii=False, indent=2), encoding='utf-8')
+        self.report['mode']='real_deepseek_http_release_copy' if any(
+            item.get('budget',{}).get('model_requests',0) for item in self.report['tasks']) else 'real_host_http_release_copy_no_model'
+        self.output.parent.mkdir(parents=True, exist_ok=True)
+        self.output.write_text(json.dumps(self.report, ensure_ascii=False, indent=2), encoding='utf-8')
 
     def api(self, method, path, **kwargs):
         response = self.client.request(method, path, **kwargs)
@@ -113,7 +156,7 @@ class RealUse:
                 'summary':s['result']['summary'],'diagnostics':s['result']['diagnostics'],
                 'next_actions':s['result']['next_actions']} for s in record['steps'] if s.get('result')],
             'audit':[e for e in record['events'] if e['type'] in ('model.request','model.result','turn.answer_only','recipe.finished','tool.result_reused',
-                'answer.accepted','answer.rejected','answer.repair','answer.fallback','answer.diagnostic','harness.error','plan.blocked','tool.diagnostic_reused','preflight.scopes_satisfied')]}
+                'answer.accepted','answer.rejected','answer.repair','answer.fallback','answer.diagnostic','error','harness.error','plan.blocked','tool.diagnostic_reused','preflight.scopes_satisfied')]}
         self.report['tasks'].append(item);self.save()
         print(json.dumps({'task':name,'model_requests':record['budget']['model_requests'],
             'tool_calls':record['budget']['tool_calls'],'elapsed_s':item['elapsed_s'],'state':record['state']},ensure_ascii=False),flush=True)
@@ -146,7 +189,7 @@ def real_use(tmp_path_factory):
             str(database),str(credential_source),str(port),str(stop)],cwd=ROOT,env=env,
             stdout=log,stderr=subprocess.STDOUT,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         with httpx.Client(base_url=f'http://127.0.0.1:{port}',timeout=300,trust_env=False) as client:
-            run=RealUse(client)
+            run=RealUse(client, os.environ.get('CABLESIM_AGENT_REAL_USE_OUTPUT') or scratch/'real-use.json')
             try:
                 deadline=monotonic()+40
                 while monotonic()<deadline:

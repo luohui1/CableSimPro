@@ -12,6 +12,7 @@ def obj(properties, required=()):
 STUDY = {'study_id':{'type':['string','null'],'maxLength':120}, 'module':{'type':['string','null'],'maxLength':120}}
 PAGE = {'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':20},'case_after':{'type':'integer','minimum':0}}
 INBOX = {'category':{'enum':['review','stale','missing','running']},
+    'view':{'enum':['items','groups']},
     'limit':{'type':'integer','minimum':1,'maximum':20},'offset':{'type':'integer','minimum':0},
     'expected_digest':{'type':'string','pattern':'^[a-f0-9]{64}$'}}
 CHANGES = {'type':'array','minItems':1,'maxItems':12,'items':obj({

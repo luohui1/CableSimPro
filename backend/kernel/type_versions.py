@@ -28,7 +28,7 @@ from .workspace import fingerprint, stamp
 from .rating_table import is_rating_table, rating_rows
 
 
-from .type_specification import CHANNELS, CHAPTERS, clean_name, render_specification
+from .type_specification import CHANNELS, CHANNEL_NAMES, CHAPTERS, clean_name, render_specification
 
 
 class Branch(StrictModel):
@@ -1038,25 +1038,48 @@ class Types:
             return {'revision': row['revision'], 'standards': names, 'reason': '当前已批准执行标准；条款与批准记录见要求与标准。' if names else '在要求与标准里添加并批准'}
         return {'revision': row['revision'], 'standards': [], 'reason': '在要求与标准里添加并批准'}
 
-    def display_runs(self, wid, after, limit):
+    def display_runs(self, wid, after, limit, recent=False):
         """Verified display evidence; full immutable archives retain their inputs."""
         from .run_details import detail
         from .verified_executor import verification_scope
         with self.store.db() as db:
             self._type(db, wid)
-            identities = db.execute('SELECT id,study,sequence FROM study_runs WHERE workspace=? AND sequence>? ORDER BY sequence LIMIT ?', (wid, after, limit+1)).fetchall()
+            if recent:
+                identities=db.execute('''SELECT id,study,sequence FROM (
+                    SELECT id,study,sequence,ROW_NUMBER() OVER (
+                        PARTITION BY json_extract(snapshot,'$.definition.method.plugin_id'),
+                                     json_extract(snapshot,'$.definition.method.capability'),
+                                     json_extract(snapshot,'$.module'),status IN ('succeeded','partial')
+                        ORDER BY sequence DESC) AS position
+                    FROM study_runs WHERE workspace=?)
+                    WHERE position=1 AND sequence>? ORDER BY sequence LIMIT ?''',(wid,after,limit+1)).fetchall()
+            else:
+                identities = db.execute('SELECT id,study,sequence FROM study_runs WHERE workspace=? AND sequence>? ORDER BY sequence LIMIT ?', (wid, after, limit+1)).fetchall()
         page=identities[:limit]
         with verification_scope():
             items=[detail(self.research,wid,row['study'],row['id']) for row in page]
         for item in items:
             snapshot=item.get('snapshot')
-            if isinstance(snapshot,dict) and 'workspace_state' in snapshot:
-                state=snapshot.pop('workspace_state')
-                snapshot['workspace_state_ref']={
-                    'url':f'/api/workspaces/{wid}/studies/{item["study"]}/runs/{item["id"]}?view=full',
-                    'sha256':fingerprint(state),
-                }
-        return {'items':items,'next_cursor':page[-1]['sequence'] if len(identities)>limit else None}
+            if isinstance(snapshot,dict):
+                archive=f'/api/workspaces/{wid}/studies/{item["study"]}/runs/{item["id"]}?view=full'
+                for key in ('workspace_state',):
+                    if key in snapshot:
+                        value=snapshot.pop(key)
+                        snapshot[key+'_ref']={'url':archive,'sha256':fingerprint(value)}
+                if recent:
+                    # Tables and result badges need quantities, not megabytes
+                    # of exact BRep and display mesh. Keep all quantities and
+                    # sources; link the untouched, verified original artifact.
+                    for case in (item.get('output') or {}).get('cases',[]):
+                        for artifact in case.get('artifacts',{}).values():
+                            if not isinstance(artifact,dict) or artifact.get('schema')!='cablesim.cad-model/1':
+                                continue
+                            artifact['exact_geometry_ref']={'url':archive,'sha256':fingerprint(artifact)}
+                            artifact.pop('step_text',None)
+                            for layer in artifact.get('layers',[]):
+                                for key in ('brep_text','display_mesh','section_outline_brep'):
+                                    layer.pop(key,None)
+        return {'items':items,'next_cursor':page[-1]['sequence'] if len(identities)>limit else None,'history_complete':not recent}
 
     def measurement_report(self, wid, report_id):
         with self.store.db() as db:
@@ -1293,13 +1316,29 @@ class Types:
     def evidence(self, wid):
         with self.store.db() as db:
             row, state = self._type(db, wid)
-            ids = [r['id'] for r in db.execute('SELECT id FROM study_runs WHERE workspace=? ORDER BY sequence DESC LIMIT 100', (wid,))]
+            identities = db.execute('''SELECT id,status,
+                json_extract(snapshot,'$.definition.method.plugin_id') AS plugin,
+                json_extract(snapshot,'$.definition.method.capability') AS capability,
+                json_extract(snapshot,'$.module') AS module,
+                instr(output,'"x-cablesim.cad-model":')>0 AS geometry,
+                instr(output,'"x-cablesim.type-electrical":')>0 AS electrical,
+                instr(output,'"x-cablesim.type-short-circuit":')>0 AS short_circuit,
+                instr(output,'"x-cablesim.standard-check":')>0 AS standards,
+                json_extract(snapshot,'$.definition.driver.kind')='batch' AS batch
+                FROM study_runs WHERE workspace=? ORDER BY sequence DESC LIMIT 100''', (wid,)).fetchall()
             versions = {r['revision']:json.loads(r['state']).get('domain') for r in db.execute(
                 'SELECT revision,state FROM workspace_revisions WHERE workspace=?',
                 (wid,),
             )}
-        channels, failures, seen_methods = {}, [], set()
-        for rid in ids:
+        channels, failures, seen_methods, completed_methods = {}, [], set(), set()
+        for identity in identities:
+            rid=identity['id']
+            key=tuple(identity[field] for field in ('plugin','capability','module','geometry','electrical','short_circuit','standards','batch'))
+            # Once a verified, matching saved output supplies this method's
+            # channels, older successes are history, not report dependencies.
+            # Their archives remain fully validated when explicitly opened.
+            if identity['status'] in ('succeeded','partial') and key in completed_methods:
+                continue
             run = self.research.get_run(wid, rid)
             method = run.get('snapshot', {}).get('definition', {}).get('method', {})
             method_key = (method.get('plugin_id'), method.get('capability'), run.get('snapshot', {}).get('module'))
@@ -1330,6 +1369,7 @@ class Types:
             if not version_document or not self._matches_type(run, version_document):
                 failures.append({'id': rid, 'message': '运行的型号输入与当前版本不同。', 'blocking': True})
                 continue
+            previous_channels=set(channels)
             for case in (run.get('output') or {}).get('cases', []):
                 for channel, artifact_key in CHANNELS.items():
                     if artifact_key in case.get('artifacts', {}) and channel not in channels:
@@ -1339,6 +1379,8 @@ class Types:
                     'run': run, 'rows': rating_rows(run),
                     'parameters': deepcopy(run['snapshot']['definition']['parameters']),
                 }
+            if set(channels)!=previous_channels and any(identity[field] for field in ('geometry','electrical','short_circuit','standards','batch')):
+                completed_methods.add(key)
         return row, state, channels, failures
 
     @staticmethod
@@ -1828,9 +1870,9 @@ def check_results(channels, checks):
             })
             continue
         if item['run']['freshness'] != 'current':
-            checks.append({'id': key+'/historical', 'channel': key, 'message': '所引运行为历史结果，请更新'+key+'。', 'blocking': True})
+            checks.append({'id': key+'/historical', 'channel': key, 'message': '所引运行为历史结果，请重新运行'+CHANNEL_NAMES.get(key,'对应模块')+'。', 'blocking': True})
         if item['run']['status'] not in ('succeeded', 'partial'):
-            checks.append({'id': key+'/failed', 'channel': key, 'message': '所引运行未完成，请更新'+key+'。', 'blocking': True})
+            checks.append({'id': key+'/failed', 'channel': key, 'message': '所引运行未完成，请重新运行'+CHANNEL_NAMES.get(key,'对应模块')+'。', 'blocking': True})
         artifact = item.get('artifact', {})
         if key in ('electrical', 'short_circuit', 'standards'):
             if not artifact.get('rows'):
@@ -1940,13 +1982,35 @@ def make_router(service):
     def adopt(wid: str, body: Adopt):
         return service.adopt(wid, body)
     @router.get('/{wid}/specification')
-    async def specification(wid: str, request: Request, audience: Literal['customer', 'internal'] = 'customer'):
+    async def specification(wid: str, request: Request, audience: Literal['customer', 'internal'] = 'customer',view:Literal['full','detail']='full'):
         from .read_responses import read_response
         from .verified_executor import verification_scope
         def load():
             with verification_scope():
-                return service.specification(wid,audience)
-        return await read_response(service.research,('type-specification',wid,audience),dict,load,request=request)
+                result=service.specification(wid,audience)
+                if view=='detail':
+                    # The rendered document and quantities are identical. Exact
+                    # solids are archive evidence, not a second UI data table.
+                    payload=result['payload']
+                    source=next((s for s in payload['sources'] if s['channel']=='geometry'),None)
+                    if source:
+                        archive=f'/api/workspaces/{wid}/studies/{source["study_id"]}/runs/{source["run_id"]}?view=full'
+                        def project(value):
+                            if not isinstance(value,dict):return
+                            if any(key in value for key in ('step_text','brep_text','display_mesh','section_outline_brep')):
+                                value['exact_geometry_ref']={'url':archive,'sha256':fingerprint(value)}
+                            for key in ('step_text','brep_text','display_mesh','section_outline_brep'):
+                                value.pop(key,None)
+                        geometry=payload['results'].get('geometry',{}).get('artifact',{})
+                        project(geometry)
+                        for layer in geometry.get('layers',[]):project(layer)
+                        for check in payload['checks']:
+                            if check.get('channel')=='geometry':
+                                project(check.get('result'))
+                                for layer in check.get('quantities',[]):project(layer)
+                    result['payload_full_ref']={'url':f'/api/types/{wid}/specification?audience={audience}&view=full','digest':result['digest']}
+                return result
+        return await read_response(service.research,('type-specification',wid,audience,view),dict,load,request=request)
     @router.post('/{wid}/specification/generate')
     def generate_specification(wid: str, body: GenerateSpecification):
         from .specification_generation import generate
@@ -2011,11 +2075,11 @@ def make_router(service):
         return await read_response(service.research,('type-standards-summary',wid),dict,
             lambda:service.standards_summary(wid),request=request)
     @router.get('/{wid}/display-runs')
-    async def display_runs(wid: str, request: Request, after: int=Query(0,ge=0), limit: int=Query(100,ge=1,le=100)):
+    async def display_runs(wid: str, request: Request, after: int=Query(0,ge=0), limit: int=Query(100,ge=1,le=100),recent:bool=False):
         from .read_responses import read_response
         from .responses import RunDetailResponse
-        return await read_response(service.research,('type-display-runs',wid,after,limit),dict[str,list[RunDetailResponse]|int|None],
-            lambda:service.display_runs(wid,after,limit),request=request,exclude_unset=True)
+        return await read_response(service.research,('type-display-runs',wid,after,limit,recent),dict[str,list[RunDetailResponse]|int|bool|None],
+            lambda:service.display_runs(wid,after,limit,recent),request=request,exclude_unset=True)
     @router.get('/{wid}/measurements/reports/{report_id}')
     def measurement_report(wid: str, report_id: str):
         return service.measurement_report(wid, report_id)

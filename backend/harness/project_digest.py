@@ -28,12 +28,16 @@ def key_inputs(case):
             z=placement.get('z')
             path='/sections/'+token(section['id'])+'/placements/'+token(placement['cable'])+'/z'
             if type(z) in (int,float):
+                add(path,z,'m',placement['cable'])
                 values.append({'path':path,'key':'burial_depth' if z<0 else 'elevation',
                     'value':-z if z<0 else z,'unit':'m','entity':placement['cable'],'saved_z':z,
                     'projection':'-z below ground; z above ground'})
     for load in document.get('load_cases',[]):
         for entity,value in load.get('currents',{}).items():
             add('/load_cases/'+token(load['id'])+'/currents/'+token(entity),value,'A',entity)
+    for cable in document.get('cable_types',[]):
+        for condition,value in cable.get('rating',{}).get('max_conductor_temperature',{}).items():
+            add('/cable_types/'+token(cable['id'])+'/rating/max_conductor_temperature/'+token(condition),value,'K',cable['id'])
     return values
 
 
@@ -68,7 +72,7 @@ def conclusions(research, run):
     return {key: deepcopy(points[key]) for key in (
         'run_id','study_id','status','freshness','input_digest','output_digest','method','headlines')} | {
         'cases': cases, 'method_family':points['method_family'],
-        'numerical_status':(run.get('convergence') or {}).get('status','unknown'),'engineering_approval': False}
+        'numerical_status':points['checks']['numerical'].get('status','unknown'),'engineering_approval': False}
 
 
 def case_parts(cases):

@@ -79,9 +79,9 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libgl1 libxrender1
           python scripts/prepare_plugin_environment.py cablesim.cable-geometry --with-tests
-      - run: python -m pytest --junitxml=artifacts/backend-${{ matrix.python }}.xml
+      - run: python -m pytest -n "$(python -c 'import os; print(min(3, os.cpu_count() or 1))')" --junitxml=artifacts/backend-${{ matrix.python }}.xml
       - name: Run direct CAD assertions in the declared geometry environment
-        run: .venv/bin/python -m pytest tests/test_cable_geometry.py tests/test_installation_scene.py tests/test_geometry_preview.py --junitxml=artifacts/cad-${{ matrix.python }}.xml
+        run: .venv/bin/python -m pytest -n 0 tests/test_cable_geometry.py tests/test_installation_scene.py tests/test_geometry_preview.py --junitxml=artifacts/cad-${{ matrix.python }}.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:

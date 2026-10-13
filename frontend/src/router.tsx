@@ -15,6 +15,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { ShellLayout, RouteSkeleton } from "./components/shell-layout";
 import { queryClient } from "./lib/query-client";
 import { prefetchStudy } from "./lib/study-queries";
+import { prefetchStandardsBasis } from './lib/standards-queries';
 import { EmptyState } from "./components/states";
 import { Redirect } from "./components/redirect";
 const SelectionPage = import.meta.env.DEV ? lazyRouteComponent(() => import('./pages/selection-page'), 'SelectionPage') : undefined;
@@ -64,7 +65,10 @@ const documentSearch = (search: Record<string, unknown>): { theme: 'light' | 'da
 // 资源（FRONTEND_REQUIREMENTS §2.2 / §2.3）：电缆型号版本及其厂家资料导入；材料与部件、模板与计算方案、标准与规则
 const cableVersionsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/cables", validateSearch: itemSearch, component: CableVersionsPage });
 const documentsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/cables/imports", validateSearch: documentSearch, component: DocumentsPage });
-const assetGroupRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/$group", validateSearch: itemSearch, beforeLoad: ({ params }) => { if (!["materials", "templates", "standards"].includes(params.group)) throw notFound(); }, component: AssetsPage });
+const assetGroupRoute = createRoute({ getParentRoute: () => rootRoute, path: "/resources/$group", validateSearch: itemSearch, beforeLoad: ({ params, context }) => {
+  if (!["materials", "templates", "standards"].includes(params.group)) throw notFound();
+  if (params.group === 'standards') prefetchStandardsBasis(context.queryClient);
+}, component: AssetsPage });
 // 记录：运行与作业、交付；都是跨对象的筛选视图，各自的家在所属研究或型号里
 const runsRoute = createRoute({ getParentRoute: () => rootRoute, path: "/runs", validateSearch: themeSearch, component: RunsPage });
 // 待办：四类审核、过期待重算、资料缺项、进行中，来自统一索引（§2.3）

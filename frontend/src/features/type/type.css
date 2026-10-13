@@ -159,6 +159,8 @@ p.type-meta{font-size:var(--text-note)}
 .type-measured-values{display:grid;gap:var(--space-3)}
 .type-measured-values>div{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:var(--space-3);align-items:center;border-bottom:1px solid var(--line);padding-bottom:var(--space-2)}
 .type-measured-values>div>span{color:var(--text-secondary);font-size:var(--text-note)}
+.type-engineering-values>div{grid-template-columns:minmax(0,1fr)}
+.type-engineering-values label{display:grid;gap:var(--space-1);min-width:0}
 .dialog-content:has(.type-measurements){width:calc(var(--space-12)*15);max-width:calc(100vw - var(--space-8))}
 .type-property-wrapper{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--panel);overflow:auto}
 .type-agent-panel{display:flex;flex:1;min-width:0;min-height:0}

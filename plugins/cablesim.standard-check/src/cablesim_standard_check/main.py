@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
-VERSION = '1.5.1'
+VERSION = '1.6.0'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 DATA = json.loads(Path(__file__).with_name('dimensions.json').read_text('utf-8'))
 AREAS = DATA['areas_mm2']
@@ -799,6 +799,9 @@ class _Check:
         self.row('armour-underlayer','铠装下内衬层或挤包隔离套',up+'.form',unit='1',
             actual=int(bool(underlayer) and underlayer.get('form') in ('smooth','tape')),
             reason=None if underlayer else '铠装前须有内衬层；符合13.3.3的挤包隔离套可代替内衬层。')
+        if self.family=='mv2':
+            self.row('armour-separation','金属层间挤包隔离套适用条件',lp+'.form',unit='1',
+                rule_key='armour-underlayer',reason='请明确金属层、纵向阻水及隔离层材料条件。')
         declared = layer.get(form['field'])
         declared_mm = declared*1000 if declared is not None else None
         details = {'wires':self.armour_wires,'tape':self.armour_tapes}
@@ -1011,6 +1014,8 @@ def check(document, parameters):
             for row in report.rows:
                 if row['id'].rsplit(':',1)[-1] in ('bedding-nominal','oversheath-nominal','armour-tape-nominal'):
                     row.update(verdict='uncovered',limit=None,margin=None,reason=str(error))
+    from cablesim_standard_check.manufacturing import finish
+    finish(report)
     result = report.result()
     result['basis_auxiliary_queries'] = annex_queries
     result['basis_cable_sha256'] = digest(report.cable)

@@ -1,6 +1,8 @@
 """OpenAI-compatible transport configured from saved settings or the host environment, with bounded response and tool calls."""
 import json
 import os
+from pathlib import Path
+from threading import RLock
 from time import perf_counter
 from urllib.parse import urlsplit
 
@@ -17,6 +19,26 @@ class OpenAICompatibleProvider:
 
     def __init__(self,settings=None):
         self.settings=settings
+        self._tls_lock=RLock();self._tls_identity=None;self._tls_context=None
+
+    def tls(self):
+        """Reuse verified trust roots, not clients, credentials or connections."""
+        import certifi
+        def identity(path):
+            value=Path(path)
+            stat=value.stat()
+            return (str(value.resolve()),stat.st_mtime_ns,stat.st_ctime_ns,stat.st_size)
+        certificate=os.environ.get('SSL_CERT_FILE')
+        directory=os.environ.get('SSL_CERT_DIR')
+        if certificate:receipt=('file',identity(certificate))
+        elif directory:receipt=('directory',identity(directory),tuple(sorted(
+            identity(path) for path in Path(directory).iterdir() if path.is_file())))
+        else:receipt=('default',identity(certifi.where()))
+        with self._tls_lock:
+            if receipt!=self._tls_identity:
+                context=httpx.create_ssl_context(verify=True,trust_env=True)
+                self._tls_context=context;self._tls_identity=receipt
+            return self._tls_context
 
     def connection(self):
         if self.settings:return self.settings.resolve()
@@ -36,7 +58,7 @@ class OpenAICompatibleProvider:
             return {'ok':False,'code':'LLM_NOT_CONFIGURED','message':'请先填写模型名与密钥。'}
         started=perf_counter()
         try:
-            with httpx.Client(timeout=httpx.Timeout(timeout_s,connect=min(8.,timeout_s)),follow_redirects=False) as client:
+            with httpx.Client(timeout=httpx.Timeout(timeout_s,connect=min(8.,timeout_s)),follow_redirects=False,verify=self.tls()) as client:
                 response=client.post(base.rstrip('/')+'/chat/completions',headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'},
                     json={'model':model,'messages':[{'role':'user','content':'只回复“好”。'}],'max_tokens':8,'stream':False})
             elapsed=round((perf_counter()-started)*1000)
@@ -53,6 +75,8 @@ class OpenAICompatibleProvider:
             return {'ok':False,'code':'LLM_TIMEOUT','message':'%g 秒内没有响应；请检查网络、代理或服务状态。'%timeout_s}
         except httpx.HTTPError:
             return {'ok':False,'code':'LLM_CONNECTION_FAILED','message':'连不上服务地址；请检查网络、代理或地址拼写。'}
+        except OSError:
+            return {'ok':False,'code':'LLM_TRUST_STORE_UNAVAILABLE','message':'模型连接的证书信任库无法读取；请检查宿主证书配置。'}
         except ValueError:
             return {'ok':False,'code':'LLM_RESPONSE_INVALID','message':'地址可达，但返回的不是 JSON 对话结果。'}
 
@@ -75,7 +99,7 @@ class OpenAICompatibleProvider:
         received=payload=0
         try:
             timeout=httpx.Timeout(timeout_s,connect=min(5.,timeout_s))
-            with httpx.Client(timeout=timeout,follow_redirects=False) as client:
+            with httpx.Client(timeout=timeout,follow_redirects=False,verify=self.tls()) as client:
                 with client.stream('POST',base.rstrip('/')+'/chat/completions',
                     headers={'Authorization':'Bearer '+key,'Content-Type':'application/json'},json=body) as response:
                     if response.status_code!=200:
@@ -128,6 +152,8 @@ class OpenAICompatibleProvider:
             raise ModelError('LLM_TIMEOUT','模型请求超时；未自动重试。') from None
         except httpx.HTTPError:
             raise ModelError('LLM_CONNECTION_FAILED','无法连接模型服务；请核对宿主网络与配置。') from None
+        except OSError:
+            raise ModelError('LLM_TRUST_STORE_UNAVAILABLE','模型连接的证书信任库无法读取；请检查宿主证书配置。') from None
         except (ValueError,TypeError,KeyError,AttributeError):
             raise ModelError('LLM_RESPONSE_INVALID','模型服务响应或工具参数格式不合法；未执行不完整意图。') from None
 

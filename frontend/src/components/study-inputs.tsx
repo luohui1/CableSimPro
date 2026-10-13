@@ -491,12 +491,15 @@ export function ConditionsInputs({ document, historical }: InputProps) {
       ))}
       <InputSection title="供电系统">
         <div className="input-form-grid">
-          {document.circuits.map(circuit => <DomainNumber key={circuit.id}
-            document={document} scope="conditions" readOnly={historical}
-            spec={{path:pointer('circuits',circuit.id,'system','voltage'),
-              label:entityLabel(document,circuit.id)+' · 系统线电压',
-              unit:'kV',scale:0.001,precision:1,min:0,minExclusive:true}} />)}
+          {document.circuits.map(circuit => <div key={circuit.id}>
+            <DomainNumber
+              document={document} scope="conditions" readOnly={historical}
+              spec={{path:pointer('circuits',circuit.id,'system','voltage'),
+                label:entityLabel(document,circuit.id)+' · 系统线电压（可选）',
+                unit:'kV',scale:0.001,precision:1,min:0,minExclusive:true}} />
+          </div>)}
         </div>
+        <p className="field-basis field-note">记录供电条件；IEC 载流量的介质损耗采用电缆额定相电压。</p>
       </InputSection>
       {document.sections.map((section) => (
         <InputSection key={section.id} title={section.label + " · 环境"}>

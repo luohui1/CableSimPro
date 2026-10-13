@@ -22,18 +22,23 @@ export function readinessSnapshot() {
     busy.push({ canvas: !!e.closest('.cad-viewport,.field-view,.type-canvas-frame'), selector: e.className, text: e.innerText.trim().slice(0, 160) });
   }
   const canvases = [...document.querySelectorAll('.cad-viewport,canvas.field-canvas')]
-    .filter(e => e.checkVisibility({ checkVisibilityCSS: true }) && (visible(e) || regions.some(r => r.contains(e)))).map(e => {
+    .filter(visible).map(e => {
     const cad = e.matches('.cad-viewport'), canvas = cad ? e.querySelector('canvas') : e;
     const error = cad && e.dataset.cadState === 'error';
     const empty = cad && (e.dataset.cadState === 'empty' || !!e.querySelector('.cad-state-overlay .state-empty'));
     const rect = e.getBoundingClientRect();
     return { kind: cad ? '三维' : '场图', ready: visible(e) && (cad ? e.dataset.cadReady === 'true' && !!canvas && visible(canvas) : !!e.dataset.auditFirstDraw),
-      error, empty, visible: visible(e), width: Math.round(rect.width), height: Math.round(rect.height), localFirstDisplayMs: cad ? Number(e.dataset.cadFirstDisplayMs) || null : null };
+      error, empty, visible: true, width: Math.round(rect.width), height: Math.round(rect.height), localFirstDisplayMs: cad ? Number(e.dataset.cadFirstDisplayMs) || null : null,
+      rendering: { selector:e.className, width:Math.round(rect.width), height:Math.round(rect.height),
+        attributes:Object.fromEntries([...e.attributes].filter(a => /^(data-cad-|aria-busy)/.test(a.name)).map(a => [a.name,a.value])) } };
   });
-  // Deferred CAD has not mounted its viewport yet. The requested 3D view needs a
-  // real frame even when its loading placeholder has zero height.
+  // A newly visible lazy field may not have mounted its canvas yet. Wait for its
+  // real draw after scrolling; an existing off-screen canvas is never counted.
+  for (const field of document.querySelectorAll('.field-view')) if (visible(field) && !field.querySelector('canvas.field-canvas'))
+    canvases.push({ kind:'场图', ready:false, visible:true, pendingMount:true, error:false });
+  // Deferred CAD needs a real frame only while its requested viewport is visible.
   const three = document.querySelector('.type-canvas-frame');
-  if (!canvases.length && /\/structure\/three\/?$/.test(location.pathname) && three && !three.querySelector('.state-inline,.state-view[role="alert"]'))
+  if (!canvases.length && /\/structure\/three\/?$/.test(location.pathname) && three && visible(three) && !three.querySelector('.state-inline,.state-view[role="alert"]'))
     canvases.push({ kind: '三维', ready: false, pendingMount: true, error: false });
   const errors = [...document.querySelectorAll('.state-view[role="alert"],.provider-state [role="alert"]')].filter(visible).map(e => e.innerText.trim());
   return { content, busy, canvases, errors, mainReady: content && !busy.some(b => !b.canvas),
@@ -73,7 +78,9 @@ export async function installReadinessObserver(page) {
     const schedule = () => { if (!queued) { queued = true; requestAnimationFrame(sample); } };
     new MutationObserver(schedule).observe(document, { childList: true, subtree: true, attributes: true,
       attributeFilter: ['aria-busy', 'data-active', 'data-cad-ready', 'data-cad-state', 'data-audit-first-draw', 'class', 'hidden'] });
-    addEventListener('DOMContentLoaded', schedule); schedule();
+    addEventListener('DOMContentLoaded', schedule);
+    addEventListener('scroll', schedule, { capture:true, passive:true });
+    addEventListener('resize', schedule, { passive:true }); schedule();
   }, { snapshot: readinessSnapshot.toString() });
 }
 

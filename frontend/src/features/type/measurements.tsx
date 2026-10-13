@@ -35,6 +35,10 @@ export function measurementSource(value: unknown) {
   try {
     const record = optionalRecord(JSON.parse(reference));
     if (record.schema === 'cablesim.factory-measurement/1') return [text(record.label), '样品 ' + text(record.sample_id), text(record.measured_on), text(record.method), text(record.reference)].filter(Boolean).join(' · ');
+    if (record.schema === 'cablesim.manufacturing-inputs/1') {
+      const references=Object.values(optionalRecord(record.sources)).map(value=>{const source=text(optionalRecord(value).reference);try{return text(optionalRecord(JSON.parse(source)).reference)||source;}catch{return source;}});
+      return '工程声明 · '+[...new Set(references)].join('；');
+    }
   } catch { /* Historical plain source records remain readable. */ }
   return reference || '未记录';
 }

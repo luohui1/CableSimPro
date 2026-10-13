@@ -25,9 +25,13 @@ export async function typeComparison(wid: string, signal?: AbortSignal) {
 export type SpecificationAudience = 'customer' | 'internal';
 export type Specification = { payload: Record<string, unknown>; digest: string; lifecycle: Record<string, unknown>; ready: boolean; html: string; audience: SpecificationAudience; revisionDraft: Record<string, unknown>; exportEndpoint?: string; generationEndpoint?: string };
 export async function typeSpecification(wid: string, signal?: AbortSignal, audience: SpecificationAudience = 'customer'): Promise<Specification> {
-  const data = record(await responseData(api.GET('/api/types/{wid}/specification', {params:{path:{wid},query:{audience}},signal})), '型号规格书'), payload = record(data.payload, '规格书内容'), lifecycle = record(data.lifecycle, '规格书状态');
+  const response=await fetch(`/api/types/${encodeURIComponent(wid)}/specification?audience=${audience}&view=detail`,{signal,credentials:'same-origin'}),value=await response.json();
+  if(!response.ok)throw new ApiError(response.status,text(optionalRecord(value).detail)||'规格书读取失败，请重新读取');
+  const data = record(value, '型号规格书'), payload = record(data.payload, '规格书内容'), lifecycle = record(data.lifecycle, '规格书状态');
   if (payload.schema !== 'cablesim.type-specification/1' || payload.workspace_id !== wid || numeric(payload.revision) === null || !/^[a-f0-9]{64}$/.test(text(data.digest)) || !['draft', 'submitted', 'approved', 'published'].includes(text(lifecycle.status)) || typeof data.ready !== 'boolean' || !text(data.html).startsWith('<!doctype html>')) throw new ApiError(502, '规格书缺少版本、摘要、状态或正式渲染内容');
   for (const key of ['chapters', 'checks', 'sources', 'revisions']) array(payload[key], key);
+  const original=optionalRecord(data.payload_full_ref);
+  if(original.digest!==data.digest||original.url!==`/api/types/${encodeURIComponent(wid)}/specification?audience=${audience}&view=full`)throw new ApiError(502,'规格书投影缺少一致的完整证据引用');
   const exported = optionalRecord(data.export), endpoint = text(exported.endpoint);
   if (endpoint && (exported.format !== 'pdf' || endpoint !== '/api/types/' + encodeURIComponent(wid) + '/specification/file')) throw new ApiError(502, '规格书导出引用与型号身份不一致');
   const generationEndpoint = text(data.generation_endpoint);

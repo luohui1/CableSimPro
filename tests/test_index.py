@@ -35,14 +35,14 @@ def test_canonical_states_pinned_relations_and_no_large_contents(client,monkeypa
     # index adapter bypasses the public application readers.
     import backend.index.sources as sources
     project=sources.project
-    def small(db,metrics=None):
+    def small(db,metrics=None,previous=None):
         def authorize(action,table,column,*unused):
             if action==sqlite3.SQLITE_READ and (table,column) in {
                 ('study_runs','output'),('source_documents','original'),('deliveries','html'),('agent_steps','result')}:
                 return sqlite3.SQLITE_DENY
             return sqlite3.SQLITE_OK
         db.set_authorizer(authorize)
-        return project(db,metrics)
+        return project(db,metrics,previous)
     monkeypatch.setattr(sources,'project',small)
     # service keeps a local import of the projection function.
     monkeypatch.setattr('backend.index.service.project',small)
@@ -61,18 +61,12 @@ def test_canonical_states_pinned_relations_and_no_large_contents(client,monkeypa
     stale=object_card(client,'study',s['id']);assert stale['status']['code']=='outdated' and '修订' in stale['status']['reason']
     inbox=client.get('/api/index/inbox').json()
     assert inbox['counts']['stale']==1 and next(i for i in inbox['items'] if i['category']=='stale')['object']==stale
-    # Installed method pin changes are the host's own version-currentness rule.
-    original_pin=research.pin
-    monkeypatch.setattr(research,'pin',lambda p:{**original_pin(p),'version':'99.0.0'})
-    # Real plugin publication emits SourceWatch invalidation. The synthetic pin
-    # override above has no filesystem publication, so invalidate its old receipt.
-    with research.read_responses.lock:research.read_responses.entries.clear();research.read_responses.bytes=0
-    from backend.index import get_index
-    get_index(research).previous=None  # Synthetic pin override emits no actual SourceWatch generation.
-    get_index(research).cached=None;get_index(research).decoded=None
-    stale=object_card(client,'study',s['id'])
-    assert stale['status']['code']=='outdated' and '99.0.0' in stale['status']['reason']
-    assert next(e for e in relations(client,'study',s['id'])['uses'] if e['role']=='method')['freshness']=='outdated'
+    # An input edit invalidates the result, not its unchanged sealed method.
+    # Do not fabricate a version pin: the host authenticates release manifests
+    # and separately proves presentation-only versus calculation changes.
+    method=next(e for e in relations(client,'study',s['id'])['uses'] if e['role']=='method')
+    assert method['pinned']['digest']==s['definition']['method']['release_digest']
+    assert method['freshness']=='current'
     assert client.get('/api/index/objects',params={'limit':0}).status_code==422
     assert client.get('/api/index/objects',params={'kind':'invented'}).status_code==422
     assert client.get('/api/index/objects/study/absent/relations').status_code==404

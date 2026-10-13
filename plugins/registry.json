@@ -51,9 +51,9 @@
     },
     {
       "plugin_id": "cablesim.standard-check",
-      "version": "1.5.2",
+      "version": "1.6.0",
       "manifest": "plugins/cablesim.standard-check/plugin.json",
-      "release_digest": "8957feecfe2fb36694aedc20cca131383d122e14ce09e2ce69e1585b6eae0d1f"
+      "release_digest": "529a53d8c1201f09788f3107a14ef4855cf5b9d4122120fdb2c227128f4f22d4"
     },
     {
       "plugin_id": "cablesim.standards-basis",

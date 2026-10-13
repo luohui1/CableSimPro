@@ -5,6 +5,7 @@ import sqlite3
 from time import perf_counter
 
 import pytest
+from fastapi import HTTPException
 from backend.harness.contracts import ToolResult
 from backend.harness.evidence import quantity_facts,run_points,converted
 from backend.harness.project_digest import project_digest
@@ -125,7 +126,7 @@ def test_large_session_streams_original_and_bounds_audit_with_pressure_fallback(
     assert error['data']['category']=='memory_pressure' and audit['state']=='blocked'
 
 
-def test_saved_fem_comparison_hand_delta_unconverged_refusal_and_proposal_no_job(client,fake_model,monkeypatch):
+def test_forged_fem_convergence_is_refused_and_proposal_submits_no_job(client,fake_model,monkeypatch):
     w,s,iec=saved_run(client);h=client.app.state.harness;tid=session(client,w,s)
     fem=deepcopy(iec);fem['id']='saved-fem';fem['snapshot']['definition']['method']={**h.research.pin(h.research.registry().plugins['cablesim.simulation']),'capability':'iec-thermal-field'}
     original=fem['snapshot']['cases'][0];original['parameters']={'iec':deepcopy(iec['snapshot']['cases'][0]['parameters'])}
@@ -137,23 +138,26 @@ def test_saved_fem_comparison_hand_delta_unconverged_refusal_and_proposal_no_job
     monkeypatch.setattr(h.research,'get_run',read)
     monkeypatch.setattr(h.research.executor,'run',lambda *a,**k:pytest.fail('Agent submitted a solver/job'))
     script,requests=fake_model
-    text='有限元保存结果350.0 K，IEC计算340.0 K；同工况温差10.0 K。有限元已经过收敛检查，仍需工程复核。'
+    # A flag on a substituted receipt is not the host's saved convergence
+    # workflow. Positive comparisons use the archived release-copy real-use test.
+    text='未取得宿主核验的有限元收敛证据，不提供偏差结论。'
     script.extend([call('fem_comparison_read',{'run_id':'saved-fem','iec_run_id':'saved-iec'}),answer(text)])
     started=perf_counter();events=send(client,tid,'有限元和 IEC 差多少？要不要做有限元复核？');elapsed=perf_counter()-started
-    audit=h.tasks.record(tid);rows=audit['results'][0]['data']['comparisons'][0]['results']
-    assert next(row['value'] for row in rows if row['key'].startswith('difference.'))==10.
-    assert next(row['value'] for row in rows if row['key']=='relative_difference')==pytest.approx(1000/340)
+    audit=h.tasks.record(tid)
+    result=audit['results'][0]
+    assert result['status']=='error' or result['data'].get('comparisons')==[]
     facts=quantity_facts(audit['results'])
-    assert {fact['run_id'] for fact in facts if fact['key']=='conductor_temperature' and fact['value']==340.}=={'saved-iec'}
-    assert {fact['run_id'] for fact in facts if fact['key']=='conductor_temperature' and fact['value']==350.}=={'saved-fem'}
+    assert not any(fact['key']=='conductor_temperature' and fact['value'] in (340.,350.) for fact in facts)
     assert final_text(events)==text and not any(e['type']=='answer.fallback' for e in audit['events'])
     print('\n有限元对照假模型 '+json.dumps({**metrics(audit,elapsed),'answer':text},ensure_ascii=False))
     fem['convergence']['status']='unconverged'
     script.extend([call('fem_comparison_read',{'run_id':'saved-fem','iec_run_id':'saved-iec'}),answer('有限元尚未收敛，不给出可用偏差结论。')]);send(client,tid)
-    assert h.tasks.record(tid)['results'][-1]['data']['comparisons']==[]
-    assert run_points(h.research,fem)['cases'][0]['results']==[]
+    last=h.tasks.record(tid)['results'][-1]
+    assert last['status']=='error' or last['data'].get('comparisons')==[]
     from backend.harness.platform import evidence_view
-    assert evidence_view(h.research,fem)['cases'][0]['results']==[]  # Generic API reads keep the same qualification.
+    for read in (lambda:run_points(h.research,fem),lambda:evidence_view(h.research,fem)):
+        try:assert read()['cases'][0]['results']==[]
+        except HTTPException as error:assert error.status_code in (404,409,422)
     # Explicit finite-element boundaries and mesh are reviewable candidate
     # parameters, not derived engineering results or an HPC authorization.
     doc=iec['snapshot']['cases'][0]['input'];params={'domain_options':{'section_id':doc['sections'][0]['id'],

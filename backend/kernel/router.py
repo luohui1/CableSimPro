@@ -26,8 +26,12 @@ def make_router(research):
                 # Method selectors need identities and presentation, not all
                 # recursively expanded parameter schemas. A selected capability
                 # reads its exact, sealed /input-contracts contract separately.
-                values = [{**row, 'capabilities': [{key:value for key,value in cap.items()
-                    if key not in ('input_contract', 'parameters_schema', 'parameter_schema', 'output_schema', 'artifact_schemas')}
+                values = [{**row, 'capabilities': [{
+                    **{key:value for key,value in cap.items()
+                       if key not in ('input_contract', 'parameters_schema', 'parameter_schema', 'output_schema', 'artifact_schemas')},
+                    # Optional inspectors can avoid downloading an unrelated
+                    # capability's full contract; values still use that contract.
+                    'parameter_fields': list(cap.get('parameter_schema', {}).get('properties', {}))}
                     for cap in row['capabilities']]} for row in values]
             return json.dumps(values, ensure_ascii=False, allow_nan=False).encode()
         return await read_response(research, ('methods',) if view == 'full' else ('methods', 'summary'), None,

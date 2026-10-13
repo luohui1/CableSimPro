@@ -18,7 +18,7 @@ from backend.plugin_host.parameter_contracts import schemas
 
 from .contracts import ToolResult,Diagnostic
 from .evidence import run_points
-from .fields import domain_metadata, displayed
+from .fields import domain_metadata, displayed, schema_at, unit_for
 from .security import redact
 from .project_digest import project_digest, study_baseline
 from .fem import comparisons, propose as propose_fem
@@ -116,14 +116,64 @@ class ToolBroker:
         return sid
 
     @staticmethod
+    def read_metadata(path):
+        # scenarios.apply_layout stores these template distances in SI metres.
+        # This read projection does not add an editable/approval contract.
+        if path.rsplit('/',2)[-2:][0]=='layout_template' and path.rsplit('/',1)[-1] in ('depth','spacing'):
+            return {'title':'模板埋深' if path.endswith('/depth') else '模板间距',
+                'x-unit':{'si':'m','display':'m','scale':1,'offset':0}}
+        return domain_metadata(path)
+
+    @staticmethod
     def field_points(document,paths):
         fields=[]
         for path in paths:
             value=ToolBroker.path_value(document,path)
-            metadata=domain_metadata(path) if document.get('schema_version')=='cablesim.domain/1' and not isinstance(value,(dict,list)) else None
+            metadata=ToolBroker.read_metadata(path) if document.get('schema_version')=='cablesim.domain/1' and not isinstance(value,(dict,list)) else None
             fields.append({'path':path,'label':metadata['title'] if metadata else '保存输入字段',
                 'value':displayed(value,metadata['x-unit']) if metadata else value,
                 'unit':metadata['x-unit']['display'] if metadata else None})
+            if isinstance(value,(dict,list)) and document.get('schema_version')=='cablesim.domain/1':
+                fields[-1]['quantities']=ToolBroker.domain_points(value,path)
+        return fields
+
+    @staticmethod
+    def domain_points(value,path=''):
+        """Annotate actual saved scalar facts, never numbers inside prose/schema."""
+        fields=[]
+        def visit(item,pointer):
+            if isinstance(item,dict):
+                for key,child in item.items():
+                    if key not in ('provenance','id'):
+                        visit(child,pointer+'/'+str(key).replace('~','~0').replace('/','~1'))
+            elif isinstance(item,list):
+                for index,child in enumerate(item):
+                    visit(child,pointer+'/'+str(child.get('id',index) if isinstance(child,dict) else index).replace('~','~0').replace('/','~1'))
+            elif type(item) in (float,int):
+                try:spec=ToolBroker.read_metadata(pointer)
+                except HTTPException:return
+                unit=spec['x-unit']
+                if unit.get('si'):fields.append({'path':pointer,'label':spec['title'],
+                    'value':displayed(item,unit),'unit':unit['display']})
+        visit(value,path)
+        return fields
+
+    @staticmethod
+    def parameter_points(parameters,schema):
+        fields=[]
+        def visit(value,path):
+            if isinstance(value,dict):
+                for key,child in value.items():visit(child,path+'/'+str(key).replace('~','~0').replace('/','~1'))
+            elif isinstance(value,list):
+                for index,child in enumerate(value):visit(child,path+'/'+str(index))
+            elif type(value) in (float,int):
+                try:spec=schema_at(schema,path)
+                except (HTTPException,KeyError,TypeError):return
+                unit=unit_for(spec,parameters,path)
+                if unit.get('si'):fields.append({'path':'/parameters'+path,'label':spec.get('title',path),
+                    'value':displayed(value,unit),'unit':unit.get('display',unit['si']),
+                    'source':'saved_method_parameters'})
+        visit(parameters,'')
         return fields
 
     @staticmethod
@@ -221,6 +271,7 @@ class ToolBroker:
             return getattr(Drafts(self),operation)(task,args)
         if name=='platform_capabilities':return self.platform.discover(task,args)
         if name=='platform_read':return self.platform.read(task,args)
+        if name=='plugin_query':return self.platform.query(task,args)
         if name=='platform_prepare':return self.platform.prepare(task,args)
         if name=='task_plan':
             from .progress import update
@@ -250,14 +301,7 @@ class ToolBroker:
             if document is None:return failure('DOMAIN_INPUT_REQUIRED','工程尚未转换为领域输入，请在工作台显式转换。')
             paths=args.get('paths')
             if paths:
-                fields=[]
-                for path in paths:
-                    value=self.path_value(document,path)
-                    if isinstance(value,(dict,list)):
-                        fields.append({'path':path,'value':value,'unit':None})
-                    else:
-                        metadata=domain_metadata(path);unit=metadata['x-unit']
-                        fields.append({'path':path,'label':metadata['title'],'value':displayed(value,unit),'unit':unit['display']})
+                fields=self.field_points(document,paths)
                 data={'fields':fields}
             else:
                 data={**outline(document),'locks':state.get('locks',[])}
@@ -310,6 +354,20 @@ class ToolBroker:
                 'driver':{key:value for key,value in definition['driver'].items() if key!='cases'},
                 'cases':[{'case_id':case['case_id'],'label':case['label'],'parameters':case.get('parameters',{})}
                     for case in definition['driver'].get('cases',[])]}
+            # Units come from the selected sealed producer contract, values from
+            # this saved definition. Schema defaults are never used as facts.
+            _,state,_=self.proposals.source(task)
+            source=definition['method_input'] if definition['input_source']=='study' else state.get('domain')
+            if source is not None and source.get('schema_version')=='cablesim.domain/1':
+                from .project_digest import key_inputs
+                data['input_fields']=key_inputs({'input':source})
+            try:
+                _,cap=self.research.resolve(definition['method'])
+                parameter_schema,_=schemas(cap,source)
+                data['parameter_fields']=self.parameter_points(definition['parameters'],parameter_schema)
+            except (HTTPException,PluginHostError) as error:
+                data['parameter_fields']=[]
+                data['parameter_units_unavailable']='保存参数仍在原记录；当前无法核对对应封签单位契约，不能补猜单位。'
             if args.get('run_id'):data.update(run_id=args['run_id'],workspace_revision=original['workspace_revision'])
             if args.get('input_paths'):
                 _,state,_=self.proposals.source(task)
@@ -347,6 +405,12 @@ class ToolBroker:
             return ToolResult(status='ok',summary='已读取保存运行的量值与分项证据；完整性通过不代表工程批准。',
                 data=data,artifact_refs=refs,execution_ref={'run_id':run['id'],'study_id':sid,'status':run['status']})
         if name=='plugin_inspect':
+            if args.get('plugin_id') and args.get('capability') and args.get('tool') in (None,'plugin_query'):
+                plugin=self.research.registry(args['plugin_id']).get(args['plugin_id'])
+                try:cap=plugin.manifest.capability(args['capability'])
+                except KeyError:cap=None
+                if cap is not None and cap.read_only:
+                    return self.platform.query(task,{key:args[key] for key in ('plugin_id','capability')})
             from backend.kernel.input_contracts import contracts
             entries=contracts(self.research)
             if args.get('tool'):

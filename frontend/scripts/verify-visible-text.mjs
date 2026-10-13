@@ -154,15 +154,16 @@ async function scan(surface, size, layer = 'ordinary') {
     }
     return values.map(({ element, ...value }, i) => ({ ...value, id: String(i) }));
   });
-  await record(surface, size, layer);
+  await settled(); await record(surface, size, layer);
   for (const pane of panes) {
     for (let left = 0; left < pane.width; left += Math.max(1, pane.clientWidth * 0.8)) {
-      await page.locator(`[data-text-audit-pane="${pane.id}"]`).evaluate((e, left) => { e.scrollLeft = left; e.scrollTop = 0; }, left); await record(surface, size, layer);
+      await page.locator(`[data-text-audit-pane="${pane.id}"]`).evaluate((e, left) => { e.scrollLeft = left; e.scrollTop = 0; }, left); await settled(); await record(surface, size, layer);
       for (let top = Math.max(1, pane.client * 0.8); top < pane.height; top += Math.max(1, pane.client * 0.8)) {
-        await page.locator(`[data-text-audit-pane="${pane.id}"]`).evaluate((e, top) => e.scrollTop = top, top); await page.waitForTimeout(35); await record(surface, size, layer);
+        await page.locator(`[data-text-audit-pane="${pane.id}"]`).evaluate((e, top) => e.scrollTop = top, top); await settled(); await record(surface, size, layer);
       }
     }
     await page.locator(`[data-text-audit-pane="${pane.id}"]`).evaluate(e => { e.scrollTop = 0; e.scrollLeft = 0; });
+    await settled();
   }
   // Radix tooltips are mounted on hover; titles above are counted without opening them.
   await page.evaluate(() => document.querySelectorAll('[data-text-audit-pane]').forEach(e => e.removeAttribute('data-text-audit-pane')));
@@ -173,7 +174,8 @@ async function scan(surface, size, layer = 'ordinary') {
   for (let i = 0; i < await triggers.count(); i++) {
     const trigger = triggers.nth(i); if (!await trigger.isVisible()) continue;
     if (!auditShell && await trigger.evaluate(e => !!e.closest('.workbench-sidebar'))) continue;
-    await trigger.hover({ timeout: 1000 }).catch(() => {}); await page.waitForTimeout(240);
+    await trigger.hover({ timeout: 1000 }).catch(() => {});
+    await page.locator('[role="tooltip"]').first().waitFor({ state:'visible', timeout:1000 }).catch(() => {});
     const tooltipText = await page.locator('[role="tooltip"]').allTextContents();
     for (const text of tooltipText) for (const match of identifyText(text)) {
       const key = [surface.route, size.width, text, match.token, 'radix-hover'].join('|');

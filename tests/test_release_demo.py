@@ -116,7 +116,7 @@ def test_completed_release_seed_keeps_user_data_and_unfinished_seed_is_refused(t
 
 
 @pytest.mark.parametrize('with_evidence', [True, False], ids=['saved-engineering-evidence','waiting-for-slurm'])
-def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeypatch, with_evidence):
+def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeypatch, with_evidence, release_seed_copy):
     from backend.kernel.hpc_evidence import evidence_availability
     if with_evidence:
         status=evidence_availability()
@@ -140,7 +140,9 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
         monkeypatch.setenv(key, str(development))
     monkeypatch.setattr(seed, 'urlopen', lambda *_a, **_k: pytest.fail('Release seed must not contact a donor service'))
     database = tmp_path / 'release/engineering.sqlite'
-    seed.seed_release(database)
+    # Fresh offline creation is shared only as immutable input. This test owns
+    # its database/library and still exercises the real idempotent restart below.
+    release_seed_copy(seed, database)
     receipt = json.loads(database.with_suffix('.seed.json').read_text(encoding='utf-8'))
     from backend.kernel.hpc_evidence import evidence_index
     has_chengnan=bool(evidence_index()[0].get('supplementary_receipts'))

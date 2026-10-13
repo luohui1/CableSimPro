@@ -5,7 +5,7 @@ import { CommandBar, type CommandAction } from '@/components/command-bar';
 import { commandResultLabel, latestModuleRun, moduleResultStatus, useTypeEvidence } from './evidence';
 import { nominalNumber } from './design-summary';
 import { message, optionalRecord, text } from '@/api/client';
-import { methodCatalog } from '@/api/research';
+import { moduleMethods } from './api';
 import { AppShell } from '@/components/app-shell';
 import { Icon } from '@/components/icon';
 import { PropertyPanel, type PropertyGroup } from '@/components/property-panel';
@@ -45,7 +45,7 @@ export { typeModules } from "./module-definitions";
 export function TypeWorkspace() {
   const state = useTypeWorkspace(), { location, navigate, onTheme } = useTypeNavigation();
   const evidence = useTypeEvidence();
-  const methods = useQuery({ queryKey: ['type-method-catalog'], queryFn: ({ signal }) => methodCatalog(signal) });
+  const methods = useQuery({ queryKey: ['type-method-catalog'], queryFn: ({ signal }) => moduleMethods(signal) });
   const specificationState = useQuery({ queryKey: ['type-specification', state.workspace?.id, 'customer'], queryFn: ({ signal }) => typeSpecification(state.workspace!.id, signal, 'customer'), enabled: !!state.workspace && location.module==='specification', staleTime:30000 });
   const comparisonState = useQuery({ queryKey: ['type-comparison', state.workspace?.id], queryFn: ({ signal }) => typeComparison(state.workspace!.id, signal), enabled: !!state.workspace && location.module==='comparison', staleTime:30000 });
   const module = typeModules.find(module => module.id === location.module);

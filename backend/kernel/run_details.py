@@ -22,7 +22,11 @@ def detail(research, wid, sid, rid, view='detail'):
     if view != 'full' and hasattr(research, 'store'):
         with getattr(research.store, 'read_snapshot', research.store.db)() as db:
             sharded = db.execute('SELECT request_id,request_digest,owner_epoch,execution_nonce FROM study_runs '
-                                'WHERE workspace=? AND id=? AND instr(output,?)>0',
+                                # Saved capability is in the small input snapshot.
+                                # CASE short-circuits the legacy shard scan; the
+                                # display reader still authenticates actual bytes.
+                                "WHERE workspace=? AND id=? AND CASE WHEN json_extract(snapshot,'$.definition.method.capability')='iec-thermal-field' "
+                                'THEN 1 ELSE instr(output,?)>0 END',
                                 (wid, rid, '"x-cablesim.field-')).fetchone()
     if sharded is not None:
         from .batch_field_projection import read_display

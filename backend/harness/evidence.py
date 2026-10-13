@@ -22,6 +22,9 @@ def run_points(research,run,case_id=None,*,entity=None,key=None,all_quantities=F
     family=run['snapshot']['definition']['method'].get('plugin_id')
     fem=family=='cablesim.simulation'
     numerical=run.get('convergence')
+    if fem and run['snapshot']['definition']['method'].get('capability')=='iec-thermal-field' and hasattr(research,'store'):
+        from backend.kernel.fem_evidence import proof as convergence_proof
+        numerical=convergence_proof(research,run,display=True,summary=True)
     conclusion_keys={'ampacity','conductor_temperature','temperature_margin','x-cablesim.emergency-current',
         'thermal_resistance.external','thermal_resistance.insulation','thermal_resistance.oversheath','losses.total'}
     for case in selected:
@@ -86,12 +89,17 @@ def numbers(value):
     return result
 
 
-NUMBER=r'[-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?'
-QUANTITY=re.compile(r'('+NUMBER+r')\s*(K\s*[·*.]\s*m/W|J/\(m³[·*]K\)|Ω/km|Ω/m|ohm/km|ohm/m|mm²|mm2|m²|m2|W/m|kV|kA|°C|℃|摄氏度|安培|Hz|mm|Pa|kg|A|K|V|W|m|s|%|倍)(?![A-Za-z²0-9/])')
+NUMBER=r'[-+]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:[eE][-+]?\d+)?'
+QUANTITY=re.compile(r'('+NUMBER+r')\s*(K\s*[·*.]\s*m/W|W/\(m\s*[·*.]\s*K\)|J/\(m³[·*]K\)|Ω/km|Ω/m|ohm/km|ohm/m|A/m(?:²|\^2|2)|mm²|mm2|m²|m2|W/m|kV|kA|°C|℃|摄氏度|安培|Hz|mm|Pa|kg|deg|°|A|K|V|W|m|s|%|倍)(?![A-Za-z²0-9/])')
 
 
 def unit_name(unit):
-    return str(unit).replace('℃','°C').replace('摄氏度','°C').replace('安培','A').replace('ohm','Ω').replace('mm2','mm²').replace('m2','m²').replace('*','·').replace('K.m','K·m').replace(' ','')
+    if unit=='°':return 'deg'
+    return str(unit).replace('℃','°C').replace('摄氏度','°C').replace('安培','A').replace('ohm','Ω').replace('m^2','m²').replace('mm2','mm²').replace('m2','m²').replace('*','·').replace('K.m','K·m').replace(' ','')
+
+
+def literal_number(value):
+    return float(value.replace(',','')) if isinstance(value,str) else float(value)
 
 
 def is_delta(key):
@@ -100,9 +108,30 @@ def is_delta(key):
 
 def delta_context(prefix,unit):
     if unit not in ('K','°C'):return False
+    # A preceding temperature/margin has its own qualifier: "余量24 K
+    # （温限90 °C）" must not transfer "余量" to the absolute limit.
+    previous=list(QUANTITY.finditer(prefix))
+    if previous:prefix=prefix[previous[-1].end():]
     # "升高到58°C" is an absolute value; "升高5°C" is a difference.
     if re.search(r'(?:升高|降低|变化)(?:到|至|为)|(?:从|由|→)[^，。；\n]*$',prefix):return False
     return bool(re.search(r'温差|余量|温升|变化|差值|升高|降低|超出(?:温限|上限)?|超过(?:温限|上限)',prefix))
+
+
+def declared_references(observations):
+    """Saved source declarations, including sealed method parameter source fields."""
+    def visit(value,path='observations',parameters=False):
+        if isinstance(value,dict):
+            if value.get('projection') in METADATA_PROJECTIONS:return
+            if '/provenance/' in path and value.get('kind') and isinstance(value.get('reference'),str):
+                yield value['reference'],path+'/reference'
+            for key,child in value.items():
+                pointer=path+'/'+str(key)
+                if parameters and key in ('source','geometry_source') and isinstance(child,str):
+                    yield child,pointer
+                else:yield from visit(child,pointer,parameters or key=='parameters')
+        elif isinstance(value,list):
+            for index,child in enumerate(value):yield from visit(child,path+'/'+str(index),parameters)
+    yield from visit(observations)
 
 
 def quantity_facts(observations):
@@ -119,7 +148,20 @@ def quantity_facts(observations):
             identity={**identity,**{key:item[key] for key in ('workspace_id','study_id','type_id','run_id','case_id','entity','condition','proposal_id') if item.get(key)}}
             if isinstance(item.get('case'),str) and not item.get('condition'):identity['condition']=item['case']
             key=item.get('key') or item.get('path') or item.get('label') or ''
-            for field,unit,headline in (('value',item.get('unit'),False),('display_value',item.get('display_unit'),True),
+            sources=[]
+            if '/provenance/' in path and item.get('kind') and isinstance(item.get('reference'),str):
+                sources.append((item['reference'],path+'/reference'))
+            if '/parameters/' in path:
+                sources.extend((item[field],path+'/'+field) for field in ('source','geometry_source')
+                    if isinstance(item.get(field),str))
+            for reference,source in sources:
+                for match in QUANTITY.finditer(reference):
+                    facts.append({'value':literal_number(match[1]),'unit':unit_name(match[2]),
+                        'key':'source_reference','delta':False,'headline':False,'field':'reference',
+                        'reference_only':True,'source':source+'/'+str(match.start()),**identity})
+            declared_unit=item.get('unit')
+            if not declared_unit and isinstance(item.get('quantity'),dict):declared_unit=item['quantity'].get('unit')
+            for field,unit,headline in (('value',declared_unit,False),('display_value',item.get('display_unit'),True),
                                         ('before',item.get('unit'),False),('after',item.get('unit'),False)):
                 value=item.get(field)
                 if type(value) in (int,float) and math.isfinite(value) and unit and item.get('status')!='unavailable':
@@ -134,12 +176,12 @@ def quantity_facts(observations):
 
 def converted(fact,target,*,delta=False):
     source=fact['unit'];value=fact['value']
-    if source==target:return value
     if source in ('K','°C') and target in ('K','°C'):
         if fact['delta']!=delta:return None
         return value if source==target or delta else value+(273.15 if target=='K' else -273.15)
     if source==target:return value
     scales={'m':('length',1.),'mm':('length',.001),'m²':('area',1.),'mm²':('area',1e-6),
+            'V':('voltage',1.),'kV':('voltage',1000.),'A':('current',1.),'kA':('current',1000.),
             'Ω/m':('resistance',1.),'Ω/km':('resistance',.001)}
     if source in scales and target in scales and scales[source][0]==scales[target][0]:
         return value*scales[source][1]/scales[target][1]
@@ -147,8 +189,8 @@ def converted(fact,target,*,delta=False):
 
 
 def rounded_match(number,value):
-    if value is None or not math.isfinite(value) or not math.isfinite(float(number)):return False
-    written=Decimal(str(number));numeric=float(number)
+    if value is None or not math.isfinite(value) or not math.isfinite(literal_number(number)):return False
+    written=Decimal(str(number).replace(',',''));numeric=literal_number(number)
     if math.isclose(numeric,value,rel_tol=1e-10,abs_tol=1e-10):return True
     decimal=Decimal(str(value))
     # Preserve the literal token: 338.672 and 1.4832e2 both declare a precision.
@@ -165,7 +207,7 @@ def reference_text(text):
     # Equal-length masking preserves audit offsets in the original draft; typographic hyphens
     # (YJV22‑8.7/15) are normalised first so designations are recognised.
     text=re.sub('[‐‑‒–—]','-',text)
-    patterns=[r'(?<![A-Za-z0-9_])(?:IEC|GB(?:/T)?|TB(?:/T)?)\s*\d+(?:[-./]\d+)*',
+    patterns=[r'(?<![A-Za-z0-9_])(?:IEC|GB(?:/T)?|TB(?:/T)?)\s*\d+(?:[-./]\d+)*(?:[:：]\d{4})?',
               r'(?<![A-Za-z0-9_])[A-Z]{2,}[A-Z0-9]*(?:-\d+(?:\.\d+)?(?:/\d+)?(?:\s+\d+[×x*]\d+)?|\s+\d+[×x*]\d+)(?![A-Za-z0-9_])',
               r'(?m)^\s*\d+[.)、](?=\s|[\u4e00-\u9fff])',
               r'(?<![A-Za-z0-9_])[0-9a-f]{8}-[0-9a-f-]{27,}(?![A-Za-z0-9_])',
@@ -222,11 +264,11 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
     observed_validation={card['id']:card for card in validation_cards(observations)}
     def issue(match,code,rule,message,available=(),unit=None):
         issues.append({'code':code,'rule':rule,'fragment':text[match.start():match.end()],
-            'start':match.start(),'end':match.end(),'value':(float(match[1]) if math.isfinite(float(match[1])) else match[1]) if code.startswith('UNGROUNDED') and re.fullmatch(NUMBER,match[1]) else None,
+            'start':match.start(),'end':match.end(),'value':(literal_number(match[1]) if math.isfinite(literal_number(match[1])) else match[1]) if code.startswith('UNGROUNDED') and re.fullmatch(NUMBER,match[1]) else None,
             'unit':unit,'message':message,'available_values':list(available)[:16]})
     for match in re.finditer(r'已(?:经)?(?:批准|发布|外发)|已(?:经)?(?:保存|写入)(?:到|进|至)?(?:当前)?工程|已(?:经)?(?:修改|更新)(?:当前)?工程|工程[^，。；\n]{0,12}已(?:经)?(?:修改|更新|保存)|已(?:经)?(?:将|把)[^，。；\n]{0,50}(?:保存|写入)(?:到|进|至)?(?:当前)?工程|合规认证通过',text):
         prefix=re.split(r'[，。；\n]',text[:match.start()])[-1][-24:]
-        if re.search(r'未|没有|不能|不得|不应|不要|不可|禁止|不表示|不代表|不是|并非|非|不(?:改写|覆盖|替换|修改)',prefix):continue
+        if re.search(r'未|没有|不能|不得|不应|不要|不可|禁止|不表示|不代表|不是|并非|非|不(?:改写|覆盖|替换|修改)',prefix+match[0][:-2]):continue
         issue(match,'UNSUPPORTED_OPERATION_CLAIM','actual_engineering_state','没有工程保存、批准或发布证据；方案与试算不能描述为实际工程状态。')
     if re.search(r'方案(?:已经|已)?(?:生成|创建|提出)',text) and not proposals and not any(item.get('data',{}).get('proposal') for item in (current or observations)):
         match=re.search(r'方案(?:已经|已)?(?:生成|创建|提出)',text)
@@ -234,10 +276,10 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
     clean=reference_text(text).replace('−','-')
     # Exact names from cards, study lists and saved metric variants are identities
     # even without quotes. Mask only the observed span, not its numeric values.
-    def names(item,path='observations'):
+    def names(item,path='observations',inherited=False):
         if isinstance(item,dict):
             if item.get('projection') in METADATA_PROJECTIONS:return
-            identity=any(key in item for key in ('id','study_id','workspace_id','plugin_id','asset_id'))
+            identity=inherited or any(key in item for key in ('id','study_id','workspace_id','plugin_id','asset_id'))
             for field in ('name','title','variant'):
                 name=item.get(field)
                 if not identity or not isinstance(name,str) or not name:continue
@@ -249,13 +291,61 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
                     for token in re.findall(r'\d+[×x*]\d+',name):
                         for match in re.finditer(r'(?<![\w×x*])'+re.escape(token)+r'(?![\w×x*])',text):
                             yield match.start(),match.end(),path+'/'+field
-            for key,child in item.items():yield from names(child,path+'/'+str(key))
+            for key,child in item.items():yield from names(child,path+'/'+str(key),identity)
         elif isinstance(item,list):
-            for index,child in enumerate(item):yield from names(child,path+'/'+str(index))
+            for index,child in enumerate(item):yield from names(child,path+'/'+str(index),inherited)
     for start,end,source in names(observations):
         clean=clean[:start]+' '*(end-start)+clean[end:]
         quoted=start>0 and end<len(text) and (text[start-1],text[end]) in (('“','”'),('「','」'),('《','》'),('`','`'))
         matches.append({'fragment':text[start:end],'rule':'quoted_object_name' if quoted else 'evidence_object_name','sources':[source]})
+    def versions(value,path='observations'):
+        if isinstance(value,dict):
+            if value.get('projection') in METADATA_PROJECTIONS:return
+            identified=any(key in value for key in ('id','plugin_id','asset_id','method_id'))
+            for field in ('version','plugin_version','method_version'):
+                version=value.get(field)
+                if isinstance(version,str) and (identified or field!='version') and re.fullmatch(r'\d+\.\d+\.\d+(?:[-+][\w.-]+)?',version):
+                    yield version,path+'/'+field
+            for key,child in value.items():yield from versions(child,path+'/'+str(key))
+        elif isinstance(value,list):
+            for index,child in enumerate(value):yield from versions(child,path+'/'+str(index))
+    for version,source in versions(observations):
+        for match in re.finditer(r'(?<![\w.])'+re.escape(version)+r'(?![\w.])',text):
+            clean=clean[:match.start()]+' '*(match.end()-match.start())+clean[match.end():]
+            matches.append({'fragment':match[0],'rule':'saved_method_version','sources':[source]})
+    def locators(value,path='observations'):
+        if isinstance(value,dict):
+            if value.get('projection') in METADATA_PROJECTIONS:return
+            if isinstance(value.get('standard'),str):
+                for key in ('clause','table','locator'):
+                    locator=value.get(key)
+                    if isinstance(locator,str) and locator:yield locator,path+'/'+key
+            for key,child in value.items():yield from locators(child,path+'/'+str(key))
+        elif isinstance(value,list):
+            for index,child in enumerate(value):yield from locators(child,path+'/'+str(index))
+    for locator,source in locators(observations):
+        for match in re.finditer(r'(?<![\d.])'+re.escape(locator)+r'(?![\d.])',text):
+            if any(q.start()<=match.start()<q.end() for q in QUANTITY.finditer(text)):continue
+            if not (re.search(r'第\s*$|条款\s*$|条文\s*$|附录\s*$|§\s*$',text[max(0,match.start()-12):match.start()]) or
+                    re.match(r'\s*(?:条|节|款|项)',text[match.end():]) or locator.startswith(('表','图'))):continue
+            clean=clean[:match.start()]+' '*(match.end()-match.start())+clean[match.end():]
+            matches.append({'fragment':match[0],'rule':'saved_standard_locator','sources':[source]})
+    references=list(declared_references(observations))
+    for reference,source in references:
+        # Preserve exact source phrases (e.g. a manufacturer's table name).
+        # This only masks text actually present in a saved declaration.
+        for phrase in re.split(r'[，。；：;\n]',reference):
+            if len(phrase)<6:continue
+            pattern=r'\s*'.join(re.escape(char) for char in phrase if not char.isspace())
+            for match in re.finditer(pattern,text):
+                clean=clean[:match.start()]+' '*(match.end()-match.start())+clean[match.end():]
+                matches.append({'fragment':match[0],'rule':'saved_source_quote','sources':[source]})
+    for year,source in ((year,source) for reference,source in references
+                        for year in re.findall(r'(?<!\d)(?:19|20)\d{2}(?!\d)',reference)):
+        for match in re.finditer(r'(?<![\d.])'+year+r'(?![\d.])',text):
+            if any(q.start()<=match.start()<q.end() for q in QUANTITY.finditer(text)):continue
+            clean=clean[:match.start()]+' '*(match.end()-match.start())+clean[match.end():]
+            matches.append({'fragment':year,'rule':'saved_source_year','sources':[source]})
     # Saved validation method versions are identities, not computed quantities.
     # Mask only exact observed version strings; unknown versions remain checked.
     for card in observed_validation.values():
@@ -291,6 +381,7 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
         for rows in changes.values():
             for i,first in enumerate(rows):
                 for second in rows[i+1:]:
+                    if first.get('reference_only') or second.get('reference_only'):continue
                     if not scope.matches(first,match.start()) or not scope.matches(second,match.start()):continue
                     if first.get('study_id') and second.get('study_id') and first['study_id']!=second['study_id']:continue
                     if not validation_attributed(first,match.start()) or not validation_attributed(second,match.start()):continue
@@ -306,7 +397,7 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
         if unit in ('K','°C'):
             named=entities_named(match.start())
             exceedance=re.search(r'超|高出|不足|欠',clause) and not match[1].startswith('+')
-            limits=[fact for fact in facts if re.search(r'max_conductor_temperature|temperature_limit',str(fact['key'])) and not fact['delta']]
+            limits=[fact for fact in facts if re.search(r'max_conductor_temperature|temperature_limit',str(fact['key'])) and not fact['delta'] and not fact.get('reference_only')]
             temperatures=[fact for fact in facts if fact['key']=='conductor_temperature' and not fact['delta']
                           and attributed(fact,named) and scope.matches(fact,match.start())]
             for limit in limits:
@@ -322,10 +413,10 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
     known=numbers(observations);counts=evidence_counts(observations);covered=[];anchors=[];pending=[]
     user_facts=[]
     for user in users or []:
-        known.update(float(match[0]) for match in re.finditer(r'(?<![A-Za-z0-9_/.:-])'+NUMBER+r'(?![A-Za-z0-9_/])',reference_text(user))
-                     if math.isfinite(float(match[0])))
+        known.update(literal_number(match[0]) for match in re.finditer(r'(?<![A-Za-z0-9_/.:-])'+NUMBER+r'(?![A-Za-z0-9_/])',reference_text(user))
+                     if math.isfinite(literal_number(match[0])))
         for match in QUANTITY.finditer(reference_text(user)):
-            user_facts.append({'value':float(match[1]),'unit':unit_name(match[2]),'key':'user_input','delta':False,
+            user_facts.append({'value':literal_number(match[1]),'unit':unit_name(match[2]),'key':'user_input','delta':False,
                 'headline':False,'source':'user_message','field':'value'})
     quantities=list(QUANTITY.finditer(clean))
     # "362.2 → 341.6 A", "119.61 − 106.98 °C": the first operand borrows the unit written after the second.
@@ -336,7 +427,7 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
         # Explicit engineering lists can share the unit at their end: insulation
         # 3.5、buffer 5.88、PE 3.5 K·m/W. Check each value against that unit, rather
         # than accepting it as unrelated numeric metadata.
-        start=max(clean.rfind(mark,0,match.start()) for mark in '。；;\n')+1
+        start=max(clean.rfind(mark,0,match.start()) for mark in '。；;\n，,')+1
         segment=clean[start:match.start()]
         if re.search(r'热阻率|厚度|温度|电流|长度|埋深|截面',segment) and '、' in segment:
             for token in re.finditer(r'(?<![A-Za-z0-9_/.:-])('+NUMBER+r')(?=\s*、)',segment):
@@ -354,6 +445,9 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
         # ("余量 +17 K"), so only exceedance wording, an unsigned number and a negative fact qualify.
         exceedance=re.search(r'超|高出|不足|欠',clause) and not match[1].startswith('+')
         for fact in facts+user_facts:
+            if fact.get('reference_only'):
+                start,end=sentence(match.start())
+                if not re.search(r'参考|来源|原表|文献|规格书|引用|工程师|声明|表中',text[start:end]):continue
             value=converted(fact,unit,delta=delta)
             if not rounded_match(number,value) and not (fact['delta'] and exceedance and value is not None and value<0 and rounded_match(number,-value)):continue
             if not attributed(fact,named_entities):continue
@@ -372,6 +466,7 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
         if candidates:
             anchors.append((match,candidates));matches.append({'fragment':match[0],'rule':'quantity','sources':[fact['source'] for fact in candidates[:8]]})
         else:pending.append((match,unit,delta))
+    verified_derivations=[]
     for match,unit,delta in pending:
         # Prefer this sentence's operands. Across sentences, use a paragraph only
         # when it cites exactly two distinct quantities; competing operands are
@@ -386,16 +481,20 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
             pairs={}
             for anchor,candidates in anchors:
                 if start<=anchor.start()<end:
-                    pairs.setdefault((float(anchor[1]),unit_name(anchor[2])),(anchor,candidates))
+                    pairs.setdefault((literal_number(anchor[1]),unit_name(anchor[2])),(anchor,candidates))
             if len(pairs)==2:
                 nearby=list(pairs.values());paragraph_start,paragraph_end=start,end
-        derived=None
+        derived=next(({'fragment':match[0],'rule':'repeated_derivation','sources':sources}
+            for value,dimension,sources in verified_derivations if dimension==unit and rounded_match(match[1],value)
+            and all(scope.matches(fact,match.start()) and attributed(fact,entities_named(match.start()))
+                for fact in facts if fact['source'] in sources)),None)
         for i,(left,left_facts) in enumerate(nearby):
             for right,right_facts in nearby[i+1:]:
                 for first in left_facts:
                     for second in right_facts:
                         # User settings cannot manufacture computed conclusions; quantities must share dimensions.
                         if first['source']=='user_message' or second['source']=='user_message':continue
+                        if first.get('reference_only') or second.get('reference_only'):continue
                         # Same dimension is required (checked by conversion below); both operands sit in this sentence,
                         # so comparing load with capacity or two rating bases is explicit.
                         base=unit_name(left[2])
@@ -420,7 +519,9 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
                 if derived:break
             if derived:break
         if not derived:derived=evidence_change(match,unit)
-        if derived:matches.append(derived)
+        if derived:
+            matches.append(derived)
+            verified_derivations.append((literal_number(match[1]),unit,derived['sources']))
         else:
             available=[fact for fact in facts+user_facts if converted(fact,unit,delta=delta) is not None and scope.matches(fact,match.start())]
             issue(match,'UNGROUNDED_QUANTITY','quantity_source_or_derivation','数值须来自所引用对象的证据，符合舍入/单位换算，或在本段明确引用推导的两个证据值；其他研究或运行的同值不能替代。',available,unit)
@@ -428,7 +529,7 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
     # ratio or difference ("400 A / 362.2 A = 1.104"); 273.15 is the Kelvin offset used in conversions.
     def derived_bare(number,position):
         start,end=sentence(position)
-        values=[float(anchor[1]) for anchor,_ in anchors if start<=anchor.start()<end]
+        values=[literal_number(anchor[1]) for anchor,_ in anchors if start<=anchor.start()<end]
         return any(rounded_match(number,value) for a in values for b in values if a!=b and b
                    for value in (a/b,a-b))
     for match in re.finditer(r'(?<![A-Za-z0-9_/.:-])('+NUMBER+r')(?![A-Za-z0-9_/])',clean):
@@ -437,7 +538,7 @@ def grounded_text(text,observations,*,current=None,proposals=None,users=None,pro
         if rounded_match(number,273.15) or derived_bare(number,match.start()):continue
         context=clean[max(0,match.start()-12):match.end()+12]
         count=bool(re.search(r'工况|回路|编号|序号',context))
-        count_known=float(number) in counts
+        count_known=literal_number(number) in counts
         if not any(rounded_match(number,value) for value in known) and not (count and count_known) and not any(rounded_match(number,f['value']) for f in user_facts):
             issue(match,'UNGROUNDED_NUMBER','bare_number','没有对应输入、工具字段或实际工况/回路计数。')
     for match in re.finditer(r'(?<![A-Za-z0-9_/.:-])('+NUMBER+r')\s*([A-Za-zΩ°℃μ]+(?:[/·][A-Za-zΩμ²³]+)*)',clean):

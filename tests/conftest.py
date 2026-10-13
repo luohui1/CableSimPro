@@ -78,6 +78,79 @@ def publish(root,items):
 def reproduction_data():
     return {'cases':cases,'publish':publish,'public_cases':PUBLIC_CASES}
 
+
+@pytest.fixture(scope='session')
+def release_seed_copy(tmp_path_factory, request):
+    """Build each real release identity once; give every consumer a private copy.
+
+    The source is fresh for this pytest session, never .data/release. Workers
+    coordinate with the host's OS owner lock. The first build still exercises
+    offline creation with invalid inherited donor paths; no API/plugin/result is
+    substituted. Different evidence availability produces a different identity.
+    """
+    import json
+    import shutil
+    from time import sleep, monotonic, perf_counter
+    from backend.kernel.ownership import OwnerLock
+    from backend.kernel.workspace import fingerprint
+
+    base = tmp_path_factory.getbasetemp()
+    if hasattr(request.config, 'workerinput'):base = base.parent
+    shared = base / 'release-seeds'
+    shared.mkdir(exist_ok=True)
+
+    def copy(seed, destination):
+        identity = seed.release_identity()
+        root = shared / fingerprint(identity)
+        root.mkdir(exist_ok=True)
+        source = root / 'engineering.sqlite'
+        owner = OwnerLock(root / 'build')
+        deadline = monotonic() + 600
+        while True:
+            try:
+                owner.acquire()
+                break
+            except RuntimeError:
+                if monotonic() >= deadline:raise
+                sleep(.1)
+        try:
+            if not source.exists():
+                started = perf_counter()
+                # backend.main also creates its unused default app at import.
+                # Bootstrap that module under private valid paths before testing
+                # invalid inherited paths, including when this case runs alone.
+                with pytest.MonkeyPatch.context() as bootstrap:
+                    bootstrap.setenv('CABLESIM_DB', str(root / 'bootstrap.sqlite'))
+                    bootstrap.setenv('CABLESIM_DATASETS_DIR', str(root / 'bootstrap-datasets'))
+                    bootstrap.setenv('CABLESIM_REPRODUCTION_LIBRARY', str(root / 'bootstrap-library'))
+                    from backend.main import create_app  # noqa: F401
+                donor = root / 'donor-sentinel'
+                donor.write_bytes(b'development database sentinel')
+                # All consumers, including the import-only test, share this
+                # first-creation guarantee instead of bypassing seed_release.
+                with pytest.MonkeyPatch.context() as isolated:
+                    for name in ('CABLESIM_DB', 'CABLESIM_DATASETS_DIR', 'CABLESIM_REPRODUCTION_LIBRARY'):
+                        isolated.setenv(name, str(donor))
+                    isolated.setattr(seed, 'urlopen', lambda *_a, **_k: pytest.fail('Release seed must remain offline'))
+                    seed.seed_release(source)
+                assert donor.read_bytes() == b'development database sentinel'
+                assert json.loads(source.with_suffix('.seed.json').read_text('utf-8'))['identity'] == identity
+                (root / 'timing.json').write_text(json.dumps({'build_seconds':perf_counter()-started}), 'utf-8')
+            started = perf_counter()
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+            receipt = json.loads(source.with_suffix('.seed.json').read_text('utf-8'))
+            # Only the transport location changes; saved input/output bytes do not.
+            receipt['database'] = str(destination.resolve())
+            destination.with_suffix('.seed.json').write_text(json.dumps(receipt, ensure_ascii=False), 'utf-8')
+            shutil.copytree(root / 'library', destination.parent / 'library')
+            print('Real release seed: '+(root/'timing.json').read_text('utf-8')+
+                  f'; private copy {perf_counter()-started:.3f}s', flush=True)
+        finally:owner.close()
+        return destination
+
+    return copy
+
 @pytest.fixture(autouse=True)
 def library(request,reproduction_data):
     # Preserve the previous module scope; unrelated reproduction tests retain

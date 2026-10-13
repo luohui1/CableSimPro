@@ -19,7 +19,7 @@ import { displayName } from "@/lib/display-names";
 import { missingInputDestination, matchingFieldPath } from "@/lib/missing-input";
 import type { components } from "@/api/generated/schema";
 import { ErrorState } from "./states";
-import { inputContracts, exactContract } from '@/api/input-contracts';
+import { inputContractQuery } from '@/api/input-contracts';
 import { preflightFieldLabel, readablePreflight } from '@/features/field/preflight-labels';
 import { hpcJson } from '@/features/field/run-label';
 import { SolverLocation } from './solver-location';
@@ -66,9 +66,8 @@ export function StudyRunControl({
   const solver = availability.data?.solver;
   const capability = solver === 'slurm' || solver === 'local' || solver === 'either'
     ? { id: configuration?.method.capability || '', solver } satisfies SolverCapability : undefined;
-  const contracts = useQuery({ queryKey: ['input-contracts'], queryFn: ({signal}) => inputContracts(signal), enabled: open });
-  let parameterSchema: Record<string, unknown> = {};
-  try { if (configuration && contracts.data) parameterSchema = exactContract(contracts.data, configuration.method).parameter_schema; } catch { /* Preserve preflight's version diagnosis. */ }
+  const contracts = useQuery({ ...inputContractQuery(configuration?.method || context.study.definition.method), enabled: open && !!configuration });
+  const parameterSchema: Record<string, unknown> = contracts.data?.parameter_schema || {};
   const activeRun = context.runs.some(item => ["accepted", "queued", "running", "validating"].includes(text(item.status)) && (!item.module || item.module === module));
   const requestKey = `cablesim.pending-run:${context.study.workspace}:${context.study.id}:${module}`;
   const submitGuard = useRef(false);

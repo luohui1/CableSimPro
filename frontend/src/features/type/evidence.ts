@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { array, optionalRecord, record, text } from '@/api/client';
 import { runArtifact, typeEvidence } from './api';
 import { useTypeWorkspace } from './provider';
@@ -11,6 +11,9 @@ import { useTypeNavigation } from './navigation';
 export function useTypeEvidence() {
   const state = useTypeWorkspace();
   const { location } = useTypeNavigation();
+  const queries=useQueryClient(),historyKey=['type-evidence-history',state.workspace?.id];
+  const history=useQuery({queryKey:historyKey,queryFn:()=>false,enabled:false,initialData:false});
+  const allHistory=history.data||!!location.run||location.revision!==undefined;
   const [paintedWorkspace, setPaintedWorkspace] = useState<string>();
   useEffect(() => {
     if (!state.workspace) return;
@@ -26,11 +29,13 @@ export function useTypeEvidence() {
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); if (idle) window.cancelIdleCallback(idle); clearTimeout(timer); };
   }, [state.workspace?.id]);
   const needsResults = location.module !== 'structure' || location.tab === 'quantities' || !!location.run || !!state.readOnly;
-  return useQuery({ queryKey: ['type-evidence', state.workspace?.id], queryFn: async ({ signal }) => {
-    try { return await typeEvidence(state.workspace!.id, AbortSignal.any([signal,AbortSignal.timeout(20000)])); }
+  const query=useQuery({ queryKey: ['type-evidence', state.workspace?.id,allHistory?'history':'recent'], queryFn: async ({ signal }) => {
+    try { return await typeEvidence(state.workspace!.id, AbortSignal.any([signal,AbortSignal.timeout(20000)]),!allHistory); }
     catch(error) { if(error instanceof Error && error.name==='TimeoutError') throw new Error('保存结果读取超过 20 秒，请重新读取。'); throw error; }
-  }, retry:false, enabled: !!state.workspace && (needsResults || paintedWorkspace === state.workspace.id), staleTime:30000,
+  }, retry:false, placeholderData:previous=>previous,enabled: !!state.workspace && (needsResults || paintedWorkspace === state.workspace.id), staleTime:30000,
     refetchInterval: query => query.state.data?.some(item => pendingRun(item.run)) ? 2000 : false });
+  return {...query,historyComplete:allHistory&&!query.isPlaceholderData&&!!query.data,
+    readHistory:()=>{if(allHistory)void query.refetch();else queries.setQueryData(historyKey,true);}};
 }
 export function containsArtifact(run: Record<string, unknown>, schema: string) {
   const cases = optionalRecord(run.output).cases;

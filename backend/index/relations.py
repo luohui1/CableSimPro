@@ -95,9 +95,11 @@ def resource_edges(index,card,row):
 def build(index):
     for card in list(index.cards.values()):
         if card['kind']=='validation' and card.get('parent'):
+            if not index.relates(('plugin',card['parent']['id'])):continue
             index.link(index.get('plugin',card['parent']['id']),card,'validation')
     for row in index.raw['assets']:
         card=index.get('asset',row['id']) or index.get('cable_version',row['id'])
+        if not index.relates((card['kind'],card['id'])):continue
         for ref in decoded(row['dependencies'],[]):
             found=next((r for r in index.raw['assets'] if r['asset_id']==ref['asset_id'] and r['version']==ref['version']),None)
             if found:
@@ -105,9 +107,11 @@ def build(index):
                 index.link(card,target,'dependency',pin=pin(ref))
             else:index.missing((card['kind'],card['id']),'dependency','资源依赖 '+ref['asset_id']+' '+ref['version']+' 未在本库登记。')
         sources(index,card,decoded(row['sources'],[]))
-    for row in index.raw['models']:sources(index,index.get('cable_version',row['id']),decoded(row['sources'],{}))
+    for row in index.raw['models']:
+        if index.relates(('cable_version',row['id'])):sources(index,index.get('cable_version',row['id']),decoded(row['sources'],{}))
     for row in index.raw['workspaces']:
         card=index.workspace(row['id'])
+        if not index.relates((card['kind'],card['id'])):continue
         reference=decoded(row['cable_reference'],{})
         if not reference.get('id'):reference=decoded(row['origin_reference'],{})
         if reference.get('id'):index.link(card,index.reference(reference),'source' if card['kind']=='type' else 'cable_version',pin=pin(reference))
@@ -131,6 +135,7 @@ def build(index):
             if not reference.get('id') and not source:
                 index.missing(key,'source','没有保存来源版本；空白设计不推定来源。')
     for row in index.raw['studies']:
+        if not index.relates(('study',row['id'])):continue
         card=index.get('study',row['id']);workspace=index.workspace(row['workspace']);definition=decoded(row['definition'])
         index.link(card,workspace,'workspace')
         method_edges(index,card,definition)
@@ -142,12 +147,16 @@ def build(index):
             else:index.missing(('study',row['id']),'cable_version','工程输入未绑定型号资源版本。')
         else:index.missing(('study',row['id']),'cable_version','研究采用独立输入，没有保存型号版本绑定。')
     for row in index.raw['runs']:
+        if not index.relates(('run',row['id']),('job',row['id'])):continue
         card=index.get('run',row['id']);snapshot=index.state(row)['snapshot']
         index.link(card,index.get('study',row['study']),'study',pin={'revision':snapshot.get('study_revision')})
         index.link(card,index.get('input_snapshot',row['id']),'input_snapshot',pin={'digest':row['input_digest']})
         method_edges(index,card,snapshot.get('definition',{}))
         index.link(index.get('job',row['id']),card,'run')
     for row in index.raw['deliveries']+index.raw['submissions']:
+        related=[('delivery',row['id']),('type',row['workspace']),('project',row['workspace'])]
+        related.extend(('run',source['run_id']) for source in decoded(row['sources'],[]) if isinstance(source,dict) and source.get('run_id'))
+        if not index.relates(*related):continue
         card=index.get('delivery',row['id']);workspace=index.workspace(row['workspace'])
         index.link(card,workspace,'workspace',pin={'revision':row.get('revision')} if 'revision' in row else None)
         if workspace and workspace['kind']=='type':index.link(workspace,card,'specification')
@@ -159,6 +168,7 @@ def build(index):
                 index.link(run,card,'delivery')
             else:index.missing(('delivery',row['id']),'source_run','交付的保存运行 '+source['run_id']+' 未在本库登记。')
     for row in index.raw['releases']:
+        if not index.relates(('cable_version',row['asset']),('type',row['workspace']),('project',row['workspace'])):continue
         card=index.get('cable_version',row['asset']);design=index.workspace(row['workspace'])
         origin=decoded(row.get('source_design'),{})
         revision=origin.get('revision',row.get('revision'))
@@ -168,14 +178,17 @@ def build(index):
         if card:index.link(design,card,'published_cable_version',pin={'version':card['version'],
             'digest':index.meta.get(('cable_version',card['id']),{}).get('digest')})
     for row in index.raw['document_proposals']:
+        if not index.relates(('proposal',row['id']),('cable_version',row['new_model'])):continue
         proposal=index.get('proposal',row['id']);document=index.get('document',row['document'])
         index.link(proposal,document,'source_document')
         if row['new_model']:index.link(index.get('cable_version',row['new_model']),proposal,'source_proposal',pin={'digest':row['digest']})
     for row in index.raw['tasks']:
+        if not index.relates(('agent_task',row['id'])):continue
         card=index.get('agent_task',row['id'])
         index.link(card,index.workspace(row['workspace_id']),'workspace',pin={'revision':row['workspace_revision']})
         index.link(card,index.get('study',row['study_id']),'study')
     for row in index.raw['agent_proposals']:
+        if not index.relates(('proposal',row['id'])):continue
         card=index.get('proposal',row['id']);task=index.get('agent_task',row['task_id'])
         index.link(card,task,'agent_task')
         if task:
@@ -184,5 +197,7 @@ def build(index):
         index.link(card,index.get('study',row['study_id']),'study')
         if row['type_id']:index.link(card,index.get('type',row['type_id']),'type',pin={'revision':row['revision']})
     for row in index.raw['convergence']:
+        if not index.relates(('job','convergence:'+row['id'])):continue
         index.link(index.get('job','convergence:'+row['id']),index.get('study',row['study']),'study')
-    for row in index.raw['datasets']:index.link(index.get('run',row['id']),index.get('study',row['study']),'study')
+    for row in index.raw['datasets']:
+        if index.relates(('run',row['id'])):index.link(index.get('run',row['id']),index.get('study',row['study']),'study')

@@ -228,9 +228,9 @@ class Requirements:
         identity = {'rule': rule, 'target': row['target'], 'standard': row['standard'], 'clause': row['clause']}
         definition = {key: row.get(key) for key in (
             'title', 'target', 'standard', 'clause', 'source_digest', 'source_status',
-            'printed_page', 'pdf_page', 'comparison', 'limit', 'unit', 'formula', 'formula_inputs', 'basis_reference', 'citation', 'criterion')}
+            'printed_page', 'pdf_page', 'comparison', 'limit', 'unit', 'formula', 'formula_inputs', 'basis_reference', 'citation', 'criterion', 'engineering_inputs', 'rule_requirement')}
         definition.update(rule=rule, method=method)
-        bindable = (row.get('source_status') == 'original-verified' and row.get('limit') is not None and row.get('verdict') != 'uncovered'
+        bindable = (row.get('source_status') == 'original-verified' and (row.get('limit') is not None or row.get('criterion') == 'rule') and row.get('verdict') != 'uncovered'
                     and bool(re.fullmatch(r'[0-9a-f]{64}', row.get('source_digest') or ''))
                     and bool(row['standard'].strip()) and bool(row['clause'].strip()) and bool(row['target'].get('role')))
         return {'id': 'requirement/' + fingerprint(identity), 'row_id': row['id'],

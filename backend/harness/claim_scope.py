@@ -50,7 +50,9 @@ class ClaimScope:
             for key, identity in identities:
                 by_kind.setdefault(key, set()).add(identity)
             # Duplicate names do not choose an object by accident; exact IDs can.
-            unique = {key: ids for key, ids in by_kind.items() if len(ids) == 1}
+            # An ambiguous saved name identifies the observed set, not another
+            # earlier heading. Exact IDs can still narrow that set later.
+            unique = by_kind
             for match in re.finditer(re.escape(name), text):
                 self.mentions.append((match.start(), match.end(), unique))
         for name, identities in names.items():
@@ -63,8 +65,10 @@ class ClaimScope:
         mentions = [row for row in self.mentions if start <= row[0] and row[1] <= position]
         if not mentions:
             # A heading remains in force across its following paragraphs.
-            headings = [row for row in self.mentions if row[1] <= position and
-                        self.text[self.text.rfind('\n', 0, row[0]) + 1:row[0]].strip().startswith(('#', '**'))]
+            def heading(row):
+                prefix=self.text[self.text.rfind('\n',0,row[0])+1:row[0]].strip()
+                return prefix.startswith(('#','**','-','•')) or bool(re.match(r'^\d+[.)、]\s*',prefix))
+            headings = [row for row in self.mentions if row[1] <= position and heading(row)]
             if headings:
                 heading_start = self.text.rfind('\n', 0, max(headings, key=lambda row: row[0])[0]) + 1
                 mentions = [row for row in headings if self.text.rfind('\n', 0, row[0]) + 1 == heading_start]

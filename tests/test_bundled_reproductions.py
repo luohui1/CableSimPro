@@ -89,7 +89,7 @@ def test_saved_evidence_digest_schema_and_table_only_diagnostics(tmp_path):
     with pytest.raises(ValueError,match='Schema'):bundled_evidence(tmp_path)
 
 
-def test_release_seed_import_exposes_saved_evidence_without_development_paths(tmp_path,monkeypatch):
+def test_release_seed_import_exposes_saved_evidence_without_development_paths(tmp_path,monkeypatch,release_seed_copy):
     from backend.kernel.hpc_evidence import evidence_availability
     status=evidence_availability()
     if not status['available']: pytest.skip(status['message'])
@@ -98,7 +98,7 @@ def test_release_seed_import_exposes_saved_evidence_without_development_paths(tm
         monkeypatch.setenv(key,str(tmp_path/'must-not-be-read'))
     target=tmp_path/'release/library'
     database=target.parent/'engineering.sqlite'
-    seed.seed_release(database)
+    release_seed_copy(seed, database)
     receipt=json.loads(database.with_suffix('.seed.json').read_text('utf-8'))
     imported=receipt['reproduction_library']
     assert imported=={'snapshot_id':snapshot,'targets':63,'kind':'saved_evidence'}

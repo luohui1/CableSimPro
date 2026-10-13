@@ -49,15 +49,16 @@ class Tool:
 
     def disclosed_model(self):
         definition=self.model()
+        def compact(node):
+            if isinstance(node,dict):return {key:compact(value) for key,value in node.items()
+                if key not in ('title','default','examples') and (key!='description' or not isinstance(value,str))
+                and not (key=='required' and value==[])}
+            if isinstance(node,list):return [compact(value) for value in node]
+            return node
         if not self.plugin_id:
             # Repeated per-field prose (including recipe alternatives) must not
             # crowd out an inspected capability. Full schemas remain available
             # through platform_capabilities and are used by broker validation.
-            def compact(node):
-                if isinstance(node,dict):return {key:compact(value) for key,value in node.items()
-                    if key not in ('title','default','examples') and (key!='description' or not isinstance(value,str))}
-                if isinstance(node,list):return [compact(value) for value in node]
-                return node
             definition['function']['parameters']=compact(definition['function']['parameters'])
             if self.name=='recipe_execute':
                 # The recipe-specific alternatives are inspected on demand;
@@ -65,13 +66,17 @@ class Tool:
                 definition['function']['parameters'].pop('oneOf',None)
             # Keep a complete purpose clause. Repeated authority/usage prose is
             # in the system prompt; the full descriptions remain in /tools.
-            authority={'read':'只读','propose':'待人工批准的方案','run':'宿主许可执行'}[self.kind]
+            authority={'read':'只读','propose':'方案须人批准','run':'须宿主许可'}[self.kind]
             definition['function']['description']=self.title+'（'+authority+'）'
             if self.name=='recipe_execute':
-                definition['function']['description']+='；参数先按platform_capabilities(tool=recipe_execute)检查。'
+                definition['function']['description']+='；参数见platform_capabilities。'
         if self.plugin_id and len(json.dumps(definition,ensure_ascii=False).encode())>4096:
             definition['function']['parameters']=object_schema({**STUDY,'parameters':{
                 'type':'object','description':'按 plugin_inspect 读取的封签参数契约提供SI值；可用 schema_path 分字段读取。'},'title':TEXT})
+        if self.plugin_id:
+            # Full field prose was already disclosed by plugin_inspect. Keep
+            # admission constraints, avoiding repeated descriptions per call.
+            definition['function']['parameters']=compact(definition['function']['parameters'])
         return definition
 
 
@@ -151,8 +156,13 @@ def host_tools():
             'limit':{'type':'integer','minimum':1,'maximum':20}})),
         ('platform_read','调用平台只读接口','read','先检查operation；按平台参数契约读取JSON，保持会话修订；view是返回对象内路径，offset/limit按整项分页。禁止写接口、任意URL、请求头和大工件。',object_schema({
             'operation':TEXT,'path_parameters':{'type':'object'},'query':{'type':'object'},
+            'body':{'type':'object','description':'仅声明只读的插件查询接口使用；正式运行、保存、批准接口不能调用。'},
             'view':{'type':'string','maxLength':500},'offset':{'type':'integer','minimum':0},
             'limit':{'type':'integer','minimum':1,'maximum':20}},['operation'])),
+        ('plugin_query','读取插件依据库','read','只调用已安装清单声明read_only的本机查询能力。省略input读取封签查询契约；随后带input查询实际依据，按view/offset分页。不能求解、批准、写入或提交超算。',object_schema({
+            'plugin_id':TEXT,'capability':TEXT,'input':{'type':'object'},
+            'view':{'type':'string','maxLength':500},'offset':{'type':'integer','minimum':0},
+            'limit':{'type':'integer','minimum':1,'maximum':20}},['plugin_id','capability'])),
         ('platform_prepare','准备平台人工执行请求','propose','先检查operation；只准备结构合规的参数和人工交接，不执行接口，不生成工程批准。文件上传、凭据、系统管理仍由人操作。',object_schema({
             'operation':TEXT,'path_parameters':{'type':'object'},'query':{'type':'object'},'body':{},
             },['operation'])),
@@ -328,5 +338,7 @@ class ToolRegistry:
         return {name:tool for name,tool in self.tools().items() if not tool.plugin_id or name in enabled}
 
     def directory(self,record=None):
-        if record and is_type(record):return []
-        return [[tool.name,tool.title] for tool in self.tools().values() if tool.plugin_id]
+        queries=[['plugin_query',plugin.manifest.id,cap.id,cap.title]
+            for plugin in self.research.registry().plugins.values() for cap in plugin.manifest.capabilities if cap.read_only]
+        if record and is_type(record):return queries
+        return [[tool.name,tool.title] for tool in self.tools().values() if tool.plugin_id]+queries

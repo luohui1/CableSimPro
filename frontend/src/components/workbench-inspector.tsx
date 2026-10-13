@@ -1,7 +1,7 @@
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 import { useLocation, useSearch } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { methodCatalog } from '@/api/research';
+import { methodCardsQuery } from '@/lib/study-queries';
 import { optionalRecord, text } from '@/api/client';
 import { moduleConfiguration, rootModule } from '@/lib/study-config';
 import type { SolverCapability } from '@/lib/solver-location';
@@ -28,7 +28,7 @@ function StudySolverLocation() {
   const module = useLocation({ select: location => location.pathname.split('/')[3] });
   const search = useSearch({ strict: false }) as { run?: string };
   const saved = search.run ? runs.find(run => run.id === search.run) : runs[runs.length - 1];
-  const catalog = useQuery({ queryKey: ['method-catalog'], queryFn: ({ signal }) => methodCatalog(signal) });
+  const catalog = useQuery({ ...methodCardsQuery(), enabled: !saved && !loadingRuns });
   if (loadingRuns) return <span className="muted">读取执行来源中</span>;
   if (runError) return <span className="field-error">执行来源读取失败</span>;
   if (search.run && !saved) return <span className="muted">{runError ? '执行来源读取失败' : loadingRuns ? '读取执行来源中' : '执行来源未记录'}</span>;

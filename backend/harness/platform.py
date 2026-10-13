@@ -5,6 +5,7 @@ credential or endpoint can enter the transport. Mutations never enter it.
 """
 import asyncio
 from copy import deepcopy
+from hashlib import sha256
 import json
 import re
 from threading import RLock
@@ -123,7 +124,12 @@ class Platform:
                         binary = binary or any(route.path.endswith(suffix) for suffix in ('/file', '/image', '.png', '/full'))
                         binary = binary or '/fields/' in route.path  # Display meshes also contain large arrays.
                         executes = route.path.endswith('/preflight') and '/studies/' in route.path
-                        mode = 'human' if sensitive or method != 'GET' or executes else 'reference' if binary else 'read'
+                        # This existing host router admits only manifest-declared
+                        # read_only capabilities and authenticates the exact seal.
+                        # A tag, arbitrary POST, or model instruction grants no access.
+                        query_read=(method=='POST' and route.path=='/api/plugin-queries/{plugin_id}/{capability_id}'
+                            and route.endpoint.__module__=='backend.plugin_host.query_router')
+                        mode = 'human' if sensitive or (method != 'GET' and not query_read) or executes else 'reference' if binary else 'read'
                         if mode != 'human' and (route.openapi_extra or {}).get('x-agent-access') in ('human','reference'):
                             mode=route.openapi_extra['x-agent-access']
                         reason = ('系统管理与Agent控制由人操作，不能经通用入口取得凭据或审批权。' if sensitive else
@@ -257,15 +263,18 @@ class Platform:
         query = supplied.get('query', {})
         pairs = [(key, 'true' if value is True else 'false' if value is False else value)
                  for key, values in query.items() for value in (values if isinstance(values, list) else [values]) if value is not None]
-        scope = {'type': 'http', 'asgi': {'version': '3.0'}, 'http_version': '1.1', 'method': 'GET',
+        body=encoded(supplied['body']) if 'body' in supplied else b''
+        headers=[(b'host',b'127.0.0.1')]
+        if body:headers.extend([(b'content-type',b'application/json'),(b'content-length',str(len(body)).encode())])
+        scope = {'type': 'http', 'asgi': {'version': '3.0'}, 'http_version': '1.1', 'method': card['method'],
                  'scheme': 'http', 'path': path, 'raw_path': quote(path, safe='/').encode(),
-                 'query_string': urlencode(pairs).encode(), 'headers': [(b'host', b'127.0.0.1')],
+                 'query_string': urlencode(pairs).encode(), 'headers': headers,
                  'client': ('127.0.0.1', 0), 'server': ('127.0.0.1', 80), 'app': self.app}
         actual = next((r for r in self.app.routes if r.matches(scope)[0] == Match.FULL), None)
         if actual is not route: fail('PLATFORM_PATH_INVALID', '参数没有定位到所选能力，未调用其他接口。', '/path_parameters')
         timeout=min(task['limits'].get('platform_read_timeout_s',8),
                     (task['limits']['max_active_ms']-task['elapsed_ms'])/1000,task['deadline']-time())
-        status, payload = asyncio.run(self.fetch(scope, timeout))
+        status, payload = asyncio.run(self.fetch(scope, timeout,body))
         if status >= 400:
             detail = payload.get('detail', payload) if isinstance(payload, dict) else payload
             code = detail.get('code', 'PLATFORM_READ_FAILED') if isinstance(detail, dict) else 'PLATFORM_READ_FAILED'
@@ -282,7 +291,50 @@ class Platform:
                                 'evidence': evidence_view(self.research, payload), 'agent_projection': model_view},
                           next_actions=['page未完整时，保持operation与请求参数，用view/offset继续读取。'])
 
-    async def fetch(self, scope, timeout):
+    def query(self,task,arguments):
+        plugin=self.research.registry(arguments['plugin_id']).get(arguments['plugin_id'])
+        plugin.verify()
+        try:capability=plugin.manifest.capability(arguments['capability'])
+        except KeyError:fail('CAPABILITY_UNKNOWN','没有此安装能力。','/capability')
+        if not capability.read_only or (hasattr(self.research.executor,'required') and
+                self.research.executor.required(plugin.manifest.id,capability.id)):
+            fail('QUERY_NOT_READ_ONLY','此能力不是本机只读依据查询，请使用正式运行及人工确认流程。','/capability')
+        method={**self.research.pin(plugin),'capability':capability.id}
+        if 'input' not in arguments:
+            contract=capability.input_contract
+            input_schema=(contract.standalone_schema.model_dump(mode='json',by_alias=True,exclude_none=True)
+                if contract and contract.standalone_schema else None)
+            if input_schema is None:
+                candidates=[]
+                for sealed in plugin.manifest.files:
+                    if not sealed.path.endswith('.json') or sealed.size_bytes>READ_BYTES:continue
+                    raw=(plugin.directory/sealed.path).read_bytes()
+                    if len(raw)!=sealed.size_bytes or sha256(raw).hexdigest()!=sealed.sha256:
+                        fail('QUERY_CONTRACT_CHANGED','查询契约文件已变化，请重新核对插件发行。','/capability')
+                    try:value=json.loads(raw)
+                    except (ValueError,UnicodeDecodeError):continue
+                    if isinstance(value,dict) and value.get('$id')==capability.input_schema:
+                        candidates.append(value)
+                if len(candidates)!=1:
+                    fail('QUERY_CONTRACT_UNAVAILABLE','安装插件未提供唯一的封签查询契约，请在依据页查看；不能把schema标识当作参数定义。','/capability')
+                input_schema=candidates[0]
+            return ToolResult(status='ok',summary='已核对只读依据查询契约；尚未查询，不把默认值当作证据。',data={
+                'projection':'capability_contract','method':method,'read_only':True,
+                'schema':page(input_schema,arguments.get('view',''),
+                    arguments.get('offset',0),arguments.get('limit',10)),
+                'next_action':'按完整查询契约带input再次调用plugin_query；长结果按view/offset续读。'})
+        identifier=next((identifier for identifier,(route,card,_) in self.catalog().items()
+            if card['mode']=='read' and route.path=='/api/plugin-queries/{plugin_id}/{capability_id}'),None)
+        if identifier is None:fail('PLATFORM_UNAVAILABLE','宿主只读查询入口尚未注册。','/capability')
+        schema=self.schema(identifier)
+        self.tasks.emit(task['id'],'platform.inspected',{'operation':identifier,
+            'contract_digest':schema['contract_digest'],'turn_id':task['active_turn']})
+        return self.read(task,{'operation':identifier,'path_parameters':{
+            'plugin_id':plugin.manifest.id,'capability_id':capability.id},
+            'body':{'release_digest':method['release_digest'],'input':arguments['input']},
+            **{key:arguments[key] for key in ('view','offset','limit') if key in arguments}})
+
+    async def fetch(self, scope, timeout,body=b''):
         chunks, size, status, content_type = [], 0, 0, ''
         done = asyncio.Event()
         received = False
@@ -291,7 +343,7 @@ class Platform:
             nonlocal received
             if not received:
                 received = True
-                return {'type': 'http.request', 'body': b'', 'more_body': False}
+                return {'type': 'http.request', 'body': body, 'more_body': False}
             await done.wait()
             return {'type': 'http.disconnect'}
 

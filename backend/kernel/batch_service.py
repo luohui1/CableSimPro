@@ -97,7 +97,14 @@ class Batches:
             db.execute("UPDATE dataset_runs SET status='interrupted',updated=?,error=? WHERE owner<>? AND status IN ('preparing','running','queued')",
                 (utc_now(),json.dumps({'code':'HOST_RESTART','message':'执行所有者已变化；保存的样本不重算，请恢复执行或查询远端作业。'},ensure_ascii=False),self.owner))
 
-    def close(self):self.shutdown_event.set()
+    def close(self):
+        with self.guard:
+            self.shutdown_event.set()
+            workers=list(self.threads.values())
+        # A worker may still be saving its last state; do not hold its guard.
+        # SSH and subprocess calls enforce their own bounded timeouts.
+        for worker in workers:
+            if worker is not threading.current_thread():worker.join()
 
     def _configuration(self,db,wid,sid,revision=None):
         self.research.definition(db,wid,sid)
@@ -243,6 +250,7 @@ class Batches:
 
     def start(self,batch_id,retry=False,retry_id=None):
         with self.guard:
+            if self.shutdown_event.is_set():raise HTTPException(503,'宿主正在关闭，保存任务保留；重启后恢复执行。')
             if self.threads.get(batch_id) and self.threads[batch_id].is_alive():return
             thread=threading.Thread(target=self._execute,args=(batch_id,retry,retry_id),daemon=True)
             self.threads[batch_id]=thread;thread.start()

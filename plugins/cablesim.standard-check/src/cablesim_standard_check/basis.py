@@ -10,6 +10,7 @@ def digest(value):
     return sha256(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
 
 def queries(checker):
+    from .manufacturing import plan as manufacturing_plan
     cable, family = checker.cable, checker.family
     hv = family == 'hv'
     standard, edition = ('GB/T 11017.2', '2024') if hv else ('GB/T 12706.'+{'mv1':'1','mv2':'2','mv3':'3'}.get(family,'2'), '2020')
@@ -24,7 +25,10 @@ def queries(checker):
             row['basis_missing_fields'].append({'field':field,'label':label})
         conditions = {'area_m2':core['conductor']['nominal_area'], 'u0_v':cable['rating']['u0'], 'u_v':cable['rating']['u']}
         query = {'schema_version':'cablesim.standards-query/1', 'standard':standard, 'edition':edition, 'conditions':{}}
-        if key == 'insulation-nominal':
+        manufacturing_query = manufacturing_plan(checker,row)
+        if manufacturing_query:
+            query = manufacturing_query
+        elif key == 'insulation-nominal':
             layer = next((l for l in core['layers']+cable['common_layers'] if l['role']=='insulation'), {})
             kind = checker.materials.get(layer.get('material'), {}).get('standard_kind')
             if kind is None:
@@ -62,7 +66,7 @@ def queries(checker):
                 missing('/materials/'+escape(layer.get('material',''))+'/standard_kind','屏蔽材料标准类别')
             elif metal not in ('copper_bare','copper_coated'):
                 continue
-            query.update(locator='10.2.3',quantity={'screen-tape-nominal':'screen_tape_nominal_min',
+            query.update(locator='10.2.2' if family=='mv3' else '10.2.3',quantity={'screen-tape-nominal':'screen_tape_nominal_min',
                 'screen-tape-minimum':'screen_tape_measured_min','screen-overlap':'screen_tape_overlap_nominal',
                 'screen-overlap-minimum':'screen_tape_overlap_min'}[key],conditions={'core_count':len(cable['cores'])} if key=='screen-tape-nominal' else {})
         else: continue
@@ -78,7 +82,7 @@ def criterion(reference, unit, inputs):
             value=value.get('maximum')
         else:
             if value.get('rounding'): return None,comparison,'依据已核验；此公式尚未绑定完整附录 A/B 计算链，本项保留未覆盖。'
-            x=inputs.get('t_n_mm') if value.get('x') in ('nominal_thickness','t_n') else inputs.get('d_mm') if value.get('x')=='diameter' else None
+            x=inputs.get('t_n_mm') if value.get('x') in ('nominal_thickness','t_n','nominal_lining_thickness') else inputs.get('d_mm') if value.get('x')=='diameter' else None
             if value.get('kind')=='affine' and x is not None and {'a','b'}<=value.keys(): value=max(value.get('floor',-math.inf),value['a']*x+value['b'])
             else: return None,comparison,'依据已核验；此公式的参数或计算分支本轮未覆盖。'
     scale={('mm','mm'):1,('m','mm'):1000,('ohm/km','Ω/km'):1,('ohm/m','Ω/km'):1000,('1','1'):1}.get((record['quantity']['unit'],unit))
@@ -113,6 +117,7 @@ def validate(ref,query):
     return record
 
 def apply(checker,parameters):
+    from .manufacturing import execute
     plan=queries(checker)
     for row in checker.rows:
         row['basis_query']=plan.get(row['id'])
@@ -128,6 +133,8 @@ def apply(checker,parameters):
         if not ref or row['id'] not in plan:
             row.update(limit=None,margin=None,verdict='uncovered',source_status='not-collected',reason='本库暂未收录 · 下一轮；保留此标准版本与要求。');continue
         record=validate(ref,plan[row['id']])
+        row.update(basis_reference=ref,citation=record['citation'],source_status='original-verified',source_digest=record['source_sha256'],printed_page=record['printed_page'],pdf_page=record['pdf_page'],standard=record['standard']+'—'+record['edition'],clause=record['table'] or record['clause'],criterion=record['criterion'])
+        if execute(checker,row,record): continue
         if row['id'].endswith(':screen-tape-minimum'):
             nominal=next((r for r in checker.rows if r['id'].endswith(':screen-tape-nominal')
                 and r['path'].rsplit('.',1)[0]==row['path'].rsplit('.',1)[0]),{})

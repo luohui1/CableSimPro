@@ -3,7 +3,8 @@ import { createRoute, Outlet, useNavigate, useParams, useSearch, lazyRouteCompon
 import { TypeNavigationContext, type TypeLocation } from './navigation';
 import { typeModules } from './module-definitions';
 import { queryClient } from '@/lib/query-client';
-import { loadWorkspace } from './api';
+import { loadWorkspace, typeEvidence, moduleMethods } from './api';
+import { typeSpecification } from './version-api';
 const TypeListPage = lazyRouteComponent(() => import('./list-page'), 'TypeListPage');
 const TypeProvider = lazyRouteComponent(() => import('./provider'), 'TypeProvider');
 const TypeWorkspace = lazyRouteComponent(() => import('./workspace'), 'TypeWorkspace');
@@ -28,13 +29,25 @@ export function createTypeRoutes(root: AnyRootRoute) {
     const location = { module: 'list', tab: '', ...typeSearch(search as Record<string, unknown>) };
     return <Navigation location={location}><TypeListPage /></Navigation>;
   } });
-  const parent = createRoute({ getParentRoute: () => root, path: '/types/$wid', validateSearch: typeSearch, beforeLoad: ({ params, search }) => {
+  const parent = createRoute({ getParentRoute: () => root, path: '/types/$wid', validateSearch: typeSearch, beforeLoad: ({ params, search, location }) => {
     // Start the selected saved input together with both route bundles, rather
     // than waiting for the provider bundle before issuing the first read.
     void queryClient.prefetchQuery({ queryKey: ['type-workspace', params.wid, search.revision, search.run],
       queryFn: ({ signal }) => loadWorkspace(params.wid, signal, search.revision, search.run), staleTime: 0 });
     void TypeProvider.preload?.();
     void TypeWorkspace.preload?.();
+    const module=location.pathname.split('/')[3]||'structure';
+    if(module!=='structure') {
+      // Start the actual module and its saved evidence alongside the workspace,
+      // instead of downloading them only after the shell has mounted.
+      void import('./module-page');
+      const history=!!search.run||search.revision!==undefined||queryClient.getQueryData(['type-evidence-history',params.wid])===true;
+      void queryClient.prefetchQuery({queryKey:['type-evidence',params.wid,history?'history':'recent'],
+        queryFn:({signal})=>typeEvidence(params.wid,AbortSignal.any([signal,AbortSignal.timeout(20000)]),!history),retry:false,staleTime:30000});
+      void queryClient.prefetchQuery({queryKey:['type-method-catalog'],queryFn:({signal})=>moduleMethods(signal)});
+      if(module==='specification')void queryClient.prefetchQuery({queryKey:['type-specification',params.wid,'customer'],
+        queryFn:({signal})=>typeSpecification(params.wid,signal,'customer'),staleTime:30000});
+    }
   }, component: function TypeWorkspaceRoute() {
     const params = useParams({ strict: false }) as Record<string, string | undefined>;
     const search = typeSearch(useSearch({ strict: false }) as Record<string, unknown>);

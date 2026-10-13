@@ -220,7 +220,9 @@ class Refinements:
             parameters.setdefault('iec',{})['operation']=previous['definition']['parameters'].get('iec',{}).get('operation','both')
         if not rows:rows=[base]
         definition=deepcopy(run['snapshot']['definition'])
-        definition.update(title=(definition['title'].removesuffix(' · 自动收敛')[:90]+' · 自动收敛'),method=method,task=None,input_source='study',method_input=original['input'],
+        title=definition['title']
+        while title.endswith(' · 自动收敛'):title=title.removesuffix(' · 自动收敛')
+        definition.update(title=(title[:90]+' · 自动收敛'),method=method,task=None,input_source='study',method_input=original['input'],
                           parameters=parameters,driver={'kind':'single'},verification=None,crosschecks=[],modules={})
         with self.store.db() as db:revision=db.execute('SELECT revision FROM workspaces WHERE id=?',(wid,)).fetchone()['revision']
         identifier=str(uuid4());stamp=utc_now()

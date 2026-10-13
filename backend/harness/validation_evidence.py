@@ -33,6 +33,8 @@ def facts(card,path):
 def issues(text,observations):
     evidence={card['id']:card for card in cards(observations)}
     if not evidence:return []
+    from .claim_scope import ClaimScope
+    scope=ClaimScope(text,observations)
     errors=[]
     pattern=r'(?:已(?:经)?(?:全部|完全|充分|全面)?(?:通过(?:验证|复现)|(?:验证|复现)(?:通过|成功)?)|(?:全部|完全|充分|全面)?(?:验证(?:已)?通过|复现成功)|(?:均|都)通过(?:验证|复现)|(?:符合|满足|处于|在)[^，。；\n]{0,14}(?:CIGRE|报告|标准)[^，。；\n]{0,6}(?:容差|精度要求)|(?:偏差|误差)[^，。；\n]{0,12}(?:在|处于)[^，。；\n]{0,12}(?:门槛|容差)(?:之)?内|(?:收敛(?:检查|测试)?|网格收敛|扩域收敛)(?:已经|已)?(?:通过|达标))'
     for match in re.finditer(pattern,text):
@@ -42,7 +44,8 @@ def issues(text,observations):
         local=re.split(r'[，,:：]',prefix)[-1]
         if re.search(r'未|不能|不代表|不等于|不得|不是|并非|尚无|没有|不应|不算|不能称为',local[-32:]):continue
         named=[card for card in evidence.values() if card['name'] in sentence or card['id'] in sentence]
-        targets=named or [card for card in evidence.values() if card.get('validation')] or list(evidence.values())
+        referenced=scope.at(match.start()).get('validation_id',set())
+        targets=named or [card for id,card in evidence.items() if id in referenced] or [card for card in evidence.values() if card.get('validation')] or list(evidence.values())
         # Convergence remains independent of overall reproduction success.
         tolerance_claim=bool(re.search(r'(?:CIGRE|报告|标准)[^，。；\n]{0,6}(?:容差|精度要求)',match[0]))
         convergence_claim=not tolerance_claim and ('收敛' in match[0] or bool(re.search(r'收敛(?:检查|测试|性)?[^，。；\n]{0,6}$',prefix)))

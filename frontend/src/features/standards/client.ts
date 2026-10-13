@@ -34,7 +34,7 @@ async function json(url: string, signal?: AbortSignal, body?: unknown) {
 }
 
 export async function basisPin(signal?: AbortSignal): Promise<Pin> {
-  const plugin = array(await json('/api/methods', signal)).map(optionalRecord)
+  const plugin = array(await json('/api/methods?view=summary', signal)).map(optionalRecord)
     .find(p => optionalRecord(p.method).plugin_id === 'cablesim.standards-basis');
   if (!plugin) throw new ApiError(404, '未安装标准依据库，请安装经过封签的发行。');
   const pin = record(plugin.method);

@@ -8,6 +8,7 @@
     "test:forms-real-use": "node scripts/isolated-e2e.mjs verify-form-real-use.mjs",
     "test:client-real-use": "node scripts/isolated-e2e.mjs verify-client-real-use.mjs",
     "test:public-read-use": "node scripts/isolated-e2e.mjs verify-public-read-use.mjs",
+    "test:read-path": "node scripts/isolated-e2e.mjs verify-read-path.mjs",
     "test:visible-text": "node scripts/isolated-e2e.mjs verify-visible-text.mjs",
     "test:regularity": "node scripts/isolated-e2e.mjs verify-regularity.mjs",
     "test:performance": "node scripts/isolated-e2e.mjs verify-performance.mjs",

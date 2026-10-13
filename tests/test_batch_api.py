@@ -27,3 +27,38 @@ def test_invalid_axis_and_configuration_conflict_preserve_saved_data(tmp_path):
         assert current['configuration']['revision']==1
         assert current['configuration']['definition']['parameter_space']['sample_count']==3
         assert client.get(root+'/datasets').json()==[]
+
+
+def test_shutdown_waits_for_worker_to_finish_saved_state(tmp_path):
+    """A real SQLite writer must finish before the host deletes its private DB."""
+    import sqlite3
+    import threading
+    from contextlib import closing
+    from types import SimpleNamespace
+    from backend.kernel.batch_service import Batches
+    from fastapi import HTTPException
+    import pytest
+    database=tmp_path/'closing.sqlite'
+    service=Batches(SimpleNamespace(store=SimpleNamespace(path=database),owner_epoch='closing'))
+    opened=threading.Event();finished=threading.Event();failures=[]
+    def save_last_state():
+        try:
+            with closing(sqlite3.connect(database)) as db, db:
+                db.execute('CREATE TABLE saved_status(status TEXT)')
+                opened.set()
+                assert service.shutdown_event.wait(5)
+                db.execute("INSERT INTO saved_status VALUES ('interrupted')")
+            finished.set()
+        except BaseException as exc:failures.append(exc)
+    worker=threading.Thread(target=save_last_state)
+    service.threads['closing']=worker;worker.start()
+    try:
+        assert opened.wait(5)
+        service.close()
+        assert finished.is_set() and not worker.is_alive() and not failures
+        with closing(sqlite3.connect(database)) as db:assert db.execute('SELECT status FROM saved_status').fetchone()[0]=='interrupted'
+        with pytest.raises(HTTPException) as error:service.start('late')
+        assert error.value.status_code==503
+        database.unlink();assert not database.exists()
+    finally:
+        service.shutdown_event.set();worker.join(5)

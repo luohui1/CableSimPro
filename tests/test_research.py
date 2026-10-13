@@ -12,9 +12,13 @@ from test_plugin_host import SYNTHETIC_IEC
 
 @pytest.fixture
 def client(tmp_path):
-    with TestClient(create_app(tmp_path / 'workspace.sqlite')) as c:
-        from backend.plugin_host import Executor
-        c.app.state.research.executor=Executor()
+    app = create_app(tmp_path / 'workspace.sqlite')
+    from backend.plugin_host import Executor
+    # Preserve the uncached Executor used by seal-count/failure tests, but run
+    # opt-in real plugins through the host's normal isolated resident worker.
+    # Each test owns its worker; every execution still verifies its seal/input.
+    app.state.research.executor=Executor(process_runner=app.state.research.resident_runner)
+    with TestClient(app) as c:
         yield c
 
 
@@ -105,7 +109,9 @@ def test_saved_execution_replay_and_report(client, plugin, monkeypatch):
     saved = client.get(f'/api/workspaces/{w["id"]}/deliveries/{report.json()["id"]}')
     assert saved.status_code == 200 and saved.json()['digest'] == report.json()['digest']
     research = client.app.state.research
-    delivery_id = uuid4()
+    # Replay the existing delivery, rather than render a second identical PDF
+    # solely to test idempotency. The same saved bytes must be returned twice.
+    delivery_id = report.json()['id']
     assert research.deliver(w['id'], [run['id']], delivery_id) == research.deliver(w['id'], [run['id']], delivery_id)
     assert client.post(root + '/runs', json={**body, 'expected_revision': 2}).status_code == 409
 
@@ -456,6 +462,7 @@ def test_restart_marks_incomplete_run_interrupted_without_reexecution(client, mo
     monkeypatch.setattr(previous.executor, 'run', lambda *a, **kw: pytest.fail('restart must not recompute'))
     replay = client.post(root + '/runs', json=body).json()
     assert replay['id'] == run['id'] and replay['status'] == 'interrupted'
+    restarted.close()
 
 
 def test_reinitialization_does_not_interrupt_the_current_owner(client):

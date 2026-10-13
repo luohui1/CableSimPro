@@ -1,10 +1,10 @@
 import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { methodCatalog, type StudyRow } from "@/api/research";
+import type { StudyRow } from "@/api/research";
 import { deliveries } from "@/api/delivery";
 import { optionalRecord, text } from "@/api/client";
-import { projectStudiesQuery } from '@/lib/study-queries';
+import { projectStudiesQuery, methodCardsQuery } from '@/lib/study-queries';
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
 import { significantNumber, formatDateTime } from "@/lib/format";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
@@ -66,7 +66,7 @@ export function ProjectExplorer({ workspaceId, projectName, document, modelLabel
   const [studiesExpanded,setStudiesExpanded] = useState(!activeRow);
   const [booksExpanded,setBooksExpanded] = useState(false);
   const studies = useQuery({...projectStudiesQuery(workspaceId),enabled:studiesExpanded || !activeRow});
-  const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
+  const catalog = useQuery(methodCardsQuery());
   const books = useQuery({ queryKey: ["deliveries", workspaceId], queryFn: ({ signal }) => deliveries(workspaceId, signal),enabled:booksExpanded });
   const rows = (studiesExpanded ? studies.data || (activeRow ? [activeRow] : []) : activeRow ? [activeRow] : studies.data || []).filter((row) => row.workspace === workspaceId);
   const current = activeRow || rows.find((row) => row.id === activeStudy) || rows[0];

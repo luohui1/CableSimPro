@@ -15,7 +15,7 @@ if (!script || path.dirname(script) !== ".")
   throw Error("只能执行 frontend/scripts 中的验收脚本");
 const visibleTextScript = ['verify-visible-text.mjs', 'verify-visible-text-states.mjs', 'verify-regularity.mjs', 'verify-performance.mjs'].includes(script);
 const realUseScript = script === 'verify-real-use.mjs';
-const formsUseScript = ['verify-form-real-use.mjs', 'verify-client-real-use.mjs', 'verify-public-read-use.mjs'].includes(script);
+const formsUseScript = ['verify-form-real-use.mjs', 'verify-client-real-use.mjs', 'verify-public-read-use.mjs', 'verify-read-path.mjs'].includes(script);
 const apiGenerationScript = script === 'generate-api.mjs';
 const source = path.resolve(
   process.env.E2E_DATABASE_SOURCE ||

@@ -113,6 +113,11 @@ class StepResponses:
         elif status=='unsupported' and any(section.get('enclosures') for case in run['snapshot']['cases'] for section in case['input'].get('sections',[])):
             grouped=any(len(case['input'].get('circuits',[]))>1 and any(cable.get('construction')=='three_core' for cable in case['input'].get('cable_types',[])) for case in run['snapshot']['cases'])
             next_step=('需扩展三芯排管与多回路暂态热模型' if grouped else '需补齐本排管构型的阶跃响应适配与空气暂态模型')+'，并补齐管内空气和各材料热容来源；当前不能生成该工况的 IEC 应急响应。'
+        elif status=='unsupported' and method.get('capability')=='iec-thermal-field' and any(
+            cable.get('construction')=='single_core' for case in run['snapshot']['cases'] for cable in case['input'].get('cable_types',[])) and any(
+            len(case.get('artifacts',{}).get('x-cablesim.simulation-bundle',{}).get('result',{}).get('cables',[]))>1 for case in run['output']['cases']):
+            reason='保存稳态包含多根单芯电缆的互热；当前阶跃响应仅覆盖从环境温度起算的单个电缆包络，尚不能从此保存预载场起算。'
+            next_step='需接入已验证的分回路预载暂态方法，并补齐半导电层、缓冲层、沥青层及波纹气隙的热容依据；保留本次稳态场，不采用其他构型或零预载曲线代替。'
         elif status=='unsupported':
             next_step='请按上述保存来源或适用范围问题补齐有限元稳态参考；保留原结果，不用其他构型的曲线代替。'
         else:
