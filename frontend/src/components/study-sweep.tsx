@@ -196,7 +196,7 @@ export function StudySweep({
   if (tab === "settings")
     return (
       <div
-        className="input-module"
+        className="input-module study-sweep-settings"
         data-module-state={
           error
             ? "error"
@@ -285,9 +285,10 @@ export function StudySweep({
                   <ErrorState title="扫描设置未保存" description={error} />
                 )}
                 <div className="demo-row">
-                  <Button onClick={apply}>应用扫描设置</Button>
+                  <Button size="compact" onClick={apply}>应用扫描设置</Button>
                   {context.moduleInputs.sweep && (
                     <Button
+                      size="compact"
                       variant="ghost"
                       onClick={() =>
                         context.editModuleInput("sweep", undefined)
@@ -502,6 +503,7 @@ export function StudySweep({
           {
             id: "sample",
             label: "采样",
+            numeric: true,
             render: (row) => displayUnit(row.label),
           },
           {

@@ -70,7 +70,9 @@ function CurrentReport({
   const related = useQuery({
     queryKey: ['report-source-runs', wid], enabled: !did && !!run && !autoGenerate && !generating.current,
     queryFn: async ({signal}) => {
-      const studies = await responseData(api.GET('/api/workspaces/{wid}/studies', {params:{path:{wid}}, signal}));
+      const response = await fetch(`/api/workspaces/${encodeURIComponent(wid)}/studies?view=summary`,{signal});
+      if (!response.ok) throw new ApiError(response.status,'引用研究读取失败，请重试。');
+      const studies = await response.json();
       const found: Record<string, unknown>[] = [];
       for (const study of array(studies).map(value => record(value))) {
         const page = await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/runs', {params:{path:{wid,sid:text(study.id)}, query:{view:'summary',limit:100}}, signal}));
@@ -81,7 +83,10 @@ function CurrentReport({
   });
   const savedRuns = [...new Map([...runs, ...(related.data || [])].map(row => [text(row.id), row])).values()]
     .filter(row => row.integrity === 'verified' && row.freshness === 'current' && !isVersionStale(row) && ['succeeded','partial'].includes(text(row.status)));
-  const femEvidence=useFemEvidence(primaryFem ? run : savedRuns.find(row=>text(row.id)===femId),true);
+  // Share the already read conclusion. The delivery worker authenticates proof
+  // and formats the saved field once; a separate image-preparation request must
+  // not queue another rendering job ahead of the user's generation task.
+  const femEvidence=useFemEvidence(primaryFem ? run : savedRuns.find(row=>text(row.id)===femId));
   const defaultReference=optionalRecord(femEvidence.data?.reference);
   const selectedIec=iecId || text(defaultReference.iec_run_id);
   const chapterReference = primaryFem ? (selectedIec ? {fem_run_id:text(run?.id),iec_run_id:selectedIec,convergence_id:text(defaultReference.convergence_id) || undefined} : undefined)
@@ -99,7 +104,7 @@ function CurrentReport({
     !dirty;
   const document = useQuery({
     queryKey: ["delivery", wid, did],
-    queryFn: () => delivery(wid, did),
+    queryFn: () => jobRequest(`/api/workspaces/${encodeURIComponent(wid)}/deliveries/${encodeURIComponent(did)}?view=summary`),
     enabled: !!did && !!run,
     // Generation has already fetched and verified this immutable archive.
     // Reuse that response when opening preview; export rechecks source freshness.

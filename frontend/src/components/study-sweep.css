@@ -2,3 +2,5 @@
 .study-sweep-results .series-chart text { fill: var(--text); }
 .study-sweep-results .evidence-summary { flex-wrap: wrap; }
 .sweep-critical { flex-basis: 100%; margin: 0; font-size: var(--text-note); }
+.study-workbench .study-sweep-results .data-table .data-row { height: var(--table-compact); }
+.study-inspector .study-sweep-settings .text-field input { height: var(--control-compact); }

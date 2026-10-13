@@ -30,13 +30,14 @@ try{
   const environment={...process.env,CABLESIM_DB:database,CABLESIM_DATASETS_DIR:path.join(scratch,'datasets'),CABLESIM_AGENT_KEY_STORE:'memory',TEMP:scratch,TMP:scratch,PYTHONIOENCODING:'utf-8'};
   const backend=start(python,['-B','-c',"import os,uvicorn;from pathlib import Path;from backend.main import app;from backend.plugin_host.resident import ResidentRunner;p=Path(os.environ['TEMP']);app.state.previews.jobs=p/'previews';app.state.previews.jobs.mkdir();app.state.previews.runner=ResidentRunner(p/'preview-workers');uvicorn.run(app,host='127.0.0.1',port=int(os.environ['STANDARDS_PORT']))"],{env:{...environment,STANDARDS_PORT:String(apiPort)},stdio:['ignore','ignore','pipe']});
   await ready(`http://127.0.0.1:${apiPort}/api/health`,backend);
-  const preview=start(process.execPath,[path.join(root,'frontend/node_modules/vite/bin/vite.js'),'preview','--outDir',path.join(output,'frontend'),'--host','127.0.0.1','--port',String(uiPort),'--strictPort'],{cwd:path.join(root,'frontend'),env:{...process.env,BACKEND_URL:`http://127.0.0.1:${apiPort}`},stdio:['ignore','ignore','pipe']});
+  const preview=start(process.execPath,[path.join(root,'frontend/node_modules/vite/bin/vite.js'),'preview','--outDir',path.join(output,'frontend-acceptance'),'--host','127.0.0.1','--port',String(uiPort),'--strictPort'],{cwd:path.join(root,'frontend'),env:{...process.env,BACKEND_URL:`http://127.0.0.1:${apiPort}`},stdio:['ignore','ignore','pipe']});
   const url=`http://127.0.0.1:${uiPort}`;await ready(url,preview);
   browser=await openHeadlessBrowser({executable:process.env.BROWSER_EXECUTABLE||'C:/Program Files/Google/Chrome/Application/chrome.exe'});const {page,context}=browser;page.setDefaultTimeout(15000);await context.grantPermissions(['clipboard-read','clipboard-write'],{origin:url});
   await page.setViewportSize({width:1366,height:768});
-  const errors=[];page.on('pageerror',e=>errors.push(e.message));console.log('Own isolated services ready',apiPort,uiPort);
+  const errors=[],initialInputs=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(r.url().includes('/api/plugin-queries/'))initialInputs.push(r.postDataJSON()?.input);});console.log('Own isolated services ready',apiPort,uiPort);
   await page.goto(url+'/resources/standards');await page.locator('[data-page="standards-basis"][data-state="success"]').waitFor();
   await page.getByRole('table',{name:'标准完整表格'}).waitFor();await settle(page);
+  assert.equal(initialInputs.length,1,'首次浏览只执行一次目录与选表读取，不逐表预取整库');assert.equal(initialInputs[0].operation,'browse');assert.equal(initialInputs[0].locator,'表 7');
   // Admission and values come from the real host and saved release copy.
   const methods=await (await fetch(`http://127.0.0.1:${apiPort}/api/methods`)).json();
   const pin=methods.find(x=>x.method.plugin_id==='cablesim.standards-basis').method;
@@ -46,16 +47,26 @@ try{
     ['GB/T 3956','2008','表 1','resistance_20_max',{area_m2:.000185,conductor_class:1,conductor_material:'copper',coating:'plain',conductor_form:'circular'},.101,3,6],
     ['GB/T 12706.1','2020','表 18','insulation_mechanical_test_requirement',{test_item:'老化前抗张强度最小',insulation:'EPR',insulation_test_group:'other_cable'},4.2,29,35],
     ['GB/T 12706.4','2020','表14','test_voltage',{test_item:'冲击电压试验（峰值）',u0_v:3600,u_v:6000,um_v:7200},60,15,19],
+    ['GB/T 12706.2','2020','13.7','armour_tape_gap_ratio_max',{armour_kind:'tape'},.5,13,21],
+    ['GB/T 12706.3','2020','10.2.2','screen_tape_measured_min_ratio',{},.9,8,13],
   ];
   const receipts=[];
   for(const [standard,edition,locator,quantity,conditions,value,printed,pdf] of queries){
     const request={schema_version:'cablesim.standards-query/1',standard,edition,locator,quantity,conditions};
     const response=await fetch(`http://127.0.0.1:${apiPort}/api/plugin-queries/cablesim.standards-basis/lookup`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({release_digest:pin.release_digest,input:request})});
     const reply=await response.json();assert.equal(response.status,200,JSON.stringify(reply));
-    const answer=reply.artifacts['x-cablesim.standards-basis'];assert.equal(answer.status,'resolved');assert.equal(reply.plugin_version,'0.4.0');
+    const answer=reply.artifacts['x-cablesim.standards-basis'];assert.equal(answer.status,'resolved');assert.equal(reply.plugin_version,'0.5.0');
     const record=answer.records[0];assert.deepEqual([record.value,record.printed_page,record.pdf_page],[value,printed,pdf]);assert.equal(record.verification.status,'verified');assert.ok(record.verification.methods.length>=2);
     receipts.push({request,...reply});
   }
+  await fs.writeFile(path.join(output,'real-queries.json'),JSON.stringify({source:'.data/release/engineering.sqlite (只读backup到隔离副本)',receipts},null,2));
+  const soil={schema_version:'cablesim.standards-query/1',operation:'evaluate',standard:'Hopmans et al.',edition:'2002',locator:'§2.2 Eq. (1)/(2)',quantity:'soil_capacity_expression',
+    conditions:{material:'soil',material_role:'porous_soil',soil_capacity_method:'three_phase',parameter_origin:'project_measured'},
+    formula_inputs:{dry_bulk_density_kg_m3:1500,particle_density_kg_m3:2500,solid_specific_heat_capacity_j_kg_k:800,water_volumetric_heat_capacity_j_m3_k:4180000,air_volumetric_heat_capacity_j_m3_k:1200,water_volume_fraction:.2,phase_assumption:'single_temperature_no_phase_change'}};
+  const soilResponse=await fetch(`http://127.0.0.1:${apiPort}/api/plugin-queries/cablesim.standards-basis/lookup`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({release_digest:pin.release_digest,input:soil})});
+  const soilReply=await soilResponse.json();assert.equal(soilResponse.status,200,JSON.stringify(soilReply));
+  const soilAnswer=soilReply.artifacts['x-cablesim.standards-basis'];assert.equal(soilAnswer.calculation.output.value,2036240);assert.equal(soilAnswer.records[0].printed_page,'7-3');
+  assert.equal(soilAnswer.records[0].verification.status,'verified');receipts.push({request:soil,handCheck:'1500×800 + .2×4180000 + .2×1200；手算示例，非城南现场土壤',...soilReply});
   await fs.writeFile(path.join(output,'real-queries.json'),JSON.stringify({source:'.data/release/engineering.sqlite (只读backup到隔离副本)',receipts},null,2));
   if(process.argv.includes('--before')){
     for(const size of [{width:1366,height:768},{width:1920,height:1080}]){
@@ -177,9 +188,23 @@ try{
   assert.match(await page.getByLabel('选中格详情').innerText(),/公式仅作为依据，不执行/);
   await page.setViewportSize({width:1366,height:768});
   await page.goto(url+'/resources/standards?theme=light');await page.getByRole('table',{name:'标准完整表格'}).waitFor();
-  await choose(page,'标准版本','Nielsen et al.—2019');
-  const thermal=page.getByRole('table',{name:'标准完整表格'});await thermal.locator('tbody tr').nth(6).waitFor();assert.equal(await thermal.locator('tbody tr').count(),7);
-  await thermal.getByRole('button').filter({hasText:/^3460000/}).click();await page.getByLabel('选中格详情').filter({hasText:'第 8 页'}).waitFor();await settle(page);
+  await choose(page,'标准版本','Hopmans et al.—2002');
+  const thermal=page.getByRole('table',{name:'标准完整表格'});await thermal.locator('tbody tr').nth(1).waitFor();assert.equal(await thermal.locator('tbody tr').count(),2);
+  await thermal.getByRole('button').first().click();await page.getByLabel('选中格详情').filter({hasText:'第 7-3 页'}).waitFor();await settle(page);
+  await page.getByText('代入现场参数',{exact:true}).click();
+  const soilForm=page.getByRole('form',{name:'现场土壤热容计算'});
+  assert.equal(await soilForm.getAttribute('data-state'),'empty');
+  for(const [key,value] of Object.entries(soil.formula_inputs)) if(key!=='phase_assumption') await soilForm.locator(`[name="${key}"]`).fill(String(value));
+  await soilForm.getByLabel('确认各相同温，无冻结或相变').check();
+  await soilForm.getByRole('button',{name:'计算参考热容'}).click();await soilForm.locator('[role="status"]').filter({hasText:'2036240'}).waitFor();
+  assert.equal(await soilForm.getAttribute('data-state'),'success');
+  await soilForm.locator('[name="water_volume_fraction"]').fill('.41');assert.equal(await soilForm.getAttribute('data-state'),'historical');
+  await soilForm.getByRole('button',{name:'计算参考热容'}).click();await soilForm.getByRole('alert').filter({hasText:'孔隙率'}).waitFor();
+  assert.equal(await soilForm.getAttribute('data-state'),'error');
+  assert.equal(await soilForm.locator('[name="water_volume_fraction"]').evaluate(el=>el===document.activeElement),true);
+  await soilForm.locator('[name="water_volume_fraction"]').fill('.2');await soilForm.getByRole('button',{name:'计算参考热容'}).click();await page.locator('form[aria-label="现场土壤热容计算"][data-state="success"]').waitFor();
+  await soilForm.locator('[role="status"]').filter({hasText:'参考热容：2036240'}).waitFor();
+  await page.locator('.basis-detail').evaluate(el=>el.scrollTop=el.scrollHeight);await settle(page);
   checks.push({state:'thermal-success',...(await assertLayout(page,'材料热容原表'))});
   await page.screenshot({path:path.join(output,'thermal-capacity.png')});
   await choose(page,'标准版本','GB/T 12706.1—2020');
@@ -195,11 +220,12 @@ try{
     assert.ok(!(await table.locator('tbody').innerText()).includes("{'lte'"));
     assert.ok(!(await table.locator('tbody').innerText()).includes('one_reduced'));
   }
-  await choose(page,'标准版本','GB/T 12706.4—2020');
-  await page.getByRole('combobox',{name:'表或条款',exact:true}).click();await page.getByRole('option').filter({hasText:'表14 ·'}).click();
-  const accessories=page.getByRole('table',{name:'标准完整表格'});await accessories.locator('tbody tr').nth(6).waitFor();assert.equal(await accessories.locator('tbody tr').count(),7);
-  await accessories.locator('tbody tr').last().getByRole('button').first().click();await page.getByLabel('选中格详情').filter({hasText:'60 kV'}).waitFor();await settle(page);
-  checks.push({state:'accessory-success',...(await assertLayout(page,'附件试验完整表'))});await page.screenshot({path:path.join(output,'accessory-tests.png')});
+  await choose(page,'标准版本','GB/T 12706.3—2020');
+  await page.getByRole('combobox',{name:'表或条款',exact:true}).click();await page.getByRole('option').filter({hasText:'10.2.2 · 35 kV铜带屏蔽标称厚度'}).click();
+  const copper=page.getByRole('table',{name:'标准完整表格'});await copper.locator('tbody tr').nth(1).waitFor();assert.equal(await copper.locator('tbody tr').count(),2);
+  assert.equal(await copper.locator('thead th').count(),2,'同条款的不同判据表不得按行号拼接');assert.ok(!(await copper.locator('tbody').innerText()).includes('缺项'));
+  await copper.locator('tbody tr').last().getByRole('button').first().click();await page.getByLabel('选中格详情').filter({hasText:'PDF 第 13 页'}).waitFor();await settle(page);
+  checks.push({state:'copper-success',...(await assertLayout(page,'铜带制造判据'))});await page.screenshot({path:path.join(output,'copper-manufacturing.png')});
   assert.deepEqual(errors,[]);await fs.writeFile(path.join(output,'browser-checks.json'),JSON.stringify({checks,citation,scope:'真实backend.main、真实Executor、保存发布库的隔离副本；五态中的空/加载/断网使用明确的网络故障注入',realQueries:receipts.length},null,2));
   console.log(JSON.stringify({checks:checks.length,citation,errors}));
   }

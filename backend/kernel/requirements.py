@@ -126,6 +126,7 @@ class Requirements:
             artifact=case.artifacts['x-cablesim.standard-check']
             declarations={re.sub(r'\s+','',item['standard']).replace('—','-').replace(':','-') for item in declared_execution_standards(document)}
             auxiliary = {}
+            stored_queries = {}
             for path,source in document.get('provenance',{}).items():
                 if not path.endswith('/annex_basis'):continue
                 try:stored=json.loads(source.get('reference','{}')).get('basis_references',{})
@@ -133,7 +134,13 @@ class Requirements:
                 for key,ref in stored.items():
                     q=ref.get('query',{}) if isinstance(ref,dict) else {}
                     if re.sub(r'\s+','',q.get('standard','')+'-'+q.get('edition','')) in declarations:
-                        auxiliary[key]=ref
+                        stored_queries[key]=q
+            # A design's old receipt remains its source history. A fresh check
+            # queries the declared standard edition through the current sealed
+            # data release; it must not keep passing an incompatible old issuer.
+            if stored_queries:
+                auxiliary, absent=lookup_references(self.research,stored_queries)
+                auxiliary.update({item['key']:{'uncovered':True,'query':stored_queries[item['key']]} for item in absent})
             # The method owns the staged diameter calculations; the host only
             # executes declared queries, retaining every receipt on this revision.
             for _ in range(24):
@@ -164,6 +171,8 @@ class Requirements:
             ids={key:'basis-'+str(i) for i,key in enumerate(queries)}
             result=self.research.executor.run(basis.manifest.id,'lookup',[{'case_id':ids[key],'input':q,'parameters':{}} for key,q in queries.items()],expected_manifest=basis.manifest) if queries else None
         except (KeyError, PluginHostError) as error:
+            import logging
+            logging.getLogger(__name__).warning('Standard basis lookup unavailable: %s', error, exc_info=True)
             raise HTTPException(503,{'code':'BASIS_UNAVAILABLE','message':'标准依据查询不可用，请检查已安装的准确版本后重试。'}) from error
         resolved={}; missing=[]
         for output in result.cases if result else []:

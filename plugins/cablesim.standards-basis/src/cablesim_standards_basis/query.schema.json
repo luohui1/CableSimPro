@@ -15,7 +15,9 @@
       "enum": [
         "resolve",
         "list",
-        "catalog"
+        "catalog",
+        "evaluate",
+        "browse"
       ],
       "default": "resolve"
     },
@@ -561,8 +563,198 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 200
+        },
+        "study_case": {
+          "type": "string",
+          "description": "必须显式选择文献工况"
+        },
+        "soil_capacity_method": {
+          "type": "string",
+          "description": "three_phase 或 air_capacity_neglected"
+        },
+        "parameter_origin": {
+          "type": "string",
+          "description": "project_measured：项目来源参数必填，不提供通用默认值"
+        },
+        "covering_construction": {
+          "type": "string",
+          "description": "内衬构造"
+        },
+        "metal_layer_relation": {
+          "type": "string",
+          "description": "金属层与铠装材料关系"
+        },
+        "longitudinal_water_barrier": {
+          "type": "boolean",
+          "description": "金属层周围纵向阻水"
+        },
+        "lead_sheath_present": {
+          "type": "boolean",
+          "description": "铅套"
+        },
+        "special_armour_construction": {
+          "type": "boolean",
+          "description": "特殊铠装结构"
+        },
+        "tape_width_m": {
+          "type": "number",
+          "description": "金属带宽 / m"
+        },
+        "measurement_role": {
+          "type": "string",
+          "description": "测量位置"
+        },
+        "cable_spacing_condition": {
+          "type": "string",
+          "description": "电缆间距条件；no_gap=原表无间距；并非数值0查询字段",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "current_basis_environment": {
+          "type": "string",
+          "description": "基础载流量环境；indoor_air_at_outdoor_ambient=采用户外环境温度的户内空气载流量",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "subitem": {
+          "type": "string",
+          "description": "条款分项号，字符串1至7，不将多个分项混为唯一格",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "installation_method": {
+          "type": "string",
+          "description": "敷设方式：sand_filled_trench/direct_buried/tunnel/shaft等；无通用乘数",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "regular_water_replenishment": {
+          "type": "string",
+          "description": "是否经常性水分补充，yes/no",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "soil_replacement_prevents_migration": {
+          "type": "string",
+          "description": "换土是否能避免水分迁移，yes/no",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "mechanical_ventilation": {
+          "type": "string",
+          "description": "机械通风，yes/no",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "cable_group_size": {
+          "type": "string",
+          "description": "原文较多的定性条件，many需工程师判定",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "load_regime": {
+          "type": "string",
+          "description": "continuous_100_percent=100%持续工作负荷",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "conductor_working_temperature_k": {
+          "type": "number",
+          "description": "实际导体工作温度，非材料允许最高温度"
+        },
+        "application_case": {
+          "type": "string",
+          "description": "原文所述特殊回路条件，不将定性分支当数值乘数",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "nominal_voltage_v": {
+          "type": "number",
+          "description": "原文额定线路电压条件，不是U0对地电压"
+        },
+        "fire_covering_thickness_m": {
+          "type": "number",
+          "description": "防火涂料/阻火包带覆盖层厚度，不是普通护套厚度"
+        },
+        "backfill_mix": {
+          "type": "string",
+          "description": "原实验配方",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "other_component": {
+          "type": "string",
+          "description": "粉煤灰或砂",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "reference_statistic": {
+          "type": "string",
+          "description": "文献汇总统计身份，不是材料实测唯一值",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "gravimetric_water_content": {
+          "type": "number",
+          "description": "质量含水率，0.44=44%；干态零值需消费者支持非负输入"
+        },
+        "screen_kind": {
+          "type": "string",
+          "enum": [
+            "copper_wire",
+            "copper_tape"
+          ]
         }
       }
+    },
+    "compact": {
+      "type": "boolean",
+      "description": "目录省略逐格标识；完整逐格证据按所选表list读取。"
+    },
+    "formula_inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dry_bulk_density_kg_m3": {
+          "type": "number",
+          "minimum": 0,
+          "description": "kg/m³"
+        },
+        "particle_density_kg_m3": {
+          "type": "number",
+          "minimum": 0,
+          "description": "kg/m³"
+        },
+        "solid_specific_heat_capacity_j_kg_k": {
+          "type": "number",
+          "minimum": 0,
+          "description": "J/(kg·K)"
+        },
+        "water_volumetric_heat_capacity_j_m3_k": {
+          "type": "number",
+          "minimum": 0,
+          "description": "J/(m³·K)"
+        },
+        "air_volumetric_heat_capacity_j_m3_k": {
+          "type": "number",
+          "minimum": 0,
+          "description": "J/(m³·K)"
+        },
+        "water_volume_fraction": {
+          "type": "number",
+          "minimum": 0,
+          "description": "m³/m³"
+        },
+        "phase_assumption": {
+          "const": "single_temperature_no_phase_change"
+        }
+      }
+    },
+    "table_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 180,
+      "description": "目录内编制表标识，明确区分同一条款的不同判据；仅list/browse可用"
     }
   },
   "allOf": [
@@ -578,7 +770,7 @@
         ]
       },
       "then": {
-        "maxProperties": 2
+        "maxProperties": 3
       },
       "else": {
         "required": [
@@ -592,7 +784,10 @@
       "if": {
         "properties": {
           "operation": {
-            "const": "list"
+            "enum": [
+              "list",
+              "browse"
+            ]
           }
         },
         "required": [

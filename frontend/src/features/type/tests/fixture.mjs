@@ -29,7 +29,7 @@ export async function typeFixture({ main = false, build, setup, software = false
   const owned = []; let backendOutput = '', browser;
   async function close() {
     try { await browser?.close(); } finally {
-      for (const child of owned.reverse()) { if (child.exitCode === null) { const done = once(child, 'exit'); child.kill(); await Promise.race([done, delay(4000)]); } }
+      for (const child of owned.reverse()) { if (child.exitCode === null) { const done = once(child, 'exit'); if (process.platform === 'win32') await run('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {stdio:'ignore'}).catch(error=>{if(child.exitCode===null)throw error;}); else child.kill(); await Promise.race([done, delay(4000)]); if(child.exitCode===null)throw Error('本任务服务未退出：'+child.pid); } }
       if (path.resolve(scratch).startsWith(scratchRoot + path.sep)) { await fs.rm(scratch, { recursive: true, force: true, maxRetries: 5, retryDelay: 400 }); console.log('型号验收临时数据库清理：' + !await fs.stat(scratch).then(() => true, () => false)); }
     }
   }

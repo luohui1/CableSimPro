@@ -29,6 +29,7 @@ class RefineRequest(StrictModel):
     max_nodes: int | None = Field(default=None,ge=100,le=4000000)
     upgrade_method: bool = False
     temperature_only_levels: bool = True
+    calculate_final_rating: bool = False
     continue_from: UUID | None = None
     minimum_domain_levels: int = Field(default=2,ge=2,le=3,description='Minimum doubled-domain validation levels before final rating; never relaxes the two-change threshold.')
     retain_domain_levels: int | None = Field(default=None,ge=2,le=3,description='Continue on a verified converged domain prefix; retain later validation as history.')
@@ -125,10 +126,11 @@ class Refinements:
             method=value['definition']['method']
             value['source_execution']=self.research.executor.execution_status(value['source_run_id'],method['plugin_id'],method['capability'])
         value.pop('current_execution',None);value.pop('live_core_hours',None)
-        if value.get('request',{}).get('continue_from') and 'history_attempts' not in value:
+        if value.get('request',{}).get('continue_from') and ('history_attempts' not in value or 'origin_study' not in value):
             with self.store.db() as db:parent=db.execute('SELECT state FROM hpc_convergence WHERE id=?',(value['request']['continue_from'],)).fetchone()
             previous=json.loads(parent['state']) if parent else {}
             value['history_attempts']=previous.get('history_attempts',[])+previous.get('attempts',[])
+            value['origin_study']=previous.get('origin_study',previous.get('source_study',value['source_study']))
         if value['status'] in ('queued','running') and value['owner']!=self.research.owner_epoch:
             value['status']='interrupted';value['reason']='宿主已重启；恢复时先回收原运行，不重复提交。'
         if value.get('pending'):
@@ -150,7 +152,7 @@ class Refinements:
     def list(self,wid=None,sid=None):
         self.initialize()
         with self.store.db() as db:ids=[r['id'] for r in db.execute('SELECT id FROM hpc_convergence ORDER BY rowid DESC')]
-        return [v for i in ids if (v:=self.load(i)) and (wid is None or v['workspace']==wid) and (sid is None or sid in (v['source_study'],v['study']))]
+        return [v for i in ids if (v:=self.load(i)) and (wid is None or v['workspace']==wid) and (sid is None or sid in (v['source_study'],v['study'],v.get('origin_study')))]
 
     def start(self,wid,sid,body):
         if not body.budget_confirmed:raise HTTPException(422,'请确认本次累计核时预算。')
@@ -162,7 +164,9 @@ class Refinements:
             if old['request_digest']!=identity:raise HTTPException(409,'同一请求标识对应不同收敛设置。')
             return self.load(old['id'])
         run=self.research.get_run(wid,str(body.source_run_id))
-        if run['study']!=sid or run['status'] not in ('succeeded','partial'):raise HTTPException(422,'请选择此研究已完成的有限元运行。')
+        previous=self.load(str(body.continue_from)) if body.continue_from else None
+        inherited_source=previous and previous['workspace']==wid and previous['study']==sid and previous['source_run_id']==run['id']
+        if (run['study']!=sid and not inherited_source) or run['status'] not in ('succeeded','partial'):raise HTTPException(422,'请选择此研究或其已绑定收敛起点的完整有限元运行。')
         if body.tolerance_k>min(.1,run.get('convergence',{}).get('tolerance_k',.1)):
             raise HTTPException(422,'不能放宽原保存研究的收敛门槛。')
         reference=run.get('convergence',{}).get('reference_case_id') or run['output']['cases'][0]['case_id']
@@ -192,7 +196,6 @@ class Refinements:
             except (KeyError,ValueError,StopIteration):continue
             row['change_k']=source.get('change_k');rows.append(row)
         if body.continue_from:
-            previous=self.load(str(body.continue_from))
             if previous['workspace']!=wid or previous['study']!=sid or previous['status'] in ('queued','running','interrupted'):
                 raise HTTPException(409,'继续来源须为本研究已结束的收敛记录；请先停止原任务。')
             stop=next((i for i,r in enumerate(previous['rows']) if r['run_id']==run['id'] and r['kind']=='mesh'),None)
@@ -217,7 +220,7 @@ class Refinements:
             parameters.setdefault('iec',{})['operation']=previous['definition']['parameters'].get('iec',{}).get('operation','both')
         if not rows:rows=[base]
         definition=deepcopy(run['snapshot']['definition'])
-        definition.update(title=(definition['title'][:90]+' · 自动收敛'),method=method,task=None,input_source='study',method_input=original['input'],
+        definition.update(title=(definition['title'].removesuffix(' · 自动收敛')[:90]+' · 自动收敛'),method=method,task=None,input_source='study',method_input=original['input'],
                           parameters=parameters,driver={'kind':'single'},verification=None,crosschecks=[],modules={})
         with self.store.db() as db:revision=db.execute('SELECT revision FROM workspaces WHERE id=?',(wid,)).fetchone()['revision']
         identifier=str(uuid4());stamp=utc_now()
@@ -234,7 +237,7 @@ class Refinements:
             if any(v['status'] in ('queued','running','interrupted') for v in self.list(wid,sid)):raise HTTPException(409,'此研究已有未完成的自动收敛任务，请恢复或取消原任务。')
             with self.store.db(True) as db:
                 study=self.research.save(wid,CreateStudy.model_validate({**definition,'expected_revision':revision}),connection=db)
-                value={'id':identifier,'workspace':wid,'source_study':sid,'source_run_id':run['id'],'study':study['id'],
+                value={'id':identifier,'workspace':wid,'source_study':sid,'origin_study':previous.get('origin_study',previous['source_study']) if body.continue_from else sid,'source_run_id':run['id'],'study':study['id'],
                     'title':definition['title'],'owner':self.research.owner_epoch,'status':'queued','created':stamp,'updated':stamp,
                     'request':request,'workspace_revision':revision,'study_revision':study['revision'],'definition':definition,
                     'mesh_parameters':parameters,'domain_parameters':deepcopy(parameters),'rows':rows,'attempts':[],
@@ -269,6 +272,10 @@ class Refinements:
             try:self.research.executor.request_cancel(value['pending']['request_id'],method['plugin_id'],method['capability'],phase='check')
             except PluginHostError as exc:
                 if exc.code!='REMOTE_JOB_MISSING':raise
+        if identifier not in self.active:
+            # An interrupted workflow has no worker to settle its cancellation.
+            # Restart accounting only; work() sees the saved cancel intent first.
+            value.update(owner=self.research.owner_epoch,status='queued');self.save(value);self.launch(identifier)
         return self.load(identifier)
 
     def resume(self,identifier):
@@ -293,7 +300,7 @@ class Refinements:
                 matched_domains=[r for r in value['rows'] if r['kind']=='domain' and r['mesh_size_m']==value['mesh_parameters']['mesh']['size_m']]
                 extra_domain=value['verdict']['status']=='converged' and len(matched_domains)<value['request'].get('minimum_domain_levels',2)
                 passed=value['verdict']['status']=='converged' and not extra_domain
-                needs_rating=value['request'].get('temperature_only_levels',True) and value['definition']['parameters'].get('iec',{}).get('operation','both')=='both'
+                needs_rating=value['request'].get('calculate_final_rating',False) or (value['request'].get('temperature_only_levels',True) and value['definition']['parameters'].get('iec',{}).get('operation','both')=='both')
                 if passed and (not needs_rating or value.get('rating_run_id')):
                     value.update(status='completed',reason='网格与扩域各连续两级均小于原阈值；最终量值来自保存的全网格运行。');break
                 kind='rating' if passed else 'domain' if extra_domain and 'domain' not in value['blocked_phases'] else next((k for k in ('mesh','domain') if not value['verdict'][k+'_passed'] and k not in value['blocked_phases']),None)
@@ -355,7 +362,9 @@ class Refinements:
         pending=value.get('pending')
         if not pending:
             parameters=deepcopy(value['domain_parameters']) if kind=='rating' else next_parameters(value[kind+'_parameters'],kind)
-            if kind=='rating':parameters['iec']=deepcopy(value['definition']['parameters']['iec'])
+            if kind=='rating':
+                parameters['iec']=deepcopy(value['definition']['parameters']['iec'])
+                if value['request'].get('calculate_final_rating',False):parameters['iec']['operation']='both'
             elif value['request'].get('temperature_only_levels',True):parameters.setdefault('iec',{})['operation']='temperature'
             definition={**value['definition'],'parameters':parameters}
             body=UpdateStudy.model_validate({**definition,'expected_revision':value['workspace_revision'],'expected_study_revision':value['study_revision']})

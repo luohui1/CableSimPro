@@ -511,7 +511,7 @@ def test_history_and_delivery_survive_an_unavailable_method(client, tmp_path, mo
     research = client.app.state.research
     research.executor.registry.root = plugins
     monkeypatch.setattr(research.executor, 'run', lambda *a, **kw: pytest.fail('history must not recompute'))
-    history = client.get(root + '/runs/' + run['id'])
+    history = client.get(root + '/runs/' + run['id'], params={'view': 'full'})
     assert history.status_code == 200, history.text
     history = history.json()
     assert history['integrity'] == 'verified' and history['output'] == run['output']
@@ -541,7 +541,7 @@ def test_restart_can_read_saved_results_with_a_broken_method_directory(tmp_path,
         raise ValueError('broken method manifest')
     monkeypatch.setattr(Manifest, 'model_validate', invalid_manifest)
     with TestClient(create_app(database)) as restarted:
-        history = restarted.get(root + '/runs/' + run['id'])
+        history = restarted.get(root + '/runs/' + run['id'], params={'view': 'full'})
         assert history.status_code == 200, history.text
         assert history.json()['output'] == run['output']
         assert history.json()['method_availability']['status'] == 'unavailable'

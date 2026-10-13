@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { array, optionalRecord, record, text } from '@/api/client';
 import { runArtifact, typeEvidence } from './api';
@@ -5,13 +6,30 @@ import { useTypeWorkspace } from './provider';
 import { displayName } from '@/lib/display-names';
 import { versionLabel } from './design-summary';
 import type { StatusKind } from '@/components/status-mark';
+import { useTypeNavigation } from './navigation';
 
 export function useTypeEvidence() {
   const state = useTypeWorkspace();
+  const { location } = useTypeNavigation();
+  const [paintedWorkspace, setPaintedWorkspace] = useState<string>();
+  useEffect(() => {
+    if (!state.workspace) return;
+    const wid = state.workspace.id;
+    let second = 0, idle = 0;
+    let timer: ReturnType<typeof globalThis.setTimeout> | undefined;
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => {
+      // Structure is editable from its saved inputs. Read module result badges
+      // after that work surface has painted, without delaying the table or CAD.
+      if ('requestIdleCallback' in window) idle = window.requestIdleCallback(() => setPaintedWorkspace(wid), { timeout: 1000 });
+      else timer = globalThis.setTimeout(() => setPaintedWorkspace(wid), 0);
+    }); });
+    return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); if (idle) window.cancelIdleCallback(idle); clearTimeout(timer); };
+  }, [state.workspace?.id]);
+  const needsResults = location.module !== 'structure' || location.tab === 'quantities' || !!location.run || !!state.readOnly;
   return useQuery({ queryKey: ['type-evidence', state.workspace?.id], queryFn: async ({ signal }) => {
     try { return await typeEvidence(state.workspace!.id, AbortSignal.any([signal,AbortSignal.timeout(20000)])); }
     catch(error) { if(error instanceof Error && error.name==='TimeoutError') throw new Error('保存结果读取超过 20 秒，请重新读取。'); throw error; }
-  }, retry:false, enabled: !!state.workspace,
+  }, retry:false, enabled: !!state.workspace && (needsResults || paintedWorkspace === state.workspace.id), staleTime:30000,
     refetchInterval: query => query.state.data?.some(item => pendingRun(item.run)) ? 2000 : false });
 }
 export function containsArtifact(run: Record<string, unknown>, schema: string) {

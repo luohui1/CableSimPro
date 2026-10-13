@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { exactContract, inputContracts } from '@/api/input-contracts';
+import { inputContractQuery } from '@/api/input-contracts';
 import { numeric, optionalRecord, text } from '@/api/client';
 import { useStudy } from './study-provider';
 import { NumberField } from './ui/number-field';
@@ -13,9 +13,9 @@ export function StudyCrossingInputs({historical, placement='all'}: {historical:b
   const saved=context.runs.at(-1);
   const definition=historical ? optionalRecord(optionalRecord(saved?.snapshot).definition) : context.draft?.definition || context.study.definition;
   const method=optionalRecord(definition.method);
-  const contracts=useQuery({queryKey:['input-contracts'],queryFn:({signal})=>inputContracts(signal)});
+  const contracts=useQuery(inputContractQuery(method as typeof context.study.definition.method));
   let field:Record<string,unknown>={};
-  try {if(contracts.data)field=optionalRecord(optionalRecord(exactContract(contracts.data,method as typeof context.study.definition.method).parameter_schema).properties).crossing_heat_sources as Record<string,unknown> || {};} catch { /* Contract failure is already shown by the method inspector. */ }
+  try {if(contracts.data)field=optionalRecord(optionalRecord(contracts.data.parameter_schema).properties).crossing_heat_sources as Record<string,unknown> || {};} catch { /* Contract failure is already shown by the method inspector. */ }
   if(!field.items)return null;
   const parameters=optionalRecord(definition.parameters);
   const rows=(Array.isArray(parameters.crossing_heat_sources) ? parameters.crossing_heat_sources : []).map(optionalRecord);

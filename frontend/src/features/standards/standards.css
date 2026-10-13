@@ -34,3 +34,6 @@
 .basis-uncovered summary { cursor: pointer; padding: var(--space-1); }
 .basis-uncovered p { margin: var(--space-2) 0; }
 .basis-notice { color: var(--text-secondary); font-size: var(--text-note); min-height: var(--space-4); }
+.basis-soil-calculator form { margin-top: var(--space-2); }
+.basis-soil-calculator input[type="checkbox"] { width: auto; }
+.basis-detail:has(.basis-soil-calculator[open]) { max-height: 20rem; }

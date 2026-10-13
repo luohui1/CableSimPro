@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { prewarmCad } from '@/features/cad';
 import { DataTable } from '@/components/data-table';
 import { SourceBadge } from '@/components/source-badge';
@@ -30,7 +30,7 @@ export function TypeNumericField({ row }: { row: LayerRow }) {
     locked={state.locked(row.path)} disabled={state.busy} draftText={state.draft?.fields[row.path]?.value} onDraftChange={value => state.setField(row.spec, value)}
     onCommit={value => { if (value !== null) state.edit(row.path, value / (row.spec.scale || 1)); }} source={sourceKind(provenance)} sourceDetail={dimensionBasis(provenance.reference)} />;
 }
-export function LayerTable({ rows, selected, onSelect, compact = false }: { rows: LayerRow[]; selected: LayerTarget | null; onSelect: (target: LayerTarget | null) => void; compact?: boolean }) {
+export const LayerTable = memo(function LayerTable({ rows, selected, onSelect, compact = false }: { rows: LayerRow[]; selected: LayerTarget | null; onSelect: (target: LayerTarget | null) => void; compact?: boolean }) {
   const state = useTypeWorkspace();
   const [selectedMaterials, setSelectedMaterials] = useState<string[]>([]);
   const materialIds = [...new Set(rows.map(r => r.material.id))];
@@ -48,7 +48,7 @@ export function LayerTable({ rows, selected, onSelect, compact = false }: { rows
       ...(!compact ? [{ id: 'outer', label: '绘图外径', unit: 'mm', numeric: true, render: (row: LayerRow) => <span className="type-readonly-value">{formatNumber(row.outerM === null ? null : row.outerM * 2000, 2)}{row.outerM !== null && <SourceBadge kind="derived" detail="当前结构尺寸逐层累加的截面绘图尺寸；原始实体与用料见保存的结构推导。" />}</span> }] : []),
       { id: 'source', label: '来源', render: row => { const source = fieldSource(state.document!, row.path), kind = sourceKind(source) || (source.kind === 'demo' ? 'demo' : undefined); return kind ? <span className="type-layer-source"><SourceBadge kind={kind} detail={dimensionBasis(source.reference)} /></span> : <span className="muted">未提供</span>; } },
     ]} />{!compact && !state.readOnly && <label className="type-confirm type-material-select-all"><Checkbox checked={selectedMaterials.length === materialIds.length ? true : selectedMaterials.length ? 'indeterminate' : false} onCheckedChange={checked => setSelectedMaterials(checked ? materialIds : [])} />选择全部设计材料{selectedMaterials.length > 0 && ` · ${rows.filter(r => selectedMaterials.includes(r.material.id)).length} 层已选`}</label>}</>;
-}
+});
 export function TypeStructure({ tab, cable, selected, onSelect }: { tab: string; cable: CableType | null; selected: LayerTarget | null; onSelect: (target: LayerTarget | null) => void }) {
   const state = useTypeWorkspace();
   if (!state.document || !cable) return <EmptyState title="型号没有结构" description="当前型号未提供电缆与结构层。" />;
@@ -67,7 +67,11 @@ export function TypeStructure({ tab, cable, selected, onSelect }: { tab: string;
 /** 工作窗口画布：电缆截面（可直接拖改尺寸）或三维剥切，上方是增删结构层的操作。 */
 export function TypeCanvas({ view, cable, selected, onSelect }: { view: 'section' | 'three'; cable: CableType | null; selected: LayerTarget | null; onSelect: (target: LayerTarget | null) => void }) {
   const state = useTypeWorkspace();
-  useEffect(() => { prewarmCad(); }, []);
+  useEffect(() => {
+    // A 2D-only visit must not initialize WASM while the table is becoming
+    // usable. Prepare CAD immediately when its view is actually requested.
+    if (view === 'three') prewarmCad();
+  }, [view]);
   if (!state.document || !cable) return <EmptyState title="型号没有结构" description="当前型号未提供电缆与结构层。" />;
   let rows: LayerRow[];
   try { rows = layerRows(state.document, cable); } catch (error) { return <ErrorState title="结构不可绘制" description={error instanceof Error ? error.message : String(error)} />; }

@@ -57,9 +57,10 @@ def test_image_green_function_ground_and_superposition():
     with pytest.raises(ValueError):image_rise(np.array([[0.],[-1.]]),sources,1.)
 
 
-def test_actual_loss_sources_conserve_all_components():
+@pytest.mark.parametrize('centers', [[[0.,-1.]], [[0.,-1.],[.1,-1.],[-.1,-1.]]])
+def test_actual_loss_sources_conserve_all_components(centers):
     state=dict(conductor_joule_heat_w_m=30.,screen_heat_w_m=3.,dielectric_heat_w_m=6.,armour_heat_w_m=4.)
-    binding=dict(entity='cable',centers=[[0.,-1.],[.1,-1.],[-.1,-1.]],center_m=[0.,-1.])
+    binding=dict(entity='cable',centers=centers,center_m=[0.,-1.])
     assert sum(s['loss_w_m'] for s in loss_sources([state],[binding]))==43.
 
 

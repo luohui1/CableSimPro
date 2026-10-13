@@ -53,18 +53,33 @@ def evidence_directory():
 
 
 def archive_path(entry):
-    # Schema authenticates the logical archive identity; only its fixed basename
-    # is mapped into the external directory. No plugin-directory fallback.
-    return evidence_directory()/Path(entry['path']).name
+    # Schema permits only fixed basenames, optionally under chengnan/. Keep
+    # separately accepted bundles independent without a plugin-directory fallback.
+    return evidence_directory()/entry['path'].removeprefix('validation/engineering-evidence/')
 
 
-def evidence_availability(*, verify=False):
+def scoped_index(value, scope):
+    if scope not in ('primary','chengnan'): raise ValueError('不支持的实算证据范围。')
+    supplementary=scope=='chengnan'
+    archives=[a for a in value['archives'] if ('/chengnan/' in a['path'])==supplementary]
+    names={a['path'] for a in archives}
+    receipts=value.get('supplementary_receipts',[]) if supplementary else [value['receipt']]
+    if len(receipts)!=1 or not archives:
+        raise FileNotFoundError('尚未封存城南有限元实算证据。' if supplementary else '尚未封存有限元实算证据。')
+    return {**value,'archives':archives,'members':[m for m in value['members'] if m['archive'] in names], 'receipt':receipts[0]}
+
+
+def evidence_availability(*, verify=False, scope='primary'):
     """Report presence without preparing inputs or submitting a solver job.
 
     With verify=True, reject damaged present files even in an incomplete set.
     Missing files are an optional deployment resource, not fabricated results.
     """
     value, identity = evidence_index()
+    try: value=scoped_index(value,scope)
+    except FileNotFoundError as exc:
+        return {'available':False,'verified':False,'directory':str(evidence_directory()/'chengnan'),
+                'snapshot_id':identity,'missing':[],'message':str(exc)}
     missing = []
     for entry in value['archives']:
         path = archive_path(entry)
@@ -80,10 +95,11 @@ def evidence_availability(*, verify=False):
             'missing':missing, 'message':message}
 
 
-def verify_archives():
-    status = evidence_availability(verify=True)
+def verify_archives(*, scope='primary'):
+    status = evidence_availability(verify=True,scope=scope)
     if not status['available']: raise FileNotFoundError(status['message'])
     value, identity = evidence_index()
+    value=scoped_index(value,scope)
     if identity != status['snapshot_id']: raise ValueError('核验期间超算证据索引已更新；停止导入。')
     return value, identity
 
@@ -97,19 +113,20 @@ def saved_execution(operation, plugin_id, capability, phase='run'):
             'evidence_label': '超算实算结果', 'partition': 'dg83'}
 
 
-def import_evidence(store, expected_identity):
+def import_evidence(store, expected_identity, *, scope='primary'):
     """One database transaction; exact bytes and immutable original identities.
 
     SQLite incremental BLOB I/O keeps large JSON out of Python strings during
     restoration; CAST changes storage type to TEXT after verification. Archives
     are streamed sequentially with a bounded 80 MiB XZ dictionary.
     """
-    value, identity = verify_archives()
+    value, identity = verify_archives(scope=scope)
     if identity != expected_identity: raise ValueError('生成期间超算证据已更新；停止导入。')
     with store.db(True) as db:
         db.execute('CREATE TABLE IF NOT EXISTS hpc_convergence (id TEXT PRIMARY KEY,request_id TEXT UNIQUE,request_digest TEXT,state TEXT)')
         db.execute('CREATE TABLE IF NOT EXISTS bundled_engineering_evidence (snapshot TEXT PRIMARY KEY,receipt TEXT NOT NULL)')
-        existing = db.execute('SELECT receipt FROM bundled_engineering_evidence WHERE snapshot=?', (identity,)).fetchone()
+        import_key=identity if scope=='primary' else identity+':'+scope
+        existing = db.execute('SELECT receipt FROM bundled_engineering_evidence WHERE snapshot=?', (import_key,)).fetchone()
         if existing: return json.loads(existing[0])
         expected = {entry['name']: entry for entry in value['members']}
         seen = set()
@@ -152,6 +169,6 @@ def import_evidence(store, expected_identity):
                         db.execute('UPDATE study_runs SET '+column+'=CAST('+column+' AS TEXT) WHERE id=?', (identifier,))
         if seen != set(expected): raise ValueError('随附证据缺少文件；导入已撤回。')
         receipt = {**value['receipt'], 'snapshot_id': identity, 'kind':'saved_evidence'}
-        db.execute('INSERT INTO bundled_engineering_evidence VALUES (?,?)', (identity,json.dumps(receipt,ensure_ascii=False)))
+        db.execute('INSERT INTO bundled_engineering_evidence VALUES (?,?)', (import_key,json.dumps(receipt,ensure_ascii=False)))
         store.audit(db,receipt['workspace'],value['workspace_revision'],'导入超算实算结果',identity)
     return receipt

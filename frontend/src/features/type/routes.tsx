@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { createRoute, Outlet, useNavigate, useParams, useSearch, lazyRouteComponent, type AnyRootRoute } from '@tanstack/react-router';
 import { TypeNavigationContext, type TypeLocation } from './navigation';
 import { typeModules } from './module-definitions';
+import { queryClient } from '@/lib/query-client';
+import { loadWorkspace } from './api';
 const TypeListPage = lazyRouteComponent(() => import('./list-page'), 'TypeListPage');
 const TypeProvider = lazyRouteComponent(() => import('./provider'), 'TypeProvider');
 const TypeWorkspace = lazyRouteComponent(() => import('./workspace'), 'TypeWorkspace');
@@ -26,7 +28,14 @@ export function createTypeRoutes(root: AnyRootRoute) {
     const location = { module: 'list', tab: '', ...typeSearch(search as Record<string, unknown>) };
     return <Navigation location={location}><TypeListPage /></Navigation>;
   } });
-  const parent = createRoute({ getParentRoute: () => root, path: '/types/$wid', validateSearch: typeSearch, component: function TypeWorkspaceRoute() {
+  const parent = createRoute({ getParentRoute: () => root, path: '/types/$wid', validateSearch: typeSearch, beforeLoad: ({ params, search }) => {
+    // Start the selected saved input together with both route bundles, rather
+    // than waiting for the provider bundle before issuing the first read.
+    void queryClient.prefetchQuery({ queryKey: ['type-workspace', params.wid, search.revision, search.run],
+      queryFn: ({ signal }) => loadWorkspace(params.wid, signal, search.revision, search.run), staleTime: 0 });
+    void TypeProvider.preload?.();
+    void TypeWorkspace.preload?.();
+  }, component: function TypeWorkspaceRoute() {
     const params = useParams({ strict: false }) as Record<string, string | undefined>;
     const search = typeSearch(useSearch({ strict: false }) as Record<string, unknown>);
     const module = params.module || 'structure';

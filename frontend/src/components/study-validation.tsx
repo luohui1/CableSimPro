@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { optionalRecord, text } from '@/api/client';
-import { methodCatalog } from '@/api/research';
+import { methodCardsQuery } from '@/lib/study-queries';
 import { EmptyState } from './states';
 import { validationLevel } from '@/lib/plugin-labels';
 import { readableEvidence } from './study-workbench-config';
@@ -15,7 +15,7 @@ const list = (value: unknown) => (Array.isArray(value) ? value : []);
  * 全部来自运行记录（output.executions / limitations / crosscheck / environment），不另行判断。
  */
 export function StudyValidation({ run }: { run?: Row }) {
-  const catalog = useQuery({ queryKey: ['method-catalog'], queryFn: ({ signal }) => methodCatalog(signal) });
+  const catalog = useQuery(methodCardsQuery());
   // 插件与能力用清单里的名称显示；清单里找不到时保留运行记录中的原始身份
   const named = (pluginId: string, capabilityId: string) => {
     const plugin = (catalog.data || []).map(optionalRecord).find(row => text(optionalRecord(row.method).plugin_id) === pluginId);

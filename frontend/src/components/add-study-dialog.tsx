@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { api, ApiError, message, numeric, optionalRecord, record, responseData, text } from "@/api/client";
 import type { components } from "@/api/generated/schema";
-import { exactContract, inputContracts } from "@/api/input-contracts";
-import { methodCatalog, studyIndex, type StudyDefinition } from "@/api/research";
+import { exactContract, capabilityInputContracts } from "@/api/input-contracts";
+import { studyIndex, type StudyDefinition } from "@/api/research";
+import { methodCardsQuery } from '@/lib/study-queries';
 import { displayName } from "@/lib/display-names";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
 import { workspaceQuery } from "@/lib/study-queries";
@@ -38,7 +39,7 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
   const [error, setError] = useState("");
   const [parameterSource, setParameterSource] = useState('defaults');
   const workspace = useQuery({ ...workspaceQuery(workspaceId), enabled: open });
-  const methods = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal), enabled: open });
+  const methods = useQuery({ ...methodCardsQuery(), enabled: open });
   const studies = useQuery({ queryKey: ["study-index"], queryFn: ({ signal }) => studyIndex(signal), enabled: open });
   const simulation = useQuery({
     queryKey: ["study-tasks"],
@@ -102,7 +103,7 @@ export function AddStudyDialog({ open, onOpenChange, theme, workspaceId, project
       if (revision === null) throw new ApiError(409, "工程修订不可用，请刷新后重试");
       let parameters: Record<string, unknown> = inherit ? structuredClone(optionalRecord(same.definition.parameters)) : {};
       if (!inherit) {
-        const schema = optionalRecord(exactContract(await inputContracts(), chosen.method).parameter_schema);
+        const schema = optionalRecord(exactContract(await capabilityInputContracts(chosen.method), chosen.method).parameter_schema);
         parameters = Object.fromEntries(Object.entries(optionalRecord(schema.properties)).flatMap(([key, value]) => "default" in optionalRecord(value) ? [[key, optionalRecord(value).default]] : []));
       }
       const body: components["schemas"]["CreateStudy"] = {

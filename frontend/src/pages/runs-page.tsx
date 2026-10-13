@@ -1,4 +1,4 @@
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { keepPreviousData, useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
 import { indexAll, indexObjects, type ObjectCard } from "@/api/object-index";
 import { message, text } from "@/api/client";
@@ -18,11 +18,30 @@ import { runOwnerName, runPresentation, scopedRunOrdinals } from '@/lib/run-pres
 const PAGE = 50;
 const short = formatDateTime;
 
+// Full integrity/currentness checks are CPU work on the real host. Avoid sending
+// a burst of every history at once while retaining parallel reads and Query cache.
+function summaryReader() {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+  const drain = () => { while (active < 4 && waiting.length) waiting.shift()!(); };
+  return (workspace: string, study: string, signal: AbortSignal) => new Promise<Awaited<ReturnType<typeof studyRuns>>>((resolve, reject) => {
+    waiting.push(() => {
+      active++;
+      Promise.resolve().then(() => {
+        if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        return studyRuns(workspace, study, signal, 'summary');
+      }).then(resolve, reject).finally(() => { active--; drain(); });
+    });
+    drain();
+  });
+}
+
 /**
  * 记录 › 运行与作业（FRONTEND_REQUIREMENTS §2.2）：跨对象的筛选视图，运行本身的家在所属研究或型号里。
  * 运行列表来自统一索引；超算作业沿用作业接口（取消、核对状态）。
  */
 export function RunsPage() {
+  const readSummary = useMemo(summaryReader, []);
   const [q, setQ] = useState("");
   const query = useDeferredValue(q.trim());
   const runs = useInfiniteQuery({
@@ -43,10 +62,14 @@ export function RunsPage() {
   const typeIds = new Set((types.data || []).map(row => String(row.id)));
   const visibleParents = new Set(rows.filter(row => row.parent?.kind === 'study').map(row => row.parent!.id));
   const typeWorkspaces = new Set((studies.data || []).filter(study => visibleParents.has(study.id) && typeIds.has(study.workspace)).map(study => study.workspace));
-  const parents = [...new Set([...visibleParents, ...(studies.data || []).filter(study => typeWorkspaces.has(study.workspace)).map(study => study.id)])];
+  // When the unfiltered index already contains every run, its parents contain
+  // every non-empty history. Empty sibling modules cannot change type numbering.
+  // A partial/filtered page still reads all siblings to keep scoped numbering exact.
+  const allRunsLoaded = !query && total !== undefined && rows.length >= total && !runs.hasNextPage;
+  const parents = [...new Set([...visibleParents, ...(allRunsLoaded ? [] : (studies.data || []).filter(study => typeWorkspaces.has(study.workspace)).map(study => study.id))])];
   const summaries = useQueries({ queries: parents.map(sid => {
     const study = studies.data?.find(row => row.id === sid);
-    return { queryKey: ['run-list-summary', study?.workspace, sid], queryFn: ({ signal }: { signal: AbortSignal }) => studyRuns(study!.workspace, sid, signal, 'summary'), enabled: !!study, retry: false };
+    return { queryKey: ['run-list-summary', study?.workspace, sid], queryFn: ({ signal }: { signal: AbortSignal }) => readSummary(study!.workspace, sid, signal), enabled: !!study, retry: false };
   }) });
   const history = summaries.flatMap(query => query.data || []);
   const ordinals = scopedRunOrdinals(history, typeIds);

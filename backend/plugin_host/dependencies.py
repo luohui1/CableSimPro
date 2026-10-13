@@ -9,9 +9,22 @@ import json
 import os
 from pathlib import Path
 from functools import lru_cache
+from threading import RLock
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 
 LOCK_PATH = 'src/host-dependencies.json'
+_snapshot = ContextVar('host_dependency_snapshot', default=None)
+
+
+@contextmanager
+def dependency_batch(snapshot):
+    token = _snapshot.set(snapshot)
+    try:
+        yield
+    finally:
+        _snapshot.reset(token)
 
 
 @lru_cache(maxsize=256)
@@ -24,20 +37,48 @@ def imports(raw):
                  for alias in (node.names if isinstance(node, ast.Import) else [None]))
 
 
-def host_dependencies(directory: Path) -> list[dict]:
+class DependencySnapshot:
+    """One verification batch's actual import inventory and read source bytes.
+
+    Never retained between requests or executions. The catalogue's SourceWatch
+    lease rejects reuse after publication; execution uses its own fresh check.
+    """
+    def __init__(self, root):
+        self.root = Path(root).resolve()
+        self.sources = list((self.root / 'plugins').glob('*/src'))
+        self.files, self.directories, self.contents, self.checked = set(), set(), {}, set()
+        self.lock = RLock()
+        for source in [self.root / 'backend', self.root / 'cablesim_sdk', *self.sources]:
+            for parent, folders, names in os.walk(source):
+                folders[:] = [name for name in folders if name != '__pycache__']
+                parent = Path(parent)
+                self.directories.add(parent.as_posix())
+                self.directories.update((parent / name).as_posix() for name in folders)
+                self.files.update((parent / name).as_posix() for name in names if name.endswith('.py'))
+
+    def check(self, file):
+        with self.lock:
+            if file not in self.checked:
+                if file.is_symlink() or not file.resolve().is_relative_to(self.root):
+                    raise ValueError('UNSAFE_HOST_DEPENDENCY: ' + str(file))
+                self.checked.add(file)
+
+    def read(self, file):
+        with self.lock:
+            if file not in self.contents:
+                self.contents[file] = file.read_bytes()
+            return self.contents[file]
+
+
+def host_dependencies(directory: Path, snapshot=None) -> list[dict]:
     root = directory.parent.parent.resolve()
+    snapshot = snapshot or _snapshot.get() or DependencySnapshot(root)
+    if snapshot.root != root:
+        raise ValueError('HOST_DEPENDENCY_ROOT_MISMATCH')
     pending = list((directory / 'src').rglob('*.py'))
     visited, dependencies = set(), set()
     modules, packages, contents = {}, {}, {}
-    sources = list((root / 'plugins').glob('*/src'))
-    files, directories = set(), set()
-    for source in [root / 'backend', root / 'cablesim_sdk', *sources]:
-        for parent, folders, names in os.walk(source):
-            folders[:] = [name for name in folders if name != '__pycache__']
-            parent = Path(parent)
-            directories.add(parent.as_posix())
-            directories.update((parent / name).as_posix() for name in folders)
-            files.update((parent / name).as_posix() for name in names if name.endswith('.py'))
+    sources, files, directories = snapshot.sources, snapshot.files, snapshot.directories
 
     def add_module(name, required=False):
         if name in modules:
@@ -74,8 +115,7 @@ def host_dependencies(directory: Path) -> list[dict]:
             if file in dependencies:
                 continue
             if file.as_posix() in files:
-                if file.is_symlink() or not file.resolve().is_relative_to(root):
-                    raise ValueError('UNSAFE_HOST_DEPENDENCY: ' + str(file))
+                snapshot.check(file)
                 if file.is_relative_to(directory/'src'):
                     continue  # Already scanned and sealed as this plugin's own package.
                 dependencies.add(file)
@@ -89,7 +129,7 @@ def host_dependencies(directory: Path) -> list[dict]:
         host_file = path.is_relative_to(root / 'backend') or path.is_relative_to(root / 'cablesim_sdk')
         shared_file = path in dependencies and not host_file
         package = '.'.join(path.relative_to(root).parts[:-1]) if host_file else '.'.join(path.relative_to(root).parts[3:-1]) if shared_file else ''
-        raw = path.read_bytes()
+        raw = snapshot.read(path)
         contents[path] = raw
         for level, module, names in imports(raw):
             if not names:
@@ -114,8 +154,8 @@ def host_dependencies(directory: Path) -> list[dict]:
     return records
 
 
-def verify_host_dependencies(directory: Path) -> None:
-    expected = host_dependencies(directory)
+def verify_host_dependencies(directory: Path, snapshot=None) -> None:
+    expected = host_dependencies(directory, snapshot)
     lock = directory / LOCK_PATH
     actual = json.loads(lock.read_text('utf-8')) if lock.is_file() else []
     if actual != expected:

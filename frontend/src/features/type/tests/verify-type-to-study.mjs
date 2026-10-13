@@ -25,6 +25,7 @@ async function relations(title){
   await page.goto(`${fixture.url}/types/${wid}/structure/table?theme=light`);
   const card=page.locator('[data-type-card]'),details=card.locator('.relation-panel'),failure=card.getByRole('alert').filter({hasText:'关联读取失败'});
   await expect(card).toBeVisible();await card.scrollIntoViewIfNeeded();
+  await click(card.getByRole('button',{name:'查看关联',exact:true}));
   await expect.poll(async()=>await details.isVisible()||await failure.isVisible()).toBe(true);
   if(await failure.isVisible()){
     report.issues.push({owner:'Agent / 统一索引',kind:'index-retry',reason:await failure.innerText()});

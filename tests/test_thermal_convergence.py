@@ -69,7 +69,7 @@ def test_unconverged_field_refused_by_delivery_service(monkeypatch):
         def load(self,db,wid,*a,**k):return {'revision':1},{}
     service=object.__new__(Research)
     service.store=Store()
-    monkeypatch.setattr(service,'verified_runs',lambda *a:[evidence()])
+    monkeypatch.setattr(service,'verified_runs',lambda *a,display=False:[evidence()])
     with pytest.raises(HTTPException) as caught:service.deliver('workspace',['run'])
     assert caught.value.status_code==422
     assert '未收敛' in caught.value.detail

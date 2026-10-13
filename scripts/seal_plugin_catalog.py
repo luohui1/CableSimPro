@@ -6,7 +6,7 @@ import os
 import sys
 import tempfile
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from backend.plugin_host.registry import Registry
+from backend.plugin_host.registry import Registry, PluginHostError
 from backend.plugin_host.manifest import Manifest
 from backend.plugin_host.buried_contract import BuriedField, BuriedSummary
 from backend.plugin_host.electrothermal_contract import ElectrothermalSummary
@@ -28,13 +28,52 @@ def write_json(path,value):
     finally:temporary.unlink(missing_ok=True)
 
 
-def synchronize(write=False):
-    registry = Registry()
+def catalogue_drift(*, exclude=None):
+    """Read-only reminders; a targeted seal never repairs foreign entries."""
+    path = ROOT/'plugins/registry.json'
+    current = json.loads(path.read_text('utf-8'))
+    installed = {entry['plugin_id']:entry for entry in current['plugins']}
+    drifted = []
+    names = set()
+    for manifest_path in sorted((ROOT/'plugins').glob('*/plugin.json')):
+        name = manifest_path.parent.name
+        names.add(name)
+        if name == exclude:
+            continue
+        try:
+            plugin = Registry(ROOT/'plugins', plugin_id=name).get(name)
+            entry = {'plugin_id':name,'version':plugin.manifest.version,
+                     'manifest':'plugins/'+name+'/plugin.json',
+                     'release_digest':fingerprint(plugin.manifest.model_dump(mode='json',by_alias=True))}
+            if installed.get(name) != entry:
+                drifted.append(name)
+        except (OSError, ValueError, PluginHostError):
+            drifted.append(name)
+    drifted.extend(sorted(set(installed)-names-{exclude}))
+    return drifted
+
+
+def synchronize(write=False, *, plugin_id=None):
+    registry = Registry(plugin_id=plugin_id)
     catalogue = {'schema_version':'cablesim.catalog/2', 'plugins':[
         {'plugin_id':p.manifest.id, 'version':p.manifest.version,
          'manifest':'plugins/'+p.manifest.id+'/plugin.json',
          'release_digest':fingerprint(p.manifest.model_dump(mode='json',by_alias=True))}
         for p in registry.plugins.values()]}
+    if plugin_id is not None:
+        path = ROOT/'plugins/registry.json'
+        current = json.loads(path.read_text('utf-8'))
+        entry = catalogue['plugins'][0]
+        entries = current['plugins']
+        previous = next((item for item in entries if item['plugin_id'] == plugin_id), None)
+        if previous == entry:
+            return []
+        current['plugins'] = [entry if item['plugin_id'] == plugin_id else item for item in entries]
+        if previous is None:
+            current['plugins'].append(entry)
+        if write:
+            write_json(path, current)
+        return ['plugins/registry.json']
     schemas = {'manifest':Manifest.model_json_schema(),
                'temperature-field':TemperatureField.model_json_schema(),
                'headline-witness':HeadlineWitness.model_json_schema(),

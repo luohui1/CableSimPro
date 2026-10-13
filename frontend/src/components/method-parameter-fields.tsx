@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { components } from "@/api/generated/schema";
-import { exactContract, inputContracts } from "@/api/input-contracts";
+import { inputContractQuery } from "@/api/input-contracts";
 import { message } from "@/api/client";
 import type { ParameterDraft } from "@/lib/study-config";
 import { Suspense } from 'react';
@@ -30,19 +30,9 @@ export function MethodParameterFields({
   namespace: string;
   sources?: Record<string, { kind?: string }>;
 }) {
-  const query = useQuery({
-    queryKey: ["input-contracts"],
-    queryFn: ({ signal }) => inputContracts(signal),
-  });
+  const query = useQuery(inputContractQuery(method));
   if (query.isPending) return <LoadingState title="正在读取方法参数" />;
-  let error: unknown = query.error,
-    contract;
-  if (!error)
-    try {
-      contract = exactContract(query.data!, method);
-    } catch (problem) {
-      error = problem;
-    }
+  const error = query.error, contract = query.data;
   if (error)
     return (
       <ErrorState

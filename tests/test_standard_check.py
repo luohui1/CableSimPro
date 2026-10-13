@@ -310,7 +310,7 @@ def test_saved_snapshot_is_immutable_and_duplicate_request_reuses_run(tmp_path):
         document = deepcopy(w['domain'])
         document['cable_types'][0]['common_layers'][1]['thickness'] += .001
         assert client.put(root + '/domain', json={'document': document, 'expected_revision': w['revision']}).status_code == 200
-        saved = client.get(sr + '/runs/' + first['id']).json()
+        saved = client.get(sr + '/runs/' + first['id'], params={'view': 'full'}).json()
         assert saved['freshness'] == 'historical'
         assert saved['output'] == previous
         assert saved['snapshot']['workspace_revision'] == w['revision']

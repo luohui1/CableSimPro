@@ -5,17 +5,21 @@ import path from 'node:path';
 import {expect as baseExpect} from '@playwright/test';
 import {openHeadlessBrowser,repositoryRoot} from './browser.mjs';
 import {request} from './research-fixtures.mjs';
+import {installReadinessObserver,waitForPageReady} from './page-readiness.mjs';
 if(process.env.E2E_ISOLATED!=='1')throw Error('必须使用隔离库');
 const base=process.env.FRONTEND_URL,receipt=JSON.parse(await fs.readFile(process.env.FEM_RECEIPT,'utf8'));
-const out=path.join(repositoryRoot,'.data/fix-round/research/type-input/fem/report');await fs.mkdir(out,{recursive:true});
+const out=process.env.FEM_REPORT_OUTPUT || path.join(repositoryRoot,'.data/fix-round/research/type-input/fem/report');await fs.mkdir(out,{recursive:true});
 const session=await openHeadlessBrowser(),{page}=session,expect=baseExpect.configure({timeout:60000});
 const record={receipt,errors:[],writes:[],source:process.env.E2E_DATABASE_SOURCE};
 page.on('pageerror',error=>record.errors.push(error.message));
 page.on('request',req=>{if(req.url().includes('/api/')&&!['GET','HEAD'].includes(req.method()))record.writes.push({path:new URL(req.url()).pathname,body:req.postDataJSON()});});
 try{
   await page.setViewportSize({width:1366,height:768});
+  await installReadinessObserver(page);
   const start=Date.now();await page.goto(`${base}/studies/${receipt.study}/thermal-field/results?workspace=${receipt.workspace}&run=${receipt.run}&theme=light`);
-  await expect(page.locator('.answer-bar')).toContainText('已收敛');record.openSeconds=(Date.now()-start)/1000;
+  await expect(page.locator('.answer-bar')).toContainText('已收敛');await waitForPageReady(page);record.openSeconds=(Date.now()-start)/1000;
+  record.openWaterfall=await page.evaluate(()=>performance.getEntriesByType('resource').filter(r=>r.name.includes('/api/')).map(r=>({path:new URL(r.name).pathname,startMs:r.startTime,endMs:r.responseEnd,bytes:r.decodedBodySize})));
+  await expect(page.getByRole('dialog',{name:'操作提示',exact:true})).toHaveCount(0);
   record.summary=await request(base,`/api/workspaces/${receipt.workspace}/runs/${receipt.run}/fem-conclusion`);
   record.run=await request(base,`/api/workspaces/${receipt.workspace}/studies/${receipt.study}/runs/${receipt.run}`);
   record.chapter=await request(base,`/api/hpc/workspaces/${receipt.workspace}/chapters/${receipt.run}?iec_run_id=${receipt.iec_run}&convergence_id=${receipt.convergence}`);
@@ -33,6 +37,8 @@ try{
   }else{
   assert.ok(await button.isEnabled(),'保存结果必须通过当前正式交付门禁；不绕过历史或未收敛限制');
   const generation=Date.now();await button.click();await expect(page.getByRole('button',{name:'下载 PDF',exact:true})).toBeEnabled();record.previewSeconds=(Date.now()-generation)/1000;
+  const jobPath=await page.evaluate(()=>performance.getEntriesByType('resource').filter(r=>new URL(r.name).pathname.includes('/delivery-jobs/')).at(-1)?.name);
+  if(jobPath)record.generationJob=await request(base,new URL(jobPath).pathname);
   await page.screenshot({path:path.join(out,'preview.png')});
   const generated=record.writes.findLast(item=>item.path.endsWith('/delivery-jobs'));assert.ok(generated);
   assert.equal(generated.body.fem_chapter.fem_run_id,receipt.run);
@@ -45,4 +51,10 @@ try{
   }
   assert.ok(!record.writes.some(row=>row.path.endsWith('/runs')),'仅读取保存结果，不提交求解器');assert.deepEqual(record.errors,[]);
 }catch(error){record.failure=String(error.stack||error);record.screen=await page.locator('body').innerText();await page.screenshot({path:path.join(out,'failed.png')});console.error(record.failure);process.exitCode=1;}
-finally{await fs.writeFile(path.join(out,'record.json'),JSON.stringify(record,null,2));await session.close();}
+finally{
+  record.requests=await page.evaluate(()=>performance.getEntriesByType('resource').filter(r=>r.name.includes('/api/')).map(r=>({
+    path:new URL(r.name).pathname,startMs:r.startTime,endMs:r.responseEnd,durationMs:r.duration,
+    transferBytes:r.transferSize,decodedBytes:r.decodedBodySize,ttfbMs:r.responseStart-r.requestStart,
+    serverTiming:r.serverTiming.map(t=>({name:t.name,duration:t.duration}))}))).catch(()=>[]);
+  await fs.writeFile(path.join(out,'record.json'),JSON.stringify(record,null,2));await session.close();
+}

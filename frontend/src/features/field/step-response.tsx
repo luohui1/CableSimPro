@@ -5,8 +5,10 @@ import { Button } from '@/components/ui/button';
 import { Dialog } from '@/components/ui/dialog';
 import { Select } from '@/components/ui/select';
 import { DataTable } from '@/components/data-table';
+import { ConclusionStrip } from '@/components/conclusion-strip';
 import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { ConvergenceChart } from './convergence-chart';
+import { HeatCapacityForm } from './heat-capacity-form';
 import { hpcJson, hpcStatus, savedRunLabel } from './run-label';
 import './field.css';
 
@@ -81,6 +83,7 @@ export function StepResponse({ run }: { run: Record<string, unknown> }) {
       <p>{text(sourceCheck.data?.reason)}</p><p>{text(sourceCheck.data?.next_step)}</p></div>}
     {history.isPending || sourceCheck.isFetching && !sourceCheck.data ? <LoadingState title="检查保存来源与暂态适用范围" /> : (!item || ['failed','cancelled'].includes(text(item.status))) && !saved && !response.schema && !history.error && !unsupported ? <>
       <EmptyState title="尚无阶跃响应" description="单回路、均匀土壤与恒温地表；逐材料热容须有正文来源。" />
+      {records(sourceCheck.data?.material_regions).length>0&&<HeatCapacityForm regions={records(sourceCheck.data?.material_regions).map(row=>({id:text(row.id),label:text(row.label)}))} onChange={value=>setCapacities(JSON.stringify(value))}/>}
       <details><summary>补充材料热容来源</summary><label className="hpc-budget">区域热容 JSON · J/(m³·K)<textarea value={capacities} onChange={event => setCapacities(event.target.value)} rows={6} placeholder="已保存的来源齐全时留空；缺项预检会列出具体材料域。" /></label></details>
       <label className="hpc-budget">累计核时预算<input type="number" min="0.001" max="2000" step="1" value={budget} onChange={event => setBudget(event.target.value)} /></label>
       <Button variant="primary" disabled={busy || run.status!=='succeeded' || !sourceCheck.data || !!sourceCheck.error} onClick={() => void perform('estimate')}>预检响应与预算</Button>
@@ -90,7 +93,12 @@ export function StepResponse({ run }: { run: Record<string, unknown> }) {
       <div><dt>核时</dt><dd>{number(state.used_core_hours,5)} / {number(state.budget_core_hours,2)} 核时{active ? ` · 排队位置 ${numeric(execution.queue_position) ?? '尚未提供'}` : ''}</dd></div>
       {state.reason ? <div><dt>诊断</dt><dd>{text(state.reason)}</dd></div> : null}</dl>}
     {!!response.schema && <>
-      <dl className="field-scope"><div><dt>结论</dt><dd>{convergence.status==='converged' ? '时间步、网格与稳态末值均达到门槛' : '尚未收敛，禁止导出应急输入'} · {number(convergence.tolerance_k,1)} K</dd></div>
+      <ConclusionStrip label="阶跃响应结论" conclusion={convergence.status==='converged' ? '时间步、网格与稳态末值均达到门槛' : '尚未收敛，禁止导出应急输入'} historical={run.freshness==='historical'} metrics={[
+        {label:'收敛门槛',value:numeric(convergence.tolerance_k),unit:'K',precision:1},
+        {label:'稳态焦耳温升',value:numeric(response.steady_joule_rise_k),unit:'K',precision:3},
+        {label:'参考电流',value:numeric(response.reference_current_a),unit:'A',precision:1},
+      ]}/>
+      <dl className="field-scope">
         <div><dt>参考工况</dt><dd>{number(response.reference_current_a,1)} A · 固定焦耳损耗 · 镜像暂态远场 · 地表恒温</dd></div>
         <div><dt>稳态焦耳温升</dt><dd>{number(response.steady_joule_rise_k)} K · 末值差 {number(convergence.steady_gap_k)} K · 末值与保存稳态差 {number(convergence.endpoint_saved_difference_k)} K</dd></div>
         <div><dt>解析交叉核对</dt><dd>{response.analytic_cross_check ? `外部均质土壤 E1 镜像解 · 最大差 ${number(optionalRecord(response.analytic_cross_check).maximum_difference_k)} K · 非 IEC 官方算例` : '未覆盖：保存模型没有外部土壤取样点。'}</dd></div></dl>

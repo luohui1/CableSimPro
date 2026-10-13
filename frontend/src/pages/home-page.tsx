@@ -1,7 +1,8 @@
 import { useDeferredValue, useEffect, useRef, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { studyIndex, type StudyRow } from "@/api/research";
+import { studyCardIndex, type StudyCardRow } from "@/lib/study-cards";
+import { workspaces } from '@/api/research';
 import { indexInbox, indexObjects, type InboxItem, type ObjectCard } from "@/api/object-index";
 import { message } from "@/api/client";
 import { AppShell } from "@/components/app-shell";
@@ -14,7 +15,6 @@ import { StatusMark } from "@/components/status-mark";
 import { ErrorState, InlineEmpty, LoadingState } from "@/components/states";
 import { Button } from "@/components/ui/button";
 import { VersionNotice } from "@/components/version-notice";
-import { rootModule } from "@/lib/study-config";
 import { isVersionStale } from "@/lib/version-status";
 import { formatDateTime } from '@/lib/format';
 import { statusLabel } from '@/lib/status-vocabulary';
@@ -26,7 +26,7 @@ const short = formatDateTime;
 const SEARCH_KINDS = ["project", "study", "type", "cable_version", "asset", "plugin", "delivery", "document"] as const;
 
 /** 与待办共用分组；共性原因展示一次，所有对象仍可展开查看。 */
-function NeedsAttention({ items, studies }: { items: InboxItem[]; studies: StudyRow[] }) {
+function NeedsAttention({ items, studies }: { items: InboxItem[]; studies: StudyCardRow[] }) {
   const listed = groupInbox(items).slice(0, 6);
   if (!listed.length) return <InlineEmpty title="没有需要处理的事项。" />;
   return <ul className="home-todo">
@@ -52,6 +52,7 @@ function NeedsAttention({ items, studies }: { items: InboxItem[]; studies: Study
  * 名片、状态与待办都来自统一索引（§2.3），页面不自行推算。
  */
 export function HomePage() {
+  const queries = useQueryClient();
   const { theme, navigate } = usePageTheme();
   const [create, setCreate] = useState(false);
   const [initialTask, setInitialTask] = useState('operating');
@@ -73,12 +74,13 @@ export function HomePage() {
   const query = useDeferredValue(needle);
   const found = useQuery({ queryKey: ["index-search", query], queryFn: ({ signal }) => indexObjects({ q: query, limit: 60 }, signal), enabled: !!query, placeholderData: keepPreviousData });
   // 过期研究的“重算”沿用工作台的确认流程，需要研究的修订号
-  const studies = useQuery({ queryKey: ["study-index"], queryFn: ({ signal }) => studyIndex(signal) });
+  const studies = useQuery({ queryKey: ["study-index", "home-cards"], queryFn: ({ signal }) => studyCardIndex(signal,
+    queries.fetchQuery({ queryKey: ['workspace-index'], queryFn: ({ signal }) => workspaces(signal) })) });
 
   const recent = [...(studyCards.data?.items || []), ...(typeCards.data?.items || [])]
     .sort((a, b) => (b.updated || "").localeCompare(a.updated || "")).slice(0, 6) as (ObjectCard & { id: string })[];
   const rows = studies.data || [];
-  const simulation = rows.filter((row) => SIMULATION_MODULES.includes(rootModule(row.definition))).length;
+  const simulation = rows.filter((row) => SIMULATION_MODULES.includes(row.module)).length;
   const pending = studyCards.isPending || typeCards.isPending;
   const failure = studyCards.error || typeCards.error;
 

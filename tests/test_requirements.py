@@ -61,7 +61,7 @@ def test_review_is_persistent_idempotent_and_does_not_change_model_or_run(review
     receipt = response.json()
     assert client.post(route + '/reviews', json=body).json() == receipt
     assert client.get(root).json()['revision'] == run['snapshot']['workspace_revision']
-    saved = client.get(root + '/studies/' + run['study'] + '/runs/' + run['id']).json()
+    saved = client.get(root + '/studies/' + run['study'] + '/runs/' + run['id'], params={'view': 'full'}).json()
     assert saved['output'] == run['output'] and saved['freshness'] == 'current'
     catalog = client.get(route, params={'run_id': run['id']}).json()
     assert catalog['revision'] == 1 and catalog['approved_count'] == 1

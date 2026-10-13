@@ -1,20 +1,25 @@
 import { useQuery } from '@tanstack/react-query';
 import { array, message, numeric, optionalRecord, text } from '@/api/client';
 import { isVersionStale } from '@/lib/version-status';
-import { Conclusion } from './conclusion';
+import { ConclusionStrip } from './conclusion-strip';
 import { DataTable } from './data-table';
 import { InlineEmpty, LoadingState } from '@/components/states';
 import { StudyErrorState as ErrorState } from '@/components/study-error-state';
 import { Button } from './ui/button';
 
-export function useFemEvidence(run?: Record<string,unknown>, prepareReport=false) {
-  const method=optionalRecord(run?.method || optionalRecord(optionalRecord(run?.snapshot).definition).method);
-  return useQuery({queryKey:['fem-conclusion',run?.workspace,run?.id,prepareReport], enabled:!!run && method.capability==='iec-thermal-field' && ['succeeded','partial'].includes(text(run.status)), retry:false,staleTime:30000,
-    queryFn:async({signal})=>{
-      const response=await fetch(`/api/workspaces/${encodeURIComponent(text(run?.workspace))}/runs/${encodeURIComponent(text(run?.id))}/fem-conclusion${prepareReport ? '?prepare_report=true' : ''}`,{signal});
+export function femConclusionQuery(wid?: string,rid?: string,prepareReport=false) {
+  return {queryKey:['fem-conclusion',wid || '',rid || '',prepareReport], retry:false,staleTime:30000,
+    queryFn:async({signal}:{signal:AbortSignal})=>{
+      const response=await fetch(`/api/workspaces/${encodeURIComponent(wid || '')}/runs/${encodeURIComponent(rid || '')}/fem-conclusion${prepareReport ? '?prepare_report=true' : ''}`,{signal});
       const data=await response.json();if(!response.ok)throw Error(text(optionalRecord(data.detail).message) || text(data.detail) || `保存证明读取失败（${response.status}）`);
       return optionalRecord(data);
-    }});
+    }};
+}
+
+export function useFemEvidence(run?: Record<string,unknown>, prepareReport=false) {
+  const method=optionalRecord(run?.method || optionalRecord(optionalRecord(run?.snapshot).definition).method);
+  return useQuery({...femConclusionQuery(text(run?.workspace),text(run?.id),prepareReport),
+    enabled:!!run && method.capability==='iec-thermal-field' && ['succeeded','partial'].includes(text(run.status))});
 }
 
 export function FemConclusionBar({run}:{run:Record<string,unknown>}) {
@@ -31,8 +36,7 @@ export function FemConclusionBar({run}:{run:Record<string,unknown>}) {
   const loadLabel=currents.length ? currents.map(v=>v.toFixed(0)).join(' / ')+' A 时' : '保存负荷下';
   const limits=Array.isArray(data.temperature_limits_k) ? data.temperature_limits_k : [];
   const limitLabel=limits.length===1 && typeof limits[0]==='number' ? (limits[0]-273.15).toFixed(0)+' °C 温限下' : '各导体保存温限下';
-  return <Conclusion title="有限元负荷校核结论" model={margin===null ? '保存工况已收敛，温限资料缺项' : margin<0 ? '保存负荷超出温限' : '保存负荷满足温限'}
-    description={`有限元 · 已收敛（网格与扩域均 < ${data.tolerance_k} K）· ${text(data.boundary_label)}`}
+  return <ConclusionStrip label="有限元负荷校核结论" conclusion={`${margin===null ? '保存工况已收敛，温限资料缺项' : margin<0 ? '保存负荷超出温限' : '保存负荷满足温限'} · 有限元 · 已收敛（网格与扩域均 < ${data.tolerance_k} K）· ${text(data.boundary_label)}`}
     historical={run.freshness==='historical' || isVersionStale(run)} metrics={[
       {label:limitLabel+(text(data.rating_basis)==='rating-simultaneous' ? '共同允许电流' : '允许电流'),value:numeric(data.allowable_current_a),unit:'A',precision:1},
       {label:loadLabel+'最热导体',value:temperature===null ? null : temperature-273.15,unit:'°C',precision:1},

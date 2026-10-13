@@ -63,7 +63,8 @@ class StepResponses:
         return [v for identifier in ids if (v:=self.load(identifier))['workspace']==wid and sid in (v['source_study'],v['study'])]
 
     def prepared(self,wid,sid,body):
-        run=self.research.get_run(wid,str(body.source_run_id))
+        from .batch_field_projection import read_display
+        run=read_display(self.research,wid,str(body.source_run_id))
         if run['study']!=sid:raise HTTPException(422,'来源运行不属于当前研究。')
         plugin=Registry(self.research.executor.registry.root,plugin_id='cablesim.simulation').get('cablesim.simulation');plugin.verify()
         sys.path.insert(0,str(plugin.directory/'src'))
@@ -82,15 +83,25 @@ class StepResponses:
 
     def source_check(self,wid,sid,identifier):
         """Local, source-only scope check. Never stages or submits a native job."""
-        run=self.research.get_run(wid,identifier)
+        from .batch_field_projection import read_display
+        run=read_display(self.research,wid,identifier)
         if run['study']!=sid:raise HTTPException(422,'来源运行不属于当前研究。')
         plugin=Registry(self.research.executor.registry.root,plugin_id='cablesim.simulation').get('cablesim.simulation');plugin.verify()
         sys.path.insert(0,str(plugin.directory/'src'))
+        material_regions=[]
+        def regions(value):
+            conductors=value.get('conductor_regions',[])
+            return [{'id':shape['uid'],'label':'土壤' if index==0 else '导体' if shape['uid'] in conductors else f'电缆材料区域 {index}'}
+                    for index,shape in enumerate(value.get('problem',{}).get('geometry',[]))]
         try:
             from cablesim_simulation.step_response import from_saved_run
-            from_saved_run(run)
+            prepared=from_saved_run(run)
+            material_regions=regions(prepared)
             status,reason='passed','保存来源在阶跃热响应适用范围内。'
-        except ValidationError:
+        except ValidationError as exc:
+            for issue in exc.errors():
+                value=issue.get('input')
+                if isinstance(value,dict) and 'problem' in value:material_regions=regions(value);break
             status,reason='needs_material_sources','材料热容或来源缺项；请逐材料补充体积热容、正文页码、表号和文件摘要，再预检。'
         except (ValueError,KeyError) as exc:
             status,reason='unsupported',str(exc) if isinstance(exc,ValueError) else '保存稳态工件缺少阶跃响应所需内容，请保留原结果并补齐来源。'
@@ -109,7 +120,7 @@ class StepResponses:
         return {'status':status,'reason':reason,'source_run_id':identifier,'source_study_id':sid,
                 'source_study_name':run['snapshot']['definition']['title'],
                 'source_output_sha256':run['output_digest'],'solver_submitted':False,
-                'scope':'thermally_isolated_circuit','next_step':next_step}
+                'scope':'thermally_isolated_circuit','next_step':next_step,'material_regions':material_regions}
 
     def estimate(self,wid,sid,body):
         run,value,controls,method,budget=self.prepared(wid,sid,body)

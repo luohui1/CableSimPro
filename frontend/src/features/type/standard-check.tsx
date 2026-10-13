@@ -18,6 +18,7 @@ import { SavedRunPicker } from './saved-run-picker';
 import { basisConditions } from './basis-display';
 import { issuePresentation } from './result-presentation';
 import { ResultTrace } from './result-detail';
+import { MeasurementEntry, measurementSource } from './measurements';
 
 const verdicts: Record<string, { kind: StatusKind; label: string }> = { passed: { kind: 'satisfied', label: '满足' }, failed: { kind: 'unsatisfied', label: '不满足' }, missing: { kind: 'unknown', label: '待补数据' }, uncovered: { kind: 'unknown', label: '未覆盖' } };
 type StandardRow = Record<string, unknown> & { id: string };
@@ -67,11 +68,12 @@ export function TypeStandardCheck() {
   }
   function choose(row: StandardRow) {
     setSelected(row.id);
+    const issue=issuePresentation(row,'standard-check',state.document!.cable_types[0].id);
     const target = optionalRecord(row.target);
     const located = text(target.role) ? target.scope === 'core' ? `${text(target.core_id)}/${text(target.role)}` : `common/${text(target.role)}` : '';
     inspector.show(text(row.title), [
-      { label: '要求与结果', items: [ { label: '要求', value: requirement(row), source: 'standard', sourceDetail: text(row.standard) + ' · ' + text(row.clause) }, { label: '实际值', value: resultValue(row.actual, row), source: 'calculation', sourceDetail: methodLabel(saved!.run) }, { label: '余量', value: resultValue(row.margin, row), source: 'calculation' }, { label: '判定', value: verdicts[text(row.verdict)].label }, { label: '原因', value: displayText(text(row.reason)) || '—' } ] },
-      { label: '依据', items: [ { label: '标准', value: text(row.standard) || '未提供' }, { label: '条款', value: text(row.clause) || '未提供' }, { label: '正文页码', value: numeric(row.printed_page) ?? (row.source_status==='input-missing'?'补齐字段后查询':'本库暂未收录') }, { label: 'PDF 页码', value: numeric(row.pdf_page) ?? (row.source_status==='input-missing'?'补齐字段后查询':'本库暂未收录') }, { label: '依据', value: row.source_status === 'original-verified' ? '依据已核验' : row.source_status==='input-missing'?text(row.reason):'本库暂未收录 · 下一轮' }, { label: '输入来源', value: text(optionalRecord(row.input_source).reference) || '未提供' } ] },
+      { label: '要求与结果', items: [ { label: '要求', value: requirement(row), source: 'standard', sourceDetail: text(row.standard) + ' · ' + text(row.clause) }, { label: '实际值', value: resultValue(row.actual, row), source: 'calculation', sourceDetail: methodLabel(saved!.run) }, { label: '余量', value: resultValue(row.margin, row), source: 'calculation' }, { label: '判定', value: verdicts[text(row.verdict)].label }, { label: '原因', value: issue.kind==='history'?issue.reason:displayText(text(row.reason)) || '—' } ] },
+      { label: '依据', items: [ { label: '标准', value: text(row.standard) || '未提供' }, { label: '条款', value: text(row.clause) || '未提供' }, { label: '正文页码', value: numeric(row.printed_page) ?? (row.source_status==='input-missing'?'补齐字段后查询':'本库暂未收录') }, { label: 'PDF 页码', value: numeric(row.pdf_page) ?? (row.source_status==='input-missing'?'补齐字段后查询':'本库暂未收录') }, { label: '依据', value: issue.kind==='history'?issue.label:row.source_status === 'original-verified' ? '依据已核验' : row.source_status==='input-missing'?text(row.reason):'本库暂未收录 · 下一轮' }, { label: '输入来源', value: measurementSource(row.input_source) } ] },
       ...(located ? [{ label: '关联结构', items: [{ label: '对象', value: <Button variant="ghost" size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, 'structure', 'table', navigation.location.theme) + '&layer=' + encodeURIComponent(located))}>定位结构层</Button> }] }] : []),
     ], <ResultTrace items={[{label:'完整实际值',value:row.actual==null?'未提供':String(row.actual)+' '+text(row.unit)},{label:'完整余量',value:row.margin==null?'未提供':String(row.margin)+' '+text(row.unit)}]} />);
   }
@@ -83,7 +85,7 @@ export function TypeStandardCheck() {
   const bodyState = running || evidence.isPending ? 'loading' : error || evidence.error ? 'error' : !saved ? 'empty' : current ? 'success' : 'historical';
   return <div className="type-page" data-type-page="standard-check-results" data-type-state={bodyState}>
     <div className="type-result-toolbar"><CommandAction><TypeRunControl channel="standard-check" label="执行标准核对" definition={definition} onBusy={setRunning} /></CommandAction><Button size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, 'requirements', 'list', navigation.location.theme))}>要求与批准记录</Button>
-      {saved && <><SavedRunPicker schema="cablesim.standard-check/1" /><Select label="要求状态" value={filter} onChange={setFilter} options={[{ value: 'all', label: '全部要求' }, ...Object.entries(verdicts).map(([value, item]) => ({ value, label: item.label }))]} /></>}</div>
+      {saved && <><SavedRunPicker schema="cablesim.standard-check/1" /><Select label="要求状态" value={filter} onChange={setFilter} options={[{ value: 'all', label: '全部要求' }, ...Object.entries(verdicts).map(([value, item]) => ({ value, label: item.label }))]} /><MeasurementEntry checks={rows.map(result=>({result}))}/></>}</div>
     {bodyState === 'loading' ? <LoadingState title="正在读取或核对型号要求" /> : bodyState === 'error' ? <ErrorState title="标准核对不可用" description={error || message(evidence.error)} action={<Button onClick={() => void evidence.refetch()}>重新读取</Button>} /> : !saved ? <InlineEmpty title="尚无标准核对结果，使用命令栏执行核对。" /> : <>
       {!current && <StaleBanner description="输入或方法已变化；保留原要求与判定，人工批准保持关闭。" />}
       <div className="type-result-summary"><strong>{!rows.length ? '暂无适用要求' : numeric(counts.failed) ? `${numeric(counts.failed)} 项不满足` : numeric(counts.missing) || numeric(counts.uncovered) ? '核对尚未完整覆盖' : '声明范围内要求满足'}</strong>

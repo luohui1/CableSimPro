@@ -61,6 +61,8 @@ npm run capture:handoff          # 只读截取正式前端，可加 -- --route=
 
 可用 `VISIBLE_TEXT_PATHS`（竖线分隔的真实路由）缩小同一巡检清单，`PERFORMANCE_PASS`、`REGULARITY_PASS` 分开保存不同实测批次。`E2E_FRONTEND_DIST` 可指定冻结的构建目录，避免并行构建改变验收版本。性能巡检由隔离后端拒绝写请求，保留真实浏览器缓存；另外两项使用客户端只读守卫。`problems.md` 按线程列出超预算项，分开列最慢接口、下载、主线程任务和 CAD 初始化回执；`findings.md` 包含每次测量及界面终态，`audit.json` 保留完整时间线和未覆盖项。时间预算通过不代表功能成功，错误终态仅测提示呈现时间。没有观测来源的 CPU 阶段不猜测为 WASM 初始化。
 
+文字与规整可以共用一次真实遍历：设置 `REGULARITY_AUDIT=1`、`REGULARITY_WITH_VISIBLE=1` 后运行 `npm run test:visible-text`，会分别生成两个完整审计结果及规整总览，不重复打开同一批页面。性能仍单独实测。响应记录包含 `Server-Timing` 和 `X-CableSim-Read-Cache`（接口提供时），可将浏览器排队 / 下载与服务端实际读取时间分开查看。
+
 | 位置 | 职责与边界 |
 | --- | --- |
 | `src/components/ui/` | shadcn/ui + Radix 基础控件，仅维护一份；按令牌改造，保留语义、焦点管理和键盘行为 |
@@ -95,6 +97,33 @@ npm run capture:handoff          # 只读截取正式前端，可加 -- --route=
 shadcn 语义变量统一映射在 `theme.css`；项目灰底和控件边框使用 `--ground`、`--control-border`。`lucide-react` 在 Vite 和 TypeScript 中均指向显式命名导出的自研图标适配，未映射名称会类型报错。方法参数按匹配发行的真实输入契约生成，显示单位换算后以 SI 保存；运行记录读取正式快照，领域表保留后端锁和推导来源的只读规则。Agent 工作模式保持“待接入”，示范内容仅在开发陈列页。
 
 ## 公共组件与动效
+
+输入契约按能力读取：`capabilityInputContracts({plugin_id, capability}, signal)` 返回已安装能力的契约；已有保存方法使用 `useQuery(inputContractQuery(method))`，同时匹配插件、能力、版本及发行摘要。查询 key 保留 `input-contracts` 前缀，版本变化时可统一失效；不会把旧方法自动换成新契约。全量 `inputContracts(signal)` 仅保留兼容，导航预取不再读取它。宿主 `GET /api/input-contracts` 接受同名筛选参数，响应仍来自封签核验的目录，错误摘要返回空列表，由精确匹配给出明确错误。
+
+“方法说明已更新，保存结果仍有效”使用 `InformationNotice`（区块标题16/600、正文14/400），可关闭，不捕获焦点。公共 `Dialog` 兼容旧的单条 `ErrorState` 通知包装，只将这一类没有操作按钮的信息转为非模态提示；需要处理的失败仍保留原对话框。新调用应直接使用信息组件，去重身份沿用插件及方法发行摘要，并将该身份用作 React `key`，让下一次发行的同文提示能够重新显示；`onDismiss` 可同步清空调用方通知状态。
+
+`npm run test:public-read-use` 在发布库只读备份中打开真实保存场图、检查浏览器304与服务端重新核验，并从首页进入询价表单核对按能力请求。已核验回执可在每次检查数据/封签变更后复用；脚本在隔离库另做输出损坏注入，确认旧ETag被409拒绝，恢复原字节后重新读取，禁止将未核验数据用于304。此注入只模拟界面无法合法制造的完整性失败，所有成功数值来自原保存结果。说明更新不得打开阻断对话框；已接入公共信息组件时验证关闭，否则记录页面尚缺的接入，不制造通知响应。`FIELD_WORKSPACE`、`FIELD_STUDY`、`FIELD_RUN` 可指定已保存场图；不提交作业。对照原缓存策略时设置 `PUBLIC_READ_PHASE=before` 和 `PUBLIC_READ_BASELINE=<Git提交>`，隔离服务只换回该提交的公共中间件，其余宿主、数据与前端构建保持一致。输出在 `.data/fix-round/shared-shell/private-read/`，可用 `E2E_FRONTEND_DIST` 固定两次的同一构建。
+
+紧凑结论条统一使用 `components/conclusion-strip.tsx`（字号依据 [需求 §5](../docs/design/FRONTEND_REQUIREMENTS.md#5-视觉规则)），用于工作窗口的一句结论与 2–4 个关键数。结论句 14/600、数值 20/600、单位和标签 13/400，按整组换行；样式由组件载入，两个视口都不另覆盖字号。大号选型区仍使用原 `Conclusion`，旧调用兼容。
+
+```tsx
+import { ConclusionStrip } from '@/components/conclusion-strip';
+
+<ConclusionStrip label="保存运行结论" conclusion={savedHeadline}
+  historical={isHistorical}
+  metrics={[
+    { id: 'temperature', label: '最高温度', value: savedTemperatureK,
+      quantity: 'temperature', unit: 'K' },
+    { id: 'current', label: '保存负荷', value: savedCurrentA,
+      quantity: 'current', unit: 'A' },
+  ]} />
+```
+
+`conclusion` 来自插件 headline，`metrics` 只传保存结果原值；`quantity` 沿用 `EngineeringValue` 的物理量和原始单位，由同一格式函数换算并提供完整精度悬停。不传 `quantity` 的普通计数使用 `formatNumber`，可指定展示 `precision`。缺值传 `null` / `undefined`，显示“—”且不附伪单位，不能填零。历史状态传 `historical`；加载、错误、空态继续由页面现有状态组件处理，不能把旧运行伪装成当前结论。尚未提供 headline 时保留明确的“查看结果”入口，不拼结论计数。
+
+研究 / 仿真 / 三维线程接入时，替换紧凑条的呈现，保留已有加载、历史、失败及追溯逻辑；不要将整页 `Conclusion` 全部替换，也不要套 `.conclusion` 的旧字号覆盖。规整巡检按 `data-conclusion-part="sentence|value|unit|label"` 检查该组件，其他旧页面的规则保持原样。材料详情的“已登记物性覆盖”是当前真实资源使用例；未登记物性不计分母，也不声称已满足计算方法。
+
+属性面板可用可选 `summary` 放名称后的紧凑摘要，`extra` 仍放分组后的关联等内容；未传 `summary` 的旧页面呈现不变。
 
 基础控件为 Button / IconButton、NumberField、Select、Dialog、Tooltip、Tabs；组合为 SourceBadge、StatusMark、Toolbar、DataTable、Conclusion、PropertyPanel、CheckArea、EmptyState / LoadingState / ErrorState / StaleBanner、AppShell。每个组件只有一份实现，样式集中在 `src/styles/theme.css`，读取共享令牌。表格行高 40 / 44、6 px 判定圆点；选中行使用 fill 与左侧 2 px 文字色细条；分组/表头使用 fill。属性行高 32，分组间距 16；页签 2 px 下划线距文字 6。限制原因直接显示，满足显示“—”；演示只在页头标一次，来源显示真实类别。规则统一见需求 §5。
 

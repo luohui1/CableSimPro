@@ -35,14 +35,16 @@ export function StudySimulation({
   const config =
     moduleConfiguration(definition, "simulation") ||
     (definition.input_source === "study" ? definition : undefined);
-  const query = useQuery({
-    queryKey: ["input-contracts"],
-    queryFn: ({ signal }) => inputContracts(signal),
-  });
   const [open, setOpen] = useState(false),
     [error, setError] = useState(""),
     [method, setMethod] = useState(""),
     [filename, setFilename] = useState("");
+  const query = useQuery({
+    queryKey: ["input-contracts"],
+    queryFn: ({ signal }) => inputContracts(signal),
+    enabled: open,
+    staleTime: 60_000,
+  });
   const problemContract = useQuery({
     queryKey: ["simulation-problem-contract"],
     queryFn: ({ signal }) => responseData(api.GET("/api/simulation/problem-contract", { signal })),
@@ -185,13 +187,7 @@ export function StudySimulation({
         <EmptyState
           title="尚无独立仿真算例"
           description={
-            query.isPending
-              ? "正在读取可执行方法。"
-              : query.error
-                ? message(query.error)
-                : methods.length
-                  ? "导入有出处的完整问题，保存、预检后运行。"
-                  : "已安装方法尚未提供此类独立问题的输入契约；当前原生任务请使用各研究模块。"
+            "导入有出处的完整问题，保存、预检后运行；工程计算请使用对应研究模块。"
           }
         />
       ) : tab === "inputs" ? (

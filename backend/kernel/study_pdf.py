@@ -16,7 +16,7 @@ import json
 from .specification_pdf import _Blocks, _font_lock
 from .workspace import fingerprint
 
-RENDERER = 'cablesim.study-pdf/8'
+RENDERER = 'cablesim.study-pdf/9'
 PLUGIN_NAMES = {'cablesim.iec60287':'IEC 60287 稳态载流量', 'cablesim.thermal-network':'热网络交叉校核',
     'cablesim.gb50217-correction':'GB 50217 载流量校正',
     'cablesim.simulation':'数值仿真', 'cablesim.hybrid-rating':'混合载流量参考',
@@ -486,7 +486,8 @@ def chapters(runs, audience):
 def validate_sources(runs):
     if not runs:raise ValueError('请选择至少一个已保存运行。')
     for run in runs:
-        if run.get('integrity')!='verified' or fingerprint(run['snapshot'])!=run['input_digest'] or fingerprint(run['output'])!=run['output_digest']:
+        from .report_reads import verified_display_projection
+        if run.get('integrity')!='verified' or fingerprint(run['snapshot'])!=run['input_digest'] or (fingerprint(run['output'])!=run['output_digest'] and not verified_display_projection(run)):
             raise ValueError('计算书源运行完整性校验失败。')
         from .report_selection import context
         context(run)
@@ -607,12 +608,16 @@ def _render_pdf(runs, audience, *, generated_at=None, attachments=None):
         from .report_attachments import chapter_html
         from reportlab.platypus import Image
         items = attachments.get('section_images', []) + attachments.get('field_images', []) + attachments.get('cad_images', []) + ([attachments['fem_chapter']] if attachments.get('fem_chapter') else [])
-        for body, item in zip(chapter_html(attachments, audience), items):
-            story.append(PageBreak());story.extend(flow(body))
+        for index, (body, item) in enumerate(zip(chapter_html(attachments, audience), items)):
+            if index == 0:
+                story.append(PageBreak())
+            caption = flow(body)
             image = Image(BytesIO(b64decode(item['png_base64'], validate=True)))
-            factor = min(doc.width/image.imageWidth, (doc.height*0.65)/image.imageHeight)
+            # Fit the actual figure content, leaving room for its title/source;
+            # subsequent chapters flow into the remaining page space.
+            factor = min(doc.width/image.imageWidth, (doc.height-120)/image.imageHeight)
             image.drawWidth = image.imageWidth*factor; image.drawHeight = image.imageHeight*factor
-            story.append(image)
+            story.append(KeepTogether([*caption, image]))
     for body in chapters(runs,audience):
         story.extend(flow(body))
     arranged=[]

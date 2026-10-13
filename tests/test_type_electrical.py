@@ -332,7 +332,7 @@ def test_host_frozen_results_and_idempotent_short_circuit_request(tmp_path):
         document = deepcopy(w['domain'])
         document['measurements'] = [reported(document,document['cable_types'][0]['cores'][0]['id'],'r20',.000022)]
         assert client.put(root+'/domain',json={'document':document,'expected_revision':w['revision']}).status_code==200
-        history = client.get(sr+'/runs/'+first['id']).json()
+        history = client.get(sr+'/runs/'+first['id'],params={'view':'full'}).json()
         assert history['freshness']=='historical' and history['output']==original
 
 

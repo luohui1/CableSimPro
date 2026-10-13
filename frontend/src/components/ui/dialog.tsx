@@ -1,7 +1,10 @@
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { useRef, type ReactNode, type ComponentProps } from "react";
+import { Children, isValidElement, useRef, type ReactNode, type ComponentProps } from "react";
 import { Button, IconButton } from "./button";
 import { MotionReveal } from "@/components/motion";
+import { ErrorState } from '@/components/states';
+import { InformationNotice } from '@/components/information-notice';
+import { isResultInformation } from '@/lib/notice-level';
 
 function AppDialog({
   open,
@@ -96,6 +99,16 @@ function AppDialog({
 }
 
 export function Dialog(props: ComponentProps<typeof AppDialog> | ComponentProps<typeof DialogPrimitive.Root>) {
+  // Compatibility for existing notice wrappers. Only this verified informational
+  // message, without an action, becomes non-modal; genuine errors stay blocking.
+  if ('title' in props && !props.actions) {
+    const children = Children.toArray(props.children);
+    const child = children.length === 1 ? children[0] : null;
+    if (isValidElement<ComponentProps<typeof ErrorState>>(child) && child.type === ErrorState &&
+        !child.props.action && isResultInformation(child.props.description))
+      return props.open ? <InformationNotice title="方法说明更新" description={child.props.description}
+        floating onDismiss={() => props.onOpenChange(false)} /> : null;
+  }
   return 'title' in props ? <AppDialog {...props} /> : <DialogPrimitive.Root {...props} />;
 }
 export const DialogTrigger = DialogPrimitive.Trigger;

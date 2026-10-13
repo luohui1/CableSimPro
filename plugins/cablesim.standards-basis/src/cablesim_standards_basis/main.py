@@ -4,8 +4,8 @@ import json
 import platform
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from library import BasisError, BasisLibrary, VERSION
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from cablesim_standards_basis.library import BasisError, BasisLibrary, VERSION
 
 
 def main():

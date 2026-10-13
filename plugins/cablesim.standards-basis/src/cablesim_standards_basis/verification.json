@@ -1,6 +1,6 @@
 {
   "schema": "cablesim.standards-verification/1",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "tables": {
     "lv-表6": {
       "methods": [
@@ -9594,7 +9594,7 @@
         {
           "id": "pdf-page-visual",
           "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d",
-          "description": "PDF 对应印刷页逐格抄录；扫描页以离线 OCR 辅助，文字层页另作文本比对"
+          "description": "PDF25的17.5范围标题与PDF26式(6)图像复核；公式印刷18/PDF26"
         }
       ],
       "comparison": {
@@ -11521,65 +11521,67 @@
     "gb50217-D-0-6": {
       "methods": [
         {
-          "id": "visual-transcription-pass-a",
-          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483",
-          "description": "visual-transcription-pass-a"
+          "id": "primary-pdf-visual",
+          "description": "主代理PDF原页图像逐格盲转录",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
         },
         {
-          "id": "visual-transcription-pass-b",
-          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483",
-          "description": "visual-transcription-pass-b"
+          "id": "independent-pdf-visual",
+          "description": "独立代理另行读取原PDF页全表逐格转录，核对梯架/托盘标签",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
         }
       ],
-      "comparison": {
-        "status": "equal",
-        "row_count": 2,
-        "column_count": 5,
-        "differences": []
-      },
       "cells": [
         [
           {
             "route_a": 0.8,
             "route_b": 0.8,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.65,
             "route_b": 0.65,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.55,
             "route_b": 0.55,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.5,
             "route_b": 0.5,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           }
         ],
         [
           {
             "route_a": 0.7,
             "route_b": 0.7,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.55,
             "route_b": 0.55,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.5,
             "route_b": 0.5,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.45,
             "route_b": 0.45,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           }
         ]
       ]
@@ -11587,147 +11589,165 @@
     "gb50217-D-0-7": {
       "methods": [
         {
-          "id": "fitz-text-layer",
-          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483",
-          "description": "fitz-text-layer"
+          "id": "primary-pdf-visual",
+          "description": "主代理PDF原页图像逐格盲转录",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
         },
         {
-          "id": "pdfplumber-text-layer",
-          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483",
-          "description": "pdfplumber-text-layer"
+          "id": "independent-pdf-visual",
+          "description": "独立代理另行读取原PDF页全表逐格转录，核对梯架/托盘标签",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
         }
       ],
-      "comparison": {
-        "status": "equal",
-        "row_count": 3,
-        "column_count": 10,
-        "differences": []
-      },
       "cells": [
         [
           {
             "route_a": null,
             "route_b": null,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": null,
             "route_b": null,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": null,
             "route_b": null,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.9,
             "route_b": 0.9,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.98,
             "route_b": 0.98,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.97,
             "route_b": 0.97,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.96,
             "route_b": 0.96,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.94,
             "route_b": 0.94,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           }
         ],
         [
           {
             "route_a": 0.96,
             "route_b": 0.96,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.95,
             "route_b": 0.95,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.94,
             "route_b": 0.94,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.93,
             "route_b": 0.93,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.92,
             "route_b": 0.92,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.91,
             "route_b": 0.91,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.9,
             "route_b": 0.9,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.88,
             "route_b": 0.88,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           }
         ],
         [
           {
             "route_a": null,
             "route_b": null,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": null,
             "route_b": null,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": null,
             "route_b": null,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.99,
             "route_b": 0.99,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.99,
             "route_b": 0.99,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.99,
             "route_b": 0.99,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.99,
             "route_b": 0.99,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           },
           {
             "route_a": 0.98,
             "route_b": 0.98,
-            "status": "verified"
+            "status": "verified",
+            "note": ""
           }
         ]
       ]
@@ -31317,6 +31337,2410 @@
             "route_a": 2470000.0,
             "route_b": 2470000.0,
             "status": "verified"
+          }
+        ]
+      ]
+    },
+    "qi-eahe-table1": {
+      "methods": [
+        {
+          "id": "pdf-text",
+          "description": "PyMuPDF原PDF第3页文字层按材料行提取，保留/",
+          "source_sha256": "36893e633cb9dd9a277753c7584790da476ce24dcb7376cf26236299def2c7bf"
+        },
+        {
+          "id": "independent-pdf-visual",
+          "description": "独立代理原PDF第3页全表图像转录；主代理交叉复读表头和角色",
+          "source_sha256": "36893e633cb9dd9a277753c7584790da476ce24dcb7376cf26236299def2c7bf"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 0.16,
+            "route_b": 0.16,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1380.0,
+            "route_b": 1380,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 900.0,
+            "route_b": 900,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": null,
+            "route_b": null,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 2.1,
+            "route_b": 2.1,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1800.0,
+            "route_b": 1800,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1780.0,
+            "route_b": 1780,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": null,
+            "route_b": null,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 0.0242,
+            "route_b": 0.0242,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1.225,
+            "route_b": 1.225,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1006.43,
+            "route_b": 1006.43,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1.7894e-05,
+            "route_b": 1.7894e-05,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "qi-eahe-capacity": {
+      "methods": [
+        {
+          "id": "decimal-product",
+          "description": "从文字层密度/比热以Decimal相乘",
+          "source_sha256": "36893e633cb9dd9a277753c7584790da476ce24dcb7376cf26236299def2c7bf"
+        },
+        {
+          "id": "independent-hand-product",
+          "description": "独立原页转录后整数手算，空气100643×1225/100000=1232.87675",
+          "source_sha256": "36893e633cb9dd9a277753c7584790da476ce24dcb7376cf26236299def2c7bf"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 1242000.0,
+            "route_b": 1242000,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 3204000.0,
+            "route_b": 3204000,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 1232.87675,
+            "route_b": 1232.87675,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "deng-dbhe-table2": {
+      "methods": [
+        {
+          "id": "pdf-text",
+          "description": "PyMuPDF第5页逐参数行提取，原kJ单位保留",
+          "source_sha256": "d61e1f1a67f95cc9964ff3fee0a8816f1b8dd2588643b4aa332d94c996652928"
+        },
+        {
+          "id": "independent-pdf-visual",
+          "description": "独立代理第5页完整13行图像转录；主代理复查第4/6页材料和假设",
+          "source_sha256": "d61e1f1a67f95cc9964ff3fee0a8816f1b8dd2588643b4aa332d94c996652928"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 2500.0,
+            "route_b": 2500,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": "159 × 4.5",
+            "route_b": "159 × 4.5",
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 54.0,
+            "route_b": 54,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 0.47,
+            "route_b": 0.47,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 7820.0,
+            "route_b": 7820,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": "93 × 3.0",
+            "route_b": "93 × 3.0",
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 0.18,
+            "route_b": 0.18,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 2.1,
+            "route_b": 2.1,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 930.0,
+            "route_b": 930,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 254.0,
+            "route_b": 254,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 2.0,
+            "route_b": 2.0,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 0.85,
+            "route_b": 0.85,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 2700.0,
+            "route_b": 2700,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "deng-dbhe-capacity": {
+      "methods": [
+        {
+          "id": "decimal-si-product",
+          "description": "文字层kg/m³×kJ/(kgK)×1000，用Decimal换算",
+          "source_sha256": "d61e1f1a67f95cc9964ff3fee0a8816f1b8dd2588643b4aa332d94c996652928"
+        },
+        {
+          "id": "independent-hand-product",
+          "description": "独立图像提取后手算3675400/1953000/2295000",
+          "source_sha256": "d61e1f1a67f95cc9964ff3fee0a8816f1b8dd2588643b4aa332d94c996652928"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 3675400.0,
+            "route_b": 3675400,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 1953000.0,
+            "route_b": 1953000,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 2295000.0,
+            "route_b": 2295000,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "hopmans-soil-capacity-model": {
+      "methods": [
+        {
+          "id": "root-pdf-visual",
+          "description": "主代理读取PDF第3页公式、单位与相组成定义",
+          "source_sha256": "ed3fa500af0c70d1abbddabe6373bde4527200fcf727ca2d27767f2e98bd7553"
+        },
+        {
+          "id": "independent-pdf-visual",
+          "description": "独立代理在不读取编制输入的情况下复提第3页式1/2并逐符号比对",
+          "source_sha256": "ed3fa500af0c70d1abbddabe6373bde4527200fcf727ca2d27767f2e98bd7553"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "Cs*(1-porosity)+Cw*water_volume_fraction+Ca*(porosity-water_volume_fraction)",
+            "route_b": "Cs*(1-porosity)+Cw*water_volume_fraction+Ca*(porosity-water_volume_fraction)",
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": "Cs*(1-porosity)+Cw*water_volume_fraction",
+            "route_b": "Cs*(1-porosity)+Cw*water_volume_fraction",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-armour-materials": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 19 页图像逐条核对（印刷第 11 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": [
+              "galvanized_steel",
+              "nonmagnetic_stainless_steel",
+              "copper",
+              "tinned_copper",
+              "aluminium",
+              "aluminium_alloy"
+            ],
+            "route_b": [
+              "galvanized_steel",
+              "nonmagnetic_stainless_steel",
+              "copper",
+              "tinned_copper",
+              "aluminium",
+              "aluminium_alloy"
+            ],
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": [
+              "galvanized_steel",
+              "nonmagnetic_stainless_steel",
+              "aluminium",
+              "aluminium_alloy"
+            ],
+            "route_b": [
+              "galvanized_steel",
+              "nonmagnetic_stainless_steel",
+              "aluminium",
+              "aluminium_alloy"
+            ],
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-armour-magnetism": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 19 页图像逐条核对（印刷第 11 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "nonmagnetic",
+            "route_b": "nonmagnetic",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-armour-inner-single": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 19 页图像逐条核对（印刷第 11 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": [
+              "extruded",
+              "lapped"
+            ],
+            "route_b": [
+              "extruded",
+              "lapped"
+            ],
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-armour-inner-three": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 19 页图像逐条核对（印刷第 11 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "required_conforming_8.2",
+            "route_b": "required_conforming_8.2",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-isolation-applicability": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 19 页图像逐条核对（印刷第 11 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "extruded_required",
+            "route_b": "extruded_required",
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": [
+              "separation_sheath",
+              "tape_bedding_13.3.4"
+            ],
+            "route_b": [
+              "separation_sheath",
+              "tape_bedding_13.3.4"
+            ],
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": [
+              "replace_inner_covering",
+              "additional_to_inner_covering"
+            ],
+            "route_b": [
+              "replace_inner_covering",
+              "additional_to_inner_covering"
+            ],
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-isolation-water-barrier": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 20 页图像逐条核对（印刷第 12 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "not_required",
+            "route_b": "not_required",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-tape-layer-count": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 21 页图像逐条核对（印刷第 13 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 2,
+            "route_b": 2,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-tape-gap": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 21 页图像逐条核对（印刷第 13 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 0.5,
+            "route_b": 0.5,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-lapped-padding": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 21 页图像逐条核对（印刷第 13 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 0.5,
+            "route_b": 0.5,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 0.8,
+            "route_b": 0.8,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-lapped-padding-measured": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 21 页图像逐条核对（印刷第 13 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": {
+              "kind": "affine",
+              "a": 0.8,
+              "b": -0.2,
+              "x": "specified_total_thickness",
+              "parameter_units": {
+                "x": "mm",
+                "result": "mm"
+              }
+            },
+            "route_b": {
+              "kind": "affine",
+              "a": 0.8,
+              "b": -0.2,
+              "x": "specified_total_thickness",
+              "parameter_units": {
+                "x": "mm",
+                "result": "mm"
+              }
+            },
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-armour-tape-measurement": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 26 页图像逐条核对（印刷第 18 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 5,
+            "route_b": 5,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 0.01,
+            "route_b": 0.01,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 40,
+            "route_b": 40,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 20,
+            "route_b": 20,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-armour-deviation": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 27 页图像逐条核对（印刷第 19 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 0.05,
+            "route_b": 0.05,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 0.08,
+            "route_b": 0.08,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 0.1,
+            "route_b": 0.1,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-inner-measurement-scope": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 25 页图像逐条核对（印刷第 17 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": [
+              "outer_sheath",
+              "extruded_separation_sheath",
+              "extruded_inner_covering"
+            ],
+            "route_b": [
+              "outer_sheath",
+              "extruded_separation_sheath",
+              "extruded_inner_covering"
+            ],
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-lapped-inner-measured": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 29 页图像逐条核对（印刷第 21 页）",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": {
+              "kind": "affine",
+              "a": 0.8,
+              "b": -0.2,
+              "x": "nominal_lining_thickness",
+              "parameter_units": {
+                "x": "mm",
+                "result": "mm"
+              }
+            },
+            "route_b": {
+              "kind": "affine",
+              "a": 0.8,
+              "b": -0.2,
+              "x": "nominal_lining_thickness",
+              "parameter_units": {
+                "x": "mm",
+                "result": "mm"
+              }
+            },
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "v35-copper-tape-nominal": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "5cf2ff30a362b32f674dc2d2498796625ca13b4f3c27923277560b36f40cf0dc"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 13 页图像逐条核对（印刷第 8 页）",
+          "source_sha256": "4b2cca105c903cf4fed10b7f06cced06b834da1561170f1d9be96eb67ad0e3bb"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 0.12,
+            "route_b": 0.12,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 0.1,
+            "route_b": 0.1,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "v35-copper-tape-overlap": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "5cf2ff30a362b32f674dc2d2498796625ca13b4f3c27923277560b36f40cf0dc"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 13 页图像逐条核对（印刷第 8 页）",
+          "source_sha256": "4b2cca105c903cf4fed10b7f06cced06b834da1561170f1d9be96eb67ad0e3bb"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 0.15,
+            "route_b": 0.15,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 0.05,
+            "route_b": 0.05,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "v35-copper-tape-measured": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "5cf2ff30a362b32f674dc2d2498796625ca13b4f3c27923277560b36f40cf0dc"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 13 页图像逐条核对（印刷第 8 页）",
+          "source_sha256": "4b2cca105c903cf4fed10b7f06cced06b834da1561170f1d9be96eb67ad0e3bb"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 0.9,
+            "route_b": 0.9,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "v35-copper-wire-required": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "5cf2ff30a362b32f674dc2d2498796625ca13b4f3c27923277560b36f40cf0dc"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 13 页图像逐条核对（印刷第 8 页）",
+          "source_sha256": "4b2cca105c903cf4fed10b7f06cced06b834da1561170f1d9be96eb67ad0e3bb"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "copper_wire",
+            "route_b": "copper_wire",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "v35-copper-wire-gap": {
+      "methods": [
+        {
+          "id": "independent-docx",
+          "description": "独立 DOCX document.xml 条款转录（制造条款只读核验）",
+          "source_sha256": "5cf2ff30a362b32f674dc2d2498796625ca13b4f3c27923277560b36f40cf0dc"
+        },
+        {
+          "id": "pdf-visual",
+          "description": "主代理原 PDF 第 13 页图像逐条核对（印刷第 8 页）",
+          "source_sha256": "4b2cca105c903cf4fed10b7f06cced06b834da1561170f1d9be96eb67ad0e3bb"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 4,
+            "route_b": 4,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-01": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 10000,
+            "route_b": 10000,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-02": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 1,
+            "route_b": 1,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-03": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "required",
+            "route_b": "required",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-04": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "required",
+            "route_b": "required",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-05": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "required",
+            "route_b": "required",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-06": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "required",
+            "route_b": "required",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-07": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "required",
+            "route_b": "required",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-08": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "required",
+            "route_b": "required",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-09": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "recommended",
+            "route_b": "recommended",
+            "status": "verified",
+            "note": "并入复核：原页3.6.3第7项为宜；修正暂存规范化required为recommended，两路原文均为宜。"
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-10": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 0.0015,
+            "route_b": 0.0015,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-11": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 2,
+            "route_b": 2.0,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-12": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 35000,
+            "route_b": 35000.0,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-13": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "required",
+            "route_b": "required",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-14": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "recommended",
+            "route_b": "recommended",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-15": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 343.15,
+            "route_b": 343.15,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "gb50217-rating-scope-16": {
+      "methods": [
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理原PDF21/22页按条款和分项逐句核对、数值转SI",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        },
+        {
+          "id": "independent-pdf-transcription",
+          "description": "独立代理另读原页；数值从独立参数清单解析、严格不等号与宜/应另行核对",
+          "source_sha256": "5e15e9a4a78e40df66a8b91a2e6f5da3047e92304dc0eb7cb62522e418e09483"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 2,
+            "route_b": 2.0,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "youn-degassing-table1": {
+      "methods": [
+        {
+          "id": "pdfplumber-text",
+          "description": "原PDF文字层自动提取，逐行解析；不使用目视矩阵生成文字值",
+          "source_sha256": "efa8a2106e40941fc7503d57ffe86bfe56f059b5136cb66363c9cbf78cee7c66"
+        },
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理FastCtx原PDF图像逐格转录；全表独立与文字层比对",
+          "source_sha256": "efa8a2106e40941fc7503d57ffe86bfe56f059b5136cb66363c9cbf78cee7c66"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 8960.0,
+            "route_b": 8960,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 920.0,
+            "route_b": 920,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1150.0,
+            "route_b": 1150,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 401.0,
+            "route_b": 401,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "0.22–0.28",
+            "route_b": "0.22–0.28",
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "0.57–0.65",
+            "route_b": "0.57–0.65",
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 385.0,
+            "route_b": 385,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "135–983",
+            "route_b": "135–983",
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "115–433",
+            "route_b": "115–433",
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "sah-backfill-table2": {
+      "methods": [
+        {
+          "id": "pdfplumber-text",
+          "description": "原PDF文字层自动提取，逐行解析；不使用目视矩阵生成文字值",
+          "source_sha256": "93f1700b51af89ec19d1690b571c260056deac729326004c875bdb308422d355"
+        },
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理FastCtx原PDF图像逐格转录；全表独立与文字层比对",
+          "source_sha256": "93f1700b51af89ec19d1690b571c260056deac729326004c875bdb308422d355"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 80.0,
+            "route_b": 80,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 20.0,
+            "route_b": 20,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 60.0,
+            "route_b": 60,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 40.0,
+            "route_b": 40,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 50.0,
+            "route_b": 50,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 50.0,
+            "route_b": 50,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 30.0,
+            "route_b": 30,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 70.0,
+            "route_b": 70,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 80.0,
+            "route_b": 80,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 20.0,
+            "route_b": 20,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 60.0,
+            "route_b": 60,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 40.0,
+            "route_b": 40,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 50.0,
+            "route_b": 50,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 50.0,
+            "route_b": 50,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 30.0,
+            "route_b": 30,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 70.0,
+            "route_b": 70,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "sah-backfill-table3": {
+      "methods": [
+        {
+          "id": "pdfplumber-text",
+          "description": "原PDF文字层自动提取，逐行解析；不使用目视矩阵生成文字值",
+          "source_sha256": "93f1700b51af89ec19d1690b571c260056deac729326004c875bdb308422d355"
+        },
+        {
+          "id": "primary-pdf-visual",
+          "description": "主代理FastCtx原PDF图像逐格转录；全表独立与文字层比对",
+          "source_sha256": "93f1700b51af89ec19d1690b571c260056deac729326004c875bdb308422d355"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 26.0,
+            "route_b": 26,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 74.0,
+            "route_b": 74,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 0.0,
+            "route_b": 0,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 2.07,
+            "route_b": 2.07,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": null,
+            "route_b": null,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": null,
+            "route_b": null,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "Class F",
+            "route_b": "Class F",
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1.38,
+            "route_b": 1.38,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 19.66,
+            "route_b": 19.66,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 5.0,
+            "route_b": 5,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 31.0,
+            "route_b": 31,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 64.0,
+            "route_b": 64,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 2.71,
+            "route_b": 2.71,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 300.0,
+            "route_b": 300,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 247.0,
+            "route_b": 247,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "CH",
+            "route_b": "CH",
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1.27,
+            "route_b": 1.27,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 37.5,
+            "route_b": 37.5,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 100.0,
+            "route_b": 100,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 0.0,
+            "route_b": 0,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 0.0,
+            "route_b": 0,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 2.62,
+            "route_b": 2.62,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": null,
+            "route_b": null,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": null,
+            "route_b": null,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "SP",
+            "route_b": "SP",
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": null,
+            "route_b": null,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": null,
+            "route_b": null,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 11.0,
+            "route_b": 11,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 38.0,
+            "route_b": 38,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 51.0,
+            "route_b": 51,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 2.55,
+            "route_b": 2.55,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 160.0,
+            "route_b": 160,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 116.0,
+            "route_b": 116,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "CH",
+            "route_b": "CH",
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1.31,
+            "route_b": 1.31,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 32.0,
+            "route_b": 32.0,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 16.0,
+            "route_b": 16,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 46.0,
+            "route_b": 46,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 38.0,
+            "route_b": 38,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 2.41,
+            "route_b": 2.41,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 130.0,
+            "route_b": 130,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 94.0,
+            "route_b": 94,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "CH",
+            "route_b": "CH",
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1.36,
+            "route_b": 1.36,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 26.45,
+            "route_b": 26.45,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 19.0,
+            "route_b": 19,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 44.0,
+            "route_b": 44,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 37.0,
+            "route_b": 37,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 2.35,
+            "route_b": 2.35,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 113.0,
+            "route_b": 113,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 79.0,
+            "route_b": 79,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "CH",
+            "route_b": "CH",
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1.39,
+            "route_b": 1.39,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 25.1,
+            "route_b": 25.1,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 22.0,
+            "route_b": 22,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 58.0,
+            "route_b": 58,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 20.0,
+            "route_b": 20,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 2.23,
+            "route_b": 2.23,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 80.0,
+            "route_b": 80,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 50.0,
+            "route_b": 50,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "CH",
+            "route_b": "CH",
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1.43,
+            "route_b": 1.43,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 20.82,
+            "route_b": 20.82,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 24.0,
+            "route_b": 24,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 25.0,
+            "route_b": 25,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 51.0,
+            "route_b": 51,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 2.69,
+            "route_b": 2.69,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 180.0,
+            "route_b": 180,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 134.0,
+            "route_b": 134,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "CH",
+            "route_b": "CH",
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1.38,
+            "route_b": 1.38,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 32.33,
+            "route_b": 32.33,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 43.0,
+            "route_b": 43,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 17.0,
+            "route_b": 17,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 40.0,
+            "route_b": 40,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 2.67,
+            "route_b": 2.67,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 145.0,
+            "route_b": 145,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 105.0,
+            "route_b": 105,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "CH",
+            "route_b": "CH",
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1.53,
+            "route_b": 1.53,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 19.88,
+            "route_b": 19.88,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 53.0,
+            "route_b": 53,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 15.0,
+            "route_b": 15,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 32.0,
+            "route_b": 32,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 2.66,
+            "route_b": 2.66,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 120.0,
+            "route_b": 120,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 84.0,
+            "route_b": 84,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "CH",
+            "route_b": "CH",
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1.63,
+            "route_b": 1.63,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 18.29,
+            "route_b": 18.29,
+            "status": "verified",
+            "note": ""
+          }
+        ],
+        [
+          {
+            "route_a": 72.0,
+            "route_b": 72,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 7.0,
+            "route_b": 7,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 21.0,
+            "route_b": 21,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 2.64,
+            "route_b": 2.64,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 98.0,
+            "route_b": 98,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 66.0,
+            "route_b": 66,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": "CH",
+            "route_b": "CH",
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 1.72,
+            "route_b": 1.72,
+            "status": "verified",
+            "note": ""
+          },
+          {
+            "route_a": 16.95,
+            "route_b": 16.95,
+            "status": "verified",
+            "note": ""
+          }
+        ]
+      ]
+    },
+    "mv-screen-wire-area-rule": {
+      "methods": [
+        {
+          "id": "docx-paragraphs",
+          "description": "原DOCX python-docx独立条款提取；结构与限定词逐条核对",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual-reread",
+          "description": "原PDF第18页图像复读；印刷第10页，跨页范围另核对PDF25标题",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": {
+              "fixed_numeric_area": "standard_not_specified",
+              "sizing_basis": "fault_current_capacity",
+              "engineering_input_required": true
+            },
+            "route_b": {
+              "fixed_numeric_area": "standard_not_specified",
+              "sizing_basis": "fault_current_capacity",
+              "engineering_input_required": true
+            },
+            "status": "verified",
+            "note": "DOCX与原PDF图像一致；无数值的设计规则不转为零。"
+          }
+        ]
+      ]
+    },
+    "mv-screen-tape-area-rule": {
+      "methods": [
+        {
+          "id": "docx-paragraphs",
+          "description": "原DOCX python-docx独立条款提取；结构与限定词逐条核对",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual-reread",
+          "description": "原PDF第18页图像复读；印刷第10页，跨页范围另核对PDF25标题",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": {
+              "fixed_numeric_area": "standard_not_specified",
+              "prescribed_requirements": [
+                "nominal_tape_thickness",
+                "overlap_ratio",
+                "measured_minimum_thickness"
+              ],
+              "engineering_input_required": true
+            },
+            "route_b": {
+              "fixed_numeric_area": "standard_not_specified",
+              "prescribed_requirements": [
+                "nominal_tape_thickness",
+                "overlap_ratio",
+                "measured_minimum_thickness"
+              ],
+              "engineering_input_required": true
+            },
+            "status": "verified",
+            "note": "DOCX与原PDF图像一致；无数值的设计规则不转为零。"
+          }
+        ]
+      ]
+    },
+    "mv-screen-wire-gap": {
+      "methods": [
+        {
+          "id": "docx-paragraphs",
+          "description": "原DOCX python-docx独立条款提取；结构与限定词逐条核对",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual-reread",
+          "description": "原PDF第18页图像复读；印刷第10页，跨页范围另核对PDF25标题",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": 4,
+            "route_b": 4,
+            "status": "verified",
+            "note": "DOCX与原PDF图像一致；无数值的设计规则不转为零。"
+          }
+        ]
+      ]
+    },
+    "mv-extruded-inner-measured": {
+      "methods": [
+        {
+          "id": "docx-paragraphs",
+          "description": "原DOCX python-docx独立条款提取；结构与限定词逐条核对",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual-reread",
+          "description": "原PDF第26页图像复读；印刷第18页，跨页范围另核对PDF25标题",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": {
+              "kind": "affine",
+              "a": 0.8,
+              "b": -0.2,
+              "x": "nominal_lining_thickness",
+              "parameter_units": {
+                "x": "mm",
+                "result": "mm"
+              }
+            },
+            "route_b": {
+              "kind": "affine",
+              "a": 0.8,
+              "b": -0.2,
+              "x": "nominal_lining_thickness",
+              "parameter_units": {
+                "x": "mm",
+                "result": "mm"
+              }
+            },
+            "status": "verified",
+            "note": "DOCX与原PDF图像一致；无数值的设计规则不转为零。"
+          }
+        ]
+      ]
+    },
+    "mv-screen-wire-resistance-rule": {
+      "methods": [
+        {
+          "id": "docx-paragraphs",
+          "description": "原DOCX python-docx独立条款提取；结构与限定词逐条核对",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual-reread",
+          "description": "原PDF第18页图像复读；印刷第10页，跨页范围另核对PDF25标题",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "GB/T 3956",
+            "route_b": "GB/T 3956",
+            "status": "verified",
+            "note": "DOCX与原PDF图像一致；无数值的设计规则不转为零。"
+          }
+        ]
+      ]
+    },
+    "mv-screen-construction-rule": {
+      "methods": [
+        {
+          "id": "docx-paragraphs",
+          "description": "原DOCX python-docx独立条款提取；结构与限定词逐条核对",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual-reread",
+          "description": "原PDF第18页图像复读；印刷第10页，跨页范围另核对PDF25标题",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": {
+              "structures": [
+                "metal_tape",
+                "metal_braid",
+                "concentric_wires",
+                "wire_tape_combination"
+              ],
+              "metal_sheath_or_collective_armour_allowed_subject_to_10_2": true,
+              "corrosion_consideration_required": true
+            },
+            "route_b": {
+              "structures": [
+                "metal_tape",
+                "metal_braid",
+                "concentric_wires",
+                "wire_tape_combination"
+              ],
+              "metal_sheath_or_collective_armour_allowed_subject_to_10_2": true,
+              "corrosion_consideration_required": true
+            },
+            "status": "verified",
+            "note": "DOCX与原PDF图像一致；无数值的设计规则不转为零。"
+          }
+        ]
+      ]
+    },
+    "mv-screen-tape-material-rule": {
+      "methods": [
+        {
+          "id": "docx-paragraphs",
+          "description": "原DOCX python-docx独立条款提取；结构与限定词逐条核对",
+          "source_sha256": "b6251feba7318676bc7b28d481f7e978fc66b1efa9f5c16e8bf0f83d0399555a"
+        },
+        {
+          "id": "pdf-visual-reread",
+          "description": "原PDF第18页图像复读；印刷第10页，跨页范围另核对PDF25标题",
+          "source_sha256": "3b5fa321c213d4aaac7e04a293b9026626f43cc5b15209b26b713172e56f748d"
+        }
+      ],
+      "cells": [
+        [
+          {
+            "route_a": "GB/T 11091",
+            "route_b": "GB/T 11091",
+            "status": "verified",
+            "note": "DOCX与原PDF图像一致；无数值的设计规则不转为零。"
           }
         ]
       ]

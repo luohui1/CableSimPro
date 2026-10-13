@@ -142,7 +142,10 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     database = tmp_path / 'release/engineering.sqlite'
     seed.seed_release(database)
     receipt = json.loads(database.with_suffix('.seed.json').read_text(encoding='utf-8'))
-    assert receipt['complete'] and len(receipt['studies']) == 4 and len(receipt['types']) == 2
+    from backend.kernel.hpc_evidence import evidence_index
+    has_chengnan=bool(evidence_index()[0].get('supplementary_receipts'))
+    imported_chengnan=receipt['identity']['chengnan_engineering_evidence_imported']
+    assert receipt['complete'] and len(receipt['studies']) == 4+int(has_chengnan) and len(receipt['types']) == 2
     assert receipt['identity'] == seed.release_identity()
     assert receipt['identity']['engineering_resources']
     assert len(receipt['engineering_resources']) == 28
@@ -155,7 +158,7 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
         assert not without['engineering_evidence_imported']
         assert without['engineering_evidence']==receipt['identity']['engineering_evidence']
         assert without!=receipt['identity']
-    assert sum(bool(row.get('run')) for row in receipt['studies']) == (4 if with_evidence else 3)
+    assert sum(bool(row.get('run')) for row in receipt['studies']) == (4 if with_evidence else 3)+int(imported_chengnan)
     type_runs=[module for item in receipt['types'] for module in item['modules'] if module.get('run')]
     assert len(type_runs)>=6
     assert all(item['status'] in ('succeeded','partial') for item in type_runs)
@@ -174,7 +177,24 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     assert hv['run'] and hv['ready'] and hv['status']=='succeeded'
     with closing(sqlite3.connect(database)) as connection:
         assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == (5 if with_evidence else 4)
-        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status IN ('succeeded','partial')").fetchone()[0] == 3+len(type_runs)+(8 if with_evidence else 0)
+        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status IN ('succeeded','partial')").fetchone()[0] == 3+len(type_runs)+(8 if with_evidence else 0)+(7 if imported_chengnan else 0)
+        if has_chengnan:
+            single=next(s for s in receipt['studies'] if '波纹品字形有限元' in s['title'])
+            if imported_chengnan:
+                assert single['saved_evidence']['job_id']=='817014'
+                frozen=connection.execute('SELECT input_digest,output_digest FROM study_runs WHERE id=?',(single['run'],)).fetchone()
+                assert frozen==('5e0bd56cc15891d578d5999c195775cd59abdd994c623941bf6f2e185b3a2227','2e873724fda340ce927370550c00924d8d58b69e213f2dc51a5c46f966a15425')
+                assert single['workspace']==hv['workspace'],'Keep the original engineering binding'
+            else:
+                assert single['status']=='输入齐全，等待超算提交' and not single.get('run')
+                definition=json.loads(connection.execute('SELECT definition FROM study_versions WHERE study=? ORDER BY revision DESC',(single['study'],)).fetchone()[0])
+                domain=json.loads(connection.execute('SELECT state FROM workspaces WHERE id=?',(single['workspace'],)).fetchone()[0])['domain']
+                from cablesim_simulation.three_core_thermal import prepare
+                from cablesim_sdk.parameter_units import decode_request
+                request=decode_request({'capability':'iec-thermal-field','cases':[{'input':domain,'parameters':definition['parameters']}]},
+                    path.parents[2]/'plugins/cablesim.simulation/plugin.json')
+                case=request['cases'][0]
+                prepare(case['input'],case['parameters'],allow_single_core=True)
         if with_evidence:
             frozen=connection.execute('SELECT input_digest,output_digest FROM study_runs WHERE id=?',(fem['run'],)).fetchone()
             assert frozen==('8dc54a1be8032168a0d786d7466e1f73afb5610e03fdba0787fc65adc0a0d02b','61f14f0378dd18147b4074c65edec335ccf82be8680f3919d6c674924b1e3046')

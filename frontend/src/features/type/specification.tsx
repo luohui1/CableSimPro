@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, array, message, numeric, optionalRecord, text } from '@/api/client';
 import { DataTable } from '@/components/data-table';
 import { StatusMark } from '@/components/status-mark';
-import { EmptyState, ErrorState, LoadingState, StaleBanner } from '@/components/states';
+import { EmptyState, ErrorState, LoadingState } from '@/components/states';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -90,14 +90,13 @@ export function TypeSpecification({ tab }: { tab: string }) {
     <div className="type-result-toolbar">{!inCommand&&<Button variant="primary" size="compact" loading={busy} disabled={!spec || !!reason || state.readOnly && status !== 'published'} onClick={() => void generate()}>{status === 'published' ? '导出 PDF' : '生成规格书'}</Button>}
       <Select label="文档版本" value={audience} disabled={busy} options={[{ value: 'customer', label: '客户版' }, { value: 'internal', label: '内部审核版' }]} onChange={value => setAudience(value as SpecificationAudience)} />
       {audience === 'internal' && <Button size="compact" disabled={!spec || !!reason || busy} onClick={() => void generate(true)}>导出内部审核稿</Button>}
-      {spec && <StatusMark kind={status === 'published' || status === 'approved' ? 'success' : 'draft'} label={statuses[status as keyof typeof statuses]} />}{reason && <span className="muted">{reason}</span>}
+      {spec && <StatusMark kind={historical ? 'historical' : status === 'published' || status === 'approved' ? 'success' : 'draft'} label={historical ? '已过期' : statuses[status as keyof typeof statuses]} detail={historical ? '输入或来源已变化；重新生成后才能交付当前客户版。' : undefined} />}{reason && <span className="muted">{reason}</span>}
     </div>
     {error && !action && <p role="alert" className="type-notice is-error">{error}{blockedTarget && <Button size="compact" onClick={() => navigation.navigate(typePath(state.workspace!.id, ...blockedTarget, navigation.location.theme))}>查看{channelLabels[blockedChannel]}条件</Button>}</p>}
     {bodyState === 'loading' ? <LoadingState title={busy ? '正在预检并生成规格书，已完成的计算会保留' : '正在读取规格书'} /> : query.error || differentRevision ? <ErrorState title="规格书不可用" description={differentRevision ? reason : message(query.error)} action={<Button onClick={() => void query.refetch()}>重新读取</Button>} /> : !spec ? <EmptyState title="尚无规格书" description="" /> : <>
-      {historical && <StaleBanner description="输入或来源已变化；重新生成后才能交付当前客户版。" />}
       {tab === 'review' ? <>
         <div className="type-result-summary"><strong>{checks.filter(check => check.blocking === true).length} 项阻止发布</strong><Button size="compact" disabled={state.dirty || state.readOnly || busy || status !== 'draft' || checks.some(check=>check.blocking===true)} onClick={() => begin('adopt')}>采纳为版本草稿</Button><Button size="compact" disabled={state.dirty || state.readOnly || busy || status === 'published' || checks.some(check=>check.blocking===true) || !spec.ready} onClick={() => begin(nextAction)}>{names[nextAction]}</Button></div>
-        <ReviewIssues checks={checks} />
+        <ReviewIssues checks={checks} approved={status==='published'} />
       </> : tab === 'revisions' ? revisionRows.length ? <DataTable label="文档修订记录" showGroups={false} rowLabel={row => text(row.version)} groups={[{ id: 'revisions', label: '修订', rows: revisionRows }]} columns={[{ id: 'version', label: '文件版本', render: row => text(row.version) }, { id: 'summary', label: '变更摘要', wrap: true, render: row => text(row.summary) }, { id: 'author', label: '编制人', render: row => text(row.author) }, { id: 'created', label: '日期', render: row => text(row.created).slice(0, 10) }]} /> : <EmptyState title="尚未提交文档评审" description="提交时记录文件版本、变更摘要、编制人与日期。" /> : <div className="type-specification-layout">
         <div className="type-specification-navigation">{tab === 'content' && <nav aria-label="规格书章节">{chapters.map((name, index) => <button key={name} title={name} aria-label={name} aria-current={chapter === markers[index] ? 'page' : undefined} onClick={() => { setChapter(markers[index]); const section=preview.current?.contentDocument?.querySelector(`[data-specification-section="${markers[index]}"]`); const dock=preview.current?.closest('.workbench-dock-body'); if(section&&dock&&preview.current) dock.scrollTo({top:preview.current.offsetTop+(section as HTMLElement).offsetTop,behavior:'instant'}); }}>{index + 1} {chapterLabels[index] || name}</button>)}</nav>}
         {!!checks.filter(check=>check.blocking===true).length && <Button size="compact" onClick={() => { const first=checks.find(check=>check.blocking===true), destination=destinations[text(first?.channel)]; navigation.navigate(typePath(state.workspace!.id,...(destination || ['specification','review'] as [string,string]),navigation.location.theme)); }}>{checks.filter(check=>check.blocking===true).length} 项阻止发布 · 查看第一项</Button>}</div>

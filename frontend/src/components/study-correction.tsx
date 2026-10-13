@@ -1,5 +1,5 @@
 import { numeric, optionalRecord, text } from '@/api/client';
-import { Conclusion } from './conclusion';
+import { ConclusionStrip } from './conclusion-strip';
 import { StudyDetailGroup } from './study-detail-group';
 import { formatNumber } from '@/lib/format';
 import './study-correction.css';
@@ -7,7 +7,7 @@ import './study-correction.css';
 /** Frozen plugin artifact only; never infer a coefficient from live inputs. */
 export function StudyCorrection({ artifact, historical, part }: { artifact: Record<string, unknown>; historical: boolean; part: 'all'|'conclusion'|'details' }) {
   const baseline=optionalRecord(artifact.baseline), coefficients=(Array.isArray(artifact.coefficients)?artifact.coefficients:[]).map(optionalRecord);
-  const conclusion=<Conclusion title="GB 50217 校正结论" model={text(artifact.headline)} description="GB 50217—2018 附录 D；系数由标准依据库核验。" historical={historical}
+  const conclusion=<ConclusionStrip label="GB 50217 校正结论" conclusion={text(artifact.headline)+' · GB 50217—2018 附录 D'} historical={historical}
     metrics={[{label:'基准载流量',value:numeric(baseline.baseline_current_a),unit:'A',quantity:'ampacity'},
       {label:'总校正系数',value:numeric(artifact.total_factor),unit:'1',quantity:'correction_factor'},
       {label:'校正后允许电流',value:numeric(artifact.corrected_current_a),unit:'A',quantity:'ampacity'}]} />;

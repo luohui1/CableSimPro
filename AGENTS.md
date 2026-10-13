@@ -68,7 +68,7 @@ IEC 展示验证图由 `python plugins/cablesim.iec60287/validation/presentation
 1. 删除本任务产生的临时文件、调试输出、临时 worktree / 分支。
 2. `python scripts/clean.py` 清掉本地中间文件（不会动 `.data/` 里的工程数据）。
 3. `python -m pytest` 通过（含卫生检查）；动了插件跑 `plugin-tests`。
-4. 改了插件或公共被封签源码：`python scripts/plugin_sdk.py seal` 检查各 v2 清单和生成索引；未发布版本用 `seal --write`，已发布版本先升版本号。清单模型/物理工件 schema 改动后用 `python scripts/seal_plugin_catalog.py --write-draft` 同步生成文件。最后确认 `python scripts/plugin_sdk.py verify` 与 `python scripts/seal_plugin_catalog.py` 通过。
+4. 改了插件或公共被封签源码：`python scripts/plugin_sdk.py seal` 检查全库；未发布版本用 `python scripts/plugin_sdk.py seal plugins/<id>/plugin.json --write` 只写指定插件的依赖锁、files 和注册条目（其他漂移仅提醒），不传路径的 `seal --write` 才写全库，已发布版本先升版本号。清单模型/物理工件 schema 改动后用 `python scripts/seal_plugin_catalog.py --write-draft` 同步生成文件。最后确认 `python scripts/plugin_sdk.py verify` 与 `python scripts/seal_plugin_catalog.py` 通过。
 5. 有限元、批量仿真、收敛与性能计算只提交超算 dg83；CI 原生回归使用 `cablesim-hpc` 自托管 runner 的 `CABLESIM_HPC_PROFILE`。本机保留轻量单元与标准代数核验；不要在本机执行原生求解器。
 
 ## 分支

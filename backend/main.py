@@ -58,7 +58,19 @@ class LocalBoundary:
         async def send_response(message):
             if message['type'] == 'http.response.start' and request.url.path.startswith('/api/'):
                 headers = MutableHeaders(scope=message)
-                headers['Cache-Control'] = 'no-store'
+                # Only the verified private field projection may revalidate in
+                # the browser. Its handler verifies the saved source BEFORE 304.
+                # Match the actual registered route, not a caller-controlled prefix.
+                field_view = (
+                    getattr(scope.get('route'), 'path', None) == '/api/hpc/workspaces/{wid}/fields/{rid}/view'
+                    and request.method == 'GET'
+                    and headers.get('Cache-Control') == 'private, no-cache'
+                    and bool(headers.get('ETag'))
+                    and (message['status'] == 304 or
+                         message['status'] == 200 and headers.get('Content-Type', '').split(';')[0] == 'application/json')
+                )
+                if not field_view:
+                    headers['Cache-Control'] = 'no-store'
                 headers['X-Content-Type-Options'] = 'nosniff'
             await send(message)
         await self.app(scope, receive, send_response)

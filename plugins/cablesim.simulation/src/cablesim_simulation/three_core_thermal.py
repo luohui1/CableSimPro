@@ -13,7 +13,7 @@ from cablesim_sdk.validation import FieldValueError
 from .report import digest
 
 
-def prepare(value, parameters):
+def prepare(value, parameters, *, allow_single_core=False):
     from cablesim_iec60287.domain import prepare as prepare_iec
     p = ThermalParameters.model_validate(parameters)
     d = DomainDocument.model_validate(value).model_dump(mode='json')
@@ -37,6 +37,9 @@ def prepare(value, parameters):
     d['circuits'] = [c for c in d['circuits'] if any(x['id'] in placed for x in c['cables'])]
     group = prepare_iec(d,p.iec)
     if not group.soil.get('three_core'):
+        if allow_single_core:
+            from .single_core_thermal import prepare as prepare_single
+            return prepare_single(p,d,group)
         raise FieldValueError('此热场能力要求三芯独立屏蔽的平衡电缆；单芯使用相应热场能力。','cable_types')
     materials = {m['id']:m for m in d['materials']};types = {t['id']:t for t in d['cable_types']}
     instances = {x['id']:c for c in d['circuits'] for x in c['cables']}
@@ -158,6 +161,9 @@ def thermal_state(prepared, system, temperature):
     import numpy as np
     from cablesim_iec60287.three_core import electrical
     p,d,group,problem,bindings,ducts=prepared
+    if not group.soil.get('three_core'):
+        from .single_core_thermal import thermal_state as single_state
+        return single_state(prepared,system,temperature)
     mesh,basis,ids,regions,weights,nodes,air_laws,fixed_matrix,fixed_heat,D,free=system
     def mean(uid):return float(weights[uid]@temperature/weights[uid].sum())
     matrix=fixed_matrix.copy();air=[]
@@ -235,7 +241,8 @@ def solve(prepared, mesh=None, *, _cache=None, _export_field=True):
     if balance>1e-6 or physical>max(1e-5,p.tolerance_k):raise ValueError('三芯接受温度的热平衡不合格。')
     result = {'cables':states,'iterations':history,'source_heat_w_m':power,'boundary_heat_w_m':outflow,
         'energy_relative_residual':balance,'physical_residual_inf_w_m':physical,'duct_air_states':air,
-        'solver':f'scikit-fem P{p.mesh.field_order or 1} / IEC60287 balanced three-core loss feedback','clauses':SOURCES,
+        'solver':f'scikit-fem P{p.mesh.field_order or 1} / IEC60287 '+('balanced three-core' if group.soil.get('three_core') else 'single-core')+' loss feedback',
+        'clauses':SOURCES if group.soil.get('three_core') else ['IEC 60287-1-1:2023 5.1.2, 5.2, 5.3.7; IEC 60287-2-1:2023 4.1.2.1, 4.1.5.1'],
         'outer_boundary':{'kind':p.outer_boundary,'ground_surface':'isothermal','soil_resistivity_k_m_w':rho,
             'sources':loss_sources(states,bindings) if p.outer_boundary=='kennelly_image' else [],
             'feedback_residual_k':boundary_error,'reference':'IEC 60287-2-1:2023 4.2.2; Kennelly half-space Green function'},
@@ -297,7 +304,7 @@ def rating(prepared,mesh,*,_cache=None):
 
 def host_case(request,case,job):
     from .artifacts import source,write,temperature_field
-    prepared = prepare(case['input'],case.get('parameters',{}))
+    prepared = prepare(case['input'],case.get('parameters',{}),allow_single_core=True)
     if request['phase']=='check':
         from .problem_mesh import build
         mesh=build(prepared[3],prepared[0].mesh)
@@ -334,4 +341,4 @@ def host_case(request,case,job):
     return {'case_id':case['case_id'],'status':'succeeded','artifacts':[raw,artifact,*full_artifacts],
         'results':[{'key':'conductor_temperature','type':'quantity','entity':c['entity'],'unit':'K','status':'available',
                     'case':'operating','value':c['conductor_max_temperature_k']} for c in result['cables']]+ratings,
-        'warnings':[{'code':'IEC_THERMAL_FIELD_SCOPE','message':'三芯IEC平衡电损耗按金属区域平均温度反馈；场解析实际三芯热域。丝/带为有来源的热层等效，不是三维电磁场。'}]}
+        'warnings':[{'code':'IEC_THERMAL_FIELD_SCOPE','message': '三芯IEC平衡电损耗按金属区域平均温度反馈；场解析实际三芯热域。丝/带为有来源的热层等效，不是三维电磁场。' if prepared[2].soil.get('three_core') else '单芯IEC电损耗按金属平均温度反馈；二维热场解析保存热层与互热。波纹是有来源的环形等效，点接触不是实测接触宽度；不称为三维电磁场。'}]}

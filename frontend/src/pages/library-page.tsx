@@ -19,6 +19,7 @@ import { propertyLabel, referenceCitation, referenceData, referenceNumber, right
 import { StandardsBrowser } from '@/features/standards/browser';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { assetCoverage } from '@/lib/asset-coverage';
+import { ConclusionStrip } from '@/components/conclusion-strip';
 
 type AssetKind = components["schemas"]["AssetRelease"]["kind"];
 const kinds: Record<string, string> = {
@@ -137,6 +138,7 @@ export function AssetsPage() {
   const pages = useQueries({
     queries: shown.map((value) => ({
       queryKey: ["asset-catalog", q, value, status],
+      enabled: !browsingBasis,
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         assetCatalog({ q, kind: value as AssetKind, status: status === "all" ? undefined : (status as "draft"), offset: 0 }, signal),
     })),
@@ -150,7 +152,7 @@ export function AssetsPage() {
   const detail = useQuery({
     queryKey: ["asset-detail", selected],
     queryFn: ({ signal }) => assetDetail(selected, signal),
-    enabled: !!selected,
+    enabled: !!selected && !browsingBasis,
   });
   const materialRows = groupId === 'materials' ? rows.filter(row => row.kind === 'material') : [];
   const coverageQueries = useQueries({ queries: materialRows.map(row => ({ queryKey: ['asset-detail', row.id], queryFn: ({ signal }: { signal: AbortSignal }) => assetDetail(row.id, signal), retry: false })) });
@@ -188,6 +190,7 @@ export function AssetsPage() {
   const filtered = !!q || kind !== "all" || status !== "all";
   // 筛选后选中的那条不在结果里：面板不再显示它（地址里的 item 保留，清空筛选后恢复）
   const showing = selected && (!filtered || pending || rows.some((row) => row.id === selected)) ? selected : "";
+  const selectedCoverage = groupId === 'materials' && detail.data?.kind === 'material' ? assetCoverage(optionalRecord(detail.data.release)) : undefined;
   return (
     <CatalogShell
       title={group.title}
@@ -204,6 +207,12 @@ export function AssetsPage() {
               : detail.error
                 ? [{ label: "名片", items: [{ label: "错误", value: message(detail.error) }] }]
                 : assetGroups(optionalRecord(detail.data))}
+            summary={selectedCoverage && <ConclusionStrip label="已登记物性覆盖" historical={detail.data?.status === 'deprecated'}
+                conclusion={selectedCoverage.total ? selectedCoverage.missing.length ? '已登记物性存在缺项' : '已登记物性未列缺项' : '物性尚未登记'}
+                metrics={selectedCoverage.total ? [
+                  { label: '已登记数值', value: selectedCoverage.covered, unit: '项' },
+                  { label: '明确缺项', value: selectedCoverage.missing.length, unit: '项' },
+                ] : []} />}
             extra={<section aria-label="关联"><h3>关联</h3><RelationPanel kind="asset" id={selected} /></section>}
             onToggle={() => setSelected("")}
           />

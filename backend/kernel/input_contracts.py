@@ -11,9 +11,13 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+from collections import OrderedDict
+from threading import RLock
 from backend.domain.models import DomainDocument
 
 ROOT = Path(__file__).resolve().parents[2]
+_validated_catalogues = OrderedDict()
+_catalogue_lock = RLock()
 MODELS = {
     ('cablesim.simulation', 'getdp-eddy'): ('backend.kernel.simulation_contract', 'StandaloneParameters'),
     ('cablesim.simulation', 'elmer-heat'): ('backend.kernel.simulation_contract', 'StandaloneParameters'),
@@ -86,7 +90,11 @@ def contracts(research, *, encoded=False, catalog_preload=True):
         with research.contract_read_lock, verification_scope():
             registry = research.registry()
             entries = research.methods(registry)
-            cache = {'registries': {pid: registry for pid in registry.plugins}}
+            # methods() already computed each identity from this exact Registry
+            # metadata snapshot; fresh package verification below still runs.
+            cache = {'registries': {pid: registry for pid in registry.plugins},
+                     'pins': {(entry['method']['plugin_id'], id(registry.get(entry['method']['plugin_id']).manifest)):
+                              entry['method'] for entry in entries}}
             if catalog_preload:
                 # Discovery only publishes metadata, with a SourceWatch lease around
                 # the whole read. Verify all package bytes/import closures once;
@@ -96,9 +104,14 @@ def contracts(research, *, encoded=False, catalog_preload=True):
                 # execution. Four readers overlap Windows path/byte I/O while
                 # keeping every package's normal digest/import-closure check.
                 from concurrent.futures import ThreadPoolExecutor
+                from backend.plugin_host.dependencies import DependencySnapshot, dependency_batch
+                snapshot = DependencySnapshot(registry.root.parent)
+                def verify(plugin):
+                    with dependency_batch(snapshot):
+                        plugin.verify()
                 try:
                     with ThreadPoolExecutor(max_workers=4) as readers:
-                        list(readers.map(lambda plugin: plugin.verify(), registry.plugins.values()))
+                        list(readers.map(verify, registry.plugins.values()))
                 except OSError as exc:
                     raise PluginHostError('PLUGIN_SEAL_INVALID', '插件封签文件无法核验；请检查安装文件与读取权限。'+str(exc), 409) from None
                 cache['verified'] = {pid: None for pid in registry.plugins}
@@ -108,10 +121,27 @@ def contracts(research, *, encoded=False, catalog_preload=True):
                     research.resolve({**entry['method'], 'capability': cap['id']}, cache)
             key = sha256(json.dumps([entry['method'] for entry in entries], sort_keys=True).encode()).hexdigest()
             if key not in research.contract_read_cache:
-                values = verified_contracts(research, entries, cache)
-                adapter = TypeAdapter(list[InputContract])
-                validated = adapter.validate_python(values)
-                research.contract_read_cache[key] = (values, adapter.dump_json(validated, by_alias=True))
+                # Only immutable source-derived JSON is shared between hosts.
+                # Every package/closure above was freshly authenticated; database
+                # data, executors, mutable manifests and currentness never enter
+                # this cache. A model rebuild or builder replacement also misses.
+                schema_digest = sha256(json.dumps(DomainDocument.model_json_schema(), sort_keys=True).encode()).digest()
+                shared_key = (str(registry.root.resolve()), key, schema_digest, verified_contracts)
+                with _catalogue_lock:
+                    previous = _validated_catalogues.get(shared_key)
+                    if previous is not None:
+                        _validated_catalogues.move_to_end(shared_key)
+                if previous is None:
+                    values = verified_contracts(research, entries, cache)
+                    adapter = TypeAdapter(list[InputContract])
+                    validated = adapter.validate_python(values)
+                    previous = (json.dumps(values, ensure_ascii=False, allow_nan=False).encode(),
+                                adapter.dump_json(validated, by_alias=True))
+                    with _catalogue_lock:
+                        _validated_catalogues[shared_key] = previous
+                        while len(_validated_catalogues) > 8:
+                            _validated_catalogues.popitem(last=False)
+                research.contract_read_cache[key] = (json.loads(previous[0]), previous[1])
                 while len(research.contract_read_cache) > 4:
                     research.contract_read_cache.popitem(last=False)
             research.contract_read_cache.move_to_end(key)

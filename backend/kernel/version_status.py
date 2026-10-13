@@ -70,15 +70,20 @@ def inspect(research, snapshot, cache=None):
         try:
             if pid not in pins:
                 registry = cache.get('registries', {}).get(pid)
-                pins[pid] = research.pin((registry if registry is not None else research.registry(pid)).get(pid))
+                plugin = (registry if registry is not None else research.registry(pid)).get(pid)
+                shared_pins = cache.setdefault('pins', {})
+                pin_key = (pid, id(plugin.manifest))
+                if pin_key not in shared_pins:
+                    shared_pins[pin_key] = research.pin(plugin)
+                pins[pid] = shared_pins[pin_key]
             new = pins[pid]
             if (old['version'], old['release_digest']) == (new['version'], new['release_digest']):
                 continue
             plugin = (cache.get('registries', {}).get(pid) or research.registry(pid)).get(pid)
-            from .method_identity import classify, saved_manifest
+            from .method_identity import classify, saved_manifest, manifest_for_read
             proof = classify(old, {**new, 'capability': old['capability']},
                              saved_manifest(snapshot, old['release_digest']),
-                             plugin.manifest.model_dump(mode='json', by_alias=True))
+                             manifest_for_read(plugin, cache), cache)
             # A matching declaration alone never bypasses a broken current seal.
             if proof['classification'] == 'presentation_only':
                 research.resolve({**new, 'capability': old['capability']}, cache)

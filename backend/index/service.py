@@ -7,6 +7,7 @@ import logging
 from threading import Event, RLock
 from time import time, perf_counter
 from types import SimpleNamespace
+from copy import deepcopy
 
 from fastapi import HTTPException
 from backend.kernel.read_models import run_state
@@ -33,7 +34,7 @@ def parent(card):
 class Snapshot:
     def __init__(self,research,db,reproductions=None,reproduction_error=None,*,previous=None,source_generation=None,execution_reader=None):
         self.research,self.db=research,db
-        self.raw=project(db);self.cards={};self.meta={};self.edges=[];self.unresolved={};self.todos=[]
+        self.source_timings={};self.raw=project(db,self.source_timings);self.cards={};self.meta={};self.edges=[];self.unresolved={};self.todos=[]
         self.receipts=[];self.reproduction_error=reproduction_error
         self.execution_reader=execution_reader or ExecutionReceipts()
         # Agent events/proposals do not change saved engineering currentness.
@@ -257,6 +258,8 @@ class Index:
         self.previous=None;self.last_build=None;self.startup_wait_ms=None
         self.last_read=None
         self.execution_reader=ExecutionReceipts()
+        self.cached=None
+        self.decoded=None;self.reproduction_cache=None
         from .reproductions import library
         self.reproduction_library=library()
 
@@ -264,7 +267,7 @@ class Index:
         if stop is not None and stop.is_set():return
         self.warm_state='building'
         try:
-            self.snapshot()
+            self.snapshot(copy=False)
             self.warm_state='ready'
         except Exception:
             self.warm_state='unavailable'
@@ -282,11 +285,21 @@ class Index:
         reproduction_error=None;reproductions=None
         try:
             observed=identity(self.reproduction_library)
-            reproductions=self.reproduction_library.snapshot()
+            stamp=(str(self.reproduction_library.root.resolve()),observed)
+            if self.reproduction_cache is not None and self.reproduction_cache[0]==stamp:
+                reproductions=self.reproduction_cache[1]
+            else:reproductions=self.reproduction_library.snapshot()
             if identity(self.reproduction_library)!=observed:raise ValueError('读取期间复现库变化，请重试。')
+            self.reproduction_cache=(stamp,reproductions)
         except (OSError,ValueError,KeyError,TypeError,AttributeError,IndexError,HTTPException) as error:
             reproductions=None;reproduction_error=invalid(error).detail
         with self.research.store.db() as db:
+            # Late metadata columns follow potentially huge saved output records.
+            # SQLite otherwise copies their overflow pages into its page cache
+            # just to reach those columns. A bounded read-only file mapping avoids
+            # that copy; it is unmapped with this short-lived connection, not kept
+            # as a private heap buffer or a new background database connection.
+            db.execute('PRAGMA mmap_size=1073741824')
             db.execute('PRAGMA query_only=ON');db.execute('PRAGMA busy_timeout=250');db.execute('BEGIN')
             cache=self.research.read_responses
             with cache.lock:generation=cache.generation(True)
@@ -304,13 +317,14 @@ class Index:
             'unresolved':[[*key,notes] for key,notes in view.unresolved.items()],'todos':view.todos,
             'reproduction_error':view.reproduction_error},ensure_ascii=False,allow_nan=False).encode()
         self.last_build={'elapsed_ms':(perf_counter()-started)*1000,'cards':len(view.cards),
+            'source_timings':view.source_timings,
             'reused_run_states':bool(self.previous and source_generation is not None
                 and self.previous['source_generation']==source_generation and self.previous['model_identity']==view.model_identity)}
         self.previous={'source_generation':source_generation,'model_identity':view.model_identity,
             'registry':view.registry,'run_states':view.run_states}
         return payload
 
-    def snapshot(self):
+    def snapshot(self,*,copy=True):
         started=perf_counter();metrics={}
         # Leave room for the HTTP error response within the public wait budget.
         if not self.lock.acquire(timeout=max(0,self.MAX_WAIT_SECONDS-.1)):
@@ -337,16 +351,30 @@ class Index:
             key=('object-index',self.expiry_generation,self.runtime_generation,reproduction_identity)
             metrics['reproduction_identity_ms']=(perf_counter()-phase)*1000;phase=perf_counter()
             cache=self.research.read_responses
-            payload=cache.get(key,True)
+            # Keep this small validated projection independently of the shared
+            # LRU: large page reads must not evict sidebar/index metadata. Reuse
+            # only an exact current DB/source generation, never a TTL.
+            with cache.lock:
+                generation=cache.generation(True) if cache.watch is not None and cache.database is not None and cache.source_root==self.research.executor.registry.root.parent else None
+            payload=self.cached[2] if generation is not None and self.cached is not None and self.cached[:2]==(key,generation) else None
             metrics['cache_hit']=payload is not None
-            if payload is None:payload=cache.build(key,None,self.load,True)
+            if payload is None:
+                payload=cache.build(key,None,self.load,True)
+                with cache.lock:after=cache.generation(True)
+                self.cached=(key,after,payload) if generation is not None and generation==after and len(payload)<=cache.MAX_BYTES else None
             metrics['cache_ms']=(perf_counter()-phase)*1000;phase=perf_counter()
-            value=json.loads(payload)
+            view=self.decoded[2] if self.cached is not None and self.decoded is not None and self.decoded[:2]==(key,generation) else None
+            if view is None:
+                value=json.loads(payload)
+                view=SimpleNamespace(cards={(card['kind'],card['id']):card for card in value['cards']},
+                    edges=[(tuple(source),edge) for source,edge in value['edges']],
+                    unresolved={(kind,id):notes for kind,id,notes in value['unresolved']},todos=value['todos'],
+                    reproduction_error=value.get('reproduction_error'))
+                self.decoded=(*self.cached[:2],view) if self.cached is not None else None
             metrics['decode_ms']=(perf_counter()-phase)*1000
-            return SimpleNamespace(cards={(card['kind'],card['id']):card for card in value['cards']},
-                edges=[(tuple(source),edge) for source,edge in value['edges']],
-                unresolved={(kind,id):notes for kind,id,notes in value['unresolved']},todos=value['todos'],
-                reproduction_error=value.get('reproduction_error'))
+            # Public adapters receive an isolated view. These three read-only
+            # API projections can borrow it without repeated full JSON decoding.
+            return deepcopy(view) if copy else view
         except sqlite3.OperationalError as error:
             raise HTTPException(503,{'code':'INDEX_UNAVAILABLE','message':'统一索引暂时无法读取；原数据未改变，请稍后重试。'},headers={'Retry-After':'1'}) from error
         except (PluginHostError,OSError,ValueError) as error:
@@ -361,7 +389,7 @@ class Index:
         if kind is not None and kind not in ObjectCard.model_fields['kind'].annotation.__args__:
             raise HTTPException(422,{'code':'INDEX_KIND_INVALID','path':'/kind','message':'请选择已注册的对象类别。'})
         if not 1<=limit<=100 or offset<0 or len(q)>200:raise HTTPException(422,'索引查询参数超出范围。')
-        snapshot=self.snapshot();term=q.casefold().strip()
+        snapshot=self.snapshot(copy=False);term=q.casefold().strip()
         if kind=='validation' and snapshot.reproduction_error:
             # Exact declared-card identities remain readable even when the
             # independent reproduction source is unavailable.
@@ -379,7 +407,7 @@ class Index:
             source_errors=[snapshot.reproduction_error] if snapshot.reproduction_error else []).model_dump(mode='json')
 
     def relations(self,kind,id):
-        snapshot=self.snapshot();key=(kind,id)
+        snapshot=self.snapshot(copy=False);key=(kind,id)
         if kind=='validation' and snapshot.reproduction_error and (snapshot.cards.get(key) or {}).get('subtype')!='declared':
             raise HTTPException(503,snapshot.reproduction_error)
         if key not in snapshot.cards:raise HTTPException(404,{'code':'INDEX_OBJECT_NOT_FOUND','message':'对象未在现有索引中登记。'})
@@ -392,7 +420,7 @@ class Index:
             source_errors=[snapshot.reproduction_error] if snapshot.reproduction_error else []).model_dump(mode='json')
 
     def inbox(self,snapshot=None):
-        snapshot=snapshot if snapshot is not None else self.snapshot();items=snapshot.todos
-        items.sort(key=lambda item:(item['created'] or '',item['category'],item['object']['id']),reverse=True)
+        snapshot=snapshot if snapshot is not None else self.snapshot(copy=False)
+        items=sorted(snapshot.todos,key=lambda item:(item['created'] or '',item['category'],item['object']['id']),reverse=True)
         return Inbox(items=items,counts={key:sum(item['category']==key for item in items) for key in ('review','stale','missing','running')},
             source_errors=[snapshot.reproduction_error] if snapshot.reproduction_error else []).model_dump(mode='json')

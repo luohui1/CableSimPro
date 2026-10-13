@@ -15,6 +15,7 @@ import { Select } from "./ui/select";
 import { Button } from "./ui/button";
 import { Tooltip } from "./ui/tooltip";
 import { Conclusion } from "./conclusion";
+import { ConclusionStrip } from './conclusion-strip';
 import { EngineeringValue } from "./engineering-value";
 import type { InputSelection } from "./study-inputs";
 import { StatusMark } from './status-mark';
@@ -42,7 +43,7 @@ export function StudyTemperature({
   const needsSavedView = !!run?.id && !!run?.workspace && !['accepted','queued','running','validating'].includes(text(run?.status)) &&
     (!run?.output || savedCases.some(item => item.input_ref && !item.input));
   const view = useQuery({ queryKey: ['saved-field-view', run?.workspace, run?.id], enabled: needsSavedView,
-    queryFn: ({ signal }) => hpcJson(`/workspaces/${text(run?.workspace)}/fields/${text(run?.id)}/view`, { signal }), retry: false });
+    queryFn: ({ signal }) => hpcJson(`/workspaces/${text(run?.workspace)}/fields/${text(run?.id)}/view`, { signal, cache:'default' }), retry: false });
   run = view.data ?? run;
   const pendingRun = run && ['accepted','queued','running','validating'].includes(text(run.status)) ? run : undefined;
   const previous = useQuery({ queryKey: ['field-previous-result', pendingRun?.workspace, pendingRun?.study, pendingRun?.id], enabled: !!pendingRun?.study, retry: false,
@@ -70,8 +71,18 @@ export function StudyTemperature({
       return { view: undefined, error };
     }
   }, [run]);
-  const workflows = useQuery({ queryKey: ['saved-field-inputs-convergence', run?.workspace], enabled: parsed.view?.kind === 'fem' && !!run?.workspace,
-    queryFn: ({ signal }) => hpcJson(`/convergence?workspace=${text(run?.workspace)}`, { signal }), retry: false });
+  // Camera controls and selection must reuse the verified display arrays;
+  // changing a label should not rebuild contours or upload the mesh again.
+  const circles = useMemo(() => (parsed.view?.geometry?.cables || []).map(cable => ({ x: cable.x, z: cable.z, r: cable.shape.radiusM, label: cable.label })), [parsed.view]);
+  const values = useMemo(() => parsed.view?.temperatures.map(value => value - 273.15) || [], [parsed.view]);
+  const focused = useMemo(() => {
+    const data = parsed.view;
+    if (!data) return { points: [], triangles: [], values };
+    return data.kind === 'fem' && !fullDomain ? focusField(data.points, data.triangles, values, circles)
+      : { points: data.points, triangles: data.triangles, values };
+  }, [parsed.view, fullDomain, values, circles]);
+  const workflows = useQuery({ queryKey: ['adaptive-convergence', text(run?.workspace), text(run?.study)], enabled: parsed.view?.kind === 'fem' && !!run?.workspace,
+    queryFn: ({ signal }) => hpcJson(`/convergence?workspace=${encodeURIComponent(text(run?.workspace))}${run?.study ? `&study=${encodeURIComponent(text(run.study))}` : ''}`, { signal }), staleTime: 3000, retry: false });
   useEffect(() => {
     if (!run || !parsed.view || parsed.view.kind !== 'fem' || pendingRun || needsSavedView && !view.data || workflows.isPending) return;
     if (selectedInputRun.current === text(run.id)) return;
@@ -98,9 +109,11 @@ export function StudyTemperature({
   const data = parsed.view;
   if (!data) return <EmptyState description="" title="该运行没有温度场工件" />;
   const domain = savedDomain(run);
-  const circles = (data.geometry?.cables || []).map(cable => ({ x: cable.x, z: cable.z, r: cable.shape.radiusM, label: cable.label }));
-  const values = data.temperatures.map(value => value - 273.15);
-  const focused = data.kind === 'fem' && !fullDomain ? focusField(data.points, data.triangles, values, circles) : { points: data.points, triangles: data.triangles, values };
+  const savedAssumptions = optionalRecord(optionalRecord(optionalRecord(data.case.artifacts)['x-cablesim.simulation-bundle']).result).assumptions;
+  const modellingNotes = [['接触', '相切外护套'], ['波纹', '波纹护套'], ['范围', '二维均匀环']].flatMap(([label, prefix]) => {
+    const statement = Array.isArray(savedAssumptions) ? savedAssumptions.find(value => typeof value === 'string' && value.startsWith(prefix)) : undefined;
+    return statement ? [{ label, statement: text(statement) }] : [];
+  });
   const summaryEntry = Object.entries(optionalRecord(data.case.artifacts)).find(([, value]) => optionalRecord(value).schema_version === 'cablesim.electrothermal-reference/1');
   const thermalSummary = optionalRecord(summaryEntry?.[1]);
   const checked = summaryEntry && optionalRecord(optionalRecord(optionalRecord(run.artifact_status)[text(data.case.case_id)])[summaryEntry[0]]).status === 'verified';
@@ -161,7 +174,18 @@ export function StudyTemperature({
       ],
     });
   }
-  const conclusion = (
+  const conclusion = data.kind === 'fem' ? <>
+    <ConclusionStrip label="保存温度场结论"
+      conclusion={verdict === undefined ? '无法判断温限 · 保存工件尚无温限判定' : verdict ? '保存负荷满足温限' : '保存负荷超温'}
+      historical={run.freshness === 'historical'}
+      metrics={[
+        { label: savedMaximum === null ? '场内最高温度' : '最高导体温度', value: savedMaximum === null ? data.maximum : savedMaximum + 273.15, unit: 'K', quantity: 'temperature' },
+        { label: '保存温限', value: limit === null ? null : limit + 273.15, unit: 'K', quantity: 'temperature' },
+        { label: '最大超出', value: savedLimit?.excess_k, unit: 'K', precision: 1 },
+      ]} />
+    {verdict === undefined && <p className="field-state-note">最高温度不代表满足温限；请核对来源运行的保存输入与温限判定。</p>}
+    {savedLimit && limit === null && <p className="field-state-note">按各电缆保存的正常温限逐项判定。</p>}
+  </> : (
     <Conclusion
       title={<StatusMark kind={verdict === undefined ? 'unknown' : verdict ? 'satisfied' : 'unsatisfied'} label={verdict === undefined ? '无法判断' : verdict ? '满足温限' : '超温'} />}
       model={`${savedLimit ? '最高导体温度' : '最高温度'} ${verdict === undefined ? engineeringQuantity("temperature", data.maximum, "K").text : formatNumber(savedMaximum, 1)} °C`}
@@ -189,6 +213,10 @@ export function StudyTemperature({
         {data.kind === "fem" && <SavedRunProgress run={pendingRun || run} />}
         {data.kind === "fem" && <FieldHistoryNotice run={run} />}
         {conclusion}
+        {modellingNotes.length > 0 && <details className="field-state-note">
+          <summary>建模假设：理想点接触 · 波纹等效热环</summary>
+          <dl className="field-scope">{modellingNotes.map(note => <div key={note.label}><dt>{note.label}</dt><dd>{note.statement}</dd></div>)}</dl>
+        </details>}
         <Toolbar>
           <h2>保存温度场</h2>
           {data.kind === 'fem' && <Button size="compact" onClick={() => setFullDomain(value => !value)}>{fullDomain ? '电缆区域' : '全域'}</Button>}
@@ -241,7 +269,7 @@ export function StudyTemperature({
     );
   if (tab === "samples")
     return (
-      <div className="input-module">
+      <div className="input-module saved-field-samples">
         {conclusion}
         <DataTable
           label="保存温度取样"
@@ -249,7 +277,7 @@ export function StudyTemperature({
             {
               id: "entity",
               label: "对象",
-              render: (row) => entityLabel(domain, row.entity),
+              render: (row) => row.id === data.hotspot.id ? "最高温度点" : entityLabel(domain, row.entity),
             },
             {
               id: "x",
@@ -300,7 +328,7 @@ export function StudyTemperature({
           ]}
           selectedId={selected}
           onSelect={select}
-          rowLabel={(row) => entityLabel(domain, row.entity)}
+          rowLabel={(row) => row.id === data.hotspot.id ? "最高温度点" : entityLabel(domain, row.entity)}
           showGroups={false}
         />
         {data.kind === "fem" && <SavedFieldComparison run={run} />}
@@ -431,6 +459,13 @@ export function StudyTemperature({
         ...optionalRecord(value),
       }),
     );
+    const caseName = (row: Record<string, unknown>) => {
+      const saved = savedCases.find(value => value.case_id === row.case_id);
+      const name = text(row.case_name) || text(row.label) || text(saved?.name) || text(saved?.label);
+      if (name) return name;
+      const index = rows.indexOf(row as typeof rows[number]);
+      return `工况 ${index + 1}`;
+    };
     return (
       <div className="input-module">
         {conclusion}
@@ -449,7 +484,7 @@ export function StudyTemperature({
         <DataTable
           label="保存收敛记录"
           columns={[
-            { id: "case", label: "工况", render: (row) => text(row.case_id) },
+            { id: "case", label: "工况", render: caseName },
             {
               id: "mesh",
               label: "网格长度",
@@ -491,7 +526,7 @@ export function StudyTemperature({
             },
           ]}
           groups={[{ id: "convergence", label: "核验", rows }]}
-          rowLabel={(row) => text(row.case_id)}
+          rowLabel={caseName}
           showGroups={false}
         />
       </div>

@@ -84,7 +84,8 @@ def test_every_record_has_complete_provenance_and_two_route_evidence(library):
         ids.add(record['id'])
         assert record['standard'] and record['edition'] and record['title']
         assert record['clause'] or record['table']
-        assert type(record['printed_page']) is int and record['printed_page'] > 0
+        assert (type(record['printed_page']) is int and record['printed_page'] > 0) or (
+            isinstance(record['printed_page'], str) and __import__('re').fullmatch(r'[1-9]\d*-[1-9]\d*', record['printed_page']))
         assert type(record['pdf_page']) is int and record['pdf_page'] > 0
         assert record['source_file'] and record['source_sha256'] in sources
         assert record['quantity']['name'] and record['quantity']['dimension'] and record['quantity']['unit']
@@ -232,5 +233,5 @@ def test_real_host_process_check_run_errors_retries_and_citation(tmp_path):
     assert answer['records'][0]['value']==5.5 and answer['approval']=='not_granted'
     retry=executor.run('cablesim.standards-basis','lookup',[valid])
     assert retry.cases[0].artifacts['x-cablesim.standards-basis']==answer
-    assert run.plugin_version==checked.plugin_version=='0.4.0'
+    assert run.plugin_version==checked.plugin_version=='0.6.0'
     assert len(run.request_sha256)==len(checked.request_sha256)==64

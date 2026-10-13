@@ -39,3 +39,13 @@
 全网格数据仅在上述忽略目录或指定的部署目录保存；计算书章节会逐级回查封存运行，全网格取样与导出也需要原场。XZ 流式读取、80 MiB 字典、SQLite 增量写入，不将整个档案展开为内存数据库；每个成员上限 100 MiB。打包工具只生成待审阅的部署数据，更新索引前须人工验收并重新封签；不得将压缩包加入仓库。
 
 真实只读浏览器复验：`node frontend/src/features/field/verify-real-study.mjs imported`，`FRONTEND_URL` / `BACKEND_URL` 指向隔离服务，`HPC_REAL_EVIDENCE` 指向本次证据目录。从导入的真实运行打开场图、收敛、对照和已保存历史 PDF，不提交新作业、不将历史 PDF 冒充当前计算书。
+
+## 单芯接触品字形稳态
+
+`single_core_thermal.py` 保留保存输入中的电缆中心、波纹尺寸、负荷和 IEC 电损耗选择。护套相切是零面积理想点接触，采用同一土壤域共形网格，不凭空赋予接触宽度或接触热阻；局部网格须按 0.1 K 门槛验证。它不代表已验证的有限接触面模型，也不开放接触单芯组的暂态。
+
+波纹内侧采用 IEC 60287-2-1:2023 §4.1.2.1 的平均内径（PDF 14 / 印刷 12 页），外护层采用 §4.1.5.1 的平均金属套外径至波峰外包络（PDF 19–20 / 印刷 17–18 页）。各材料圆环热阻按 §4.1.3（PDF 18 / 印刷 16 页）逐层组装。空气、缓冲带参数沿用保存来源；缺失的铜和铝导热率使用刘黎等 2021《110 kV电缆缓冲层的电热特性分析》表 2（PDF 3 / 印刷 56 页）400、238 W/(m·K)，不覆盖已有物性。该文的 1×1000 模型不能冒充本研究 1×800 的厂家验证。二维均匀空气环不能表达波谷的轴向接触；正弦波纹轮廓、轴向等温金属套下的并联热路仅是方法假设敏感性，不是实测参数，也不调整参数去贴合 IEC。
+
+`python plugins/cablesim.simulation/validation/pack_chengnan_evidence.py --database <隔离库> --receipt-folder <验收目录> --stage <外部证据目录>/chengnan` 只打包已完成两类收敛、同输入 IEC 对照与计算书的保存字节。逐成员流式核对摘要，三个包各不超过 100 MiB；先产出待审阅索引，不提交作业。仓库仍仅保留一个封签的 `engineering-evidence-index.json`、Schema 与摘要见证，`supplementary_receipts` 记录城南链，原城北档案与成员摘要不变。
+
+城南原件放在 `.data/simulation/engineering-evidence/chengnan/`，或 `CABLESIM_ENGINEERING_EVIDENCE` 指定根目录下的 `chengnan/`。通过证据保管人取得与索引一致的三份原件；用 `verify_archives(scope='chengnan')` 核验，`evidence_availability(scope='chengnan')` 查询。城北、城南分别核验和导入；一条链缺包不影响另一条链。种子有包时保留原工程与研究绑定并离线导入，缺包时只保存有来源的输入，显示“输入齐全，等待超算提交”。发布身份分别记录两条链的导入状态，补包会触发既有备份重建流程。原生结果均标为“超算实算结果”，保留建模假设；不能称作本机计算或已批准设计。

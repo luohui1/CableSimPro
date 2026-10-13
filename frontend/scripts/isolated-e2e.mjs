@@ -15,7 +15,7 @@ if (!script || path.dirname(script) !== ".")
   throw Error("只能执行 frontend/scripts 中的验收脚本");
 const visibleTextScript = ['verify-visible-text.mjs', 'verify-visible-text-states.mjs', 'verify-regularity.mjs', 'verify-performance.mjs'].includes(script);
 const realUseScript = script === 'verify-real-use.mjs';
-const formsUseScript = ['verify-form-real-use.mjs', 'verify-client-real-use.mjs'].includes(script);
+const formsUseScript = ['verify-form-real-use.mjs', 'verify-client-real-use.mjs', 'verify-public-read-use.mjs'].includes(script);
 const apiGenerationScript = script === 'generate-api.mjs';
 const source = path.resolve(
   process.env.E2E_DATABASE_SOURCE ||
@@ -84,6 +84,7 @@ try {
   const environment = {
     ...process.env,
     CABLESIM_DB: database,
+    E2E_PYTHON: python,
     // 普通验收禁用系统凭据；真实使用仅让平台按来源库账户正常鉴权，不改模型或密钥。
     CABLESIM_AGENT_KEY_STORE: realUseScript ? 'system' : 'memory',
     CABLESIM_DATASETS_DIR: path.join(scratch, "datasets"),
@@ -128,6 +129,16 @@ try {
           "import os,uvicorn",
           "from pathlib import Path",
           "from backend.main import app",
+          ...(script === 'verify-public-read-use.mjs' && process.env.PUBLIC_READ_PHASE === 'before' ? [
+            // Run the committed middleware for a real before/after cache comparison.
+            // Keep the live host, plugins and saved results otherwise identical.
+            "import ast,subprocess,backend.main as host_main",
+            "baseline=ast.parse(subprocess.check_output(['git','show',os.environ.get('PUBLIC_READ_BASELINE','HEAD')+':backend/main.py'],text=True,encoding='utf-8'))",
+            "node=next(n for n in baseline.body if isinstance(n,ast.ClassDef) and n.name=='LocalBoundary')",
+            "namespace=dict(vars(host_main))",
+            "exec(compile(ast.Module(body=[node],type_ignores=[]),'<committed-cache-baseline>','exec'),namespace)",
+            "host_main.LocalBoundary.__call__=namespace['LocalBoundary'].__call__",
+          ] : []),
           ...(script === 'verify-performance.mjs' ? [
             "import re",
             "from starlette.responses import JSONResponse",

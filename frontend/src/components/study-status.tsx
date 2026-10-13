@@ -6,21 +6,26 @@ import type { StatusKind } from './status-mark';
 import { VersionNotice } from './version-notice';
 import { formatDateTime } from '@/lib/format';
 import { statusLabel } from '@/lib/status-vocabulary';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { studyErrorDescription } from './study-error-state';
 
 /** Acknowledge once per installed release, across studies sharing that method. */
-export function useMethodPresentationNotice(study: StudyRow, run: Record<string, unknown> | undefined, notify: (value: string) => void) {
-  const notices = [study.raw, run].flatMap(value => {
+export function useMethodPresentationNotice(study: StudyRow, run: Record<string, unknown> | undefined) {
+  const [notice, setNotice] = useState('');
+  const notices = [run || study.raw].flatMap(value => {
     const rows = optionalRecord(optionalRecord(value).version_status).notices;
     return (Array.isArray(rows) ? rows : []).map(optionalRecord);
   }).filter(row => row.code === 'METHOD_PRESENTATION_UPDATED' && text(row.to_digest));
   useEffect(() => {
+    setNotice('');
     const pending = notices.filter(row => !localStorage.getItem(`method-description:${text(row.id)}:${text(row.to_digest)}`));
     if (!pending.length) return;
-    notify('方法说明已更新，保存结果仍有效。');
-    pending.forEach(row => localStorage.setItem(`method-description:${text(row.id)}:${text(row.to_digest)}`, 'acknowledged'));
-  }, [notices.map(row => text(row.id) + ':' + text(row.to_digest)).join('|'), notify]);
+    setNotice('方法说明已更新，保存结果仍有效。');
+  }, [study.id, run?.id, notices.map(row => text(row.id) + ':' + text(row.to_digest)).join('|')]);
+  return notice ? {description:notice, dismiss:() => {
+    notices.forEach(row => localStorage.setItem(`method-description:${text(row.id)}:${text(row.to_digest)}`, 'acknowledged'));
+    setNotice('');
+  }} : undefined;
 }
 
 /** §5.5: one projection for the selected study, shared by every workbench region. */

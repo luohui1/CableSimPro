@@ -4,6 +4,7 @@ PowerShell: $env:CABLESIM_AGENT_REAL_USE='1'; python -m pytest -s -q tests/test_
 No model, response, tool, proposal, saved object or plugin is substituted.
 """
 import json
+from contextlib import closing
 import os
 from pathlib import Path
 import socket
@@ -40,11 +41,12 @@ def serve(database, credential_database, port, stop):
             response.headers['X-Acceptance-Server-Ms']=str((perf_counter()-started)*1000)
         return response
     @app.get('/__acceptance/index-profile',include_in_schema=False)
-    def index_profile():
+    def index_profile(kind='study',id=None):
         import cProfile
         import pstats
         profiler=cProfile.Profile()
-        profiler.runcall(app.state.research.object_index.objects,kind='study',limit=100)
+        if id:profiler.runcall(app.state.research.object_index.relations,kind,id)
+        else:profiler.runcall(app.state.research.object_index.objects,kind=kind,limit=100)
         stats=pstats.Stats(profiler)
         return {'total_seconds':stats.total_tt,'functions':[
             {'file':key[0],'line':key[1],'function':key[2],'calls':value[1],
@@ -107,10 +109,11 @@ class RealUse:
             'answer':'\n'.join(m['content'] for m in record['messages'] if m['role']=='assistant' and m.get('content')),
             'object_refs':[m.get('object_refs',[]) for m in record['messages'] if m.get('content') and m['role']=='assistant'],
             'proposals':record['proposals'],'steps':[{'id':s['node_id'],'tool':s['tool'],'state':s['state'],
+                'arguments':s['arguments'],'input_identity':s['input_identity'],
                 'summary':s['result']['summary'],'diagnostics':s['result']['diagnostics'],
                 'next_actions':s['result']['next_actions']} for s in record['steps'] if s.get('result')],
             'audit':[e for e in record['events'] if e['type'] in ('model.request','model.result','turn.answer_only','recipe.finished','tool.result_reused',
-                'answer.accepted','answer.repair','answer.fallback','answer.diagnostic','plan.blocked','tool.diagnostic_reused')]}
+                'answer.accepted','answer.rejected','answer.repair','answer.fallback','answer.diagnostic','harness.error','plan.blocked','tool.diagnostic_reused','preflight.scopes_satisfied')]}
         self.report['tasks'].append(item);self.save()
         print(json.dumps({'task':name,'model_requests':record['budget']['model_requests'],
             'tool_calls':record['budget']['tool_calls'],'elapsed_s':item['elapsed_s'],'state':record['state']},ensure_ascii=False),flush=True)
@@ -128,7 +131,7 @@ def real_use(tmp_path_factory):
     assert source.is_file() and credential_source.is_file(), 'A saved release library is required'
     scratch = tmp_path_factory.mktemp('agent-real-use')
     database=scratch/'workspace.sqlite'; stop=scratch/'stop'; log_path=scratch/'host.log'
-    with sqlite3.connect(source.as_uri()+'?mode=ro',uri=True) as original, sqlite3.connect(database) as copied:
+    with closing(sqlite3.connect(source.as_uri()+'?mode=ro',uri=True)) as original, closing(sqlite3.connect(database)) as copied:
         original.backup(copied)
     with socket.socket() as listener:
         listener.bind(('127.0.0.1',0));port=listener.getsockname()[1]
@@ -162,12 +165,22 @@ def real_use(tmp_path_factory):
                 yield run
             finally:
                 run.save();stop.touch()
+                forced=False
                 try:process.wait(timeout=45)
                 except subprocess.TimeoutExpired:
-                    process.terminate();process.wait(timeout=10)
+                    forced=True;process.terminate();process.wait(timeout=10)
                 with socket.socket() as check:closed=check.connect_ex(('127.0.0.1',port))!=0
+                run.report['service_shutdown']={'forced':forced,'exit_code':process.returncode}
                 run.report['service_closed']=closed;run.save()
                 assert closed, f'Owned temporary port {port} remains open'
+                # Real Windows lifecycle check, including the index mapping and
+                # managed warm-up. No gc, busy-loop, force-unlock or fake handle.
+                with closing(sqlite3.connect(database,timeout=1)) as check:
+                    journal=check.execute('PRAGMA journal_mode=DELETE').fetchone()[0]
+                moved=database.with_suffix('.closed.sqlite')
+                database.rename(moved);moved.rename(database)
+                run.report['database_closed']={'journal_mode':journal,'rename_after_shutdown':True,'forced_shutdown':forced}
+                run.save()
 
 
 def projects(run):

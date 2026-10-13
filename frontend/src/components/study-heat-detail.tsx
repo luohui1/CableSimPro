@@ -3,11 +3,11 @@ import { optionalRecord, numeric, text } from '@/api/client';
 import { EmptyState } from './states';
 import { Select } from './ui/select';
 import { displayName } from '@/lib/display-names';
-import { savedDomain, entityLabel } from '@/lib/domain-fields';
 import { readableEvidence } from './study-workbench-config';
 import { StudyDetailGroup } from './study-detail-group';
 import { StudyMaterialBasis } from './study-material-basis';
 import { StudyCorrection } from './study-correction';
+import { savedCaseLabel, savedEntityLabel } from './study-run-label';
 
 type Row = Record<string, unknown>;
 const K = 273.15;
@@ -25,20 +25,6 @@ function operating(caseRow: Row) {
   return values;
 }
 
-/** 电缆实体按回路顺序命名为「回路 n」；单回路多根时加序号。 */
-function cableNames(run: Row, caseId: string) {
-  const snapshotCase = (Array.isArray(optionalRecord(run.snapshot).cases) ? optionalRecord(run.snapshot).cases as unknown[] : []).map(optionalRecord).find(c => text(c.case_id) === caseId);
-  // 运行详情默认不带工况输入；回退到快照里保存的工作区模型（回路与电缆身份相同）
-  const input = optionalRecord(snapshotCase?.input ?? savedDomain(run));
-  const circuits = Array.isArray(input.circuits) ? input.circuits as unknown[] : [];
-  const names = new Map<string, string>();
-  circuits.map(optionalRecord).forEach(circuit => {
-    const cables = (Array.isArray(circuit.cables) ? circuit.cables : []).map(optionalRecord);
-    cables.forEach(cable => names.set(text(cable.id), entityLabel(input, text(cable.id))));
-  });
-  return names;
-}
-
 const fmt = (v: number | undefined, digits = 1) => (v === undefined ? '—' : v.toFixed(digits));
 
 /**
@@ -48,7 +34,7 @@ const fmt = (v: number | undefined, digits = 1) => (v === undefined ? '—' : v.
 export function StudyHeatDetail({ run, cases, initialCase }: { run?: Row; cases: { id: string; label: string }[]; initialCase?: string }) {
   const output = optionalRecord(run?.output);
   const runCases = (Array.isArray(output.cases) ? output.cases : []).map(optionalRecord);
-  const options = cases.length ? cases : runCases.map(c => ({ id: text(c.case_id), label: text(c.case_id) }));
+  const options = cases.length ? cases : runCases.map(c => ({ id: text(c.case_id), label: savedCaseLabel(run || {}, text(c.case_id)) }));
   const [caseId, setCaseId] = useState(initialCase || options[0]?.id || '');
   const [cable, setCable] = useState('');
   const current = runCases.find(c => text(c.case_id) === caseId);
@@ -59,7 +45,6 @@ export function StudyHeatDetail({ run, cases, initialCase }: { run?: Row; cases:
   if (!current || !Object.keys(trace).length) return <EmptyState title="此工况没有计算轨迹" description="所用方法未输出 IEC 60287 计算轨迹，无法展示热路详情。" />;
 
   const values = operating(current);
-  const names = cableNames(run, caseId);
   const cables = [...new Set([...values.keys()].filter(k => k.startsWith('conductor_temperature|')).map(k => k.split('|')[1]))];
   const hottest = cables.reduce((best, id) => ((values.get(`conductor_temperature|${id}`) ?? -Infinity) > (values.get(`conductor_temperature|${best}`) ?? -Infinity) ? id : best), cables[0]);
   const focus = cable && cables.includes(cable) ? cable : hottest;
@@ -80,7 +65,7 @@ export function StudyHeatDetail({ run, cases, initialCase }: { run?: Row; cases:
   }
   const evidence = optionalRecord(current.evidence);
   const sources = (Array.isArray(trace.sources) ? trace.sources : []).map(text).filter(Boolean).map(readableEvidence);
-  const name = (id?: string) => id ? names.get(id) || entityLabel(savedDomain(run), id) : '保存工况';
+  const name = (id?: string) => id ? savedEntityLabel(run, caseId, id) : '保存工况';
 
   return <div className="heat-detail">
     <div className="heat-detail-bar">

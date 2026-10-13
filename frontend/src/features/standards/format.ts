@@ -5,7 +5,7 @@ export const conditionNames: Record<string, string> = {
   u0_v: '相对地电压 / kV', u_v: '额定电压 / kV', um_v: '最高电压 / kV',
   insulation: '绝缘类型', conductor_material: '导体材料', coating: '镀层', conductor_form: '导体结构',
   conductor_class: '导体类别', core_count: '芯数', screened: '屏蔽', sheath_material: '护套材料',
-  layer: '层位置', armour_material: '铠装材料', armour_kind: '铠装形式', duration_s: '持续时间 / s',
+  layer: '层位置', armour_material: '铠装材料', armour_kind: '铠装形式', duration_s: '持续时间 / s', nominal_thickness_m: '标称厚度 / mm',
   conductor_max_working_temperature_k: '导体最高温度 / K', ambient_temperature_k: '环境温度 / K',
   soil_thermal_resistivity_k_m_w: '土壤热阻率 / K·m/W', cable_count: '并列根数', layer_count: '叠置层数',
   horizontal_parallel_cable_count: '水平并列根数', spacing_m: '净间距 / mm', spacing_diameter_ratio: '中心间距 / 外径',
@@ -31,6 +31,9 @@ export const conditionNames: Record<string, string> = {
   current_rating_a: '额定电流 / A', conductor_temperature_k: '导体温度 / K', formula_parameter: '公式参数',
   conductor_shape: '导体形状', test_specimen: '试样状态', equal_core_sections: '等截面线芯', rounding_scope: '修约步骤',
   screen_construction: '金属屏蔽构造', inner_covering_present: '有内衬',
+  study_case: '文献工况', soil_capacity_method: '土壤混合方法', parameter_origin: '参数来源',
+  covering_construction: '内衬构造', metal_layer_relation: '金属层与铠装关系', longitudinal_water_barrier: '金属层周围纵向阻水',
+  lead_sheath_present: '有铅套', special_armour_construction: '特殊铠装结构', tape_width_m: '金属带宽 / mm', measurement_role: '测量位置',
 };
 const labels: Record<string, string> = { copper: '铜', aluminium: '铝', plain: '不镀金属', metal_coated: '镀金属', circular: '圆形', compacted: '紧压', shaped: '成型', yes: '有', no: '无', lead: '铅', corrugated_aluminium: '皱纹铝', plain_aluminium: '平滑铝', non_lead: '非铅', steel: '钢',
   air: '空气', soil: '土壤', ladder: '梯架', tray: '托盘', parallel: '平行', crossing: '交叉', insulation: '绝缘', protective_covering: '保护护层', conductor: '导体', semiconductor: '半导电层', duct: '导管', sheaths_and_armour: '护套与铠装',
@@ -50,6 +53,15 @@ const labels: Record<string, string> = { copper: '铜', aluminium: '铝', plain:
   standard: '普通排列', single_layer: '一层成缆', one_reduced_small: '三芯一小芯（直径比小于2/3）', one_reduced_large: '三芯一小芯（直径比不小于2/3）', one_reduced: '一个小截面芯', two_reduced: '两个小截面芯',
   tape: '金属带', wire: '金属丝', polyethylene: 'PE', polypropylene: 'PP', lead_or_lead_alloy: '铅或铅合金', seabed_sand_gravel: '海床砂砾', silicone_rubber: '硅橡胶', polypropylene_and_air: 'PP与空气', insulation_resin: '绝缘树脂', concrete: '混凝土',
   connection_tube: '连接管', main_insulation_tube: '主绝缘管', cable_filler: '电缆填充', joint_filler: '接头填充', inner_sheath: '内护套', metal_shield: '金属屏蔽', outer_sheath: '外护套', waterproof_sealant: '防水密封', pipe: '管壁', cable_well: '电缆井', air_layer: '空气层', soil_layer: '土壤层',
+  pipe_wall: '管壁', surrounding_soil: '管周土壤', flowing_pipe_air: '流动管内空气', porous_soil: '多孔土壤',
+  'qi-eahe-constant-properties': 'Qi 地气换热器恒物性工况', 'deng-xian-dbhe': 'Deng 西安深井换热器工况',
+  not_reported: '原文未给温度范围', constant_property_assumption: '文献假定恒定物性', project_measured: '工程师现场参数',
+  three_phase: '固/液/气三相混合', air_capacity_neglected: '明确忽略空气相热容',
+  borehole: '钻孔', geometry: '几何尺寸', stainless_steel: '不锈钢', outer_pipe_wall: '外管壁', inner_pipe_wall: '内管壁', unspecified_grout: '文献未注明配方的回填料', geothermal_borehole_backfill: '地热钻孔回填',
+  round_wire: '圆金属丝', flat_wire: '扁金属线', galvanized_steel: '镀锌钢', nonmagnetic_stainless_steel: '非磁性不锈钢', tinned_copper: '镀锡铜', aluminium_alloy: '铝合金',
+  nonmagnetic: '非磁性', extruded: '挤包', lapped: '绕包', 'required_conforming_8.2': '必须有符合8.2的内衬',
+  different: '不同材料', extruded_required: '必须挤包隔离套', separation_sheath: '隔离套', 'tape_bedding_13.3.4': '按13.3.4包带垫层', replace_inner_covering: '可代替内衬', additional_to_inner_covering: '可附加在内衬上', not_required: '不必采用',
+  head_diameter: '测头直径', accuracy: '测量精度', width_boundary: '带宽分界', edge_offset: '距边距离', nominal: '标称值', minimum: '最小值', extruded_separation_sheath: '挤包隔离套', extruded_inner_covering: '挤包内衬', copper_wire: '铜丝屏蔽',
 };
 export const localized = (value: unknown): string => value === true || value === 'true' ? '是' : value === false || value === 'false' ? '否' : labels[String(value)] || String(value);
 export const conditionFactor = (key: string) => key.endsWith('_m2') ? 1e6 : key.endsWith('_m') ? 1000 : key.endsWith('_v') ? .001 : 1;
@@ -87,11 +99,12 @@ export function valueLabel(value: unknown): string {
   if (typeof value === 'object' && value && 'min' in value) return `≥${valueLabel((value as { min: unknown }).min)}`;
   if (typeof value === 'object') return '公式参数（查看引用）';
   if (typeof value === 'number') return value.toLocaleString('zh-CN', { maximumSignificantDigits: 12, useGrouping: false });
-  return String(value);
+  return localized(value);
 }
 export function copyCitation(r: BasisRecord) {
   const unit = r.value === null || r.quantity.dimension === 'text' || r.quantity.unit === '1' ? '' : ` ${r.quantity.unit}`;
-  const value = r.value === null && r.semantic.startsWith('literature') ? '—（原表未给值）' : valueLabel(r.value);
+  const value = r.value === null && r.semantic.startsWith('literature') ? '—（原表未给值）' :
+    r.id.startsWith('hopmans-soil-capacity-model/') && r.value_details?.formula_text ? r.value_details.formula_text : valueLabel(r.value);
   return `${r.standard}—${r.edition} ${r.table || `条款 ${r.clause}`}，第 ${r.printed_page} 页：${conditionsLabel(r.conditions)}，${value}${unit}`;
 }
 export function methodLabel(value: unknown): string {
@@ -114,6 +127,7 @@ export function formulaDetails(value: unknown, prefix = ''): string[] {
     insulation_multiplier: '绝缘厚度倍数', screen_increment_mm: '半导电屏蔽增量 / mm', thickness_multiplier: '厚度倍数', tie_tape_multiplier: '扎带厚度倍数', tie_tape_ignored_max_mm: '扎带忽略上限 / mm',
     mode: '修约方式', half_up: '保留位后一位0–4舍去、5–9进一', scope: '适用步骤', each_annex_a_stage: '附录A每阶段', increment_source: '修约精度来源', governing_clause: '有关条文', requires_explicit_increment: '必须明确指定修约精度',
     factor: '系数', large_core_multiplier: '大芯倍数', large_core_count: '大芯数量', divisor: '分母', small_core_ratio_max_exclusive: '小芯直径比上界（不含）', small_core_ratio_min: '小芯直径比下界（含）',
+    specified_total_thickness: '规定的内衬与垫层总厚度', nominal_lining_thickness: '内衬标称厚度',
     area_expression: '截面积公式', zero_increase_if_total_thickness_lt_mm: '增量为零的总厚度边界 / mm（小于）', longitudinal_overlap_boundary: '纵包搭盖率分界', longitudinal_below_multiplier: '纵包低于分界的厚度倍数', longitudinal_at_or_above_multiplier: '纵包达到分界的厚度倍数', lapped_multiplier: '绕包厚度倍数', table_selection: '表值选取规则', next_upper_nominal_area: '向上取相邻标称截面',
   });
   return Object.entries(value).flatMap(([key, item]) => item && typeof item === 'object' ? formulaDetails(item, `${prefix}${names[key] || key} · `) : [`${prefix}${names[key] || key}：${names[String(item)] || localized(item)}`]);

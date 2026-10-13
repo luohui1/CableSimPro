@@ -6,7 +6,7 @@ No solver runs from a GET, and list polling never opens the field archive.
 import json
 from datetime import datetime, timezone
 from uuid import UUID, uuid5
-from fastapi import APIRouter, HTTPException, Query, Response
+from fastapi import APIRouter, HTTPException, Query, Response, Request
 from .batch_files import read
 from .batch_slurm import SlurmBackend, RemoteDisconnected, allocation_estimate
 from .batch_convergence import Refinements, RefineRequest
@@ -188,6 +188,35 @@ def make_router(research,batches=None):
 
     @router.get('/profile')
     def profile():return research.executor.profile_status()
+
+    @router.post('/heat-capacity/preflight')
+    def heat_capacity_preflight(body:dict):
+        """Validate sourced SI capacities locally, without staging a solver job."""
+        from pydantic import ValidationError
+        from importlib import import_module
+        import sys
+        plugin=research.registry('cablesim.simulation').get('cablesim.simulation')
+        plugin.verify()
+        directory=str(plugin.directory/'src')
+        sys.path.insert(0,directory)
+        try:
+            Capacity=import_module('cablesim_simulation.step_response').Capacity
+            capacities=body.get('capacities',{})
+            regions=body.get('regions',[])
+            if not isinstance(capacities,dict) or not isinstance(regions,list) or any(not isinstance(r,str) or not r for r in regions):
+                raise HTTPException(422,'请逐材料填写热容与来源，并明确所需材料域。')
+            issues=[];validated={}
+            for region in dict.fromkeys(regions):
+                if region not in capacities:
+                    issues.append({'region':region,'message':'缺少有依据的体积热容，请选择正文来源；半导电层与回填料不能套用其他材料。'})
+                    continue
+                try:validated[region]=Capacity.model_validate(capacities[region]).model_dump(mode='json')
+                except ValidationError:
+                    issues.append({'region':region,'message':'请填写正的体积热容、材料名称、来源摘要、正文页码、表号和适用限制；密度与比热须成对且乘积一致。'})
+            return {'input_ready':bool(regions) and not issues,'capacities':validated,'issues':issues,
+                    'solver_submitted':False,'scope':'material_sources_only',
+                    'message':'热容与来源格式检查通过；工况、网格和超算预检仍须单独完成。' if regions and not issues else '热容依据仍有缺项，不能提交暂态求解。'}
+        finally:sys.path.pop(0)
 
     def profile_editor():return HpcProfile(research.executor,managed_path=ROOT/'.data/hpc/config.json')
 
@@ -374,20 +403,31 @@ def make_router(research,batches=None):
         except (ValueError,KeyError,StopIteration) as exc:raise HTTPException(422,str(exc)) from exc
 
     @router.get('/workspaces/{wid}/fields/{rid}/view')
-    def field_view(wid:UUID,rid:UUID):
+    async def field_view(wid:UUID,rid:UUID,request:Request):
         """Verified display projection: binary arrays stay on the server."""
         from time import perf_counter
         from .batch_field_projection import read_display
+        from .read_responses import read_response
+        from starlette.concurrency import run_in_threadpool
+        def saved():
+            with research.store.read_snapshot() as db:
+                row=db.execute('SELECT status FROM study_runs WHERE workspace=? AND id=?',(str(wid),str(rid))).fetchone()
+                return row is not None and row['status']=='succeeded'
+        def load():
+            projected=read_display(research,str(wid),str(rid))
+            if projected.get('integrity')!='verified':raise HTTPException(409,'保存场完整性未通过。')
+            return json.dumps(projected,ensure_ascii=False,separators=(',',':'),allow_nan=False).encode('utf-8')
+        # Reuse the host's bounded, source/commit-invalidated receipts. Only
+        # sealed successful results qualify: live progress remains uncached.
+        if await run_in_threadpool(saved):
+            return await read_response(research,('hpc-field-view',str(wid),str(rid)),None,load,request=request)
         started=perf_counter()
-        projected=read_display(research,str(wid),str(rid))
-        if projected.get('integrity')!='verified':raise HTTPException(409,'保存场完整性未通过。')
-        loaded=perf_counter()
-        # read_display has verified the saved contracts; avoid FastAPI walking every
-        # scalar of the display mesh a second time through jsonable_encoder.
-        payload=json.dumps(projected,ensure_ascii=False,separators=(',',':'),allow_nan=False).encode('utf-8')
-        return Response(payload,media_type='application/json',headers={
+        payload=await run_in_threadpool(load)
+        headers={
             'Cache-Control':'private, no-cache',
-            'Server-Timing':f'verify;dur={(loaded-started)*1000:.1f}, serialize;dur={(perf_counter()-loaded)*1000:.1f}'})
+            'ETag':'"'+sha256(payload).hexdigest()+'"',
+            'Server-Timing':f'verify;dur={(perf_counter()-started)*1000:.1f}'}
+        return Response(status_code=304,headers=headers) if request.headers.get('if-none-match')==headers['ETag'] else Response(payload,media_type='application/json',headers=headers)
 
     @router.get('/workspaces/{wid}/fields/{rid}/full')
     def field_archive(wid:UUID,rid:UUID,case_id:str|None=None):

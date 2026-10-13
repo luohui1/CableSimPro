@@ -27,7 +27,7 @@ export async function createRegularityAudit({ page, context, root }) {
       const rootStyle = getComputedStyle(document.documentElement);
       const token = name => Number.parseFloat(rootStyle.getPropertyValue(name));
       const spaces = [0, ...[1, 2, 3, 4, 6, 8, 12].map(n => token('--space-' + n))];
-      const fonts = { page: token('--text-heading'), section: token('--text-subheading'), body: token('--text-body'), tablehead: token('--text-note'), auxiliary: token('--text-note'), group: token('--text-note'), value: token('--text-value') };
+      const fonts = { page: token('--text-heading'), section: token('--text-subheading'), body: token('--text-body'), tablehead: token('--text-note'), auxiliary: token('--text-note'), group: token('--text-note'), value: token('--text-value'), stripSentence: token('--text-body'), stripValue: token('--text-heading'), stripUnit: token('--text-note'), stripLabel: token('--text-note') };
       const weights = [token('--weight-normal'), token('--weight-strong')];
       if ([...spaces, ...Object.values(fonts), ...weights].some(value => !Number.isFinite(value))) throw Error('设计 tokens 未加载；不能将缺失样式当作检查通过');
       const issues = [], profiles = [], controls = [], excluded = {};
@@ -55,12 +55,16 @@ export async function createRegularityAudit({ page, context, root }) {
       };
       const add = (e, category, actual, expected, extra = {}) => {
         const r = e.getBoundingClientRect();
-        const sharedField = e.matches('[data-slot="field-content"],[data-slot="input-group-addon"]');
+        const sharedField = e.matches('[data-slot="field-content"],[data-slot="input-group-addon"]') || !!e.closest('.information-notice');
         issues.push({ selector: cssPath(e), text: (e.innerText || e.getAttribute('aria-label') || e.getAttribute('placeholder') || e.textContent || '').trim().slice(0, 180), category, actual, expected, rect: { x: Math.max(0, r.x), y: Math.max(0, r.y), width: Math.min(r.width, innerWidth - Math.max(0, r.x)), height: Math.min(r.height, innerHeight - Math.max(0, r.y)) }, classes: typeof e.className === 'string' ? e.className : '', ownerHint: sharedField || e.closest('.workbench-sidebar,.topbar,.relation-panel,.object-chip,.series-chart,.comparison-dots,[data-slot="dialog-content"]') ? '前端公共' : e.closest('.agent-page,.agent-panel') ? '前端公共' : e.closest('.type-page,.drawing-panel') ? '三维' : e.closest('[data-field-page],.field-results,.hpc-job-list') ? '仿真' : e.closest('.basis-page,.standards-browser') ? '标准' : undefined, ...extra });
       };
       const approx = (a, b) => Math.abs(a - b) <= 0.15;
       const directText = e => [...e.childNodes].some(n => n.nodeType === Node.TEXT_NODE && n.textContent.trim());
       const roleFor = e => {
+        if (e.closest('[data-conclusion-strip]')) {
+          const part = e.closest('[data-conclusion-part]')?.dataset.conclusionPart;
+          return { sentence: 'stripSentence', value: 'stripValue', unit: 'stripUnit', label: 'stripLabel' }[part] || null;
+        }
         if (e.matches('.plugin-description,.capability-description')) return 'body';
         if (e.matches('.series-chart text,.comparison-dots text')) return 'auxiliary';
         if (e.matches('.home-page h1,.home-welcome h1,.conclusion-metrics dd,[data-typography="value"]')) return 'value';
@@ -82,10 +86,11 @@ export async function createRegularityAudit({ page, context, root }) {
         if (role && (directText(e) || e.matches('h1,h2,h3,.conclusion-metrics dd'))) {
           const font = Number.parseFloat(s.fontSize), weight = Number(s.fontWeight);
           const emphasis = e.matches('b,strong') || role !== 'auxiliary' && !!e.closest('strong,b');
-          const expectedWeight = ['page', 'section', 'group', 'value'].includes(role) || emphasis ? 600 : 400;
+          const strongRoles = ['page', 'section', 'group', 'value', 'stripSentence', 'stripValue'];
+          const expectedWeight = strongRoles.includes(role) || emphasis ? 600 : 400;
           profiles.push({ role, font, weight, emphasis, selector: cssPath(e) });
           const validFont = role === 'unclassified' ? Object.values(fonts).some(f => approx(f, font)) : approx(font, fonts[role]);
-          if (!validFont || !weights.includes(weight)) add(e, '字号层级', `${role}: ${font}px / ${weight}`, `${role === 'unclassified' ? Object.values(fonts).join(' / ') : fonts[role]}px / ${['page','section','group','value'].includes(role) ? 600 : '400 或 600（强调）'}`, { role });
+          if (!validFont || !weights.includes(weight)) add(e, '字号层级', `${role}: ${font}px / ${weight}`, `${role === 'unclassified' ? Object.values(fonts).join(' / ') : fonts[role]}px / ${strongRoles.includes(role) ? 600 : '400 或 600（强调）'}`, { role });
           if (role !== 'unclassified' && weight !== expectedWeight) add(e, '字号字重', `${role}: ${weight}`, `${expectedWeight}${emphasis ? '（强调 / 当前项）' : ''}`, { role });
         }
         // Zero/normal/auto is structural, not an off-token visual gap. The selected-tab
@@ -136,6 +141,10 @@ export async function createRegularityAudit({ page, context, root }) {
       }
       const primary = [...document.querySelectorAll('.button-primary,.button-run,.agent-hold:not(:disabled),.prompt-bar-send[data-armed]')].filter(visible);
       if (primary.length > 1) primary.forEach(e => add(e, '多个主操作', `同屏 ${primary.length} 个`, '每屏最多一个主操作'));
+      for (const strip of document.querySelectorAll('[data-conclusion-strip]')) if (visible(strip)) {
+        const metrics = strip.querySelectorAll('.conclusion-strip-metrics > div').length;
+        if (metrics && (metrics < 2 || metrics > 4)) add(strip, '结论条关键数', `${metrics} 项`, '2–4 项；未提供关键数时不制造数值');
+      }
       for (const row of document.querySelectorAll('table tbody tr')) if (visible(row) && !row.matches('.group-row')) {
         const multiline = [...row.cells].some(cell => {
           const ys = [], walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);

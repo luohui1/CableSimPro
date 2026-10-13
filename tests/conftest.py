@@ -8,6 +8,31 @@ import pytest
 
 os.environ.setdefault('CABLESIM_AGENT_KEY_STORE', 'memory')
 
+
+@pytest.hookimpl(tryfirst=True)
+def pytest_configure(config):
+    """Three isolated workers for host tests; external acceptance stays serial.
+
+    File scheduling keeps module fixtures together. Each host has its own
+    tmp_path SQLite database and random port/mailbox. Real model acceptance
+    writes shared reports, and Slurm tests own external jobs: neither is safe
+    to distribute. Explicit -n 0 always retains the serial profiling path.
+    """
+    if hasattr(config, 'workerinput') or not config.pluginmanager.hasplugin('xdist'):
+        return
+    unsafe = os.environ.get('CABLESIM_AGENT_REAL_USE') == '1' or bool(os.environ.get('SLURM_JOB_ID'))
+    unsafe = unsafe or any('plugin-tests' in str(argument).replace('\\', '/').split('/') for argument in config.args)
+    workers = config.getoption('numprocesses', default=None)
+    if workers is None:
+        workers = 0 if unsafe or config.getoption('usepdb', default=False) else 3
+        config.option.numprocesses = workers
+        config.option.dist = 'loadfile' if workers else 'no'
+        # xdist translates -n into its process specifications before configure.
+        # Our default is chosen here, so provide the matching isolated workers.
+        config.option.tx = ['popen'] * workers
+    elif workers and unsafe:
+        raise pytest.UsageError('真实模型或 Slurm 验收须串行运行：请使用 -n 0。')
+
 # Saved TB 880:2022 Fig.25–26 pp.63–64, §§4.5.3.1 p.75 / 4.7.5 p.87.
 # Numerical reproduction values come from the archived Slurm report identified
 # in .data/fem-validation/integration.md; these fixtures never execute a solver.

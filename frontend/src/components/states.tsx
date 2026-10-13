@@ -3,6 +3,8 @@ import { displayText } from '@/lib/display-names';
 import { Icon } from './icon';
 import { StatusMark } from './status-mark';
 import { illustration } from '@/lib/illustrations';
+import { isResultInformation } from '@/lib/notice-level';
+import { InformationNotice } from './information-notice';
 
 /**
  * 空状态插画：not-run（尚未计算）、no-results（检索无匹配）、queued（等待计算）、missing-data（缺数据）、
@@ -26,6 +28,8 @@ export function LoadingState({ title = '正在读取', description = '' }: { tit
   return <div className="state-view" role="status" aria-busy="true"><StatusMark kind="running" label={title} />{description && <p className="muted">{description}</p>}<div className="skeleton-lines" aria-hidden="true"><div /><div /><div /></div></div>;
 }
 export function ErrorState({ title = '结果读取失败', description, action }: { title?: string; description: string; action?: ReactNode }) {
+  if (!action && isResultInformation(description))
+    return <InformationNotice title="方法说明更新" description={description} />;
   return <div className="state-view" role="alert"><StatusMark kind="error" label={title} /><p className="muted" title={displayText(description)}>{displayText(description)}</p>{action}</div>;
 }
 export function StaleBanner({ description = '输入已变化，以下为历史结果。', action }: { description?: string; action?: ReactNode }) {

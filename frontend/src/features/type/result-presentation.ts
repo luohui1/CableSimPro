@@ -20,11 +20,13 @@ export function identicalCoreRows(rows: Row[], coreIds: string[]): (Row & {membe
 }
 
 const parameterFields:Record<string,[string,string]>={temperature_k:['temperature_k','工作温度'],f_hz:['frequency_hz','频率'],U_phase_V:['phase_voltage_v','运行相电压'],ks:['ks','集肤系数'],kp:['kp','邻近系数'],s_m:['spacing_m','相间中心距'],C_LL:['core_lay_factor','成缆绞入系数'],length_basis:['r20_length_basis','电阻长度基准'],theta_i_K:['initial_temperature_k','短路初温'],theta_f_K:['final_temperature_k','短路终温'],t_s:['duration_s','短路时间'],contact_factor:['contact_factor','接触因数']};
+function outdatedBasis(row:Record<string,unknown>){return /依据不属于此方法已封签的依据发行|请重新核对版本/.test(text(row.reason));}
 export function issuePresentation(row:Record<string,unknown>, module:string, cableId:string) {
   const status=text(row.verdict)||text(row.status), target=optionalRecord(row.target), role=text(target.role), core=text(target.core_id);
   const layer=role?(target.scope==='core'?core:'common')+'/'+role:'';
   const standard=[text(row.standard),text(row.clause)].filter(Boolean).join(' · ');
   const basisFields=Array.isArray(row.basis_missing_fields)?row.basis_missing_fields.map(item=>optionalRecord(item)):[];
+  if(outdatedBasis(row))return {kind:'history',label:'依据版本需重核',reason:'保存的结构依据与当前核对方法版本不一致；重新查询依据，复核结构尺寸后重算',module:'requirements',tab:'list',layer:'',field:'',action:'重新核对依据'};
   if(basisFields.length)return {kind:'field',label:'缺字段',reason:basisFields.map(item=>text(item.label)).join('、')+'；补齐后按固定标准版本查询依据',module:'requirements',tab:'list',layer:'',field:text(basisFields[0].field),action:'填写'+text(basisFields[0].label)};
   if(Array.isArray(row.missing_input_fields)&&row.missing_input_fields.length)return {kind:'field',label:'缺字段',reason:displayText(text(row.reason)).replace(/^缺字段[：:]\s*/,''),module:'structure',tab:'table',layer,field:'',action:'核对金属组件与来源'};
   if(status==='uncovered'||status==='not_applicable')return {kind:'coverage',label:'标准未覆盖',reason:[standard,displayText(text(row.reason))||'本方法尚未覆盖此判据'].filter(Boolean).join('：'),module:'requirements',tab:'list',layer:'',field:'',action:'查看依据与范围'};
@@ -40,9 +42,11 @@ export function issuePresentation(row:Record<string,unknown>, module:string, cab
 export function reviewGroups(checks: Record<string,unknown>[]) {
   const groups=new Map<string,{id:string;title:string;items:Record<string,unknown>[]}>();
   for(const check of checks){
+    if(check.blocking!==true)continue;
     const row=optionalRecord(check.result), status=text(row.verdict)||text(row.status), message=text(check.message);
-    const reason=/historical|过期|历史/.test(text(check.id)+' '+message)?'历史过期':status==='uncovered'||status==='not_applicable'||/未覆盖/.test(message)?'标准未覆盖':/source|来源|resources/.test(text(check.channel)+' '+message)?'来源待核对':'输入与计算缺项';
-    const id=text(check.channel)+'/'+reason, group=groups.get(id)||{id,title:reason,items:[]};group.items.push(check);groups.set(id,group);
+    const inputMissing=outdatedBasis(row)||Array.isArray(row.basis_missing_fields)&&row.basis_missing_fields.length>0||row.source_status==='input-missing';
+    const reason=!inputMissing&&(status==='uncovered'||status==='not_applicable'||/未覆盖/.test(message))?'标准依据未覆盖':text(check.channel)==='resources'?'需要人工批准':!inputMissing&&row.basis==='measurement'&&!/historical/.test(text(check.id))?'需要出厂实测值':'需要工程师补输入';
+    const group=groups.get(reason)||{id:reason,title:reason,items:[]};group.items.push(check);groups.set(reason,group);
   }
-  return [...groups.values()];
+  return ['需要工程师补输入','需要出厂实测值','标准依据未覆盖','需要人工批准'].flatMap(id=>groups.has(id)?[groups.get(id)!]:[]);
 }

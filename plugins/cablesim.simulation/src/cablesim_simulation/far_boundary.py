@@ -51,7 +51,7 @@ def loss_sources(states, bindings):
     """Resolved cores/screens/dielectrics and common armour, conserving all heat."""
     sources=[]
     for state,binding in zip(states,bindings):
-        per_core=sum(state[k] for k in ('conductor_joule_heat_w_m','screen_heat_w_m','dielectric_heat_w_m'))/3
+        per_core=sum(state[k] for k in ('conductor_joule_heat_w_m','screen_heat_w_m','dielectric_heat_w_m'))/len(binding['centers'])
         sources.extend({'entity':binding['entity']+f'/core-{i}', 'center_m':center,'loss_w_m':per_core}
                        for i,center in enumerate(binding['centers']))
         sources.append({'entity':binding['entity']+'/armour','center_m':binding['center_m'],

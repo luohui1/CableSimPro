@@ -272,16 +272,24 @@ def make_router(research, previews):
         return problem_contract()
 
     @router.get('/workspaces/{wid}/deliveries', response_model=list[DeliverySummary], responses=ERRORS)
-    def deliveries(wid:UUID):
-        with research.store.db() as db:
-            host_call(research.store.load,db,str(wid))
-            ids=[r['id'] for r in db.execute('SELECT id FROM deliveries WHERE workspace=? ORDER BY rowid',(str(wid),))]
-        results=[]
-        for version,did in enumerate(ids,1):
-            saved=host_call(research.delivery,str(wid),did)
-            results.append({k:saved[k] for k in ('id','workspace','renderer','created','sources','digest','version_status')})
-            results[-1].update(version=version,kind='specification' if 'data-specification-section=' in saved['html'] else 'calculation',download_url=f'/api/workspaces/{wid}/deliveries/{did}/file')
-        return results[::-1]
+    async def deliveries(wid:UUID, request:Request):
+        def load():
+            from .read_models import model_reference
+            from .report_reads import saved_scope
+            @saved_scope
+            def verified_list():
+                with research.store.read_snapshot() as db:
+                    host_call(model_reference,db,str(wid))
+                    ids=[r['id'] for r in db.execute('SELECT id FROM deliveries WHERE workspace=? ORDER BY rowid',(str(wid),))]
+                results=[]
+                for version,did in enumerate(ids,1):
+                    saved=host_call(research.delivery,str(wid),did)
+                    results.append({k:saved[k] for k in ('id','workspace','renderer','created','sources','digest','version_status')})
+                    results[-1].update(version=version,kind='specification' if 'data-specification-section=' in saved['html'] else 'calculation',download_url=f'/api/workspaces/{wid}/deliveries/{did}/file')
+                return results[::-1]
+            return verified_list()
+        from .read_responses import read_response
+        return await read_response(research, ('deliveries',str(wid)), list[DeliverySummary], load, request=request)
 
     @router.post('/design/workspaces/{wid}/geometry-preview', response_model=GeometryPreviewResult, responses=ERRORS, deprecated=True)
     @router.post('/workspaces/{wid}/geometry-preview', response_model=GeometryPreviewResult, responses=ERRORS)
@@ -290,11 +298,27 @@ def make_router(research, previews):
 
     @router.get('/design/input-contracts', response_model=list[InputContract], responses=ERRORS, deprecated=True)
     @router.get('/input-contracts', response_model=list[InputContract], responses=ERRORS)
-    async def input_contracts(request:Request):
+    async def input_contracts(request:Request, plugin_id: str | None = Query(default=None, min_length=1),
+                              capability: str | None = Query(default=None, min_length=1),
+                              version: str | None = Query(default=None, min_length=1),
+                              release_digest: str | None = Query(default=None, min_length=1)):
         from .input_contracts import contracts
         from .read_responses import read_response
-        return await read_response(research, ('input-contracts',), None,
-            lambda: contracts(research, encoded=True), uses_database=False,request=request)
+        selectors = {key: value for key, value in {
+            'plugin_id': plugin_id, 'capability': capability,
+            'version': version, 'release_digest': release_digest}.items() if value is not None}
+        def selected_contracts():
+            # Filter only the verified, encoded catalog. Do not bypass package
+            # verification or recursively copy every schema for a small form.
+            payload = contracts(research, encoded=True)
+            if not selectors:
+                return payload
+            values = [value for value in json.loads(payload)
+                      if all(value['method'].get(key) == expected for key, expected in selectors.items())]
+            return json.dumps(values, ensure_ascii=False, separators=(',', ':'), allow_nan=False).encode('utf-8')
+        key = ('input-contracts',) if not selectors else ('input-contracts', *sorted(selectors.items()))
+        return await read_response(research, key, None, selected_contracts,
+                                   uses_database=False, request=request)
 
     @router.get('/design/examples/iec', response_model=IecExample, deprecated=True)
     @router.get('/examples/iec', response_model=IecExample)

@@ -6,10 +6,12 @@ import { formatNumber } from '@/lib/format';
 import type { DomainDocument } from '@/lib/domain-fields';
 import { designSummary, publicationLabels, publicationStatus } from './design-summary';
 import { MissingTypeInputs } from './missing';
-import type { ReactNode } from 'react';
+import { Button } from '@/components/ui/button';
+import { useState, type ReactNode } from 'react';
 
 export function DesignCard({ document, raw, onClose, extra }: { document: DomainDocument; raw: Record<string, unknown>; onClose?: () => void; extra?: ReactNode }) {
   const card = designSummary(document, raw), status = publicationStatus(raw), creation = optionalRecord(raw.type_creation), source = optionalRecord(creation.source);
+  const [relationsFor, setRelationsFor] = useState('');
   return <div className="type-design-card" data-type-card data-closable={!!onClose}><PropertyPanel title="型号名片" collapsed={false} onToggle={onClose || (() => {})} extra={extra} groups={[
     { label: '基本信息', items: [
       { label: '类别', value: '型号设计' }, { label: '基准版本', value: card.version },
@@ -18,5 +20,5 @@ export function DesignCard({ document, raw, onClose, extra }: { document: Domain
       { label: '绘图外径', value: formatNumber(card.diameter, 1), unit: 'mm', source: card.diameter === null ? undefined : 'derived', sourceDetail: '同一份参数截面的绘图包络；原始实体外径见外径与用料。' },
       { label: '层数', value: card.layers ?? '未提供' }, { label: '最近修订时间', value: card.updated }, { label: '所属', value: '独立型号设计' },
     ] },
-  ]} />{creation.kind === 'standard' && Array.isArray(source.limitations) && <details className="type-missing-inputs"><summary>提案范围与缺项</summary><ul>{source.limitations.map((item, index) => <li key={index}>{String(item)}</li>)}</ul></details>}{!!raw.type_creation && text(raw.id) && <MissingTypeInputs document={document} wid={text(raw.id)} />}{text(raw.id) && <RelationPanel kind="type" id={text(raw.id)} />}</div>;
+  ]} />{creation.kind === 'standard' && Array.isArray(source.limitations) && <details className="type-missing-inputs"><summary>提案范围与缺项</summary><ul>{source.limitations.map((item, index) => <li key={index}>{String(item)}</li>)}</ul></details>}{!!raw.type_creation && text(raw.id) && <MissingTypeInputs document={document} wid={text(raw.id)} />}{text(raw.id) && (relationsFor === raw.id ? <RelationPanel kind="type" id={text(raw.id)} /> : <Button size="compact" variant="ghost" onClick={() => setRelationsFor(text(raw.id))}>查看关联</Button>)}</div>;
 }

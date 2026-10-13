@@ -8,7 +8,7 @@ import { optionalRecord, text, numeric } from "@/api/client";
 import { formatNumber } from "@/lib/format";
 import { displayName } from '@/lib/display-names';
 import { DataTable, type Column } from "./data-table";
-import { Conclusion } from "./conclusion";
+import { ConclusionStrip } from "./conclusion-strip";
 import { Toolbar } from "./toolbar";
 import { Select } from "./ui/select";
 import { StatusMark } from "./status-mark";
@@ -185,10 +185,9 @@ export function StudySelection({
     ? "结论依赖工程师给定参数；按已保存判定排序。"
     : "按已保存判定选择的最小满足截面。";
   const conclusion = recommended ? (
-        <Conclusion
-          title={view.historical ? "历史最小满足候选" : "推荐型号"}
-          model={(view.historical ? '历史推荐：' : '推荐：') + recommended.name}
-          description={part === "conclusion" ? "" : recommendationBasis}
+        <ConclusionStrip
+          label={view.historical ? "历史最小满足候选" : "推荐型号"}
+          conclusion={(view.historical ? '历史推荐：' : '推荐：') + recommended.name + (part === 'conclusion' ? '' : ' · '+recommendationBasis)}
           metrics={[
             {
               label: "保存温限下允许电流",
@@ -198,19 +197,13 @@ export function StudySelection({
             },
             { label: "目标电流", value: view.target, unit: "A", precision: 0 },
             {
-              label: "余量",
+              label: recommended.margin === null ? '余量' : `余量（${formatNumber((recommended.margin / view.target) * 100, 1)}%）`,
               value: recommended.margin,
               unit: "A",
               precision: 1,
-              secondary:
-                recommended.margin === null
-                  ? undefined
-                  : formatNumber((recommended.margin / view.target) * 100, 1) +
-                    "%",
             },
           ]}
           historical={view.historical}
-          conditions={part === "conclusion" ? undefined : <SelectionConditions run={run} theme={theme} />}
         />
       ) : (
         <EmptyState
@@ -230,6 +223,7 @@ export function StudySelection({
         <StaleBanner description="有未保存修改；以下结果对应已保存研究。" />
       )}
       {part === "all" && conclusion}
+      {part === 'all' && <SelectionConditions run={run} theme={theme} />}
       <Toolbar>
         <h2>候选结果</h2>
         <SourceBadge

@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { CommandAction } from './command-slot';
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, array, message, numeric, optionalRecord, record, text } from '@/api/client';
-import { inputContracts, exactContract } from '@/api/input-contracts';
+import { inputContractQuery } from '@/api/input-contracts';
+import type { components } from '@/api/generated/schema';
 import { DataTable } from '@/components/data-table';
 import { SourceBadge } from '@/components/source-badge';
 import { StatusMark, type StatusKind } from '@/components/status-mark';
@@ -43,7 +44,6 @@ export function TypeAnalysis({ module, tab }: { module: 'electrical' | 'short-ci
   const trialRequest = useRef<AbortController | null>(null);
   useEffect(()=>()=>trialRequest.current?.abort(),[]);
   const name = module === 'electrical' ? '电气参数' : '短路容量';
-  const contracts = useQuery({ queryKey: ['input-contracts'], queryFn: ({ signal }) => inputContracts(signal) });
   const installed = useQuery({ queryKey: ['type-method', module], queryFn: ({ signal }) => methodForArtifact('x-cablesim.type-' + module, signal) });
   const studies = useQuery({ queryKey: ['type-studies', state.workspace?.id], queryFn: ({ signal }) => typeStudies(state.workspace!.id, signal), enabled: !!state.workspace });
   let saved: ReturnType<typeof chooseEvidence> = null, rows: AnalysisRow[] = [], error = '';
@@ -59,6 +59,8 @@ export function TypeAnalysis({ module, tab }: { module: 'electrical' | 'short-ci
     }
   } catch (failure) { error = message(failure); }
   const savedDefinition = optionalRecord(optionalRecord(saved?.run.snapshot).definition);
+  const selectedMethod = state.readOnly ? savedDefinition.method as components['schemas']['Method'] | undefined : installed.data;
+  const contracts = useQuery({ ...(selectedMethod ? inputContractQuery(selectedMethod) : { queryKey: ['type-contract-pending', module], queryFn: async () => { throw new ApiError(409, '请先读取所选方法'); } }), enabled: tab === 'parameters' && !!selectedMethod });
   const study = studies.data?.filter(study => study.definition.method.capability === module).sort((a, b) => b.created.localeCompare(a.created))[0];
   const current = !!saved && currentEvidence(saved.run, state.workspace?.revision, state.inputDirty || !!state.methodDrafts[module]) && (state.readOnly || !!study && study.id === saved.study.id && study.revision === optionalRecord(saved.run.snapshot).study_revision);
   const configuration = state.readOnly ? savedDefinition : study?.definition || savedDefinition;
@@ -66,7 +68,7 @@ export function TypeAnalysis({ module, tab }: { module: 'electrical' | 'short-ci
   const values = { cable_type_id:state.document!.cable_types[0]?.id, ...parameters, ...(module === 'electrical' ? { frequency_hz:parameters.frequency_hz ?? 50,
     sources:{...optionalRecord(parameters.sources),...(!parameters.frequency_hz&&!optionalRecord(parameters.sources).frequency_hz?{frequency_hz:'50 Hz 为明示工程试算初值；须核对实际电源频率，未经批准。'}:{})} } : {}) };
   let contractError = '';
-  if (!contracts.isPending && !installed.isPending) { try { if (contracts.error || installed.error) throw contracts.error || installed.error; exactContract(contracts.data!, installed.data!); } catch (failure) { contractError = message(failure); } }
+  if (contracts.error || installed.error) contractError = message(contracts.error || installed.error);
   async function definition() {
     if (!study) throw new ApiError(409, '请先保存方法条件');
     const method = await methodForArtifact('x-cablesim.type-' + module);
@@ -109,7 +111,7 @@ export function TypeAnalysis({ module, tab }: { module: 'electrical' | 'short-ci
     {tab==='parameters'&&!state.readOnly&&<div className="type-result-toolbar"><Button size="compact" variant="primary" loading={trying} disabled={!study||state.inputDirty||state.busy||!!contractError} onClick={()=>void preview()}>试算</Button><Button size="compact" loading={state.busy} disabled={(!state.methodDrafts[module]&&!!study)||trying||!!contractError||!installed.data} onClick={()=>{if(!state.methodDrafts[module])state.setMethodDraft(module,()=>draft());void state.save();}}>保存方法条件</Button>{!study&&<span className="muted">填写参数并保存条件后试算</span>}{state.inputDirty&&<span className="muted">请先保存结构修改</span>}</div>}
     {tab !== 'parameters' && <CommandAction><TypeRunControl channel={module} label={'计算' + name} definition={definition} onBusy={setRunning} unavailable={!study ? '请先在方法参数页填写并保存条件' : undefined} /></CommandAction>}
     {bodyState === 'loading' ? <LoadingState title={'正在读取或计算' + name} /> : bodyState === 'error' ? <ErrorState title={name + '不可用'} description={error || message(evidence.error)} action={<Button onClick={() => void evidence.refetch()}>重新读取</Button>} /> : tab === 'parameters' ? <>
-      {!!contractError ? <ErrorState title="方法参数契约不可用" description={contractError} action={<Button onClick={() => void Promise.all([contracts.refetch(), installed.refetch()])}>重新读取方法</Button>} /> : installed.data && contracts.data ? <><p className="type-meta">{state.readOnly ? '固定运行的方法条件' : '当前方法条件'}</p><TypeMethodFields schema={exactContract(contracts.data!, installed.data).parameter_schema} document={state.document!} namespace={module} values={state.readOnly ? parameters : values} readOnly={state.readOnly || state.busy || trying} sources={state.readOnly ? optionalRecord(savedDefinition.input_sources) as Record<string,{kind?:string}> : state.methodDrafts[module]?.definition.input_sources || study?.definition.input_sources} fields={state.methodDrafts[module]?.fields} onChange={change} onDraftChange={(field, key) => {if(state.readOnly)return;state.setMethodDraft(module, current => { const next = current || draft(), fields = { ...next.fields }; if (field) fields[key] = field; else delete fields[key]; const baseline = next.study?.definition.parameters || { cable_type_id: state.document!.cable_types[0]?.id }; return !Object.keys(fields).length && JSON.stringify(next.definition.parameters) === JSON.stringify(baseline) && JSON.stringify(next.definition.input_sources) === JSON.stringify(next.study?.definition.input_sources) ? null : { ...next, fields }; });}} /></> : <LoadingState title="正在读取方法契约" />}
+      {!!contractError ? <ErrorState title="方法参数契约不可用" description={contractError} action={<Button onClick={() => void Promise.all([contracts.refetch(), installed.refetch()])}>重新读取方法</Button>} /> : selectedMethod && contracts.data ? <><p className="type-meta">{state.readOnly ? '固定运行的方法条件' : '当前方法条件'}</p><TypeMethodFields schema={contracts.data.parameter_schema} document={state.document!} namespace={module} values={state.readOnly ? parameters : values} readOnly={state.readOnly || state.busy || trying} sources={state.readOnly ? optionalRecord(savedDefinition.input_sources) as Record<string,{kind?:string}> : state.methodDrafts[module]?.definition.input_sources || study?.definition.input_sources} fields={state.methodDrafts[module]?.fields} onChange={change} onDraftChange={(field, key) => {if(state.readOnly)return;state.setMethodDraft(module, current => { const next = current || draft(), fields = { ...next.fields }; if (field) fields[key] = field; else delete fields[key]; const baseline = next.study?.definition.parameters || { cable_type_id: state.document!.cable_types[0]?.id }; return !Object.keys(fields).length && JSON.stringify(next.definition.parameters) === JSON.stringify(baseline) && JSON.stringify(next.definition.input_sources) === JSON.stringify(next.study?.definition.input_sources) ? null : { ...next, fields }; });}} /></> : <LoadingState title="正在读取方法契约" />}
     </> : !saved ? <InlineEmpty title={study ? '尚无' + name + '结果；按当前方法条件运行。' : '尚无' + name + '结果；先填写方法参数。'} action={!study && !state.readOnly ? <Button onClick={() => navigation.navigate(typePath(state.workspace!.id, module, 'parameters', navigation.location.theme))}>在方法页填写参数</Button> : undefined} /> : <>
       {!current && <StaleBanner description="输入或方法已变化，以下为原运行保存的结果。" />}
       <div className="type-result-summary" title={methodLabel(saved.run) + '；统计来自保存的结果行'}><strong>{rows.filter(row => row.status === 'available').length} 项已计算</strong><span>{rows.filter(row => row.status === 'missing').length} 项待补数据</span><span>{rows.filter(row => row.status === 'uncovered' || row.status === 'not_applicable').length} 项未覆盖或拒绝</span></div>

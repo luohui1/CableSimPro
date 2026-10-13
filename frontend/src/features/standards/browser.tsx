@@ -9,12 +9,13 @@ import { ApiError, message } from '@/api/client';
 import { basisPin, basisQuery, type BasisRecord, type Answer } from './client';
 import { conditionFactor, conditionNames, conditionsLabel, copyCitation, formulaDetails, localized, methodLabel, valueLabel } from './format';
 import './standards.css';
+import { SoilCalculator } from './soil-calculator';
 
 type GridRow = { id: string; label: string; records: BasisRecord[] };
 export function StandardsBrowser() {
   const pin = useQuery({ queryKey: ['standards-basis-pin'], queryFn: ({ signal }) => basisPin(signal), retry: false });
   const catalogue = useQuery({ queryKey: ['standards-basis-catalog', pin.data?.release_digest], enabled: !!pin.data,
-    queryFn: ({ signal }) => basisQuery(pin.data!, { schema_version: 'cablesim.standards-query/1', operation: 'catalog' }, signal), retry: false });
+    queryFn: ({ signal }) => basisQuery(pin.data!, { schema_version: 'cablesim.standards-query/1', operation: 'browse', standard: 'GB/T 12706.2', edition: '2020', locator: '表 7' }, signal), retry: false, staleTime: Infinity });
   const [standard, setStandard] = useState('GB/T 12706.2—2020'), [tableId, setTableId] = useState('mv-表7');
   const [filter, setFilter] = useState(''), [quantity, setQuantity] = useState(''), [inputs, setInputs] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState(''), [history, setHistory] = useState<Answer[]>([]), [historical, setHistorical] = useState<Answer | null>(null);
@@ -28,7 +29,8 @@ export function StandardsBrowser() {
   const filteredTables = tables.filter(t => `${t.standard}—${t.edition}` === standard && `${t.table} ${t.clause} ${t.title} ${(t.quantities ?? []).map(q => q.name).join(' ')}`.includes(filter));
   const table = filteredTables.find(t => t.id === tableId) ?? filteredTables[0];
   const listing = useQuery({ queryKey: ['standards-basis-table', pin.data?.release_digest, table?.id], enabled: !!pin.data && !!table,
-    queryFn: ({ signal }) => basisQuery(pin.data!, { schema_version: 'cablesim.standards-query/1', operation: 'list', standard: table!.standard, edition: table!.edition, locator: table!.table || table!.clause }, signal), retry: false });
+    initialData: () => catalogue.data?.browse?.standard === table?.standard && catalogue.data?.browse?.edition === table?.edition && catalogue.data?.browse?.locator === (table?.table || table?.clause) ? catalogue.data : undefined,
+    queryFn: ({ signal }) => basisQuery(pin.data!, { schema_version: 'cablesim.standards-query/1', operation: 'list', standard: table!.standard, edition: table!.edition, locator: table!.table || table!.clause, table_id: table!.id }, signal), retry: false, staleTime: Infinity });
   const chooseTable = (id: string) => { searchController.current?.abort(); setTableId(id); setQuantity(''); setInputs({}); setNotice(''); setSelectedId(null); setHistorical(null); search.reset(); };
   const search = useMutation({ retry: false, mutationFn: async () => {
     if (!pin.data || !table || !selectedQuantity) throw Error('请选择标准、条款和量。');
@@ -65,7 +67,14 @@ export function StandardsBrowser() {
   const quantityRecords = records.filter(r => r.quantity.key === selectedQuantity);
   const conditionKeys = [...new Set(quantityRecords.flatMap(r => Object.keys(r.conditions)))];
   const columns = [...new Map(records.map(r => [r.column, r])).values()];
-  const rows = useMemo(() => [...new Map(records.map(r => [r.row, { id: String(r.row), label: r.row_label, records: records.filter(x => x.row === r.row) }])).values()], [records]);
+  const rows = useMemo(() => {
+    const grouped = new Map<number, GridRow>();
+    for (const r of records) {
+      if (!grouped.has(r.row)) grouped.set(r.row, { id: String(r.row), label: r.row_label, records: [] });
+      grouped.get(r.row)!.records.push(r);
+    }
+    return [...grouped.values()];
+  }, [records]);
   const selected = records.find(r => r.id === selectedId);
   useEffect(() => {
     if (!selectedId) return;
@@ -75,9 +84,9 @@ export function StandardsBrowser() {
   }, [selectedId]);
   const commonConditions = Object.fromEntries(Object.entries(columns[0]?.column_conditions ?? {}).filter(([key,value]) => columns.every(c => JSON.stringify(c.column_conditions?.[key]) === JSON.stringify(value))));
   const units = [...new Set(records.filter(r => r.quantity.dimension !== 'text' && r.quantity.unit !== '1').map(r => r.quantity.unit))];
-  const printedPages = [...new Set(records.map(r => r.printed_page))].sort((a,b) => a-b);
+  const printedPages = [...new Set(records.map(r => r.printed_page))].sort((a,b) => String(a).localeCompare(String(b), 'zh-CN', { numeric: true }));
   const pdfPages = [...new Set(records.map(r => r.pdf_page))].sort((a,b) => a-b);
-  const pageRange = (pages: number[]) => pages.length > 1 ? `${pages[0]}–${pages.at(-1)}` : String(pages[0] ?? '缺项');
+  const pageRange = (pages: (number | string)[]) => pages.length > 1 ? `${pages[0]}–${pages.at(-1)}` : String(pages[0] ?? '缺项');
   function columnLabel(r: BasisRecord) {
     const distinguishing = Object.fromEntries(Object.entries(r.column_conditions ?? {}).filter(([key]) => !(key in commonConditions)));
     const numbers = (value: unknown): number[] => typeof value === 'number' ? [value] : value && typeof value === 'object' ?
@@ -108,19 +117,19 @@ export function StandardsBrowser() {
   function evidence(r: BasisRecord) {
     return <div className="basis-evidence"><strong>{copyCitation(r)}</strong><span>印刷第 {r.printed_page} 页 · PDF 第 {r.pdf_page} 页</span>
       {r.verification.methods.map((m, i) => <span key={i}>核验 {i + 1}：{methodLabel(m)} · {r.verification.status === 'verified' ? '一致' : '存在差异'}</span>)}
-      <span>来源摘要：{r.source_sha256}</span>{r.value_details && (r.value_details.formula_text ? <span>{r.value_details.formula_text}；公式仅作为依据，不执行。</span> : formulaDetails(r.value_details).map((line,i) => <span key={`detail-${i}`}>{line}</span>))}
+      <span>来源摘要：{r.source_sha256}</span>{r.value_details && (r.value_details.formula_text ? <span>{r.value_details.formula_text}；{r.id.startsWith('hopmans-soil-capacity-model/') ? '现场参数必填，无默认热容。' : '公式仅作为依据，不执行。'}</span> : formulaDetails(r.value_details).map((line,i) => <span key={`detail-${i}`}>{line}</span>))}
       {r.limitations.map((note,i) => <span key={`limit-${i}`}>{note}</span>)}{r.value && typeof r.value === 'object' && !Array.isArray(r.value) ?
         formulaDetails(r.value).map((text,i) => <span key={i}>{text}</span>) : null}</div>;
   }
   function cell(r?: BasisRecord, inGrid = true) {
     if (!r) return '缺项';
-    return <Tooltip content={r.value === null ? (r.semantic.startsWith('literature') ? '原表未给值（原表为破折号）' : '标准不适用（原表为破折号）') : evidence(r)}><button type="button" className="basis-value"
+    return <Tooltip content={r.value === null ? (r.semantic.startsWith('literature') ? '原表未给值；该单元格没有数值依据。' : '标准不适用（原表为破折号）') : evidence(r)}><button type="button" className="basis-value"
       data-record-id={r.id} data-selected={selectedId === r.id || undefined} aria-pressed={selectedId === r.id}
       tabIndex={!inGrid || selectedId === r.id || (!selected && r.id === records[0]?.id) ? 0 : -1}
       aria-label={`查看依据：${copyCitation(r)}`} onClick={() => setSelectedId(r.id)}
       onKeyDown={e => { if (inGrid && ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) { e.preventDefault(); e.stopPropagation(); moveCell(r,e.key); }
         if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); setSelectedId(r.id); if (r.verification.status === 'verified') void copy(r); } }}>
-      {r.value === null ? '—' : r.value_details && /^[a-z]$/i.test(String(r.value)) ? `脚注 ${String(r.value)}` : valueLabel(r.value)}{r.value !== null && units.length > 1 && r.quantity.dimension !== 'text' && r.quantity.unit !== '1' ? ` ${r.quantity.unit}` : ''}</button></Tooltip>;
+      {r.value === null ? '—' : r.id.startsWith('hopmans-soil-capacity-model/') ? '土壤混合公式' : r.value_details && /^[a-z]$/i.test(String(r.value)) ? `脚注 ${String(r.value)}` : valueLabel(r.value)}{r.value !== null && units.length > 1 && r.quantity.dimension !== 'text' && r.quantity.unit !== '1' ? ` ${r.quantity.unit}` : ''}</button></Tooltip>;
   }
   const gaps = (catalogue.data?.not_covered ?? []).filter(g => String(g.standard || '').replace(/—.*$/, '') === table?.standard || standard.startsWith(String(g.standard || '')));
   const changeInput = (key: string, value: string) => { lastInputs.current = inputs; setInputs(prev => ({ ...prev, [key]: value })); setHistorical(null); if (search.data) { setHistorical(search.data); } search.reset(); };
@@ -149,12 +158,13 @@ export function StandardsBrowser() {
         <DataTable<GridRow> label="标准完整表格" showGroups={false} groups={[{ id: 'basis', label: '完整表', rows }]} rowLabel={r => r.label} historical={!!historical}
           columns={[{ id: 'conditions', label: '行条件', wrap: true, render: r => r.label }, ...columns.map(c => ({ id: c.column,
             label: columnLabel(c), numeric: true, wrap: true, render: (r: GridRow) => cell(r.records.find(x => x.column === c.column)) }))]} />
-        {selected ? <div className="basis-detail" aria-label="选中格详情"><div><strong>{selected.quantity.name}：{selected.value === null && selected.semantic.startsWith('literature') ? '—（原表未给值）' : valueLabel(selected.value)}{selected.value !== null && selected.quantity.dimension !== 'text' && selected.quantity.unit !== '1' ? ` ${selected.quantity.unit}` : ''}</strong>
+        {selected ? <div className="basis-detail" aria-label="选中格详情"><div><strong>{selected.quantity.name}：{selected.value === null && selected.semantic.startsWith('literature') ? '—（原表未给值）' : selected.value_details?.formula_text || valueLabel(selected.value)}{selected.value !== null && selected.quantity.dimension !== 'text' && selected.quantity.unit !== '1' ? ` ${selected.quantity.unit}` : ''}</strong>
           <p>{conditionsLabel(selected.conditions)}</p>
           <p>印刷第 {selected.printed_page} 页 · PDF 第 {selected.pdf_page} 页</p>
           {selected.verification.methods.map((m,i) => <p key={i}>核验 {i+1}：{methodLabel(m)} · {selected.verification.status === 'verified' ? '一致' : '存在差异，禁止引用'}</p>)}
-          {selected.value_details && (selected.value_details.formula_text ? <p>{selected.value_details.formula_text}；公式仅作为依据，不执行。</p> : formulaDetails(selected.value_details).map((line,i) => <p key={`detail-${i}`}>{line}</p>))}
+          {selected.value_details && (selected.value_details.formula_text ? <p>{selected.value_details.formula_text}；{selected.id.startsWith('hopmans-soil-capacity-model/') ? '现场参数必填，无默认热容。' : '公式仅作为依据，不执行。'}</p> : formulaDetails(selected.value_details).map((line,i) => <p key={`detail-${i}`}>{line}</p>))}
           {selected.limitations.map((note,i) => <p key={i}>{note}</p>)}
+          {pin.data && selected.id.startsWith('hopmans-soil-capacity-model/') && <SoilCalculator key={selected.id} pin={pin.data} record={selected} />}
           <details><summary>引用与来源摘要</summary><p>{copyCitation(selected)}</p><p>{selected.source_sha256}</p>{selected.value && typeof selected.value === 'object' ? formulaDetails(selected.value).map((line,i) => <p key={i}>{line}</p>) : null}</details></div>
           <Button size="compact" disabled={selected.verification.status !== 'verified'} onClick={() => void copy(selected)}>复制引用</Button></div> : <p className="basis-selection-hint">选择表格中的值查看完整依据；方向键选格，Enter 复制引用。</p>}
       </div>}

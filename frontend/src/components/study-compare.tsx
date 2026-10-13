@@ -5,9 +5,10 @@ import { displayName } from "@/lib/display-names";
 import { entityLabel, savedDomain } from "@/lib/domain-fields";
 import { useQuery } from "@tanstack/react-query";
 import { compareRuns } from "@/api/comparison";
-import { inputContracts } from "@/api/input-contracts";
+import { inputContractQuery, capabilityInputContracts, exactContract } from "@/api/input-contracts";
 import {
   record,
+  array,
   optionalRecord,
   numeric,
   text,
@@ -35,7 +36,8 @@ import { Button } from "./ui/button";
 import { StatusMark } from "./status-mark";
 import { downloadCsv, downloadJson } from "@/lib/download";
 import type { CatalogRow } from "@/api/catalogs";
-import { methodCatalog, type StudyDefinition } from "@/api/research";
+import { type StudyDefinition } from "@/api/research";
+import { methodCardsQuery } from '@/lib/study-queries';
 export function StudyCompare({
   run,
   tab,
@@ -57,13 +59,9 @@ export function StudyCompare({
         : context.draft?.definition || context.study.definition
     ) as StudyDefinition,
     config = moduleConfiguration(definition, "method-compare");
-  const contracts = useQuery({
-    queryKey: ["input-contracts"],
-    queryFn: ({ signal }) => inputContracts(signal),
-  });
-  const catalog=useQuery({queryKey:['method-catalog'],queryFn:({signal})=>methodCatalog(signal)});
+  const catalog=useQuery(methodCardsQuery());
   const methodLabel=(pin:Record<string,unknown>,snapshot?:unknown)=>{
-    const id=text(pin.plugin_id), fixed=Object.values(optionalRecord(optionalRecord(snapshot).method_manifests)).map(optionalRecord).find(item=>item.id===id);
+    const saved=optionalRecord(snapshot), id=text(pin.plugin_id), fixed=Object.values(optionalRecord(saved.method_manifests || saved.method_cards)).map(optionalRecord).find(item=>item.id===id);
     const name=text(fixed?.name)||text(catalog.data?.find(item=>optionalRecord(item.method).plugin_id===id)?.name);
     const fallback=displayName(id);return name||(fallback===id?'保存的计算方法':fallback);
   };
@@ -108,12 +106,9 @@ export function StudyCompare({
       return { data: undefined, error };
     }
   }, [run, comparison.data, selectedRuns]);
-  const methods = (contracts.data || []).filter(
-    (value) =>
-      (value.tasks?.includes("rating") || value.reference_only) &&
-      value.method.capability ===
-        (config?.method.capability || definition.method.capability),
-  );
+  const methods = (catalog.data || []).flatMap(entry => array(entry.capabilities).map(optionalRecord).flatMap(cap =>
+    (array(cap.study_tasks).includes('rating') || cap.analysis === 'crosscheck') && text(cap.id) === (config?.method.capability || definition.method.capability)
+      ? [{method:{...optionalRecord(entry.method),capability:text(cap.id)} as StudyDefinition['method']}] : []));
   const key = (value: {
     plugin_id: string;
     capability: string;
@@ -126,11 +121,14 @@ export function StudyCompare({
       value.version,
       value.release_digest,
     ].join(":");
-  function configure() {
+  const selectedMethod=methods.find(value=>key(value.method)===method)?.method;
+  const contracts=useQuery({...inputContractQuery(selectedMethod || config?.method || definition.method),enabled:!!selectedMethod && !readOnly});
+  async function configure() {
     try {
       if (readOnly) throw Error("固定运行只读，请返回当前研究。");
       const selected = methods.find((value) => key(value.method) === method);
       if (!selected) throw Error("请选择有正式输入契约的对照方法。");
+      const contract=exactContract(await capabilityInputContracts(selected.method),selected.method);
       const baseline = configurationOnly(
         config || moduleConfiguration(definition, "ampacity") || definition,
       );
@@ -147,7 +145,7 @@ export function StudyCompare({
           candidate_ids: [],
           selected_case_ids: null,
         },
-        crosschecks: [{ method: selected.method, parameters: contractDefaults(selected.parameter_schema) }],
+        crosschecks: [{ method: selected.method, parameters: contractDefaults(contract.parameter_schema) }],
         input_sources: {...baseline.input_sources, '/crosschecks/0/parameters': {
           kind: 'derived' as const, reference: `采用 ${methodLabel(selected.method)} ${selected.method.version} 契约声明的默认参数，工程师需核对适用范围`, reviewed: false,
         }},
@@ -165,12 +163,12 @@ export function StudyCompare({
       setError(message(error));
     }
   }
-  function configurePhysics() {
+  async function configurePhysics() {
     try {
-      const contract = contracts.data?.find(
-        (value) => value.method.capability === "physics-comparison",
-      );
-      if (!contract) throw Error("物理对比契约未加载，请重新读取。");
+      const entry=(catalog.data || []).find(value=>array(value.capabilities).some(cap=>optionalRecord(cap).id==='physics-comparison'));
+      if (!entry) throw Error("尚未安装物理对比方法，请联系管理员。");
+      const pin={...optionalRecord(entry.method),capability:'physics-comparison'} as StudyDefinition['method'];
+      const contract=exactContract(await capabilityInputContracts(pin),pin);
       const saved = moduleConfiguration(definition, "ampacity") || definition;
       const iec =
         saved.method.plugin_id === "cablesim.iec60287"
@@ -272,7 +270,7 @@ export function StudyCompare({
     );
   return (
     <div
-      className="input-module"
+      className="input-module study-compare-module"
       data-module-state={
         ids.length && comparison.isPending
           ? "loading"
@@ -300,7 +298,7 @@ export function StudyCompare({
           <Button
             size="compact"
             disabled={
-              contracts.isPending || !!contracts.error || context.saving
+              catalog.isPending || !!catalog.error || context.saving
             }
             onClick={configurePhysics}
           >
@@ -324,6 +322,7 @@ export function StudyCompare({
         </Toolbar>
         <DataTable
           label="可比较运行"
+          density="standard"
           rowLabel={(row) => text(row.created)}
           showGroups={false}
           groups={[
@@ -500,12 +499,9 @@ export function StudyCompare({
                     {!readOnly && (
                       <Button
                         size="compact"
-                        onClick={() => {
-                          const contract = methods.find(
-                            (value) =>
-                              key(value.method) === key(crosscheck.method),
-                          );
-                          if (!contract) return;
+                        onClick={async () => {
+                          try {
+                          const contract=exactContract(await capabilityInputContracts(crosscheck.method),crosscheck.method);
                           const next = structuredClone(config);
                           next.crosschecks![index].parameters =
                             contractDefaults(contract.parameter_schema);
@@ -516,6 +512,7 @@ export function StudyCompare({
                               next,
                             ),
                           );
+                          } catch(problem) { setError(message(problem)); }
                         }}
                       >
                         采用契约默认参数

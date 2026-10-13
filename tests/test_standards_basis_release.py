@@ -29,11 +29,33 @@ def test_five_engineering_queries_on_saved_release_copy(tmp_path, monkeypatch):
         ('GB/T 3956', '2008', '表 1', 'resistance_20_max', {'area_m2':185e-6,'conductor_class':1,'conductor_material':'copper','coating':'plain','conductor_form':'circular'}, .101, 3, 6),
         ('GB/T 12706.1', '2020', '表 18', 'insulation_mechanical_test_requirement', {'test_item':'老化前抗张强度最小','insulation':'EPR','insulation_test_group':'other_cable'}, 4.2, 29, 35),
         ('GB/T 12706.4', '2020', '表14', 'test_voltage', {'test_item':'冲击电压试验（峰值）','u0_v':3600,'u_v':6000,'um_v':7200}, 60, 15, 19),
+        ('GB/T 12706.2', '2020', '13.7', 'armour_tape_gap_ratio_max', {'armour_kind':'tape'}, .5, 13, 21),
+        ('GB/T 12706.2', '2020', '17.7.3', 'armour_measured_negative_deviation_max', {'armour_kind':'tape'}, .1, 19, 27),
+        ('GB/T 12706.3', '2020', '10.2.2', 'screen_tape_measured_min_ratio', {}, .9, 8, 13),
+        ('Youn et al.', '2019', 'Table 1', 'specific_heat_capacity', {'material':'semiconducting_layer'}, '115–433', 8, 8),
+        ('GB/T 12706.2', '2020', '17.5.3', 'extruded_inner_covering_measured_min', {'covering_construction':'extruded'},
+         {'kind':'affine','a':.8,'b':-.2,'x':'nominal_lining_thickness','parameter_units':{'x':'mm','result':'mm'}}, 18, 26),
+        ('GB/T 12706.2', '2020', '13.2', 'armour_allowed_materials', {'armour_kind':'tape'},
+         ['galvanized_steel','nonmagnetic_stainless_steel','aluminium','aluminium_alloy'], 11, 19),
+        ('GB/T 12706.2', '2020', '13.3.2', 'armour_inner_covering_rule', {'core_count':3}, 'required_conforming_8.2', 11, 19),
+        ('GB/T 12706.2', '2020', '13.7', 'armour_tape_layer_count', {'armour_kind':'tape'}, 2, 13, 21),
+        ('GB/T 12706.2', '2020', '表 11', 'armour_tape_nominal', {'diameter_m':.0666,'armour_material':'steel'}, .5, 13, 21),
+        ('GB/T 12706.2', '2020', '10.2.3', 'screen_nominal_area_requirement', {'screen_kind':'copper_tape'},
+         {'fixed_numeric_area':'standard_not_specified','prescribed_requirements':['nominal_tape_thickness','overlap_ratio','measured_minimum_thickness'],'engineering_input_required':True}, 10, 18),
+        ('GB 50217', '2018', '3.6.3', 'installation_calculation_requirement', {'subitem':'7','nominal_voltage_v':35000}, 'recommended', 12, 22),
+        ('GB 50217', '2018', 'D.0.6', 'ampacity_correction',
+         {'tray_kind':'ladder','layer_count':2,'horizontal_parallel_cable_count':7,'cable_spacing_condition':'no_gap'}, .65, 74, 84),
+        ('GB 50217', '2018', 'D.0.7', 'ampacity_correction',
+         {'u_v':1000,'core_count':3,'area_m2':95e-6,'outdoor_unshaded':'yes','current_basis_environment':'indoor_air_at_outdoor_ambient'}, .90, 74, 84),
+        ('Sah et al.', '2022-preprint-v1', 'Table 2', 'other_component_mass_fraction_percent',
+         {'backfill_mix':'B80-F20','other_component':'fly_ash'}, 20, 6, 6),
+        ('Sah et al.', '2022-preprint-v1', 'Table 3', 'maximum_dry_density', {'backfill_mix':'F'}, 1.38, 7, 7),
     ]
     with TestClient(app) as client:
         methods = client.get('/api/methods'); assert methods.status_code==200
         pin = next(m['method'] for m in methods.json() if m['method']['plugin_id']=='cablesim.standards-basis')
-        assert pin['version']=='0.4.0'
+        assert pin['version']=='0.6.0'
+        receipts=[]
         for standard,edition,locator,quantity,conditions,value,printed,pdf in cases:
             query={'schema_version':'cablesim.standards-query/1','standard':standard,'edition':edition,
                    'locator':locator,'quantity':quantity,'conditions':conditions}
@@ -41,11 +63,65 @@ def test_five_engineering_queries_on_saved_release_copy(tmp_path, monkeypatch):
                               json={'release_digest':pin['release_digest'],'input':query})
             assert reply.status_code==200,reply.text
             envelope=reply.json(); answer=envelope['artifacts']['x-cablesim.standards-basis']
-            assert envelope['plugin_version']=='0.4.0' and len(envelope['request_sha256'])==64
+            assert envelope['plugin_version']=='0.6.0' and len(envelope['request_sha256'])==64
             assert answer['status']=='resolved' and len(answer['records'])==1, (query,answer)
             record=answer['records'][0]
             assert (record['value'],record['printed_page'],record['pdf_page'])==(value,printed,pdf)
             assert record['verification']['status']=='verified' and len(record['verification']['methods'])>=2
+            receipts.append({'query':query,'response':envelope})
+        isolation={'schema_version':'cablesim.standards-query/1','standard':'GB/T 12706.2','edition':'2020',
+                   'locator':'13.3.3','quantity':'separation_sheath_application',
+                   'record_id':'mv-isolation-applicability/r1/separation_sheath_application',
+                   'conditions':{'metal_layer_relation':'different','longitudinal_water_barrier':False,'lead_sheath_present':False}}
+        reply=client.post('/api/plugin-queries/cablesim.standards-basis/lookup',json={'release_digest':pin['release_digest'],'input':isolation})
+        assert reply.status_code==200,reply.text
+        r=reply.json()['artifacts']['x-cablesim.standards-basis']['records'][0]
+        assert (r['value'],r['printed_page'],r['pdf_page'])==('extruded_required',11,19)
+        assert r['verification']['status']=='verified'
+        receipts.append({'query':isolation,'response':reply.json()})
+        # Missing the newly verified spacing condition must stop at that field.
+        incomplete={'schema_version':'cablesim.standards-query/1','standard':'GB 50217','edition':'2018',
+                    'locator':'D.0.6','quantity':'ampacity_correction',
+                    'conditions':{'tray_kind':'ladder','layer_count':2,'horizontal_parallel_cable_count':7}}
+        reply=client.post('/api/plugin-queries/cablesim.standards-basis/lookup',json={'release_digest':pin['release_digest'],'input':incomplete})
+        assert reply.status_code==422 and reply.json()['detail']['path']=='/conditions/cable_spacing_condition'
+        # Actual host replies are the consumer handoff; only read the source library.
+        output=ROOT/'.data/standards-next/release';output.mkdir(parents=True,exist_ok=True)
+        (output/'real-queries.json').write_text(json.dumps(receipts,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
+        # Declared YJV22 nominal inner covering 1.8mm and steel tape 0.5mm:
+        # measured minima require actual measurement, 0.8*1.8-0.2=1.24, (1-.1)*.5=.45mm.
+        received={receipt['query']['quantity']:receipt['response']['artifacts']['x-cablesim.standards-basis']['records'][0]['value'] for receipt in receipts}
+        lining=received['extruded_inner_covering_measured_min']
+        assert lining['a']*1.8+lining['b']==pytest.approx(1.24)
+        assert (1-received['armour_measured_negative_deviation_max'])*received['armour_tape_nominal']==pytest.approx(.45)
+        ladder=next(x for x in receipts if x['query']['locator']=='D.0.6')['response']['artifacts']['x-cablesim.standards-basis']['records'][0]
+        assert 200*ladder['value']==130  # Explicit manual example, not a saved rating.
+        # Declared hand calculation, not a fabricated city soil measurement:
+        # phi=.4; solid=1500*800; water=.2*4.18e6; air=.2*1200.
+        soil=dict(schema_version='cablesim.standards-query/1',operation='evaluate',standard='Hopmans et al.',edition='2002',
+                  locator='§2.2 Eq. (1)/(2)',quantity='soil_capacity_expression',
+                  conditions={'material':'soil','material_role':'porous_soil','soil_capacity_method':'three_phase','parameter_origin':'project_measured'},
+                  formula_inputs={'dry_bulk_density_kg_m3':1500,'particle_density_kg_m3':2500,'solid_specific_heat_capacity_j_kg_k':800,
+                                  'water_volumetric_heat_capacity_j_m3_k':4180000,'air_volumetric_heat_capacity_j_m3_k':1200,
+                                  'water_volume_fraction':.2,'phase_assumption':'single_temperature_no_phase_change'})
+        def soil_query(request):
+            return client.post('/api/plugin-queries/cablesim.standards-basis/lookup',json={'release_digest':pin['release_digest'],'input':request})
+        response=soil_query(soil); assert response.status_code==200,response.text
+        answer=response.json()['artifacts']['x-cablesim.standards-basis'];calculation=answer['calculation']
+        assert calculation['output']=={'quantity':'volumetric_heat_capacity','value':2036240,'unit':'J/(m³·K)'}
+        assert calculation['derived']['porosity']==.4 and calculation['approval']=='not_granted'
+        assert answer['records'][0]['printed_page']=='7-3' and answer['records'][0]['pdf_page']==3
+        assert calculation['record_sha256']==answer['records'][0]['record_sha256']
+        assert len(calculation['input_sha256'])==64 and answer['records'][0]['verification']['status']=='verified'
+        from copy import deepcopy
+        for theta,expected in [(0,1200480),(.4,2872000)]:
+            check=deepcopy(soil);check['formula_inputs']['water_volume_fraction']=theta
+            response=soil_query(check);assert response.status_code==200,response.text
+            assert response.json()['artifacts']['x-cablesim.standards-basis']['calculation']['output']['value']==expected
+        invalid=deepcopy(soil);invalid['formula_inputs']['water_volume_fraction']=.41
+        response=soil_query(invalid);assert response.status_code==422 and response.json()['detail']['path']=='/formula_inputs/water_volume_fraction'
+        invalid=deepcopy(soil);del invalid['formula_inputs']['particle_density_kg_m3']
+        response=soil_query(invalid);assert response.status_code==422 and response.json()['detail']['path']=='/formula_inputs/particle_density_kg_m3'
         # Consume the returned parameters against original public examples/hand products.
         for locator in ('B.1','B.2'):
             request=dict(schema_version='cablesim.standards-query/1',standard='GB/T 12706.1',edition='2020',

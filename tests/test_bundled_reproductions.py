@@ -13,7 +13,7 @@ from backend.foundation.reproduction_library import BUNDLED_EVIDENCE, bundled_ev
 
 
 def test_accepted_engineering_archives_preserve_full_sealed_run_identity():
-    from backend.kernel.hpc_evidence import evidence_index
+    from backend.kernel.hpc_evidence import evidence_index, scoped_index
     value, snapshot = evidence_index()
     receipt = value['receipt']
     assert receipt['job_id']=='811855' and receipt['core_hours']==pytest.approx(13710/3600)
@@ -29,14 +29,23 @@ def test_accepted_engineering_archives_preserve_full_sealed_run_identity():
     assert {entry['column']:entry['sha256'] for entry in historical}=={
         'snapshot':'66a01118fdaddd3d87f8ca247d9286ccc90888ad3245aad739389f10c06731f9',
         'output':'e5db2325b1b7508fbea917b0e80e6d6ccea4b1540809939d8362447880f9607e'}
-    assert len(snapshot)==64 and len([entry for entry in value['members'] if entry.get('column')=='output'])==8
+    primary=scoped_index(value,'primary')
+    assert len(snapshot)==64 and len([entry for entry in primary['members'] if entry.get('column')=='output'])==8
+    supplementary=scoped_index(value,'chengnan')
+    accepted=supplementary['receipt']
+    assert accepted['job_id']=='817014'
+    outputs=[entry for entry in supplementary['members'] if entry.get('column')=='output']
+    assert len(outputs)==7
+    saved=next(entry for entry in outputs if entry['run_id']==accepted['run'])
+    assert saved['sha256']==accepted['output_digest']=='2e873724fda340ce927370550c00924d8d58b69e213f2dc51a5c46f966a15425'
 
 
-def test_local_engineering_archives_match_sealed_index():
+@pytest.mark.parametrize('scope',['primary','chengnan'])
+def test_local_engineering_archives_match_sealed_index(scope):
     from backend.kernel.hpc_evidence import evidence_availability, verify_archives
-    status = evidence_availability()
+    status = evidence_availability(scope=scope)
     if not status['available']: pytest.skip(status['message'])
-    assert verify_archives()[1] == status['snapshot_id']
+    assert verify_archives(scope=scope)[1] == status['snapshot_id']
 
 
 def test_missing_or_damaged_deployment_evidence_is_explicit(tmp_path, monkeypatch):
@@ -124,6 +133,23 @@ def test_release_seed_import_exposes_saved_evidence_without_development_paths(tm
             assert fem['delivery'] is None
             pdf=client.get(f'/api/workspaces/{fem["workspace"]}/deliveries/{fem["historical_delivery"]}/pdf')
             assert pdf.status_code==200 and pdf.content.startswith(b'%PDF-')
+            if receipt['identity']['chengnan_engineering_evidence_imported']:
+                single=next(row['saved_evidence'] for row in receipt['studies'] if row.get('saved_evidence',{}).get('job_id')=='817014')
+                restored=client.get(f'/api/hpc/workspaces/{single["workspace"]}/fields/{single["run"]}/view')
+                assert restored.status_code==200,restored.text[:300]
+                saved=restored.json()
+                assert saved['integrity']=='verified' and saved['execution']['job_id']=='817014'
+                assert saved['output_digest']==single['output_digest']
+                response=client.get(f'/api/hpc/workspaces/{single["workspace"]}/chapters/{single["run"]}?iec_run_id={single["iec_run"]}&convergence_id={single["convergence"]}')
+                assert response.status_code==200,response.text[:300]
+                accepted=response.json()
+                assert accepted['fem']['eligible_current_report']
+                assert accepted['convergence']['verdict']['mesh_passed'] and accepted['convergence']['verdict']['domain_passed']
+                rating=next(row for row in accepted['rows'] if row['key']=='ampacity' and row['case']=='rating')
+                assert rating['fem']==pytest.approx(746.5381575809546,abs=.001)
+                assert rating['iec']==pytest.approx(748.3219742774963,abs=.001)
+                pdf=client.get(f'/api/workspaces/{single["workspace"]}/deliveries/{single["delivery"]}/pdf')
+                assert pdf.status_code==200 and pdf.content.startswith(b'%PDF-')
     before=(target/'index.json').read_bytes()
     with pytest.raises(RuntimeError,match='已更新'):
         seed.import_release_reproductions(target,'0'*64)

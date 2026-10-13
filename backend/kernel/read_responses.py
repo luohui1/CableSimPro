@@ -86,7 +86,8 @@ class ReadResponses:
                     method = receipt[1]['method'] or {}
                     identities.append((str(rid), receipt[0], method.get('release_digest')))
                 if 'definition' in row:
-                    identities.append(('study', row['id'], row['revision'], fingerprint(row['definition'])))
+                    identities.append(('study', row['id'], row['revision'],
+                                       row.get('definition_digest') or fingerprint(row['definition'])))
         return tuple(identities)
 
     def build(self, key, model, load, uses_database, *, exclude_unset=False):
@@ -106,7 +107,12 @@ class ReadResponses:
         if not owner:
             return pending.result()  # Worker thread only; never block the event loop.
         try:
-            value = load()
+            # Resolve all release pins against one verified source snapshot in
+            # this read. Executions still rehash independently; source changes
+            # during the read prevent caching below.
+            from .verified_executor import verification_scope
+            with verification_scope():
+                value = load()
             adapter = TypeAdapter(model) if not isinstance(value, bytes) else None
             payload = value if isinstance(value, bytes) else adapter.dump_json(
                 adapter.validate_python(value), by_alias=True, exclude_unset=exclude_unset)
@@ -168,7 +174,15 @@ async def read_response(research, key, model, load, *, uses_database=True, exclu
     headers = {
         'Server-Timing': f'host-read;dur={(perf_counter()-started)*1000:.2f}',
         'X-CableSim-Read-Cache': 'hit' if hit else 'miss', 'Vary':'Accept-Encoding',
+        'Cache-Control': 'private, no-cache',
         'ETag': 'W/"'+sha256(payload).hexdigest()+'"'}
+    # Revalidate against the newly verified content, never a timestamp or a
+    # caller-supplied digest. Browsers can reuse bytes only after this check.
+    if request is not None:
+        candidates = request.headers.get('if-none-match', '').split(',')
+        if any(tag.strip().removeprefix('W/') == headers['ETag'].removeprefix('W/')
+               for tag in candidates):
+            return Response(status_code=304, headers=headers)
     accepted = request.headers.get('accept-encoding','') if request is not None else ''
     if len(payload) >= 1024 and accepts_gzip(accepted):
         payload = await run_in_threadpool(cache.gzip, payload)

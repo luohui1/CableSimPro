@@ -41,8 +41,8 @@
   },
   {
     "path": "backend/plugin_host/dependencies.py",
-    "sha256": "e7700e9aeba305014bc5fa819928b4e468847b02c661664b1a84e0864db0e513",
-    "size_bytes": 5624
+    "sha256": "2f2bbe3d4939194a7db9cfc5a3c71ac40cb275747055a4975ffc7a72d6c8b2d6",
+    "size_bytes": 7094
   },
   {
     "path": "backend/plugin_host/electrothermal_contract.py",

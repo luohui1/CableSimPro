@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { TypeCommandSlot } from './command-slot';
 import { CommandBar, type CommandAction } from '@/components/command-bar';
@@ -23,7 +23,8 @@ import { formatNumber } from '@/lib/format';
 import type { LayerTarget } from '@/features/drawing/types';
 import { targetId } from '@/features/drawing/cable-geometry';
 import { TypeStructure, TypeNumericField, TypeCanvas, LayerTable, nominalArea } from './structure';
-import { MaterialComparison } from './material-comparison';
+import { deferredView } from '@/components/deferred-view';
+const MaterialComparison = deferredView(() => import('./material-comparison').then(module => ({ default: module.MaterialComparison })));
 import { layerRows } from './layers';
 import { useTypeWorkspace } from './provider';
 import { typePath, useTypeNavigation } from './navigation';
@@ -31,12 +32,12 @@ import './type.css';
 import { cleanLabel } from './labels';
 import { StructurePropertyInputs, TypeRatingInputs } from './property-inputs';
 import { TypeInspectorContext } from './inspector';
-import { TypeModulePage } from './module-page';
+const TypeModulePage = deferredView(() => import('./module-page').then(module => ({ default: module.TypeModulePage })));
 import { DesignCard } from './design-card';
 import { typeComparison, typeSpecification } from './version-api';
 import { ResourceBindings } from './resource-bindings';
-import { AgentPanel } from '@/features/agent/agent-panel';
-import { TypeStudyDialog } from './study-dialog';
+const AgentPanel = deferredView(() => import('@/features/agent/agent-panel').then(module => ({ default: module.AgentPanel })));
+const TypeStudyDialog = deferredView(() => import('./study-dialog').then(module => ({ default: module.TypeStudyDialog })));
 
 import { typeModules } from "./module-definitions";
 import { WorkbenchSplitter } from "@/components/workbench-splitter";
@@ -45,8 +46,8 @@ export function TypeWorkspace() {
   const state = useTypeWorkspace(), { location, navigate, onTheme } = useTypeNavigation();
   const evidence = useTypeEvidence();
   const methods = useQuery({ queryKey: ['type-method-catalog'], queryFn: ({ signal }) => methodCatalog(signal) });
-  const specificationState = useQuery({ queryKey: ['type-specification', state.workspace?.id, 'customer'], queryFn: ({ signal }) => typeSpecification(state.workspace!.id, signal, 'customer'), enabled: !!state.workspace });
-  const comparisonState = useQuery({ queryKey: ['type-comparison', state.workspace?.id], queryFn: ({ signal }) => typeComparison(state.workspace!.id, signal), enabled: !!state.workspace });
+  const specificationState = useQuery({ queryKey: ['type-specification', state.workspace?.id, 'customer'], queryFn: ({ signal }) => typeSpecification(state.workspace!.id, signal, 'customer'), enabled: !!state.workspace && location.module==='specification', staleTime:30000 });
+  const comparisonState = useQuery({ queryKey: ['type-comparison', state.workspace?.id], queryFn: ({ signal }) => typeComparison(state.workspace!.id, signal), enabled: !!state.workspace && location.module==='comparison', staleTime:30000 });
   const module = typeModules.find(module => module.id === location.module);
   const activeTab = module?.tabs.some(([id]) => id === location.tab) ? location.tab : module?.tabs[0][0] || location.tab;
   const [cableId, setCableId] = useState(''), [selected, setSelected] = useState<LayerTarget | null>(null), [collapsed, setCollapsed] = useState(false), [info, setInfo] = useState('');
@@ -65,13 +66,15 @@ export function TypeWorkspace() {
   const showProperty = useCallback((title: string, groups: PropertyGroup[], extra?: ReactNode) => { setResultProperty({ title, groups, extra }); setCollapsed(false); }, []);
   const clearProperty = useCallback(() => setResultProperty(null), []);
   const document = state.document, cable = document?.cable_types.find(cable => cable.id === cableId) || document?.cable_types[0] || null;
-  let rows: ReturnType<typeof layerRows> = [], structureError = '';
-  try { if (document && cable) rows = layerRows(document, cable); } catch (error) { structureError = message(error); }
+  const { rows, structureError } = useMemo(() => {
+    try { return { rows: document && cable ? layerRows(document, cable) : [] as ReturnType<typeof layerRows>, structureError: '' }; }
+    catch (error) { return { rows: [] as ReturnType<typeof layerRows>, structureError: message(error) }; }
+  }, [document, cable]);
   const row = selected ? rows.find(row => row.id === targetId(selected)) : undefined;
   const source = row && document ? fieldSource(document, row.path) : {};
   const demo = Object.values(document?.provenance || {}).some(source => source.kind === 'demo');
   const status: StatusKind = state.loading ? 'running' : state.error ? 'error' : state.readOnly ? state.workspace?.raw.historical ? 'historical' : 'locked' : state.dirty ? 'draft' : 'saved';
-  const statusLabel = state.loading ? '读取中' : state.error ? state.workspace ? '保存失败' : '读取失败' : state.readOnly ? state.workspace?.raw.historical ? '历史 · 只读' : '已发布 · 只读' : state.dirty ? '未保存' : '已保存';
+  const statusLabel = state.loading ? '读取中' : state.error ? state.workspace ? '保存失败' : '读取失败' : state.readOnly ? state.workspace?.raw.fixed_run ? '保存运行 · ' + (state.workspace.raw.historical ? '历史 · ' : '') + '只读' : state.workspace?.raw.historical ? '历史 · 只读' : '已发布 · 只读' : state.dirty ? '未保存' : '已保存';
   function resultStatus(id: string) {
     if (id === 'comparison') {
       if (comparisonState.error) return { kind: 'error' as const, label: '读取失败', reason: message(comparisonState.error) };
@@ -95,13 +98,25 @@ export function TypeWorkspace() {
     return moduleResultStatus(evidence.data, id, state.workspace?.revision, state.inputDirty || !!state.methodDrafts[id] || id === 'rating-table' && !!state.ratingDraft, methods.data);
   }
   function resultMark(id: string) { const value = resultStatus(id); return <Tooltip content={value.reason}><span className="type-module-status" title={value.reason} aria-label={value.label}>{value.kind === 'unknown' ? <span className="type-module-idle" aria-hidden="true" /> : <StatusMark kind={value.kind} label={value.label} />}</span></Tooltip>; }
-  function choose(target: LayerTarget | null) { setSelected(target); if (target) setCollapsed(false); }
+  const choose = useCallback((target: LayerTarget | null) => { setSelected(target); if (target) setCollapsed(false); }, []);
   const go = (module: string, tab: string) => navigate(typePath(location.wid!, module, tab, location.theme) + (location.revision ? '&revision=' + location.revision : '') + (location.run && module === location.module ? '&run=' + encodeURIComponent(location.run) : ''));
   function shortcut(event: KeyboardEvent<HTMLDivElement>) {
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') { event.preventDefault(); void state.save(); return; }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !(event.target as HTMLElement).closest('input,textarea,[contenteditable=true]')) { event.preventDefault(); void state.undo(); }
     if (event.key === 'Escape' && !(event.target as HTMLElement).closest('input,textarea,[role=dialog],[role=combobox]')) { choose(null); setInfo(''); }
   }
+  useEffect(() => {
+    // A closed portal can return focus to body, outside the React workbench tree.
+    // Keep document undo/save usable there; input editors retain their native undo.
+    const fallback=(event:globalThis.KeyboardEvent)=>{
+      const target=event.target instanceof HTMLElement?event.target:null;
+      if(event.defaultPrevented||!(event.ctrlKey||event.metaKey)||target?.closest('.type-root,input,textarea,[contenteditable=true]')||window.document.querySelector('[role=dialog][data-state=open]'))return;
+      if(event.key.toLowerCase()==='z'){event.preventDefault();void state.undo();}
+      if(event.key.toLowerCase()==='s'){event.preventDefault();void state.save();}
+    };
+    window.addEventListener('keydown',fallback);
+    return()=>window.removeEventListener('keydown',fallback);
+  },[state]);
   useEffect(() => { setInfo(''); setResultProperty(null); setCollapsed(false); }, [location.module, location.tab, selected]);
   // 文档型模块（规格书、要求清单、方案对比）默认放大下方面板
   useEffect(() => { setDockMax(location.module !== 'structure' || ['quantities', 'materials'].includes(location.tab)); }, [location.module, location.tab]);
@@ -161,7 +176,7 @@ export function TypeWorkspace() {
   </nav>;
   // 命令栏与研究工作台一致：模型（保存 / 撤销）、交付（规格书）；分析在各模块里运行
   const specification = typeModules.find(entry => entry.id === 'specification');
-  const commandBar = <CommandBar label="型号命令" status={commandResultLabel(resultStatus(location.module), latestModuleRun(evidence.data, location.module, methods.data), state.dirty)} actions={[
+  const commandBar = <CommandBar label="型号命令" status={location.module === 'specification' ? undefined : commandResultLabel(resultStatus(location.module), latestModuleRun(evidence.data, location.module, methods.data), state.dirty)} actions={[
     { id:'save', label:'保存', icon:'action/save', role:'save', loading:state.busy, disabledReason:state.readOnly?'此版本只读':!state.dirty?'没有未保存修改':!state.workspace?'型号尚未读取':undefined, onSelect:()=>void state.save() },
     ...(primaryAction ? [primaryAction] : []),
     { id:'undo', label:'撤销', icon:'action/undo', priority:10, disabledReason:state.busy||state.readOnly||!state.dirty&&state.workspace?.raw.can_undo!==true?'没有可撤销的修改':undefined, onSelect:()=>void state.undo() },
@@ -181,7 +196,7 @@ export function TypeWorkspace() {
     {property}</>}
     {agentOpened && state.workspace && <div className="type-agent-panel" hidden={inspectorView !== 'agent'}><AgentPanel key={state.workspace.id} workspaceId={state.workspace.id} context={cleanLabel(document?.name || '型号设计')} suggestions={['检查这个型号的问题', '绝缘厚度改到 15.8 mm 会怎样？', '检查规格书还缺哪些来源与结果']} /></div>}
   </div>;
-  return <TypeCommandSlot.Provider value={setPrimaryAction}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<StatusMark kind={status} label={(location.run ? '运行快照 · 只读' : statusLabel) + (demo ? ' · 演示' : '')} detail={state.error || (demo ? '型号基准含演示来源，请核对各字段工程依据。' : state.readOnly ? '所选输入快照只读；基准版本与来源见型号名片。' : state.dirty ? '保存后更新型号输入；原运行结果保留并标为过期。' : '当前编辑已保存；各模块保存结果的状态见型号浏览器。')} />}
+  return <TypeCommandSlot.Provider value={setPrimaryAction}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<StatusMark kind={status} label={statusLabel + (demo ? ' · 演示' : '')} detail={state.error || (demo ? '型号基准含演示来源，请核对各字段工程依据。' : state.readOnly ? '所选输入快照只读；基准版本与来源见型号名片。' : state.dirty ? '保存后更新型号输入；原运行结果保留并标为过期。' : '当前编辑已保存；各模块保存结果的状态见型号浏览器。')} />}
     activeNavigation="型号" theme={location.theme} onTheme={onTheme} onUnavailable={name => setInfo(name + '入口尚未接入')}
     actions={<><IconButton icon="action/edit" label="修改型号名称" disabled={state.busy || state.readOnly || !document} onClick={() => { setNewName(document?.name || ''); setRenaming(true); }} /></>}
     property={inspector}>
@@ -213,6 +228,6 @@ export function TypeWorkspace() {
     </div>
     </div>
     <Dialog open={renaming} onOpenChange={setRenaming} title="修改型号名称" actions={<Button variant="primary" disabled={!newName.trim() || state.readOnly} onClick={() => { state.edit('/name', newName.trim()); setRenaming(false); }}>确认</Button>}><Input aria-label="新的型号名称" value={newName} maxLength={200} onChange={event => setNewName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && newName.trim()) { state.edit('/name', newName.trim()); setRenaming(false); } }} /></Dialog>
-    {state.workspace && <TypeStudyDialog open={studyOpen} onOpenChange={setStudyOpen} />}
+    {state.workspace && studyOpen && <TypeStudyDialog open onOpenChange={setStudyOpen} />}
   </AppShell></Tabs></TypeInspectorContext.Provider></TypeCommandSlot.Provider>;
 }

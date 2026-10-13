@@ -32,7 +32,7 @@ def test_changes_compare_sealed_content_not_patch_versions(change, expected):
         next(row for row in new['capabilities'] if row['id']=='steady-rating')['method_version'] = '9.0.0'
     proof = classify(pin(old), pin(new), old, new)
     assert proof['classification'] == expected
-    assert proof['rule'] == 'sealed-computation-and-contract/1'
+    assert proof['rule'] == 'sealed-computation-and-contract/2'
     assert (proof['from_computation_digest']==proof['to_computation_digest']) == (expected=='presentation_only')
     assert classify(pin(old),pin(new),None,new)['classification']=='unproven'
     tampered=deepcopy(old);tampered['description']+='tampered'
@@ -83,3 +83,61 @@ def test_legacy_evidence_exact_digest_only():
     assert computation_identity(changed,'steady-rating')!=computation_identity(manifest,'steady-rating')
     from backend.kernel.method_identity import schema_identity
     assert schema_identity({'default':{'description':'input value'},'properties':{'title':{'description':'label','default':1}}}) == {'default':{'description':'input value'},'properties':{'title':{'default':1}}}
+
+
+def test_saved_engineering_job_is_not_invalidated_by_evidence_catalogue():
+    """Real job 811855, frozen before its evidence catalogue was appended.
+
+    No solver or output substitute: authenticate the actual saved input. Isolate
+    catalogue changes from later solver releases; a current release with new
+    calculations must not be assumed presentation-only. The manifest mutations
+    below exercise publication/diagnostic rules, never create engineering output.
+    """
+    import json
+    from pathlib import Path
+    import sqlite3
+    database = Path('.data/fix-round/simulation-transient/current-fem/workspace.sqlite')
+    if not database.exists():
+        pytest.skip('作业 811855 的真实保存库未提供；不制造有限元结果')
+    from contextlib import closing
+    with closing(sqlite3.connect(f'file:{database.resolve().as_posix()}?mode=ro', uri=True)) as db:
+        row = db.execute('SELECT snapshot,input_digest FROM study_runs WHERE id=?',
+                         ('00c54351-4a2c-49f5-bf88-7e86e6a9615f',)).fetchone()
+    if row is None:
+        pytest.skip('真实保存库未包含作业 811855 的运行')
+    snapshot = json.loads(row[0])
+    assert fingerprint(snapshot) == row[1]
+    old = snapshot['definition']['method']
+    manifest = snapshot['method_manifests'][old['release_digest']]
+    plugin = Registry(Path('plugins'), plugin_id=old['plugin_id']).get(old['plugin_id'])
+    current = plugin.manifest.model_dump(mode='json', by_alias=True)
+    current_pin = {'plugin_id': current['id'], 'version': current['version'],
+                   'release_digest': fingerprint(current), 'capability': old['capability']}
+    before = next(cap for cap in manifest['capabilities'] if cap['id']==old['capability'])
+    after = next(cap for cap in current['capabilities'] if cap['id']==old['capability'])
+    if before['method_version'] != after['method_version']:
+        assert classify(old,current_pin,manifest,current)['classification']=='calculation_changed'
+    # Only the two real catalogue receipts change in this diagnostic comparison.
+    # Preserve the frozen method, source/dependency receipts and all unknown data.
+    catalogue = deepcopy(manifest)
+    from backend.kernel.method_identity import EVIDENCE_ASSETS
+    actual = {item['path']:item for item in current['files']}
+    for item in catalogue['files']:
+        if item['path'] in EVIDENCE_ASSETS:
+            item.update({key:actual[item['path']][key] for key in ('sha256','size_bytes')})
+    new = {**old,'release_digest':fingerprint(catalogue)}
+    proof = classify(old, new, manifest, catalogue)
+    assert proof['classification'] == 'presentation_only', proof
+    assert proof['from_computation_digest'] == proof['to_computation_digest']
+    assert {item['path'] for item in proof['non_computation_asset_changes']} == {
+        'assets/engineering-evidence-index.json', 'assets/engineering-evidence-schema.json'}
+    for change in ('source', 'method', 'unknown_file_metadata'):
+        changed = deepcopy(catalogue)
+        if change == 'source':
+            next(item for item in changed['files'] if item['path'].endswith('/main.py'))['sha256'] = '0'*64
+        elif change == 'method':
+            next(item for item in changed['capabilities'] if item['id'] == old['capability'])['method_version'] = '99.0.0'
+        else:
+            next(item for item in changed['files'] if item['path'].endswith('engineering-evidence-index.json'))['unrecognized'] = True
+        altered = {**new, 'release_digest': fingerprint(changed)}
+        assert classify(old, altered, manifest, changed)['classification'] == 'calculation_changed'

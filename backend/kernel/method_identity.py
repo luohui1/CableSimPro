@@ -1,18 +1,38 @@
 """Conservative release comparison: ignore only enumerated presentation metadata.
 
 No execution substitutes releases. This proof applies to reading saved results
-only. All sealed files, dependencies, defaults, units and unknown fields remain
-in the comparison; unsupported/absent historical evidence fails closed.
+only. Calculation files, dependencies, defaults, units and unknown fields remain
+in the comparison; unsupported/absent historical evidence fails closed. Two
+fixed simulation evidence assets are authenticated separately on evidence reads.
 """
 from copy import deepcopy
 from functools import lru_cache
+from collections import OrderedDict
+from threading import RLock
 import json
 from pathlib import Path
 from fastapi import HTTPException
 
 from .workspace import fingerprint
 
-RULE = 'sealed-computation-and-contract/1'
+RULE = 'sealed-computation-and-contract/2'
+_identities = OrderedDict()
+_identity_lock = RLock()
+
+# These assets catalogue already completed jobs; neither is a solver input.
+# Keep their paths and any unknown file metadata in the identity. This is not
+# a plugin-controlled trust switch, an assets/** exclusion, or a seal bypass.
+EVIDENCE_ASSETS = frozenset({
+    'assets/engineering-evidence-index.json',
+    'assets/engineering-evidence-schema.json',
+})
+
+
+def evidence_asset_receipts(manifest):
+    if manifest.get('id') != 'cablesim.simulation':
+        return {}
+    return {row['path']: deepcopy(row) for row in manifest.get('files', [])
+            if row.get('path') in EVIDENCE_ASSETS}
 
 
 @lru_cache(maxsize=1)
@@ -47,7 +67,35 @@ def schema_identity(value):
 
 
 def computation_identity(manifest, capability):
+    # Authenticate the actual manifest, rather than trusting its claimed seal.
+    # Cached normalization never replaces resolve() or input/currentness checks.
+    return _computation_identity(manifest, capability, fingerprint(manifest))
+
+
+def _computation_identity(manifest, capability, release_digest):
+    cache_key = (RULE, release_digest, capability)
+    with _identity_lock:
+        cached = _identities.get(cache_key)
+        if cached is not None:
+            _identities.move_to_end(cache_key)
+            return cached
+        # The summary and display requests arrive together. Normalize each
+        # authenticated release once, including their concurrent first miss.
+        # This is a metadata lock; it never holds a database/write transaction.
+        result = _normalized_identity(manifest, capability)
+        _identities[cache_key] = result
+        while len(_identities) > 128:
+            _identities.popitem(last=False)
+        return result
+
+
+def _normalized_identity(manifest, capability):
     value = deepcopy(manifest)
+    if value.get('id') == 'cablesim.simulation':
+        for row in value.get('files', []):
+            if row.get('path') in EVIDENCE_ASSETS:
+                row.pop('sha256', None)
+                row.pop('size_bytes', None)
     for key in ('version', 'name', 'description', 'icon', 'presentation'):
         value.pop(key, None)
     selected = next(item for item in value.pop('capabilities') if item['id'] == capability)
@@ -66,20 +114,45 @@ def computation_identity(manifest, capability):
     return fingerprint(value)
 
 
-def classify(old, new, old_manifest, new_manifest):
+def classify(old, new, old_manifest, new_manifest, cache=None):
+    # Read callers supply their private request scope: both manifests are
+    # immutable, already byte-bound copies. Retain the object alongside its
+    # digest, so an id cannot be reused for a different manifest in this scope.
+    # Independent callers (including mutable diagnostic inputs) hash each call.
+    def manifest_digest(manifest):
+        if cache is None:return fingerprint(manifest)
+        receipts = cache.setdefault('manifest_digests', {})
+        key = id(manifest)
+        if key not in receipts:receipts[key] = (manifest, fingerprint(manifest))
+        return receipts[key][1]
     base = {'rule': RULE, 'from_computation_digest': None, 'to_computation_digest': None}
     try:
-        if (not isinstance(old_manifest, dict) or fingerprint(old_manifest) != old['release_digest']
-                or fingerprint(new_manifest) != new['release_digest']
+        if (not isinstance(old_manifest, dict) or manifest_digest(old_manifest) != old['release_digest']
+                or manifest_digest(new_manifest) != new['release_digest']
                 or old_manifest['version'] != old['version'] or new_manifest['version'] != new['version']
                 or old_manifest['id'] != old['plugin_id'] or new_manifest['id'] != old['plugin_id']):
             return {**base, 'classification': 'unproven'}
-        before = computation_identity(old_manifest, old['capability'])
-        after = computation_identity(new_manifest, old['capability'])
+        # Both seals were authenticated against actual bytes above. Avoid a
+        # second hash and recursive schema copy for this same immutable release.
+        before = _computation_identity(old_manifest, old['capability'], old['release_digest'])
+        after = _computation_identity(new_manifest, old['capability'], new['release_digest'])
+        asset_changes = [{'path': path, 'from': receipt, 'to': evidence_asset_receipts(new_manifest).get(path)}
+                         for path, receipt in evidence_asset_receipts(old_manifest).items()
+                         if receipt != evidence_asset_receipts(new_manifest).get(path)]
         return {**base, 'from_computation_digest': before, 'to_computation_digest': after,
+                'non_computation_asset_changes': asset_changes,
                 'classification': 'presentation_only' if before == after else 'calculation_changed'}
     except (KeyError, TypeError, StopIteration):
         return {**base, 'classification': 'unproven'}
+
+
+def manifest_for_read(plugin, cache):
+    """Serialize a resolved, sealed manifest once within this read request."""
+    manifests = cache.setdefault('serialized_manifests', {})
+    key = (plugin.manifest.id, id(plugin.manifest))
+    if key not in manifests:
+        manifests[key] = plugin.manifest.model_dump(mode='json', by_alias=True)
+    return manifests[key]
 
 
 def current_for_read(research, old, snapshot, cache):
@@ -92,10 +165,14 @@ def current_for_read(research, old, snapshot, cache):
             raise
         registry = cache.setdefault('registries', {}).get(old['plugin_id'])
         plugin = (registry or research.registry(old['plugin_id'])).get(old['plugin_id'])
-        new = {**research.pin(plugin), 'capability': old['capability']}
+        pins = cache.setdefault('pins', {})
+        pin_key = (old['plugin_id'], id(plugin.manifest))
+        if pin_key not in pins:
+            pins[pin_key] = research.pin(plugin)
+        new = {**pins[pin_key], 'capability': old['capability']}
         resolved = research.resolve(new, cache)
         proof = classify(old, new, saved_manifest(snapshot, old['release_digest']),
-                         plugin.manifest.model_dump(mode='json', by_alias=True))
+                         manifest_for_read(plugin, cache), cache)
         if proof['classification'] != 'presentation_only':
             raise error
         return resolved

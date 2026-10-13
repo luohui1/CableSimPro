@@ -25,7 +25,15 @@ export function compareSavedFields(fem: Record<string, unknown>, iec: Record<str
   const reference = referenceCases.find(item => item.status === "succeeded" && matchingIds.includes(item.case_id));
   if (!chosen || !reference || !original?.input) throw Error("两次保存运行没有完全相同的领域工况；请对同一保存输入运行 IEC。");
   const femParameters = optionalRecord(original.parameters), iecParameters = optionalRecord(records(other.cases).find(item => item.case_id === reference.case_id)?.parameters);
-  const scope = (value: unknown) => Object.fromEntries(Object.entries(optionalRecord(value)).filter(([key]) => key !== 'operation'));
+  const scope = (value: unknown) => {
+    const result = structuredClone(Object.fromEntries(Object.entries(optionalRecord(value)).filter(([key]) => key !== 'operation')));
+    const solver = optionalRecord(result.solver);
+    if (typeof solver.initial_sheath_temperature_c === 'number' && solver.initial_sheath_temperature_k === undefined) {
+      solver.initial_sheath_temperature_k = solver.initial_sheath_temperature_c + 273.15;
+      delete solver.initial_sheath_temperature_c;
+    }
+    return result;
+  };
   if (canonical(scope(femParameters.iec)) !== canonical(scope(iecParameters))) throw Error("两次运行的 IEC 电损耗参数或额定口径不同，不能作为同工况对照。");
   const saved = records(chosen.results), right = records(reference.results);
   const identity = (row: Record<string, unknown>) => canonical([row.key, row.entity, row.unit, row.case]);
@@ -74,7 +82,7 @@ export function SavedFieldComparison({ run }: { run: Record<string, unknown> }) 
   } });
   const domain = savedDomain(run), data = comparison.data;
   const value = (number: number | null, unit: string) => number === null ? "未覆盖" : (unit === "K" ? number - 273.15 : number).toFixed(2);
-  return <section className="input-section" aria-label="有限元与IEC保存运行对照">
+  return <section className="input-section saved-field-comparison" aria-label="有限元与IEC保存运行对照">
     <h3>有限元 vs IEC</h3>
     {candidates.isPending ? <LoadingState title="读取保存运行" /> : candidates.error ? <ErrorState description={message(candidates.error)} /> : !candidate ? <EmptyState title="尚无可对照的 IEC 保存运行" description="在同一保存工况下运行 IEC 后再比较。" /> : <>
       <Select label="IEC 参考运行" value={text(candidate.id)} onChange={setSelected} options={(candidates.data || []).map(item => ({ value: text(item.id), label: savedRunLabel(item, text(item.title)) }))} />
@@ -92,7 +100,7 @@ export function SavedFieldComparison({ run }: { run: Record<string, unknown> }) 
         <details><summary>对照口径{data.rows.some(row => row.exceeded) ? ' · 差异超过提示阈值' : ''}</summary>
           <dl className="field-scope"><div><dt>边界</dt><dd>有限元：{data.boundary}；IEC：无限土壤外部热阻</dd></div>
             <div><dt>地表</dt><dd>两者均为保存环境温度 · 等温</dd></div>
-            <div><dt>互热</dt><dd>有限元：二维三芯耦合；IEC：外部互热模型</dd></div>
+            <div><dt>互热</dt><dd>有限元：二维电缆热域耦合；IEC：外部互热模型</dd></div>
             <div><dt>相对差</dt><dd>以 IEC 保存值为分母；温度用 K</dd></div>
             <div><dt>提示阈值</dt><dd>温差 2 K / 电流 5%（非标准验收限值）</dd></div></dl>
           {data.rows.some(row => row.exceeded) && <p>优先核对上述边界、地表与互热口径，并检查网格和计算域核验。</p>}

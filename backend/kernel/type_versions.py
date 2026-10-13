@@ -7,12 +7,14 @@ from copy import deepcopy
 import json
 import getpass
 import re
+import base64
+from datetime import date
 from math import isfinite
 from typing import Literal
 from uuid import UUID, uuid4
 from threading import Lock
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import Response
 from hashlib import sha256
 from pydantic import Field, field_validator, model_validator, ValidationError
@@ -46,6 +48,52 @@ class Branch(StrictModel):
 class Adopt(StrictModel):
     expected_revision: int = Field(ge=1)
     request_id: UUID
+
+
+class MeasuredValue(StrictModel):
+    core: str | None = None
+    role: Literal['conductor', 'insulation', 'conductor_screen', 'insulation_screen', 'metallic_screen', 'metallic_sheath', 'bedding', 'separator', 'armour', 'oversheath']
+    quantity: Literal['r20', 'minimum_thickness', 'maximum_thickness', 'mean_thickness', 'minimum_tape_thickness', 'mean_wire_diameter', 'screen_area', 'minimum_overlap']
+    value: float = Field(ge=0, allow_inf_nan=False)
+    unit: Literal['mm', 'mm2', 'ohm/km', '%']
+
+    @model_validator(mode='after')
+    def physical_unit(self):
+        expected = {'r20': 'ohm/km', 'screen_area': 'mm2', 'minimum_overlap': '%'}.get(self.quantity, 'mm')
+        maximum = {'ohm/km': 1000, 'mm2': 10000, '%': 100, 'mm': 500}[expected]
+        if self.unit != expected or self.value > maximum or (self.value == 0 and self.quantity != 'minimum_overlap'):
+            raise ValueError('请按字段所列单位填写有效实测值，不能将标准限值作为实测值。')
+        return self
+
+
+class MeasurementReport(StrictModel):
+    filename: str = Field(min_length=1, max_length=180)
+    content_base64: str = Field(min_length=1, max_length=12_000_000)
+
+
+class SaveMeasurements(Adopt):
+    origin: Literal['manufacturer', 'teaching']
+    sample_id: str = Field(min_length=1, max_length=120)
+    measured_on: date
+    method: str = Field(min_length=1, max_length=500)
+    reference: str = Field(min_length=1, max_length=1000)
+    values: list[MeasuredValue] = Field(min_length=1, max_length=100)
+    report: MeasurementReport | None = None
+    acknowledge_measured: Literal[True]
+
+    @model_validator(mode='after')
+    def sample_record(self):
+        if self.measured_on > date.today() or any(not s.strip() for s in (self.sample_id, self.method, self.reference)):
+            raise ValueError('请填写样品编号、测量方法和出处；测量日期不能在未来。')
+        keys = [(v.core, v.role, v.quantity) for v in self.values]
+        if len(set(keys)) != len(keys):
+            raise ValueError('同一层同一物性只能录入一次，请修改已有数值。')
+        for value in self.values:
+            if value.quantity == 'minimum_thickness':
+                upper = next((v.value for v in self.values if v.core == value.core and v.role == value.role and v.quantity == 'maximum_thickness'), None)
+                if upper is not None and value.value > upper:
+                    raise ValueError('同一试样最薄点不能大于最大厚度，请核对记录。')
+        return self
 
 
 class GenerateSpecification(Adopt):
@@ -910,6 +958,117 @@ class Types:
                 materials.append({'id': mid, 'name': material['label'], 'resource': pin, 'rows': rows, 'reason': None})
             return {'workspace_id': wid, 'revision': revision or row['revision'], 'historical': revision is not None, 'materials': materials}
 
+    def save_measurements(self, wid, body):
+        """A measured receipt is a new fact revision, never a design-size overwrite.
+
+        Legacy SI measurements remain readable. Dimensionless tape overlap uses an
+        explicit provenance receipt because the existing domain/1 measurement enum
+        has no ratio quantity; only the method plugin interprets that receipt.
+        """
+        from ..domain.guards import check_locks
+        with self.store.db(True) as db:
+            previous = self._replay(db, wid, body)
+            if previous:
+                return previous
+            row, state = self._type(db, wid, body.expected_revision)
+            self.store.assert_mutable(db, wid)
+            document = deepcopy(state['domain'])
+            cable = document['cable_types'][0]
+            metadata = {'schema': 'cablesim.factory-measurement/1', 'origin': body.origin,
+                        'label': '教学示例实测' if body.origin == 'teaching' else '厂家实测',
+                        'sample_id': body.sample_id.strip(), 'measured_on': body.measured_on.isoformat(),
+                        'method': body.method.strip(), 'reference': body.reference.strip()}
+            if body.report:
+                try:
+                    data = base64.b64decode(body.report.content_base64, validate=True)
+                except ValueError:
+                    raise HTTPException(422, {'field': 'report', 'message': '报告文件无效，请重新选择 PDF 或图片。'}) from None
+                media = 'application/pdf' if data.startswith(b'%PDF-') else 'image/png' if data.startswith(b'\x89PNG\r\n\x1a\n') else 'image/jpeg' if data.startswith(b'\xff\xd8\xff') else None
+                if not media or len(data) > 8 * 1024 * 1024:
+                    raise HTTPException(422, {'field': 'report', 'message': '仅支持不超过 8 MB 的 PDF、PNG 或 JPEG 报告。'})
+                rid = str(uuid4())
+                db.execute('CREATE TABLE IF NOT EXISTS type_measurement_reports (id TEXT PRIMARY KEY, workspace TEXT NOT NULL, filename TEXT NOT NULL, media TEXT NOT NULL, digest TEXT NOT NULL, content BLOB NOT NULL)')
+                filename = re.split(r'[/\\]', body.report.filename)[-1]
+                db.execute('INSERT INTO type_measurement_reports VALUES (?,?,?,?,?,?)', (rid, wid, filename, media, sha256(data).hexdigest(), data))
+                metadata['report'] = {'id': rid, 'filename': filename, 'sha256': sha256(data).hexdigest()}
+            source = {'kind': 'measurement' if body.origin == 'teaching' else 'manufacturer',
+                      'reference': json.dumps(metadata, ensure_ascii=False, sort_keys=True), 'reviewed': False}
+            observations = document.setdefault('measurements', [])
+            provenance = document.setdefault('provenance', {})
+            for value in body.values:
+                core = next((c for c in cable['cores'] if c['id'] == value.core), None) if value.core else None
+                layers = core['layers'] if core else cable['common_layers']
+                if value.core and core is None or value.role != 'conductor' and not any(l['role'] == value.role for l in layers) or value.role == 'conductor' and core is None:
+                    raise HTTPException(422, {'field': 'values', 'message': '所选芯或结构层已变化，请刷新后重新录入。'})
+                if value.quantity == 'minimum_overlap' and value.role not in ('metallic_screen', 'armour'):
+                    raise HTTPException(422, {'field': 'values', 'message': '搭盖率只能录入金属屏蔽或铠装层。'})
+                key = (cable['id'], value.core, value.role, value.quantity)
+                si = value.value / {'mm': 1000, 'mm2': 1e6, 'ohm/km': 1000, '%': 100}[value.unit]
+                receipt = {'id': 'measurement/' + str(uuid4()), 'cable_type': cable['id'], 'core': value.core,
+                           'role': value.role, 'quantity': value.quantity, 'value': si,
+                           'unit': {'mm': 'm', 'mm2': 'm2', 'ohm/km': 'ohm/m', '%': '1'}[value.unit],
+                           'basis': 'measurement', 'source': source}
+                if value.quantity == 'minimum_overlap':
+                    stable = '/factory_measurements/' + '/'.join(str(k or 'common').replace('/', '~1') for k in key)
+                    provenance[stable] = {**source, 'reference': json.dumps({**metadata, 'observation': receipt}, ensure_ascii=False, sort_keys=True)}
+                else:
+                    observations[:] = [o for o in observations if (o['cable_type'], o.get('core'), o['role'], o['quantity']) != key]
+                    observations.append(receipt)
+            if body.origin == 'teaching':
+                provenance['/measurement_examples/' + str(body.request_id)] = {'kind': 'demo', 'reference': '教学示例实测：' + body.sample_id.strip() + '；不能作为厂家检验报告或客户交付依据。', 'reviewed': False}
+            document = checked_type_document(document)
+            check_locks(state, document)
+            state['domain'] = document
+            self.store.commit(db, row, state, '录入' + metadata['label'] + '：' + body.sample_id.strip())
+            result = self.store.snapshot(wid, db)
+            self._remember(db, wid, body, result)
+            return result
+
+    def standards_summary(self, wid):
+        """Read only approved standards, without loading unrelated rating fields."""
+        from .requirements import Requirements
+        with self.store.db() as db:
+            row, _ = self._type(db, wid)
+            ids = [r['id'] for r in db.execute("SELECT id FROM study_runs WHERE workspace=? AND status IN ('succeeded','partial') AND json_extract(snapshot,'$.definition.method.plugin_id')='cablesim.standard-check' AND json_extract(snapshot,'$.definition.method.capability')='dimensions' ORDER BY sequence DESC", (wid,))]
+        for rid in ids:
+            ledger = Requirements(self.research).read(wid, rid)
+            if not ledger['source_current']:
+                continue
+            names = list(dict.fromkeys(p['definition']['standard'] for p in ledger['items'] if p['state']=='approved' and p['bindable']))
+            return {'revision': row['revision'], 'standards': names, 'reason': '当前已批准执行标准；条款与批准记录见要求与标准。' if names else '在要求与标准里添加并批准'}
+        return {'revision': row['revision'], 'standards': [], 'reason': '在要求与标准里添加并批准'}
+
+    def display_runs(self, wid, after, limit):
+        """Verified display evidence; full immutable archives retain their inputs."""
+        from .run_details import detail
+        from .verified_executor import verification_scope
+        with self.store.db() as db:
+            self._type(db, wid)
+            identities = db.execute('SELECT id,study,sequence FROM study_runs WHERE workspace=? AND sequence>? ORDER BY sequence LIMIT ?', (wid, after, limit+1)).fetchall()
+        page=identities[:limit]
+        with verification_scope():
+            items=[detail(self.research,wid,row['study'],row['id']) for row in page]
+        for item in items:
+            snapshot=item.get('snapshot')
+            if isinstance(snapshot,dict) and 'workspace_state' in snapshot:
+                state=snapshot.pop('workspace_state')
+                snapshot['workspace_state_ref']={
+                    'url':f'/api/workspaces/{wid}/studies/{item["study"]}/runs/{item["id"]}?view=full',
+                    'sha256':fingerprint(state),
+                }
+        return {'items':items,'next_cursor':page[-1]['sequence'] if len(identities)>limit else None}
+
+    def measurement_report(self, wid, report_id):
+        with self.store.db() as db:
+            self._type(db, wid)
+            exists = db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='type_measurement_reports'").fetchone()
+            row = db.execute('SELECT * FROM type_measurement_reports WHERE workspace=? AND id=?', (wid, report_id)).fetchone() if exists else None
+            if not row:
+                raise HTTPException(404, '报告文件不存在，请核对实测记录。')
+            if sha256(row['content']).hexdigest() != row['digest']:
+                raise HTTPException(409, '报告文件摘要不一致，停止下载。')
+            return Response(row['content'], media_type=row['media'], headers={'Content-Disposition': 'attachment; filename="measurement-report"', 'X-Artifact-SHA256': row['digest'], 'Cache-Control': 'no-store'})
+
     def adopt_material_value(self, wid, body):
         from ..domain.guards import check_locks
         with self.store.db(True) as db:
@@ -1747,11 +1906,15 @@ def make_router(service):
     def library():
         return service.library()
     @router.get('/{wid}/comparison')
-    def comparison(wid: str):
-        return service.comparison(wid)
+    async def comparison(wid: str, request: Request):
+        from .read_responses import read_response
+        return await read_response(service.research,('type-comparison',wid),dict,
+            lambda:service.comparison(wid),request=request)
     @router.get('/{wid}/resources')
-    def resources(wid: str):
-        return service.resources(wid)
+    async def resources(wid: str, request: Request):
+        from .read_responses import read_response
+        return await read_response(service.research, ('type-resources', wid), dict,
+            lambda: service.resources(wid), request=request)
     @router.post('/{wid}/resources/bind')
     def bind_resource(wid: str, body: BindResource):
         return service.bind_resources(wid, body)
@@ -1777,8 +1940,13 @@ def make_router(service):
     def adopt(wid: str, body: Adopt):
         return service.adopt(wid, body)
     @router.get('/{wid}/specification')
-    def specification(wid: str, audience: Literal['customer', 'internal'] = 'customer'):
-        return service.specification(wid, audience)
+    async def specification(wid: str, request: Request, audience: Literal['customer', 'internal'] = 'customer'):
+        from .read_responses import read_response
+        from .verified_executor import verification_scope
+        def load():
+            with verification_scope():
+                return service.specification(wid,audience)
+        return await read_response(service.research,('type-specification',wid,audience),dict,load,request=request)
     @router.post('/{wid}/specification/generate')
     def generate_specification(wid: str, body: GenerateSpecification):
         from .specification_generation import generate
@@ -1834,6 +2002,23 @@ def make_router(service):
             'X-Specification-Audience':audience,
             'Cache-Control':'no-store',
         })
+    @router.post('/{wid}/measurements')
+    def save_measurements(wid: str, body: SaveMeasurements):
+        return service.save_measurements(wid, body)
+    @router.get('/{wid}/standards-summary')
+    async def standards_summary(wid: str, request: Request):
+        from .read_responses import read_response
+        return await read_response(service.research,('type-standards-summary',wid),dict,
+            lambda:service.standards_summary(wid),request=request)
+    @router.get('/{wid}/display-runs')
+    async def display_runs(wid: str, request: Request, after: int=Query(0,ge=0), limit: int=Query(100,ge=1,le=100)):
+        from .read_responses import read_response
+        from .responses import RunDetailResponse
+        return await read_response(service.research,('type-display-runs',wid,after,limit),dict[str,list[RunDetailResponse]|int|None],
+            lambda:service.display_runs(wid,after,limit),request=request,exclude_unset=True)
+    @router.get('/{wid}/measurements/reports/{report_id}')
+    def measurement_report(wid: str, report_id: str):
+        return service.measurement_report(wid, report_id)
     @router.post('/{wid}/submissions', status_code=201)
     def submit(wid: str, body: Submit):
         return service.submit(wid, body)

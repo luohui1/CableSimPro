@@ -12,6 +12,7 @@ import { chooseEvidence } from './evidence';
 import { typeEvidence } from './api';
 import { methodForArtifact } from './run-control';
 import { corrugatedDisplay, hasCorrugatedSheath, sectionEnvelope } from './display-envelope';
+import { LoadingState } from '@/components/states';
 
 function matchesTarget(layer: CadModel['layers'][number], target: LayerTarget) {
   const source = layer.source_target;
@@ -30,6 +31,14 @@ function previewModel(value: unknown): CadModel {
 }
 export function TypeGeometry({ cable, selected, onSelect }: { cable: CableType; selected: LayerTarget | null; onSelect: (target: LayerTarget | null) => void }) {
   const state = useTypeWorkspace();
+  const [viewportMounted, setViewportMounted] = useState(false);
+  useEffect(() => {
+    // Commit and paint the engineer's table and commands before native GL
+    // allocation/tessellation. The pending view still requires a real first draw.
+    let second: number | undefined;
+    const first = requestAnimationFrame(() => { second = requestAnimationFrame(() => setViewportMounted(true)); });
+    return () => { cancelAnimationFrame(first); if (second !== undefined) cancelAnimationFrame(second); };
+  }, []);
   const [stable, setStable] = useState(state.document);
   useEffect(() => { const timeout = window.setTimeout(() => { try { setStable(state.draft ? commitFields(state.draft) : state.document); } catch { /* Invalid draft cannot replace the last valid display. */ } }, 300); return () => clearTimeout(timeout); }, [state.document, state.draft]);
   const preview = useQuery({ queryKey: ['type-preview', state.workspace?.id, state.workspace?.revision, cable.id, stable], enabled: !!stable && !!state.workspace && !state.readOnly,
@@ -59,6 +68,7 @@ export function TypeGeometry({ cable, selected, onSelect }: { cable: CableType; 
   const model = active.data?.model || envelope.data;
   const rows = state.document ? layerRows(state.document, cable) : [];
   const pickedLayer = selected ? model?.layers.find(layer => matchesTarget(layer, selected)) : undefined;
+  if (!viewportMounted) return <LoadingState title="正在打开三维视口" />;
   return <CadViewport hasSavedInput={!!state.workspace} layerLabels="selected" geometry={model || null} state={active.error ? 'error' : active.isPending ? 'loading' : state.workspace?.raw.historical ? 'historical' : 'success'} error={active.error ? message(active.error).replace(/core\/\d+\.layers/g, '线芯结构层') : undefined}
     resultStatus={hasCorrugatedSheath(cable) ? '波纹按等效厚度显示' : !active.data && model ? active.error ? '截面包络 · 原始几何未取得' : '截面包络 · 正在细化；间隙填充待显示' : null}
     selectedObject={pickedLayer ? { kind: 'layer', id: layerId(pickedLayer) } : null} onSelectionChange={selection => { const layer = selection ? model?.layers.find(layer => layerId(layer) === selection.id) : undefined; onSelect(layer ? rows.find(row => matchesTarget(layer, row.target))?.target || null : null); }} onRetry={() => void active.refetch()}

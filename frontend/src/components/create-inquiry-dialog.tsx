@@ -11,7 +11,7 @@ import {
   responseData,
   text,
 } from "@/api/client";
-import { inputContracts } from "@/api/input-contracts";
+import { capabilityInputContracts } from "@/api/input-contracts";
 import { methodCatalog, modelVersions, workspaces, typeIndex } from "@/api/research";
 import type { components } from "@/api/generated/schema";
 import {
@@ -30,7 +30,7 @@ import { engineeringContractFields } from './study-method-form';
 import { declaredUnit } from '@/lib/contract-schema';
 import './workbench-inspector.css';
 import './study-inquiry.css';
-type Source = components["schemas"]["Source"];
+type Source = NonNullable<components["schemas"]["CreateStudy"]["input_sources"]>[string];
 type Given = { value: string; source: Source["kind"]; reference: string };
 function areaRange(models: Record<string, unknown>[]) {
   const areas=models.map(model=>numeric(optionalRecord(optionalRecord(model.payload).specification).area_m2)!).map(area=>area*1e6);
@@ -98,8 +98,11 @@ export function CreateInquiryDialog({
     enabled: open,
   });
   const contracts = useQuery({
-    queryKey: ["input-contracts"],
-    queryFn: ({ signal }) => inputContracts(signal),
+    queryKey: ["input-contracts", "inquiry", "cablesim.iec60287", "model-completion", "steady-rating"],
+    queryFn: async ({ signal }) => (await Promise.all([
+      capabilityInputContracts({ plugin_id: "cablesim.iec60287", capability: "model-completion" }, signal),
+      capabilityInputContracts({ plugin_id: "cablesim.iec60287", capability: "steady-rating" }, signal),
+    ])).flat(),
     enabled: open,
   });
   const ranges = new Map<string, Record<string, unknown>[]>();

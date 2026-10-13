@@ -55,6 +55,12 @@ class StudyResponse(PublicResponse):
     model_reference: ModelReference | None = Field(default=None, description='Model display identity from the saved workspace binding or local domain; null for standalone study input. Does not load the complete workspace payload.', json_schema_extra={'readOnly': True})
 
 
+class StudyCardResponse(StudyResponse):
+    definition: dict[str, JsonValue] = Field(description='Display projection only: task/method identity, driver kind and input schema. Full immutable inputs remain at input_ref.')
+    definition_digest: str = Field(description='SHA256 of the complete saved study definition before projection.')
+    input_ref: str = Field(description='Endpoint for the complete editable study configuration; cards must never be saved as input.')
+
+
 class TaskOption(PublicResponse):
     task: str
     module: str

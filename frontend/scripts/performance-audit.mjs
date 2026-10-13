@@ -49,7 +49,11 @@ export async function createPerformanceAudit({ page, context, root, base }) {
   page.on('requestfinished', request => { const timing = requests.get(request); if (timing) timing.finishedAt = Date.now(); });
   page.on('worker', worker => workers.push({ url: worker.url().replace(base, ''), observedAt: Date.now() }));
   page.on('requestfailed', request => failures.push({ url: request.url().replace(base, ''), reason: request.failure()?.errorText }));
-  page.on('response', response => { if (response.headers()['x-audit-blocked']) blocked.push({ url: response.url().replace(base, ''), status: response.status() }); });
+  page.on('response', response => {
+    const headers = response.headers(), request = requests.get(response.request());
+    if (headers['x-audit-blocked']) blocked.push({ url: response.url().replace(base, ''), status: response.status() });
+    if (request) Object.assign(request, { status: response.status(), serverTiming: headers['server-timing'] || null, readCache: headers['x-cablesim-read-cache'] || null });
+  });
   async function measure(surface, kind, action) {
     workers = []; failures = []; blocked = []; requests = new Map();
     const started = Date.now(); let startMs = 0, failure = null;
@@ -77,7 +81,7 @@ export async function createPerformanceAudit({ page, context, root, base }) {
     const metrics = await page.evaluate(() => {
       const audit = window.__loadAudit;
       return { ...audit, now: performance.now(), resources: performance.getEntriesByType('resource').map(r => ({ url: r.name, startMs: r.startTime, endMs: r.responseEnd,
-        durationMs: r.duration, ttfbMs: r.responseStart - r.requestStart, transferBytes: r.transferSize, encodedBytes: r.encodedBodySize, decodedBytes: r.decodedBodySize, initiator: r.initiatorType })),
+        durationMs: r.duration, ttfbMs: r.responseStart - r.requestStart, serverTiming: (r.serverTiming || []).map(t => ({ name: t.name, durationMs: t.duration, description: t.description })), transferBytes: r.transferSize, encodedBytes: r.encodedBodySize, decodedBytes: r.decodedBodySize, initiator: r.initiatorType })),
         navigation: performance.getEntriesByType('navigation').map(n => ({ ttfbMs: n.responseStart - n.requestStart, domContentLoadedMs: n.domContentLoadedEventEnd, transferBytes: n.transferSize })) };
     }).catch(() => null);
     state = await page.evaluate(readinessSnapshot).catch(() => state);
@@ -89,7 +93,10 @@ export async function createPerformanceAudit({ page, context, root, base }) {
     const frameMs = metrics?.frameMs === null ? null : metrics?.frameMs - startMs;
     const applicableFrames = (state?.canvases || []).filter(c => !c.empty);
     const horizon = Math.max(content?.mainMs || 0, metrics?.frameMs || 0, (failure || frameFailure) ? metrics?.now || 0 : 0);
-    const resources = (metrics?.resources || []).filter(r => r.startMs >= startMs && r.startMs <= horizon).map(r => ({ ...r, url: r.url.replace(base, '') }));
+    const resources = (metrics?.resources || []).filter(r => r.startMs >= startMs && r.startMs <= horizon).map(r => {
+      const url = r.url.replace(base, ''), response = [...requests.values()].filter(request => request.url === url && request.serverTiming !== undefined).at(-1);
+      return { ...r, url, readCache: response?.readCache || null, serverTimingHeader: response?.serverTiming || null, status: response?.status };
+    });
     const tasks = (metrics?.longTasks || []).filter(t => t.startMs >= startMs && t.startMs <= horizon);
     const row = { page: surface.route, actualUrl: page.url().replace(base, ''), label: surface.label, owner: surface.owner, kind, navigation: action ? '页签切换' : '完整导航', mainMs: mainMs === null || mainMs === undefined ? null : Math.round(mainMs),
       budgetMs: kind === 'cold' ? 3000 : 1000, mainPassed: mainMs !== null && mainMs !== undefined && mainMs <= (kind === 'cold' ? 3000 : 1000) && !failure,
@@ -112,7 +119,7 @@ export async function createPerformanceAudit({ page, context, root, base }) {
     return row;
   }
   async function save(traversal) {
-    if (traversal) { report.complete = traversal.complete; report.scope = traversal.scope; report.uncovered = traversal.uncovered; report.errors = traversal.errors; }
+    if (traversal) { report.complete = traversal.complete; report.scope = traversal.scope; report.uncovered = traversal.uncovered; report.errors = traversal.errors; report.runChecks = traversal.runChecks; }
     report.counts = { measurements: report.pages.length, pages: new Set(report.pages.map(p => p.page)).size, mainOverBudget: report.pages.filter(p => !p.mainPassed).length, frameOverBudget: report.pages.filter(p => p.framePassed === false).length,
       terminalErrorStates: report.pages.filter(p => p.terminalErrors.length).length, blockedWrites: report.pages.reduce((n,p) => n + p.blockedWrites.length,0) };
     await fs.writeFile(path.join(out,'audit.json'),JSON.stringify(report,null,2));

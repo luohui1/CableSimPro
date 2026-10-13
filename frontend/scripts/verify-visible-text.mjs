@@ -12,7 +12,9 @@ import { performance as monotonicClock } from 'node:perf_hooks';
 assert.equal(process.env.E2E_ISOLATED, '1', '文字巡检只能在隔离副本运行');
 const base = process.env.FRONTEND_URL;
 const performanceMode = process.env.PERFORMANCE_AUDIT === '1';
-const phase = ['before', 'modules', 'gaps', 'catalog', 'real-use', 'real-use-config', 'forms-real-use', 'agent-real-use', 'regularity', 'regularity-check', 'loading'].includes(process.env.VISIBLE_TEXT_PASS) ? process.env.VISIBLE_TEXT_PASS : performanceMode ? 'performance-state' : process.env.REGULARITY_AUDIT === '1' && process.env.REGULARITY_WITH_VISIBLE !== '1' ? 'regularity-state' : 'after';
+const requestedPhase = process.env.VISIBLE_TEXT_PASS;
+if (requestedPhase && !/^[a-z-]+$/.test(requestedPhase)) throw Error('文字巡检输出名只能使用小写字母和连字符');
+const phase = requestedPhase || (performanceMode ? 'performance-state' : process.env.REGULARITY_AUDIT === '1' && process.env.REGULARITY_WITH_VISIBLE !== '1' ? 'regularity-state' : 'after');
 const out = path.join(repositoryRoot, '.data/fix-round/shared-shell/visible-text', phase);
 await fs.mkdir(out, { recursive: true });
 const session = await openHeadlessBrowser({ executable: 'C:/Program Files/Google/Chrome/Application/chrome.exe', routeGuard: !performanceMode });
@@ -22,6 +24,8 @@ if (!performanceMode) await installReadinessObserver(page);
 const regularity = process.env.REGULARITY_AUDIT === '1' ? await (await import('./regularity-audit.mjs')).createRegularityAudit({ page, context, root: repositoryRoot }) : null;
 const withVisibleText = process.env.REGULARITY_WITH_VISIBLE === '1';
 const report = { phase, generated: new Date().toISOString(), source: '发布库只读备份；独立随机端口；不运行求解或批准提案', pages: [], findings: [], secondary: [], allowed: [], uncovered: [], errors: [], blockedWrites: [], readOnlyPosts: [], runChecks: [], whitelist, complete: false };
+report.sourceDatabase = process.env.E2E_DATABASE_SOURCE || path.join(repositoryRoot, '.data/release/engineering.sqlite');
+report.frontendSnapshot = process.env.E2E_FRONTEND_DIST || '当前前端构建';
 const sizes = performanceMode ? [{ width: 1366, height: 768 }] : [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }];
 const targets = [], queued = new Set(), issueKeys = new Set(), secondaryKeys = new Set(), shellHoverSizes = new Set(), sourceModules = new Map();
 const requestedPaths = new Set((process.env.VISIBLE_TEXT_PATHS || '').split('|').filter(Boolean));
@@ -264,10 +268,25 @@ try {
           assert.ok(await open.evaluate(e => e === document.activeElement), '关闭新建研究后未恢复触发按钮焦点');
           const cards = studies.filter(s => s.parent?.kind === 'project');
           for (const w of spaces.filter(w => !types.some(t => t.id === w.id)).slice(0, 3)) {
-            const row = page.locator('.tree-object').filter({ hasText: w.name });
+            const row = page.locator(`.tree-object[href*="workspace=${escaped(w.id)}"]`);
             if (await row.count()) assert.equal(await row.locator('.tree-count').innerText(), String(cards.filter(s => s.parent.id === w.id).length), '侧栏计数必须与保存研究名片相符');
           }
-          performanceAudit.report.realUse = { deferredStudyEditor: '点击及 Enter 打开真实表单，Esc 关闭后焦点恢复；未保存或计算', sidebarCounts: '与发布库名片实际工程归属逐项对拍', elapsedMs: Math.round(monotonicClock.now() - started), passed: true };
+          // Verify the display projection against real full saved definitions,
+          // after measurement so these comparison reads cannot warm its requests.
+          const definitions = (await Promise.all(spaces.map(w => get('/api/workspaces/' + escaped(w.id) + '/studies')))).flat().map(s => s.definition);
+          const simulations = definitions.filter(d => {
+            const capability = d.method.capability;
+            if (capability === 'physics-comparison') return false;
+            if (d.method_input?.schema_version === 'cablesim.simulation-problem/1') return true;
+            if (d.method.plugin_id === 'cablesim.hybrid-rating') return false;
+            return ['transient-temperature', 'sheath-losses', 'electrothermal-steady', 'thermal-field', 'iec-thermal-field', 'multiregion-thermal'].includes(capability) ||
+              capability.includes('temperature-field') || d.driver.kind === 'batch';
+          }).length;
+          for (const [name, expected] of [['载流量计算', definitions.length - simulations], ['电缆仿真', simulations]]) {
+            const domain = page.locator('.home-domains > div').filter({ has: page.getByText(name, { exact: true }) });
+            assert.equal(await domain.locator('span.muted').innerText(), `${expected} 项研究`, '首页领域计数必须与完整保存定义一致');
+          }
+          performanceAudit.report.realUse = { deferredStudyEditor: '点击及 Enter 打开真实表单，Esc 关闭后焦点恢复；未保存或计算', sidebarCounts: '与发布库名片实际工程归属逐项对拍', homeCounts: { studies: definitions.length, simulation: simulations, ampacity: definitions.length - simulations }, elapsedMs: Math.round(monotonicClock.now() - started), passed: true };
         }
       } else {
         await page.goto(base + surface.route + (surface.route.includes('?') ? '&' : '?') + 'theme=light', { waitUntil: 'domcontentloaded', timeout: 60000 }); readiness = await settled();
@@ -280,6 +299,21 @@ try {
           for (let row = 0; row < await ratingRows.count(); row++) assert.match((await ratingRows.nth(row).getByRole('cell').first().innerText()).replace(/\s+/g, ' '), /第 \d+ 次运行 · 载流量表$/, '载流量表所属的保存运行必须显示明确任务名');
           for (const type of types) assert.ok(!text.includes(type.name + ' · ' + type.name), '所属不得重复型号名');
           report.runChecks.push({ ...size, label: '真实发布库型号载流量表命名与归属去重', ratingRows: await ratingRows.count(), passed: true });
+          if (performanceMode && await ratingRows.count()) {
+            const count = await ratingRows.count();
+            const name = (await ratingRows.first().getByRole('cell').first().innerText()).replace(/\s+/g, ' ');
+            const search = page.getByPlaceholder('研究、型号或方法');
+            await search.fill('载流量表');
+            await page.waitForFunction(expected => {
+              const table = document.querySelector('table[aria-label="运行"]');
+              return table && table.querySelectorAll('tbody tr').length === expected &&
+                ![...document.querySelectorAll('[role="status"]')].some(e => e.textContent === '正在读取方法与结论');
+            }, count, { timeout: 30000 });
+            assert.equal((await table.getByRole('row').filter({ hasText: '载流量表' }).first().getByRole('cell').first().innerText()).replace(/\s+/g, ' '), name, '筛选后型号范围内的运行编号不能变化');
+            report.runChecks.push({ ...size, label: '真实检索载流量表后型号运行编号保留', name, passed: true });
+            await search.fill('');
+            await page.getByText('正在读取方法与结论', { exact: true }).waitFor({ state: 'hidden', timeout: 30000 });
+          }
         }
         if (size.width === 1366) await page.screenshot({ path: path.join(out, 'runs-light.png') });
       }
@@ -345,18 +379,43 @@ try {
   }
   if (regularity && process.env.REGULARITY_PUBLIC_LAYOUT === '1') {
     const { assertLayout } = await import('./layout-assertions.mjs');
-    const routes = ['/', '/runs', '/settings?section=ai', '/settings/compute', '/plugins', '/resources/materials', '/agent'];
+    const material = assets.find(card => card.subtype === 'material');
+    const materialRoute = material ? '/resources/materials?item=' + escaped(material.id) : null;
+    const routes = ['/', '/runs', '/settings?section=ai', '/settings/compute', '/plugins', '/resources/materials', '/agent', ...(materialRoute ? [materialRoute] : [])];
     for (const route of routes) for (const size of sizes) for (const theme of ['light', 'dark']) {
       const check = { route, ...size, theme, passed: false };
       try {
         await page.setViewportSize(size);
-        await page.goto(base + route + (route.includes('?') ? '&' : '?') + 'theme=' + theme, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await page.goto(base + (route === materialRoute ? '/resources/materials' : route) + (route !== materialRoute && route.includes('?') ? '&' : '?') + 'theme=' + theme, { waitUntil: 'domcontentloaded', timeout: 60000 });
         await settled();
+        if (route === materialRoute) {
+          // Open the real saved material from its catalogue, rather than constructing a demo strip.
+          await page.locator(`tr[id$="-${material.id}"]`).click();
+          await settled();
+          const strip = page.getByRole('region', { name: '已登记物性覆盖', exact: true });
+          await strip.waitFor({ state: 'visible', timeout: 30000 });
+          const parts = await strip.locator('[data-conclusion-part]').evaluateAll(elements => elements.map(element => {
+            const style = getComputedStyle(element), box = element.getBoundingClientRect();
+            return { part: element.dataset.conclusionPart, text: element.innerText, font: parseFloat(style.fontSize), weight: Number(style.fontWeight), numeric: style.fontVariantNumeric, align: style.textAlign,
+              inFirstScreen: box.top >= 0 && box.bottom <= innerHeight && box.left >= 0 && box.right <= innerWidth };
+          }));
+          assert.ok(parts.some(part => part.part === 'sentence' && part.text), '真实物性结论未出现');
+          for (const part of parts) {
+            assert.equal(part.font, { sentence: 14, value: 20, unit: 13, label: 13 }[part.part]);
+            assert.equal(part.weight, ['sentence', 'value'].includes(part.part) ? 600 : 400);
+            if (part.part === 'value') { assert.match(part.numeric, /tabular-nums/); assert.equal(part.align, 'right'); assert.ok(part.inFirstScreen, '材料关键数必须在详情首屏可见'); }
+          }
+          check.realUse = { action: '从材料列表点开真实保存资源，核对结论句与关键数字号、字重、数字对齐', parts };
+        }
         if (await page.locator('html').getAttribute('data-theme') !== theme) {
           await page.locator('.sidebar-foot').getByRole('button').click();
           await page.getByRole('menuitem', { name: theme === 'dark' ? '切换深色模式' : '切换浅色模式', exact: true }).click();
         }
         assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
+        if (route === materialRoute) {
+          await scan({ route, label: '材料详情 · ' + material.name, owner: '前端公共' }, size);
+          if (size.width === 1366 && theme === 'light') await page.screenshot({ path: path.join(regularity.out, 'material-conclusion-light.png') });
+        }
         await assertLayout(page, `${route} ${size.width} ${theme}`);
         check.passed = true;
       } catch (error) {

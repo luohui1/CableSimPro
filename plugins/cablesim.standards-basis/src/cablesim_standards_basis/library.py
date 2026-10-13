@@ -8,7 +8,7 @@ from math import isclose, isfinite
 from pathlib import Path
 import re
 
-VERSION = '0.4.0'
+VERSION = '0.6.0'
 DATA = Path(__file__).parent
 NUMERIC_FIELDS = {'area_m2', 'screen_area_m2', 'diameter_m', 'u0_v', 'u_v', 'um_v', 'core_count',
                   'conductor_class', 'nominal_thickness_m', 'duration_s'}
@@ -72,17 +72,17 @@ class BasisLibrary:
                 raw = (directory / name).read_bytes()
                 if len(raw) != item['size_bytes'] or sha256(raw).hexdigest() != item['sha256']:
                     raise ValueError('摘要不一致')
-                contents[name] = json.loads(raw)
-            self.data = contents['basis.json']
-            self.data['records'] = []
-            for item in self.data['record_files']:
+                contents[name] = raw
+            self._index = json.loads(contents['basis.json'])
+            self._raw = contents
+            self._loaded = {}
+            self._verification = None
+            for item in self._index['record_files']:
                 name=item['name']
                 if {k:item[k] for k in ('sha256','size_bytes')} != index['files'][name]:
                     raise ValueError('分册摘要与索引不同')
-                self.data['records'].extend(contents[name])
-            self.verification = contents['verification.json']
             self.data_sha256 = index['files']['basis.json']['sha256']
-            if self.data['schema'] != 'cablesim.standards-basis/1' or self.data['version'] != VERSION:
+            if self._index['schema'] != 'cablesim.standards-basis/1' or self._index['version'] != VERSION:
                 raise ValueError('版本不一致')
             manifest_path = directory.parents[1] / 'plugin.json'
             if directory.resolve() == DATA.resolve() or manifest_path.exists():
@@ -91,18 +91,40 @@ class BasisLibrary:
                     raise ValueError('发行不一致')
                 sealed = {f['path']: f for f in manifest['files']}
                 for name in ('excerpts.json', 'integrity.json', *index['files']):
-                    raw = (directory / name).read_bytes()
+                    raw = contents.get(name) or (directory / name).read_bytes()
                     item = sealed['src/cablesim_standards_basis/' + name]
                     if len(raw) != item['size_bytes'] or sha256(raw).hexdigest() != item['sha256']:
                         raise ValueError('封签不一致')
         except (OSError, ValueError, KeyError, TypeError):
             raise BasisError('BASIS_INTEGRITY_FAILED', '/', '依据库缺失或摘要不一致；请重新安装准确版本的插件。') from None
 
+    def _records(self, table_ids=None):
+        records = []
+        for item in self._index['record_files']:
+            if table_ids is not None and not table_ids.intersection(item.get('table_ids', table_ids)):
+                continue
+            name = item['name']
+            if name not in self._loaded:
+                self._loaded[name] = json.loads(self._raw[name])
+            records.extend(self._loaded[name])
+        return records
+
+    @property
+    def data(self):
+        # Existing compilation and consumer contracts retain the complete view.
+        return {**self._index, 'records': self._records()}
+
+    @property
+    def verification(self):
+        if self._verification is None:
+            self._verification = json.loads(self._raw['verification.json'])
+        return self._verification
+
     def query(self, request: dict) -> dict:
         if not isinstance(request, dict):
             raise BasisError('INPUT_INVALID', '/', '查询应为对象。')
         allowed = {'schema_version', 'operation', 'standard', 'edition', 'locator',
-                   'quantity', 'conditions', 'record_id', 'expected_data_sha256'}
+                   'quantity', 'conditions', 'record_id', 'expected_data_sha256', 'compact', 'formula_inputs', 'table_id'}
         extra = set(request) - allowed
         if extra:
             field = sorted(extra)[0]
@@ -110,30 +132,36 @@ class BasisLibrary:
         if request.get('schema_version') != 'cablesim.standards-query/1':
             raise BasisError('INPUT_INVALID', '/schema_version', '请使用 cablesim.standards-query/1。')
         operation = request.get('operation', 'resolve')
+        if 'formula_inputs' in request and operation != 'evaluate':
+            raise BasisError('INPUT_INVALID', '/formula_inputs', '公式输入仅用于 evaluate 查询。')
         if operation == 'catalog':
-            if set(request) != {'schema_version', 'operation'}:
+            if set(request) - {'schema_version', 'operation', 'compact'} or ('compact' in request and type(request['compact']) is not bool):
                 raise BasisError('INPUT_INVALID', '/', '目录查询仅接受 schema_version 和 operation。')
             return {'schema': 'cablesim.standards-answer/1', 'plugin_id': 'cablesim.standards-basis',
                     'plugin_version': VERSION, 'data_sha256': self.data_sha256,
                     'query_sha256': digest(request), 'approval': 'not_granted',
-                    'status': 'catalogued', 'tables': self.data['tables'],
-                    'not_covered': self.data['not_covered'], 'records': []}
+                    'status': 'catalogued', 'tables': [{k:v for k,v in t.items() if k != 'record_ids'} for t in self._index['tables']] if request.get('compact') else self._index['tables'],
+                    'not_covered': self._index['not_covered'], 'records': []}
+        if 'compact' in request:
+            raise BasisError('INPUT_INVALID', '/compact', '紧凑模式仅用于目录查询。')
+        if 'table_id' in request and (operation not in ('list', 'browse') or not isinstance(request['table_id'], str) or not request['table_id'] or len(request['table_id']) > 180):
+            raise BasisError('INPUT_INVALID', '/table_id', '表索引标识仅用于list/browse；取唯一判据请用record_id。')
         for field in ('standard', 'edition', 'locator'):
             if not isinstance(request.get(field), str) or not request[field].strip() or len(request[field]) > 80:
                 raise BasisError('INPUT_INVALID', '/' + field, '请填写明确的标准号、版本和条款或表号。')
-        if operation not in ('resolve', 'list'):
+        if operation not in ('resolve', 'list', 'evaluate', 'browse'):
             raise BasisError('INPUT_INVALID', '/operation', '请选择 resolve（取判据）或 list（完整列出）。')
         for field in ('quantity', 'record_id'):
             if field in request and (not isinstance(request[field], str) or not request[field] or len(request[field]) > 180):
                 raise BasisError('INPUT_INVALID', '/' + field, '请输入有效的量名或记录标识。')
-        if operation == 'resolve' and not request.get('quantity'):
+        if operation in ('resolve', 'evaluate') and not request.get('quantity'):
             raise BasisError('INPUT_INVALID', '/quantity', '取判据时必须指定量名，不能用不同物理量互相替代。')
         conditions = request.get('conditions', {})
         if not isinstance(conditions, dict):
             raise BasisError('INPUT_INVALID', '/conditions', '条件须为对象，数值字段使用契约规定的 SI 单位。')
-        if operation == 'list' and (conditions or request.get('record_id')):
+        if operation in ('list', 'browse') and (conditions or request.get('record_id')):
             raise BasisError('INPUT_INVALID', '/conditions', '完整列出不接受条件或记录筛选；请改用 resolve。')
-        declared = self.data.get('condition_fields', {})
+        declared = self._index.get('condition_fields', {})
         for key, value in conditions.items():
             if key not in CONDITION_FIELDS and key not in declared:
                 raise BasisError('INPUT_INVALID', '/conditions/' + key, '未知条件；请使用依据库声明的条件名和 SI 单位。')
@@ -159,7 +187,9 @@ class BasisLibrary:
                 raise BasisError('INPUT_INVALID', '/expected_data_sha256', '请提供完整的 SHA256。')
             if expected != self.data_sha256:
                 raise BasisError('BASIS_VERSION_CHANGED', '/expected_data_sha256', '依据库版本或内容已变化；请重新核对引用，不能静默换版。')
-        records = [r for r in self.data['records'] if r['standard'] == request['standard']
+        selected_tables = {t['id'] for t in self._index['tables'] if t['standard'] == request['standard'] and t['edition'] == request['edition'] and request['locator'] in (t['table'], t['clause']) and (not request.get('table_id') or t['id'] == request['table_id'])}
+        records = [r for r in self._records(selected_tables) if r['standard'] == request['standard']
+                   and r['id'].split('/')[0] in selected_tables
                    and r['edition'] == request['edition']
                    and request['locator'] in (r['table'], r['clause'])
                    and (not request.get('quantity') or r['quantity']['key'] == request['quantity'])
@@ -167,7 +197,7 @@ class BasisLibrary:
         base = {'schema': 'cablesim.standards-answer/1', 'plugin_id': 'cablesim.standards-basis',
                 'plugin_version': VERSION, 'data_sha256': self.data_sha256,
                 'query_sha256': digest(request), 'approval': 'not_granted'}
-        if operation == 'resolve':
+        if operation in ('resolve', 'evaluate'):
             candidates = [r for r in records if all(k not in conditions or _matches(conditions[k], p)
                                                     for k, p in r['conditions'].items())]
             missing = sorted({k for r in candidates for k in r['conditions'] if k not in conditions})
@@ -180,7 +210,7 @@ class BasisLibrary:
         if not records:
             return {**base, 'status': 'not_covered', 'reason': '此版本、条款、量或条件本轮未覆盖；不得替换为其他标准版本。', 'records': []}
         blocked = [r for r in records if r['verification']['status'] != 'verified']
-        if blocked and operation == 'resolve':
+        if blocked and operation in ('resolve', 'evaluate'):
             raise BasisError('EVIDENCE_BLOCKED', '/record_id', '此条依据存在未确认差异，禁止用于自动核对。')
         enriched = []
         for record in records:
@@ -188,9 +218,20 @@ class BasisLibrary:
             record['record_sha256'] = digest(record)
             record['citation'] = citation(record)
             enriched.append(record)
+        if operation == 'browse':
+            return {**base, 'status': 'listed', 'records': enriched,
+                    'tables': [{k:v for k,v in t.items() if k != 'record_ids'} for t in self._index['tables']],
+                    'not_covered': self._index['not_covered'],
+                    'browse': {k:request[k] for k in ('standard','edition','locator')}}
         status = ('listed' if operation == 'list' else
                   'reference_value_missing' if records[0]['value'] is None and records[0]['semantic'].startswith('literature') else
                   'explicit_not_applicable' if records[0]['value'] is None else 'resolved')
+        if operation == 'evaluate':
+            from .soil_capacity import evaluate
+            return {**base, 'status': 'evaluated', 'records': enriched,
+                    'calculation': evaluate(enriched[0], request.get('formula_inputs'))}
+        if 'formula_inputs' in request:
+            raise BasisError('INPUT_INVALID', '/formula_inputs', '公式输入仅用于 evaluate 查询。')
         return {**base, 'status': status, 'records': enriched}
 
 

@@ -1,6 +1,6 @@
 {
   "schema": "cablesim.standards-basis/1",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "rights": {
     "status": "not_assessed",
     "use": "用户持有标准的受控结构化摘录；不包含标准全文；不宣称许可已评估或合规批准"
@@ -140,6 +140,89 @@
       "format": "pdf",
       "origin": "https://doi.org/10.1049/hve2.12465",
       "use": "文献参考参数；不等同于标准限值或厂家材料声明"
+    },
+    {
+      "standard": "Qi et al.",
+      "edition": "2021",
+      "file": "pvc-pipe-capacity.pdf",
+      "sha256": "36893e633cb9dd9a277753c7584790da476ce24dcb7376cf26236299def2c7bf",
+      "format": "pdf",
+      "title": "Numerical Assessment of Earth to Air Heat Exchanger with Variable Humidity Conditions in Greenhouses",
+      "doi": "https://doi.org/10.3390/en14051368",
+      "source_url": "https://mdpi-res.com/d_attachment/energies/energies-14-01368/article_deploy/energies-14-01368.pdf",
+      "download_date": "2026-10-11",
+      "rights": "author_publisher_open_access_or_author_reprint; not_assessed",
+      "library_path": "D:\\work\\项目综合\\标准资料\\文献\\pvc-pipe-capacity.pdf",
+      "work_copy": "D:\\work\\自建项目\\自研Cable\\.data\\standards-next\\capacity\\sources\\pvc-pipe-capacity.pdf",
+      "zotero_status": "attached_sha256_verified",
+      "zotero_key": "TQXBHF33",
+      "zotero_attachment_keys": [
+        "RHLPX6UJ"
+      ],
+      "zotero_verified_storage_path": "C:\\Users\\guo\\Zotero\\storage\\RHLPX6UJ\\pvc-pipe-capacity.pdf"
+    },
+    {
+      "standard": "Deng et al.",
+      "edition": "2020",
+      "file": "hdpe-borehole.pdf",
+      "sha256": "d61e1f1a67f95cc9964ff3fee0a8816f1b8dd2588643b4aa332d94c996652928",
+      "format": "pdf",
+      "title": "Simulation Analysis on the Heat Performance of Deep Borehole Heat Exchangers in Medium-Depth Geothermal Heat Pump Systems",
+      "doi": "https://doi.org/10.3390/en13030754",
+      "source_url": "https://mdpi-res.com/d_attachment/energies/energies-13-00754/article_deploy/energies-13-00754.pdf",
+      "download_date": "2026-10-11",
+      "rights": "author_publisher_open_access_or_author_reprint; not_assessed",
+      "library_path": "D:\\work\\项目综合\\标准资料\\文献\\hdpe-borehole.pdf",
+      "work_copy": "D:\\work\\自建项目\\自研Cable\\.data\\standards-next\\capacity\\sources\\hdpe-borehole.pdf",
+      "zotero_status": "attached_sha256_verified",
+      "zotero_key": "5J38HQJ7",
+      "zotero_attachment_keys": [
+        "JWCQQNZD"
+      ],
+      "zotero_verified_storage_path": "C:\\Users\\guo\\Zotero\\storage\\JWCQQNZD\\hdpe-borehole.pdf"
+    },
+    {
+      "standard": "Hopmans et al.",
+      "edition": "2002",
+      "file": "soil-mixture.pdf",
+      "sha256": "ed3fa500af0c70d1abbddabe6373bde4527200fcf727ca2d27767f2e98bd7553",
+      "format": "pdf",
+      "title": "Indirect estimation of soil thermal properties and water flux using heat pulse probe measurements: Geometry and dispersion effects",
+      "doi": "https://doi.org/10.1029/2000WR000071",
+      "source_url": "https://www.pc-progress.com/Documents/Jirka/HPP_WRR_2002.pdf",
+      "download_date": "2026-10-11",
+      "rights": "author_publisher_open_access_or_author_reprint; not_assessed",
+      "library_path": "D:\\work\\项目综合\\标准资料\\文献\\soil-mixture.pdf",
+      "work_copy": "D:\\work\\自建项目\\自研Cable\\.data\\standards-next\\capacity\\sources\\soil-mixture.pdf",
+      "zotero_status": "attached_sha256_verified",
+      "zotero_key": "4SI3MB9K",
+      "zotero_attachment_keys": [
+        "E3ZUDTI7"
+      ],
+      "zotero_verified_storage_path": "C:\\Users\\guo\\Zotero\\storage\\E3ZUDTI7\\soil-mixture.pdf"
+    },
+    {
+      "standard": "Youn et al.",
+      "edition": "2019",
+      "file": "li-degassing.pdf",
+      "sha256": "efa8a2106e40941fc7503d57ffe86bfe56f059b5136cb66363c9cbf78cee7c66",
+      "format": "pdf",
+      "origin": "https://mdpi-res.com/d_attachment/polymers/polymers-11-01439/article_deploy/polymers-11-01439.pdf",
+      "doi": "https://doi.org/10.3390/polym11091439",
+      "rights": "publisher_open_access_CC_BY; engineering_applicability_not_assessed",
+      "download_date": "2026-10-12"
+    },
+    {
+      "standard": "Sah et al.",
+      "edition": "2022-preprint-v1",
+      "file": "sah-2023-backfill-preprint.pdf",
+      "sha256": "93f1700b51af89ec19d1690b571c260056deac729326004c875bdb308422d355",
+      "format": "pdf",
+      "origin": "https://assets-eu.researchsquare.com/files/rs-2321894/v1/d45875ef-448e-4d0f-b1cd-460c9b2065e6.pdf?c=1697483258",
+      "doi": "https://doi.org/10.21203/rs.3.rs-2321894/v1",
+      "version_of_record_doi": "https://doi.org/10.1007/s10765-023-03163-9",
+      "rights": "author_preprint_CC_BY; not_version_of_record",
+      "download_date": "2026-10-12"
     }
   ],
   "condition_fields": {
@@ -501,8 +584,7 @@
     },
     "temperature_basis": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 200
+      "description": "原文温度有效范围是否给出，不将边界温度冒充物性范围"
     },
     "polyethylene_density": {
       "type": "string",
@@ -652,6 +734,122 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 200
+    },
+    "study_case": {
+      "type": "string",
+      "description": "必须显式选择文献工况"
+    },
+    "soil_capacity_method": {
+      "type": "string",
+      "description": "three_phase 或 air_capacity_neglected"
+    },
+    "parameter_origin": {
+      "type": "string",
+      "description": "project_measured：项目来源参数必填，不提供通用默认值"
+    },
+    "covering_construction": {
+      "type": "string",
+      "description": "内衬构造"
+    },
+    "metal_layer_relation": {
+      "type": "string",
+      "description": "金属层与铠装材料关系"
+    },
+    "longitudinal_water_barrier": {
+      "type": "boolean",
+      "description": "金属层周围纵向阻水"
+    },
+    "lead_sheath_present": {
+      "type": "boolean",
+      "description": "铅套"
+    },
+    "special_armour_construction": {
+      "type": "boolean",
+      "description": "特殊铠装结构"
+    },
+    "tape_width_m": {
+      "type": "number",
+      "description": "金属带宽 / m"
+    },
+    "measurement_role": {
+      "type": "string",
+      "description": "测量位置"
+    },
+    "cable_spacing_condition": {
+      "type": "string",
+      "description": "电缆间距条件；no_gap=原表无间距；并非数值0查询字段"
+    },
+    "current_basis_environment": {
+      "type": "string",
+      "description": "基础载流量环境；indoor_air_at_outdoor_ambient=采用户外环境温度的户内空气载流量"
+    },
+    "subitem": {
+      "type": "string",
+      "description": "条款分项号，字符串1至7，不将多个分项混为唯一格"
+    },
+    "installation_method": {
+      "type": "string",
+      "description": "敷设方式：sand_filled_trench/direct_buried/tunnel/shaft等；无通用乘数"
+    },
+    "regular_water_replenishment": {
+      "type": "string",
+      "description": "是否经常性水分补充，yes/no"
+    },
+    "soil_replacement_prevents_migration": {
+      "type": "string",
+      "description": "换土是否能避免水分迁移，yes/no"
+    },
+    "mechanical_ventilation": {
+      "type": "string",
+      "description": "机械通风，yes/no"
+    },
+    "cable_group_size": {
+      "type": "string",
+      "description": "原文较多的定性条件，many需工程师判定"
+    },
+    "load_regime": {
+      "type": "string",
+      "description": "continuous_100_percent=100%持续工作负荷"
+    },
+    "conductor_working_temperature_k": {
+      "type": "number",
+      "unit": "K",
+      "description": "实际导体工作温度，非材料允许最高温度"
+    },
+    "application_case": {
+      "type": "string",
+      "description": "原文所述特殊回路条件，不将定性分支当数值乘数"
+    },
+    "nominal_voltage_v": {
+      "type": "number",
+      "unit": "V",
+      "description": "原文额定线路电压条件，不是U0对地电压"
+    },
+    "fire_covering_thickness_m": {
+      "type": "number",
+      "unit": "m",
+      "description": "防火涂料/阻火包带覆盖层厚度，不是普通护套厚度"
+    },
+    "backfill_mix": {
+      "type": "string",
+      "description": "原实验配方"
+    },
+    "other_component": {
+      "type": "string",
+      "description": "粉煤灰或砂"
+    },
+    "reference_statistic": {
+      "type": "string",
+      "description": "文献汇总统计身份，不是材料实测唯一值"
+    },
+    "gravimetric_water_content": {
+      "type": "number",
+      "unit": "1",
+      "description": "质量含水率，0.44=44%；干态零值需消费者支持非负输入"
+    },
+    "screen_kind": {
+      "type": "string",
+      "description": "金属屏蔽结构：copper_wire或copper_tape；与半导电screened分开"
     }
   },
   "tables": [
@@ -11337,6 +11535,1386 @@
         "huang-TableA1/r14/specific_heat",
         "huang-TableA1/r14/capacity"
       ]
+    },
+    {
+      "id": "qi-eahe-table1",
+      "standard": "Qi et al.",
+      "edition": "2021",
+      "clause": "Table 1",
+      "table": "Table 1",
+      "title": "EAHE管壁、土壤与空气物性（完整原表）",
+      "quantities": [
+        {
+          "key": "thermal_conductivity",
+          "name": "导热系数",
+          "dimension": "thermal_conductivity",
+          "unit": "W/(m·K)"
+        },
+        {
+          "key": "density",
+          "name": "密度",
+          "dimension": "mass_density",
+          "unit": "kg/m³"
+        },
+        {
+          "key": "specific_heat_capacity",
+          "name": "质量比热容",
+          "dimension": "specific_heat_capacity",
+          "unit": "J/(kg·K)"
+        },
+        {
+          "key": "dynamic_viscosity",
+          "name": "动力黏度",
+          "dimension": "dynamic_viscosity",
+          "unit": "kg/(m·s)"
+        }
+      ],
+      "row_count": 3,
+      "column_count": 4,
+      "record_count": 12,
+      "record_ids": [
+        "qi-eahe-table1/r1/thermal_conductivity",
+        "qi-eahe-table1/r1/density",
+        "qi-eahe-table1/r1/specific_heat_capacity",
+        "qi-eahe-table1/r1/dynamic_viscosity",
+        "qi-eahe-table1/r2/thermal_conductivity",
+        "qi-eahe-table1/r2/density",
+        "qi-eahe-table1/r2/specific_heat_capacity",
+        "qi-eahe-table1/r2/dynamic_viscosity",
+        "qi-eahe-table1/r3/thermal_conductivity",
+        "qi-eahe-table1/r3/density",
+        "qi-eahe-table1/r3/specific_heat_capacity",
+        "qi-eahe-table1/r3/dynamic_viscosity"
+      ]
+    },
+    {
+      "id": "qi-eahe-capacity",
+      "standard": "Qi et al.",
+      "edition": "2021",
+      "clause": "Table 1（ρ×cp派生）",
+      "table": "Table 1（ρ×cp派生）",
+      "title": "EAHE材料体积热容",
+      "quantities": [
+        {
+          "key": "volumetric_heat_capacity",
+          "name": "体积热容",
+          "dimension": "volumetric_heat_capacity",
+          "unit": "J/(m³·K)"
+        }
+      ],
+      "row_count": 3,
+      "column_count": 1,
+      "record_count": 3,
+      "record_ids": [
+        "qi-eahe-capacity/r1/volumetric_heat_capacity",
+        "qi-eahe-capacity/r2/volumetric_heat_capacity",
+        "qi-eahe-capacity/r3/volumetric_heat_capacity"
+      ]
+    },
+    {
+      "id": "deng-dbhe-table2",
+      "standard": "Deng et al.",
+      "edition": "2020",
+      "clause": "Table 2",
+      "table": "Table 2",
+      "title": "深层钻孔换热器参数（完整原表）",
+      "quantities": [
+        {
+          "key": "borehole_depth",
+          "name": "钻孔深度",
+          "dimension": "length",
+          "unit": "m"
+        },
+        {
+          "key": "outer_pipe_dimensions",
+          "name": "外管外径×壁厚",
+          "dimension": "length_pair",
+          "unit": "mm × mm"
+        },
+        {
+          "key": "thermal_conductivity",
+          "name": "回填材料导热系数",
+          "dimension": "thermal_conductivity",
+          "unit": "W/(m·K)"
+        },
+        {
+          "key": "specific_heat_capacity",
+          "name": "回填材料质量比热容",
+          "dimension": "specific_heat_capacity",
+          "unit": "kJ/(kg·K)"
+        },
+        {
+          "key": "density",
+          "name": "回填材料密度",
+          "dimension": "mass_density",
+          "unit": "kg/m³"
+        },
+        {
+          "key": "inner_pipe_dimensions",
+          "name": "内管内径×壁厚",
+          "dimension": "length_pair",
+          "unit": "mm × mm"
+        },
+        {
+          "key": "backfill_diameter",
+          "name": "回填区域直径",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 13,
+      "column_count": 1,
+      "record_count": 13,
+      "record_ids": [
+        "deng-dbhe-table2/r1/value",
+        "deng-dbhe-table2/r2/value",
+        "deng-dbhe-table2/r3/value",
+        "deng-dbhe-table2/r4/value",
+        "deng-dbhe-table2/r5/value",
+        "deng-dbhe-table2/r6/value",
+        "deng-dbhe-table2/r7/value",
+        "deng-dbhe-table2/r8/value",
+        "deng-dbhe-table2/r9/value",
+        "deng-dbhe-table2/r10/value",
+        "deng-dbhe-table2/r11/value",
+        "deng-dbhe-table2/r12/value",
+        "deng-dbhe-table2/r13/value"
+      ]
+    },
+    {
+      "id": "deng-dbhe-capacity",
+      "standard": "Deng et al.",
+      "edition": "2020",
+      "clause": "Table 2（ρ×cp派生）",
+      "table": "Table 2（ρ×cp派生）",
+      "title": "钻孔内外管壁及地热回填体积热容",
+      "quantities": [
+        {
+          "key": "volumetric_heat_capacity",
+          "name": "体积热容",
+          "dimension": "volumetric_heat_capacity",
+          "unit": "J/(m³·K)"
+        }
+      ],
+      "row_count": 3,
+      "column_count": 1,
+      "record_count": 3,
+      "record_ids": [
+        "deng-dbhe-capacity/r1/volumetric_heat_capacity",
+        "deng-dbhe-capacity/r2/volumetric_heat_capacity",
+        "deng-dbhe-capacity/r3/volumetric_heat_capacity"
+      ]
+    },
+    {
+      "id": "hopmans-soil-capacity-model",
+      "standard": "Hopmans et al.",
+      "edition": "2002",
+      "clause": "§2.2 Eq. (1)/(2)",
+      "table": "§2.2 Eq. (1)/(2)",
+      "title": "按孔隙率与体积含水率计算土壤体积热容",
+      "quantities": [
+        {
+          "key": "soil_capacity_expression",
+          "name": "土壤体积热容表达式",
+          "dimension": "volumetric_heat_capacity",
+          "unit": "J/(m³·K)"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "hopmans-soil-capacity-model/r1/soil_capacity_expression",
+        "hopmans-soil-capacity-model/r2/soil_capacity_expression"
+      ]
+    },
+    {
+      "id": "mv-armour-materials",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "13.2",
+      "table": "13.2",
+      "title": "铠装允许材料",
+      "quantities": [
+        {
+          "key": "armour_allowed_materials",
+          "name": "允许铠装材料",
+          "dimension": "text",
+          "unit": "1"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "mv-armour-materials/r1/armour_allowed_materials",
+        "mv-armour-materials/r2/armour_allowed_materials"
+      ]
+    },
+    {
+      "id": "mv-armour-magnetism",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "13.2",
+      "table": "13.2",
+      "title": "交流单芯铠装材料规则",
+      "quantities": [
+        {
+          "key": "armour_material_magnetism",
+          "name": "磁性要求",
+          "dimension": "text",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-armour-magnetism/r1/armour_material_magnetism"
+      ]
+    },
+    {
+      "id": "mv-armour-inner-single",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "13.3.1",
+      "table": "13.3.1",
+      "title": "单芯铠装下内衬",
+      "quantities": [
+        {
+          "key": "armour_inner_covering_rule",
+          "name": "允许内衬构造",
+          "dimension": "text",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-armour-inner-single/r1/armour_inner_covering_rule"
+      ]
+    },
+    {
+      "id": "mv-armour-inner-three",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "13.3.2",
+      "table": "13.3.2",
+      "title": "三芯铠装下内衬",
+      "quantities": [
+        {
+          "key": "armour_inner_covering_rule",
+          "name": "内衬要求",
+          "dimension": "text",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-armour-inner-three/r1/armour_inner_covering_rule"
+      ]
+    },
+    {
+      "id": "mv-isolation-applicability",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "13.3.3",
+      "table": "13.3.3",
+      "title": "隔离套适用规则",
+      "quantities": [
+        {
+          "key": "separation_sheath_application",
+          "name": "隔离套适用规则",
+          "dimension": "text",
+          "unit": "1"
+        }
+      ],
+      "row_count": 3,
+      "column_count": 1,
+      "record_count": 3,
+      "record_ids": [
+        "mv-isolation-applicability/r1/separation_sheath_application",
+        "mv-isolation-applicability/r2/separation_sheath_application",
+        "mv-isolation-applicability/r3/separation_sheath_application"
+      ]
+    },
+    {
+      "id": "mv-isolation-water-barrier",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "13.3.3",
+      "table": "13.3.3",
+      "title": "纵向阻水隔离套例外",
+      "quantities": [
+        {
+          "key": "separation_sheath_water_barrier_exception",
+          "name": "隔离套要求",
+          "dimension": "text",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-isolation-water-barrier/r1/separation_sheath_water_barrier_exception"
+      ]
+    },
+    {
+      "id": "mv-tape-layer-count",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "13.7",
+      "table": "13.7",
+      "title": "双金属带铠装层数",
+      "quantities": [
+        {
+          "key": "armour_tape_layer_count",
+          "name": "金属带层数",
+          "dimension": "count",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-tape-layer-count/r1/armour_tape_layer_count"
+      ]
+    },
+    {
+      "id": "mv-tape-gap",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "13.7",
+      "table": "13.7",
+      "title": "各层铠装带最大间隙率",
+      "quantities": [
+        {
+          "key": "armour_tape_gap_ratio_max",
+          "name": "各层最大间隙率",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-tape-gap/r1/armour_tape_gap_ratio_max"
+      ]
+    },
+    {
+      "id": "mv-lapped-padding",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "13.7",
+      "table": "13.7",
+      "title": "绕包内衬附加垫层增量",
+      "quantities": [
+        {
+          "key": "armour_additional_bedding_nominal",
+          "name": "内衬附加垫层标称增量",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "mv-lapped-padding/r1/armour_additional_bedding_nominal",
+        "mv-lapped-padding/r2/armour_additional_bedding_nominal"
+      ]
+    },
+    {
+      "id": "mv-lapped-padding-measured",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "13.7",
+      "table": "13.7",
+      "title": "绕包内衬与附加垫层总实测厚度",
+      "quantities": [
+        {
+          "key": "armour_bedding_measured_min",
+          "name": "绕包总实测厚度下限",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-lapped-padding-measured/r1/armour_bedding_measured_min"
+      ]
+    },
+    {
+      "id": "mv-armour-tape-measurement",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "17.7.2",
+      "table": "17.7.2",
+      "title": "金属带测量方法参数",
+      "quantities": [
+        {
+          "key": "armour_tape_measurement_parameter",
+          "name": "金属带测量参数",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 4,
+      "column_count": 1,
+      "record_count": 4,
+      "record_ids": [
+        "mv-armour-tape-measurement/r1/armour_tape_measurement_parameter",
+        "mv-armour-tape-measurement/r2/armour_tape_measurement_parameter",
+        "mv-armour-tape-measurement/r3/armour_tape_measurement_parameter",
+        "mv-armour-tape-measurement/r4/armour_tape_measurement_parameter"
+      ]
+    },
+    {
+      "id": "mv-armour-deviation",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "17.7.3",
+      "table": "17.7.3",
+      "title": "铠装实测尺寸最大负偏差",
+      "quantities": [
+        {
+          "key": "armour_measured_negative_deviation_max",
+          "name": "最大负偏差",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 3,
+      "column_count": 1,
+      "record_count": 3,
+      "record_ids": [
+        "mv-armour-deviation/r1/armour_measured_negative_deviation_max",
+        "mv-armour-deviation/r2/armour_measured_negative_deviation_max",
+        "mv-armour-deviation/r3/armour_measured_negative_deviation_max"
+      ]
+    },
+    {
+      "id": "mv-inner-measurement-scope",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "17.5.1",
+      "table": "17.5.1",
+      "title": "非金属厚度测量范围与方法",
+      "quantities": [
+        {
+          "key": "nonmetal_thickness_measurement_scope",
+          "name": "厚度测量范围",
+          "dimension": "text",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-inner-measurement-scope/r1/nonmetal_thickness_measurement_scope"
+      ]
+    },
+    {
+      "id": "mv-lapped-inner-measured",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "17.12",
+      "table": "17.12",
+      "title": "绕包内衬实测厚度下限",
+      "quantities": [
+        {
+          "key": "lapped_inner_covering_measured_min",
+          "name": "绕包内衬实测厚度下限",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-lapped-inner-measured/r1/lapped_inner_covering_measured_min"
+      ]
+    },
+    {
+      "id": "v35-copper-tape-nominal",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "10.2.2",
+      "table": "10.2.2",
+      "title": "35 kV铜带屏蔽标称厚度",
+      "quantities": [
+        {
+          "key": "screen_tape_nominal_min",
+          "name": "铜带标称厚度下限",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "v35-copper-tape-nominal/r1/screen_tape_nominal_min",
+        "v35-copper-tape-nominal/r2/screen_tape_nominal_min"
+      ]
+    },
+    {
+      "id": "v35-copper-tape-overlap",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "10.2.2",
+      "table": "10.2.2",
+      "title": "35 kV铜带搭盖率",
+      "quantities": [
+        {
+          "key": "screen_tape_overlap_ratio",
+          "name": "铜带搭盖率",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "v35-copper-tape-overlap/r1/screen_tape_overlap_ratio",
+        "v35-copper-tape-overlap/r2/screen_tape_overlap_ratio"
+      ]
+    },
+    {
+      "id": "v35-copper-tape-measured",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "10.2.2",
+      "table": "10.2.2",
+      "title": "35 kV铜带最小实测厚度",
+      "quantities": [
+        {
+          "key": "screen_tape_measured_min_ratio",
+          "name": "铜带实测最小厚度系数",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "v35-copper-tape-measured/r1/screen_tape_measured_min_ratio"
+      ]
+    },
+    {
+      "id": "v35-copper-wire-required",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "10.2.3",
+      "table": "10.2.3",
+      "title": "大截面铜丝屏蔽结构",
+      "quantities": [
+        {
+          "key": "screen_required_construction",
+          "name": "必需屏蔽结构",
+          "dimension": "text",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "v35-copper-wire-required/r1/screen_required_construction"
+      ]
+    },
+    {
+      "id": "v35-copper-wire-gap",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "10.2.3",
+      "table": "10.2.3",
+      "title": "相邻铜丝平均间隙",
+      "quantities": [
+        {
+          "key": "screen_wire_average_gap_max",
+          "name": "相邻铜丝平均间隙上限",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "v35-copper-wire-gap/r1/screen_wire_average_gap_max"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-01",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.2",
+      "table": "3.6.2",
+      "title": "校正表设计范围",
+      "quantities": [
+        {
+          "key": "table_nominal_voltage_max",
+          "name": "校正表设计范围",
+          "dimension": "voltage",
+          "unit": "V"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-01/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-02",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.2",
+      "table": "3.6.2",
+      "title": "校正后允许电流与工作电流之比",
+      "quantities": [
+        {
+          "key": "corrected_ampacity_load_ratio_min_exclusive",
+          "name": "校正后允许电流与工作电流之比",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-02/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-03",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.3",
+      "table": "3.6.3",
+      "title": "高次谐波或中频非同轴回路计入集肤、邻近等附加发热。",
+      "quantities": [
+        {
+          "key": "installation_calculation_requirement",
+          "name": "高次谐波或中频非同轴回路计入集肤、邻近等附加发热。",
+          "dimension": "categorical",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-03/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-04",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.3",
+      "table": "3.6.3",
+      "title": "交叉互联高压交流单芯单元三区段不等长时计入金属套附加损耗。",
+      "quantities": [
+        {
+          "key": "installation_calculation_requirement",
+          "name": "交叉互联高压交流单芯单元三区段不等长时计入金属套附加损耗。",
+          "dimension": "categorical",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-04/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-05",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.3",
+      "table": "3.6.3",
+      "title": "保护管计入管道热阻，排管不同孔位分别计入互热。",
+      "quantities": [
+        {
+          "key": "installation_calculation_requirement",
+          "name": "保护管计入管道热阻，排管不同孔位分别计入互热。",
+          "dimension": "categorical",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-05/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-06",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.3",
+      "table": "3.6.3",
+      "title": "耐火槽盒计入材质、厚度和尺寸等附加热阻。",
+      "quantities": [
+        {
+          "key": "installation_calculation_requirement",
+          "name": "耐火槽盒计入材质、厚度和尺寸等附加热阻。",
+          "dimension": "categorical",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-06/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-07",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.3",
+      "table": "3.6.3",
+      "title": "防火涂料或阻火包带覆盖层厚度大于1.5mm时计入附加热阻。",
+      "quantities": [
+        {
+          "key": "installation_calculation_requirement",
+          "name": "防火涂料或阻火包带覆盖层厚度大于1.5mm时计入附加热阻。",
+          "dimension": "categorical",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-07/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-08",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.3",
+      "table": "3.6.3",
+      "title": "电缆沟埋砂且无经常水分补充，按砂质选大于2.0 K·m/W的热阻系数。",
+      "quantities": [
+        {
+          "key": "installation_calculation_requirement",
+          "name": "电缆沟埋砂且无经常水分补充，按砂质选大于2.0 K·m/W的热阻系数。",
+          "dimension": "categorical",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-08/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-09",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.3",
+      "table": "3.6.3",
+      "title": "35kV及以上宜按使用环境及JB/T10181计算载流量。",
+      "quantities": [
+        {
+          "key": "installation_calculation_requirement",
+          "name": "35kV及以上宜按使用环境及JB/T10181计算载流量。",
+          "dimension": "categorical",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-09/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-10",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.3",
+      "table": "3.6.3",
+      "title": "防火覆盖层附加热阻触发厚度",
+      "quantities": [
+        {
+          "key": "fire_covering_thermal_resistance_trigger",
+          "name": "防火覆盖层附加热阻触发厚度",
+          "dimension": "length",
+          "unit": "m"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-10/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-11",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.3",
+      "table": "3.6.3",
+      "title": "沟内埋砂热阻系数下界",
+      "quantities": [
+        {
+          "key": "sand_thermal_resistivity_min_exclusive",
+          "name": "沟内埋砂热阻系数下界",
+          "dimension": "thermal_resistivity",
+          "unit": "K·m/W"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-11/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-12",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.3",
+      "table": "3.6.3",
+      "title": "按使用环境计算载流量电压门槛",
+      "quantities": [
+        {
+          "key": "environment_rating_voltage_min",
+          "name": "按使用环境计算载流量电压门槛",
+          "dimension": "voltage",
+          "unit": "V"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-12/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-13",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.4",
+      "table": "3.6.4",
+      "title": "未机械通风环境温升",
+      "quantities": [
+        {
+          "key": "unventilated_environment_rise_requirement",
+          "name": "未机械通风环境温升",
+          "dimension": "categorical",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-13/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-14",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.4",
+      "table": "3.6.4",
+      "title": "直埋水分迁移条件",
+      "quantities": [
+        {
+          "key": "soil_migration_resistivity_requirement",
+          "name": "直埋水分迁移条件",
+          "dimension": "categorical",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-14/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-15",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.4",
+      "table": "3.6.4",
+      "title": "高温导体工况触发温度",
+      "quantities": [
+        {
+          "key": "conductor_working_temperature_trigger",
+          "name": "高温导体工况触发温度",
+          "dimension": "temperature",
+          "unit": "K"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-15/r1/criterion"
+      ]
+    },
+    {
+      "id": "gb50217-rating-scope-16",
+      "standard": "GB 50217",
+      "edition": "2018",
+      "clause": "3.6.4",
+      "table": "3.6.4",
+      "title": "直埋土壤热阻系数建议下界",
+      "quantities": [
+        {
+          "key": "migration_soil_thermal_resistivity_min",
+          "name": "直埋土壤热阻系数建议下界",
+          "dimension": "thermal_resistivity",
+          "unit": "K·m/W"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "gb50217-rating-scope-16/r1/criterion"
+      ]
+    },
+    {
+      "id": "youn-degassing-table1",
+      "standard": "Youn et al.",
+      "edition": "2019",
+      "clause": "Table 1",
+      "table": "Table 1",
+      "title": "脱气模型材料物性（完整原表；范围不可自动选值）",
+      "quantities": [
+        {
+          "key": "mass_density",
+          "name": "密度",
+          "dimension": "mass_density",
+          "unit": "kg/m³"
+        },
+        {
+          "key": "thermal_conductivity",
+          "name": "导热系数",
+          "dimension": "thermal_conductivity",
+          "unit": "W/(m·K)"
+        },
+        {
+          "key": "specific_heat_capacity",
+          "name": "定压比热",
+          "dimension": "specific_heat_capacity",
+          "unit": "J/(kg·K)"
+        }
+      ],
+      "row_count": 3,
+      "column_count": 3,
+      "record_count": 9,
+      "record_ids": [
+        "youn-degassing-table1/r1/copper",
+        "youn-degassing-table1/r1/xlpe",
+        "youn-degassing-table1/r1/semiconductor",
+        "youn-degassing-table1/r2/copper",
+        "youn-degassing-table1/r2/xlpe",
+        "youn-degassing-table1/r2/semiconductor",
+        "youn-degassing-table1/r3/copper",
+        "youn-degassing-table1/r3/xlpe",
+        "youn-degassing-table1/r3/semiconductor"
+      ]
+    },
+    {
+      "id": "sah-backfill-table2",
+      "standard": "Sah et al.",
+      "edition": "2022-preprint-v1",
+      "clause": "Table 2",
+      "table": "Table 2",
+      "title": "电缆回填配方（完整原表）",
+      "quantities": [
+        {
+          "key": "bentonite_mass_fraction_percent",
+          "name": "膨润土质量比例",
+          "dimension": "dimensionless",
+          "unit": "%"
+        },
+        {
+          "key": "other_component_mass_fraction_percent",
+          "name": "粉煤灰或砂质量比例",
+          "dimension": "dimensionless",
+          "unit": "%"
+        }
+      ],
+      "row_count": 8,
+      "column_count": 2,
+      "record_count": 16,
+      "record_ids": [
+        "sah-backfill-table2/r1/bentonite",
+        "sah-backfill-table2/r1/other",
+        "sah-backfill-table2/r2/bentonite",
+        "sah-backfill-table2/r2/other",
+        "sah-backfill-table2/r3/bentonite",
+        "sah-backfill-table2/r3/other",
+        "sah-backfill-table2/r4/bentonite",
+        "sah-backfill-table2/r4/other",
+        "sah-backfill-table2/r5/bentonite",
+        "sah-backfill-table2/r5/other",
+        "sah-backfill-table2/r6/bentonite",
+        "sah-backfill-table2/r6/other",
+        "sah-backfill-table2/r7/bentonite",
+        "sah-backfill-table2/r7/other",
+        "sah-backfill-table2/r8/bentonite",
+        "sah-backfill-table2/r8/other"
+      ]
+    },
+    {
+      "id": "sah-backfill-table3",
+      "standard": "Sah et al.",
+      "edition": "2022-preprint-v1",
+      "clause": "Table 3",
+      "table": "Table 3",
+      "title": "回填母材与配方物理性质（完整原表）",
+      "quantities": [
+        {
+          "key": "sand",
+          "name": "砂粒含量",
+          "dimension": "dimensionless",
+          "unit": "%"
+        },
+        {
+          "key": "silt",
+          "name": "粉粒含量",
+          "dimension": "dimensionless",
+          "unit": "%"
+        },
+        {
+          "key": "clay",
+          "name": "黏粒含量",
+          "dimension": "dimensionless",
+          "unit": "%"
+        },
+        {
+          "key": "specific_gravity",
+          "name": "颗粒比重",
+          "dimension": "dimensionless",
+          "unit": "1"
+        },
+        {
+          "key": "liquid_limit",
+          "name": "液限",
+          "dimension": "dimensionless",
+          "unit": "%"
+        },
+        {
+          "key": "plastic_index",
+          "name": "塑性指数",
+          "dimension": "dimensionless",
+          "unit": "%"
+        },
+        {
+          "key": "classification",
+          "name": "土分类",
+          "dimension": "categorical",
+          "unit": "1"
+        },
+        {
+          "key": "maximum_dry_density",
+          "name": "最大干密度",
+          "dimension": "mass_density",
+          "unit": "g/cm³"
+        },
+        {
+          "key": "optimum_moisture_content",
+          "name": "最优含水率",
+          "dimension": "dimensionless",
+          "unit": "%"
+        }
+      ],
+      "row_count": 11,
+      "column_count": 9,
+      "record_count": 99,
+      "record_ids": [
+        "sah-backfill-table3/r1/sand",
+        "sah-backfill-table3/r1/silt",
+        "sah-backfill-table3/r1/clay",
+        "sah-backfill-table3/r1/specific_gravity",
+        "sah-backfill-table3/r1/liquid_limit",
+        "sah-backfill-table3/r1/plastic_index",
+        "sah-backfill-table3/r1/classification",
+        "sah-backfill-table3/r1/maximum_dry_density",
+        "sah-backfill-table3/r1/optimum_moisture_content",
+        "sah-backfill-table3/r2/sand",
+        "sah-backfill-table3/r2/silt",
+        "sah-backfill-table3/r2/clay",
+        "sah-backfill-table3/r2/specific_gravity",
+        "sah-backfill-table3/r2/liquid_limit",
+        "sah-backfill-table3/r2/plastic_index",
+        "sah-backfill-table3/r2/classification",
+        "sah-backfill-table3/r2/maximum_dry_density",
+        "sah-backfill-table3/r2/optimum_moisture_content",
+        "sah-backfill-table3/r3/sand",
+        "sah-backfill-table3/r3/silt",
+        "sah-backfill-table3/r3/clay",
+        "sah-backfill-table3/r3/specific_gravity",
+        "sah-backfill-table3/r3/liquid_limit",
+        "sah-backfill-table3/r3/plastic_index",
+        "sah-backfill-table3/r3/classification",
+        "sah-backfill-table3/r3/maximum_dry_density",
+        "sah-backfill-table3/r3/optimum_moisture_content",
+        "sah-backfill-table3/r4/sand",
+        "sah-backfill-table3/r4/silt",
+        "sah-backfill-table3/r4/clay",
+        "sah-backfill-table3/r4/specific_gravity",
+        "sah-backfill-table3/r4/liquid_limit",
+        "sah-backfill-table3/r4/plastic_index",
+        "sah-backfill-table3/r4/classification",
+        "sah-backfill-table3/r4/maximum_dry_density",
+        "sah-backfill-table3/r4/optimum_moisture_content",
+        "sah-backfill-table3/r5/sand",
+        "sah-backfill-table3/r5/silt",
+        "sah-backfill-table3/r5/clay",
+        "sah-backfill-table3/r5/specific_gravity",
+        "sah-backfill-table3/r5/liquid_limit",
+        "sah-backfill-table3/r5/plastic_index",
+        "sah-backfill-table3/r5/classification",
+        "sah-backfill-table3/r5/maximum_dry_density",
+        "sah-backfill-table3/r5/optimum_moisture_content",
+        "sah-backfill-table3/r6/sand",
+        "sah-backfill-table3/r6/silt",
+        "sah-backfill-table3/r6/clay",
+        "sah-backfill-table3/r6/specific_gravity",
+        "sah-backfill-table3/r6/liquid_limit",
+        "sah-backfill-table3/r6/plastic_index",
+        "sah-backfill-table3/r6/classification",
+        "sah-backfill-table3/r6/maximum_dry_density",
+        "sah-backfill-table3/r6/optimum_moisture_content",
+        "sah-backfill-table3/r7/sand",
+        "sah-backfill-table3/r7/silt",
+        "sah-backfill-table3/r7/clay",
+        "sah-backfill-table3/r7/specific_gravity",
+        "sah-backfill-table3/r7/liquid_limit",
+        "sah-backfill-table3/r7/plastic_index",
+        "sah-backfill-table3/r7/classification",
+        "sah-backfill-table3/r7/maximum_dry_density",
+        "sah-backfill-table3/r7/optimum_moisture_content",
+        "sah-backfill-table3/r8/sand",
+        "sah-backfill-table3/r8/silt",
+        "sah-backfill-table3/r8/clay",
+        "sah-backfill-table3/r8/specific_gravity",
+        "sah-backfill-table3/r8/liquid_limit",
+        "sah-backfill-table3/r8/plastic_index",
+        "sah-backfill-table3/r8/classification",
+        "sah-backfill-table3/r8/maximum_dry_density",
+        "sah-backfill-table3/r8/optimum_moisture_content",
+        "sah-backfill-table3/r9/sand",
+        "sah-backfill-table3/r9/silt",
+        "sah-backfill-table3/r9/clay",
+        "sah-backfill-table3/r9/specific_gravity",
+        "sah-backfill-table3/r9/liquid_limit",
+        "sah-backfill-table3/r9/plastic_index",
+        "sah-backfill-table3/r9/classification",
+        "sah-backfill-table3/r9/maximum_dry_density",
+        "sah-backfill-table3/r9/optimum_moisture_content",
+        "sah-backfill-table3/r10/sand",
+        "sah-backfill-table3/r10/silt",
+        "sah-backfill-table3/r10/clay",
+        "sah-backfill-table3/r10/specific_gravity",
+        "sah-backfill-table3/r10/liquid_limit",
+        "sah-backfill-table3/r10/plastic_index",
+        "sah-backfill-table3/r10/classification",
+        "sah-backfill-table3/r10/maximum_dry_density",
+        "sah-backfill-table3/r10/optimum_moisture_content",
+        "sah-backfill-table3/r11/sand",
+        "sah-backfill-table3/r11/silt",
+        "sah-backfill-table3/r11/clay",
+        "sah-backfill-table3/r11/specific_gravity",
+        "sah-backfill-table3/r11/liquid_limit",
+        "sah-backfill-table3/r11/plastic_index",
+        "sah-backfill-table3/r11/classification",
+        "sah-backfill-table3/r11/maximum_dry_density",
+        "sah-backfill-table3/r11/optimum_moisture_content"
+      ]
+    },
+    {
+      "id": "mv-screen-wire-area-rule",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "10.2.1",
+      "table": "10.2.1",
+      "title": "铜丝屏蔽标称截面确定规则",
+      "quantities": [
+        {
+          "key": "screen_nominal_area_requirement",
+          "name": "屏蔽标称截面要求",
+          "dimension": "text",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-screen-wire-area-rule/r1/screen_nominal_area_requirement"
+      ]
+    },
+    {
+      "id": "mv-screen-tape-area-rule",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "10.2.3",
+      "table": "10.2.3",
+      "title": "铜带屏蔽标称截面的规定范围",
+      "quantities": [
+        {
+          "key": "screen_nominal_area_requirement",
+          "name": "屏蔽标称截面要求",
+          "dimension": "text",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-screen-tape-area-rule/r1/screen_nominal_area_requirement"
+      ]
+    },
+    {
+      "id": "mv-screen-wire-gap",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "10.2.2",
+      "table": "10.2.2",
+      "title": "铜丝屏蔽相邻铜丝平均间隙",
+      "quantities": [
+        {
+          "key": "screen_wire_average_gap_max",
+          "name": "铜丝屏蔽平均间隙上限",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-screen-wire-gap/r1/screen_wire_average_gap_max"
+      ]
+    },
+    {
+      "id": "mv-extruded-inner-measured",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "17.5.3",
+      "table": "17.5.3",
+      "title": "挤包内衬最薄点",
+      "quantities": [
+        {
+          "key": "extruded_inner_covering_measured_min",
+          "name": "挤包内衬最小实测厚度",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-extruded-inner-measured/r1/extruded_inner_covering_measured_min"
+      ]
+    },
+    {
+      "id": "mv-screen-wire-resistance-rule",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "10.2.1",
+      "table": "10.2.1",
+      "title": "铜丝屏蔽电阻适用规则",
+      "quantities": [
+        {
+          "key": "screen_wire_resistance_requirement",
+          "name": "铜丝屏蔽电阻依据",
+          "dimension": "text",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-screen-wire-resistance-rule/r1/screen_wire_resistance_requirement"
+      ]
+    },
+    {
+      "id": "mv-screen-construction-rule",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "10.1",
+      "table": "10.1",
+      "title": "金属屏蔽结构与腐蚀条件",
+      "quantities": [
+        {
+          "key": "metal_screen_construction_rule",
+          "name": "金属屏蔽结构规则",
+          "dimension": "text",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-screen-construction-rule/r1/metal_screen_construction_rule"
+      ]
+    },
+    {
+      "id": "mv-screen-tape-material-rule",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "10.2.3",
+      "table": "10.2.3",
+      "title": "铜带屏蔽材料标准",
+      "quantities": [
+        {
+          "key": "screen_tape_material_requirement",
+          "name": "铜带屏蔽材料依据",
+          "dimension": "text",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-screen-tape-material-rule/r1/screen_tape_material_requirement"
+      ]
     }
   ],
   "not_covered": [
@@ -11442,88 +13020,469 @@
         "干土、湿土、回填料：现有可靠文献未提供各湿度/配方分支体积热容。",
         "任意管壁/空气工况：仅覆盖Huang案例MPP管壁与空气层；不自动替代其他材料或温压。"
       ]
+    },
+    {
+      "standard": "IEC 60853-2",
+      "locators": [
+        "Table 1"
+      ],
+      "reason": "合法公开预览未含基础版完整材料热容表，不能以AMD1代替。"
+    },
+    {
+      "standard": "材料热容",
+      "locators": [
+        "电缆半导电层",
+        "电缆专用回填料",
+        "城南干湿土壤数值",
+        "封闭管内空气Cv"
+      ],
+      "reason": "缺可靠逐页原始物性/配方/温压/现场密度与含水率；文献案例输入不自动填工程。"
+    },
+    {
+      "standard": "IEC 60287-2-1",
+      "locators": [
+        "Table 2"
+      ],
+      "reason": "2023版hb/wb=3、LG/hb=3仍为3,2-，同版授权预览未露出主体，整560格暂缓。"
+    },
+    {
+      "standard": "Sah et al.",
+      "edition": "2022-preprint-v1",
+      "items": [
+        "热容汇总7格暂缓；正式版逐值复核及密度/温度映射未闭合。",
+        "半导电现场Cp(T)、专用电缆回填料、封闭管内空气仍未覆盖唯一默认热容。"
+      ],
+      "next_round": true
     }
   ],
   "record_files": [
     {
       "name": "records-lv.json",
       "sha256": "59ca00d4d6cb31d6ac058453e08b92c5dc26c695777fe64c29bf76fd183a808a",
-      "size_bytes": 898726
+      "size_bytes": 898726,
+      "table_ids": [
+        "lv-rule-11",
+        "lv-rule-12.3.3-lead",
+        "lv-rule-12.3.3-non_lead",
+        "lv-rule-13.3-1",
+        "lv-rule-13.3-multi",
+        "lv-rule-16.5.2",
+        "lv-rule-16.5.2-mean",
+        "lv-rule-16.5.3",
+        "lv-rule-16.6.1",
+        "lv-rule-9.2.3-1",
+        "lv-rule-9.2.3-minimum",
+        "lv-rule-9.2.3-multi",
+        "lv-rule-9.2.3-overlap",
+        "lv-rule-9.2.3-overlap-min",
+        "lv-表1",
+        "lv-表10",
+        "lv-表11",
+        "lv-表12",
+        "lv-表13",
+        "lv-表14",
+        "lv-表15",
+        "lv-表16",
+        "lv-表17",
+        "lv-表19",
+        "lv-表2",
+        "lv-表20",
+        "lv-表21",
+        "lv-表22",
+        "lv-表23",
+        "lv-表3",
+        "lv-表4",
+        "lv-表5",
+        "lv-表6",
+        "lv-表7",
+        "lv-表8",
+        "lv-表9",
+        "lv-高密度XLPE吸水"
+      ]
     },
     {
       "name": "records-lv-a.json",
       "sha256": "32cefc7d603587e39c1d16d9a207304b8635791a4fd9c87c14eb6e52e99827db",
-      "size_bytes": 550974
+      "size_bytes": 550974,
+      "table_ids": [
+        "lv-表17",
+        "lv-表18",
+        "part1-A.2.2",
+        "part1-A.2.4",
+        "part1-A.2.6",
+        "part1-A.2.7",
+        "part1-A.2.8",
+        "part1-B.1",
+        "part1-B.2",
+        "part1-additional-bedding",
+        "part1-armour",
+        "part1-formula-A.3",
+        "part1-formula-A.4",
+        "part1-formula-A.5",
+        "part1-formula-A.6",
+        "part1-formula-A.7",
+        "part1-screen-rules",
+        "part1-screen-table",
+        "part1-表A.1",
+        "part1-表A.2",
+        "part1-表B.1"
+      ]
     },
     {
       "name": "records-mv.json",
-      "sha256": "5ae9d4d9de0aacfa2a3e5032590a03700a742365eb4c312a2f5a964de38aa7fd",
-      "size_bytes": 898637
+      "sha256": "ce356ed7ddf0a67f1030f963a9b110b390ac4482814e935981c483690417e510",
+      "size_bytes": 898614,
+      "table_ids": [
+        "mv-rule-10.2.3-1",
+        "mv-rule-10.2.3-minimum",
+        "mv-rule-10.2.3-multi",
+        "mv-rule-10.2.3-overlap",
+        "mv-rule-10.2.3-overlap-min",
+        "mv-rule-12",
+        "mv-rule-13.3.3-lead",
+        "mv-rule-13.3.3-non_lead",
+        "mv-rule-14.3-1",
+        "mv-rule-14.3-multi",
+        "mv-rule-17.5.2",
+        "mv-rule-17.5.2-eccentricity",
+        "mv-rule-17.5.3",
+        "mv-rule-17.6.1",
+        "mv-表1",
+        "mv-表10",
+        "mv-表11",
+        "mv-表12",
+        "mv-表13",
+        "mv-表14",
+        "mv-表15",
+        "mv-表16",
+        "mv-表17",
+        "mv-表18",
+        "mv-表19",
+        "mv-表2",
+        "mv-表20",
+        "mv-表21",
+        "mv-表22",
+        "mv-表23",
+        "mv-表24",
+        "mv-表25",
+        "mv-表3",
+        "mv-表4",
+        "mv-表5",
+        "mv-表6",
+        "mv-表7",
+        "mv-表8",
+        "mv-表9",
+        "mv-高密度XLPE吸水"
+      ]
     },
     {
       "name": "records-mv-a.json",
-      "sha256": "19fc13bd7aa92475ac24d289017d978f18f620da90ab2708fa00cfe35c3b00ba",
-      "size_bytes": 327499
+      "sha256": "b91aeca287709b5db2a0cfd8fbd914b56ddd263c683d695627185c09d315df43",
+      "size_bytes": 374511,
+      "table_ids": [
+        "mv-armour-deviation",
+        "mv-armour-inner-single",
+        "mv-armour-inner-three",
+        "mv-armour-magnetism",
+        "mv-armour-materials",
+        "mv-armour-tape-measurement",
+        "mv-extruded-inner-measured",
+        "mv-inner-measurement-scope",
+        "mv-isolation-applicability",
+        "mv-isolation-water-barrier",
+        "mv-lapped-inner-measured",
+        "mv-lapped-padding",
+        "mv-lapped-padding-measured",
+        "mv-screen-construction-rule",
+        "mv-screen-tape-area-rule",
+        "mv-screen-tape-material-rule",
+        "mv-screen-wire-area-rule",
+        "mv-screen-wire-gap",
+        "mv-screen-wire-resistance-rule",
+        "mv-tape-gap",
+        "mv-tape-layer-count",
+        "mv-表19",
+        "part2-A.2.2",
+        "part2-A.2.3",
+        "part2-A.2.4",
+        "part2-A.2.6",
+        "part2-A.2.7",
+        "part2-A.2.8",
+        "part2-B.1",
+        "part2-B.2",
+        "part2-additional-bedding",
+        "part2-armour",
+        "part2-screen-rules",
+        "part2-screen-table",
+        "part2-表A.1",
+        "part2-表B.1"
+      ]
     },
     {
       "name": "records-medium-high.json",
-      "sha256": "d99f9be8958f6f7b1e273c8cfad61f6eb3d8e8e34956a5b81e8ae53d762902bc",
-      "size_bytes": 744903
+      "sha256": "6802733303fc66cac6a1feef11bd7bcbb0876dc0ee494c9091993895ad5865a5",
+      "size_bytes": 754838,
+      "table_ids": [
+        "part3-A.2.2",
+        "part3-A.2.3",
+        "part3-A.2.4",
+        "part3-A.2.6",
+        "part3-A.2.7",
+        "part3-A.2.8",
+        "part3-B.1",
+        "part3-B.2",
+        "part3-armour",
+        "part3-screen-rules",
+        "part3-表B.1",
+        "v35-copper-tape-measured",
+        "v35-copper-tape-nominal",
+        "v35-copper-tape-overlap",
+        "v35-copper-wire-gap",
+        "v35-copper-wire-required",
+        "v35-rule-12",
+        "v35-rule-13.3.3-lead",
+        "v35-rule-13.3.3-non_lead",
+        "v35-rule-14.3-1",
+        "v35-rule-14.3-multi",
+        "v35-rule-17.5.2",
+        "v35-rule-17.5.2-eccentricity",
+        "v35-rule-17.5.3",
+        "v35-rule-17.6.1",
+        "v35-表1",
+        "v35-表10",
+        "v35-表11",
+        "v35-表12",
+        "v35-表13",
+        "v35-表14",
+        "v35-表15",
+        "v35-表16",
+        "v35-表17",
+        "v35-表18",
+        "v35-表19",
+        "v35-表2",
+        "v35-表20",
+        "v35-表21",
+        "v35-表3",
+        "v35-表4",
+        "v35-表5",
+        "v35-表6",
+        "v35-表7",
+        "v35-表8",
+        "v35-表9",
+        "v35-表A.1",
+        "v35-表A.2",
+        "v35-高密度XLPE吸水"
+      ]
     },
     {
       "name": "records-conductor-gb.json",
       "sha256": "fe590201867238707571a41a00c191fffed3c8ad75e3beed3104091e19d145ba",
-      "size_bytes": 899641
+      "size_bytes": 899641,
+      "table_ids": [
+        "gb3956-表1",
+        "gb3956-表2",
+        "gb3956-表3",
+        "gb3956-表4",
+        "gb3956-表A.1",
+        "gb3956-表C.1"
+      ]
     },
     {
       "name": "records-conductor-gb-a.json",
       "sha256": "fefe9f49603bd55d75d84c87a546886f80be3e345ae2b695fac07c9b3a7021f7",
-      "size_bytes": 161029
+      "size_bytes": 161029,
+      "table_ids": [
+        "gb3956-表C.1",
+        "gb3956-表C.2",
+        "gb3956-表C.3",
+        "gb3956-附录A",
+        "gb3956-附录B-Al",
+        "gb3956-附录B-Cu"
+      ]
     },
     {
       "name": "records-conductor-iec.json",
       "sha256": "142ab8fa8c0c9176b09f0e163d4c8dc64021f77dc271d58c79ec162b16a83c0c",
-      "size_bytes": 836033
+      "size_bytes": 836033,
+      "table_ids": [
+        "iec-Table3",
+        "iec-Table4",
+        "iec-Table5",
+        "iec-Table6",
+        "iec60228-table1",
+        "iec60228-table2"
+      ]
     },
     {
       "name": "records-high.json",
       "sha256": "df5b5c486631a5fbdfab7646a7cfcf4c0e7436ece4eb7a5488f3636e05dc1e97",
-      "size_bytes": 158772
+      "size_bytes": 158772,
+      "table_ids": [
+        "hv-rule-6.3.2-minimum",
+        "hv-rule-6.3.2-reference",
+        "hv-rule-6.3.3-minimum",
+        "hv-rule-6.3.3-reference",
+        "hv-rule-6.5.2-formula",
+        "hv-rule-6.5.2-gap",
+        "hv-rule-6.5.2-wire",
+        "hv-rule-6.7.3",
+        "hv-表1",
+        "hv-表2",
+        "hv-表3",
+        "hv-表4"
+      ]
     },
     {
       "name": "records-installation.json",
-      "sha256": "98916ad9aa3ca943ab0a3bd3beb180956f0ba08d2f4c26158e55f9cc2c8ca330",
-      "size_bytes": 333182
+      "sha256": "2610aa10c0e8ac37ed76da600c475f6ff57a2033c7f18cfdab5201cb9ed21f0f",
+      "size_bytes": 363939,
+      "table_ids": [
+        "gb50217-2018-5-1-2",
+        "gb50217-2018-5-3-2",
+        "gb50217-2018-d0-2",
+        "gb50217-5-1-11",
+        "gb50217-5-1-18",
+        "gb50217-5-1-7",
+        "gb50217-5-3-3",
+        "gb50217-5-3-5",
+        "gb50217-5-3-6",
+        "gb50217-5-3-8",
+        "gb50217-5-4-4",
+        "gb50217-5-4-5",
+        "gb50217-5-4-6",
+        "gb50217-5-5-1",
+        "gb50217-5-5-2",
+        "gb50217-5-5-3",
+        "gb50217-5-5-4",
+        "gb50217-5-5-5",
+        "gb50217-5-5-6",
+        "gb50217-5-6-1",
+        "gb50217-5-6-1-width",
+        "gb50217-5-6-3",
+        "gb50217-D-0-1",
+        "gb50217-D-0-3",
+        "gb50217-D-0-4",
+        "gb50217-D-0-5",
+        "gb50217-D-0-6",
+        "gb50217-D-0-7",
+        "gb50217-rating-scope-01",
+        "gb50217-rating-scope-02",
+        "gb50217-rating-scope-03",
+        "gb50217-rating-scope-04",
+        "gb50217-rating-scope-05",
+        "gb50217-rating-scope-06",
+        "gb50217-rating-scope-07",
+        "gb50217-rating-scope-08",
+        "gb50217-rating-scope-09",
+        "gb50217-rating-scope-10",
+        "gb50217-rating-scope-11",
+        "gb50217-rating-scope-12",
+        "gb50217-rating-scope-13",
+        "gb50217-rating-scope-14",
+        "gb50217-rating-scope-15",
+        "gb50217-rating-scope-16"
+      ]
     },
     {
       "name": "records-electrical.json",
       "sha256": "42bab46005d6266246ba6c0025181393e7cf850f85185d538771f46fdb68822f",
-      "size_bytes": 131653
+      "size_bytes": 131653,
+      "table_ids": [
+        "iec60287-1-1-table1",
+        "iec60287-1-1-table2",
+        "iec60287-1-1-table3",
+        "iec60287-1-1-table4"
+      ]
     },
     {
       "name": "records-thermal.json",
       "sha256": "109a97251c095dc4c7171da9cd48a89a523df759a9fba50aceeb613180e944a3",
-      "size_bytes": 142666
+      "size_bytes": 142666,
+      "table_ids": [
+        "iec60287-2-1-table1",
+        "iec60287-2-1-table3",
+        "iec60287-2-1-table4",
+        "iec60287-2-1-table5"
+      ]
     },
     {
       "name": "records-environment.json",
       "sha256": "134e781c72e82326300c2506ebb392be1d0170fb39adb0d96783e1c68b65d592",
-      "size_bytes": 35320
+      "size_bytes": 35320,
+      "table_ids": [
+        "iec60287-3-1-annex-a4",
+        "iec60287-3-1-table1",
+        "iec60287-3-1-table2"
+      ]
     },
     {
       "name": "records-accessories.json",
       "sha256": "a9e39f8bbdddd61e91061339cec151de2b5f1d93970f7095517504a813169acb",
-      "size_bytes": 129768
+      "size_bytes": 129768,
+      "table_ids": [
+        "gb12706.4-表1",
+        "gb12706.4-表14",
+        "gb12706.4-表8"
+      ]
     },
     {
       "name": "records-thermal-capacity.json",
       "sha256": "835a8c47ed02b0b026677184e1bb54d7fb398821445834c98d0d2f8f66c084a7",
-      "size_bytes": 23711
+      "size_bytes": 23711,
+      "table_ids": [
+        "nielsen-Table1"
+      ]
     },
     {
       "name": "records-thermal-capacity-model.json",
       "sha256": "bf6de2a156e9b804a4e63c4c2a2391c0c93adf03717a7bfe1ae3cc0402401359",
-      "size_bytes": 124993
+      "size_bytes": 124993,
+      "table_ids": [
+        "huang-TableA1"
+      ]
+    },
+    {
+      "name": "records-pipe-capacity.json",
+      "sha256": "fc3c386e2d90698675b3996b28a7a43dc3ddfb34ef36b259242ad263210a2700",
+      "size_bytes": 26490,
+      "table_ids": [
+        "qi-eahe-capacity",
+        "qi-eahe-table1"
+      ]
+    },
+    {
+      "name": "records-borehole-capacity.json",
+      "sha256": "d4a94e0b25761691991986eb46f48a47cfa7e7b2ea7aced042e8aaf0ea300da4",
+      "size_bytes": 28478,
+      "table_ids": [
+        "deng-dbhe-capacity",
+        "deng-dbhe-table2"
+      ]
+    },
+    {
+      "name": "records-soil-capacity.json",
+      "sha256": "6615c176324cd664ea998b590ea61e8d3d6a9bd3dbdddd1aadbf8194ae1942bc",
+      "size_bytes": 5787,
+      "table_ids": [
+        "hopmans-soil-capacity-model"
+      ]
+    },
+    {
+      "name": "records-semiconducting-capacity.json",
+      "sha256": "bd58d8e7bde67cd3f528200204dad21a2e531bd4a6ca3a0e2d26dfbfe80a0f2d",
+      "size_bytes": 15056,
+      "table_ids": [
+        "youn-degassing-table1"
+      ]
+    },
+    {
+      "name": "records-backfill-reference.json",
+      "sha256": "a14a675086a05b6db3e1b2924b6d0219bb7f40a045f84fe63fa997ea1932fea3",
+      "size_bytes": 192187,
+      "table_ids": [
+        "sah-backfill-table2",
+        "sah-backfill-table3"
+      ]
     }
   ]
 }

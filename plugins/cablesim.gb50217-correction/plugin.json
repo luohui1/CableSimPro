@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.gb50217-correction",
-  "version": "1.0.1",
+  "version": "1.0.3",
   "name": "GB 50217 载流量校正",
   "description": "按附录 D 对有出处的单根基准载流量校正；表外条件拒绝，系数由标准依据库核验。",
   "icon": "assets/icon.svg",
@@ -286,10 +286,10 @@
             "x-group": "evidence",
             "x-order": 9,
             "x-level": "advanced",
-            "default": "e4540b57612b9c68a607df14108aeb9297b55c9c0708857a01a18dc33dd3e1cd",
+            "default": "e9dd0259516fb41cb399d10ea62666f6ee1cd1f8c698ec07399e22f583559444",
             "x-default-basis": {
               "kind": "binding",
-              "reference": "标准依据库 0.4.0 的已核验发行摘要；已有配置保持原绑定，不静默换表"
+              "reference": "标准依据库 0.6.0 的已核验发行摘要；已有配置保持原绑定，不静默换表"
             },
             "x-range-basis": {
               "kind": "engineering",
@@ -399,7 +399,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "215a5465c5b023c90fa84fc358543e610cf9fe002344e7209fd22bd065b72cad",
+      "sha256": "58e0a95cca77375a5ee8aa28c6b7aa62a1eb127a1dbc5e43f579ee7cf539d549",
       "size_bytes": 3632
     }
   ]

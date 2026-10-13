@@ -149,6 +149,8 @@ def quantity(value, unit, short_circuit=False):
 
 def human_note(value):
     result = str(value or '')
+    if '依据不属于此方法已封签的依据发行' in result:
+        return '保存的结构依据与当前核对方法版本不一致；请重新查询依据，复核结构尺寸后重算。'
     names = {**STATUS_NAMES, **CHANNEL_NAMES, **METHOD_NAMES, 't_n': '标称厚度'}
     for key in sorted(names, key=len, reverse=True):
         label = names[key]
@@ -241,6 +243,21 @@ def check_tables(standards, checks, document=None):
           {'>=':'≥ ', '<=':'≤ ', '=':'= '}.get(row.get('comparison'),'')+value(row,'limit'), value(row,'actual'), value(row,'margin'),
           verdicts.get(row.get('verdict'), row.get('verdict'))+'\n'+(human_note(row.get('reason')) or '—')]
          for row in standards], '未计算（尚无标准核对结果）。', [2.8,1.1,1.1,1,2.5])
+    measured = []
+    for row in standards:
+        source = row.get('input_source') or {}
+        try:
+            import json
+            receipt = json.loads(source.get('reference') or '{}')
+        except (ValueError, TypeError):
+            continue
+        if receipt.get('schema') == 'cablesim.factory-measurement/1':
+            measured.append([row['title'], receipt['label'], receipt['sample_id'], receipt['measured_on'],
+                             receipt['method'] + '；' + receipt['reference'] +
+                             ('；附件：' + receipt['report']['filename'] if receipt.get('report') else '')])
+    if measured:
+        body += '<h3>实测记录与来源</h3>' + table(['核对项目', '来源类别', '样品编号', '测量日期', '方法与记录出处'], measured, widths=[1.5,1.1,1.1,1,2.5])
+        body += '<p class="spec-note">教学示例实测仅用于流程演示，不是厂家检验报告；标准值和标称设计值不作为实测值。</p>'
     if checks is not None:
         body += '<h3>发布前待完成事项</h3>' + table(['校核事项'], [[human_note(check['message'])] for check in checks], '当前未发现阻止发布的计算校核项；批准状态仍以签署记录为准。')
     return body

@@ -13,7 +13,9 @@
 .study-inspector .field-value-line { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; }
 .study-inspector .number-field { min-width: 0; max-width: none; }
 .study-inspector .number-input { height: var(--control-compact); }
-.study-inspector .number-field input { min-width: 0; text-align: right; }
+.study-inspector .number-field input { min-width: 0; height: var(--control-compact); text-align: right; }
+.study-inspector input[type="number"] { height: var(--control-compact); }
+.study-workbench table[aria-label="可比较运行"] .data-row { height: calc(var(--space-8) + var(--space-3)); }
 .study-inspector .number-field > .field-error { grid-column: 2; }
 .study-inspector .inspector-fields, .study-inspector .inspector-conditions .input-form-grid { gap: 0; }
 .study-inspector .study-crossing-inputs .input-form-grid { min-width: 0; margin: 0; }
@@ -36,6 +38,9 @@
 .project-study-table .project-calc > span { min-width: 0; overflow-wrap: anywhere; }
 .command-bar .command-state { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .project-explorer .explorer-calc { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+.explorer-group-toggle { border: 0; background: transparent; padding: 0; color: inherit; font: inherit; cursor: pointer; text-align: left; }
+.explorer-group-toggle[aria-expanded="false"]::after { content: ' +'; }
+.explorer-group-toggle[aria-expanded="true"]::after { content: ' −'; }
 .project-explorer .explorer-calc > .explorer-study-name { min-width: 0; }
 .project-explorer .explorer-calc > .explorer-study-name b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .project-explorer .explorer-calc > .explorer-state { grid-column: 2; justify-self: start; white-space: nowrap; font-weight: var(--weight-normal); }
@@ -93,3 +98,7 @@
 .engineering-completion { gap: var(--space-3) var(--space-4); }
 .engineering-completion .completion-field-help { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 .engineering-completion .completion-field-help > span:last-child { margin-left: auto; cursor: help; }
+.study-workbench .study-parameters-heading { font-size: var(--text-subheading); }
+.study-workbench[data-analysis="selection"] .number-field input { height: var(--control-compact); }
+.study-compare-module .data-table tbody tr { height: calc(var(--space-8) + var(--space-2)); }
+.study-workbench .field-basis { font-size: var(--text-body); }

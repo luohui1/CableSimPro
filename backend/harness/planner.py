@@ -25,6 +25,7 @@ def prepare(record,tools,directory=None,closing=None,feedback=None,instructions=
     guidance+='\n平台能力按需发现：platform_capabilities按module/q查实际API，用operation检查请求契约，用tool检查已开放宿主工具的完整说明。platform_read仅调用检查过的只读JSON接口；缺项时按返回的view/offset继续读。platform_prepare只准备需要人执行的请求，business_validation=pending，不表示已执行或已批准，正文写清人工下一步。不能把契约默认值、示例或请求参数当成计算结果。已有工程量工具提供固定来源与单位时优先复用；插件能力仍通过plugin_inspect按封签契约启用。'
     guidance+='\n敷设/型号/CAD任务可自主组合draft_read、draft_update、draft_geometry、simulation_prepare、draft_propose。每次草稿修改返回新draft_id，后续步骤须使用同一个ID；先查当前对象、单位、锁和准确插件契约。上下文drafts只列候选身份，不是计算证据；长对话或中断后可用draft_read(view=catalog)找回本会话候选，expired/outdated须重新建立，不猜ID或悄悄选最新。draft_read(view=changes,draft_id,compare_to?)比较输入差异；省略compare_to与保存基准比，不能把差异当作定量工程影响。按next_page续读完整条目。模板必须显式选择，会重排截面并带教学假设，不能自行用默认模板物性补缺项。几何预览复用普通几何接口，不保存，不能宣称仿真网格已生成。仿真配置只核对结构与锁；物理预检、网格与核时仍需在批准保存后确认。不必为每种问法走固定路线，按新证据调整草稿并重复检查。draft_propose产生现有审核方案，人批准才保存输入和所列新研究；之后通过平台只读接口核对新研究availability/estimate和原作业状态，不擅自提交或重复作业。'
     guidance+='\nproject_digest 一次读取各研究最新保存结论（量值、单位、口径、限制对象、状态），通常读取一次后直接解释；next_cursor 非空时可继续分页。workspace_read 默认工程大纲；按返回路径读细节。run_read 默认结论量值，可按 entity / key 读取。修改方案后用 study_preview(proposal_id) 试算；选择/批量研究须同时指定原 run_id、case_id，以原工况为准。'
+    guidance+='\n解释输入预检时，以已成功回执的 ready、字段诊断、coverage 和未检查范围为依据；已完成且输入未变的范围不再预检。控制参数表不是缺项结论，不为凑全而逐项抄录数值；用户追问具体参数时再取得对应字段及单位证据。研究定义的 cases 是驱动配置，不是保存运行列表，不能据其为空推断没有运行。'
     guidance+='\n型号设计检查优先用type_review配方。type_read读取型号工作区并返回稳定字段path和单位，长度用mm；propose_type_changes只生成本会话型号字段方案，不批准、不发布。结构改动对外径、电气、载流量及标准符合性的定量影响须有修改后运行证据，不能把厚度差直接当成算法结果。回答提及工程、研究、运行、型号、型号版本或插件时，使用工具名片中的准确名称并加引号；宿主为这些名称附上object_refs，正文保持纯文本。'
     if is_type(record):guidance+='\n本会话是型号设计工作区。默认输入证据为宿主 type_read 摘要，默认方案类型为型号字段方案，长度用mm。检查问题使用type_review；工程/研究配方及正式研究工具不适用，不要请求载流量试算或新建研究。摘要若还有next_page，只能解释已经展示的条目，需要时按页继续读。'
     start=next((index for index in range(len(record['events'])-1,-1,-1)
@@ -42,7 +43,7 @@ def prepare(record,tools,directory=None,closing=None,feedback=None,instructions=
         prompt.extend([{'role':'assistant','content':feedback['draft'],**thinking,'tool_calls':[{'id':identifier,'type':'function',
             'function':{'name':'answer_validation','arguments':'{}'}}]},
             {'role':'tool','tool_call_id':identifier,'content':json.dumps(context_builder.compress_result({
-                'status':'error','summary':'回答未通过核验。保留有证据的结论与输入依据，修正被指出的对象归属、舍入或推导。若开放只读工具，可补取缺失证据后重写；不得生成方案、试算或执行任何写操作。没有证据且无法补取的部分明确说明未取得。',
+                'status':'error','summary':'回答未通过核验。直接交付修正后的正文，不在正文复述被拒的数值或核验过程。保留有证据的结论与输入依据，修正被指出的对象归属、舍入或推导。若开放只读工具，可补取缺失证据后重写；不得生成方案、试算或执行任何写操作。没有证据且无法补取的部分明确说明未取得。',
                 'data':{'issues':feedback['issues']}},maximum=6*1024),ensure_ascii=False)}])
     definitions=[] if closing else [tool.disclosed_model() for tool in tools.values()]
     return prompt,definitions

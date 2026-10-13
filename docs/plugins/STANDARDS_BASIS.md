@@ -1,6 +1,6 @@
 # 标准依据库
 
-`cablesim.standards-basis` 0.4.0 是离线、只读的数据插件。当前含 **228 个表或条款索引、4,017 条输出格记录**：第四批新增868格，附录参数新增239格，材料文献新增84格；其中4,007格已核验，GB/T12706.2表18的10格因电压轴歧义阻止resolve。标准值、文献直接值、文献派生参考值分别声明语义；宿主不内置算法。表格完整保留行轴、原空白和破折号，不将缺值变成零，也不插值。
+`cablesim.standards-basis` 0.6.0 是离线、只读的数据插件。当前含 **278 个表或条款索引、4,227 条输出格记录**，其中4,217格已核验；GB/T12706.2表18的10格因电压轴歧义阻止resolve。新增147格：GB50217设计范围16条、文献完整原表124格、金属屏蔽与挤包内衬规则7条；另补齐32格既有条件。标准值、文献直接值、文献派生参考值分别声明语义；宿主不内置算法。表格完整保留行轴、原空白和破折号，不将缺值变成零，也不插值。两条土壤混合公式由本插件执行，全部物性与现场参数必填，无默认土壤。
 
 资源库“标准与规则”支持完整表格、选格详情、条件检索及复制引用。格内仅显示值，量名和单位集中在标题；选中后在下方查看完整条件、页码和两路核验，并复制固定引用。方向键移动选格，Enter复制，宽表在自身区域滚动且首列固定。破折号仅显示“—”，悬停解释原表不适用；原表空白与破折号保持区别。型号要求、标准核对、规格书的引用契约兼容上一发行；这些消费者由三维线程接入。源值核验通过不等于设计或试验合格，输出始终带 `approval=not_granted`。设计负责人已在正式应用挂载通用只读路由；本线程的浏览器回归继续使用真实路由与Executor组成的隔离应用，不写演示数据库。
 
@@ -14,7 +14,7 @@
 
 | 文件 | 用途 |
 | --- | --- |
-| `plugin.json` | v2 清单、0.4.0 发行、无网络、read_only能力和逐文件封签 |
+| `plugin.json` | v2 清单、0.6.0 发行、无网络、read_only能力和逐文件封签 |
 | `assets/icon.svg` | 插件图标 |
 | `src/cablesim_standards_basis/excerpts.json` | 审阅后的完整矩形输出格、完整行轴、条件与公式参数，作为编制输入 |
 | `verification.json` | 每格的 route_a / route_b、方法、源 SHA256、结果和已解决提取问题 |
@@ -29,6 +29,121 @@
 `basis.json.record_files`逐个保存分册名称、SHA256和字节数，因此`data_sha256`也覆盖所有记录分册；`integrity.json`再次核对，加载时拒绝不一致。分册布局属于插件内部编制格式，消费者使用稳定的`lookup`答复，不直接读取内部文件。新增的`column_header/column_conditions/value_details`为可选展示信息；r1记录ID、查询schema、引用schema、数值单位及状态语义不变。升级发行需要显式更新发行/数据摘要，旧摘要不会自动迁移。
 
 **消费者接入**：0.4.0保持旧记录ID与查询schema，修正出处/语义及核验状态会改变record摘要，须显式更新允许版本和摘要。本轮按授权执行`basis_catalog.py --write`，以LF锁定全部4,017条记录，standard-check机械升为1.3.2并重封签，判定逻辑未改。旧0.3.0引用固定旧快照，不自动换版；表18的新查询因歧义明确失败。
+
+0.5.0保留以上记录身份与resolve/list契约；standard-check当前工作区发行1.5.0机械升至1.5.1，LF清单锁定全部4,080条记录，未改判定逻辑。GB50217校正插件1.0.1机械升至1.0.2，只更新依据发行默认摘要与默认依据说明；原有保存配置继续固定旧摘要，须工程师重新确认，不能静默换表。
+
+## 第五批与制造判据覆盖
+
+### 0.6.0 新增与型号审核接入
+
+| 来源 / 完整定位 | 新增格 / 同ID更新 | 印刷 / PDF页 | 两路核验与用途 |
+| --- | ---: | --- | --- |
+| GB50217—2018 3.6.2、3.6.3、3.6.4 | 16 / 0 | 11–12 / 21–22 | 原页图像转录 / 独立盲提取；应/宜、严格不等号分开 |
+| GB50217 表D.0.6、D.0.7 | 0 / 8+24 | 74 / 84 | 两次完整图像转录；原值不变，补间距/基准环境条件 |
+| Youn et al. 2019 Table1 | 9 / 0 | 8 / 8 | pdfplumber文字层 / 完整图像转录；文献参考，不自动选范围值 |
+| Sah et al. 2022预印本v1 Table2、Table3 | 16+99 / 0 | 6–7 / 6–7 | 文字层逐行解析 / 完整图像转录；配方、压实参考，非正式发表版本 |
+| GB/T12706.2—2020 10.1、10.2.1、10.2.2、10.2.3、17.5.3 | 7 / 1页码修正 | 10、18 / 18、26 | 独立DOCX / 原PDF图像复读；含标准未规定固定截面的结论 |
+
+两份文献原件已登记受控资料目录及Zotero，附件回读SHA256与项目副本一致。全文不进入插件。Sah热容汇总7格继续暂缓：正式版逐值复核及测点密度、温度对应未闭合；可自动采用的新增现场热容为0。IEC60287-2-1:2023 Table2整表560格仍暂缓，同版本印刷不清格未确认，不零散放行559格。
+
+D.0.6查询必须新增`cable_spacing_condition="no_gap"`；D.0.7新增`current_basis_environment="indoor_air_at_outdoor_ambient"`。缺条件明确失败。3.6.3第7项原文为“宜”，已将暂存的`required`修正为`recommended`及`recommended_calculation`；敷设计算要求不是载流量乘数。排管、穿管、电缆沟的通用固定乘数及独立埋深校正仍未覆盖。
+
+型号YJV22 8.7/15kV 3×240的九项要求按下表引用。每芯屏蔽截面三项使用同一标准记录，工程要求仍保留各自芯身份；引用不批准任何芯。
+
+| 要求 | quantity / 记录键 | 条件与实际查询结果 | 印刷 / PDF页 |
+| --- | --- | --- | --- |
+| 三芯各自铜带屏蔽标称截面 | `screen_nominal_area_requirement` / `mv-screen-tape-area-rule/r1/screen_nominal_area_requirement` | `screen_kind=copper_tape`；`fixed_numeric_area=standard_not_specified`，要求工程输入与独立性能依据 | 10 / 18 |
+| 铜丝屏蔽截面分支 | 同量 / `mv-screen-wire-area-rule/r1/screen_nominal_area_requirement` | `screen_kind=copper_wire`；无固定数值，按故障电流容量确定 | 10 / 18 |
+| 挤包内衬最薄点 | `extruded_inner_covering_measured_min` / `mv-extruded-inner-measured/r1/extruded_inner_covering_measured_min` | `covering_construction=extruded`；0.8×内衬标称厚度−0.2mm，需实测值 | 18 / 26 |
+| 铠装材料类别 | `armour_allowed_materials` / `mv-armour-materials/r2/armour_allowed_materials` | `armour_kind=tape`；镀锌钢、非磁不锈钢、铝、铝合金。普通steel标签须另声明镀锌类别，不能擅自等同 | 11 / 19 |
+| 三芯铠装下内衬 | `armour_inner_covering_rule` / `mv-armour-inner-three/r1/armour_inner_covering_rule` | `core_count=3`；`required_conforming_8.2` | 11 / 19 |
+| 挤包隔离套适用分支 | `separation_sheath_application` / `mv-isolation-applicability/r1/separation_sheath_application` | `metal_layer_relation=different,longitudinal_water_barrier=false,lead_sheath_present=false`；`extruded_required` | 11 / 19 |
+| 金属带层数 | `armour_tape_layer_count` / `mv-tape-layer-count/r1/armour_tape_layer_count` | `armour_kind=tape`；螺旋绕包两层（非至少两层） | 13 / 21 |
+| 每层最大间隙率 | `armour_tape_gap_ratio_max` / `mv-tape-gap/r1/armour_tape_gap_ratio_max` | `armour_kind=tape`；0.5（50%），需实测/工艺声明并区分层 | 13 / 21 |
+| 铠装带实测厚度 | `armour_measured_negative_deviation_max` / `mv-armour-deviation/r3/armour_measured_negative_deviation_max` | `armour_kind=tape`；最大负偏差0.10；0.5mm带须≥0.45mm，需按17.7.2实测 | 19 / 27 |
+| 完整铠装厚度表 | `armour_tape_nominal` / `mv-表11/r1..r3/steel或al` | `diameter_m=0.0666,armour_material=steel`→0.5mm；假设直径按13.4，不能用成品外径 | 13 / 21 |
+
+“标准未规定”指该版本10.1–10.2.3未给每芯固定数值屏蔽截面：铜丝明确按故障电流容量确定；铜带明确规定厚度、搭盖及实测厚度。不能把它翻译为不需要短路校核或数值0，更不能用附录A.2假设直径增量表替代屏蔽容量。新quantity返回有字段的规则对象而非数值，`engineering_input_required=true`；standard-check下一轮实现人工设计依据/性能校核分支，本轮不改其判定逻辑。
+
+17.5标题明确包括挤包内衬，17.5.1规定测量方法，17.5.3式(6)在印刷18/PDF26。新记录按该明确范围引用内衬标称厚度和内衬实测值，没有套用外护套输入。既有`mv-rule-17.5.3/r1/value`亦修正为公式所在续页18/26，旧记录键不变。绕包内衬继续用17.12；双金属带绕包内衬及附加垫层总厚度用13.7，两者不可混用。实测铠带按≤40mm中央、>40mm距两边20mm各测并平均；测量精度±0.01mm，平测头直径5mm。
+
+宿主实际请求示例（发行摘要从`GET /api/methods`获取，禁止写死示例摘要）：
+
+```json
+{
+  "release_digest": "<当前0.6.0发行摘要>",
+  "input": {
+    "schema_version": "cablesim.standards-query/1",
+    "operation": "resolve",
+    "standard": "GB/T 12706.2", "edition": "2020",
+    "locator": "17.5.3", "quantity": "extruded_inner_covering_measured_min",
+    "conditions": {"covering_construction": "extruded"}
+  }
+}
+```
+
+POST `/api/plugin-queries/cablesim.standards-basis/lookup`返回唯一记录、公式参数、18/26页码、两路verified及摘要。厚度输入/输出均mm：1.8mm标称内衬的最薄点手算下限1.24mm；这不是现场实测值，缺实测必须停在测量字段。
+
+依赖发行机械同步：standard-check 1.5.1→1.5.2，仅`basis-records.json`以LF重新锁定4227条及清单版本/封签；GB校正1.0.2→1.0.3，仅默认依据发行摘要、说明、补丁版本与封签。其`method_version=1.0.0`与判定源码不变，保存配置不静默换发行。宿主依赖封签闭包变化会由seal重生成`src/host-dependencies.json`，纳入机械文件清单，交研究复核。
+
+并入前确认0.5.0现有excerpts、verification、basis、integrity与清单封签逐字节一致，三维机械重封签未造成这四份依据内容漂移。本轮封签工具已包含公共线程对清单路径的修复：指定清单仅写目标，其他漂移返回警告；封签前后摘要审计未发现非目标清单写入。工作区其他插件既有差异不属于本线程改动。
+
+| 来源与定位 | 新增格 | 印刷页 / PDF页 | 双路核验 |
+| --- | ---: | --- | --- |
+| Qi et al. 2021 Table 1 完整表 / ρc派生 | 12 / 3 | 3 / 3 | 原PDF文字层 / 独立全表图像转录；派生另作乘积复算 |
+| Deng et al. 2020 Table 2 完整表 / ρc派生 | 13 / 3 | 5 / 5 | 原PDF文字层 / 独立全表图像转录；单位换算及乘积复算 |
+| Hopmans et al. 2002 §2.2 Eq.(1)/(2) | 2 | 7-3 / 3 | 文字层公式 / 原页图像独立重读 |
+| GB/T12706.2—2020 13.2 | 3 | 11 / 19 | 独立DOCX条款转录 / 主代理PDF图像 |
+| 同上13.3.1、13.3.2 | 1 / 1 | 11 / 19 | 同上 |
+| 同上13.3.3适用规则及纵向阻水例外 | 3 / 1 | 11–12 / 19–20 | 同上；原有厚度公式保留 |
+| 同上13.7层数、间隙率、绕包附加垫层及总实测厚度 | 1 / 1 / 2 / 1 | 13 / 21 | 同上 |
+| 同上17.7.2测量参数 / 17.7.3最大负偏差 | 4 / 3 | 18–19 / 26–27 | 同上 |
+| 同上17.5.1测量范围 / 17.12绕包内衬实测下限 | 1 / 1 | 17、21 / 25、29 | 同上 |
+| GB/T12706.3—2020 10.2.2铜带标称、搭盖、实测 | 2 / 2 / 1 | 8 / 13 | 独立DOCX条款转录 / 主代理PDF图像 |
+| 同上10.2.3铜丝结构及平均间隙 | 1 / 1 | 8 / 13 | 同上 |
+
+铜带条款按实际原文收录于**10.2.2**。10.2.3是截面≥500mm²的铜丝屏蔽要求，9.2.3未在此正文中出现，不能为错误编号编造铜带判据。所有厚度系数、负偏差和最小搭盖等记录的限制明确写“需实测值”；三维包络与假设直径不是实测值。13.7的0.5/0.8mm增量和总厚度下限仅适用于绕包内衬。17.12明确针对绕包；挤包内衬测量应引用17.5标题所列范围、17.5.1方法及17.5.3的非金属护套判据，不能把17.12或外护套专用输入直接改名为内衬实测。现有通用`nonmetal_sheath_min`保留，不新增猜测的内衬专用公式。
+
+型号消费者必须同时核对屏蔽结构：`.3`截面≥500mm²应读取10.2.3的`screen_required_construction`，不能仅查10.2.2的铜带厚度就宣称该截面允许铜带屏蔽。这项结构判定由三维消费者接入，本线程只机械同步其依据清单。
+
+IEC60287-2-1:2023 Table2整表560格继续暂缓：本地“3,2-”印刷格未取得同版本合法清晰副本或正式勘误确认，不并入。Hopmans Table1固相热容与脚注乘积不一致，同样不作为默认参数。Qi空气是流动管内空气，Deng回填是地热钻孔回填，温度范围/配方未给；仅为明确文献工况参考，不能自动覆盖城南封闭管内空气、专用电缆回填或现场干湿土壤。半导电配方及现场相物性缺项保持未覆盖。
+
+## 土壤公式与按表读取契约
+
+`catalog`新增可选`compact:true`，省略目录中的逐格record_ids，完整目录默认答复不变。首次浏览使用`browse`：同一Executor运行返回紧凑目录和明确所选一张表（必填standard/edition/locator），避免先目录后表格的串行启动；条件/记录筛选用resolve。后续只按所选表取`list`，不预取整库。分册按表索引按需解析；全库各文件仍先核对摘要与封签。依据浏览页不加载隐藏的资源名片与详情，切换“资源版本”时恢复原读取。前端按发行摘要缓存目录和已打开表，仅存当前会话内存；不保存工程数据、不静默刷新历史引用。原印刷页允许整数或章节页字符串（如`7-3`）；PDF页仍为正整数。
+
+`list/browse`新增可选`table_id`（目录的id），前端完整表格始终带此字段：同一条款的标称厚度、搭盖率、测量系数可以有不同的行轴，不能按row号合并。同条款的未带table_id旧查询仍返回全部判据，兼容已有消费者；消费者若自行呈现表格，必须按`verification.evidence_id`分组，或携带table_id读取。resolve的唯一性与记录引用契约不变。
+
+只有Hopmans两条土壤公式支持`operation:evaluate`。公式来源仍为`literature_reference`，与IEC标准推荐值区分。物性取值和适用温度/压力须由工程师另有来源；本插件不给默认值。`formula_inputs`均用字段所示SI单位：
+
+```json
+{
+  "schema_version": "cablesim.standards-query/1",
+  "operation": "evaluate",
+  "standard": "Hopmans et al.", "edition": "2002",
+  "locator": "§2.2 Eq. (1)/(2)", "quantity": "soil_capacity_expression",
+  "conditions": {
+    "material": "soil", "material_role": "porous_soil",
+    "soil_capacity_method": "three_phase", "parameter_origin": "project_measured"
+  },
+  "formula_inputs": {
+    "dry_bulk_density_kg_m3": 1500, "particle_density_kg_m3": 2500,
+    "solid_specific_heat_capacity_j_kg_k": 800,
+    "water_volumetric_heat_capacity_j_m3_k": 4180000,
+    "air_volumetric_heat_capacity_j_m3_k": 1200,
+    "water_volume_fraction": 0.2,
+    "phase_assumption": "single_temperature_no_phase_change"
+  }
+}
+```
+
+上述仅为**手算校验输入**，并非城南现场数据：孔隙率φ=1−ρd/ρs=0.4（质量体积定义的换算），Cs=ρs·cs；原式C=Cs(1−φ)+Cwθ+Ca(φ−θ)，结果2,036,240J/(m³·K)。输入正有限密度/相热容、0≤θ≤φ≤1、ρd≤ρs并明确同温无相变；缺项停在`/formula_inputs/<字段>`。`air_capacity_neglected`分支须明确选择，不能传气相参数后暗中忽略。冻结/相变、未知相温度不在范围内。返回`calculation`含原输入及其摘要、推导量、结果单位、插件版本、记录摘要、来源摘要、页码引用和`approval:not_granted`；消费者保存原结果，不把手算参数写成现场实测。
+
+在依据浏览中选择这两条公式后，详情的“代入现场参数”提供同一只读宿主查询：参数初始为空，所有单位直接写在字段标签，需确认同温无相变。计算期间禁止重复提交；越界错误聚焦具体字段；修改参数后上次值明确标为历史结果，不能冒充新结果。Esc取消查询并收起表单，当前会话保留输入；不写工程库、不自动采用热容。
+
+铠装例：`standard=GB/T12706.2,edition=2020,locator=13.7,quantity=armour_tape_gap_ratio_max,conditions={armour_kind:tape}`返回0.5、印刷13/PDF21；每层间隙率均须有实测或声明后才可比较。铜带例：`.3/10.2.2/screen_tape_nominal_min,{core_count:3}`返回0.10mm、印刷8/PDF13；`screen_tape_measured_min_ratio,{}`返回0.9，必须再提供铜带标称厚度和最薄实测值。
+
+比值统一为无量纲比例：原文50%、10%、90%分别返回0.5、0.1、0.9，消费者不得再除以100。查询条件的厚度、带宽用m；返回原条款尺寸阈值用mm，按quantity.unit转换后再比较。
 
 原文件摘要（完整 64 位）：
 
@@ -468,23 +583,30 @@ python plugins/cablesim.standards-basis/src/cablesim_standards_basis/rebuild.py
 python -m pytest tests/test_standards_basis.py tests/test_standards_basis_query.py tests/test_standards_basis_round.py -q
 python -m pytest tests/test_standards_basis_release.py -q
 python plugins/cablesim.standards-basis/validation/constants.py
+# 在frontend目录用vite build --outDir ../.data/standards-basis/frontend-acceptance --emptyOutDir准备独立验收构建
 node frontend/src/features/standards/tests/verify-browser.mjs
 python scripts/plugin_sdk.py seal --write
 python scripts/plugin_sdk.py verify
 python scripts/seal_plugin_catalog.py
 ```
 
-数值修改先更新完整编制输入与独立核验矩阵，再`rebuild.py --write`；默认命令只检查，不改文件。新发行或版本更新按根AGENTS.md封签规则处理，不修改已发布版本。多线程环境下封签脚本会重写所有插件，故本次调用封签脚本的seal_v2(--write)原函数，仅限定两个获授权清单的绝对路径，更新两条registry发行；其余插件不写，然后在实际仓库只读核对目录及封签，避免改写其他线程的发行。临时工作副本不入库。
+数值修改先更新完整编制输入与独立核验矩阵，再`rebuild.py --write`；默认命令只检查，不改文件。新发行或版本更新按根AGENTS.md封签规则处理，不修改已发布版本。多线程环境下封签脚本会重写所有插件，故调用封签脚本的seal_v2(--write)原函数，仅限定依据库、standard-check和GB50217校正三个获授权清单的绝对路径，更新三条registry发行；其余插件不写，然后在实际仓库只读核对目录及封签，避免改写其他线程的发行。临时工作副本不入库。
 
-相关测试覆盖人工页码数值锚点、完整矩阵尺寸、4,017条记录的条件查询/歧义拦截、出处与双路结果、确定性重建及封签、分册篡改、输入单位/缺条件、空格/多个选项/边界、不跨版本/合金派生、手算公式参数对拍，以及真实Executor进程和ASGI只读路由的缓存/并发/发行错误。新测试还覆盖空气排列/直径边界、高密度无数值上限及增长后分册不丢格不重排。重建器统一UTF-8/LF字节；实际Git autocrlf检出测试核对封签、重建及读取一致性。本插件无原生求解器测试。
+相关测试覆盖人工页码数值锚点、完整矩阵尺寸、4,080条记录的条件查询/歧义拦截、出处与双路结果、确定性重建及封签、分册篡改、输入单位/缺条件、空格/多个选项/边界、不跨版本/合金派生、手算公式参数对拍，以及真实Executor进程和ASGI只读路由的缓存/并发/发行错误。土壤公式还检验干燥/饱和边界、含水率越界及缺参数；参数只是明确的手算示例，不是现场值。重建器统一UTF-8/LF字节；实际Git autocrlf检出测试核对封签、重建及读取一致性。本插件无原生求解器测试。
 
 浏览器脚本使用正式SPA构建、backend.main真实宿主与真实Executor，SQLite只读backup发布库到隔离副本，运行后关闭任务服务/浏览器；不写源演示库；验证标准/表切换、整表行数、原页悬停、240mm²/12/20kV/XLPE→5.5mm、选格详情/准确剪贴板引用、方向键/Enter、缺条件、历史、宽表首列固定及第三批公差显示。自动布局检查覆盖1366×768与1920×1080、深浅主题、空/加载/错误/成功/历史共20项，检查溢出、重叠、13px字号、对比度及主操作数量。结果保存在不入库的`.data/standards-basis/browser-checks.json`；本轮验收截图为`thermal-capacity.png`、`accessory-tests.png`；五态中的空/加载/错误通过明确的网络故障注入，其余流程使用真实响应。五类查询收据为`real-queries.json`。任务浏览器上下文和服务在finally关闭。
 
 两张概念图在`.data/standards-basis/concepts/browser-columns.png`及`browser-wide.png`；采用后者的顶部选择器与宽表布局，1366宽度能保留更多数值列，沿用现有白灰工作界面。图只用于布局方向，图中示意数值不构成依据。
 
-0.4.0本机相关测试29项通过；真实发布库隔离副本经宿主路由完成热容、四芯系数、第1类R₂₀、试验表、附件表五类查询，并验证B.1原例、B.2缺精度及MPP热容派生。浏览器22项断言覆盖原五态矩阵及新表，截图仅保留两张新表；空/加载/错误是明确的网络故障注入。发布库缺失的干净环境将真实使用测试标为环境缺失/skip，不能当作通过。旧孤立路由fixture已移除；任务浏览器标签页、随机端口服务及其子进程在finally关闭，隔离副本随任务清理。
+发布库缺失的干净环境将真实使用测试标为环境缺失/skip，不能当作通过。旧孤立路由fixture已移除；任务浏览器标签页、随机端口服务及其子进程在finally关闭，隔离副本随任务清理。五态中的空/加载/错误使用明确的网络故障注入，其余来源和值由真实宿主/Executor提供。
 
-本轮唯一一次全量为1229通过、54失败、23跳过，依据库测试无失败；运行期间IEC crossing源码曾与封签不一致，另有研究校正插件的依据发行锁定值和三维A.2.2缺screened条件的对接失败。完整失败及分类保留于不入库的`.data/standards-basis/full-failures.json`，不把本插件通过称为整仓通过。结束后的SDK封签验证、插件目录与卫生检查均通过；其他线程的逻辑与测试未修改。
+全量结果按当前工作区实测另行交设计负责人；依据库相关检查通过不代表其他线程的工作区全绿。
+
+0.5.0验收：相关pytest 29项通过；真实宿主/Executor、发布库只读隔离副本完成热容公式、铠装、铜带和已有五类来源查询。浏览器22项检查通过，保留两尺寸/两主题/五态20项，另覆盖土壤参数输入、成功结果、修改后的历史状态、越界字段聚焦及同条款表格隔离。截图为`.data/standards-basis/thermal-capacity.png`与`copper-manufacturing.png`，输入数字为明确手算对拍值，非城南实测。
+
+`test:visible-text`和`test:regularity`各4页检查通过（1366/1920）；普通界面代号外露及规整发现均为0。最终`test:performance`4次真实测量均通过：标准列表冷2.321s/热0.815s，资源定位入口冷0.875s/热0.773s。无错误终态和拦截写入，首次浏览断言只发一条browse查询，后续按所选表读取。样式、TypeScript、独立生产构建通过。数据重建、SDK封签、发行目录和卫生检查通过。
+
+全量pytest待设计负责人快照验收：观察到其他线程PID58636持续运行`python -m pytest -q -p no:cacheprovider`，30分钟等待上限后仍未结束，因此本线程未并发启动全量。不能将上述通过项称为整仓全绿；没有Git提交，8100/8200和来源发布库未写入。清理被执行工具拒绝的路径另列于`.data/standards-basis/release-report.md`，原工具只返回`blocked by policy`，无更具体原因。
 
 ## 现有IEC插件常数对拍（只读交研究线程）
 

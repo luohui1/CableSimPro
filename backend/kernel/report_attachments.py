@@ -87,7 +87,11 @@ def prepare(research, wid, ids, images, fem_reference, section_images=None):
     primary = ids[0]
     attachments = {'section_images': [], 'field_images': [], 'cad_images': [], 'fem_chapter': None}
     for image in section_images or []:
-        saved = research.get_run(wid, primary)
+        if fem_reference:
+            from .fem_evidence import display_read
+            saved = display_read(research,wid,primary)
+        else:
+            saved = research.get_run(wid, primary)
         from .report_selection import context
         selection=context(saved)
         if selection and image['case_id']!=selection['case_id']:
@@ -111,7 +115,7 @@ def prepare(research, wid, ids, images, fem_reference, section_images=None):
             from .report_reads import saved_field_image
             from .report_reads import checkpoint
             checkpoint('field_image')
-            raw=saved_field_image(field)
+            raw=saved_field_image(field,research)
             checkpoint('evidence')
             analytic=field.get('source',{}).get('binding')=='iec-trace'
             if analytic:
@@ -157,8 +161,10 @@ def prepare(research, wid, ids, images, fem_reference, section_images=None):
         if verdict.get('status') != 'converged' or not 0<verdict.get('tolerance_k',.1)<=.1:
             raise HTTPException(422, '有限元未收敛，不能进入正式计算书。')
         chosen = next(c for c in fem['output']['cases'] if c['case_id']==data['fem']['case_id'])
-        from .report_reads import saved_field_image
-        raw = saved_field_image(chosen['artifacts']['x-cablesim.temperature-field'])
+        from .report_reads import saved_field_image, checkpoint
+        checkpoint('field_image')
+        raw = saved_field_image(chosen['artifacts']['x-cablesim.temperature-field'],research)
+        checkpoint('evidence')
         attachments['fem_chapter'] = {'data': data, 'png_base64': b64encode(raw).decode(), 'image_sha256': sha256(raw).hexdigest()}
         for rid in (fem_id, iec_id):
             if rid not in ids: ids.append(rid)

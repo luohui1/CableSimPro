@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { displayName } from "@/lib/display-names";
-import { savedRunLabel } from './study-run-label';
+import { savedRunLabel, savedCaseLabel, savedEntityLabel } from './study-run-label';
 import { isVersionStale } from '@/lib/version-status';
 import {
   optionalRecord,
@@ -11,7 +11,6 @@ import {
   message,
   ApiError,
 } from "@/api/client";
-import { entityLabel, savedDomain } from "@/lib/domain-fields";
 import { engineeringQuantity } from "@/lib/format";
 import { DataTable, type Column } from "./data-table";
 import { StudyDetailGroup } from './study-detail-group';
@@ -22,7 +21,7 @@ import { SourceBadge } from "./source-badge";
 import { EmptyState } from "./states";
 import { StudyErrorState as ErrorState } from './study-error-state';
 import { Toolbar } from "./toolbar";
-import { Conclusion } from "./conclusion";
+import { ConclusionStrip } from "./conclusion-strip";
 import { EngineeringValue } from "./engineering-value";
 import type { InputSelection } from "./study-inputs";
 
@@ -76,8 +75,7 @@ export function StudyResults({
         }
       />
     );
-  const snapshot = optionalRecord(run.snapshot),
-    domain = savedDomain(run);
+  const snapshot = optionalRecord(run.snapshot);
   const correction=optionalRecord(selected.artifacts)['x-cablesim.gb50217-correction'];
   if (correction) return <StudyCorrection artifact={optionalRecord(correction)} historical={run.freshness==='historical'||isVersionStale(run)} part={part} />;
   const rows: ResultRow[] = (
@@ -92,7 +90,7 @@ export function StudyResults({
       id: String(index),
       key,
       label: text(result.title) || text((Array.isArray(snapshot.headline_contract) ? snapshot.headline_contract : []).map(optionalRecord).find(spec => spec.key === key)?.title) || displayName(key),
-      entity: entityLabel(domain, text(result.entity)),
+      entity: savedEntityLabel(run, text(selected.case_id), text(result.entity)),
       entityId: text(result.entity),
       value: numericValue,
       unit,
@@ -211,21 +209,21 @@ export function StudyResults({
     },
   ];
   const conclusion = (
-      <Conclusion
-      title={operatingTask ? "负荷校核结论" : rating ? "载流量结论" : "保存结果结论"}
-      model={
+      <ConclusionStrip
+      label={operatingTask ? "负荷校核结论" : rating ? "载流量结论" : "保存结果结论"}
+      conclusion={[
         operatingTask && hottest
           ? `${load === null ? '当前' : show('current', load, 'A')} 负荷${verdict}，最热 ${show(hottest.key, hottest.value, hottest.unit)}`
           : noRating
-          ? rating!.entity + " 在其他回路当前负荷下没有正允许电流" + (simultaneous ? "；同时额定 " + show("ampacity", simultaneous.value, simultaneous.unit) : "")
+          ? savedEntityLabel(run, text(selected.case_id), rating!.entity) + " 在其他回路当前负荷下没有正允许电流" + (simultaneous ? "；同时额定 " + show("ampacity", simultaneous.value, simultaneous.unit) : "")
           : rating
           ? "允许电流 " + show("ampacity", rating.value, rating.unit) +
             (limitingCable
-              ? "，受限于 " + entityLabel(domain, limitingCable).replace(/ · ([ABC])$/, " 的 $1 相")
+              ? "，受限于 " + savedEntityLabel(run, text(selected.case_id), limitingCable)
               : "；限制电缆未提供")
-          : hottest?.entity || "该运行未提供温度结论"
-      }
-      description={crossing ? text(crossing.clause) : noRating ? [rating!.reason, description].filter(Boolean).join(" ") : description}
+          : (hottest ? savedEntityLabel(run, text(selected.case_id), hottest.entity) : "该运行未提供温度结论"),
+          crossing ? text(crossing.clause) : noRating ? [rating!.reason, description].filter(Boolean).join(' ') : description,
+      ].filter(Boolean).join(' · ')}
       historical={run.freshness === "historical" || isVersionStale(run)}
       metrics={[
         ...(crossing ? [{label:'降额前允许电流',value:numeric(crossing.baseline_current_a),unit:'A',quantity:'ampacity'},
@@ -285,7 +283,7 @@ export function StudyResults({
             options={cases.map((value) => ({
               value: text(value.case_id),
               label:
-                displayName(text(value.case_id)) +
+                savedCaseLabel(run, text(value.case_id)) +
                 " · " +
                 (value.status === "succeeded" ? "成功" : "未成功"),
             }))}
@@ -325,7 +323,7 @@ export function StudyResults({
                     source: "calculation",
                   },
                   { label: "输出条件", value: displayName(row.case) },
-                  { label: "结果身份", value: displayName(text(selected.case_id)) },
+                  { label: "保存工况", value: savedCaseLabel(run, text(selected.case_id)) },
                 ],
               },
             ],

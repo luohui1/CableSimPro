@@ -4,7 +4,7 @@ from cablesim_sdk.reproduction import digest
 from .workspace import fingerprint
 
 
-def status(run,case):
+def status(run,case,*,source_artifact_types=None):
     try:
         witness=HeadlineWitness.model_validate(case['artifacts'][ARTIFACT])
         original_id=case['case_id'].split('-',2)[-1] if case['case_id'].startswith('crosscheck-') else case['case_id']
@@ -21,7 +21,11 @@ def status(run,case):
         hashes=case.get('artifact_digests',{})
         if not hashes.get(ARTIFACT):raise ValueError('关键结论工件缺少封存摘要。')
         for value in witness.quantities:
-            if not isinstance(case['artifacts'].get(value.artifact_type),dict) or hashes.get(value.artifact_type)!=value.artifact_sha256:
+            # List projections authenticate the complete saved bytes first, then
+            # read these actual JSON types from those same bytes in SQLite. They
+            # never replace an engineering artifact with a manufactured object.
+            present = source_artifact_types.get(value.artifact_type) == 'object' if source_artifact_types is not None else isinstance(case['artifacts'].get(value.artifact_type),dict)
+            if not present or hashes.get(value.artifact_type)!=value.artifact_sha256:
                 raise ValueError('关键结论没有绑定同工况原始工程工件。')
             inherited=any(spec.get('key')==value.key and spec.get('condition')==value.condition
                           and spec.get('source_artifact')==value.artifact_type for spec in run['snapshot'].get('headline_contract',[]))

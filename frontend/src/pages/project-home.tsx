@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { methodCatalog, studyIndex, studyRuns, workspaces, type StudyRow } from "@/api/research";
+import { workspaces, type StudyRow } from "@/api/research";
+import { methodCardsQuery } from '@/lib/study-queries';
 import { message, optionalRecord, text } from "@/api/client";
 import { AppShell } from "@/components/app-shell";
 import { AddStudyDialog } from "@/components/add-study-dialog";
@@ -19,7 +20,7 @@ import { CableSection } from "@/features/drawing/cable-section";
 import { LayingSection } from "@/features/drawing/laying-section";
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
-import { workspaceQuery } from "@/lib/study-queries";
+import { projectStudiesQuery, workspaceQuery } from "@/lib/study-queries";
 import { modelViews, projectSuggestions } from '@/components/study-workbench-config';
 import { readableCableVersion } from '@/components/study-workbench-config';
 import { RelationPanel } from '@/components/relation-panel';
@@ -53,22 +54,17 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
   const [recalculateQueue,setRecalculateQueue] = useState<StudyRow[]>([]);
   const workspace = useQuery(workspaceQuery(workspaceId));
   const projects = useQuery({ queryKey: ["workspace-index"], queryFn: ({ signal }) => workspaces(signal) });
-  const studies = useQuery({ queryKey: ["study-index"], queryFn: ({ signal }) => studyIndex(signal) });
-  const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
+  const studies = useQuery(projectStudiesQuery(workspaceId));
+  const catalog = useQuery(methodCardsQuery());
   const rows = (studies.data || []).filter((row) => row.workspace === workspaceId).sort((a, b) => b.updated.localeCompare(a.updated));
-  const runs = useQueries({
-    queries: rows.map((row) => ({
-      queryKey: ["runs", row.workspace, row.id, "summary"],
-      queryFn: ({ signal }: { signal: AbortSignal }) => studyRuns(row.workspace, row.id, signal, "summary"),
-    })),
-  });
-  const latest = new Map(rows.map((row, index) => [row.id, runs[index]?.data?.at(-1)]));
+  // latest_run 已由宿主在同一只读快照核验；首页不为结论逐项下载运行历史。
+  const latest = new Map(rows.map(row => [row.id, optionalRecord(row.raw.latest_run)]));
   const name = text((projects.data || []).find((row) => text(row.id) === workspaceId)?.name) || "工程";
   const document = workspace.data?.domain as DomainDocument | undefined;
   const reference = optionalRecord(workspace.data?.study_cable_reference);
   const section = document?.sections.find((item) => item.id === chosen) || document?.sections[0];
   const cable = document?.cable_types.find((item) => item.id === chosen) || document?.cable_types[0];
-  const states = new Map(rows.map((row,index)=>[row.id,studyPresentation(row,latest.get(row.id),0,runs[index]?.error,runs[index]?.isPending)]));
+  const states = new Map(rows.map(row=>[row.id,studyPresentation(row,latest.get(row.id),0,studies.error,studies.isPending)]));
   const outdated = rows.filter(row=>states.get(row.id)?.code==='outdated');
   const open = (row: StudyRow, extra: Record<string, unknown> = {}, hash = '') => navigate({
     to: "/studies/$sid/$module/$tab",

@@ -45,16 +45,31 @@ def test_latest_run_summary_matches_history_and_readers_do_not_wait_for_writer(c
     with service.store.db(True) as writer:
         writer.execute('UPDATE workspaces SET revision=revision+1 WHERE id=?', (w['id'],))
         observed = service.study_detail(w['id'], s['id'])
+        direct = service.study_detail_by_id(s['id'])
         workspace = service.store.snapshot(w['id'])
         assert workspace['revision'] == w['revision']
         assert observed['workspace_revision'] == w['revision']
+        assert direct == observed
         writer.rollback()
     history = client.get(root+'/runs?view=summary').json()['items'][-1]
     detail = client.get(root).json()
+    direct_response = client.get('/api/studies/'+s['id'])
+    assert direct_response.status_code == 200
+    assert direct_response.json() == detail
+    assert client.get('/api/studies/'+str(uuid4())).status_code == 404
     assert detail['latest_run']['id'] == saved['id']
     assert detail['latest_module_run_ids'][''] == saved['id']
     assert detail['latest_run'] == history
     assert detail['version_status'] == history['version_status']
+    cards_response = client.get('/api/workspaces/'+w['id']+'/studies?view=summary')
+    assert cards_response.status_code == 200
+    card = next(row for row in cards_response.json() if row['id'] == s['id'])
+    assert card['latest_run'] == history
+    assert card['version_status'] == detail['version_status']
+    assert card['definition_digest'] == fingerprint(service.study_detail(w['id'], s['id'])['definition'])
+    assert client.get(card['input_ref']).json() == detail
+    assert 'parameters' not in card['definition']
+    assert card['definition']['method'] == detail['definition']['method']
     with service.store.read_snapshot() as reader:
         import sqlite3
         with pytest.raises(sqlite3.OperationalError, match='readonly'):
@@ -89,53 +104,91 @@ def test_http_compressed_and_identity_reads_are_the_same_verified_contract(clien
     assert compressed.content == raw.content
     assert compressed.headers['etag'] == raw.headers['etag']
     assert compressed.headers['vary'] == 'Accept-Encoding'
+    revalidated = client.get('/api/input-contracts', headers={'If-None-Match': compressed.headers['etag']})
+    assert revalidated.status_code == 304
+    assert revalidated.content == b''
+    assert revalidated.headers['etag'] == compressed.headers['etag']
+    # The outer loopback policy may enforce the stricter no-store policy.
+    assert revalidated.headers['cache-control'] in ('private, no-cache', 'no-store')
 
 
-@pytest.mark.parametrize('output', [None, {'cases': [{'case_id': 'saved', 'artifacts': {
-    'x-cablesim.field-shard/0': {'binary': 'full-mesh'},
-    'x-cablesim.temperature-field': {'mesh': 'display'},
-    'x-cablesim.iec60287-trace': {'source': 'saved'},
-}}]}])
-def test_detail_omits_lossless_field_shards_but_full_keeps_evidence(output):
-    from types import SimpleNamespace
-    from backend.kernel.run_details import detail
-    original = {'study': 's', 'integrity': 'verified', 'output': output,
-                'output_digest': 'original-evidence', 'snapshot': {'cases': []}}
-    evidence = deepcopy(original)
-    research = SimpleNamespace(get_run=lambda *_: original)
-    projected = detail(research, 'w', 's', 'r')
-    assert projected['output_digest'] == original['output_digest']
-    if output is None:
-        assert projected['output'] is None
-    else:
-        assert set(projected['output']['cases'][0]['artifacts']) == {
-            'x-cablesim.temperature-field', 'x-cablesim.iec60287-trace'}
-    assert original == evidence
-    assert detail(research, 'w', 's', 'r', 'full') == evidence
-
-
-def test_sharded_detail_uses_verified_display_reader_before_loading_arrays(monkeypatch):
+@pytest.fixture
+def saved_fem_projection(tmp_path):
+    """A private copy of an actual published Slurm run, not invented field JSON."""
     import sqlite3
-    from types import SimpleNamespace
-    from contextlib import nullcontext
-    from backend.kernel import batch_field_projection
+    from contextlib import closing
+    from backend.kernel.workspace import WorkspaceStore
+    from backend.kernel.research import Research
+    source = Path('.data/release/engineering.sqlite').resolve()
+    if not source.exists(): pytest.skip('发布库缺失，不能制造有限元保存结果')
+    destination = tmp_path/'projection.sqlite'
+    with closing(sqlite3.connect(source.as_uri()+'?mode=ro', uri=True)) as db:
+        row = db.execute("SELECT workspace,study,id FROM study_runs WHERE id=?",
+                         ('00c54351-4a2c-49f5-bf88-7e86e6a9615f',)).fetchone()
+        if row is None: pytest.skip('发布库未包含真实作业 811855')
+        with closing(sqlite3.connect(destination)) as private: db.backup(private)
+    service = Research(WorkspaceStore(destination))
+    try: yield service, row
+    finally: service.close()
+
+
+def test_detail_omits_lossless_field_shards_but_full_keeps_evidence(saved_fem_projection):
     from backend.kernel.run_details import detail
-    db = sqlite3.connect(':memory:')
-    db.row_factory = sqlite3.Row
-    db.execute('CREATE TABLE study_runs(workspace TEXT,id TEXT,output TEXT,request_id TEXT,request_digest TEXT,owner_epoch TEXT,execution_nonce TEXT)')
-    db.execute('INSERT INTO study_runs VALUES(?,?,?,?,?,?,?)', ('w', 'r', '{"x-cablesim.field-shard/0":{}}', 'request', 'digest', 'epoch', 'nonce'))
-    calls = []
-    def display(research, wid, rid):
-        calls.append((wid, rid))
-        return {'study': 's', 'snapshot': {'cases': []}, 'output': None, 'integrity': 'verified'}
-    research = SimpleNamespace(store=SimpleNamespace(db=lambda: nullcontext(db)),
-                               get_run=lambda *_: pytest.fail('Detail loaded lossless arrays'))
-    monkeypatch.setattr(batch_field_projection, 'read_display', display)
-    result = detail(research, 'w', 's', 'r')
+    research, (wid, sid, rid) = saved_fem_projection
+    original = detail(research, wid, sid, rid, 'full')
+    evidence = deepcopy(original)
+    assert original['integrity'] == 'verified'
+    assert any(key.startswith('x-cablesim.field-') for case in original['output']['cases'] for key in case['artifacts'])
+    projected = detail(research, wid, sid, rid)
+    assert projected['input_digest'] == original['input_digest']
+    assert projected['output_digest'] == original['output_digest']
+    assert projected['evidence_ref']['input_digest'] == original['input_digest']
+    for case in projected['output']['cases']:
+        assert not any(key.startswith('x-cablesim.field-') for key in case['artifacts'])
+        frozen = next(c for c in original['output']['cases'] if c['case_id'] == case['case_id'])
+        assert case['results'] == frozen['results']
+        assert case['artifacts']['x-cablesim.temperature-field'] == frozen['artifacts']['x-cablesim.temperature-field']
+    assert 'preflight' not in projected['output']
+    assert original == evidence
+    assert detail(research, wid, sid, rid, 'full') == evidence
+
+
+def test_sharded_detail_uses_verified_display_reader_before_loading_arrays(saved_fem_projection, monkeypatch):
+    from backend.kernel.run_details import detail
+    research, (wid, sid, rid) = saved_fem_projection
+    with research.store.read_snapshot() as db:
+        expected = dict(db.execute('SELECT request_id,request_digest,owner_epoch,execution_nonce FROM study_runs WHERE id=?', (rid,)).fetchone())
+    monkeypatch.setattr(research, 'get_run', lambda *_: pytest.fail('Detail loaded lossless arrays'))
+    result = detail(research, wid, sid, rid)
     assert result['integrity'] == 'verified'
-    assert (result['request_id'], result['request_digest'], result['owner_epoch'], result['execution_nonce']) == ('request', 'digest', 'epoch', 'nonce')
-    assert calls == [('w', 'r')]
-    db.close()
+    assert {key: result[key] for key in expected} == expected
+    assert len(result['input_digest']) == len(result['output_digest']) == 64
+
+
+def test_saved_fem_summary_matches_full_answer_and_rejects_changed_source_bytes(saved_fem_projection):
+    """Use actual 811855 evidence; only corrupt the private copy to test refusal."""
+    import json
+    from backend.kernel.read_models import RUN_COLUMNS, run_facts
+    research, (wid, sid, rid) = saved_fem_projection
+    full = research.get_run(wid, rid)
+    with research.store.read_snapshot() as db:
+        source = db.execute('SELECT '+RUN_COLUMNS+' FROM study_runs WHERE workspace=? AND id=?', (wid,rid)).fetchone()
+    facts = run_facts(research, source)
+    assert facts['integrity'] == 'verified'
+    from backend.kernel.headlines import project
+    assert facts['headlines'] == project(full['snapshot'],full['output'],full['artifact_status'])
+    assert facts['task'] == full['snapshot']['definition']['task']
+    assert facts['driver'] == full['snapshot']['definition']['driver']
+    # This is deliberately damaged saved data, not a successful synthetic run.
+    changed = json.loads(source['output'])
+    changed['cases'][0]['results'][0]['value'] += 1
+    with research.store.db() as db:
+        db.execute('UPDATE study_runs SET output=? WHERE id=?', (json.dumps(changed,separators=(',',':')),rid))
+    with research.store.read_snapshot() as db:
+        corrupt = db.execute('SELECT '+RUN_COLUMNS+' FROM study_runs WHERE workspace=? AND id=?', (wid,rid)).fetchone()
+    rejected = run_facts(research, corrupt)
+    assert rejected['integrity'] == 'corrupt'
+    assert rejected['headlines'] == []
 
 
 @pytest.mark.parametrize('fails', [False, True])
@@ -486,6 +539,16 @@ def test_run_detail_reads_inputs_on_demand_without_rewriting_evidence(client):
     assert detail['snapshot_view']=='inputs-on-demand'
     case=detail['snapshot']['cases'][0]
     assert 'input' not in case and detail['input_digest']==original['input_digest']
+    assert detail['output_digest']==original['output_digest']
+    assert 'method_manifests' not in detail['snapshot']
+    evidence=client.get(detail['evidence_ref']['url'])
+    assert evidence.status_code==200,evidence.text
+    assert evidence.json()['snapshot']['method_manifests']==original['snapshot']['method_manifests']
+    assert evidence.json()['input_digest']==original['input_digest']
+    assert evidence.json()['output_digest']==original['output_digest']
+    source_case=original['snapshot']['cases'][0]
+    cable=source_case['input']['circuits'][0]['cables'][0]
+    assert detail['saved_case_labels'][source_case['case_id']]['entities'][cable['id']].startswith('回路 ')
     assert client.get(url+'?view=full').json()==original
     saved=client.get(case['input_ref']['url']).json()
     assert saved['input']==original['snapshot']['cases'][0]['input']

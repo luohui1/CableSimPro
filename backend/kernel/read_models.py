@@ -24,20 +24,81 @@ def reference(value):
     return {key: value.get(key) for key in ('id', 'name', 'version', 'content_sha256')}
 
 
+def answer_output(research, raw, snapshot):
+    """Project only the saved answer's actual evidence after authenticating bytes.
+
+    A list never displays a field, so validating/decimating its full mesh is not
+    part of this read. Keep the original witness, quantities, source artifact,
+    producer and assessment; the existing witness checks still authorize each
+    headline. The display/full/report readers retain their field verification.
+    SQLite parses JSON in C without materializing lossless shards in Python.
+    Bind the authenticated bytes themselves, not a second mutable source query.
+    """
+    paths = ['$.case_id', '$.status', '$.results', '$.evidence.headline', '$.method', '$.artifact_digests']
+    types = sorted({value['artifact'] for value in snapshot.get('headline_contract', []) if isinstance(value.get('artifact'), str)})
+    sources = sorted({value['source_artifact'] for value in snapshot.get('headline_contract', []) if isinstance(value.get('source_artifact'), str)})
+    paths += ['$.artifacts.' + json.dumps(kind) for kind in types]
+    with research.store.read_snapshot() as db:
+        # json_each.value materializes each entire mesh-bearing case. Select its
+        # index only, then extract all small fields from the same original JSON.
+        # This avoids copying and reparsing a multi-megabyte case per expression.
+        prefix = "'$.cases[' || entries.key || ']' || ?"
+        rows = db.execute('WITH original(body) AS MATERIALIZED (SELECT ?) SELECT json_extract(body,' +
+                          ','.join(prefix for _ in paths) + ",'$.assessment','$.default_result','$.run_id')" +
+                          ''.join(',json_type(body,' + prefix + ')' for _ in sources) +
+                          " FROM original,json_each(body,'$.cases') AS entries",
+                          (raw, *(path[1:] for path in paths), *('.artifacts.'+json.dumps(kind) for kind in sources))).fetchall()
+    cases = []
+    assessment, default, run_id = None, None, None
+    for row in rows:
+        values = json.loads(row[0])
+        case_id, status, results, headline, method, hashes, *artifacts = values[:-3]
+        assessment, default, run_id = values[-3:]
+        cases.append({'case_id':case_id, 'status':status, 'results':results or [],
+                      'evidence':{'headline':headline}, 'method':method,
+                      'artifact_digests':hashes or {},
+                      '_saved_artifact_types':{kind:kind_type for kind,kind_type in zip(sources,row[1:])},
+                      'artifacts':{kind:value for kind,value in zip(types,artifacts) if value is not None}})
+    return {'cases':cases, 'assessment':assessment, 'default_result':default, 'run_id':run_id}
+
+
 def run_facts(research, row):
     """Bounded content-addressed receipt, including corrupt-record detection."""
+    from pathlib import Path
+    from .report_reads import saved_observation_receipt
+    kernel = Path(__file__).parent
+    validator = sha256(b''.join(path.read_bytes() for path in [
+        *(kernel / name for name in ('read_models.py','headlines.py','answer_witnesses.py','research.py',
+                                    'workspace.py','report.py','report_selection.py')),
+        *sorted((kernel.parents[1] / 'cablesim_sdk').glob('*.py'))])).hexdigest()
     key = (row['input_digest'], row['output_digest'], *(
-        sha256(row[name] or b'').digest() for name in ('snapshot', 'output', 'error')))
+        sha256(row[name] or b'').digest() for name in ('snapshot', 'output', 'error')), validator)
     identity = (row['workspace'], row['id'])
     with research.run_read_lock:
         previous = research.run_read_cache.get(identity)
         if previous is not None and previous[0] == key:
             research.run_read_cache.move_to_end(identity)
             return previous[1]
+    # The source bytes above are authenticated on every lookup. A persistent
+    # receipt only retains their immutable witness projection, never currentness.
+    # Bind every validator source and SDK contract byte; changed validation code
+    # must repeat validation, just as changed input/output bytes do.
+    receipt_key = fingerprint(('run-facts/1', key[0], key[1], *(value.hex() for value in key[2:5]), validator))
+    receipt = saved_observation_receipt(research, receipt_key)
+    if receipt is not None:
+        with research.run_read_lock:
+            research.run_read_cache[identity] = (key, receipt)
+            while len(research.run_read_cache) > 64:research.run_read_cache.popitem(last=False)
+        return receipt
     facts = {'integrity': 'corrupt', 'snapshot': {}, 'method': None, 'error': None, 'headlines': [], 'headline': None, 'task': None, 'driver': None}
     try:
         snapshot = json.loads(row['snapshot'])
-        output = json.loads(row['output']) if row['output'] else None
+        from .report_reads import byte_digest
+        if (snapshot.get('definition',{}).get('method',{}).get('capability')=='iec-thermal-field'
+                and byte_digest(row['snapshot'])==row['input_digest'] and row['output']
+                and byte_digest(row['output'])==row['output_digest']):
+            output=answer_output(research,row['output'],snapshot)
+        else:output=json.loads(row['output']) if row['output'] else None
         error = json.loads(row['error']) if row['error'] else None
         # Saved canonical JSON already has the exact digest being verified.
         # Hash those bytes once; retain semantic verification for legacy JSON.
@@ -53,7 +114,11 @@ def run_facts(research, row):
             compact['workspace_state'] = {name: reference(state[name]) for name in (
                 'study_cable_reference', 'type_origin_reference') if state.get(name)}
             compact['workspace_state_digest'] = fingerprint(state)
-            answers = project(snapshot, output, research.artifact_status({'snapshot': snapshot, 'output': output})) if snapshot.get('headline_contract') else []
+            from .answer_witnesses import status
+            witness_status = {case['case_id']:{'x-cablesim.headline-witness':status({'snapshot':snapshot,'output':output},case,
+                              source_artifact_types=case.get('_saved_artifact_types'))}
+                              for case in (output or {}).get('cases',[]) if 'x-cablesim.headline-witness' in case.get('artifacts',{})}
+            answers = project(snapshot, output, witness_status) if snapshot.get('headline_contract') else []
             selected_case = answers[0]['case_id'] if answers else None
             # Only forward the producer's saved text for the same verified case.
             # Older/missing witnesses stay empty rather than inventing a summary.
@@ -67,6 +132,7 @@ def run_facts(research, row):
                      'error': {name: str(error.get(name, ''))[:512] for name in ('code', 'message')} if error else None}
     except (ValueError, TypeError, KeyError):
         pass
+    saved_observation_receipt(research, receipt_key, facts)
     with research.run_read_lock:
         research.run_read_cache[identity] = (key, facts)
         research.run_read_cache.move_to_end(identity)

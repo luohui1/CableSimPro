@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { methodCatalog } from "@/api/research";
+import { methodCardsQuery } from '@/lib/study-queries';
 import { displayName } from '@/lib/display-names';
 import { Redirect } from "@/components/redirect";
 import { studyModuleRoute, studyRootRoute } from "@/router";
@@ -17,6 +17,7 @@ import { StudyGeometryProposal, type GeometryProposal } from '@/components/study
 import { isVersionStale } from '@/lib/version-status';
 import { missingInputDestination, focusPreflightField } from "@/lib/missing-input";
 import { StatusMark } from "@/components/status-mark";
+import { InformationNotice } from '@/components/information-notice';
 import { EmptyState, InlineEmpty, LoadingState } from '@/components/states';
 import { StudyErrorState as ErrorState } from '@/components/study-error-state';
 import { WorkbenchInspector } from "@/components/workbench-inspector";
@@ -117,7 +118,7 @@ export function StudyWorkspace() {
   const [canvasExpanded,setCanvasExpanded]=useState(module!=='selection');
   useEffect(()=>setCanvasExpanded(module!=='selection'),[sid,module]);
   const [creating, setCreating] = useState(false);
-  const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
+  const catalog = useQuery(methodCardsQuery());
   const [edit, setEdit] = useState(false);
   const [records, setRecords] = useState(false);
   const [reportImage, setReportImage] = useState<{runId: string; image: CadImage}>();
@@ -279,7 +280,7 @@ export function StudyWorkspace() {
   const edits = context.dirty ? Math.max(1, Object.keys(context.domainDraft?.fields || {}).length + Object.keys(context.draft?.parameterFields || {}).length) : 0;
   // 浏览子模块不会改变研究状态；状态来自研究保存的最近运行摘要。
   const overallRun = optionalRecord(study.raw.latest_run);
-  useMethodPresentationNotice(study, overallRun.id ? overallRun : undefined, context.notice);
+  const methodPresentationNotice = useMethodPresentationNotice(study, search.run ? run : overallRun.id ? overallRun : undefined);
   const presentation = studyPresentation(study, overallRun.id ? overallRun : undefined, edits, context.runError, context.loadingRuns && !overallRun.id);
   const selectedPresentation = studyPresentation(study, run, edits);
   const recalculateTarget = { wid: study.workspace, sid, module: (search.run || module === 'report' ? text(optionalRecord(run?.snapshot).module) : configuredModule) || undefined };
@@ -470,8 +471,8 @@ export function StudyWorkspace() {
         >
           {commandBar}
           <div className="workbench-frame">
-          <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={canvasDocument} modelLabel={viewingOldInput ? '历史运行模型' : independentInput ? '本研究模型（独立输入）' : '工程模型'} activeStudy={sid} activeState={presentation} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
-          <div className={`workbench study-workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-dock={dockMax ? "max" : undefined}>
+          <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={canvasDocument} modelLabel={viewingOldInput ? '历史运行模型' : independentInput ? '本研究模型（独立输入）' : '工程模型'} activeStudy={sid} activeRow={study} activeState={presentation} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
+          <div className={`workbench study-workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-analysis={module} data-dock={dockMax ? "max" : undefined}>
           {(answer || preview.result || preview.error) && <section className="answer-bar" aria-label="结论">{answer}<PreviewStrip preview={preview} saved={run?.headlines || (overallRun.id === run?.id ? overallRun.headlines : undefined)} /></section>}
           {showCanvas && (
             <section className="workbench-canvas" aria-label="模型">
@@ -540,6 +541,7 @@ export function StudyWorkspace() {
               {showCanvas && <IconButton variant="ghost" icon={dockMax ? "action/chevron-down" : "action/chevron-up"} label={dockMax ? "还原结果面板" : "放大结果面板"} onClick={() => setDockMax(!dockMax)} />}
             </div>
           <TabsContent value={tab} className="workbench-dock-body">
+          {methodPresentationNotice && <InformationNotice title="方法说明已更新" description={methodPresentationNotice.description} onDismiss={methodPresentationNotice.dismiss} />}
           {(selectedPresentation.historical || context.dirty) && run && <div className="study-history-line" role="status"><span title={selectedPresentation.releaseDetails}>{context.dirty ? '已显示保存结果；修改尚未保存' : selectedPresentation.reason}</span>{recalculate}</div>}
           {!!context.saveError && (
             <ErrorState
@@ -548,7 +550,7 @@ export function StudyWorkspace() {
             />
           )}
           {workspaceMethod ? <div className="study-method-workspace" aria-label="有限元方法参数">
-            <h3>本次计算参数</h3>
+            <h3 className="study-parameters-heading">本次计算参数</h3>
             <p className="muted">先核对网格、计算域、材料来源和热边界；数值求解选项在“高级参数”。</p>
             <StudyMethodForm module={module} historical={methodHistorical} savedRun={methodHistorical ? run : undefined}
               definition={methodHistorical ? ((optionalRecord(run?.snapshot).study_definition || optionalRecord(run?.snapshot).definition) as StudyDefinition) : undefined} />

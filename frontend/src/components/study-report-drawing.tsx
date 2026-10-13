@@ -51,7 +51,36 @@ export async function reportSectionImages(run: Record<string, unknown>) {
         const style=getComputedStyle(originals[i]);
         for (const key of ['color','fill','fill-opacity','stroke','stroke-width','stroke-opacity','stroke-linecap','stroke-linejoin','stroke-dasharray','paint-order','vector-effect','font-family','font-size','font-weight','opacity','text-anchor','dominant-baseline']) copies[i].setAttribute(key,style.getPropertyValue(key));
       }
-      const size=svg.getBoundingClientRect(), width=Math.round(size.width*2),height=Math.round(size.height*2);
+      // The workbench shares a screen-size SVG for overview and detail. Its
+      // unbounded soil/ground paths must not cross the paper's detail panel.
+      // Clip only the overview to its actual allocated rectangle; keep the
+      // existing drawing's dimensions, phases and saved temperature annotations.
+      const frame=copy.querySelector<SVGRectElement>('.drawing-detail-frame');
+      if(frame) {
+        const ns='http://www.w3.org/2000/svg', boundary=Number(frame.getAttribute('x'))-16;
+        const defs=window.document.createElementNS(ns,'defs'),clip=window.document.createElementNS(ns,'clipPath'),rect=window.document.createElementNS(ns,'rect');
+        const clipId='report-overview-'+section.id.replace(/[^a-zA-Z0-9_-]/g,'_');
+        clip.setAttribute('id',clipId);rect.setAttribute('x','0');rect.setAttribute('y','0');rect.setAttribute('width',String(boundary));rect.setAttribute('height',String(svg.viewBox.baseVal.height));
+        clip.append(rect);defs.append(clip);copy.prepend(defs);
+        const overview=window.document.createElementNS(ns,'g');overview.setAttribute('clip-path',`url(#${clipId})`);
+        const main=Array.from(copy.children).filter(node=>node!==defs && Array.from(copy.children).indexOf(node)<Array.from(copy.children).indexOf(frame));
+        for(const node of main)overview.append(node);
+        copy.insertBefore(overview,frame);
+        const source=copy.querySelector('.drawing-detail-source');
+        source?.querySelector(':scope > path')?.remove();
+        source?.setAttribute('clip-path',`url(#${clipId})`);
+      }
+      // The drawing keeps crowded spacing labels outside its interactive SVG.
+      // Export those same labels below the figure, rather than losing them.
+      const notes=[...new Set(Array.from(host.querySelectorAll('.drawing-overflow-dimensions button')).map(node=>node.textContent?.trim()).filter((value):value is string=>!!value))];
+      const size=svg.getBoundingClientRect(), paperHeight=size.height+notes.length*24;
+      for(const [index,note] of notes.entries()) {
+        const label=window.document.createElementNS('http://www.w3.org/2000/svg','text');
+        label.setAttribute('x','16');label.setAttribute('y',String(size.height+20+index*24));
+        label.setAttribute('font-family','Noto Sans SC, sans-serif');label.setAttribute('font-size','14');label.setAttribute('fill',getComputedStyle(host).color);label.textContent=note;copy.append(label);
+      }
+      copy.setAttribute('viewBox',`0 0 ${size.width} ${paperHeight}`);
+      const width=Math.round(size.width*2),height=Math.round(paperHeight*2);
       copy.setAttribute('xmlns','http://www.w3.org/2000/svg');copy.setAttribute('width',String(width));copy.setAttribute('height',String(height));
       const url=URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(copy)],{type:'image/svg+xml'}));
       try {

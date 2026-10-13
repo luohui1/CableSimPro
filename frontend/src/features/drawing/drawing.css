@@ -110,6 +110,8 @@
 .drawing-ring.is-selected{stroke-width:3;stroke:var(--brand-primary);vector-effect:non-scaling-stroke}
 .drawing-selected-label{max-width:none;white-space:normal;overflow:visible}
 .drawing-compact-layers{position:absolute;inset:0 0 0 auto;width:calc(var(--space-12)*4.5);overflow:auto;display:flex;flex-direction:column;border-left:1px solid var(--line);background:var(--panel)}
-.drawing-compact-layers .button{height:auto;min-height:var(--space-8);display:flex;align-items:flex-start;flex-direction:column;text-align:left;white-space:normal;border-radius:var(--radius-item);flex-shrink:0}
+.drawing-compact-layer{display:flex;flex-direction:column;gap:var(--space-1);padding:var(--space-1) var(--space-2);border-bottom:1px solid var(--line);flex-shrink:0}
+.drawing-compact-layer .button{justify-content:flex-start;text-align:left;white-space:normal;border-radius:var(--radius-item)}
+.drawing-compact-layer>span{font-size:var(--text-note);color:var(--text-secondary);overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 .drawing-layer-detail,.drawing-result-reference,.drawing-compact-reference{display:flex;align-items:center;gap:var(--space-3);padding:var(--space-1) var(--space-2);border-top:1px solid var(--line);flex-shrink:0;overflow:auto;white-space:nowrap;font-variant-numeric:tabular-nums}
 .drawing-temperature-ramp{display:inline-block;width:calc(var(--space-12)*3);height:var(--space-3);flex-shrink:0}

@@ -15,7 +15,8 @@ def make_router(index):
         await run_in_threadpool(index.warm_done.wait,5)
         index.startup_wait_ms=(perf_counter()-started)*1000
         try:yield
-        finally:index.previous=None
+        finally:
+            index.previous=None;index.cached=None;index.decoded=None;index.reproduction_cache=None
     router=APIRouter(prefix='/api/index',tags=['index'],lifespan=lifespan)
 
     @router.get('/objects',response_model=ObjectList)

@@ -59,7 +59,7 @@ export function StudyRunControl({
     lock: string;
   } | null>(null);
   const configuration = moduleConfiguration(context.study.definition, module);
-  const availability = useQuery({ queryKey: ['simulation-availability', context.study.id, module], enabled: !!configuration, retry: false,
+  const availability = useQuery({ queryKey: ['simulation-availability', context.study.id, module], enabled: !!configuration && open, retry: false,
     queryFn: ({signal}) => hpcJson(`/workspaces/${context.study.workspace}/studies/${context.study.id}/availability?` +
       new URLSearchParams(context.study.definition.modules?.[module] ? {module} : {}), {signal}) });
   const remoteOnly = availability.data?.location === 'slurm';

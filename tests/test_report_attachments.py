@@ -57,7 +57,7 @@ def test_cad_image_delivery_is_frozen_retry_safe_and_pdf_contains_image(client, 
     assert client.post(endpoint,json=rejected).json()['detail']['code']=='REPORT_ATTACHMENT_INVALID'
 
 
-def test_linear_saved_fem_chapter_is_rebuilt_and_unconverged_is_blocked(monkeypatch):
+def test_linear_saved_fem_chapter_is_rebuilt_and_unconverged_is_blocked(monkeypatch, tmp_path):
     monkeypatch.setattr('backend.kernel.fem_evidence.workflow_for',lambda *a:None)
     fem, iec = saved_fixture()
     fem['convergence']={'status':'converged','reason':'三档网格及计算域通过', 'reference_case_id':'case-0',
@@ -65,7 +65,14 @@ def test_linear_saved_fem_chapter_is_rebuilt_and_unconverged_is_blocked(monkeypa
                 for i,(h,t,delta) in enumerate(((.008,320.08,None),(.004,320.03,.05),(.002,320.,.03)))]+
         [{'case_id':'domain','mesh_size_m':.002,'hotspot_k':320.02,'change_k':.02}]}
     saved = {fem['id']:fem,iec['id']:iec}
-    research = SimpleNamespace(get_run=lambda wid,rid:deepcopy(saved[rid]))
+    from backend.kernel.workspace import WorkspaceStore
+    research = SimpleNamespace(get_run=lambda wid,rid:deepcopy(saved[rid]),
+                               store=WorkspaceStore(tmp_path/'attachments.sqlite'))
+    # This existing linear hand-check has no database source rows. Keep its
+    # in-memory display adapter explicit; real source-byte/display validation
+    # is exercised with the saved Slurm run in test_read_projections.
+    monkeypatch.setattr('backend.kernel.batch_field_projection.read_display',
+                        lambda service,wid,rid:deepcopy(saved[rid]))
     ref = {'fem_run_id':fem['id'],'iec_run_id':iec['id']}
     ids, attachments = prepare(research,fem['workspace'],[fem['id']],[],ref)
     assert ids==[fem['id'],iec['id']]

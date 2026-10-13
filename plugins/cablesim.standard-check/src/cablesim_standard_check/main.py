@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
-VERSION = '1.4.0'
+VERSION = '1.5.1'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 DATA = json.loads(Path(__file__).with_name('dimensions.json').read_text('utf-8'))
 AREAS = DATA['areas_mm2']
@@ -189,7 +189,19 @@ class _Check:
         self.cable, self.root, self.family, self.materials = prepare(document, parameters)
         self.document = document
         self.rows, self.trace, self.not_applicable = [], [], []
-        self.observations = document.get('measurements', [])
+        self.observations = list(document.get('measurements', []))
+        # Dimensionless observations are versioned receipts, separate from the
+        # nominal tape overlap. domain/1 keeps its original SI measurement enum.
+        for path, source in document.get('provenance', {}).items():
+            if not path.startswith('/factory_measurements/'):
+                continue
+            receipt = json.loads(source.get('reference') or '{}')
+            if receipt.get('schema') != 'cablesim.factory-measurement/1':
+                raise ValueError('实测记录格式无效，请重新录入。')
+            observation = receipt.get('observation', {})
+            if observation.get('quantity') != 'minimum_overlap' or observation.get('unit') != '1' or observation.get('basis') != 'measurement' or not 0 <= observation.get('value', -1) <= 1:
+                raise ValueError('实测搭盖率须以无量纲比例记录，范围为 0% 至 100%。')
+            self.observations.append(observation)
 
     def rule(self, key):
         return DATA['rules'][key][self.family]
@@ -270,8 +282,10 @@ class _Check:
         observation = self.observed(target.get('core_id'), target.get('role'), quantity)
         design_actual = actual
         if observation:
-            expected_unit = 'ohm/m' if quantity == 'r20' else 'm2' if quantity == 'screen_area' else 'm'
-            actual = observation['value'] * (1e6 if expected_unit == 'm2' else 1000)
+            expected_unit = 'ohm/m' if quantity == 'r20' else 'm2' if quantity == 'screen_area' else '1' if quantity == 'minimum_overlap' else 'm'
+            if observation['unit'] != expected_unit:
+                raise ValueError('实测记录单位不符，停止比较。')
+            actual = observation['value'] * (1e6 if expected_unit == 'm2' else 1 if expected_unit == '1' else 1000)
             basis, provenance = observation['basis'], observation['source']
             if limit is not None and key == 'r20':
                 reason = '出厂数据与标准上限比较；来源记录不代表已人工批准。'
@@ -420,7 +434,7 @@ class _Check:
                 tmin, tmax = (minimum['value'], maximum['value']) if same_sample else (None, None)
                 if tmin is not None and tmin > tmax:
                     raise ValueError('measurements.minimum_thickness：同一试样的最薄点大于最大实测厚度。')
-            row(
+            uniformity = row(
                 'insulation-uniformity',
                 f'芯 {i+1} · 绝缘厚度偏差',
                 ip + '.maximum_thickness',
@@ -431,6 +445,8 @@ class _Check:
                 basis='measurement',
                 reason='需录入同一试样的最薄点和最大实测厚度。',
             )
+            if minimum and maximum and same_sample:
+                uniformity.update(input_source=minimum['source'], measurement_ids=[minimum['id'], maximum['id']])
         return ins, tn
 
     def screen(self, core, i, pairs, area):

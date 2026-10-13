@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { displayName } from '@/lib/display-names';
-import { inputContracts, exactContract } from "@/api/input-contracts";
-import { methodCatalog, type StudyDefinition } from "@/api/research";
+import { exactContract, inputContractQuery } from "@/api/input-contracts";
+import { type StudyDefinition } from "@/api/research";
+import { methodCardsQuery } from '@/lib/study-queries';
 import { optionalRecord, text, message } from "@/api/client";
 import type { components } from "@/api/generated/schema";
 import { useStudy } from "./study-provider";
@@ -76,14 +77,19 @@ export function StudyMethodForm({
       duct: domain.sections.flatMap((section) => (section.enclosures || []).filter((item) => item.type === "duct").map((item) => option(item.id))),
     };
   }, [domain]);
-  const contracts = useQuery({
-    queryKey: ["input-contracts"],
-    queryFn: ({ signal }) => inputContracts(signal),
+  const methods = useQuery(methodCardsQuery());
+  const choices=(methods.data || []).flatMap(entry=>(Array.isArray(entry.capabilities) ? entry.capabilities : []).map(optionalRecord).flatMap(cap=>{
+    const method={...optionalRecord(entry.method),capability:text(cap.id)} as Method;
+    const task=(['transient-temperature','sheath-losses','electrothermal-steady'].includes(text(cap.id)) ? text(cap.id) : Array.isArray(cap.study_tasks) && cap.study_tasks.includes('operating') ? 'operating' : 'rating') as Configuration['task'];
+    if (rootModule({method,driver:{kind:'single'},task} as StudyDefinition)!==module || entry.platform_supported===false) return [];
+    return [{value:method.plugin_id+':'+method.capability,label:text(entry.name)+' · '+text(cap.title),method,task}];
+  }));
+  const chosen=choices.find(row=>row.value===initialMethod) || choices[0];
+  const selectedContract = useQuery({
+    ...inputContractQuery(configuration?.method || chosen?.method || definition.method),
+    enabled: !!configuration || !!chosen,
   });
-  const methods = useQuery({
-    queryKey: ["method-catalog"],
-    queryFn: ({ signal }) => methodCatalog(signal),
-  });
+  const contracts = {...selectedContract, data:selectedContract.data ? [selectedContract.data] : undefined};
   // The form engine keys its field state by schema identity. Keep the filtered
   // schema stable across its change notifications to avoid a reset/render loop.
   const selectLayout = useMemo(() => {
@@ -104,18 +110,11 @@ export function StudyMethodForm({
   // number must not reset the existing contract form's editor state.
   const missingSignature=JSON.stringify(missingRequiredPaths(selectLayout.remaining,selectLayout.root,parameters));
   const remaining=useMemo(()=>visibleRequiredSchema(selectLayout.remaining,selectLayout.root,new Set<string>(JSON.parse(missingSignature))),[selectLayout,missingSignature]);
-  if (contracts.isPending || methods.isPending)
+  if ((configuration || chosen) && contracts.isPending || methods.isPending)
     return <LoadingState title="正在读取方法输入契约" />;
   if (!configuration) {
     if (historical) return <EmptyState title="该保存运行未配置此模块" description="历史运行保持只读；返回当前研究可建立新配置。" />;
     if (methods.error || contracts.error) return <ErrorState title="方法清单读取失败" description={message(methods.error || contracts.error)} />;
-    const choices=(methods.data || []).flatMap(entry=>(Array.isArray(entry.capabilities) ? entry.capabilities : []).map(optionalRecord).flatMap(cap=>{
-      const method={...optionalRecord(entry.method),capability:text(cap.id)} as Method;
-      const task=(['transient-temperature','sheath-losses','electrothermal-steady'].includes(text(cap.id)) ? text(cap.id) : Array.isArray(cap.study_tasks) && cap.study_tasks.includes('operating') ? 'operating' : 'rating') as Configuration['task'];
-      if (rootModule({method,driver:{kind:'single'},task} as StudyDefinition)!==module || entry.platform_supported===false) return [];
-      return [{value:method.plugin_id+':'+method.capability,label:text(entry.name)+' · '+text(cap.title),method,task}];
-    }));
-    const chosen=choices.find(row=>row.value===initialMethod) || choices[0];
     return <div className="parameter-form"><p>此模块尚未配置。建立配置后核对必填输入，再保存研究；已有模块和运行记录保持不变。</p>
       {chosen ? <><Select label="模块方法" value={chosen.value} options={choices} disabled={context.saving} onChange={setInitialMethod} />
       <p className="muted">参数来源：当前已封签插件输入契约的默认值；没有默认值的必填项需工程师填写。</p>

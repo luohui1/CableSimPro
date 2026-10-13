@@ -10,6 +10,9 @@ import { StudyRunControl, StudyRemoteProgress } from './study-run-control';
 import { LoadingState, ErrorState } from './states';
 import { SolverLocation } from './solver-location';
 import type { SolverCapability } from '@/lib/solver-location';
+import { deferredView } from './deferred-view';
+import { domainCapacityRegions } from '@/features/field/capacity-regions';
+const HeatCapacityForm = deferredView(() => import('@/features/field/heat-capacity-form').then(m => ({default:m.HeatCapacityForm})));
 import '@/features/field/field.css';
 
 export function SimulationSetupStatus({ estimate, loading, error, action, boundary }: {
@@ -41,13 +44,17 @@ export function SimulationSetup({ module }: { module: string }) {
     queryFn: ({ signal }) => hpcJson(`/workspaces/${context.study.workspace}/studies/${context.study.id}/estimate?` +
       new URLSearchParams({ expected_revision: String(context.workspace.revision), expected_study_revision: String(context.study.revision),
         ...(context.study.definition.modules?.[module] ? { module } : {}) }), { signal }) });
-  if (!configuration) return <section className="input-section" aria-label="模块配置">
+  const materialRegions = domainCapacityRegions(context.domain);
+  const savedSource = context.runs.filter(run=>run.status==='succeeded').sort((a,b)=>Number(b.sequence)-Number(a.sequence))[0];
+  if (!materialRegions.some(region=>region.category==='soil')) materialRegions.push({id:'material/soil',label:'现场土壤',category:'soil'});
+  if (!configuration) return <div className="input-module"><section className="input-section" aria-label="模块配置">
     <p role="status">尚未配置该模块</p>
     <p>请先选择计算方法并保存参数，再检查输入和运行。</p>
     <Link to="/studies/$sid/$module/$tab" params={{ sid: context.study.id, module, tab: 'parameters' }}
       search={previous => ({ ...previous, theme: previous.theme === 'dark' ? 'dark' : 'light',
         workspace: context.study.workspace, run: '', delivery: '', inspector: 'method' })}>配置方法与参数</Link>
-  </section>;
+  </section>{module==='transient'&&materialRegions.length>0&&<HeatCapacityForm regions={materialRegions}
+    savedSource={savedSource?{workspace:context.study.workspace,study:context.study.id,run:text(savedSource.id)}:undefined}/>}</div>;
   if (active) return <StudyRemoteProgress />;
   const input = context.moduleInputs[module]?.value ?? configuration?.method_input ?? context.domain;
   const boundary = configuration?.method?.capability === 'iec-thermal-field'

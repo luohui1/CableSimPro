@@ -21,7 +21,7 @@ class DeliveryJobs:
         with self.lock:
             for job in self.jobs.values():
                 if job['state'] in ('queued','running') and job['stage']!='save':job['state']='cancelled'
-        self.worker.shutdown(wait=False,cancel_futures=True)
+        self.worker.shutdown(wait=True,cancel_futures=True)
 
     def warm_saved_image(self,wid,rid):
         """Format only the chosen, verified IEC display artifact after saving.
@@ -38,7 +38,7 @@ class DeliveryJobs:
             if case is None:return
             field=case.get('artifacts',{}).get('x-cablesim.temperature-field')
             status=run.get('artifact_status',{}).get(case['case_id'],{}).get('x-cablesim.temperature-field',{})
-            if field and status.get('status')=='verified':saved_field_image(field)
+            if field and status.get('status')=='verified':saved_field_image(field,self.research)
         def completed(future):
             if future.cancelled():return
             if future.exception():

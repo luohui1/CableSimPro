@@ -20,7 +20,9 @@ const Context = createContext<TypeContextValue | null>(null);
 export function useTypeWorkspace() { const value = useContext(Context); if (!value) throw new Error('型号工作区未挂载'); return value; }
 export function TypeProvider({ wid, children }: { wid: string; children: ReactNode }) {
   const queries = useQueryClient(), { location } = useTypeNavigation();
-  const query = useQuery({ queryKey: ['type-workspace', wid, location.revision, location.run], queryFn: ({ signal }) => loadWorkspace(wid, signal, location.revision, location.run), staleTime: 0 });
+  // The route starts this read on entry. Mounting must not repeat a just-finished
+  // prefetch; explicit reload/save/undo keep their existing refresh behavior.
+  const query = useQuery({ queryKey: ['type-workspace', wid, location.revision, location.run], queryFn: ({ signal }) => loadWorkspace(wid, signal, location.revision, location.run), staleTime: 0, refetchOnMount: false });
   const [draft, setDraft] = useState<DomainDraft | null>(null), [busy, setBusy] = useState(false), [error, setError] = useState(''), [notice, setNotice] = useState('');
   const [ratingDraft, setRatingDraft] = useState<RatingDraft | null>(null), ratingRef = useRef(ratingDraft); ratingRef.current = ratingDraft;
   const [methodDrafts, setMethodDrafts] = useState<Record<string, MethodDraft>>({}), methodsRef = useRef(methodDrafts); methodsRef.current = methodDrafts;

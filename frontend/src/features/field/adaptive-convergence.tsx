@@ -16,12 +16,13 @@ export function AdaptiveConvergence({ run }: { run: Record<string, unknown> }) {
   const [retainDomains, setRetainDomains] = useState('2');
   const [error, setError] = useState(''), [busy, setBusy] = useState(false), lock = useRef(false), request = useRef({ scope: '', id: '' });
   const wid = text(run.workspace), sid = text(run.study);
-  const history = useQuery({ queryKey: ['adaptive-convergence', wid, sid], enabled: !!wid && !!sid,
+  const history = useQuery({ queryKey: ['adaptive-convergence', wid, sid], enabled: !!wid && !!sid, staleTime: 3000,
     queryFn: ({ signal }) => hpcJson(`/convergence?workspace=${encodeURIComponent(wid)}&study=${encodeURIComponent(sid)}`, { signal }),
     refetchInterval: query => records(query.state.data?.items).some(row => ['queued', 'running'].includes(text(row.status))) ? 3000 : false, retry: false });
   const item = records(history.data?.items).find(row => row.source_run_id === run.id || row.study === sid);
-  const continuation = item && ['cancelled', 'blocked', 'budget_exhausted', 'failed'].includes(text(item.status))
-    ? records(item.rows).filter(row => row.kind === 'mesh' && row.run_id !== item.source_run_id).at(-1) : undefined;
+  const pendingRating = item?.status === 'completed' && optionalRecord(item.verdict).status === 'converged' && !item.rating_run_id;
+  const continuation = item && (pendingRating || ['cancelled', 'blocked', 'budget_exhausted', 'failed'].includes(text(item.status)))
+    ? records(item.rows).filter(row => row.kind === 'mesh').at(-1) : undefined;
   const active = item && ['queued', 'running'].includes(text(item.status));
   const verdict = optionalRecord(item?.verdict);
   const domains = records(item?.rows).filter(row => row.kind === 'domain');
@@ -60,18 +61,18 @@ export function AdaptiveConvergence({ run }: { run: Record<string, unknown> }) {
         const scope = `${wid}:${sourceStudy}:${text(sourceRun)}:${continuation ? text(item?.id) : ''}:${retained}`;
         if (request.current.scope !== scope) request.current = { scope, id: crypto.randomUUID() };
         await hpcJson(`/workspaces/${encodeURIComponent(wid)}/studies/${encodeURIComponent(sourceStudy)}/convergence`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ request_id: request.current.id, source_run_id: sourceRun, max_core_hours: Number(budget), tolerance_k: tolerance, max_steps: 12, budget_confirmed: true, max_nodes: 4000000, upgrade_method: true,
+          body: JSON.stringify({ request_id: request.current.id, source_run_id: sourceRun, max_core_hours: Number(budget), tolerance_k: tolerance, max_steps: 12, budget_confirmed: true, max_nodes: 4000000, upgrade_method: true, calculate_final_rating: true,
             ...(continuation ? { continue_from: item?.id } : {}), ...(retained ? { retain_domain_levels: retained } : {}) }) });
       } else await hpcJson(`/convergence/${text(item?.id)}/${action}`, { method: 'POST' });
       setOpen(false); await history.refetch();
     } catch (failure) { setError(message(failure)); }
     finally { lock.current = false; setBusy(false); }
   }
-  return <section className="input-section" aria-label="自动加密与扩域">
+  return <section className="input-section fem-convergence" aria-label="自动加密与扩域">
     <div className="hpc-actions"><h3>自动加密与扩域</h3>{!item && <Button disabled={busy || history.isPending || !!history.error} onClick={() => setOpen(true)}>设置收敛预算</Button>}
-      {active && <Button variant="ghost" disabled={busy || !!item.cancel_requested} onClick={() => void perform('cancel')}>{item.cancel_requested ? '取消待确认' : '停止后续级别'}</Button>}
+      {(active || item?.status === 'interrupted') && <Button variant="ghost" disabled={busy || !!item.cancel_requested} onClick={() => void perform('cancel')}>{item.cancel_requested ? '取消待确认' : '停止后续级别'}</Button>}
       {(item?.status === 'interrupted' || collectionFailed) && <Button disabled={busy} onClick={() => void perform('resume')}>{collectionFailed ? '回收原作业结果' : '恢复原作业'}</Button>}
-      {continuation && <Button disabled={busy} onClick={() => setOpen(true)}>用当前版本继续</Button>}
+      {continuation && <Button disabled={busy} onClick={() => setOpen(true)}>{pendingRating ? '完成载流量封存' : '用当前版本继续'}</Button>}
       {history.error && <Button variant="ghost" onClick={() => void history.refetch()}>重试</Button>}
     </div>
     {(history.error || error) && !open && <ErrorState description={error || message(history.error)} />}

@@ -44,6 +44,7 @@ function shader(gl: WebGL2RenderingContext, type: number, source: string) {
 export function FieldView({ points, triangles, values, limit, circles = [], maskObjects = true, groundZ, hotspot, bands = 14, label, samplePoint }: FieldViewProps) {
   const host = useRef<HTMLDivElement>(null), canvas = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
+  const [visible, setVisible] = useState(false);
   const [view, setView] = useState<View | null>(null);
   const [pointer, setPointer] = useState<{ x: number; y: number; value?: number; world: Point; pending?: boolean; failed?: boolean } | null>(null);
   const drag = useRef<{ x: number; y: number; view: View } | null>(null);
@@ -78,7 +79,7 @@ export function FieldView({ points, triangles, values, limit, circles = [], mask
     return { x0, x1, z0, z1 };
   }, [points]);
   const levels = useMemo(() => contourLevels(range.minimum, range.maximum, 8), [range]);
-  const contours = useMemo(() => levels.map((level) => ({ level, segments: contourSegments(points, triangles, values, level) })), [levels, points, triangles, values]);
+  const contours = useMemo(() => visible ? levels.map((level) => ({ level, segments: contourSegments(points, triangles, values, level) })) : [], [visible, levels, points, triangles, values]);
   const locator = useMemo(() => buildLocator(points, triangles), [points, triangles]);
   useEffect(() => {
     if (!samplePoint || !pointer) return;
@@ -116,13 +117,15 @@ export function FieldView({ points, triangles, values, limit, circles = [], mask
   useEffect(() => {
     const element = host.current;
     if (!element) return;
+    const visibility = new IntersectionObserver(([entry]) => setVisible(entry.isIntersecting));
+    visibility.observe(element);
     // 尺寸没变就不更新状态：否则旁边属性栏内容变化引起的回流会让场图反复重绘，整页卡死
     const observer = new ResizeObserver(([entry]) => {
       const width = Math.round(entry.contentRect.width), height = Math.round(entry.contentRect.height);
       setSize(current => current.width === width && current.height === height ? current : { width, height });
     });
     observer.observe(element);
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); visibility.disconnect(); };
   }, []);
 
   // 上传网格：位置、节点值、索引（WebGL2 支持 32 位索引）。
@@ -159,7 +162,7 @@ void main() { float t = clamp((v_value - u_min) / (u_max - u_min), 0.0, 1.0); if
     gl.current = { context, program, count: triangles.length * 3 };
     return () => { buffers.forEach(buffer => context.deleteBuffer(buffer)); context.deleteVertexArray(vao);
       context.getAttachedShaders(program)?.forEach(shader => context.deleteShader(shader)); context.deleteProgram(program); gl.current = null; };
-  }, [points, triangles, values]);
+  }, [visible, points, triangles, values]);
 
   // 每次视图或尺寸变化重画（只改 uniform，不重新上传网格）。
   useEffect(() => {
@@ -278,8 +281,8 @@ void main() { float t = clamp((v_value - u_min) / (u_max - u_min), 0.0, 1.0); if
     onPointerDown={(event) => { const [x, y] = local(event); if (x > plotWidth || y > plotHeight) return; drag.current = { x, y, view: camera }; event.currentTarget.setPointerCapture(event.pointerId); }}
     onPointerMove={move} onPointerUp={() => { drag.current = null; }} onPointerLeave={() => { drag.current = null; setPointer(null); }}
     onDoubleClick={() => setView(null)}>
-    <canvas ref={canvas} className="field-canvas" />
-    {size.width > 0 && <svg className="field-overlay" width={size.width} height={size.height}>
+    {visible && <canvas ref={canvas} className="field-canvas" />}
+    {visible && size.width > 0 && <svg className="field-overlay" width={size.width} height={size.height}>
       <defs><clipPath id={clipId}><rect width={plotWidth} height={plotHeight} /></clipPath></defs>
       <g clipPath={`url(#${clipId})`}>
       {contours.map(({ level, segments }) => {

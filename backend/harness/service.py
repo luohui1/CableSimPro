@@ -158,7 +158,12 @@ class Harness:
                 model_recipe=next((e['data'] for e in reversed(record['events']) if e['type']=='recipe.finished'
                     and e['data'].get('turn_id')==turn and e['data'].get('source')=='model'
                     and not e['data'].get('remaining_pages')),None)
-                recipe_ready=model_recipe and (progress['all_satisfied'] if progress['goals'] else model_recipe.get('all_results_reused',False))
+                # A model-selected finite recipe has already supplied its
+                # declared scope. Awaiting a duplicate recipe before explaining
+                # wasted a provider round and a second pair of tool intents.
+                # Explicit multi-goal plans still keep tools until every goal's
+                # receipts are present; paginated recipes remain open above.
+                recipe_ready=model_recipe and (progress['all_satisfied'] if progress['goals'] else model_recipe.get('status')=='completed')
                 answer_reason=('研究保存的方法发行已变化，预检尚未执行。根据结构化原因说明阻断及人工下一步，不重复预检、不宣称缺项已检查。' if method_block else
                     '宿主已执行所选配方。按回执解释结果、检查覆盖范围及尚未覆盖的目标；预检通过不等于工程合格，不再重复已完成的配方。' if requested or recipe_ready else
                     '连续读取没有取得新证据。说明已完成目标、缺口及可执行下一步。' if progress['consecutive_unproductive_reads']>=record['budget']['limits']['max_read_tool_calls'] else None)
@@ -170,7 +175,7 @@ class Harness:
                     'read_tool_calls':reads,'max_read_tool_calls':record['budget']['limits']['max_read_tool_calls'],
                     'consecutive_unproductive_reads':progress['consecutive_unproductive_reads'],
                     'tools_allowed':False,'remaining_page':digest.get('next_page') if digest else None})
-                shown=tools
+                shown=self.remaining_preflights(tid,record,tools,current)
                 prompt,definitions=prepare(record,shown,self.registry.directory(record) if not answer_only else [],
                     closing=answer_reason,
                     instructions=self.settings.instructions(),progress=progress)
@@ -205,7 +210,7 @@ class Harness:
                     yield from self.answer_loop(tid,turn,reply.text,reply.reasoning)
                     break
                 if answer_only:raise HTTPException(422,{'code':'TOOLS_NOT_ALLOWED','message':'本次仅解释已取得证据与诊断，不能继续调用工具。'})
-                plan=compile_calls(reply.tool_calls,shown,record['workspace_id'],record['workspace_revision'])
+                plan=compile_calls(reply.tool_calls,tools,record['workspace_id'],record['workspace_revision'])
                 waiting=yield from self.execute_plan(tid,turn,plan,tools,record,reasoning=reply.reasoning,soft_limit=True)
                 if waiting=='scope_confirmation':
                     state,reason='waiting',waiting
@@ -473,7 +478,8 @@ class Harness:
             recovery_tools={name:tool for name,tool in visible.items() if tool.kind=='read' and name!='task_plan'} if needs_evidence else {}
             progress=task_progress(record,visible)
             if self.method_problem(record,turn) or progress['consecutive_unproductive_reads']>=record['budget']['limits']['max_read_tool_calls']:recovery_tools={}
-            prompt,definitions=prepare(record,recovery_tools,closing=None if recovery_tools else '只重写被拦的解释，不执行任何业务动作。',
+            shown=self.remaining_preflights(tid,record,recovery_tools,self.turn_steps(record,turn))
+            prompt,definitions=prepare(record,shown,closing=None if recovery_tools else '只重写被拦的解释，不执行任何业务动作。',
                 feedback=feedback,instructions=self.settings.instructions(),progress=progress)
             _,model=self.model.status();metrics={**request_summary(model,prompt,definitions),'phase':'repair'}
             with self.research.store.db() as db:task=self.tasks.load(db,tid)
@@ -572,19 +578,59 @@ class Harness:
     def previous_read(self,tid,node):
         if node['tool'] not in ('run_read','workspace_read','study_read','study_preflight'):return None
         if node['tool']=='study_preflight' and not node['input_identity'].get('verified_preflight_methods'):return None
-        view=lambda args:({key:args[key] for key in ('run_id','case_id','entity','key','input_paths') if args.get(key) is not None}
-            if node['tool']=='run_read' else args)
+        def view(args,identity):
+            if node['tool']=='study_preflight':return {'study_id':identity.get('study_id'),'module':args.get('module')}
+            return {key:args[key] for key in ('run_id','case_id','entity','key','input_paths') if args.get(key) is not None} if node['tool']=='run_read' else args
         physical=lambda identity:{key:value for key,value in identity.items() if key not in ('recipe','recipe_version','recipe_step')}
         record=self.tasks.record(tid,model_context=True)
         began=next(event['created'] for event in reversed(record['events']) if event['type']=='chat.message' and event['data'].get('role')=='user')
         found=next((step for step in reversed(record['steps']) if step['tool']==node['tool']
-            and step['state']=='succeeded' and step.get('result') and view(step['arguments'])==view(node['arguments'])
+            and step['state']=='succeeded' and step.get('result') and view(step['arguments'],step['input_identity'])==view(node['arguments'],node['input_identity'])
             and (node['tool']=='run_read' or step['created']>=began)
             and physical(step['input_identity'])==physical(node['input_identity'])),None)
         if found:
             with self.tasks.db() as db:found['result']=json.loads(db.execute('SELECT result FROM agent_steps WHERE operation_id=?',
                 (found['operation_id'],)).fetchone()[0])
         return found
+
+    def remaining_preflights(self,tid,record,tools,current):
+        """Hide only already-verified scopes, retaining other studies/modules."""
+        tool=tools.get('study_preflight')
+        if tool is None:return tools
+        completed={((step.get('input_identity') or {}).get('study_id'),step['arguments'].get('module')):step
+            for step in current if step['tool']=='study_preflight' and step['state']=='succeeded'
+            and step.get('result') and (step.get('input_identity') or {}).get('verified_preflight_methods')}
+        if not completed:return tools
+        with self.tasks.db() as db:task=self.tasks.load(db,tid)
+        from backend.plugin_host import PluginHostError
+        excluded=[];confirmed=[]
+        for (sid,module),step in completed.items():
+            node={'tool':'study_preflight','arguments':{'study_id':sid,'module':module},'input_identity':step['input_identity']}
+            try:node['input_identity']=self.broker.identity(task,node,tool)
+            except (HTTPException,PluginHostError):continue
+            if self.previous_read(tid,node) is None:continue
+            properties={'study_id':{'enum':[sid,None] if sid==record['study_id'] else [sid]},'module':{'const':module}}
+            required=([] if sid==record['study_id'] else ['study_id'])+([] if module is None else ['module'])
+            excluded.append({'properties':properties,'required':required})
+            confirmed.append({'study_id':sid,'module':module,'source_operation_id':step['operation_id']})
+        if not excluded:return tools
+        parameters={**tool.parameters,'not':{'anyOf':excluded}}
+        self.tasks.emit(tid,'preflight.scopes_satisfied',{'scopes':confirmed,
+            'excluded_scopes':excluded,'input_and_seals_rechecked':True})
+        result={**tools,'study_preflight':replace(tool,parameters=parameters,
+            title=tool.title+'：已完成范围不可重复，引用已有成功回执；其他研究/模块仍可检查',
+            description=tool.description+' 已成功且输入和封签未变化的预检范围已从参数中排除，直接引用已有回执；其他研究和模块仍可检查。')}
+        # The missing-input recipe expands to this same preflight. Excluding
+        # only the direct tool leaves a second path to the identical operation.
+        # Keep the recipe usable for any other study/module, with defaults
+        # resolved in exactly the same way as the direct call.
+        recipe=tools.get('recipe_execute')
+        if recipe:
+            nested=[{'properties':{'recipe':{'const':'missing_inputs'},'parameters':scope},
+                'required':['recipe','parameters']} for scope in excluded]
+            result['recipe_execute']=replace(recipe,parameters={**recipe.parameters,'not':{'anyOf':nested}},
+                title=recipe.title+'：已完成的缺项预检范围不可重做；引用现有回执或检查其他范围')
+        return result
 
     def close_stream(self,tid,turn,iterator):
         iterator.close()

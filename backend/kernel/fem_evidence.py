@@ -41,11 +41,12 @@ class FemConclusion(StrictModel):
 
 
 def workflow_for(research, wid, rid):
-    with research.store.db() as db:
+    with getattr(research.store, 'read_snapshot', research.store.db)() as db:
         if not db.execute("SELECT 1 FROM sqlite_master WHERE name='hpc_convergence'").fetchone():return None
-        states=db.execute('SELECT state FROM hpc_convergence ORDER BY rowid DESC').fetchall()
-    return next((v for row in states if (v:=json.loads(row['state']))['workspace']==wid
-        and v.get('rows') and v['rows'][-1]['run_id']==rid and v['status'] in ('completed','converged')),None)
+        row=db.execute("SELECT state FROM hpc_convergence WHERE json_extract(state,'$.workspace')=? "
+                       "AND json_extract(state,'$.rows[#-1].run_id')=? "
+                       "AND json_extract(state,'$.status') IN ('completed','converged') ORDER BY rowid DESC LIMIT 1",(wid,rid)).fetchone()
+    return json.loads(row['state']) if row else None
 
 
 def proof(research, run, identifier=None, *, display=False, summary=False):
@@ -57,13 +58,22 @@ def proof(research, run, identifier=None, *, display=False, summary=False):
     tolerance=workflow['request']['tolerance_k']
     if not 0<tolerance<=.1:raise HTTPException(422,'收敛门槛不能放宽到 0.1 K 以上。')
     proven=verdict(workflow['rows'],tolerance)
+    summary_sources=None
+    if summary and hasattr(research,'store'):
+        identifiers=list(dict.fromkeys(row['run_id'] for row in workflow['rows']))
+        # Verify all frozen row bindings against one independent snapshot. A
+        # connection per refinement repeats snapshot setup and cannot improve
+        # consistency; the same status/digest checks remain below for every row.
+        with getattr(research.store,'read_snapshot',research.store.db)() as db:
+            summary_sources={row['id']:row for row in db.execute(
+                'SELECT id,status,output_digest FROM study_runs WHERE workspace=? AND id IN ('+
+                ','.join('?' for _ in identifiers)+')',(run['workspace'],*identifiers))}
     for row in workflow['rows']:
-        if summary and hasattr(research,'store'):
+        if summary_sources is not None:
             # The saved summary is not a proof inspection. Bind each frozen row
             # to its source identity/digest without reading gigabytes of arrays.
             # Formal delivery below still verifies actual bytes and observations.
-            with research.store.db() as db:
-                source=db.execute('SELECT status,output_digest FROM study_runs WHERE workspace=? AND id=?',(run['workspace'],row['run_id'])).fetchone()
+            source=summary_sources.get(row['run_id'])
             if not source or source['status'] not in ('succeeded','partial') or source['output_digest']!=row['output_digest']:
                 raise HTTPException(409,'收敛摘要的保存来源已改变。')
             continue
@@ -81,7 +91,16 @@ def display_read(research,wid,rid):
     # Test/legacy services without a database keep their existing full reader.
     if not hasattr(research,'store'):return research.get_run(wid,rid)
     from .batch_field_projection import read_display
-    return read_display(research,wid,rid)
+    from .report_reads import read_cache
+    cache=read_cache();key=('display-read',id(research),wid,rid)
+    # One report operation uses one authenticated source snapshot. Returning an
+    # isolated copy prevents its chapter/cover formatting from changing the
+    # source receipt. Every new request still rechecks bytes and currentness;
+    # deliver() retains the final revision/consistency checks before saving.
+    if cache is not None and key in cache:return json.loads(cache[key])
+    run=read_display(research,wid,rid)
+    if cache is not None:cache[key]=json.dumps(run,ensure_ascii=False,separators=(',',':'),allow_nan=False)
+    return run
 
 
 def source_observation(research,wid,rid,case_id,kind):
@@ -91,30 +110,62 @@ def source_observation(research,wid,rid,case_id,kind):
     shards and display triangles are irrelevant to a saved convergence table.
     Legacy noncanonical output keeps the full verifier rather than weakening it.
     """
-    from .report_reads import byte_digest,read_cache,read_generation,observation_receipt
+    from .report_reads import byte_digest,read_cache,observation_generation,observation_receipt,saved_observation_receipt
     from cablesim_sdk.reproduction import digest as artifact_digest_of
     from .batch_convergence import observation
+    def legacy_observation():
+        saved=research.get_run(wid,rid)
+        if saved.get('integrity')!='verified':
+            raise HTTPException(409,'收敛来源运行完整性未通过，拒绝引用。')
+        return observation(saved,case_id,kind)
     cache=read_cache();key=('observation',id(research),wid,rid,case_id,kind)
     if cache is not None and key in cache:return cache[key]
-    generation=read_generation(research)
+    from pathlib import Path
+    import cablesim_sdk.reproduction as reproduction
+    source_generation=('observation-code',byte_digest(Path(__file__).read_bytes()),
+        byte_digest(Path(__file__).with_name('batch_convergence.py').read_bytes()),
+        byte_digest(Path(reproduction.__file__).read_bytes()))
+    generation=observation_generation(research,source_generation)
     receipt=observation_receipt(research,key,generation)
     if receipt is not None:
         if cache is not None:cache[key]=receipt
         return receipt
-    with research.store.db() as db:
-        db.execute('BEGIN')
-        row=db.execute('SELECT id,sequence,created,status,snapshot,input_digest,output_digest FROM study_runs WHERE workspace=? AND id=?',(wid,rid)).fetchone()
+    with getattr(research.store, 'read_snapshot', research.store.db)() as db:
+        if not hasattr(research.store, 'read_snapshot'):
+            db.execute('BEGIN')  # Legacy adapter only; production snapshot already began.
+        # Fetch each immutable source row once. Two SELECTs traverse the same
+        # large overflow pages twice even when only the first reads metadata.
+        row=db.execute('SELECT id,sequence,created,status,snapshot,input_digest,output_digest,CAST(output AS BLOB) AS output FROM study_runs WHERE workspace=? AND id=?',(wid,rid)).fetchone()
         if row is None:raise HTTPException(404,'收敛来源运行不存在。')
         if byte_digest(row['snapshot'])!=row['input_digest']:
-            return observation(research.get_run(wid,rid),case_id,kind)
+            return legacy_observation()
+        # Rehash actual saved bytes on a database commit, but do not repeatedly
+        # parse megabytes of immutable field JSON for a convergence-table row.
+        raw=row['output']
+        if not raw or byte_digest(raw)!=row['output_digest']:
+            return legacy_observation()
+        content_key=(key,row['input_digest'],row['output_digest'],row['status'],row['sequence'],row['created'])
+        # This receipt contains frozen observation metadata, not currentness.
+        # Actual input/output bytes were rehashed above. Bind the exact observer
+        # and digest implementation as well, so an unavailable directory-watch
+        # snapshot cannot force repeated large JSON parsing (or confer trust).
+        # Live method/input eligibility is still verified by the caller.
+        content_receipt=observation_receipt(research,content_key,source_generation)
+        disk_identity=artifact_digest_of((wid,rid,case_id,kind,row['input_digest'],row['output_digest'],
+            row['status'],row['sequence'],row['created'],source_generation))
+        if content_receipt is None:content_receipt=saved_observation_receipt(research,disk_identity)
+        if content_receipt is not None:
+            if cache is not None:cache[key]=content_receipt
+            observation_receipt(research,content_key,source_generation,content_receipt)
+            if generation==observation_generation(research,source_generation):
+                observation_receipt(research,key,generation,content_receipt)
+            return content_receipt
         snapshot=json.loads(row['snapshot']);index=next(i for i,c in enumerate(snapshot['cases']) if c['case_id']==case_id)
         base=f'$.cases[{index}]';field=base+'.artifacts."x-cablesim.temperature-field"';bundle=base+'.artifacts."x-cablesim.simulation-bundle"'
         paths=[base+'.case_id',base+'.status',field+'.source',field+'.hotspot.temperature_k',field+'.convergence.full_mesh_nodes',bundle+'.field_storage.nodes',base+'.artifact_digests."x-cablesim.temperature-field"',base+'.artifact_digests."x-cablesim.simulation-bundle"']
-        metadata=db.execute('SELECT CAST(output AS BLOB) AS output,json_extract(output,'+','.join('?' for _ in paths)+') AS metadata,CASE WHEN json_extract(output,?) IS NULL THEN json_array_length(output,?) END AS display_nodes FROM study_runs WHERE workspace=? AND id=?',(*paths,bundle+'.field_storage.nodes',field+'.mesh.points',wid,rid)).fetchone()
-        if not metadata['output'] or byte_digest(metadata['output'])!=row['output_digest']:
-            return observation(research.get_run(wid,rid),case_id,kind)
+        metadata=db.execute('SELECT json_extract(output,'+','.join('?' for _ in paths)+') AS metadata,CASE WHEN json_extract(output,?) IS NULL THEN json_array_length(output,?) END AS display_nodes FROM study_runs WHERE workspace=? AND id=?',(*paths,bundle+'.field_storage.nodes',field+'.mesh.points',wid,rid)).fetchone()
     actual_id,state,source,peak,full_nodes,storage_nodes,artifact_digest,bundle_digest=json.loads(metadata['metadata'])
-    if actual_id!=case_id:return observation(research.get_run(wid,rid),case_id,kind)  # Legacy reordered output.
+    if actual_id!=case_id:return legacy_observation()  # Legacy reordered output.
     original=snapshot['cases'][index];pin=snapshot['definition']['method'];parameters=original['parameters']
     if (row['status'] not in ('succeeded','partial') or state!='succeeded' or not source or source.get('binding')=='iec-trace'
         or source.get('input_sha256')!=artifact_digest_of(original['input']) or source.get('case_id')!=case_id
@@ -127,12 +178,14 @@ def source_observation(research,wid,rid,case_id,kind):
         'sequence':row['sequence'],'created':row['created'],'study_name':snapshot['definition']['title'],'change_k':None,
         **({'outer_boundary':parameters['outer_boundary']} if 'outer_boundary' in parameters else {})}
     if cache is not None:cache[key]=actual
-    if generation==read_generation(research):observation_receipt(research,key,generation,actual)
+    saved_observation_receipt(research,disk_identity,actual)
+    observation_receipt(research,content_key,source_generation,actual)
+    if generation==observation_generation(research,source_generation):observation_receipt(research,key,generation,actual)
     return actual
 
 
 def saved_execution(research,wid,rid):
-    with research.store.db() as db:row=db.execute('SELECT status,error,snapshot,input_digest FROM study_runs WHERE workspace=? AND id=?',(wid,rid)).fetchone()
+    with getattr(research.store, 'read_snapshot', research.store.db)() as db:row=db.execute('SELECT status,error,snapshot,input_digest FROM study_runs WHERE workspace=? AND id=?',(wid,rid)).fetchone()
     from .report_reads import byte_digest
     if not row or byte_digest(row['snapshot'])!=row['input_digest']:raise HTTPException(409,'作业来源快照完整性未通过。')
     pin=json.loads(row['snapshot'])['definition']['method']
@@ -273,7 +326,7 @@ def conclusion(research, wid, rid, *, prepare_report=False):
     response={'run_id':rid,'status':evidence['status'],'reason':evidence.get('reason','未收敛。'),'tolerance_k':evidence.get('tolerance_k',.1)}
     if evidence['status']!='converged':return response
     metrics,document=values(run,evidence);response.update(metrics)
-    with research.store.db() as db:
+    with getattr(research.store, 'read_snapshot', research.store.db)() as db:
         ids=[row['id'] for row in db.execute("SELECT id FROM study_runs WHERE workspace=? AND status IN ('succeeded','partial') AND json_extract(snapshot,'$.definition.method.plugin_id')='cablesim.iec60287' ORDER BY sequence DESC",(wid,))]
     names=_names(document)
     for identifier in ids:

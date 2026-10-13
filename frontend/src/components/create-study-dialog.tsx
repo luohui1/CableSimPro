@@ -11,7 +11,8 @@ import {
   message,
   ApiError,
 } from "@/api/client";
-import { methodCatalog, modelVersions } from "@/api/research";
+import { modelVersions } from "@/api/research";
+import { methodCardsQuery } from '@/lib/study-queries';
 import type { components } from "@/api/generated/schema";
 import { Dialog } from "./ui/dialog";
 import { Button } from "./ui/button";
@@ -21,7 +22,7 @@ import { LoadingState, ErrorState, EmptyState } from "./states";
 import { SourceBadge } from "./source-badge";
 import { sourceKind } from "@/lib/selection-view";
 import { modelArtifacts } from "@/api/model-artifacts";
-import { inputContracts, exactContract } from "@/api/input-contracts";
+import { capabilityInputContracts, inputContractQuery, exactContract } from "@/api/input-contracts";
 import { CreateInquiryDialog } from "./create-inquiry-dialog";
 import { AddStudyDialog } from './add-study-dialog';
 
@@ -103,8 +104,7 @@ function GenericCreateStudyDialog({
     enabled: open,
   });
   const methods = useQuery({
-    queryKey: ["method-catalog"],
-    queryFn: ({ signal }) => methodCatalog(signal),
+    ...methodCardsQuery(),
     enabled: open,
   });
   const tasks = useQuery({
@@ -123,11 +123,6 @@ function GenericCreateStudyDialog({
     "electrothermal-steady",
   ].includes(task);
   const [nativeParameters, setNativeParameters] = useState("");
-  const contracts = useQuery({
-    queryKey: ["input-contracts"],
-    queryFn: ({ signal }) => inputContracts(signal),
-    enabled: open && nativeRequested,
-  });
   const model = models.data?.find((item) => text(item.id) === modelId);
   const choices = (methods.data || []).flatMap((item) => {
     const pin = optionalRecord(item.method);
@@ -170,10 +165,14 @@ function GenericCreateStudyDialog({
     );
   });
   const chosen = choices.find((item) => item.id === methodId);
+  const contracts = useQuery({
+    ...inputContractQuery(chosen?.method || optionalRecord(nativeTask?.method) as components['schemas']['Method']),
+    enabled: open && nativeRequested && !!chosen,
+  });
   let nativeContract;
   try {
     if (nativeRequested && chosen)
-      nativeContract = exactContract(contracts.data || [], chosen.method);
+      nativeContract = contracts.data;
   } catch {
     /* Display the exact contract error below. */
   }
@@ -272,7 +271,7 @@ function GenericCreateStudyDialog({
           "该厂家型号尚缺工程参数；请先完成型号工程输入。",
         );
       const defaults = optionalRecord(model.method_defaults);
-      const contract = exactContract(await inputContracts(), chosen.method);
+      const contract = exactContract(await capabilityInputContracts(chosen.method), chosen.method);
       if (!contract.input_sources.includes("domain"))
         throw new ApiError(422, "所选方法不接受领域工程输入");
       let parameters = optionalRecord(defaults[chosen.method.plugin_id]);

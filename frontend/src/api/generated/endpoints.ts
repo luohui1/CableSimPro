@@ -81,6 +81,9 @@ export const endpoints = {
     "get",
     "post"
   ],
+  "/api/studies/{sid}": [
+    "get"
+  ],
   "/api/workspaces/{wid}/studies/{sid}": [
     "get",
     "put"
@@ -188,6 +191,9 @@ export const endpoints = {
   "/api/design/workspaces/{wid}/deliveries": [
     "post"
   ],
+  "/api/workspaces/{wid}/deliveries/{did}/pdf": [
+    "get"
+  ],
   "/api/workspaces/{wid}/deliveries/{did}/file": [
     "get"
   ],
@@ -227,6 +233,9 @@ export const endpoints = {
     "get",
     "put"
   ],
+  "/api/hpc/heat-capacity/preflight": [
+    "post"
+  ],
   "/api/hpc/profile/configuration": [
     "get"
   ],
@@ -246,6 +255,9 @@ export const endpoints = {
   "/api/hpc/workspaces/{wid}/studies/{sid}/step-responses/estimate": [
     "post"
   ],
+  "/api/hpc/workspaces/{wid}/studies/{sid}/step-responses/source-check": [
+    "get"
+  ],
   "/api/hpc/step-responses/{identifier}": [
     "get"
   ],
@@ -256,6 +268,9 @@ export const endpoints = {
     "post"
   ],
   "/api/hpc/jobs": [
+    "get"
+  ],
+  "/api/hpc/jobs/{identifier}": [
     "get"
   ],
   "/api/hpc/jobs/{identifier}/cancel": [
@@ -389,6 +404,12 @@ export const endpoints = {
   "/api/types/{wid}/resources/bind": [
     "post"
   ],
+  "/api/types/{wid}/resources/material-preview": [
+    "post"
+  ],
+  "/api/types/{wid}/resources/material-confirm": [
+    "post"
+  ],
   "/api/types/{wid}/resources/migrate": [
     "post"
   ],
@@ -411,6 +432,18 @@ export const endpoints = {
     "post"
   ],
   "/api/types/{wid}/specification/file": [
+    "get"
+  ],
+  "/api/types/{wid}/measurements": [
+    "post"
+  ],
+  "/api/types/{wid}/standards-summary": [
+    "get"
+  ],
+  "/api/types/{wid}/display-runs": [
+    "get"
+  ],
+  "/api/types/{wid}/measurements/reports/{report_id}": [
     "get"
   ],
   "/api/types/{wid}/submissions": [

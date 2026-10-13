@@ -87,7 +87,9 @@ def expected_files(directory=ROOT):
              'GB/T 3956':'conductor-gb','IEC 60228':'conductor-iec','GB/T 11017.2':'high',
              'GB 50217':'installation','IEC 60287-1-1':'electrical','IEC 60287-2-1':'thermal',
              'IEC 60287-3-1':'environment','GB/T 12706.4':'accessories',
-             'Nielsen et al.':'thermal-capacity','Huang and Niu':'thermal-capacity-model'}
+             'Nielsen et al.':'thermal-capacity','Huang and Niu':'thermal-capacity-model',
+             'Qi et al.':'pipe-capacity','Deng et al.':'borehole-capacity','Hopmans et al.':'soil-capacity',
+             'Youn et al.':'semiconducting-capacity','Sah et al.':'backfill-reference'}
     compiled = {}
     for standard, suffix in names.items():
         selected = [r for r in basis['records'] if r['standard']==standard]
@@ -111,7 +113,8 @@ def expected_files(directory=ROOT):
     if sum(len(json.loads(raw)) for raw in compiled.values()) != len(basis['records']):
         raise ValueError('新标准必须声明编制文件名。')
     basis.pop('records')
-    basis['record_files'] = [{'name':name,'sha256':sha256(raw).hexdigest(),'size_bytes':len(raw)} for name,raw in compiled.items()]
+    basis['record_files'] = [{'name':name,'sha256':sha256(raw).hexdigest(),'size_bytes':len(raw),
+                            'table_ids': sorted({r['id'].split('/')[0] for r in json.loads(raw)})} for name,raw in compiled.items()]
     basis_raw = encode(basis)
     compiled.update({'basis.json':basis_raw,'verification.json':verification_raw})
     integrity = {'schema': 'cablesim.standards-integrity/1', 'version': excerpts['version'],

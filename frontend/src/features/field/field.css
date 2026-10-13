@@ -34,7 +34,7 @@
 .fem-chart-dot { fill: var(--text); }
 .fem-chart-threshold path { stroke: var(--text-secondary); stroke-width: 1.5; stroke-dasharray: 6 4; }
 .field-history { margin: 0; font-size: var(--text-body); color: var(--text-secondary); }
-.field-state-note { margin: var(--space-2) 0 0; font-size: var(--text-body); color: var(--text-secondary); overflow-wrap: anywhere; }
+.field-state-note { margin: var(--space-2) 0 0; font-size: var(--text-note); color: var(--text-secondary); overflow-wrap: anywhere; }
 .field-scope { display: grid; gap: var(--space-2); margin: var(--space-3) 0; font-size: var(--text-body); font-variant-numeric: tabular-nums; }
 .field-scope > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 4fr); gap: var(--space-3); }
 .field-scope dt { color: var(--text-secondary); }
@@ -44,6 +44,15 @@
 .hpc-budget { display: grid; gap: var(--space-2); font-size: var(--text-body); }
 .hpc-budget input { padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-item); background: var(--panel); color: var(--text); font: inherit; font-variant-numeric: tabular-nums; }
 .hpc-job-list { min-width: 0; max-width: 100%; }
+.hpc-job-list .field-state-note { font-size: var(--text-note); }
 .field-number { text-align: right; font-variant-numeric: tabular-nums; }
+.fem-convergence .table-scroll .data-table .data-row,
+.saved-field-samples .table-scroll .data-table .data-row,
+.saved-field-comparison .table-scroll .data-table .data-row,
+.heat-capacity-form .table-scroll .data-table .data-row { height: calc(var(--space-8) + var(--space-2)); }
 .step-response { min-width: 0; }
 .step-response textarea { width: 100%; min-width: 0; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-item); background: var(--panel); color: var(--text); font: inherit; }
+.heat-capacity-form > h3 { font-size: var(--text-subheading); font-weight: var(--weight-strong); }
+.capacity-site-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--space-12) * 4), 1fr)); gap: var(--space-4); margin: 0; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-item); }
+.capacity-site-inputs label { display: grid; gap: var(--space-2); font-size: var(--text-note); }
+.heat-capacity-form .select-trigger { min-height: var(--control-standard); }

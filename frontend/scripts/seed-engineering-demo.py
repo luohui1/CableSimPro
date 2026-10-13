@@ -220,7 +220,7 @@ def ensure_temperature(client, result):
     result['studies'].append({'title':title,'workspace':workspace['id'],'study':saved['id'],'module':'thermal-field','status':'已保存输入；待补方法参数与超算预检','ready':False})
 
 
-def release_temperature_study(api, store, expected_identity):
+def release_temperature_study(api, store, expected_identity, *, scope='primary'):
     """Restore authenticated deployment evidence offline, never a local native solve.
 
     The original source study starts at 0.5 m / 0.0022 m, P2. This allows
@@ -228,12 +228,32 @@ def release_temperature_study(api, store, expected_identity):
     both consecutive-change gates at 0.1 K. The final saved grid is finer.
     """
     from backend.kernel.hpc_evidence import import_evidence
-    receipt = import_evidence(store, expected_identity)
+    receipt = import_evidence(store, expected_identity,scope=scope)
     studies = api('/api/workspaces/'+receipt['workspace']+'/studies')
     saved = next(item for item in studies if item['id']==receipt['study'])
     return {'title':saved['definition']['title'],'workspace':receipt['workspace'],
             'study':receipt['study'],'run':receipt['run'],'status':'succeeded',
             'ready':True,'saved_evidence':receipt,'module':None}
+
+
+def release_chengnan_input(api, workspace):
+    """Same sourced teaching design, no saved field when deployment evidence is absent."""
+    from backend.kernel.hpc_evidence import evidence_index
+    index,_=evidence_index()
+    receipt=next(iter(index.get('supplementary_receipts',[])),None)
+    if not receipt:return None
+    contract=next(c for c in api('/api/input-contracts') if c['method']['capability']=='iec-thermal-field')
+    parameters=deepcopy(receipt['starting_parameters'])
+    parameters['iec']['operation']='both'
+    title='城南线路 · 110 kV 波纹品字形有限元稳态'
+    source=receipt['scope']+'；无实算证据包时仅保存输入，不生成结果。'
+    configuration={'title':title,'task':None,'input_source':'domain','method':contract['method'],
+        'parameters':parameters,'driver':{'kind':'single'},
+        'input_sources':{'/parameters':{'kind':'user','reviewed':False,'reference':source}}}
+    saved=api('/api/workspaces/'+workspace['id']+'/studies','POST',{
+        **configuration,'expected_revision':workspace['revision']})
+    return {'title':title,'workspace':workspace['id'],'study':saved['id'],'module':None,
+            'status':'输入齐全，等待超算提交','ready':False}
 
 
 def release_temperature_input(api, workspace, iec_parameters):
@@ -332,9 +352,11 @@ def release_identity():
     series, digest = bundled_series()
     hv,hv_digest = bundled_hv()
     evidence = evidence_availability(verify=True)
-    return {'seed_revision':13, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
+    chengnan = evidence_availability(verify=True,scope='chengnan')
+    return {'seed_revision':14, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
             'engineering_evidence':evidence['snapshot_id'],
             'engineering_evidence_imported':evidence['available'],
+            'chengnan_engineering_evidence_imported':chengnan['available'],
             'plugins':{key:Research.pin(plugin) for key,plugin in sorted(registry.plugins.items())},
             'models':{item['id']:{'version':item['version'],'sha256':item['content_sha256']} for item in system_models()},
             'manufacturer_series':{'id':series['id'],'version':series['version'],'sha256':digest},
@@ -365,6 +387,8 @@ def build_release_seed(staged, database, identity):
             # calculations. Convergence receipts bind those sequence numbers.
             native_evidence = (release_temperature_study(api,client.app.state.research.store,identity['engineering_evidence'])
                                if identity['engineering_evidence_imported'] else None)
+            chengnan_evidence = (release_temperature_study(api,client.app.state.research.store,identity['engineering_evidence'],scope='chengnan')
+                                if identity['chengnan_engineering_evidence_imported'] else None)
             from frontend.scripts.engineering_resources import publish_resources, bind_demo_resources
             result['engineering_resources'] = publish_resources(api)
             method = next(row['method'] for row in api('/api/methods') if row['method']['plugin_id']=='cablesim.iec60287')
@@ -442,10 +466,12 @@ def build_release_seed(staged, database, identity):
                     print(item['name']+' · '+saved['title']+'：真实保存结果',flush=True)
             workspace = create_workspace(mv,'城北变电站 · 10 kV 三回排管',
                                          target_current_a=400,three_core_layout='three_core_ducts_horizontal')
-            hv_workspace = create_workspace(hv,'城南线路 · 110 kV 直埋单回',target_current_a=600)
+            hv_workspace = (api('/api/workspaces/'+chengnan_evidence['workspace']) if chengnan_evidence else
+                            create_workspace(hv,'城南线路 · 110 kV 直埋单回',target_current_a=600))
             hv_data,hv_digest = bundled_hv()
-            api('/api/workspaces/'+hv_workspace['id']+'/domain','PUT',{
-                'expected_revision':hv_workspace['revision'],'document':hv_study_document(hv_workspace)})
+            if not chengnan_evidence:
+                api('/api/workspaces/'+hv_workspace['id']+'/domain','PUT',{
+                    'expected_revision':hv_workspace['revision'],'document':hv_study_document(hv_workspace)})
             hv_workspace=api('/api/workspaces/'+hv_workspace['id'])
             result['hv_series']={'id':hv_data['id'],'version':hv_data['version'],
                                  'sha256':hv_digest,'engineering_scope':hv_data['scope']}
@@ -509,6 +535,9 @@ def build_release_seed(staged, database, identity):
                 result['engineering_evidence_availability'] = evidence_availability()
                 print(result['engineering_evidence_availability']['message'],flush=True)
             result['studies'].append(native_evidence)
+            if chengnan_evidence is None:
+                chengnan_evidence=release_chengnan_input(api,hv_workspace)
+            if chengnan_evidence:result['studies'].append(chengnan_evidence)
             # Later seed operations must not silently age an earlier result.
             for item in result['studies']:
                 if item.get('run') and not item.get('saved_evidence'):

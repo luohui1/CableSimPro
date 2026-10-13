@@ -1,9 +1,10 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { methodCatalog, projectStudy, type StudyRow } from "@/api/research";
+import { methodCatalog, type StudyRow } from "@/api/research";
 import { deliveries } from "@/api/delivery";
-import { api, array, optionalRecord, responseData, text } from "@/api/client";
+import { optionalRecord, text } from "@/api/client";
+import { projectStudiesQuery } from '@/lib/study-queries';
 import { entityLabel, type DomainDocument } from "@/lib/domain-fields";
 import { significantNumber, formatDateTime } from "@/lib/format";
 import { rootModule, studyEntryTab } from "@/lib/study-config";
@@ -48,9 +49,9 @@ export function headlineText(value: unknown, limit = 3): string {
     .map((row) => `${limit > 1 ? text(row.title) + " " : ""}${significantNumber(row.display_value as number, 4)}${text(row.display_unit) ? " " + text(row.display_unit) : ""}`).join(" · ");
 }
 
-function Section({ icon, title, count, children }: { icon: string; title: string; count?: number; children: ReactNode }) {
+function Section({ icon, title, count, children, expanded, onToggle }: { icon: string; title: string; count?: number; children: ReactNode; expanded?: boolean; onToggle?: () => void }) {
   return <section className="explorer-section" aria-label={title}>
-    <h3><Icon name={icon} />{title}{count !== undefined && <span>{count}</span>}</h3>
+    <h3><Icon name={icon} />{onToggle ? <button type="button" className="explorer-group-toggle" aria-expanded={expanded} onClick={onToggle} aria-label={`${expanded ? '收起' : '展开'}${title}`}>{title}</button> : title}{count !== undefined && <span>{count}</span>}</h3>
     <div className="explorer-items">{children}</div>
   </section>;
 }
@@ -59,17 +60,16 @@ function Section({ icon, title, count, children }: { icon: string; title: string
  * 工程浏览器：侧栏右侧的第二层，只列本工程真实存在的对象。
  * 模型 = 工程模型里的敷设截面、电缆、负荷工况；研究 = 本工程的研究；交付 = 已封存的计算书。
  */
-export function ProjectExplorer({ workspaceId, projectName, document, modelLabel = '模型', activeStudy, activeState, view, theme, onCreate }: {
-  workspaceId: string; projectName: string; document?: DomainDocument; modelLabel?: string; activeStudy: string; activeState?: StudyPresentation; view: string; theme: Theme; onCreate: () => void;
+export function ProjectExplorer({ workspaceId, projectName, document, modelLabel = '模型', activeStudy, activeRow, activeState, view, theme, onCreate }: {
+  workspaceId: string; projectName: string; document?: DomainDocument; modelLabel?: string; activeStudy: string; activeRow?: StudyRow; activeState?: StudyPresentation; view: string; theme: Theme; onCreate: () => void;
 }) {
-  const studies = useQuery({ queryKey: ["study-index", workspaceId], queryFn: async ({ signal }) => {
-    const rows = array(await responseData(api.GET('/api/workspaces/{wid}/studies', {params:{path:{wid:workspaceId}},signal})), '本工程研究');
-    return rows.map(row => projectStudy(row,{id:workspaceId},optionalRecord(optionalRecord(row).model_reference)));
-  }});
+  const [studiesExpanded,setStudiesExpanded] = useState(!activeRow);
+  const [booksExpanded,setBooksExpanded] = useState(false);
+  const studies = useQuery({...projectStudiesQuery(workspaceId),enabled:studiesExpanded || !activeRow});
   const catalog = useQuery({ queryKey: ["method-catalog"], queryFn: ({ signal }) => methodCatalog(signal) });
-  const books = useQuery({ queryKey: ["deliveries", workspaceId], queryFn: ({ signal }) => deliveries(workspaceId, signal) });
-  const rows = (studies.data || []).filter((row) => row.workspace === workspaceId);
-  const current = rows.find((row) => row.id === activeStudy) || rows[0];
+  const books = useQuery({ queryKey: ["deliveries", workspaceId], queryFn: ({ signal }) => deliveries(workspaceId, signal),enabled:booksExpanded });
+  const rows = (studiesExpanded ? studies.data || (activeRow ? [activeRow] : []) : activeRow ? [activeRow] : studies.data || []).filter((row) => row.workspace === workspaceId);
+  const current = activeRow || rows.find((row) => row.id === activeStudy) || rows[0];
   const plugins = (catalog.data || []).map(optionalRecord);
   const at = (study: StudyRow, module: string, tab: string, extra: Record<string, string> = {}) => ({
     to: "/studies/$sid/$module/$tab" as const, params: { sid: study.id, module, tab },
@@ -90,7 +90,9 @@ export function ProjectExplorer({ workspaceId, projectName, document, modelLabel
       </Link>)}
       {document.load_cases.map((load) => <a key={load.id} className="explorer-item" href="#inspector-conditions"><Icon name="object/conditions" /><span>{entityLabel(document, load.id)}</span></a>)}
     </Section>}
-    <Section icon="calc/ampacity" title="研究" count={rows.length}>
+    <Section icon="calc/ampacity" title="研究" count={studies.data?.length} expanded={studiesExpanded} onToggle={()=>setStudiesExpanded(value=>!value)}>
+      {studiesExpanded && studies.isFetching && <span role="status">正在读取本工程研究</span>}
+      {studiesExpanded && studies.error && <button type="button" onClick={()=>void studies.refetch()}>研究列表读取失败 · 重试</button>}
       {rows.map((study) => {
         const module = rootModule(study.definition), kind = calculationKind(study, plugins);
         const name = head && study.title.startsWith(head + " · ") ? study.title.slice(head.length + 3) : study.title;
@@ -100,8 +102,10 @@ export function ProjectExplorer({ workspaceId, projectName, document, modelLabel
       })}
       <button type="button" className="explorer-item explorer-add" onClick={onCreate}><Icon name="action/add" /><span>新建研究</span></button>
     </Section>
-    {current && <Section icon="object/delivery" title="交付" count={books.data?.length}>
-      {(books.data || []).map((book) => <Link key={book.id} className="explorer-item" {...at(current, "report", "preview", { delivery: book.id })}>
+    {current && <Section icon="object/delivery" title="交付" count={books.data?.length} expanded={booksExpanded} onToggle={()=>setBooksExpanded(value=>!value)}>
+      {booksExpanded && books.isFetching && <span role="status">正在读取交付列表</span>}
+      {booksExpanded && books.error && <button type="button" onClick={()=>void books.refetch()}>交付列表读取失败 · 重试</button>}
+      {(booksExpanded ? books.data || [] : []).map((book) => <Link key={book.id} className="explorer-item" {...at(current, "report", "preview", { delivery: book.id })}>
         <Icon name="result/report" /><span><b>{book.kind === "specification" ? "规格书" : "计算书"} 第 {book.version} 版</b><small>{formatDateTime(book.created)}</small></span>
       </Link>)}
       <Link className="explorer-item explorer-add" {...at(current, "report", "content")}><Icon name="result/report" /><span>计算书内容</span></Link>

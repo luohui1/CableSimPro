@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.simulation",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "name": "电缆有限元仿真",
   "description": "多区域稳态导热与GetDP时谐涡流、Elmer稳态/瞬态热适配，使用统一问题、网格和复现工件。",
   "icon": "assets/icon.svg",
@@ -2511,8 +2511,8 @@
       "kind": "method",
       "id": "iec-thermal-field",
       "solver": "slurm",
-      "title": "三芯电缆有限元热场（IEC 损耗反馈）",
-      "method_version": "1.4.0",
+      "title": "电缆有限元热场（IEC 损耗反馈）",
+      "method_version": "1.5.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -2615,13 +2615,14 @@
         ]
       },
       "limitations": [
-        "平衡三芯独立屏蔽、两端接地，电损耗适用范围由IEC60287三芯分支校验；金属平均温度与损耗迭代。",
-        "实际三芯与公共层热域；绞线与丝带采用明确的热层等效，未求三维电磁场。",
+        "平衡三芯独立屏蔽，或均匀土壤直埋单芯圆形热包络；电损耗适用范围由对应 IEC 60287 分支校验，按金属平均温度迭代。",
+        "逐层解析导体、绝缘与公共层热域；波纹护套按 IEC 60287-2-1:2023 4.1.2.1、4.1.5.1 作环形等效，气隙参数必须有来源。",
+        "相切外护套为零面积理想点接触；不代表实测接触宽度、接触热阻或轴向波谷缓冲接触，不求三维电磁场。",
         "一管一缆同心圆管；IEC管内热阻随两侧界面温度更新；结果为reference_only。",
         "Kennelly远场只覆盖均匀半无限土壤和等温地表；实际迭代损耗在金属/介质中心作镜像线热源，不覆盖分层土或回填。"
       ],
       "category": "simulation",
-      "description": "平衡三芯独立屏蔽、两端接地，电损耗适用范围由IEC60287三芯分支校验；金属平均温度与损耗迭代。；实际三芯与公共层热域；绞线与丝带采用明确的热层等效，未求三维电磁场。",
+      "description": "三芯或直埋单芯的逐层有限元稳态热场；IEC 损耗随金属平均温度反馈。波纹与点接触假设随结果保存，未求三维电磁场。",
       "parameter_schema": {
         "additionalProperties": false,
         "properties": {
@@ -24545,13 +24546,13 @@
     },
     {
       "path": "assets/engineering-evidence-index.json",
-      "sha256": "685e233b138bcdebac994471f34ea19e74a1fa1dddde6c77fb473d80df072bdd",
-      "size_bytes": 20275
+      "sha256": "3ef2b0a5efad01ac9ba101414a4f3d8ad3c1f1621d6e94c927421acd68b1ac6f",
+      "size_bytes": 40026
     },
     {
       "path": "assets/engineering-evidence-schema.json",
-      "sha256": "5e782b441e0f249ced8e9ccbdf7774a52cc07d636384204e85f26c06e78ffabb",
-      "size_bytes": 3308
+      "sha256": "dfabbead64522673853728f4a84737338547c2fed77b452d8f72ad71bc6bb9a1",
+      "size_bytes": 3435
     },
     {
       "path": "assets/icon.svg",
@@ -24640,8 +24641,8 @@
     },
     {
       "path": "src/cablesim_simulation/far_boundary.py",
-      "sha256": "7b2267e88dffa33dff84eac36d7ca1bcef81baaebdf18f7e3b4d889f071a2fda",
-      "size_bytes": 3227
+      "sha256": "20ed7ed760b3760efeb5942d3c3a8b53872f92a3fcde59747a0df728fe4f7168",
+      "size_bytes": 3249
     },
     {
       "path": "src/cablesim_simulation/getdp_adapter.py",
@@ -24699,6 +24700,11 @@
       "size_bytes": 6024
     },
     {
+      "path": "src/cablesim_simulation/single_core_thermal.py",
+      "sha256": "ba96a514a50f07f06356ac6b4b39ea0949cbac2a5464341b28efc5d1ff00fbf2",
+      "size_bytes": 6941
+    },
+    {
       "path": "src/cablesim_simulation/solver_runtime.py",
       "sha256": "33a614dcebd7bab646866f3fab4ceb35bbfa83b6ea9fc03998412638d2f80625",
       "size_bytes": 6838
@@ -24750,8 +24756,8 @@
     },
     {
       "path": "src/cablesim_simulation/three_core_thermal.py",
-      "sha256": "60fdce48b628bd7f507359897002c33ace4bb6a0ba2c1381ff77b3289fb6ac11",
-      "size_bytes": 24252
+      "sha256": "d0acacde488117a50f349ca0bc3e56b086f57691734b4966ff3e92bebc2fbdf0",
+      "size_bytes": 25037
     },
     {
       "path": "src/cablesim_simulation/transient.py",

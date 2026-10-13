@@ -149,3 +149,79 @@ def test_projection_observation_cache_invalidates_on_database_commit(tmp_path):
         with pytest.raises(HTTPException) as caught:source_observation(research,run['workspace'],run['id'],'case-0','mesh')
         assert caught.value.status_code==409
     finally:monitor.close()
+
+
+def test_real_saved_display_receipt_survives_unrelated_commit_but_rejects_byte_drift(tmp_path, monkeypatch):
+    """Read the actual sealed 811855 field; never synthesize FEM output.
+
+    A no-op database commit models another page saving unrelated data. Corrupt
+    bytes model an integrity failure that cannot be produced through normal UI.
+    Currentness and source integrity must still be checked on cache hits.
+    """
+    import sqlite3
+    from pathlib import Path
+    from backend.kernel.workspace import WorkspaceStore
+    from backend.kernel.research import Research
+    from backend.kernel.batch_field_projection import read_display
+    source=Path('.data/release/engineering.sqlite').resolve()
+    if not source.exists():pytest.skip('发布库缺失，不制造保存结果')
+    destination=tmp_path/'field.sqlite'
+    with sqlite3.connect(source.as_uri()+'?mode=ro',uri=True) as db:
+        row=db.execute('SELECT workspace,id FROM study_runs WHERE id=?',('00c54351-4a2c-49f5-bf88-7e86e6a9615f',)).fetchone()
+        if row is None:pytest.skip('发布库未包含作业 811855')
+        with sqlite3.connect(destination) as private:db.backup(private)
+    service=Research(WorkspaceStore(destination));calls=[]
+    original=service.artifact_status
+    def observe(run):
+        calls.append(1)
+        return original(run)
+    monkeypatch.setattr(service,'artifact_status',observe)
+    try:
+        first=read_display(service,*row)
+        assert first['integrity']=='verified'
+        assert first['output']['cases'][0]['artifacts']['x-cablesim.temperature-field']['source']['binding']=='simulation-bundle'
+        with service.store.db(True) as db:db.execute('UPDATE workspaces SET revision=revision WHERE id=?',(row[0],))
+        second=read_display(service,*row)
+        assert second['output']==first['output'] and len(calls)==1
+        assert second['freshness']==first['freshness'] and second['version_status']==first['version_status']
+        from backend.kernel.fem_evidence import source_observation
+        case_id=first['output']['cases'][0]['case_id']
+        saved_observation=source_observation(service,*row,case_id,'mesh')
+        assert saved_observation['hotspot_k']==381.51532875844487
+        # A new host must reuse the byte-bound receipt, not merely a process dict.
+        restarted=Research(WorkspaceStore(destination));restart_calls=[]
+        original_restart=restarted.artifact_status
+        def observe_restart(run):
+            restart_calls.append(1);return original_restart(run)
+        monkeypatch.setattr(restarted,'artifact_status',observe_restart)
+        try:
+            reopened=read_display(restarted,*row)
+            assert reopened['output']==first['output'] and restart_calls==[]
+            assert reopened['version_status']==first['version_status']
+            # The actual source row is still rehashed after a host restart;
+            # only its already verified immutable observation is reused.
+            assert source_observation(restarted,*row,case_id,'mesh')==saved_observation
+        finally:restarted.close()
+        from backend.kernel.report_reads import saved_scope
+        from backend.kernel.fem_evidence import display_read
+        from backend.kernel.study_pdf import validate_sources
+        @saved_scope
+        def check_paper_source():
+            verified=display_read(service,*row)
+            validate_sources([verified])
+            # A display copy is not a license to change the saved quantities.
+            verified['output']['cases'][0]['results'][0]['value']+=1
+            with pytest.raises(ValueError,match='完整性'):validate_sources([verified])
+            unchanged=display_read(service,*row)
+            assert unchanged['output']==first['output']
+            validate_sources([unchanged])
+        check_paper_source()
+        with pytest.raises(ValueError,match='完整性'):validate_sources([second])
+        # The row's declared output digest is deliberately unchanged.
+        with service.store.db(True) as db:db.execute("UPDATE study_runs SET output=replace(output,'381.51532875844487','382.51532875844487') WHERE id=?",(row[1],))
+        with pytest.raises(HTTPException) as error:read_display(service,*row)
+        assert error.value.status_code==409
+        with pytest.raises(HTTPException) as observation_error:
+            source_observation(service,*row,case_id,'mesh')
+        assert observation_error.value.status_code==409
+    finally:service.close()

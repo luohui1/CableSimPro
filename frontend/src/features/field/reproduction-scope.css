@@ -3,9 +3,16 @@
   border-block: 1px solid var(--border);
 }
 .validation-scope h2, .validation-scope h3 {
-  font-size: var(--text-body);
+  font-size: var(--text-subheading);
   margin-block: var(--space-3) var(--space-2);
 }
+[data-page="reproduction-detail"] section > h2,
+[data-page="reproduction-detail"] section > h3 {
+  font-size: var(--text-subheading);
+  font-weight: var(--weight-strong);
+}
+.validation-purpose-note { font-size: var(--text-note); }
+[data-page="reproduction-detail"] .table-scroll .data-table .data-row { height: calc(var(--space-8) + var(--space-2)); }
 .validation-scope h2:first-child { margin-top: 0; }
 .validation-scope p, .validation-purpose-note { margin-block: var(--space-2); }
 .validation-scope ul, .validation-limit-list {

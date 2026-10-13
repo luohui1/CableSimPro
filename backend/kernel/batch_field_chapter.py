@@ -30,7 +30,15 @@ def compare(fem,iec,case_id=None):
     if iec.get('integrity')!='verified' or iec.get('status') not in ('succeeded','partial') or iec['snapshot']['definition']['method']['plugin_id']!='cablesim.iec60287':
         raise ValueError('参考运行必须是完整性通过的 IEC 保存运行。')
     # Operation selects saved quantities, not the electrical/thermal condition.
-    scope=lambda p:{k:v for k,v in p.items() if k!='operation'}
+    def scope(parameters):
+        # Legacy Celsius and saved SI Kelvin spell the same starting state.
+        # Normalize the unit, never discard an electrical/thermal selector.
+        from copy import deepcopy
+        value={k:deepcopy(v) for k,v in parameters.items() if k!='operation'}
+        solver=value.get('solver',{})
+        if 'initial_sheath_temperature_c' in solver and 'initial_sheath_temperature_k' not in solver:
+            solver['initial_sheath_temperature_k']=solver.pop('initial_sheath_temperature_c')+273.15
+        return value
     candidates=[c for c in iec['snapshot']['cases'] if c['input']==original['input'] and scope(c['parameters'])==scope(original['parameters'].get('iec',{}))]
     match=next(((a,b) for a in candidates for b in iec['output']['cases'] if b['case_id']==a['case_id'] and b['status']=='succeeded'),None)
     if not match:raise ValueError('领域输入、IEC 电损耗参数或额定口径不同，不能对照。')
@@ -57,11 +65,18 @@ def compare(fem,iec,case_id=None):
         row['exceeded']=row['delta'] is not None and (abs(row['delta'])>2 if row['unit']=='K' else row['relative_percent'] is not None and abs(row['relative_percent'])>5)
     saved_boundary=chosen.get('artifacts',{}).get('x-cablesim.simulation-bundle',{}).get('result',{}).get('outer_boundary',{})
     boundary=saved_boundary.get('kind') or original['parameters'].get('outer_boundary') or 'ambient_truncated'
+    assumptions=chosen.get('artifacts',{}).get('x-cablesim.simulation-bundle',{}).get('result',{}).get('assumptions',[])
+    model_scope=[]
+    if any(c.get('construction')=='single_core' for c in original['input'].get('cable_types',[])):
+        for label,prefix in (('接触假设','相切外护套'),('波纹假设','波纹护套'),('未覆盖','二维均匀环')):
+            statement=next((a for a in assumptions if isinstance(a,str) and a.startswith(prefix)),None)
+            if statement:model_scope.append({'item':label,'fem':statement,'iec':'保存 IEC 圆环及品字形口径'})
     return {'fem':reference(fem,original),'iec':reference(iec,other),'rows':rows,'outer_boundary':boundary,
+            'modelling_assumptions':assumptions,
             'scope':[{'item':'边界','fem':'Kennelly 镜像远场 · 当前迭代实际损耗' if boundary=='kennelly_image' else '环境定温截断','iec':'无限土壤解析外部热阻'},
                      {'item':'地表','fem':'保存环境温度 · 等温','iec':'Kennelly 镜像 · 等温'},
-                     {'item':'互热','fem':'二维三芯热域耦合','iec':'IEC 外部互热模型'},
-                     {'item':'差异提示','fem':'温差 > 2 K / 电流 > 5%','iec':'界面提示阈值，非标准验收限值'}],
+                     {'item':'互热','fem':'二维电缆热域耦合','iec':'IEC 外部互热模型'},
+                     {'item':'差异提示','fem':'温差 > 2 K / 电流 > 5%','iec':'界面提示阈值，非标准验收限值'}]+model_scope,
             'relative_temperature_basis':'kelvin', 'engineering_approval':False}
 
 

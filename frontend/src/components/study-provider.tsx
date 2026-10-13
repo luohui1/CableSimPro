@@ -45,6 +45,7 @@ import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } f
 import { Button } from "./ui/button";
 import { LoadingState } from '@/components/states';
 import { StudyErrorState as ErrorState } from '@/components/study-error-state';
+import { femConclusionQuery } from './study-fem-conclusion';
 
 type Draft = {
   title: string;
@@ -102,12 +103,20 @@ export function StudyProvider() {
   const search = useSearch({ from: "/studies/$sid" });
   const location = useLocation();
   const queries = useQueryClient();
-  const index = useQuery(studyContextQuery(queries, search.workspace, sid));
+  // The requested saved run is already an explicit address. Read its host
+  // summary alongside the context/display, not after those have mounted the
+  // conclusion component. The host validates the run's actual method/input;
+  // this supplies no guessed quantities or currentness and shares one cache.
+  useQuery({...femConclusionQuery(search.workspace,search.run),
+    enabled:!!search.workspace && !!search.run && location.pathname.split('/')[3]==='thermal-field'
+      && location.pathname.split('/')[4]==='results'});
+  const index = useQuery(studyContextQuery(queries, search.workspace, sid, search.run,
+    location.pathname.split('/')[3] || '', location.pathname.split('/')[4] || ''));
   const study = index.data?.find((item) => item.id === sid);
   const wid = study?.workspace || search.workspace;
   const workspace = useQuery({ ...workspaceQuery(wid), enabled: !!study });
   const runs = useQuery({
-    ...studyRunsQuery(queries, wid, sid, search.run, location.pathname.split('/')[3] || ''),
+    ...studyRunsQuery(queries, wid, sid, search.run, location.pathname.split('/')[3] || '', location.pathname.split('/')[4] || ''),
     enabled: !!study,
     refetchInterval: (query) =>
       query.state.data?.some((run) =>

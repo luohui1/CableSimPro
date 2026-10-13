@@ -1,5 +1,5 @@
 """Versioned workspace persistence and migration; computations use saved studies."""
-from contextlib import contextmanager, nullcontext
+from contextlib import closing, contextmanager, nullcontext
 from datetime import datetime, timezone
 from hashlib import sha256
 import json
@@ -91,7 +91,9 @@ class WorkspaceStore:
 
     @contextmanager
     def db(self, write=False):
-        with sqlite3.connect(self.path, timeout=20) as db:
+        # SQLite's connection context commits/rolls back but does not close it.
+        # Close before a release importer checkpoints or replaces the library.
+        with closing(sqlite3.connect(self.path, timeout=20)) as db, db:
             db.row_factory = sqlite3.Row
             if write:
                 db.execute('BEGIN IMMEDIATE')
@@ -101,7 +103,7 @@ class WorkspaceStore:
     def read_snapshot(self):
         """Independent WAL read snapshot; never joins a writer's transaction."""
         uri = self.path.resolve().as_uri() + '?mode=ro'
-        with sqlite3.connect(uri, uri=True, timeout=20) as db:
+        with closing(sqlite3.connect(uri, uri=True, timeout=20)) as db, db:
             db.row_factory = sqlite3.Row
             db.execute('BEGIN')
             yield db
@@ -237,9 +239,14 @@ def make_router(store: WorkspaceStore):
     router = APIRouter(prefix='/api/workspaces')
     @router.get('')
     def listing():
-        with store.db() as db:
-            return [{'id': r['id'], 'revision': r['revision'], 'name': (state.get('domain') or state['scenario'])['name'], 'updated_at': r['updated']}
-                    for r in db.execute('SELECT * FROM workspaces ORDER BY updated DESC') for state in [json.loads(r['state'])]]
+        # Navigation needs names, not every engineering model. Read a committed
+        # snapshot and project metadata in SQLite; do not deserialize large CAD
+        # inputs while the research canvas is opening.
+        with store.read_snapshot() as db:
+            return [dict(row) for row in db.execute(
+                "SELECT id,revision,COALESCE(json_extract(state,'$.domain.name'),"
+                "json_extract(state,'$.scenario.name')) AS name,updated AS updated_at "
+                "FROM workspaces ORDER BY updated DESC")]
 
     @router.post('', status_code=201)
     def create(body: Create):

@@ -51,6 +51,8 @@ class Research:
         self.run_read_lock = RLock()
         self.contract_read_cache = OrderedDict()
         self.contract_read_lock = RLock()
+        self.registry_read_cache = OrderedDict()
+        self.registry_read_lock = RLock()
         from .read_responses import ReadResponses
         self.read_responses = ReadResponses(self)
         # Large run/library projections must never evict the two source-only
@@ -60,7 +62,8 @@ class Research:
 
     def close(self):
         if hasattr(self,'delivery_jobs'):self.delivery_jobs.close()
-        self.background.shutdown(wait=False)
+        # A stopped host must not leave workers holding its staging library.
+        self.background.shutdown(wait=True,cancel_futures=True)
         self.read_responses.close()
         self.catalog_read_responses.close()
         if self.resident_runner is not None:
@@ -69,14 +72,44 @@ class Research:
         if seals is not None:seals.close()
 
     def warm_reads(self, stop=None):
-        """Warm metadata without competing with the first interactive page.
+        """Warm metadata and one latest display in the managed background task.
 
         Eager validation of unrelated historical FEM artifacts held the GIL for
-        seconds even while catalog reads were cache hits. Saved runs continue
-        to be verified on demand by the normal read endpoints.
+        seconds even while catalog reads were cache hits. Only one bounded
+        display is primed; historical arrays and proof pages remain on demand.
         """
         if (stop is None or not stop.is_set()) and not self.catalog_read_responses.entries:
             self.warm_catalogs(stop)
+        # Prime only the most recent completed FEM display, not historical proof
+        # arrays or every saved run. This performs the normal first verification
+        # and writes its byte-bound derived receipt during managed warm-up; it
+        # does not render, submit a job or cache a currentness decision.
+        if stop is None or not stop.is_set():
+            import logging
+            try:
+                with self.store.read_snapshot() as db:
+                    row=db.execute("SELECT workspace,study,id FROM study_runs WHERE status IN ('succeeded','partial') AND json_extract(snapshot,'$.definition.method.capability')='iec-thermal-field' ORDER BY sequence DESC LIMIT 1").fetchone()
+                if row:
+                    from .batch_field_projection import read_display
+                    read_display(self,row['workspace'],row['id'])
+                    # Prime the three actual first-screen read projections, using
+                    # exactly their public cache keys/contracts. All currentness
+                    # checks run here; a DB commit or sealed-source change makes
+                    # these responses miss normally. Never prime full proof,
+                    # delivery lists, historical runs, or an image renderer.
+                    from .responses import StudyResponse, RunDetailResponse
+                    from .run_details import detail
+                    from .fem_evidence import FemConclusion, conclusion
+                    wid,sid,rid=row['workspace'],row['study'],row['id']
+                    tasks=[(('study',wid,sid),StudyResponse,lambda:self.study_detail(wid,sid),False),
+                           (('run-detail',wid,sid,rid,'detail'),RunDetailResponse,lambda:detail(self,wid,sid,rid),True),
+                           (('fem-conclusion',wid,rid,False),FemConclusion,lambda:conclusion(self,wid,rid),False)]
+                    for key,model,load,exclude in tasks:
+                        if stop is not None and stop.is_set():return
+                        self.read_responses.build(key,model,load,True,exclude_unset=exclude)
+                    logging.getLogger(__name__).info('Saved field display warm-up complete.')
+            except (HTTPException,PluginHostError,ValueError,OSError):
+                logging.getLogger(__name__).warning('Saved field display warm-up rejected',exc_info=True)
         # Keep the managed warm-up task owned by lifespan until shutdown;
         # directory I/O itself uses SourceWatch's persistent notification owner.
         if stop is not None:
@@ -120,6 +153,11 @@ class Research:
         No solver is invoked. SourceWatch still invalidates every cached payload
         on publication; an invalid package remains a 409 on its public endpoint.
         """
+        # Start the read-only commit/source monitors during managed warm-up.
+        # Waiting until the first field read leaves concurrent readers without
+        # a source generation and duplicates large immutable-source reads.
+        with self.read_responses.lock:
+            self.read_responses.initialize(hasattr(self.store,'path') and self.store.path.exists())
         from .input_contracts import contracts
         import logging
         tasks = [(('input-contracts',), lambda: contracts(self, encoded=True, catalog_preload=True)),
@@ -130,6 +168,14 @@ class Research:
             try:self.catalog_read_responses.build(key, None, load, False)
             except (HTTPException, PluginHostError, ValueError, OSError):
                 logging.getLogger(__name__).warning('Plugin catalog warm-up rejected %s', key, exc_info=True)
+        if stop is not None and stop.is_set():return
+        try:
+            from .model_catalog_reads import content_identity, verified_catalogue
+            identity = content_identity(self.executor.registry.root.parent)
+            self.catalog_read_responses.build(('model-artifacts', identity), None,
+                                             lambda: verified_catalogue(self, identity), False)
+        except (HTTPException, PluginHostError, ValueError, OSError):
+            logging.getLogger(__name__).warning('Model catalog warm-up rejected', exc_info=True)
 
     def methods(self, registry=None):
         from ..plugin_host.presentation import resources
@@ -146,7 +192,47 @@ class Research:
 
     def registry(self, plugin_id=None):
         try:
-            return Registry(self.executor.registry.root,plugin_id=plugin_id)
+            root = self.executor.registry.root
+            # Cache only parsed, host-read-only metadata, by actual manifest
+            # bytes. Every resolve still authenticates the package/dependencies;
+            # this never caches a successful seal check or currentness verdict.
+            # Avoid Registry's recursive copy of the large method schemas on
+            # every saved-run read. Changes on disk cannot hit the old key.
+            if plugin_id is not None:
+                from ..plugin_host.manifest import ID
+                import re
+                if not re.fullmatch(ID,plugin_id):
+                    return Registry(root,plugin_id=plugin_id)
+            def identity():
+                paths = root.glob('*/plugin.json') if plugin_id is None else (root/plugin_id).glob('plugin.json')
+                return tuple((str(path.resolve()),sha256(path.read_bytes()).digest()) for path in sorted(paths))
+            before = identity()
+            key = (str(root.resolve()),plugin_id,before)
+            with self.registry_read_lock:
+                cached = self.registry_read_cache.get(key)
+                if cached is not None:
+                    self.registry_read_cache.move_to_end(key)
+                    return cached
+                # Startup already validated the catalogue. A filtered read uses
+                # that same byte-authenticated manifest instead of recursively
+                # validating its large parameter schema a second time. Keep the
+                # filtered Registry contract; resolve still verifies its seal.
+                if plugin_id is not None and before:
+                    for (cached_root,selected,receipts),catalogue in reversed(self.registry_read_cache.items()):
+                        if cached_root==key[0] and selected is None and all(receipt in receipts for receipt in before):
+                            registry=Registry(root,discover=False)
+                            registry.plugins={plugin_id:catalogue.get(plugin_id)}
+                            if before==identity():
+                                self.registry_read_cache[key]=registry
+                                while len(self.registry_read_cache)>32:self.registry_read_cache.popitem(last=False)
+                                return registry
+                            break
+            registry = Registry(root,plugin_id=plugin_id)
+            if before == identity():
+                with self.registry_read_lock:
+                    self.registry_read_cache[key] = registry
+                    while len(self.registry_read_cache)>32:self.registry_read_cache.popitem(last=False)
+            return registry
         except (ValueError,OSError) as exc:
             raise PluginHostError('PLUGIN_MANIFEST_INVALID','插件清单不可读或格式错误；请完成安装/封签后重试。'+str(exc),409) from None
 
@@ -160,13 +246,20 @@ class Research:
         # Refresh disk metadata: an already-created executor cannot hide a package upgrade.
         # Only callers performing one read request share this cache; executions never do.
         shared=read_cache()
-        cache = shared.setdefault('methods',{}) if shared is not None else {} if cache is None else cache
+        if cache is None:
+            cache = shared.setdefault('methods',{}) if shared is not None else {}
         registries = cache.setdefault('registries', {})
         plugin_id = method['plugin_id']
         if plugin_id not in registries:
             registries[plugin_id] = self.registry(plugin_id)
         plugin = registries[plugin_id].get(plugin_id)
-        if self.pin(plugin) != {k: method[k] for k in ('plugin_id', 'version', 'release_digest')}:
+        # A request's Registry is a byte-authenticated metadata snapshot. Hash
+        # its large manifest once, rather than once for each declared capability.
+        pins = cache.setdefault('pins', {})
+        pin_key = (plugin_id, id(plugin.manifest))
+        if pin_key not in pins:
+            pins[pin_key] = self.pin(plugin)
+        if pins[pin_key] != {k: method[k] for k in ('plugin_id', 'version', 'release_digest')}:
             raise HTTPException(409, '方法发行已变化，请明确选择新版本并保存研究。')
         verified = cache.setdefault('verified', {})
         if plugin.manifest.id not in verified:
@@ -272,6 +365,35 @@ class Research:
         with self.store.read_snapshot() as db:
             revision, model = model_reference(db, wid)
             return self._study_detail(db, wid, sid, revision, model, {} if cache is None else cache)
+
+    def list_study_cards(self, wid):
+        from .responses import StudyResponse
+        cards = []
+        for saved in self.list_studies(wid):
+            # Validate the complete record before projecting; version status and
+            # headline still come from the same verified latest-run summary.
+            card = StudyResponse.model_validate(saved).model_dump(mode='json')
+            definition = card['definition']
+            card['definition_digest'] = fingerprint(saved['definition'])
+            card['input_ref'] = f'/api/workspaces/{wid}/studies/{card["id"]}'
+            card['definition'] = {key: definition[key] for key in
+                                  ('title', 'method', 'task', 'input_source') if key in definition}
+            card['definition']['driver'] = {'kind': definition['driver']['kind']}
+            if definition.get('method_input'):
+                card['definition']['method_input'] = {'schema_version': definition['method_input'].get('schema_version')}
+            cards.append(card)
+        return cards
+
+    def study_detail_by_id(self, sid):
+        """Resolve a direct study URL in one read snapshot, without listing projects."""
+        from .read_models import model_reference
+        with self.store.read_snapshot() as db:
+            row = db.execute('SELECT workspace FROM studies WHERE id=?', (sid,)).fetchone()
+            if row is None:
+                raise HTTPException(404, '研究不存在。')
+            wid = row['workspace']
+            revision, model = model_reference(db, wid)
+            return self._study_detail(db, wid, sid, revision, model, {})
 
     def _study_detail(self, db, wid, sid, revision, model, cache):
         from .read_models import summary, RUN_COLUMNS
@@ -814,8 +936,7 @@ class Research:
         if shared is not None and identity in shared:
             return shared[identity]
         cache = shared.setdefault('methods',{}) if shared is not None else {} if cache is None else cache
-        with self.store.db() as db:
-            db.execute('BEGIN')
+        with self.store.read_snapshot() as db:
             row, _ = self.store.load(db, wid)
             record = db.execute('SELECT * FROM study_runs WHERE workspace=? AND id=?', (wid, rid)).fetchone()
             if record is None:
@@ -1024,9 +1145,13 @@ class Research:
         return {'items': [self.get_run(wid, r['id'], cache) for r in page],
                 'next_cursor': page[-1]['sequence'] if len(rows) > limit else None}
 
-    def verified_runs(self, wid, ids):
+    def verified_runs(self, wid, ids, *, display=False):
         cache = {}
-        values = [self.get_run(wid, str(rid), cache) for rid in ids]
+        if display:
+            from .fem_evidence import display_read
+            values = [display_read(self,wid,str(rid)) for rid in ids]
+        else:
+            values = [self.get_run(wid, str(rid), cache) for rid in ids]
         if any(r['integrity'] != 'verified' or (r['status'] not in ('succeeded', 'partial') and not (r['snapshot']['definition']['driver']['kind'] in ('selection','batch') and (r.get('output') or {}).get('cases'))) for r in values):
             raise HTTPException(409, '源运行未完成或完整性校验失败。')
         return values
@@ -1062,7 +1187,11 @@ class Research:
             generation_studies = {str(rid): db.execute('SELECT study FROM study_runs WHERE workspace=? AND id=?', (wid, str(rid))).fetchone() for rid in ids}
             generation_studies = {row['study']: self.definition(db, wid, row['study'])['revision'] for row in generation_studies.values() if row}
         checkpoint('source')
-        runs = self.verified_runs(wid, ids)
+        # prepare() has authenticated every frozen convergence observation.
+        # Paper needs its verified display, not lossless binary arrays. Full
+        # source references remain in the internal archive below; no proof or
+        # currentness check is waived by using a projection here.
+        runs = self.verified_runs(wid, ids, display=bool(attachments and attachments.get('fem_chapter')))
         if attachments and attachments.get('fem_chapter'):
             evidence=attachments['fem_chapter']['data']
             for run in runs:
@@ -1123,20 +1252,45 @@ class Research:
 
     @saved_scope
     def delivery(self, wid, did, *, include_version_status=True):
-        with self.store.db() as db:
+        with self.store.read_snapshot() as db:
             row = db.execute('SELECT * FROM deliveries WHERE workspace=? AND id=?', (wid, did)).fetchone()
         if row is None:
             raise HTTPException(404, '计算书不存在或不属于此工程。')
         result = dict(row)
         try:
             result['sources'] = json.loads(result['sources'])
-            digest = fingerprint({k: result[k] for k in ('renderer', 'sources', 'html')})
+            # A receipt is bound to the actual archive bytes, not its declared
+            # digest or row ID. Any change repeats the complete archive check.
+            from .report_reads import saved_observation_receipt
+            identity = fingerprint(('delivery-archive/1', result['digest'], result['renderer'],
+                                    result['sources'], byte_digest(result['html'])))
+            receipt = saved_observation_receipt(self, identity)
+            digest = result['digest'] if receipt and receipt.get('verified_digest') == result['digest'] else fingerprint({k: result[k] for k in ('renderer', 'sources', 'html')})
         except (ValueError, TypeError):
             raise HTTPException(409, '计算书完整性校验失败。') from None
         if digest != result['digest']:
             raise HTTPException(409, '计算书完整性校验失败。')
+        if not receipt:
+            saved_observation_receipt(self, identity, {'verified_digest': digest})
         if include_version_status:
             from .version_status import cover_status
-            from .fem_evidence import display_read
-            result['version_status'] = cover_status([display_read(self, wid, s['run_id']) for s in result['sources']])
+            from .read_models import RUN_COLUMNS, summary, model_reference
+            with self.store.read_snapshot() as db:
+                revision, _ = model_reference(db, wid)
+                rows = [db.execute('SELECT '+RUN_COLUMNS+' FROM study_runs WHERE workspace=? AND id=?',
+                                   (wid, source['run_id'])).fetchone() for source in result['sources']]
+                if any(row is None for row in rows):
+                    raise HTTPException(409, '计算书来源运行缺失，无法核验。')
+                studies = {row['study']: self.definition(db, wid, row['study']) for row in rows}
+            cache = {}
+            runs = [summary(self, row, revision, studies[row['study']], cache) for row in rows]
+            for source, run, row in zip(result['sources'], runs, rows):
+                if run['integrity'] != 'verified' or (source['input_digest'], source['output_digest']) != (row['input_digest'], row['output_digest']):
+                    raise HTTPException(409, '计算书来源摘要与保存运行不一致，无法核验。')
+            result['version_status'] = cover_status(runs)
         return result
+
+    def delivery_receipt(self, wid, did):
+        """Verified metadata; HTML/PDF attachments have separate checked reads."""
+        saved = self.delivery(wid, did)
+        return {key: saved[key] for key in ('id', 'workspace', 'sources', 'renderer', 'digest', 'created', 'version_status')}

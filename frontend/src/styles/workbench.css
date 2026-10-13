@@ -1,3 +1,9 @@
+.information-notice { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-4); background: var(--panel); color: var(--text); border: 1px solid var(--control-border); border-radius: var(--radius-surface); }
+.information-notice > .icon { flex: none; margin-top: var(--space-1); }
+.information-notice > div { min-width: 0; flex: 1; }
+.information-notice h2 { margin: 0; font-size: var(--text-subheading); font-weight: var(--weight-strong); }
+.information-notice p { margin: var(--space-2) 0 0; font-size: var(--text-body); font-weight: var(--weight-normal); color: var(--text-secondary); }
+.information-notice[data-floating] { position: fixed; right: var(--space-6); bottom: var(--space-6); z-index: 40; width: min(calc(var(--space-12) * 9), calc(100vw - var(--space-6) * 2)); }
 .shell-workbench { position: relative; grid-template-columns: var(--sidebar-width, calc(var(--space-12) * 5)) minmax(0, 1fr); }
 .shell-workbench[data-sidebar-width="220"] { --sidebar-width: calc(var(--space-1) * 55); }
 .shell-workbench[data-sidebar-width="224"] { --sidebar-width: calc(var(--space-1) * 56); }

@@ -33,7 +33,7 @@ export function HpcJobList() {
     {jobs.isPending ? <LoadingState title="读取超算作业" /> : !rows.length && !jobs.error ? <EmptyState title="尚无超算作业" description="提交研究后在这里查看状态与核时。" /> : rows.length > 0 && <DataTable label="所有研究超算作业" columns={[
       { id: 'study', label: '研究与运行', render: row => <div>{row.study_href ? <Link to={text(row.study_href)}>{text(row.study_name)}</Link> : <span>{text(row.study_name)}</span>}
         <span className="field-state-note">{row.kind==='preflight' ? ' · 预检' : row.sequence ? ` · 运行 ${row.sequence}` : ''}</span></div> },
-      { id: 'job', label: 'Slurm 作业', render: row => text(optionalRecord(row.execution).job_id) || '等待分配' },
+      { id: 'job', label: 'Slurm 作业', numeric: true, render: row => text(optionalRecord(row.execution).job_id) || '等待分配' },
       { id: 'status', label: '状态', render: row => optionalRecord(row.execution).cancel_requested && row.cancellable ? '取消待确认' : hpcStatus(row.status) },
       { id: 'cost', label: '已用核时', numeric: true, render: row => numeric(row.core_hours)?.toFixed(5) ?? '未结算' },
       { id: 'start', label: '开始', render: row => localTime(row.started) },

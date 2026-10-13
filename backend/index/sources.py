@@ -1,15 +1,19 @@
 """Small SQL projections. Deliberately excludes originals, outputs and chat/tool bodies."""
 import json
+from time import perf_counter
 
 
 def decoded(value,default=None):
     return json.loads(value) if value is not None else default
 
 
-def project(db):
+def project(db,metrics=None):
     tables={row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     def rows(table,columns,tail=''):
-        return [dict(row) for row in db.execute(f'SELECT {columns} FROM {table} {tail}')] if table in tables else []
+        started=perf_counter()
+        value=[dict(row) for row in db.execute(f'SELECT {columns} FROM {table} {tail}')] if table in tables else []
+        if metrics is not None:metrics[table]={'ms':(perf_counter()-started)*1000,'rows':len(value)}
+        return value
     reference=lambda path:("json_object('id',json_extract(state,'"+path+".id'),'name',json_extract(state,'"+path+".name'),"
         "'version',json_extract(state,'"+path+".version'),'content_sha256',json_extract(state,'"+path+".content_sha256'))")
     workspaces=rows('workspaces',"id,revision,created,updated,COALESCE(json_extract(state,'$.domain.name'),json_extract(state,'$.scenario.name')) AS name,"
@@ -22,17 +26,21 @@ def project(db):
         "json_extract(state,'$.domain.cable_types') AS type_structure")
     studies=rows('studies','s.id,s.workspace,s.revision,v.created,v.definition',
         's JOIN study_versions v ON v.study=s.id AND v.revision=s.revision')
-    snapshot=("json_object('workspace_id',json_extract(snapshot,'$.workspace_id'),"
-        "'workspace_revision',json_extract(snapshot,'$.workspace_revision'),'study_revision',json_extract(snapshot,'$.study_revision'),"
-        "'module',json_extract(snapshot,'$.module'),'definition',json(json_extract(snapshot,'$.definition')),"
-        "'lock',json(json_extract(snapshot,'$.lock')),'workspace_state',json_object(")
-    for index,key in enumerate(('study_cable_reference','type_origin_reference')):
-        if index:snapshot+=','
-        path='$.workspace_state.'+key
-        snapshot+=f"'{key}',json_object('id',json_extract(snapshot,'{path}.id'),'name',json_extract(snapshot,'{path}.name'),'version',json_extract(snapshot,'{path}.version'),'content_sha256',json_extract(snapshot,'{path}.content_sha256'))"
-    snapshot+='))'
+    # One JSON invocation per saved snapshot. Repeated json_extract expressions
+    # reparse large FEM input snapshots; no output/field artifact is selected.
+    keys=('workspace_id','workspace_revision','study_revision','module','definition','lock')
+    references=('study_cable_reference','type_origin_reference')
+    fields=('id','name','version','content_sha256')
+    paths=[*('$.'+key for key in keys),*('$.workspace_state.'+key+'.'+field for key in references for field in fields)]
+    snapshot='json_extract(snapshot,'+','.join("'"+path+"'" for path in paths)+')'
     runs=rows('study_runs','id,workspace,study,sequence,status,created,finished,input_digest,output_digest,'+snapshot+
-        " AS meta,substr(json_extract(error,'$.message'),1,512) AS error",'ORDER BY sequence DESC')
+        " AS source_meta,substr(json_extract(error,'$.message'),1,512) AS error",'ORDER BY sequence DESC')
+    for row in runs:
+        values=decoded(row.pop('source_meta')) or [None]*len(paths)
+        meta=dict(zip(keys,values))
+        meta['workspace_state']={key:dict(zip(fields,values[len(keys)+i*len(fields):len(keys)+(i+1)*len(fields)]))
+            for i,key in enumerate(references)}
+        row['meta']=json.dumps(meta,ensure_ascii=False,separators=(',',':'))
     return {'workspaces':workspaces,'studies':studies,'runs':runs,
         'assets':rows('engineering_assets',"id,asset_id,version,kind,name,status,revision,content_sha256,created,updated,"
             "json_extract(release_json,'$.dependencies') AS dependencies,json_extract(release_json,'$.sources') AS sources"),

@@ -57,15 +57,15 @@ test('Three identical core results collapse; different values, missing cores and
   const grouped=identicalCoreRows(rows,['a','b','c']);assert.equal(grouped.length,1);assert.match(grouped[0].title,/3 芯相同/);assert.deepEqual(grouped[0].members,rows);
   for(const next of [rows.slice(0,2),rows.map((r,i)=>i===2?{...r,value:43000}:r),rows.map((r,i)=>i===2?{...r,formula_inputs:{t_s:2}}:r)]) assert.equal(identicalCoreRows(next,['a','b','c']).length,next.length);
 });
-test('Missing-field actions locate frequency; uncovered clauses remain distinct from historical reruns',()=>{
+test('Missing-field actions locate frequency; release blockers group by who resolves them',()=>{
   const missing=issuePresentation({status:'missing',formula_inputs:{f_hz:null,U_phase_V:null}},'electrical','cable');
   assert.equal(missing.field,'/frequency_hz');assert.equal(missing.tab,'parameters');assert.match(missing.reason,/频率、运行相电压/);
   const metal=issuePresentation({status:'missing',missing_parameters:['metal_initial_temperature_k','duration_s']},'short-circuit','cable');
   assert.equal(metal.field,'/metal_initial_temperature_k');assert.match(metal.reason,/金属组件初温、短路时间/);
   const coverage=issuePresentation({verdict:'uncovered',standard:'GB/T 11017.2—2024',clause:'表 2',reason:'未覆盖此结构'},'standard-check','cable');
   assert.equal(coverage.kind,'coverage');assert.match(coverage.reason,/GB\/T 11017.2—2024 · 表 2/);
-  const groups=reviewGroups([{id:'old',channel:'electrical',message:'输入已过期'},{id:'gap',channel:'standards',result:{verdict:'uncovered'}},{id:'field',channel:'electrical',result:{status:'missing'}}]);
-  assert.deepEqual(groups.map(g=>g.title),['历史过期','标准未覆盖','输入与计算缺项']);
+  const groups=reviewGroups([{id:'old',channel:'electrical',message:'输入已过期',blocking:false},{id:'gap',channel:'standards',blocking:true,result:{verdict:'uncovered'}},{id:'gap-input',channel:'standards',blocking:true,result:{verdict:'uncovered',basis_missing_fields:[{field:'/armour_material',label:'铠装材料'}]}},{id:'field',channel:'electrical',blocking:true,result:{status:'missing'}},{id:'measure',channel:'standards',blocking:true,result:{basis:'measurement'}},{id:'approve',channel:'resources',blocking:true,result:{}}]);
+  assert.deepEqual(groups.map(g=>[g.title,g.items.map(item=>item.id)]),[['需要工程师补输入',['gap-input','field']],['需要出厂实测值',['measure']],['标准依据未覆盖',['gap']],['需要人工批准',['approve']]]);
 });
 test('Layer labels preserve 1.35 mm and show a 34.0 mm diameter without padded thickness precision',()=>{
   assert.equal(layerMillimetres(.00135),'1.35');assert.equal(layerMillimetres(.0162),'16.2');assert.equal(layerMillimetres(.034,true),'34.0');

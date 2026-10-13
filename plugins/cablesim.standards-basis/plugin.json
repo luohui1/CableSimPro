@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standards-basis",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "name": "标准依据库",
   "icon": "assets/icon.svg",
   "description": "离线只读查询已逐格核验的标准尺寸、电阻和试验数值，返回适用条件、原页出处与摘要；查询不会批准工程要求。",
@@ -43,7 +43,7 @@
       "id": "lookup",
       "kind": "method",
       "title": "按标准、条款和条件查询依据",
-      "method_version": "0.4.0",
+      "method_version": "0.6.0",
       "read_only": true,
       "analysis": "standards_lookup",
       "input_schema": "cablesim.standards-query/1",
@@ -76,7 +76,7 @@
         ]
       },
       "limitations": [
-        "仅提供结构化依据，不执行标准公式、不产生工程合格结论、不批准型号要求。",
+        "提供结构化依据；仅Hopmans两条土壤混合公式接受明确现场参数执行，不产生工程合格结论，不批准型号要求。",
         "仅覆盖文档列出的完整表及条款；不外推、不跨版本补值；合金派生、协商例外及修约计算须下一轮接入。",
         "标准全文未打包；用户持有正文的使用权限尚未评估，发布或对外分发前需人工审查。"
       ]
@@ -90,43 +90,53 @@
     },
     {
       "path": "src/cablesim_standards_basis/basis.json",
-      "sha256": "3eac84a561939e419a40023b16d9e1f64048a8a86fe3cbd0fabb9bb01f778dc4",
-      "size_bytes": 328701
+      "sha256": "f51f794280e989c6c7bd79c1f5e4814a03a873ca0278cace958561b939862eb7",
+      "size_bytes": 387312
     },
     {
       "path": "src/cablesim_standards_basis/excerpts.json",
-      "sha256": "17dcedff742939d8a761db3effc61b9939ec090a8ae5a90668bdd4f33281bd2b",
-      "size_bytes": 650093
+      "sha256": "f7b549d2140be0bddd0a46afcaffb97742bfdbb39a18216b8ea525bace909ac0",
+      "size_bytes": 722172
     },
     {
       "path": "src/cablesim_standards_basis/integrity.json",
-      "sha256": "ec752fa1d5d42675abcd21503f224342ed7a7cea552e8b37b139020e573757b5",
-      "size_bytes": 2780
+      "sha256": "1d466e430e65d6433a4fccf0817fc5f46ffe70abed459fa998ea88feefb1950c",
+      "size_bytes": 3564
     },
     {
       "path": "src/cablesim_standards_basis/library.py",
-      "sha256": "dc708212585b790f1e1dec23d15190c0eccde7f55877637a7d22c71e09f2dfca",
-      "size_bytes": 12727
+      "sha256": "09773b3530a25385874504829680f278f21b33a1e606db47a8f45591d9ef6709",
+      "size_bytes": 15546
     },
     {
       "path": "src/cablesim_standards_basis/main.py",
-      "sha256": "b16e4ee2d39c5e42bf547742e57fed0daa767758e861fc2cd97f1d52410cadad",
-      "size_bytes": 2585
+      "sha256": "3b6ecc839af48a90732d6801fccea7cc83faf0abc333338ed6c714358f916f57",
+      "size_bytes": 2614
     },
     {
       "path": "src/cablesim_standards_basis/query.schema.json",
-      "sha256": "52f0cb7d0b3eb32cb8ae73d0539543c4b97729322e0c9754c0f26e5ef12fa17e",
-      "size_bytes": 14634
+      "sha256": "25a10bd8831cd59e3bddcc1f98f4dc44b3132589065e6d1ad46201e1646608f3",
+      "size_bytes": 20889
     },
     {
       "path": "src/cablesim_standards_basis/rebuild.py",
-      "sha256": "65628d192d5aa8db5712a625316838a408a35a2444681c6ca3d534db458860ef",
-      "size_bytes": 8850
+      "sha256": "ae2f987212e15873b52dfb2ff1019250584745a8a0a8fc244f7ba3d59baecc5e",
+      "size_bytes": 9146
     },
     {
       "path": "src/cablesim_standards_basis/records-accessories.json",
       "sha256": "a9e39f8bbdddd61e91061339cec151de2b5f1d93970f7095517504a813169acb",
       "size_bytes": 129768
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-backfill-reference.json",
+      "sha256": "a14a675086a05b6db3e1b2924b6d0219bb7f40a045f84fe63fa997ea1932fea3",
+      "size_bytes": 192187
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-borehole-capacity.json",
+      "sha256": "d4a94e0b25761691991986eb46f48a47cfa7e7b2ea7aced042e8aaf0ea300da4",
+      "size_bytes": 28478
     },
     {
       "path": "src/cablesim_standards_basis/records-conductor-gb-a.json",
@@ -160,8 +170,8 @@
     },
     {
       "path": "src/cablesim_standards_basis/records-installation.json",
-      "sha256": "98916ad9aa3ca943ab0a3bd3beb180956f0ba08d2f4c26158e55f9cc2c8ca330",
-      "size_bytes": 333182
+      "sha256": "2610aa10c0e8ac37ed76da600c475f6ff57a2033c7f18cfdab5201cb9ed21f0f",
+      "size_bytes": 363939
     },
     {
       "path": "src/cablesim_standards_basis/records-lv-a.json",
@@ -175,18 +185,33 @@
     },
     {
       "path": "src/cablesim_standards_basis/records-medium-high.json",
-      "sha256": "d99f9be8958f6f7b1e273c8cfad61f6eb3d8e8e34956a5b81e8ae53d762902bc",
-      "size_bytes": 744903
+      "sha256": "6802733303fc66cac6a1feef11bd7bcbb0876dc0ee494c9091993895ad5865a5",
+      "size_bytes": 754838
     },
     {
       "path": "src/cablesim_standards_basis/records-mv-a.json",
-      "sha256": "19fc13bd7aa92475ac24d289017d978f18f620da90ab2708fa00cfe35c3b00ba",
-      "size_bytes": 327499
+      "sha256": "b91aeca287709b5db2a0cfd8fbd914b56ddd263c683d695627185c09d315df43",
+      "size_bytes": 374511
     },
     {
       "path": "src/cablesim_standards_basis/records-mv.json",
-      "sha256": "5ae9d4d9de0aacfa2a3e5032590a03700a742365eb4c312a2f5a964de38aa7fd",
-      "size_bytes": 898637
+      "sha256": "ce356ed7ddf0a67f1030f963a9b110b390ac4482814e935981c483690417e510",
+      "size_bytes": 898614
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-pipe-capacity.json",
+      "sha256": "fc3c386e2d90698675b3996b28a7a43dc3ddfb34ef36b259242ad263210a2700",
+      "size_bytes": 26490
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-semiconducting-capacity.json",
+      "sha256": "bd58d8e7bde67cd3f528200204dad21a2e531bd4a6ca3a0e2d26dfbfe80a0f2d",
+      "size_bytes": 15056
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-soil-capacity.json",
+      "sha256": "6615c176324cd664ea998b590ea61e8d3d6a9bd3dbdddd1aadbf8194ae1942bc",
+      "size_bytes": 5787
     },
     {
       "path": "src/cablesim_standards_basis/records-thermal-capacity-model.json",
@@ -204,9 +229,14 @@
       "size_bytes": 142666
     },
     {
+      "path": "src/cablesim_standards_basis/soil_capacity.py",
+      "sha256": "ee879a8afe34e9fb0232837e872fc00682f08c16a8df90e1c0df305401432cb3",
+      "size_bytes": 3766
+    },
+    {
       "path": "src/cablesim_standards_basis/verification.json",
-      "sha256": "c19cfe451a312c4fcf5a15f37fa6c8f0e560ec175395f00f54dfe24f7586e42d",
-      "size_bytes": 798976
+      "sha256": "1131d7edbcbd57e9626f67a12fb8e92b9a3861bb5858c615fff42e3f8ac68a2b",
+      "size_bytes": 866629
     }
   ]
 }

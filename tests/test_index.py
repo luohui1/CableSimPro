@@ -35,14 +35,14 @@ def test_canonical_states_pinned_relations_and_no_large_contents(client,monkeypa
     # index adapter bypasses the public application readers.
     import backend.index.sources as sources
     project=sources.project
-    def small(db):
+    def small(db,metrics=None):
         def authorize(action,table,column,*unused):
             if action==sqlite3.SQLITE_READ and (table,column) in {
                 ('study_runs','output'),('source_documents','original'),('deliveries','html'),('agent_steps','result')}:
                 return sqlite3.SQLITE_DENY
             return sqlite3.SQLITE_OK
         db.set_authorizer(authorize)
-        return project(db)
+        return project(db,metrics)
     monkeypatch.setattr(sources,'project',small)
     # service keeps a local import of the projection function.
     monkeypatch.setattr('backend.index.service.project',small)
@@ -69,6 +69,7 @@ def test_canonical_states_pinned_relations_and_no_large_contents(client,monkeypa
     with research.read_responses.lock:research.read_responses.entries.clear();research.read_responses.bytes=0
     from backend.index import get_index
     get_index(research).previous=None  # Synthetic pin override emits no actual SourceWatch generation.
+    get_index(research).cached=None;get_index(research).decoded=None
     stale=object_card(client,'study',s['id'])
     assert stale['status']['code']=='outdated' and '99.0.0' in stale['status']['reason']
     assert next(e for e in relations(client,'study',s['id'])['uses'] if e['role']=='method')['freshness']=='outdated'
