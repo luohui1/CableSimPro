@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useSearch } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
-import { studyIndex, typeIndex, workspaces } from '@/api/research';
-import { indexInbox } from '@/api/object-index';
+import { typeIndex, workspaces } from '@/api/research';
+import { indexAll, indexInbox } from '@/api/object-index';
 import { useIdleStart } from '@/lib/use-deferred-start';
 import { text } from '@/api/client';
 import { Icon } from './icon';
@@ -10,7 +10,7 @@ import { BrandLogo } from './brand';
 import { Button, IconButton } from './ui/button';
 import { ToggleGroup, ToggleGroupItem } from './ui/toggle-group';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from './ui/dropdown-menu';
-import { CreateStudyDialog } from './create-study-dialog';
+import { LazyCreateStudyDialog as CreateStudyDialog } from './lazy-create-study-dialog';
 import { AgentTaskList } from '@/features/agent/task-list';
 
 type Slot = (element: HTMLElement | null) => void;
@@ -48,10 +48,10 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
   };
   const spaces = useQuery({ queryKey: ['workspace-index'], queryFn: ({ signal }) => workspaces(signal) });
   const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal) });
-  // 全库研究列表（只用于各工程的研究数）和待办数在浏览器空闲后再读，不和页面首屏抢宿主；
+  // 研究名片（只用于各工程的研究数）和待办数在浏览器空闲后再读，不和页面首屏抢宿主；
   // 当前工程优先取地址里的 workspace，不必等研究列表
   const idle = useIdleStart();
-  const studies = useQuery({ queryKey: ['study-index'], queryFn: ({ signal }) => studyIndex(signal), enabled: idle });
+  const studies = useQuery({ queryKey: ['study-index', 'sidebar-cards'], queryFn: ({ signal }) => indexAll('study', signal), enabled: idle });
   // 待办数：需要人处理的审核、过期与缺项；进行中的作业不计入
   const inbox = useQuery({ queryKey: ['index-inbox'], queryFn: ({ signal }) => indexInbox(signal), refetchInterval: 60_000, retry: false, enabled: idle });
   const todo = inbox.data ? inbox.data.counts.review + inbox.data.counts.stale + inbox.data.counts.missing : 0;
@@ -61,7 +61,7 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
   const at = (prefix: string) => pathname === prefix || pathname.startsWith(prefix + '/') ? 'page' as const : undefined;
   const typeIds = new Set((types.data || []).map(row => text(row.id)));
   const projects = (spaces.data || []).filter(space => !typeIds.has(text(space.id)));
-  const activeProject = (typeof search.workspace === 'string' && search.workspace) || studies.data?.find(row => row.id === activeStudy)?.workspace || '';
+  const activeProject = (typeof search.workspace === 'string' && search.workspace) || studies.data?.items.find(row => row.id === activeStudy)?.parent?.id || '';
   useEffect(() => {
     const container = scroll.current;
     if (!container || collapsed) return;
@@ -97,7 +97,7 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
       {spaces.isPending ? <div className="tree-empty">读取中</div> : spaces.isError ? <div className="tree-empty">工程读取失败</div> : <>
         {/* 只列最近几个，当前打开的始终在列；其余到列表页找，侧栏不随数量无限变长 */}
         {recent(projects, (project) => text(project.id) === activeProject).map(project => {
-          const id = text(project.id), count = (studies.data || []).filter(row => row.workspace === id).length;
+          const id = text(project.id), count = (studies.data?.items || []).filter(row => row.parent?.id === id).length;
           return <Link key={id} className="tree-row tree-object" to="/studies" search={{ theme, workspace: id }} aria-current={id === activeProject ? 'page' : undefined} title={text(project.name)}>
             <span className="tree-label">{text(project.name) || '未命名工程'}</span>{studies.data && <span className="tree-count">{count}</span>}
           </Link>;

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import {
@@ -53,6 +53,8 @@ export function CreateInquiryDialog({
   const [workspaceId, setWorkspaceId] = useState(search.workspace || '');
   const [projectName,setProjectName]=useState('');
   const projectNameInput=useRef<HTMLInputElement>(null);
+  const projectNameErrorId=useId();
+  const projectNameFieldId=useId();
   const projects = useQuery({ queryKey: ['workspace-index'], queryFn: ({ signal }) => workspaces(signal), enabled: open });
   const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal), enabled: open });
   const typeIds = new Set((types.data || []).map(item => text(item.id)));
@@ -66,6 +68,7 @@ export function CreateInquiryDialog({
   const allocated = useRef<Record<string, unknown> | null>(null);
   const completionForm = useRef<HTMLDivElement>(null);
   const [fieldError, setFieldError] = useState<{key:string; message:string; source?:boolean}>();
+  const projectNameError = failure === '请填写客户与工程名称';
   useEffect(() => { if (open) { setWorkspaceId(search.workspace || ''); allocated.current = null; } }, [open, search.workspace]);
   const targetInput = useRef<HTMLInputElement>(null);
   function continueInquiry() {
@@ -251,7 +254,7 @@ export function CreateInquiryDialog({
           await responseData(
             api.POST("/api/design/study-workspaces", {
               body: {
-                ...{project_name:projectName.trim()},
+                project_name:projectName.trim(),
                 model_id: text(candidates[0].id),
                 content_sha256: text(candidates[0].content_sha256),
                 candidate_completion: completionValue,
@@ -421,7 +424,7 @@ export function CreateInquiryDialog({
           >
             <Select label="所属工程" value={workspaceId || 'new-project'} onChange={value => { setWorkspaceId(value === 'new-project' ? '' : value); allocated.current = null; }}
               options={[{ value: 'new-project', label: '新建工程' }, ...projectOptions.map(project => ({ value: text(project.id), label: text(project.name) || '未命名工程' }))]} />
-            {!workspaceId && <label className="text-field">工程名称<input ref={projectNameInput} value={projectName} onChange={event=>setProjectName(event.target.value)} maxLength={120} required placeholder="填写客户与项目名称" /></label>}
+            {!workspaceId && <div className="text-field"><label htmlFor={projectNameFieldId}>工程名称</label><input id={projectNameFieldId} ref={projectNameInput} value={projectName} onChange={event=>{setProjectName(event.target.value);if(projectNameError)setFailure('');}} maxLength={120} required aria-invalid={projectNameError || undefined} aria-describedby={projectNameError ? projectNameErrorId : undefined} placeholder="填写客户与项目名称" />{projectNameError && <span id={projectNameErrorId} className="field-error" role="alert">{failure}</span>}</div>}
             <Select
               label="研究任务"
               value="selection"
@@ -501,7 +504,7 @@ export function CreateInquiryDialog({
                   : "缺少方法"
               }
             />
-            {failure && (
+            {failure && !projectNameError && (
               <p className="field-error" role="alert">
                 {failure}
               </p>

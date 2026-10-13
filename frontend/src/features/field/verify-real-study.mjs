@@ -26,7 +26,83 @@ const started=performance.now();
 try {
  await page.setViewportSize({width:1366,height:768});
  await page.goto(frontend+`/studies/${study.id}/thermal-field/field?theme=light`);await settle(page);
- if(phase==='library') {
+ if(phase==='imported') {
+  // Read-only acceptance of the release's immutable dg83 evidence. No run,
+  // report-generation or SSH request is sent in this phase.
+  const workflows=(await api('/api/hpc/convergence')).items;
+  const wf=workflows.find(w=>w.status==='completed' && w.verdict?.status==='converged' && w.rating_run_id);
+  assert(wf,'The offline seed must import the completed convergence evidence');
+  const finalStudy=studies.find(s=>s.id===wf.study);assert(finalStudy);
+  const wid=wf.workspace,rid=wf.rating_run_id;
+  const execution=(await api(`/api/hpc/jobs`)).items.find(job=>job.run_id===rid || job.id===rid)?.execution;
+  const expectedJob=wf.run_executions?.[rid]?.job_id;assert(expectedJob);assert.equal(execution?.job_id,expectedJob);assert(execution?.saved_evidence);
+  const references=studies.filter(s=>s.workspace===wid && s.definition.title==='排管段 · IEC 同工况对照');assert.equal(references.length,1);
+  const chapter=await api(`/api/hpc/workspaces/${wid}/chapters/${rid}?iec_run_id=${references[0].latest_run_id}&convergence_id=${wf.id}`);
+  assert.equal(chapter.convergence.verdict.status,'converged');assert.equal(chapter.execution.job_id,expectedJob);
+  assert.equal(chapter.field.full_mesh_nodes,1836625);
+  await fs.writeFile(path.join(output,'imported-chapter.json'),JSON.stringify(chapter,null,2));
+  const writes=[];page.on('request',request=>{if(['POST','PUT','PATCH','DELETE'].includes(request.method()))writes.push(request.method()+' '+new URL(request.url()).pathname);});
+  const checks=[];
+  for(const width of [1366,1920])for(const theme of ['light','dark']) {
+   await page.setViewportSize({width,height:width===1366?768:1080});
+   for(const tab of ['field','convergence','results']) {
+    const start=performance.now();
+    await page.goto(frontend+`/studies/${wf.study}/thermal-field/${tab}?theme=${theme}&view=field&run=${rid}`);
+    await page.locator('.study-field-slot .field-hotspot').waitFor({timeout:90000});
+    const firstFieldSeconds=(performance.now()-start)/1000;
+    await settle(page);
+    if(tab==='field')await page.getByText('超算实算结果',{exact:true}).waitFor({timeout:90000});
+    if(tab==='convergence')await page.getByRole('region',{name:'自动加密与扩域'}).getByText('已完成 · 达到门槛',{exact:true}).waitFor({timeout:90000});
+    const body=await page.locator('body').innerText();
+    if(tab==='field') {
+     await page.getByRole('heading',{name:'本次计算输入',exact:true}).waitFor();
+     assert(body.includes('超算实算结果'));assert(body.includes('超温'));assert(!body.includes('保存工件未提供温限判定'));
+     assert(body.includes('18.4 K'));
+     if(wf.current_grid_recheck)assert(body.includes('计算网格') && /0\.125(?:0+)? m/.test(body));
+     else assert(body.includes('起始网格') && /0\.5(?:0+)? m/.test(body));
+     assert(body.includes('400.0 A') && body.includes('25.0'));
+    }
+    if(tab==='convergence')assert(body.includes('达到门槛') && body.includes('0.1 K'));
+    if(tab==='results') {await page.getByRole('table',{name:'有限元与 IEC 同输入对照'}).waitFor({timeout:60000});assert((await page.locator('body').innerText()).includes('362.24'));}
+    const layout=await page.evaluate(()=>{
+     const overlaps=[];let groundOverlap=false;
+     const plots=[...document.querySelectorAll('.field-view')];
+     for(const plot of plots) {
+      if(plot.querySelectorAll('.field-colorbar').length!==1)throw Error('Each field must have one colorbar');
+      const labels=[...plot.querySelectorAll('[data-field-label] rect')].map(n=>n.getBoundingClientRect());
+      for(let i=0;i<labels.length;i++)for(let j=i+1;j<labels.length;j++){
+       const a=labels[i],b=labels[j];if(Math.min(a.right,b.right)-Math.max(a.left,b.left)>0 && Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>0)overlaps.push([i,j]);
+      }
+      const ground=plot.querySelector('.field-ground')?.getBoundingClientRect();
+      if(ground)for(const a of labels)if(a.top<=ground.top+4 && a.bottom>=ground.top-4 && a.right>ground.left && a.left<ground.right)groundOverlap=true;
+     }
+     return {overlaps,groundOverlap,overflow:document.documentElement.scrollWidth>innerWidth,plots:plots.length};
+    });
+    assert(!layout.overlaps.length && !layout.groundOverlap && !layout.overflow,JSON.stringify(layout));
+    checks.push({width,theme,tab,firstFieldSeconds,...layout});
+    if(width===1366&&theme==='light'&&tab!=='results')await page.screenshot({path:path.join(output,`imported-${tab}.png`)});
+    if(tab==='field') {
+     const toggle=page.getByRole('button',{name:'适配全域',exact:true});assert(await toggle.isVisible());await toggle.click();
+     await page.getByRole('button',{name:'对准电缆区域',exact:true}).click();
+    }
+   }
+  }
+  const deliveries=await api(`/api/workspaces/${wid}/deliveries`);
+  const values=deliveries.items || deliveries;
+  const bookRun=wf.current_grid_recheck?.source_run_id || rid;
+  const bookStudy=workflows.find(value=>value.rating_run_id===bookRun)?.study;assert(bookStudy);
+  const delivery=values.find(value=>(value.sources || []).some(source=>source.run_id===bookRun));assert(delivery,'The accepted PDF must be imported, not regenerated');
+  await page.setViewportSize({width:1366,height:768});
+  await page.goto(frontend+`/studies/${bookStudy}/report/preview?theme=light&run=${bookRun}&delivery=${delivery.id}`);
+  await page.locator('iframe[title="计算书预览"][src^="blob:"]').waitFor({timeout:90000});
+  await page.waitForTimeout(3000);
+  await page.screenshot({path:path.join(output,'imported-book-preview.png')});
+  const pdfResponse=await fetch(backend+`/api/workspaces/${wid}/deliveries/${delivery.id}/pdf`);assert(pdfResponse.ok);
+  const pdf=Buffer.from(await pdfResponse.arrayBuffer());assert(pdf.subarray(0,5).equals(Buffer.from('%PDF-')));
+  await fs.writeFile(path.join(output,'imported-calculation-book.pdf'),pdf);
+  assert(writes.every(value=>value.startsWith('POST ') && value.endsWith('/sample')),'Read-only acceptance cannot modify saved data: '+writes.join(';'));
+  await fs.writeFile(path.join(output,'imported-acceptance.json'),JSON.stringify({checks,writes,job:expectedJob,new_core_hours:0,execution,receipt:delivery,book_run:bookRun,book_kind:bookRun===rid?'accepted_original':'historical'},null,2));
+ } else if(phase==='library') {
   const catalog=await api('/api/foundation/reproductions');assert.equal(catalog.items.length,63);
   const record=await api('/api/foundation/reproductions/B02-2');
   const checks=[];

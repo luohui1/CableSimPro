@@ -37,8 +37,21 @@ export function ShellLayout() {
   const loading = useRouterState({ select: state => state.status === 'pending' });
   const queryClient = useQueryClient();
   useEffect(() => {
-    const idle = window.requestIdleCallback ? window.requestIdleCallback(() => { prefetchCatalogs(queryClient); preloadCommonChunks(); }, { timeout: 3000 }) : window.setTimeout(() => { prefetchCatalogs(queryClient); preloadCommonChunks(); }, 1500);
-    return () => { if (window.cancelIdleCallback) window.cancelIdleCallback(idle); else window.clearTimeout(idle); };
+    let timer: number, idle: number | undefined, stopped = false;
+    const preload = () => {
+      if (stopped) return;
+      // CPU idle does not imply the first page's data is ready. Wait for visible content
+      // and its initial requests before speculative downloads compete for local host I/O.
+      if (!document.querySelector('.main-content') || queryClient.isFetching() || document.querySelector('.route-skeleton,.state-view[aria-busy="true"]')) {
+        timer = window.setTimeout(preload, 250); return;
+      }
+      prefetchCatalogs(queryClient); preloadCommonChunks();
+    };
+    timer = window.setTimeout(() => {
+      if (window.requestIdleCallback) idle = window.requestIdleCallback(preload, { timeout: 3000 });
+      else preload();
+    }, 0);
+    return () => { stopped = true; window.clearTimeout(timer); if (idle !== undefined) window.cancelIdleCallback(idle); };
   }, [queryClient]);
   // 首帧同步读出收起状态和宽度，不在 effect 里修正，刷新时侧栏不跳。
   const [collapsed, setCollapsed] = useState(() => readStored(COLLAPSED_KEY) === 'true');

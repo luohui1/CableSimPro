@@ -4205,7 +4205,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "fd3bf8e844dc95d8f8d28445e491c0382495d0eaef3e639531bf4f68f9e8d02a",
+      "sha256": "ca82f258ef3fe4d18a253b554fed594574e39fe77b320d6ecd2608254fb2cc30",
       "size_bytes": 7670
     }
   ],

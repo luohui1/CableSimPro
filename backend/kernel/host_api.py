@@ -141,6 +141,17 @@ class DeliveryJob(StrictModel):
     finished: str | None = Field(description='UTC ISO 8601 terminal time.')
     delivery_id: UUID | None = Field(description='Saved delivery identity, present only after successful commit.')
     error: ApiErrorDetail | None
+    delivery_receipt: 'DeliveryReceipt | None' = Field(default=None,description='Committed delivery metadata; no HTML or source arrays. Binary PDF is read from its integrity-checked endpoint.')
+
+
+class DeliveryReceipt(StrictModel):
+    id: UUID
+    workspace: UUID
+    sources: list[DeliverySource]
+    renderer: str = Field(description='Saved renderer version.')
+    digest: str = Field(pattern=r'^[0-9a-f]{64}$',description='SHA256 of the complete saved HTML archive, renderer and sources.')
+    created: str = Field(description='UTC creation timestamp.')
+    version_status: VersionStatus
 
 
 class DeliverySummary(StrictModel):
@@ -316,6 +327,21 @@ def make_router(research, previews):
             fail(422, 'REPORT_ATTACHMENT_INVALID', str(exc))
 
     file_response = {**ERRORS, 200: {'content': {'text/html': {'schema': {'type': 'string'}}}, 'description': 'Integrity-checked saved HTML attachment.'}}
+
+    @router.get('/workspaces/{wid}/deliveries/{did}/pdf', response_class=Response,
+                responses={**ERRORS,200:{'description':'PDF extracted from the verified immutable delivery; no rendering or solving.', 'content':{'application/pdf':{'schema':{'type':'string','format':'binary'}}}}})
+    def delivery_pdf(wid:UUID,did:UUID,audience:Literal['customer','internal']=Query(default='customer',description='Saved PDF edition; no unit.')):
+        from base64 import b64decode
+        import re
+        # This is an immutable file read, not a current-result decision. Verify
+        # its complete archive digest; avoid loading all source fields again.
+        saved=host_call(research.delivery,str(wid),str(did),include_version_status=False)
+        links=re.findall(r'data-report-pdf="'+audience+r'"[^>]*href="data:application/pdf;base64,([A-Za-z0-9+/=]+)"',saved['html'])
+        if len(links)!=1:fail(422,'DELIVERY_PDF_MISSING','该保存交付未提供此版本 PDF；可下载 HTML 存档。')
+        raw=b64decode(links[0],validate=True)
+        if not raw.startswith(b'%PDF-'):fail(409,'DELIVERY_PDF_INVALID','保存 PDF 格式不正确，拒绝导出。')
+        return Response(raw,media_type='application/pdf',headers={'Content-Disposition':f'inline; filename="calculation-{audience}.pdf"',
+            'X-Artifact-SHA256':sha256(raw).hexdigest(),'X-Delivery-SHA256':saved['digest']})
 
     @router.get('/design/workspaces/{wid}/deliveries/{did}/file', responses=file_response, deprecated=True, response_class=Response)
     @router.get('/workspaces/{wid}/deliveries/{did}/file', responses=file_response, response_class=Response)

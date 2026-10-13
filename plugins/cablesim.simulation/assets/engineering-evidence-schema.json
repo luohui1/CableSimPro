@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "kind", "workspace_revision", "archives", "members", "executions", "receipt"],
+  "properties": {
+    "schema": {"const": "cablesim.saved-engineering-evidence/1"},
+    "kind": {"const": "saved_evidence"},
+    "workspace_revision": {"type": "integer", "minimum": 1},
+    "archives": {"type": "array", "minItems": 1, "maxItems": 3, "items": {
+      "type": "object", "additionalProperties": false, "required": ["path", "size", "sha256"],
+      "properties": {
+        "path": {"type": "string", "pattern": "^validation/engineering-evidence/(study|mesh|domain)-evidence\\.tar\\.xz$"},
+        "size": {"type": "integer", "minimum": 1, "maximum": 104857600},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    }},
+    "members": {"type": "array", "minItems": 1, "maxItems": 100, "items": {
+      "type": "object", "additionalProperties": false, "required": ["name", "kind", "archive", "size", "sha256"],
+      "properties": {
+        "name": {"type": "string", "pattern": "^(workspace|studies|runs|convergence|delivery)/[A-Za-z0-9/_.-]+$"},
+        "kind": {"enum": ["record", "payload"]},
+        "archive": {"type": "string", "pattern": "^validation/engineering-evidence/(study|mesh|domain)-evidence\\.tar\\.xz$"},
+        "size": {"type": "integer", "minimum": 1, "maximum": 104857600},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "table": {"enum": ["workspaces", "studies", "study_versions", "workspace_revisions", "workspace_history", "hpc_convergence", "deliveries", "delivery_requests", "study_runs"]},
+        "column": {"enum": ["snapshot", "output"]},
+        "run_id": {"type": "string", "format": "uuid"}
+      },
+      "allOf": [
+        {"if": {"properties": {"kind": {"const": "record"}}}, "then": {"required": ["table"]}},
+        {"if": {"properties": {"kind": {"const": "payload"}}}, "then": {"required": ["column", "run_id"]}}
+      ]
+    }},
+    "executions": {"type": "object", "maxProperties": 10, "additionalProperties": {
+      "type": "object", "additionalProperties": false, "required": ["plugin_id", "capability", "execution"],
+      "properties": {"plugin_id": {"const": "cablesim.simulation"}, "capability": {"const": "iec-thermal-field"}, "execution": {"type": "object"}}
+    }},
+    "receipt": {
+      "type": "object",
+      "required": ["workspace", "study", "run", "convergence", "iec_run", "delivery", "job_id", "partition", "date", "core_hours", "wall_seconds", "method", "input_digest", "output_digest", "starting_mesh", "final_mesh", "scope"],
+      "properties": {
+        "job_id": {"type": "string", "pattern": "^[0-9]+$"}, "partition": {"const": "dg83"},
+        "core_hours": {"type": "number", "exclusiveMinimum": 0, "maximum": 10},
+        "wall_seconds": {"type": "integer", "minimum": 1},
+        "input_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "output_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+        "starting_mesh": {"type": "object", "required": ["size_m", "far_size_m", "field_order"],
+          "properties": {"size_m": {"const": 0.0022}, "far_size_m": {"const": 0.5}, "field_order": {"const": 2}}}
+      }
+    }
+  }
+}

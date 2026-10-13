@@ -115,7 +115,21 @@ def test_completed_release_seed_keeps_user_data_and_unfinished_seed_is_refused(t
     assert database.read_bytes() == before
 
 
-def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeypatch):
+@pytest.mark.parametrize('with_evidence', [True, False], ids=['saved-engineering-evidence','waiting-for-slurm'])
+def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeypatch, with_evidence):
+    from backend.kernel.hpc_evidence import evidence_availability
+    if with_evidence:
+        status=evidence_availability()
+        if not status['available']: pytest.skip(status['message'])
+    else:
+        monkeypatch.setenv('CABLESIM_ENGINEERING_EVIDENCE',str(tmp_path/'missing-evidence'))
+    # Import the real ASGI host under an isolated valid database before testing
+    # inherited donor paths; this test also runs independently of suite order.
+    monkeypatch.setenv('CABLESIM_DB', str(tmp_path / 'bootstrap.sqlite'))
+    monkeypatch.setenv('CABLESIM_DATASETS_DIR', str(tmp_path / 'bootstrap-datasets'))
+    monkeypatch.setenv('CABLESIM_REPRODUCTION_LIBRARY', str(tmp_path / 'bootstrap-library'))
+    from backend.main import create_app
+
     path = Path(__file__).resolve().parents[1] / 'frontend/scripts/seed-engineering-demo.py'
     spec = importlib.util.spec_from_file_location('fresh_release_seed', path)
     seed = importlib.util.module_from_spec(spec)
@@ -133,17 +147,52 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     assert receipt['identity']['engineering_resources']
     assert len(receipt['engineering_resources']) == 28
     assert all(row['resource_bindings']['bound'] >= 2 for row in receipt['types'])
-    assert sum(bool(row.get('run')) for row in receipt['studies']) == 3
+    assert receipt['identity']['engineering_evidence_imported'] is with_evidence
+    if with_evidence:
+        with monkeypatch.context() as absent:
+            absent.setenv('CABLESIM_ENGINEERING_EVIDENCE',str(tmp_path/'absent-for-identity'))
+            without=seed.release_identity()
+        assert not without['engineering_evidence_imported']
+        assert without['engineering_evidence']==receipt['identity']['engineering_evidence']
+        assert without!=receipt['identity']
+    assert sum(bool(row.get('run')) for row in receipt['studies']) == (4 if with_evidence else 3)
     type_runs=[module for item in receipt['types'] for module in item['modules'] if module.get('run')]
     assert len(type_runs)>=6
     assert all(item['status'] in ('succeeded','partial') for item in type_runs)
     assert all(any(m.get('run') and m['title']=='标准核对' for m in item['modules']) for item in receipt['types'])
-    assert any('有限元温度场' in row['title'] and not row.get('run') for row in receipt['studies'])
+    fem=next(row for row in receipt['studies'] if '有限元温度场' in row['title'])
+    if with_evidence:
+        assert fem['run'] and fem['saved_evidence']['job_id']=='811855'
+        assert fem['saved_evidence']['historical_receipt']['job_id']=='809850'
+        assert fem['saved_evidence']['starting_mesh']['far_size_m']==.5
+        assert fem['saved_evidence']['starting_mesh']['size_m']==.0022
+    else:
+        assert not fem.get('run') and not fem.get('saved_evidence')
+        assert fem['status']=='输入齐全，等待超算提交'
+        assert not receipt['engineering_evidence_availability']['available']
     hv=next(row for row in receipt['studies'] if '110 kV' in row['title'])
     assert hv['run'] and hv['ready'] and hv['status']=='succeeded'
     with closing(sqlite3.connect(database)) as connection:
-        assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == 4
-        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status IN ('succeeded','partial')").fetchone()[0] == 3+len(type_runs)
+        assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == (5 if with_evidence else 4)
+        assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status IN ('succeeded','partial')").fetchone()[0] == 3+len(type_runs)+(8 if with_evidence else 0)
+        if with_evidence:
+            frozen=connection.execute('SELECT input_digest,output_digest FROM study_runs WHERE id=?',(fem['run'],)).fetchone()
+            assert frozen==('8dc54a1be8032168a0d786d7466e1f73afb5610e03fdba0787fc65adc0a0d02b','61f14f0378dd18147b4074c65edec335ccf82be8680f3919d6c674924b1e3046')
+        else:
+            assert connection.execute('SELECT COUNT(*) FROM study_runs WHERE study=?',(fem['study'],)).fetchone()[0]==0
+            definition=json.loads(connection.execute('SELECT definition FROM study_versions WHERE study=? ORDER BY revision DESC',(fem['study'],)).fetchone()[0])
+            domain=json.loads(connection.execute('SELECT state FROM workspaces WHERE id=?',(fem['workspace'],)).fetchone()[0])['domain']
+            from backend.plugin_host.registry import Registry
+            from backend.plugin_host.parameter_contracts import validate_case
+            cap=Registry().get('cablesim.simulation').manifest.capability('iec-thermal-field')
+            validate_case(cap,{'input':domain,'parameters':definition['parameters']})
+            assert definition['parameters']['outer_boundary']=='kennelly_image'
+            assert definition['input_sources']['/parameters']['reference']
+            with monkeypatch.context() as absent:
+                absent.setenv('CABLESIM_ENGINEERING_EVIDENCE',str(tmp_path/'other-empty-evidence'))
+                without=seed.release_identity()
+            # Presence controls release rebuilding; the local folder name does not.
+            assert without==receipt['identity']
         assert connection.execute("SELECT COUNT(*) FROM engineering_assets WHERE kind='material' AND status='published'").fetchone()[0] == 21
         assert connection.execute("SELECT COUNT(*) FROM engineering_assets WHERE kind='rule' AND status='published'").fetchone()[0] == 7
         candidates=[json.loads(r[0]) for r in connection.execute('SELECT payload FROM domain_cable_models')]
@@ -175,9 +224,10 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
             assert set((json.loads(definition).get('modules') or {})) <= modules
         for (snapshot,) in connection.execute('SELECT snapshot FROM study_runs'):
             assert json.loads(snapshot).get('module') in modules | {None, ''}
-    before = database.read_bytes()
+    from backend.kernel.hpc_evidence import checksum
+    before = checksum(database)
     seed.seed_release(database)
-    assert database.read_bytes() == before
+    assert checksum(database) == before
     assert development.read_bytes() == b'development database sentinel'
 
 

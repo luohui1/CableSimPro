@@ -11,7 +11,7 @@ if(process.env.E2E_ISOLATED!=='1')throw Error('Use the isolated release database
 const expect=baseExpect.configure({timeout:30000}),base=process.env.FRONTEND_URL;
 const phase=process.env.REAL_USE_PHASE || 'before';
 const reportFix=process.env.REAL_USE_REPORT_FIX==='1';
-const out=path.join(repositoryRoot,reportFix?'.data/fix-round/research/report-fix':'.data/fix-round/research/real-use',phase);
+const out=path.join(repositoryRoot,process.env.REAL_USE_REPORT_CLOSE==='1' ? '.data/fix-round/research/report-close' : reportFix?'.data/fix-round/research/report-fix':'.data/fix-round/research/real-use',phase);
 await fs.mkdir(out,{recursive:true});
 const session=await openHeadlessBrowser(),{page}=session;
 const evidence={phase,steps:[],errors:[],clicks:0,source:process.env.E2E_DATABASE_SOURCE};
@@ -89,7 +89,7 @@ try{
     await click(command.getByRole('button',{name:/运行|预检/}).first());
     await expect(preflight.getByText('你的工况在适用范围内 ✓',{exact:true})).toBeVisible({timeout:180000});
   });
-  await step('06-selection','运行真实IEC选型，读取是否满足450 A',async()=>{
+  await step('06-selection',`运行真实IEC选型，读取是否满足${targetCurrent} A`,async()=>{
     await click(preflight.getByRole('button',{name:'确认并运行',exact:true}));
     await expect(page.locator('.study-selection-table').first()).toBeVisible({timeout:180000});
     evidence.conclusion=await page.getByLabel('结论',{exact:true}).innerText();
@@ -121,9 +121,11 @@ try{
   });
   await page.keyboard.press('Escape');
   await step('09-customer-report','按所选保存运行生成并预览客户计算书',async()=>{
+    const previewStarted=Date.now();
     await click(page.getByRole('toolbar',{name:'工程命令'}).getByRole('button',{name:'生成计算书',exact:true}));
     await expect(page.getByRole('button',{name:'下载 PDF',exact:true})).toBeEnabled({timeout:90000});
     await expect(page.getByTitle('计算书预览',{exact:true})).toBeVisible();
+    evidence.preview_seconds=(Date.now()-previewStarted)/1000;
   });
   await step('10-download','下载客户版PDF并核对实际文件',async()=>{
     const pending=page.waitForEvent('download');await click(page.getByRole('button',{name:'下载 PDF',exact:true}));
@@ -161,6 +163,9 @@ try{
       ' with fitz.open(p/(audience+".pdf")) as pdf:',
       '  cover=re.sub(r"\\s+","",pdf[0].get_text());text="\\n".join(page.get_text() for page in pdf)',
       '  assert all(v in cover for v in metrics),(audience,metrics,cover)',
+      '  target=r["snapshot"]["definition"]["driver"]["minimum"]',
+      '  assert "90°C温限下允许电流" in cover',
+      '  assert f"{target:g}A时最热导体温度" in cover and f"{target:g}A时温限余量" in cover',
       '  assert re.sub(r"\\s+","",s["candidate"]["payload"]["name"]) in cover',
       '  assert "全回路共同能力" in cover and "其他回路维持" not in cover',
       '  assert ("最接近，不满足" in cover)==(not s["recommended"])',

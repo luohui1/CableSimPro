@@ -6,7 +6,7 @@ import { indexInbox, indexObjects, type InboxItem, type ObjectCard } from "@/api
 import { message } from "@/api/client";
 import { AppShell } from "@/components/app-shell";
 import { usePageTheme } from "@/components/catalog-shell";
-import { CreateStudyDialog } from "@/components/create-study-dialog";
+import { LazyCreateStudyDialog as CreateStudyDialog } from "@/components/lazy-create-study-dialog";
 import { DataTable } from "@/components/data-table";
 import { Icon } from "@/components/icon";
 import { KIND_LABELS, ObjectLink, statusMark } from "@/components/object-link";

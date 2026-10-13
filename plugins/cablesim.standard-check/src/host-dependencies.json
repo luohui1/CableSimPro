@@ -46,8 +46,8 @@
   },
   {
     "path": "cablesim_sdk/type_design.py",
-    "sha256": "a82b564fb54eda338eae7d68f94f8fc4d5c79ec0412e12dfd34dc88948597029",
-    "size_bytes": 3535
+    "sha256": "d91b74eea2654d8eb7e249a7c2c88524a11ac51e2bc7cc7f0b684bb1d74e47f2",
+    "size_bytes": 4380
   },
   {
     "path": "cablesim_sdk/validation.py",

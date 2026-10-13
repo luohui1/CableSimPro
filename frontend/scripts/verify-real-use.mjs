@@ -9,11 +9,16 @@ import { identifyText, exceptionFor } from './visible-text-policy.mjs';
 
 assert.equal(process.env.E2E_ISOLATED, '1', '真实使用只能在发布库隔离副本运行');
 const base = process.env.FRONTEND_URL, expect = baseExpect.configure({ timeout: 45000 });
-const out = path.join(repositoryRoot, '.data/fix-round/shared-shell/real-use');
+const usePhase = process.env.REAL_USE_PHASE === 'agent-real-use' ? 'agent-real-use' : 'real-use';
+const out = path.join(repositoryRoot, '.data/fix-round/shared-shell', usePhase);
 await fs.mkdir(out, { recursive: true });
 const report = { started: new Date().toISOString(), mode: process.env.REAL_USE_MODE || 'all', checks: [], variants: [], tasks: [], errors: [], blocked: [], requests: [], fixtures: [], coreHours: 0 };
 const taskNames = new Set((process.env.REAL_USE_TASKS || 'missing-inputs,inbox,type-proposal').split(','));
 assert.ok([...taskNames].every(name => ['missing-inputs', 'inbox', 'type-proposal'].includes(name)), '未知真实使用任务');
+const savedMissing = process.env.REAL_USE_RESUME_MISSING === '1'
+  ? JSON.parse(await fs.readFile(path.join(out, 'missing-inputs-model.json'), 'utf8')).tasks.find(task => task.name === 'missing-inputs') : null;
+const savedModelTasks = process.env.REAL_USE_RESUME_TASKS === '1'
+  ? JSON.parse(await fs.readFile(path.join(out, 'saved-model-tasks.json'), 'utf8')) : null;
 const session = await openHeadlessBrowser({ executable: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headed: process.env.REAL_USE_HEADED === '1' });
 const { page, context } = session;
 report.transport = [];
@@ -27,7 +32,7 @@ const allowedWrite = (method, url) => {
     ['/api/hpc/profile/undo', '/api/hpc/profile/check', '/api/agent/sessions', '/api/plugin-queries/cablesim.standards-basis/lookup'].includes(p)
     || /^\/api\/agent\/sessions\/[0-9a-f-]{36}\/messages$/.test(p)
     || /^\/api\/agent\/proposals\/[0-9a-f-]{36}\/approve$/.test(p)
-    || /^\/api\/workspaces\/[0-9a-f-]{36}\/undo$/.test(p)
+    || /^\/api\/workspaces\/[0-9a-f-]{36}\/history\/undo$/.test(p)
     || /^\/api\/workspaces\/[0-9a-f-]{36}\/geometry-preview$/.test(p));
 };
 await context.route('**/api/**', route => {
@@ -40,10 +45,17 @@ page.on('request', request => { if (!['GET', 'HEAD', 'OPTIONS'].includes(request
 const get = async url => { const response = await fetch(base + url, { signal: AbortSignal.timeout(60000) }); assert.ok(response.ok, url + ':' + response.status); return response.json(); };
 async function go(url) { await page.goto(base + url, { waitUntil: 'domcontentloaded' }); await page.locator('.app-shell').waitFor({ state: 'visible' }); await page.evaluate(() => document.fonts.ready); }
 async function saveReport() { const name = report.mode === 'all' ? 'real-use' : report.mode + (process.env.REAL_USE_TASKS ? '-' + [...taskNames].join('-') : ''); await fs.writeFile(path.join(out, name + '.json'), JSON.stringify(report, null, 2)); }
+async function setTheme(theme) {
+  if (await page.locator('html').getAttribute('data-theme') === theme) return;
+  await page.locator('.sidebar-foot').getByRole('button').click();
+  await page.getByRole('menuitem', { name: theme === 'dark' ? '切换深色模式' : '切换浅色模式', exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+  await page.evaluate(() => document.fonts.ready);
+}
 async function appearance(label, selector, strict = true) {
   for (const width of [1366, 1920]) for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width, height: width === 1366 ? 768 : 1080 });
-    await page.evaluate(theme => { document.documentElement.dataset.theme = theme; for (const node of document.querySelectorAll('[data-theme]')) node.dataset.theme = theme; }, theme);
+    await setTheme(theme);
     await page.waitForTimeout(100);
     try {
       await page.evaluate(() => document.fonts.ready);
@@ -62,7 +74,7 @@ async function appearance(label, selector, strict = true) {
     } catch (error) { report.variants.push({ label, width, theme, passed: false, error: error.message }); if (strict) throw error; }
   }
   await page.setViewportSize({ width: 1366, height: 768 });
-  await page.evaluate(() => { for (const node of document.querySelectorAll('[data-theme]')) node.dataset.theme = 'light'; });
+  await setTheme('light');
 }
 async function hpc() {
   console.log('真实使用：超算配置保存、连接检查与撤销');
@@ -193,21 +205,43 @@ async function history() {
   report.checks.push('从上一轮真实会话隔离备份重开任务；单次提问、中文错误与默认折叠技术详情均核对；未调用模型');
 }
 
-async function agentTask({ name, route, prompt, panel, trigger }) {
+async function agentTask({ name, route, prompt, panel, trigger, suggestion }) {
+  const previous = savedModelTasks?.tasks.find(task => task.name === name);
+  if (previous) {
+    console.log('从真实保存任务继续：' + name);
+    const record = await get('/api/agent/sessions/' + previous.id);
+    await go(`/agent?task=${record.id}&workspace=${record.workspace_id}&theme=light`);
+    const surface = page.locator('.agent-page');
+    await expect(surface.locator('.agent-answer').last()).toBeVisible();
+    const answers = await surface.locator('.agent-answer').allTextContents();
+    const exposed = answers.flatMap(text => identifyText(text).filter(hit => !exceptionFor({ ...hit, text, layer: 'ordinary' })));
+    assert.deepEqual(exposed, [], '保存的真实回答不应露出代号');
+    const item = { ...previous, answers, exposed, historyRestored: true, reusedModelResult: true };
+    report.tasks.push(item);
+    report.variants.push(...savedModelTasks.variants.filter(row => row.passed && row.label.endsWith(name)));
+    await appearance('真实 Agent 保存任务重开 · ' + name, '.agent-page');
+    return { id: record.id, record, surface, item, resumed: true };
+  }
   console.log('真实模型任务：' + name); await go(route);
   if (trigger) await trigger();
   const surface = panel ? page.locator('.agent-panel') : page.locator('.agent-page');
   await expect(surface.getByRole('textbox', { name: '给 Agent 的任务' })).toBeVisible();
   await expect(surface.locator('.agent-panel-model')).toContainText('deepseek-flash');
+  if (usePhase === 'agent-real-use') await appearance('真实 Agent 空对话 · ' + name, panel ? '.agent-panel' : '.agent-page');
   const created = page.waitForResponse(r => new URL(r.url()).pathname === '/api/agent/sessions' && r.request().method() === 'POST');
   const response = page.waitForResponse(r => /\/api\/agent\/sessions\/[^/]+\/messages$/.test(new URL(r.url()).pathname) && r.request().method() === 'POST');
   void created.catch(() => {}); void response.catch(() => {});
-  await surface.getByRole('textbox', { name: '给 Agent 的任务' }).fill(prompt);
-  await surface.getByRole('textbox', { name: '给 Agent 的任务' }).press('Enter');
+  if (suggestion) await surface.getByRole('button', { name: prompt, exact: true }).click();
+  else {
+    await surface.getByRole('textbox', { name: '给 Agent 的任务' }).fill(prompt);
+    await surface.getByRole('textbox', { name: '给 Agent 的任务' }).press('Enter');
+  }
   const id = (await (await created).json()).id;
   await expect(surface.getByRole('button', { name: '停止接收', exact: true })).toBeVisible();
   const waiting = await surface.locator('.agent-steps-head').last().innerText();
   await expect(surface.locator('.agent-question').filter({ hasText: prompt })).toHaveCount(1);
+  await expect(surface.getByRole('textbox', { name: '给 Agent 的任务' })).toBeDisabled();
+  if (usePhase === 'agent-real-use') await appearance('真实 Agent 等待 · ' + name, panel ? '.agent-panel' : '.agent-page');
   const timer = setInterval(() => console.log('模型仍在处理：' + name), 30000);
   try {
     const stream = await response; assert.ok(stream.ok(), '消息请求失败：' + stream.status());
@@ -219,9 +253,9 @@ async function agentTask({ name, route, prompt, panel, trigger }) {
     const notices = await surface.locator('.agent-notice').allTextContents();
     const exposed = [...answers, ...notices].flatMap(text => identifyText(text).filter(hit => !exceptionFor({ ...hit, text, layer: 'ordinary' })).map(hit => ({ ...hit, text, owner: 'Agent' })));
     const item = { name, prompt, id, waiting, state: record.state, waiting_reason: record.waiting_reason, answers, exposed, proposals: record.proposals, budget: record.budget, steps: record.steps.map(step => ({ tool: step.tool, state: step.state, result: step.result?.summary })), notices };
-    report.tasks.push(item); await appearance('真实 Agent · ' + name, panel ? '.agent-panel' : '.agent-page', false);
+    report.tasks.push(item); await appearance('真实 Agent · ' + name, panel ? '.agent-panel' : '.agent-page');
     await surface.locator('.agent-thread').evaluate(e => e.scrollTop = e.scrollHeight);
-    await page.screenshot({ path: path.join(out, 'agent-' + name + '-light.png') });
+    if (usePhase !== 'agent-real-use' || name !== 'type-proposal') await page.screenshot({ path: path.join(out, 'agent-' + name + '-light.png') });
     await saveReport(); return { id, record, surface, item };
   } finally { clearInterval(timer); }
 }
@@ -234,44 +268,129 @@ async function agents() {
   assert.ok(project, '来源库没有工程');
   const studies = await get('/api/workspaces/' + project.id + '/studies');
   const study = studies.find(s => s.definition.driver.kind === 'single') || studies[0]; assert.ok(study, '来源工程没有研究');
-  if (taskNames.has('missing-inputs')) await agentTask({ name: 'missing-inputs', route: `/studies/${study.id}?theme=light&workspace=${project.id}&inspector=agent`, panel: true, prompt: '检查这个研究还缺哪些输入。只检查已保存输入，按影响说明缺项和下一步；不要修改、运行计算或提交作业。' });
-  if (taskNames.has('inbox')) await agentTask({ name: 'inbox', route: `/agent?theme=light&workspace=${project.id}`, prompt: '帮我理一下待办' });
+  if (taskNames.has('missing-inputs')) {
+    if (savedMissing) {
+      const record = await get('/api/agent/sessions/' + savedMissing.id);
+      assert.equal(record.state, 'completed');
+      await go(`/agent?task=${record.id}&workspace=${record.workspace_id}&theme=light`);
+      await expect(page.locator('.agent-answer').last()).toContainText('预检');
+      const answers = await page.locator('.agent-answer').allTextContents();
+      const exposed = answers.flatMap(text => identifyText(text).filter(hit => !exceptionFor({ ...hit, text, layer: 'ordinary' })));
+      assert.deepEqual(exposed, [], '实际保存回答应显示工程名称');
+      await appearance('真实缺项任务重开，保留原模型结果', '.agent-page');
+      await page.screenshot({ path: path.join(out, 'agent-missing-inputs-light.png') });
+      report.tasks.push({ ...savedMissing, answers, exposed, historyRestored: true, reusedModelResult: true });
+      report.variants.push(...JSON.parse(await fs.readFile(path.join(out, 'missing-inputs-model.json'), 'utf8')).variants.filter(row => row.passed));
+      report.checks.push('缺项任务已真实完成；只重开保存记录验证显示修正，不重复调用模型。');
+    } else {
+      const task = await agentTask({ name: 'missing-inputs', route: `/studies/${study.id}?theme=light&workspace=${project.id}&inspector=agent`, panel: true, suggestion: usePhase === 'agent-real-use', prompt: usePhase === 'agent-real-use' ? '检查这个研究还缺哪些输入' : '检查这个研究还缺哪些输入。只检查已保存输入，按影响说明缺项和下一步；不要修改、运行计算或提交作业。' });
+      if (usePhase === 'agent-real-use') assert.ok(task.record.state === 'completed' || task.record.state === 'waiting' && task.record.waiting_reason === 'missing_input', '检查应完成或明确等待人补缺项');
+    }
+  }
+  if (taskNames.has('inbox')) {
+    const task = await agentTask({ name: 'inbox', route: `/agent?theme=light&workspace=${project.id}`, prompt: '帮我理一下待办' });
+    if (usePhase === 'agent-real-use') {
+      assert.equal(task.record.state, 'completed', '待办真实任务应完成');
+      await go(`/agent?theme=light&task=${task.id}&workspace=${project.id}`);
+      await expect(page.locator('.agent-answer').last()).toHaveText(task.item.answers.at(-1));
+      await appearance('真实 Agent 完成记录重开', '.agent-page');
+      task.item.historyRestored = true;
+    }
+  }
   if (!taskNames.has('type-proposal')) return;
   const type = types.find(t => /YJV22/.test(t.name)) || types[0]; assert.ok(type, '来源库没有型号');
   const original = await get('/api/workspaces/' + type.id);
   const cable = original.domain.cable_types[0], core = cable.cores[0], insulation = core.layers.find(l => l.role === 'insulation');
   assert.ok(insulation && Number.isFinite(insulation.thickness), '保存型号未登记绝缘厚度');
-  const before = insulation.thickness, nextMm = Number((before * 1000 + 0.1).toFixed(4));
+  const inputPath = '/' + ['cable_types', cable.id, 'cores', core.id, 'layers', 'insulation', 'thickness'].map(part => part.replaceAll('~', '~0').replaceAll('/', '~1')).join('/');
+  const thicknessInput = page.locator(`.type-page [data-field-path="${inputPath}"] input`);
+  let before = insulation.thickness, nextMm = Number((before * 1000 + 0.1).toFixed(4));
   const task = await agentTask({ name: 'type-proposal', route: `/types/${type.id}/structure/table?theme=light`, panel: true, trigger: async () => { await page.getByRole('tab', { name: 'Agent', exact: true }).click(); }, prompt: `请给「${type.name}」第一芯的绝缘层厚度提出一项修改方案：改为 ${nextMm} mm。只提方案供我批准，不保存、不试算、不运行、不提交作业，保留已有材料和来源。` });
-  const proposal = task.record.proposals.find(p => p.status === 'pending');
+  const proposal = task.record.proposals.find(p => p.status === 'pending' || task.resumed && p.status === 'approved');
   if (!proposal) { task.item.approval = { completed: false, reason: '真实模型没有产生可审核方案，未伪造提案或绕过界面保存。' }; return; }
-  const card = task.surface.locator('.agent-review-card').filter({ hasText: proposal.title });
+  const card = page.locator('.agent-review-card').filter({ hasText: proposal.title });
   await expect(card).toBeVisible(); await card.scrollIntoViewIfNeeded();
-  await page.screenshot({ path: path.join(out, 'type-proposal-light.png') });
-  const held = card.getByRole('button', { name: /按住批准/ }); await held.focus();
-  const approvedReply = page.waitForResponse(r => new URL(r.url()).pathname === '/api/agent/proposals/' + proposal.id + '/approve');
-  await page.keyboard.down('Enter'); await page.waitForTimeout(900); await page.keyboard.up('Enter');
-  const reply = await approvedReply;
-  if (!reply.ok()) { task.item.approval = { completed: false, reason: await reply.text() }; return; }
+  if (proposal.status === 'pending') await page.screenshot({ path: path.join(out, 'type-proposal-light.png') });
+  const thicknessChange = proposal.changes.find(change => change.path === inputPath);
+  assert.ok(thicknessChange && thicknessChange.unit === 'mm', '实际提案应包含绝缘厚度毫米字段');
+  before = thicknessChange.before / 1000; nextMm = thicknessChange.after;
+  const reusedApproval = proposal.status === 'approved';
+  if (!reusedApproval) {
+    const held = card.getByRole('button', { name: /按住批准/ }); await held.focus();
+    console.log('真实使用：按住批准型号改动');
+    const approvedReply = page.waitForResponse(r => new URL(r.url()).pathname === '/api/agent/proposals/' + proposal.id + '/approve');
+    await page.keyboard.down('Enter'); await page.waitForTimeout(900); await page.keyboard.up('Enter');
+    const reply = await approvedReply;
+    if (!reply.ok()) { task.item.approval = { completed: false, reason: await reply.text() }; return; }
+  } else {
+    assert.ok(task.record.events.some(event => event.type === 'proposal.decision' && event.data.id === proposal.id && event.data.source === 'human.route' && typeof event.data.actor === 'string' && event.data.actor && event.data.status === 'approved' && event.data.engineering_approval === false), '已批准任务必须有真实人工审核回执');
+    report.checks.push('上一段界面已实际按住批准；从同一保存记录继续撤销，没有重复批准。');
+  }
   await expect(card).toContainText('已批准');
   const changed = await get('/api/workspaces/' + type.id);
-  const changedLayer = changed.domain.cable_types[0].cores[0].layers.find(l => l.id === insulation.id);
+  const changedLayer = changed.domain.cable_types.find(row => row.id === cable.id).cores.find(row => row.id === core.id).layers.find(l => l.role === insulation.role);
   assert.ok(Math.abs(changedLayer.thickness - nextMm / 1000) < 1e-12, '人工批准后真实输入未改变');
-  assert.ok(changed.revision > original.revision);
-  await card.scrollIntoViewIfNeeded(); await page.screenshot({ path: path.join(out, 'type-approved-light.png') });
+  assert.ok(changed.revision > (reusedApproval ? proposal.base_revision : original.revision));
+  if (task.resumed) await go(`/types/${type.id}/structure/table?theme=light`);
+  if (usePhase === 'agent-real-use') {
+    await expect(thicknessInput).toHaveCount(1);
+    await expect.poll(async () => Number(await thicknessInput.inputValue())).toBe(nextMm);
+    await appearance('真实 Agent 人工批准后同步', task.resumed ? '.type-page' : '.agent-panel');
+  } else { await card.scrollIntoViewIfNeeded(); await page.screenshot({ path: path.join(out, 'type-approved-light.png') }); }
   // Leave the text box so Ctrl+Z invokes the ordinary model-history undo.
-  await page.locator('.work-panel h1,.app-header h1,h1').first().click();
-  const undoneReply = page.waitForResponse(r => new URL(r.url()).pathname === '/api/workspaces/' + type.id + '/undo');
+  await page.getByRole('button', { name: '电缆截面', exact: true }).click();
+  console.log('真实使用：在型号工作台撤销刚批准的修改');
+  const undoneReply = page.waitForResponse(r => new URL(r.url()).pathname === '/api/workspaces/' + type.id + '/history/undo');
   await page.keyboard.press('Control+z'); assert.ok((await undoneReply).ok(), '型号工作台撤销失败');
   const restored = await get('/api/workspaces/' + type.id);
-  assert.equal(restored.domain.cable_types[0].cores[0].layers.find(l => l.id === insulation.id).thickness, before);
+  assert.ok(Math.abs(restored.domain.cable_types.find(row => row.id === cable.id).cores.find(row => row.id === core.id).layers.find(l => l.role === insulation.role).thickness - before) < 1e-12, '撤销后应恢复原绝缘厚度');
   assert.ok(restored.revision > changed.revision, '撤销产生新修订，不倒退编号');
-  task.item.approval = { completed: true, beforeMm: before * 1000, proposedMm: nextMm, restoredMm: before * 1000, originalRevision: original.revision, approvedRevision: changed.revision, undoRevision: restored.revision };
+  if (usePhase === 'agent-real-use') {
+    await expect.poll(async () => Number(await thicknessInput.inputValue())).toBe(before * 1000);
+    await expect(page.getByText('已恢复上一份型号输入', { exact: true })).toBeVisible();
+    await appearance('真实 Agent 撤销后同步', task.resumed ? '.type-page' : '.agent-panel');
+    await page.screenshot({ path: path.join(out, 'type-undone-light.png') });
+  }
+  task.item.approval = { completed: true, reusedApproval, beforeMm: before * 1000, proposedMm: nextMm, restoredMm: before * 1000, originalRevision: reusedApproval ? proposal.base_revision : original.revision, approvedRevision: changed.revision, undoRevision: restored.revision };
+  const finalTask = await get('/api/agent/sessions/' + task.id);
+  task.item.afterUndo = { state: finalTask.state, proposalStatus: finalTask.proposals.find(row => row.id === proposal.id)?.status, visibleThicknessMm: Number(await thicknessInput.inputValue()) };
   report.checks.push('真实模型型号提案 → 键盘按住人工批准 → 普通工作台 Ctrl+Z 撤销 → API 复读确认输入恢复');
 }
 
+async function verifyUndone() {
+  const previous = JSON.parse(await fs.readFile(path.join(out, 'agent-type-proposal.json'), 'utf8'));
+  assert.ok(previous.requests.some(req => /\/history\/undo$/.test(req.path)), '须先有本轮真实界面撤销请求');
+  const prior = previous.tasks.find(task => task.name === 'type-proposal');
+  const record = await get('/api/agent/sessions/' + prior.id);
+  const proposal = record.proposals.find(row => row.status === 'approved');
+  assert.ok(proposal, '真实人工批准记录应保留');
+  const receipt = record.events.find(event => event.type === 'proposal.decision' && event.data.id === proposal.id && event.data.source === 'human.route' && event.data.status === 'approved');
+  assert.ok(receipt, '须有真实人工批准回执');
+  const historical = await get(`/api/workspaces/${record.workspace_id}/revisions/${receipt.data.workspace_revision}`);
+  const restored = await get('/api/workspaces/' + record.workspace_id);
+  const change = proposal.changes.find(row => row.path.endsWith('/layers/insulation/thickness'));
+  const parts = change.path.split('/').slice(1).map(part => part.replaceAll('~1', '/').replaceAll('~0', '~'));
+  const thickness = domain => domain.cable_types.find(row => row.id === parts[1]).cores.find(row => row.id === parts[3]).layers.find(row => row.role === 'insulation').thickness;
+  assert.ok(Math.abs(thickness(historical.state.domain) - change.after / 1000) < 1e-12);
+  assert.ok(Math.abs(thickness(restored.domain) - change.before / 1000) < 1e-12);
+  assert.ok(restored.revision > historical.revision);
+  await go(`/types/${record.workspace_id}/structure/table?theme=light`);
+  const input = page.locator(`.type-page [data-field-path="${change.path}"] input`);
+  await expect.poll(async () => Number(await input.inputValue())).toBe(change.before);
+  await appearance('真实撤销保存记录重开，厚度恢复', '.type-page');
+  await page.screenshot({ path: path.join(out, 'type-undone-light.png') });
+  const approvedVariants = previous.variants.filter(row => row.label === '真实 Agent 人工批准后同步' && row.passed);
+  assert.equal(approvedVariants.length, 4, '批准后界面同步的两尺寸两主题必须已通过');
+  report.variants.push(...approvedVariants);
+  report.tasks.push({ ...prior, state: record.state, waiting_reason: record.waiting_reason, proposals: record.proposals,
+    approval: { completed: true, beforeMm: change.before, proposedMm: change.after, restoredMm: Number(await input.inputValue()), originalRevision: proposal.base_revision, approvedRevision: historical.revision, undoRevision: restored.revision, receipt: { created: receipt.created, ...receipt.data } },
+    afterUndo: { state: record.state, proposalStatus: proposal.status, visibleThicknessMm: Number(await input.inputValue()) } });
+  report.checks.push('同一真实保存库：界面按住批准与 Ctrl+Z 已实际发生；核对人工回执、批准后的历史输入、撤销后的当前输入及重开界面。未重复调用模型、批准或撤销。');
+}
+
 try {
-  if (report.mode === 'history') await history();
+  if (report.mode === 'undo-history') await verifyUndone();
+  else if (report.mode === 'history') await history();
   else if (report.mode === 'readonly') { await readonly(); if (process.env.REAL_USE_TASKS) await agents(); if (process.env.REAL_USE_HISTORY === '1') await history(); }
   else { if (report.mode !== 'agent') await hpc(); await saveReport(); if (report.mode !== 'hpc') await agents(); if (process.env.REAL_USE_HISTORY === '1') await history(); }
   report.finished = new Date().toISOString();

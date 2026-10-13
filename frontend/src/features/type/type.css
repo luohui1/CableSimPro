@@ -22,6 +22,13 @@
 .type-specification-layout .type-specification-navigation nav button{padding:var(--space-1);font-size:var(--text-note);white-space:nowrap}
 .type-specification-layout>iframe{display:block;width:100%;min-height:0;max-height:none;flex:none;border:0}
 .type-material-comparison{display:flex;flex-direction:column;min-width:0;min-height:0;flex:1;font-size:var(--text-note)}
+[data-type-page="quantities"] .table-scroll{flex:none;overflow:visible;min-height:0}
+[data-type-page="quantities"] [data-slot="table-container"]{overflow:visible}
+[data-type-page="quantities"] .data-table{table-layout:fixed;width:100%;min-width:0}
+[data-type-page="quantities"] .data-table th,[data-type-page="quantities"] .data-table td{padding-inline:var(--space-2);white-space:normal;overflow-wrap:anywhere}
+[data-type-page="quantities"] .data-table th:first-child{width:24%}
+[data-type-page="quantities"] .data-table[aria-label="外径与用料"] th:last-child{width:18%}
+[data-type-page="quantities"] .data-table td.numeric{white-space:nowrap;overflow-wrap:normal;font-variant-numeric:tabular-nums}
 .type-material-comparison .table-scroll{min-height:0;flex:1;overflow:auto}
 .type-material-comparison .data-table{table-layout:fixed;width:100%}
 .type-material-comparison .data-table th,.type-material-comparison .data-table td{padding:var(--space-2);white-space:normal;overflow-wrap:anywhere;vertical-align:top;font-variant-numeric:tabular-nums}
@@ -35,6 +42,26 @@
 .type-material-comparison .type-material-number,.type-material-comparison .type-material-unit{display:inline-block;white-space:nowrap;overflow-wrap:normal}
 .type-resource-cell{display:flex;align-items:center;gap:var(--space-2);font-variant-numeric:tabular-nums;white-space:nowrap}
 .type-resource-controls{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2);padding:var(--space-2);font-size:var(--text-note)}
+.type-material-actions{display:flex;align-items:center;flex-wrap:wrap;gap:var(--space-2);padding-right:var(--space-2)}
+.type-material-select-all{padding:var(--space-2);font-size:var(--text-note)}
+.type-layer-select{display:inline-flex;align-items:center;gap:var(--space-1)}
+.type-root .data-table[aria-label="型号分层"]:has(.type-layer-select [role=checkbox]) th:first-child{width:var(--space-12)}
+.dialog-content:has(.type-material-batch){width:calc(var(--space-12)*18);max-width:calc(100vw - var(--space-8))}
+.type-material-batch{font-size:var(--text-note);display:grid;gap:var(--space-3);min-width:0;max-height:calc(100dvh - var(--space-12)*5);overflow-y:auto;overflow-x:hidden;padding:var(--space-1)}
+.type-material-batch>section{padding-block:var(--space-2);border-bottom:1px solid var(--line);min-width:0}
+.type-material-batch p{margin:var(--space-1) 0}
+.type-material-batch dl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--space-2);margin:var(--space-2) 0}
+.type-material-batch dl>div{display:flex;gap:var(--space-2);min-width:0}
+.type-material-batch dt{color:var(--text-secondary);flex-shrink:0}
+.type-material-batch dd{margin:0;min-width:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.type-material-batch pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:var(--space-2) 0;font:inherit}
+.type-material-batch [data-review-end],.type-material-batch summary{color:var(--text-secondary);font-size:var(--text-note)}
+.type-material-choice{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);gap:var(--space-2);align-items:center}
+.type-material-choice>.muted{grid-column:1/-1}
+.type-material-density-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3);margin-block:var(--space-2);align-items:end}
+.type-material-density-row label,.type-material-batch>section>label{display:grid;gap:var(--space-1)}
+.type-material-source{display:block;color:var(--text-secondary)}
+@media(max-width:700px){.type-material-density-row,.type-material-batch dl,.type-material-choice{grid-template-columns:minmax(0,1fr)}}
 .type-binding-mark{display:inline-block;width:var(--space-2);height:var(--space-2);border:1px solid var(--text-secondary);border-radius:var(--radius-pill);flex-shrink:0}
 .type-binding-mark:not(.is-unbound){background:var(--text-secondary)}
 .type-root{height:100%;min-height:0}
@@ -105,6 +132,7 @@
 .type-result-toolbar>.select-field{margin-left:auto}
 .type-result-toolbar>.select-field{min-width:0;max-width:100%}
 .type-result-toolbar .select-trigger{max-width:calc(var(--space-12)*7)}
+.type-result-toolbar .select-trigger,.type-resource-controls .select-trigger{height:var(--control-compact);padding-block:0}
 .type-result-toolbar .select-trigger>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .type-requirement{display:grid;gap:var(--space-1);white-space:normal}
 .type-requirement small{font-size:var(--text-note);color:var(--text-secondary)}
@@ -122,6 +150,7 @@
 @media(max-width:1500px){.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) th:nth-child(5),.type-root .data-table[aria-label="型号分层"]:has(th:nth-child(6)) td:nth-child(5){display:none}}
 .type-root .dialog-content .table-scroll{max-height:calc(var(--space-12)*5);flex-shrink:0}
 .type-meta{padding:var(--space-3) var(--space-4);font-size:var(--text-note);color:var(--text-secondary)}
+p.type-meta{font-size:var(--text-body)}
 .type-property-wrapper{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--panel);overflow:auto}
 .type-agent-panel{display:flex;flex:1;min-width:0;min-height:0}
 .type-agent-panel[hidden]{display:none}
@@ -185,6 +214,7 @@
 .type-design-card .property-row .source-badge span{display:none}
 .type-design-card .property-panel>header h2{white-space:normal;overflow-wrap:anywhere}
 .type-module-status{flex:none;margin-left:auto;white-space:nowrap}
+.type-module-status .status-mark{font-weight:var(--weight-normal)}
 .type-module-idle{display:block;width:var(--space-2);height:var(--space-2);border:1px solid var(--border);border-radius:var(--radius-pill)}
 .type-root .explorer-item>span:not(.type-module-status){min-width:0}
 .type-root .explorer-item b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}

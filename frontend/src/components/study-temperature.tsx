@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from '@tanstack/react-query';
 import { hpcJson } from '@/features/field/run-label';
 import { message, optionalRecord, text, numeric } from "@/api/client";
@@ -27,6 +27,8 @@ import { FieldHistoryNotice } from '@/features/field/history-notice';
 import { savedConductorLimit } from '@/features/field/saved-temperature-limit';
 import { studyRuns } from '@/api/research';
 import { StepResponse } from '@/features/field/step-response';
+import { focusField } from './study-field-focus';
+import { savedFieldInputs } from '@/features/field/saved-input-summary';
 export function StudyTemperature({
   run,
   tab,
@@ -36,7 +38,10 @@ export function StudyTemperature({
   tab: string;
   onSelect: (selection: InputSelection) => void;
 }) {
-  const view = useQuery({ queryKey: ['saved-field-view', run?.workspace, run?.id], enabled: !!run?.id && !!run?.workspace && !run?.output,
+  const savedCases = Array.isArray(optionalRecord(run?.snapshot).cases) ? optionalRecord(run?.snapshot).cases as Record<string, unknown>[] : [];
+  const needsSavedView = !!run?.id && !!run?.workspace && !['accepted','queued','running','validating'].includes(text(run?.status)) &&
+    (!run?.output || savedCases.some(item => item.input_ref && !item.input));
+  const view = useQuery({ queryKey: ['saved-field-view', run?.workspace, run?.id], enabled: needsSavedView,
     queryFn: ({ signal }) => hpcJson(`/workspaces/${text(run?.workspace)}/fields/${text(run?.id)}/view`, { signal }), retry: false });
   run = view.data ?? run;
   const pendingRun = run && ['accepted','queued','running','validating'].includes(text(run.status)) ? run : undefined;
@@ -51,9 +56,12 @@ export function StudyTemperature({
   const [selected, setSelected] = useState("");
   const [zoom, setZoom] = useState("2");
   const [responseTab,setResponseTab]=useState(false);
+  const [fullDomain, setFullDomain] = useState(false);
+  const selectedInputRun = useRef('');
   useEffect(() => {
     setZoom("2");
     setSelected("");
+    setFullDomain(false);
   }, [run?.id]);
   const parsed = useMemo(() => {
     try {
@@ -62,8 +70,18 @@ export function StudyTemperature({
       return { view: undefined, error };
     }
   }, [run]);
-  if (run?.id && !run.output && view.isPending) return <LoadingState title="读取保存场图" />;
-  if (view.error && !run?.output) return <ErrorState title="温度场不可用" description={message(view.error)} />;
+  const workflows = useQuery({ queryKey: ['saved-field-inputs-convergence', run?.workspace], enabled: parsed.view?.kind === 'fem' && !!run?.workspace,
+    queryFn: ({ signal }) => hpcJson(`/convergence?workspace=${text(run?.workspace)}`, { signal }), retry: false });
+  useEffect(() => {
+    if (!run || !parsed.view || parsed.view.kind !== 'fem' || pendingRun || needsSavedView && !view.data || workflows.isPending) return;
+    if (selectedInputRun.current === text(run.id)) return;
+    const values = Array.isArray(workflows.data?.items) ? workflows.data.items.map(optionalRecord) : [];
+    const workflow = values.find(value => value.rating_run_id === run.id);
+    const selection = savedFieldInputs(run, text(parsed.view.case.case_id), workflow);
+    if (selection) { selectedInputRun.current = text(run.id); onSelect(selection); }
+  }, [run, parsed.view, pendingRun, needsSavedView, view.data, workflows.data, workflows.isPending, onSelect]);
+  if (needsSavedView && !view.data && view.isPending) return <LoadingState title="读取保存场图与输入" />;
+  if (needsSavedView && view.error) return <ErrorState title="保存场图与输入读取失败" description={message(view.error)} action={<Button onClick={() => void view.refetch()}>重新读取</Button>} />;
   if (pendingRun && !previous.data) return <div className="input-module"><SavedRunProgress run={pendingRun} />
     {previous.isPending ? <LoadingState title="读取上次保存结果" /> : previous.error ? <ErrorState description={message(previous.error)} /> : <p>运行中，尚无已封存温度场。</p>}</div>;
   if (!run) return <EmptyState description="" title="尚未运行；请提交超算生成温度场。" />;
@@ -80,6 +98,9 @@ export function StudyTemperature({
   const data = parsed.view;
   if (!data) return <EmptyState description="" title="该运行没有温度场工件" />;
   const domain = savedDomain(run);
+  const circles = (data.geometry?.cables || []).map(cable => ({ x: cable.x, z: cable.z, r: cable.shape.radiusM, label: cable.label }));
+  const values = data.temperatures.map(value => value - 273.15);
+  const focused = data.kind === 'fem' && !fullDomain ? focusField(data.points, data.triangles, values, circles) : { points: data.points, triangles: data.triangles, values };
   const summaryEntry = Object.entries(optionalRecord(data.case.artifacts)).find(([, value]) => optionalRecord(value).schema_version === 'cablesim.electrothermal-reference/1');
   const thermalSummary = optionalRecord(summaryEntry?.[1]);
   const checked = summaryEntry && optionalRecord(optionalRecord(optionalRecord(run.artifact_status)[text(data.case.case_id)])[summaryEntry[0]]).status === 'verified';
@@ -170,6 +191,7 @@ export function StudyTemperature({
         {conclusion}
         <Toolbar>
           <h2>保存温度场</h2>
+          {data.kind === 'fem' && <Button size="compact" onClick={() => setFullDomain(value => !value)}>{fullDomain ? '电缆区域' : '全域'}</Button>}
           {data.kind === 'fem' && <Button size="compact" role="tab" aria-selected={false} onClick={() => setResponseTab(true)}>阶跃热响应</Button>}
           {optionalRecord(data.field.convergence).display_decimated === true && <span className="muted">显示已降采样，计算用全网格</span>}
           <div className="spacer" />
@@ -200,8 +222,8 @@ export function StudyTemperature({
           {optionalRecord(data.field.convergence).display_decimated === true && <a className="button button-compact button-outline" href={`/api/hpc/workspaces/${text(run.workspace)}/fields/${text(run.id)}/full?case_id=${text(data.case.case_id)}`} download>导出全网格</a>}
         </Toolbar>
         {data.kind === "fem" ? <div className="saved-fem-field"><FieldView
-          label="有限元温度场" points={data.points} triangles={data.triangles}
-          values={data.temperatures.map(value => value - 273.15)}
+          key={fullDomain ? 'full' : 'cables'} label="有限元温度场" points={focused.points} triangles={focused.triangles}
+          values={focused.values} circles={circles} maskObjects={false} groundZ={data.geometry ? 0 : undefined}
           limit={limit === null ? undefined : { value: limit, label: '导体正常温限' }}
           samplePoint={optionalRecord(data.field.convergence).display_decimated === true ? async point => {
             const response = await hpcJson(`/workspaces/${text(run.workspace)}/fields/${text(run.id)}/sample?case_id=${text(data.case.case_id)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify([point]) });

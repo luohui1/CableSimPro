@@ -20,11 +20,20 @@ class CableDesignRequest(StrictModel):
     filler_thickness_m: float | None = Field(default=None, gt=0, le=.05)
     binder_thickness_m: float | None = Field(default=None, gt=0, le=.05)
     generation_mode: Literal['insulation', 'complete'] = 'insulation'
+    # Optional extension of /2. Old requests still produce insulation drafts.
+    screened: Literal['yes', 'no'] | None = None
+    conductor_screen_thickness_m: float | None = Field(default=None, gt=0, le=.01)
+    insulation_screen_thickness_m: float | None = Field(default=None, gt=0, le=.01)
+    screen_tape_thickness_m: float | None = Field(default=None, gt=0, le=.005)
+    screen_tape_width_m: float | None = Field(default=None, gt=0, le=.5)
+    armour: Literal['none', 'steel_tape'] | None = None
 
     @model_validator(mode='after')
     def version_and_geometry(self):
         if self.schema_version.endswith('/1') and (self.construction not in ('single_core', 'three_core') or any(v is not None for v in (self.neutral_area_m2, self.neutral_diameter_m, self.filler_thickness_m, self.binder_thickness_m))):
             raise ValueError('/schema_version：四芯与新护层字段须使用第二版设计契约。')
+        if self.schema_version.endswith('/1') and any(v is not None for v in (self.screened, self.conductor_screen_thickness_m, self.insulation_screen_thickness_m, self.screen_tape_thickness_m, self.screen_tape_width_m, self.armour)):
+            raise ValueError('/schema_version：完整护层制造输入须使用第二版设计契约。')
         if self.construction == 'three_plus_one':
             if self.neutral_area_m2 is None or self.neutral_area_m2 >= self.area_m2:
                 raise ValueError('/neutral_area_m2：3+1 须明确小于相线的中性线截面。')

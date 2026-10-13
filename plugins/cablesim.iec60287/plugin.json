@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.iec60287",
-  "version": "1.1.4",
+  "version": "1.2.0",
   "name": "IEC 60287 载流量",
   "description": "计算声明范围内单芯或独立屏蔽三芯直埋、排管与矩形回填的稳态温度和允许电流，输出逐源互热、屏蔽与磁性铠装损耗及核对表。",
   "icon": "assets/icon.svg",
@@ -2752,7 +2752,7 @@
       "solver": "local",
       "id": "steady-rating",
       "title": "地下稳态（IEC 60287-1-1 / 2-1:2023，多回路直埋 / 排管 / 矩形回填）",
-      "method_version": "1.1.0",
+      "method_version": "1.2.0",
       "analysis": "steady_state",
       "input_schema": "cablesim.domain/1",
       "outputs": [
@@ -2944,11 +2944,40 @@
         "选择 TB 880 历史参考口径时，仅复现 TB 880 所用旧版电容、等效回填半径和接触品字形热阻约定，结果标为参考复现，不能作为 IEC 2023 工程结论。",
         "验证夹具来自受控资料，不随公开仓库分发；验证只覆盖所列算例与分支，不构成合规认证。",
         "快速土壤场采用保存负荷的Kennelly镜像线热源；均匀土壤、地表等温；排管为外部近似、内部不出值；不替代有限元。表面64点周向平均误差不大于0.1 K；回填、分层及接触等效组不发布。",
-        "交叉热源降额按IEC60287-3-3:2007 4.1–4.3；仅一根三芯直埋缆，固定W/m热源且交叉位置重合；不给定电流温度，不联合求解热源载流量。"
+        "交叉热源按 IEC 60287-3-3:2007 4.1–4.3 及附录 A：一根三芯或同埋深非接触平行单芯单回路直埋；固定 W/m 热源、交叉位置重合。第 1 条指出接触电缆叠加偏乐观，接触品字形拒绝；不给定电流温度，不联合求解热源载流量。"
       ],
       "category": "calculation",
       "description": "地下稳态、恒温地表、均匀原土或单一矩形回填区；不支持分层土壤、多介质分区或土壤干燥；单芯自动电损耗适用于完整平衡三相单回路或1-2验证的双回平排温度分支；其他单芯多回路、任意排列或不平衡三相须外部损耗系数与来源。",
       "parameter_schema": {
+        "x-input-admission": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "cable_types": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "cores": {
+                      "type": "array",
+                      "oneOf": [
+                        {
+                          "minItems": 1,
+                          "maxItems": 1
+                        },
+                        {
+                          "minItems": 3,
+                          "maxItems": 3
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "message": "IEC 60287 插件当前不覆盖四芯或其他非单芯、三芯结构。可使用 GB 50217 校正，但须提供同型号、适用条件明确且有来源的基准载流量；无基准不输出电流。"
+        },
         "type": "object",
         "properties": {
           "ks": {
@@ -3624,7 +3653,7 @@
           "crossing_heat_sources": {
             "type": "array",
             "title": "交叉热源",
-            "description": "IEC 60287-3-3:2007 4.1–4.3：水平、同一交叉位置的固定W/m热源；正净距，均匀土壤三芯直埋单回。表面温度不能直接当作W/m。",
+            "description": "IEC 60287-3-3:2007 4.1–4.3 及附录 A：水平、同一交叉位置的固定 W/m 热源；均匀土壤、正净距；一根三芯或同埋深非接触平行单芯单回路。接触品字形按第 1 条拒绝，改用三维热仿真。表面温度不能直接当作 W/m。",
             "maxItems": 20,
             "items": {
               "additionalProperties": false,
@@ -7286,13 +7315,13 @@
     },
     {
       "path": "src/cablesim_iec60287/crossing.py",
-      "sha256": "d5f85e5812d9028bc02a5fe74fa6b706edf6d5e53ae0124ea7af3abe8f4b974c",
-      "size_bytes": 10663
+      "sha256": "9940196480644b6ec0de3f4d61922961b852ce1b418ad37f18fafca7ca980e40",
+      "size_bytes": 13312
     },
     {
       "path": "src/cablesim_iec60287/domain.py",
-      "sha256": "69f331f57296b003ac577c0e8eef6ecdedba9d5d16aa8785d35681e679c14961",
-      "size_bytes": 6510
+      "sha256": "24556a82b72c30332a392df5e4763ba121622b19dd06ca73de64558dc346ce2f",
+      "size_bytes": 6911
     },
     {
       "path": "src/cablesim_iec60287/double_flat.py",

@@ -14,7 +14,13 @@ ROOT = Path(__file__).parent
 
 
 def encode(value):
-    return (json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n').encode('utf-8')
+    raw = (json.dumps(value, ensure_ascii=False, indent=2, allow_nan=False) + '\n').encode('utf-8')
+    # Compact large authoring matrices; compiled records remain split by standard.
+    if len(raw) > 900_000:
+        raw = (json.dumps(value, ensure_ascii=False, separators=(',', ':'), allow_nan=False) + '\n').encode('utf-8')
+    if len(raw) >= 976 * 1024:
+        raise ValueError('编制输入超过单文件卫生限制，须分册：'+str(len(raw)))
+    return raw
 
 
 def build(excerpts, verification):
@@ -80,7 +86,8 @@ def expected_files(directory=ROOT):
     names = {'GB/T 12706.1':'lv','GB/T 12706.2':'mv','GB/T 12706.3':'medium-high',
              'GB/T 3956':'conductor-gb','IEC 60228':'conductor-iec','GB/T 11017.2':'high',
              'GB 50217':'installation','IEC 60287-1-1':'electrical','IEC 60287-2-1':'thermal',
-             'IEC 60287-3-1':'environment'}
+             'IEC 60287-3-1':'environment','GB/T 12706.4':'accessories',
+             'Nielsen et al.':'thermal-capacity','Huang and Niu':'thermal-capacity-model'}
     compiled = {}
     for standard, suffix in names.items():
         selected = [r for r in basis['records'] if r['standard']==standard]

@@ -66,6 +66,7 @@ export function AgentPage() {
   const summary = sessions.data?.find((row) => row.id === search.task);
   const workspaceId = summary?.workspace_id || options.find((row) => row.id === search.workspace)?.id || options[0]?.id;
   const project = options.find((row) => row.id === workspaceId);
+  const scopeName = project?.name || text(types.data?.find(row => text(row.id) === workspaceId)?.name) || '工程';
   const recipes = useQuery({ queryKey: ["agent-recipes", search.task || "", workspaceId || ""], queryFn: ({ signal }) => agentRecipes({ session: search.task, workspace: workspaceId }, signal), retry: false, staleTime: 300_000 });
   const commands: PromptCommand[] = (recipes.data || []).map((row) => ({ key: row.id, name: row.name, description: RECIPE_HINT[row.id] || "", text: RECIPE_TEXT[row.id] || `${row.name}：` }));
   const workspace = useQuery({ ...workspaceQuery(workspaceId), enabled: !!workspaceId });
@@ -127,7 +128,7 @@ export function AgentPage() {
   const section = domain?.sections?.[0];
 
   const scope = agent.id
-    ? <span className="agent-scope-chip"><Icon name="object/folder" />{project?.name || "工程"}</span>
+    ? <span className="agent-scope-chip"><Icon name="object/folder" />{scopeName}</span>
     : <DropdownMenu>
       <DropdownMenuTrigger asChild><button type="button" className="agent-scope-chip is-picker" aria-label="选择工程"><Icon name="object/folder" />{project?.name || "选择工程"}<Icon name="action/chevron-down" /></button></DropdownMenuTrigger>
       <DropdownMenuContent align="start">{options.map((row) => <DropdownMenuItem key={row.id} onSelect={() => void navigate({ to: "/agent", search: { theme, workspace: row.id }, replace: true })}>{row.name}</DropdownMenuItem>)}</DropdownMenuContent>
@@ -146,7 +147,7 @@ export function AgentPage() {
       <TabsContent value="changes">
         {proposals.length ? proposals.map((proposal) => {
           const event = [...agent.events].reverse().find(event => event.type === 'proposal.decision' && event.data.id === proposal.id);
-          return <ProposalCard key={proposal.id} proposal={proposal} onDecide={(id, decision) => void agent.decide(id, decision)}
+          return <ProposalCard key={proposal.id} proposal={proposal} label={label} onDecide={(id, decision) => void agent.decide(id, decision)}
             receipt={event ? { created: event.created, status: String(event.data.status), actor: typeof event.data.actor === 'string' ? event.data.actor : undefined } : undefined}
             busy={agent.decisions[proposal.id]?.busy} error={agent.decisions[proposal.id]?.error} />;
         })
@@ -175,7 +176,7 @@ export function AgentPage() {
       </>}
       property={side ? sidebar : undefined} theme={theme} onTheme={() => {}} onUnavailable={() => {}}>
       <div className="agent-page" data-page="agent">
-        <div className="agent-thread" ref={thread}>
+        <div className="agent-thread" ref={thread} aria-busy={agent.loading || undefined}>
           {agent.loading ? <p className="agent-thread-note">正在读取任务记录</p>
             : agent.error ? <div className="agent-notice" role="alert"><Icon name="status/warning" />任务记录读取失败：{agent.error.message}<Button size="compact" onClick={() => void agent.reload()}>重新读取任务</Button></div>
               : !turns.length ? <div className="agent-start">

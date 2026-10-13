@@ -36,6 +36,7 @@ import { DesignCard } from './design-card';
 import { typeComparison, typeSpecification } from './version-api';
 import { ResourceBindings } from './resource-bindings';
 import { AgentPanel } from '@/features/agent/agent-panel';
+import { TypeStudyDialog } from './study-dialog';
 
 import { typeModules } from "./module-definitions";
 import { WorkbenchSplitter } from "@/components/workbench-splitter";
@@ -57,6 +58,7 @@ export function TypeWorkspace() {
   const [inspectorView, setInspectorView] = useState<'input' | 'method' | 'agent'>(methodModule && location.tab === 'parameters' ? 'method' : 'input');
   const [agentOpened, setAgentOpened] = useState(false);
   const [renaming, setRenaming] = useState(false), [newName, setNewName] = useState('');
+  const [studyOpen, setStudyOpen] = useState(false);
   useEffect(() => { if (inspectorView === 'agent') setAgentOpened(true); }, [inspectorView]);
   // 地址指向方法参数页签（如结果空状态里的“在方法页填写参数”）时打开右侧方法页
   useEffect(() => { if (methodModule && location.tab === 'parameters') setInspectorView('method'); }, [methodModule, location.tab]);
@@ -138,9 +140,9 @@ export function TypeWorkspace() {
       <div title={cleanLabel(row.material.label)}><Select label="材料引用" value={row.material.id} disabled={state.busy || state.locked(row.materialPath)} options={document.materials.filter(item => item.category === row.material.category).map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={material => state.edit(row.materialPath, material)} /></div>
       <ResourceBindings materialId={row.material.id} />
       {!sourceKind(source) && source.kind !== 'demo' && <span className="type-field-source" title="此尺寸未提供来源；编辑后请补充工程依据。">来源未提供</span>}<StructurePropertyInputs row={row} /></div>}
-  </div> : location.module === 'structure' && activeTab !== 'quantities' ? document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} /> : null
+  </div> : location.module === 'structure' && activeTab !== 'quantities' ? document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} extra={state.workspace.raw.type_creation ? <TypeRatingInputs /> : undefined} /> : null
     : resultProperty ? <PropertyPanel title={resultProperty.title} groups={resultProperty.groups} extra={resultProperty.extra} collapsed={collapsed} onToggle={() => setCollapsed(value => !value)} />
-      : document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} /> : null;
+      : document && state.workspace ? <DesignCard document={document} raw={state.workspace.raw} extra={location.module === 'structure' && state.workspace.raw.type_creation ? <TypeRatingInputs /> : undefined} /> : null;
   // 型号工作窗口：画布 = 电缆截面 / 三维剥切；下方停靠栏 = 当前模块的页签；右侧 = 型号名称 + 所选结构层或结果
   const dockTabs = module?.id === 'structure' ? module.tabs.filter(([id]) => id === 'table' || id === 'materials' || id === 'quantities') : module?.tabs || [];
   const dockTab = module?.id === 'structure' ? (location.tab === 'quantities' ? 'quantities' : location.tab === 'materials' ? 'materials' : 'table') : activeTab;
@@ -163,6 +165,7 @@ export function TypeWorkspace() {
     { id:'save', label:'保存', icon:'action/save', role:'save', loading:state.busy, disabledReason:state.readOnly?'此版本只读':!state.dirty?'没有未保存修改':!state.workspace?'型号尚未读取':undefined, onSelect:()=>void state.save() },
     ...(primaryAction ? [primaryAction] : []),
     { id:'undo', label:'撤销', icon:'action/undo', priority:10, disabledReason:state.busy||state.readOnly||!state.dirty&&state.workspace?.raw.can_undo!==true?'没有可撤销的修改':undefined, onSelect:()=>void state.undo() },
+    { id:'study', label:'用于载流量研究', icon:'nav/study', priority:30, disabledReason:state.readOnly?'先基于此版本建立设计草稿':state.dirty?'请先保存型号修改':state.busy||!state.workspace?'型号尚未就绪':undefined, onSelect:()=>setStudyOpen(true) },
     ...(specification&&location.module!=='specification'?[{id:'specification',label:'规格书',icon:'result/report',priority:20,disabledReason:state.dirty?'请先保存修改':undefined,onSelect:()=>go('specification',specification.tabs[0][0])}]:[]),
   ]} />;
   const inspector = <div className="type-property-wrapper">
@@ -175,7 +178,7 @@ export function TypeWorkspace() {
     {document && <section className="inspector-block" aria-label="型号">
       {document.cable_types.length > 1 && <Select label="电缆结构" value={cable?.id} disabled={state.busy} options={document.cable_types.map(item => ({ value: item.id, label: cleanLabel(item.label) }))} onChange={value => { setCableId(value); choose(null); }} />}
     </section>}
-    {property}{location.module === 'structure' && !row && !!state.workspace?.raw.type_creation && document && <TypeRatingInputs />}</>}
+    {property}</>}
     {agentOpened && state.workspace && <div className="type-agent-panel" hidden={inspectorView !== 'agent'}><AgentPanel key={state.workspace.id} workspaceId={state.workspace.id} context={cleanLabel(document?.name || '型号设计')} suggestions={['检查这个型号的问题', '绝缘厚度改到 15.8 mm 会怎样？', '检查规格书还缺哪些来源与结果']} /></div>}
   </div>;
   return <TypeCommandSlot.Provider value={setPrimaryAction}><TypeInspectorContext.Provider value={{ show: showProperty, clear: clearProperty }}><Tabs className="type-root" data-save-validation={state.fieldError ? 'error' : undefined} value={dockTab} onValueChange={tab => go(location.module, tab)} onKeyDown={shortcut}><AppShell title={cleanLabel(document?.name || '型号工作区')} status={<StatusMark kind={status} label={(location.run ? '运行快照 · 只读' : statusLabel) + (demo ? ' · 演示' : '')} detail={state.error || (demo ? '型号基准含演示来源，请核对各字段工程依据。' : state.readOnly ? '所选输入快照只读；基准版本与来源见型号名片。' : state.dirty ? '保存后更新型号输入；原运行结果保留并标为过期。' : '当前编辑已保存；各模块保存结果的状态见型号浏览器。')} />}
@@ -210,5 +213,6 @@ export function TypeWorkspace() {
     </div>
     </div>
     <Dialog open={renaming} onOpenChange={setRenaming} title="修改型号名称" actions={<Button variant="primary" disabled={!newName.trim() || state.readOnly} onClick={() => { state.edit('/name', newName.trim()); setRenaming(false); }}>确认</Button>}><Input aria-label="新的型号名称" value={newName} maxLength={200} onChange={event => setNewName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter' && newName.trim()) { state.edit('/name', newName.trim()); setRenaming(false); } }} /></Dialog>
+    {state.workspace && <TypeStudyDialog open={studyOpen} onOpenChange={setStudyOpen} />}
   </AppShell></Tabs></TypeInspectorContext.Provider></TypeCommandSlot.Provider>;
 }

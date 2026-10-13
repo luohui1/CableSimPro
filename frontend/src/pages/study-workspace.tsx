@@ -17,7 +17,8 @@ import { StudyGeometryProposal, type GeometryProposal } from '@/components/study
 import { isVersionStale } from '@/lib/version-status';
 import { missingInputDestination, focusPreflightField } from "@/lib/missing-input";
 import { StatusMark } from "@/components/status-mark";
-import { EmptyState, ErrorState, InlineEmpty, LoadingState } from "@/components/states";
+import { EmptyState, InlineEmpty, LoadingState } from '@/components/states';
+import { StudyErrorState as ErrorState } from '@/components/study-error-state';
 import { WorkbenchInspector } from "@/components/workbench-inspector";
 import { RelationPanel } from "@/components/relation-panel";
 import { ProjectExplorer, singleAnswer } from "@/components/project-explorer";
@@ -90,6 +91,16 @@ export function StudyEntry() {
     />
   );
 }
+
+/** 温度场只说明保存运行的实际负荷，不能借用允许电流来标注。 */
+function fieldLoadLabel(savedCase: Record<string, unknown>) {
+  const trace = Object.values(optionalRecord(savedCase.artifacts)).map(optionalRecord)
+    .find(artifact => Array.isArray(optionalRecord(artifact.operating).cable_states));
+  const currents = [...new Set((Array.isArray(optionalRecord(trace?.operating).cable_states)
+    ? optionalRecord(trace?.operating).cable_states as unknown[] : [])
+    .map(state => numeric(optionalRecord(state).current_a)).filter((value): value is number => value !== null))];
+  return currents.length === 1 ? `保存负荷 ${Number(currents[0].toFixed(1))} A` : currents.length ? `保存负荷 ${currents.map(value => Number(value.toFixed(1)) + ' A').join(' / ')}` : '保存负荷（详见本次运行输入）';
+}
 export function StudyWorkspace() {
   const { sid, module, tab } = studyModuleRoute.useParams();
   const search = studyModuleRoute.useSearch();
@@ -161,6 +172,8 @@ export function StudyWorkspace() {
   let view: ReturnType<typeof selectionView> | undefined;
   const pendingRun =
     !!run &&
+    (moduleBehavior.input.has(module) || module === 'report' ||
+      (text(optionalRecord(run.snapshot).module) === configuredModule && (!!configuredModule || module === calculatedModule))) &&
     ["accepted", "queued", "running", "validating"].includes(text(run.status));
   if (run && !pendingRun && module === "selection")
     try {
@@ -236,14 +249,13 @@ export function StudyWorkspace() {
   const viewingOldInput = !!search.run && (run?.freshness === "historical" || isVersionStale(run));
   const studyInput = optionalRecord((draft?.definition || study.definition).method_input);
   const canvasDocument = (viewingOldInput ? (run ? savedDomain(fieldRun || run) : undefined)
-    : study.definition.input_source === 'study' ? (studyInput.schema_version === 'cablesim.domain/1' ? studyInput : undefined) : context.domain) as DomainDocument | undefined;
+    : study.definition.input_source === 'study' ? (studyInput.schema_version === 'cablesim.domain/1' ? context.domain : undefined) : context.domain) as DomainDocument | undefined;
   // S4: the complete simulation contract belongs in the work area when
   // editing its method, rather than inside the narrow properties column.
   const workspaceMethod = search.inspector === 'method' && ['thermal-field','transient','sheath-losses','electrothermal'].includes(module);
   const showCanvas = module !== "report" && !workspaceMethod && !!canvasDocument && canvasExpanded;
-  // Independent method inputs have their own editor; workspace edits must not
-  // accidentally rewrite their geometry through the shared drawing inspector.
-  const canvasReadOnly = viewingOldInput || study.definition.input_source === 'study';
+  const independentInput = study.definition.input_source === 'study';
+  const canvasReadOnly = viewingOldInput;
   const conductorLimits = (canvasDocument?.cable_types || []).map((cable) => numeric(optionalRecord(optionalRecord(cable.rating).max_conductor_temperature).normal)).filter((value): value is number => value !== null);
   const conductorLimit = conductorLimits.length ? Math.min(...conductorLimits) - 273.15 : undefined;
   const requestedCanvasView = search.view || (fieldView || needsFieldProjection ? "field" : "section");
@@ -320,7 +332,9 @@ export function StudyWorkspace() {
   // Keep old deep links, but open the current inspector rather than rendering
   // a second method form in the result dock.
   if (methodTab && tab === methodTab) return <Redirect to="/studies/$sid/$module/$tab" params={{ sid, module, tab: dockTabs[0].id }} search={{ ...currentSearch(), inspector: 'method' }} replace />;
-  const methodHistorical = viewingOldInput;
+  // The latest run from another module must not make a missing current-module
+  // configuration read-only. An explicitly selected historical run stays so.
+  const methodHistorical = viewingOldInput && (!!moduleConfiguration(study.definition,module) || !!search.run);
   const methodPanel = !methodTab ? undefined
     : workspaceMethod ? <p className="muted">方法参数在工作区填写；修改进入草稿，确认后保存。</p>
     : module === "sweep" ? <StudySweep run={run} tab="settings" readOnly={methodHistorical} onSelect={inputProps.onSelect} />
@@ -427,7 +441,7 @@ export function StudyWorkspace() {
               agentPanel={<AgentPanel workspaceId={study.workspace} studyId={sid} context={title} />}
               onView={(value) => navigate({ search: { ...currentSearch(), inspector: value }, replace: true })}
               methodPanel={methodPanel}
-              document={study.definition.input_source === 'study' && !viewingOldInput ? undefined : canvasDocument}
+              document={canvasDocument}
               historical={viewingOldInput}
               selection={inputSelection}
               candidate={module === "selection" && selectedRow ? { title: selectedRow.name, groups: selectedProperties(selectedRow) } : undefined}
@@ -456,7 +470,7 @@ export function StudyWorkspace() {
         >
           {commandBar}
           <div className="workbench-frame">
-          <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={context.domain} activeStudy={sid} activeState={presentation} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
+          <ProjectExplorer workspaceId={study.workspace} projectName={projectName} document={canvasDocument} modelLabel={viewingOldInput ? '历史运行模型' : independentInput ? '本研究模型（独立输入）' : '工程模型'} activeStudy={sid} activeState={presentation} view={showCanvas ? canvasView : ""} theme={theme} onCreate={() => setCreating(true)} />
           <div className={`workbench study-workbench ${showCanvas ? "" : "workbench-no-canvas"} ${answer || preview.result || preview.error ? "has-answer" : ""}`} data-dock={dockMax ? "max" : undefined}>
           {(answer || preview.result || preview.error) && <section className="answer-bar" aria-label="结论">{answer}<PreviewStrip preview={preview} saved={run?.headlines || (overallRun.id === run?.id ? overallRun.headlines : undefined)} /></section>}
           {showCanvas && (
@@ -474,7 +488,7 @@ export function StudyWorkspace() {
               {canvasView === 'three' && !!run?.id && !!reportImage?.runId && reportImage.runId === run.id && <div className="study-report-image-status"><StatusMark kind="saved" label="三维图已选入计算书" /></div>}
               {canvasView === "field" && fieldView ? (
                 <div className="study-field-slot"><FieldView
-                  label={fieldView.kind === "iec" ? "土壤温度场（IEC 解析）" : "温度场"}
+                  label={fieldView.kind === "iec" ? `土壤温度场（IEC 解析） · ${fieldLoadLabel(fieldView.case)}` : "温度场"}
                   key={fullFieldDomain ? 'full-domain' : 'cable-region'}
                   points={focusedField!.points}
                   triangles={focusedField!.triangles}
@@ -500,15 +514,15 @@ export function StudyWorkspace() {
                 : canvasView === 'field' ? <InlineEmpty title="该保存运行没有温度场" />
                 : ['three','section'].includes(canvasView) && drawingInput.isFetching && !drawingInput.data ? <LoadingState title="正在读取保存工况的模型输入" />
                 : ['three','section'].includes(canvasView) && drawingInput.error ? <ErrorState description={message(drawingInput.error)} action={<Button onClick={() => void drawingInput.refetch()}>重新读取</Button>} /> : (
-                <StudyDrawing document={canvasView === 'cable' || context.dirty ? canvasDocument! : drawingDocument!} historical={canvasReadOnly} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} run={drawingRun} fieldCase={drawingCase} onSelect={inputProps.onSelect} annotations={annotations}
-                  preview={capabilityEntry?.preview === true && !methodInfo.hpc && !canvasReadOnly ? geometryPreview : undefined}
-                  onPropose={canvasReadOnly ? undefined : changes => { if(context.dirty) throw Error('请先保存当前修改，再审核几何方案。'); setGeometryProposal({changes,revision:Number(workspace.revision),studyRevision:study.revision}); }} onExport={async image => {
+                <StudyDrawing document={canvasView === 'cable' || context.dirty ? canvasDocument! : drawingDocument!} historical={viewingOldInput} readOnly={canvasReadOnly} kind={canvasView === "cable" ? "cable" : canvasView === "three" ? "scene" : "section"} run={drawingRun} fieldCase={drawingCase} onSelect={inputProps.onSelect} annotations={annotations}
+                  preview={capabilityEntry?.preview === true && !methodInfo.hpc && !canvasReadOnly && !independentInput ? geometryPreview : undefined}
+                  onPropose={canvasReadOnly || independentInput ? undefined : changes => { if(context.dirty) throw Error('请先保存当前修改，再审核几何方案。'); setGeometryProposal({changes,revision:Number(workspace.revision),studyRevision:study.revision}); }} onExport={async image => {
                   if (!run || context.dirty || image.metadata.field?.provisional || image.metadata.field?.runId !== run.id) throw Error('请从所选保存运行的三维结果导出，试算图不能进入计算书。');
                   setReportImage({runId: text(run.id), image});
                   downloadBlob(image.blob, '三维视图.png');
                 }} />
               )}
-              {canvasView === "field" && fieldView?.kind === "iec" && <p className="field-basis" title={fieldView.limitations.join("；")}>{fieldView.limitations[0]}</p>}
+              {canvasView === "field" && fieldView?.kind === "iec" && <p className="field-basis" title={`${fieldLoadLabel(fieldView.case)}的保存温度场；允许电流是温限下的能力。查看额定温升，请按允许电流另行运行。${fieldView.limitations.join("；")}`}>{fieldLoadLabel(fieldView.case)} · 额定温升需按允许电流另行运行</p>}
             </section>
           )}
           {showCanvas && <WorkbenchSplitter kind="study" />}

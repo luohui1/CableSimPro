@@ -18,7 +18,8 @@ import { deferredView } from './deferred-view';
 const SeriesChart = deferredView(() => import('./series-chart').then(m => ({ default: m.SeriesChart })));
 import { EngineeringValue } from "./engineering-value";
 import { Toolbar } from "./toolbar";
-import { EmptyState, ErrorState } from "./states";
+import { EmptyState } from "./states";
+import { StudyErrorState as ErrorState } from './study-error-state';
 import { StatusMark } from "./status-mark";
 import { Button } from "./ui/button";
 import { Select } from "./ui/select";
@@ -281,9 +282,7 @@ export function StudySweep({
                   />
                 </label>
                 {error && (
-                  <p role="alert" className="field-error">
-                    {error}
-                  </p>
+                  <ErrorState title="扫描设置未保存" description={error} />
                 )}
                 <div className="demo-row">
                   <Button onClick={apply}>应用扫描设置</Button>

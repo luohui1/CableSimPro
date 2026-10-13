@@ -118,7 +118,9 @@ def submit(root,request_path):
         accounting_cpus=max(workers,-(-resources['slurm_memory_mb']//6500))
         if len(groups)*task_wall*accounting_cpus>2000*3600:raise ValueError('SINGLE_BUDGET_EXCEEDED')
         profile=request['profile'];python=profile['python']
-        for key in ('python','getdp','elmer',*(['control_python'] if 'control_python' in profile else [])):
+        # A FEM-only capability does not need GetDP or Elmer. Validate optional
+        # administrator paths when supplied; the actual plugin checks its tools.
+        for key in ('python',*[key for key in ('getdp','elmer','elmer_build','control_python') if key in profile]):
             if not re.fullmatch(r'/[A-Za-z0-9_./-]+',profile[key]) or '..' in Path(profile[key]).parts:
                 raise ValueError('Invalid administrator executable path')
         modules=profile.get('modules',[])

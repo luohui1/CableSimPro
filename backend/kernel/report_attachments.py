@@ -190,10 +190,18 @@ def chapter_html(attachments, audience='internal'):
         source=data.get('boundary_source') or {}
         boundary_source=' '.join(str(source.get(k,'')) for k in ('standard','clause'))
         if source.get('printed_page'):boundary_source+=f" · 印刷第 {source['printed_page']} 页 / PDF 第 {source['pdf_page']} 页"
+        executions=[];seen=set()
+        for purpose,execution in [('最终额定校核',data.get('execution') or {})]+[('原生预检',e) for e in data.get('preflight_jobs',[])]+[('网格 / 扩域计算',e) for e in data.get('convergence_jobs',[])]+[('收敛起始保存运行（核时另计）' if i==0 else '收敛记录来源',r.get('execution') or {}) for i,r in enumerate(conv['rows'])]:
+            job=execution.get('job_id')
+            if job is None or str(job) in seen:continue
+            hours=execution.get('core_hours')
+            if hours is None and execution.get('actual_cpu_seconds') is not None:hours=execution['actual_cpu_seconds']/3600
+            seen.add(str(job));executions.append([purpose,str(job),number(hours,3) if hours is not None else '未记录'])
         bodies.append('<h2>有限元温度场与 IEC 对照</h2><p>已收敛：网格与扩域均通过；门槛 '+number(conv.get('verdict',conv).get('tolerance_k',.1))+' K。两类均须连续两级满足，结果来自保存运行。</p>'+
             table(['对象','量值','有限元','IEC','差值 K / A','相对差'],compared)+
             '<p>温度相对差以 IEC 绝对温度 K 为分母；载流量仅按相同口径比较。未计算的口径不借用另一方法的数值。</p>'+
-            '<h3>逐级收敛记录</h3>'+table(['级别','网格 / mm','最热点 / °C','变化 / K'], [[{'mesh':'网格','domain':'扩域','rating':'额定校核'}.get(r.get('kind'),'核验')+' '+str(i),number(r['mesh_size_m']*1000,2),number(r['hotspot_k']-273.15,3),number(r.get('change_k'),4) if r.get('change_k') is not None else '—'] for i,r in enumerate(conv['rows'],1)])+
+            '<h3>逐级收敛记录</h3>'+table(['级别','网格 / mm','最热点 / °C','变化 / K'], [[('额定校核（不计入收敛级别）' if r.get('kind')=='rating' else {'mesh':'网格','domain':'扩域'}.get(r.get('kind'),'核验')+' '+str(i)),number(r['mesh_size_m']*1000,2),number(r['hotspot_k']-273.15,3),number(r.get('change_k'),4) if r.get('kind')!='rating' and r.get('change_k') is not None else '—'] for i,r in enumerate(conv['rows'],1)])+
+            '<h3>超算执行追溯</h3>'+table(['用途','Slurm 作业号','实际核时'],executions or [['保存执行记录','未记录','未记录']])+
             '<h3>边界与来源</h3>'+table(['边界口径','有限元','IEC'], [[r['item'],r['fem'],r['iec']] for r in data['scope']])+
             '<p>'+escape(boundary_source+'；'+source.get('scope','保存参数定义的边界。'))+'</p>'+
             '<p>本次收敛流程核时 '+number(conv.get('actual_core_hours'),3)+'；最终运行核时 '+number(data.get('execution',{}).get('core_hours'),3)+'，最终运行已包含在流程总量中，不重复累加。</p>'+

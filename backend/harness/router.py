@@ -107,7 +107,8 @@ def make_router(harness):
     @router.post('/sessions/{id}/messages',response_class=StreamingResponse,
         responses={200:{'description':'SSE events, each event/data JSON pair separated by a blank line.',
             'content':{'text/event-stream':{'schema':{'type':'string'}}}}},
-        openapi_extra={'x-sse-events':TypeAdapter(StreamEvent).json_schema()})
+        openapi_extra={'x-sse-events':TypeAdapter(StreamEvent).json_schema(
+            ref_template='#/paths/~1api~1agent~1sessions~1{{id}}~1messages/post/x-sse-events/$defs/{model}')})
     def message(id:str,body:Message):
         turn=harness.begin(id,body.content,body.recipe.model_dump(mode='json') if body.recipe else None)
         iterator=harness.stream(id,turn)

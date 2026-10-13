@@ -13,12 +13,13 @@ const python = process.env.PYTHON || [path.join(root,'.venv','Scripts','python.e
 const script = process.argv[2];
 if (!script || path.dirname(script) !== ".")
   throw Error("只能执行 frontend/scripts 中的验收脚本");
-const visibleTextScript = ['verify-visible-text.mjs', 'verify-visible-text-states.mjs'].includes(script);
+const visibleTextScript = ['verify-visible-text.mjs', 'verify-visible-text-states.mjs', 'verify-regularity.mjs', 'verify-performance.mjs'].includes(script);
 const realUseScript = script === 'verify-real-use.mjs';
-const formsUseScript = script === 'verify-form-real-use.mjs';
+const formsUseScript = ['verify-form-real-use.mjs', 'verify-client-real-use.mjs'].includes(script);
+const apiGenerationScript = script === 'generate-api.mjs';
 const source = path.resolve(
   process.env.E2E_DATABASE_SOURCE ||
-    path.join(root, visibleTextScript || realUseScript || formsUseScript ? '.data/release/engineering.sqlite' : script === 'verify-type-resilience.mjs' ? '.data/standard-check/validation.sqlite' : ['verify-workbench.mjs','verify-component-foundation.mjs','verify-version-status.mjs','verify-host-connections.mjs','verify-inquiry.mjs','verify-display-names.mjs','verify-documents.mjs','verify-document-batch.mjs','verify-accessibility.mjs'].includes(script) ? '.data/engineering-demo/engineering.sqlite' : ".data/frontend-integration/engineering.sqlite"),
+    path.join(root, visibleTextScript || realUseScript || formsUseScript || apiGenerationScript ? '.data/release/engineering.sqlite' : script === 'verify-type-resilience.mjs' ? '.data/standard-check/validation.sqlite' : ['verify-workbench.mjs','verify-component-foundation.mjs','verify-version-status.mjs','verify-host-connections.mjs','verify-inquiry.mjs','verify-display-names.mjs','verify-documents.mjs','verify-document-batch.mjs','verify-accessibility.mjs'].includes(script) ? '.data/engineering-demo/engineering.sqlite' : ".data/frontend-integration/engineering.sqlite"),
 );
 const scratchRoot = path.resolve(root, ".tmp/frontend-e2e");
 const scratch = path.join(scratchRoot, randomUUID());
@@ -90,7 +91,7 @@ try {
     TMP: scratch,
     BACKEND_URL: "http://127.0.0.1:" + backendPort,
     E2E_SEED_RECEIPT: seedReceipt,
-    ...(realUseScript ? { E2E_SOURCE_DATABASE: source } : {}),
+    ...(realUseScript ? { E2E_SOURCE_DATABASE: path.resolve(process.env.E2E_AGENT_ACCOUNT_SOURCE || source) } : {}),
   };
   if (realUseScript) {
     // Only non-secret deployed connection values enter the form. The actual editor starts empty.
@@ -119,7 +120,7 @@ try {
       [path.join(frontend, "scripts/seed-research-fixtures.py")],
       { env: environment, stdio: "inherit" },
     );
-  const isolatedCad = visibleTextScript || realUseScript || formsUseScript || ["verify-accessibility.mjs", "verify-research-refinement.mjs", "verify-expansion.mjs", "verify-expansion-states.mjs", "verify-display-names.mjs"].includes(script);
+  const isolatedCad = visibleTextScript || realUseScript || formsUseScript || apiGenerationScript || ["verify-accessibility.mjs", "verify-research-refinement.mjs", "verify-expansion.mjs", "verify-expansion-states.mjs", "verify-display-names.mjs"].includes(script);
   const launchArgs = isolatedCad
     ? [
         "-c",
@@ -127,9 +128,18 @@ try {
           "import os,uvicorn",
           "from pathlib import Path",
           "from backend.main import app",
+          ...(script === 'verify-performance.mjs' ? [
+            "import re",
+            "from starlette.responses import JSONResponse",
+            "@app.middleware('http')",
+            "async def readonly_audit(request,call_next):",
+            "    allowed=request.method in ('GET','HEAD','OPTIONS') or request.url.path=='/__e2e/close-previews' or (request.method=='POST' and (request.url.path=='/api/plugin-queries/cablesim.standards-basis/lookup' or re.fullmatch(r'/api/workspaces/[0-9a-fA-F-]{36}/geometry-preview',request.url.path)))",
+            "    if not allowed: return JSONResponse({'detail':'性能巡检只读，未执行计算或保存'},status_code=403,headers={'X-Audit-Blocked':'1'})",
+            "    return await call_next(request)",
+          ] : []),
           "from backend.plugin_host.resident import ResidentRunner",
           "root=Path(os.environ['TEMP']).resolve()",
-          ...(realUseScript || formsUseScript ? [
+          ...(realUseScript || formsUseScript || apiGenerationScript ? [
             "import backend.kernel.hpc_jobs as hpc_api",
             "hpc_api.ROOT=root",
             "app.state.research.executor.profile=root/('administrator-profile.json' if os.environ.get('REAL_USE_MODE')=='readonly' else '.data/hpc/config.json')",
@@ -170,6 +180,10 @@ try {
       backendOutput = (backendOutput + chunk.toString()).slice(-12000);
     });
   await ready(environment.BACKEND_URL + "/api/health", backend);
+  if (apiGenerationScript) {
+    console.log(`隔离 OpenAPI 服务：后端 PID ${backend.pid} / ${backendPort}`);
+    await run(process.execPath, [path.join(frontend, 'scripts', script)], { cwd: frontend, env: environment, stdio: 'inherit' });
+  } else {
   if (script === 'verify-display-names.mjs') {
     // Refresh installed IEC releases only in the private backup. Preserve
     // historical runs and the source demonstration database.
@@ -185,14 +199,18 @@ try {
     ].join('\n'), environment.BACKEND_URL, seedReceipt], {env:environment,stdio:'inherit'});
   }
   // The visible-text audit must keep the frontend snapshot stable while other threads build.
+  // An explicitly supplied frozen snapshot is already isolated; serve it read-only.
+  const suppliedPreview = process.env.E2E_FRONTEND_DIST ? await fs.realpath(process.env.E2E_FRONTEND_DIST) : undefined;
+  const sharedDist = await fs.realpath(path.join(frontend, 'dist')).catch(() => path.join(frontend, 'dist'));
+  const previewDist = suppliedPreview && suppliedPreview !== sharedDist ? suppliedPreview : path.join(scratch, 'preview-dist');
   if ((visibleTextScript || realUseScript || formsUseScript) && process.env.E2E_DEV !== '1')
-    await fs.cp(process.env.E2E_FRONTEND_DIST || path.join(frontend, 'dist'), path.join(scratch, 'preview-dist'), { recursive: true });
+    if (previewDist === path.join(scratch, 'preview-dist')) await fs.cp(sharedDist, previewDist, { recursive: true });
   const preview = spawn(
     process.execPath,
     [
       path.join(frontend, "node_modules/vite/bin/vite.js"),
       ...(process.env.E2E_DEV === '1' ? [] : ['preview']),
-      ...((visibleTextScript || realUseScript || formsUseScript) && process.env.E2E_DEV !== '1' ? ['--outDir', path.join(scratch, 'preview-dist')] : []),
+      ...((visibleTextScript || realUseScript || formsUseScript) && process.env.E2E_DEV !== '1' ? ['--outDir', previewDist] : []),
       "--host",
       "127.0.0.1",
       "--port",
@@ -212,10 +230,12 @@ try {
     env: { ...environment, FRONTEND_URL: url, E2E_ISOLATED: "1" },
     stdio: "inherit",
   });
+  }
 } finally {
-  if (realUseScript && process.env.REAL_USE_CAPTURE_DATABASE === '1' && existsSync(database)) {
+  if ((realUseScript || script === 'verify-client-real-use.mjs') && process.env.REAL_USE_CAPTURE_DATABASE === '1' && existsSync(database)) {
     // Keep actual saved sessions for subsequent read-only inspection.
-    const evidence = path.join(root, '.data/fix-round/shared-shell/real-use/observed.sqlite');
+    const phase = process.env.REAL_USE_PHASE === 'agent-real-use' ? 'agent-real-use' : 'real-use';
+    const evidence = path.join(root, '.data/fix-round/shared-shell', phase, script === 'verify-client-real-use.mjs' ? 'client-observed.sqlite' : 'observed.sqlite');
     await run(python, ['-c', "import sqlite3,sys; from pathlib import Path; a=sqlite3.connect(Path(sys.argv[1]).resolve().as_uri()+'?mode=ro',uri=True); b=sqlite3.connect(sys.argv[2]); a.backup(b); b.close(); a.close()", database, evidence], {stdio:'inherit'}).catch(error => console.error('真实使用记录备份失败：' + error.message));
   }
   if (previewShutdownUrl) {

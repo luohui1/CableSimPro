@@ -104,10 +104,10 @@ export function WorkbenchInspector({ view = "input", onView, methodPanel, agentP
     {document && <Block icon="object/conditions" title="工况" id="inspector-conditions">
       <div className="inspector-conditions"><ConditionsInputs document={document} historical={historical} tab="inputs" onSelect={() => {}} /></div>
     </Block>}
-    {/* 独立研究的几何输入只读，交叉热源仍属于可编辑的方法工况。 */}
+    {/* 没有领域模型的研究仍可配置方法工况。 */}
     {!document && <div className="inspector-conditions"><StudyCrossingInputs historical={historical} /></div>}
     {document && <div className="inspector-layers"><span>敷设参数</span><Button size="compact" variant="ghost" onClick={() => setSection(true)}>{historical?'查看':'编辑'}</Button></div>}
-    <Dialog open={section} onOpenChange={setSection} title="编辑工程模型" description="坐标与介质修改进入本地草稿；保存后影响本工程相关研究。" initialFocus="form">
+    <Dialog open={section} onOpenChange={setSection} title="编辑工程模型" description="坐标与介质修改进入输入草稿；独立研究只保存到本研究，工程共用输入保存后影响相关研究。" initialFocus="form">
       <div role="tablist" aria-label="模型参数"><Button variant={sectionTab==='coordinates'?'primary':'ghost'} onClick={()=>setSectionTab('coordinates')}>坐标与尺寸</Button><Button variant={sectionTab==='media'?'primary':'ghost'} onClick={()=>setSectionTab('media')}>介质参数</Button></div>
       {section && <SectionInputs tab={sectionTab} document={document} historical={historical} onSelect={()=>{}} />}
     </Dialog>

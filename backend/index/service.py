@@ -5,7 +5,7 @@ import json
 import sqlite3
 import logging
 from threading import Event, RLock
-from time import time
+from time import time, perf_counter
 from types import SimpleNamespace
 
 from fastapi import HTTPException
@@ -13,6 +13,7 @@ from backend.kernel.read_models import run_state
 from backend.plugin_host import PluginHostError
 from .contracts import ObjectCard, ObjectList, Relations, Inbox
 from .sources import project, decoded
+from .executions import ExecutionReceipts
 
 LABELS={'not_run':'未运行','running':'运行中','current':'当前','outdated':'已过期','failed':'失败',
     'draft':'草稿','reviewed':'已核对','published':'已发布','deprecated':'已停用','incomplete':'资料缺项',
@@ -30,15 +31,21 @@ def parent(card):
 
 
 class Snapshot:
-    def __init__(self,research,db,reproductions=None,reproduction_error=None):
+    def __init__(self,research,db,reproductions=None,reproduction_error=None,*,previous=None,source_generation=None,execution_reader=None):
         self.research,self.db=research,db
         self.raw=project(db);self.cards={};self.meta={};self.edges=[];self.unresolved={};self.todos=[]
         self.receipts=[];self.reproduction_error=reproduction_error
-        self.registry=research.registry()
+        self.execution_reader=execution_reader or ExecutionReceipts()
+        # Agent events/proposals do not change saved engineering currentness.
+        # Reuse only verified source identities and identical non-Agent metadata.
+        self.model_identity=sha256(json.dumps({key:value for key,value in self.raw.items()
+            if key not in ('tasks','agent_proposals')},sort_keys=True,ensure_ascii=False).encode()).digest()
+        same_sources=source_generation is not None and previous and previous['source_generation']==source_generation
+        self.registry=previous['registry'] if same_sources else research.registry()
         self.cache={'registries':{pid:self.registry for pid in self.registry.plugins}}
         self.workspaces={r['id']:r for r in self.raw['workspaces']}
         self.studies={r['id']:r for r in self.raw['studies']}
-        self.run_states={}
+        self.run_states=dict(previous['run_states']) if same_sources and previous['model_identity']==self.model_identity else {}
         self.build_cards()
         if reproductions is not None:
             from .reproductions import build as reproduction_cards,invalid
@@ -199,14 +206,15 @@ class Snapshot:
             run=latest.get(row['id']);state=self.state(run) if run else {'code':'not_run','reason':None}
             self.add('study',row['id'],decoded(row['definition']).get('title') or '未命名研究',state['code'],reason=state['reason'],
                 revision=row['revision'],updated=(run['finished'] or run['created']) if run else row['created'],owner=self.workspace(row['workspace']))
+        executions=dict(self.execution_reader.read(self.research.executor,[(row['id'],self.state(row)['snapshot']['definition']['method'])
+            for row in self.raw['runs'] if self.state(row)['snapshot'].get('definition',{}).get('method')]))
         for row in self.raw['runs']:
             state=self.state(row);owner=self.get('study',row['study']);snapshot=state['snapshot']
             card=self.add('run',row['id'],(owner['name'] if owner else '保存运行')+' · '+str(row['sequence']),state['code'],
                 reason=state['reason'],updated=row['finished'] or row['created'],owner=owner,digest=row['output_digest'])
             self.add('input_snapshot',row['id'],'输入快照 · '+str(snapshot.get('workspace_revision','未知')), 'saved',
                 revision=snapshot.get('workspace_revision'),updated=row['created'],owner=card,digest=row['input_digest'])
-            method=snapshot.get('definition',{}).get('method') or {}
-            execution=self.research.executor.execution_status(row['id'],method['plugin_id'],method['capability']) if method and hasattr(self.research.executor,'execution_status') else None
+            execution=executions.get(row['id'])
             if execution:
                 self.receipts.append((row['id'],execution))
                 status=row['status'] if row['status'] in ('validating','succeeded','partial','failed','interrupted','cancelled') else execution.get('state',row['status'])
@@ -246,6 +254,9 @@ class Index:
         self.next_expiry=None;self.expiry_generation=0
         self.runtime_generation=0;self.runtime_hash=None
         self.warm_done=Event();self.warm_state='pending'
+        self.previous=None;self.last_build=None;self.startup_wait_ms=None
+        self.last_read=None
+        self.execution_reader=ExecutionReceipts()
         from .reproductions import library
         self.reproduction_library=library()
 
@@ -263,14 +274,10 @@ class Index:
     def runtime_identity(self):
         # Job receipts live outside SQLite. Read the executor's small local
         # receipt, never refresh SSH/Slurm or load result archives.
-        receipts=[]
-        if hasattr(self.research.executor,'execution_status'):
-            for rid,method in self.runs:
-                receipt=self.research.executor.execution_status(rid,method['plugin_id'],method['capability'])
-                if receipt:receipts.append((rid,receipt))
-        return sha256(json.dumps(receipts,sort_keys=True,ensure_ascii=False).encode()).digest()
+        return sha256(json.dumps(self.execution_reader.read(self.research.executor,self.runs),sort_keys=True,ensure_ascii=False).encode()).digest()
 
     def load(self):
+        started=perf_counter()
         from .reproductions import invalid,identity
         reproduction_error=None;reproductions=None
         try:
@@ -281,7 +288,11 @@ class Index:
             reproductions=None;reproduction_error=invalid(error).detail
         with self.research.store.db() as db:
             db.execute('PRAGMA query_only=ON');db.execute('PRAGMA busy_timeout=250');db.execute('BEGIN')
-            view=Snapshot(self.research,db,reproductions,reproduction_error)
+            cache=self.research.read_responses
+            with cache.lock:generation=cache.generation(True)
+            source_generation=generation[1] if generation is not None else None
+            view=Snapshot(self.research,db,reproductions,reproduction_error,
+                previous=self.previous,source_generation=source_generation,execution_reader=self.execution_reader)
         self.runs=[(r['id'],view.state(r)['snapshot']['definition']['method']) for r in view.raw['runs']
             if view.state(r)['snapshot'].get('definition',{}).get('method')]
         # Baseline exactly the receipts used for these cards. A fresh reread here
@@ -289,23 +300,32 @@ class Index:
         self.runtime_hash=sha256(json.dumps(view.receipts,sort_keys=True,ensure_ascii=False).encode()).digest()
         now=time();deadlines=[r['expires'] for r in view.raw['agent_proposals'] if not r['decision'] and r['expires'] and r['expires']>now]
         self.next_expiry=min(deadlines,default=None)
-        return json.dumps({'cards':list(view.cards.values()),'edges':view.edges,
+        payload=json.dumps({'cards':list(view.cards.values()),'edges':view.edges,
             'unresolved':[[*key,notes] for key,notes in view.unresolved.items()],'todos':view.todos,
             'reproduction_error':view.reproduction_error},ensure_ascii=False,allow_nan=False).encode()
+        self.last_build={'elapsed_ms':(perf_counter()-started)*1000,'cards':len(view.cards),
+            'reused_run_states':bool(self.previous and source_generation is not None
+                and self.previous['source_generation']==source_generation and self.previous['model_identity']==view.model_identity)}
+        self.previous={'source_generation':source_generation,'model_identity':view.model_identity,
+            'registry':view.registry,'run_states':view.run_states}
+        return payload
 
     def snapshot(self):
+        started=perf_counter();metrics={}
         # Leave room for the HTTP error response within the public wait budget.
         if not self.lock.acquire(timeout=max(0,self.MAX_WAIT_SECONDS-.1)):
             raise HTTPException(503,{'code':'INDEX_BUILDING','state':'building',
                 'message':'统一索引正在完整构建；本次等待已达上限，请稍后重试。',
                 'max_wait_seconds':self.MAX_WAIT_SECONDS},headers={'Retry-After':'1'})
         try:
+            metrics['lock_ms']=(perf_counter()-started)*1000;phase=perf_counter()
             if self.next_expiry is not None and time()>=self.next_expiry:
                 self.expiry_generation+=1;self.next_expiry=None
             observed=self.runtime_identity()
             if self.runtime_hash is not None and observed!=self.runtime_hash:
                 self.runtime_generation+=1
             self.runtime_hash=observed
+            metrics['execution_ms']=(perf_counter()-phase)*1000;phase=perf_counter()
             from .reproductions import identity,invalid
             try:reproduction_identity=identity(self.reproduction_library)
             except (OSError,ValueError,KeyError,TypeError,AttributeError,IndexError,HTTPException) as error:
@@ -315,21 +335,27 @@ class Index:
                 except OSError:stamp=None
                 reproduction_identity=('invalid',stamp,type(error).__name__,str(error))
             key=('object-index',self.expiry_generation,self.runtime_generation,reproduction_identity)
+            metrics['reproduction_identity_ms']=(perf_counter()-phase)*1000;phase=perf_counter()
             cache=self.research.read_responses
             payload=cache.get(key,True)
+            metrics['cache_hit']=payload is not None
             if payload is None:payload=cache.build(key,None,self.load,True)
+            metrics['cache_ms']=(perf_counter()-phase)*1000;phase=perf_counter()
             value=json.loads(payload)
+            metrics['decode_ms']=(perf_counter()-phase)*1000
             return SimpleNamespace(cards={(card['kind'],card['id']):card for card in value['cards']},
                 edges=[(tuple(source),edge) for source,edge in value['edges']],
                 unresolved={(kind,id):notes for kind,id,notes in value['unresolved']},todos=value['todos'],
                 reproduction_error=value.get('reproduction_error'))
         except sqlite3.OperationalError as error:
             raise HTTPException(503,{'code':'INDEX_UNAVAILABLE','message':'统一索引暂时无法读取；原数据未改变，请稍后重试。'},headers={'Retry-After':'1'}) from error
-        except (PluginHostError,OSError) as error:
+        except (PluginHostError,OSError,ValueError) as error:
             raise HTTPException(503,{'code':'INDEX_SOURCE_UNAVAILABLE','message':'安装清单或保存引用暂时不可用，请核对原模块。'}) from error
         except MemoryError as error:
             raise HTTPException(503,{'code':'INDEX_RESOURCE_PRESSURE','message':'统一索引暂时内存不足；未返回部分索引，请稍后重试。'},headers={'Retry-After':'1'}) from error
-        finally:self.lock.release()
+        finally:
+            metrics['elapsed_ms']=(perf_counter()-started)*1000;self.last_read=metrics
+            self.lock.release()
 
     def objects(self,*,kind=None,q='',limit=50,offset=0):
         if kind is not None and kind not in ObjectCard.model_fields['kind'].annotation.__args__:

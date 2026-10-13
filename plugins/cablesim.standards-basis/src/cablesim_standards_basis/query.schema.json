@@ -53,24 +53,18 @@
       "additionalProperties": false,
       "properties": {
         "area_m2": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "maximum": 0.01
+          "type": "number"
         },
         "u0_v": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "maximum": 1000000.0
+          "type": "number"
         },
         "u_v": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "maximum": 1000000.0
+          "type": "number"
         },
         "insulation": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 60
+          "maxLength": 200
         },
         "screened": {
           "type": "string",
@@ -95,16 +89,15 @@
         "sheath_material": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 60
+          "maxLength": 200
         },
         "conductor_class": {
-          "type": "number",
-          "exclusiveMinimum": 0
+          "type": "number"
         },
         "conductor_material": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 60
+          "maxLength": 200
         },
         "coating": {
           "type": "string",
@@ -260,9 +253,7 @@
           "maxLength": 60
         },
         "um_v": {
-          "type": "number",
-          "exclusiveMinimum": 0,
-          "maximum": 1000000.0
+          "type": "number"
         },
         "duration_s": {
           "type": "number",
@@ -276,7 +267,7 @@
         "test_item": {
           "type": "string",
           "minLength": 1,
-          "maxLength": 60
+          "maxLength": 200
         },
         "typical_model": {
           "type": "string",
@@ -505,6 +496,68 @@
           "maxLength": 200
         },
         "reference_item": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "halogen_free": {
+          "type": "boolean"
+        },
+        "insulation_test_group": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "manufacturer_declares_flame_retardant": {
+          "type": "boolean"
+        },
+        "manufacturer_declares_longitudinal_water_barrier": {
+          "type": "boolean"
+        },
+        "manufacturer_declares_peelable_screen": {
+          "type": "boolean"
+        },
+        "sheath_colour": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "conductor_shape": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "conductor_temperature_k": {
+          "type": "number"
+        },
+        "test_specimen": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "current_rating_a": {
+          "type": "number"
+        },
+        "insulation_screen_present": {
+          "type": "boolean"
+        },
+        "equal_core_sections": {
+          "type": "boolean"
+        },
+        "inner_covering_present": {
+          "type": "boolean"
+        },
+        "screen_construction": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "armour_kind": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "rounding_scope": {
           "type": "string",
           "minLength": 1,
           "maxLength": 200

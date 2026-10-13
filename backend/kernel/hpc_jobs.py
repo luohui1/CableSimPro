@@ -93,18 +93,30 @@ def dataset_jobs(batches):
 
 
 def unbound_checks(research,linked):
-    """Legacy checks predate study binding; expose them without guessing an owner."""
+    """Read submission bindings; unrecorded legacy owners stay explicitly unknown."""
     root=getattr(research.executor,'root',None)
     if root is None:return []
     known={row['execution'].get('plan_id') for row in linked};result=[]
     for path in root.glob('*/plan.json'):
         plan=read(path)
-        if plan.get('phase')!='check' or plan.get('operation_id') or plan['id'] in known:continue
+        if plan.get('phase')!='check' or plan['id'] in known:continue
         progress=path.parent/'execution.json';execution=read(progress) if progress.is_file() else {}
         if not execution.get('job_id'):continue
         execution={**execution,'plan_id':plan['id'],'cancel_requested':(path.parent/'cancel-request.json').is_file()}
-        result.append({'id':'unbound:'+plan['id'],'kind':'preflight','workspace':None,'study':None,
-            'study_name':'超算预检（研究归属未记录）','sequence':None,
+        context=plan.get('research_context') or {}
+        receipt=path.parent/'research-context.json'
+        if not context and receipt.is_file():context=read(receipt)
+        if not context and plan.get('operation_id'):
+            # Execution-time validation is bound to the saved run UUID, not a
+            # standalone preflight context. Resolve that exact foreign key.
+            with research.store.db() as db:
+                saved=db.execute('SELECT id,workspace,study,snapshot FROM study_runs WHERE id=?',(plan['operation_id'],)).fetchone()
+            if saved:
+                snapshot=json.loads(saved['snapshot'])
+                context={'workspace_id':saved['workspace'],'study_id':saved['study'],'run_id':saved['id'],
+                         'study_revision':snapshot.get('study_revision'),'workspace_revision':snapshot.get('workspace_revision')}
+        result.append({'id':'unbound:'+plan['id'],'kind':'preflight','workspace':context.get('workspace_id'),'study':context.get('study_id'),
+            'research_context':context,'study_name':'超算预检（研究归属未记录）','sequence':None,
             'created':datetime.fromtimestamp(path.stat().st_mtime,timezone.utc).isoformat(),
             'created_basis':'local_plan_record_time','started':execution.get('started'),'finished':execution.get('finished'),
             'execution':execution,'core_hours':execution.get('actual_cpu_seconds',0)/3600,
@@ -120,16 +132,25 @@ def job_cards(research,refinements,values,batches=None):
         names={row['id']:(state.get('domain') or state.get('scenario') or {}).get('name')
                for row in db.execute('SELECT id,state FROM workspaces')
                for state in [json.loads(row['state'])]} if 'state' in columns else {}
+        titles={}
+        bindings={(context['study_id'],context['study_revision']) for value in values
+                  for context in [value.get('research_context',{})] if context.get('study_id') and context.get('study_revision') is not None}
+        for binding in bindings:
+            saved=db.execute('SELECT definition FROM study_versions WHERE study=? AND revision=?',binding).fetchone()
+            if saved:titles[binding]=json.loads(saved['definition'])['title']
     workflows=refinements.list();owners={}
     for workflow in workflows:
         for index,row in enumerate(workflow['rows']):owners.setdefault(row['run_id'],(workflow,index+1,row['kind']))
         if workflow.get('current_run_id'):
             owners[workflow['current_run_id']]=(workflow,len(workflow['rows'])+1,workflow.get('pending',{}).get('kind'))
     for row in values:
+        context=row.get('research_context',{})
+        if row['kind']=='preflight' and context.get('study_id'):
+            row['study_name']=titles.get((context['study_id'],context.get('study_revision')),'所属研究版本不可用')
         execution=row['execution'];owner=owners.get(row['id']);workflow=owner[0] if owner else next(
             (w for w in workflows if row['id'].startswith('preflight:'+w['id']+':')),None)
         kind='batch' if row['kind']=='dataset' else 'convergence' if workflow else 'single'
-        run_id=row['id'].split(':')[0] if row['kind'] in ('study','dataset') else None
+        run_id=row['id'].split(':')[0] if row['kind'] in ('study','dataset') else context.get('run_id')
         if workflow and row['kind']=='preflight':
             method=workflow['definition']['method']
             for attempt in workflow.get('attempts',[]):
@@ -148,6 +169,8 @@ def job_cards(research,refinements,values,batches=None):
                     cpus=max(resources.get('slurm_cpus_per_task',1),-(-resources['slurm_memory_mb']//6500))
                     budget=saved['task_count']*saved['task_wall_seconds']*cpus/3600
         row.update(workspace_id=row['workspace'],workspace_name=names.get(row['workspace']),study_id=row['study'],
+                   study_href='/studies/'+row['study'] if row['study'] else None,
+                   study_revision=context.get('study_revision'),
                    run_id=run_id,
                    type=kind,job_id=execution.get('job_id'),queue_position=execution.get('queue_position'),
                    queue_position_basis=execution.get('queue_position_basis','not_recorded'),
@@ -196,6 +219,10 @@ def make_router(research,batches=None):
     @router.post('/workspaces/{wid}/studies/{sid}/step-responses/estimate')
     def step_estimate(wid:UUID,sid:UUID,body:StepRequest):return responses.estimate(str(wid),str(sid),body)
 
+    @router.get('/workspaces/{wid}/studies/{sid}/step-responses/source-check')
+    def step_source_check(wid:UUID,sid:UUID,source_run_id:UUID):
+        return responses.source_check(str(wid),str(sid),str(source_run_id))
+
     @router.post('/workspaces/{wid}/studies/{sid}/step-responses',status_code=202)
     def step_start(wid:UUID,sid:UUID,body:StepRequest):return responses.start(str(wid),str(sid),body)
 
@@ -208,12 +235,21 @@ def make_router(research,batches=None):
     @router.post('/step-responses/{identifier}/resume',status_code=202)
     def step_resume(identifier:UUID):return responses.resume(str(identifier))
 
-    @router.get('/jobs')
-    def jobs(offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100)):
+    def all_jobs():
         linked=preflight_jobs(refinements)
         values=sorted(study_jobs(research)+dataset_jobs(batches)+linked+unbound_checks(research,linked),key=created_order,reverse=True)
-        values=job_cards(research,refinements,values,batches)
+        return job_cards(research,refinements,values,batches)
+
+    @router.get('/jobs')
+    def jobs(offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100)):
+        values=all_jobs()
         return {'items':values[offset:offset+limit],'total':len(values),'next_offset':offset+limit if offset+limit<len(values) else None}
+
+    @router.get('/jobs/{identifier}')
+    def job_detail(identifier:str):
+        value=next((row for row in all_jobs() if row['id']==identifier),None)
+        if value is None:raise HTTPException(404,'超算作业记录不存在。')
+        return value
 
     @router.post('/jobs/{identifier}/cancel')
     def cancel(identifier:str):

@@ -7,6 +7,7 @@ import { VersionNotice } from './version-notice';
 import { formatDateTime } from '@/lib/format';
 import { statusLabel } from '@/lib/status-vocabulary';
 import { useEffect } from 'react';
+import { studyErrorDescription } from './study-error-state';
 
 /** Acknowledge once per installed release, across studies sharing that method. */
 export function useMethodPresentationNotice(study: StudyRow, run: Record<string, unknown> | undefined, notify: (value: string) => void) {
@@ -52,7 +53,7 @@ export function studyPresentation(study: StudyRow, run?: Record<string, unknown>
     : code === 'loading' ? '正在读取保存运行' : code === 'not_run' ? '尚未运行，请预检并运行' : code === 'running' ? '运行中，保存结果保留' : code === 'failed' ? failureReason : `最近运行 ${when} · ${state.label}`;
   const staleValue = code === 'outdated' ? {version_status:{status:'stale',reasons}} : run || study.raw;
   const releaseDetails = reasons.filter(reason => reason.code === 'METHOD_VERSION_CHANGED').map(reason => `原发行摘要：${text(reason.from_release_digest) || text(reason.from_digest) || '记录未提供'}；当前发行摘要：${text(reason.to_release_digest) || text(reason.to_digest) || '记录未提供'}`).join('\n');
-  return {code,label,mark,reason,releaseDetails,staleValue,historical:code === 'outdated'};
+  return {code,label,mark,reason:studyErrorDescription(reason),releaseDetails,staleValue,historical:code === 'outdated'};
 }
 export type StudyPresentation = ReturnType<typeof studyPresentation>;
 

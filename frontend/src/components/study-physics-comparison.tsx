@@ -2,7 +2,8 @@ import { optionalRecord, text, numeric, api, responseData, message } from '@/api
 import { useMutation } from '@tanstack/react-query';
 import { useStudy } from './study-provider';
 import { DataTable, type Column } from './data-table';
-import { EmptyState, ErrorState } from './states';
+import { EmptyState } from './states';
+import { StudyErrorState as ErrorState } from './study-error-state';
 import { savedDomain } from '@/lib/domain-fields';
 import { StatusMark } from './status-mark';
 import { StudyMethodForm } from './study-method-form';

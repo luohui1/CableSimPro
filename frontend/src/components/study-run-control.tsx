@@ -333,8 +333,9 @@ export function SavedRunProgress({ run: selected, onRefresh }: { run?: Record<st
   if (!rid || (!execution.backend && !detail.error)) return null;
   const cancelled = Array.isArray(execution.slurm_states) && execution.slurm_states.includes("CANCELLED");
   return <section className="input-section" aria-label="超算运行记录" aria-live="polite">
-    <div className="report-toolbar"><strong>{cancelled ? STATUS_WORDS.cancelled : execution.cancel_requested && busy ? "正在取消" : remoteStates[status] || '状态未记录'}</strong>
+    <div className="report-toolbar"><strong>{execution.saved_evidence === true ? '超算实算结果' : cancelled ? STATUS_WORDS.cancelled : execution.cancel_requested && busy ? "正在取消" : remoteStates[status] || '状态未记录'}</strong>
       <span>作业 {text(execution.job_id) || "等待 Slurm 回执"} · 已用 {((numeric(execution.actual_cpu_seconds) || 0) / 3600).toFixed(4)} 核时{numeric(execution.budget_core_hours) !== null ? ` / 预算 ${Number(execution.budget_core_hours).toFixed(3)} 核时` : ''}</span>
+      {execution.saved_evidence === true && <span title={`输入摘要 ${text(value?.input_digest || selected?.input_digest)}；完整证据摘要 ${text(execution.evidence_snapshot)}`}>dg83 · {new Date(text(execution.finished)).toLocaleDateString('zh-CN')} · 方法 {text(optionalRecord(optionalRecord(optionalRecord(value?.snapshot || selected?.snapshot).definition).method).version)}</span>}
       {busy && <span title="同分区待调度优先序，不保证开跑顺序">排队位置 {numeric(execution.queue_position) ?? '尚未提供'}</span>}
       {busy && <span>{workflow ? `第 ${(Array.isArray(workflow.rows) ? workflow.rows.length : 0)+1} 级 · ${optionalRecord(workflow.pending).kind === 'domain' ? '扩域' : optionalRecord(workflow.pending).kind === 'rating' ? '最终载流量' : '网格'}` : convergence.error ? '当前级别暂不可读' : '单次运行'}</span>}
       {busy && <Button size="compact" disabled={action.isPending || execution.cancel_requested === true} onClick={() => action.mutate("cancel")}>停止</Button>}

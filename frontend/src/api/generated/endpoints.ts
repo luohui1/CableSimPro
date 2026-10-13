@@ -59,6 +59,9 @@ export const endpoints = {
   "/api/methods": [
     "get"
   ],
+  "/api/plugins/{plugin_id}/assets/{role}": [
+    "get"
+  ],
   "/api/study-tasks": [
     "get"
   ],
@@ -85,6 +88,12 @@ export const endpoints = {
   "/api/workspaces/{wid}/studies/{sid}/recalculate": [
     "post"
   ],
+  "/api/workspaces/{wid}/studies/{sid}/preview": [
+    "post"
+  ],
+  "/api/workspaces/{wid}/studies/{sid}/upgrade-methods": [
+    "post"
+  ],
   "/api/workspaces/{wid}/studies/{sid}/undo": [
     "post"
   ],
@@ -99,6 +108,9 @@ export const endpoints = {
     "get"
   ],
   "/api/workspaces/{wid}/studies/{sid}/runs/{rid}": [
+    "get"
+  ],
+  "/api/workspaces/{wid}/studies/{sid}/runs/{rid}/cases/{case_id}/input": [
     "get"
   ],
   "/api/workspaces/{wid}/studies/{sid}/runs/{rid}/resume": [
@@ -130,6 +142,18 @@ export const endpoints = {
   "/api/database/restores/current": [
     "get",
     "delete"
+  ],
+  "/api/workspaces/{wid}/delivery-jobs": [
+    "post"
+  ],
+  "/api/workspaces/{wid}/delivery-jobs/{jid}": [
+    "get"
+  ],
+  "/api/workspaces/{wid}/delivery-jobs/{jid}/cancel": [
+    "post"
+  ],
+  "/api/workspaces/{wid}/runs/{rid}/fem-conclusion": [
+    "get"
   ],
   "/api/simulation/problem-contract": [
     "get"
@@ -170,6 +194,9 @@ export const endpoints = {
   "/api/design/workspaces/{wid}/deliveries/{did}/file": [
     "get"
   ],
+  "/api/plugin-queries/{plugin_id}/{capability_id}": [
+    "post"
+  ],
   "/api/workspaces/{wid}/studies/{sid}/batch-configuration": [
     "get",
     "put"
@@ -188,6 +215,89 @@ export const endpoints = {
     "post"
   ],
   "/api/workspaces/{wid}/studies/{sid}/datasets/{batch_id}/export": [
+    "post"
+  ],
+  "/api/workspaces/{wid}/studies/{sid}/runs/{rid}/progress": [
+    "get"
+  ],
+  "/api/workspaces/{wid}/studies/{sid}/runs/{rid}/cancel": [
+    "post"
+  ],
+  "/api/hpc/profile": [
+    "get",
+    "put"
+  ],
+  "/api/hpc/profile/configuration": [
+    "get"
+  ],
+  "/api/hpc/profile/undo": [
+    "post"
+  ],
+  "/api/hpc/profile/check": [
+    "post"
+  ],
+  "/api/hpc/workspaces/{wid}/studies/{sid}/input-preflight": [
+    "get"
+  ],
+  "/api/hpc/workspaces/{wid}/studies/{sid}/step-responses": [
+    "get",
+    "post"
+  ],
+  "/api/hpc/workspaces/{wid}/studies/{sid}/step-responses/estimate": [
+    "post"
+  ],
+  "/api/hpc/step-responses/{identifier}": [
+    "get"
+  ],
+  "/api/hpc/step-responses/{identifier}/cancel": [
+    "post"
+  ],
+  "/api/hpc/step-responses/{identifier}/resume": [
+    "post"
+  ],
+  "/api/hpc/jobs": [
+    "get"
+  ],
+  "/api/hpc/jobs/{identifier}/cancel": [
+    "post"
+  ],
+  "/api/hpc/jobs/{identifier}/refresh": [
+    "post"
+  ],
+  "/api/hpc/convergence": [
+    "get"
+  ],
+  "/api/hpc/workspaces/{wid}/studies/{sid}/estimate": [
+    "get"
+  ],
+  "/api/hpc/workspaces/{wid}/studies/{sid}/availability": [
+    "get"
+  ],
+  "/api/hpc/workspaces/{wid}/studies/{sid}/convergence": [
+    "post"
+  ],
+  "/api/hpc/convergence/{identifier}": [
+    "get"
+  ],
+  "/api/hpc/convergence/{identifier}/cancel": [
+    "post"
+  ],
+  "/api/hpc/convergence/{identifier}/resume": [
+    "post"
+  ],
+  "/api/hpc/workspaces/{wid}/chapters/{rid}": [
+    "get"
+  ],
+  "/api/hpc/workspaces/{wid}/fields/{rid}.png": [
+    "get"
+  ],
+  "/api/hpc/workspaces/{wid}/fields/{rid}/view": [
+    "get"
+  ],
+  "/api/hpc/workspaces/{wid}/fields/{rid}/full": [
+    "get"
+  ],
+  "/api/hpc/workspaces/{wid}/fields/{rid}/sample": [
     "post"
   ],
   "/api/domain-cable-models": [
@@ -255,11 +365,38 @@ export const endpoints = {
     "get",
     "post"
   ],
+  "/api/types/creation-options": [
+    "get"
+  ],
+  "/api/types/creation-proposals": [
+    "post"
+  ],
+  "/api/types": [
+    "post"
+  ],
+  "/api/types/{wid}/document": [
+    "put"
+  ],
   "/api/types/library": [
     "get"
   ],
   "/api/types/{wid}/comparison": [
     "get"
+  ],
+  "/api/types/{wid}/resources": [
+    "get"
+  ],
+  "/api/types/{wid}/resources/bind": [
+    "post"
+  ],
+  "/api/types/{wid}/resources/migrate": [
+    "post"
+  ],
+  "/api/types/{wid}/material-comparison": [
+    "get"
+  ],
+  "/api/types/{wid}/material-comparison/adopt": [
+    "post"
   ],
   "/api/types/{wid}/plans": [
     "post"
@@ -310,6 +447,9 @@ export const endpoints = {
   "/api/design/type-workspaces/{wid}/requirements": [
     "get"
   ],
+  "/api/design/type-workspaces/{wid}/requirements/basis": [
+    "post"
+  ],
   "/api/design/type-workspaces/{wid}/requirements/reviews": [
     "post"
   ],
@@ -317,6 +457,72 @@ export const endpoints = {
     "post"
   ],
   "/api/design/workspaces/{wid}/rating-table-runs/{rid}": [
+    "get"
+  ],
+  "/api/agent/capabilities": [
+    "get"
+  ],
+  "/api/agent/status": [
+    "get"
+  ],
+  "/api/agent/settings": [
+    "get",
+    "put",
+    "delete"
+  ],
+  "/api/agent/settings/test": [
+    "post"
+  ],
+  "/api/agent/memory/settings": [
+    "get",
+    "put"
+  ],
+  "/api/agent/memories": [
+    "get"
+  ],
+  "/api/agent/memories/{id}": [
+    "put",
+    "delete"
+  ],
+  "/api/agent/sessions/{id}/memory": [
+    "get",
+    "post"
+  ],
+  "/api/agent/tools": [
+    "get"
+  ],
+  "/api/agent/recipes": [
+    "get"
+  ],
+  "/api/agent/sessions": [
+    "post",
+    "get"
+  ],
+  "/api/agent/sessions/{id}": [
+    "get"
+  ],
+  "/api/agent/sessions/{id}/messages": [
+    "post"
+  ],
+  "/api/agent/proposals/{id}/approve": [
+    "post"
+  ],
+  "/api/agent/proposals/{id}/reject": [
+    "post"
+  ],
+  "/api/agent/sessions/{id}/reconcile": [
+    "post"
+  ],
+  "/api/agent/contract": [
+    "get"
+  ],
+  "/api/index/objects": [
+    "get"
+  ],
+  "/api/index/objects/{kind}/{id}/relations": [
+    "get"
+  ],
+  "/api/index/inbox": [
     "get"
   ],
   "/api/health": [
@@ -327,5 +533,8 @@ export const endpoints = {
   ],
   "/": [
     "get"
+  ],
+  "/__e2e/close-previews": [
+    "post"
   ]
 } as const;

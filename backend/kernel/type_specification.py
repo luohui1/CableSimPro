@@ -72,6 +72,23 @@ def number(value, digits=1, factor=1, *, trim=False):
     return result.rstrip('0').rstrip('.') if trim and '.' in result else result
 
 
+def density_citation(row):
+    source = row.get('density_source') or {}
+    kinds = {'demo': '教学值', 'standard': '标准参考值', 'manufacturer': '厂家值',
+             'measurement': '实测值', 'user': '工程输入', 'asset': '资源值'}
+    reference = source.get('reference') or '历史工件未记录密度出处'
+    try:
+        import json
+        record = json.loads(reference)
+        if isinstance(record, dict):
+            reference = record.get('reference') or record.get('citation') or '保存的密度来源记录'
+    except (ValueError, TypeError):
+        pass
+    reference = re.sub(r'\b[0-9a-f]{64}\b', '摘要见保存运行追溯', str(reference))
+    reference = re.sub(r'\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b', '来源记录见追溯', reference)
+    return kinds.get(source.get('kind'), '出处缺项')+' · '+reference
+
+
 def table(headings, rows, empty='未计算（尚无有效保存结果）。', widths=None):
     rows = list(rows)
     if not rows:
@@ -186,17 +203,24 @@ def geometry_tables(payload, audience='internal'):
         return body + '<p class="spec-note">' + text(missing_reason(payload, 'geometry')) + '</p>'
     body += table(['指标', '数值', '数据性质'], [
         ['成品外径', number(geometry.get('outer_diameter_m'), 1, 1000) + ' mm', '结构推导'],
-        ['单位长度用料', number(geometry.get('mass_kg_per_km'), 0) + ' kg/km' if geometry.get('mass_kg_per_km') is not None
+        ['理论每公里重量', number(geometry.get('mass_kg_per_km'), 1) + ' kg/km' if geometry.get('mass_kg_per_km') is not None
          else '未计算（缺少完整密度或构造输入）', '理论用料，非成品实测重量']], widths=[2,2,3])
     body += table(
-        ['结构层', '内径 → 外径 / mm', '体积 / m³/km', '用料 / kg/km', '推导依据 / 缺项'],
+        ['结构层', '内径 → 外径 / mm', '体积 / m³/km', '密度 / kg/m³', '用料 / kg/km', '推导依据 / 缺项'],
         [[row.get('label') or LAYER_NAMES.get(row['role'], '结构层'),
           number(row.get('inner_radius_m'), 2, 2000)+' → '+number(row.get('outer_radius_m'), 2, 2000),
-          number(row.get('material_volume_m3'), 3, 1000/geometry['length_m']) if geometry.get('length_m',0)>0 else '未提供', number(row.get('mass_kg_per_km'), 0),
+          number(row.get('material_volume_m3'), 4, 1000/geometry['length_m']) if geometry.get('length_m',0)>0 else '未提供', number(row.get('density_kg_m3'), 1), number(row.get('mass_kg_per_km'), 1),
           human_note('；'.join(row.get('quantity_missing') or []) or row.get('quantity_basis') or '保存的实体积分')]
          for row in geometry.get('layers', [])],
-        '未计算（尚无分层用料结果）。', [1.2,1.5,1.1,1.1,2.8],
+        '未计算（尚无分层用料结果）。', [1.2,1.5,1.1,1.1,1.1,2.8],
     )
+    if geometry.get('material_usage'):
+        body += '<h3>主要材料用量与密度出处</h3>'+table(
+            ['材料', '材料体积 / m³/km', '用量 / kg/km', '密度出处'],
+            [[row.get('label', '材料'), number(row.get('material_volume_m3_per_km'), 4),
+              number(row.get('mass_kg_per_km'), 1), density_citation(row)]
+             for row in geometry['material_usage']], widths=[1.2,1.2,1.2,3.4])
+    body += '<p class="spec-note">质量 = 材料体积 ÷ 建模长度 × 1000 × 密度；体积与密度取自同一保存运行快照。教学密度不作为制造验收或报价保证值。</p>'
     body += '<p class="spec-note">用料按保存模型长度折算到 1 km；推导尺寸与理论用料不替代制造公差、实测尺寸或称重。</p>'
     return body
 

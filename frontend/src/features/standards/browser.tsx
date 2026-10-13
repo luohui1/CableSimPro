@@ -32,16 +32,20 @@ export function StandardsBrowser() {
   const chooseTable = (id: string) => { searchController.current?.abort(); setTableId(id); setQuantity(''); setInputs({}); setNotice(''); setSelectedId(null); setHistorical(null); search.reset(); };
   const search = useMutation({ retry: false, mutationFn: async () => {
     if (!pin.data || !table || !selectedQuantity) throw Error('请选择标准、条款和量。');
-    const conditions: Record<string, string | number> = {};
+    const conditions: Record<string, string | number | boolean> = {};
     for (const key of conditionKeys) {
       const raw = inputs[key]?.trim();
       if (!raw) continue;
       const candidates = quantityRecords.map(r => r.conditions[key]).filter(v => v !== undefined);
       const numeric = candidates.some(v => typeof v === 'number' || (v && typeof v === 'object' && Object.values(v).flat().some(x => typeof x === 'number')));
+      const boolean = candidates.some(v => typeof v === 'boolean' || (v && typeof v === 'object' && Object.values(v).flat().some(x => typeof x === 'boolean')));
       if (numeric) {
         const value = Number(raw);
         if (!Number.isFinite(value) || value <= 0) throw new ApiError(422, `请在“${conditionNames[key] || key}”填写正数。`, { path: `/conditions/${key}` });
         conditions[key] = value / conditionFactor(key);
+      } else if (boolean) {
+        if (!['true','false'].includes(raw)) throw new ApiError(422, `请在“${conditionNames[key] || key}”明确选择是或否。`, { path: `/conditions/${key}` });
+        conditions[key] = raw === 'true';
       } else conditions[key] = raw;
     }
     searchController.current?.abort();
@@ -104,13 +108,13 @@ export function StandardsBrowser() {
   function evidence(r: BasisRecord) {
     return <div className="basis-evidence"><strong>{copyCitation(r)}</strong><span>印刷第 {r.printed_page} 页 · PDF 第 {r.pdf_page} 页</span>
       {r.verification.methods.map((m, i) => <span key={i}>核验 {i + 1}：{methodLabel(m)} · {r.verification.status === 'verified' ? '一致' : '存在差异'}</span>)}
-      <span>来源摘要：{r.source_sha256}</span>{r.value_details && <span>{r.value_details.formula_text}；公式仅作为依据，不执行。</span>}
+      <span>来源摘要：{r.source_sha256}</span>{r.value_details && (r.value_details.formula_text ? <span>{r.value_details.formula_text}；公式仅作为依据，不执行。</span> : formulaDetails(r.value_details).map((line,i) => <span key={`detail-${i}`}>{line}</span>))}
       {r.limitations.map((note,i) => <span key={`limit-${i}`}>{note}</span>)}{r.value && typeof r.value === 'object' && !Array.isArray(r.value) ?
         formulaDetails(r.value).map((text,i) => <span key={i}>{text}</span>) : null}</div>;
   }
   function cell(r?: BasisRecord, inGrid = true) {
     if (!r) return '缺项';
-    return <Tooltip content={r.value === null ? '标准不适用（原表为破折号）' : evidence(r)}><button type="button" className="basis-value"
+    return <Tooltip content={r.value === null ? (r.semantic.startsWith('literature') ? '原表未给值（原表为破折号）' : '标准不适用（原表为破折号）') : evidence(r)}><button type="button" className="basis-value"
       data-record-id={r.id} data-selected={selectedId === r.id || undefined} aria-pressed={selectedId === r.id}
       tabIndex={!inGrid || selectedId === r.id || (!selected && r.id === records[0]?.id) ? 0 : -1}
       aria-label={`查看依据：${copyCitation(r)}`} onClick={() => setSelectedId(r.id)}
@@ -132,7 +136,7 @@ export function StandardsBrowser() {
         <Select label="量" value={selectedQuantity || ''} onChange={v => { setQuantity(v); setInputs({}); search.reset(); }} options={quantities.map(q => ({ value: q.key, label: q.name }))} />
         {conditionKeys.map(key => {
           const raw = quantityRecords.map(r => r.conditions[key]).filter(v => v !== undefined);
-          const options = [...new Set(raw.flatMap(v => typeof v === 'string' ? [v] : v && typeof v === 'object' ? Object.values(v).flat().filter((x): x is string => typeof x === 'string') : []))];
+          const options = [...new Set(raw.flatMap(v => typeof v === 'string' || typeof v === 'boolean' ? [String(v)] : v && typeof v === 'object' ? Object.values(v).flat().filter(x => typeof x === 'string' || typeof x === 'boolean').map(String) : []))];
           return options.length ? <Select key={key} path={`/conditions/${key}`} label={conditionNames[key] || key} value={inputs[key] || ''} onChange={v => changeInput(key, v)} options={[{ value: '', label: '未指定' }, ...options.map(v => ({ value: v, label: localized(v) }))]} /> :
             <label className="text-field" key={key}>{conditionNames[key] || key}<input id={`basis-${key}`} value={inputs[key] || ''} inputMode="decimal" placeholder="填写条件" onChange={e => changeInput(key, e.target.value)} /></label>;
         })}<Button variant="primary" type="submit" disabled={!table || !selectedQuantity} loading={search.isPending}>查依据</Button>
@@ -145,16 +149,16 @@ export function StandardsBrowser() {
         <DataTable<GridRow> label="标准完整表格" showGroups={false} groups={[{ id: 'basis', label: '完整表', rows }]} rowLabel={r => r.label} historical={!!historical}
           columns={[{ id: 'conditions', label: '行条件', wrap: true, render: r => r.label }, ...columns.map(c => ({ id: c.column,
             label: columnLabel(c), numeric: true, wrap: true, render: (r: GridRow) => cell(r.records.find(x => x.column === c.column)) }))]} />
-        {selected ? <div className="basis-detail" aria-label="选中格详情"><div><strong>{selected.quantity.name}：{valueLabel(selected.value)}{selected.value !== null && selected.quantity.dimension !== 'text' && selected.quantity.unit !== '1' ? ` ${selected.quantity.unit}` : ''}</strong>
+        {selected ? <div className="basis-detail" aria-label="选中格详情"><div><strong>{selected.quantity.name}：{selected.value === null && selected.semantic.startsWith('literature') ? '—（原表未给值）' : valueLabel(selected.value)}{selected.value !== null && selected.quantity.dimension !== 'text' && selected.quantity.unit !== '1' ? ` ${selected.quantity.unit}` : ''}</strong>
           <p>{conditionsLabel(selected.conditions)}</p>
           <p>印刷第 {selected.printed_page} 页 · PDF 第 {selected.pdf_page} 页</p>
           {selected.verification.methods.map((m,i) => <p key={i}>核验 {i+1}：{methodLabel(m)} · {selected.verification.status === 'verified' ? '一致' : '存在差异，禁止引用'}</p>)}
-          {selected.value_details && <p>{selected.value_details.formula_text}；公式仅作为依据，不执行。</p>}
+          {selected.value_details && (selected.value_details.formula_text ? <p>{selected.value_details.formula_text}；公式仅作为依据，不执行。</p> : formulaDetails(selected.value_details).map((line,i) => <p key={`detail-${i}`}>{line}</p>))}
           {selected.limitations.map((note,i) => <p key={i}>{note}</p>)}
           <details><summary>引用与来源摘要</summary><p>{copyCitation(selected)}</p><p>{selected.source_sha256}</p>{selected.value && typeof selected.value === 'object' ? formulaDetails(selected.value).map((line,i) => <p key={i}>{line}</p>) : null}</details></div>
           <Button size="compact" disabled={selected.verification.status !== 'verified'} onClick={() => void copy(selected)}>复制引用</Button></div> : <p className="basis-selection-hint">选择表格中的值查看完整依据；方向键选格，Enter 复制引用。</p>}
       </div>}
-      <details className="basis-uncovered"><summary>下一轮 · 未覆盖条款</summary>{gaps.length ? gaps.map((g, i) => <p key={i}>{[...(Array.isArray(g.locators) ? g.locators : []),g.reason].filter(v => typeof v === 'string').join(' · ')}</p>) : <p>当前标准未覆盖的其他条款与特殊条件留到下一轮；已列出的表格不代表整份标准合格。</p>}</details>
+      <details className="basis-uncovered"><summary>下一轮 · 未覆盖条款</summary>{gaps.length ? gaps.map((g, i) => <p key={i}>{[...(Array.isArray(g.locators) ? g.locators : []),...(Array.isArray(g.items) ? g.items : []),g.reason].filter(v => typeof v === 'string').join(' · ')}</p>) : <p>当前标准未覆盖的其他条款与特殊条件留到下一轮；已列出的表格不代表整份标准合格。</p>}</details>
       <span className="basis-notice" role="status">{notice}</span>
     </>}
   </section>;

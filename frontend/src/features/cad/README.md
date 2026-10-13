@@ -4,6 +4,10 @@
 
 ## 接口
 
+生命周期与冷启动实测：`node src/features/cad/tests/verify-lifecycle.mjs` 只读复制发布库，实际打开两款型号的三维剥切，再在一个保存温度场研究中快速切换 20 次，并开关切片、导出 PNG。统计真实 Worker 的创建与终止，以及每个 DOM 画布的转交次数；通过应用导航离开后活动 Worker 必须为零。`CAD_DEVELOPMENT=1` 使用开发入口，补验 React StrictMode 的 effect 重放；`CAD_RESEARCH_ONLY=1` 仅复验研究画布并保留独立证据。耗时、布局与截图在 `.data/cad-lifecycle/`；`data-cad-initialization-ms`、`data-cad-native-update-ms` 分别记录视口初始化和网格更新。
+
+型号先显示同一输入尺寸的截面包络，后台替换为插件原精度网格。包络阶段明确标记、禁用精确量测；间隙填充不冒充圆柱。非圆形截面等待同源正式网格，不用同心圆替代。几何缓存按输入、修订和型号固定，保留请求方法；不跨输入复用，手动重载可重新请求。
+
 | 组件 | 输入 | 受控编辑与回调 |
 | --- | --- | --- |
 | `CadViewport` | `geometry: CadModel \| CadScene \| null`，`selectedObject`，五态 `state`，`error`；工件长度用 m，原始 BRep/显示网格用 mm | `onSelectionChange` 返回稳定层/对象 ID；`onPick` 返回原生捕捉值；`onCameraChange`、`onReady`、`onError`；`loadExact(model, signal)` 按同一输入摘要和层标识取得精确工件。ref 提供 `fit/zoom/view/info` |

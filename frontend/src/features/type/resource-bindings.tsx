@@ -11,10 +11,10 @@ import { InlineEmpty, LoadingState, ErrorState } from '@/components/states';
 import { standardVersionLabel } from './design-summary';
 import { useTypeWorkspace } from './provider';
 
-type Resource = { id: string; resource_id?: string; asset_id: string; version: string; content_sha256: string; name: string; kind: string };
-type Target = { id: string; role: 'material' | 'standard'; name: string; state: string; reason: string; unique_match: string | null; match_reason: string; binding: Resource | null; declaration?: boolean };
-type ResourceView = { revision: number; targets: Target[]; resources: Resource[]; changed?: string[] };
-async function request(wid: string, action = '', body?: unknown, signal?: AbortSignal): Promise<ResourceView> {
+export type Resource = { id: string; resource_id?: string; asset_id: string; version: string; content_sha256: string; name: string; kind: string };
+export type Target = { id: string; role: 'material' | 'standard'; name: string; state: string; reason: string; unique_match: string | null; match_reason: string; binding: Resource | null; declaration?: boolean; exact_name_match?: string | null; exact_name_reason?: string };
+export type ResourceView = { revision: number; targets: Target[]; resources: Resource[]; changed?: string[] };
+export async function resourceRequest<T>(wid: string, action = '', body?: unknown, signal?: AbortSignal): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`/api/types/${encodeURIComponent(wid)}/resources${action}`, { method: body ? 'POST' : 'GET', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined,
@@ -25,10 +25,14 @@ async function request(wid: string, action = '', body?: unknown, signal?: AbortS
   }
   const data = await response.json();
   if (!response.ok) throw new ApiError(response.status, typeof data.detail === 'string' ? data.detail : data.detail?.message || '资源绑定不可用，请重新读取');
+  return data;
+}
+async function request(wid: string, action = '', body?: unknown, signal?: AbortSignal): Promise<ResourceView> {
+  const data = await resourceRequest<ResourceView>(wid, action, body, signal);
   if (!Number.isInteger(data.revision) || !Array.isArray(data.targets) || !Array.isArray(data.resources)) throw new ApiError(502, '资源绑定响应缺少版本或目录');
   return data;
 }
-function useResources() {
+export function useResources() {
   const state = useTypeWorkspace();
   return useQuery({ queryKey: ['type-resource-bindings', state.workspace?.id, state.workspace?.revision], enabled: !!state.workspace && !state.readOnly,
     queryFn: ({ signal }) => request(state.workspace!.id, '', undefined, signal) });

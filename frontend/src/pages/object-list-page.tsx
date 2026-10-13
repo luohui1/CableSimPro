@@ -9,7 +9,7 @@ import {
 } from "@/api/research";
 import { message, optionalRecord, text } from "@/api/client";
 import { AppShell } from "@/components/app-shell";
-import { CreateStudyDialog } from "@/components/create-study-dialog";
+import { LazyCreateStudyDialog as CreateStudyDialog } from "@/components/lazy-create-study-dialog";
 import { DataTable, type Column } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";

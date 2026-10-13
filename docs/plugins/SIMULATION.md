@@ -2,6 +2,8 @@
 
 cablesim.simulation 是宿主 API 2.1 的方法插件。算法位于插件，宿主负责固定输入、执行、输出校验和封存。入口遵守 cablesim.run/2，经冻结研究执行器提交 Slurm；插件共享数据契约在 `cablesim_sdk/`，生产源码不导入宿主。论文来源见[复现目标清单](SIMULATION_TARGETS.md)，几何边界见[分析几何接口](../architecture/simulation-geometry.md)，用户负荷曲线、护套接地和双向电热的参数/工件/API 见[研究调用接口](../architecture/simulation-research.md)。复现、对比与基准 CLI 均在各插件 `validation/`，pytest 原生回归在 `plugin-tests/`。
 
+已验收工程运行的完整压缩包是部署数据，不进入 Git。默认目录为 `.data/simulation/engineering-evidence/`，可由 `CABLESIM_ENGINEERING_EVIDENCE` 指定；从证据保管人取得与仓库封签索引一致的三个原件，导入前逐包核对长度与 SHA256，导入时核对成员摘要。缺包时演示只保存完整有限元输入，显示“输入齐全，等待超算提交”；补齐后发布身份变化会触发备份重建，核验失败则拒绝导入。文件名、核验命令、索引及来源说明见[工程证据部署说明](../../plugins/cablesim.simulation/validation/saved-evidence.md#随附工程运行)。
+
 ## 1. 方法与范围
 
 | 能力ID | 输入与输出 | 适用范围 |

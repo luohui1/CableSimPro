@@ -102,9 +102,12 @@ export function FieldView({ points, triangles, values, limit, circles = [], mask
   const horizontal = size.width < 620 || size.height < 360;
   const plotWidth = Math.max(1, size.width - (horizontal ? 0 : COLORBAR));
   const plotHeight = Math.max(1, size.height - (horizontal ? COLORBAR : 0));
+  // A short FEM workbench canvas must not spend almost all its height on the
+  // 48 px margins. Keep IEC framing and physical aspect ratio unchanged.
+  const fitMargin = maskObjects ? MARGIN : Math.min(MARGIN, Math.max(12, Math.min(plotWidth, plotHeight) * .12));
   const fit: View = {
     cx: (bounds.x0 + bounds.x1) / 2, cz: (bounds.z0 + bounds.z1) / 2,
-    scale: Math.max(1e-9, Math.min(Math.max(1, plotWidth - MARGIN * 2) / Math.max(1e-9, bounds.x1 - bounds.x0), Math.max(1, plotHeight - MARGIN * 2) / Math.max(1e-9, bounds.z1 - bounds.z0))),
+    scale: Math.max(1e-9, Math.min(Math.max(1, plotWidth - fitMargin * 2) / Math.max(1e-9, bounds.x1 - bounds.x0), Math.max(1, plotHeight - fitMargin * 2) / Math.max(1e-9, bounds.z1 - bounds.z0))),
   };
   const camera = view || fit;
   const toScreen = (x: number, z: number): [number, number] => [plotWidth / 2 + (x - camera.cx) * camera.scale, plotHeight / 2 - (z - camera.cz) * camera.scale];
@@ -225,6 +228,11 @@ void main() { float t = clamp((v_value - u_min) / (u_max - u_min), 0.0, 1.0); if
   const metres = [1, 2, 5, 10].map(factor => factor * power).filter(value => value <= target).pop() || power;
   const scaleText = metres >= 1 ? `${metres} m` : `${Math.round(metres * 1000)} mm`, scaleLength = metres * camera.scale;
   const occupied: Box[] = [{ x: 8, y: plotHeight - 38, w: scaleLength + measure(scaleText) + 24, h: 34 }];
+  if (groundZ !== undefined) {
+    const [, y] = toScreen(0, groundZ);
+    // The ground line is part of the model, not free space for annotation text.
+    if (y >= 0 && y <= plotHeight) occupied.push({ x: 0, y: y - 5, w: plotWidth, h: 10 });
+  }
   const probeBox = pointer && !drag.current ? { x: Math.max(6, Math.min(pointer.x + 12, plotWidth - 272)), y: Math.max(6, Math.min(pointer.y + 10, plotHeight - 60)), w: Math.min(260, plotWidth - 12), h: 48 } : undefined;
   if (probeBox) occupied.push(probeBox);
   // Also keep text clear of object outlines. Hotspot has priority, then objects,

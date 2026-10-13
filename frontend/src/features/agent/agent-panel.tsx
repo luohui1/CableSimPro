@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/icon";
 import { entityLabel } from "@/lib/domain-fields";
 import { workspaceQuery } from "@/lib/study-queries";
-import { agentTools } from "./agent-api";
+import { agentRecipes, agentTools, type RecipeCall } from "./agent-api";
 import { ProposalCard, TurnView } from "./conversation";
 import { PromptBar } from "./prompt-bar";
 import { useAgentSession, useAgentStatus } from "./use-agent-session";
@@ -19,6 +19,7 @@ export function AgentPanel({ workspaceId, studyId, context, suggestions = SUGGES
   const navigate = useNavigate();
   const { ready, canSend, label: model } = useAgentStatus();
   const tools = useQuery({ queryKey: ["agent-tools"], queryFn: ({ signal }) => agentTools(signal), retry: false, staleTime: 60_000 });
+  const recipes = useQuery({ queryKey: ['agent-recipes', workspaceId], queryFn: ({ signal }) => agentRecipes({ workspace: workspaceId }, signal), enabled: !!studyId, retry: false, staleTime: 300_000 });
   const kinds = useMemo(() => new Map((tools.data || []).map((tool) => [tool.name, tool.kind])), [tools.data]);
   const workspace = useQuery(workspaceQuery(workspaceId));
   const label = (entity: string) => entityLabel(workspace.data?.domain, entity);
@@ -28,7 +29,11 @@ export function AgentPanel({ workspaceId, studyId, context, suggestions = SUGGES
   const thread = useRef<HTMLDivElement>(null);
   useEffect(() => { thread.current?.scrollTo({ top: thread.current.scrollHeight }); }, [agent.turns.length, agent.live]);
   const turns = agent.live ? [...agent.turns, agent.live] : agent.turns;
-  const send = (value: string) => { void agent.send(value); setDraft(""); };
+  const send = (value: string, recipe?: RecipeCall) => { void agent.send(value, recipe); setDraft(""); };
+  const suggestion = (value: string) => {
+    const check = studyId && value === '检查这个研究还缺哪些输入' && recipes.data?.some(recipe => recipe.id === 'missing_inputs');
+    send(value, check ? { id: 'missing_inputs', parameters: { study_id: studyId } } : undefined);
+  };
   const openWorkbench = () => {
     if (studyId) void navigate({ to: '/studies/$sid', params: { sid: studyId }, search: { workspace: workspaceId, inspector: 'input', theme: document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light', run: '', delivery: '' } });
     else {
@@ -50,7 +55,7 @@ export function AgentPanel({ workspaceId, studyId, context, suggestions = SUGGES
     <div className="agent-thread is-compact" ref={thread}>
       {!turns.length ? <div className="agent-start is-compact">
         <p>基于「{context}」工作，调用工作台同一批模块和插件；改动先写成方案，由你批准。</p>
-        <div className="agent-start-grid">{suggestions.map((item) => <button key={item} type="button" disabled={!canSend || agent.sending} onClick={() => send(item)}><Icon name="agent/message" />{item}</button>)}</div>
+        <div className="agent-start-grid">{suggestions.map((item) => <button key={item} type="button" disabled={!canSend || agent.sending} onClick={() => suggestion(item)}><Icon name="agent/message" />{item}</button>)}</div>
       </div>
         : turns.map((turn, index) => <TurnView key={turn.id} turn={turn} kinds={kinds} proposals={agent.proposals} label={label}
           onRetry={index === turns.length - 1 && canSend && !agent.sending ? () => send(turn.question) : undefined}
@@ -58,7 +63,7 @@ export function AgentPanel({ workspaceId, studyId, context, suggestions = SUGGES
           onOpenWorkspace={index === turns.length - 1 ? openWorkbench : undefined} onReview={reviewPending}
           review={(proposal) => {
             const event = [...agent.events].reverse().find(event => event.type === 'proposal.decision' && event.data.id === proposal.id);
-            return <ProposalCard proposal={proposal} onDecide={(id, decision) => void agent.decide(id, decision)}
+            return <ProposalCard proposal={proposal} label={label} onDecide={(id, decision) => void agent.decide(id, decision)}
               receipt={event ? { created: event.created, status: String(event.data.status), actor: typeof event.data.actor === 'string' ? event.data.actor : undefined } : undefined}
               busy={agent.decisions[proposal.id]?.busy} error={agent.decisions[proposal.id]?.error} />;
           }} />)}

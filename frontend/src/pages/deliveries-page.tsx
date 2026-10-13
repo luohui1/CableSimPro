@@ -81,7 +81,7 @@ export function DeliveriesPage() {
           {id:"kind",label:"文档",render:row=>row.kind === "specification" ? "规格书" : "计算书"},
           {id:"version",label:"版本",render:row=>`第 ${row.version} 版`},
           {id:"created",label:"生成时间",render:row=>formatDateTime(row.created)},
-          {id:"sources",label:"来源",render:row=>`${row.sources.length} 个固定运行`},
+          {id:"sources",label:"来源",numeric:true,render:row=>`${row.sources.length} 个固定运行`},
           {id:"state",label:"结果状态",render:row=><VersionNotice value={row} target={{wid:row.wid,runId:row.sources[0]?.run_id}} />},
           {id:"download",label:"操作",render:row=><div className="report-toolbar"><Button size="compact" loading={download.isPending && download.variables?.row.id===row.id} disabled={download.isPending} onClick={event=>{event.stopPropagation();download.mutate({row,format:"pdf"});}}>下载 PDF</Button><Button variant="ghost" size="compact" disabled={download.isPending} onClick={event=>{event.stopPropagation();download.mutate({row,format:"html"});}}>HTML 存档</Button></div>},
         ]} />}

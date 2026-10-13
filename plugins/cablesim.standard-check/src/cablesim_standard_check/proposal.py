@@ -26,14 +26,27 @@ def propose(values, insulation_limit, sources, data, parameters=None):
     if values.get('generation_mode') == 'complete':
         if family == 'hv':
             raise ValueError('/generation_mode：110 kV 不适用 GB/T 12706 附录 A/B；完整高压结构生成尚未覆盖。')
+        if any(values.get(key) is not None for key in ('filler_thickness_m','binder_thickness_m')):
+            raise ValueError('/generation_mode：附加填充外包与包带的假设增量分支尚未覆盖；请选择当前无附加包带的挤包内衬，或只生成绝缘线芯后人工设计。')
+        if values.get('screened') is None:
+            raise ValueError('/screened：缺字段：半导电屏蔽构造；请明确结构中的导体与绝缘屏蔽层。')
         for key, locator, quantity, conditions in (
-            ('conductor','表 A.1','conductor_fictitious_diameter',{'area_m2':values['area_m2']}),
-            ('rounding','B.1','fictitious_rounding',{}),
-            ('core','A.2.2','core_fictitious_parameters',{}),
-            ('bundle','A.2.3','bundle_factor',{'core_count':n}),
+            ('annex_conductor','表 A.1','conductor_fictitious_diameter',{'area_m2':values['area_m2']}),
+            ('annex_rounding','B.1','fictitious_rounding',{}),
+            ('annex_other_rounding','B.2','fictitious_rounding',{}),
+            ('annex_core','A.2.2','core_fictitious_parameters',{'screened':values['screened']} if family=='mv2' else {}),
+            ('annex_inner_cover','A.2.4','cover_fictitious_parameters',{}),
         ):
             queries[key]={'schema_version':'cablesim.standards-query/1','standard':standard,'edition':edition,
                           'locator':locator,'quantity':quantity,'conditions':conditions}
+        if n>1:
+            queries['annex_bundle']={'schema_version':'cablesim.standards-query/1','standard':standard,'edition':edition,
+                'locator':'表 A.2' if family=='mv1' else 'A.2.3','quantity':'bundle_factor',
+                'conditions':{'core_count':n,'equal_core_sections':True,**({'cable_arrangement':'standard'} if family=='mv1' else {})}}
+        if family!='mv1':
+            queries['annex_screen_rule']={'schema_version':'cablesim.standards-query/1','standard':standard,'edition':edition,
+                'locator':'A.2.5','quantity':'screen_fictitious_parameters','conditions':{'screen_construction':'tape'}}
+            queries['annex_screen_table']={'schema_version':'cablesim.standards-query/1','operation':'list','standard':standard,'edition':edition,'locator':'表 A.2'}
     if not parameters or 'basis_references' not in parameters:
         return {'schema':'cablesim.cable-design-proposal/1','status':'basis_required',
                 'basis_queries':queries,'rows':[],'limitations':['待固定标准依据查询完成后提出尺寸，不批准或创建型号。']}
@@ -51,16 +64,13 @@ def propose(values, insulation_limit, sources, data, parameters=None):
         if neutral_record['criterion'] != 'nominal' or neutral_record['quantity']['unit'] != 'mm':
             raise ValueError('/neutral_area_m2：中性线绝缘依据须为毫米标称厚度。')
         neutral_thickness = float(decimal(neutral_record['value']))
+    covering = None
     if values.get('generation_mode') == 'complete':
-        names = {'conductor':'导体假设直径','rounding':'数值修约','core':'绝缘线芯假设直径','bundle':'成缆系数'}
-        missing = [f'{standard}—{edition} {query["locator"]}（{names.get(key,"绝缘厚度")}）' for key,query in queries.items() if not refs.get(key)]
-        if missing:
-            raise ValueError('/generation_mode：完整护层生成缺少已核验的计算依据：'+'；'.join(missing)+'。可选择仅生成绝缘线芯草稿；本库补齐参数与页码后才能计算护层。')
-        rounding, conductor, core_rule, bundle_rule = [evidence(refs[key],queries[key]) for key in ('rounding','conductor','core','bundle')]
-        chain = DiameterChain(rounding)
-        diameter = chain.bundle(chain.core(chain.conductor(conductor),decimal(thickness),core_rule),bundle_rule)
-        # Never substitute the fictitious chain for physical material geometry.
-        raise ValueError('/generation_mode：缆芯假设直径已可计算，但屏蔽构造、内衬与铠装直径增量和制造尺寸仍缺项；不能以假设直径 '+str(diameter)+' mm 建实体护层。')
+        from .coverings import calculate, NeedQueries
+        try:
+            covering = calculate(values,family,refs)
+        except NeedQueries as pending:
+            return {'schema':'cablesim.cable-design-proposal/1','status':'basis_required','basis_queries':pending.queries,'rows':[],'limitations':[]}
     reference = {**insulation,
                  'clause':record['table'] or record['clause'], 'citation':record['citation']}
     conductor = {'material': 'material/conductor', 'form': 'unspecified', 'nominal_area': values['area_m2'],
@@ -97,10 +107,62 @@ def propose(values, insulation_limit, sources, data, parameters=None):
         path = '/cable_types/cable_type~1design/common_layers/'+role+'/thickness'
         document['provenance'][path]={'kind':'user','reference':'工程师给定'+label+'连续等效径向厚度；不作为标准值或绕包工艺参数。','reviewed':False}
         rows.append({'label':label+' · 等效径向厚度','path':path,'value':values[key],'unit':'m','basis':'user','formula':document['provenance'][path]['reference']})
+    radial = thickness/1000
+    if covering:
+        document['materials'].append({'id':'material/pvc','label':'PVC','category':'polymer','standard_kind':'PVC'})
+        if values['screened']=='yes':
+            document['materials'].append({'id':'material/semi','label':'半导电材料 · 待绑定','category':'semiconductor'})
+        if family!='mv1':
+            document['materials'].append({'id':'material/screen','label':'铜屏蔽','category':'metal','standard_kind':'copper_bare'})
+        for i, core in enumerate(document['cable_types'][0]['cores']):
+            insulation_layer = core['layers'][0]
+            layers = []
+            if values['screened']=='yes':
+                layers.append({'role':'conductor_screen','material':'material/semi','thickness':values['conductor_screen_thickness_m'],'form':'smooth'})
+            layers.append(insulation_layer)
+            if values['screened']=='yes':
+                layers.append({'role':'insulation_screen','material':'material/semi','thickness':values['insulation_screen_thickness_m'],'form':'smooth'})
+            if family!='mv1':
+                tape_rule = refs['annex_screen_rule']['record']['value']
+                layers.append({'role':'metallic_screen','material':'material/screen','thickness':float(decimal(tape_rule['lapped_multiplier'])*decimal(values['screen_tape_thickness_m'])),
+                    'form':'tape','tape_count':1,'tape_application':'helical_overlap','nominal_tape_thickness':values['screen_tape_thickness_m'],'tape_width':values['screen_tape_width_m']})
+            core['layers'] = layers
+            for layer in layers:
+                if layer['role']=='insulation': continue
+                path=f'/cable_types/cable_type~1design/cores/core~1{i+1}/layers/{layer["role"]}/thickness'
+                ref={'kind':'engineering_input','screened':values['screened'],'design_request':values,'note':'实际制造厚度由工程师给定，金属带径向包络按固定绕包规则推导；不使用假设屏蔽增量。'}
+                if layer['role']=='metallic_screen':
+                    ref.update(refs['annex_screen_rule'],calculation=[{'stage':'铜带径向包络','formula':'t = lapped_multiplier × 单带厚度',
+                        'inputs':{'lapped_multiplier':tape_rule['lapped_multiplier'],'单带厚度':values['screen_tape_thickness_m']*1000},
+                        'unit':'mm','raw_value':str(layer['thickness']*1000),'rounded_value':layer['thickness']*1000,
+                        'record':refs['annex_screen_rule']['record']}])
+                document['provenance'][path]={'kind':'user' if layer['role']!='metallic_screen' else 'derived','reference':json.dumps(ref,ensure_ascii=False),'reviewed':False}
+                rows.append({'label':f'芯 {i+1} · '+{'conductor_screen':'导体屏蔽','insulation_screen':'绝缘屏蔽','metallic_screen':'铜带屏蔽'}[layer['role']], 'path':path,'value':layer['thickness'],'unit':'m','basis':'user' if layer['role']!='metallic_screen' else 'derived','formula':ref['note']})
+        radial=sum(l['thickness'] for l in document['cable_types'][0]['cores'][0]['layers'])
+        common = document['cable_types'][0]['common_layers']
+        common.append({'role':'bedding','material':'material/pvc','thickness':covering['bedding']/1000,'form':'smooth'})
+        if covering['armour'] is not None:
+            document['materials'].append({'id':'material/armour','label':'镀锌钢带','category':'metal','standard_kind':'steel_galvanized'})
+            multiplier = refs['annex_armour_cover']['record']['value']['thickness_multiplier']
+            common.append({'role':'armour','material':'material/armour','thickness':multiplier*covering['armour']/2000,'form':'tape','tape_count':2,
+                'nominal_tape_thickness':covering['armour']/1000,'tape_application':'two_tape_gap'})
+        common.append({'role':'oversheath','material':'material/pvc','thickness':covering['oversheath']/1000,'form':'smooth'})
+        for layer in common:
+            if layer['role'] not in ('bedding','armour','oversheath'): continue
+            path='/cable_types/cable_type~1design/common_layers/'+layer['role']+'/thickness'
+            key={'bedding':'annex_bedding','armour':'annex_armour','oversheath':'annex_oversheath'}[layer['role']]
+            source={**refs[key],'calculation':covering['trace'],'citation':refs[key]['record']['citation']}
+            document['provenance'][path]={'kind':'standard' if layer['role']=='bedding' else 'derived','reference':json.dumps(source,ensure_ascii=False),'reviewed':False}
+            rows.append({'label':{'bedding':'PVC 挤包内衬','armour':'双钢带径向包络','oversheath':'PVC 外护套'}[layer['role']], 'path':path,'value':layer['thickness'],'unit':'m','basis':'standard_value' if layer['role']=='bedding' else 'derived','source':source})
+            if layer['role']=='armour':
+                gauge_path=path.rsplit('/',1)[0]+'/nominal_tape_thickness'
+                document['provenance'][gauge_path]={'kind':'standard','reference':json.dumps(source,ensure_ascii=False),'reviewed':False}
+                rows.append({'label':'钢带单带标称厚度','path':gauge_path,'value':layer['nominal_tape_thickness'],'unit':'m','basis':'standard_value','source':source})
+        document['provenance']['/cable_types/cable_type~1design/annex_basis']={'kind':'derived','reference':json.dumps({'design_request':values,'basis_references':refs,'trace':covering['trace']},ensure_ascii=False),'reviewed':False}
     return {'schema': 'cablesim.cable-design-proposal/1', 'status':'partial', 'document': document, 'rows': rows,
             'next_input': {'schema_version': 'cablesim.core-layout-request/2' if n == 4 else 'cablesim.core-layout-request/1', 'area_m2': values['area_m2'],
-                'thickness_m': thickness/1000, 'construction': values['construction'], 'form': values['form'],
+                'thickness_m': radial, 'construction': values['construction'], 'form': values['form'],
                 **{k: values[k] for k in ('diameter_m', 'gap_m','neutral_area_m2','neutral_diameter_m','filler_thickness_m','binder_thickness_m') if k in values},
                 **({'neutral_thickness_m':neutral_thickness/1000} if values['construction']=='three_plus_one' else {})},
-            'limitations': ['仅提出 XLPE 绝缘及导体几何；屏蔽、护套、铠装、制造数据和物性需另行设计。',
+            'limitations': [*(['完整尺寸采用已核验附录及正文表；实际芯位置由实体几何插件推导，填充工艺、铜带搭盖、钢带宽度与间隙、实测最薄点、物性仍须工程师补齐。'] if covering else ['仅提出 XLPE 绝缘及导体几何；屏蔽、护套、铠装、制造数据和物性需另行设计。']),
                             '标准厚度不是实测最薄点；提案不构成合格判定或型号发布。']}

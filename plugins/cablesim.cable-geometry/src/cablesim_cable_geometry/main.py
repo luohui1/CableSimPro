@@ -428,7 +428,20 @@ def layer_quantities(document, row, length, solid, representation, known, volume
         row['material_volume_m3'] = material_volume
         row['quantity_basis'] = '设计平均轮廓周长 × 单带标称厚度 × 展示长度 / (1−搭盖率)；径向包络体积不作金属量'
         known = True
-    density = next(m for m in document['materials'] if m['id']==row['material']).get('density')
+    material = next(m for m in document['materials'] if m['id']==row['material'])
+    density = material.get('density')
+    escaped = material['id'].replace('~', '~0').replace('/', '~1')
+    index = document['materials'].index(material)
+    provenance = document.get('provenance', {})
+    density_source = next((provenance[p] for p in (
+        '/materials/'+escaped+'/density', '/materials/'+str(index)+'/density',
+        '/materials/'+escaped, '/materials/'+str(index), '/materials') if p in provenance),
+        {'kind': 'user', 'reference': '未记录密度出处', 'reviewed': False})
+    row['density_kg_m3'] = density
+    row['density_source'] = density_source
+    row['material_label'] = material.get('label', material['id'])
+    row['material_volume_m3_per_km'] = material_volume/length*1000 if material_volume is not None else None
+    row['mass_formula'] = '材料体积 / 建模长度 × 1000 m/km × 密度（kg/m³）'
     row['mass_kg'] = material_volume*density if material_volume is not None and density is not None else None
     row['mass_kg_per_km'] = row['mass_kg']/length*1000 if row['mass_kg'] is not None else None
     missing_name={'conductor':'导体构造','metallic_screen':'金属屏蔽构造','metallic_sheath':'金属护套构造','armour':'铠装构造'}.get(row['role'],'结构构造')
@@ -519,6 +532,20 @@ def build(document, parameters, out, case_id, reuse_artifacts=None, native_layer
     if include_exact:
         cq.exporters.export(cq.Compound.makeCompound(solids), str(step), exportType='STEP')
     step_ms = (perf_counter()-step_started)*1000
+    # Preserve material identity: identical names never merge distinct formulations.
+    usage = []
+    for material in document['materials']:
+        used = [r for r in rows if r['material'] == material['id']]
+        if not used:
+            continue
+        usage.append({'material': material['id'], 'label': material.get('label', material['id']),
+            'layer_count': len(used), 'density_kg_m3': used[0]['density_kg_m3'],
+            'density_source': used[0]['density_source'],
+            'material_volume_m3_per_km': sum(r['material_volume_m3_per_km'] for r in used)
+                if all(r['material_volume_m3_per_km'] is not None for r in used) else None,
+            'mass_kg_per_km': sum(r['mass_kg_per_km'] for r in used)
+                if all(r['mass_kg_per_km'] is not None for r in used) else None,
+            'quantity_missing': list(dict.fromkeys(k for r in used for k in r['quantity_missing']))})
     payload = {'schema': 'cablesim.cad-model/1', 'cable_type_id': cable['id'], 'label': cable['label'],
                'length_m': length, 'outer_diameter_m': max(profile_radius(row['section_profile']['outer']) for row in rows) * 2,
                'geometry_unit': 'm', 'step_unit': 'mm', 'brep_unit': 'mm', 'axis': '+Z',
@@ -527,6 +554,7 @@ def build(document, parameters, out, case_id, reuse_artifacts=None, native_layer
                    'build_ms':(perf_counter()-started)*1000,'layers':layer_timings,'step_export_ms':step_ms},
                'mass_kg_per_km': sum(r['mass_kg_per_km'] for r in rows) if all(r['mass_kg_per_km'] is not None for r in rows) else None,
                'quantity_missing_layers': [r['role'] for r in rows if r['mass_kg_per_km'] is None],
+               'material_usage': usage,
                'display_approximation': 'OCCT 显示缓存：绝对弦差 0.08 mm、角度 0.35 rad；共享单丝细分，原始 BRep 曲面不简化，STEP 导出同源精确实体。',
                'geometry_approximation': '线芯按明确截面位置直线拉伸；扇形使用明确圆弧直径、夹角和朝向，不从截面积猜轮廓。圆丝为理想螺旋，双带按带宽及最大轴向间隙建模。紧压、分割及扇形导体用料按标称截面和明确绞入系数计算；搭盖金属带显示径向包络，用料另按单带厚度和搭盖率计算。不含成缆扭转、接触形变及制造公差。',
                'exact_pending': not include_exact, 'material_sources': document.get('materials', []),

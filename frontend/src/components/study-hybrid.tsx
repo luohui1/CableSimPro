@@ -7,7 +7,8 @@ import { Select } from './ui/select';
 import { NumberField } from './ui/number-field';
 import { Dialog } from './ui/dialog';
 import { StatusMark } from './status-mark';
-import { EmptyState, ErrorState, LoadingState } from './states';
+import { EmptyState, LoadingState } from './states';
+import { StudyErrorState as ErrorState } from './study-error-state';
 import { DataTable, type Column } from './data-table';
 import { modelArtifacts } from '@/api/model-artifacts';
 import { api, record, optionalRecord, text, numeric, responseData, message, ApiError } from '@/api/client';
@@ -210,7 +211,7 @@ export function StudyHybrid({ run, tab }: { run?: Record<string, unknown>; tab: 
   if (models.error) return <ErrorState description={message(models.error)} action={<Button onClick={() => models.refetch()}>重新读取</Button>} />;
   return <div className="hybrid-study">
     <div className="hybrid-toolbar"><Select label="模型版本" value={modelId || undefined} onChange={value => { history.current.push({ values, modelId }); setModelId(value); setError(''); }} options={compatible.map(item => ({ value: item.id, label: `${item.name} · ${item.version}` }))} /><StatusMark kind="proposal" label="仅参考" detail="仿真数据校准；工程使用需要独立实测验证与人工批准。" /><span className="spacer" /><Button variant="run" loading={busy} disabled={!model || context.dirty} onClick={execute}>{dirty ? '保存并预测' : '预测'}</Button></div>
-    {error && !Object.keys(fieldErrors).length && <p className="field-error" role="alert">{error}</p>}
+    {error && !Object.keys(fieldErrors).length && <ErrorState title="预测未完成" description={error} />}
     {tab === 'results' ? <><div className="hybrid-inputs" onKeyDown={event => { if (event.key === 'Escape' && !busy) { event.preventDefault(); discard(); } }}>{activeFields.map(field => <NumberField key={field.key} label={field.label} value={values[field.key]} unit={field.unit} precision={field.precision} required disabled={busy} error={fieldErrors[field.key]}
       draftText={raw[field.key]} onDraftChange={value => { setFieldErrors(previous => { const next = { ...previous }; delete next[field.key]; return next; }); setError(''); setRaw(previous => { const next = { ...previous }; if (value === undefined) delete next[field.key]; else next[field.key] = value; return next; }); }} onCommit={value => update(field.key, value)} />)}</div>
       {busy ? <LoadingState title={saving ? '正在保存输入' : '正在预测'} /> : failed ? <ErrorState title="预测未完成" description={text(optionalRecord(failed.error).message)} /> : comparison.length ? <DataTable label="混合预测结果" columns={columns} groups={[{ id: 'comparison', label: '方法对比', rows: comparison }]} rowLabel={row => row.name} showGroups={false} /> : <EmptyState title="尚无混合预测" description={model ? '输入已保存，可运行参考预测。' : '当前场景没有可用模型。'} />}

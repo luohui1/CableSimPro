@@ -19,7 +19,7 @@ function AppDialog({
   description?: string;
   children?: ReactNode;
   actions?: ReactNode;
-  initialFocus?: "action" | "form";
+  initialFocus?: "action" | "form" | "preserve";
   variant?: "dialog" | "drawer";
 }) {
   const previousFocus = useRef<HTMLElement | null>(null);
@@ -57,6 +57,9 @@ function AppDialog({
             onOpenAutoFocus={(event) => {
               previousFocus.current = document.activeElement as HTMLElement;
               event.preventDefault();
+              // A deferred dialog's loading shell retains the opener until the real
+              // form mounts, so swapping shells does not capture a discarded button.
+              if (initialFocus === "preserve") return;
               const first = content.current
                 ?.querySelector<HTMLElement>(
                   initialFocus === "form"

@@ -1,7 +1,8 @@
 """Build a separate engineering demonstration DB through host APIs; never copy test runs.
 
 Inputs: public manufacturer records plus the existing, explicitly sourced engineering
-completion. Only IEC standard algebra is executed here; native fields await HPC.
+completion. Only IEC standard algebra is executed here; accepted native fields
+are imported offline from sealed engineering evidence, never solved locally.
 """
 from __future__ import annotations
 
@@ -219,7 +220,23 @@ def ensure_temperature(client, result):
     result['studies'].append({'title':title,'workspace':workspace['id'],'study':saved['id'],'module':'thermal-field','status':'已保存输入；待补方法参数与超算预检','ready':False})
 
 
-def release_temperature_study(api, workspace, iec_parameters):
+def release_temperature_study(api, store, expected_identity):
+    """Restore authenticated deployment evidence offline, never a local native solve.
+
+    The original source study starts at 0.5 m / 0.0022 m, P2. This allows
+    refinement inside the verified four-million-node capacity while preserving
+    both consecutive-change gates at 0.1 K. The final saved grid is finer.
+    """
+    from backend.kernel.hpc_evidence import import_evidence
+    receipt = import_evidence(store, expected_identity)
+    studies = api('/api/workspaces/'+receipt['workspace']+'/studies')
+    saved = next(item for item in studies if item['id']==receipt['study'])
+    return {'title':saved['definition']['title'],'workspace':receipt['workspace'],
+            'study':receipt['study'],'run':receipt['run'],'status':'succeeded',
+            'ready':True,'saved_evidence':receipt,'module':None}
+
+
+def release_temperature_input(api, workspace, iec_parameters):
     """A complete thermal FEM input; no mesh or native solve on the seed host."""
     contract = next(item for item in api('/api/input-contracts') if item['method']['capability']=='iec-thermal-field')
     document=workspace['domain'];section=document['sections'][0];load=document['load_cases'][0]
@@ -249,8 +266,7 @@ def release_temperature_study(api, workspace, iec_parameters):
     saved=api('/api/workspaces/'+workspace['id']+'/studies','POST',{
         **configuration,'modules':{'thermal-field':deepcopy(configuration)},'expected_revision':workspace['revision']})
     return {'title':configuration['title'],'workspace':workspace['id'],'study':saved['id'],
-            'module':'thermal-field','status':'未运行；配置超算后确认核时并提交','ready':False}
-
+            'module':'thermal-field','status':'输入齐全，等待超算提交','ready':False}
 
 def release_hv_model():
     """Sourced Qifan reference design; never a factory ampacity declaration."""
@@ -301,7 +317,7 @@ def import_release_reproductions(folder, expected_snapshot):
 
 
 def release_identity():
-    """Pin installed releases and the bundled model/input versions, not local edits."""
+    """Pin releases, bundled inputs and authenticated deployment evidence presence."""
     from backend.plugin_host.registry import Registry
     from backend.kernel.research import Research
     from backend.kernel.scenarios import system_models
@@ -309,12 +325,16 @@ def release_identity():
     from backend.kernel.workspace import fingerprint
     from frontend.scripts.engineering_resources import identity as resource_identity
     from backend.foundation.reproduction_library import bundled_evidence
+    from backend.kernel.hpc_evidence import evidence_availability
     registry = Registry()
     for plugin in registry.plugins.values():
         plugin.verify()
     series, digest = bundled_series()
     hv,hv_digest = bundled_hv()
-    return {'seed_revision':10, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
+    evidence = evidence_availability(verify=True)
+    return {'seed_revision':13, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
+            'engineering_evidence':evidence['snapshot_id'],
+            'engineering_evidence_imported':evidence['available'],
             'plugins':{key:Research.pin(plugin) for key,plugin in sorted(registry.plugins.items())},
             'models':{item['id']:{'version':item['version'],'sha256':item['content_sha256']} for item in system_models()},
             'manufacturer_series':{'id':series['id'],'version':series['version'],'sha256':digest},
@@ -341,6 +361,10 @@ def build_release_seed(staged, database, identity):
                     raise RuntimeError(f'{method} {path}: {response.status_code} {response.text}')
                 return response.json()
 
+            # Reserve the original run sequences before new standard-algebra
+            # calculations. Convergence receipts bind those sequence numbers.
+            native_evidence = (release_temperature_study(api,client.app.state.research.store,identity['engineering_evidence'])
+                               if identity['engineering_evidence_imported'] else None)
             from frontend.scripts.engineering_resources import publish_resources, bind_demo_resources
             result['engineering_resources'] = publish_resources(api)
             method = next(row['method'] for row in api('/api/methods') if row['method']['plugin_id']=='cablesim.iec60287')
@@ -479,10 +503,15 @@ def build_release_seed(staged, database, identity):
                        {'kind':'single'},parameters=deepcopy(hv_data['parameters']),
                        input_sources={'/parameters':{'kind':'user','reviewed':False,
                            'reference':hv_data['scope']+'；'+hv_data['sources']['buffer_reference']['reference']+'；'+hv_data['sources']['geometry_reference']['reference']}})
-            result['studies'].append(release_temperature_study(api,workspace,parameters))
+            if native_evidence is None:
+                native_evidence = release_temperature_input(api,workspace,parameters)
+                from backend.kernel.hpc_evidence import evidence_availability
+                result['engineering_evidence_availability'] = evidence_availability()
+                print(result['engineering_evidence_availability']['message'],flush=True)
+            result['studies'].append(native_evidence)
             # Later seed operations must not silently age an earlier result.
             for item in result['studies']:
-                if item.get('run'):
+                if item.get('run') and not item.get('saved_evidence'):
                     run = api(f'/api/workspaces/{item["workspace"]}/studies/{item["study"]}/runs/{item["run"]}')
                     if run['freshness']!='current' or run['version_status']['status']!='current':
                         raise RuntimeError('发布种子出现过期结果：'+item['title'])

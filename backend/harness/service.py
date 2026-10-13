@@ -155,14 +155,18 @@ class Harness:
                 reads=self.read_count(record,turn,tools)
                 baseline=self.baseline_problem(record,turn)
                 method_block=self.method_problem(record,turn)
+                model_recipe=next((e['data'] for e in reversed(record['events']) if e['type']=='recipe.finished'
+                    and e['data'].get('turn_id')==turn and e['data'].get('source')=='model'
+                    and not e['data'].get('remaining_pages')),None)
+                recipe_ready=model_recipe and (progress['all_satisfied'] if progress['goals'] else model_recipe.get('all_results_reused',False))
                 answer_reason=('研究保存的方法发行已变化，预检尚未执行。根据结构化原因说明阻断及人工下一步，不重复预检、不宣称缺项已检查。' if method_block else
-                    '宿主已执行所选配方。解释结果、诊断及尚未覆盖的目标。' if requested else
+                    '宿主已执行所选配方。按回执解释结果、检查覆盖范围及尚未覆盖的目标；预检通过不等于工程合格，不再重复已完成的配方。' if requested or recipe_ready else
                     '连续读取没有取得新证据。说明已完成目标、缺口及可执行下一步。' if progress['consecutive_unproductive_reads']>=record['budget']['limits']['max_read_tool_calls'] else None)
                 answer_only=answer_reason is not None
                 if baseline:state,reason='waiting','missing_input'
                 if method_block:state,reason='waiting','missing_input'
                 if answer_only:self.tasks.emit(tid,'turn.answer_only',{'turn_id':turn,
-                    'reason':'method_release_changed' if method_block else 'recipe_complete' if requested else 'evidence_stalled',
+                    'reason':'method_release_changed' if method_block else 'recipe_complete' if requested or recipe_ready else 'evidence_stalled',
                     'read_tool_calls':reads,'max_read_tool_calls':record['budget']['limits']['max_read_tool_calls'],
                     'consecutive_unproductive_reads':progress['consecutive_unproductive_reads'],
                     'tools_allowed':False,'remaining_page':digest.get('next_page') if digest else None})
@@ -328,6 +332,7 @@ class Harness:
                 node['preparation_error']={'code':detail.get('code','INPUT_IDENTITY_INVALID') if isinstance(detail,dict) else 'INPUT_IDENTITY_INVALID',
                     'message':redact(str(detail))}
         revision=self.tasks.add_plan(tid,plan)
+        reused_nodes=set()
         recipes={node['input_identity'].get('recipe') for node in plan['nodes']} - {None}
         if recipes:self.tasks.emit(tid,'recipe.compiled',{'turn_id':turn,'revision':revision,'source':source,
             'recipes':sorted(recipes),'nodes':[{'id':node['id'],'tool':node['tool'],
@@ -371,6 +376,7 @@ class Harness:
             if prior:self.tasks.emit(tid,'tool.diagnostic_reused',{'turn_id':turn,'node_id':node['id'],'source_operation_id':prior['operation_id']})
             if reused:self.tasks.emit(tid,'tool.result_reused',{'turn_id':turn,'node_id':node['id'],
                 'source_operation_id':reused['operation_id'],'source_run_id':reused['run_id'],'executed':False})
+            if reused:reused_nodes.add(node['id'])
             result=redact(result.model_dump(mode='json'));self.tasks.finish_step(tid,operation,result,(perf_counter()-started)*1000)
             snapshot['steps'].append({'result':compress_result(result),'operation_id':operation,'turn_id':turn,
                 'node_id':node['id'],'tool':node['tool'],'state':'succeeded' if result['status']=='ok' else 'failed'})
@@ -386,6 +392,17 @@ class Harness:
                 return 'missing_input'
             if result['status']=='error' and self.repeated_error(tid,node,result)>=task['limits']['max_repair_attempts']:
                 raise HTTPException(422,{'code':'REPAIR_LIMIT_EXCEEDED','message':'同一错误已达到修正次数上限，请人工补充输入或能力；没有无限重试。'})
+        if recipes and source=='model':
+            current=self.tasks.record(tid,model_context=True)
+            completed={step['node_id']:step for step in current['steps'] if step.get('result')}
+            recipe_steps=[completed[node['id']] for node in plan['nodes'] if node['id'] in completed
+                and node['input_identity'].get('recipe')]
+            if len(recipe_steps)==sum(bool(node['input_identity'].get('recipe')) for node in plan['nodes']):
+                self.tasks.emit(tid,'recipe.finished',{'turn_id':turn,'source':'model','ids':sorted(recipes),
+                    'remaining_pages':[step['result']['data']['next_page'] for step in recipe_steps if step['result']['data'].get('next_page')],
+                    'status':'needs_action' if any(step['result']['status']=='error' for step in recipe_steps) else 'completed',
+                    'source_node_ids':[step['node_id'] for step in recipe_steps],
+                    'all_results_reused':all(step['node_id'] in reused_nodes for step in recipe_steps),'engineering_approval':False})
 
     def respond(self,tid,turn,text,*,safe=False,phase='answer',attempt=0,suffix='',reasoning=''):
         record=self.tasks.record(tid,model_context=True)
@@ -553,12 +570,21 @@ class Harness:
             and physical(step['input_identity'])==physical(node['input_identity'])),None)
 
     def previous_read(self,tid,node):
-        if node['tool']!='run_read':return None
-        view=lambda args:{key:args[key] for key in ('run_id','case_id','entity','key','input_paths') if args.get(key) is not None}
+        if node['tool'] not in ('run_read','workspace_read','study_read','study_preflight'):return None
+        if node['tool']=='study_preflight' and not node['input_identity'].get('verified_preflight_methods'):return None
+        view=lambda args:({key:args[key] for key in ('run_id','case_id','entity','key','input_paths') if args.get(key) is not None}
+            if node['tool']=='run_read' else args)
         physical=lambda identity:{key:value for key,value in identity.items() if key not in ('recipe','recipe_version','recipe_step')}
-        return next((step for step in reversed(self.tasks.record(tid,model_context=True)['steps']) if step['tool']=='run_read'
+        record=self.tasks.record(tid,model_context=True)
+        began=next(event['created'] for event in reversed(record['events']) if event['type']=='chat.message' and event['data'].get('role')=='user')
+        found=next((step for step in reversed(record['steps']) if step['tool']==node['tool']
             and step['state']=='succeeded' and step.get('result') and view(step['arguments'])==view(node['arguments'])
+            and (node['tool']=='run_read' or step['created']>=began)
             and physical(step['input_identity'])==physical(node['input_identity'])),None)
+        if found:
+            with self.tasks.db() as db:found['result']=json.loads(db.execute('SELECT result FROM agent_steps WHERE operation_id=?',
+                (found['operation_id'],)).fetchone()[0])
+        return found
 
     def close_stream(self,tid,turn,iterator):
         iterator.close()

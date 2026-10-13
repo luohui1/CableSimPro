@@ -37,10 +37,13 @@ export function StudyCrossingInputs({historical, placement='all'}: {historical:b
     {rows.map((row,index)=><fieldset key={index} className="input-form-grid"><legend>{text(row.label) || `热源 ${index+1}`}</legend>
       {Object.entries(properties).map(([key,raw])=>{
         const spec=optionalRecord(raw),label=text(spec.title),unit=text(optionalRecord(spec['x-unit']).si) || text(spec['x-unit']);
+        // Engineers enter crossing angles in degrees; the saved contract remains SI radians.
+        const angular=unit==='rad',scale=angular ? 180/Math.PI : 1;
+        const saved=numeric(row[key]),minimum=numeric(spec.exclusiveMinimum) ?? numeric(spec.minimum),maximum=numeric(spec.maximum);
         const update=(value:unknown)=>write(rows.map((r,i)=>i===index ? {...r,[key]:value} : r));
-        return spec.type==='number' ? <NumberField key={key} label={label} value={numeric(row[key])} unit={unit} precision={3}
-          path={`/parameters/crossing_heat_sources/${index}/${key}`} min={numeric(spec.exclusiveMinimum) ?? numeric(spec.minimum) ?? undefined}
-          max={numeric(spec.maximum) ?? undefined} required minExclusive={spec.exclusiveMinimum!==undefined} locked={historical} disabled={context.saving} onCommit={update} />
+        return spec.type==='number' ? <NumberField key={key} label={label} value={saved===null ? null : saved*scale} unit={angular ? '°' : unit} precision={angular ? 1 : 3}
+          path={`/parameters/crossing_heat_sources/${index}/${key}`} min={minimum===null ? undefined : minimum*scale}
+          max={maximum===null ? undefined : maximum*scale} required minExclusive={spec.exclusiveMinimum!==undefined} locked={historical} disabled={context.saving} onCommit={value=>update(value===null ? null : value/scale)} />
           : <label key={key} className="text-field" data-field-path={`/parameters/crossing_heat_sources/${index}/${key}`}>{label}<input value={text(row[key])} required readOnly={historical} disabled={context.saving} onChange={e=>update(e.target.value)} /></label>;
       })}
       {!historical && <Button variant="ghost" onClick={()=>write(rows.filter((_,i)=>i!==index))}>移除热源 {index+1}</Button>}

@@ -64,6 +64,30 @@ class MigrateResources(Adopt):
     operation: Literal['migrate_resource_bindings'] = 'migrate_resource_bindings'
 
 
+class MaterialBindingItem(StrictModel):
+    target_id: str = Field(min_length=1, max_length=200)
+    resource_id: UUID
+
+
+class PreviewMaterialBindings(StrictModel):
+    expected_revision: int = Field(ge=1)
+    items: list[MaterialBindingItem] = Field(min_length=1, max_length=128)
+
+    @model_validator(mode='after')
+    def unique_targets(self):
+        if len({item.target_id for item in self.items}) != len(self.items):
+            raise ValueError('同一设计材料只能选择一个资源版本。')
+        return self
+
+
+class ConfirmMaterialBindings(PreviewMaterialBindings):
+    request_id: UUID
+    operation: Literal['bind_material_batch'] = 'bind_material_batch'
+    preview_digest: str = Field(pattern=r'^[a-f0-9]{64}$')
+    reviewed_targets: list[str] = Field(min_length=1, max_length=128)
+    human_confirmed: Literal[True]
+
+
 class AdoptMaterialValue(Adopt):
     operation: Literal['adopt_material_value'] = 'adopt_material_value'
     material_id: str = Field(pattern=r'^material/[A-Za-z0-9_-]+$')
@@ -521,11 +545,19 @@ class Types:
                         raise HTTPException(409, '提案请求标识已用于其他输入。')
                     return json.loads(prior['payload'])
             proposal, standard = self._invoke_proposal('x-cablesim.cable-design-proposal', body.input)
-            if proposal.get('status') == 'basis_required':
+            references, missing = {}, []
+            for _ in range(24):
+                if proposal.get('status') != 'basis_required':
+                    break
                 from .requirements import lookup_references
-                references, missing = lookup_references(self.research, proposal['basis_queries'])
+                additions, absent = lookup_references(self.research, proposal['basis_queries'])
+                references.update(additions)
+                references.update({item['key']:{'uncovered':True,'query':proposal['basis_queries'][item['key']]} for item in absent})
+                missing.extend(absent)
                 proposal, standard = self._invoke_proposal('x-cablesim.cable-design-proposal', body.input, {'basis_references':references})
                 standard['basis_missing'] = missing
+            if proposal.get('status') == 'basis_required':
+                raise HTTPException(422, '依据查询未完成，请核对插件声明的护层条件。')
             geometry, layout = self._invoke_proposal('x-cablesim.core-layout-proposal', proposal['next_input'])
             document = deepcopy(proposal['document'])
             for change in geometry['changes']:
@@ -754,13 +786,101 @@ class Types:
             candidates = [r['id'] for r in catalog if matches(r)]
             target['unique_match'] = candidates[0] if len(candidates) == 1 else None
             target['match_reason'] = '唯一身份匹配' if len(candidates) == 1 else '资源身份有多个版本，需人工选择。' if candidates else '没有明确的资源身份匹配；不会按名称猜测。'
+            if target['role'] == 'material':
+                material = next((m for m in state['domain']['materials'] if m['id'] == target['id']), {})
+                target['category'] = material.get('category')
+                # Explicit resource metadata only. Never infer a material class
+                # from a chemical name, a property or an asset-id suffix.
+                exact = [r for r in catalog if r['kind'] == 'material' and r['name'] == target['name']
+                         and target['category'] and self._material_category(r) == target['category']]
+                target['exact_name_match'] = exact[0]['id'] if len(exact) == 1 else None
+                target['exact_name_reason'] = '名称与材料类别精确匹配' if len(exact) == 1 else '同名同类有多个已发布版本，请选择固定版本。' if exact else '没有同名同类的唯一已发布版本；类别未声明的资源不自动匹配。'
         return {'workspace_id': wid, 'revision': row['revision'], 'targets': targets,
                 'resources': [{k: r[k] for k in ('id', 'asset_id', 'version', 'kind', 'name', 'content_sha256')} for r in catalog]}
+
+    @staticmethod
+    def _material_category(resource):
+        categories = {record.get('category') for source in resource['release']['sources']
+                      if (record := source_identity(source)).get('schema') == 'cablesim.material-identity/1'
+                      and isinstance(record.get('category'), str)}
+        return next(iter(categories)) if len(categories) == 1 else None
 
     def resources(self, wid):
         with self.store.db() as db:
             row, state = self._type(db, wid)
             return self._resources(db, wid, row, state)
+
+    def _material_binding_preview(self, db, wid, row, state, items):
+        from ..domain.guards import pointer
+        view = self._resources(db, wid, row, state)
+        catalog = self._resource_catalog(db)
+        rows = []
+        for item in items:
+            target = next((t for t in view['targets'] if t['role'] == 'material' and t['id'] == item.target_id), None)
+            resource = next((r for r in catalog if r['id'] == str(item.resource_id) and r['kind'] == 'material'), None)
+            if not target or target['input_digest'] is None or not resource:
+                raise HTTPException(422, {'field': item.target_id, 'message': '材料已移除或资源不再是可引用的已发布材料版本；请重新选择。'})
+            material = next(m for m in state['domain']['materials'] if m['id'] == item.target_id)
+            previous = None
+            previous_domain = None
+            if target['binding']:
+                for archived in db.execute('SELECT state FROM workspace_revisions WHERE workspace=? ORDER BY revision DESC', (wid,)):
+                    domain = json.loads(archived['state']).get('domain', {})
+                    candidate = next((m for m in domain.get('materials', []) if m['id'] == item.target_id), None)
+                    if candidate and fingerprint(candidate) == target['binding']['input_digest']:
+                        previous, previous_domain = candidate, domain
+                        break
+                if previous is None:
+                    raise HTTPException(409, '无法读取上次绑定时的材料事实；请逐项核对来源后重新绑定。')
+            def source(domain, key):
+                if domain is None:
+                    return None
+                index = next(i for i, m in enumerate(domain['materials']) if m['id'] == item.target_id)
+                provenance = domain.get('provenance', {})
+                return (provenance.get(pointer('materials', item.target_id, key)) or provenance.get('/materials/'+str(index)+'/'+key)
+                        or provenance.get(pointer('materials', item.target_id)) or provenance.get('/materials/'+str(index)))
+            differences = [{'field': key, 'label': MATERIAL_PROPERTIES.get(key, ({'label':'材料名称', 'category':'材料类别', 'standard_kind':'标准材料类别'}.get(key, '材料参数'), ''))[0],
+                            'unit': MATERIAL_PROPERTIES.get(key, ('', ''))[1], 'before': previous.get(key) if previous else None,
+                            'after': material.get(key), 'before_source': source(previous_domain, key), 'after_source': source(state['domain'], key)}
+                           for key in sorted(set(material) | set(previous or {})) if key != 'id' and (previous is not None or material.get(key) is not None) and (previous is None or previous.get(key) != material.get(key) or source(previous_domain, key) != source(state['domain'], key))]
+            uses = [l for c in state['domain']['cable_types'] for l in [*c['common_layers'], *(l for core in c['cores'] for l in [core['conductor'], *core['layers']])] ]
+            pin = {k: resource[k] for k in ('id', 'asset_id', 'version', 'kind', 'name', 'content_sha256')}
+            rows.append({'id': item.target_id, 'name': target['name'], 'layer_count': sum(l['material'] == item.target_id for l in uses),
+                         'input_digest': target['input_digest'], 'before_resource': target['binding'], 'after_resource': pin,
+                         'differences': differences})
+        payload = {'workspace_id': wid, 'revision': row['revision'], 'rows': rows}
+        return {**payload, 'digest': fingerprint(payload)}
+
+    def preview_material_bindings(self, wid, body):
+        with self.store.db() as db:
+            row, state = self._type(db, wid, body.expected_revision)
+            return self._material_binding_preview(db, wid, row, state, body.items)
+
+    def confirm_material_bindings(self, wid, body):
+        with self.store.db(True) as db:
+            replay = self._replay(db, wid, body)
+            if replay:
+                return replay
+            row, state = self._type(db, wid, body.expected_revision)
+            self.store.assert_mutable(db, wid)
+            preview = self._material_binding_preview(db, wid, row, state, body.items)
+            ids = [r['id'] for r in preview['rows']]
+            if preview['digest'] != body.preview_digest or sorted(body.reviewed_targets) != sorted(ids):
+                raise HTTPException(409, '差异预览已变化或尚未查看全部材料；请重新预览后确认。')
+            bindings = state.setdefault('type_resource_bindings', {'schema': 'cablesim.type-resource-bindings/1', 'material': {}, 'standard': {}})
+            changed = []
+            for item in preview['rows']:
+                resource = item['after_resource']
+                pin = {**resource, 'resource_id': resource['id'], 'input_digest': item['input_digest']}
+                if pin != bindings['material'].get(item['id']):
+                    bindings['material'][item['id']] = pin
+                    changed.append(item['id'])
+            if changed:
+                self.store.commit(db, row, state, '逐项查看差异后批量绑定材料版本')
+            row, state = self._type(db, wid)
+            result = {**self._resources(db, wid, row, state), 'changed': changed}
+            self._remember(db, wid, body, result)
+            return result
 
     def material_comparison(self, wid, revision=None):
         with self.store.db() as db:
@@ -1570,7 +1690,7 @@ def check_results(channels, checks):
                         'message': result.get(
                             'title',
                             result['id'],
-                        )+'：'+str(result.get('reason') or result.get('verdict') or result.get('status'))+'。',
+                        )+'：'+str(result.get('reason') or {'missing':'缺项，请补齐对应输入或实测值','uncovered':'标准未覆盖，请核对适用范围与依据','failed':'不满足要求，请修正输入后重新核对','fail':'不满足要求，请修正输入后重新核对'}.get(result.get('verdict') or result.get('status'),'尚无可交付结果')).rstrip('。')+'。',
                         'blocking': True,
                         'result': deepcopy(result),
                     })
@@ -1635,6 +1755,12 @@ def make_router(service):
     @router.post('/{wid}/resources/bind')
     def bind_resource(wid: str, body: BindResource):
         return service.bind_resources(wid, body)
+    @router.post('/{wid}/resources/material-preview')
+    def preview_material_bindings(wid: str, body: PreviewMaterialBindings):
+        return service.preview_material_bindings(wid, body)
+    @router.post('/{wid}/resources/material-confirm')
+    def confirm_material_bindings(wid: str, body: ConfirmMaterialBindings):
+        return service.confirm_material_bindings(wid, body)
     @router.post('/{wid}/resources/migrate')
     def migrate_resources(wid: str, body: MigrateResources):
         return service.bind_resources(wid, body, migrate=True)

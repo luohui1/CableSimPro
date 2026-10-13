@@ -18,7 +18,7 @@ import {
   useSearch,
   useLocation,
 } from "@tanstack/react-router";
-import { message, numeric, text } from "@/api/client";
+import { message, numeric, text, optionalRecord } from "@/api/client";
 import { studyContextQuery, studyRunsQuery, workspaceQuery } from "@/lib/study-queries";
 import {
   saveStudy,
@@ -43,7 +43,8 @@ import {
 } from "@/lib/domain-draft-history";
 import { Dialog, DialogContent, DialogTitle, DialogDescription, DialogFooter } from "./ui/dialog";
 import { Button } from "./ui/button";
-import { ErrorState, LoadingState } from "./states";
+import { LoadingState } from '@/components/states';
+import { StudyErrorState as ErrorState } from '@/components/study-error-state';
 
 type Draft = {
   title: string;
@@ -231,6 +232,15 @@ export function StudyProvider() {
     if (domainDraft) {
       writing.current = true;
       try {
+        if (study?.definition.input_source === 'study') {
+          const definition = draft?.definition || study.definition;
+          await mutation.mutateAsync({title:draft?.title || study.title,base:draft?.base || study,
+            workspaceRevision:draft?.workspaceRevision || domainDraft.revision,
+            parameterFields:draft?.parameterFields,
+            definition:{...definition,method_input:commitFields(domainDraft)}});
+          setDomainDraft(null);
+          return true;
+        }
         const value = await domainMutation.mutateAsync();
         if (draft) {
           const revision = numeric(value?.revision);
@@ -249,7 +259,7 @@ export function StudyProvider() {
       }
     }
     return save();
-  }, [draft, domainDraft, domainMutation, mutation, save, moduleInputs]);
+  }, [draft, domainDraft, domainMutation, mutation, save, moduleInputs, study]);
   // 模型（电缆、截面、工况）有未保存改动时，撤销/重做作用于模型；否则作用于研究配置的已保存版本
   const modelEditing = domainHistory.past.length > 0 || domainHistory.future.length > 0 || !!domainDraft;
   // 只有查看已过期的运行才视为固定只读；刚运行完的当前运行仍可继续编辑
@@ -285,11 +295,11 @@ export function StudyProvider() {
       return;
     }
     if (!modelEditing) {
-      askHistory("undo", workspace.data?.can_undo ? 'model' : 'study');
+      askHistory("undo", study?.definition.input_source === 'study' ? 'study' : workspace.data?.can_undo ? 'model' : 'study');
       return;
     }
     try {
-      askHistory("undo", 'model');
+      askHistory("undo", study?.definition.input_source === 'study' ? 'study' : 'model');
     } catch (error) {
       setNotice(message(error));
     }
@@ -319,7 +329,7 @@ export function StudyProvider() {
         setNotice("请先保存或放弃草稿，再重做已保存版本。");
         return;
       }
-      askHistory("redo", workspace.data?.can_redo ? 'model' : 'study');
+      askHistory("redo", study?.definition.input_source === 'study' ? 'study' : workspace.data?.can_redo ? 'model' : 'study');
       return;
     }
     if (domainHistory.future.length) {
@@ -331,7 +341,7 @@ export function StudyProvider() {
       return;
     }
     try {
-      askHistory("redo", 'model');
+      askHistory("redo", study?.definition.input_source === 'study' ? 'study' : 'model');
     } catch (error) {
       setNotice(message(error));
     }
@@ -407,6 +417,11 @@ export function StudyProvider() {
         <LoadingState title="正在读取研究工作区" />
       </ProviderState>
     );
+  const definition = draft?.definition || study.definition;
+  const independent = optionalRecord(definition.method_input);
+  // Independent study inputs share the editor, but never the workspace save path.
+  const editingDomain = definition.input_source === 'study' && independent.schema_version === 'cablesim.domain/1'
+    ? independent as unknown as DomainDocument : workspace.data.domain as DomainDocument | undefined;
   const value: StudyContextValue = {
     study,
     workspace: workspace.data,
@@ -459,15 +474,15 @@ export function StudyProvider() {
     notice: setNotice,
     domain:
       domainDraft?.document ||
-      (workspace.data.domain as DomainDocument | undefined),
+      editingDomain,
     domainDraft,
     dirty: !!(draft || domainDraft),
     editDomainText: (spec, textValue, scope) =>
       setDomainDraft((previous) => {
-        if (!workspace.data.domain) return previous;
+        if (!editingDomain) return previous;
         const current = previous || {
-          document: structuredClone(workspace.data.domain) as DomainDocument,
-          base: structuredClone(workspace.data.domain) as DomainDocument,
+          document: structuredClone(editingDomain),
+          base: structuredClone(editingDomain),
           revision: numeric(workspace.data.revision)!,
           scope,
           fields: {},
@@ -493,10 +508,10 @@ export function StudyProvider() {
         record: true,
         consumed: [path],
         update: (previous) => {
-          if (!workspace.data.domain) return previous;
+          if (!editingDomain) return previous;
           const current = previous || {
-            document: structuredClone(workspace.data.domain) as DomainDocument,
-            base: structuredClone(workspace.data.domain) as DomainDocument,
+            document: structuredClone(editingDomain),
+            base: structuredClone(editingDomain),
             revision: numeric(workspace.data.revision)!,
             scope,
             fields: {},
@@ -514,10 +529,10 @@ export function StudyProvider() {
         record: true,
         consumed,
         update: (previous) => {
-          if (!workspace.data.domain) return previous;
+          if (!editingDomain) return previous;
           return {
             ...(previous || {
-              base: structuredClone(workspace.data.domain) as DomainDocument,
+              base: structuredClone(editingDomain),
               revision: numeric(workspace.data.revision)!,
               fields: {},
             }),
@@ -625,8 +640,8 @@ export function StudyProvider() {
           if (!open) setNotice("");
         }}
         title="操作提示"
-        description={notice}
-      />
+        description=""
+      >{notice && <ErrorState title="操作未完成" description={notice} />}</Dialog>
     </Context.Provider>
   );
 }

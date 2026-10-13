@@ -13,6 +13,8 @@ export function useCadViewport(props: CadViewportProps) {
   const [problem, setProblem] = useState('');
   const [displayed, setDisplayed] = useState<CadGeometry | null>(null);
   const [firstDisplayMs, setFirstDisplayMs] = useState<number | null>(null);
+  const [initializationMs, setInitializationMs] = useState<number | null>(null);
+  const [nativeUpdateMs, setNativeUpdateMs] = useState<number | null>(null);
   const [camera, setCamera] = useState<CadCamera | null>(null);
   const [measurement, setMeasurement] = useState<MeasurementMode>('part');
   const [pick, setPick] = useState<CadPick | null>(null);
@@ -35,6 +37,7 @@ export function useCadViewport(props: CadViewportProps) {
     setProblem('');
     setDisplayed(null);
     setFirstDisplayMs(null);
+    setInitializationMs(null); setNativeUpdateMs(null);
     const reportError = (error: Error) => {
       if (!alive) return;
       setProblem(error.message);
@@ -75,6 +78,7 @@ export function useCadViewport(props: CadViewportProps) {
       if (!alive || !value) { value?.dispose(); return; }
       owned = value;
       controller.current = value;
+      setInitializationMs(performance.now() - mountedAt.current);
       setInstance(value);
     }).catch(error => { window.clearTimeout(deadline); reportError(asError(error)); });
     return () => {
@@ -104,6 +108,7 @@ export function useCadViewport(props: CadViewportProps) {
       window.clearTimeout(firstDisplayDeadline.current);
       firstDisplayDeadline.current = undefined;
       setDisplayed(geometry);
+      setNativeUpdateMs(timing.nativeUpdateMs ?? null);
       setBusy(false);
       const measured = timing.phase === 'first-display'
         ? { ...timing, elapsedMs: performance.now() - mountedAt.current } : timing;
@@ -147,5 +152,5 @@ export function useCadViewport(props: CadViewportProps) {
 
   function retry() { setAttempt(value => value + 1); props.onRetry?.(); }
   return { host, controller, instance, busy, problem, displayed, camera, mode, measurement,
-    measurementBusy, changeMode, changeMeasurement, retry, pick, points, firstDisplayMs };
+    measurementBusy, changeMode, changeMeasurement, retry, pick, points, firstDisplayMs, initializationMs, nativeUpdateMs };
 }

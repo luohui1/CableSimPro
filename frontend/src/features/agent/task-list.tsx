@@ -11,7 +11,7 @@ const WAITING: Record<string, string> = { missing_input: "待补齐输入", scop
 
 /** 任务状态说明：一句话说清停在哪里。 */
 export function taskState(task: Pick<AgentSessionSummary, "state" | "waiting_reason" | "pending_proposals">) {
-  if (task.pending_proposals > 0) return { tone: "review", text: `待审核 ${task.pending_proposals} 项改动` };
+  if (task.pending_proposals > 0) return { tone: "review", text: `待审核 ${task.pending_proposals} 个方案` };
   switch (task.state) {
     case "planning": case "running": return { tone: "running", text: "执行中" };
     case "reviewing": return { tone: "review", text: "待审核" };

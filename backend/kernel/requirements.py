@@ -66,6 +66,13 @@ def lookup_references(research, queries):
         if case.status != 'succeeded':
             raise HTTPException(422,case.error or '标准依据查询失败，请核对条件并重试。')
         answer = case.artifacts['x-cablesim.standards-basis']
+        if answer['status'] == 'listed':
+            references[case.case_id] = {'schema':'cablesim.standard-basis-list-ref/1',
+                'query':queries[case.case_id],'plugin_version':answer['plugin_version'],
+                'data_sha256':answer['data_sha256'],'query_sha256':answer['query_sha256'],
+                'records':answer['records'],'request_sha256':result.request_sha256,
+                'artifact_digest':case.artifact_digests['x-cablesim.standards-basis']}
+            continue
         if answer['status'] != 'resolved':
             missing.append({'key':case.case_id,'query':queries[case.case_id], 'reason':answer.get('reason','本库暂未收录 · 下一轮')})
             continue
@@ -118,6 +125,33 @@ class Requirements:
             if case.status!='succeeded': raise HTTPException(422,case.error or '当前型号不能建立要求目录。')
             artifact=case.artifacts['x-cablesim.standard-check']
             declarations={re.sub(r'\s+','',item['standard']).replace('—','-').replace(':','-') for item in declared_execution_standards(document)}
+            auxiliary = {}
+            for path,source in document.get('provenance',{}).items():
+                if not path.endswith('/annex_basis'):continue
+                try:stored=json.loads(source.get('reference','{}')).get('basis_references',{})
+                except (ValueError,TypeError):continue
+                for key,ref in stored.items():
+                    q=ref.get('query',{}) if isinstance(ref,dict) else {}
+                    if re.sub(r'\s+','',q.get('standard','')+'-'+q.get('edition','')) in declarations:
+                        auxiliary[key]=ref
+            # The method owns the staged diameter calculations; the host only
+            # executes declared queries, retaining every receipt on this revision.
+            for _ in range(24):
+                if auxiliary:
+                    planned=self.research.executor.run(method.manifest.id,'dimensions',[{'case_id':'plan','input':document,
+                        'parameters':{'cable_type_id':document['cable_types'][0]['id'],'basis_references':auxiliary,
+                            'basis_cable_sha256':artifact['basis_cable_sha256']}}],expected_manifest=method.manifest)
+                    case=planned.cases[0]
+                    if case.status!='succeeded':raise HTTPException(422,case.error or '当前护层依据查询未完成。')
+                    artifact=case.artifacts['x-cablesim.standard-check']
+                pending={key:q for key,q in artifact.get('basis_auxiliary_queries',{}).items()
+                    if re.sub(r'\s+','',q['standard']+'-'+q['edition']) in declarations}
+                if not pending:break
+                additions, absent=lookup_references(self.research,pending)
+                auxiliary.update(additions)
+                auxiliary.update({item['key']:{'uncovered':True,'query':pending[item['key']]} for item in absent})
+            else:
+                raise HTTPException(422,'当前护层依据查询未完成，请核对型号条件后重试。')
             plans={r['id']:r['basis_query'] for r in artifact['rows'] if r.get('basis_query') and re.sub(r'\s+','',r['basis_query']['standard']+'-'+r['basis_query']['edition']) in declarations}
             missing_fields=[{'row_id':r['id'],'fields':r['basis_missing_fields'],'reason':r['reason']} for r in artifact['rows'] if r.get('basis_missing_fields')]
             undeclared={}
@@ -145,7 +179,7 @@ class Requirements:
                  'workspace_revision':body.expected_revision,'input_digest':planned.request_sha256,'request_sha256':result.request_sha256,
                  'release_digest':self.research.pin(basis)['release_digest'],'artifact_digest':output.artifact_digests['x-cablesim.standards-basis']}
             resolved[key]=ref
-        payload={'parameters':{'basis_references':{rid:resolved[fingerprint(q)] for rid,q in plans.items() if fingerprint(q) in resolved},'basis_cable_sha256':artifact['basis_cable_sha256']},
+        payload={'parameters':{'basis_references':{**auxiliary,**{rid:resolved[fingerprint(q)] for rid,q in plans.items() if fingerprint(q) in resolved}},'basis_cable_sha256':artifact['basis_cable_sha256']},
                  'workspace_revision':body.expected_revision,'missing':missing,'missing_fields':missing_fields,
                  'undeclared_standards':list(undeclared.values()),'unbound_standard_count':len(artifact['rows'])-len(plans)}
         with self.store.db(True) as db:

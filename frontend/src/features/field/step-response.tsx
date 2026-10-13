@@ -44,6 +44,9 @@ export function StepResponse({ run }: { run: Record<string, unknown> }) {
     queryFn:({signal}) => hpcJson(`/step-responses/${text(item?.id)}`,{signal}),
     refetchInterval:query => ['queued','running'].includes(text(query.state.data?.status)) ? 3000 : false});
   const saved=records(optionalRecord(run.output).cases).map(row => optionalRecord(optionalRecord(optionalRecord(row.artifacts)['x-cablesim.simulation-bundle']).step_response)).find(row => row.schema==='cablesim.fem-step-response-result/1');
+  const sourceCheck=useQuery({queryKey:['step-response-source',wid,sid,rid],enabled:!!wid && !!sid && !!rid && run.status==='succeeded' && !saved && (!item || ['failed','cancelled'].includes(text(item.status))),retry:false,
+    queryFn:({signal}) => hpcJson(`/workspaces/${wid}/studies/${sid}/step-responses/source-check?source_run_id=${encodeURIComponent(rid)}`,{signal})});
+  const unsupported=sourceCheck.data?.status==='unsupported';
   const response=optionalRecord(detail.data?.response ?? saved),convergence=optionalRecord(response.convergence);
   const active=item && ['queued','running'].includes(text(item.status)),execution=optionalRecord(detail.data?.execution ?? item?.execution);
   const exported=detail.data?.emergency_input ?? records(optionalRecord(run.output).cases).map(row => optionalRecord(row.artifacts)['x-cablesim.emergency-input']).find(Boolean);
@@ -72,13 +75,15 @@ export function StepResponse({ run }: { run: Record<string, unknown> }) {
       {active && <Button disabled={busy || !!state?.cancel_requested} onClick={() => void perform('cancel')}>{state?.cancel_requested ? '取消待确认' : '停止响应作业'}</Button>}
       {item?.status==='interrupted' && <Button disabled={busy} onClick={() => void perform('resume')}>恢复原作业</Button>}
     </div>
-    {run.freshness==='historical' && <p className="field-history">历史 · 来源运行已过期，曲线仍按其保存输入显示。</p>}
-    {(error || history.error || detail.error) && <ErrorState description={error || message(history.error ?? detail.error)} action={<Button variant="ghost" onClick={() => {void history.refetch();void detail.refetch();}}>重试读取</Button>} />}
-    {history.isPending ? <LoadingState title="读取保存阶跃响应" /> : (!item || ['failed','cancelled'].includes(text(item.status))) && !saved && !response.schema && !history.error ? <>
+    {run.freshness==='historical' && <p className="field-history">历史 · 来源运行已过期，{response.schema ? '曲线仍按其保存输入显示。' : '适用范围按保存输入核对。'}</p>}
+    {(error || history.error || detail.error || sourceCheck.error) && <ErrorState description={error || message(history.error ?? detail.error ?? sourceCheck.error)} action={<Button variant="ghost" onClick={() => {void history.refetch();void detail.refetch();void sourceCheck.refetch();}}>重试读取</Button>} />}
+    {unsupported && <div className="field-state-note" role="status"><strong>该工况的阶跃响应尚未覆盖</strong>
+      <p>{text(sourceCheck.data?.reason)}</p><p>{text(sourceCheck.data?.next_step)}</p></div>}
+    {history.isPending || sourceCheck.isFetching && !sourceCheck.data ? <LoadingState title="检查保存来源与暂态适用范围" /> : (!item || ['failed','cancelled'].includes(text(item.status))) && !saved && !response.schema && !history.error && !unsupported ? <>
       <EmptyState title="尚无阶跃响应" description="单回路、均匀土壤与恒温地表；逐材料热容须有正文来源。" />
       <details><summary>补充材料热容来源</summary><label className="hpc-budget">区域热容 JSON · J/(m³·K)<textarea value={capacities} onChange={event => setCapacities(event.target.value)} rows={6} placeholder="已保存的来源齐全时留空；缺项预检会列出具体材料域。" /></label></details>
       <label className="hpc-budget">累计核时预算<input type="number" min="0.001" max="2000" step="1" value={budget} onChange={event => setBudget(event.target.value)} /></label>
-      <Button variant="primary" disabled={busy || run.status!=='succeeded'} onClick={() => void perform('estimate')}>预检响应与预算</Button>
+      <Button variant="primary" disabled={busy || run.status!=='succeeded' || !sourceCheck.data || !!sourceCheck.error} onClick={() => void perform('estimate')}>预检响应与预算</Button>
     </> : null}
     {state && <dl className="field-scope"><div><dt>保存记录</dt><dd>{savedRunLabel({...state,study_name:text(optionalRecord(state.definition).title),sequence:detail.data?.sequence})}</dd></div>
       <div><dt>状态</dt><dd>{hpcStatus(active ? execution.state ?? state.status : state.status)}{execution.job_id ? ` · 作业 ${text(execution.job_id)}` : ''}</dd></div>

@@ -11,11 +11,12 @@ from html import escape
 from io import BytesIO
 import math
 import re
+import json
 
 from .specification_pdf import _Blocks, _font_lock
 from .workspace import fingerprint
 
-RENDERER = 'cablesim.study-pdf/5'
+RENDERER = 'cablesim.study-pdf/8'
 PLUGIN_NAMES = {'cablesim.iec60287':'IEC 60287 稳态载流量', 'cablesim.thermal-network':'热网络交叉校核',
     'cablesim.gb50217-correction':'GB 50217 载流量校正',
     'cablesim.simulation':'数值仿真', 'cablesim.hybrid-rating':'混合载流量参考',
@@ -24,6 +25,25 @@ PARAMETERS = {'core_lay_length':'成缆节距', 'filler_rho':'填充材料热阻
     'screen_radial_factor':'铜带径向包络系数', 'armour_gap_ratio':'钢带间隙率',
     'steel_relative_permeability':'钢带相对磁导率', 'conductor_form':'导体构造', 'diameter_rounding':'外径舍入容差'}
 VALUES = {'continuous_contact':'连续导电接触', 'stranded_round_compacted':'紧压圆绞导体'}
+# Historical provenance did not carry contract display names. This is a paper
+# vocabulary only: original keys/values remain in the internal trace attachment.
+SOURCE_FIELDS = {'conductor_class':'导体类别','lay_factor':'绞合增量系数',
+    'r20_basis':'20 °C 电阻取值依据','density':'密度','standard_kind':'标准材料分类',
+    'relative_permeability':'相对磁导率','short_circuit':'短路温限',
+    'method_input':'研究独立输入','case_id':'工况标识','layout':'敷设方式',
+    'depth_m':'中心埋深','soil_rho_k_m_w':'土壤热阻率','ambient_temperature_c':'环境温度',
+    'frequency_hz':'频率','spacing_m':'中心间距','rating_basis':'载流量口径',
+    'duct_inner_m':'排管内径','duct_outer_m':'排管外径','duct_rho_k_m_w':'管壁热阻率',
+    'source':'来源说明','name':'名称','bonding':'接地方式',
+    'loss_tangent':'介质损耗角正切','thermal_resistivity':'材料热阻率',
+    'electrical_resistivity_20':'20 °C 电阻率','temperature_coefficient_20':'电阻温度系数'}
+SOURCE_VALUES = {'three_core_buried_single':'三芯直埋单回','three_core_ducts_horizontal':'三芯排管水平排列',
+    'both_ends':'两端接地','single_point':'单点接地','cross_bonded':'交叉互联',
+    'simultaneous':'全回路共同能力','conditional':'其他回路固定负荷下的条件上限',
+    'copper_bare':'裸铜','copper_coated':'镀层铜','copper':'铜','aluminium':'铝'}
+SOURCE_UNITS = {'depth_m':'m','spacing_m':'m','soil_rho_k_m_w':'K·m/W',
+    'ambient_temperature_c':'°C','frequency_hz':'Hz','duct_inner_m':'m',
+    'duct_outer_m':'m','duct_rho_k_m_w':'K·m/W'}
 QUANTITIES = {'ampacity':'允许电流', 'conductor_temperature':'导体温度', 'sheath_temperature':'金属屏蔽温度',
     'surface_temperature':'表面温度', 'losses.conductor':'导体损耗', 'losses.sheath':'金属屏蔽损耗',
     'losses.dielectric':'介质损耗', 'losses.total':'总损耗', 'loss_factor.sheath':'屏蔽损耗因数',
@@ -193,10 +213,46 @@ def paper_text(runs, value, *, aliases=None):
     value=re.sub(r'x-cablesim\.[\w.-]+','方法扩展量',value)
     value=re.sub(r'\bcablesim\.[\w.-]+','保存方法',value)
     value=value.replace('v0 area/fill_factor','截面积与填充系数推导（保存来源记录）')
+    # Historical input-source labels predate translated contract metadata.
+    # Translate presentation only; the attached original snapshot is untouched.
+    labels={**SOURCE_FIELDS,**SOURCE_VALUES,'construction':'结构形式','stranded':'绞合导体','io_basis':'输入输出依据',
+            'round_compacted':'紧压圆形','round':'圆形','segmental':'分割导体',
+            'crossing_heat_sources':'交叉热源'}
+    for key,label in labels.items():value=re.sub(r'(?<![\w])'+re.escape(key)+r'(?![\w])',label,value)
+    value=value.replace('尚未产生结果','输入编制时的历史说明：当时尚未产生结果')
     if value.startswith('/'):
         fields={'condition':'工况','parameters':'方法参数','materials':'材料','thermal_resistivity':'热阻率','cable_types':'型号','cores':'绝缘线芯','conductor':'导体','diameter':'外径','nominal_area':'标称截面','layers':'层结构','common_layers':'公共层','thickness':'厚度','insulation':'绝缘','screen':'金属屏蔽','sheath':'护套','bedding':'内衬','armour':'铠装','sections':'敷设截面','placements':'电缆位置','circuits':'回路','load_cases':'负荷工况','currents':'电流','medium':'环境介质','surface_temperature':'地表温度','max_temperature':'温限','conductor_screen':'导体屏蔽','insulation_screen':'绝缘屏蔽','oversheath':'外护套','material':'材料引用','form':'构造形式','lay_direction':'绞合方向','lay_length':'节距','overlap':'搭盖率','role':'层功能','tape_width':'带宽','wire_count':'根数','wire_diameter':'单丝直径','title':'研究名称','driver':'任务','crosschecks':'对照方法','normal':'正常运行','rating':'额定参数','resistance_20':'20 °C 电阻','r20':'20 °C 电阻','core':'线芯','x':'横向位置','z':'竖向位置','category':'材料类别','electrical_resistivity_20':'20 °C 电阻率','temperature_coefficient_20':'电阻温度系数','relative_permittivity':'相对介电常数','loss_tangent':'介质损耗角正切','max_conductor_temperature':'导体温限','criteria':'校核要求','bonding':'接地方式','kind':'类型','u0':'额定相电压','u':'额定线电压','um':'最高系统电压'}
-        value=' · '.join(fields.get(part,PARAMETERS.get(part,part)) for part in value.split('/') if part and not part.isdigit())
+        fields.update(SOURCE_FIELDS)
+        parts=[part for part in value.split('/') if part and not part.isdigit()]
+        # Container IDs identify the object in the attached source snapshot;
+        # they are not input field names and must not become repeated placeholders.
+        labels=[fields.get(part,PARAMETERS.get(part,part if re.search('[\u4e00-\u9fff]',part) else None)) for part in parts]
+        if labels and labels[-1] is None:labels[-1]='保存输入项（详见追溯附录）'
+        value=' · '.join(label for label in labels if label) or '保存输入项（详见追溯附录）'
     return value
+
+
+def source_reference(value):
+    """Render an embedded saved template as labelled conditions, never raw JSON.
+
+    No new fact or value is inferred. Unrecognised structured fields remain in
+    the original source snapshot, with an explicit trace pointer on paper.
+    """
+    value=str(value)
+    start=value.find('{')
+    if start<0:return value
+    try:record,length=json.JSONDecoder().raw_decode(value[start:])
+    except ValueError:return value[:start]+'结构化来源记录见内部审核版追溯附录。'
+    if not isinstance(record,dict):return value[:start]+'结构化来源记录见内部审核版追溯附录。'+value[start+length:]
+    terms=[]
+    for key,item in record.items():
+        if key=='case_id':continue  # Identity, preserved in the trace appendix.
+        label=SOURCE_FIELDS.get(key)
+        if not label or isinstance(item,(dict,list)):
+            terms.append('补充保存输入详见内部审核版追溯附录');continue
+        given='未给定' if item is None else '是' if item is True else '否' if item is False else SOURCE_VALUES.get(str(item),str(item))
+        terms.append(label+'：'+given+(' '+SOURCE_UNITS[key] if item is not None and key in SOURCE_UNITS else ''))
+    return value[:start]+'；'.join(dict.fromkeys(terms))+value[start+length:]
 
 
 def paper_aliases(runs):
@@ -237,11 +293,12 @@ def input_sources(document, definition, candidate=None):
     for label,source in sources:
         ref=source.get('reference') or '未记录出处';page=source.get('page') or source.get('page_number')
         if page:ref+=f' · 第 {page} 页'
+        ref=source_reference(ref)
         if ref not in references:references.append(ref)
         if str(label).startswith('/cable_types/'):
             label='/'+ '/'.join(str(label).split('/')[-2:]) if len(str(label).split('/'))>3 else '电缆结构与物性'
         rows.append([label,origins.get(source.get('kind'),'保存来源'),f'依据 {references.index(ref)+1}'])
-    return table(['输入项目','来源类型','依据'],rows or [['工况与结构','保存输入','未逐项登记来源']],[2.5,1,1.5])+''.join(paragraph(f'依据 {i}：{ref}') for i,ref in enumerate(references,1))
+    return table(['输入项目','来源类型','依据'],rows or [['工况与结构','保存输入','未逐项登记来源']],[2.5,1,1.5])+''.join(paragraph(f'依据 {i}：{ref}') for i,ref in enumerate(references,1))+paragraph('原始字段、来源原文和输入快照保留在内部审核版的追溯附录附件中；本表只转换显示名称，不修改保存数据。')
 
 
 def summary(run):
@@ -270,6 +327,9 @@ def summary(run):
     if correction:
         return answer,[number(correction['corrected_current_a'])+' A',number(correction['baseline']['baseline_current_a'])+' A',number(correction['total_factor'],4)]
     trace=next((c.get('artifacts',{}).get('x-cablesim.iec60287-trace') for c in cases if c.get('artifacts',{}).get('x-cablesim.iec60287-trace')), {})
+    if trace.get('crossing_derating'):
+        crossing=trace['crossing_derating'][0]
+        return answer,[number(crossing['baseline_current_a'],1)+' A',number(crossing['derated_current_a'],1)+' A',number(crossing['derating_factor'],4)]
     states=trace.get('operating',{}).get('cable_states',[])
     currents=[r['value'] for c in cases for r in c.get('results',[]) if r['key']=='ampacity' and r.get('status')=='available']
     temperatures=[r['value']-273.15 for c in cases for r in c.get('results',[]) if r['key']=='conductor_temperature' and r.get('status')=='available']
@@ -277,6 +337,34 @@ def summary(run):
     if states:temperatures=[s['conductor_temperature_c'] for s in states if s.get('conductor_temperature_c') is not None]
     capacity=selected[0].get('value') if selected else min(currents,default=None)
     return answer, [number(capacity,0)+' A',number(max(temperatures,default=None))+' °C',number(min(margins,default=None))+' K']
+
+
+def summary_labels(run):
+    """Label capacity at its limit separately from the saved operating load."""
+    document=_input(run)
+    currents=sorted({v for load in document.get('load_cases',[]) for v in load.get('currents',{}).values() if isinstance(v,(int,float))})
+    load=' / '.join(number(v,0) for v in currents)+' A 时' if currents else '保存负荷下'
+    from .report_selection import context
+    selected=context(run)
+    cases=[selected['output']] if selected else run['output'].get('cases',[])[:1]
+    states=[s for case in cases for s in case.get('artifacts',{}).get('x-cablesim.iec60287-trace',{}).get('operating',{}).get('cable_states',[])]
+    # Crossing outputs intentionally omit operating temperatures. The preserved
+    # baseline states still record the same temperature limit, used only as a label.
+    for case in cases:
+        trace=case.get('artifacts',{}).get('x-cablesim.iec60287-trace',{})
+        if trace.get('crossing_derating'):
+            states+=trace.get('baseline_evidence',{}).get('operating',{}).get('cable_states',[])
+    limits=sorted({s['temperature_limit_c'] for s in states if isinstance(s.get('temperature_limit_c'),(int,float))})
+    if not limits:limits=sorted({v['temperature_limits']['normal']-273.15 for v in document.get('cable_types',[]) if isinstance(v.get('temperature_limits',{}).get('normal'),(int,float))})
+    if not limits and run.get('fem_evidence'):
+        from .fem_evidence import values
+        metrics,_=values(run,run['convergence'])
+        if metrics['hottest_temperature_k'] is not None and metrics['margin_k'] is not None:
+            limits=[metrics['hottest_temperature_k']+metrics['margin_k']-273.15]
+    limit=' / '.join(number(v,0) for v in limits)+' °C 温限下' if limits else '保存温限下'
+    if any(case.get('artifacts',{}).get('x-cablesim.iec60287-trace',{}).get('crossing_derating') for case in cases):
+        return [limit+'降额前允许电流',limit+'降额后允许电流','交叉降额系数']
+    return [limit+'允许电流',load+'最热导体温度',load+'温限余量']
 
 
 def grouped_results(cases, names, document):
@@ -356,7 +444,7 @@ def chapters(runs, audience):
             row=trace['crossing_derating'][0]
             body+='<h3>交叉热源降额</h3>'+table(['降额前 / A','降额后 / A','降额系数','交叉温升 / K'],[[number(row['baseline_current_a']),number(row['derated_current_a']),number(row['derating_factor'],4),number(row['crossing_rise_k'],2)]],[1,1,1,1])
             body+=paragraph(row['clause'])+paragraph(row['scope'])
-            body+=table(['热源','轴线深度 / m','净距 / m','交叉角 / rad','发热 / W/m','出处'],[[s['label'],number(s['depth_m'],3),number(s['net_clearance_m'],3),number(s['angle_rad'],3),number(s['heat_w_m'],2),s['source']] for s in row['sources']],[1,1,1,1,1,2])
+            body+=table(['热源','轴线深度 / m','外径 / m','净距 / m','交叉角 / °','发热 / W/m','出处'],[[s['label'],number(s['depth_m'],3),number(s.get('diameter_m'),3),number(s['net_clearance_m'],3),number(s['angle_rad']*180/3.141592653589793,1),number(s['heat_w_m'],2),s['source']] for s in row['sources']],[1.2,1,1,1,1,1,2.5])
         if selection and selected and trace:
             from .report_selection import context
             body+='<h3>'+('推荐型号' if context(run)['recommended'] else '最接近候选（不满足）')+'：保存负荷下的温度与损耗</h3>'
@@ -385,12 +473,12 @@ def chapters(runs, audience):
         body+=paragraph('客户版保留结论、工况、结果和依据；内部审核版另附完整输入快照、诊断和验证证据。')
         sections.append(body)
         if audience=='internal':
-            body='<h2>附录：来源摘要</h2>'+paragraph('完整输入快照、完整精度结果、诊断与验证证据保存在本 PDF 的 JSON 附件中，可由支持附件的 PDF 阅读器导出。原始字段和标识完整保留，纸面使用工程名称。')+table(['证据','保存记录'],[['源运行',run['id']],['输入 SHA256',run['input_digest']],['输出 SHA256',run['output_digest']],['方法发行 SHA256',method.get('release_digest','未记录')],['结果完整性',run.get('integrity','未记录')],['运行状态',run.get('status')],['时效状态',run.get('freshness')]], [1.1,3.9])
-            body+=table(['输入位置','来源及核对状态'],[[p,clean(s.get('reference'))+'；'+('已核对' if s.get('reviewed') else '未核对')] for p,s in definition.get('input_sources',{}).items()] or [['来源','未记录']],[1.3,3.7])
+            body='<h2>附录：来源摘要</h2>'+paragraph('完整输入快照、原始来源字段及原文、完整精度结果、诊断与验证证据保存在本 PDF 的 JSON 附件中，可由支持附件的 PDF 阅读器导出。原始字段和标识完整保留，纸面使用工程名称。')+table(['证据','保存记录'],[['源运行',run['id']],['输入 SHA256',run['input_digest']],['输出 SHA256',run['output_digest']],['方法发行 SHA256',method.get('release_digest','未记录')],['结果完整性',run.get('integrity','未记录')],['运行状态',run.get('status')],['时效状态',run.get('freshness')]], [1.1,3.9])
+            body+=table(['输入位置','来源及核对状态'],[[p,source_reference(clean(s.get('reference')))+'；'+('已核对' if s.get('reviewed') else '未核对')] for p,s in definition.get('input_sources',{}).items()] or [['来源','未记录']],[1.3,3.7])
             for candidate in run['snapshot'].get('candidate_snapshots',[]):
                 body+='<h3>'+escape(candidate['payload']['name'])+'</h3>'+table(['证据','摘要'],[['候选内容 SHA256',candidate['digest']],['候选状态',candidate['state']],['原始记录 SHA256',candidate.get('origin',{}).get('digest','未记录')],['补全工件 SHA256',candidate.get('preparation',{}).get('artifact_sha256','未记录')]], [1.3,3.7])
                 references=list(dict.fromkeys(s['reference'] for s in candidate['payload'].get('sources',{}).values()))
-                body+=''.join(paragraph(s) for s in references)
+                body+=''.join(paragraph(source_reference(s)) for s in references)
             sections.append(body)
     return sections
 
@@ -498,9 +586,9 @@ def _render_pdf(runs, audience, *, generated_at=None, attachments=None):
     answer,metrics=summary(first)
     saved_input=_input(first)
     currents=sorted({i for load in saved_input.get('load_cases',[]) for i in load.get('currents',{}).values() if isinstance(i,(int,float))})
-    if currents:answer=' / '.join(number(i,0) for i in currents)+' A 工况：'+answer
+    if currents and '交叉降额系数' not in summary_labels(first):answer=' / '.join(number(i,0) for i in currents)+' A 工况：'+answer
     correction_method=definition['method']['plugin_id']=='cablesim.gb50217-correction'
-    cover+='<h2>结论摘要</h2>'+paragraph(answer)+table(['校正后允许电流','基准载流量','总校正系数'] if correction_method else ['允许电流','最热导体温度','温限余量'],[metrics],[1,1,1])
+    cover+='<h2>结论摘要</h2>'+paragraph(answer)+table(['校正后允许电流','基准载流量','总校正系数'] if correction_method else summary_labels(first),[metrics],[1,1,1])
     cover+=paragraph('适用方法：'+PLUGIN_NAMES.get(definition['method']['plugin_id'],'保存方法')+' '+definition['method']['version']+'；具体标准条款见计算依据。')
     references=[]
     for source_run in runs:
@@ -541,7 +629,7 @@ def _render_pdf(runs, audience, *, generated_at=None, attachments=None):
         import json
         from .report_reads import archive_runs
         with fitz.open(stream=output.getvalue(),filetype='pdf') as audit:
-            audit.embfile_add('saved-runs.json',json.dumps(archive_runs(runs),ensure_ascii=False,indent=2).encode('utf-8'),filename='saved-runs.json',desc='完整输入、完整精度结果与证据；大场二进制数组以来源工件摘要和保存运行地址引用，原件保留在工程库；未重新计算。')
+            audit.embfile_add('saved-runs.json',json.dumps(archive_runs(runs),ensure_ascii=False,separators=(',',':')).encode('utf-8'),filename='saved-runs.json',desc='完整输入、完整精度结果与证据；大场二进制数组以来源工件摘要和保存运行地址引用，原件保留在工程库；未重新计算。')
             return audit.tobytes(garbage=3,deflate=True)
     return output.getvalue()
 

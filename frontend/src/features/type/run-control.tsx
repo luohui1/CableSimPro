@@ -16,6 +16,8 @@ function preflightReason(value:string) {
   if(value.includes('波纹层需专用轮廓'))return '波纹金属护套：实际波纹实体与用料尚未覆盖；三维可按等效厚度显示。';
   const parameter=/^\/parameters\/([^：:]+)[：:]/.exec(value);
   if(parameter){const name=parameter[1].split('/').map(key=>displayName(key)).join(' · ');return /[（(]required[）)]/.test(value)?'缺字段：'+name+'；填写方法参数及来源。':name+'不符合方法要求，请核对数值、单位与适用范围。';}
+  const layer=/^.+\/(metallic_screen|armour|metallic_sheath)(?:\.([^：:]+))?[：:]\s*(.+)$/.exec(value);
+  if(layer){const names:Record<string,string>={metallic_screen:'金属屏蔽',armour:'铠装',metallic_sheath:'金属护套'};return names[layer[1]]+'：'+layer[3].replace('0–1 的搭盖率','0–100% 的搭盖比例');}
   return displayText(value);
 }
 

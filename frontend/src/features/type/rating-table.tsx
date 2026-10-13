@@ -22,6 +22,7 @@ import { TypeRunControl } from './run-control';
 import { MethodParameterFields } from '@/components/method-parameter-fields';
 import { EvidenceDigest } from './evidence-digest';
 import { ResultTrace } from './result-detail';
+import { TypeStudyDialog } from './study-dialog';
 
 const layouts = { trefoil: '直埋 · 品字', flat: '直埋 · 水平', ducts: '排管 · 品字', air: '空气', three_core_buried_single: '三芯直埋 · 单回', three_core_buried_horizontal: '三芯直埋 · 三回水平', three_core_ducts_horizontal: '三芯排管 · 三回水平' };
 const statusKinds: Record<string, StatusKind> = { 已计算: 'success', 未运行: 'unknown', 计算失败: 'error', 待补数据: 'unknown', 输入错误: 'error', 超出范围: 'inapplicable' };
@@ -32,6 +33,7 @@ export function TypeRatingTable({ tab }: { tab: string }) {
   const state = useTypeWorkspace(), { location, navigate } = useTypeNavigation(), evidence = useTypeEvidence(), inspector = useTypeInspector();
   const threeCore = state.document?.cable_types[0]?.construction === 'three_core';
   const unsupported = state.document?.cable_types[0]?.construction === 'multi_core';
+  const [studyOpen, setStudyOpen] = useState(false);
   const layoutOptions = Object.entries(layouts).filter(([value]) => value.startsWith('three_core_') === threeCore).map(([value, label]) => ({ value, label }));
   const studies = useQuery({ queryKey: ['type-studies', state.workspace?.id], queryFn: ({ signal }) => typeStudies(state.workspace!.id, signal), enabled: !!state.workspace });
   const [selected, setSelected] = useState(''), [running, setRunning] = useState(false), [open, setOpen] = useState(false), [name, setName] = useState(''), [frequency, setFrequency] = useState('50'), [layout, setLayout] = useState<components['schemas']['RatingRow']['layout']>('trefoil'), [adding, setAdding] = useState(false), [error, setError] = useState('');
@@ -74,7 +76,7 @@ export function TypeRatingTable({ tab }: { tab: string }) {
   async function definition() { if (!savedStudy) throw Error('请先保存工况表'); return compileRating(state.workspace!.id, state.workspace!.revision, ratingBody(savedStudy)); }
   const row = rows.find(row => row.id === selected) || rows[0];
   const bodyState = running || evidence.isPending || studies.isPending || saved && results.isPending ? 'loading' : error || projectionError || evidence.error || studies.error || results.error ? 'error' : !saved ? 'empty' : current ? 'success' : 'historical';
-  if(unsupported)return <div className="type-page" data-type-page="rating-table-results" data-type-state="inapplicable"><EmptyState title="四芯载流量 · 标准未覆盖" description="当前载流量方法只覆盖单芯回路和三芯电缆；四芯及 3+1 的中性线负荷、成缆热路尚未接入，不能套用三芯结果。" action={<Button onClick={()=>navigate(typePath(state.workspace!.id,'structure','table',location.theme))}>继续完善护层与材料</Button>} /></div>;
+  if(unsupported)return <div className="type-page" data-type-page="rating-table-results" data-type-state="inapplicable"><EmptyState title="四芯载流量 · 方法未覆盖" description="四芯及 3+1 的中性线负荷与完整热路尚未接入。10 kV 及以下可在研究中按 GB 50217 校正有出处的同型号单根基准值；须核对温限、埋深、土壤及中性线负荷条件。没有适用基准时不输出电流。" action={<><Button disabled={state.dirty||state.busy||state.readOnly} onClick={()=>setStudyOpen(true)}>新建载流量研究</Button><Button variant="ghost" onClick={()=>navigate(typePath(state.workspace!.id,'structure','table',location.theme))}>继续完善护层与材料</Button></>} /><TypeStudyDialog open={studyOpen} onOpenChange={setStudyOpen} /></div>;
   return <div className="type-page" data-type-page="rating-table-results" data-type-state={bodyState}>
     <div className="type-result-toolbar"><CommandAction><TypeRunControl channel="rating-table" label="计算所选工况" locateIssue={()=> <Button size="compact" onClick={()=>navigate(typePath(state.workspace!.id,'rating-table','parameters',location.theme))}>填写载流量方法参数</Button>} definition={definition} onBusy={setRunning} unavailable={!savedStudy || !body.rows.length ? '请先添加并保存工况表' : body.selected_case_ids?.length === 0 ? '尚未选择计算工况' : undefined} /></CommandAction><Button size="compact" disabled={state.busy || state.readOnly || body.rows.length >= 100} onClick={() => { setOpen(true); setName(''); setLayout(threeCore ? 'three_core_buried_single' : 'trefoil'); }}>添加工况</Button></div>
     {bodyState === 'loading' ? <LoadingState title="正在读取载流量工况与结果" /> : bodyState === 'error' ? <ErrorState title="载流量表不可用" description={error || projectionError || message(evidence.error || studies.error || results.error)} action={<Button onClick={() => { setError(''); void evidence.refetch(); void studies.refetch(); void results.refetch(); }}>重新读取</Button>} /> : tab === 'parameters' ? <>

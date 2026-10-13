@@ -35,27 +35,27 @@ export function ObjectLink({ card, children, className = "object-link" }: { card
   const body = children ?? (card.kind === 'run' ? readableRunName(card.name, card.parent?.name) : card.name);
   const parent = card.parent;
   switch (card.kind) {
-    case "project": return <Link className={className} to="/studies" search={{ theme, workspace: card.id }}>{body}</Link>;
-    case "study": return <Link className={className} to="/studies/$sid" params={{ sid: card.id }} search={{ theme, workspace: parent?.kind === "project" ? parent.id : "", run: "", delivery: "" }}>{body}</Link>;
+    case "project": return <Link title={typeof body === 'string' ? body : card.name} className={className} to="/studies" search={{ theme, workspace: card.id }}>{body}</Link>;
+    case "study": return <Link title={typeof body === 'string' ? body : card.name} className={className} to="/studies/$sid" params={{ sid: card.id }} search={{ theme, workspace: parent?.kind === "project" ? parent.id : "", run: "", delivery: "" }}>{body}</Link>;
     case "run":
     case "input_snapshot": return parent?.kind === "study"
-      ? <Link className={className} to="/studies/$sid" params={{ sid: parent.id }} search={{ theme, workspace: "", run: card.id, delivery: "" }}>{body}</Link>
-      : <Link className={className} to="/runs" search={{ theme }}>{body}</Link>;
-    case "type": return <Link className={className} to="/types/$wid/$module/$tab" params={{ wid: card.id, module: "structure", tab: "section" }} search={{ theme }}>{body}</Link>;
-    case "cable_version": return <Link className={className} to="/resources/cables" search={{ theme, item: card.id }}>{body}</Link>;
-    case "asset": return <Link className={className} to="/resources/$group" params={{ group: ASSET_GROUP[card.subtype || ""] || "materials" }} search={{ theme, item: card.id }}>{body}</Link>;
-    case "job": return <Link className={className} to="/runs" search={{ theme }}>{body}</Link>;
-    case "delivery": return <Link className={className} to="/deliveries" search={{ theme, workspace: "", delivery: card.id }}>{body}</Link>;
-    case "plugin": return <Link className={className} to="/plugins/$pid" params={{ pid: card.id }} search={{ theme }}>{body}</Link>;
+      ? <Link title={typeof body === 'string' ? body : card.name} className={className} to="/studies/$sid" params={{ sid: parent.id }} search={{ theme, workspace: "", run: card.id, delivery: "" }}>{body}</Link>
+      : <Link title={typeof body === 'string' ? body : card.name} className={className} to="/runs" search={{ theme }}>{body}</Link>;
+    case "type": return <Link title={typeof body === 'string' ? body : card.name} className={className} to="/types/$wid/$module/$tab" params={{ wid: card.id, module: "structure", tab: "section" }} search={{ theme }}>{body}</Link>;
+    case "cable_version": return <Link title={typeof body === 'string' ? body : card.name} className={className} to="/resources/cables" search={{ theme, item: card.id }}>{body}</Link>;
+    case "asset": return <Link title={typeof body === 'string' ? body : card.name} className={className} to="/resources/$group" params={{ group: ASSET_GROUP[card.subtype || ""] || "materials" }} search={{ theme, item: card.id }}>{body}</Link>;
+    case "job": return <Link title={typeof body === 'string' ? body : card.name} className={className} to="/runs" search={{ theme }}>{body}</Link>;
+    case "delivery": return <Link title={typeof body === 'string' ? body : card.name} className={className} to="/deliveries" search={{ theme, workspace: "", delivery: card.id }}>{body}</Link>;
+    case "plugin": return <Link title={typeof body === 'string' ? body : card.name} className={className} to="/plugins/$pid" params={{ pid: card.id }} search={{ theme }}>{body}</Link>;
     // 复现库的验证对象家在验证算例页，并固定到引用时的快照；清单声明的验证回到所属插件
     case "validation": return card.subtype === "reproduced"
-      ? <Link className={className} to="/validation/$target/$tab" params={{ target: card.id, tab: "results" }} search={{ theme, snapshot: card.validation?.snapshot_digest || "" }}>{body}</Link>
+      ? <Link title={typeof body === 'string' ? body : card.name} className={className} to="/validation/$target/$tab" params={{ target: card.id, tab: "results" }} search={{ theme, snapshot: card.validation?.snapshot_digest || "" }}>{body}</Link>
       : parent?.kind === "plugin"
-      ? <Link className={className} to="/plugins/$pid" params={{ pid: parent.id }} search={{ theme }}>{body}</Link>
-      : <Link className={className} to="/validation" search={{ theme, snapshot: "" }}>{body}</Link>;
-    case "document": return <Link className={className} to="/resources/cables/imports" search={{ theme, document: card.id }}>{body}</Link>;
-    case "agent_task": return <Link className={className} to="/agent" search={{ theme, task: card.id }}>{body}</Link>;
-    default: return <Link className={className} to="/inbox" search={{ theme }}>{body}</Link>;
+      ? <Link title={typeof body === 'string' ? body : card.name} className={className} to="/plugins/$pid" params={{ pid: parent.id }} search={{ theme }}>{body}</Link>
+      : <Link title={typeof body === 'string' ? body : card.name} className={className} to="/validation" search={{ theme, snapshot: "" }}>{body}</Link>;
+    case "document": return <Link title={typeof body === 'string' ? body : card.name} className={className} to="/resources/cables/imports" search={{ theme, document: card.id }}>{body}</Link>;
+    case "agent_task": return <Link title={typeof body === 'string' ? body : card.name} className={className} to="/agent" search={{ theme, task: card.id }}>{body}</Link>;
+    default: return <Link title={typeof body === 'string' ? body : card.name} className={className} to="/inbox" search={{ theme }}>{body}</Link>;
   }
 }
 

@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[4]))
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 
-VERSION = '1.2.1'
+VERSION = '1.4.0'
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
 DATA = json.loads(Path(__file__).with_name('dimensions.json').read_text('utf-8'))
 AREAS = DATA['areas_mm2']
@@ -959,6 +959,7 @@ class _Check:
 def check(document, parameters):
     report = _Check(document, parameters)
     cable, root = report.cable, report.root
+    family, trace = report.family, report.trace
     core_diameters = [report.core(core, i) for i, core in enumerate(cable['cores'])]
     if report.family == 'hv':
         report.hv_common(rounded(cable['cores'][0]['conductor']['nominal_area'] * 1e6, 6))
@@ -967,7 +968,35 @@ def check(document, parameters):
         report.mv_common(common, core_diameters)
     from cablesim_standard_check.basis import apply, digest
     apply(report, parameters)
+    annex_queries = {}
+    # A saved complete proposal supplies receipt identities, never reusable
+    # limits. Recalculate from today's geometry and request fresh condition refs.
+    if family != 'hv' and any(key.endswith('/annex_basis') for key in document.get('provenance',{})):
+        from cablesim_standard_check.coverings import calculate, from_cable, NeedQueries
+        try:
+            calculated = calculate(from_cable(cable,report.materials),family,parameters.get('basis_references',{}))
+            trace[:] = calculated['trace']
+            for row in report.rows:
+                key=row['id'].rsplit(':',1)[-1]
+                source_key={'bedding-nominal':'annex_bedding','oversheath-nominal':'annex_oversheath','armour-tape-nominal':'annex_armour'}.get(key)
+                if source_key:
+                    ref=parameters['basis_references'][source_key]
+                    limit=calculated[{'bedding-nominal':'bedding','oversheath-nominal':'oversheath','armour-tape-nominal':'armour'}[key]]
+                    record=ref['record']; actual=row['actual']
+                    row.update(limit=limit,margin=None if actual is None else actual-limit,comparison='>=',
+                        verdict='missing' if actual is None else 'passed' if actual>=limit-1e-12 else 'failed',
+                        reason=None if actual is not None else '缺字段：实际标称尺寸。',
+                        basis_query=calculated['queries'][source_key],basis_reference={**ref,'calculation_steps':calculated['trace']},
+                        citation=record['citation'],source_status='original-verified',standard=record['standard']+'—'+record['edition'],
+                        printed_page=record['printed_page'],pdf_page=record['pdf_page'],clause=record['table'] or record['clause'],source_digest=record['source_sha256'])
+        except NeedQueries as pending:
+            annex_queries = pending.queries
+        except (ValueError,KeyError) as error:
+            for row in report.rows:
+                if row['id'].rsplit(':',1)[-1] in ('bedding-nominal','oversheath-nominal','armour-tape-nominal'):
+                    row.update(verdict='uncovered',limit=None,margin=None,reason=str(error))
     result = report.result()
+    result['basis_auxiliary_queries'] = annex_queries
     result['basis_cable_sha256'] = digest(report.cable)
     return result
 

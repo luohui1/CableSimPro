@@ -10,7 +10,8 @@ ROOT=Path(__file__).resolve().parents[3]
 sys.path[:0]=[str(ROOT/'plugins/cablesim.simulation/src'),str(ROOT/'plugins/cablesim.iec60287/src')]
 
 
-def test_seeded_thermal_input_is_complete_and_preparable(tmp_path):
+def test_seeded_thermal_input_is_complete_and_preparable(tmp_path, monkeypatch):
+    monkeypatch.setenv('CABLESIM_ENGINEERING_EVIDENCE',str(tmp_path/'missing-engineering-evidence'))
     from cablesim_simulation.three_core_thermal import prepare
     from backend.plugin_host.parameter_contracts import validate_case
     from cablesim_sdk.parameter_units import decode_request

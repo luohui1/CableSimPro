@@ -40,14 +40,21 @@ def test_duplicate_request_runs_once_and_cancel_prevents_delivery():
 
 def test_save_commit_cannot_be_cancelled_and_failure_is_explicit():
     entered,release=Event(),Event();did=str(uuid4())
+    wid=str(uuid4())
+    # Only the cancellation race is simulated; the committed receipt follows
+    # the real delivery contract, with no simulated engineering result.
+    receipt={'id':did,'workspace':wid,'sources':[],'renderer':'study-pdf/1',
+             'digest':'a'*64,'created':'2026-10-11T00:00:00+00:00',
+             'version_status':{'status':'current','reasons':[]}}
     def deliver(*args,**kwargs):
-        checkpoint('save');entered.set();assert release.wait(3);return {'id':did}
-    jobs=DeliveryJobs(SimpleNamespace(deliver=deliver));wid=str(uuid4())
+        checkpoint('save');entered.set();assert release.wait(3);return receipt
+    jobs=DeliveryJobs(SimpleNamespace(deliver=deliver))
     try:
         job=jobs.start(wid,{'request_id':str(uuid4()),'run_ids':[str(uuid4())]});assert entered.wait(3)
         with pytest.raises(HTTPException) as conflict:jobs.cancel(wid,job['id'])
         assert conflict.value.status_code==409
-        release.set();assert wait_job(jobs,wid,job['id'])['delivery_id']==did
+        release.set();committed=wait_job(jobs,wid,job['id'])
+        assert committed['delivery_id']==did and committed['delivery_receipt']==receipt
         jobs.research.deliver=lambda *a,**k:(_ for _ in ()).throw(HTTPException(409,'Source changed'))
         failed=jobs.start(wid,{'request_id':str(uuid4()),'run_ids':[str(uuid4())]})
         failed=wait_job(jobs,wid,failed['id'])

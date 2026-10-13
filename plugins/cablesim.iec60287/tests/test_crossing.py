@@ -71,3 +71,74 @@ def test_integrated_rating_and_scope_gates_keep_baseline_evidence(tmp_path):
     assert next(row for row in compared if row['key']=='x-cablesim.iec60287.crossing.derating_factor')['title']=='交叉热源降额系数'
     group.parameters['crossing_heat_sources'][0]['depth_m']=1.2
     with pytest.raises(RatingRefused,match='正净距'):sources_for(group)
+
+
+def test_public_qifan_flat_single_core_group_and_independent_integral(tmp_path):
+    """Real published model + declared engineering layout; no synthetic losses.
+
+    Annex A Table A.1 uses the hottest cable's group-effective T4, including
+    its two neighbours. Independent Simpson integration of the Kennelly image
+    kernel checks Eq.(2), while Eq.(3)/(8)/(9) are iterated separately below.
+    This is a cross-check, not a claim to reproduce a Qifan factory rating.
+    """
+    from copy import deepcopy
+    from math import exp, log1p, sin
+    from backend.domain.migration import convert
+    from backend.schemas import Scenario
+    from backend.kernel.model_series import hv_payload, hv_study_document, bundled_hv
+    from cablesim_iec60287.domain import prepare as single_prepare
+    from backend.plugin_host import Executor
+    model=hv_payload();doc=convert(Scenario().model_dump())['document']
+    material_ids={m['id'] for m in model['materials']}
+    doc['materials']=[m for m in doc['materials'] if m['id'] not in material_ids]+deepcopy(model['materials'])
+    doc['cable_types']=[deepcopy(model['cable_type'])]
+    doc['circuits'][0]['cable_type']=model['cable_type']['id']
+    doc=hv_study_document({'domain':doc})
+    doc['load_cases'][0]['currents'][doc['circuits'][0]['id']]=bundled_hv()[0]['scenario']['target_current_a']
+    p=deepcopy(bundled_hv()[0]['parameters'])
+    heat={'label':'参考热力管','depth_m':1.5,'diameter_m':.1,'angle_rad':pi/2,
+          'heat_w_m':20.,'source':'工程师给定正交管道参考工况；非厂家额定值'}
+    p.update(rating_mode='simultaneous',crossing_heat_sources=[heat])
+    # The release scenario is touching trefoil: no invented derated result.
+    with pytest.raises(RatingRefused,match='第 1 条'):
+        sources_for(single_prepare(doc,p))
+    depth=bundled_hv()[0]['scenario']['centre_depth_m']
+    for place,x in zip(doc['sections'][0]['placements'],[-.2,0.,.2]):
+        place.update(x=x,z=-depth)
+    doc['sections'][0]['layout_template'].update(kind='flat',depth=depth,spacing=.2)
+    group=single_prepare(doc,p);base=rate_group(group)['simultaneous_rating']
+    state=min(base['cable_states'],key=lambda s:s['margin_k'])
+    t4=state['external_temperature_rise_k']/state['total_loss_w_m']
+    assert t4>state['t4_self_soil_k_m_w']  # Neighbour losses must not disappear.
+    tl=.0026/model['cable_type']['cores'][0]['conductor']['nominal_area']
+    tr=state['t1_k_m_w']+state['t3_k_m_w']+t4
+    weighted=state['t1_k_m_w']+(1+state['lambda1'])*(state['t3_k_m_w']+t4)
+    wd=state['dielectric_loss_w_m']
+    budget=state['temperature_limit_c']-group.ambient-wd*(state['t1_k_m_w']/2+state['t3_k_m_w']+t4)
+    alpha=group.cables[0]['rating'].conductor.alpha20_per_k
+    dw0=state['ac_resistance_ohm_m']*alpha*base['ampacity_a']**2/(1+alpha*(state['temperature_limit_c']-20))
+    soil=next(m for m in doc['materials'] if m['id']==doc['sections'][0]['medium']['material'])['thermal_resistivity']
+    rise=0.;n=16000;du=32/n
+    for _ in range(100):
+        gamma=sqrt((1-dw0*(1-rise/budget)*weighted)*tl/tr)
+        def integrand(u):
+            return exp(-u)*log1p(4*depth*heat['depth_m']/((depth-heat['depth_m'])**2+(u*sin(heat['angle_rad'])/gamma)**2))
+        integral=du/3*(integrand(0)+integrand(32)+sum((4 if i%2 else 2)*integrand(i*du) for i in range(1,n)))
+        new=heat['heat_w_m']*soil/(4*pi)*integral
+        if abs(new-rise)<1e-9:break
+        rise=new
+    else:raise AssertionError('Independent integral did not converge')
+    actual=Executor(jobs_root=tmp_path).run('cablesim.iec60287','steady-rating',[
+        {'case_id':'qifan-flat-crossing','input':doc,'parameters':p}]).cases[0]
+    assert actual.status=='succeeded',actual.error
+    records=actual.artifacts['x-cablesim.iec60287-trace']['crossing_derating']
+    common=records[-1]
+    assert common['t4_group_effective_k_m_w']==pytest.approx(t4)
+    assert common['rated_cable']==state['entity']
+    assert common['crossing_rise_k']==pytest.approx(new,abs=.05)
+    assert common['derating_factor']==pytest.approx(sqrt(1-new/budget),abs=.0005)
+    assert actual.value('ampacity',doc['circuits'][0]['id'])==pytest.approx(common['derated_current_a'])
+    print({'baseline_a':common['baseline_current_a'],'derated_a':common['derated_current_a'],
+           'factor':common['derating_factor'],'plugin_rise_k':common['crossing_rise_k'],
+           'independent_rise_k':new,'t4_self':state['t4_self_soil_k_m_w'],
+           't4_group':t4,'TL':tl,'Tr':tr,'weighted':weighted})

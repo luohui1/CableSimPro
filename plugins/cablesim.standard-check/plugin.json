@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standard-check",
-  "version": "1.3.1",
+  "version": "1.4.0",
   "name": "产品标准尺寸核对",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -64,7 +64,7 @@
       "kind": "method",
       "id": "dimensions",
       "title": "GB 产品标准结构尺寸与电阻核对",
-      "method_version": "1.2.1",
+      "method_version": "1.4.0",
       "analysis": "standard_check",
       "solver": "local",
       "input_schema": "cablesim.domain/1",
@@ -227,7 +227,7 @@
       "kind": "method",
       "id": "structure-proposal",
       "title": "XLPE 标准结构提案",
-      "method_version": "1.2.0",
+      "method_version": "1.4.0",
       "analysis": "geometry_proposal",
       "solver": "local",
       "input_schema": "cablesim.cable-design-request/2",
@@ -565,6 +565,130 @@
               "type": "number",
               "exclusiveMinimum": 0,
               "maximum": 0.05
+            },
+            "screened": {
+              "enum": [
+                "yes",
+                "no"
+              ],
+              "type": "string",
+              "title": "半导电屏蔽",
+              "description": "完整护层制造输入；须工程师明确，不从假设直径猜测。",
+              "x-group": "model",
+              "x-order": 40,
+              "x-level": "advanced",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1.0,
+                "offset": 0.0
+              },
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "显式选择的完整护层构造；未覆盖分支明确拒绝。"
+              }
+            },
+            "conductor_screen_thickness_m": {
+              "exclusiveMinimum": 0,
+              "maximum": 0.01,
+              "type": "number",
+              "title": "导体屏蔽厚度",
+              "description": "完整护层制造输入；须工程师明确，不从假设直径猜测。",
+              "x-group": "model",
+              "x-order": 41,
+              "x-level": "advanced",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "明确给定的正值制造尺寸，超出方法范围拒绝。"
+              }
+            },
+            "insulation_screen_thickness_m": {
+              "exclusiveMinimum": 0,
+              "maximum": 0.01,
+              "type": "number",
+              "title": "绝缘屏蔽厚度",
+              "description": "完整护层制造输入；须工程师明确，不从假设直径猜测。",
+              "x-group": "model",
+              "x-order": 42,
+              "x-level": "advanced",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "明确给定的正值制造尺寸，超出方法范围拒绝。"
+              }
+            },
+            "screen_tape_thickness_m": {
+              "exclusiveMinimum": 0,
+              "maximum": 0.005,
+              "type": "number",
+              "title": "铜带单带厚度",
+              "description": "完整护层制造输入；须工程师明确，不从假设直径猜测。",
+              "x-group": "model",
+              "x-order": 43,
+              "x-level": "advanced",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "明确给定的正值制造尺寸，超出方法范围拒绝。"
+              }
+            },
+            "screen_tape_width_m": {
+              "exclusiveMinimum": 0,
+              "maximum": 0.5,
+              "type": "number",
+              "title": "铜带宽度",
+              "description": "完整护层制造输入；须工程师明确，不从假设直径猜测。",
+              "x-group": "model",
+              "x-order": 44,
+              "x-level": "advanced",
+              "x-unit": {
+                "si": "m",
+                "display": "mm",
+                "scale": 1000.0,
+                "offset": 0.0
+              },
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "明确给定的正值制造尺寸，超出方法范围拒绝。"
+              }
+            },
+            "armour": {
+              "enum": [
+                "none",
+                "steel_tape"
+              ],
+              "type": "string",
+              "title": "护层构造",
+              "description": "完整护层制造输入；须工程师明确，不从假设直径猜测。",
+              "x-group": "model",
+              "x-order": 45,
+              "x-level": "advanced",
+              "x-unit": {
+                "si": null,
+                "display": null,
+                "scale": 1.0,
+                "offset": 0.0
+              },
+              "x-range-basis": {
+                "kind": "method",
+                "reference": "显式选择的完整护层构造；未覆盖分支明确拒绝。"
+              }
             }
           },
           "$defs": {},
@@ -624,23 +748,28 @@
     },
     {
       "path": "src/cablesim_standard_check/annex.py",
-      "sha256": "cbeea17c0189105ba5c3be5abbabc0055249870c993404bc252a7f23a0a3e10b",
-      "size_bytes": 6004
+      "sha256": "5428609af0790cac85753f32ff43340a8936140bd38748469bf03064a9be7c6d",
+      "size_bytes": 6620
     },
     {
       "path": "src/cablesim_standard_check/basis-records.json",
-      "sha256": "99a7ea426bfe6d3ef349bdef8afcc4b7678048caef9ebbb7f60ffdd3c20c2abb",
-      "size_bytes": 283527
+      "sha256": "575a265b3731af4f1a69b04073e1a0e534bf5420e210b73c654bfdfb20b629b4",
+      "size_bytes": 396399
     },
     {
       "path": "src/cablesim_standard_check/basis.py",
-      "sha256": "455c2a3890b88b4395b814beca1933e44513bc6d10eb715b7d49c3003cb7e7b0",
-      "size_bytes": 9940
+      "sha256": "5856c92bc4e3246a944de526da3018d8de2dcefab77359b5d7edc1381f1c2179",
+      "size_bytes": 11981
     },
     {
       "path": "src/cablesim_standard_check/basis_catalog.py",
       "sha256": "c4306fd7b667440049e5618a64a9c1467e60445d441109bed33837386d93c4d0",
       "size_bytes": 2109
+    },
+    {
+      "path": "src/cablesim_standard_check/coverings.py",
+      "sha256": "1377ef416bd772b62d4c3e3917196d5e359bba0f645422d031c722c053963bd2",
+      "size_bytes": 13785
     },
     {
       "path": "src/cablesim_standard_check/dimensions.json",
@@ -649,13 +778,13 @@
     },
     {
       "path": "src/cablesim_standard_check/main.py",
-      "sha256": "2446162c4493ed806a63ea49ff94c74581c5d259e7cc99795b7cc9ace1d40fda",
-      "size_bytes": 57755
+      "sha256": "fabceba972f37e67c8f359696d1b388f40b5e655ec7bccdb557a885462def151",
+      "size_bytes": 60070
     },
     {
       "path": "src/cablesim_standard_check/proposal.py",
-      "sha256": "604e9522e3c22910c74861a61be10e712249dd0f62ca40f74503b35b27fb7fbd",
-      "size_bytes": 9236
+      "sha256": "6f485e2ac33f970f6b5660eff208a9629c4d94381cf14112c09c426b8df24f7f",
+      "size_bytes": 15614
     },
     {
       "path": "src/cablesim_standard_check/sources.json",
@@ -664,7 +793,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "dd4c78ca230afd589202841c0c6d8abf0c8d8b87f94c9ddcb606995e555c401a",
+      "sha256": "fca3f97675bd1b6a7148f84490f9dab8fb9e723a27c86d9c1ef88bbbdac87d06",
       "size_bytes": 1721
     }
   ]

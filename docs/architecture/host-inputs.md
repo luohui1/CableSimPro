@@ -179,6 +179,10 @@
 
 同条消息中完全相同的工具、参数与输入身份已返回错误时，宿主不再执行该动作；`tool.diagnostic_reused`引用原操作，后续返回DIAGNOSTIC_ALREADY_REPORTED并进入一次收尾。修改输入或进入新消息可重新检查。
 
+`workspace_read`支持`view:outline|locks`、`offset`（默认0）、`limit`（默认20，上限30）。模型视图按完整对象或字段分页，`next_page`给出可直接续读的参数；大纲只保留锁路径总数与读取提示，锁不是缺项。`coverage`标明当前页覆盖范围和未展开项，完整原件保留在会话工具步骤。`study_preflight`优先呈现ready、工况诊断和覆盖范围，方法限制保留省略条数及工作台全文位置；通过只代表保存方法的输入预检，不代表现场真实性、来源已批准或工程合格。同条消息重复读取相同工程修订或预检相同封签的方法时，`tool.result_reused`引用原成功操作；输入修订或方法封签变化不复用。模型仍选择任务路线；整套重复配方均引用旧回执且无待续页时，下一请求只解释结果，`recipe.finished.all_results_reused`及`turn.answer_only`记录原因。
+
+OpenAPI的`x-sse-events`使用指向本扩展内`$defs`的完整JSON Pointer，包含discriminator映射；无需生成客户端时忽略引用警告。真实自由问答回归命令：设置`CABLESIM_AGENT_REAL_USE=1`和`CABLESIM_AGENT_REAL_USE_OUTPUT=.data/agent-live/real-use-r21.json`后运行`python -m pytest -s -q tests/test_harness_free_questions.py`；经发布库隔离副本、正常方法升级接口和平台凭据路径调用实际模型，包含三种自由问法、首次索引请求与实际OpenAPI客户端生成。
+
 `run_read/study_read(run_id)`可由本工程保存运行反查研究；显式研究或会话绑定冲突仍拒绝。`workspace_read`与输入字段读取路径无效时返回PATH_NOT_FOUND，列可用顶层路径、最接近路径和下一步。会话内重复`run_read`同运行、同视图及相同工程/研究版本时引用上次成功结果，`tool.result_reused`记录原操作；不会重读运行或重算。
 
 `fem_comparison_read({run_id?,iec_run_id?,case_id?})`读取保存的IEC/FEM对照工件，或比较输入及IEC参数完全一致的两次保存运行。量值带方法、实体、工况、单位和运行/工件摘要；仅既有收敛检查通过时提供有限元偏差，未收敛保留诊断，工程批准仍为false。温度相对差用K，算术差值不是新的求解结果。省略运行时读取最近有限元运行并搜索最多20个IEC参考档；未匹配明示缺项。`propose_fem_verification({run_id,case_id?,capability?,parameters?,title?})`为当前保存工况生成新建研究方案，方法为封签的iec-thermal-field或iec-fem-comparison，IEC参数由宿主绑定。边界、网格和来源须明确，缺项定位字段；不从CAD显示范围推断求解边界。人保存研究后仍须预检、确认核时并在工作台提交超算；Agent不提交、不求解、不自动批准。
@@ -227,7 +231,9 @@ Agent功能验收使用真实已配置deepseek-flash和发布库隔离副本：P
 kind=validation的查询及plugin的关联优先展示有保存结果的目标，其中已有收敛证据的先展示，再展示其余复现目标和清单声明；同级沿用原更新时间顺序。这个顺序表示证据可供读取，不表示复现状态通过，partial与超限仍保留原值；避免精度查询先读完清单声明而漏掉真实算例。
 
 `backend/index/`在同一只读数据库快照中投影已有元数据，不初始化表、不迁移数据、不求解、不刷新远端作业，也不加载厂家原件、结果正文、计算书HTML或场数组。仅研究配置与运行的冻结方法/锁/型号引用参与当前性检查。页面导航由前端按kind换算，API不返回地址。
-元数据投影复用宿主ReadResponses的有界缓存；SQLite提交与封签源码通知使缓存失效。方案有效期到点、调度回执内容变化、复现库index.json字节或当前快照文件身份变化也会触发重建，不用固定TTL保留旧待办。三个接口与Agent工具共用该投影。宿主完成数据库初始化后，在同一study-read-warmup后台线程先预建统一索引，再预热研究目录；不阻塞启动、不加载历史运行正文。构建期间其他读取最多等待3秒，超时返回503、Retry-After: 1及`detail:{code:"INDEX_BUILDING",state:"building",message,max_wait_seconds:3}`，不返回部分items。内存不足返回INDEX_RESOURCE_PRESSURE；预建失败后普通读取仍可重试，保留原数据。
+元数据投影复用宿主ReadResponses的有界缓存；SQLite提交与封签源码通知使缓存失效。方案有效期到点、调度回执内容变化、复现库index.json字节或当前快照文件身份变化也会触发重建，不用固定TTL保留旧待办。三个接口与Agent工具共用该投影。宿主完成数据库初始化后，在同一study-read-warmup后台线程先预建统一索引，再预热研究目录；索引路由启动阶段最多等5秒再宣告服务就绪，把冷构建等待移出首个页面请求。只变更Agent任务或方案且非Agent元数据及封签来源身份完全一致时，复用已校验清单和运行当前性；研究输入、运行、资源与方法变化仍重建对应状态。不加载历史运行正文、不持有额外数据库连接。构建期间其他读取最多等待3秒，超时返回503、Retry-After: 1及`detail:{code:"INDEX_BUILDING",state:"building",message,max_wait_seconds:3}`，不返回部分items。内存不足返回INDEX_RESOURCE_PRESSURE；预建失败后普通读取仍可重试，保留原数据。
+
+运行回执按批读取：本机作业计划存在时仍调用宿主execution_status读取最新小型回执，始终重新检查计划是否存在；随附超算证据使用宿主evidence_index校验的目录，一批多项不逐项重复核验。仅目录、见证摘要、schema全部字节一致时复用已校验目录，改变任一文件立即重验，不用TTL或仅mtime信任，不读取大场工件或提交作业。缓存仅一份小目录，API回执与宿主原读接口保持一致。Index.last_read记录锁等待、回执、复现目录、缓存及解码耗时和cache_hit，便于区分热读取与来源变化后的重建，不作为工程证据。真实测速与待办验收：设置CABLESIM_AGENT_REAL_USE=1、CABLESIM_AGENT_REAL_USE_OUTPUT指向本轮.data记录，运行`python -m pytest -s -q tests/test_index_real_use.py`；发布库隔离副本经实际HTTP接口，首次读取与10次热读取分别记录，热预算200 ms，随后调用已配置的真实模型和比对已保存超算回执。
 
 
 | 接口 | 请求与结果 |

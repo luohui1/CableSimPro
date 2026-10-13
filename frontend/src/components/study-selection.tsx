@@ -191,7 +191,7 @@ export function StudySelection({
           description={part === "conclusion" ? "" : recommendationBasis}
           metrics={[
             {
-              label: "允许电流",
+              label: "保存温限下允许电流",
               value: recommended.current,
               unit: "A",
               precision: 1,

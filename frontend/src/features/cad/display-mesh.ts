@@ -28,10 +28,11 @@ export function decodeMesh(mesh: DisplayMesh): DisplayMesh {
 }
 
 /** An explicitly marked display envelope. Never exported as native geometry or quantities. */
-export function annulusMesh(lengthM: number, layer: Pick<CadLayer, 'inner_radius_m' | 'outer_radius_m'>): DisplayMesh {
+export function annulusMesh(lengthM: number, layer: Pick<CadLayer, 'inner_radius_m' | 'outer_radius_m' | 'center_m'>): DisplayMesh {
   const inner = layer.inner_radius_m * 1000;
   const outer = layer.outer_radius_m * 1000;
   const length = lengthM * 1000;
+  const centerX = (layer.center_m?.x || 0) * 1000, centerY = (layer.center_m?.z || 0) * 1000;
   const count = Math.max(32, Math.ceil(Math.PI / Math.acos(Math.max(-1, 1 - .08 / outer)) / 4) * 4);
   if (!Number.isFinite(count) || count > 8192) throw new Error('显示包络尺寸超过当前细分范围。');
   const positions: number[] = [];
@@ -40,7 +41,7 @@ export function annulusMesh(lengthM: number, layer: Pick<CadLayer, 'inner_radius
     const start = positions.length / 3;
     for (let index = 0; index < count; index += 1) {
       const angle = index * Math.PI * 2 / count;
-      positions.push(radius * Math.cos(angle), radius * Math.sin(angle), z);
+      positions.push(centerX + radius * Math.cos(angle), centerY + radius * Math.sin(angle), z);
     }
     return start;
   }
@@ -59,7 +60,7 @@ export function annulusMesh(lengthM: number, layer: Pick<CadLayer, 'inner_radius
   for (const z of [0, length]) {
     const outside = ring(outer, z);
     const inside = inner ? ring(inner, z) : positions.length / 3;
-    if (!inner) positions.push(0, 0, z);
+    if (!inner) positions.push(centerX, centerY, z);
     for (let index = 0; index < count; index += 1) {
       const next = (index + 1) % count;
       const cap = inner

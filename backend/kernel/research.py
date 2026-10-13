@@ -10,7 +10,7 @@ from hashlib import sha256
 import json
 import os
 import platform
-from uuid import uuid4
+from uuid import uuid4, uuid5, NAMESPACE_URL
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
 from threading import RLock
@@ -584,6 +584,18 @@ class Research:
                 checked[case['case_id']]=CaseResult(case['case_id'],'failed',error=deepcopy(case['preflight_error']))
                 continue
             try:
+                # Applicability is declared by the sealed plugin, and precedes
+                # parameter completion. The host only evaluates JSON Schema.
+                admission = capability.parameter_schema.model_dump(mode='json',by_alias=True).get('x-input-admission') if capability else None
+                if admission:
+                    from jsonschema import Draft202012Validator
+                    errors = list(Draft202012Validator(admission['schema']).iter_errors(case['input']))
+                    if errors:
+                        from cablesim_sdk.validation import pointer
+                        checked[case['case_id']] = CaseResult(case['case_id'],'not_applicable',error={
+                            'code':'DOMAIN_NOT_SUPPORTED','message':admission['message'],
+                            'path':pointer(('input',*errors[0].absolute_path))})
+                        continue
                 if capability is not None and plugin is not None and plugin.manifest.presentation is not None:
                     from ..plugin_host.parameter_contracts import validate_case
                     validate_case(capability,case)
@@ -613,8 +625,26 @@ class Research:
 
     def preflight(self, wid, sid, revision, study_revision, module=None):
         from .verified_executor import verification_scope
-        with verification_scope():
-            return self._preflight(wid,sid,revision,study_revision,module)
+        from .hpc_executor import HpcExecutor, _CHECK_CONTEXT
+        if not isinstance(self.executor,HpcExecutor):
+            with verification_scope():return self._preflight(wid,sid,revision,study_revision,module)
+        # A caller such as convergence already owns cancellation and operation
+        # identity. Preserve it; bind the actual study, never infer by name.
+        inherited=_CHECK_CONTEXT.get()
+        operation=(inherited or {}).get('id') or str(uuid5(NAMESPACE_URL,f'cablesim-preflight/{wid}/{sid}/{revision}/{study_revision}/{module or "root"}'))
+        binding={'workspace_id':wid,'study_id':sid,'module':module,'workspace_revision':revision,'study_revision':study_revision}
+        token=_CHECK_CONTEXT.set({'cancelled':None,**(inherited or {}),'id':operation,**binding})
+        try:
+            with verification_scope():result=self._preflight(wid,sid,revision,study_revision,module)
+            from .batch_files import atomic
+            for case in result['cases']+result['crosschecks']:
+                evidence=case.get('evidence') or {};case['evidence']=evidence
+                evidence['research_context']={**binding,'operation_id':operation,'input_digest':result['input_digest']}
+                execution=evidence.get('preflight_execution') or {}
+                if execution.get('plan_id'):
+                    atomic(self.executor.root/execution['plan_id']/'research-context.json',evidence['research_context'])
+            return result
+        finally:_CHECK_CONTEXT.reset(token)
 
     def _preflight(self, wid, sid, revision, study_revision, module=None):
         with self.store.db() as db:
@@ -747,9 +777,12 @@ class Research:
             statuses = {c['status'] for c in output['cases']}
             status = 'succeeded' if statuses == {'succeeded'} else 'partial' if 'succeeded' in statuses else 'failed'
             with self.store.db(True) as db:
-                db.execute("UPDATE study_runs SET status=?,output=?,output_digest=?,finished=? WHERE id=? AND owner_epoch=? "
+                committed=db.execute("UPDATE study_runs SET status=?,output=?,output_digest=?,finished=? WHERE id=? AND owner_epoch=? "
                            "AND execution_nonce=? AND status='running'",
-                           (status, encode(output), fingerprint(output), stamp(), rid, self.owner_epoch, nonce))
+                           (status, encode(output), fingerprint(output), stamp(), rid, self.owner_epoch, nonce)).rowcount
+            if committed and status in ('succeeded','partial') and plugin.manifest.id=='cablesim.iec60287':
+                jobs=getattr(self,'delivery_jobs',None)
+                if jobs is not None:jobs.warm_saved_image(wid,rid)
         except Exception as exc:
             error = {'code': getattr(exc, 'code', type(exc).__name__), 'message': str(exc)}
             with self.store.db(True) as db:
@@ -1089,7 +1122,7 @@ class Research:
                 'digest':digest,'created':created,'version_status':cover_status(runs)}
 
     @saved_scope
-    def delivery(self, wid, did):
+    def delivery(self, wid, did, *, include_version_status=True):
         with self.store.db() as db:
             row = db.execute('SELECT * FROM deliveries WHERE workspace=? AND id=?', (wid, did)).fetchone()
         if row is None:
@@ -1102,7 +1135,8 @@ class Research:
             raise HTTPException(409, '计算书完整性校验失败。') from None
         if digest != result['digest']:
             raise HTTPException(409, '计算书完整性校验失败。')
-        from .version_status import cover_status
-        from .fem_evidence import display_read
-        result['version_status'] = cover_status([display_read(self, wid, s['run_id']) for s in result['sources']])
+        if include_version_status:
+            from .version_status import cover_status
+            from .fem_evidence import display_read
+            result['version_status'] = cover_status([display_read(self, wid, s['run_id']) for s in result['sources']])
         return result

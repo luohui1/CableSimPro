@@ -35,7 +35,10 @@
 .project-study-table .project-calc { max-width: 100%; }
 .project-study-table .project-calc > span { min-width: 0; overflow-wrap: anywhere; }
 .command-bar .command-state { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.project-explorer .explorer-calc > .explorer-state { flex: none; white-space: nowrap; }
+.project-explorer .explorer-calc { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+.project-explorer .explorer-calc > .explorer-study-name { min-width: 0; }
+.project-explorer .explorer-calc > .explorer-study-name b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.project-explorer .explorer-calc > .explorer-state { grid-column: 2; justify-self: start; white-space: nowrap; font-weight: var(--weight-normal); }
 .project-explorer .explorer-item > span, .project-explorer .explorer-item b, .project-explorer header strong { white-space: normal; overflow-wrap: anywhere; overflow: visible; text-overflow: clip; }
 .study-inspector .inspector-lead { white-space: normal; overflow-wrap: anywhere; }
 .study-inspector .select-trigger { height: auto; min-height: var(--control-compact); white-space: normal; }
@@ -63,6 +66,7 @@
 .study-detail-group > summary .muted { margin-left: auto; font-weight: normal; }
 .study-detail-content { padding: var(--space-2) 0 var(--space-3); }
 .study-detail-content .heat-section > h3 { display: none; }
+.study-workbench .heat-detail-temps dd { font-weight: var(--weight-normal); }
 .study-workbench .answer-bar { padding: var(--space-2) var(--space-3); }
 .study-workbench .answer-bar .conclusion { flex-wrap: nowrap; align-items: center; gap: var(--space-3); }
 .study-workbench .answer-bar .conclusion-copy { flex: 1 1 auto; min-width: 0; }

@@ -4,9 +4,10 @@ export type Quantity = { key: string; name: string; dimension: string; unit: str
 export type BasisRecord = {
   id: string; standard: string; edition: string; clause: string; table: string; title: string;
   row: number; column: string; row_label: string; axes: Record<string, unknown>;
+  semantic: string; criterion: string;
   printed_page: number; pdf_page: number; source_sha256: string; record_sha256: string;
   conditions: Record<string, unknown>; column_conditions?: Record<string, unknown>; quantity: Quantity; value: unknown; citation: string;
-  value_details?: { formula_text?: string; variables?: { name: string; description: string; unit: string }[] }; limitations: string[];
+  value_details?: { formula_text?: string; variables?: { name: string; description: string; unit: string }[]; [key: string]: unknown }; limitations: string[];
   column_header?: { name: string; unit: string };
   verification: { status: string; methods: { method?: string; description?: string; [key: string]: unknown }[] };
 };

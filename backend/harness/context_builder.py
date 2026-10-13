@@ -30,7 +30,7 @@ def content_digest(value):
 def compress_result(value,maximum=RESULT_BYTES):
     """Project a model observation; durable steps always retain the original JSON."""
     data=value.get('data') or {}
-    if data.get('projection') in ('platform_read','draft_geometry') and 'agent_projection' in data:
+    if data.get('projection') in ('platform_read','draft_geometry','workspace_input','study_preflight') and 'agent_projection' in data:
         value={**value,'data':data['agent_projection']}
     if fits(value,maximum):return value
     result={key:value[key] for key in ('status','summary','execution_ref') if key in value}
@@ -45,7 +45,7 @@ def compress_result(value,maximum=RESULT_BYTES):
         if fits(item,budget):return item
         if isinstance(item,(dict,list)):
             output={} if isinstance(item,dict) else []
-            priority=('proposal','enabled_tools','headlines','run_id','study_id','draft_id','input_digest','status','preview','persisted',
+            priority=('proposal','enabled_tools','headlines','run_id','study_id','draft_id','input_digest','status','ready','partial','coverage','next_page','preview','persisted',
                 'engineering_approval','source_run_id','source_case_id','proposal_id','method','fields','objects',
                 'sections','materials','cable_types','circuits','load_cases','cases','factors','results','assessment','checks')
             pairs=sorted(item.items(),key=lambda row:priority.index(row[0]) if row[0] in priority else len(priority)) if isinstance(item,dict) else enumerate(item)

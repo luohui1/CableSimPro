@@ -16,7 +16,7 @@ import httpx
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / '.data/agent-live/real-use-r20.json'
+OUTPUT = Path(os.environ.get('CABLESIM_AGENT_REAL_USE_OUTPUT',ROOT / '.data/agent-live/real-use-r20.json'))
 pytestmark = pytest.mark.skipif(os.environ.get('CABLESIM_AGENT_REAL_USE') != '1',
     reason='Real provider calls require explicit CABLESIM_AGENT_REAL_USE=1; no fake fallback.')
 
@@ -28,6 +28,43 @@ def serve(database, credential_database, port, stop):
     from threading import Thread
     import uvicorn
     app = create_app(database)
+    @app.get('/__acceptance/index-timing',include_in_schema=False)
+    def index_timing():
+        index=app.state.research.object_index
+        return {'warm_state':index.warm_state,'build':index.last_build,'startup_wait_ms':index.startup_wait_ms,'read':index.last_read}
+    @app.middleware('http')
+    async def timed_index(request,call_next):
+        from time import perf_counter
+        started=perf_counter();response=await call_next(request)
+        if request.url.path.startswith('/api/index/'):
+            response.headers['X-Acceptance-Server-Ms']=str((perf_counter()-started)*1000)
+        return response
+    @app.get('/__acceptance/index-profile',include_in_schema=False)
+    def index_profile():
+        import cProfile
+        import pstats
+        profiler=cProfile.Profile()
+        profiler.runcall(app.state.research.object_index.objects,kind='study',limit=100)
+        stats=pstats.Stats(profiler)
+        return {'total_seconds':stats.total_tt,'functions':[
+            {'file':key[0],'line':key[1],'function':key[2],'calls':value[1],
+             'self_seconds':value[2],'cumulative_seconds':value[3]}
+            for key,value in sorted(stats.stats.items(),key=lambda row:row[1][3],reverse=True)[:25]]}
+    @app.get('/__acceptance/execution-consistency',include_in_schema=False)
+    def execution_consistency():
+        index=app.state.research.object_index;executor=app.state.research.executor
+        from backend.kernel.hpc_evidence import evidence_index
+        catalog,_=evidence_index()
+        targets=dict(index.runs)
+        targets.update({operation:{'plugin_id':entry['plugin_id'],'capability':entry['capability']}
+            for operation,entry in catalog['executions'].items()})
+        direct=[]
+        for operation,method in targets.items():
+            value=executor.execution_status(operation,method['plugin_id'],method['capability'])
+            if value:direct.append((operation,value))
+        batch=index.execution_reader.read(executor,targets.items())
+        return {'equal_to_host':batch==direct,'saved_runs':len(index.runs),
+            'receipts':len(batch),'bundled_receipts':sum(bool(value.get('saved_evidence')) for _,value in batch)}
     # Reuse only the OS account identifier. The platform itself reads its key
     # through the ordinary KeyStore/provider path; the test never reads a key.
     app.state.harness.settings.keys.account = KeyStore(credential_database).account
@@ -72,7 +109,7 @@ class RealUse:
             'proposals':record['proposals'],'steps':[{'id':s['node_id'],'tool':s['tool'],'state':s['state'],
                 'summary':s['result']['summary'],'diagnostics':s['result']['diagnostics'],
                 'next_actions':s['result']['next_actions']} for s in record['steps'] if s.get('result')],
-            'audit':[e for e in record['events'] if e['type'] in ('model.request','model.result','turn.answer_only',
+            'audit':[e for e in record['events'] if e['type'] in ('model.request','model.result','turn.answer_only','recipe.finished','tool.result_reused',
                 'answer.accepted','answer.repair','answer.fallback','answer.diagnostic','plan.blocked','tool.diagnostic_reused')]}
         self.report['tasks'].append(item);self.save()
         print(json.dumps({'task':name,'model_requests':record['budget']['model_requests'],
@@ -117,6 +154,11 @@ def real_use(tmp_path_factory):
                 else:raise AssertionError(f'Host did not start; see {log_path}')
                 assert status['configured'] and status['model']=='deepseek-flash', 'Use the configured real DeepSeek provider'
                 run.report.update(model=status['model'],port=port,source_database=str(source),isolated_database=str(database))
+                started=monotonic()
+                inbox=run.api('GET','/api/index/inbox')
+                run.report['index_first_request']={'elapsed_ms':(monotonic()-started)*1000,
+                    'counts':inbox['counts'],**run.api('GET','/__acceptance/index-timing')}
+                run.save()
                 yield run
             finally:
                 run.save();stop.touch()

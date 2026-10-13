@@ -40,6 +40,9 @@ npm run test:names               # 全局显示名、扫描结论/刻度、来�
 npm run test:documents           # 真实PDF/OCR、核对/提案/批准、断线重放、单位对拍；隔离数据库
 npm run test:document-batch      # 五个真实规格、快捷核对、批量提案/批准与断线幂等
 npm run test:accessibility       # 全路由WCAG、可见焦点/表格键盘与首屏冷缓存测量
+npm run test:performance         # 发布库隔离副本，逐页冷/热内容就绪与三维/场图首帧预算
+npm run test:regularity          # 实际内容就绪后，双尺寸规整检查与1366逐页总览
+npm run test:visible-text        # 同一真实页面集合，可见标识、悬停和折叠层分别计数
 npm run test:inquiry             # 问询数字输入、简明预检、冻结工况与历史跳转
 npm run test:version-status      # 版本过期、确认重算/轮询、冲突与温度场缺项；隔离演示库
 npm run test:host-connections    # 交付存档下载、研究撤销/重做、仿真问题格式导入；不启动求解
@@ -53,6 +56,10 @@ npm run capture:handoff          # 只读截取正式前端，可加 -- --route=
 `test:version-status` 默认执行真实 IEC 重算。发布资产阻塞构建时，`E2E_DEV=1` 使用隔离的 Vite 开发服务；`VERSION_UI_ONLY=1` 只注入运行传输状态，复用真实保存数值检验确认、轮询和错误处理，不代表真实求解通过。演示温度场没有保存温限判定或超出量时显示“无法判断”，不在前端从温度和材料上限推导结论。
 
 ## 代码职责
+
+三个全站巡检共用发布库中的实际对象与模块清单。性能巡检默认 1366×768 浅色，无网络或 CPU 节流：冷加载为清空浏览器 HTTP 缓存后完整导航，热加载为保留缓存刷新同页，两次均重新建立客户端查询缓存；服务端不重启，因此不代表服务端冷启动。内容预算为冷 3 秒、热 1 秒，CAD/场图真实首帧另记 5 秒。主要内容必须出现，可见加载状态结束并经过绘制；截图还等待字体与画布，不使用固定休眠或 networkidle。加载超时只出现在未覆盖证据中，不能进入正常首屏总览。输出见 `.data/fix-round/shared-shell/performance/` 与 `regularity/`。
+
+可用 `VISIBLE_TEXT_PATHS`（竖线分隔的真实路由）缩小同一巡检清单，`PERFORMANCE_PASS`、`REGULARITY_PASS` 分开保存不同实测批次。`E2E_FRONTEND_DIST` 可指定冻结的构建目录，避免并行构建改变验收版本。性能巡检由隔离后端拒绝写请求，保留真实浏览器缓存；另外两项使用客户端只读守卫。`problems.md` 按线程列出超预算项，分开列最慢接口、下载、主线程任务和 CAD 初始化回执；`findings.md` 包含每次测量及界面终态，`audit.json` 保留完整时间线和未覆盖项。时间预算通过不代表功能成功，错误终态仅测提示呈现时间。没有观测来源的 CPU 阶段不猜测为 WASM 初始化。
 
 | 位置 | 职责与边界 |
 | --- | --- |

@@ -10,7 +10,7 @@ export const repositoryRoot = fileURLToPath(new URL('../../', import.meta.url));
 export const outputRoot = path.join(repositoryRoot, '.data', 'frontend-handoff');
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-export async function openHeadlessBrowser({ headed = false, executable: requestedExecutable } = {}) {
+export async function openHeadlessBrowser({ headed = false, executable: requestedExecutable, routeGuard = true } = {}) {
   const executable = requestedExecutable || process.env.BROWSER_EXECUTABLE || [
     'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
     'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
@@ -25,6 +25,8 @@ export async function openHeadlessBrowser({ headed = false, executable: requeste
     '--no-first-run', '--no-default-browser-check', '--disable-background-networking',
     '--disable-component-update', 'about:blank',
   ], { windowsHide: !headed, stdio: 'ignore' });
+  let closing = false;
+  child.on('exit', (code, signal) => { if (!closing) console.error(`本任务浏览器意外退出：PID ${child.pid}，code=${code}，signal=${signal}`); });
   let browser;
   try {
     let port;
@@ -36,14 +38,16 @@ export async function openHeadlessBrowser({ headed = false, executable: requeste
     if (!port) throw new Error('浏览器 CDP 启动超时。');
     browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
     const context = browser.contexts()[0];
-    if(process.env.E2E_ISOLATED==="1")await context.route('**/api/**',route=>{
+    if(process.env.E2E_ISOLATED==="1" && routeGuard)await context.route('**/api/**',route=>{
       if(!['GET','HEAD','OPTIONS'].includes(route.request().method()) && new URL(route.request().url()).origin!==process.env.FRONTEND_URL)return route.abort('blockedbyclient');
       return route.fallback();
     });
     const page = await context.newPage();
+    page.on('crash', () => console.error('本任务页面渲染进程崩溃：' + page.url()));
     // This browser and all its tabs are task-owned, with an isolated profile.
     for (const initial of context.pages()) if (initial !== page) await initial.close();
     return { browser, context, page, close: async () => {
+      closing = true;
       for (const ownedPage of context.pages()) await ownedPage.close();
       console.log(`浏览器清理：剩余标签页 ${context.pages().length}。`);
       try {
@@ -57,6 +61,7 @@ export async function openHeadlessBrowser({ headed = false, executable: requeste
       await fs.rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 400 });
     } };
   } catch (error) {
+    closing = true;
     await browser?.close().catch(() => {});
     child.kill();
     if (path.resolve(profile).startsWith(scratchRoot + path.sep)) await fs.rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 400 });

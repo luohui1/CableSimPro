@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.simulation",
-  "version": "1.4.1",
+  "version": "1.5.0",
   "name": "电缆有限元仿真",
   "description": "多区域稳态导热与GetDP时谐涡流、Elmer稳态/瞬态热适配，使用统一问题、网格和复现工件。",
   "icon": "assets/icon.svg",
@@ -24544,6 +24544,16 @@
       "size_bytes": 23290
     },
     {
+      "path": "assets/engineering-evidence-index.json",
+      "sha256": "685e233b138bcdebac994471f34ea19e74a1fa1dddde6c77fb473d80df072bdd",
+      "size_bytes": 20275
+    },
+    {
+      "path": "assets/engineering-evidence-schema.json",
+      "sha256": "5e782b441e0f249ced8e9ccbdf7774a52cc07d636384204e85f26c06e78ffabb",
+      "size_bytes": 3308
+    },
+    {
       "path": "assets/icon.svg",
       "sha256": "862cf69ec46161a956bc7fb78cdd4c44ba33105457f21ce2e3120655c6bd6170",
       "size_bytes": 333
@@ -24734,9 +24744,14 @@
       "size_bytes": 7968
     },
     {
+      "path": "src/cablesim_simulation/three_core_history.py",
+      "sha256": "2e8f982d51f25d6e0983cbde6a10aba148890c9c18ce1c3814ff76324da0a02c",
+      "size_bytes": 19528
+    },
+    {
       "path": "src/cablesim_simulation/three_core_thermal.py",
-      "sha256": "bde3bdd52084f83d2680f73d80b021a14c341e9c34db634e957e845f39d08d21",
-      "size_bytes": 23967
+      "sha256": "60fdce48b628bd7f507359897002c33ace4bb6a0ba2c1381ff77b3289fb6ac11",
+      "size_bytes": 24252
     },
     {
       "path": "src/cablesim_simulation/transient.py",
@@ -24820,7 +24835,7 @@
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "c8f110ada42e4137dbca269dba37ed51a45db12c7a25beaeacca017c77deb945",
+      "sha256": "618df1b45415d65bc9542957425808d5ebab7116759e8cd20da516f74965f791",
       "size_bytes": 5498
     }
   ]

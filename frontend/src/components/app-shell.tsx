@@ -21,6 +21,6 @@ export function AppShell({ title, path, status, actions, tabs, children, propert
   const modules = sidebar || (gallery ? <><Link className="module-item" to="/gallery" search={{theme}}>组件陈列</Link><Link className="module-item" to="/gallery/selection" search={{theme,state:'success',tab:'results'}}>选型样稿</Link></> : null);
   return <>
     {slot && modules && createPortal(modules, slot)}
-    <section className={`work-panel ${gallery ? 'shell-gallery' : ''}`}><header className="topbar">{path && <span className="topbar-path">{path}<span aria-hidden="true">/</span></span>}<h1>{title}</h1>{status}<div className="topbar-actions">{actions}</div></header>{tabs && <div className="page-tabs">{tabs}</div>}<div className={`work-body ${property ? 'has-property' : ''} ${propertyCollapsed ? 'is-property-collapsed' : ''}`} data-animating={animating || undefined}><main className="main-content">{children}</main>{property}</div>{checks}</section>
+    <section className={`work-panel ${gallery ? 'shell-gallery' : ''}`}><header className="topbar">{path && <span className="topbar-path">{path}<span aria-hidden="true">/</span></span>}<h1 title={title}>{title}</h1>{status}<div className="topbar-actions">{actions}</div></header>{tabs && <div className="page-tabs">{tabs}</div>}<div className={`work-body ${property ? 'has-property' : ''} ${propertyCollapsed ? 'is-property-collapsed' : ''}`} data-animating={animating || undefined}><main className="main-content">{children}</main>{property}</div>{checks}</section>
   </>;
 }

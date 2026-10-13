@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from jsonschema import Draft202012Validator
 
 from .contracts import ToolResult
-from .context_builder import fits, RESULT_BYTES
+from .context_builder import fits, RESULT_BYTES, compress_result
 
 
 def turn_steps(record):
@@ -52,9 +52,9 @@ def state(record, tools):
     seen, stalled = set(), 0
     for step in current:
         tool = tools.get(step['tool'])
-        if not tool or tool.kind != 'read' or tool.name == 'task_plan' or not step.get('result'):
+        if not tool or (tool.kind != 'read' and tool.name!='study_preflight') or tool.name == 'task_plan' or not step.get('result'):
             continue
-        result = step['result']
+        result = compress_result(step['result'])
         # Tool/receipt identity matters; timings and host operation IDs do not.
         observed = {'tool': tool.name, 'status': result['status'], 'data': result.get('data'),
                     'diagnostics': result.get('diagnostics')}

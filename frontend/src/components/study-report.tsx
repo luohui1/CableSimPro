@@ -14,7 +14,8 @@ import {
   optionalRecord,
 } from "@/api/client";
 import { Button } from "./ui/button";
-import { EmptyState, ErrorState, LoadingState, StaleBanner } from "./states";
+import { EmptyState, LoadingState, StaleBanner } from '@/components/states';
+import { StudyErrorState as ErrorState } from '@/components/study-error-state';
 import { StatusMark } from "./status-mark";
 import { Link, useSearch } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
@@ -122,17 +123,32 @@ function CurrentReport({
   }
   const [preview, setPreview] = useState('');
   const [previewError, setPreviewError] = useState<Error>();
+  const pdfCache=useRef(new Map<string,Blob>());
+  async function savedPdf(book:Record<string,unknown>,edition:ReportAudience) {
+    const key=text(book.id)+':'+text(book.digest)+':'+edition;
+    const cached=pdfCache.current.get(key);if(cached)return cached;
+    const response=await fetch(`/api/workspaces/${wid}/deliveries/${text(book.id)}/pdf?audience=${edition}`);
+    if(!response.ok)throw new ApiError(response.status,'保存 PDF 读取失败，请重试；计算书与运行记录保持不变。');
+    const bytes=await response.arrayBuffer();
+    const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),v=>v.toString(16).padStart(2,'0')).join('');
+    if(response.headers.get('X-Delivery-SHA256')!==book.digest || response.headers.get('X-Artifact-SHA256')!==hash || new TextDecoder().decode(bytes.slice(0,5))!=='%PDF-')throw new ApiError(409,'保存 PDF 与所选交付摘要不一致，拒绝预览。');
+    const blob=new Blob([bytes],{type:'application/pdf'});pdfCache.current.set(key,blob);
+    while(pdfCache.current.size>4)pdfCache.current.delete(pdfCache.current.keys().next().value!);
+    return blob;
+  }
   useEffect(() => {
     setPreview('');setPreviewError(undefined);
     if (!document.data) return;
-    let url: string;
-    try {
+    let url: string;let disposed=false;
+    void (async()=>{try {
       // Preview the actual customer/internal PDF selected for export. The saved
       // HTML remains an evidence archive, including its diagnostic source keys.
-      url = URL.createObjectURL(deliveryPdf(document.data, audience));
+      const blob=typeof document.data.html==='string' ? deliveryPdf(document.data,audience) : await savedPdf(document.data,audience);
+      if(disposed)return;
+      url = URL.createObjectURL(blob);
       setPreview(url);
-    } catch (error) { setPreviewError(error as Error); }
-    return () => { if (url) URL.revokeObjectURL(url); };
+    } catch (error) { if(!disposed)setPreviewError(error as Error); }})();
+    return () => { disposed=true;if (url) URL.revokeObjectURL(url); };
   }, [document.data, audience]);
   async function fresh() {
     if (!run || dirty)
@@ -158,7 +174,11 @@ function CurrentReport({
       if(generating.current)throw new ApiError(409,'计算书正在生成，请等待当前任务。');
       generating.current=true;cancelRequested.current=false;setGeneration({state:'running',stage:'source'});
       try {
-      const source = await fresh();
+      // The host revalidates integrity, freshness and source revisions before
+      // committing. Use the already saved run for drawing; avoid a duplicate
+      // multi-megabyte detail request on the generation critical path.
+      if (!run || dirty) throw new ApiError(409, '请先保存研究并选择完整的保存运行。');
+      const source = run;
       const rid = text(source.id);
       if (primaryFem && !chapterReference) throw new ApiError(422, '请选择输入匹配的 IEC 对照运行。');
       if (chapterReference && (!chapterConverged || chapter.error || chapter.isFetching)) throw new ApiError(422, '请先核对有限元章节；未收敛或输入不一致不能交付。');
@@ -182,8 +202,9 @@ function CurrentReport({
       }
       if(job.state==='cancelled'){request.current={run:'',id:''};throw new ApiError(499,'已取消生成，保存运行未改变。');}
       if(job.state!=='succeeded')throw new ApiError(422,text(optionalRecord(job.error).message) || '计算书生成失败，保存运行未改变。');
-      const book = await delivery(wid,text(job.delivery_id));
+      const book = optionalRecord(job.delivery_receipt);
       verify(book, source);
+      await savedPdf(book,'customer');
       return book;
       } finally {generating.current=false;}
     },
@@ -198,9 +219,9 @@ function CurrentReport({
     retry: false,
     mutationFn: async ({format, audience}: {format: "pdf" | "html"; audience: ReportAudience}) => {
       const source = await fresh();
-      const book = await delivery(wid, did);
+      const book = document.data || await delivery(wid, did);
       verify(book, source);
-      return format === "pdf" ? deliveryPdf(book, audience) : deliveryFile(wid, did, text(book.digest));
+      return format === "pdf" ? savedPdf(book,audience) : deliveryFile(wid, did, text(book.digest));
     },
     onSuccess: (blob, {format, audience}) => {
       downloadBlob(blob, format === "html" ? "计算书存档.html" : `${audience === "customer" ? "客户" : "内部"}计算书.pdf`);
@@ -228,8 +249,8 @@ function CurrentReport({
       sources[0].output_digest !== source.output_digest
     )
       throw new ApiError(409, "计算书与所选运行不一致，拒绝预览和导出");
-    if (typeof book.html !== "string")
-      throw new ApiError(502, "计算书没有正文");
+    if (typeof book.renderer !== 'string' || !/^[a-f0-9]{64}$/.test(text(book.digest)))
+      throw new ApiError(502, "计算书没有有效的保存回执");
   }
   if (!run)
     return (
@@ -292,9 +313,9 @@ function CurrentReport({
       {!did && <section aria-label="计算书附图与章节" className="report-toolbar">
         {cadImage && <label><input type="checkbox" checked={includeImage} disabled={create.isPending} onChange={event => setIncludeImage(event.target.checked)} /> 插入三维导出图（含色标与来源）</label>}
         {primaryFem ? <Select label="IEC 对照运行" value={selectedIec} disabled={create.isPending || related.isFetching} onChange={setIecId}
-          options={[{value:'',label:'选择保存的 IEC 运行'},...savedRuns.filter(row => methodOf(row).plugin_id === 'cablesim.iec60287').map(row => ({value:text(row.id),label:savedRunLabel(row)}))]} />
+          options={[{value:'',label:'选择保存的 IEC 运行'},...savedRuns.filter(row => methodOf(row).plugin_id === 'cablesim.iec60287').map(row => ({value:text(row.id),label:savedRunLabel(row,'保存运行',text(row.study_name) || text(optionalRecord(optionalRecord(row.snapshot).definition).title))}))]} />
           : methodOf(run).plugin_id === 'cablesim.iec60287' && <Select label="有限元章节" value={femId} disabled={create.isPending || related.isFetching} onChange={setFemId}
-            options={[{value:'',label:'仅所选 IEC 运行'},...savedRuns.filter(row => methodOf(row).capability === 'iec-thermal-field').map(row => ({value:text(row.id),label:savedRunLabel(row)}))]} />}
+            options={[{value:'',label:'仅所选 IEC 运行'},...savedRuns.filter(row => methodOf(row).capability === 'iec-thermal-field').map(row => ({value:text(row.id),label:savedRunLabel(row,'保存运行',text(row.study_name) || text(optionalRecord(optionalRecord(row.snapshot).definition).title))}))]} />}
         {(chapter.isFetching || femEvidence.isFetching) && <span role="status">正在核对保存章节与收敛证明</span>}
         {chapter.data && !chapter.isFetching && <span role="status">有限元章节已核对 · {chapterConverged ? '已收敛' : '未收敛'}</span>}
       </section>}

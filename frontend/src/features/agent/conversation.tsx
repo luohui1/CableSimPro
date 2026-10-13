@@ -3,6 +3,8 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/icon";
 import { ObjectChip } from "@/components/object-link";
 import { significantNumber, formatDateTime } from "@/lib/format";
+import { displayName, displayText } from '@/lib/display-names';
+import type { ObjectCard } from '@/api/object-index';
 import { EVIDENCE_LABEL, type Preview, type SavedRun, type Step, type Turn } from "./transcript";
 import type { AgentProposal } from "./agent-api";
 import "./agent.css";
@@ -11,6 +13,25 @@ import "./agent.css";
    提问气泡 · 工作过程（收起一行、展开每步）· 回答 · 试算卡 · 改动审核（按住批准）· 输入栏。 */
 
 type Label = (entity: string) => string;
+const UUID = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
+function proposalFieldLabel(path: string, label: Label) {
+  const parts = path.split('/').slice(1).map(part => part.replaceAll('~1', '/').replaceAll('~0', '~'));
+  const core = parts.indexOf('cores'), layer = parts.indexOf('layers');
+  const field = parts.at(-1) || '';
+  const key = layer >= 0 ? `${parts[layer + 1]}_${field}` : field;
+  const name = displayName(key);
+  return [core >= 0 ? label(parts[core + 1]) : '', name !== key ? name : '参数字段'].filter(Boolean).join(' · ');
+}
+function readableAgentText(value: string, label: Label, refs: ObjectCard[] = []) {
+  const names = new Map(refs.map(card => [card.id, card.name]));
+  const paths = value.replace(/\/(?:cable_types|parameters|values|materials|sections|circuits|loads|requirements|driver|definition)(?:\/[A-Za-z0-9_~.-]+)+/g, path => proposalFieldLabel(path, label));
+  const entities = paths.replace(/\b(?:circuit|core|cable|section|material|load|case|condition|layer)\/[A-Za-z0-9_/-]+/g, id => label(id));
+  return displayText(entities.replace(UUID, id => names.get(id) || '保存记录')
+    .replace(/\bA\/B\/C\b/g, 'A、B、C')
+    .replace(/\bv0 soil\b/g, '土壤')
+    .replace(/\bv0 screen, construction unspecified\b/g, '屏蔽（结构未明确）')
+    .replace(/\bunspecified\b/g, '未明确'));
+}
 /** 方案前后值：去掉浮点噪声，前后按同样的小数位显示（1.0 → 1.2）。 */
 const decimals = (value: unknown) => (typeof value === "number" ? (String(Number(value.toPrecision(10))).split(".")[1] || "").length : 0);
 const show = (value: unknown, places = decimals(value)) => (value === null || value === undefined ? "—" : typeof value === "number" ? Number(value.toPrecision(10)).toFixed(Math.min(places, 6)) : typeof value === "object" ? JSON.stringify(value) : String(value));
@@ -34,8 +55,10 @@ export function AnswerText({ text }: { text: string }) {
     }
     if (rows.length) {
       const [head, ...body] = rows;
-      blocks.push(<div key={blocks.length} className="agent-answer-table"><table><thead><tr>{head.map((cell, index) => <th key={index}>{inline(cell)}</th>)}</tr></thead>
-        <tbody>{body.map((row, index) => <tr key={index}>{row.map((cell, column) => <td key={column}>{inline(cell)}</td>)}</tr>)}</tbody></table></div>);
+      const numberCell = (cell: string) => /^[+−-]?\d[\d ,]*(?:\.\d+)?\s*(?:[A-Za-z°%²³·/]+)?$/.test(cell.replace(/\*\*|`/g, '').trim());
+      const numericColumns = head.map((_, column) => body.some(row => numberCell(row[column] || '')) && body.every(row => ['','—'].includes(row[column] || '') || numberCell(row[column])));
+      blocks.push(<div key={blocks.length} className="agent-answer-table"><table><thead><tr>{head.map((cell, index) => <th key={index} className={numericColumns[index] ? 'numeric' : undefined}>{inline(cell)}</th>)}</tr></thead>
+        <tbody>{body.map((row, index) => <tr key={index}>{row.map((cell, column) => <td key={column} className={numericColumns[column] ? 'numeric' : undefined}>{inline(cell)}</td>)}</tr>)}</tbody></table></div>);
     }
     paragraph = []; items = []; rows = [];
   };
@@ -52,7 +75,7 @@ export function AnswerText({ text }: { text: string }) {
     else if (bullet || numbered) {
       if (paragraph.length) { const kept = items; items = []; flush(); items = kept; }
       items.push({ ordered: !!numbered, text: (bullet || numbered)![1] });
-    } else if (heading) { flush(); blocks.push(<p key={blocks.length} className="agent-answer-heading">{inline(heading[1])}</p>); }
+    } else if (heading) { flush(); blocks.push(<h3 key={blocks.length} className="agent-answer-heading">{inline(heading[1])}</h3>); }
     else { if (items.length) flush(); paragraph.push(line); }
   }
   flush();
@@ -82,7 +105,7 @@ const stepIcon = (step: Step, kinds: Map<string, string>) =>
   step.tool === "answer-check" ? "result/evidence" : ({ read: "agent/step-read", propose: "agent/proposal", run: "agent/step-run" } as Record<string, string>)[kinds.get(step.tool) || "read"] || "agent/step-read";
 
 /** 工作过程：进行中展开并显示当前步骤；完成后收成“已完成 N 步，用时 …”。 */
-export function WorkSteps({ turn, kinds }: { turn: Turn; kinds: Map<string, string> }) {
+export function WorkSteps({ turn, kinds, label = displayName }: { turn: Turn; kinds: Map<string, string>; label?: Label }) {
   const elapsed = useElapsed(turn);
   const [open, setOpen] = useState(false);
   const steps = turn.steps;
@@ -100,7 +123,7 @@ export function WorkSteps({ turn, kinds }: { turn: Turn; kinds: Map<string, stri
     {expanded && <ol className="agent-step-list">{steps.map((step) => <li key={step.id} className={`agent-step is-${step.status}`}>
       <Icon name={stepIcon(step, kinds)} />
       <b>{step.title}</b>
-      {step.summary && <span>{step.summary}</span>}
+      {step.summary && <span title={step.summary}>{readableAgentText(step.summary, label, turn.refs)}</span>}
       <time>{step.status === "running" ? "…" : step.ms !== undefined ? seconds(step.ms) : ""}</time>
     </li>)}</ol>}
   </div>;
@@ -158,20 +181,25 @@ export function HoldButton({ children, onConfirm, disabled, loading }: { childre
 }
 
 /** 改动审核：字段级前后值；只有人能批准，批准走工作台同一保存路径。 */
-export function ProposalCard({ proposal, onDecide, busy, error, receipt }: { proposal: AgentProposal; onDecide: (id: string, decision: "approve" | "reject") => void; busy?: boolean; error?: string; receipt?: { created: string; actor?: string; status: string } }) {
+export function ProposalCard({ proposal, onDecide, busy, error, receipt, label = displayName }: { proposal: AgentProposal; onDecide: (id: string, decision: "approve" | "reject") => void; busy?: boolean; error?: string; receipt?: { created: string; actor?: string; status: string }; label?: Label }) {
+  const title = readableAgentText(proposal.title, label);
+  const shortTitle = title.length > 50 ? title.split(' · ')[0] : title;
   return <article className={`agent-review-card is-${proposal.status}`}>
-    <header><Icon name="agent/proposal" /><b>{proposal.title}</b><span>{proposal.status === "approved" ? "已批准" : proposal.status === "rejected" ? "已拒绝" : `待审核 · ${proposal.changes.length} 项`}</span></header>
+    <header><Icon name="agent/proposal" /><b title={title}>{shortTitle}</b><span>{proposal.status === "approved" ? "已批准" : proposal.status === "rejected" ? "已拒绝" : `待审核 · ${proposal.changes.length} 项改动`}</span></header>
+    {shortTitle !== title && <details className="agent-notice-details"><summary>方案说明</summary><p>{title}</p></details>}
     {proposal.base_revision != null && <p className="agent-card-meta">基于第 {proposal.base_revision} 修订</p>}
     {receipt && receipt.status === proposal.status && <p className="agent-card-meta">{receipt.actor ? `${receipt.actor === 'human' ? '人工' : receipt.actor} · ` : ''}{formatDateTime(receipt.created)} · {receipt.status === 'approved' ? '已保存输入，工程结果尚未批准' : '已拒绝方案'}</p>}
     <div className="agent-diff">{proposal.changes.map((change) => {
       const places = Math.max(decimals(change.before), decimals(change.after));
+      const pathLabel = proposalFieldLabel(change.path, label);
       return <div key={change.path} className="agent-diff-hunk">
-        <div className="agent-diff-label">{change.label}</div>
+        <div className="agent-diff-label" title={change.path}>{change.label.startsWith('/') || change.path.includes('/cores/') && !pathLabel.endsWith('参数字段') ? pathLabel : readableAgentText(change.label, label)}</div>
         <div className="agent-diff-line is-removed"><span aria-hidden="true">−</span>{show(change.before, places)}{change.unit && ` ${change.unit}`}</div>
         <div className="agent-diff-line is-added"><span aria-hidden="true">+</span>{show(change.after, places)}{change.unit && ` ${change.unit}`}</div>
       </div>;
     })}</div>
-    {!!proposal.checks?.length && <ul className="agent-review-checks">{proposal.checks.map((check) => <li key={check}>{check}</li>)}</ul>}
+    {!!proposal.checks?.length && <ul className="agent-review-checks">{proposal.checks.map((check) => <li key={check} title={check}>{readableAgentText(check, label)}</li>)}</ul>}
+    <details className="agent-notice-details"><summary>追溯 · 提案详情</summary><pre>{proposal.title}{'\n'}{proposal.changes.map(change => change.path).join('\n')}</pre></details>
     {error && <p className="agent-notice" role="alert">{error}</p>}
     {proposal.status === "pending" && <div className="agent-review-actions">
       <HoldButton loading={busy} onConfirm={() => onDecide(proposal.id, "approve")}>按住批准 {proposal.changes.length} 项改动</HoldButton>
@@ -181,8 +209,9 @@ export function ProposalCard({ proposal, onDecide, busy, error, receipt }: { pro
 }
 
 /** 方案在对话里只留一行引用，审核在右栏完成（工作台属性栏这种窄位置则直接内嵌审核卡）。 */
-function ProposalLine({ proposal }: { proposal: AgentProposal }) {
-  return <div className={`agent-proposal-line is-${proposal.status}`}><Icon name="agent/branch" /><span>方案：{proposal.title}</span>
+function ProposalLine({ proposal, label }: { proposal: AgentProposal; label: Label }) {
+  const title = readableAgentText(proposal.title, label);
+  return <div className={`agent-proposal-line is-${proposal.status}`}><Icon name="agent/branch" /><span title={title}>方案：{title.length > 50 ? title.split(' · ')[0] : title}</span>
     <b>{proposal.status === "approved" ? "已批准" : proposal.status === "rejected" ? "已拒绝" : "在右侧审核"}</b></div>;
 }
 
@@ -192,6 +221,7 @@ export function TurnView({ turn, kinds, proposals, label, review, onOpenStudy, o
   onRefresh?: () => void; onOpenWorkspace?: () => void; onReview?: () => void;
 }) {
   const evidence = turn.evidenceOnly ? turn.answer.slice(EVIDENCE_LABEL.length).trim() : turn.answer;
+  const readableEvidence = readableAgentText(evidence, label, turn.refs);
   const pending = turn.proposals.some(id => proposals.get(id)?.status === 'pending');
   const state = turn.task?.state, reason = turn.task?.reason;
   const waiting = state === 'waiting' || state === 'reviewing', blocked = state === 'blocked', failed = state === 'failed';
@@ -203,13 +233,14 @@ export function TurnView({ turn, kinds, proposals, label, review, onOpenStudy, o
   const retry = !turn.interrupted && !pending && !waiting && !blocked && (failed || !turn.answer && turn.notices.length > 0);
   return <section className="agent-turn">
     <p className="agent-question">{turn.question}</p>
-    <WorkSteps turn={turn} kinds={kinds} />
+    <WorkSteps turn={turn} kinds={kinds} label={label} />
     {turn.proposals.map((id) => proposals.get(id)).filter((proposal): proposal is AgentProposal => !!proposal)
-      .map((proposal) => <div key={proposal.id}>{review === "aside" ? <ProposalLine proposal={proposal} /> : review(proposal)}</div>)}
+      .map((proposal) => <div key={proposal.id}>{review === "aside" ? <ProposalLine proposal={proposal} label={label} /> : review(proposal)}</div>)}
     {turn.previews.map((item) => <PreviewCard key={item.id} preview={item} label={label} proposalTitle={item.proposalId ? proposals.get(item.proposalId)?.title : undefined}
       onOpen={item.studyId && onOpenStudy ? () => onOpenStudy(item.studyId!) : undefined} />)}
     {turn.evidenceOnly && <p className="agent-evidence-tag"><Icon name="result/evidence" />证据摘要 · 模型的解释没有通过数值核对，下面只列工具结果</p>}
-    {evidence && <AnswerText text={evidence} />}
+    {evidence && <AnswerText text={readableEvidence} />}
+    {readableEvidence !== evidence && <details className="agent-notice-details"><summary>追溯 · 原文</summary><pre>{evidence}</pre></details>}
     {/* 回答里提到的对象：同一张名片，点了回到它的家（§2.3） */}
     {!turn.running && turn.refs.length > 0 && (turn.refs.length > 4
       ? <details className="agent-ref-details"><summary>相关对象 · {turn.refs.length} 项</summary><div className="agent-refs" aria-label="提到的对象">{turn.refs.map((card) => <ObjectChip key={card.kind + card.id} card={card} />)}</div></details>

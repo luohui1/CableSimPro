@@ -9,6 +9,9 @@ def prepare(value, p):
         raise FieldValueError('rating_mode：请选择 individual、simultaneous 或 both。','parameters','rating_mode')
     if value.get('schema_version') != 'cablesim.domain/1':
         return Rating.model_validate(value)
+    for index, cable in enumerate(value.get('cable_types', [])):
+        if len(cable.get('cores', [])) not in (1, 3):
+            raise FieldValueError('IEC 60287 插件当前不覆盖四芯或其他非单芯、三芯结构。可使用 GB 50217 校正，但须提供同型号、适用条件明确且有来源的基准载流量；无基准不输出电流。','input','cable_types',str(index),'cores')
     if any(t.get('construction') == 'three_core' for t in value.get('cable_types', [])):
         from .three_core import prepare as prepare_three_core
         return prepare_three_core(value, p)

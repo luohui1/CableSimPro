@@ -25,6 +25,12 @@ export const conditionNames: Record<string, string> = {
   cable_arrangement: '电缆排列', support_arrangement: '支架布置', support_side: '支架布置', channel_depth_m: '电缆沟深度 / mm',
   cable_voltage_v: '电缆电压 / kV', cable_type: '电缆类型', voltage_class: '电压等级', installation: '安装方式',
   route_length: '线路长度类别', remaining_segment: '截取后剩余段',
+  halogen_free: '无卤声明', manufacturer_declares_flame_retardant: '厂家声明阻燃',
+  manufacturer_declares_longitudinal_water_barrier: '厂家声明纵向阻水', manufacturer_declares_peelable_screen: '厂家声明可剥离屏蔽',
+  insulation_screen_present: '有绝缘屏蔽', insulation_test_group: '绝缘试验分组', sheath_colour: '护套颜色',
+  current_rating_a: '额定电流 / A', conductor_temperature_k: '导体温度 / K', formula_parameter: '公式参数',
+  conductor_shape: '导体形状', test_specimen: '试样状态', equal_core_sections: '等截面线芯', rounding_scope: '修约步骤',
+  screen_construction: '金属屏蔽构造', inner_covering_present: '有内衬',
 };
 const labels: Record<string, string> = { copper: '铜', aluminium: '铝', plain: '不镀金属', metal_coated: '镀金属', circular: '圆形', compacted: '紧压', shaped: '成型', yes: '有', no: '无', lead: '铅', corrugated_aluminium: '皱纹铝', plain_aluminium: '平滑铝', non_lead: '非铅', steel: '钢',
   air: '空气', soil: '土壤', ladder: '梯架', tray: '托盘', parallel: '平行', crossing: '交叉', insulation: '绝缘', protective_covering: '保护护层', conductor: '导体', semiconductor: '半导电层', duct: '导管', sheaths_and_armour: '护套与铠装',
@@ -41,8 +47,11 @@ const labels: Record<string, string> = { copper: '铜', aluminium: '铝', plain:
   three_touching_vertical: '三根垂直接触', three_spaced_vertical: '三根垂直有间隔', single_wall_clipped: '单根墙面夹装',
   three_trefoil_wall_clipped: '三根品字形墙面夹装', non_continuous_brackets: '非连续支架', vertical_wall_clipped: '竖墙直接夹装',
   non_long_distance: '非长距离', unusable: '不可利用',
+  standard: '普通排列', single_layer: '一层成缆', one_reduced_small: '三芯一小芯（直径比小于2/3）', one_reduced_large: '三芯一小芯（直径比不小于2/3）', one_reduced: '一个小截面芯', two_reduced: '两个小截面芯',
+  tape: '金属带', wire: '金属丝', polyethylene: 'PE', polypropylene: 'PP', lead_or_lead_alloy: '铅或铅合金', seabed_sand_gravel: '海床砂砾', silicone_rubber: '硅橡胶', polypropylene_and_air: 'PP与空气', insulation_resin: '绝缘树脂', concrete: '混凝土',
+  connection_tube: '连接管', main_insulation_tube: '主绝缘管', cable_filler: '电缆填充', joint_filler: '接头填充', inner_sheath: '内护套', metal_shield: '金属屏蔽', outer_sheath: '外护套', waterproof_sealant: '防水密封', pipe: '管壁', cable_well: '电缆井', air_layer: '空气层', soil_layer: '土壤层',
 };
-export const localized = (value: unknown): string => labels[String(value)] || String(value);
+export const localized = (value: unknown): string => value === true || value === 'true' ? '是' : value === false || value === 'false' ? '否' : labels[String(value)] || String(value);
 export const conditionFactor = (key: string) => key.endsWith('_m2') ? 1e6 : key.endsWith('_m') ? 1000 : key.endsWith('_v') ? .001 : 1;
 export function predicateLabel(key: string, value: unknown): string {
   if (value && typeof value === 'object' && !Array.isArray(value)) return Object.entries(value)
@@ -74,13 +83,16 @@ export function valueLabel(value: unknown): string {
     const range = value as { min: unknown; max: unknown };
     return `${valueLabel(range.min)}～${valueLabel(range.max)}`;
   }
+  if (typeof value === 'object' && value && 'max' in value) return `≤${valueLabel((value as { max: unknown }).max)}`;
+  if (typeof value === 'object' && value && 'min' in value) return `≥${valueLabel((value as { min: unknown }).min)}`;
   if (typeof value === 'object') return '公式参数（查看引用）';
   if (typeof value === 'number') return value.toLocaleString('zh-CN', { maximumSignificantDigits: 12, useGrouping: false });
   return String(value);
 }
 export function copyCitation(r: BasisRecord) {
   const unit = r.value === null || r.quantity.dimension === 'text' || r.quantity.unit === '1' ? '' : ` ${r.quantity.unit}`;
-  return `${r.standard}—${r.edition} ${r.table || `条款 ${r.clause}`}，第 ${r.printed_page} 页：${conditionsLabel(r.conditions)}，${valueLabel(r.value)}${unit}`;
+  const value = r.value === null && r.semantic.startsWith('literature') ? '—（原表未给值）' : valueLabel(r.value);
+  return `${r.standard}—${r.edition} ${r.table || `条款 ${r.clause}`}，第 ${r.printed_page} 页：${conditionsLabel(r.conditions)}，${value}${unit}`;
 }
 export function methodLabel(value: unknown): string {
   if (typeof value === 'string') return value;
@@ -94,5 +106,15 @@ export function methodLabel(value: unknown): string {
 export function formulaDetails(value: unknown, prefix = ''): string[] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return [`${prefix}${localized(value)}`];
   const names: Record<string, string> = { min: '下限', max: '上限', kind: '公式类型', expression: '表达式', a: '系数 a', b: '常数 b', x: '变量', floor: '下限', parameter_units: '参数单位', rounding: '修约', increment: '步长', unit: '单位', rule: '规则', execution_status: '执行状态', diameter: '直径', result: '结果', affine: '一次式', not_implemented: '未实现，不自动计算', 'annex-B': '附录 B' };
+  Object.assign(names, {
+    voltage_factor: '电压倍数', acceptance: '判据', test_item: '试验项目', waveform: '波形', impulse_peak: '冲击峰值', AC: '交流', DC: '直流',
+    density_kg_m3: '密度 / kg/m³', specific_heat_j_kg_k: '比热容 / J/(kg·K)', derivation: '推导说明', verification: '核验说明', 'density*specific_heat': 'ρ × cₚ',
+    change_rate_denominator: '变化率分母', additional_test_clause: '补充试验条款', meaning: '适用说明',
+    core_diameter: '线芯假设直径', cover_diameter: '护层假设直径', unequal_core_bundle: '不等截面成缆', screen_tape: '带屏蔽', screen_wire: '丝屏蔽',
+    insulation_multiplier: '绝缘厚度倍数', screen_increment_mm: '半导电屏蔽增量 / mm', thickness_multiplier: '厚度倍数', tie_tape_multiplier: '扎带厚度倍数', tie_tape_ignored_max_mm: '扎带忽略上限 / mm',
+    mode: '修约方式', half_up: '保留位后一位0–4舍去、5–9进一', scope: '适用步骤', each_annex_a_stage: '附录A每阶段', increment_source: '修约精度来源', governing_clause: '有关条文', requires_explicit_increment: '必须明确指定修约精度',
+    factor: '系数', large_core_multiplier: '大芯倍数', large_core_count: '大芯数量', divisor: '分母', small_core_ratio_max_exclusive: '小芯直径比上界（不含）', small_core_ratio_min: '小芯直径比下界（含）',
+    area_expression: '截面积公式', zero_increase_if_total_thickness_lt_mm: '增量为零的总厚度边界 / mm（小于）', longitudinal_overlap_boundary: '纵包搭盖率分界', longitudinal_below_multiplier: '纵包低于分界的厚度倍数', longitudinal_at_or_above_multiplier: '纵包达到分界的厚度倍数', lapped_multiplier: '绕包厚度倍数', table_selection: '表值选取规则', next_upper_nominal_area: '向上取相邻标称截面',
+  });
   return Object.entries(value).flatMap(([key, item]) => item && typeof item === 'object' ? formulaDetails(item, `${prefix}${names[key] || key} · `) : [`${prefix}${names[key] || key}：${names[String(item)] || localized(item)}`]);
 }

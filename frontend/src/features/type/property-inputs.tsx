@@ -1,10 +1,12 @@
 import { text } from '@/api/client';
 import { NumberField } from '@/components/ui/number-field';
+import { Input } from '@/components/ui/input';
 import { Select } from '@/components/ui/select';
 import { at, displayed, fieldSource, pointer, type NumericInput } from '@/lib/domain-fields';
 import { sourceKind } from '@/lib/selection-view';
 import type { LayerRow } from './layers';
 import { useTypeWorkspace } from './provider';
+import { DensityInput } from './density-input';
 
 function Numeric({ spec, integer }: { spec: NumericInput; integer?: boolean }) {
   const state = useTypeWorkspace(), source = fieldSource(state.document!, spec.path);
@@ -49,11 +51,13 @@ export function StructurePropertyInputs({ row }: { row: LayerRow }) {
         label: `芯位置 ${axis}`, unit: 'mm', scale: 1000, precision: 3, required: true }} />)}</>}
     </div></details>
     <details className="type-property-detail"><summary>材料参数</summary><div className="type-property-fields">
+      <label>材料名称<Input aria-label="材料名称" value={row.material.label} disabled={state.readOnly || state.busy || state.locked(pointer('materials', row.material.id, 'label'))}
+        onChange={event => { if (event.target.value.trim()) state.edit(pointer('materials', row.material.id, 'label'), event.target.value); }} /></label>
       <Select label="材料标准类别" value={text(at(state.document, pointer('materials', row.material.id, 'standard_kind'))) || 'unspecified'}
         disabled={state.busy || state.locked(pointer('materials', row.material.id, 'standard_kind'))}
         options={[['unspecified', '未给定'], ['copper_bare', '裸铜'], ['copper_coated', '镀层铜'], ['aluminium', '铝'], ['aluminium_alloy', '铝合金'], ['steel_galvanized', '镀锌钢'], ['steel_stainless_nonmagnetic', '非磁性不锈钢'], ['lead', '铅'], ['XLPE', '交联聚乙烯'], ['PVC', '聚氯乙烯'], ['EPR', '乙丙橡胶'], ['HEPR', '硬乙丙橡胶'], ['other', '其他']].map(([value, label]) => ({ value, label }))}
         onChange={value => state.edit(pointer('materials', row.material.id, 'standard_kind'), value === 'unspecified' ? null : value)} />
-      <Numeric spec={{ path: pointer('materials', row.material.id, 'density'), label: '材料密度', unit: 'kg/m³', precision: 1, min: 0, minExclusive: true }} />
+      <DensityInput materialId={row.material.id} />
     </div></details>
   </>;
 }

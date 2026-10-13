@@ -8,17 +8,18 @@ import { useStudy } from "./study-provider";
 import { Select } from "./ui/select";
 import { Tooltip } from "./ui/tooltip";
 import { Button } from "./ui/button";
-import { ErrorState, LoadingState, EmptyState, StaleBanner } from "./states";
+import { LoadingState, EmptyState, StaleBanner } from '@/components/states';
+import { StudyErrorState as ErrorState } from '@/components/study-error-state';
 import { SourceBadge } from "./source-badge";
 import { StudyDetailGroup } from './study-detail-group';
 import { downloadJson } from "@/lib/download";
-import { moduleConfiguration, withConfiguration } from "@/lib/study-config";
+import { moduleConfiguration, withConfiguration, rootModule } from "@/lib/study-config";
 import { entityLabel } from "@/lib/domain-fields";
 import { expand } from '@/lib/contract-schema';
 import { savedDomain } from '@/lib/domain-fields';
 import { array } from '@/api/client';
 import './study-method-form.css';
-import { Suspense, useMemo } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { contractFields } from '@/lib/heavy-components';
 const ContractFields = contractFields.Component;
 export { rootModule, moduleConfiguration } from "@/lib/study-config";
@@ -53,11 +54,13 @@ export function StudyMethodForm({
   savedRun?: Record<string, unknown>;
 }) {
   const context = useStudy();
+  const [initialMethod,setInitialMethod]=useState('');
   const definition =
     snapshot || context.draft?.definition || context.study.definition;
   const configuration = moduleConfiguration(definition, module);
   const parameters: Record<string,unknown>=historical && savedRun ? {...optionalRecord(configuration?.parameters),...optionalRecord(array(optionalRecord(savedRun.snapshot).cases).map(optionalRecord)[0]?.parameters)} : optionalRecord(configuration?.parameters);
-  const domain = historical && savedRun ? savedDomain(savedRun) : context.domain;
+  const independentDomain = optionalRecord(definition.method_input);
+  const domain = historical && savedRun ? savedDomain(savedRun) : definition.input_source === 'study' && independentDomain.schema_version === 'cablesim.domain/1' ? independentDomain as unknown as NonNullable<typeof context.domain> : context.domain;
   const references = useMemo(() => {
     if (!domain) return undefined;
     const option = (id: string) => ({ value: id, label: entityLabel(domain, id) });
@@ -101,10 +104,31 @@ export function StudyMethodForm({
   // number must not reset the existing contract form's editor state.
   const missingSignature=JSON.stringify(missingRequiredPaths(selectLayout.remaining,selectLayout.root,parameters));
   const remaining=useMemo(()=>visibleRequiredSchema(selectLayout.remaining,selectLayout.root,new Set<string>(JSON.parse(missingSignature))),[selectLayout,missingSignature]);
-  if (!configuration)
-    return <EmptyState description="" title="当前研究没有该模块的方法配置" />;
   if (contracts.isPending || methods.isPending)
     return <LoadingState title="正在读取方法输入契约" />;
+  if (!configuration) {
+    if (historical) return <EmptyState title="该保存运行未配置此模块" description="历史运行保持只读；返回当前研究可建立新配置。" />;
+    if (methods.error || contracts.error) return <ErrorState title="方法清单读取失败" description={message(methods.error || contracts.error)} />;
+    const choices=(methods.data || []).flatMap(entry=>(Array.isArray(entry.capabilities) ? entry.capabilities : []).map(optionalRecord).flatMap(cap=>{
+      const method={...optionalRecord(entry.method),capability:text(cap.id)} as Method;
+      const task=(['transient-temperature','sheath-losses','electrothermal-steady'].includes(text(cap.id)) ? text(cap.id) : Array.isArray(cap.study_tasks) && cap.study_tasks.includes('operating') ? 'operating' : 'rating') as Configuration['task'];
+      if (rootModule({method,driver:{kind:'single'},task} as StudyDefinition)!==module || entry.platform_supported===false) return [];
+      return [{value:method.plugin_id+':'+method.capability,label:text(entry.name)+' · '+text(cap.title),method,task}];
+    }));
+    const chosen=choices.find(row=>row.value===initialMethod) || choices[0];
+    return <div className="parameter-form"><p>此模块尚未配置。建立配置后核对必填输入，再保存研究；已有模块和运行记录保持不变。</p>
+      {chosen ? <><Select label="模块方法" value={chosen.value} options={choices} disabled={context.saving} onChange={setInitialMethod} />
+      <p className="muted">参数来源：当前已封签插件输入契约的默认值；没有默认值的必填项需工程师填写。</p>
+      <Button disabled={context.saving} onClick={()=>{
+        const schema=exactContract(contracts.data!,chosen.method).parameter_schema;
+        const parameters=Object.fromEntries(Object.entries(optionalRecord(expand(schema,schema).properties)).flatMap(([key,raw])=>{
+          const field=expand(raw,schema);return Object.hasOwn(field,'default') ? [[key,structuredClone(field.default)]] : [];
+        }));
+        const config={title:definition.title,method:chosen.method,task:chosen.task,input_source:'domain',parameters,driver:{kind:'single'},crosschecks:[],input_sources:{'/parameters':{kind:'derived',reference:`已封签插件输入契约默认值 · 发行摘要 ${chosen.method.release_digest}`,reviewed:false}}} as Configuration;
+        context.editDefinition({...definition,modules:{...definition.modules,[module]:config}});
+      }}>为该模块建立方法配置</Button></> : <EmptyState title="尚无适用于此模块的已安装方法" description="安装相应插件后可建立配置；现有研究仍可使用。" />}
+    </div>;
+  }
   let error: unknown = contracts.error || methods.error;
   let contract;
   if (!error)
@@ -155,6 +179,13 @@ export function StudyMethodForm({
       method: configuration.method,
     });
   const root = contract?.parameter_schema || {};
+  const admission = optionalRecord(root['x-input-admission']);
+  const coreSchema = optionalRecord(optionalRecord(optionalRecord(optionalRecord(optionalRecord(admission.schema).properties).cable_types).items).properties).cores;
+  const coreAlternatives = optionalRecord(coreSchema).oneOf;
+  const allowedCores = (Array.isArray(coreAlternatives) ? coreAlternatives : []).map(optionalRecord)
+    .filter(branch => branch.minItems === branch.maxItems).map(branch => branch.minItems);
+  if (allowedCores.length && domain?.cable_types.some(cable => !allowedCores.includes(cable.cores.length)))
+    return <ErrorState title="方法不覆盖此结构" description={text(admission.message) + ' 在工程浏览器点击“新建研究”，选择校正任务并填写基准来源。'} />;
   const {selects}=selectLayout;
   return (
     <div className="parameter-form study-method-config">
@@ -174,7 +205,7 @@ export function StudyMethodForm({
           title="方法契约不可用"
           description={message(error)}
           action={
-            <Button onClick={() => contracts.refetch()}>重新读取契约</Button>
+            <Button size="compact" onClick={() => contracts.refetch()}>重新读取契约</Button>
           }
         />
       )}
@@ -252,7 +283,7 @@ export function StudyMethodForm({
       {!contract && (
         <div className="source-line">
           <span className="muted">参数已保存；契约恢复后可查看单位与范围。</span>
-          <Button variant="ghost" onClick={() => downloadJson({method:configuration.method, parameters:configuration.parameters || {}, input_sources:configuration.input_sources || {}}, 'saved-method-parameters.json')}>导出已保存参数</Button>
+          <Button size="compact" variant="ghost" onClick={() => downloadJson({method:configuration.method, parameters:configuration.parameters || {}, input_sources:configuration.input_sources || {}}, 'saved-method-parameters.json')}>导出已保存参数</Button>
         </div>
       )}
     </div>

@@ -95,9 +95,11 @@ def test_every_record_has_complete_provenance_and_two_route_evidence(library):
         table = authoring[record['verification']['evidence_id']]
         col_index = next(i for i,c in enumerate(table['columns']) if c['id']==record['column'])
         assert checked[col_index]['route_a'] == checked[col_index]['route_b'] == record['value']
-        assert checked[col_index]['status'] == record['verification']['status'] == 'verified'
+        expected_status = 'blocked' if record['verification']['evidence_id'] == 'mv-表18' else 'verified'
+        assert checked[col_index]['status'] == record['verification']['status'] == expected_status
+        if expected_status == 'blocked': assert record['verification']['note']
     assert len(ids) >= 1429
-    assert library.verification['unresolved'] == []
+    assert {r['table_id'] for r in library.verification['unresolved']} == {'mv-表18'}
     assert sources >= {
         '9c398e261e5b88d24db5f0ca5a698402bc25eab6e4da0de063ebd4cd7790f6f1',
         'cb45f149b626e5ab9f50c491f7950965ad604a37cb9dac2c76eee013511f0970',
@@ -230,5 +232,5 @@ def test_real_host_process_check_run_errors_retries_and_citation(tmp_path):
     assert answer['records'][0]['value']==5.5 and answer['approval']=='not_granted'
     retry=executor.run('cablesim.standards-basis','lookup',[valid])
     assert retry.cases[0].artifacts['x-cablesim.standards-basis']==answer
-    assert run.plugin_version==checked.plugin_version=='0.3.0'
+    assert run.plugin_version==checked.plugin_version=='0.4.0'
     assert len(run.request_sha256)==len(checked.request_sha256)==64

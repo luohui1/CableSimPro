@@ -1,6 +1,6 @@
 {
   "schema": "cablesim.standards-basis/1",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "rights": {
     "status": "not_assessed",
     "use": "用户持有标准的受控结构化摘录；不包含标准全文；不宣称许可已评估或合规批准"
@@ -106,28 +106,56 @@
       "file": "iec60287-3-1{ed2.0.RLV}en.pdf",
       "format": "pdf",
       "sha256": "618e8d8cd829a15cb0bdcf08af4d73afc0b8928a3ea0eeb42bdc75cc87b08f63"
+    },
+    {
+      "standard": "GB/T 12706.4",
+      "edition": "2020",
+      "file": "GBT12706.4-2020 额定电压1 kV(Um=1.2 kV)到35 kV(Um=40.5 kV)挤包绝缘电力电缆及附件 第4部分：额定电压6 kV(Um=7.2 kV)到35 kV(Um=40.5 kV)电力电缆附件试验要求.pdf",
+      "sha256": "ed20cf78c536f157c9285d4c636fc8abca002d81f5f651bdaacc849a39ff9fd3",
+      "format": "pdf",
+      "rights": "user_supplied_controlled_excerpt"
+    },
+    {
+      "standard": "GB/T 12706.4",
+      "edition": "2020",
+      "file": "GBT12706.4-2020 额定电压1 kV(Um=1.2 kV)到35 kV(Um=40.5 kV)挤包绝缘电力电缆及附件 第4部分：额定电压6 kV(Um=7.2 kV)到35 kV(Um=40.5 kV)电力电缆附件试验要求.docx",
+      "sha256": "dac2fe646063e1f8ce249d4455edbc5ade17d0b1b0844855cb2ed3a2940950c5",
+      "format": "docx",
+      "rights": "user_supplied_controlled_excerpt"
+    },
+    {
+      "standard": "Nielsen et al.",
+      "edition": "2019",
+      "file": "文献/Nielsen-2019-dynamic-three-core-rating.pdf",
+      "sha256": "e5b2632dfc9e88d5097da1a91c3653df9ed53d61ef77ce82fcfa39de41496bcf",
+      "format": "pdf",
+      "origin": "https://doi.org/10.3390/app9040800",
+      "use": "文献参考参数；不等同于标准限值或厂家材料声明"
+    },
+    {
+      "standard": "Huang and Niu",
+      "edition": "2025",
+      "file": "文献/Huang-Niu-cable-digital-twin.pdf",
+      "sha256": "34fc4f54064ac14e70b437dc99146b295aa21a9bf73d421067475559372a12d1",
+      "format": "pdf",
+      "origin": "https://doi.org/10.1049/hve2.12465",
+      "use": "文献参考参数；不等同于标准限值或厂家材料声明"
     }
   ],
   "condition_fields": {
     "area_m2": {
-      "type": "number",
-      "exclusiveMinimum": 0,
-      "maximum": 0.01
+      "type": "number"
     },
     "u0_v": {
-      "type": "number",
-      "exclusiveMinimum": 0,
-      "maximum": 1000000.0
+      "type": "number"
     },
     "u_v": {
-      "type": "number",
-      "exclusiveMinimum": 0,
-      "maximum": 1000000.0
+      "type": "number"
     },
     "insulation": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 60
+      "maxLength": 200
     },
     "screened": {
       "type": "string",
@@ -152,16 +180,15 @@
     "sheath_material": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 60
+      "maxLength": 200
     },
     "conductor_class": {
-      "type": "number",
-      "exclusiveMinimum": 0
+      "type": "number"
     },
     "conductor_material": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 60
+      "maxLength": 200
     },
     "coating": {
       "type": "string",
@@ -317,9 +344,7 @@
       "maxLength": 60
     },
     "um_v": {
-      "type": "number",
-      "exclusiveMinimum": 0,
-      "maximum": 1000000.0
+      "type": "number"
     },
     "duration_s": {
       "type": "number",
@@ -333,7 +358,7 @@
     "test_item": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 60
+      "maxLength": 200
     },
     "typical_model": {
       "type": "string",
@@ -562,6 +587,68 @@
       "maxLength": 200
     },
     "reference_item": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "halogen_free": {
+      "type": "boolean"
+    },
+    "insulation_test_group": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "manufacturer_declares_flame_retardant": {
+      "type": "boolean"
+    },
+    "manufacturer_declares_longitudinal_water_barrier": {
+      "type": "boolean"
+    },
+    "manufacturer_declares_peelable_screen": {
+      "type": "boolean"
+    },
+    "sheath_colour": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "conductor_shape": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "conductor_temperature_k": {
+      "type": "number"
+    },
+    "test_specimen": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "current_rating_a": {
+      "type": "number"
+    },
+    "insulation_screen_present": {
+      "type": "boolean"
+    },
+    "equal_core_sections": {
+      "type": "boolean"
+    },
+    "inner_covering_present": {
+      "type": "boolean"
+    },
+    "screen_construction": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "armour_kind": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200
+    },
+    "rounding_scope": {
       "type": "string",
       "minLength": 1,
       "maxLength": 200
@@ -3938,7 +4025,7 @@
         },
         {
           "key": "farmland_cover_depth",
-          "name": "耕地电缆外皮至地面宜达到深度",
+          "name": "耕地电缆外皮至地面最小深度",
           "dimension": "length",
           "unit": "m"
         }
@@ -8588,7 +8675,7 @@
       "quantities": [
         {
           "key": "rated_voltage_axis",
-          "name": "额定线电压",
+          "name": "原表额定电压U₀（轴语义待澄清）",
           "dimension": "voltage",
           "unit": "kV"
         },
@@ -8658,6 +8745,2598 @@
       "record_ids": [
         "mv-高密度XLPE吸水/r1/c1"
       ]
+    },
+    {
+      "id": "lv-表17",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "19",
+      "table": "表 17",
+      "title": "非电气型式试验",
+      "quantities": [
+        {
+          "key": "test_applicability",
+          "name": "试验项目适用性",
+          "dimension": "category",
+          "unit": "1"
+        }
+      ],
+      "row_count": 22,
+      "column_count": 10,
+      "record_count": 220,
+      "record_ids": [
+        "lv-表17/r1/c1",
+        "lv-表17/r1/c2",
+        "lv-表17/r1/c3",
+        "lv-表17/r1/c4",
+        "lv-表17/r1/c5",
+        "lv-表17/r1/c6",
+        "lv-表17/r1/c7",
+        "lv-表17/r1/c8",
+        "lv-表17/r1/c9",
+        "lv-表17/r1/c10",
+        "lv-表17/r2/c1",
+        "lv-表17/r2/c2",
+        "lv-表17/r2/c3",
+        "lv-表17/r2/c4",
+        "lv-表17/r2/c5",
+        "lv-表17/r2/c6",
+        "lv-表17/r2/c7",
+        "lv-表17/r2/c8",
+        "lv-表17/r2/c9",
+        "lv-表17/r2/c10",
+        "lv-表17/r3/c1",
+        "lv-表17/r3/c2",
+        "lv-表17/r3/c3",
+        "lv-表17/r3/c4",
+        "lv-表17/r3/c5",
+        "lv-表17/r3/c6",
+        "lv-表17/r3/c7",
+        "lv-表17/r3/c8",
+        "lv-表17/r3/c9",
+        "lv-表17/r3/c10",
+        "lv-表17/r4/c1",
+        "lv-表17/r4/c2",
+        "lv-表17/r4/c3",
+        "lv-表17/r4/c4",
+        "lv-表17/r4/c5",
+        "lv-表17/r4/c6",
+        "lv-表17/r4/c7",
+        "lv-表17/r4/c8",
+        "lv-表17/r4/c9",
+        "lv-表17/r4/c10",
+        "lv-表17/r5/c1",
+        "lv-表17/r5/c2",
+        "lv-表17/r5/c3",
+        "lv-表17/r5/c4",
+        "lv-表17/r5/c5",
+        "lv-表17/r5/c6",
+        "lv-表17/r5/c7",
+        "lv-表17/r5/c8",
+        "lv-表17/r5/c9",
+        "lv-表17/r5/c10",
+        "lv-表17/r6/c1",
+        "lv-表17/r6/c2",
+        "lv-表17/r6/c3",
+        "lv-表17/r6/c4",
+        "lv-表17/r6/c5",
+        "lv-表17/r6/c6",
+        "lv-表17/r6/c7",
+        "lv-表17/r6/c8",
+        "lv-表17/r6/c9",
+        "lv-表17/r6/c10",
+        "lv-表17/r7/c1",
+        "lv-表17/r7/c2",
+        "lv-表17/r7/c3",
+        "lv-表17/r7/c4",
+        "lv-表17/r7/c5",
+        "lv-表17/r7/c6",
+        "lv-表17/r7/c7",
+        "lv-表17/r7/c8",
+        "lv-表17/r7/c9",
+        "lv-表17/r7/c10",
+        "lv-表17/r8/c1",
+        "lv-表17/r8/c2",
+        "lv-表17/r8/c3",
+        "lv-表17/r8/c4",
+        "lv-表17/r8/c5",
+        "lv-表17/r8/c6",
+        "lv-表17/r8/c7",
+        "lv-表17/r8/c8",
+        "lv-表17/r8/c9",
+        "lv-表17/r8/c10",
+        "lv-表17/r9/c1",
+        "lv-表17/r9/c2",
+        "lv-表17/r9/c3",
+        "lv-表17/r9/c4",
+        "lv-表17/r9/c5",
+        "lv-表17/r9/c6",
+        "lv-表17/r9/c7",
+        "lv-表17/r9/c8",
+        "lv-表17/r9/c9",
+        "lv-表17/r9/c10",
+        "lv-表17/r10/c1",
+        "lv-表17/r10/c2",
+        "lv-表17/r10/c3",
+        "lv-表17/r10/c4",
+        "lv-表17/r10/c5",
+        "lv-表17/r10/c6",
+        "lv-表17/r10/c7",
+        "lv-表17/r10/c8",
+        "lv-表17/r10/c9",
+        "lv-表17/r10/c10",
+        "lv-表17/r11/c1",
+        "lv-表17/r11/c2",
+        "lv-表17/r11/c3",
+        "lv-表17/r11/c4",
+        "lv-表17/r11/c5",
+        "lv-表17/r11/c6",
+        "lv-表17/r11/c7",
+        "lv-表17/r11/c8",
+        "lv-表17/r11/c9",
+        "lv-表17/r11/c10",
+        "lv-表17/r12/c1",
+        "lv-表17/r12/c2",
+        "lv-表17/r12/c3",
+        "lv-表17/r12/c4",
+        "lv-表17/r12/c5",
+        "lv-表17/r12/c6",
+        "lv-表17/r12/c7",
+        "lv-表17/r12/c8",
+        "lv-表17/r12/c9",
+        "lv-表17/r12/c10",
+        "lv-表17/r13/c1",
+        "lv-表17/r13/c2",
+        "lv-表17/r13/c3",
+        "lv-表17/r13/c4",
+        "lv-表17/r13/c5",
+        "lv-表17/r13/c6",
+        "lv-表17/r13/c7",
+        "lv-表17/r13/c8",
+        "lv-表17/r13/c9",
+        "lv-表17/r13/c10",
+        "lv-表17/r14/c1",
+        "lv-表17/r14/c2",
+        "lv-表17/r14/c3",
+        "lv-表17/r14/c4",
+        "lv-表17/r14/c5",
+        "lv-表17/r14/c6",
+        "lv-表17/r14/c7",
+        "lv-表17/r14/c8",
+        "lv-表17/r14/c9",
+        "lv-表17/r14/c10",
+        "lv-表17/r15/c1",
+        "lv-表17/r15/c2",
+        "lv-表17/r15/c3",
+        "lv-表17/r15/c4",
+        "lv-表17/r15/c5",
+        "lv-表17/r15/c6",
+        "lv-表17/r15/c7",
+        "lv-表17/r15/c8",
+        "lv-表17/r15/c9",
+        "lv-表17/r15/c10",
+        "lv-表17/r16/c1",
+        "lv-表17/r16/c2",
+        "lv-表17/r16/c3",
+        "lv-表17/r16/c4",
+        "lv-表17/r16/c5",
+        "lv-表17/r16/c6",
+        "lv-表17/r16/c7",
+        "lv-表17/r16/c8",
+        "lv-表17/r16/c9",
+        "lv-表17/r16/c10",
+        "lv-表17/r17/c1",
+        "lv-表17/r17/c2",
+        "lv-表17/r17/c3",
+        "lv-表17/r17/c4",
+        "lv-表17/r17/c5",
+        "lv-表17/r17/c6",
+        "lv-表17/r17/c7",
+        "lv-表17/r17/c8",
+        "lv-表17/r17/c9",
+        "lv-表17/r17/c10",
+        "lv-表17/r18/c1",
+        "lv-表17/r18/c2",
+        "lv-表17/r18/c3",
+        "lv-表17/r18/c4",
+        "lv-表17/r18/c5",
+        "lv-表17/r18/c6",
+        "lv-表17/r18/c7",
+        "lv-表17/r18/c8",
+        "lv-表17/r18/c9",
+        "lv-表17/r18/c10",
+        "lv-表17/r19/c1",
+        "lv-表17/r19/c2",
+        "lv-表17/r19/c3",
+        "lv-表17/r19/c4",
+        "lv-表17/r19/c5",
+        "lv-表17/r19/c6",
+        "lv-表17/r19/c7",
+        "lv-表17/r19/c8",
+        "lv-表17/r19/c9",
+        "lv-表17/r19/c10",
+        "lv-表17/r20/c1",
+        "lv-表17/r20/c2",
+        "lv-表17/r20/c3",
+        "lv-表17/r20/c4",
+        "lv-表17/r20/c5",
+        "lv-表17/r20/c6",
+        "lv-表17/r20/c7",
+        "lv-表17/r20/c8",
+        "lv-表17/r20/c9",
+        "lv-表17/r20/c10",
+        "lv-表17/r21/c1",
+        "lv-表17/r21/c2",
+        "lv-表17/r21/c3",
+        "lv-表17/r21/c4",
+        "lv-表17/r21/c5",
+        "lv-表17/r21/c6",
+        "lv-表17/r21/c7",
+        "lv-表17/r21/c8",
+        "lv-表17/r21/c9",
+        "lv-表17/r21/c10",
+        "lv-表17/r22/c1",
+        "lv-表17/r22/c2",
+        "lv-表17/r22/c3",
+        "lv-表17/r22/c4",
+        "lv-表17/r22/c5",
+        "lv-表17/r22/c6",
+        "lv-表17/r22/c7",
+        "lv-表17/r22/c8",
+        "lv-表17/r22/c9",
+        "lv-表17/r22/c10"
+      ]
+    },
+    {
+      "id": "lv-表18",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "18.5.2",
+      "table": "表 18",
+      "title": "电缆绝缘机械性能试验要求（老化前后）",
+      "quantities": [
+        {
+          "key": "insulation_mechanical_test_requirement",
+          "name": "试验结果",
+          "dimension": "category",
+          "unit": "1"
+        }
+      ],
+      "row_count": 19,
+      "column_count": 7,
+      "record_count": 133,
+      "record_ids": [
+        "lv-表18/r1/c1",
+        "lv-表18/r1/c2",
+        "lv-表18/r1/c3",
+        "lv-表18/r1/c4",
+        "lv-表18/r1/c5",
+        "lv-表18/r1/c6",
+        "lv-表18/r1/c7",
+        "lv-表18/r2/c1",
+        "lv-表18/r2/c2",
+        "lv-表18/r2/c3",
+        "lv-表18/r2/c4",
+        "lv-表18/r2/c5",
+        "lv-表18/r2/c6",
+        "lv-表18/r2/c7",
+        "lv-表18/r3/c1",
+        "lv-表18/r3/c2",
+        "lv-表18/r3/c3",
+        "lv-表18/r3/c4",
+        "lv-表18/r3/c5",
+        "lv-表18/r3/c6",
+        "lv-表18/r3/c7",
+        "lv-表18/r4/c1",
+        "lv-表18/r4/c2",
+        "lv-表18/r4/c3",
+        "lv-表18/r4/c4",
+        "lv-表18/r4/c5",
+        "lv-表18/r4/c6",
+        "lv-表18/r4/c7",
+        "lv-表18/r5/c1",
+        "lv-表18/r5/c2",
+        "lv-表18/r5/c3",
+        "lv-表18/r5/c4",
+        "lv-表18/r5/c5",
+        "lv-表18/r5/c6",
+        "lv-表18/r5/c7",
+        "lv-表18/r6/c1",
+        "lv-表18/r6/c2",
+        "lv-表18/r6/c3",
+        "lv-表18/r6/c4",
+        "lv-表18/r6/c5",
+        "lv-表18/r6/c6",
+        "lv-表18/r6/c7",
+        "lv-表18/r7/c1",
+        "lv-表18/r7/c2",
+        "lv-表18/r7/c3",
+        "lv-表18/r7/c4",
+        "lv-表18/r7/c5",
+        "lv-表18/r7/c6",
+        "lv-表18/r7/c7",
+        "lv-表18/r8/c1",
+        "lv-表18/r8/c2",
+        "lv-表18/r8/c3",
+        "lv-表18/r8/c4",
+        "lv-表18/r8/c5",
+        "lv-表18/r8/c6",
+        "lv-表18/r8/c7",
+        "lv-表18/r9/c1",
+        "lv-表18/r9/c2",
+        "lv-表18/r9/c3",
+        "lv-表18/r9/c4",
+        "lv-表18/r9/c5",
+        "lv-表18/r9/c6",
+        "lv-表18/r9/c7",
+        "lv-表18/r10/c1",
+        "lv-表18/r10/c2",
+        "lv-表18/r10/c3",
+        "lv-表18/r10/c4",
+        "lv-表18/r10/c5",
+        "lv-表18/r10/c6",
+        "lv-表18/r10/c7",
+        "lv-表18/r11/c1",
+        "lv-表18/r11/c2",
+        "lv-表18/r11/c3",
+        "lv-表18/r11/c4",
+        "lv-表18/r11/c5",
+        "lv-表18/r11/c6",
+        "lv-表18/r11/c7",
+        "lv-表18/r12/c1",
+        "lv-表18/r12/c2",
+        "lv-表18/r12/c3",
+        "lv-表18/r12/c4",
+        "lv-表18/r12/c5",
+        "lv-表18/r12/c6",
+        "lv-表18/r12/c7",
+        "lv-表18/r13/c1",
+        "lv-表18/r13/c2",
+        "lv-表18/r13/c3",
+        "lv-表18/r13/c4",
+        "lv-表18/r13/c5",
+        "lv-表18/r13/c6",
+        "lv-表18/r13/c7",
+        "lv-表18/r14/c1",
+        "lv-表18/r14/c2",
+        "lv-表18/r14/c3",
+        "lv-表18/r14/c4",
+        "lv-表18/r14/c5",
+        "lv-表18/r14/c6",
+        "lv-表18/r14/c7",
+        "lv-表18/r15/c1",
+        "lv-表18/r15/c2",
+        "lv-表18/r15/c3",
+        "lv-表18/r15/c4",
+        "lv-表18/r15/c5",
+        "lv-表18/r15/c6",
+        "lv-表18/r15/c7",
+        "lv-表18/r16/c1",
+        "lv-表18/r16/c2",
+        "lv-表18/r16/c3",
+        "lv-表18/r16/c4",
+        "lv-表18/r16/c5",
+        "lv-表18/r16/c6",
+        "lv-表18/r16/c7",
+        "lv-表18/r17/c1",
+        "lv-表18/r17/c2",
+        "lv-表18/r17/c3",
+        "lv-表18/r17/c4",
+        "lv-表18/r17/c5",
+        "lv-表18/r17/c6",
+        "lv-表18/r17/c7",
+        "lv-表18/r18/c1",
+        "lv-表18/r18/c2",
+        "lv-表18/r18/c3",
+        "lv-表18/r18/c4",
+        "lv-表18/r18/c5",
+        "lv-表18/r18/c6",
+        "lv-表18/r18/c7",
+        "lv-表18/r19/c1",
+        "lv-表18/r19/c2",
+        "lv-表18/r19/c3",
+        "lv-表18/r19/c4",
+        "lv-表18/r19/c5",
+        "lv-表18/r19/c6",
+        "lv-表18/r19/c7"
+      ]
+    },
+    {
+      "id": "mv-表19",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "19",
+      "table": "表 19（续）",
+      "title": "非电气型式试验",
+      "quantities": [
+        {
+          "key": "test_applicability",
+          "name": "试验项目适用性",
+          "dimension": "category",
+          "unit": "1"
+        }
+      ],
+      "row_count": 25,
+      "column_count": 10,
+      "record_count": 250,
+      "record_ids": [
+        "mv-表19/r1/c1",
+        "mv-表19/r1/c2",
+        "mv-表19/r1/c3",
+        "mv-表19/r1/c4",
+        "mv-表19/r1/c5",
+        "mv-表19/r1/c6",
+        "mv-表19/r1/c7",
+        "mv-表19/r1/c8",
+        "mv-表19/r1/c9",
+        "mv-表19/r1/c10",
+        "mv-表19/r2/c1",
+        "mv-表19/r2/c2",
+        "mv-表19/r2/c3",
+        "mv-表19/r2/c4",
+        "mv-表19/r2/c5",
+        "mv-表19/r2/c6",
+        "mv-表19/r2/c7",
+        "mv-表19/r2/c8",
+        "mv-表19/r2/c9",
+        "mv-表19/r2/c10",
+        "mv-表19/r3/c1",
+        "mv-表19/r3/c2",
+        "mv-表19/r3/c3",
+        "mv-表19/r3/c4",
+        "mv-表19/r3/c5",
+        "mv-表19/r3/c6",
+        "mv-表19/r3/c7",
+        "mv-表19/r3/c8",
+        "mv-表19/r3/c9",
+        "mv-表19/r3/c10",
+        "mv-表19/r4/c1",
+        "mv-表19/r4/c2",
+        "mv-表19/r4/c3",
+        "mv-表19/r4/c4",
+        "mv-表19/r4/c5",
+        "mv-表19/r4/c6",
+        "mv-表19/r4/c7",
+        "mv-表19/r4/c8",
+        "mv-表19/r4/c9",
+        "mv-表19/r4/c10",
+        "mv-表19/r5/c1",
+        "mv-表19/r5/c2",
+        "mv-表19/r5/c3",
+        "mv-表19/r5/c4",
+        "mv-表19/r5/c5",
+        "mv-表19/r5/c6",
+        "mv-表19/r5/c7",
+        "mv-表19/r5/c8",
+        "mv-表19/r5/c9",
+        "mv-表19/r5/c10",
+        "mv-表19/r6/c1",
+        "mv-表19/r6/c2",
+        "mv-表19/r6/c3",
+        "mv-表19/r6/c4",
+        "mv-表19/r6/c5",
+        "mv-表19/r6/c6",
+        "mv-表19/r6/c7",
+        "mv-表19/r6/c8",
+        "mv-表19/r6/c9",
+        "mv-表19/r6/c10",
+        "mv-表19/r7/c1",
+        "mv-表19/r7/c2",
+        "mv-表19/r7/c3",
+        "mv-表19/r7/c4",
+        "mv-表19/r7/c5",
+        "mv-表19/r7/c6",
+        "mv-表19/r7/c7",
+        "mv-表19/r7/c8",
+        "mv-表19/r7/c9",
+        "mv-表19/r7/c10",
+        "mv-表19/r8/c1",
+        "mv-表19/r8/c2",
+        "mv-表19/r8/c3",
+        "mv-表19/r8/c4",
+        "mv-表19/r8/c5",
+        "mv-表19/r8/c6",
+        "mv-表19/r8/c7",
+        "mv-表19/r8/c8",
+        "mv-表19/r8/c9",
+        "mv-表19/r8/c10",
+        "mv-表19/r9/c1",
+        "mv-表19/r9/c2",
+        "mv-表19/r9/c3",
+        "mv-表19/r9/c4",
+        "mv-表19/r9/c5",
+        "mv-表19/r9/c6",
+        "mv-表19/r9/c7",
+        "mv-表19/r9/c8",
+        "mv-表19/r9/c9",
+        "mv-表19/r9/c10",
+        "mv-表19/r10/c1",
+        "mv-表19/r10/c2",
+        "mv-表19/r10/c3",
+        "mv-表19/r10/c4",
+        "mv-表19/r10/c5",
+        "mv-表19/r10/c6",
+        "mv-表19/r10/c7",
+        "mv-表19/r10/c8",
+        "mv-表19/r10/c9",
+        "mv-表19/r10/c10",
+        "mv-表19/r11/c1",
+        "mv-表19/r11/c2",
+        "mv-表19/r11/c3",
+        "mv-表19/r11/c4",
+        "mv-表19/r11/c5",
+        "mv-表19/r11/c6",
+        "mv-表19/r11/c7",
+        "mv-表19/r11/c8",
+        "mv-表19/r11/c9",
+        "mv-表19/r11/c10",
+        "mv-表19/r12/c1",
+        "mv-表19/r12/c2",
+        "mv-表19/r12/c3",
+        "mv-表19/r12/c4",
+        "mv-表19/r12/c5",
+        "mv-表19/r12/c6",
+        "mv-表19/r12/c7",
+        "mv-表19/r12/c8",
+        "mv-表19/r12/c9",
+        "mv-表19/r12/c10",
+        "mv-表19/r13/c1",
+        "mv-表19/r13/c2",
+        "mv-表19/r13/c3",
+        "mv-表19/r13/c4",
+        "mv-表19/r13/c5",
+        "mv-表19/r13/c6",
+        "mv-表19/r13/c7",
+        "mv-表19/r13/c8",
+        "mv-表19/r13/c9",
+        "mv-表19/r13/c10",
+        "mv-表19/r14/c1",
+        "mv-表19/r14/c2",
+        "mv-表19/r14/c3",
+        "mv-表19/r14/c4",
+        "mv-表19/r14/c5",
+        "mv-表19/r14/c6",
+        "mv-表19/r14/c7",
+        "mv-表19/r14/c8",
+        "mv-表19/r14/c9",
+        "mv-表19/r14/c10",
+        "mv-表19/r15/c1",
+        "mv-表19/r15/c2",
+        "mv-表19/r15/c3",
+        "mv-表19/r15/c4",
+        "mv-表19/r15/c5",
+        "mv-表19/r15/c6",
+        "mv-表19/r15/c7",
+        "mv-表19/r15/c8",
+        "mv-表19/r15/c9",
+        "mv-表19/r15/c10",
+        "mv-表19/r16/c1",
+        "mv-表19/r16/c2",
+        "mv-表19/r16/c3",
+        "mv-表19/r16/c4",
+        "mv-表19/r16/c5",
+        "mv-表19/r16/c6",
+        "mv-表19/r16/c7",
+        "mv-表19/r16/c8",
+        "mv-表19/r16/c9",
+        "mv-表19/r16/c10",
+        "mv-表19/r17/c1",
+        "mv-表19/r17/c2",
+        "mv-表19/r17/c3",
+        "mv-表19/r17/c4",
+        "mv-表19/r17/c5",
+        "mv-表19/r17/c6",
+        "mv-表19/r17/c7",
+        "mv-表19/r17/c8",
+        "mv-表19/r17/c9",
+        "mv-表19/r17/c10",
+        "mv-表19/r18/c1",
+        "mv-表19/r18/c2",
+        "mv-表19/r18/c3",
+        "mv-表19/r18/c4",
+        "mv-表19/r18/c5",
+        "mv-表19/r18/c6",
+        "mv-表19/r18/c7",
+        "mv-表19/r18/c8",
+        "mv-表19/r18/c9",
+        "mv-表19/r18/c10",
+        "mv-表19/r19/c1",
+        "mv-表19/r19/c2",
+        "mv-表19/r19/c3",
+        "mv-表19/r19/c4",
+        "mv-表19/r19/c5",
+        "mv-表19/r19/c6",
+        "mv-表19/r19/c7",
+        "mv-表19/r19/c8",
+        "mv-表19/r19/c9",
+        "mv-表19/r19/c10",
+        "mv-表19/r20/c1",
+        "mv-表19/r20/c2",
+        "mv-表19/r20/c3",
+        "mv-表19/r20/c4",
+        "mv-表19/r20/c5",
+        "mv-表19/r20/c6",
+        "mv-表19/r20/c7",
+        "mv-表19/r20/c8",
+        "mv-表19/r20/c9",
+        "mv-表19/r20/c10",
+        "mv-表19/r21/c1",
+        "mv-表19/r21/c2",
+        "mv-表19/r21/c3",
+        "mv-表19/r21/c4",
+        "mv-表19/r21/c5",
+        "mv-表19/r21/c6",
+        "mv-表19/r21/c7",
+        "mv-表19/r21/c8",
+        "mv-表19/r21/c9",
+        "mv-表19/r21/c10",
+        "mv-表19/r22/c1",
+        "mv-表19/r22/c2",
+        "mv-表19/r22/c3",
+        "mv-表19/r22/c4",
+        "mv-表19/r22/c5",
+        "mv-表19/r22/c6",
+        "mv-表19/r22/c7",
+        "mv-表19/r22/c8",
+        "mv-表19/r22/c9",
+        "mv-表19/r22/c10",
+        "mv-表19/r23/c1",
+        "mv-表19/r23/c2",
+        "mv-表19/r23/c3",
+        "mv-表19/r23/c4",
+        "mv-表19/r23/c5",
+        "mv-表19/r23/c6",
+        "mv-表19/r23/c7",
+        "mv-表19/r23/c8",
+        "mv-表19/r23/c9",
+        "mv-表19/r23/c10",
+        "mv-表19/r24/c1",
+        "mv-表19/r24/c2",
+        "mv-表19/r24/c3",
+        "mv-表19/r24/c4",
+        "mv-表19/r24/c5",
+        "mv-表19/r24/c6",
+        "mv-表19/r24/c7",
+        "mv-表19/r24/c8",
+        "mv-表19/r24/c9",
+        "mv-表19/r24/c10",
+        "mv-表19/r25/c1",
+        "mv-表19/r25/c2",
+        "mv-表19/r25/c3",
+        "mv-表19/r25/c4",
+        "mv-表19/r25/c5",
+        "mv-表19/r25/c6",
+        "mv-表19/r25/c7",
+        "mv-表19/r25/c8",
+        "mv-表19/r25/c9",
+        "mv-表19/r25/c10"
+      ]
+    },
+    {
+      "id": "gb3956-表A.1",
+      "standard": "GB/T 3956",
+      "edition": "2008",
+      "clause": "表A.1",
+      "table": "表A.1",
+      "title": "导体电阻温度校正系数",
+      "quantities": [
+        {
+          "key": "resistance_temperature_factor",
+          "name": "温度校正系数",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 41,
+      "column_count": 1,
+      "record_count": 41,
+      "record_ids": [
+        "gb3956-表A.1/r1/value",
+        "gb3956-表A.1/r2/value",
+        "gb3956-表A.1/r3/value",
+        "gb3956-表A.1/r4/value",
+        "gb3956-表A.1/r5/value",
+        "gb3956-表A.1/r6/value",
+        "gb3956-表A.1/r7/value",
+        "gb3956-表A.1/r8/value",
+        "gb3956-表A.1/r9/value",
+        "gb3956-表A.1/r10/value",
+        "gb3956-表A.1/r11/value",
+        "gb3956-表A.1/r12/value",
+        "gb3956-表A.1/r13/value",
+        "gb3956-表A.1/r14/value",
+        "gb3956-表A.1/r15/value",
+        "gb3956-表A.1/r16/value",
+        "gb3956-表A.1/r17/value",
+        "gb3956-表A.1/r18/value",
+        "gb3956-表A.1/r19/value",
+        "gb3956-表A.1/r20/value",
+        "gb3956-表A.1/r21/value",
+        "gb3956-表A.1/r22/value",
+        "gb3956-表A.1/r23/value",
+        "gb3956-表A.1/r24/value",
+        "gb3956-表A.1/r25/value",
+        "gb3956-表A.1/r26/value",
+        "gb3956-表A.1/r27/value",
+        "gb3956-表A.1/r28/value",
+        "gb3956-表A.1/r29/value",
+        "gb3956-表A.1/r30/value",
+        "gb3956-表A.1/r31/value",
+        "gb3956-表A.1/r32/value",
+        "gb3956-表A.1/r33/value",
+        "gb3956-表A.1/r34/value",
+        "gb3956-表A.1/r35/value",
+        "gb3956-表A.1/r36/value",
+        "gb3956-表A.1/r37/value",
+        "gb3956-表A.1/r38/value",
+        "gb3956-表A.1/r39/value",
+        "gb3956-表A.1/r40/value",
+        "gb3956-表A.1/r41/value"
+      ]
+    },
+    {
+      "id": "gb3956-表C.1",
+      "standard": "GB/T 3956",
+      "edition": "2008",
+      "clause": "表C.1",
+      "table": "表C.1",
+      "title": "圆形铜导体最大直径",
+      "quantities": [
+        {
+          "key": "conductor_diameter_max",
+          "name": "导体最大直径",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 24,
+      "column_count": 3,
+      "record_count": 72,
+      "record_ids": [
+        "gb3956-表C.1/r1/c1",
+        "gb3956-表C.1/r1/c2",
+        "gb3956-表C.1/r1/c3",
+        "gb3956-表C.1/r2/c1",
+        "gb3956-表C.1/r2/c2",
+        "gb3956-表C.1/r2/c3",
+        "gb3956-表C.1/r3/c1",
+        "gb3956-表C.1/r3/c2",
+        "gb3956-表C.1/r3/c3",
+        "gb3956-表C.1/r4/c1",
+        "gb3956-表C.1/r4/c2",
+        "gb3956-表C.1/r4/c3",
+        "gb3956-表C.1/r5/c1",
+        "gb3956-表C.1/r5/c2",
+        "gb3956-表C.1/r5/c3",
+        "gb3956-表C.1/r6/c1",
+        "gb3956-表C.1/r6/c2",
+        "gb3956-表C.1/r6/c3",
+        "gb3956-表C.1/r7/c1",
+        "gb3956-表C.1/r7/c2",
+        "gb3956-表C.1/r7/c3",
+        "gb3956-表C.1/r8/c1",
+        "gb3956-表C.1/r8/c2",
+        "gb3956-表C.1/r8/c3",
+        "gb3956-表C.1/r9/c1",
+        "gb3956-表C.1/r9/c2",
+        "gb3956-表C.1/r9/c3",
+        "gb3956-表C.1/r10/c1",
+        "gb3956-表C.1/r10/c2",
+        "gb3956-表C.1/r10/c3",
+        "gb3956-表C.1/r11/c1",
+        "gb3956-表C.1/r11/c2",
+        "gb3956-表C.1/r11/c3",
+        "gb3956-表C.1/r12/c1",
+        "gb3956-表C.1/r12/c2",
+        "gb3956-表C.1/r12/c3",
+        "gb3956-表C.1/r13/c1",
+        "gb3956-表C.1/r13/c2",
+        "gb3956-表C.1/r13/c3",
+        "gb3956-表C.1/r14/c1",
+        "gb3956-表C.1/r14/c2",
+        "gb3956-表C.1/r14/c3",
+        "gb3956-表C.1/r15/c1",
+        "gb3956-表C.1/r15/c2",
+        "gb3956-表C.1/r15/c3",
+        "gb3956-表C.1/r16/c1",
+        "gb3956-表C.1/r16/c2",
+        "gb3956-表C.1/r16/c3",
+        "gb3956-表C.1/r17/c1",
+        "gb3956-表C.1/r17/c2",
+        "gb3956-表C.1/r17/c3",
+        "gb3956-表C.1/r18/c1",
+        "gb3956-表C.1/r18/c2",
+        "gb3956-表C.1/r18/c3",
+        "gb3956-表C.1/r19/c1",
+        "gb3956-表C.1/r19/c2",
+        "gb3956-表C.1/r19/c3",
+        "gb3956-表C.1/r20/c1",
+        "gb3956-表C.1/r20/c2",
+        "gb3956-表C.1/r20/c3",
+        "gb3956-表C.1/r21/c1",
+        "gb3956-表C.1/r21/c2",
+        "gb3956-表C.1/r21/c3",
+        "gb3956-表C.1/r22/c1",
+        "gb3956-表C.1/r22/c2",
+        "gb3956-表C.1/r22/c3",
+        "gb3956-表C.1/r23/c1",
+        "gb3956-表C.1/r23/c2",
+        "gb3956-表C.1/r23/c3",
+        "gb3956-表C.1/r24/c1",
+        "gb3956-表C.1/r24/c2",
+        "gb3956-表C.1/r24/c3"
+      ]
+    },
+    {
+      "id": "gb3956-表C.2",
+      "standard": "GB/T 3956",
+      "edition": "2008",
+      "clause": "表C.2",
+      "table": "表C.2",
+      "title": "紧压绞合圆形导体直径范围",
+      "quantities": [
+        {
+          "key": "conductor_diameter_min",
+          "name": "导体最小直径",
+          "dimension": "length",
+          "unit": "mm"
+        },
+        {
+          "key": "conductor_diameter_max",
+          "name": "导体最大直径",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 15,
+      "column_count": 2,
+      "record_count": 30,
+      "record_ids": [
+        "gb3956-表C.2/r1/minimum",
+        "gb3956-表C.2/r1/maximum",
+        "gb3956-表C.2/r2/minimum",
+        "gb3956-表C.2/r2/maximum",
+        "gb3956-表C.2/r3/minimum",
+        "gb3956-表C.2/r3/maximum",
+        "gb3956-表C.2/r4/minimum",
+        "gb3956-表C.2/r4/maximum",
+        "gb3956-表C.2/r5/minimum",
+        "gb3956-表C.2/r5/maximum",
+        "gb3956-表C.2/r6/minimum",
+        "gb3956-表C.2/r6/maximum",
+        "gb3956-表C.2/r7/minimum",
+        "gb3956-表C.2/r7/maximum",
+        "gb3956-表C.2/r8/minimum",
+        "gb3956-表C.2/r8/maximum",
+        "gb3956-表C.2/r9/minimum",
+        "gb3956-表C.2/r9/maximum",
+        "gb3956-表C.2/r10/minimum",
+        "gb3956-表C.2/r10/maximum",
+        "gb3956-表C.2/r11/minimum",
+        "gb3956-表C.2/r11/maximum",
+        "gb3956-表C.2/r12/minimum",
+        "gb3956-表C.2/r12/maximum",
+        "gb3956-表C.2/r13/minimum",
+        "gb3956-表C.2/r13/maximum",
+        "gb3956-表C.2/r14/minimum",
+        "gb3956-表C.2/r14/maximum",
+        "gb3956-表C.2/r15/minimum",
+        "gb3956-表C.2/r15/maximum"
+      ]
+    },
+    {
+      "id": "gb3956-表C.3",
+      "standard": "GB/T 3956",
+      "edition": "2008",
+      "clause": "表C.3",
+      "table": "表C.3",
+      "title": "实心圆形铝导体直径范围",
+      "quantities": [
+        {
+          "key": "conductor_diameter_min",
+          "name": "导体最小直径",
+          "dimension": "length",
+          "unit": "mm"
+        },
+        {
+          "key": "conductor_diameter_max",
+          "name": "导体最大直径",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 18,
+      "column_count": 2,
+      "record_count": 36,
+      "record_ids": [
+        "gb3956-表C.3/r1/minimum",
+        "gb3956-表C.3/r1/maximum",
+        "gb3956-表C.3/r2/minimum",
+        "gb3956-表C.3/r2/maximum",
+        "gb3956-表C.3/r3/minimum",
+        "gb3956-表C.3/r3/maximum",
+        "gb3956-表C.3/r4/minimum",
+        "gb3956-表C.3/r4/maximum",
+        "gb3956-表C.3/r5/minimum",
+        "gb3956-表C.3/r5/maximum",
+        "gb3956-表C.3/r6/minimum",
+        "gb3956-表C.3/r6/maximum",
+        "gb3956-表C.3/r7/minimum",
+        "gb3956-表C.3/r7/maximum",
+        "gb3956-表C.3/r8/minimum",
+        "gb3956-表C.3/r8/maximum",
+        "gb3956-表C.3/r9/minimum",
+        "gb3956-表C.3/r9/maximum",
+        "gb3956-表C.3/r10/minimum",
+        "gb3956-表C.3/r10/maximum",
+        "gb3956-表C.3/r11/minimum",
+        "gb3956-表C.3/r11/maximum",
+        "gb3956-表C.3/r12/minimum",
+        "gb3956-表C.3/r12/maximum",
+        "gb3956-表C.3/r13/minimum",
+        "gb3956-表C.3/r13/maximum",
+        "gb3956-表C.3/r14/minimum",
+        "gb3956-表C.3/r14/maximum",
+        "gb3956-表C.3/r15/minimum",
+        "gb3956-表C.3/r15/maximum",
+        "gb3956-表C.3/r16/minimum",
+        "gb3956-表C.3/r16/maximum",
+        "gb3956-表C.3/r17/minimum",
+        "gb3956-表C.3/r17/maximum",
+        "gb3956-表C.3/r18/minimum",
+        "gb3956-表C.3/r18/maximum"
+      ]
+    },
+    {
+      "id": "gb3956-附录A",
+      "standard": "GB/T 3956",
+      "edition": "2008",
+      "clause": "附录A",
+      "table": "附录A",
+      "title": "电阻测量换算参数",
+      "quantities": [
+        {
+          "key": "length_factor",
+          "name": "length_factor",
+          "dimension": "length_conversion",
+          "unit": "m/km"
+        },
+        {
+          "key": "reference_temperature",
+          "name": "reference_temperature",
+          "dimension": "temperature",
+          "unit": "°C"
+        },
+        {
+          "key": "minimum_sample_length",
+          "name": "minimum_sample_length",
+          "dimension": "length",
+          "unit": "m"
+        }
+      ],
+      "row_count": 3,
+      "column_count": 1,
+      "record_count": 3,
+      "record_ids": [
+        "gb3956-附录A/r1/value",
+        "gb3956-附录A/r2/value",
+        "gb3956-附录A/r3/value"
+      ]
+    },
+    {
+      "id": "gb3956-附录B-Cu",
+      "standard": "GB/T 3956",
+      "edition": "2008",
+      "clause": "附录B",
+      "table": "附录B",
+      "title": "退火铜精确温度校正公式参数",
+      "quantities": [
+        {
+          "key": "numerator",
+          "name": "numerator",
+          "dimension": "temperature",
+          "unit": "°C"
+        },
+        {
+          "key": "denominator_offset",
+          "name": "denominator_offset",
+          "dimension": "temperature",
+          "unit": "°C"
+        },
+        {
+          "key": "alpha20",
+          "name": "alpha20",
+          "dimension": "dimensionless",
+          "unit": "1/K"
+        },
+        {
+          "key": "reference_temperature",
+          "name": "reference_temperature",
+          "dimension": "temperature",
+          "unit": "°C"
+        }
+      ],
+      "row_count": 4,
+      "column_count": 1,
+      "record_count": 4,
+      "record_ids": [
+        "gb3956-附录B-Cu/r1/value",
+        "gb3956-附录B-Cu/r2/value",
+        "gb3956-附录B-Cu/r3/value",
+        "gb3956-附录B-Cu/r4/value"
+      ]
+    },
+    {
+      "id": "gb3956-附录B-Al",
+      "standard": "GB/T 3956",
+      "edition": "2008",
+      "clause": "附录B",
+      "table": "附录B",
+      "title": "铝精确温度校正公式参数",
+      "quantities": [
+        {
+          "key": "numerator",
+          "name": "numerator",
+          "dimension": "temperature",
+          "unit": "°C"
+        },
+        {
+          "key": "denominator_offset",
+          "name": "denominator_offset",
+          "dimension": "temperature",
+          "unit": "°C"
+        },
+        {
+          "key": "alpha20",
+          "name": "alpha20",
+          "dimension": "dimensionless",
+          "unit": "1/K"
+        },
+        {
+          "key": "reference_temperature",
+          "name": "reference_temperature",
+          "dimension": "temperature",
+          "unit": "°C"
+        }
+      ],
+      "row_count": 4,
+      "column_count": 1,
+      "record_count": 4,
+      "record_ids": [
+        "gb3956-附录B-Al/r1/value",
+        "gb3956-附录B-Al/r2/value",
+        "gb3956-附录B-Al/r3/value",
+        "gb3956-附录B-Al/r4/value"
+      ]
+    },
+    {
+      "id": "iec60228-table1",
+      "standard": "IEC 60228",
+      "edition": "2023",
+      "clause": "5.2",
+      "table": "Table 1",
+      "title": "实心铝导体抗拉强度限值",
+      "quantities": [
+        {
+          "key": "tensile_strength",
+          "name": "抗拉强度",
+          "dimension": "pressure",
+          "unit": "N/mm²"
+        }
+      ],
+      "row_count": 4,
+      "column_count": 1,
+      "record_count": 4,
+      "record_ids": [
+        "iec60228-table1/r1/value",
+        "iec60228-table1/r2/value",
+        "iec60228-table1/r3/value",
+        "iec60228-table1/r4/value"
+      ]
+    },
+    {
+      "id": "iec60228-table2",
+      "standard": "IEC 60228",
+      "edition": "2023",
+      "clause": "5.3",
+      "table": "Table 2",
+      "title": "绞合铝导体单线抗拉强度限值",
+      "quantities": [
+        {
+          "key": "tensile_strength",
+          "name": "抗拉强度",
+          "dimension": "pressure",
+          "unit": "N/mm²"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "iec60228-table2/r1/value",
+        "iec60228-table2/r2/value"
+      ]
+    },
+    {
+      "id": "gb12706.4-表14",
+      "standard": "GB/T 12706.4",
+      "edition": "2020",
+      "clause": "9",
+      "table": "表14",
+      "title": "试验电压和要求的归纳",
+      "quantities": [
+        {
+          "key": "test_voltage",
+          "name": "试验电压",
+          "dimension": "voltage",
+          "unit": "kV"
+        }
+      ],
+      "row_count": 7,
+      "column_count": 7,
+      "record_count": 49,
+      "record_ids": [
+        "gb12706.4-表14/r1/c1",
+        "gb12706.4-表14/r1/c2",
+        "gb12706.4-表14/r1/c3",
+        "gb12706.4-表14/r1/c4",
+        "gb12706.4-表14/r1/c5",
+        "gb12706.4-表14/r1/c6",
+        "gb12706.4-表14/r1/c7",
+        "gb12706.4-表14/r2/c1",
+        "gb12706.4-表14/r2/c2",
+        "gb12706.4-表14/r2/c3",
+        "gb12706.4-表14/r2/c4",
+        "gb12706.4-表14/r2/c5",
+        "gb12706.4-表14/r2/c6",
+        "gb12706.4-表14/r2/c7",
+        "gb12706.4-表14/r3/c1",
+        "gb12706.4-表14/r3/c2",
+        "gb12706.4-表14/r3/c3",
+        "gb12706.4-表14/r3/c4",
+        "gb12706.4-表14/r3/c5",
+        "gb12706.4-表14/r3/c6",
+        "gb12706.4-表14/r3/c7",
+        "gb12706.4-表14/r4/c1",
+        "gb12706.4-表14/r4/c2",
+        "gb12706.4-表14/r4/c3",
+        "gb12706.4-表14/r4/c4",
+        "gb12706.4-表14/r4/c5",
+        "gb12706.4-表14/r4/c6",
+        "gb12706.4-表14/r4/c7",
+        "gb12706.4-表14/r5/c1",
+        "gb12706.4-表14/r5/c2",
+        "gb12706.4-表14/r5/c3",
+        "gb12706.4-表14/r5/c4",
+        "gb12706.4-表14/r5/c5",
+        "gb12706.4-表14/r5/c6",
+        "gb12706.4-表14/r5/c7",
+        "gb12706.4-表14/r6/c1",
+        "gb12706.4-表14/r6/c2",
+        "gb12706.4-表14/r6/c3",
+        "gb12706.4-表14/r6/c4",
+        "gb12706.4-表14/r6/c5",
+        "gb12706.4-表14/r6/c6",
+        "gb12706.4-表14/r6/c7",
+        "gb12706.4-表14/r7/c1",
+        "gb12706.4-表14/r7/c2",
+        "gb12706.4-表14/r7/c3",
+        "gb12706.4-表14/r7/c4",
+        "gb12706.4-表14/r7/c5",
+        "gb12706.4-表14/r7/c6",
+        "gb12706.4-表14/r7/c7"
+      ]
+    },
+    {
+      "id": "gb12706.4-表1",
+      "standard": "GB/T 12706.4",
+      "edition": "2020",
+      "clause": "表1",
+      "table": "表1",
+      "title": "用于可分离连接器试验的电缆截面积",
+      "quantities": [
+        {
+          "key": "conductor_area",
+          "name": "试验导体标称截面积",
+          "dimension": "area",
+          "unit": "mm²"
+        }
+      ],
+      "row_count": 5,
+      "column_count": 2,
+      "record_count": 10,
+      "record_ids": [
+        "gb12706.4-表1/r1/c1",
+        "gb12706.4-表1/r1/c2",
+        "gb12706.4-表1/r2/c1",
+        "gb12706.4-表1/r2/c2",
+        "gb12706.4-表1/r3/c1",
+        "gb12706.4-表1/r3/c2",
+        "gb12706.4-表1/r4/c1",
+        "gb12706.4-表1/r4/c2",
+        "gb12706.4-表1/r5/c1",
+        "gb12706.4-表1/r5/c2"
+      ]
+    },
+    {
+      "id": "gb12706.4-表8",
+      "standard": "GB/T 12706.4",
+      "edition": "2020",
+      "clause": "7.1",
+      "table": "表8",
+      "title": "可分离连接器的覆盖范围",
+      "quantities": [
+        {
+          "key": "coverage_area",
+          "name": "认可截面上限",
+          "dimension": "area",
+          "unit": "mm²"
+        }
+      ],
+      "row_count": 5,
+      "column_count": 2,
+      "record_count": 10,
+      "record_ids": [
+        "gb12706.4-表8/r1/c1",
+        "gb12706.4-表8/r1/c2",
+        "gb12706.4-表8/r2/c1",
+        "gb12706.4-表8/r2/c2",
+        "gb12706.4-表8/r3/c1",
+        "gb12706.4-表8/r3/c2",
+        "gb12706.4-表8/r4/c1",
+        "gb12706.4-表8/r4/c2",
+        "gb12706.4-表8/r5/c1",
+        "gb12706.4-表8/r5/c2"
+      ]
+    },
+    {
+      "id": "part1-表A.1",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.1",
+      "table": "表 A.1",
+      "title": "导体假设直径",
+      "quantities": [
+        {
+          "key": "conductor_fictitious_diameter",
+          "name": "导体假设直径",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 21,
+      "column_count": 1,
+      "record_count": 21,
+      "record_ids": [
+        "part1-表A.1/r1/value",
+        "part1-表A.1/r2/value",
+        "part1-表A.1/r3/value",
+        "part1-表A.1/r4/value",
+        "part1-表A.1/r5/value",
+        "part1-表A.1/r6/value",
+        "part1-表A.1/r7/value",
+        "part1-表A.1/r8/value",
+        "part1-表A.1/r9/value",
+        "part1-表A.1/r10/value",
+        "part1-表A.1/r11/value",
+        "part1-表A.1/r12/value",
+        "part1-表A.1/r13/value",
+        "part1-表A.1/r14/value",
+        "part1-表A.1/r15/value",
+        "part1-表A.1/r16/value",
+        "part1-表A.1/r17/value",
+        "part1-表A.1/r18/value",
+        "part1-表A.1/r19/value",
+        "part1-表A.1/r20/value",
+        "part1-表A.1/r21/value"
+      ]
+    },
+    {
+      "id": "part2-表A.1",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "A.2.1",
+      "table": "表 A.1",
+      "title": "导体假设直径",
+      "quantities": [
+        {
+          "key": "conductor_fictitious_diameter",
+          "name": "导体假设直径",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 20,
+      "column_count": 1,
+      "record_count": 20,
+      "record_ids": [
+        "part2-表A.1/r1/value",
+        "part2-表A.1/r2/value",
+        "part2-表A.1/r3/value",
+        "part2-表A.1/r4/value",
+        "part2-表A.1/r5/value",
+        "part2-表A.1/r6/value",
+        "part2-表A.1/r7/value",
+        "part2-表A.1/r8/value",
+        "part2-表A.1/r9/value",
+        "part2-表A.1/r10/value",
+        "part2-表A.1/r11/value",
+        "part2-表A.1/r12/value",
+        "part2-表A.1/r13/value",
+        "part2-表A.1/r14/value",
+        "part2-表A.1/r15/value",
+        "part2-表A.1/r16/value",
+        "part2-表A.1/r17/value",
+        "part2-表A.1/r18/value",
+        "part2-表A.1/r19/value",
+        "part2-表A.1/r20/value"
+      ]
+    },
+    {
+      "id": "part1-表A.2",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.3",
+      "table": "表 A.2",
+      "title": "等截面线芯成缆系数K",
+      "quantities": [
+        {
+          "key": "bundle_factor",
+          "name": "成缆系数",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 55,
+      "column_count": 1,
+      "record_count": 55,
+      "record_ids": [
+        "part1-表A.2/r1/value",
+        "part1-表A.2/r2/value",
+        "part1-表A.2/r3/value",
+        "part1-表A.2/r4/value",
+        "part1-表A.2/r5/value",
+        "part1-表A.2/r6/value",
+        "part1-表A.2/r7/value",
+        "part1-表A.2/r8/value",
+        "part1-表A.2/r9/value",
+        "part1-表A.2/r10/value",
+        "part1-表A.2/r11/value",
+        "part1-表A.2/r12/value",
+        "part1-表A.2/r13/value",
+        "part1-表A.2/r14/value",
+        "part1-表A.2/r15/value",
+        "part1-表A.2/r16/value",
+        "part1-表A.2/r17/value",
+        "part1-表A.2/r18/value",
+        "part1-表A.2/r19/value",
+        "part1-表A.2/r20/value",
+        "part1-表A.2/r21/value",
+        "part1-表A.2/r22/value",
+        "part1-表A.2/r23/value",
+        "part1-表A.2/r24/value",
+        "part1-表A.2/r25/value",
+        "part1-表A.2/r26/value",
+        "part1-表A.2/r27/value",
+        "part1-表A.2/r28/value",
+        "part1-表A.2/r29/value",
+        "part1-表A.2/r30/value",
+        "part1-表A.2/r31/value",
+        "part1-表A.2/r32/value",
+        "part1-表A.2/r33/value",
+        "part1-表A.2/r34/value",
+        "part1-表A.2/r35/value",
+        "part1-表A.2/r36/value",
+        "part1-表A.2/r37/value",
+        "part1-表A.2/r38/value",
+        "part1-表A.2/r39/value",
+        "part1-表A.2/r40/value",
+        "part1-表A.2/r41/value",
+        "part1-表A.2/r42/value",
+        "part1-表A.2/r43/value",
+        "part1-表A.2/r44/value",
+        "part1-表A.2/r45/value",
+        "part1-表A.2/r46/value",
+        "part1-表A.2/r47/value",
+        "part1-表A.2/r48/value",
+        "part1-表A.2/r49/value",
+        "part1-表A.2/r50/value",
+        "part1-表A.2/r51/value",
+        "part1-表A.2/r52/value",
+        "part1-表A.2/r53/value",
+        "part1-表A.2/r54/value",
+        "part1-表A.2/r55/value"
+      ]
+    },
+    {
+      "id": "part2-A.2.3",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "A.2.3",
+      "table": "A.2.3",
+      "title": "三芯成缆系数",
+      "quantities": [
+        {
+          "key": "bundle_factor",
+          "name": "成缆系数",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part2-A.2.3/r1/value"
+      ]
+    },
+    {
+      "id": "part3-A.2.3",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "A.2.3",
+      "table": "A.2.3",
+      "title": "三芯成缆系数",
+      "quantities": [
+        {
+          "key": "bundle_factor",
+          "name": "成缆系数",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part3-A.2.3/r1/value"
+      ]
+    },
+    {
+      "id": "part1-A.2.2",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.2",
+      "table": "A.2.2",
+      "title": "绝缘线芯假设直径参数",
+      "quantities": [
+        {
+          "key": "core_fictitious_parameters",
+          "name": "线芯假设参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part1-A.2.2/r1/value"
+      ]
+    },
+    {
+      "id": "part2-A.2.2",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "A.2.2",
+      "table": "A.2.2",
+      "title": "绝缘线芯假设直径参数",
+      "quantities": [
+        {
+          "key": "core_fictitious_parameters",
+          "name": "线芯假设参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "part2-A.2.2/r1/value",
+        "part2-A.2.2/r2/value"
+      ]
+    },
+    {
+      "id": "part3-A.2.2",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "A.2.2",
+      "table": "A.2.2",
+      "title": "绝缘线芯假设直径参数",
+      "quantities": [
+        {
+          "key": "core_fictitious_parameters",
+          "name": "线芯假设参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part3-A.2.2/r1/value"
+      ]
+    },
+    {
+      "id": "part1-formula-A.3",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.3",
+      "table": "式 A.3",
+      "title": "不等截面线芯成缆参数",
+      "quantities": [
+        {
+          "key": "bundle_parameters",
+          "name": "不等截面成缆公式参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part1-formula-A.3/r1/value"
+      ]
+    },
+    {
+      "id": "part1-formula-A.4",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.3",
+      "table": "式 A.4",
+      "title": "不等截面线芯成缆参数",
+      "quantities": [
+        {
+          "key": "bundle_parameters",
+          "name": "不等截面成缆公式参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part1-formula-A.4/r1/value"
+      ]
+    },
+    {
+      "id": "part1-formula-A.5",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.3",
+      "table": "式 A.5",
+      "title": "不等截面线芯成缆参数",
+      "quantities": [
+        {
+          "key": "bundle_parameters",
+          "name": "不等截面成缆公式参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part1-formula-A.5/r1/value"
+      ]
+    },
+    {
+      "id": "part1-formula-A.6",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.3",
+      "table": "式 A.6",
+      "title": "不等截面线芯成缆参数",
+      "quantities": [
+        {
+          "key": "bundle_parameters",
+          "name": "不等截面成缆公式参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part1-formula-A.6/r1/value"
+      ]
+    },
+    {
+      "id": "part1-formula-A.7",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.3",
+      "table": "式 A.7",
+      "title": "不等截面线芯成缆参数",
+      "quantities": [
+        {
+          "key": "bundle_parameters",
+          "name": "不等截面成缆公式参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part1-formula-A.7/r1/value"
+      ]
+    },
+    {
+      "id": "part1-A.2.4",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.4",
+      "table": "A.2.4",
+      "title": "内衬假设直径与厚度参数",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "内衬直径增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        },
+        {
+          "key": "inner_covering_fictitious_thickness",
+          "name": "内衬假设厚度",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 5,
+      "column_count": 1,
+      "record_count": 5,
+      "record_ids": [
+        "part1-A.2.4/r1/value",
+        "part1-A.2.4/r2/value",
+        "part1-A.2.4/r3/value",
+        "part1-A.2.4/r4/value",
+        "part1-A.2.4/r5/value"
+      ]
+    },
+    {
+      "id": "part2-A.2.4",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "A.2.4",
+      "table": "A.2.4",
+      "title": "内衬假设直径与厚度参数",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "内衬直径增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        },
+        {
+          "key": "inner_covering_fictitious_thickness",
+          "name": "内衬假设厚度",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 5,
+      "column_count": 1,
+      "record_count": 5,
+      "record_ids": [
+        "part2-A.2.4/r1/value",
+        "part2-A.2.4/r2/value",
+        "part2-A.2.4/r3/value",
+        "part2-A.2.4/r4/value",
+        "part2-A.2.4/r5/value"
+      ]
+    },
+    {
+      "id": "part3-A.2.4",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "A.2.4",
+      "table": "A.2.4",
+      "title": "内衬假设直径与厚度参数",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "内衬直径增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part3-A.2.4/r1/value"
+      ]
+    },
+    {
+      "id": "part1-screen-table",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.5",
+      "table": "表 A.3",
+      "title": "同心导体和金属屏蔽的直径增量",
+      "quantities": [
+        {
+          "key": "screen_diameter_increase",
+          "name": "屏蔽直径增量",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 16,
+      "column_count": 1,
+      "record_count": 16,
+      "record_ids": [
+        "part1-screen-table/r1/value",
+        "part1-screen-table/r2/value",
+        "part1-screen-table/r3/value",
+        "part1-screen-table/r4/value",
+        "part1-screen-table/r5/value",
+        "part1-screen-table/r6/value",
+        "part1-screen-table/r7/value",
+        "part1-screen-table/r8/value",
+        "part1-screen-table/r9/value",
+        "part1-screen-table/r10/value",
+        "part1-screen-table/r11/value",
+        "part1-screen-table/r12/value",
+        "part1-screen-table/r13/value",
+        "part1-screen-table/r14/value",
+        "part1-screen-table/r15/value",
+        "part1-screen-table/r16/value"
+      ]
+    },
+    {
+      "id": "part2-screen-table",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "A.2.5",
+      "table": "表 A.2",
+      "title": "同心导体和金属屏蔽的直径增量",
+      "quantities": [
+        {
+          "key": "screen_diameter_increase",
+          "name": "屏蔽直径增量",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 16,
+      "column_count": 1,
+      "record_count": 16,
+      "record_ids": [
+        "part2-screen-table/r1/value",
+        "part2-screen-table/r2/value",
+        "part2-screen-table/r3/value",
+        "part2-screen-table/r4/value",
+        "part2-screen-table/r5/value",
+        "part2-screen-table/r6/value",
+        "part2-screen-table/r7/value",
+        "part2-screen-table/r8/value",
+        "part2-screen-table/r9/value",
+        "part2-screen-table/r10/value",
+        "part2-screen-table/r11/value",
+        "part2-screen-table/r12/value",
+        "part2-screen-table/r13/value",
+        "part2-screen-table/r14/value",
+        "part2-screen-table/r15/value",
+        "part2-screen-table/r16/value"
+      ]
+    },
+    {
+      "id": "part1-screen-rules",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.5",
+      "table": "A.2.5 参数",
+      "title": "金属屏蔽构造参数",
+      "quantities": [
+        {
+          "key": "screen_fictitious_parameters",
+          "name": "屏蔽截面与直径增量规则",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "part1-screen-rules/r1/value",
+        "part1-screen-rules/r2/value"
+      ]
+    },
+    {
+      "id": "part1-A.2.6",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.6",
+      "table": "A.2.6",
+      "title": "铅套假设直径增量",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "铅套增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part1-A.2.6/r1/value"
+      ]
+    },
+    {
+      "id": "part1-A.2.7",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.7",
+      "table": "A.2.7",
+      "title": "隔离套假设直径增量",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "隔离套增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part1-A.2.7/r1/value"
+      ]
+    },
+    {
+      "id": "part1-A.2.8",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.8",
+      "table": "A.2.8",
+      "title": "包带垫层假设直径增量",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "包带垫层增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part1-A.2.8/r1/value"
+      ]
+    },
+    {
+      "id": "part1-armour",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.10",
+      "table": "A.2.10",
+      "title": "铠装假设直径增量",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "铠装增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "part1-armour/r1/value",
+        "part1-armour/r2/value"
+      ]
+    },
+    {
+      "id": "part2-screen-rules",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "A.2.5",
+      "table": "A.2.5 参数",
+      "title": "金属屏蔽构造参数",
+      "quantities": [
+        {
+          "key": "screen_fictitious_parameters",
+          "name": "屏蔽截面与直径增量规则",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "part2-screen-rules/r1/value",
+        "part2-screen-rules/r2/value"
+      ]
+    },
+    {
+      "id": "part2-A.2.6",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "A.2.6",
+      "table": "A.2.6",
+      "title": "铅套假设直径增量",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "铅套增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part2-A.2.6/r1/value"
+      ]
+    },
+    {
+      "id": "part2-A.2.7",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "A.2.7",
+      "table": "A.2.7",
+      "title": "隔离套假设直径增量",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "隔离套增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part2-A.2.7/r1/value"
+      ]
+    },
+    {
+      "id": "part2-A.2.8",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "A.2.8",
+      "table": "A.2.8",
+      "title": "包带垫层假设直径增量",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "包带垫层增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part2-A.2.8/r1/value"
+      ]
+    },
+    {
+      "id": "part2-armour",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "A.2.10",
+      "table": "A.2.10",
+      "title": "铠装假设直径增量",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "铠装增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "part2-armour/r1/value",
+        "part2-armour/r2/value"
+      ]
+    },
+    {
+      "id": "part3-screen-rules",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "A.2.5",
+      "table": "A.2.5 参数",
+      "title": "金属屏蔽构造参数",
+      "quantities": [
+        {
+          "key": "screen_fictitious_parameters",
+          "name": "屏蔽截面与直径增量规则",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "part3-screen-rules/r1/value",
+        "part3-screen-rules/r2/value"
+      ]
+    },
+    {
+      "id": "part3-A.2.6",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "A.2.6",
+      "table": "A.2.6",
+      "title": "铅套假设直径增量",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "铅套增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part3-A.2.6/r1/value"
+      ]
+    },
+    {
+      "id": "part3-A.2.7",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "A.2.7",
+      "table": "A.2.7",
+      "title": "隔离套假设直径增量",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "隔离套增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part3-A.2.7/r1/value"
+      ]
+    },
+    {
+      "id": "part3-A.2.8",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "A.2.8",
+      "table": "A.2.8",
+      "title": "包带垫层假设直径增量",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "包带垫层增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part3-A.2.8/r1/value"
+      ]
+    },
+    {
+      "id": "part3-armour",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "A.2.9",
+      "table": "A.2.9",
+      "title": "铠装假设直径增量",
+      "quantities": [
+        {
+          "key": "cover_fictitious_parameters",
+          "name": "铠装增量参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "part3-armour/r1/value",
+        "part3-armour/r2/value"
+      ]
+    },
+    {
+      "id": "part1-additional-bedding",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "A.2.9",
+      "table": "表 A.4",
+      "title": "金属带铠装附加垫层直径增量",
+      "quantities": [
+        {
+          "key": "additional_bedding_diameter_increase",
+          "name": "附加垫层直径增量",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "part1-additional-bedding/r1/value",
+        "part1-additional-bedding/r2/value"
+      ]
+    },
+    {
+      "id": "part2-additional-bedding",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "A.2.9",
+      "table": "表 A.3",
+      "title": "金属带铠装附加垫层直径增量",
+      "quantities": [
+        {
+          "key": "additional_bedding_diameter_increase",
+          "name": "附加垫层直径增量",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 1,
+      "record_count": 2,
+      "record_ids": [
+        "part2-additional-bedding/r1/value",
+        "part2-additional-bedding/r2/value"
+      ]
+    },
+    {
+      "id": "part1-B.1",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "B.1",
+      "table": "B.1",
+      "title": "假设计算每阶段数值修约",
+      "quantities": [
+        {
+          "key": "fictitious_rounding",
+          "name": "假设直径与厚度修约参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part1-B.1/r1/value"
+      ]
+    },
+    {
+      "id": "part1-B.2",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "B.2",
+      "table": "B.2",
+      "title": "其他用途数值修约",
+      "quantities": [
+        {
+          "key": "fictitious_rounding",
+          "name": "其他用途修约规则",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part1-B.2/r1/value"
+      ]
+    },
+    {
+      "id": "part1-表B.1",
+      "standard": "GB/T 12706.1",
+      "edition": "2020",
+      "clause": "B.3",
+      "table": "表 B.1",
+      "title": "规定值与测量/计算值修约精度",
+      "quantities": [
+        {
+          "key": "comparison_rounding",
+          "name": "规定值修约",
+          "dimension": "length",
+          "unit": "mm"
+        },
+        {
+          "key": "comparison_measured_rounding",
+          "name": "测量/计算值修约",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 11,
+      "column_count": 2,
+      "record_count": 22,
+      "record_ids": [
+        "part1-表B.1/r1/value",
+        "part1-表B.1/r1/measured",
+        "part1-表B.1/r2/value",
+        "part1-表B.1/r2/measured",
+        "part1-表B.1/r3/value",
+        "part1-表B.1/r3/measured",
+        "part1-表B.1/r4/value",
+        "part1-表B.1/r4/measured",
+        "part1-表B.1/r5/value",
+        "part1-表B.1/r5/measured",
+        "part1-表B.1/r6/value",
+        "part1-表B.1/r6/measured",
+        "part1-表B.1/r7/value",
+        "part1-表B.1/r7/measured",
+        "part1-表B.1/r8/value",
+        "part1-表B.1/r8/measured",
+        "part1-表B.1/r9/value",
+        "part1-表B.1/r9/measured",
+        "part1-表B.1/r10/value",
+        "part1-表B.1/r10/measured",
+        "part1-表B.1/r11/value",
+        "part1-表B.1/r11/measured"
+      ]
+    },
+    {
+      "id": "part2-B.1",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "B.1",
+      "table": "B.1",
+      "title": "假设计算每阶段数值修约",
+      "quantities": [
+        {
+          "key": "fictitious_rounding",
+          "name": "假设直径与厚度修约参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part2-B.1/r1/value"
+      ]
+    },
+    {
+      "id": "part2-B.2",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "B.2",
+      "table": "B.2",
+      "title": "其他用途数值修约",
+      "quantities": [
+        {
+          "key": "fictitious_rounding",
+          "name": "其他用途修约规则",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part2-B.2/r1/value"
+      ]
+    },
+    {
+      "id": "part2-表B.1",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "B.3",
+      "table": "表 B.1",
+      "title": "规定值与测量/计算值修约精度",
+      "quantities": [
+        {
+          "key": "comparison_rounding",
+          "name": "规定值修约",
+          "dimension": "length",
+          "unit": "mm"
+        },
+        {
+          "key": "comparison_measured_rounding",
+          "name": "测量/计算值修约",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 10,
+      "column_count": 2,
+      "record_count": 20,
+      "record_ids": [
+        "part2-表B.1/r1/value",
+        "part2-表B.1/r1/measured",
+        "part2-表B.1/r2/value",
+        "part2-表B.1/r2/measured",
+        "part2-表B.1/r3/value",
+        "part2-表B.1/r3/measured",
+        "part2-表B.1/r4/value",
+        "part2-表B.1/r4/measured",
+        "part2-表B.1/r5/value",
+        "part2-表B.1/r5/measured",
+        "part2-表B.1/r6/value",
+        "part2-表B.1/r6/measured",
+        "part2-表B.1/r7/value",
+        "part2-表B.1/r7/measured",
+        "part2-表B.1/r8/value",
+        "part2-表B.1/r8/measured",
+        "part2-表B.1/r9/value",
+        "part2-表B.1/r9/measured",
+        "part2-表B.1/r10/value",
+        "part2-表B.1/r10/measured"
+      ]
+    },
+    {
+      "id": "part3-B.1",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "B.1",
+      "table": "B.1",
+      "title": "假设计算每阶段数值修约",
+      "quantities": [
+        {
+          "key": "fictitious_rounding",
+          "name": "假设直径与厚度修约参数",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part3-B.1/r1/value"
+      ]
+    },
+    {
+      "id": "part3-B.2",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "B.2",
+      "table": "B.2",
+      "title": "其他用途数值修约",
+      "quantities": [
+        {
+          "key": "fictitious_rounding",
+          "name": "其他用途修约规则",
+          "dimension": "formula",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "part3-B.2/r1/value"
+      ]
+    },
+    {
+      "id": "part3-表B.1",
+      "standard": "GB/T 12706.3",
+      "edition": "2020",
+      "clause": "B.3",
+      "table": "表 B.1",
+      "title": "规定值与测量/计算值修约精度",
+      "quantities": [
+        {
+          "key": "comparison_rounding",
+          "name": "规定值修约",
+          "dimension": "length",
+          "unit": "mm"
+        },
+        {
+          "key": "comparison_measured_rounding",
+          "name": "测量/计算值修约",
+          "dimension": "length",
+          "unit": "mm"
+        }
+      ],
+      "row_count": 8,
+      "column_count": 2,
+      "record_count": 16,
+      "record_ids": [
+        "part3-表B.1/r1/value",
+        "part3-表B.1/r1/measured",
+        "part3-表B.1/r2/value",
+        "part3-表B.1/r2/measured",
+        "part3-表B.1/r3/value",
+        "part3-表B.1/r3/measured",
+        "part3-表B.1/r4/value",
+        "part3-表B.1/r4/measured",
+        "part3-表B.1/r5/value",
+        "part3-表B.1/r5/measured",
+        "part3-表B.1/r6/value",
+        "part3-表B.1/r6/measured",
+        "part3-表B.1/r7/value",
+        "part3-表B.1/r7/measured",
+        "part3-表B.1/r8/value",
+        "part3-表B.1/r8/measured"
+      ]
+    },
+    {
+      "id": "nielsen-Table1",
+      "standard": "Nielsen et al.",
+      "edition": "2019",
+      "clause": "Table 1",
+      "table": "Table 1",
+      "title": "材料热阻率与体积热容（文献参考）",
+      "quantities": [
+        {
+          "key": "thermal_resistivity",
+          "name": "热阻率",
+          "dimension": "thermal_resistivity",
+          "unit": "K·m/W"
+        },
+        {
+          "key": "volumetric_heat_capacity",
+          "name": "体积热容",
+          "dimension": "volumetric_heat_capacity",
+          "unit": "J/(m³·K)"
+        }
+      ],
+      "row_count": 7,
+      "column_count": 2,
+      "record_count": 14,
+      "record_ids": [
+        "nielsen-Table1/r1/thermal",
+        "nielsen-Table1/r1/capacity",
+        "nielsen-Table1/r2/thermal",
+        "nielsen-Table1/r2/capacity",
+        "nielsen-Table1/r3/thermal",
+        "nielsen-Table1/r3/capacity",
+        "nielsen-Table1/r4/thermal",
+        "nielsen-Table1/r4/capacity",
+        "nielsen-Table1/r5/thermal",
+        "nielsen-Table1/r5/capacity",
+        "nielsen-Table1/r6/thermal",
+        "nielsen-Table1/r6/capacity",
+        "nielsen-Table1/r7/thermal",
+        "nielsen-Table1/r7/capacity"
+      ]
+    },
+    {
+      "id": "huang-TableA1",
+      "standard": "Huang and Niu",
+      "edition": "2025",
+      "clause": "Table A1",
+      "table": "Table A1",
+      "title": "电缆接头案例材料参数（文献参考）",
+      "quantities": [
+        {
+          "key": "case_layer_diameter",
+          "name": "案例层外径",
+          "dimension": "length",
+          "unit": "mm"
+        },
+        {
+          "key": "thermal_conductivity",
+          "name": "导热系数",
+          "dimension": "thermal_conductivity",
+          "unit": "W/(m·K)"
+        },
+        {
+          "key": "mass_density",
+          "name": "密度",
+          "dimension": "mass_density",
+          "unit": "kg/m³"
+        },
+        {
+          "key": "specific_heat",
+          "name": "比热容",
+          "dimension": "specific_heat",
+          "unit": "J/(kg·K)"
+        },
+        {
+          "key": "volumetric_heat_capacity",
+          "name": "派生体积热容",
+          "dimension": "volumetric_heat_capacity",
+          "unit": "J/(m³·K)"
+        }
+      ],
+      "row_count": 14,
+      "column_count": 5,
+      "record_count": 70,
+      "record_ids": [
+        "huang-TableA1/r1/diameter",
+        "huang-TableA1/r1/conductivity",
+        "huang-TableA1/r1/density",
+        "huang-TableA1/r1/specific_heat",
+        "huang-TableA1/r1/capacity",
+        "huang-TableA1/r2/diameter",
+        "huang-TableA1/r2/conductivity",
+        "huang-TableA1/r2/density",
+        "huang-TableA1/r2/specific_heat",
+        "huang-TableA1/r2/capacity",
+        "huang-TableA1/r3/diameter",
+        "huang-TableA1/r3/conductivity",
+        "huang-TableA1/r3/density",
+        "huang-TableA1/r3/specific_heat",
+        "huang-TableA1/r3/capacity",
+        "huang-TableA1/r4/diameter",
+        "huang-TableA1/r4/conductivity",
+        "huang-TableA1/r4/density",
+        "huang-TableA1/r4/specific_heat",
+        "huang-TableA1/r4/capacity",
+        "huang-TableA1/r5/diameter",
+        "huang-TableA1/r5/conductivity",
+        "huang-TableA1/r5/density",
+        "huang-TableA1/r5/specific_heat",
+        "huang-TableA1/r5/capacity",
+        "huang-TableA1/r6/diameter",
+        "huang-TableA1/r6/conductivity",
+        "huang-TableA1/r6/density",
+        "huang-TableA1/r6/specific_heat",
+        "huang-TableA1/r6/capacity",
+        "huang-TableA1/r7/diameter",
+        "huang-TableA1/r7/conductivity",
+        "huang-TableA1/r7/density",
+        "huang-TableA1/r7/specific_heat",
+        "huang-TableA1/r7/capacity",
+        "huang-TableA1/r8/diameter",
+        "huang-TableA1/r8/conductivity",
+        "huang-TableA1/r8/density",
+        "huang-TableA1/r8/specific_heat",
+        "huang-TableA1/r8/capacity",
+        "huang-TableA1/r9/diameter",
+        "huang-TableA1/r9/conductivity",
+        "huang-TableA1/r9/density",
+        "huang-TableA1/r9/specific_heat",
+        "huang-TableA1/r9/capacity",
+        "huang-TableA1/r10/diameter",
+        "huang-TableA1/r10/conductivity",
+        "huang-TableA1/r10/density",
+        "huang-TableA1/r10/specific_heat",
+        "huang-TableA1/r10/capacity",
+        "huang-TableA1/r11/diameter",
+        "huang-TableA1/r11/conductivity",
+        "huang-TableA1/r11/density",
+        "huang-TableA1/r11/specific_heat",
+        "huang-TableA1/r11/capacity",
+        "huang-TableA1/r12/diameter",
+        "huang-TableA1/r12/conductivity",
+        "huang-TableA1/r12/density",
+        "huang-TableA1/r12/specific_heat",
+        "huang-TableA1/r12/capacity",
+        "huang-TableA1/r13/diameter",
+        "huang-TableA1/r13/conductivity",
+        "huang-TableA1/r13/density",
+        "huang-TableA1/r13/specific_heat",
+        "huang-TableA1/r13/capacity",
+        "huang-TableA1/r14/diameter",
+        "huang-TableA1/r14/conductivity",
+        "huang-TableA1/r14/density",
+        "huang-TableA1/r14/specific_heat",
+        "huang-TableA1/r14/capacity"
+      ]
     }
   ],
   "not_covered": [
@@ -8665,29 +11344,25 @@
       "standard": "GB/T 12706.1",
       "edition": "2020",
       "locators": [
-        "表 17（适用性符号矩阵）",
-        "表 18（含铜导体老化分支）",
-        "附录A/B完整算法与修约实现",
-        "直接包带例外及完整试验程序"
+        "完整试验操作程序、厂家直接包带例外",
+        "护层算法执行（参数已覆盖，依据插件不执行几何生成）"
       ],
-      "reason": "下一轮；表17的DOCX符号损坏，表18的DOCX缺失其他电缆EPR/HEPR数列，未完成全表双路一致核验，不放行。"
+      "reason": "下一轮；第四批试验矩阵与本轮附录参数已覆盖，仅剩程序和执行器能力。"
     },
     {
       "standard": "GB/T 12706.2",
       "edition": "2020",
       "locators": [
-        "表 19（适用性符号矩阵）",
-        "附录A/B完整算法与修约实现",
-        "局放、冲击及其余试验完整程序"
+        "完整试验操作程序、厂家直接包带例外",
+        "护层算法执行（参数已覆盖，依据插件不执行几何生成）"
       ],
-      "reason": "下一轮；表19的DOCX合并格符号损坏，尚未获得与完整PDF一致的第二路矩阵，不放行。"
+      "reason": "下一轮；第四批试验矩阵与本轮附录参数已覆盖，仅剩程序和执行器能力。"
     },
     {
       "standard": "GB/T 12706.3",
       "edition": "2020",
       "locators": [
         "局放和冲击完整程序",
-        "附录A/B剩余公式和修约实现",
         "高密度XLPE替代吸水数值上限（标准未给）"
       ],
       "reason": "下一轮；表11/16已覆盖，高密度XLPE已保留条件说明，但没有可自动判合格的替代数值限值。"
@@ -8696,21 +11371,18 @@
       "standard": "GB/T 3956",
       "edition": "2008",
       "locators": [
-        "导体结构条文和表注的例外分支",
-        "温度修正",
-        "附录A/B/C"
+        "导体结构条文和表注的特殊用途/合金例外判据"
       ],
-      "reason": "下一轮；本轮完整表1~4，特殊用途/合金派生判据禁止自动放行"
+      "reason": "下一轮；表1–4、温度修正及附录A/B/C已覆盖；禁止自动派生铝合金判据。"
     },
     {
       "standard": "IEC 60228",
       "edition": "2023",
       "locators": [
-        "表1~2",
         "表注例外与合金1.162派生分支",
         "温度修正及附录"
       ],
-      "reason": "下一轮；本轮完整Table3~6；不得将表内铝值直接判定为所有铝合金限值"
+      "reason": "下一轮；Table1–6已覆盖，不将铝值直接用于全部铝合金。"
     },
     {
       "standard": "GB/T 11017.2",
@@ -8725,7 +11397,7 @@
     {
       "standard": "IEC 60287",
       "edition": "2023",
-      "reason": "下一轮；Table2为29×20网格，未完成全网格双路一致核验；当前不实现载流量算法。",
+      "reason": "下一轮；IEC60287-2-1 Table2完整28×20矩阵已准备，但hB/wB=3、LG/hB=3原印刷为3,2-，整表暂缓；不猜数值。",
       "locators": [
         "IEC60287-2-1 Table 2（几何因子）",
         "其余分册及完整算法"
@@ -8743,33 +11415,75 @@
       "standard": "GB 50217",
       "edition": "2018",
       "reason": "下一轮：附录C的基准载流量表和其埋深工况、不同埋深的独立校正方法；本标准附录D未提供可脱离基准表套用的通用埋深系数。"
+    },
+    {
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "locators": [
+        "表 18"
+      ],
+      "reason": "原PDF24页表头写U₀，但6/10/15/20/30与额定线电压一致；无合法勘误不能决定u_v/u0_v映射。保留旧ID/条件仅供完整浏览，禁止resolve与自动核对。"
+    },
+    {
+      "standard": "GB/T 12706.4",
+      "edition": "2020",
+      "locators": [
+        "表2–7",
+        "表9–13"
+      ],
+      "reason": "下一轮逐格核验程序及脚注矩阵；表7原文在考虑中，不编造判据。"
+    },
+    {
+      "standard": "材料体积热容",
+      "edition": "来源分别列明",
+      "items": [
+        "IEC 60853-2原始材料热容表：本地仅预览/修订单，官方合法预览仍无原表数值。",
+        "半导电层：Alliander CSV候选值2000000缺原始表页与明确单位证据，暂不放行。",
+        "干土、湿土、回填料：现有可靠文献未提供各湿度/配方分支体积热容。",
+        "任意管壁/空气工况：仅覆盖Huang案例MPP管壁与空气层；不自动替代其他材料或温压。"
+      ]
     }
   ],
   "record_files": [
     {
       "name": "records-lv.json",
-      "sha256": "df8f2d7dc285fc5c8802ef7004dbc0151bdef2d31502c877b56b7e639975c402",
-      "size_bytes": 599033
+      "sha256": "59ca00d4d6cb31d6ac058453e08b92c5dc26c695777fe64c29bf76fd183a808a",
+      "size_bytes": 898726
+    },
+    {
+      "name": "records-lv-a.json",
+      "sha256": "32cefc7d603587e39c1d16d9a207304b8635791a4fd9c87c14eb6e52e99827db",
+      "size_bytes": 550974
     },
     {
       "name": "records-mv.json",
-      "sha256": "739e66c63d6758f05fa36d11b208f0cd0e0db0fa91e0351151b901fe4cff9ca8",
-      "size_bytes": 671107
+      "sha256": "5ae9d4d9de0aacfa2a3e5032590a03700a742365eb4c312a2f5a964de38aa7fd",
+      "size_bytes": 898637
+    },
+    {
+      "name": "records-mv-a.json",
+      "sha256": "19fc13bd7aa92475ac24d289017d978f18f620da90ab2708fa00cfe35c3b00ba",
+      "size_bytes": 327499
     },
     {
       "name": "records-medium-high.json",
-      "sha256": "d94acfc0bffbeaabbab3b1e6cbcad0f8ec7cec2b9edc0af88ba11905bbc44586",
-      "size_bytes": 703556
+      "sha256": "d99f9be8958f6f7b1e273c8cfad61f6eb3d8e8e34956a5b81e8ae53d762902bc",
+      "size_bytes": 744903
     },
     {
       "name": "records-conductor-gb.json",
-      "sha256": "3c4ec273398adce2c334b8fff79b3e29bb23800376d2e687508fba54a0dd5b88",
-      "size_bytes": 773827
+      "sha256": "fe590201867238707571a41a00c191fffed3c8ad75e3beed3104091e19d145ba",
+      "size_bytes": 899641
+    },
+    {
+      "name": "records-conductor-gb-a.json",
+      "sha256": "fefe9f49603bd55d75d84c87a546886f80be3e345ae2b695fac07c9b3a7021f7",
+      "size_bytes": 161029
     },
     {
       "name": "records-conductor-iec.json",
-      "sha256": "056f4e12b4bfb1633a65caa67e10864662facf8d53889f0d66b6d23158607d3f",
-      "size_bytes": 827311
+      "sha256": "142ab8fa8c0c9176b09f0e163d4c8dc64021f77dc271d58c79ec162b16a83c0c",
+      "size_bytes": 836033
     },
     {
       "name": "records-high.json",
@@ -8778,8 +11492,8 @@
     },
     {
       "name": "records-installation.json",
-      "sha256": "63ec9b1ace29dfecb70b583eabbf0afb3339492aa1cfb1c09c07c38bf6f612f9",
-      "size_bytes": 333134
+      "sha256": "98916ad9aa3ca943ab0a3bd3beb180956f0ba08d2f4c26158e55f9cc2c8ca330",
+      "size_bytes": 333182
     },
     {
       "name": "records-electrical.json",
@@ -8795,6 +11509,21 @@
       "name": "records-environment.json",
       "sha256": "134e781c72e82326300c2506ebb392be1d0170fb39adb0d96783e1c68b65d592",
       "size_bytes": 35320
+    },
+    {
+      "name": "records-accessories.json",
+      "sha256": "a9e39f8bbdddd61e91061339cec151de2b5f1d93970f7095517504a813169acb",
+      "size_bytes": 129768
+    },
+    {
+      "name": "records-thermal-capacity.json",
+      "sha256": "835a8c47ed02b0b026677184e1bb54d7fb398821445834c98d0d2f8f66c084a7",
+      "size_bytes": 23711
+    },
+    {
+      "name": "records-thermal-capacity-model.json",
+      "sha256": "bf6de2a156e9b804a4e63c4c2a2391c0c93adf03717a7bfe1ae3cc0402401359",
+      "size_bytes": 124993
     }
   ]
 }

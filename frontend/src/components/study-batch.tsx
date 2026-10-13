@@ -24,7 +24,8 @@ import { useStudy } from "./study-provider";
 import { DataTable } from "./data-table";
 import { EngineeringValue } from "./engineering-value";
 import { QueryState } from "./query-state";
-import { EmptyState, ErrorState, StaleBanner } from "./states";
+import { EmptyState, StaleBanner } from '@/components/states';
+import { StudyErrorState as ErrorState } from '@/components/study-error-state';
 import { StatusMark } from "./status-mark";
 import { PreflightDialog } from "./preflight-dialog";
 import { Toolbar } from "./toolbar";
@@ -782,9 +783,7 @@ export function StudyBatch({
             </span>
           </section>
           {error && (
-            <p role="alert" className="field-error">
-              {error}
-            </p>
+            <ErrorState title="批量设置未保存" description={error} />
           )}
         </QueryState>
       ) : (

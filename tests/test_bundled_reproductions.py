@@ -12,6 +12,46 @@ import pytest
 from backend.foundation.reproduction_library import BUNDLED_EVIDENCE, bundled_evidence
 
 
+def test_accepted_engineering_archives_preserve_full_sealed_run_identity():
+    from backend.kernel.hpc_evidence import evidence_index
+    value, snapshot = evidence_index()
+    receipt = value['receipt']
+    assert receipt['job_id']=='811855' and receipt['core_hours']==pytest.approx(13710/3600)
+    assert receipt['historical_receipt']['job_id']=='809850'
+    assert receipt['current_grid_recheck']['same_input'] and receipt['current_grid_recheck']['same_parameters']
+    assert receipt['current_grid_recheck']['maximum_temperature_change_k']==0
+    assert receipt['starting_mesh']['far_size_m']==.5 and receipt['starting_mesh']['field_order']==2
+    assert receipt['final_mesh']['size_m']==.00055
+    members=[entry for entry in value['members'] if entry.get('run_id')==receipt['run']]
+    assert {entry['column']:entry['sha256'] for entry in members}=={
+        'snapshot':receipt['input_digest'],'output':'61f14f0378dd18147b4074c65edec335ccf82be8680f3919d6c674924b1e3046'}
+    historical=[entry for entry in value['members'] if entry.get('run_id')==receipt['historical_run']]
+    assert {entry['column']:entry['sha256'] for entry in historical}=={
+        'snapshot':'66a01118fdaddd3d87f8ca247d9286ccc90888ad3245aad739389f10c06731f9',
+        'output':'e5db2325b1b7508fbea917b0e80e6d6ccea4b1540809939d8362447880f9607e'}
+    assert len(snapshot)==64 and len([entry for entry in value['members'] if entry.get('column')=='output'])==8
+
+
+def test_local_engineering_archives_match_sealed_index():
+    from backend.kernel.hpc_evidence import evidence_availability, verify_archives
+    status = evidence_availability()
+    if not status['available']: pytest.skip(status['message'])
+    assert verify_archives()[1] == status['snapshot_id']
+
+
+def test_missing_or_damaged_deployment_evidence_is_explicit(tmp_path, monkeypatch):
+    from backend.kernel.hpc_evidence import evidence_availability, verify_archives
+    monkeypatch.setenv('CABLESIM_ENGINEERING_EVIDENCE',str(tmp_path))
+    status = evidence_availability(verify=True)
+    assert not status['available'] and not status['verified'] and len(status['missing'])==3
+    assert status['snapshot_id'] in status['message']
+    assert all(item['file'] in status['message'] and item['destination'] in status['message'] for item in status['missing'])
+    with pytest.raises(FileNotFoundError,match='证据包缺失'): verify_archives()
+    # Manufacture a damaged deployment file only; no numerical results are faked.
+    (tmp_path/status['missing'][0]['file']).write_bytes(b'corrupt archive')
+    with pytest.raises(ValueError,match='长度或摘要不一致'): verify_archives()
+
+
 def seed_module():
     path=Path(__file__).resolve().parents[1]/'frontend/scripts/seed-engineering-demo.py'
     spec=importlib.util.spec_from_file_location('bundled_release_seed',path)
@@ -41,6 +81,9 @@ def test_saved_evidence_digest_schema_and_table_only_diagnostics(tmp_path):
 
 
 def test_release_seed_import_exposes_saved_evidence_without_development_paths(tmp_path,monkeypatch):
+    from backend.kernel.hpc_evidence import evidence_availability
+    status=evidence_availability()
+    if not status['available']: pytest.skip(status['message'])
     seed=seed_module();value,raw,snapshot=bundled_evidence()
     for key in ('CABLESIM_REPRODUCTION_LIBRARY','CABLESIM_DB'):
         monkeypatch.setenv(key,str(tmp_path/'must-not-be-read'))
@@ -63,6 +106,24 @@ def test_release_seed_import_exposes_saved_evidence_without_development_paths(tm
             assert detail_response.status_code==200
             detail=detail_response.json()
             assert detail['sensitivity']['rows']==next(i for i in value['items'] if i['id']=='B02-2')['sensitivity']['rows']
+            fem=next(row['saved_evidence'] for row in receipt['studies'] if row.get('saved_evidence'))
+            restored=client.get(f'/api/hpc/workspaces/{fem["workspace"]}/fields/{fem["run"]}/view')
+            assert restored.status_code==200,restored.text[:300]
+            run=restored.json()
+            assert run['integrity']=='verified' and run['execution']['saved_evidence']
+            assert run['execution']['job_id']==fem['job_id']=='811855'
+            assert run['snapshot']['cases'][0]['input']['load_cases'][0]['currents']=={'circuit/c1':400.,'circuit/template2':400.,'circuit/template3':400.}
+            assert run['output_digest']==fem['output_digest']
+            chapter=client.get(f'/api/hpc/workspaces/{fem["workspace"]}/chapters/{fem["run"]}?iec_run_id={fem["iec_run"]}&convergence_id={fem["convergence"]}')
+            assert chapter.status_code==200,chapter.text[:300]
+            proof=chapter.json()
+            assert proof['convergence']['verdict']['mesh_passed'] and proof['convergence']['verdict']['domain_passed']
+            rating=next(row for row in proof['rows'] if row['key']=='ampacity' and row['case']=='rating-simultaneous')
+            assert rating['fem']==pytest.approx(359.6451671186804)
+            assert rating['iec']==pytest.approx(362.2382462024689)
+            assert fem['delivery'] is None
+            pdf=client.get(f'/api/workspaces/{fem["workspace"]}/deliveries/{fem["historical_delivery"]}/pdf')
+            assert pdf.status_code==200 and pdf.content.startswith(b'%PDF-')
     before=(target/'index.json').read_bytes()
     with pytest.raises(RuntimeError,match='已更新'):
         seed.import_release_reproductions(target,'0'*64)

@@ -103,7 +103,9 @@ class HpcExecutor:
                 'sample_timeout_s':limit+30,'slurm_memory_mb':min(65536,max(512,manifest.resources.memory_mb))}
 
     def run(self,plugin_id,capability,cases,timeout_s=None,*,phase='run',expected_manifest=None,reuse_artifacts=None):
-        remote=self.required(plugin_id,capability) and (phase=='run' or self.required(plugin_id))
+        # Both native preflight and solving follow the capability route. The
+        # separate input-preflight endpoint only validates schemas on the host.
+        remote=self.required(plugin_id,capability)
         if not remote:
             return self.local.run(plugin_id,capability,cases,timeout_s,phase=phase,
                                   expected_manifest=expected_manifest,reuse_artifacts=reuse_artifacts)
@@ -140,6 +142,8 @@ class HpcExecutor:
                     runtime_sha,frozen_manifest=freeze_runtime(candidate,plugin_id,self.registry.root.parent)
                     plan={'schema_version':'cablesim.remote-run-plan/1','id':identifier,
                           'request_identity':identity,'operation_id':operation,
+                          'research_context':{key:context[key] for key in ('workspace_id','study_id','module','workspace_revision','study_revision')
+                                              if context and key in context},
                           'plugin_id':plugin_id,'capability':capability,'phase':phase,
                           'plugin_manifest':frozen_manifest,'runtime_sha256':runtime_sha,
                           'cases':deepcopy(cases),'reuse_artifacts':deepcopy(reuse_artifacts),
@@ -212,7 +216,10 @@ class HpcExecutor:
                 raise PluginHostError('REMOTE_'+reason,'Slurm 作业 '+submission['job_id']+'：'+reason+'；输入、已用核时和日志保留。',502)
             collected=remote.collect(directory,submission['token'])
         except RemoteDisconnected as exc:
-            raise PluginHostError('REMOTE_DISCONNECTED','超算连接中断；原作业与输入保留，请恢复当前运行。执行目录：'+plan['id']+'；'+str(exc),503) from exc
+            raise PluginHostError('REMOTE_DISCONNECTED','超算连接中断；原作业与输入保留，请恢复当前运行，不要另行提交。',503) from exc
+        except (RuntimeError,ValueError) as exc:
+            atomic(directory/'preparation-error.json',{'message':str(exc),'phase':plan['phase']})
+            raise PluginHostError('REMOTE_SETUP_FAILED','超算准备或回收未完成；输入与核时预留保留。请核对计算环境和作业状态，再恢复原记录。',502) from exc
         evidence=Path(collected['evidence'])
         if plan.get('case_array'):
             return self.collect_array(plan,evidence,submission,accounting)
@@ -272,7 +279,9 @@ class HpcExecutor:
         """Read cached scheduler evidence; page polling never contacts SSH."""
         identifier=str(uuid5(UUID(operation),plugin_id+'/'+capability+'/'+phase))
         directory=self.root/identifier
-        if not (directory/'plan.json').is_file():return None
+        if not (directory/'plan.json').is_file():
+            from .hpc_evidence import saved_execution
+            return saved_execution(operation,plugin_id,capability,phase)
         plan=read(directory/'plan.json')
         if plan.get('operation_id')!=operation or plan.get('plugin_id')!=plugin_id or plan.get('capability')!=capability:
             return {'backend':'slurm','state':'unavailable','error':'REMOTE_PROGRESS_BINDING_INVALID'}
@@ -303,6 +312,8 @@ class HpcExecutor:
 
     def refresh_status(self,operation,plugin_id,capability,phase='run'):
         """Reconcile an existing allocation only; never prepare or submit a job."""
+        cached=self.execution_status(operation,plugin_id,capability,phase)
+        if cached and cached.get('saved_evidence'):return cached
         directory,_=self.saved(operation,plugin_id,capability,phase)
         return self.refresh_plan(directory)
 

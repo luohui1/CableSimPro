@@ -59,8 +59,8 @@ function Section({ icon, title, count, children }: { icon: string; title: string
  * 工程浏览器：侧栏右侧的第二层，只列本工程真实存在的对象。
  * 模型 = 工程模型里的敷设截面、电缆、负荷工况；研究 = 本工程的研究；交付 = 已封存的计算书。
  */
-export function ProjectExplorer({ workspaceId, projectName, document, activeStudy, activeState, view, theme, onCreate }: {
-  workspaceId: string; projectName: string; document?: DomainDocument; activeStudy: string; activeState?: StudyPresentation; view: string; theme: Theme; onCreate: () => void;
+export function ProjectExplorer({ workspaceId, projectName, document, modelLabel = '模型', activeStudy, activeState, view, theme, onCreate }: {
+  workspaceId: string; projectName: string; document?: DomainDocument; modelLabel?: string; activeStudy: string; activeState?: StudyPresentation; view: string; theme: Theme; onCreate: () => void;
 }) {
   const studies = useQuery({ queryKey: ["study-index", workspaceId], queryFn: async ({ signal }) => {
     const rows = array(await responseData(api.GET('/api/workspaces/{wid}/studies', {params:{path:{wid:workspaceId}},signal})), '本工程研究');
@@ -81,7 +81,7 @@ export function ProjectExplorer({ workspaceId, projectName, document, activeStud
     <header>
       <strong title={projectName}>{projectName}</strong>
     </header>
-    {current && document && <Section icon="object/overview" title="模型">
+    {current && document && <Section icon="object/overview" title={modelLabel}>
       {document.sections.map((section) => <Link key={section.id} className="explorer-item" {...at(current, calc, studyEntryTab(calc), { view: "section" })} aria-current={view === "section" ? "true" : undefined}>
         <Icon name="object/section" /><span>{section.label || "敷设截面"}</span>
       </Link>)}
@@ -95,7 +95,7 @@ export function ProjectExplorer({ workspaceId, projectName, document, activeStud
         const module = rootModule(study.definition), kind = calculationKind(study, plugins);
         const name = head && study.title.startsWith(head + " · ") ? study.title.slice(head.length + 3) : study.title;
         return <Link key={study.id} className="explorer-item explorer-calc" {...at(study, module, studyEntryTab(module))} aria-current={study.id === activeStudy ? "page" : undefined} title={study.title}>
-          <Icon name={kind.icon} /><span><b>{name}</b><small>{kind.label}{kind.hpc ? " · 超算" : ""}</small></span><RunDot study={study} state={study.id===activeStudy ? activeState : undefined} />
+          <Icon name={kind.icon} /><span className="explorer-study-name"><b>{name}</b><small>{kind.label}{kind.hpc ? " · 超算" : ""}</small></span><RunDot study={study} state={study.id===activeStudy ? activeState : undefined} />
         </Link>;
       })}
       <button type="button" className="explorer-item explorer-add" onClick={onCreate}><Icon name="action/add" /><span>新建研究</span></button>

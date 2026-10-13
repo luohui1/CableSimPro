@@ -6,16 +6,23 @@ import { openHeadlessBrowser, repositoryRoot } from './browser.mjs';
 import { moduleDefinitions, moduleBehavior } from '../src/pages/study-modules.ts';
 import { typeModules } from '../src/features/type/module-definitions.ts';
 import { categories, identifyText, exceptionFor, whitelist, findingOwner, readOnlyPost } from './visible-text-policy.mjs';
+import { installReadinessObserver, waitForPageReady } from './page-readiness.mjs';
+import { performance as monotonicClock } from 'node:perf_hooks';
 
 assert.equal(process.env.E2E_ISOLATED, '1', '文字巡检只能在隔离副本运行');
 const base = process.env.FRONTEND_URL;
-const phase = ['before', 'modules', 'gaps', 'catalog', 'real-use', 'real-use-config', 'forms-real-use'].includes(process.env.VISIBLE_TEXT_PASS) ? process.env.VISIBLE_TEXT_PASS : 'after';
+const performanceMode = process.env.PERFORMANCE_AUDIT === '1';
+const phase = ['before', 'modules', 'gaps', 'catalog', 'real-use', 'real-use-config', 'forms-real-use', 'agent-real-use', 'regularity', 'regularity-check', 'loading'].includes(process.env.VISIBLE_TEXT_PASS) ? process.env.VISIBLE_TEXT_PASS : performanceMode ? 'performance-state' : process.env.REGULARITY_AUDIT === '1' && process.env.REGULARITY_WITH_VISIBLE !== '1' ? 'regularity-state' : 'after';
 const out = path.join(repositoryRoot, '.data/fix-round/shared-shell/visible-text', phase);
 await fs.mkdir(out, { recursive: true });
-const session = await openHeadlessBrowser({ executable: 'C:/Program Files/Google/Chrome/Application/chrome.exe' });
+const session = await openHeadlessBrowser({ executable: 'C:/Program Files/Google/Chrome/Application/chrome.exe', routeGuard: !performanceMode });
 const { page, context } = session;
+const performanceAudit = performanceMode ? await (await import('./performance-audit.mjs')).createPerformanceAudit({ page, context, root: repositoryRoot, base }) : null;
+if (!performanceMode) await installReadinessObserver(page);
+const regularity = process.env.REGULARITY_AUDIT === '1' ? await (await import('./regularity-audit.mjs')).createRegularityAudit({ page, context, root: repositoryRoot }) : null;
+const withVisibleText = process.env.REGULARITY_WITH_VISIBLE === '1';
 const report = { phase, generated: new Date().toISOString(), source: '发布库只读备份；独立随机端口；不运行求解或批准提案', pages: [], findings: [], secondary: [], allowed: [], uncovered: [], errors: [], blockedWrites: [], readOnlyPosts: [], runChecks: [], whitelist, complete: false };
-const sizes = [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }];
+const sizes = performanceMode ? [{ width: 1366, height: 768 }] : [{ width: 1366, height: 768 }, { width: 1920, height: 1080 }];
 const targets = [], queued = new Set(), issueKeys = new Set(), secondaryKeys = new Set(), shellHoverSizes = new Set(), sourceModules = new Map();
 const requestedPaths = new Set((process.env.VISIBLE_TEXT_PATHS || '').split('|').filter(Boolean));
 const modulesOnly = process.env.VISIBLE_TEXT_MODULES === '1';
@@ -29,7 +36,7 @@ function target(route, label, owner = '前端公共', extra = {}) {
 }
 page.on('pageerror', error => report.errors.push({ page: page.url().replace(base, ''), error: error.message }));
 // No audit action is permitted to start a run, create a session, or approve a proposal.
-await context.route('**/api/**', async route => {
+if (!performanceMode) await context.route('**/api/**', async route => {
   if (!['GET', 'HEAD', 'OPTIONS'].includes(route.request().method())) {
     const pathname = new URL(route.request().url()).pathname, reason = route.request().method() === 'POST' && readOnlyPost(pathname);
     if (reason) { report.readOnlyPosts.push({ path: pathname, reason }); return route.fallback(); }
@@ -45,13 +52,9 @@ async function all(kind) {
   throw Error('索引超过巡检上限，必须分页覆盖：' + kind);
 }
 async function settled() {
-  await page.waitForLoadState('domcontentloaded');
-  await page.locator('.app-shell').waitFor({ state: 'visible', timeout: 45000 });
+  const state = await waitForPageReady(page);
   await page.evaluate(() => document.fonts.ready);
-  // Several real pages poll jobs/sessions; networkidle is not a readiness signal.
-  await page.waitForFunction(() => !document.querySelector('.route-skeleton,.provider-state [aria-busy="true"],.main-content [aria-busy="true"]'), null, { timeout: 20000 });
-  await page.waitForTimeout(500);
-  assert.ok((await page.locator('body').innerText()).trim().length > 30, '应用文字尚未渲染，不能把空 DOM 当作通过');
+  return state;
 }
 
 /** Read only painted viewport text; clipped scroll text is scanned at its later scroll position. */
@@ -111,6 +114,7 @@ async function entries(layer = 'ordinary') {
   }, layer);
 }
 async function record(surface, size, layer = 'ordinary') {
+  if (regularity) { await regularity.record(surface, size, layer); if (!withVisibleText) return; }
   for (const node of await entries(layer)) for (const match of identifyText(node.text)) {
     const hit = { page: surface.route, label: surface.label, ...size, text: node.text.slice(0, 1000), ...match, categoryLabel: categories[match.category], layer: node.layer, summary: node.summary, selector: node.selector, rect: node.rect, owner: findingOwner(surface, node) };
     const exception = exceptionFor(hit);
@@ -131,6 +135,7 @@ async function record(surface, size, layer = 'ordinary') {
   }
 }
 async function scan(surface, size, layer = 'ordinary') {
+  if (regularity) await regularity.capture(surface, size);
   // Include independent main/inspector/table scroll panes, not only window scrolling.
   const panes = await page.evaluate(() => {
     const values = [];
@@ -156,6 +161,8 @@ async function scan(surface, size, layer = 'ordinary') {
     await page.locator(`[data-text-audit-pane="${pane.id}"]`).evaluate(e => { e.scrollTop = 0; e.scrollLeft = 0; });
   }
   // Radix tooltips are mounted on hover; titles above are counted without opening them.
+  await page.evaluate(() => document.querySelectorAll('[data-text-audit-pane]').forEach(e => e.removeAttribute('data-text-audit-pane')));
+  if (regularity && !withVisibleText) return;
   // Shared navigation is identical across routes; count its mounted tooltips once per viewport.
   const auditShell = !shellHoverSizes.has(size.width);
   const triggers = page.locator('[data-state="closed"]:not([aria-haspopup]):not([aria-expanded])');
@@ -171,9 +178,10 @@ async function scan(surface, size, layer = 'ordinary') {
     await page.mouse.move(1, 1);
   }
   shellHoverSizes.add(size.width);
-  await page.evaluate(() => document.querySelectorAll('[data-text-audit-pane]').forEach(e => e.removeAttribute('data-text-audit-pane')));
 }
 async function save() {
+  if (performanceAudit) { await performanceAudit.save(report); return; }
+  if (regularity) { await regularity.save(report); if (!withVisibleText) return; }
   const ordinary = report.findings.length, counts = {};
   for (const hit of report.findings) counts[hit.owner] = (counts[hit.owner] || 0) + 1;
   const secondaryByLayer = {};
@@ -230,10 +238,40 @@ try {
   let fallbackQueued = false;
   if (requestedPaths.size) assert.equal(surfaces.filter(t => requestedPaths.has(t.route)).length, requestedPaths.size, '指定巡检页面必须都存在于实际覆盖清单');
   for (let i = 0; i < surfaces.length; i++) for (const size of sizes) {
-    const surface = surfaces[i]; console.log(`文字巡检 ${i + 1}/${surfaces.length} ${size.width}：${surface.label}`);
+    const surface = surfaces[i]; console.log(`${regularity && !withVisibleText ? '规整巡检' : '文字巡检'} ${i + 1}/${surfaces.length} ${size.width}：${surface.label}`);
     try {
       await page.setViewportSize(size);
-      await page.goto(base + surface.route + (surface.route.includes('?') ? '&' : '?') + 'theme=light', { waitUntil: 'domcontentloaded', timeout: 60000 }); await settled();
+      let readiness;
+      if (performanceAudit) {
+        await performanceAudit.measure(surface, 'cold');
+        await performanceAudit.measure(surface, 'hot');
+        if (surface.route === '/') {
+          // Actually open the deferred editor; do not mistake a smaller bundle for working UI.
+          const open = page.locator('.topbar-actions').getByRole('button', { name: '新建研究', exact: true });
+          const started = monotonicClock.now();
+          await open.click();
+          await page.locator('.create-study-form').waitFor({ state: 'visible', timeout: 30000 });
+          await waitForPageReady(page);
+          assert.ok(await page.getByRole('dialog').locator('input').count(), '新建研究真实表单未出现');
+          await page.keyboard.press('Escape');
+          await page.getByRole('dialog').waitFor({ state: 'hidden', timeout: 5000 });
+          assert.ok(await open.evaluate(e => e === document.activeElement), '首次关闭按需加载的研究表单后未恢复触发焦点');
+          // Also exercise the retained dialog on its second opening.
+          await page.keyboard.press('Enter');
+          await page.locator('.create-study-form').waitFor({ state: 'visible', timeout: 30000 });
+          await page.keyboard.press('Escape');
+          await page.getByRole('dialog').waitFor({ state: 'hidden', timeout: 5000 });
+          assert.ok(await open.evaluate(e => e === document.activeElement), '关闭新建研究后未恢复触发按钮焦点');
+          const cards = studies.filter(s => s.parent?.kind === 'project');
+          for (const w of spaces.filter(w => !types.some(t => t.id === w.id)).slice(0, 3)) {
+            const row = page.locator('.tree-object').filter({ hasText: w.name });
+            if (await row.count()) assert.equal(await row.locator('.tree-count').innerText(), String(cards.filter(s => s.parent.id === w.id).length), '侧栏计数必须与保存研究名片相符');
+          }
+          performanceAudit.report.realUse = { deferredStudyEditor: '点击及 Enter 打开真实表单，Esc 关闭后焦点恢复；未保存或计算', sidebarCounts: '与发布库名片实际工程归属逐项对拍', elapsedMs: Math.round(monotonicClock.now() - started), passed: true };
+        }
+      } else {
+        await page.goto(base + surface.route + (surface.route.includes('?') ? '&' : '?') + 'theme=light', { waitUntil: 'domcontentloaded', timeout: 60000 }); readiness = await settled();
+      }
       if (surface.route === '/runs') {
         await page.getByText('正在读取方法与结论', { exact: true }).waitFor({ state: 'hidden', timeout: 30000 });
         const table = page.getByRole('table', { name: '运行', exact: true });
@@ -245,7 +283,7 @@ try {
         }
         if (size.width === 1366) await page.screenshot({ path: path.join(out, 'runs-light.png') });
       }
-      await scan(surface, size);
+      if (!performanceMode) await scan(surface, size);
       if (!requestedPaths.size && !modulesOnly && surface.discover && size.width === 1366) {
         const links = await page.locator(`a[href^="/studies/${surface.study}/"]`).evaluateAll(links => links.map(l => l.getAttribute('href')));
         links.push(page.url()); // The active analysis may be selected by a combobox, not an anchor.
@@ -253,7 +291,7 @@ try {
         if (await analysis.isVisible()) {
           await analysis.click();
           const options = await page.getByRole('option').evaluateAll(items => items.filter(item => item.getAttribute('aria-disabled') !== 'true').map(item => item.textContent.replaceAll('✓', '').trim()));
-          await record({ ...surface, route: surface.route + '#analysis-menu' }, size);
+          if (!performanceMode) await record({ ...surface, route: surface.route + '#analysis-menu' }, size);
           await page.keyboard.press('Escape');
           for (const name of options) {
             await page.getByRole('combobox', { name: '分析', exact: true }).click();
@@ -270,20 +308,31 @@ try {
       if (surface.tabs) {
         const labels = await page.locator('.plugin-detail [role="tab"]').allTextContents();
         for (const label of labels) {
-          await page.locator('.plugin-detail [role="tab"]').filter({ hasText: label }).click(); await settled();
           const tab = { ...surface, route: surface.route + '#tab=' + escaped(label), label: surface.label + ' · ' + label };
-          await scan(tab, size, /技术|追溯/.test(label) ? 'technical' : 'ordinary'); report.pages.push({ ...tab, ...size });
+          const click = () => page.locator('.plugin-detail [role="tab"]').filter({ hasText: label }).click();
+          if (performanceAudit) {
+            if (label === labels[0] && labels.length > 1) { await page.locator('.plugin-detail [role="tab"]').filter({ hasText: labels[1] }).click(); await settled(); }
+            await performanceAudit.measure(tab, 'cold', click);
+            const other = labels.find(l => l !== label);
+            if (other) { await page.locator('.plugin-detail [role="tab"]').filter({ hasText: other }).click(); await settled(); }
+            await performanceAudit.measure(tab, 'hot', click);
+          } else {
+            await click(); await settled(); await scan(tab, size, /技术|追溯/.test(label) ? 'technical' : 'ordinary');
+          }
+          report.pages.push({ ...tab, ...size });
         }
       }
-      report.pages.push({ ...surface, actualUrl: page.url().replace(base, ''), ...size });
+      report.pages.push({ ...surface, actualUrl: page.url().replace(base, ''), readiness, ...size });
     } catch (error) {
       const screenshot = 'uncovered-' + createHash('sha256').update(surface.route + size.width).digest('hex').slice(0, 12) + '.png';
       await page.screenshot({ path: path.join(out, screenshot) }).catch(() => {});
       report.uncovered.push({ page: surface.route, label: surface.label, owner: surface.owner, ...size, reason: error.message, screenshot });
+      if (page.isClosed() || !session.browser.isConnected()) throw Error('浏览器会话退出，停止该批巡检；未访问的页面不能计为通过。' + error.message);
+      if (performanceMode && surface.route === '/') throw error; // Stop if the changed real creation flow fails.
       // Record the visible error/loading words, while keeping readiness coverage explicitly failed.
-      await record(surface, size).catch(() => {});
+      if (!performanceMode) await record(surface, size).catch(() => {});
     }
-    if (!requestedPaths.size && !modulesOnly && !fallbackQueued && i === surfaces.length - 1 && size.width === 1920) {
+    if (!requestedPaths.size && !modulesOnly && !fallbackQueued && i === surfaces.length - 1 && size.width === sizes.at(-1).width) {
       fallbackQueued = true;
       const sample = studies.find(s => !types.some(t => t.id === s.parent?.id));
       for (const [module, spec] of Object.entries(moduleDefinitions)) if (!discoveredModules.has(module)) {
@@ -294,9 +343,41 @@ try {
     }
     await save();
   }
+  if (regularity && process.env.REGULARITY_PUBLIC_LAYOUT === '1') {
+    const { assertLayout } = await import('./layout-assertions.mjs');
+    const routes = ['/', '/runs', '/settings?section=ai', '/settings/compute', '/plugins', '/resources/materials', '/agent'];
+    for (const route of routes) for (const size of sizes) for (const theme of ['light', 'dark']) {
+      const check = { route, ...size, theme, passed: false };
+      try {
+        await page.setViewportSize(size);
+        await page.goto(base + route + (route.includes('?') ? '&' : '?') + 'theme=' + theme, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await settled();
+        if (await page.locator('html').getAttribute('data-theme') !== theme) {
+          await page.locator('.sidebar-foot').getByRole('button').click();
+          await page.getByRole('menuitem', { name: theme === 'dark' ? '切换深色模式' : '切换浅色模式', exact: true }).click();
+        }
+        assert.equal(await page.locator('html').getAttribute('data-theme'), theme);
+        await assertLayout(page, `${route} ${size.width} ${theme}`);
+        check.passed = true;
+      } catch (error) {
+        check.error = error.message;
+        check.screenshot = 'appearance-' + createHash('sha256').update(route + size.width + theme).digest('hex').slice(0, 12) + '.png';
+        await page.screenshot({ path: path.join(regularity.out, check.screenshot) }).catch(() => {});
+        process.exitCode = 1;
+      }
+      regularity.report.appearanceChecks.push(check);
+      console.log('公共页面外观：' + JSON.stringify(check));
+    }
+  }
   report.complete = true; await save();
+  if (performanceAudit) {
+    console.log(JSON.stringify(performanceAudit.report.counts));
+    if (performanceAudit.report.pages.some(p => !p.mainPassed || p.framePassed === false || p.blockedWrites.length)) process.exitCode = 1;
+  }
+  if (regularity) { await regularity.overview(); console.log(JSON.stringify({ pages: report.pages.length, ...regularity.report.counts, uncovered: report.uncovered.length, errors: report.errors.length })); }
   console.log(JSON.stringify({ pages: report.pages.length, ...report.counts, uncovered: report.uncovered.length, errors: report.errors.length }));
   const strict = process.env.VISIBLE_TEXT_STRICT || 'all';
   if (report.errors.length || report.blockedWrites.length || report.uncovered.some(u => u.page) || report.findings.some(h => strict === 'all' || h.owner === '前端公共')) process.exitCode = 1;
+  if (regularity?.report.findings.length) process.exitCode = 1;
 } catch (error) { report.failure = error.stack; process.exitCode = 1; await save(); console.error(error); }
 finally { await session.close(); }

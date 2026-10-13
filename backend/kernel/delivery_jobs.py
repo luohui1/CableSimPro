@@ -23,6 +23,30 @@ class DeliveryJobs:
                 if job['state'] in ('queued','running') and job['stage']!='save':job['state']='cancelled'
         self.worker.shutdown(wait=False,cancel_futures=True)
 
+    def warm_saved_image(self,wid,rid):
+        """Format only the chosen, verified IEC display artifact after saving.
+
+        Uses the existing digest-bound image cache and single report worker;
+        never solves, changes a run, or preformats every selection candidate.
+        """
+        def format_image():
+            from .report_selection import context
+            from .report_reads import saved_field_image
+            run=self.research.get_run(wid,rid)
+            selected=context(run)
+            case=next((c for c in run['output']['cases'] if c['case_id']==selected['case_id']),None) if selected else next((c for c in run['output']['cases'] if c['status']=='succeeded'),None)
+            if case is None:return
+            field=case.get('artifacts',{}).get('x-cablesim.temperature-field')
+            status=run.get('artifact_status',{}).get(case['case_id'],{}).get('x-cablesim.temperature-field',{})
+            if field and status.get('status')=='verified':saved_field_image(field)
+        def completed(future):
+            if future.cancelled():return
+            if future.exception():
+                import logging
+                logging.getLogger(__name__).warning('Saved image preformat unavailable; report will retry on demand.',exc_info=future.exception())
+        try:self.worker.submit(format_image).add_done_callback(completed)
+        except RuntimeError:pass  # Host shutdown; saved run remains available.
+
     def read(self,wid,jid):
         with self.lock:
             job=self.jobs.get(jid)
@@ -73,7 +97,8 @@ class DeliveryJobs:
                 saved=self.research.deliver(wid,body['run_ids'],request_id=body['request_id'],current_only=True,
                     cad_images=body.get('cad_images'),section_images=body.get('section_images'),fem_chapter=body.get('fem_chapter'))
             progress('done')
-            with self.lock:self.jobs[jid].update(state='succeeded',stage='done',delivery_id=saved['id'],finished=stamp(),elapsed_seconds=round(perf_counter()-started,4))
+            receipt={k:saved[k] for k in ('id','workspace','sources','renderer','digest','created','version_status')}
+            with self.lock:self.jobs[jid].update(state='succeeded',stage='done',delivery_id=saved['id'],delivery_receipt=receipt,finished=stamp(),elapsed_seconds=round(perf_counter()-started,4))
         except Cancelled:pass
         except Exception as exc:
             detail=getattr(exc,'detail',exc)

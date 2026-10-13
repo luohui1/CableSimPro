@@ -61,7 +61,8 @@ def test_second_batch_independent_page_values_and_full_shapes():
 
 
 def test_every_published_condition_can_be_resolved_without_guessed_default():
-    library=load(DATA/'library.py').BasisLibrary()
+    import pytest
+    module=load(DATA/'library.py');library=module.BasisLibrary()
     for record in library.data['records']:
         conditions={}
         for key,predicate in record['conditions'].items():
@@ -74,9 +75,14 @@ def test_every_published_condition_can_be_resolved_without_guessed_default():
             elif 'lt' in predicate:value=predicate['lt']*.99
             else:raise AssertionError('未声明条件运算符 '+key)
             conditions[key]=value
-        answer=library.query({'schema_version':'cablesim.standards-query/1','standard':record['standard'],
+        request={'schema_version':'cablesim.standards-query/1','standard':record['standard'],
                               'edition':record['edition'],'locator':record['table'] or record['clause'],
-                              'quantity':record['quantity']['key'],'record_id':record['id'],'conditions':conditions})
+                              'quantity':record['quantity']['key'],'record_id':record['id'],'conditions':conditions}
+        if record['verification']['status']=='blocked':
+            with pytest.raises(module.BasisError) as caught: library.query(request)
+            assert caught.value.code=='EVIDENCE_BLOCKED'
+            continue
+        answer=library.query(request)
         assert len(answer['records'])==1
         assert answer['records'][0]['value']==record['value']
 
@@ -168,7 +174,7 @@ def test_third_batch_manual_full_page_anchors_and_boundaries():
     for ident,(value,printed,pdf) in anchors.items():
         r=records[ident]
         assert (r['value'],r['printed_page'],r['pdf_page'])==(value,printed,pdf)
-    assert len(records)==2826
+    assert len(records)==4017
     assert records['gb50217-5-5-2/r8/bracket_or_hanger']['value_details']['execution_status']=='not_implemented'
     for column in ('bracket_or_hanger','ladder_or_tray'):
         formula=records['gb50217-5-5-2/r8/'+column]

@@ -2,7 +2,7 @@
 from html import escape
 import json
 
-RENDERER = 'cablesim.study-html/22'
+RENDERER = 'cablesim.study-html/24'
 
 
 def formatted(value, digits=1):
@@ -37,7 +37,7 @@ def task_answer(run):
     artifact = next((v for v in case.get('artifacts', {}).values() if isinstance(v, dict) and 'goal_checks' in v), {})
     if artifact.get('crossing_derating'):
         row=artifact['crossing_derating'][0]
-        return '<p class="answer">'+escape(f"交叉热源降额：{row['baseline_current_a']:.1f} A → {row['derated_current_a']:.1f} A，系数 {row['derating_factor']:.4f}；{row['clause']}。")+'</p>'
+        return '<p class="answer">'+escape(f"温限下交叉热源降额：{row['baseline_current_a']:.1f} A → {row['derated_current_a']:.1f} A，系数 {row['derating_factor']:.4f}；{row['clause']}。本分支只计算允许电流，未求解保存负荷下的导体温度。")+'</p>'
     all_checks = artifact.get('goal_checks', [])
     checks = {key: min((g for g in all_checks if g['key'] == key),key=lambda g:g.get('margin') if g.get('margin') is not None else float('inf'),default=None)
               for key in ('ampacity','conductor_temperature')}

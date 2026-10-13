@@ -19,7 +19,8 @@ import { StudyMaterialBasis } from './study-material-basis';
 import { StudyCorrection } from './study-correction';
 import { Select } from "./ui/select";
 import { SourceBadge } from "./source-badge";
-import { EmptyState, ErrorState } from "./states";
+import { EmptyState } from "./states";
+import { StudyErrorState as ErrorState } from './study-error-state';
 import { Toolbar } from "./toolbar";
 import { Conclusion } from "./conclusion";
 import { EngineeringValue } from "./engineering-value";
@@ -232,7 +233,7 @@ export function StudyResults({
         ...(rating && !noRating
           ? [
               {
-                label: crossing ? "降额后允许电流" : "允许电流",
+                label: crossing ? "降额后允许电流" : `${limit === null ? '保存' : show('temperature_limit',limit,'K')} 温限下允许电流`,
                 value: rating.value,
                 unit: rating.unit,
                 quantity: "ampacity",
@@ -243,13 +244,13 @@ export function StudyResults({
           ? [{ label: "同时额定", value: simultaneous.value, unit: simultaneous.unit, quantity: "ampacity" }]
           : []),
         ...(!crossing ? [{
-          label: "最热导体",
+          label: load === null ? "保存负荷下最热导体" : `${show('current',load,'A')} 时最热导体`,
           value: hottest?.value ?? null,
           unit: hottest?.unit || "K",
           quantity: "conductor_temperature",
         },
         {
-          label: "温限余量",
+          label: load === null ? "保存负荷下温限余量" : `${show('current',load,'A')} 时温限余量`,
           value: margin,
           unit: "K",
           quantity: "temperature_margin",

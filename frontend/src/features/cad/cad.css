@@ -32,6 +32,7 @@
 .cad-point-measurement path{fill:none;stroke:var(--text);stroke-width:.75}
 .cad-point-measurement circle{fill:var(--panel);stroke:var(--text);stroke-width:1.5}
 .cad-temperature-slice{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1}
+.cad-temperature-host{position:absolute;inset:0;pointer-events:none}
 .cad-thermal-overlay{z-index:2}
 .cad-thermal-overlay text{fill:var(--text);font:inherit;font-size:var(--text-note);font-variant-numeric:tabular-nums;paint-order:stroke;stroke:var(--panel);stroke-width:3}
 .cad-hot-conductor{pointer-events:auto;cursor:pointer}

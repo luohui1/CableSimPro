@@ -8,7 +8,7 @@ from math import isclose, isfinite
 from pathlib import Path
 import re
 
-VERSION = '0.3.0'
+VERSION = '0.4.0'
 DATA = Path(__file__).parent
 NUMERIC_FIELDS = {'area_m2', 'screen_area_m2', 'diameter_m', 'u0_v', 'u_v', 'um_v', 'core_count',
                   'conductor_class', 'nominal_thickness_m', 'duration_s'}
@@ -146,7 +146,10 @@ class BasisLibrary:
                     raise BasisError('INPUT_INVALID', '/conditions/' + key, '数值超过查询边界；请核对 SI 单位。')
                 if (key.endswith('_count') or key == 'conductor_class') and (int(value) != value or value > 100):
                     raise BasisError('INPUT_INVALID', '/conditions/' + key, '请输入正整数类别或芯数。')
-            elif not isinstance(value, str) or not value or len(value) > 60:
+            elif declared.get(key, {}).get('type') == 'boolean':
+                if type(value) is not bool:
+                    raise BasisError('INPUT_INVALID', '/conditions/' + key, '请选择明确的 true 或 false，不能用数字或文字代替声明条件。')
+            elif not isinstance(value, str) or not value or len(value) > declared.get(key, {}).get('maxLength',60):
                 raise BasisError('INPUT_INVALID', '/conditions/' + key, '请输入明确的材料、结构或分支代号。')
             elif key == 'screened' and value not in ('yes', 'no'):
                 raise BasisError('INPUT_INVALID', '/conditions/screened', '请选择 yes（有屏蔽）或 no（无屏蔽）。')
@@ -185,7 +188,9 @@ class BasisLibrary:
             record['record_sha256'] = digest(record)
             record['citation'] = citation(record)
             enriched.append(record)
-        status = 'listed' if operation == 'list' else 'explicit_not_applicable' if records[0]['value'] is None else 'resolved'
+        status = ('listed' if operation == 'list' else
+                  'reference_value_missing' if records[0]['value'] is None and records[0]['semantic'].startswith('literature') else
+                  'explicit_not_applicable' if records[0]['value'] is None else 'resolved')
         return {**base, 'status': status, 'records': enriched}
 
 

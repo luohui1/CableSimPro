@@ -6,7 +6,7 @@ import time
 from threading import Lock
 from uuid import UUID
 from fastapi import HTTPException
-from pydantic import Field
+from pydantic import Field, ValidationError
 from ..schemas import StrictModel
 from ..plugin_host.registry import Registry
 from .contracts import CreateStudy, RunStudy
@@ -79,6 +79,37 @@ class StepResponses:
         if not self.research.executor.required(method['plugin_id'],method['capability']):raise HTTPException(422,'未配置 dg83；拒绝本机求解。')
         estimate=allocation_estimate(self.research.executor.resources(plugin.manifest,1),1,read(self.research.executor.profile))
         return run,value,controls,method,2*estimate['upper_core_hours']
+
+    def source_check(self,wid,sid,identifier):
+        """Local, source-only scope check. Never stages or submits a native job."""
+        run=self.research.get_run(wid,identifier)
+        if run['study']!=sid:raise HTTPException(422,'来源运行不属于当前研究。')
+        plugin=Registry(self.research.executor.registry.root,plugin_id='cablesim.simulation').get('cablesim.simulation');plugin.verify()
+        sys.path.insert(0,str(plugin.directory/'src'))
+        try:
+            from cablesim_simulation.step_response import from_saved_run
+            from_saved_run(run)
+            status,reason='passed','保存来源在阶跃热响应适用范围内。'
+        except ValidationError:
+            status,reason='needs_material_sources','材料热容或来源缺项；请逐材料补充体积热容、正文页码、表号和文件摘要，再预检。'
+        except (ValueError,KeyError) as exc:
+            status,reason='unsupported',str(exc) if isinstance(exc,ValueError) else '保存稳态工件缺少阶跃响应所需内容，请保留原结果并补齐来源。'
+        finally:sys.path.pop(0)
+        method=run['snapshot']['definition']['method']
+        if status=='unsupported' and run.get('integrity')=='verified' and run.get('status')=='succeeded' and method.get('plugin_id')=='cablesim.iec60287':
+            reason='当前保存的是标准方法结果，不是有限元焦耳稳态参考；不能从载流量数值推算暂态响应。'
+            next_step='先保存同工况、同材料与同边界的有限元焦耳稳态参考，再补齐逐材料热容来源并预检。'
+        elif status=='unsupported' and any(section.get('enclosures') for case in run['snapshot']['cases'] for section in case['input'].get('sections',[])):
+            grouped=any(len(case['input'].get('circuits',[]))>1 and any(cable.get('construction')=='three_core' for cable in case['input'].get('cable_types',[])) for case in run['snapshot']['cases'])
+            next_step=('需扩展三芯排管与多回路暂态热模型' if grouped else '需补齐本排管构型的阶跃响应适配与空气暂态模型')+'，并补齐管内空气和各材料热容来源；当前不能生成该工况的 IEC 应急响应。'
+        elif status=='unsupported':
+            next_step='请按上述保存来源或适用范围问题补齐有限元稳态参考；保留原结果，不用其他构型的曲线代替。'
+        else:
+            next_step='补齐材料来源后预检、确认核时，再提交超算。' if status=='needs_material_sources' else '确认保存输入与材料来源后预检、确认核时，再提交超算。'
+        return {'status':status,'reason':reason,'source_run_id':identifier,'source_study_id':sid,
+                'source_study_name':run['snapshot']['definition']['title'],
+                'source_output_sha256':run['output_digest'],'solver_submitted':False,
+                'scope':'thermally_isolated_circuit','next_step':next_step}
 
     def estimate(self,wid,sid,body):
         run,value,controls,method,budget=self.prepared(wid,sid,body)

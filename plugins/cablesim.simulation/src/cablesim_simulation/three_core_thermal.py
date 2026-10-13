@@ -153,6 +153,40 @@ def _thermal_system(prepared, mesh):
     return mesh,basis,ids,regions,weights,nodes,air_laws,fixed_matrix,fixed_heat,D,free
 
 
+def thermal_state(prepared, system, temperature):
+    """Shared resolved-region loss assembly for steady and transient methods."""
+    import numpy as np
+    from cablesim_iec60287.three_core import electrical
+    p,d,group,problem,bindings,ducts=prepared
+    mesh,basis,ids,regions,weights,nodes,air_laws,fixed_matrix,fixed_heat,D,free=system
+    def mean(uid):return float(weights[uid]@temperature/weights[uid].sum())
+    matrix=fixed_matrix.copy();air=[]
+    for duct,unit,interfaces in air_laws:
+        surfaces=[float(np.sum(fb.interpolate(temperature)*fb.dx)/fb.dx.sum()) for fb in interfaces]
+        mean_c=sum(surfaces)/2-273.15;law=duct['law']
+        resistance=law.u/(1+.1*(law.v+law.y_per_k*mean_c)*duct['cable_radius']*2000)
+        if not 0<=mean_c<=150 or resistance<=0:raise ValueError('管内空气温度越出声明的0–150°C计算区间。')
+        conductivity=log(duct['inner_radius']/duct['cable_radius'])/(2*pi*resistance)
+        matrix+=conductivity*unit
+        regions[duct['uid']]['material']['k_w_m_k']=conductivity
+        air.append({'entity':duct['uid'],'mean_temperature_c':mean_c,'resistance_k_m_w':resistance})
+    load=fixed_heat.copy();states=[]
+    for c,b in zip(group.cables,bindings):
+        tc=sum(mean(uid) for uid in b['conductors'])/3-273.15
+        ts=sum(mean(uid) for uid in b['screens'])/3-273.15
+        ta=mean(b['armour'])-273.15 if b['armour'] else ts
+        circuit=next(row for row in d['circuits'] if row['id']==b['circuit'])
+        rc,l1,l2,details=electrical(c['model'],tc,ts,ta,group.parameters,circuit['system']['frequency'])
+        wc=c['current']**2*rc;ws=wc*l1;wa=3*wc*l2['total']
+        for uids,power in [(b['conductors'],wc),(b['screens'],ws),([b['armour']] if b['armour'] else [],wa)]:
+            for uid in uids:load+=power*weights[uid]/weights[uid].sum()
+        states.append({'entity':b['entity'],'current_a':c['current'],'conductor_mean_temperature_k':tc+273.15,
+            'conductor_max_temperature_k':max(float(temperature[nodes[uid]].max()) for uid in b['conductors']),
+            'conductor_joule_heat_w_m':3*wc,'screen_heat_w_m':3*ws,'armour_heat_w_m':wa,
+            'dielectric_heat_w_m':3*c['model']['wd'],'lambda1':l1,'lambda2':l2['total'],'electrical_details':details})
+    return matrix,load,states,air
+
+
 def solve(prepared, mesh=None, *, _cache=None, _export_field=True):
     """Solve every trial; reuse only the immutable same-mesh linear assembly.
 
@@ -174,33 +208,8 @@ def solve(prepared, mesh=None, *, _cache=None, _export_field=True):
     rho=1/problem.geometry[0].material.k_w_m_k
     def boundary(states):
         return image_rise(basis.doflocs[:,D],loss_sources(states,bindings),rho) if p.outer_boundary=='kennelly_image' else np.zeros(len(D))
-    def mean(uid,t):return float(weights[uid]@t/weights[uid].sum())
     def evaluate(t):
-        matrix = fixed_matrix.copy();air = []
-        for duct,unit,interfaces in air_laws:
-            surfaces = [float(np.sum(fb.interpolate(t)*fb.dx)/fb.dx.sum()) for fb in interfaces]
-            mean_c = sum(surfaces)/2-273.15;law = duct['law']
-            resistance = law.u/(1+.1*(law.v+law.y_per_k*mean_c)*duct['cable_radius']*2000)
-            if not 0<=mean_c<=150 or resistance<=0:raise ValueError('管内空气温度越出声明的0–150°C计算区间。')
-            conductivity = log(duct['inner_radius']/duct['cable_radius'])/(2*pi*resistance)
-            matrix += conductivity*unit
-            regions[duct['uid']]['material']['k_w_m_k'] = conductivity
-            air.append({'entity':duct['uid'],'mean_temperature_c':mean_c,'resistance_k_m_w':resistance})
-        load = fixed_heat.copy();states = []
-        for c,b in zip(group.cables,bindings):
-            tc = sum(mean(uid,t) for uid in b['conductors'])/3-273.15
-            ts = sum(mean(uid,t) for uid in b['screens'])/3-273.15
-            ta = mean(b['armour'],t)-273.15 if b['armour'] else ts
-            circuit = next(row for row in d['circuits'] if row['id']==b['circuit'])
-            rc,l1,l2,details = electrical(c['model'],tc,ts,ta,group.parameters,circuit['system']['frequency'])
-            wc = c['current']**2*rc;ws = wc*l1;wa = 3*wc*l2['total']
-            for uids,power in [(b['conductors'],wc),(b['screens'],ws),([b['armour']] if b['armour'] else [],wa)]:
-                for uid in uids:load += power*weights[uid]/weights[uid].sum()
-            states.append({'entity':b['entity'],'current_a':c['current'],'conductor_mean_temperature_k':tc+273.15,
-                'conductor_max_temperature_k':max(float(t[nodes[uid]].max()) for uid in b['conductors']),
-                'conductor_joule_heat_w_m':3*wc,'screen_heat_w_m':3*ws,'armour_heat_w_m':wa,
-                'dielectric_heat_w_m':3*c['model']['wd'],'lambda1':l1,'lambda2':l2['total'],'electrical_details':details})
-        return matrix,load,states,air
+        return thermal_state(prepared,cache['system'],t)
     history = [];preconditioner = cache['preconditioner']
     for iteration in range(1,p.maximum_iterations+1):
         matrix,load,states,_ = evaluate(temperature);reduced = matrix[free][:,free].tocsr()

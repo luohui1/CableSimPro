@@ -31,7 +31,7 @@ function FieldLegend({
       data-slot="field-legend"
       data-variant={variant}
       className={cn(
-        "mb-3 font-medium",
+        "mb-3 font-semibold",
         "data-[variant=legend]:text-ui-body",
         "data-[variant=label]:text-ui-note",
         className
@@ -46,7 +46,7 @@ function FieldGroup({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="field-group"
       className={cn(
-        "group/field-group @container/field-group flex w-full flex-col gap-7 data-[slot=checkbox-group]:gap-3 [&>[data-slot=field-group]]:gap-4",
+        "group/field-group @container/field-group flex w-full flex-col gap-6 data-[slot=checkbox-group]:gap-3 [&>[data-slot=field-group]]:gap-4",
         className
       )}
       {...props}
@@ -99,7 +99,7 @@ function FieldContent({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="field-content"
       className={cn(
-        "group/field-content flex flex-1 flex-col gap-1.5 leading-snug",
+        "group/field-content flex flex-1 flex-col gap-2 leading-snug",
         className
       )}
       {...props}
@@ -130,7 +130,7 @@ function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="field-label"
       className={cn(
-        "flex w-fit items-center gap-2 text-ui-note leading-snug font-medium group-data-[disabled=true]/field:opacity-50",
+        "flex w-fit items-center gap-2 text-ui-note leading-snug font-normal group-data-[disabled=true]/field:opacity-50",
         className
       )}
       {...props}

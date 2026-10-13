@@ -69,7 +69,7 @@ def client(tmp_path):
     ('600/1000',95e-6,'single_core',.0011,6),
     ('26000/35000',400e-6,'single_core',.0105,6),
 ])
-def test_live_basis_dimensions_and_complete_generation_refuses_missing_annex(client,voltage,area,construction,thickness,page):
+def test_live_basis_dimensions_and_complete_generation_refuses_missing_inputs_or_annex(client,voltage,area,construction,thickness,page):
     values={'schema_version':'cablesim.cable-design-request/1','construction':construction,
             'voltage':voltage,'conductor':'copper_bare','area_m2':area,'form':'solid_round',
             **({'gap_m':0} if construction=='three_core' else {})}
@@ -85,7 +85,8 @@ def test_live_basis_dimensions_and_complete_generation_refuses_missing_annex(cli
     with pytest.raises(ValueError,match='摘要'):evidence(edited,ref['query'])
     blocked=client.post('/api/types/creation-proposals',json={'request_id':str(uuid4()),'input':{**values,'generation_mode':'complete'}})
     assert blocked.status_code==422,blocked.text
-    assert '本库' in blocked.text or '缺少' in blocked.text
+    # Do not query A.2.2 without knowing the actual semiconductor structure.
+    assert '/screened' in blocked.text and '缺字段' in blocked.text
     assert client.get('/api/design/type-workspaces').json()==[]
 
 

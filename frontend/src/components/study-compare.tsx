@@ -25,7 +25,8 @@ import { DataTable } from "./data-table";
 import { QueryState } from "./query-state";
 import { Toolbar } from "./toolbar";
 import { EngineeringValue } from "./engineering-value";
-import { EmptyState, ErrorState } from "./states";
+import { EmptyState } from "./states";
+import { StudyErrorState as ErrorState } from './study-error-state';
 import { StudyMethodForm } from "./study-method-form";
 import { MethodParameterFields } from "./method-parameter-fields";
 import { contractDefaults } from "./contract-fields";
@@ -710,9 +711,7 @@ export function StudyCompare({
         />
       )}
       {error && (
-        <p role="alert" className="field-error">
-          {error}
-        </p>
+        <ErrorState title="对比设置未保存" description={error} />
       )}
     </div>
   );

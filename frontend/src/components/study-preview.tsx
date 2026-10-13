@@ -6,6 +6,7 @@ import { moduleConfiguration, commitParameters } from "@/lib/study-config";
 import { Icon } from "./icon";
 import { useStudy } from "./study-provider";
 import { Button } from "./ui/button";
+import { StudyErrorState } from './study-error-state';
 
 /** 宿主从插件声明的关键结论里投影出的答案（值来自已校验工件，带显示单位）。 */
 export type Headline = { key: string; title: string; value: number; unit: string; display_unit?: string | null; display_value: number; entity?: string; condition?: string | null; case_id?: string };
@@ -100,7 +101,7 @@ export function PreviewStrip({ preview, saved }: { preview: ReturnType<typeof us
   const savedRows = headlinesOf(saved);
   return <div className={`preview-strip ${preview.error ? "is-error" : ""}`} role="status" aria-label="试算结果">
     <span className="preview-tag">试算 · 未保存</span>
-    {preview.error ? <span className="preview-error">{preview.error}</span>
+    {preview.error ? <StudyErrorState title="试算未完成" description={preview.error} />
       : preview.result!.headlines.length ? preview.result!.headlines.slice(0, 4).map((row) => {
         const before = savedRows.find((item) => item.key === row.key && item.condition === row.condition);
         const delta = before ? row.display_value - before.display_value : null;

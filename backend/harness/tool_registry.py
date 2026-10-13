@@ -180,7 +180,9 @@ def host_tools():
             'limit':{'type':'integer','minimum':1,'maximum':20},'offset':{'type':'integer','minimum':0}},['kind','id'])),
         ('workspace_list','列出工程','read','读取工程身份与修订，供明确选择上下文。',object_schema()),
         ('workspace_read','读取工程输入','read','读取会话固定版本的工程事实、字段与单位；不修改输入。',object_schema({
-            'paths':{'type':'array','maxItems':8,'items':{'type':'string'},'description':'可选稳定领域路径；省略返回有界工程概览。'}})),
+            'paths':{'type':'array','maxItems':8,'items':{'type':'string'},'description':'可选稳定领域路径；省略返回有界工程概览。'},
+            'view':{'enum':['outline','locks']},'offset':{'type':'integer','minimum':0},
+            'limit':{'type':'integer','minimum':1,'maximum':30}})),
         ('study_list','列出研究','read','读取本工程的研究名称、方法与状态。',object_schema()),
         ('project_digest','汇总工程研究结论','read','优先用于结论汇总：一次读取各研究最新保存运行的量值、单位、口径、限制对象和状态；按next_cursor分页。',object_schema({
             'after':{'type':'integer','minimum':0},'limit':{'type':'integer','minimum':1,'maximum':20},'case_after':{'type':'integer','minimum':0}})),

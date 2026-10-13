@@ -1,9 +1,23 @@
 /** Display-only browser fixture; never imported by the production entry. */
 import { createRoot } from 'react-dom/client';
+import { useState } from 'react';
 import '@fontsource/noto-sans-sc/400.css';
 import '@fontsource/noto-sans-sc/600.css';
 import 'virtual:design-tokens.css';
 import { FieldView } from './field-view';
+import { PreflightDialog } from '@/components/preflight-dialog';
+
+/** Read the host's saved rejection; never executes or fabricates a preflight. */
+export function renderSavedPreflight(data: Record<string, unknown>) {
+  function ReadSaved() {
+    const [open, setOpen] = useState(true);
+    return <PreflightDialog open={open} onOpenChange={setOpen} method="IEC 60287 · 已保存适用性检查"
+      loading={false} data={data} ack={false} onAck={() => {}} running={false} disabled={false}
+      onRun={() => { throw Error('不可运行不覆盖工况'); }}
+      onMissing={() => { throw Error('不应要求修正分层'); }} missingLabel={() => '电缆分层参数'} />;
+  }
+  createRoot(document.getElementById('root')!).render(<ReadSaved />);
+}
 
 export function renderDirectField() {
   const points: [number, number][] = [], triangles: [number, number, number][] = [], values: number[] = [];

@@ -1,10 +1,22 @@
 """Read-only metadata projections; no migration, solver, job refresh or approval."""
 from fastapi import APIRouter, Query
+from contextlib import asynccontextmanager
+from time import perf_counter
+from starlette.concurrency import run_in_threadpool
 from .contracts import Kind, ObjectList, Relations, Inbox
 
 
 def make_router(index):
-    router=APIRouter(prefix='/api/index',tags=['index'])
+    @asynccontextmanager
+    async def lifespan(app):
+        # main's existing owned warm-up thread builds the complete index. Wait
+        # before declaring startup ready; do not move that wait to the first UI read.
+        started=perf_counter()
+        await run_in_threadpool(index.warm_done.wait,5)
+        index.startup_wait_ms=(perf_counter()-started)*1000
+        try:yield
+        finally:index.previous=None
+    router=APIRouter(prefix='/api/index',tags=['index'],lifespan=lifespan)
 
     @router.get('/objects',response_model=ObjectList)
     def objects(kind:Kind|None=None,q:str=Query('',max_length=200),

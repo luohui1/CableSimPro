@@ -8,6 +8,11 @@ export function needsScopeConfirmation(data?: Record<string, unknown>) {
   return data?.partial === true || [data?.cases, data?.crosschecks].some(rows =>
     Array.isArray(rows) && rows.some(raw => optionalRecord(raw).status !== "succeeded"));
 }
+function outsideScope(item: Record<string, unknown>, issue?: Record<string, unknown>) {
+  const error = optionalRecord(item.error);
+  return item.status === 'not_applicable' || text(error.code).includes('APPLICAB') ||
+    /不覆盖|未覆盖|不适用|不接受/.test(text(issue?.message) || text(error.message));
+}
 export function PreflightDialog({
   open,
   onOpenChange,
@@ -50,7 +55,7 @@ export function PreflightDialog({
   const cases = data && Array.isArray(data.cases) ? array(data.cases, "预检工况").map(optionalRecord) : [];
   const checks = [...cases, ...(Array.isArray(data?.crosschecks) ? data.crosschecks.map(optionalRecord) : [])];
   const failed = checks.filter(item => item.status !== "succeeded");
-  const outOfScope = failed.filter(item => item.status === "not_applicable" || text(optionalRecord(item.error).code).includes("APPLICAB"));
+  const outOfScope = failed.filter(item => outsideScope(item));
   const confirm = requireConfirmation || !!onCheck || needsScopeConfirmation(data);
   return (
     <Dialog
@@ -108,7 +113,7 @@ export function PreflightDialog({
                     ? (optionalRecord(item.error).issues as unknown[])
                     : [item.error]).map((raw, issueIndex) => {
                       const issue = optionalRecord(raw), path = text(issue.path) || text(optionalRecord(item.error).path);
-                      return <div key={issueIndex}><p>{text(issue.message) || '输入不符合当前方法要求'}</p><Button variant="ghost" size="compact" onClick={() => onMissing(path)}>修正{missingLabel(path)}后重新预检</Button></div>;
+                      return <div key={issueIndex}><p>{text(issue.message) || '输入不符合当前方法要求'}</p>{!outsideScope(item, issue) && <Button variant="ghost" size="compact" onClick={() => onMissing(path)}>修正{missingLabel(path)}后重新预检</Button>}</div>;
                     })}
                 </>
               )}
@@ -134,7 +139,7 @@ export function PreflightDialog({
               onChange={(event) => onAck(event.target.checked)}
               disabled={(!onCheck && data?.ready !== true) || running || loading}
             />
-            {onCheck || requireConfirmation ? "已核对保存输入与采样范围" : data?.ready === true ? "已知悉上述限制，仅运行通过预检的工况" : "请先修正上述问题，再重新预检"}
+            {onCheck || requireConfirmation ? "已核对保存输入与采样范围" : data?.ready === true ? "已知悉上述限制，仅运行通过预检的工况" : outOfScope.length === failed.length && failed.length ? "当前方法不覆盖此工况，不能运行" : "请先修正上述问题，再重新预检"}
           </label>}
           {!!runError && (
             <ErrorState title="运行未完成" description={message(runError)} />

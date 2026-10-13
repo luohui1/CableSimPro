@@ -1,6 +1,7 @@
 import { entityLabel } from "@/lib/domain-fields";
 import { useRef, useState, type ComponentProps } from "react";
 import { api, ApiError, numeric, record, responseData, message } from "@/api/client";
+import { StudyErrorState } from './study-error-state';
 import type { components } from "@/api/generated/schema";
 import {
   CableSection,
@@ -89,6 +90,7 @@ function cablePath(id: string, target: LayerTarget) {
 export function StudyDrawing({
   document,
   historical,
+  readOnly = false,
   kind,
   onSelect,
   annotations,
@@ -96,6 +98,7 @@ export function StudyDrawing({
 }: {
   document: DomainDocument;
   historical: boolean;
+  readOnly?: boolean;
   kind: "cable" | "section" | "scene";
   onSelect: (selection: InputSelection) => void;
   annotations?: Record<string, { text: string; emphasis?: boolean }>;
@@ -117,7 +120,8 @@ export function StudyDrawing({
     section =
       document.sections.find((item) => item.id === chosen) ||
       document.sections[0];
-  const editable = !historical && !context.saving;
+  const editable = !historical && !readOnly && !context.saving;
+  const editDocument = context.editDomainDocument;
   function command(value: DrawingCommand) {
     if (value === "save") {
       const focused = window.document.activeElement;
@@ -186,7 +190,7 @@ export function StudyDrawing({
       },
     })), '敷设模板');
     if (result.schema_version !== 'cablesim.domain/1') throw new ApiError(502, '模板缺少领域输入');
-    context.editDomainDocument(result as DomainDocument, 'section', [pointer('sections')]);
+    editDocument(result as DomainDocument, 'section', [pointer('sections')]);
     setSelection(null);
   }
   async function confirmTemplate() {
@@ -215,11 +219,11 @@ export function StudyDrawing({
       {kind !== 'cable' && editable && <div className="study-template-action"><Button size="compact" variant="ghost" onClick={() => {
         setTemplateId(templates[0]?.id || ''); setTemplateDepth(Math.abs(section?.placements[0]?.z || 0.8)); setTemplateError(''); setTemplateOpen(true);
       }}>敷设模板</Button></div>}
-      <Dialog open={templateOpen} onOpenChange={open => {if(!templatePending.current) setTemplateOpen(open);}} title="敷设模板" description="本研究使用的内置布置模板；不是组织发布模板。应用后进入工程模型草稿，保存会影响本工程的相关研究。" initialFocus="form"
+      <Dialog open={templateOpen} onOpenChange={open => {if(!templatePending.current) setTemplateOpen(open);}} title="敷设模板" description={context.study.definition.input_source === 'study' ? '应用后进入本研究的独立输入草稿；保存不会修改型号或其他研究。' : '本研究使用的内置布置模板；不是组织发布模板。应用后进入工程模型草稿，保存会影响本工程的相关研究。'} initialFocus="form"
         actions={<Button variant="primary" loading={templateBusy} onClick={() => void confirmTemplate()}>应用模板</Button>}>
         <Select label="模板" value={templateId} options={templates.map(item => ({value:item.id,label:item.label}))} onChange={setTemplateId} disabled={templateBusy} />
         <NumberField label="中心埋深" unit="m" value={templateDepth} min={0} minExclusive required precision={3} onCommit={setTemplateDepth} inputRef={templateDepthInput} disabled={templateBusy} submitOnEnter />
-        {templateError && <p className="field-error" role="alert">{templateError}</p>}
+        {templateError && <StudyErrorState title="敷设模板未应用" description={templateError} />}
       </Dialog>
       {(kind === "cable" ? document.cable_types : document.sections).length >
         1 && (
@@ -321,7 +325,7 @@ export function StudyDrawing({
             };
             for (const path of paths)
               updated = change(updated, path, at(temporary, path));
-            context.editDomainDocument(updated, "section", paths);
+            editDocument(updated, "section", paths);
           }}
           onTemplateRequest={applyTemplate}
         />

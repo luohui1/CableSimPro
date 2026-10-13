@@ -71,8 +71,8 @@
   },
   {
     "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/domain.py",
-    "sha256": "69f331f57296b003ac577c0e8eef6ecdedba9d5d16aa8785d35681e679c14961",
-    "size_bytes": 6510
+    "sha256": "24556a82b72c30332a392df5e4763ba121622b19dd06ca73de64558dc346ce2f",
+    "size_bytes": 6911
   },
   {
     "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/double_flat.py",

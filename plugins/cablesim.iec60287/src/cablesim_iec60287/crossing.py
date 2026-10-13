@@ -4,7 +4,7 @@ SI inputs. Equation (1) has a square root (confirmed on the original page).
 Sources are fixed horizontal line heat sources, not jointly rated circuits (4.4).
 """
 from functools import lru_cache
-from math import ceil, exp, expm1, fsum, log1p, pi, sin, sqrt
+from math import ceil, exp, expm1, fsum, hypot, log1p, pi, sin, sqrt
 from pydantic import BaseModel, ConfigDict, Field
 from cablesim_sdk.validation import FieldValueError
 from .method import RatingRefused
@@ -25,10 +25,23 @@ class HeatSource(BaseModel):
 def sources_for(group):
     values=group.parameters.get('crossing_heat_sources',[])
     if not values:return []
-    # Narrow integration boundary: no unknown three-dimensional mutual geometry.
+    # Annex A uses the hottest single-core cable and its group-effective T4.
+    # Section 1 expressly warns that superposition is optimistic for touching cables.
     section=group.document['sections'][0]
-    if len(group.cables)!=1 or not group.soil.get('three_core') or group.cables[0]['duct'] or section.get('backfill') or section.get('soil_layers'):
-        raise RatingRefused('CROSSING_SCOPE','交叉热源现支持均匀土壤、等温地表的一根三芯直埋电缆；多回路、单芯组、排管或回填请用三维数值方法。','/parameters/crossing_heat_sources')
+    if any(c['duct'] for c in group.cables) or section.get('backfill') or section.get('soil_layers'):
+        raise RatingRefused('CROSSING_SCOPE','IEC 60287-3-3:2007 第 1 条要求周围介质热特性均匀且可叠加；本方法不覆盖排管、回填或分层。请建立包含热源实际几何的三维热仿真。','/parameters/crossing_heat_sources')
+    if not group.soil.get('three_core'):
+        for i,a in enumerate(group.cables):
+            for b in group.cables[i+1:]:
+                clearance=hypot(a['point'][0]-b['point'][0],a['point'][1]-b['point'][1])-(a['geometry'].overall_m+b['geometry'].overall_m)/2
+                if clearance<=1e-9:
+                    raise RatingRefused('CROSSING_TOUCHING_GROUP','接触电缆组（包括接触品字形）不能直接套用交叉降额：IEC 60287-3-3:2007 第 1 条（第 6 页，PDF 第 8 页）说明接触电缆不严格满足叠加原理，直接计算偏乐观。请用包含三相电缆、接触界面和交叉热源的三维热仿真；本次不输出降额值。','/parameters/crossing_heat_sources')
+        if len(group.circuits)!=1 or group.circuits[0].get('arrangement')!='flat' or max(c['point'][1] for c in group.cables)-min(c['point'][1] for c in group.cables)>1e-9:
+            raise RatingRefused('CROSSING_GROUP_SCOPE','标准覆盖单芯电缆；本实现按 IEC 60287-3-3:2007 附录 A 的最热电缆法支持同埋深、非接触平行单回路。不同埋深品字形或多回路的纵向互热尚未闭合，请用三维热仿真，不以独立单根降额替代。','/parameters/crossing_heat_sources')
+        if len({c['current'] for c in group.cables})!=1:
+            raise RatingRefused('CROSSING_UNBALANCED_GROUP','附录 A 的单芯平行组按三相等负荷采用最热电缆法；本实现不覆盖不平衡负荷的纵向互热。请使用包含各相实际负荷与交叉段的三维热仿真。','/parameters/crossing_heat_sources')
+    elif len(group.cables)!=1:
+        raise RatingRefused('CROSSING_SCOPE','交叉降额的三芯分支只覆盖一根直埋电缆；多回路请用三维热仿真。','/parameters/crossing_heat_sources')
     cable_type=next(t for t in group.document['cable_types'] if t['id']==group.document['circuits'][0]['cable_type'])
     conductor=cable_type['cores'][0]['conductor']
     material=next(m for m in group.document['materials'] if m['id']==conductor['material'])
@@ -115,7 +128,7 @@ def derate(*, current_a, resistance_ohm_m, alpha20_per_k, area_m2, conductor_rho
 def apply(group,payload):
     sources=sources_for(group)
     if not sources:return payload
-    c=group.cables[0];model=c['model'];document=group.document
+    document=group.document
     cable_type=next(t for t in document['cable_types'] if t['id']==document['circuits'][0]['cable_type'])
     conductor=cable_type['cores'][0]['conductor'];material=next(m for m in document['materials'] if m['id']==conductor['material'])
     kind=material.get('standard_kind') or group.parameters.get('crossing_conductor_material')
@@ -125,13 +138,22 @@ def apply(group,payload):
     records=[]
     for rated in payload['circuit_ratings']+([payload['simultaneous_rating']] if payload.get('simultaneous_rating') else []):
         if rated['ampacity_a'] is None:continue
-        state=rated['cable_states'][0]
-        result=derate(current_a=rated['ampacity_a'],resistance_ohm_m=state['ac_resistance_ohm_m'],alpha20_per_k=model['alpha'],
-            area_m2=conductor['nominal_area'],conductor_rho_k_m_w=rho,cores=3,t1=state['t1_k_m_w'],t2=state['t2_k_m_w'],
-            t3=state['t3_k_m_w'],t4=state['t4_self_soil_k_m_w'],lambda1=state['lambda1'],lambda2=state['lambda2'],
-            dielectric_w_m=state['dielectric_loss_per_core_w_m'],limit_c=state['temperature_limit_c'],ambient_c=group.ambient,
+        state=min(rated['cable_states'],key=lambda row:row['margin_k'])
+        c=next(c for c in group.cables if c['id']==state['entity'])
+        three_core=bool(group.soil.get('three_core'))
+        # Annex A, Table A.1: T4 belongs to the hottest cable in the loaded
+        # parallel group, not its isolated self resistance. Preserve mutual heat.
+        t4=state['t4_self_soil_k_m_w'] if three_core else state['external_temperature_rise_k']/state['total_loss_w_m']
+        alpha=c['model']['alpha'] if three_core else c['rating'].conductor.alpha20_per_k
+        result=derate(current_a=rated['ampacity_a'],resistance_ohm_m=state['ac_resistance_ohm_m'],alpha20_per_k=alpha,
+            area_m2=conductor['nominal_area'],conductor_rho_k_m_w=rho,cores=3 if three_core else 1,t1=state['t1_k_m_w'],t2=state.get('t2_k_m_w',0),
+            t3=state['t3_k_m_w'],t4=t4,lambda1=state['lambda1'],lambda2=state.get('lambda2',0),
+            dielectric_w_m=state['dielectric_loss_per_core_w_m'] if three_core else state['dielectric_loss_w_m'],limit_c=state['temperature_limit_c'],ambient_c=group.ambient,
             depth_m=-c['point'][1],soil_rho_k_m_w=medium['thermal_resistivity'],sources=sources)
-        for source in result['sources']:source['net_clearance_m']=abs(-c['point'][1]-source['depth_m'])-(model['overall']+source['diameter_m'])/2
+        for source in result['sources']:source['net_clearance_m']=abs(-c['point'][1]-source['depth_m'])-(c['geometry'].overall_m+source['diameter_m'])/2
+        result['rated_cable']=c['id']
+        result['t4_group_effective_k_m_w']=t4
+        if not three_core:result['scope']+=' 单芯非接触平行组采用附录 A 最热电缆及含相间互热的等效外部热阻；同回路等负荷降额。'
         result['entity']=rated.get('entity',group.circuits[0]['id']);records.append(result)
         rated['baseline_ampacity_a']=rated['ampacity_a'];rated['ampacity_a']=result['derated_current_a']
     payload['crossing_derating']=records

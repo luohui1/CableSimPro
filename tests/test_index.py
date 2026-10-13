@@ -67,6 +67,8 @@ def test_canonical_states_pinned_relations_and_no_large_contents(client,monkeypa
     # Real plugin publication emits SourceWatch invalidation. The synthetic pin
     # override above has no filesystem publication, so invalidate its old receipt.
     with research.read_responses.lock:research.read_responses.entries.clear();research.read_responses.bytes=0
+    from backend.index import get_index
+    get_index(research).previous=None  # Synthetic pin override emits no actual SourceWatch generation.
     stale=object_card(client,'study',s['id'])
     assert stale['status']['code']=='outdated' and '99.0.0' in stale['status']['reason']
     assert next(e for e in relations(client,'study',s['id'])['uses'] if e['role']=='method')['freshness']=='outdated'

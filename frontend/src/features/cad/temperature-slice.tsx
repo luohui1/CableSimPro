@@ -14,6 +14,7 @@ export function TemperatureSlice({ thermal, controller, camera, projectionKey, w
   showHotspot?: boolean; legendSide?: 'left' | 'right'; showLegend?: boolean;
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
+  const canvasHost = useRef<HTMLDivElement>(null);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
   const render = useRef<(() => void) | null>(null);
@@ -24,13 +25,25 @@ export function TemperatureSlice({ thermal, controller, camera, projectionKey, w
   const palette = canvas.current ? ['--brand-primary', '--error', '--fill'].map(name => tokenColor(canvas.current!, name)) : [[0, 0, 0], [1, 1, 1], [.5, .5, .5]];
   const hex = (t: number) => '#' + fieldColor(t, thermal.kind === 'difference', ...palette as [number[], number[], number[]]).map(c => Math.round(c * 255).toString(16).padStart(2, '0')).join('');
   useEffect(() => {
-    const element = canvas.current;
     setReady(false);
-    if (!element || !visible || !hasField) return;
-    if (!element.transferControlToOffscreen) { setError('当前浏览器缺少后台温度切片环境。'); return; }
+    setError('');
+    const host = canvasHost.current;
+    if (!host || !visible || !hasField) return;
+    // An OffscreenCanvas transfer is irreversible. Each effect setup owns a fresh
+    // DOM canvas, including StrictMode replay; cleanup never tries to reuse it.
+    const element = document.createElement('canvas');
+    element.className = 'cad-temperature-slice';
+    element.dataset.cadFieldReady = 'false';
+    element.setAttribute('aria-label', projected.current.thermal.provisional ? '试算温度场垂直切片' : '保存温度场垂直切片');
+    host.append(element);
+    canvas.current = element;
+    if (!element.transferControlToOffscreen) { setError('当前浏览器缺少后台温度切片环境。'); element.remove(); canvas.current = null; return; }
     let alive = true;
-    const fail = (reason: Error) => { if (alive) { setReady(false); setError(reason.message); } };
-    const worker = new SceneWorkerClient(fail), offscreen = element.transferControlToOffscreen();
+    const fail = (reason: Error) => { if (alive) { setReady(false); setError(reason.message); worker.dispose(); } };
+    const worker = new SceneWorkerClient(fail);
+    let offscreen: OffscreenCanvas;
+    try { offscreen = element.transferControlToOffscreen(); }
+    catch (reason) { fail(reason instanceof Error ? reason : new Error(String(reason))); element.remove(); canvas.current = null; return; }
     const unregister = registerCanvasCapture(element, async () => {
       await worker.request('draw', viewData());
       return await worker.request('capture', {}) as Blob;
@@ -48,18 +61,23 @@ export function TemperatureSlice({ thermal, controller, camera, projectionKey, w
       if (!alive) return;
       render.current = () => worker.draw(viewData());
       upload.current = async () => {
+        if (!alive) return;
         setReady(false);
         const expected = projected.current.thermal;
-        const diagnostics=await worker.request('field', { thermal: expected, view: viewData() }) as {premultiplied:boolean};
-        element.dataset.webglPremultiplied=String(diagnostics.premultiplied);
-        if (alive && projected.current.thermal === expected) { window.clearTimeout(deadline); setReady(true); setError(''); }
+        try {
+          const diagnostics=await worker.request('field', { thermal: expected, view: viewData() }) as {premultiplied:boolean};
+          if (alive) element.dataset.webglPremultiplied=String(diagnostics.premultiplied);
+          if (alive && projected.current.thermal === expected) { window.clearTimeout(deadline); setReady(true); setError(''); }
+        } catch (reason) { fail(reason instanceof Error ? reason : new Error(String(reason))); }
       };
       await upload.current();
     }).catch(fail);
     return () => {
       alive = false; window.clearTimeout(deadline); render.current = null; upload.current = null; unregister(); worker.dispose();
+      element.remove(); if (canvas.current === element) canvas.current = null;
     };
   }, [hasField, visible]);
+  useEffect(() => { if (canvas.current) canvas.current.dataset.cadFieldReady = String(ready); }, [ready]);
   useEffect(() => { void upload.current?.().catch(reason => { setReady(false); setError(String(reason)); }); }, [thermal]);
   useEffect(() => { render.current?.(); }, [camera, projectionKey, width, height]);
   const hottest = thermal.conductors.find(c => c.hottest);
@@ -67,7 +85,7 @@ export function TemperatureSlice({ thermal, controller, camera, projectionKey, w
   const labelX = hot ? Math.max(16, Math.min(width - 180, hot.x + 28)) : 16;
   const labelY = hot ? Math.max(44, Math.min(height - 84, hot.y - 32)) : 44;
   return <>
-    {visible && thermal.triangles.length > 0 && <canvas ref={canvas} className="cad-temperature-slice" aria-label={thermal.provisional ? '试算温度场垂直切片' : '保存温度场垂直切片'} data-cad-field-ready={ready} />}
+    {visible && hasField && <div ref={canvasHost} className="cad-temperature-host" />}
     <svg className="cad-overlay cad-thermal-overlay" viewBox={`0 0 ${width} ${height}`} aria-label={thermal.kind === 'difference' ? '导体温差与共享温差色标' : '导体温度与共享温度色标'}
       data-run-id={thermal.runId} data-case-id={thermal.caseId} data-field-kind={thermal.kind} data-minimum={thermal.minimum} data-maximum={thermal.maximum}>
       {showHotspot && hot && hottest && <g className="cad-hot-conductor" role="button" tabIndex={0} aria-label={`选择${thermal.kind === 'difference' ? '最大导体温差' : '最热导体'} ${hottest.label} ${formatNumber(hottest.value, 1)} ${thermal.kind === 'difference' ? 'K' : '°C'}`}

@@ -64,6 +64,7 @@ export const CadViewport = forwardRef<CadViewportHandle, CadViewportProps>(funct
 
   return <div className={`cad-viewport ${props.className || ''}`} data-cad-state={error ? 'error' : state}
     data-cad-ready={ready} data-cad-selected={props.selectedObject?.id} data-cad-first-display-ms={viewport.firstDisplayMs}
+    data-cad-initialization-ms={viewport.initializationMs} data-cad-native-update-ms={viewport.nativeUpdateMs}
     data-cad-result-state={props.resultState} data-cad-exporting={exporting} data-cad-distance-mm={viewport.pick?.distance_mm}
     data-cad-model-kind={displayed?.envelope ? 'envelope' : displayed ? 'precise' : undefined}
     data-cad-view={camera?.view} data-cad-mode={viewport.mode} aria-label={props.label || '三维 CAD 视口'}

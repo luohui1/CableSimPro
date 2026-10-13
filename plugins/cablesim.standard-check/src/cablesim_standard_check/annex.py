@@ -58,7 +58,7 @@ class DiameterChain:
         return result
 
     def conductor(self, record):
-        if record.get('criterion') != 'nominal' or record.get('quantity', {}).get('unit') != 'mm':
+        if record.get('criterion') not in ('nominal', 'fictitious_method_parameter') or record.get('quantity', {}).get('unit') != 'mm':
             raise MissingBasis('导体假设直径须使用本部分表 A.1 的毫米参考值，不能用真实导体外径代替。')
         return self.step('导体假设直径', 'dL = 表 A.1', {}, decimal(record['value']), record)
 
@@ -90,7 +90,7 @@ class DiameterChain:
             raise ValueError('护层直径增量倍数与内径应为正值，厚度不得为负值。')
         return self.step(name, 'Dout = Din + m·t', {'Din': diameter, 'm': factor, 't': thickness}, diameter + factor * thickness, record)
 
-    def thickness(self, diameter, record):
+    def thickness(self, diameter, record, other_rounding=None):
         p = record['value']
         if not isinstance(p, dict) or p.get('kind') != 'affine' or p.get('x') != 'diameter' or p.get('parameter_units') != {'a': '1', 'b': 'mm', 'diameter': 'mm', 'result': 'mm'}:
             raise MissingBasis(record['citation'] + '：未覆盖的厚度公式或参数单位。')
@@ -98,8 +98,18 @@ class DiameterChain:
         if diameter <= 0 or a < 0 or b < 0 or floor <= 0:
             raise ValueError('厚度公式内径与最小厚度应为正值，系数不得为负值。')
         raw = a * diameter + b
+        old_rounding = self.rounding_record
+        if other_rounding is not None:
+            from copy import deepcopy
+            self.rounding_record = deepcopy(other_rounding)
+            increment = p.get('rounding', {}).get('increment')
+            if increment is None:
+                raise MissingBasis(record['citation']+'：条款未给修约精度，不能执行 B.2。')
+            self.rounding_record['value']['increment'] = increment
+            self.rounding_record['increment_source'] = record
         rounded = self.step(record['quantity']['name'], 't = max(tmin, roundB(a·D+b))',
                             {'a': a, 'D': diameter, 'b': b, 'tmin': floor}, raw, record)
+        self.rounding_record = old_rounding
         value = max(floor, rounded)
         self.steps[-1].update(rounded_value=float(value), floor_applied=rounded < floor)
         return value

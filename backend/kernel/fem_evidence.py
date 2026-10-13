@@ -32,6 +32,8 @@ class FemConclusion(StrictModel):
     allowable_current_a: float | None = Field(default=None, description='Saved current capacity, A; absent without verified convergence.')
     hottest_temperature_k: float | None = Field(default=None, description='Hottest saved conductor temperature, K; not the soil hotspot.')
     margin_k: float | None = Field(default=None, description='Smallest per-conductor normal temperature-limit margin, K.')
+    operating_currents_a: list[float] = Field(default_factory=list, description='Distinct operating currents from the verified saved case input, A; never from current workspace input.')
+    temperature_limits_k: list[float] = Field(default_factory=list, description='Distinct conductor limits from the same saved case, K.')
     rating_basis: str = Field(default='', description='Saved rating condition of the selected ampacity quantities.')
     boundary_label: str = Field(default='', description='Saved boundary display label from the plugin contract or verified chapter.')
     reference: FemChapterReference | None = None
@@ -252,7 +254,9 @@ def values(run, evidence):
     margins=[limits[r['entity']]-r['value'] for r in temperatures if r['entity'] in limits]
     return {'allowable_current_a':capacity,'hottest_temperature_k':max((r['value'] for r in temperatures),default=None),
         'margin_k':min(margins) if temperatures and len(margins)==len(temperatures) else None,
-        'rating_basis':next(iter(bases),'')},document
+        'rating_basis':next(iter(bases),''),
+        'operating_currents_a':sorted({current for load in document.get('load_cases',[]) for current in load.get('currents',{}).values() if isinstance(current,(int,float)) and isfinite(current)}),
+        'temperature_limits_k':sorted(set(limits.values()))},document
 
 
 @saved_scope

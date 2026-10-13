@@ -15,7 +15,7 @@ type TypeContextValue = { workspace?: Workspace; document?: DomainDocument; dirt
   ratingDraft: RatingDraft | null; setRatingDraft: (draft: RatingDraft | null | ((current: RatingDraft | null) => RatingDraft | null)) => void;
   methodDrafts: Record<string, MethodDraft>; setMethodDraft: (module: string, draft: MethodDraft | null | ((current: MethodDraft | undefined) => MethodDraft | null)) => void;
   fieldError: { path: string; message: string } | null;
-  setField: (spec: NumericInput, text: string | undefined) => void; edit: (path: string, value: unknown) => void; save: () => Promise<void>; commitResourceValue: (action: () => Promise<unknown>,notice?:string) => Promise<void>; undo: () => Promise<void>; discard: () => void; reload: () => void; locked: (path: string) => boolean };
+  setField: (spec: NumericInput, text: string | undefined) => void; edit: (path: string, value: unknown, source?: NonNullable<DomainDocument['provenance']>[string]) => void; save: () => Promise<void>; commitResourceValue: (action: () => Promise<unknown>,notice?:string) => Promise<void>; undo: () => Promise<void>; discard: () => void; reload: () => void; locked: (path: string) => boolean };
 const Context = createContext<TypeContextValue | null>(null);
 export function useTypeWorkspace() { const value = useContext(Context); if (!value) throw new Error('型号工作区未挂载'); return value; }
 export function TypeProvider({ wid, children }: { wid: string; children: ReactNode }) {
@@ -33,10 +33,10 @@ export function TypeProvider({ wid, children }: { wid: string; children: ReactNo
   const blocker = useBlocker({ withResolver: true, shouldBlockFn: ({ next }) => (!!draftRef.current || !!ratingRef.current || Object.keys(methodsRef.current).length > 0) && !next.pathname.startsWith(`/types/${encodeURIComponent(wid)}/`) });
   useEffect(() => { const warn = (event: BeforeUnloadEvent) => { if (draftRef.current || ratingRef.current || Object.keys(methodsRef.current).length) event.preventDefault(); }; window.addEventListener('beforeunload', warn); return () => window.removeEventListener('beforeunload', warn); }, []);
   function initial(): DomainDraft { if (!workspace) throw new ApiError(409, '型号仍在读取'); if (readOnly) throw new ApiError(409, '此型号版本保持只读，请建立新版本方案'); return { document: workspace.document, base: workspace.document, revision: workspace.revision, scope: 'type', fields: {} }; }
-  function edit(path: string, value: unknown) {
+  function edit(path: string, value: unknown, source?: NonNullable<DomainDocument['provenance']>[string]) {
     setFieldError(null);
     if (isLocked(workspace?.raw.locks, path) || readOnly) { setError('此字段已锁定，请从型号列表建立独立草稿'); return; }
-    setDraft(previous => { const next = previous || initial(); if (at(next.document, path) === value) return previous; const changed = change(next.document, path, value); changed.provenance = { ...changed.provenance, [path]: { kind: 'user', reference: '工程师在型号工作区填写', reviewed: false } }; const fields = value && typeof value === 'object' ? Object.fromEntries(Object.entries(next.fields).filter(([key]) => !key.startsWith(path + '/'))) : next.fields; return { ...next, document: changed, fields }; }); setError(''); setNotice('');
+    setDraft(previous => { const next = previous || initial(); if (at(next.document, path) === value && !source) return previous; const changed = change(next.document, path, value); changed.provenance = { ...changed.provenance, [path]: source || { kind: 'user', reference: '工程师在型号工作区填写', reviewed: false } }; const fields = value && typeof value === 'object' ? Object.fromEntries(Object.entries(next.fields).filter(([key]) => !key.startsWith(path + '/'))) : next.fields; return { ...next, document: changed, fields }; }); setError(''); setNotice('');
   }
   function setField(spec: NumericInput, value: string | undefined) {
     setFieldError(null);

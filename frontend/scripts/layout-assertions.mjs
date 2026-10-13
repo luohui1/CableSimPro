@@ -10,9 +10,17 @@ export async function assertLayout(page, label, nameOptions) {
       ),
     ].filter((node) => {
       const box = node.getBoundingClientRect();
+      if (getComputedStyle(node).visibility === 'hidden') return false;
+      let left = Math.max(0, box.left), top = Math.max(0, box.top), right = Math.min(innerWidth, box.right), bottom = Math.min(innerHeight, box.bottom);
+      for (let parent = node.parentElement; parent; parent = parent.parentElement) {
+        if (parent.matches('details:not([open])') && !parent.querySelector(':scope > summary')?.contains(node)) return false;
+        const style = getComputedStyle(parent), bounds = parent.getBoundingClientRect();
+        if (/(hidden|auto|scroll)/.test(style.overflowX)) { left = Math.max(left, bounds.left); right = Math.min(right, bounds.right); }
+        if (/(hidden|auto|scroll)/.test(style.overflowY)) { top = Math.max(top, bounds.top); bottom = Math.min(bottom, bounds.bottom); }
+      }
       return (
-        box.width > 0 &&
-        box.height > 0 &&
+        right - left > 1 &&
+        bottom - top > 1 &&
         (node.textContent.trim() || node.value) &&
         !node.closest('[aria-hidden="true"]')
       );

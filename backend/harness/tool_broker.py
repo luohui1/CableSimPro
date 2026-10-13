@@ -55,6 +55,8 @@ def outline(document):
                 row['medium_material']=item['medium'].get('material')
                 for key in ('surface_temperature','air_temperature'):field('/medium/'+key,item['medium'].get(key))
                 row['placements']=[{'cable':p['cable'],'path':path+'/placements/'+token(p['cable'])} for p in item['placements']]
+                for placement in item['placements']:
+                    for coordinate in ('x','z'):field('/placements/'+token(placement['cable'])+'/'+coordinate,placement.get(coordinate))
             elif collection=='cable_types':
                 for core in item['cores']:
                     field('/cores/'+token(core['id'])+'/conductor/nominal_area',core['conductor']['nominal_area'])
@@ -164,6 +166,19 @@ class ToolBroker:
             identity['current_workspace_revision']=row['revision']
             identity.update(method=json.loads(original['method']),run_module=original['module'],run_study_revision=original['revision'])
         if tool:identity['tool_contract_digest']=fingerprint(tool.parameters)
+        if tool and tool.name in ('workspace_read','study_read','study_preflight'):
+            with self.research.store.db() as db:
+                identity['current_workspace_revision']=db.execute('SELECT revision FROM workspaces WHERE id=?',
+                    (task['workspace_id'],)).fetchone()[0]
+        if tool and tool.name=='study_preflight' and sid:
+            selected=self.research.module_definition(study['definition'],args.get('module'))
+            methods=[selected['method'],*[entry['method'] for entry in selected.get('crosschecks',[])],
+                *[entry['method'] for entry in selected.get('candidate_completions',{}).values()]]
+            try:
+                # Replaying a preflight must still verify the installed seals.
+                for method in methods:self.research.resolve(method)
+                identity['verified_preflight_methods']=methods
+            except (HTTPException,PluginHostError):pass  # Dispatch preserves the original field/version diagnostic.
         return identity
 
     def execute(self,task,node,tool):
@@ -246,9 +261,10 @@ class ToolBroker:
                 data={'fields':fields}
             else:
                 data={**outline(document),'locks':state.get('locks',[])}
-            return ToolResult(status='ok',summary='已读取会话固定版本的工程输入。',data={**data,
+            from .observations import workspace
+            return workspace(ToolResult(status='ok',summary='已读取会话固定版本的工程输入。',data={**data,
                 'workspace_id':wid,'workspace_revision':task['workspace_revision'],'current_revision':current['revision'],
-                'freshness':'current' if current['revision']==task['workspace_revision'] else 'historical'})
+                'freshness':'current' if current['revision']==task['workspace_revision'] else 'historical'}),args)
         if name=='study_list':
             studies=self.research.list_studies(wid)
             return ToolResult(status='ok',summary='已读取本工程研究。',data={'studies':[
@@ -389,9 +405,11 @@ class ToolBroker:
             if name=='study_preflight':
                 data=self.research.preflight(wid,sid,task['workspace_revision'],study['revision'],args.get('module'))
                 issues=[row.get('error') for row in [*data.get('cases',[]),*data.get('crosschecks',[])] if row.get('error')]
-                return ToolResult(status='ok' if data['ready'] else 'error',summary='研究预检通过。' if data['ready'] else '研究预检未通过，请补齐明确缺项。',
+                from .observations import preflight
+                return preflight(ToolResult(status='ok' if data['ready'] else 'error',summary='研究预检通过。' if data['ready'] else '研究预检未通过，请补齐明确缺项。',
                     data=data,diagnostics=[Diagnostic(code=issue.get('code','PREFLIGHT_FAILED'),message=issue.get('message','预检失败。'),path=issue.get('path'),recoverable=True) for issue in issues],
-                    next_actions=[] if data['ready'] else ['根据预检路径读取输入，生成修正方案；不要猜测物性。'])
+                    next_actions=[] if data['ready'] else ['根据预检路径读取输入，生成修正方案；不要猜测物性。']),
+                    study_id=sid,workspace_id=wid,workspace_revision=task['workspace_revision'],study_revision=study['revision'],module=args.get('module'))
             overrides={}
             if args.get('proposal_id') or args.get('run_id') or selected['driver']['kind']!='single':
                 overrides=self.proposals.preview_inputs(task,sid,args.get('module'),args.get('proposal_id'),args.get('run_id'),args.get('case_id'))

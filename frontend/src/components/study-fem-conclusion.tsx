@@ -3,7 +3,8 @@ import { array, message, numeric, optionalRecord, text } from '@/api/client';
 import { isVersionStale } from '@/lib/version-status';
 import { Conclusion } from './conclusion';
 import { DataTable } from './data-table';
-import { ErrorState, InlineEmpty, LoadingState } from './states';
+import { InlineEmpty, LoadingState } from '@/components/states';
+import { StudyErrorState as ErrorState } from '@/components/study-error-state';
 import { Button } from './ui/button';
 
 export function useFemEvidence(run?: Record<string,unknown>, prepareReport=false) {
@@ -22,12 +23,20 @@ export function FemConclusionBar({run}:{run:Record<string,unknown>}) {
   if(evidence.error)return <ErrorState title="收敛证明不可用" description={message(evidence.error)} action={<Button size="compact" onClick={()=>void evidence.refetch()}>重新读取</Button>} />;
   if(!data || data.status!=='converged')return <InlineEmpty title={'有限元 · 未收敛 · '+text(data?.reason)} />;
   const margin=numeric(data.margin_k),temperature=numeric(data.hottest_temperature_k);
+  const snapshot=optionalRecord(run.snapshot);
+  const cases=Array.isArray(snapshot.cases) ? snapshot.cases.map(optionalRecord) : [];
+  const input=optionalRecord(cases[0]?.input),loads=Array.isArray(input.load_cases) ? input.load_cases.map(optionalRecord) : [];
+  const savedCurrents=Array.isArray(data.operating_currents_a) ? data.operating_currents_a : loads.flatMap(load=>Object.values(optionalRecord(load.currents)));
+  const currents=[...new Set(savedCurrents.filter((v):v is number=>typeof v==='number'))];
+  const loadLabel=currents.length ? currents.map(v=>v.toFixed(0)).join(' / ')+' A 时' : '保存负荷下';
+  const limits=Array.isArray(data.temperature_limits_k) ? data.temperature_limits_k : [];
+  const limitLabel=limits.length===1 && typeof limits[0]==='number' ? (limits[0]-273.15).toFixed(0)+' °C 温限下' : '各导体保存温限下';
   return <Conclusion title="有限元负荷校核结论" model={margin===null ? '保存工况已收敛，温限资料缺项' : margin<0 ? '保存负荷超出温限' : '保存负荷满足温限'}
     description={`有限元 · 已收敛（网格与扩域均 < ${data.tolerance_k} K）· ${text(data.boundary_label)}`}
     historical={run.freshness==='historical' || isVersionStale(run)} metrics={[
-      {label:text(data.rating_basis)==='rating-simultaneous' ? '共同允许电流' : '允许电流',value:numeric(data.allowable_current_a),unit:'A',precision:1},
-      {label:'最热导体',value:temperature===null ? null : temperature-273.15,unit:'°C',precision:1},
-      {label:'温限余量',value:margin,unit:'K',precision:1}]} />;
+      {label:limitLabel+(text(data.rating_basis)==='rating-simultaneous' ? '共同允许电流' : '允许电流'),value:numeric(data.allowable_current_a),unit:'A',precision:1},
+      {label:loadLabel+'最热导体',value:temperature===null ? null : temperature-273.15,unit:'°C',precision:1},
+      {label:loadLabel+'温限余量',value:margin,unit:'K',precision:1}]} />;
 }
 
 export function FemSavedComparison({run}:{run:Record<string,unknown>}) {
