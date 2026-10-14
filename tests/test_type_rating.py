@@ -72,6 +72,25 @@ def test_condition_batch_reuses_real_iec_and_archives_air_refusal(client):
     assert run['status'] == 'partial'
     assert run['integrity'] == 'verified'
     rows = rating_rows(run)
+    # The ordinary table reads the same verified saved rows without downloading
+    # the complete batch inputs and artifacts; explicit trace reads remain full.
+    endpoint = f"/api/design/workspaces/{w['id']}/rating-table-runs/{run['id']}"
+    full = client.get(endpoint).json()
+    compact = client.get(endpoint, params={'view': 'rows'}).json()
+    assert compact['rows'] == full['rows'] == rows
+    for key in ('id', 'integrity', 'input_digest', 'output_digest'):
+        assert compact['run'][key] == full['run'][key]
+    assert 'snapshot' in full['run'] and 'output' in full['run']
+    assert 'snapshot' not in compact['run'] and 'output' not in compact['run']
+    assert len(json.dumps(compact)) < len(json.dumps(full))/5
+    recent = client.get(f"/api/types/{w['id']}/display-runs", params={'recent': True}).json()
+    projected = next(item for item in recent['items'] if item['id'] == run['id'])
+    definition = projected['snapshot']['definition']
+    assert 'method_input' not in definition and definition['method_input_ref']['sha256']
+    assert all('input' not in case and case['input_ref']['sha256'] for case in definition['driver']['cases'])
+    assert [case['metadata'] for case in definition['driver']['cases']] == [case['metadata'] for case in study['definition']['driver']['cases']]
+    assert projected['input_digest'] == run['input_digest'] and projected['output_digest'] == run['output_digest']
+    assert client.get(root+'/runs/'+run['id'], params={'view': 'full'}).json()['snapshot']['definition']['driver']['cases'] == study['definition']['driver']['cases']
     assert all(r['value_a'] is not None and r['value_a'] > 0 for r in rows[:3]), [(r['case_id'], r['status'], r['reason']) for r in rows]
     assert rows[-1]['value_a'] is None and rows[-1]['status'] == '超出范围'
     assert '地下稳态' in rows[-1]['reason']

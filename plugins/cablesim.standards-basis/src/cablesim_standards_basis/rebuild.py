@@ -89,7 +89,8 @@ def expected_files(directory=ROOT):
              'IEC 60287-3-1':'environment','GB/T 12706.4':'accessories',
              'Nielsen et al.':'thermal-capacity','Huang and Niu':'thermal-capacity-model',
              'Qi et al.':'pipe-capacity','Deng et al.':'borehole-capacity','Hopmans et al.':'soil-capacity',
-             'Youn et al.':'semiconducting-capacity','Sah et al.':'backfill-reference'}
+             'Youn et al.':'semiconducting-capacity','Sah et al.':'backfill-reference',
+             'IEC 60949':'short-circuit'}
     compiled = {}
     for standard, suffix in names.items():
         selected = [r for r in basis['records'] if r['standard']==standard]

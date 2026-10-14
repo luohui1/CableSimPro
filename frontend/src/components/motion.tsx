@@ -23,7 +23,9 @@ export function MotionValue({ value, from, precision = 0, historical = false }: 
 
 export function MotionReveal({ open, kind = 'collapse', children, className, id }: { open: boolean; kind?: 'collapse' | 'drawer'; children: ReactNode; className?: string; id?: string }) {
   const reduced = useReducedMotion() || document.documentElement.dataset.reducedMotion === 'true';
-  const offset = Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--space-1'));
+  // Collapses and closed drawers never use x; do not read global styles during
+  // their render, especially while the workbench is committing its first result.
+  const offset = kind === 'drawer' && open && !reduced ? Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--space-1')) : 0;
   return <AnimatePresence initial={false}>{open && <motion.div id={id} className={className} data-motion={kind}
     initial={kind === 'collapse' ? { height: 0, opacity: 0 } : { opacity: 0, x: reduced ? 0 : offset }}
     animate={kind === 'collapse' ? { height: 'auto', opacity: 1 } : { opacity: 1, x: 0 }}

@@ -28,6 +28,10 @@ def serve(database, credential_database, port, stop):
     from threading import Thread
     import uvicorn
     app = create_app(database)
+    # Isolated before/after control: use the actual pre-journal identity-scan
+    # algorithm, without substituting APIs, saved rows, plugins, or results.
+    if os.environ.get('CABLESIM_INDEX_ACCEPTANCE_MODE')=='identity_scan':
+        app.state.workspace_store.changes_since=None
     @app.get('/__acceptance/index-timing',include_in_schema=False)
     def index_timing():
         index=app.state.research.object_index

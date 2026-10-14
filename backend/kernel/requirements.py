@@ -59,32 +59,47 @@ def lookup_references(research, queries):
     plugin = registry.plugins.get('cablesim.standards-basis')
     if plugin is None:
         raise HTTPException(503, {'code':'BASIS_UNAVAILABLE','message':'未安装标准依据库，无法按固定标准版本生成结构；请先安装已核验的依据发行。'})
+    identities = {'basis_'+str(index): key for index,key in enumerate(queries)}
     result = research.executor.run(plugin.manifest.id,'lookup',[
-        {'case_id': key,'input': query,'parameters':{}} for key,query in queries.items()],expected_manifest=plugin.manifest)
+        {'case_id': case_id,'input': queries[key],'parameters':{}} for case_id,key in identities.items()],expected_manifest=plugin.manifest)
     references, missing = {}, []
     for case in result.cases:
+        key = identities[case.case_id]
         if case.status != 'succeeded':
             raise HTTPException(422,case.error or '标准依据查询失败，请核对条件并重试。')
         answer = case.artifacts['x-cablesim.standards-basis']
         if answer['status'] == 'listed':
-            references[case.case_id] = {'schema':'cablesim.standard-basis-list-ref/1',
-                'query':queries[case.case_id],'plugin_version':answer['plugin_version'],
+            references[key] = {'schema':'cablesim.standard-basis-list-ref/1',
+                'query':queries[key],'plugin_version':answer['plugin_version'],
                 'data_sha256':answer['data_sha256'],'query_sha256':answer['query_sha256'],
                 'records':answer['records'],'request_sha256':result.request_sha256,
                 'artifact_digest':case.artifact_digests['x-cablesim.standards-basis']}
             continue
         if answer['status'] != 'resolved':
-            missing.append({'key':case.case_id,'query':queries[case.case_id], 'reason':answer.get('reason','本库暂未收录 · 下一轮')})
+            missing.append({'key':key,'query':queries[key], 'reason':answer.get('reason','本库暂未收录 · 下一轮')})
             continue
         record = answer['records'][0]
-        references[case.case_id] = {'schema':'cablesim.standard-basis-ref/1','plugin_id':answer['plugin_id'],
+        references[key] = {'schema':'cablesim.standard-basis-ref/1','plugin_id':answer['plugin_id'],
             'plugin_version':answer['plugin_version'],'data_sha256':answer['data_sha256'], 'query_sha256':answer['query_sha256'],
-            'query':queries[case.case_id], 'record_id':record['id'],'record_sha256':record['record_sha256'],
+            'query':queries[key], 'record_id':record['id'],'record_sha256':record['record_sha256'],
             'standard':record['standard'],'edition':record['edition'],'locator':record['table'] or record['clause'],
             'printed_page':record['printed_page'],'pdf_page':record['pdf_page'],'source_sha256':record['source_sha256'],
             'record':record,'request_sha256':result.request_sha256,'release_digest':research.pin(plugin)['release_digest'],
             'artifact_digest':case.artifact_digests['x-cablesim.standards-basis']}
     return references, missing
+
+
+def resolve_short_circuit_basis(research, method, document, parameters):
+    """The method authors its query plan; Executor reads the installed data release."""
+    plugin, _ = research.resolve(method)
+    planned = research.executor.run(plugin.manifest.id, method['capability'], [{'case_id':'basis-plan',
+        'input':document,'parameters':{**parameters,'basis_references':{},'parallel_components':[]}}], expected_manifest=plugin.manifest)
+    case=planned.cases[0]
+    if case.status!='succeeded':
+        raise HTTPException(422,case.error or '短路依据查询条件不完整。')
+    queries=case.artifacts['x-cablesim.type-short-circuit']['basis_queries']
+    refs,missing=lookup_references(research,queries)
+    return {'parameters':{**parameters,'basis_references':refs},'missing':missing}
 
 
 class Requirements:

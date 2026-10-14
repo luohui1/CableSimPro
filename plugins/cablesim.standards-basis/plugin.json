@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.standards-basis",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "name": "标准依据库",
   "icon": "assets/icon.svg",
   "description": "离线只读查询已逐格核验的标准尺寸、电阻和试验数值，返回适用条件、原页出处与摘要；查询不会批准工程要求。",
@@ -43,7 +43,7 @@
       "id": "lookup",
       "kind": "method",
       "title": "按标准、条款和条件查询依据",
-      "method_version": "0.6.0",
+      "method_version": "0.7.0",
       "read_only": true,
       "analysis": "standards_lookup",
       "input_schema": "cablesim.standards-query/1",
@@ -90,22 +90,22 @@
     },
     {
       "path": "src/cablesim_standards_basis/basis.json",
-      "sha256": "f51f794280e989c6c7bd79c1f5e4814a03a873ca0278cace958561b939862eb7",
-      "size_bytes": 387312
+      "sha256": "2ca9aea8d0223b81d2ac8468346c1df6f2e661970a769f92461ed58328fbeb16",
+      "size_bytes": 411901
     },
     {
       "path": "src/cablesim_standards_basis/excerpts.json",
-      "sha256": "f7b549d2140be0bddd0a46afcaffb97742bfdbb39a18216b8ea525bace909ac0",
-      "size_bytes": 722172
+      "sha256": "f2beebd1bc0d3094a639cef156db07611f5425c12e9f4653d70d47c4189e7eeb",
+      "size_bytes": 762037
     },
     {
       "path": "src/cablesim_standards_basis/integrity.json",
-      "sha256": "1d466e430e65d6433a4fccf0817fc5f46ffe70abed459fa998ea88feefb1950c",
-      "size_bytes": 3564
+      "sha256": "638cb07f51a801dcc3c39605bc422ef09847164faa679ec7659b5e5290906d86",
+      "size_bytes": 3718
     },
     {
       "path": "src/cablesim_standards_basis/library.py",
-      "sha256": "09773b3530a25385874504829680f278f21b33a1e606db47a8f45591d9ef6709",
+      "sha256": "c937403b3c530fe590b52fec6fba41d037cc47502608175c27bced4493fe9226",
       "size_bytes": 15546
     },
     {
@@ -120,8 +120,8 @@
     },
     {
       "path": "src/cablesim_standards_basis/rebuild.py",
-      "sha256": "ae2f987212e15873b52dfb2ff1019250584745a8a0a8fc244f7ba3d59baecc5e",
-      "size_bytes": 9146
+      "sha256": "9bd8bcc0ad556d86f2fccf8fe63ffe8af6033324c8d6940693eef31d2fba0b6d",
+      "size_bytes": 9188
     },
     {
       "path": "src/cablesim_standards_basis/records-accessories.json",
@@ -190,8 +190,8 @@
     },
     {
       "path": "src/cablesim_standards_basis/records-mv-a.json",
-      "sha256": "b91aeca287709b5db2a0cfd8fbd914b56ddd263c683d695627185c09d315df43",
-      "size_bytes": 374511
+      "sha256": "c19e1365e94f250574a5555f762093831fd545c611ed0947e211369a8f00e1cf",
+      "size_bytes": 378368
     },
     {
       "path": "src/cablesim_standards_basis/records-mv.json",
@@ -207,6 +207,11 @@
       "path": "src/cablesim_standards_basis/records-semiconducting-capacity.json",
       "sha256": "bd58d8e7bde67cd3f528200204dad21a2e531bd4a6ca3a0e2d26dfbfe80a0f2d",
       "size_bytes": 15056
+    },
+    {
+      "path": "src/cablesim_standards_basis/records-short-circuit.json",
+      "sha256": "6505d2b16f5b7f01bed8959c18855c6daaff4248a057ebd5bac9386702434233",
+      "size_bytes": 240802
     },
     {
       "path": "src/cablesim_standards_basis/records-soil-capacity.json",
@@ -235,8 +240,8 @@
     },
     {
       "path": "src/cablesim_standards_basis/verification.json",
-      "sha256": "1131d7edbcbd57e9626f67a12fb8e92b9a3861bb5858c615fff42e3f8ac68a2b",
-      "size_bytes": 866629
+      "sha256": "ddb1a7c1c087cfcacff222b946457ffe79f059f8afe48f61195425eb5bf8929d",
+      "size_bytes": 486391
     }
   ]
 }

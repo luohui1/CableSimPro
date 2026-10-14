@@ -1,10 +1,9 @@
 import { ErrorState } from '@/components/states';
-import { TypeStandardCheck } from './standard-check';
-import { TypeAnalysis } from './analysis';
-import { TypeRatingTable } from './rating-table';
-import { TypeComparison } from './comparison';
-import { TypeSpecification } from './specification';
-import { TypeRequirements } from './requirements';
+import { deferredView } from '@/components/deferred-view';
+import {typeModuleLoaders as loaders} from './module-loader';
+const TypeRequirements=deferredView(loaders.requirements), TypeStandardCheck=deferredView(loaders['standard-check']);
+const TypeAnalysis=deferredView(loaders.electrical), TypeRatingTable=deferredView(loaders['rating-table']);
+const TypeComparison=deferredView(loaders.comparison), TypeSpecification=deferredView(loaders.specification);
 export function TypeModulePage({ module, tab }: { module: string; tab: string }) {
   if (module === 'requirements') return <TypeRequirements tab={tab} />;
   if (module === 'standard-check') return <TypeStandardCheck />;
@@ -12,5 +11,5 @@ export function TypeModulePage({ module, tab }: { module: string; tab: string })
   if (module === 'rating-table') return <TypeRatingTable tab={tab} />;
   if (module === 'comparison') return <TypeComparison tab={tab} />;
   if (module === 'specification') return <TypeSpecification tab={tab} />;
-  return <ErrorState title="此模块待迁移" description="仍可从原样板查看已有输入与结果。" />;
+  return <ErrorState title="此型号模块不可用" description="请返回结构设计，或从浏览栏选择已有模块。" />;
 }

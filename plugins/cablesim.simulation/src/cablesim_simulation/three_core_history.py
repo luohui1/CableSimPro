@@ -18,7 +18,7 @@ from .step_response import Capacity, image_step_rise
 from .far_boundary import image_rise, loss_sources
 from .three_core_thermal import _thermal_system, solve, thermal_state
 
-METHOD_VERSION='1.0.0'
+METHOD_VERSION='1.1.0'
 
 
 def method_digest():
@@ -88,10 +88,13 @@ class ResolvedHistory:
 
     def evaluate(self, temperature, currents, fixed_region_heat=None):
         import numpy as np
-        circuits={b['circuit'] for b in self.bindings}
-        if set(currents)!=circuits or any(not isfinite(v) or v<0 for v in currents.values()):
-            raise FieldValueError('每回路须给出非负有限电流，单位 A。','currents_a')
-        for cable,b in zip(self.prepared[2].cables,self.bindings):cable['current']=currents[b['circuit']]
+        circuits={b['circuit'] for b in self.bindings};entities={b['entity'] for b in self.bindings}
+        by_phase=set(currents)==entities
+        if not by_phase and set(currents)!=circuits or any(not isfinite(v) or v<0 for v in currents.values()):
+            raise FieldValueError('逐相电缆或逐回路完整填写非负有限电流，单位 A；不能混用两种绑定。','currents_a')
+        # Electrical feedback uses each saved cable's own current. Every phase
+        # remains a separate source/mass region in the one shared soil problem.
+        for cable,b in zip(self.prepared[2].cables,self.bindings):cable['current']=currents[b['entity'] if by_phase else b['circuit']]
         if fixed_region_heat is None:
             matrix,load,states,_=thermal_state(self.prepared,self.system,temperature)
             return matrix,load,loss_sources(states,self.bindings),states
@@ -116,7 +119,8 @@ class ResolvedHistory:
             temperature=np.asarray(values)
             if not np.allclose(cache['system'][1].doflocs,self.basis.doflocs,rtol=0,atol=1e-12):
                 raise ValueError('保存稳态与暂态全网格不同；拒绝隐式投影。')
-            initial_currents={b['circuit']:c['current'] for c,b in zip(self.prepared[2].cables,self.bindings)}
+            by_phase=set(currents)=={b['entity'] for b in self.bindings}
+            initial_currents={b['entity'] if by_phase else b['circuit']:c['current'] for c,b in zip(self.prepared[2].cables,self.bindings)}
             if initial_currents!=currents:raise ValueError('预载电流须等于保存稳态输入。')
         else:
             matrix,load,sources,_=self.evaluate(np.full(self.basis.N,self.ambient),currents,fixed_region_heat)
@@ -160,7 +164,7 @@ class ResolvedHistory:
             raise ValueError('初场须引用宿主摘要核验通过的成功稳态运行。')
         method=run['snapshot']['definition']['method']
         if method['plugin_id']!='cablesim.simulation' or method['capability']!='iec-thermal-field':
-            raise ValueError('初场来源不是同口径三芯稳态有限元。')
+            raise ValueError('初场来源不是同口径稳态有限元。')
         cases=run['output']['cases']
         if len(cases)!=1 or cases[0]['status']!='succeeded':raise ValueError('初场须为单工况成功稳态结果。')
         case=cases[0];bundle=case['artifacts'].get('x-cablesim.simulation-bundle')
@@ -177,7 +181,7 @@ class ResolvedHistory:
         if points.shape!=self.basis.doflocs.T.shape or not np.allclose(points,self.basis.doflocs.T,rtol=0,atol=1e-12):
             raise ValueError('保存全场自由度与原生网格不同，本方法不自动投影。')
         if not np.isfinite(temperature).all() or np.any(temperature<=0):raise ValueError('保存初温含非法 K 值。')
-        currents={b['circuit']:c['current'] for c,b in zip(self.prepared[2].cables,self.bindings)}
+        currents={b['entity']:c['current'] for c,b in zip(self.prepared[2].cables,self.bindings)}
         K,load,sources,states=self.evaluate(temperature,currents)
         residual=float(np.max(np.abs((K@(temperature-self.ambient)-load)[self.free])))
         boundary_error=float(np.max(np.abs(temperature[self.D]-self.ambient-image_rise(self.basis.doflocs[:,self.D],sources,1/self.k))))
@@ -186,7 +190,8 @@ class ResolvedHistory:
             'model_sha256':self.identity,'mesh':self.mesh,'dof_points_m':points.tolist(),'temperature_k':temperature.tolist(),
             'currents_a':currents,'sources':sources,'states':states,'ambient_temperature_k':self.ambient,
             'physical_residual_inf_w_m':residual,'reference_kind':'saved_steady_field','engineering_approval':False,
-            'source_run_id':run['id'],'source_output_sha256':run['output_digest'],'source_method':method,
+            'source_run_id':run['id'],'source_output_sha256':run['output_digest'],'source_input_sha256':run['input_digest'],
+            'source_job_id':(run.get('execution') or {}).get('job_id'),'source_method':method,
             'input_sha256':digest(self.prepared[1]),'job_id':os.environ['SLURM_JOB_ID']}
         return {**value,'sha256':digest(value)}
 

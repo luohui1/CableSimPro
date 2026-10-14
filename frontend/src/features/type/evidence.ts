@@ -29,10 +29,10 @@ export function useTypeEvidence() {
     return () => { cancelAnimationFrame(first); cancelAnimationFrame(second); if (idle) window.cancelIdleCallback(idle); clearTimeout(timer); };
   }, [state.workspace?.id]);
   const needsResults = location.module !== 'structure' || location.tab === 'quantities' || !!location.run || !!state.readOnly;
-  const query=useQuery({ queryKey: ['type-evidence', state.workspace?.id,allHistory?'history':'recent'], queryFn: async ({ signal }) => {
-    try { return await typeEvidence(state.workspace!.id, AbortSignal.any([signal,AbortSignal.timeout(20000)]),!allHistory); }
+  const query=useQuery({ queryKey: ['type-evidence', state.workspace?.id,allHistory?'history':'recent',location.module], queryFn: async ({ signal }) => {
+    try { return await typeEvidence(state.workspace!.id, AbortSignal.any([signal,AbortSignal.timeout(20000)]),!allHistory,location.module); }
     catch(error) { if(error instanceof Error && error.name==='TimeoutError') throw new Error('保存结果读取超过 20 秒，请重新读取。'); throw error; }
-  }, retry:false, placeholderData:previous=>previous,enabled: !!state.workspace && (needsResults || paintedWorkspace === state.workspace.id), staleTime:30000,
+  }, retry:false,enabled: !!state.workspace && (needsResults || paintedWorkspace === state.workspace.id), staleTime:30000,
     refetchInterval: query => query.state.data?.some(item => pendingRun(item.run)) ? 2000 : false });
   return {...query,historyComplete:allHistory&&!query.isPlaceholderData&&!!query.data,
     readHistory:()=>{if(allHistory)void query.refetch();else queries.setQueryData(historyKey,true);}};

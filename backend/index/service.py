@@ -32,16 +32,27 @@ def parent(card):
 
 
 class Snapshot:
-    def __init__(self,research,db,reproductions=None,reproduction_error=None,*,previous=None,source_generation=None,execution_reader=None):
+    def __init__(self,research,db,reproductions=None,reproduction_error=None,*,previous=None,source_generation=None,execution_reader=None,notifications=None):
         self.research,self.db=research,db
-        self.source_timings={};self.raw=project(db,self.source_timings,previous.get('raw') if previous else None)
+        self.source_timings={};self.raw=project(db,self.source_timings,previous.get('raw') if previous else None,notifications)
         self.cards={};self.meta={};self.edges=[];self.unresolved={};self.todos=[];self.relation_filter=None
-        self.previous_view=previous.get('view') if previous else None
+        # Unmodelled source tables may participate in host approval/currentness.
+        # Keep their ordinary full relation/currentness evaluation, while still
+        # reusing unchanged SQL metadata rows proven by the committed journal.
+        from .sources import IDENTITIES
+        # These event/history tables do not independently supply cards or
+        # freshness. Agent events refresh their task/proposal rows above; study
+        # versions refresh their parent study. Resource audit events accompany
+        # the authoritative resource row, whose revision/status/digest is read.
+        indirect_sources={'agent_events','engineering_asset_events','study_versions',
+            'study_history','study_history_cursor','study_history_requests'}
+        extra_sources=set(notifications.get('tables',{}))-set(IDENTITIES)-indirect_sources if notifications and notifications.get('complete') else set()
+        self.previous_view=previous.get('view') if previous and not extra_sources else None
         self.receipts=[];self.reproduction_error=reproduction_error
         self.execution_reader=execution_reader or ExecutionReceipts()
         # Agent events/proposals do not change saved engineering currentness.
         # Reuse only verified source identities and identical non-Agent metadata.
-        same_sources=source_generation is not None and previous and previous['source_generation']==source_generation
+        same_sources=source_generation is not None and previous and previous['source_generation']==source_generation and not extra_sources
         self.registry=previous['registry'] if same_sources else research.registry()
         self.cache={'registries':{pid:self.registry for pid in self.registry.plugins}}
         self.workspaces={r['id']:r for r in self.raw['workspaces']}
@@ -385,8 +396,11 @@ class Index:
             cache=self.research.read_responses
             with cache.lock:generation=cache.generation(True)
             source_generation=generation[1] if generation is not None else None
+            reader=getattr(self.research.store,'changes_since',None)
+            notifications=reader(db,self.previous.get('change_cursor') if self.previous else None) if reader else None
             view=Snapshot(self.research,db,reproductions,reproduction_error,
-                previous=self.previous,source_generation=source_generation,execution_reader=self.execution_reader)
+                previous=self.previous if not reader or notifications['complete'] else None,
+                source_generation=source_generation,execution_reader=self.execution_reader,notifications=notifications)
         self.runs=[(r['id'],view.state(r)['snapshot']['definition']['method']) for r in view.raw['runs']
             if view.state(r)['snapshot'].get('definition',{}).get('method')]
         # Baseline exactly the receipts used for these cards. A fresh reread here
@@ -401,7 +415,10 @@ class Index:
             'source_timings':view.source_timings}
         self.last_build.update(affected_objects=len(view.affected),reused_run_states=sum(
             view.prior_run_tokens.get(rid)==token for rid,token in view.run_state_tokens.items()))
+        self.last_build['change_notification']={'complete':notifications['complete'],'reason':notifications['reason'],
+            'tables':sorted(notifications['tables'])} if notifications else {'complete':False,'reason':'unsupported','tables':[]}
         self.previous={'source_generation':source_generation,'run_metadata':view.run_metadata,
+            'change_cursor':notifications['cursor'] if notifications else None,
             'registry':view.registry,'run_states':view.run_states,'run_state_tokens':view.run_state_tokens,
             'raw':view.raw,'view':SimpleNamespace(cards=view.cards,meta=view.meta,edges=view.edges,
                 unresolved=view.unresolved,todos=view.todos)}

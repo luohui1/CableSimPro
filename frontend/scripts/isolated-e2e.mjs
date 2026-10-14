@@ -13,10 +13,11 @@ const python = process.env.PYTHON || [path.join(root,'.venv','Scripts','python.e
 const script = process.argv[2];
 if (!script || path.dirname(script) !== ".")
   throw Error("只能执行 frontend/scripts 中的验收脚本");
-const visibleTextScript = ['verify-visible-text.mjs', 'verify-visible-text-states.mjs', 'verify-regularity.mjs', 'verify-performance.mjs'].includes(script);
+const visibleTextScript = ['verify-visible-text.mjs', 'verify-visible-text-states.mjs', 'verify-regularity.mjs', 'verify-performance.mjs', 'verify-loading-trace.mjs'].includes(script);
 const realUseScript = script === 'verify-real-use.mjs';
 const formsUseScript = ['verify-form-real-use.mjs', 'verify-client-real-use.mjs', 'verify-public-read-use.mjs', 'verify-read-path.mjs'].includes(script);
 const apiGenerationScript = script === 'generate-api.mjs';
+const serverTrace = script === 'verify-loading-trace.mjs' || script === 'verify-performance.mjs' && !!process.env.LOADING_SERVER_TRACE;
 const source = path.resolve(
   process.env.E2E_DATABASE_SOURCE ||
     path.join(root, visibleTextScript || realUseScript || formsUseScript || apiGenerationScript ? '.data/release/engineering.sqlite' : script === 'verify-type-resilience.mjs' ? '.data/standard-check/validation.sqlite' : ['verify-workbench.mjs','verify-component-foundation.mjs','verify-version-status.mjs','verify-host-connections.mjs','verify-inquiry.mjs','verify-display-names.mjs','verify-documents.mjs','verify-document-batch.mjs','verify-accessibility.mjs'].includes(script) ? '.data/engineering-demo/engineering.sqlite' : ".data/frontend-integration/engineering.sqlite"),
@@ -94,6 +95,12 @@ try {
     E2E_SEED_RECEIPT: seedReceipt,
     ...(realUseScript ? { E2E_SOURCE_DATABASE: path.resolve(process.env.E2E_AGENT_ACCOUNT_SOURCE || source) } : {}),
   };
+  if (serverTrace) {
+    const output = path.resolve(process.env.LOADING_TRACE_OUTPUT || path.join(root, '.data/fix-round/shared-shell/loading-path/trace'));
+    environment.LOADING_TRACE_OUTPUT = output;
+    environment.LOADING_SERVER_TRACE = path.resolve(process.env.LOADING_SERVER_TRACE || output + '-server.jsonl');
+    await fs.mkdir(path.dirname(environment.LOADING_SERVER_TRACE), { recursive: true });
+  }
   if (realUseScript) {
     // Only non-secret deployed connection values enter the form. The actual editor starts empty.
     const deployed = JSON.parse(await fs.readFile(path.join(root, '.data/hpc/config.json'), 'utf8'));
@@ -139,7 +146,7 @@ try {
             "exec(compile(ast.Module(body=[node],type_ignores=[]),'<committed-cache-baseline>','exec'),namespace)",
             "host_main.LocalBoundary.__call__=namespace['LocalBoundary'].__call__",
           ] : []),
-          ...(script === 'verify-performance.mjs' ? [
+          ...(['verify-performance.mjs', 'verify-loading-trace.mjs'].includes(script) ? [
             "import re",
             "from starlette.responses import JSONResponse",
             "@app.middleware('http')",
@@ -165,7 +172,40 @@ try {
           "def close_previews():",
           "    app.state.previews.close()",
           "    return {'closed':True}",
-          `uvicorn.run(app,host='127.0.0.1',port=${backendPort})`,
+          ...(serverTrace ? [
+            "import time,json",
+            "original_app=app",
+            ...(process.env.LOADING_TRACE_WARM === '1' ? [
+              "from functools import wraps",
+              "from backend.kernel.research import Research",
+              "def trace_warm(method):",
+              "    @wraps(method)",
+              "    def measured(self,*args,**kwargs):",
+              "        item={'phase':method.__name__,'start':time.time()}",
+              "        try: return method(self,*args,**kwargs)",
+              "        finally:",
+              "            item['done']=time.time()",
+              "            with open(os.environ['LOADING_SERVER_TRACE'],'a',encoding='utf-8') as log: log.write(json.dumps(item)+'\\n')",
+              "    return measured",
+              "Research.warm_catalogs=trace_warm(Research.warm_catalogs)",
+            ] : []),
+            "async def traced_app(scope,receive,send):",
+            "    if scope['type']!='http': return await original_app(scope,receive,send)",
+            "    item={'path':scope['path'],'query':scope.get('query_string',b'').decode(),'start':time.time(),'bytes':0,'bodies':0}",
+            "    async def traced_send(message):",
+            "        if message['type']=='http.response.start': item.update(headers=time.time(),status=message['status'],response_headers={k.decode():v.decode() for k,v in message.get('headers',[])})",
+            "        if message['type']=='http.response.body':",
+            "            item.setdefault('first_body',time.time());item.update(last_body=time.time(),bytes=item['bytes']+len(message.get('body',b'')),bodies=item['bodies']+1)",
+            "        await send(message)",
+            "    try: await original_app(scope,receive,traced_send)",
+            "    finally:",
+            "        item['done']=time.time()",
+            "        if scope['path'].startswith('/api/index/'):",
+            "            from backend.index import get_index",
+            "            item['index_read']=get_index(original_app.state.research).last_read",
+            "        with open(os.environ['LOADING_SERVER_TRACE'],'a',encoding='utf-8') as log: log.write(json.dumps(item)+'\\n')",
+          ] : []),
+          `uvicorn.run(${serverTrace ? 'traced_app' : 'app'},host='127.0.0.1',port=${backendPort})`,
         ].join("\n"),
       ]
     : [
@@ -193,7 +233,7 @@ try {
   await ready(environment.BACKEND_URL + "/api/health", backend);
   if (apiGenerationScript) {
     console.log(`隔离 OpenAPI 服务：后端 PID ${backend.pid} / ${backendPort}`);
-    await run(process.execPath, [path.join(frontend, 'scripts', script)], { cwd: frontend, env: environment, stdio: 'inherit' });
+    await run(process.execPath, [path.join(frontend, 'scripts', script), ...process.argv.slice(3)], { cwd: frontend, env: environment, stdio: 'inherit' });
   } else {
   if (script === 'verify-display-names.mjs') {
     // Refresh installed IEC releases only in the private backup. Preserve

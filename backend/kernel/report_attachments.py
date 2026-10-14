@@ -121,10 +121,14 @@ def prepare(research, wid, ids, images, fem_reference, section_images=None):
             if analytic:
                 # Reuse the saved-triangle renderer, but label the actual IEC
                 # soil projection instead of its default FEM footer.
-                from PIL import Image,ImageDraw,ImageFont
+                from PIL import Image,ImageDraw
+                from .batch_field_chapter import field_font
                 with Image.open(BytesIO(raw)) as png:
-                    draw=ImageDraw.Draw(png);draw.rectangle((0,546,png.width,png.height),fill='white')
-                    draw.text((45,570),'Saved IEC trace projection | soil only | x / z: m',fill='black',font=ImageFont.load_default(size=18))
+                    draw=ImageDraw.Draw(png)
+                    # The colour-bar minimum label extends below y=546. Erase
+                    # the old caption area only, keeping that saved scale legible.
+                    draw.rectangle((0,546,min(909,png.width),png.height),fill='white')
+                    draw.text((45,570),'保存 IEC 解析土壤场投影 · 仅土壤 · 水平／高程单位 m',fill='black',font=field_font(18))
                     stream=BytesIO();png.save(stream,format='PNG');raw=stream.getvalue()
             attachments['field_images'].append({'case_id':image['case_id'],'png_base64':b64encode(raw).decode(),'image_sha256':sha256(raw).hexdigest(),
                 'basis':'IEC 解析土壤场投影；显示网格，电缆与排管内部不出值。' if analytic else '已通过收敛核验的有限元温度场。',

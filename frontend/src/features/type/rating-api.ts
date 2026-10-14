@@ -1,4 +1,4 @@
-import { api, ApiError, array, numeric, record, responseData, text } from '@/api/client';
+import { api, ApiError, array, numeric, optionalRecord, record, responseData, text } from '@/api/client';
 import type { components } from '@/api/generated/schema';
 import { committedParameter, type ParameterDraft } from '@/lib/study-config';
 
@@ -37,7 +37,10 @@ export async function saveRating(wid: string, draft: RatingDraft, revision = dra
   if (!study || !numeric(study.revision)) throw new ApiError(502, '工况保存未返回方法版本'); return study;
 }
 export async function ratingResults(wid: string, rid: string, signal?: AbortSignal) {
-  const result = record(await responseData(api.GET('/api/design/workspaces/{wid}/rating-table-runs/{rid}', { params: { path: { wid, rid } }, signal })), '载流量表结果');
+  const response=await fetch(`/api/design/workspaces/${encodeURIComponent(wid)}/rating-table-runs/${encodeURIComponent(rid)}?view=rows`,{signal,credentials:'same-origin'});
+  const payload=await response.json();
+  if(!response.ok){const detail=optionalRecord(payload).detail;throw new ApiError(response.status,text(optionalRecord(detail).message)||text(detail)||'载流量结果读取失败',detail);}
+  const result = record(payload, '载流量表结果');
   const run = record(result.run, '载流量表运行'); if (run.integrity !== 'verified' || run.id !== rid) throw new ApiError(409, '载流量表运行完整性或身份不一致');
   const rows = array(result.rows, '载流量结果行').map(value => { const row = record(value, '载流量结果行'); if (!text(row.case_id) || !text(row.name) || !text(row.status) || row.value_a !== null && numeric(row.value_a) === null) throw new ApiError(502, '载流量结果缺少身份、状态或有限电流'); return { ...row, id: text(row.case_id) } as Record<string, unknown> & { id: string }; });
   return { run, rows };

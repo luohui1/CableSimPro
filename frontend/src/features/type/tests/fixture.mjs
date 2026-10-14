@@ -19,7 +19,7 @@ async function run(command, args, options = {}) {
   const child = spawn(command, args, { cwd: root, windowsHide: true, ...options });
   const code = await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', resolve); }); if (code !== 0) throw Error(command + '退出' + code);
 }
-export async function typeFixture({ main = false, build, setup, software = false, development = false } = {}) {
+export async function typeFixture({ main = false, build, setup, software = false, development = false, readOnly = false } = {}) {
   const python = process.env.PYTHON || path.join(root, process.platform === 'win32' ? '.venv/Scripts/python.exe' : '.venv/bin/python');
   const backendRoot=process.env.E2E_BACKEND_ROOT ? path.resolve(process.env.E2E_BACKEND_ROOT) : root;
   if(backendRoot!==root && (!backendRoot.startsWith(path.resolve(root,'.tmp')+path.sep)
@@ -40,7 +40,11 @@ export async function typeFixture({ main = false, build, setup, software = false
     if (setup) await setup(database);
     const backendPort = await freePort(), frontendPort = await freePort();
     const environment = { ...process.env, CABLESIM_DB: database, CABLESIM_DATASETS_DIR: path.join(scratch, 'datasets'), TEMP: scratch, TMP: scratch, BACKEND_URL: 'http://127.0.0.1:' + backendPort };
-    const backend = spawn(python, ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(backendPort)], { cwd: backendRoot, env: environment, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }); backend.on('error', error => { backendOutput += String(error); }); owned.push(backend);
+    // Playwright routing disables the browser HTTP cache. Pure read audits
+    // enforce read-only API access at this private host instead, retaining
+    // actual cache behaviour without allowing any engineering mutation.
+    const readServer=`from backend.main import app\nfrom fastapi.responses import JSONResponse\nimport uvicorn\n@app.middleware('http')\nasync def readonly(request,call_next):\n    if request.method not in ('GET','HEAD','OPTIONS'):\n        return JSONResponse({'detail':'只读验收禁止修改工程'},status_code=403,headers={'X-Audit-Blocked':'true'})\n    return await call_next(request)\nuvicorn.run(app,host='127.0.0.1',port=${backendPort})`;
+    const backend = spawn(python, readOnly ? ['-c',readServer] : ['-m', 'uvicorn', 'backend.main:app', '--host', '127.0.0.1', '--port', String(backendPort)], { cwd: backendRoot, env: environment, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] }); backend.on('error', error => { backendOutput += String(error); }); owned.push(backend);
     for (const stream of [backend.stdout, backend.stderr]) stream.on('data', data => { backendOutput = (backendOutput + data.toString()).slice(-12000); });
     async function ready(url, child) { for (let i = 0; i < 120; i++) { if (child.exitCode !== null || child.pid === undefined) throw Error(backendOutput.slice(-3000)); try { if ((await fetch(url, { signal: AbortSignal.timeout(1500) })).ok) return; } catch {} await delay(250); } throw Error('服务启动超时：' + url + '\n' + backendOutput.slice(-3000)); }
     await ready(environment.BACKEND_URL + '/api/health', backend);
@@ -52,7 +56,7 @@ export async function typeFixture({ main = false, build, setup, software = false
       const instance=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:process.platform==='win32'?{channel:'msedge'}:{}),args:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
       const context=await instance.newContext(),page=await context.newPage();
       browser={browser:instance,context,page,close:async()=>{for(const tab of context.pages())await tab.close();console.log('浏览器清理：剩余标签页 '+context.pages().length+'。');await instance.close();}};
-    }else browser = await openHeadlessBrowser();
+    }else browser = await openHeadlessBrowser({routeGuard:!readOnly});
     const errors = []; browser.page.on('pageerror', error => errors.push(error.message));
     browser.page.on('console', message => { if (message.type() === 'error' && !message.text().includes('Failed to load resource')) errors.push(message.text()); });
     const writes = []; browser.page.on('request', request => { if (new URL(request.url()).origin !== url && !['GET', 'HEAD', 'OPTIONS'].includes(request.method())) throw Error('跨环境写入被拒绝'); if (request.url().includes('/api/') && !['GET', 'HEAD'].includes(request.method())) writes.push({ method: request.method(), url: request.url() }); });

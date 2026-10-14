@@ -13,9 +13,13 @@ class Status(StrictModel):
     reason: str | None = None
 
 
-class Source(StrictModel):
+class IndexSource(StrictModel):
     kind: str
     label: str
+
+
+# Preserve Python callers while keeping the public schema name unambiguous.
+Source = IndexSource
 
 
 class Parent(StrictModel):

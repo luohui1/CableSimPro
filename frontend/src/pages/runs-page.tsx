@@ -15,7 +15,9 @@ import { statusLabel } from '@/lib/status-vocabulary';
 import { studyRuns, typeIndex } from '@/api/research';
 import { runOwnerName, runPresentation, scopedRunOrdinals } from '@/lib/run-presentation';
 
-const PAGE = 50;
+// One screen of recent records first. Older records retain the same explicit
+// pagination and scoped numbering, without authenticating unseen FEM histories.
+const PAGE = 10;
 const short = formatDateTime;
 
 // Full integrity/currentness checks are CPU work on the real host. Avoid sending

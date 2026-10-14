@@ -3,8 +3,8 @@ from dataclasses import asdict
 import gzip
 from hashlib import sha256
 import os
+import shutil
 from pathlib import Path
-from functools import partial
 import sys
 from threading import Event
 import time
@@ -39,8 +39,21 @@ def main():
             'plan_sha256':digest(plan),'runtime_sha256':plan['runtime_sha256']}
     started=time.monotonic()
     try:
+        attachments=[]
+        for record in plan.get('attachments',[]):
+            name=record['name']
+            if name!='preload-'+record['sha256']+'.tar.gz' or len(record['sha256'])!=64 or any(c not in '0123456789abcdef' for c in record['sha256']):raise RuntimeError('初场附件路径无效。')
+            path=directory/'inputs'/name;checksum=sha256()
+            with path.open('rb') as stream:
+                for block in iter(lambda:stream.read(1024*1024),b''):checksum.update(block)
+            if path.stat().st_size!=record['size'] or checksum.hexdigest()!=record['sha256']:raise RuntimeError('冻结初场附件摘要不符。')
+            attachments.append(path)
+        def controlled(arguments,**kwargs):
+            job=Path(kwargs['cwd'])
+            for source in attachments:shutil.copyfile(source,job/'input'/source.name)
+            return run_process(arguments,stop_event=Event(),**kwargs)
         executor=Executor(Registry(runtime/'plugins',discover=False),jobs_root=jobs,
-                          process_runner=partial(run_process,stop_event=Event()))
+                          process_runner=controlled)
         result=executor.run(plan['plugin_id'],plan['capability'],selected,
                             plan['timeout_s'],phase=plan['phase'],
                             expected_manifest=Manifest.model_validate(plan['plugin_manifest']),

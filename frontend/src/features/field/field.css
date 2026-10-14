@@ -24,7 +24,7 @@
 .field-probe text { stroke: none; font-weight: var(--weight-strong); }
 .field-probe .field-probe-coords { fill: var(--text-secondary); font-weight: var(--weight-normal); }
 /* IEC 解析土壤场的依据：画布左下一行，悬停看全部适用限制 */
-.field-basis { position: absolute; left: var(--space-3); bottom: var(--space-3); max-width: 60%; margin: 0; padding: var(--space-1) var(--space-2); border-radius: var(--radius-item); background: var(--panel); color: var(--text-secondary); font-size: var(--text-note); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.field-basis { position: absolute; left: var(--space-3); bottom: var(--space-3); max-width: 60%; margin: 0; padding: var(--space-1) var(--space-2); border-radius: var(--radius-item); background: var(--panel); color: var(--text-secondary); font-size: var(--text-body); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .saved-fem-field { height: calc(var(--space-12) * 8); min-height: calc(var(--space-12) * 6); }
 .fem-convergence-chart { margin: 0; max-width: 100%; font-size: var(--text-body); font-variant-numeric: tabular-nums; }
 .fem-convergence-chart svg { width: 100%; max-height: calc(var(--space-12) * 5); }
@@ -49,10 +49,13 @@
 .fem-convergence .table-scroll .data-table .data-row,
 .saved-field-samples .table-scroll .data-table .data-row,
 .saved-field-comparison .table-scroll .data-table .data-row,
+.saved-field-diagnostics .table-scroll .data-table .data-row,
+.step-response .table-scroll .data-table .data-row,
 .heat-capacity-form .table-scroll .data-table .data-row { height: calc(var(--space-8) + var(--space-2)); }
 .step-response { min-width: 0; }
 .step-response textarea { width: 100%; min-width: 0; padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-item); background: var(--panel); color: var(--text); font: inherit; }
 .heat-capacity-form > h3 { font-size: var(--text-subheading); font-weight: var(--weight-strong); }
 .capacity-site-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--space-12) * 4), 1fr)); gap: var(--space-4); margin: 0; padding: var(--space-4); border: 1px solid var(--line); border-radius: var(--radius-item); }
 .capacity-site-inputs label { display: grid; gap: var(--space-2); font-size: var(--text-note); }
+.capacity-site-inputs input { width: 100%; min-width: 0; min-height: var(--control-standard); padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-item); background: var(--panel); color: var(--text); font: inherit; font-variant-numeric: tabular-nums; }
 .heat-capacity-form .select-trigger { min-height: var(--control-standard); }

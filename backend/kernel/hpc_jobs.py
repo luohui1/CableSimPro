@@ -13,23 +13,25 @@ from .batch_convergence import Refinements, RefineRequest
 from .batch_step_response import StepResponses, StepRequest
 from .batch_field_chapter import chapter, selected_case, field_png
 from hashlib import sha256
+from concurrent.futures import ThreadPoolExecutor
+from time import perf_counter
 from ..plugin_host import PluginHostError
 from .hpc_profile import HpcProfile
 from .hpc_executor import ROOT
+from .batch_job_reads import plan_identity, study_identities
 
 
 def study_jobs(research):
-    with research.store.db() as db:
-        rows=db.execute('SELECT id,workspace,study,sequence,status,created,finished,snapshot FROM study_runs ORDER BY sequence DESC').fetchall()
+    rows=study_identities(research)
     result=[]
     for row in rows:
-        definition=json.loads(row['snapshot'])['definition'];method=definition['method']
+        title,method=json.loads(row['method_identity'])
         execution=research.executor.execution_status(row['id'],method['plugin_id'],method['capability'])
         if not execution:continue
         recovering_live=row['status']=='validating' and execution.get('slurm_states') and not terminal(execution)
         state=row['status'] if row['status'] in ('validating','succeeded','partial','failed','interrupted') and not recovering_live else execution.get('state',row['status'])
         result.append({'id':row['id'],'kind':'study','workspace':row['workspace'],'study':row['study'],
-            'study_name':definition['title'],'sequence':row['sequence'],'created':row['created'],
+            'study_name':title,'sequence':row['sequence'],'created':row['created'],
             'started':execution.get('started'),'finished':execution.get('finished') or row['finished'],
             'status':state,'execution':execution,'core_hours':execution.get('actual_cpu_seconds',0)/3600,
             'cancellable':bool(execution.get('job_id')) and row['status'] not in ('succeeded','partial') and
@@ -47,9 +49,9 @@ def created_order(row):
     except (ValueError,KeyError):return 0
 
 
-def preflight_jobs(refinements):
+def preflight_jobs(refinements,workflows=None):
     result=[]
-    for value in refinements.list():
+    for value in refinements.list() if workflows is None else workflows:
         saved=dict(value.get('preflight_executions',{}));pending=value.get('pending')
         if pending:
             method=value['definition']['method']
@@ -96,25 +98,35 @@ def unbound_checks(research,linked):
     """Read submission bindings; unrecorded legacy owners stay explicitly unknown."""
     root=getattr(research.executor,'root',None)
     if root is None:return []
-    known={row['execution'].get('plan_id') for row in linked};result=[]
-    for path in root.glob('*/plan.json'):
-        plan=read(path)
-        if plan.get('phase')!='check' or plan['id'] in known:continue
+    known={row['execution'].get('plan_id') for row in linked}
+    def record(path):
         progress=path.parent/'execution.json';execution=read(progress) if progress.is_file() else {}
-        if not execution.get('job_id'):continue
+        if not execution.get('job_id'):return None
+        plan=plan_identity(path)
+        if plan.get('phase')!='check' or plan['id'] in known:return None
         execution={**execution,'plan_id':plan['id'],'cancel_requested':(path.parent/'cancel-request.json').is_file()}
         context=plan.get('research_context') or {}
         receipt=path.parent/'research-context.json'
         if not context and receipt.is_file():context=read(receipt)
+        return path,plan,execution,context
+    # These independent small local records never invoke SSH. Bound file I/O
+    # concurrency, then resolve exact saved foreign keys on the request thread.
+    paths=[path for path in root.glob('*/plan.json') if path.parent.name not in known]
+    with ThreadPoolExecutor(max_workers=4,thread_name_prefix='hpc-job-read') as pool:
+        records=list(pool.map(record,paths))
+    result=[]
+    for item in records:
+        if item is None:continue
+        path,plan,execution,context=item
         if not context and plan.get('operation_id'):
             # Execution-time validation is bound to the saved run UUID, not a
             # standalone preflight context. Resolve that exact foreign key.
             with research.store.db() as db:
-                saved=db.execute('SELECT id,workspace,study,snapshot FROM study_runs WHERE id=?',(plan['operation_id'],)).fetchone()
+                saved=db.execute("SELECT id,workspace,study,json_extract(snapshot,'$.study_revision','$.workspace_revision') AS revisions FROM study_runs WHERE id=?",(plan['operation_id'],)).fetchone()
             if saved:
-                snapshot=json.loads(saved['snapshot'])
+                study_revision,workspace_revision=json.loads(saved['revisions'])
                 context={'workspace_id':saved['workspace'],'study_id':saved['study'],'run_id':saved['id'],
-                         'study_revision':snapshot.get('study_revision'),'workspace_revision':snapshot.get('workspace_revision')}
+                         'study_revision':study_revision,'workspace_revision':workspace_revision}
         result.append({'id':'unbound:'+plan['id'],'kind':'preflight','workspace':context.get('workspace_id'),'study':context.get('study_id'),
             'research_context':context,'study_name':'超算预检（研究归属未记录）','sequence':None,
             'created':datetime.fromtimestamp(path.stat().st_mtime,timezone.utc).isoformat(),
@@ -125,7 +137,7 @@ def unbound_checks(research,linked):
     return result
 
 
-def job_cards(research,refinements,values,batches=None):
+def job_cards(research,refinements,values,batches=None,workflows=None):
     """Shared record cards; missing legacy identities remain explicit nulls."""
     with research.store.db() as db:
         columns={row['name'] for row in db.execute('PRAGMA table_info(workspaces)')}
@@ -138,7 +150,7 @@ def job_cards(research,refinements,values,batches=None):
         for binding in bindings:
             saved=db.execute('SELECT definition FROM study_versions WHERE study=? AND revision=?',binding).fetchone()
             if saved:titles[binding]=json.loads(saved['definition'])['title']
-    workflows=refinements.list();owners={}
+    workflows=refinements.list() if workflows is None else workflows;owners={}
     for workflow in workflows:
         for index,row in enumerate(workflow['rows']):owners.setdefault(row['run_id'],(workflow,index+1,row['kind']))
         if workflow.get('current_run_id'):
@@ -160,7 +172,7 @@ def job_cards(research,refinements,values,batches=None):
         folder=(batches.root/row['id'].split(':')[0]) if kind=='batch' and batches else (
             research.executor.root/execution['plan_id'] if getattr(research.executor,'root',None) and execution.get('plan_id') else None)
         if budget is None and folder and (folder/'plan.json').is_file():
-            resources=read(folder/'plan.json').get('execution',{})
+            resources=plan_identity(folder/'plan.json').get('execution',{})
             for path in (folder/'submissions').glob('*/submission.json'):
                 saved=read(path)
                 if saved.get('job_id')!=execution.get('job_id'):continue
@@ -264,15 +276,41 @@ def make_router(research,batches=None):
     @router.post('/step-responses/{identifier}/resume',status_code=202)
     def step_resume(identifier:UUID):return responses.resume(str(identifier))
 
+    def collected_jobs(timings=None):
+        start=perf_counter()
+        workflows=refinements.list()
+        linked=preflight_jobs(refinements,workflows)
+        workflow_done=perf_counter()
+        def measured(call):
+            began=perf_counter();value=call()
+            return value,perf_counter()-began
+        # Independent database and local-file reads can overlap. There is no
+        # scheduler query here; keep the request's fan-out bounded and joined.
+        with ThreadPoolExecutor(max_workers=2,thread_name_prefix='hpc-job-list') as pool:
+            study_read=pool.submit(measured,lambda:study_jobs(research))
+            check_read=pool.submit(measured,lambda:unbound_checks(research,linked))
+            datasets,dataset_elapsed=measured(lambda:dataset_jobs(batches))
+            studies,study_elapsed=study_read.result()
+            checks,check_elapsed=check_read.result()
+        values=sorted(studies+datasets+linked+checks,key=created_order,reverse=True)
+        if timings is not None:
+            timings.update(workflows=workflow_done-start,study_jobs=study_elapsed,
+                           dataset_jobs=dataset_elapsed,check_jobs=check_elapsed)
+        return values,workflows
+
     def all_jobs():
-        linked=preflight_jobs(refinements)
-        values=sorted(study_jobs(research)+dataset_jobs(batches)+linked+unbound_checks(research,linked),key=created_order,reverse=True)
-        return job_cards(research,refinements,values,batches)
+        values,workflows=collected_jobs()
+        return job_cards(research,refinements,values,batches,workflows)
 
     @router.get('/jobs')
-    def jobs(offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100)):
-        values=all_jobs()
-        return {'items':values[offset:offset+limit],'total':len(values),'next_offset':offset+limit if offset+limit<len(values) else None}
+    def jobs(response:Response,offset:int=Query(0,ge=0),limit:int=Query(50,ge=1,le=100)):
+        started=perf_counter();timings={}
+        values,workflows=collected_jobs(timings)
+        cards_started=perf_counter()
+        items=job_cards(research,refinements,values[offset:offset+limit],batches,workflows)
+        timings.update(job_cards=perf_counter()-cards_started,jobs=perf_counter()-started)
+        response.headers['Server-Timing']=', '.join(f'{key};dur={seconds*1000:.2f}' for key,seconds in timings.items())
+        return {'items':items,'total':len(values),'next_offset':offset+limit if offset+limit<len(values) else None}
 
     @router.get('/jobs/{identifier}')
     def job_detail(identifier:str):
@@ -406,7 +444,7 @@ def make_router(research,batches=None):
     async def field_view(wid:UUID,rid:UUID,request:Request):
         """Verified display projection: binary arrays stay on the server."""
         from time import perf_counter
-        from .batch_field_projection import read_display
+        from .batch_field_projection import read_display, field_view_response
         from .read_responses import read_response
         from starlette.concurrency import run_in_threadpool
         def saved():
@@ -416,7 +454,7 @@ def make_router(research,batches=None):
         def load():
             projected=read_display(research,str(wid),str(rid))
             if projected.get('integrity')!='verified':raise HTTPException(409,'保存场完整性未通过。')
-            return json.dumps(projected,ensure_ascii=False,separators=(',',':'),allow_nan=False).encode('utf-8')
+            return json.dumps(field_view_response(projected),ensure_ascii=False,separators=(',',':'),allow_nan=False).encode('utf-8')
         # Reuse the host's bounded, source/commit-invalidated receipts. Only
         # sealed successful results qualify: live progress remains uncached.
         if await run_in_threadpool(saved):

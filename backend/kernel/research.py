@@ -48,6 +48,7 @@ class Research:
         self.owner_epoch = str(uuid4())
         self.prepared_candidates = {}
         self.run_read_cache = OrderedDict()
+        self.run_read_pending = {}
         self.run_read_lock = RLock()
         self.contract_read_cache = OrderedDict()
         self.contract_read_lock = RLock()
@@ -133,6 +134,7 @@ class Research:
               created TEXT NOT NULL, finished TEXT, UNIQUE(workspace,request_id),
               FOREIGN KEY(workspace) REFERENCES workspaces(id), FOREIGN KEY(study) REFERENCES studies(id));
             CREATE INDEX IF NOT EXISTS study_runs_page ON study_runs(workspace,study,sequence);
+            CREATE INDEX IF NOT EXISTS study_runs_receipts ON study_runs(id,workspace,status,output_digest);
             CREATE TABLE IF NOT EXISTS deliveries (
               id TEXT PRIMARY KEY, workspace TEXT NOT NULL, sources TEXT NOT NULL,
               renderer TEXT NOT NULL, html TEXT NOT NULL, digest TEXT NOT NULL, created TEXT NOT NULL);
@@ -161,7 +163,8 @@ class Research:
         from .input_contracts import contracts
         import logging
         tasks = [(('input-contracts',), lambda: contracts(self, encoded=True, catalog_preload=True)),
-                 (('methods',), lambda: json.dumps(self.methods(), ensure_ascii=False, allow_nan=False).encode())]
+                 (('methods',), lambda: json.dumps(self.methods(), ensure_ascii=False, allow_nan=False).encode()),
+                 (('methods','summary'), lambda: json.dumps(self.methods(summary=True), ensure_ascii=False, allow_nan=False).encode())]
         for key, load in tasks:
             if stop is not None and stop.is_set():
                 return
@@ -177,8 +180,14 @@ class Research:
         except (HTTPException, PluginHostError, ValueError, OSError):
             logging.getLogger(__name__).warning('Model catalog warm-up rejected', exc_info=True)
 
-    def methods(self, registry=None):
+    def methods(self, registry=None, *, summary=False):
         from ..plugin_host.presentation import resources
+        def capability(card):
+            if not summary:return card.model_dump(mode='json',by_alias=True,exclude_none=True)
+            value=card.model_dump(mode='json',by_alias=True,exclude_none=True,exclude={
+                'input_contract','parameter_schema','output_schema','artifact_schemas'})
+            value['parameter_fields']=list(card.parameter_schema.properties)
+            return value
         return [{'method': self.pin(p), 'name': p.manifest.name, 'description': p.manifest.description,
                  'presentation': p.manifest.presentation.model_dump(mode='json') if p.manifest.presentation else None,
                  'resources': resources(p),
@@ -187,7 +196,7 @@ class Research:
                                       'isolation': 'process', 'os_sandbox': False, 'timeout_enforced': True,
                                       'memory_limit_enforced': False, 'network_isolation_enforced': False,
                                       'parent_death_enforced': os.name == 'nt', 'process_tree_cleanup_enforced': os.name == 'nt'},
-                 'capabilities': [c.model_dump(mode='json', by_alias=True, exclude_none=True) for c in p.manifest.capabilities]}
+                 'capabilities': [capability(c) for c in p.manifest.capabilities]}
                 for p in (registry or self.registry()).plugins.values()]
 
     def registry(self, plugin_id=None):
@@ -396,11 +405,14 @@ class Research:
             return self._study_detail(db, wid, sid, revision, model, {})
 
     def _study_detail(self, db, wid, sid, revision, model, cache):
-        from .read_models import summary, RUN_COLUMNS
+        from .read_models import summary, source_facts
         value = self.definition(db, wid, sid)
-        latest = db.execute('SELECT '+RUN_COLUMNS+' FROM study_runs WHERE workspace=? AND study=? ORDER BY sequence DESC LIMIT 1', (wid, sid)).fetchone()
+        latest = db.execute('SELECT id FROM study_runs WHERE workspace=? AND study=? ORDER BY sequence DESC LIMIT 1', (wid, sid)).fetchone()
+        facts = None
+        if latest:
+            latest, facts = source_facts(self, db, wid, latest['id'], cache)
         value['latest_run_id'] = latest['id'] if latest else None
-        value['latest_run'] = summary(self, latest, revision, value, cache) if latest else None
+        value['latest_run'] = summary(self, latest, revision, value, cache, facts) if latest else None
         value['latest_module_run_ids'] = {row['module']: row['id'] for row in db.execute(
             "SELECT id,coalesce(json_extract(snapshot,'$.module'),'') AS module FROM study_runs WHERE workspace=? AND study=? AND sequence IN (SELECT max(sequence) FROM study_runs WHERE workspace=? AND study=? GROUP BY coalesce(json_extract(snapshot,'$.module'),''))",
             (wid,sid,wid,sid))}
@@ -1121,7 +1133,7 @@ class Research:
 
     def list_runs(self, wid, sid, after=0, limit=50, *, view='full'):
         if view == 'summary':
-            from .read_models import summary, RUN_COLUMNS
+            from .read_models import summary, source_facts
             from .verified_executor import verification_scope
             with self.store.read_snapshot() as db:
                 study = self.definition(db, wid, sid)
@@ -1133,8 +1145,8 @@ class Research:
                     # Verify one immutable output at a time. A history of FEM
                     # runs must not retain all lossless arrays in memory at once.
                     for identity in page:
-                        row = db.execute('SELECT '+RUN_COLUMNS+' FROM study_runs WHERE workspace=? AND id=?', (wid,identity['id'])).fetchone()
-                        items.append(summary(self, row, revision, study, cache))
+                        row, facts = source_facts(self, db, wid, identity['id'], cache)
+                        items.append(summary(self, row, revision, study, cache, facts))
             return {'items': items, 'next_cursor': page[-1]['sequence'] if len(rows) > limit else None}
         with self.store.db() as db:
             self.definition(db, wid, sid)

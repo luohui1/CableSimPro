@@ -499,7 +499,7 @@ export function ConditionsInputs({ document, historical }: InputProps) {
                 unit:'kV',scale:0.001,precision:1,min:0,minExclusive:true}} />
           </div>)}
         </div>
-        <p className="field-basis field-note">记录供电条件；IEC 载流量的介质损耗采用电缆额定相电压。</p>
+        <p className="study-input-explanation" data-typography="body">记录供电条件；IEC 载流量的介质损耗采用电缆额定相电压。</p>
       </InputSection>
       {document.sections.map((section) => (
         <InputSection key={section.id} title={section.label + " · 环境"}>

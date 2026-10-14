@@ -140,6 +140,8 @@ class HpcExecutor:
                 with TemporaryDirectory(prefix='prepare-',dir=self.root) as scratch:
                     candidate=Path(scratch)
                     runtime_sha,frozen_manifest=freeze_runtime(candidate,plugin_id,self.registry.root.parent)
+                    from .batch_preload_attachment import stage
+                    attachments=stage(self.root,candidate,cases)
                     plan={'schema_version':'cablesim.remote-run-plan/1','id':identifier,
                           'request_identity':identity,'operation_id':operation,
                           'research_context':{key:context[key] for key in ('workspace_id','study_id','module','workspace_revision','study_revision')
@@ -147,6 +149,7 @@ class HpcExecutor:
                           'plugin_id':plugin_id,'capability':capability,'phase':phase,
                           'plugin_manifest':frozen_manifest,'runtime_sha256':runtime_sha,
                           'cases':deepcopy(cases),'reuse_artifacts':deepcopy(reuse_artifacts),
+                          'attachments':attachments,
                           'timeout_s':limit,'samples':[{'case_id':case['case_id']} for case in cases] if phase=='run' and len(cases)>1 else [{'case_id':'research-run'}],
                           'case_array':phase=='run' and len(cases)>1,
                           'execution':self.resources(manifest,len(cases) if phase=='run' else 1,limit)}
@@ -282,7 +285,8 @@ class HpcExecutor:
         if not (directory/'plan.json').is_file():
             from .hpc_evidence import saved_execution
             return saved_execution(operation,plugin_id,capability,phase)
-        plan=read(directory/'plan.json')
+        from .batch_job_reads import plan_identity
+        plan=plan_identity(directory/'plan.json')
         if plan.get('operation_id')!=operation or plan.get('plugin_id')!=plugin_id or plan.get('capability')!=capability:
             return {'backend':'slurm','state':'unavailable','error':'REMOTE_PROGRESS_BINDING_INVALID'}
         value=read(directory/'execution.json') if (directory/'execution.json').is_file() else {'backend':'slurm','state':'preparing'}

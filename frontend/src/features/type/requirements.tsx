@@ -19,6 +19,7 @@ import { chooseEvidence, currentEvidence, useTypeEvidence } from './evidence';
 import { standardDefinition } from './standard-check';
 import { basisConditions, basisValue } from './basis-display';
 import { TypeRunControl } from './run-control';
+import { typeRequirements } from './api';
 import { EvidenceDigest } from './evidence-digest';
 import { DeclaredStandardReferences, ResourceBindings, StandardResourceCell } from './resource-bindings';
 import { BasisInputRepair } from './basis-input-repair';
@@ -36,10 +37,7 @@ export function TypeRequirements({ tab }: { tab: string }) {
   try { saved = chooseEvidence(evidence.data, 'cablesim.standard-check/1', navigation.location.run, navigation.location.revision); } catch (error) { parseError = message(error); }
   const runId = text(saved?.run.id), current = !!saved && currentEvidence(saved.run, state.workspace?.revision, state.inputDirty || !!state.methodDrafts['standard-check']) && !state.readOnly;
   const ledger = useQuery({ queryKey: ['type-requirements', state.workspace!.id, runId], enabled: !!runId,
-    retry: false, queryFn: async ({ signal }) => {
-      try { return record(await responseData(api.GET('/api/design/type-workspaces/{wid}/requirements', { params: { path: { wid: state.workspace!.id }, query: { run_id: runId } }, signal:AbortSignal.any([signal,AbortSignal.timeout(20000)]) })), '要求目录'); }
-      catch(error) { if(error instanceof Error && error.name==='TimeoutError') throw new Error('要求目录读取超过 20 秒，请重新读取。'); throw error; }
-    } });
+    retry: false, queryFn: ({signal}) => typeRequirements(state.workspace!.id,runId,signal) });
   useEffect(() => { setSelected(new Set()); setPicked(''); setAck(false); inspector.clear(); request.current = null; }, [runId]);
   let rows: Row[] = [], standards: Row[] = [];
   try {

@@ -3,7 +3,7 @@ from copy import deepcopy
 import json
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import Field, field_validator, model_validator
 
 from backend.domain.models import CableType
@@ -169,10 +169,22 @@ def make_router(research):
         return table_definition(research.store.snapshot(wid), body, {**entry['method'], 'capability': 'steady-rating'})
 
     @router.get('/workspaces/{wid}/rating-table-runs/{rid}')
-    def results(wid: str, rid: str):
-        run = research.get_run(wid, rid)
-        if not is_rating_table(run):
-            raise HTTPException(422, '此运行不是型号载流量表。')
-        return {'run': run, 'rows': rating_rows(run)}
+    async def results(wid: str, rid: str, request: Request, view: Literal['full', 'rows'] = 'full'):
+        from .read_responses import read_response
+
+        def load():
+            run = research.get_run(wid, rid)
+            if not is_rating_table(run):
+                raise HTTPException(422, '此运行不是型号载流量表。')
+            rows = rating_rows(run)
+            # Row inspection needs the verified saved identity, not every batch
+            # input and artifact. Explicit trace reads retain the full response.
+            if view == 'rows':
+                run = {key: run.get(key) for key in ('id', 'workspace', 'study', 'status',
+                       'integrity', 'input_digest', 'output_digest', 'freshness', 'created')}
+            return {'run': run, 'rows': rows}
+
+        return await read_response(research, ('type-rating-rows', wid, rid, view),
+                                   dict, load, request=request)
 
     return router

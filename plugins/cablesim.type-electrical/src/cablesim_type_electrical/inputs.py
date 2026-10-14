@@ -36,6 +36,7 @@ class TypeParameters(BaseModel):
     cable_type_id: str = Field(min_length=1, title='电缆结构', description='当前型号中的精确电缆结构标识。')
     circuit_id: str | None = Field(default=None, min_length=1, title='接地拓扑回路', description='必须引用当前型号的实际回路；不由名称推测拓扑。')
     sources: dict[str, str] = Field(default_factory=dict, title='参数出处', description='参数名到标准条款、报告或明确设计条件的出处映射；不是自动生成的实测证明。')
+    basis_references: dict = Field(default_factory=dict, title='已查询的标准依据', json_schema_extra={'x-hidden': True})
 
 
 class ElectricalParameters(TypeParameters):
@@ -47,10 +48,16 @@ class ElectricalParameters(TypeParameters):
     spacing_m: float | None = quantity('spacing_m')
     core_lay_factor: float | None = quantity('core_lay_factor')
     r20_length_basis: Literal['finished_cable', 'straight_core'] | None = Field(default=None, title='R₂₀ 长度基准', description='每米成品电缆或每米直线线芯；未声明时不进行长度换算。')
-    arrangement: Literal['trefoil', 'flat'] | None = Field(default=None, title='单芯相间排列', description='等距品字形或水平排列；完整金属回路阻抗仍由插件明确范围拒绝。')
+    arrangement: Literal['trefoil', 'flat'] | None = Field(default=None, title='相间排列', description='品字形或平排；三芯优先用保存的真实芯坐标。')
+    bonding_model: Literal['single_point', 'both_ends', 'cross_bonded'] | None = Field(default=None, title='金属回路连接', description='单端、两端或交叉互联；须提供来源，不从型号名称推断。')
+    return_path: Literal['metallic_only', 'earth', 'metallic_and_earth'] | None = Field(default=None, title='零序回流路径', description='本方法计算明确的金属回流；大地分支须使用线路研究方法。')
+    metal_resistance_ohm_m: float | None = Field(default=None, gt=0, le=10, title='每相金属回路交流电阻', json_schema_extra={'x-unit':'Ω/m','x-source-required':True})
+    metal_mean_radius_m: float | None = Field(default=None, gt=0, le=1, title='每相金属回路平均半径', json_schema_extra={'x-unit':'m','x-source-required':True})
+    metal_nonmagnetic: Literal[True] | None = Field(default=None, title='线性非磁性回路确认', description='本分支仅非磁性金属回路；含钢铠装的完整阻抗须另行线路研究，不得确认为非磁性。')
 
 
 class ShortCircuitParameters(TypeParameters):
+    metal_capacity_basis: Literal['adiabatic','nonadiabatic'] | None = Field(default=None, title='金属容量校核口径', description='显式选择绝热或非绝热；后者须相邻介质热参数，不能用默认值补齐。')
     duration_s: float | None = quantity('duration_s')
     initial_temperature_k: float | None = quantity('initial_temperature_k')
     final_temperature_k: float | None = quantity('final_temperature_k')
@@ -62,6 +69,10 @@ class ShortCircuitParameters(TypeParameters):
     inner_volumetric_heat_capacity: float | None = quantity('inner_volumetric_heat_capacity')
     outer_volumetric_heat_capacity: float | None = quantity('outer_volumetric_heat_capacity')
     wire_contact: Literal['fully_embedded', 'air_spaces', 'touching'] | None = Field(default=None, title='铜丝接触条件', description='只有已声明且适用的嵌入/间隔条件可以产生非绝热结果。')
+    screen_fault_current_a: float | None = Field(default=None, gt=0, le=1e7, title='金属回路故障电流', json_schema_extra={'x-unit':'A','x-source-required':True})
+    bonding_model: Literal['single_point', 'both_ends', 'cross_bonded'] | None = Field(default=None, title='金属回路连接')
+    return_path: Literal['metallic_only', 'earth', 'metallic_and_earth'] | None = Field(default=None, title='故障回流路径')
+    parallel_components: list[dict] = Field(default_factory=list, max_length=20, title='并联金属组件', description='逐项填写 row_id、resistance_ohm、initial_temperature_k、final_temperature_k 和 source；组件温度不默认相同。')
     interest_times_s: list[Annotated[float, Field(ge=.1, le=5)]] = Field(default_factory=list, max_length=20, title='关注时间点', description='0.1–5 s，最多 20 点；曲线电流由插件计算，前端不外推。', json_schema_extra={'x-unit': 's'})
 
     @model_validator(mode='after')

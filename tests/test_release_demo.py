@@ -147,11 +147,11 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     from backend.kernel.hpc_evidence import evidence_index
     has_chengnan=bool(evidence_index()[0].get('supplementary_receipts'))
     imported_chengnan=receipt['identity']['chengnan_engineering_evidence_imported']
-    assert receipt['complete'] and len(receipt['studies']) == 4+int(has_chengnan) and len(receipt['types']) == 2
+    assert receipt['complete'] and len(receipt['studies']) == 4+int(has_chengnan) and len(receipt['types']) == 3
     assert receipt['identity'] == seed.release_identity()
     assert receipt['identity']['engineering_resources']
     assert len(receipt['engineering_resources']) == 28
-    assert all(row['resource_bindings']['bound'] >= 2 for row in receipt['types'])
+    assert all(row['resource_bindings']['bound'] >= 2 for row in receipt['types'] if '3×240' not in row['name'])
     assert receipt['identity']['engineering_evidence_imported'] is with_evidence
     if with_evidence:
         with monkeypatch.context() as absent:
@@ -165,6 +165,14 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     assert len(type_runs)>=6
     assert all(item['status'] in ('succeeded','partial') for item in type_runs)
     assert all(any(m.get('run') and m['title']=='标准核对' for m in item['modules']) for item in receipt['types'])
+    teaching = next(item for item in receipt['types'] if '3×240' in item['name'])
+    assert teaching['resource_bindings']['bound'] >= 1
+    assert teaching['resource_bindings']['unbound']
+    assert all(item['reason'] for item in teaching['resource_bindings']['unbound'])
+    assert teaching['review']['teaching'] and not teaching['review']['ready']
+    assert len(teaching['review']['blockers']) > 0
+    assert len([item for item in teaching['review']['blockers'] if item['id'].endswith(':screen-area')]) == 3
+    assert all('· 自动收敛 · 自动收敛' not in item['title'] for item in receipt['studies'])
     fem=next(row for row in receipt['studies'] if '有限元温度场' in row['title'])
     if with_evidence:
         assert fem['run'] and fem['saved_evidence']['job_id']=='811855'
@@ -178,7 +186,14 @@ def test_first_release_seed_is_offline_isolated_and_idempotent(tmp_path, monkeyp
     hv=next(row for row in receipt['studies'] if '110 kV' in row['title'])
     assert hv['run'] and hv['ready'] and hv['status']=='succeeded'
     with closing(sqlite3.connect(database)) as connection:
-        assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == (5 if with_evidence else 4)
+        assert connection.execute('SELECT COUNT(*) FROM workspaces').fetchone()[0] == (6 if with_evidence else 5)
+        teaching_state = json.loads(connection.execute('SELECT state FROM workspaces WHERE id=?',(teaching['workspace'],)).fetchone()[0])
+        assert len(teaching_state['domain']['measurements']) == 12
+        assert all(json.loads(item['source']['reference'])['label']=='教学示例实测' for item in teaching_state['domain']['measurements'])
+        overlaps=[source for key,source in teaching_state['domain']['provenance'].items()
+                  if key.startswith('/factory_measurements/') and key.endswith('/minimum_overlap')]
+        assert len(overlaps)==3 and all(json.loads(item['reference'])['label']=='教学示例实测' for item in overlaps)
+        assert connection.execute('SELECT COUNT(*) FROM engineering_type_releases WHERE workspace=?',(teaching['workspace'],)).fetchone()[0] == 0
         assert connection.execute("SELECT COUNT(*) FROM study_runs WHERE status IN ('succeeded','partial')").fetchone()[0] == 3+len(type_runs)+(8 if with_evidence else 0)+(7 if imported_chengnan else 0)
         if has_chengnan:
             single=next(s for s in receipt['studies'] if '波纹品字形有限元' in s['title'])

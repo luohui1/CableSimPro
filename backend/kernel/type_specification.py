@@ -164,11 +164,16 @@ def missing_reason(payload, channel):
 
 
 def parameter_table(rows, empty, short_circuit=False):
+    def displayed(row):
+        impedance=row.get('complex_ohm_m')
+        if impedance is not None:
+            real,imaginary=impedance['real']*1000,impedance['imaginary']*1000
+            return [number(real,3)+' '+('−' if imaginary<0 else '+')+' j'+number(abs(imaginary),3),'Ω/km']
+        return quantity(row.get('value'),row.get('unit'),short_circuit)
     return table(
         ['参数 / 组件', '数值', '单位', '结果与依据'],
-        [[row['title'], *quantity(row.get('value'), row.get('unit'), short_circuit),
-          '；'.join(filter(None, [STATUS_NAMES.get(row['status'], row['status']), row.get('standard'),
-                                 row.get('clause'), human_note(row.get('reason'))]))] for row in rows],
+        [[row['title'], *displayed(row),
+          '；'.join(filter(None, [STATUS_NAMES.get(row['status'], row['status']),(row.get('citation') or ' · '.join(filter(None,[row.get('standard'),row.get('clause')]))).replace('4 amendment','第 4 章（修订 1）'),human_note(row.get('reason'))]))] for row in rows],
         empty, [2.1, 1.1, 1, 3.8],
     )
 
@@ -259,7 +264,7 @@ def check_tables(standards, checks, document=None):
         body += '<h3>实测记录与来源</h3>' + table(['核对项目', '来源类别', '样品编号', '测量日期', '方法与记录出处'], measured, widths=[1.5,1.1,1.1,1,2.5])
         body += '<p class="spec-note">教学示例实测仅用于流程演示，不是厂家检验报告；标准值和标称设计值不作为实测值。</p>'
     if checks is not None:
-        body += '<h3>发布前待完成事项</h3>' + table(['校核事项'], [[human_note(check['message'])] for check in checks], '当前未发现阻止发布的计算校核项；批准状态仍以签署记录为准。')
+        body += '<h3>发布前待完成事项</h3>' + table(['校核事项'], [[human_note(check['message'])] for check in checks if check.get('blocking',True)], '当前未发现阻止发布的计算校核项；批准状态仍以签署记录为准。')
     return body
 
 
@@ -412,6 +417,11 @@ def chapter_bodies(payload, lifecycle, audience='internal'):
     cover += '<p class="spec-note">签字栏供人工填写；电子批准及发布状态以系统记录为准。</p>'
     if not internal and lifecycle['status'] != 'published':
         cover += '<p class="spec-note">客户版编制草稿 · 未批准发布。</p>'
+    excluded = payload.get('release_exclusions', [])
+    if excluded:
+        cover += '<h3>本次发布不含项</h3>' + table(['项目', '范围声明及原因', '声明人'],
+            [[item['title'], item['reason'], item['reviewer']] for item in excluded])
+        cover += '<p class="spec-note">上述项目未取得本次发布的计算结论；不得据此声称满足相应工程要求。</p>'
     version_status = lifecycle.get('version_status', {})
     if version_status.get('status') == 'stale':
         reasons = list(dict.fromkeys(human_note(reason.get('message')) for reason in version_status.get('reasons', []) if reason.get('message')))

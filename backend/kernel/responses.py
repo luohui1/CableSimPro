@@ -74,13 +74,17 @@ class TaskOption(PublicResponse):
     limitations: list[str]
 
 
-class PreflightIssue(PublicResponse):
+class InputPreflightIssue(PublicResponse):
     code: str = Field(description='Stable validation code.')
     message: str = Field(description='Human-readable correction.')
     path: str = Field(description='RFC 6901 JSON Pointer relative to the domain input; /parameters addresses method parameters. Array indices are zero-based, object keys escape ~ and /. No physical unit.')
 
 
-class PreflightError(PreflightIssue):
+# Preserve Python imports; the foundation package has a different issue contract.
+PreflightIssue = InputPreflightIssue
+
+
+class PreflightError(InputPreflightIssue):
     issues: list[PreflightIssue] = Field(default_factory=list, description='Individual invalid fields, each independently navigable.')
 
 

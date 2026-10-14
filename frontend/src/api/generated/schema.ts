@@ -3550,7 +3550,7 @@ export interface components {
             file: string;
         };
         /** Bonding */
-        "Bonding-Input": {
+        Bonding: {
             /**
              * Kind
              * @enum {string}
@@ -3568,28 +3568,7 @@ export interface components {
              * @description 每小段中三条连续护套支路所处的位置索引（0,1,2）；顺序与 minor_section_lengths 的 m 值相同
              */
             section_permutations?: number[][];
-            source?: components["schemas"]["Source-Input"] | null;
-        };
-        /** Bonding */
-        "Bonding-Output": {
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "both_ends" | "single_point" | "cross_bonded" | "none" | "unspecified";
-            /** Minor Section Lengths */
-            minor_section_lengths?: number[];
-            /**
-             * Transposed
-             * @default false
-             */
-            transposed?: boolean;
-            /**
-             * Section Permutations
-             * @description 每小段中三条连续护套支路所处的位置索引（0,1,2）；顺序与 minor_section_lengths 的 m 值相同
-             */
-            section_permutations?: number[][];
-            source?: components["schemas"]["cablesim_sdk__domain__Source"] | null;
+            source?: components["schemas"]["Source"] | null;
         };
         /** Branch */
         Branch: {
@@ -3762,7 +3741,7 @@ export interface components {
             specification?: components["schemas"]["PublishedSpecification"] | null;
             /** Sources */
             sources: {
-                [key: string]: components["schemas"]["Source-Input"];
+                [key: string]: components["schemas"]["Source"];
             };
             /**
              * Confirmed
@@ -3782,7 +3761,7 @@ export interface components {
             specification?: components["schemas"]["PublishedSpecification"] | null;
             /** Sources */
             sources: {
-                [key: string]: components["schemas"]["cablesim_sdk__domain__Source"];
+                [key: string]: components["schemas"]["Source"];
             };
             /**
              * Confirmed
@@ -4191,8 +4170,8 @@ export interface components {
             cable_type: string;
             /** Cables */
             cables: components["schemas"]["CableInstance"][];
-            bonding: components["schemas"]["Bonding-Input"];
-            electrical_topology?: components["schemas"]["PhaseTopology-Input"] | null;
+            bonding: components["schemas"]["Bonding"];
+            electrical_topology?: components["schemas"]["PhaseTopology"] | null;
         };
         /** Circuit */
         "Circuit-Output": {
@@ -4205,8 +4184,8 @@ export interface components {
             cable_type: string;
             /** Cables */
             cables: components["schemas"]["CableInstance"][];
-            bonding: components["schemas"]["Bonding-Output"];
-            electrical_topology?: components["schemas"]["PhaseTopology-Output"] | null;
+            bonding: components["schemas"]["Bonding"];
+            electrical_topology?: components["schemas"]["PhaseTopology"] | null;
         };
         /** CircularLayer */
         CircularLayer: {
@@ -4512,7 +4491,7 @@ export interface components {
             } | components["schemas"]["TransientParameters-Input"] | components["schemas"]["SheathLossParameters-Input"] | components["schemas"]["CoupledParameters-Input"];
             /** Input Sources */
             input_sources?: {
-                [key: string]: components["schemas"]["Source-Input"];
+                [key: string]: components["schemas"]["Source"];
             };
             /** Candidate Completions */
             candidate_completions?: {
@@ -5013,10 +4992,10 @@ export interface components {
             };
             /** Provenance */
             provenance?: {
-                [key: string]: components["schemas"]["Source-Input"];
+                [key: string]: components["schemas"]["Source"];
             };
             /** Measurements */
-            measurements?: components["schemas"]["FactoryMeasurement-Input"][];
+            measurements?: components["schemas"]["FactoryMeasurement"][];
         };
         /** DomainDocument */
         "DomainDocument-Output": {
@@ -5044,10 +5023,10 @@ export interface components {
             };
             /** Provenance */
             provenance?: {
-                [key: string]: components["schemas"]["cablesim_sdk__domain__Source"];
+                [key: string]: components["schemas"]["Source"];
             };
             /** Measurements */
-            measurements?: components["schemas"]["FactoryMeasurement-Output"][];
+            measurements?: components["schemas"]["FactoryMeasurement"][];
         };
         /** DraftCableType */
         DraftCableType: {
@@ -5097,10 +5076,10 @@ export interface components {
             };
             /** Provenance */
             provenance?: {
-                [key: string]: components["schemas"]["Source-Input"];
+                [key: string]: components["schemas"]["Source"];
             };
             /** Measurements */
-            measurements?: components["schemas"]["FactoryMeasurement-Input"][];
+            measurements?: components["schemas"]["FactoryMeasurement"][];
         };
         /** Driver */
         Driver: {
@@ -5518,7 +5497,7 @@ export interface components {
          * FactoryMeasurement
          * @description Reported product data is independent of design geometry and material facts.
          */
-        "FactoryMeasurement-Input": {
+        FactoryMeasurement: {
             /** Id */
             id: string;
             /** Cable Type */
@@ -5547,42 +5526,7 @@ export interface components {
              * @enum {string}
              */
             basis: "measurement" | "manufacturer_limit";
-            source: components["schemas"]["Source-Input"];
-        };
-        /**
-         * FactoryMeasurement
-         * @description Reported product data is independent of design geometry and material facts.
-         */
-        "FactoryMeasurement-Output": {
-            /** Id */
-            id: string;
-            /** Cable Type */
-            cable_type: string;
-            /** Core */
-            core?: string | null;
-            /**
-             * Role
-             * @enum {string}
-             */
-            role: "conductor" | "insulation" | "conductor_screen" | "insulation_screen" | "metallic_screen" | "metallic_sheath" | "bedding" | "separator" | "armour" | "oversheath";
-            /**
-             * Quantity
-             * @enum {string}
-             */
-            quantity: "r20" | "minimum_thickness" | "maximum_thickness" | "mean_thickness" | "minimum_tape_thickness" | "mean_wire_diameter" | "screen_area";
-            /** Value */
-            value: number;
-            /**
-             * Unit
-             * @enum {string}
-             */
-            unit: "ohm/m" | "m" | "m2";
-            /**
-             * Basis
-             * @enum {string}
-             */
-            basis: "measurement" | "manufacturer_limit";
-            source: components["schemas"]["cablesim_sdk__domain__Source"];
+            source: components["schemas"]["Source"];
         };
         /** FemChapterReference */
         FemChapterReference: {
@@ -5876,6 +5820,13 @@ export interface components {
             /** Created */
             created: string | null;
         };
+        /** IndexSource */
+        IndexSource: {
+            /** Kind */
+            kind: string;
+            /** Label */
+            label: string;
+        };
         /** InputContract */
         InputContract: {
             method: components["schemas"]["Method"];
@@ -5977,6 +5928,26 @@ export interface components {
         InputFieldErrorResponse: {
             /** Detail */
             detail: components["schemas"]["InputFieldError"][];
+        };
+        /** InputPreflightIssue */
+        InputPreflightIssue: {
+            /**
+             * Code
+             * @description Stable validation code.
+             */
+            code: string;
+            /**
+             * Message
+             * @description Human-readable correction.
+             */
+            message: string;
+            /**
+             * Path
+             * @description RFC 6901 JSON Pointer relative to the domain input; /parameters addresses method parameters. Array indices are zero-based, object keys escape ~ and /. No physical unit.
+             */
+            path: string;
+        } & {
+            [key: string]: unknown;
         };
         /** Installation */
         Installation: {
@@ -6566,7 +6537,7 @@ export interface components {
             /** Revision */
             revision?: number | null;
             status: components["schemas"]["Status"];
-            source?: components["schemas"]["Source"] | null;
+            source?: components["schemas"]["IndexSource"] | null;
             /** Updated */
             updated: string | null;
             parent?: components["schemas"]["Parent"] | null;
@@ -6691,7 +6662,7 @@ export interface components {
             size_bytes: number;
         };
         /** PhaseTopology */
-        "PhaseTopology-Input": {
+        PhaseTopology: {
             /**
              * Phase Sequence
              * @enum {string}
@@ -6702,21 +6673,7 @@ export interface components {
              * @description A/L1 相相角，rad；所有回路共用同一时间参考
              */
             reference_angle_rad: number;
-            source: components["schemas"]["Source-Input"];
-        };
-        /** PhaseTopology */
-        "PhaseTopology-Output": {
-            /**
-             * Phase Sequence
-             * @enum {string}
-             */
-            phase_sequence: "ABC" | "ACB";
-            /**
-             * Reference Angle Rad
-             * @description A/L1 相相角，rad；所有回路共用同一时间参考
-             */
-            reference_angle_rad: number;
-            source: components["schemas"]["cablesim_sdk__domain__Source"];
+            source: components["schemas"]["Source"];
         };
         /** Pin */
         Pin: {
@@ -6759,7 +6716,7 @@ export interface components {
              * Issues
              * @description Individual invalid fields, each independently navigable.
              */
-            issues?: components["schemas"]["backend__kernel__responses__PreflightIssue"][];
+            issues?: components["schemas"]["InputPreflightIssue"][];
         } & {
             [key: string]: unknown;
         };
@@ -7394,6 +7351,11 @@ export interface components {
              * @default true
              */
             temperature_only_levels?: boolean;
+            /**
+             * Calculate Final Rating
+             * @default false
+             */
+            calculate_final_rating?: boolean;
             /** Continue From */
             continue_from?: string | null;
             /**
@@ -8509,13 +8471,6 @@ export interface components {
         };
         /** Source */
         Source: {
-            /** Kind */
-            kind: string;
-            /** Label */
-            label: string;
-        };
-        /** Source */
-        "Source-Input": {
             /**
              * Kind
              * @enum {string}
@@ -8580,6 +8535,12 @@ export interface components {
              * @default false
              */
             budget_confirmed?: boolean;
+            /** Preload */
+            preload?: boolean | null;
+            /** History */
+            history?: {
+                [key: string]: unknown;
+            }[] | null;
         };
         /** StudyCardResponse */
         StudyCardResponse: {
@@ -8690,7 +8651,7 @@ export interface components {
             } | components["schemas"]["TransientParameters-Input"] | components["schemas"]["SheathLossParameters-Input"] | components["schemas"]["CoupledParameters-Input"];
             /** Input Sources */
             input_sources?: {
-                [key: string]: components["schemas"]["Source-Input"];
+                [key: string]: components["schemas"]["Source"];
             };
             /** Candidate Completions */
             candidate_completions?: {
@@ -8733,7 +8694,7 @@ export interface components {
             } | components["schemas"]["TransientParameters-Output"] | components["schemas"]["SheathLossParameters-Output"] | components["schemas"]["CoupledParameters-Output"];
             /** Input Sources */
             input_sources?: {
-                [key: string]: components["schemas"]["cablesim_sdk__domain__Source"];
+                [key: string]: components["schemas"]["Source"];
             };
             /** Candidate Completions */
             candidate_completions?: {
@@ -8776,7 +8737,7 @@ export interface components {
             } | components["schemas"]["TransientParameters-Output"] | components["schemas"]["SheathLossParameters-Output"] | components["schemas"]["CoupledParameters-Output"];
             /** Input Sources */
             input_sources?: {
-                [key: string]: components["schemas"]["cablesim_sdk__domain__Source"];
+                [key: string]: components["schemas"]["Source"];
             };
             /** Candidate Completions */
             candidate_completions?: {
@@ -9300,7 +9261,7 @@ export interface components {
             } | components["schemas"]["TransientParameters-Input"] | components["schemas"]["SheathLossParameters-Input"] | components["schemas"]["CoupledParameters-Input"];
             /** Input Sources */
             input_sources?: {
-                [key: string]: components["schemas"]["Source-Input"];
+                [key: string]: components["schemas"]["Source"];
             };
             /** Candidate Completions */
             candidate_completions?: {
@@ -9502,49 +9463,11 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
-        /** PreflightIssue */
-        backend__kernel__responses__PreflightIssue: {
-            /**
-             * Code
-             * @description Stable validation code.
-             */
-            code: string;
-            /**
-             * Message
-             * @description Human-readable correction.
-             */
-            message: string;
-            /**
-             * Path
-             * @description RFC 6901 JSON Pointer relative to the domain input; /parameters addresses method parameters. Array indices are zero-based, object keys escape ~ and /. No physical unit.
-             */
-            path: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /** Source */
-        cablesim_sdk__domain__Source: {
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "demo" | "user" | "manufacturer" | "standard" | "measurement" | "derived" | "asset";
-            /** Reference */
-            reference?: string | null;
-            /**
-             * Reviewed
-             * @default false
-             */
-            reviewed?: boolean;
-        };
-        Bonding: components["schemas"]["Bonding-Input"];
         CableModelVersion: components["schemas"]["CableModelVersion-Input"];
         CableType: components["schemas"]["CableType-Input"];
         Circuit: components["schemas"]["Circuit-Input"];
         CoupledParameters: components["schemas"]["CoupledParameters-Input"];
         DomainDocument: components["schemas"]["DomainDocument-Input"];
-        FactoryMeasurement: components["schemas"]["FactoryMeasurement-Input"];
-        PhaseTopology: components["schemas"]["PhaseTopology-Input"];
         Section: components["schemas"]["Section-Input"];
         SheathLossParameters: components["schemas"]["SheathLossParameters-Input"];
         StudyConfiguration: components["schemas"]["StudyConfiguration-Input"];
@@ -10204,7 +10127,9 @@ export interface operations {
     };
     methods_api_methods_get: {
         parameters: {
-            query?: never;
+            query?: {
+                view?: "full" | "summary";
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -10218,6 +10143,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -11305,7 +11239,10 @@ export interface operations {
     };
     delivery_api_workspaces__wid__deliveries__did__get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description summary returns verified structure and source digests; full includes saved HTML/PDF attachments. */
+                view?: "full" | "summary";
+            };
             header?: never;
             path: {
                 wid: string;
@@ -11321,7 +11258,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeliveryResult"];
+                    "application/json": components["schemas"]["DeliveryResult"] | components["schemas"]["DeliveryReceipt"];
                 };
             };
             /** @description Not Found */
@@ -16256,6 +16193,7 @@ export interface operations {
         parameters: {
             query?: {
                 audience?: "customer" | "internal";
+                view?: "full" | "detail";
             };
             header?: never;
             path: {
@@ -16426,6 +16364,7 @@ export interface operations {
             query?: {
                 after?: number;
                 limit?: number;
+                recent?: boolean;
             };
             header?: never;
             path: {
@@ -16952,7 +16891,9 @@ export interface operations {
     };
     results_api_design_workspaces__wid__rating_table_runs__rid__get: {
         parameters: {
-            query?: never;
+            query?: {
+                view?: "full" | "rows";
+            };
             header?: never;
             path: {
                 wid: string;

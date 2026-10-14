@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {once} from 'node:events';
+import {randomUUID} from 'node:crypto';
 import {expect as expectBase} from '@playwright/test';
 import {openHeadlessBrowser,outputRoot,settle} from './browser.mjs';
 import {currentSelection,request} from './research-fixtures.mjs';
@@ -10,6 +11,65 @@ import {assertLayout} from './layout-assertions.mjs';
 if(process.env.E2E_ISOLATED!=='1')throw Error('Requires isolated database');
 const base=process.env.FRONTEND_URL,out=path.join(outputRoot,'report-pdf');
 await fs.mkdir(out,{recursive:true});
+if(process.env.REPORT_SAVED_IEC==='1'){
+  // Reuse the published engineering input in a private copy, explicitly adopt
+  // the installed IEC release, then execute the actual algebraic plugin. No FEM
+  // solve or constructed output is involved in this paper check.
+  if(process.env.E2E_DEV!=='1')throw Error('绘图导出验收需要真实开发模块入口');
+  const directory=path.resolve(process.env.REPORT_PDF_OUTPUT || out);
+  await fs.mkdir(directory,{recursive:true});
+  const wid='da924def-cbfe-4f1b-8378-8ea05f472359',sid='5683f7af-2444-467b-a7ad-79c536bda854';
+  const root=`/api/workspaces/${wid}`,prefix=`${root}/studies/${sid}`;
+  let study=await request(base,prefix);
+  const workspace=await request(base,root),definition=structuredClone(study.definition);
+  const methods=await request(base,'/api/methods?view=summary');
+  const method=methods.find(row=>row.method.plugin_id===definition.method.plugin_id&&row.capabilities.some(c=>c.id===definition.method.capability));
+  assert.ok(method,'发布输入对应的真实 IEC 能力仍在安装目录');
+  definition.method={...method.method,capability:definition.method.capability};
+  study=await request(base,prefix,'PUT',{...definition,expected_revision:workspace.revision,expected_study_revision:study.revision});
+  const preflight=await request(base,prefix+`/preflight?expected_revision=${workspace.revision}&expected_study_revision=${study.revision}`);
+  assert.equal(preflight.ready,true,JSON.stringify(preflight.cases));
+  let run=await request(base,prefix+'/runs','POST',{request_id:randomUUID(),expected_revision:workspace.revision,expected_study_revision:study.revision,lock_digest:preflight.lock_digest,scope_acknowledged:true});
+  while(['accepted','running','validating'].includes(run.status)){
+    await new Promise(resolve=>setTimeout(resolve,500));
+    run=await request(base,prefix+'/runs/'+run.id+'?view=full');
+  }
+  assert.equal(run.status,'succeeded');assert.equal(run.integrity,'verified');assert.equal(run.freshness,'current');
+  assert.ok(run.output.cases.some(row=>row.artifacts?.['x-cablesim.temperature-field']?.source?.binding==='iec-trace'));
+  const session=await openHeadlessBrowser(),{page}=session;
+  const report={run_id:run.id,input_digest:run.input_digest,output_digest:run.output_digest,checks:[],errors:[]};
+  page.on('pageerror',error=>report.errors.push(error.message));
+  page.on('dialog',dialog=>dialog.dismiss());
+  try{
+    await page.setViewportSize({width:1366,height:768});
+    // Render the same saved-input drawing on a stable application surface;
+    // first-study URL normalization must finish before a dynamic module import.
+    await page.goto(base+'/resources/cables');await settle(page);
+    console.log('真实 IEC 运行已保存；导出保存输入的截面。');
+    const sections=await page.evaluate(async frozen=>{
+      const drawing=await import('/src/components/study-report-drawing.tsx');
+      return drawing.reportSectionImages(frozen);
+    },run);
+    assert.ok(sections.length,'同一工作台绘图导出真实保存截面');
+    const start=performance.now();
+    const book=await request(base,root+'/deliveries/current','POST',{run_ids:[run.id],request_id:randomUUID(),section_images:sections});
+    report.generation_ms=Math.round(performance.now()-start);report.delivery_id=book.id;
+    assert.match(book.html,/IEC 解析土壤场投影/);
+    for(const audience of ['customer','internal']){
+      const response=await fetch(base+root+`/deliveries/${book.id}/pdf?audience=${audience}`);
+      assert.equal(response.status,200);
+      const bytes=Buffer.from(await response.arrayBuffer());assert.equal(bytes.subarray(0,5).toString(),'%PDF-');
+      await fs.writeFile(path.join(directory,audience+'.pdf'),bytes);
+      report.checks.push(`${audience}：真实保存 IEC 运行、同一绘图截面、已核验解析土壤场与独立 PDF 下载`);
+    }
+    await page.goto(base+`/studies/${sid}/report/preview?workspace=${wid}&run=${run.id}&delivery=${book.id}`);
+    await expectBase(page.locator('iframe[title="计算书预览"]')).toHaveAttribute('src',/^blob:/,{timeout:60000});
+    await page.screenshot({path:path.join(directory,'preview-1366.png')});
+    assert.deepEqual(report.errors,[]);
+  }catch(error){report.failure=error.message;throw error;}
+  finally{await fs.writeFile(path.join(directory,'verification.json'),JSON.stringify(report,null,2));await session.close();}
+  console.log(JSON.stringify(report,null,2));
+}else{
 const expect=expectBase.configure({timeout:60000});
 const archiveOnly=process.env.REPORT_ARCHIVE_ONLY==='1';
 console.log(archiveOnly?'使用已封存运行验证 PDF 与预览，不调用求解':'读取真实 IEC 当前结果与 PDF 交付');
@@ -89,3 +149,4 @@ try{
 }catch(error){report.failure={message:error.message,page:await page.locator('body').innerText().catch(()=>'' )};throw error;}
 finally{await fs.writeFile(path.join(out,archiveOnly?'archive-verification.json':'verification.json'),JSON.stringify(report,null,2));await session.close();}
 console.log(JSON.stringify({checks:report.checks,variants:report.variants.length,errors:report.errors},null,2));
+}

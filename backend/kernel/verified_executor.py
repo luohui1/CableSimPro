@@ -1,24 +1,19 @@
-"""Research-local seal reuse; every execution rehashes actual source bytes.
+"""Execution-side seal reuse; every execution rehashes actual source bytes.
 
 No mtime-only trust and no persistent trusted bit. A content-identical import
-tree may reuse its full manifest/dependency check; a changed tree must reverify.
+tree may reuse the host's immutable seal receipt; a changed tree must reverify.
 Read-only resolves within one request share that request's verified snapshot.
 """
-from hashlib import sha256
-import json
-import os
-from pathlib import Path
 from threading import RLock
 from contextlib import contextmanager
 from contextvars import ContextVar
 from concurrent.futures import ThreadPoolExecutor
-from contextlib import suppress
 
 from ..plugin_host import Executor, PluginHostError
 from .source_watch import defer_close
 from ..plugin_host.registry import Registry
-from ..plugin_host.dependencies import LOCK_PATH
-from .workspace import fingerprint, stamp
+from .workspace import fingerprint
+from ..plugin_host.verification_receipts import source_digest, verify as verified_receipt
 
 _scope=ContextVar('research_seal_scope',default=None)
 
@@ -39,105 +34,6 @@ def verification_scope():
         _scope.reset(token)
 
 
-def source_inventory(root, workers):
-    """One scandir pass: DirEntry metadata avoids repeated Windows stat calls."""
-    directories=set();inventory=set();entries={}
-    def visit(directory, relative, found):
-        dirs,modules,files=found
-        dirs.add(relative)
-        with os.scandir(directory) as children:
-            for entry in children:
-                if entry.name=='__pycache__':continue
-                name=relative+'/'+entry.name
-                if entry.is_symlink():
-                    raise PluginHostError('UNSAFE_PACKAGE_PATH','封签来源不允许符号链接。',409)
-                if entry.is_dir(follow_symlinks=False):visit(entry.path,name,found)
-                elif entry.is_file(follow_symlinks=False):
-                    files[name]=entry.path
-                    if entry.name.endswith('.py'):modules.add(name)
-    sources=['backend','cablesim_sdk']
-    try:
-        with os.scandir(root/'plugins') as plugins:
-            sources.extend('plugins/'+entry.name+'/src' for entry in plugins if entry.is_dir())
-    except FileNotFoundError:pass
-    def inspect(relative):
-        found=(set(),set(),{})
-        source=os.path.join(root,*relative.split('/'))
-        if os.path.islink(source):raise PluginHostError('UNSAFE_PACKAGE_PATH','封签来源目录不允许符号链接。',409)
-        try:visit(source,relative,found)
-        except FileNotFoundError:
-            found[0].discard(relative)
-        return found
-    for dirs,modules,files in workers.map(inspect,sources):
-        directories.update(dirs);inventory.update(modules);entries.update(files)
-    return directories,inventory,entries
-
-
-def source_digest(plugin, shared=None):
-    if shared is None:
-        with ThreadPoolExecutor(max_workers=4) as workers:
-            return _source_digest(plugin,{'readers':workers})
-    if 'readers' not in shared:shared['readers']=ThreadPoolExecutor(max_workers=4)
-    return _source_digest(plugin,shared)
-
-
-def _source_digest(plugin, shared):
-    root=plugin.directory.parent.parent.resolve()
-    if root not in shared:shared[root]=(*source_inventory(root,shared['readers']),{})
-    directories,inventory,entries,contents=shared[root]
-    prefix=plugin.directory.relative_to(root).as_posix()+'/src/'
-    files={name for name in entries if name.startswith(prefix) and not name.endswith('.pyc')}
-    # Assets are sealed but intentionally outside the Python import inventory.
-    def package_files(directory, relative):
-        try:
-            with os.scandir(directory) as children:
-                for entry in children:
-                    if entry.name=='__pycache__':continue
-                    name=relative+'/'+entry.name
-                    if entry.is_symlink():raise PluginHostError('UNSAFE_PACKAGE_PATH','封签来源文件不允许符号链接。',409)
-                    if entry.is_dir(follow_symlinks=False):package_files(entry.path,name)
-                    elif entry.is_file(follow_symlinks=False) and not name.endswith('.pyc'):
-                        files.add(name);entries[name]=entry.path
-        except FileNotFoundError:pass
-    if not files:package_files(plugin.directory/'src',prefix.rstrip('/'))
-    package_files(plugin.directory/'assets',plugin.directory.relative_to(root).as_posix()+'/assets')
-    lock=plugin.directory/LOCK_PATH
-    try:lock_bytes=lock.read_bytes()
-    except FileNotFoundError:lock_bytes=None
-    if lock_bytes is not None:
-        try:
-            contents[lock.relative_to(root).as_posix()]=sha256(lock_bytes).hexdigest()
-            for record in json.loads(lock_bytes):
-                name=record['path']
-                if not isinstance(name,str) or '\\' in name or any(part in ('','..','.') for part in name.split('/')) or ':' in name:
-                    raise ValueError('dependency outside source root')
-                if name not in entries and not (root/name).resolve().is_relative_to(root):raise ValueError('dependency outside source root')
-                files.add(name)
-        except (ValueError,KeyError,TypeError) as exc:
-            raise PluginHostError('HOST_DEPENDENCIES_MISMATCH','宿主依赖封签格式或路径无效。',409) from exc
-    pending=[]
-    for name in sorted(files):
-        if name not in contents:
-            path=entries.get(name)
-            if path is None:
-                path=root/name
-                if path.is_symlink():raise PluginHostError('UNSAFE_PACKAGE_PATH','封签来源文件不允许符号链接。',409)
-                if not path.is_file():raise PluginHostError('HOST_DEPENDENCIES_MISMATCH','封签引用的源码文件已删除。',409)
-            pending.append((name,path))
-    # Bounded parallel file reads hide local filesystem latency, not computation.
-    # map finishes these reads before returning; the shared pool closes with the host.
-    if len(pending)>8:
-        contents.update(shared['readers'].map(read_digest,pending))
-    else:contents.update(map(read_digest,pending))
-    records=[(name,contents[name]) for name in sorted(files)]
-    # Unchanged importer bytes plus unchanged module inventory preserve the
-    # verified static import closure; unrelated modules need not be read again.
-    return fingerprint({'files':records,'directories':sorted(directories),'import_inventory':sorted(inventory)})
-
-
-def read_digest(item):
-    name,path=item
-    with open(path,'rb') as file:return name,sha256(file.read()).hexdigest()
 
 
 class SealCache:
@@ -183,17 +79,14 @@ class SealCache:
                     self.unchanged[(directory,release)]=(generation,previous)
                 if scope is not None:scope[scope_key]=previous
                 return {**previous,'cache_hit':True,'request_snapshot_reused':False}
-            plugin.verify()
-            if source_digest(plugin,{'readers':self.readers})!=content:
-                raise PluginHostError('RELEASE_CHANGED','封签核验期间文件发生变化，请完成发布后重试。',409)
-            record={'status':'verified','release_digest':release,'source_tree_sha256':content,
-                    'verified_at':stamp(),'policy':'content-and-import-inventory/1'}
+            receipt=verified_receipt(plugin,plugin._verify,content=content,readers=self.readers)
+            record={name:value for name,value in receipt.items() if name!='cache_hit'}
             if len(self.records)>=32:self.records.clear();self.unchanged.clear()
             self.records[key]=record
             if generation is not None and watch.snapshot()==generation:
                 self.unchanged[(directory,release)]=(generation,record)
             if scope is not None:scope[scope_key]=record
-            return {**record,'cache_hit':False,'request_snapshot_reused':False}
+            return {**record,'cache_hit':receipt['cache_hit'],'request_snapshot_reused':False}
 
 
 class VerifiedExecutor(Executor):

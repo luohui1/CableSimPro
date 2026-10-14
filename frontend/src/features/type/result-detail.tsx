@@ -5,7 +5,7 @@ import { displayName } from '@/lib/display-names';
 
 /** Display only saved evidence. This does not evaluate or change a formula. */
 export function resultCitation(row: Record<string, unknown>) {
-  const clause = text(row.clause).replace(/[；;]/g, ' ').replace(/\s+/g, ' ').trim();
+  const clause = text(row.clause).replace(/4 amendment/g,'第 4 章（修订 1）').replace(/[；;]/g, ' ').replace(/\s+/g, ' ').trim();
   const printed = numeric(row.printed_page), pdf = numeric(row.pdf_page);
   return [text(row.standard), clause].filter(Boolean).join(' ') +
     (printed === null ? ' · 本库暂未收录 · 下一轮' : ` · 第 ${printed} 页`) +

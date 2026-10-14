@@ -4,6 +4,8 @@ import importlib.util
 import json
 from pathlib import Path
 from uuid import uuid4
+from functools import lru_cache
+from tempfile import TemporaryDirectory
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,8 +24,21 @@ spec2.loader.exec_module(standard)
 PUBLIC = json.loads((ROOT/'tests/fixtures/standard_check_cases.json').read_text('utf-8'))
 
 
+@lru_cache(maxsize=1)
+def real_short_basis():
+    from backend.kernel.requirements import lookup_references
+    from cablesim_type_electrical.short_basis import queries
+    with TemporaryDirectory() as directory, TestClient(create_app(Path(directory)/'basis.sqlite')) as client:
+        references,missing=lookup_references(client.app.state.research,queries())
+        assert not missing,missing
+        return references
+
+
 def params(**values):
-    return {'cable_type_id': 'cable_type/public', **values, 'sources': {key: '独立手算条件；非厂家试验结果' for key in values}}
+    result={'cable_type_id': 'cable_type/public', **values, 'sources': {key: '独立手算条件；非厂家试验结果' for key in values}}
+    if any(key in values for key in ('duration_s','metal_initial_temperature_k','initial_temperature_k')):
+        result['basis_references']=deepcopy(real_short_basis())
+    return result
 
 
 def row(result, key):
@@ -57,7 +72,7 @@ def test_tb880_printed_resistance_intermediates_not_thermal_rating():
     assert row(result, 'ac')['value'] == pytest.approx(3.952152638e-5, rel=1e-6)
     # IEC 2023 uses 2π ε0, not the earlier 1/18 coefficient printed by TB 880.
     assert row(result, 'capacitance')['value'] != pytest.approx(2.11076622e-10, rel=1e-5, abs=0)
-    assert row(result, 'positive-sequence')['status'] == 'uncovered'
+    assert row(result, 'positive-sequence')['status'] == 'missing'
     assert row(result, 'zero-sequence')['value'] is None
 
 
@@ -236,7 +251,7 @@ def test_independent_lead_sheath_hand_calculation():
     assert row(result,'metallic_sheath-adiabatic')['value'] == pytest.approx(1706.7369528732804,abs=1e-8)
     assert row(result,'metallic_sheath-factor')['formula_inputs']['M_s_minus_half'] == pytest.approx(1400/2900)
     assert row(result,'metallic_sheath-factor')['value'] == pytest.approx(1.5285124277338144,abs=1e-10)
-    assert row(result,'parallel-fault-sharing')['status'] == 'uncovered'
+    assert row(result,'parallel-fault-sharing')['status'] == 'missing'
 
 
 def test_smooth_aluminium_design_area_and_short_circuit_match_decimal_hand_calculation():
@@ -266,7 +281,7 @@ def test_isolated_wires_use_per_wire_area_not_total_screen_area():
     document = tb_document()
     screen = {'role':'metallic_screen','material':'material/cu','form':'wires','thickness':.001,'wire_diameter':.001,'wire_count':50,'screen_inner_diameter':.0669}
     document['cable_types'][0]['common_layers'][3] = screen
-    p = params(duration_s=1,metal_initial_temperature_k=363.15,metal_final_temperature_k=523.15,inner_thermal_resistivity=3.5,inner_volumetric_heat_capacity=2.4e6)
+    p = params(duration_s=1,metal_initial_temperature_k=363.15,metal_final_temperature_k=523.15,inner_thermal_resistivity=3.5,inner_volumetric_heat_capacity=2.4e6,contact_factor=.7)
     p['wire_contact'] = 'fully_embedded'
     a = plugin.calculate(document,p,'short-circuit')
     screen['wire_count'] = 100
@@ -287,7 +302,8 @@ def test_shared_electrical_topology_is_captured_without_inventing_impedance():
     result = plugin.calculate(document,p,'electrical')
     assert result['electrical_topology']['electrical_topology']['phase_sequence'] == 'ACB'
     assert row(result,'zero-sequence')['value'] is None
-    assert '已复用' in row(result,'zero-sequence')['reason']
+    assert row(result,'zero-sequence')['status']=='missing'
+    assert 'bonding_model' in row(result,'zero-sequence')['missing_parameters']
 
 
 def test_isolated_capabilities_and_no_residual_jobs(tmp_path):

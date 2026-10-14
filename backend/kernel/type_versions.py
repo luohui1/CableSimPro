@@ -532,6 +532,41 @@ class Approval(StrictModel):
         return value
 
 
+class ReleaseExclusion(StrictModel):
+    check_id: str = Field(min_length=1, max_length=300)
+    reason: str = Field(min_length=5, max_length=500)
+
+    @field_validator('reason')
+    @classmethod
+    def reason_required(cls, value):
+        if len(value.strip()) < 5:
+            raise ValueError('请说明本次发布不含此项的具体原因。')
+        return value.strip()
+
+
+class ReleaseScope(Adopt):
+    specification_digest: str = Field(pattern=r'^[a-f0-9]{64}$')
+    human_confirmed: Literal[True]
+    exclusions: list[ReleaseExclusion] = Field(max_length=100)
+
+    @field_validator('human_confirmed', mode='before')
+    @classmethod
+    def human(cls, value):
+        if value is not True:
+            raise ValueError('必须由人工明确确认。')
+        return value
+
+    @model_validator(mode='after')
+    def unique_items(self):
+        if len({item.check_id for item in self.exclusions}) != len(self.exclusions):
+            raise ValueError('同一发布项不能重复声明。')
+        return self
+
+
+class AnalysisBasis(Adopt):
+    parameters: dict
+
+
 class Publish(StrictModel):
     request_id: UUID
     submission_id: UUID
@@ -1038,7 +1073,7 @@ class Types:
             return {'revision': row['revision'], 'standards': names, 'reason': '当前已批准执行标准；条款与批准记录见要求与标准。' if names else '在要求与标准里添加并批准'}
         return {'revision': row['revision'], 'standards': [], 'reason': '在要求与标准里添加并批准'}
 
-    def display_runs(self, wid, after, limit, recent=False):
+    def display_runs(self, wid, after, limit, recent=False, module=None):
         """Verified display evidence; full immutable archives retain their inputs."""
         from .run_details import detail
         from .verified_executor import verification_scope
@@ -1067,6 +1102,21 @@ class Types:
                         value=snapshot.pop(key)
                         snapshot[key+'_ref']={'url':archive,'sha256':fingerprint(value)}
                 if recent:
+                    # Exact queried records remain in the verified run archive.
+                    # The ordinary table needs citations and quantities, not
+                    # identical record snapshots repeated on every result row.
+                    project_basis_records(snapshot.get('definition', {}).get('parameters', {}), archive)
+                    project_basis_records(item.get('output') or {}, archive)
+                    # The condition table reads identities, parameters and saved
+                    # condition metadata. Its full per-case domain documents are
+                    # fetched only when following the immutable input trace.
+                    definition = snapshot.get('definition', {})
+                    if definition.get('driver', {}).get('kind') == 'batch':
+                        for owner in [definition, *definition['driver'].get('cases', [])]:
+                            key = 'method_input' if owner is definition else 'input'
+                            if key in owner:
+                                value = owner.pop(key)
+                                owner[key+'_ref'] = {'url': archive, 'sha256': fingerprint(value)}
                     # Tables and result badges need quantities, not megabytes
                     # of exact BRep and display mesh. Keep all quantities and
                     # sources; link the untouched, verified original artifact.
@@ -1079,6 +1129,27 @@ class Types:
                             for layer in artifact.get('layers',[]):
                                 for key in ('brep_text','display_mesh','section_outline_brep'):
                                     layer.pop(key,None)
+                    if module:
+                        selected = {
+                            'electrical': 'electrical', 'short-circuit': 'short-circuit',
+                            'requirements': 'dimensions', 'standard-check': 'dimensions',
+                        }.get(module)
+                        pin = definition.get('method', {})
+                        row_plugin = pin.get('plugin_id') in ('cablesim.type-electrical','cablesim.standard-check')
+                        if row_plugin and pin.get('capability') != selected:
+                            # The explorer only needs this peer module's actual
+                            # identity/currentness/headline. Following that module
+                            # reads its full rows; immutable archives stay intact.
+                            if 'parameters' in definition:
+                                definition.pop('parameters')
+                                definition['parameters_ref']={'url':archive,'input_sha256':item['input_digest']}
+                            for case in (item.get('output') or {}).get('cases',[]):
+                                for artifact in case.get('artifacts',{}).values():
+                                    if not isinstance(artifact,dict):continue
+                                    artifact['rows_ref']={'url':archive,'output_sha256':item['output_digest']}
+                                    artifact['display_status_only']=True
+                                    for key in ('rows','curve','basis_queries','fictitious_diameter_trace'):
+                                        artifact.pop(key,None)
         return {'items':items,'next_cursor':page[-1]['sequence'] if len(identities)>limit else None,'history_complete':not recent}
 
     def measurement_report(self, wid, report_id):
@@ -1171,6 +1242,8 @@ class Types:
     def initialize(self):
         with self.store.db(True) as db:
             for sql in (
+                '''CREATE TABLE IF NOT EXISTS type_release_scope (
+                  workspace TEXT PRIMARY KEY, revision INTEGER NOT NULL, declarations TEXT NOT NULL)''',
                 '''CREATE TABLE IF NOT EXISTS type_create_requests (request_id TEXT PRIMARY KEY, request_digest TEXT NOT NULL, workspace TEXT NOT NULL)''',
                 '''CREATE TABLE IF NOT EXISTS type_creation_proposals (id TEXT PRIMARY KEY, request_id TEXT UNIQUE NOT NULL, request_digest TEXT NOT NULL, payload TEXT NOT NULL, digest TEXT NOT NULL, created TEXT NOT NULL)''',
                 '''CREATE TABLE IF NOT EXISTS type_families (
@@ -1326,10 +1399,10 @@ class Types:
                 instr(output,'"x-cablesim.standard-check":')>0 AS standards,
                 json_extract(snapshot,'$.definition.driver.kind')='batch' AS batch
                 FROM study_runs WHERE workspace=? ORDER BY sequence DESC LIMIT 100''', (wid,)).fetchall()
-            versions = {r['revision']:json.loads(r['state']).get('domain') for r in db.execute(
-                'SELECT revision,state FROM workspace_revisions WHERE workspace=?',
-                (wid,),
-            )}
+            # Current report evidence normally uses one revision. Do not load
+            # every historical domain (including embedded provenance snapshots)
+            # before presenting the current work surface.
+            versions = {row['revision']: state.get('domain')}
         channels, failures, seen_methods, completed_methods = {}, [], set(), set()
         for identity in identities:
             rid=identity['id']
@@ -1365,7 +1438,12 @@ class Types:
                     }
                 continue
             seen_methods.add(method_key)
-            version_document = versions.get(run['snapshot']['workspace_revision'])
+            source_revision=run['snapshot']['workspace_revision']
+            if source_revision not in versions:
+                with self.store.db() as db:
+                    historical=db.execute("SELECT json_extract(state,'$.domain') AS domain FROM workspace_revisions WHERE workspace=? AND revision=?",(wid,source_revision)).fetchone()
+                versions[source_revision]=json.loads(historical['domain']) if historical and historical['domain'] else None
+            version_document = versions[source_revision]
             if not version_document or not self._matches_type(run, version_document):
                 failures.append({'id': rid, 'message': '运行的型号输入与当前版本不同。', 'blocking': True})
                 continue
@@ -1412,6 +1490,36 @@ class Types:
                 'freshness': run['freshness'], 'status': run['status'], 'version_status': run.get('version_status')}
 
     def specification(self, wid, audience='customer'):
+        # A published document is immutable. Rebuilding today's requirements,
+        # bindings and assessments before overwriting them with this frozen
+        # payload adds work and can accidentally apply a later design's scope.
+        # Verify the frozen document and every original source on each uncached
+        # read; method freshness still comes from the actual saved runs.
+        with self.store.db() as db:
+            self._type(db,wid)
+            published=db.execute('SELECT * FROM engineering_type_releases WHERE workspace=?',(wid,)).fetchone()
+        if published:
+            payload=json.loads(published['payload'])
+            digest=published['digest']
+            if fingerprint(payload)!=digest or payload.get('workspace_id')!=wid:
+                raise HTTPException(409,'已发布规格书完整性异常。')
+            runs=[]
+            for source in payload['sources']:
+                run=self.research.get_run(wid,source['run_id'])
+                if run.get('integrity')!='verified' or any(run.get(key)!=source.get(key) for key in ('input_digest','output_digest')):
+                    raise HTTPException(409,'已发布规格书来源完整性异常，请核对保存运行。')
+                runs.append(run)
+            from .version_status import cover_status
+            lifecycle={'status':'published','submission_id':published['submission'],
+                       'approval':self._receipt(published['receipt']),'asset_id':published['asset'],
+                       'stale':False,'operator':{'username':getpass.getuser(),'authority':'local_manual_confirmation'},
+                       'version_status':cover_status(runs)}
+            return {'payload':payload,'digest':digest,'lifecycle':lifecycle,
+                    'ready':not any(c['blocking'] for c in payload['checks']),
+                    'html':render_specification(payload,digest,lifecycle,audience),'audience':audience,
+                    'revision_draft':self.revision_draft(wid,payload),
+                    'generation_endpoint':'/api/types/'+wid+'/specification/generate',
+                    'export':{'endpoint':'/api/types/'+wid+'/specification/file','format':'pdf'}}
         row, state, channels, checks = self.evidence(wid)
         d, t = state['domain'], state['domain']['cable_types'][0]
         sources = [self._source(key, data) for key, data in channels.items()]
@@ -1422,8 +1530,8 @@ class Types:
             requirement_reviews = self._requirement_reviews(db, wid)
             resource_view = self._resources(db, wid, row, state)
             submitted = db.execute('SELECT * FROM type_submissions WHERE workspace=? ORDER BY rowid DESC LIMIT 1', (wid,)).fetchone()
-            published = db.execute('SELECT * FROM engineering_type_releases WHERE workspace=?', (wid,)).fetchone()
             plan = db.execute('SELECT * FROM type_plans WHERE workspace=?', (wid,)).fetchone()
+            exclusions = self._scope(db, wid, row['revision'])
         payload = {'schema': 'cablesim.type-specification/1', 'renderer': 'type-specification/3',
                    'workspace_id': wid, 'revision': row['revision'], 'name': clean_name(t['label']),
                    'purpose': 'demo' if '演示' in t['label'] or '合成验收数据' in t['label'] or any(s.get('kind')=='demo' for s in d.get(
@@ -1439,6 +1547,15 @@ class Types:
                                        'adopted_revision': plan['adopted_revision'],
                                        'source': deepcopy(state.get('type_plan_source', {}))} if plan else None),
                    'resource_bindings': deepcopy(state.get('type_resource_bindings', {}))}
+        payload['release_exclusions'] = []
+        for check in checks:
+            declaration = next((item for item in exclusions if item['check_id'] == check['id'] and
+                                item['evidence_digest'] == scope_evidence(check)), None)
+            if declaration and can_exclude(check):
+                check['blocking'] = False
+                check['excluded'] = True
+                check['exclusion_reason'] = declaration['reason']
+                payload['release_exclusions'].append(deepcopy(declaration))
         for target in resource_view['targets']:
             if target['state'] == 'outdated':
                 checks.append({'id': 'resource/'+target['id'], 'channel': 'resources',
@@ -1449,21 +1566,10 @@ class Types:
             lifecycle = {'status': submitted['status'], 'submission_id': submitted['id'],
                          'approval': self._receipt(submitted['receipt']) if submitted['receipt'] else None,
                          'stale': submitted['digest'] != digest}
-        if published:
-            frozen = json.loads(published['payload'])
-            if fingerprint(frozen) != published['digest']:
-                raise HTTPException(409, '已发布规格书完整性异常。')
-            payload, digest = frozen, published['digest']
-            lifecycle = {
-                'status': 'published',
-                'submission_id': published['submission'],
-                'approval': self._receipt(published['receipt']),
-                'asset_id': published['asset'],
-                'stale': False,
-            }
         lifecycle['operator'] = {'username': getpass.getuser(), 'authority': 'local_manual_confirmation'}
         from .version_status import cover_status
-        lifecycle['version_status'] = cover_status([self.research.get_run(wid, s['run_id']) for s in payload['sources']])
+        verified_runs={item['run']['id']:item['run'] for item in channels.values()}
+        lifecycle['version_status'] = cover_status([verified_runs[s['run_id']] if s['run_id'] in verified_runs else self.research.get_run(wid,s['run_id']) for s in payload['sources']])
         return {
             'payload': payload,
             'digest': digest,
@@ -1482,6 +1588,11 @@ class Types:
             raise HTTPException(409, '型号输入已变化，请重新生成规格书。')
         if state.get('type_resource_bindings', {}) != payload.get('resource_bindings', {}):
             raise HTTPException(409, '资源版本绑定已变化，请重新生成规格书。')
+        current_scope = self._scope(db, wid, payload['revision'])
+        active_scope = [item for item in current_scope if any(check['id']==item['check_id'] and
+            scope_evidence(check)==item['evidence_digest'] for check in payload['checks'])]
+        if sorted(active_scope, key=lambda item: item['check_id']) != sorted(payload.get('release_exclusions', []), key=lambda item: item['check_id']):
+            raise HTTPException(409, '本次发布范围声明已变化，请重新提交。')
         if any(t['state'] == 'outdated' for t in self._resources(db, wid, row, state)['targets']):
             raise HTTPException(409, '资源绑定已过期，请重新核对后提交。')
         if self._revisions(db, wid) != payload['revisions'] or self._requirement_reviews(db, wid) != payload['requirement_reviews']:
@@ -1518,9 +1629,9 @@ class Types:
         from .type_specification import LAYER_NAMES, number
         with self.store.db() as db:
             count = db.execute('SELECT COUNT(*) FROM type_document_revisions WHERE workspace=?', (wid,)).fetchone()[0]
-            prior = db.execute('SELECT payload FROM type_submissions WHERE workspace=? ORDER BY rowid DESC LIMIT 1', (wid,)).fetchone()
+            prior = db.execute("SELECT json_extract(payload,'$.document') AS document FROM type_submissions WHERE workspace=? ORDER BY rowid DESC LIMIT 1", (wid,)).fetchone()
             plan = db.execute('SELECT f.base_document FROM type_plans p JOIN type_families f ON f.id=p.family WHERE p.workspace=?', (wid,)).fetchone()
-        before = json.loads(prior['payload'])['document'] if prior else json.loads(plan['base_document']) if plan else None
+        before = json.loads(prior['document']) if prior else json.loads(plan['base_document']) if plan else None
         changes = []
         if before:
             old, new = before['cable_types'][0], payload['document']['cable_types'][0]
@@ -1626,6 +1737,7 @@ class Types:
                        'decision': 'approved', 'authority': 'local_manual_confirmation',
                        'submission_id': submission['id'], 'specification_digest': submission['digest'],
                        'workspace_revision': payload['revision'], 'sources': payload['sources']}
+            receipt['release_exclusions'] = deepcopy(payload.get('release_exclusions', []))
             receipt['receipt_digest'] = fingerprint(receipt)
             db.execute(
                 "UPDATE type_submissions SET status='approved',receipt=? WHERE id=?",
@@ -1634,6 +1746,44 @@ class Types:
             self.store.audit(db, wid, payload['revision'], '人工批准规格书', json.dumps(receipt, ensure_ascii=False))
             self._remember(db, wid, body, receipt)
             return receipt
+
+    @staticmethod
+    def _scope(db, wid, revision):
+        row = db.execute('SELECT revision,declarations FROM type_release_scope WHERE workspace=?', (wid,)).fetchone()
+        return json.loads(row['declarations']) if row and row['revision'] == revision else []
+
+    def declare_scope(self, wid, body, actor):
+        reviewer = self._human(actor)
+        with self.store.db() as db:
+            previous = self._replay(db, wid, body)
+            if previous:
+                return previous
+        spec = self.specification(wid)
+        if spec['digest'] != body.specification_digest:
+            raise HTTPException(409, '校核证据已变化，请先查看当前发布清单。')
+        checks = {item['id']: item for item in spec['payload']['checks']}
+        declarations = []
+        for item in body.exclusions:
+            check = checks.get(item.check_id)
+            if not check or not can_exclude(check):
+                raise HTTPException(422, '只能声明未计算或适用范围外的结果项；失败、不满足、历史结果及审批关口不能声明掉。')
+            declarations.append({'check_id': item.check_id, 'title': (check.get('result') or {}).get('title') or check['message'],
+                'reason': item.reason, 'reviewer': reviewer, 'declared_at': stamp(),
+                'workspace_revision': body.expected_revision, 'authority': 'local_manual_confirmation',
+                'evidence_digest': scope_evidence(check)})
+        with self.store.db(True) as db:
+            previous = self._replay(db, wid, body)
+            if previous:
+                return previous
+            self.store.assert_mutable(db, wid)
+            self._type(db, wid, body.expected_revision)
+            self._validate_sources(db, wid, spec['payload'])
+            db.execute('INSERT OR REPLACE INTO type_release_scope VALUES (?,?,?)',
+                       (wid, body.expected_revision, json.dumps(declarations, ensure_ascii=False)))
+            self.store.audit(db, wid, body.expected_revision, '人工声明本次发布范围', json.dumps(declarations, ensure_ascii=False))
+            result = {'revision': body.expected_revision, 'exclusions': declarations}
+            self._remember(db, wid, body, result)
+            return result
 
     def publish(self, wid, body, actor):
         self._human(actor)
@@ -1911,6 +2061,35 @@ def check_results(channels, checks):
                     })
 
 
+def project_basis_records(value, archive):
+    """Display projection only; immutable evidence and its digest stay intact."""
+    if isinstance(value, list):
+        for child in value:
+            project_basis_records(child, archive)
+    elif isinstance(value, dict):
+        records = value.pop('basis_references', None)
+        if records:
+            value['basis_records_ref'] = {'url': archive, 'sha256': fingerprint(records)}
+        for child in list(value.values()):
+            project_basis_records(child, archive)
+
+
+def can_exclude(check):
+    result = check.get('result') or {}
+    if (result.get('status') in ('failed', 'fail') or result.get('verdict') in ('failed', 'fail') or
+            result.get('satisfied') is False):
+        return False
+    if check.get('id') == 'geometry/mass' and check.get('channel') == 'geometry':
+        return True  # Explicit dimensions-only publication; no mass claim is made.
+    return check.get('channel') in ('electrical', 'short_circuit', 'standards') and (
+        result.get('status') in ('missing', 'uncovered', 'not_applicable') or
+        result.get('verdict') in ('missing', 'uncovered'))
+
+
+def scope_evidence(check):
+    return fingerprint(check.get('result') or {key:check.get(key) for key in ('id','channel','message','quantities')})
+
+
 def metric(value, unit, source, title=None, reason=None):
     return {'value': value, 'unit': unit, 'source': source, 'title': title, 'reason': reason,
             'state': 'missing' if value is None else 'historical' if source and source['freshness'] != 'current' else 'current'}
@@ -1923,6 +2102,19 @@ def next_version(version):
 
 def make_router(service):
     router = APIRouter(prefix='/api/types', tags=['Type versions'])
+    @router.post('/{wid}/release-scope')
+    def declare_scope(wid: str, body: ReleaseScope, x_cablesim_actor: str | None = Header(default=None)):
+        return service.declare_scope(wid, body, x_cablesim_actor)
+    @router.post('/{wid}/short-circuit-basis')
+    def short_circuit_basis(wid: str, body: AnalysisBasis):
+        from .requirements import resolve_short_circuit_basis
+        with service.store.db() as db:
+            _,state=service._type(db,wid,body.expected_revision)
+        plugin=service.research.registry().plugins.get('cablesim.type-electrical')
+        if not plugin:
+            raise HTTPException(503,'未安装型号电气与短路方法。')
+        parameters={**body.parameters,'cable_type_id':state['domain']['cable_types'][0]['id']}
+        return resolve_short_circuit_basis(service.research,{**service.research.pin(plugin),'capability':'short-circuit'},state['domain'],parameters)
     def creation_call(call):
         try:
             return call()
@@ -1957,6 +2149,16 @@ def make_router(service):
         from .read_responses import read_response
         return await read_response(service.research, ('type-resources', wid), dict,
             lambda: service.resources(wid), request=request)
+    @router.get('/{wid}/workspace')
+    async def type_workspace(wid: str, request: Request):
+        from .read_responses import read_response
+        def load():
+            with service.store.db() as db:
+                service._type(db, wid)
+            # Preserve all editable facts, provenance, lifecycle and undo
+            # metadata. Only transport/ETag reuse changes, never the document.
+            return service.store.snapshot(wid)
+        return await read_response(service.research, ('type-workspace', wid), dict, load, request=request)
     @router.post('/{wid}/resources/bind')
     def bind_resource(wid: str, body: BindResource):
         return service.bind_resources(wid, body)
@@ -2009,6 +2211,8 @@ def make_router(service):
                                 project(check.get('result'))
                                 for layer in check.get('quantities',[]):project(layer)
                     result['payload_full_ref']={'url':f'/api/types/{wid}/specification?audience={audience}&view=full','digest':result['digest']}
+                    project_basis_records(payload['results'], result['payload_full_ref']['url'])
+                    project_basis_records(payload['checks'], result['payload_full_ref']['url'])
                 return result
         return await read_response(service.research,('type-specification',wid,audience,view),dict,load,request=request)
     @router.post('/{wid}/specification/generate')
@@ -2051,7 +2255,7 @@ def make_router(service):
             from .specification_generation import generation_gap, ORDER
             _, _, channels, _ = service.evidence(wid)
             for channel in ORDER:
-                gap = generation_gap(channel, channels.get(channel))
+                gap = generation_gap(channel, channels.get(channel), spec['payload'].get('release_exclusions', []))
                 if gap:
                     raise HTTPException(422, {'message':'请先生成规格书。'+gap, 'channel':channel})
         try:
@@ -2075,11 +2279,12 @@ def make_router(service):
         return await read_response(service.research,('type-standards-summary',wid),dict,
             lambda:service.standards_summary(wid),request=request)
     @router.get('/{wid}/display-runs')
-    async def display_runs(wid: str, request: Request, after: int=Query(0,ge=0), limit: int=Query(100,ge=1,le=100),recent:bool=False):
+    async def display_runs(wid: str, request: Request, after: int=Query(0,ge=0), limit: int=Query(100,ge=1,le=100),recent:bool=False,
+                           module:Literal['structure','requirements','standard-check','electrical','short-circuit','rating-table','comparison','specification']|None=None):
         from .read_responses import read_response
         from .responses import RunDetailResponse
-        return await read_response(service.research,('type-display-runs',wid,after,limit,recent),dict[str,list[RunDetailResponse]|int|bool|None],
-            lambda:service.display_runs(wid,after,limit,recent),request=request,exclude_unset=True)
+        return await read_response(service.research,('type-display-runs',wid,after,limit,recent,module),dict[str,list[RunDetailResponse]|int|bool|None],
+            lambda:service.display_runs(wid,after,limit,recent,module),request=request,exclude_unset=True)
     @router.get('/{wid}/measurements/reports/{report_id}')
     def measurement_report(wid: str, report_id: str):
         return service.measurement_report(wid, report_id)

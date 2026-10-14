@@ -46,11 +46,11 @@ export function WorkbenchSidebar({ theme, onTheme, onSlot, collapsed, onCollapse
     if (back) void navigate({ href: back });
     else void navigate({ to: next === 'agent' ? '/agent' : '/studies', search: { theme } });
   };
-  const spaces = useQuery({ queryKey: ['workspace-index'], queryFn: ({ signal }) => workspaces(signal) });
-  const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal) });
+  const idle = useIdleStart();
+  const spaces = useQuery({ queryKey: ['workspace-index'], queryFn: ({ signal }) => workspaces(signal), enabled: idle, staleTime: 30_000 });
+  const types = useQuery({ queryKey: ['type-index'], queryFn: ({ signal }) => typeIndex(signal), enabled: idle, staleTime: 30_000 });
   // 研究名片（只用于各工程的研究数）和待办数在浏览器空闲后再读，不和页面首屏抢宿主；
   // 当前工程优先取地址里的 workspace，不必等研究列表
-  const idle = useIdleStart();
   const studies = useQuery({ queryKey: ['study-index', 'sidebar-cards'], queryFn: ({ signal }) => indexAll('study', signal), enabled: idle });
   // 待办数：需要人处理的审核、过期与缺项；进行中的作业不计入
   const inbox = useQuery({ queryKey: ['index-inbox'], queryFn: ({ signal }) => indexInbox(signal), refetchInterval: 60_000, retry: false, enabled: idle });

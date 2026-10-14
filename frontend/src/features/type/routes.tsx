@@ -3,8 +3,9 @@ import { createRoute, Outlet, useNavigate, useParams, useSearch, lazyRouteCompon
 import { TypeNavigationContext, type TypeLocation } from './navigation';
 import { typeModules } from './module-definitions';
 import { queryClient } from '@/lib/query-client';
-import { loadWorkspace, typeEvidence, moduleMethods } from './api';
+import { loadWorkspace, typeEvidence, moduleMethods, runArtifact, typeRequirements } from './api';
 import { typeSpecification } from './version-api';
+import {preloadTypeModule} from './module-loader';
 const TypeListPage = lazyRouteComponent(() => import('./list-page'), 'TypeListPage');
 const TypeProvider = lazyRouteComponent(() => import('./provider'), 'TypeProvider');
 const TypeWorkspace = lazyRouteComponent(() => import('./workspace'), 'TypeWorkspace');
@@ -34,16 +35,27 @@ export function createTypeRoutes(root: AnyRootRoute) {
     // than waiting for the provider bundle before issuing the first read.
     void queryClient.prefetchQuery({ queryKey: ['type-workspace', params.wid, search.revision, search.run],
       queryFn: ({ signal }) => loadWorkspace(params.wid, signal, search.revision, search.run), staleTime: 0 });
+    const module=location.pathname.split('/')[3]||'structure';
+    if(module!=='structure')void preloadTypeModule(module);
     void TypeProvider.preload?.();
     void TypeWorkspace.preload?.();
-    const module=location.pathname.split('/')[3]||'structure';
     if(module!=='structure') {
       // Start the actual module and its saved evidence alongside the workspace,
       // instead of downloading them only after the shell has mounted.
-      void import('./module-page');
       const history=!!search.run||search.revision!==undefined||queryClient.getQueryData(['type-evidence-history',params.wid])===true;
-      void queryClient.prefetchQuery({queryKey:['type-evidence',params.wid,history?'history':'recent'],
-        queryFn:({signal})=>typeEvidence(params.wid,AbortSignal.any([signal,AbortSignal.timeout(20000)]),!history),retry:false,staleTime:30000});
+      const evidence = queryClient.fetchQuery({queryKey:['type-evidence',params.wid,history?'history':'recent',module],
+        queryFn:({signal})=>typeEvidence(params.wid,AbortSignal.any([signal,AbortSignal.timeout(20000)]),!history,module),retry:false,staleTime:30000});
+      // The requirement directory depends on the selected immutable run, not
+      // on React mounting its table. Begin that read as soon as evidence arrives.
+      void evidence.then(items=>{
+        if(module!=='requirements')return;
+        const selected=search.run ? items.find(item=>item.run.id===search.run) : items.find(item=>
+          ['succeeded','partial'].includes(String(item.run.status))&&
+          (search.revision===undefined||(item.run.snapshot as Record<string,unknown>).workspace_revision===search.revision)&&
+          runArtifact(item.run,'cablesim.standard-check/1'));
+        if(selected)void queryClient.prefetchQuery({queryKey:['type-requirements',params.wid,selected.run.id],
+          queryFn:({signal})=>typeRequirements(params.wid,String(selected.run.id),signal)});
+      }).catch(()=>{ /* The module presents the query error and its retry action. */ });
       void queryClient.prefetchQuery({queryKey:['type-method-catalog'],queryFn:({signal})=>moduleMethods(signal)});
       if(module==='specification')void queryClient.prefetchQuery({queryKey:['type-specification',params.wid,'customer'],
         queryFn:({signal})=>typeSpecification(params.wid,signal,'customer'),staleTime:30000});

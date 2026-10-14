@@ -12,6 +12,7 @@
     "test:visible-text": "node scripts/isolated-e2e.mjs verify-visible-text.mjs",
     "test:regularity": "node scripts/isolated-e2e.mjs verify-regularity.mjs",
     "test:performance": "node scripts/isolated-e2e.mjs verify-performance.mjs",
+    "test:loading-trace": "node scripts/isolated-e2e.mjs verify-loading-trace.mjs",
     "test:visible-text-states": "node scripts/isolated-e2e.mjs verify-visible-text-states.mjs",
     "test:public-workflows": "node scripts/isolated-e2e.mjs verify-public-workflows.mjs",
     "test:shared-shell": "node scripts/isolated-e2e.mjs verify-shared-shell.mjs",
@@ -33,6 +34,7 @@
     "test:documents": "node scripts/isolated-e2e.mjs verify-documents.mjs",
     "prepare:backend": "python scripts/prepare-backend.py",
     "generate:api": "node scripts/generate-api.mjs",
+    "check:api": "node scripts/isolated-e2e.mjs generate-api.mjs --check",
     "build": "npm run check:styles && tsc -b && vite build",
     "build:release": "npm run check:styles && vite build",
     "preview": "vite preview",
@@ -87,6 +89,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
+    "@jridgewell/trace-mapping": "0.3.31",
     "@playwright/test": "1.63.0",
     "@tailwindcss/vite": "4.3.3",
     "@types/node": "24.19.1",

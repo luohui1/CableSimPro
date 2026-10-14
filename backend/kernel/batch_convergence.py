@@ -118,8 +118,9 @@ class Refinements:
             db.execute('CREATE TABLE IF NOT EXISTS hpc_convergence(id TEXT PRIMARY KEY,request_id TEXT UNIQUE NOT NULL,request_digest TEXT NOT NULL,state TEXT NOT NULL)')
 
     def load(self,identifier):
-        self.initialize()
-        with self.store.db() as db:row=db.execute('SELECT state FROM hpc_convergence WHERE id=?',(str(identifier),)).fetchone()
+        with self.store.db() as db:
+            exists=db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='hpc_convergence'").fetchone()
+            row=db.execute('SELECT state FROM hpc_convergence WHERE id=?',(str(identifier),)).fetchone() if exists else None
         if row is None:raise HTTPException(404,'收敛研究不存在。')
         value=json.loads(row['state'])
         if not value.get('source_execution'):
@@ -150,8 +151,9 @@ class Refinements:
             db.execute('UPDATE hpc_convergence SET state=? WHERE id=?',(json.dumps(value,ensure_ascii=False,allow_nan=False),value['id']))
 
     def list(self,wid=None,sid=None):
-        self.initialize()
-        with self.store.db() as db:ids=[r['id'] for r in db.execute('SELECT id FROM hpc_convergence ORDER BY rowid DESC')]
+        with self.store.db() as db:
+            if not db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='hpc_convergence'").fetchone():return []
+            ids=[r['id'] for r in db.execute('SELECT id FROM hpc_convergence ORDER BY rowid DESC')]
         return [v for i in ids if (v:=self.load(i)) and (wid is None or v['workspace']==wid) and (sid is None or sid in (v['source_study'],v['study'],v.get('origin_study')))]
 
     def start(self,wid,sid,body):

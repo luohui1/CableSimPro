@@ -102,3 +102,4 @@
 .study-workbench[data-analysis="selection"] .number-field input { height: var(--control-compact); }
 .study-compare-module .data-table tbody tr { height: calc(var(--space-8) + var(--space-2)); }
 .study-workbench .field-basis { font-size: var(--text-body); }
+.input-section .study-input-explanation { margin: 0; color: var(--text-secondary); font-size: var(--text-body); }

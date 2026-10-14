@@ -23,4 +23,6 @@ node frontend/src/features/field/verify-transient-real-study.mjs inspect
 `verify-uncovered-preflight.mjs` 将 `PREFLIGHT_SAVED_RECEIPT` 内真实宿主保存的 `fourPreflight` 响应在正式预检对话框中读取。`FRONTEND_URL` 使用私有 Vite 开发服务。检查两个尺寸及深浅主题下四芯不覆盖文案、提交禁用、没有误导性分层修正按钮和 Esc 关闭。这是保存拒绝结果的组件回放，不是重新执行预检或求解，不伪造 SSH、工况或返回值。
 城南保存工况稳态真实验收使用 `verify-chengnan-steady.mjs`：私有发布库副本、真实宿主与 dg83 预检和提交；已有运行时拒绝重复提交。以 `FRONTEND_URL`、`BACKEND_URL` 和 `HPC_REAL_EVIDENCE` 指定隔离服务与记录目录。
 
-`verify-chengnan-transient.mjs` 在上述真实保存库的隔离副本中读取作业 817014，进入“阶跃热响应”，核对预载与材料缺项说明、提交入口未开放、两种尺寸及深浅主题布局。不会提交作业、构造响应曲线或调用整包输入契约。记录在 `.data/fix-round/simulation-chengnan-transient/`；“未覆盖”检查通过不代表暂态求解验收通过。
+`verify-chengnan-transient.mjs` 在上述真实保存库的隔离副本中读取作业 817014，进入“阶跃热响应”，核对逐相预载绑定、两种尺寸及深浅主题布局；点击输入预检，确认缺热容时拒绝打开超算提交确认。不会提交作业、构造响应曲线或调用整包输入契约。记录在 `.data/fix-round/simulation-chengnan-transient/`；缺项拒绝通过不代表城南暂态求解验收通过。
+
+`verify-preloaded-response.mjs` 用有正文热容来源的简化三导体截面，在隔离宿主中从保存全场起算。`reference` 从界面预检并提交真实稳态参考，完成后 `submit` 提交逐区域损耗阶跃，完成后 `inspect` 核对曲线、两类收敛和外部土壤 E1 解析交叉核对。三阶段都拒绝 8100 / 8200；活动或成功作业存在时不会重复提交。`HPC_REAL_EVIDENCE` 目录须有该隔离研究的 `reference.json`，材料参数来源与简化几何假设随输入保存。这是材料有来源的简化模型核验，不是完整文献或 IEC 官方暂态算例复现。

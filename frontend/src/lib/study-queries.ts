@@ -9,9 +9,7 @@ import { femConclusionQuery } from '@/components/study-fem-conclusion';
 export function methodCardsQuery() {
   return queryOptions({queryKey:['method-catalog','summary'], staleTime:30000,
     queryFn:async ({signal}) => {
-      const response=await fetch('/api/methods?view=summary',{signal});
-      const value=await response.json();
-      if(!response.ok)throw new ApiError(response.status,String(optionalRecord(value.detail).message || value.detail || '方法清单读取失败'));
+      const value=await responseData(api.GET('/api/methods',{params:{query:{view:'summary'}},signal}));
       return array(value,'方法清单').map(row=>record(row)) as CatalogRow[];
     }});
 }
@@ -108,7 +106,20 @@ export function studyRunsQuery(client: QueryClient, wid: string | undefined, sid
   return queryOptions({
     queryKey: ["runs", wid, sid, run || 'latest', run ? '' : module, evidence ? 'evidence' : 'detail'],
     queryFn: async () => {
-      const detail = (rid: string) => client.fetchQuery({queryKey:['saved-run',wid,sid,rid,evidence ? 'evidence' : 'detail'],
+      const study = wid ? await client.fetchQuery(savedStudyQuery(wid, sid)) : undefined;
+      const definition = optionalRecord(study?.definition) as StudyDefinition;
+      // The field viewer owns the authenticated display receipt. Keep the
+      // full/evidence detail on its explicit tabs, rather than downloading the
+      // same large display twice on entry. The saved input remains in this view.
+      const field = !evidence && !!wid && ['', 'thermal-field'].includes(module)
+        && rootModule(definition) === 'thermal-field';
+      const detail = async (rid: string) => {
+        if (field) {
+          const value = await client.fetchQuery(savedFieldViewQuery(wid!, rid));
+          if (value.study !== sid) throw new ApiError(404, '保存运行不属于本研究');
+          return value;
+        }
+        return client.fetchQuery({queryKey:['saved-run',wid,sid,rid,evidence ? 'evidence' : 'detail'],
         queryFn:async({signal: detailSignal}) => {
           if (!evidence) return record(await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/runs/{rid}', {params:{path:{wid:wid!,sid,rid}},signal:detailSignal})), '运行详情');
           const response = await fetch(`/api/workspaces/${encodeURIComponent(wid!)}/studies/${encodeURIComponent(sid)}/runs/${encodeURIComponent(rid)}?view=evidence`, {signal:detailSignal});
@@ -117,19 +128,30 @@ export function studyRunsQuery(client: QueryClient, wid: string | undefined, sid
           return record(value,'运行依据');
         },
         staleTime: query => ['accepted','queued','running','validating'].includes(String(query.state.data?.status)) ? 0 : 30000});
+      };
       if (run) return [await detail(run)];
       if (!wid) return [];
-      const study = await client.fetchQuery(savedStudyQuery(wid, sid));
-      const definition = optionalRecord(study.definition) as StudyDefinition;
       // Only the requested module's current saved run. History belongs to the drawer.
       const configured = !!definition.modules?.[module];
-      const latest = optionalRecord(study.latest_module_run_ids);
+      const latest = optionalRecord(study?.latest_module_run_ids);
       const id = configured ? latest[module]
-        : !module || module === rootModule(definition) ? (latest[''] || optionalRecord(study.latest_run).id)
-          : optionalRecord(study.latest_run).id;
+        : !module || module === rootModule(definition) ? (latest[''] || optionalRecord(study?.latest_run).id)
+          : optionalRecord(study?.latest_run).id;
       return id ? [await detail(String(id))] : [];
     },
   });
+}
+
+/** One display cache for route prefetch, saved-run selection and canvas fallback. */
+export function savedFieldViewQuery(wid: string, rid: string) {
+  return queryOptions<Record<string,unknown>>({queryKey:['saved-field-view',wid,rid], retry:false,
+    staleTime: query => ['accepted','queued','running','validating'].includes(String(query.state.data?.status)) ? 0 : 30000,
+    queryFn:async({signal}) => {
+      const response = await fetch(`/api/hpc/workspaces/${encodeURIComponent(wid)}/fields/${encodeURIComponent(rid)}/view`, {signal});
+      const value = await response.json();
+      if (!response.ok) throw new ApiError(response.status, String(optionalRecord(value.detail).message || value.detail || '保存场读取失败'));
+      return record(value, '保存场');
+    }});
 }
 
 /** 空闲时预取轻量目录；输入契约由需要表单的组件按选定能力读取。 */
@@ -151,8 +173,12 @@ export function prefetchStudy(client: QueryClient, workspace: string, sid: strin
   // verifies ownership and capability. Hover prefetch on other pages keeps the
   // metadata-gated path below and never guesses a method from a run ID.
   if (workspace && run && typeof window!=='undefined'
-      && window.location.pathname===`/studies/${sid}/thermal-field/results`)
+      && window.location.pathname===`/studies/${sid}/thermal-field/results`) {
     void client.prefetchQuery(femConclusionQuery(workspace,run));
+    // This route explicitly selects a saved field. Its host endpoint verifies
+    // ownership and source bytes; do not serialize it behind study metadata.
+    void client.prefetchQuery(savedFieldViewQuery(workspace,run));
+  }
   if (!workspace) {
     // The provider already owns the complete loading/error state. Blocking the
     // route on ownership discovery also invokes its minimum pending duration,

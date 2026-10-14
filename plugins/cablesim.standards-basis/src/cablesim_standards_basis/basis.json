@@ -1,6 +1,6 @@
 {
   "schema": "cablesim.standards-basis/1",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "rights": {
     "status": "not_assessed",
     "use": "用户持有标准的受控结构化摘录；不包含标准全文；不宣称许可已评估或合规批准"
@@ -223,6 +223,55 @@
       "version_of_record_doi": "https://doi.org/10.1007/s10765-023-03163-9",
       "rights": "author_preprint_CC_BY; not_version_of_record",
       "download_date": "2026-10-12"
+    },
+    {
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "file": "IEC-60949-1988-English-pages.pdf",
+      "sha256": "b75b1b185529cb99cdf88a24c7700040c09ed366c805f760db6936ed87827de2",
+      "format": "PDF scanned English pages",
+      "origin": "https://www.scribd.com/document/394054488/Selection",
+      "rights": "not_assessed/not_registered",
+      "coverage": {
+        "physical_pdf_pages": 12,
+        "printed_pages": [
+          5,
+          7,
+          9,
+          11,
+          13,
+          15,
+          17,
+          19,
+          21,
+          23,
+          25
+        ],
+        "blank_pdf_pages": [
+          12
+        ],
+        "missing": "完整双语件的封面、法文、题录等不在英文分册；末页为空白，不能引用为印刷27页"
+      }
+    },
+    {
+      "standard": "IEC 60949",
+      "edition": "1988/AMD1:2008",
+      "file": "IEC-60949-1988-AMD1-2008-preview.pdf",
+      "sha256": "f9d9c0ee9f5b9d579947f360b8580f953a1cd4990a8357ba4008c90a2ef12d36",
+      "format": "PDF",
+      "origin": "https://cdn.standards.iteh.ai/samples/15781/4e3870da81af4677b4b4f41c5406392c/IEC-60949-1988-AMD1-2008.pdf",
+      "rights": "not_assessed/not_registered",
+      "coverage": {
+        "english_amendment_pdf_pages": [
+          4,
+          5
+        ],
+        "english_printed_pages": [
+          2,
+          3
+        ],
+        "not_base_reprint": true
+      }
     }
   ],
   "condition_fields": {
@@ -12915,6 +12964,640 @@
       "record_ids": [
         "mv-screen-tape-material-rule/r1/screen_tape_material_requirement"
       ]
+    },
+    {
+      "id": "sc-material-constants",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "3",
+      "table": "Table I",
+      "title": "载流金属材料常数",
+      "quantities": [
+        {
+          "key": "short_circuit_material_k",
+          "name": "材料常数 K",
+          "dimension": "current_time_per_area",
+          "unit": "A·s^0.5/mm²"
+        },
+        {
+          "key": "resistance_temperature_coefficient_reciprocal_0c",
+          "name": "0 ℃电阻温度系数倒数 β",
+          "dimension": "temperature",
+          "unit": "K"
+        },
+        {
+          "key": "volumetric_heat_capacity_20c",
+          "name": "20 ℃载流部件体积热容 σc",
+          "dimension": "volumetric_heat_capacity",
+          "unit": "J/(m³·K)"
+        },
+        {
+          "key": "electrical_resistivity_20c",
+          "name": "20 ℃电阻率 ρ20",
+          "dimension": "electrical_resistivity",
+          "unit": "Ω·m"
+        }
+      ],
+      "row_count": 6,
+      "column_count": 4,
+      "record_count": 24,
+      "record_ids": [
+        "sc-material-constants/r1/K",
+        "sc-material-constants/r1/beta",
+        "sc-material-constants/r1/sigma_c",
+        "sc-material-constants/r1/rho20",
+        "sc-material-constants/r2/K",
+        "sc-material-constants/r2/beta",
+        "sc-material-constants/r2/sigma_c",
+        "sc-material-constants/r2/rho20",
+        "sc-material-constants/r3/K",
+        "sc-material-constants/r3/beta",
+        "sc-material-constants/r3/sigma_c",
+        "sc-material-constants/r3/rho20",
+        "sc-material-constants/r4/K",
+        "sc-material-constants/r4/beta",
+        "sc-material-constants/r4/sigma_c",
+        "sc-material-constants/r4/rho20",
+        "sc-material-constants/r5/K",
+        "sc-material-constants/r5/beta",
+        "sc-material-constants/r5/sigma_c",
+        "sc-material-constants/r5/rho20",
+        "sc-material-constants/r6/K",
+        "sc-material-constants/r6/beta",
+        "sc-material-constants/r6/sigma_c",
+        "sc-material-constants/r6/rho20"
+      ]
+    },
+    {
+      "id": "sc-adjacent-thermal",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "5.1 / 6.1",
+      "table": "Table II",
+      "title": "相邻材料热常数",
+      "quantities": [
+        {
+          "key": "thermal_resistivity",
+          "name": "热阻率 ρ",
+          "dimension": "thermal_resistivity",
+          "unit": "K·m/W"
+        },
+        {
+          "key": "volumetric_heat_capacity",
+          "name": "体积热容 σ",
+          "dimension": "volumetric_heat_capacity",
+          "unit": "J/(m³·K)"
+        }
+      ],
+      "row_count": 20,
+      "column_count": 2,
+      "record_count": 40,
+      "record_ids": [
+        "sc-adjacent-thermal/r1/rho",
+        "sc-adjacent-thermal/r1/sigma",
+        "sc-adjacent-thermal/r2/rho",
+        "sc-adjacent-thermal/r2/sigma",
+        "sc-adjacent-thermal/r3/rho",
+        "sc-adjacent-thermal/r3/sigma",
+        "sc-adjacent-thermal/r4/rho",
+        "sc-adjacent-thermal/r4/sigma",
+        "sc-adjacent-thermal/r5/rho",
+        "sc-adjacent-thermal/r5/sigma",
+        "sc-adjacent-thermal/r6/rho",
+        "sc-adjacent-thermal/r6/sigma",
+        "sc-adjacent-thermal/r7/rho",
+        "sc-adjacent-thermal/r7/sigma",
+        "sc-adjacent-thermal/r8/rho",
+        "sc-adjacent-thermal/r8/sigma",
+        "sc-adjacent-thermal/r9/rho",
+        "sc-adjacent-thermal/r9/sigma",
+        "sc-adjacent-thermal/r10/rho",
+        "sc-adjacent-thermal/r10/sigma",
+        "sc-adjacent-thermal/r11/rho",
+        "sc-adjacent-thermal/r11/sigma",
+        "sc-adjacent-thermal/r12/rho",
+        "sc-adjacent-thermal/r12/sigma",
+        "sc-adjacent-thermal/r13/rho",
+        "sc-adjacent-thermal/r13/sigma",
+        "sc-adjacent-thermal/r14/rho",
+        "sc-adjacent-thermal/r14/sigma",
+        "sc-adjacent-thermal/r15/rho",
+        "sc-adjacent-thermal/r15/sigma",
+        "sc-adjacent-thermal/r16/rho",
+        "sc-adjacent-thermal/r16/sigma",
+        "sc-adjacent-thermal/r17/rho",
+        "sc-adjacent-thermal/r17/sigma",
+        "sc-adjacent-thermal/r18/rho",
+        "sc-adjacent-thermal/r18/sigma",
+        "sc-adjacent-thermal/r19/rho",
+        "sc-adjacent-thermal/r19/sigma",
+        "sc-adjacent-thermal/r20/rho",
+        "sc-adjacent-thermal/r20/sigma"
+      ]
+    },
+    {
+      "id": "sc-simplified-constants",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "5.2",
+      "table": "Table III",
+      "title": "导体或疏离屏蔽丝非绝热简式参数",
+      "quantities": [
+        {
+          "key": "non_adiabatic_X",
+          "name": "非绝热参数 X",
+          "dimension": "length_per_time_sqrt",
+          "unit": "mm/s^0.5"
+        },
+        {
+          "key": "non_adiabatic_Y",
+          "name": "非绝热参数 Y",
+          "dimension": "area_per_time",
+          "unit": "mm²/s"
+        }
+      ],
+      "row_count": 7,
+      "column_count": 4,
+      "record_count": 28,
+      "record_ids": [
+        "sc-simplified-constants/r1/cu_X",
+        "sc-simplified-constants/r1/cu_Y",
+        "sc-simplified-constants/r1/al_X",
+        "sc-simplified-constants/r1/al_Y",
+        "sc-simplified-constants/r2/cu_X",
+        "sc-simplified-constants/r2/cu_Y",
+        "sc-simplified-constants/r2/al_X",
+        "sc-simplified-constants/r2/al_Y",
+        "sc-simplified-constants/r3/cu_X",
+        "sc-simplified-constants/r3/cu_Y",
+        "sc-simplified-constants/r3/al_X",
+        "sc-simplified-constants/r3/al_Y",
+        "sc-simplified-constants/r4/cu_X",
+        "sc-simplified-constants/r4/cu_Y",
+        "sc-simplified-constants/r4/al_X",
+        "sc-simplified-constants/r4/al_Y",
+        "sc-simplified-constants/r5/cu_X",
+        "sc-simplified-constants/r5/cu_Y",
+        "sc-simplified-constants/r5/al_X",
+        "sc-simplified-constants/r5/al_Y",
+        "sc-simplified-constants/r6/cu_X",
+        "sc-simplified-constants/r6/cu_Y",
+        "sc-simplified-constants/r6/al_X",
+        "sc-simplified-constants/r6/al_Y",
+        "sc-simplified-constants/r7/cu_X",
+        "sc-simplified-constants/r7/cu_Y",
+        "sc-simplified-constants/r7/al_X",
+        "sc-simplified-constants/r7/al_Y"
+      ]
+    },
+    {
+      "id": "sc-gas-pressure-paper",
+      "standard": "IEC 60949",
+      "edition": "1988/AMD1:2008",
+      "clause": "Table II amendment",
+      "table": "Table II insertion",
+      "title": "AMD1新增内气压纸绝缘热参数",
+      "quantities": [
+        {
+          "key": "thermal_resistivity",
+          "name": "热阻率 ρ",
+          "dimension": "thermal_resistivity",
+          "unit": "K·m/W"
+        },
+        {
+          "key": "volumetric_heat_capacity",
+          "name": "体积热容 σ",
+          "dimension": "volumetric_heat_capacity",
+          "unit": "J/(m³·K)"
+        }
+      ],
+      "row_count": 2,
+      "column_count": 2,
+      "record_count": 4,
+      "record_ids": [
+        "sc-gas-pressure-paper/r1/rho",
+        "sc-gas-pressure-paper/r1/sigma",
+        "sc-gas-pressure-paper/r2/rho",
+        "sc-gas-pressure-paper/r2/sigma"
+      ]
+    },
+    {
+      "id": "sc-conductor-simplified",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "5.2",
+      "table": "5.2",
+      "title": "导体与疏离丝非绝热简式",
+      "quantities": [
+        {
+          "key": "non_adiabatic_conductor_simplified_formula",
+          "name": "导体与疏离丝非绝热简式",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-conductor-simplified/r1/non_adiabatic_conductor_simplified_formula"
+      ]
+    },
+    {
+      "id": "sc-adiabatic-current",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "3",
+      "table": "3",
+      "title": "绝热短路电流公式",
+      "quantities": [
+        {
+          "key": "adiabatic_short_circuit_formula",
+          "name": "绝热短路电流公式",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-adiabatic-current/r1/adiabatic_short_circuit_formula"
+      ]
+    },
+    {
+      "id": "sc-k-definition",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "3",
+      "table": "3",
+      "title": "K的材料参数定义",
+      "quantities": [
+        {
+          "key": "short_circuit_k_definition",
+          "name": "K的材料参数定义",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-k-definition/r1/short_circuit_k_definition"
+      ]
+    },
+    {
+      "id": "sc-permissible-current",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "2",
+      "table": "2",
+      "title": "绝热与非绝热电流关系",
+      "quantities": [
+        {
+          "key": "short_circuit_correction_formula",
+          "name": "绝热与非绝热电流关系",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-permissible-current/r1/short_circuit_correction_formula"
+      ]
+    },
+    {
+      "id": "sc-time-applicability",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "Introduction",
+      "table": "Introduction",
+      "title": "短路持续时间适用说明",
+      "quantities": [
+        {
+          "key": "short_circuit_time_applicability",
+          "name": "短路持续时间适用说明",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-time-applicability/r1/short_circuit_time_applicability"
+      ]
+    },
+    {
+      "id": "sc-adiabatic-ratio",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "Introduction / Appendix A(A)",
+      "table": "Introduction / Appendix A(A)",
+      "title": "导体忽略非绝热增益的比值条件",
+      "quantities": [
+        {
+          "key": "adiabatic_improvement_ratio",
+          "name": "导体忽略非绝热增益的比值条件",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-adiabatic-ratio/r1/adiabatic_improvement_ratio"
+      ]
+    },
+    {
+      "id": "sc-conductor-general",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "5.1",
+      "table": "5.1",
+      "title": "导体与疏离丝非绝热通式",
+      "quantities": [
+        {
+          "key": "non_adiabatic_conductor_formula",
+          "name": "导体与疏离丝非绝热通式",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-conductor-general/r1/non_adiabatic_conductor_formula"
+      ]
+    },
+    {
+      "id": "sc-screen-general",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "6.1",
+      "table": "6.1",
+      "title": "护套屏蔽铠装非绝热修正式",
+      "quantities": [
+        {
+          "key": "non_adiabatic_screen_formula",
+          "name": "护套屏蔽铠装非绝热修正式",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-screen-general/r1/non_adiabatic_screen_formula"
+      ]
+    },
+    {
+      "id": "sc-fully-embedded-wire",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "5.3.1",
+      "table": "5.3.1",
+      "title": "完全包埋疏离屏蔽丝",
+      "quantities": [
+        {
+          "key": "screen_wire_non_adiabatic_rule",
+          "name": "完全包埋疏离屏蔽丝",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-fully-embedded-wire/r1/screen_wire_non_adiabatic_rule"
+      ]
+    },
+    {
+      "id": "sc-partially-embedded-wire",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "5.3.2",
+      "table": "5.3.2",
+      "title": "有气隙疏离屏蔽丝",
+      "quantities": [
+        {
+          "key": "screen_wire_non_adiabatic_rule",
+          "name": "有气隙疏离屏蔽丝",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-partially-embedded-wire/r1/screen_wire_non_adiabatic_rule"
+      ]
+    },
+    {
+      "id": "sc-screen-contact",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "6.1",
+      "table": "6.1",
+      "title": "屏蔽护套铠装热接触系数",
+      "quantities": [
+        {
+          "key": "screen_thermal_contact_factor_rule",
+          "name": "屏蔽护套铠装热接触系数",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-screen-contact/r1/screen_thermal_contact_factor_rule"
+      ]
+    },
+    {
+      "id": "sc-tubular-area",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "6.2",
+      "table": "6.2",
+      "title": "管状护套的短路截面积",
+      "quantities": [
+        {
+          "key": "short_circuit_geometrical_area_formula",
+          "name": "管状护套的短路截面积",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-tubular-area/r1/short_circuit_geometrical_area_formula"
+      ]
+    },
+    {
+      "id": "sc-longitudinal-tape-area",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "6.3.1",
+      "table": "6.3.1",
+      "title": "纵向金属带短路截面积",
+      "quantities": [
+        {
+          "key": "short_circuit_geometrical_area_formula",
+          "name": "纵向金属带短路截面积",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-longitudinal-tape-area/r1/short_circuit_geometrical_area_formula"
+      ]
+    },
+    {
+      "id": "sc-helical-tape-area",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "6.3.2",
+      "table": "6.3.2",
+      "title": "螺旋金属带短路截面积",
+      "quantities": [
+        {
+          "key": "short_circuit_geometrical_area_formula",
+          "name": "螺旋金属带短路截面积",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-helical-tape-area/r1/short_circuit_geometrical_area_formula"
+      ]
+    },
+    {
+      "id": "sc-touching-wire-area",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "6.4",
+      "table": "6.4",
+      "title": "接触金属丝截面与厚度定义",
+      "quantities": [
+        {
+          "key": "short_circuit_geometrical_area_rule",
+          "name": "接触金属丝截面与厚度定义",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-touching-wire-area/r1/short_circuit_geometrical_area_rule"
+      ]
+    },
+    {
+      "id": "sc-wire-braid-area",
+      "standard": "IEC 60949",
+      "edition": "1988",
+      "clause": "6.5",
+      "table": "6.5",
+      "title": "编织屏蔽截面与厚度定义",
+      "quantities": [
+        {
+          "key": "short_circuit_geometrical_area_rule",
+          "name": "编织屏蔽截面与厚度定义",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-wire-braid-area/r1/short_circuit_geometrical_area_rule"
+      ]
+    },
+    {
+      "id": "sc-parallel-metal-current",
+      "standard": "IEC 60949",
+      "edition": "1988/AMD1:2008",
+      "clause": "4 amendment",
+      "table": "4 amendment",
+      "title": "并联金属部件故障电流分配",
+      "quantities": [
+        {
+          "key": "parallel_metal_short_circuit_rule",
+          "name": "并联金属部件故障电流分配",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "sc-parallel-metal-current/r1/parallel_metal_short_circuit_rule"
+      ]
+    },
+    {
+      "id": "mv-short-circuit-temperature-reference",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "4.2",
+      "table": "4.2 / 表3说明",
+      "title": "短路温度导则引用",
+      "quantities": [
+        {
+          "key": "short_circuit_temperature_guideline",
+          "name": "短路温度导则引用",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-short-circuit-temperature-reference/r1/short_circuit_temperature_guideline"
+      ]
+    },
+    {
+      "id": "mv-short-circuit-temperature-duration",
+      "standard": "GB/T 12706.2",
+      "edition": "2020",
+      "clause": "4.2",
+      "table": "4.2 / 表3说明",
+      "title": "表3导体短路温度的持续时间范围",
+      "quantities": [
+        {
+          "key": "conductor_short_circuit_temperature_duration_max",
+          "name": "表3导体短路温度的持续时间范围",
+          "dimension": "dimensionless",
+          "unit": "1"
+        }
+      ],
+      "row_count": 1,
+      "column_count": 1,
+      "record_count": 1,
+      "record_ids": [
+        "mv-short-circuit-temperature-duration/r1/conductor_short_circuit_temperature_duration_max"
+      ]
     }
   ],
   "not_covered": [
@@ -13053,6 +13736,111 @@
         "半导电现场Cp(T)、专用电缆回填料、封闭管内空气仍未覆盖唯一默认热容。"
       ],
       "next_round": true
+    },
+    {
+      "standard": "Sah et al.",
+      "edition": "2022-preprint-v1",
+      "items": "7格体积热容汇总；原暂存页码8/9修正为12–13，数值继续不发布",
+      "reason": "正式发表版未取得，配方、测点密度及温度对应未闭合；不是现场默认参数。",
+      "source_sha256": "93f1700b51af89ec19d1690b571c260056deac729326004c875bdb308422d355",
+      "held_record_locations": [
+        {
+          "record_id": "sah-backfill-capacity-summary/r1/capacity",
+          "row_label": "砂 S，w=10%",
+          "printed_pages": [
+            12
+          ],
+          "pdf_pages": [
+            12
+          ],
+          "status": "held",
+          "source_sha256": "93f1700b51af89ec19d1690b571c260056deac729326004c875bdb308422d355"
+        },
+        {
+          "record_id": "sah-backfill-capacity-summary/r2/capacity",
+          "row_label": "粉煤灰 F，w=28%",
+          "printed_pages": [
+            12
+          ],
+          "pdf_pages": [
+            12
+          ],
+          "status": "held",
+          "source_sha256": "93f1700b51af89ec19d1690b571c260056deac729326004c875bdb308422d355"
+        },
+        {
+          "record_id": "sah-backfill-capacity-summary/r3/capacity",
+          "row_label": "膨润土 B，w=53%",
+          "printed_pages": [
+            12
+          ],
+          "pdf_pages": [
+            12
+          ],
+          "status": "held",
+          "source_sha256": "93f1700b51af89ec19d1690b571c260056deac729326004c875bdb308422d355"
+        },
+        {
+          "record_id": "sah-backfill-capacity-summary/r4/capacity",
+          "row_label": "B80-F20，w=44%原文最大值",
+          "printed_pages": [
+            12
+          ],
+          "pdf_pages": [
+            12
+          ],
+          "status": "held",
+          "source_sha256": "93f1700b51af89ec19d1690b571c260056deac729326004c875bdb308422d355"
+        },
+        {
+          "record_id": "sah-backfill-capacity-summary/r5/capacity",
+          "row_label": "母材干态 w=0 汇总范围",
+          "printed_pages": [
+            12
+          ],
+          "pdf_pages": [
+            12
+          ],
+          "status": "held",
+          "source_sha256": "93f1700b51af89ec19d1690b571c260056deac729326004c875bdb308422d355"
+        },
+        {
+          "record_id": "sah-backfill-capacity-summary/r6/capacity",
+          "row_label": "B-S干态 w=0 汇总范围",
+          "printed_pages": [
+            12,
+            13
+          ],
+          "pdf_pages": [
+            12,
+            13
+          ],
+          "status": "held",
+          "source_sha256": "93f1700b51af89ec19d1690b571c260056deac729326004c875bdb308422d355"
+        },
+        {
+          "record_id": "sah-backfill-capacity-summary/r7/capacity",
+          "row_label": "B-S，w=35–44%最大值汇总范围",
+          "printed_pages": [
+            13
+          ],
+          "pdf_pages": [
+            13
+          ],
+          "status": "held",
+          "source_sha256": "93f1700b51af89ec19d1690b571c260056deac729326004c875bdb308422d355"
+        }
+      ],
+      "page_verification_methods": [
+        "原PDF12–13文字层定位",
+        "2026-10-13原PDF12–13整页目视，含Page12/27及13/27印刷页脚"
+      ]
+    },
+    {
+      "standard": "IEC 60853-1 / IEC 60853-2",
+      "edition": "1985 / 1989",
+      "items": "完整热容原表及110kV暂态方法输入",
+      "reason": "仅本地基础预览/修订单可核验；未取得完整Annex E Table E.1/E.2及完整方法/例题输入，不以短路标准冒充暂态原表。"
     }
   ],
   "record_files": [
@@ -13177,8 +13965,8 @@
     },
     {
       "name": "records-mv-a.json",
-      "sha256": "b91aeca287709b5db2a0cfd8fbd914b56ddd263c683d695627185c09d315df43",
-      "size_bytes": 374511,
+      "sha256": "c19e1365e94f250574a5555f762093831fd545c611ed0947e211369a8f00e1cf",
+      "size_bytes": 378368,
       "table_ids": [
         "mv-armour-deviation",
         "mv-armour-inner-single",
@@ -13199,6 +13987,8 @@
         "mv-screen-wire-area-rule",
         "mv-screen-wire-gap",
         "mv-screen-wire-resistance-rule",
+        "mv-short-circuit-temperature-duration",
+        "mv-short-circuit-temperature-reference",
         "mv-tape-gap",
         "mv-tape-layer-count",
         "mv-表19",
@@ -13482,6 +14272,34 @@
       "table_ids": [
         "sah-backfill-table2",
         "sah-backfill-table3"
+      ]
+    },
+    {
+      "name": "records-short-circuit.json",
+      "sha256": "6505d2b16f5b7f01bed8959c18855c6daaff4248a057ebd5bac9386702434233",
+      "size_bytes": 240802,
+      "table_ids": [
+        "sc-adiabatic-current",
+        "sc-adiabatic-ratio",
+        "sc-adjacent-thermal",
+        "sc-conductor-general",
+        "sc-conductor-simplified",
+        "sc-fully-embedded-wire",
+        "sc-gas-pressure-paper",
+        "sc-helical-tape-area",
+        "sc-k-definition",
+        "sc-longitudinal-tape-area",
+        "sc-material-constants",
+        "sc-parallel-metal-current",
+        "sc-partially-embedded-wire",
+        "sc-permissible-current",
+        "sc-screen-contact",
+        "sc-screen-general",
+        "sc-simplified-constants",
+        "sc-time-applicability",
+        "sc-touching-wire-area",
+        "sc-tubular-area",
+        "sc-wire-braid-area"
       ]
     }
   ]

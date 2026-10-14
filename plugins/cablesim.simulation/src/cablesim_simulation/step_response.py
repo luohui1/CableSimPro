@@ -139,12 +139,12 @@ def time_grid(c,level):
 
 
 class System:
-    def __init__(self,p,controls):
+    def __init__(self,p,controls,*,analysis_mesh=None):
         import numpy as np
         from skfem import MeshTri,Basis,ElementTriP1,ElementTriP2,BilinearForm,LinearForm,asm
         from skfem.helpers import grad,dot
         from .problem_mesh import build
-        self.np=np;self.p=p;self.mesh=build(p.problem,controls)
+        self.np=np;self.p=p;self.mesh=build(p.problem,controls) if analysis_mesh is None else deepcopy(analysis_mesh)
         ids=np.asarray(self.mesh['domain_ids']);self.ids=ids
         basis=self.basis=Basis(MeshTri(np.asarray(self.mesh['points']).T,np.asarray(self.mesh['triangles']).T),ElementTriP2() if controls.field_order==2 else ElementTriP1(),intorder=5)
         if basis.N>controls.max_nodes:raise FieldValueError(f'网格有 {basis.N} 自由度，超过容量上限。','mesh','max_nodes')

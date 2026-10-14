@@ -152,6 +152,8 @@ def test_field_routes_project_without_mutation_and_sample_full_saved_values(tmp_
     from io import BytesIO
     import numpy as np
     manager,run,_=service(tmp_path,monkeypatch)
+    from backend.kernel.workspace import fingerprint
+    run['input_digest']=fingerprint(run['snapshot'])
     artifacts=run['output']['cases'][0]['artifacts']
     artifacts['x-cablesim.temperature-field']['mesh']['domain_ids']=[1]
     artifacts['x-cablesim.field-test']={'binary':'must not travel with view'}

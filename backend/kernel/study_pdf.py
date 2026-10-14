@@ -526,7 +526,9 @@ def _render_pdf(runs, audience, *, generated_at=None, attachments=None):
     with _font_lock:
         if font not in pdfmetrics.getRegisteredFontNames():pdfmetrics.registerFont(TTFont(font,BytesIO(fitz.Font('cjk').buffer)))
     timestamp=local_time(generated_at or datetime.now(timezone.utc).isoformat(timespec='seconds'))
-    first=runs[0];definition=first['snapshot']['definition'];study=definition.get('title','研究计算书')
+    first=runs[0];definition=first['snapshot']['definition']
+    # Presentation only; frozen input titles and their digests remain untouched.
+    study=re.sub(r'( · 自动收敛){2,}$',' · 自动收敛',definition.get('title','研究计算书'))
     project=first['snapshot'].get('workspace_state',{}).get('domain',{}).get('name') or '未记录工程名称'
     version='输入修订 '+str(first['snapshot'].get('workspace_revision','—'))+' / 研究修订 '+str(first['snapshot'].get('study_revision','—'))
     historical=any(r.get('freshness')!='current' for r in runs)

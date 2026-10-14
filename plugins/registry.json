@@ -21,9 +21,9 @@
     },
     {
       "plugin_id": "cablesim.gb50217-correction",
-      "version": "1.0.3",
+      "version": "1.0.5",
       "manifest": "plugins/cablesim.gb50217-correction/plugin.json",
-      "release_digest": "53e1845ead09147641d47b8c646683d2564dda11c0f2d5aadc4d12adf041d3cd"
+      "release_digest": "dffa26c5b716c521b8de7a9b1ec7e01ace5c04afa20031c2152734b771f4ed7a"
     },
     {
       "plugin_id": "cablesim.hybrid-rating",
@@ -39,27 +39,27 @@
     },
     {
       "plugin_id": "cablesim.native-reference",
-      "version": "1.0.5",
+      "version": "1.0.6",
       "manifest": "plugins/cablesim.native-reference/plugin.json",
-      "release_digest": "6849d630bab299561f0149afd982d32e0243c27eac9925856253427fa902a01c"
+      "release_digest": "707f60d499f4383b76052f07b50ec5f2be887d992ffd7c9733aa1c7ac9e073db"
     },
     {
       "plugin_id": "cablesim.simulation",
-      "version": "1.6.0",
+      "version": "1.7.1",
       "manifest": "plugins/cablesim.simulation/plugin.json",
-      "release_digest": "8681df2ca8414461c888aa6998b8de5153ba6cd29b9bb62b31d7a51ae020af46"
+      "release_digest": "0cc81b63ae4367f1d58404ea328dcef2e5887c1e86bb8f4180a86ba7d14a3dd3"
     },
     {
       "plugin_id": "cablesim.standard-check",
-      "version": "1.6.0",
+      "version": "1.6.1",
       "manifest": "plugins/cablesim.standard-check/plugin.json",
-      "release_digest": "529a53d8c1201f09788f3107a14ef4855cf5b9d4122120fdb2c227128f4f22d4"
+      "release_digest": "1f66664cfb287807f984c1c74c9df210bfb19689efcaf94e43022b6fbbe60c43"
     },
     {
       "plugin_id": "cablesim.standards-basis",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "manifest": "plugins/cablesim.standards-basis/plugin.json",
-      "release_digest": "e9dd0259516fb41cb399d10ea62666f6ee1cd1f8c698ec07399e22f583559444"
+      "release_digest": "93be894ea9e0b384ec267252db36bb9fe91d29a645975a3a3ea8dcfddf3e317f"
     },
     {
       "plugin_id": "cablesim.thermal-network",
@@ -69,9 +69,9 @@
     },
     {
       "plugin_id": "cablesim.type-electrical",
-      "version": "1.0.5",
+      "version": "1.1.1",
       "manifest": "plugins/cablesim.type-electrical/plugin.json",
-      "release_digest": "ad5692cac91ccb91a6d017c2647bb31eae89c465843a5202674e06ecb91a13ce"
+      "release_digest": "e0105ae162d735c36bb2fb2a4a83cf3d19a120ecba37f20cf9a9ce1d33440fb2"
     }
   ]
 }

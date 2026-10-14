@@ -35,14 +35,14 @@ def test_canonical_states_pinned_relations_and_no_large_contents(client,monkeypa
     # index adapter bypasses the public application readers.
     import backend.index.sources as sources
     project=sources.project
-    def small(db,metrics=None,previous=None):
+    def small(db,metrics=None,previous=None,notifications=None):
         def authorize(action,table,column,*unused):
             if action==sqlite3.SQLITE_READ and (table,column) in {
                 ('study_runs','output'),('source_documents','original'),('deliveries','html'),('agent_steps','result')}:
                 return sqlite3.SQLITE_DENY
             return sqlite3.SQLITE_OK
         db.set_authorizer(authorize)
-        return project(db,metrics,previous)
+        return project(db,metrics,previous,notifications)
     monkeypatch.setattr(sources,'project',small)
     # service keeps a local import of the projection function.
     monkeypatch.setattr('backend.index.service.project',small)

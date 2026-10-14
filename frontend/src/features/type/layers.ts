@@ -1,10 +1,11 @@
-import { ApiError } from '@/api/client';
+import { ApiError, numeric } from '@/api/client';
 import { at, pointer, type DomainDocument, type NumericInput } from '@/lib/domain-fields';
 import { cableShape, layerNames, targetId } from '@/features/drawing/cable-geometry';
 import type { CableType, LayerTarget, Material } from '@/features/drawing/types';
 import { missingTypeInputs } from './missing';
 
 export type LayerRow = { id: string; label: string; target: LayerTarget; number: number; path: string; materialPath: string; material: Material; spec: NumericInput; innerM: number | null; outerM: number | null };
+export function nominalArea(document: unknown, row: LayerRow): number | null { return row.target.scope === 'core' && row.target.role === 'conductor' ? numeric(at(document, row.path.replace(/diameter$/, 'nominal_area'))) : null; }
 export function layerRows(document: DomainDocument, cable: CableType): LayerRow[] {
   let rings: ReturnType<typeof cableShape>['rings'] = [];
   try { if (!missingTypeInputs(document).some(item => !item.path.includes('/rating/'))) rings = cableShape(cable, document.materials).rings; } catch { /* Unsupported drawings must not prevent correction in the real layer table. */ }

@@ -21,20 +21,36 @@ export function CommandBar({ actions, leading, status, label = '研究操作' }:
   const root = useRef<HTMLDivElement>(null);
   const measure = useRef<HTMLDivElement>(null);
   const [hidden, setHidden] = useState<string[]>([]);
+  // Handler identity does not affect geometry. Re-subscribe only when the actual
+  // button content changes; parent query updates must not force a layout in commit.
+  const layoutKey = JSON.stringify(actions.map(({ id, label, icon, role, priority, variant, disabledReason, loading }) =>
+    ({ id, label, icon, role, priority, variant, disabledReason, loading })));
+  const geometry = useRef(actions);
+  useLayoutEffect(() => { geometry.current = actions; });
   useLayoutEffect(() => {
     const target = root.current, sample = measure.current;
     if (!target || !sample) return;
     const leadingElement = target.querySelector<HTMLElement>('.command-leading');
-    const fit = () => {
-      const css = getComputedStyle(target);
-      const gap = parseFloat(css.columnGap) || 0;
-      const available = target.clientWidth - parseFloat(css.paddingLeft) - parseFloat(css.paddingRight);
-      const widths = new Map([...sample.querySelectorAll<HTMLElement>('[data-command-id]')].map(node => [node.dataset.commandId!, node.getBoundingClientRect().width]));
-      const fixed = leadingElement?.getBoundingClientRect().width || 0;
-      const more = sample.querySelector('[data-more]')?.getBoundingClientRect().width || 0;
+    const widths = new Map<string, number>();
+    let available: number | undefined, fixed = 0, more: number | undefined;
+    const fit = (entries: ResizeObserverEntry[]) => {
+      // ResizeObserver runs after layout and supplies sizes. Reading clientWidth /
+      // getBoundingClientRect here used to repeat the entire workbench's layout.
+      for (const entry of entries) {
+        const node = entry.target as HTMLElement;
+        const width = entry.borderBoxSize[0]?.inlineSize ?? entry.contentRect.width;
+        if (node === target) available = entry.contentRect.width;
+        else if (node === leadingElement) fixed = width;
+        else if (node.dataset.more !== undefined) more = width;
+        else if (node.dataset.commandId) widths.set(node.dataset.commandId, width);
+      }
+      const actions = geometry.current;
+      if (available === undefined || more === undefined || actions.some(action => !widths.has(action.id))) return;
+      const moreWidth = more;
+      const gap = parseFloat(getComputedStyle(target).columnGap) || 0;
       const visible = [...actions];
       const removed: string[] = [];
-      const size = () => fixed + visible.reduce((sum, item) => sum + (widths.get(item.id) || 0), 0) + (removed.length ? more : 0)
+      const size = () => fixed + visible.reduce((sum, item) => sum + (widths.get(item.id) || 0), 0) + (removed.length ? moreWidth : 0)
         + gap * Math.max(0, visible.length + (leading ? 1 : 0) + (removed.length ? 1 : 0) - 1);
       const candidates = actions.filter(action => !action.role).sort((a, b) => (a.priority || 0) - (b.priority || 0));
       while (size() > available && candidates.length) {
@@ -44,14 +60,12 @@ export function CommandBar({ actions, leading, status, label = '研究操作' }:
       }
       setHidden(previous => previous.join('|') === removed.join('|') ? previous : removed);
     };
-    fit();
     const observer = new ResizeObserver(fit);
-    observer.observe(target); observer.observe(sample);
+    observer.observe(target);
+    for (const node of sample.querySelectorAll('[data-command-id],[data-more]')) observer.observe(node);
     if (leadingElement) observer.observe(leadingElement);
-    let active = true;
-    void document.fonts.ready.then(() => { if (active) fit(); });
-    return () => { active = false; observer.disconnect(); };
-  }, [actions, leading]);
+    return () => observer.disconnect();
+  }, [layoutKey, !!leading]);
   const button = (action: CommandAction, measuring = false) => {
     const control = <Button key={action.id} size="compact" variant={action.variant || (action.role === 'primary' ? 'primary' : 'outline')}
       data-command-id={action.id} data-command-role={action.role} disabled={!!action.disabledReason} loading={action.loading}

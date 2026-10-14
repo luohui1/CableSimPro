@@ -90,7 +90,11 @@ def _computation_identity(manifest, capability, release_digest):
 
 
 def _normalized_identity(manifest, capability):
-    value = deepcopy(manifest)
+    # Only the selected capability belongs to this identity. Do not recursively
+    # copy contracts of every other capability merely to discard them below;
+    # retain every non-presentation root/file/dependency field exactly as before.
+    value = {key: deepcopy(item) for key, item in manifest.items() if key != 'capabilities'}
+    selected = deepcopy(next(item for item in manifest['capabilities'] if item['id'] == capability))
     if value.get('id') == 'cablesim.simulation':
         for row in value.get('files', []):
             if row.get('path') in EVIDENCE_ASSETS:
@@ -98,7 +102,6 @@ def _normalized_identity(manifest, capability):
                 row.pop('size_bytes', None)
     for key in ('version', 'name', 'description', 'icon', 'presentation'):
         value.pop(key, None)
-    selected = next(item for item in value.pop('capabilities') if item['id'] == capability)
     for key in ('title', 'description', 'limitations', 'validation', 'x-groups'):
         selected.pop(key, None)
     if 'parameter_schema' in selected:
@@ -157,6 +160,9 @@ def manifest_for_read(plugin, cache):
 
 def current_for_read(research, old, snapshot, cache):
     """Validate current installation, prove equivalent release, preserve old pin."""
+    from .report_reads import read_cache
+    shared = read_cache()
+    if shared is not None:cache = shared.setdefault('methods', {})
     try:
         return research.resolve(old, cache)
     except HTTPException as error:

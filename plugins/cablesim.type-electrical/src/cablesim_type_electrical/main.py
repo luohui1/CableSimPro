@@ -12,12 +12,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]/'cablesim.iec60287/sr
 from cablesim_iec60287.electrical import skin, effect_x, proximity
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from cablesim_type_electrical.inputs import ElectricalParameters, ShortCircuitParameters
+from cablesim_type_electrical.sequence import sequence_results
+from cablesim_type_electrical.short_basis import queries as short_queries, material_constants, record as basis_record, attach as attach_basis
 
-VERSION = '1.1.1'
+VERSION = '1.2.1'
 METHOD_VERSIONS = {'electrical':VERSION, 'short-circuit':VERSION}
 SOURCES = json.loads(Path(__file__).with_name('sources.json').read_text('utf-8'))
-CONSTANTS = {'copper_bare': (226, 234.5, 3.45e6), 'copper_coated': (226, 234.5, 3.45e6),
-             'aluminium': (148, 228, 2.5e6), 'lead': (41, 230, 1.45e6)}
 
 
 def checked(value, path, lower, upper):
@@ -133,7 +133,7 @@ def calculate(document, parameters, capability, *, _include_curve=True):
         needed = list(dependencies.get(key, []))
         if capability == 'electrical' and len(cable['cores']) > 1 and key in ('dc', 'ys', 'yp', 'ac', 'capacitance', 'charging', 'dielectric'):
             needed.append('core_lay_factor')
-        if role in ('metallic_screen', 'metallic_sheath') and capability == 'short-circuit':
+        if role in ('metallic_screen', 'metallic_sheath', 'armour') and capability == 'short-circuit':
             needed = ['duration_s', 'metal_initial_temperature_k', 'metal_final_temperature_k']
             if key.endswith(('-factor', '-nonadiabatic')):
                 needed += ['inner_thermal_resistivity', 'inner_volumetric_heat_capacity']
@@ -215,38 +215,53 @@ def calculate(document, parameters, capability, *, _include_curve=True):
             loss = 2*pi*frequency*capacitance*voltage**2*tan if all(v is not None for v in (frequency, capacitance, voltage, tan)) else None
             add('dielectric', title+'每相介质损耗', loss, 'W/m', '5.2', 19, core=cid, role='insulation', formula='W_d=2πf C U_phase² tanδ', inputs={'f_hz': frequency, 'C_F_m': capacitance, 'U_phase_V': voltage, 'tan_delta': tan})
             geometric_l = 2e-7*log(spacing/(.779*conductor['diameter']/2)) if len(cable['cores']) == 1 and circular and conductor['form'] in ('solid_round', 'stranded_round_compacted') and spacing and parameters.get('arrangement') == 'trefoil' else None
-            add('geometric-inductance', title+'导体几何电感（不含金属回路）', geometric_l, 'H/m', '4.2，式 (9)，表 1（等距平衡回路导出）', 10, source='iec60287_1_3', core=cid, formula='L_geom=2·10⁻⁷ ln[s/(αd_c/2)]；α=0.779', inputs={'s_m': spacing, 'dc_m': conductor['diameter'], 'alpha': .779}, status='uncovered' if len(cable['cores']) != 1 else None, reason='仅等距单芯圆实心 / 紧压导体的几何项；不包含护套电流或大地返回，不能当作完整型号电感。')
+            add('geometric-inductance', title+'导体几何电感（不含金属回路）', geometric_l, 'H/m', '4.2，式 (9)，表 1（等距平衡回路导出）', 11, source='iec60287_1_3', core=cid, formula='L_geom=2·10⁻⁷ ln[s/(αd_c/2)]；α=0.779', inputs={'s_m': spacing, 'dc_m': conductor['diameter'], 'alpha': .779}, status='uncovered' if len(cable['cores']) != 1 else None, reason='仅等距单芯圆实心 / 紧压导体的几何项；不包含护套电流或大地返回，不能当作完整型号电感。')
             add('geometric-reactance', title+'导体几何感抗（不含金属回路）', 2*pi*frequency*geometric_l if frequency and geometric_l is not None else None, 'Ω/m', '4.2，式 (9)', 10, source='iec60287_1_3', core=cid, formula='X_geom=2πf L_geom', status='uncovered' if len(cable['cores']) != 1 else None)
-        for key, title in [('inductance', '完整电缆电感 / 感抗'), ('positive-sequence', '正序阻抗 Z₁'), ('zero-sequence', '零序阻抗 Z₀')]:
-            topology_ready = circuit and circuit.get('electrical_topology') and circuit.get('bonding', {}).get('source')
-            add(key, title, None, 'Ω/m' if key != 'inductance' else 'H/m', '4.2 / 4.3（完整金属回路需拓扑）；大地返回不在本方法范围', 10, source='iec60287_1_3', status='uncovered', inputs={'topology_contract': topology}, reason='已复用领域接地拓扑契约；完整金属回路阻抗求解及大地返回尚未实现，不输出近似阻抗。' if topology_ready else '领域接地拓扑缺少相序、相角或接地来源；不从旧 bonding.kind 推断回流通路。完整阻抗求解尚未覆盖。')
+        sequence = sequence_results(cable, parameters, [next(r['value'] for r in rows if r['id']==c['id']+':ac') for c in cable['cores']])
+        for key, title in [('inductance','完整回路正序电感（自感与互感）'),('positive-sequence','正序阻抗 Z₁'),('zero-sequence','零序阻抗 Z₀')]:
+            impedance = sequence.get('zero' if key=='zero-sequence' else 'positive')
+            value = sequence.get('inductance') if key=='inductance' else abs(impedance) if impedance is not None else None
+            row = add(key,title,value,'H/m' if key=='inductance' else 'Ω/m','4.2 式 (9)；4.3 阻抗矩阵',11,source='iec60287_1_3',
+                status='available' if value is not None else sequence['status'] if sequence['status']!='available' else 'missing',
+                formula='Z·I=V；ΣI=0；Z₁=Σ(V_phase/I_positive)/3；Z₀=ΣV_phase/3',inputs=sequence.get('inputs',{}),
+                reason=(sequence.get('zero_reason') or sequence.get('reason')) if key=='zero-sequence' and value is None else sequence.get('reason') or sequence.get('scope'))
+            row['missing_parameters']=sequence.get('zero_missing',sequence.get('missing_parameters',[])) if key=='zero-sequence' and value is None else sequence.get('missing_parameters',[])
+            row['input_category']='system'
+            if impedance is not None: row['complex_ohm_m']={'real':impedance.real,'imaginary':impedance.imag}
+            if 'matrix_ohm_m' in sequence: row['primitive_matrix_ohm_m']=sequence['matrix_ohm_m']
     else:
         duration, initial, final = (parameter(k) for k in ('duration_s', 'initial_temperature_k', 'final_temperature_k'))
         for i, core in enumerate(cable['cores']):
             cond, cid = core['conductor'], core['id']
-            const = CONSTANTS.get(materials[cond['material']].get('standard_kind'))
+            const, material_refs = material_constants(parameters, materials[cond['material']].get('standard_kind'))
             area = cond['nominal_area']*1e6
             declared_final = cable['rating']['max_conductor_temperature'].get('short_circuit')
             if final is not None and declared_final is not None and final > declared_final + 1e-9:
                 raise ValueError('parameters.final_temperature_k：最终温度超过已声明的导体短路温限。')
             iad = adiabatic(area, const[0], const[1], initial-273.15, final-273.15, duration) if const and all(v is not None for v in (duration, initial, final)) else None
             prefix = f'芯 {i+1} · ' if len(cable['cores']) > 1 else ''
-            add('conductor-adiabatic', prefix+'导体绝热允许短路电流', iad, 'A', '第 3 章；表 I', 9, source='iec60949', core=cid, formula='I_AD=K S √{ln[(θ_f+β)/(θ_i+β)]/t}', inputs={'S_mm2': area, 'K': const[0] if const else None, 'beta_K': const[1] if const else None, 'theta_i_K': initial, 'theta_f_K': final, 't_s': duration}, status='uncovered' if not const else None, reason='按输入初末温度计算单个组件容量；不证明所选最终温度已获产品允许。')
+            formula_ref = basis_record(parameters,'sc-adiabatic-current/r1/adiabatic_short_circuit_formula')
+            if not formula_ref: iad=None
+            row=add('conductor-adiabatic', prefix+'导体绝热允许短路电流', iad, 'A', '第 3 章；表 I', 9, source='iec60949', core=cid, formula='I_AD=K S √{ln[(θ_f+β)/(θ_i+β)]/t}', inputs={'S_mm2': area, 'K': const[0] if const else None, 'beta_K': const[1] if const else None, 'theta_i_K': initial, 'theta_f_K': final, 't_s': duration}, reason='按输入初末温度及已查询材料依据计算单个组件容量；缺依据时重新查询，不补默认常数。')
+            attach_basis(row,[formula_ref,*material_refs])
             ins = next((l for l in layers(cable, core) if l['role'] == 'insulation'), {})
             xlpe = materials.get(ins.get('material'), {}).get('standard_kind') == 'XLPE'
             copper = materials[cond['material']].get('standard_kind') in ('copper_bare', 'copper_coated')
-            x, y = (.41, .12) if copper else (.57, .16)
-            eps = conductor_factor(area, duration, x, y) if const and duration is not None and xlpe else None
-            add('conductor-factor', prefix+'导体非绝热修正因数', eps, '1', '5.2；表 III（XLPE，接触因数 0.7）', 13, source='iec60949', core=cid, formula='ε=√[1+X√(t/S)+Y(t/S)]', inputs={'S_mm2': area, 't_s': duration, 'X': x if xlpe else None, 'Y': y if xlpe else None}, status='uncovered' if not xlpe or not const else None, reason='只覆盖铜 / 铝导体与 XLPE 的表 III 组合。')
-            add('conductor-nonadiabatic', prefix+'导体非绝热允许短路电流', iad*eps if iad is not None and eps is not None else None, 'A', '第 2 章；5.2', 9, source='iec60949', core=cid, formula='I=ε I_AD', inputs={'I_AD_A': iad, 'epsilon': eps}, status='uncovered' if not xlpe or not const else None)
-        metallic = [(l, core['id']) for core in cable['cores'] for l in core['layers'] if l['role'] in ('metallic_screen', 'metallic_sheath')] + [(l, None) for l in cable['common_layers'] if l['role'] in ('metallic_screen', 'metallic_sheath')]
+            xy_refs=[basis_record(parameters,'sc-simplified-constants/r3/'+('cu_' if copper else 'al_')+suffix) for suffix in ('X','Y')] if xlpe and const else []
+            simplified=basis_record(parameters,'sc-conductor-simplified/r1/non_adiabatic_conductor_simplified_formula')
+            x,y=[r['record']['value'] for r in xy_refs] if len(xy_refs)==2 and all(xy_refs) else (None,None)
+            eps = conductor_factor(area, duration, x, y) if x is not None and y is not None and duration is not None and simplified else None
+            factor=add('conductor-factor', prefix+'导体非绝热修正因数', eps, '1', '5.2；表 III（XLPE，接触因数 0.7）', 13, source='iec60949', core=cid, formula='ε=√[1+X√(t/S)+Y(t/S)]', inputs={'S_mm2': area, 't_s': duration, 'X': x, 'Y': y}, status='uncovered' if not xlpe else None, reason='只覆盖已查询铜 / 铝导体与 XLPE 的表 III 组合。')
+            nonadiabatic=add('conductor-nonadiabatic', prefix+'导体非绝热允许短路电流', iad*eps if iad is not None and eps is not None else None, 'A', '第 2 章；5.2', 9, source='iec60949', core=cid, formula='I=ε I_AD', inputs={'I_AD_A': iad, 'epsilon': eps}, status='uncovered' if not xlpe else None)
+            attach_basis(factor,[simplified,*xy_refs]);attach_basis(nonadiabatic,[formula_ref,simplified,*xy_refs,*material_refs])
+        metallic = [(l, core['id']) for core in cable['cores'] for l in core['layers'] if l['role'] in ('metallic_screen', 'metallic_sheath', 'armour')] + [(l, None) for l in cable['common_layers'] if l['role'] in ('metallic_screen', 'metallic_sheath','armour')]
         if not metallic:
             add('metal-adiabatic', '金属屏蔽 / 护套绝热允许电流', None, 'A', '第 3 章；5.3 / 6.2 / 6.3', 9, source='iec60949', role='metallic_screen', reason='缺少金属屏蔽或护套构造、截面与初末温度。')
             add('metal-nonadiabatic', '金属屏蔽 / 护套非绝热允许电流', None, 'A', '5.3 / 6.1', 13, source='iec60949', role='metallic_screen', reason='需接触类型及相邻介质热参数，未用导体温度替代。')
         for layer, cid in metallic:
             role, form = layer['role'], layer.get('form')
             kind = materials[layer['material']].get('standard_kind')
-            const = CONSTANTS.get(kind)
+            const, material_refs = material_constants(parameters, kind, metal=True)
             obs = measurement(document, cable, cid, role, 'screen_area')
             area = obs['value']*1e6 if obs else None
             area_geometry = {}
@@ -255,13 +270,17 @@ def calculate(document, parameters, capability, *, _include_curve=True):
             if area is None and form == 'wires' and layer.get('wire_count') and layer.get('wire_diameter'):
                 area = layer['wire_count']*pi*(layer['wire_diameter']*1000)**2/4
             if area is None and form == 'tape' and layer.get('tape_width') and layer.get('nominal_tape_thickness') and layer.get('tape_count') and layer.get('tape_application') in ('helical_overlap', 'two_tape_gap'):
-                area = layer['tape_count']*layer['tape_width']*layer['nominal_tape_thickness']*1e6
+                area_ref = basis_record(parameters,'sc-helical-tape-area/r1/short_circuit_geometrical_area_formula')
+                if area_ref:
+                    area = layer['tape_count']*layer['tape_width']*layer['nominal_tape_thickness']*1e6
+                    area_geometry={'area_formula':'S=n·w·δ','n':layer['tape_count'],'w_mm':layer['tape_width']*1000,'delta_mm':layer['nominal_tape_thickness']*1000}
             mi, mf = parameter('metal_initial_temperature_k'), parameter('metal_final_temperature_k')
-            iad = adiabatic(area, const[0], const[1], mi-273.15, mf-273.15, duration) if const and all(v is not None for v in (area, mi, mf, duration)) else None
+            iad = adiabatic(area, const[0], const[1], mi-273.15, mf-273.15, duration) if const and formula_ref and all(v is not None for v in (area, mi, mf, duration)) else None
             metal_reason=('缺字段：波纹铝护套实际载流金属截面及制造或试验报告；等效圆柱仅用于显示，不能作为短路计算截面。' if area is None and form=='corrugated' else '缺字段：金属屏蔽或护套实际截面及来源。' if area is None else '缺字段：金属材料标准类别；请在材料属性中明确铜、铝或铅。' if not const else '金属组件容量单独列出；多个并联组件不能直接相加。')
             if kind is not None and not const:
                 metal_reason='此金属材料的 IEC 60949 常数分支未覆盖；请核对材料与方法范围。'
             metal=add(role+'-adiabatic', ('芯 '+str(next(i+1 for i,c in enumerate(cable['cores']) if c['id']==cid))+' · ' if cid else '')+'金属组件绝热允许电流', iad, 'A', '第 3 章；表 I；5.3 / 6.2 / 6.3', 9, source='iec60949', core=cid, role=role, formula='I_AD=K S √{ln[(θ_f+β)/(θ_i+β)]/t}', inputs={'S_mm2': area, **area_geometry, 'K': const[0] if const else None, 'beta_K': const[1] if const else None, 'theta_i_K': mi, 'theta_f_K': mf, 't_s': duration}, status='uncovered' if kind is not None and not const else 'missing' if not const else None, input_source=obs['source'] if obs else {'kind':'derived','reference':'同心光滑护套保存尺寸的环形设计截面；非实测截面。','reviewed':False} if area_geometry else None, reason=metal_reason)
+            attach_basis(metal,[formula_ref,*material_refs]+([basis_record(parameters,'sc-helical-tape-area/r1/short_circuit_geometrical_area_formula')] if form=='tape' else []))
             if area is None:
                 metal['missing_input_fields']=[{'label':'实际载流金属截面','quantity':'screen_area','unit':'m2','role':role}]
             if kind is None:
@@ -271,31 +290,45 @@ def calculate(document, parameters, capability, *, _include_curve=True):
             contact = parameter('contact_factor')
             thickness = layer.get('nominal_tape_thickness') if form == 'tape' else layer.get('thickness')
             reason, status = '需金属组件厚度、相邻两侧介质热参数和接触因数的来源。', None
-            if form in ('smooth', 'corrugated', 'tape') and const and all(v is not None for v in (duration, thickness, rho_i, rho_o, cv_i, cv_o, contact)):
+            nonad_ref=basis_record(parameters,'sc-screen-general/r1/non_adiabatic_screen_formula')
+            if form in ('smooth', 'corrugated', 'tape') and const and nonad_ref and all(v is not None for v in (duration, thickness, rho_i, rho_o, cv_i, cv_o, contact)):
                 eps, m = metal_factor(duration, thickness, const[2], rho_i, rho_o, cv_i, cv_o, contact)
             elif form == 'wires':
+                nonad_ref=basis_record(parameters,'sc-conductor-general/r1/non_adiabatic_conductor_formula')
                 n, d, inner_d = layer.get('wire_count'), layer.get('wire_diameter'), layer.get('screen_inner_diameter')
                 gap = (pi*(inner_d+d)-n*d)/n if n and d and inner_d else None
                 wire_area = area/n if area is not None and n else pi*(d*1000)**2/4 if d else None
                 embedded = parameters.get('wire_contact') == 'fully_embedded'
                 if gap is not None and gap < 0:
                     raise ValueError('metallic_screen.wire_count：铜丝构造重叠。')
-                if embedded and gap is not None and gap >= d and const and all(v is not None for v in (duration, rho_i, cv_i, wire_area)):
-                    a = 2464/const[2]*sqrt(cv_i/rho_i)
-                    b = 1.22/const[2]*(cv_i/rho_i)
-                    eps = sqrt(1+.7*a*sqrt(duration/wire_area)+.7**2*b*duration/wire_area)
+                if embedded and gap is not None and gap >= d and const and nonad_ref and all(v is not None for v in (duration, rho_i, cv_i, wire_area, contact)):
+                    a = nonad_ref['record']['value']['C1']/const[2]*sqrt(cv_i/rho_i)
+                    b = nonad_ref['record']['value']['C2']/const[2]*(cv_i/rho_i)
+                    eps = sqrt(1+contact*a*sqrt(duration/wire_area)+contact**2*b*duration/wire_area)
                     reason = '5.3.1：铜丝间隔至少一个丝径、完全嵌入；按每根铜丝面积计算 ε，容量再乘丝数；不包括反向扎带。'
                 else:
-                    status, reason = 'uncovered', '铜丝非绝热分支只覆盖明确完全嵌入且间隔至少一个丝径；其余接触类型未覆盖。'
+                    status, reason = ('missing','需工程输入：接触因数及内侧介质热参数与来源。') if embedded and gap is not None and gap>=d else ('uncovered','铜丝非绝热分支只覆盖明确完全嵌入且间隔至少一个丝径；其余接触类型未覆盖。')
             elif form not in ('smooth', 'corrugated', 'tape'):
                 status, reason = 'uncovered', '需明确管状护套、铜带或铜丝构造。'
-            add(role+'-factor', '金属组件非绝热修正因数', eps, '1', '5.1 / 5.3.1' if form == 'wires' else '6.1', 11 if form == 'wires' else 13, source='iec60949', core=cid, role=role, formula='按每根铜丝：ε=√[1+FA√(t/S_wire)+F²B(t/S_wire)]' if form == 'wires' else 'ε=1+0.61P−0.069P²+0.0043P³；P=M√t；M=F(√(σ₂/ρ₂)+√(σ₃/ρ₃))/(2σ₁δ)', inputs={'M_s_minus_half': m, 't_s': duration, 'thickness_m': thickness, 'contact_factor': contact}, status=status, reason=reason)
-            add(role+'-nonadiabatic', '金属组件非绝热允许电流', iad*eps if iad is not None and eps is not None else None, 'A', '第 2 章；5.3 / 6.1', 9, source='iec60949', core=cid, role=role, formula='I=ε I_AD', inputs={'I_AD_A': iad, 'epsilon': eps}, status=status, reason=reason)
-        add('parallel-fault-sharing', '多个金属回路的总故障容量', None, 'A', 'AMD1:2008，第 4 章补充', 2, source='iec60949_amendment', status='uncovered', reason='缺少接地拓扑、阻抗分配与各组件初始温度；不直接累加各组件容量。')
+            factor_row=add(role+'-factor', '金属组件非绝热修正因数', eps, '1', '5.1 / 5.3.1' if form == 'wires' else '6.1', 11 if form == 'wires' else 13, source='iec60949', core=cid, role=role, formula='按每根铜丝：ε=√[1+FA√(t/S_wire)+F²B(t/S_wire)]' if form == 'wires' else 'ε=1+0.61P−0.069P²+0.0043P³；P=M√t；M=F(√(σ₂/ρ₂)+√(σ₃/ρ₃))/(2σ₁δ)', inputs={'M_s_minus_half': m, 't_s': duration, 'thickness_m': thickness, 'contact_factor': contact}, status=status, reason=reason)
+            capacity=add(role+'-nonadiabatic', '金属组件非绝热允许电流', iad*eps if iad is not None and eps is not None else None, 'A', '第 2 章；5.3 / 6.1', 9, source='iec60949', core=cid, role=role, formula='I=ε I_AD', inputs={'I_AD_A': iad, 'epsilon': eps}, status=status, reason=reason)
+            attach_basis(factor_row,[nonad_ref,*material_refs]);attach_basis(capacity,[formula_ref,nonad_ref,*material_refs])
+            if parameters.get('metal_capacity_basis')=='adiabatic':
+                factor_row['input_category']='system';capacity['input_category']='system'
+            demand=parameter('screen_fault_current_a')
+            capacity_basis=parameter('metal_capacity_basis')
+            allowed=metal['value'] if capacity_basis=='adiabatic' else capacity['value'] if capacity_basis=='nonadiabatic' else None
+            check=add(role+'-fault-check',metal['title'].replace('绝热允许电流','故障电流校核'),allowed-demand if allowed is not None and demand is not None else None,'A','3；6.1',9,source='iec60949',core=cid,role=role,reason='需工程输入：容量口径、此组件故障电流、保护清除时间、初温与允许终温；不将导体温限替代金属部件温限。',inputs={'fault_current_a':demand,'allowed_current_a':allowed,'capacity_basis':capacity_basis})
+            if check['value'] is not None: check.update(status='available' if check['value']>=0 else 'failed',satisfied=check['value']>=0,reason='组件故障电流不超过'+('绝热' if capacity_basis=='adiabatic' else '非绝热')+'容量。' if check['value']>=0 else '故障电流超过组件短路容量，请调整截面或保护时间。')
+            check['missing_parameters']=[name for name in ('metal_capacity_basis','screen_fault_current_a','duration_s','metal_initial_temperature_k','metal_final_temperature_k') if parameter(name) is None]
+            check['input_category']='system';attach_basis(check,[formula_ref,nonad_ref,*material_refs])
+        from cablesim_type_electrical.sharing import fault_sharing
+        fault_sharing(parameters,rows,add)
     counts = dict(Counter(r['status'] for r in rows))
     result = {'schema': 'cablesim.type-analysis/1', 'capability': capability, 'cable_type_id': cable['id'], 'label': cable['label'], 'method_version': METHOD_VERSIONS[capability], 'electrical_topology': topology, 'parameter_sources': parameters.get('sources', {}),
             'input_sha256': sha256(json.dumps({'document': document, 'parameters': parameters}, sort_keys=True, ensure_ascii=False, allow_nan=False).encode()).hexdigest(),
             'rows': rows, 'counts': counts, 'sources': list(SOURCES.values()), 'scope': '数值按保存的输入与已核验分支计算；不批准型号、不替代出厂试验或接地拓扑。'}
+    if capability=='short-circuit': result['basis_queries']=short_queries()
     if capability == 'short-circuit' and _include_curve:
         result['curve'] = short_circuit_curve(document, parameters, rows)
     primary = [r for r in rows if r['status'] == 'available' and r['id'].endswith(':r20' if capability == 'electrical' else ':conductor-adiabatic')]

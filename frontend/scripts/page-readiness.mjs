@@ -1,13 +1,16 @@
 /** Main-content readiness, shared by the real-data audits. Sidebar text is not content. */
 export function readinessSnapshot() {
+  const styles = new WeakMap(), bounds = new WeakMap();
+  const css = e => { if (!styles.has(e)) styles.set(e, getComputedStyle(e)); return styles.get(e); };
+  const box = e => { if (!bounds.has(e)) bounds.set(e, e.getBoundingClientRect()); return bounds.get(e); };
   const visible = e => {
     // A loader fading in is still loading. Opacity zero during the entry animation
     // must not turn an unfinished view into a ready page.
     if (!e.checkVisibility({ checkVisibilityCSS: true })) return false;
-    const r = e.getBoundingClientRect();
+    const r = box(e);
     let left = Math.max(0, r.left), top = Math.max(0, r.top), right = Math.min(innerWidth, r.right), bottom = Math.min(innerHeight, r.bottom);
     for (let p = e.parentElement; p; p = p.parentElement) {
-      const s = getComputedStyle(p), b = p.getBoundingClientRect();
+      const s = css(p), b = box(p);
       if (/(hidden|clip|auto|scroll)/.test(s.overflowX)) { left = Math.max(left, b.left); right = Math.min(right, b.right); }
       if (/(hidden|clip|auto|scroll)/.test(s.overflowY)) { top = Math.max(top, b.top); bottom = Math.min(bottom, b.bottom); }
     }
@@ -89,7 +92,9 @@ export async function waitForPageReady(page, { includeCanvas = true, timeout = 3
   await page.waitForLoadState('domcontentloaded');
   try {
     await page.waitForFunction(({ snapshot, includeCanvas }) => {
-      const state = (0, eval)('(' + snapshot + ')')();
+      // The observer already samples after DOM mutations/scroll/resize. Polling a
+      // second full visibility/layout walk added artificial tasks to every page.
+      const state = window.__loadAudit?.latest ?? (0, eval)('(' + snapshot + ')')();
       return includeCanvas ? state.ready : state.mainReady;
     }, { snapshot: readinessSnapshot.toString(), includeCanvas }, { timeout, polling: 50 });
     // Let the committed content paint. No fixed sleep and no networkidle (polling pages stay active).

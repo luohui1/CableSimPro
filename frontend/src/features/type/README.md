@@ -45,6 +45,8 @@
 
 ## 验收
 
+`node src/features/type/tests/verify-release-integration.mjs` 从发布种子的只读副本核验独立 3×240 教学草稿、实测与工程声明的来源身份、三芯屏蔽独立缺项、审核阻塞和参数页损坏安装的诊断分层。`E2E_DATABASE_SOURCE` 指定隔离种子，`E2E_FRONTEND_DIST` 指定构建；`TYPE_RELEASE_PHASE=before|after` 对相同保存数据测量要求、核对、审核与原加载候选，每页冷 / 热各三次，保留请求瀑布。`TYPE_RELEASE_UI_ONLY=1` 仅复测两尺寸两主题的真实内容、空态、历史及故障状态，不覆盖已有性能记录；安装失败响应与真实请求延迟分别用于错误态和加载态，正常内容和计算均来自真实宿主与插件。页面不重复下载完整方法目录，要求目录在选定运行读取后立即预取，仍按运行身份缓存并由保存操作失效。载流量参数页不读取结果，结果页请求 `rating-table-runs/{rid}?view=rows`；完整工件默认接口和最近批量输入的原件引用仍可追溯，浏览器逐项对拍行值及运行摘要。
+
 `node src/features/type/tests/verify-first-screen.mjs` 使用 `.data/type-measurements/validation.sqlite` 的只读隔离副本及 `.data/type-first-screen/frontend` 构建，真实操作结构、按需关联、所选电气方法参数、未保存结构修改后的规格书过期状态、插件细化剥切网格及研究电缆输入的层选择。输出 `.data/type-first-screen/real-use.json`，保留几何请求参数、服务端 profiling 与网格工件的构建统计；不写演示服务。显示网格不含测量用 BRep，原有建模与网格精度不变。型号路由将输入读取与组件下载并行，和上下文共用一次请求；结构首屏从保存输入直接绘制，保存结果状态在首屏绘制后读取；关联由“查看关联”按需加载。型号结果读取保存快照的方法身份，参数只取所选方法完整身份的输入契约；固定运行仍按原摘要读取完整输入快照。
 
 `node src/features/type/tests/verify-type-to-study.mjs` 使用发布库的只读备份、真实宿主与插件、一个浏览器页面，操作四芯草稿创建、导体类别补填、方法适用性、新建研究与名片返回链接。四芯完整热路未接入时保持明确拒绝；GB 50217 校正必须另有同型号、同条件且有出处的基准电流，不为新草稿编造基准。另用发布副本中完整的 YJV22 三芯设计实测直埋允许电流，不把它冒称为四芯或新生成三芯草稿的结果。输出 `.data/type-to-study/`；`--supported-only` 只复测完整三芯，并单独保存记录。
@@ -171,6 +173,13 @@ IEC 60287-1-1:2023 现行正文表1（印刷35 / CMV PDF83）、表3（印刷37 
 5. `organization.test.mjs` 已纳入 `npm test`。两个浏览器命令见上文，分别依赖 8100 只读来源与隔离数据库。
 
 ## 新建型号的四个起点
+
+审核页支持逐项人工发布范围声明：`POST /api/types/{wid}/release-scope`，头 `X-CableSim-Actor:human`，正文 `expected_revision/request_id/specification_digest/human_confirmed:true/exclusions:[{check_id,reason}]`。只允许未算或不适用的电气、短路、标准项，以及明确不含重量报价的用料缺项；已失败、不满足、历史或结构不完整不可声明。声明固定当前修订和该项证据摘要，输入或结果变化自动失效。声明保存在审批回执、客户和内部规格书；插件、Agent 不提供代声明入口。撤销发送完整剩余声明列表，仍核验当前规格书摘要。
+
+`verify-publication.mjs` 在发布库的私有副本使用真实五模块结果，逐项填写范围原因并走采纳、提交、人工批准、发布；记录当前条目计数、PDF、布局和请求瀑布于 `.data/type-publish/`。只有网络延迟与断线等无法正常制造的状态采用故障注入。
+发布后冷热各三次复测使用 `TYPE_PUBLISH_PERFORMANCE_ONLY=1` 和已发布隔离副本；私有宿主拒绝全部 HTTP 写请求，浏览器不设置 Playwright 路由以保留真实 HTTP 缓存。完整发布操作场景仍保留跨域写保护，该场景内拦截开启时的加载记录不能作为热缓存性能结论。
+最近结果读取携带当前 `module`：当前模块保留结果行，其他模块只供浏览栏显示真实运行状态，并以 `input_sha256` / `output_sha256` 引用完整运行归档。状态摘要不能当成计算工件；模块切换重新读取对应结果，全部历史仍按原完整契约读取。
+`verify-publication-states.mjs` 使用真实空白草稿、保存结果和厚度修改产生的历史结果，检查两种视口、深浅主题的五态与断网重试；网络延迟和断开显式记录为故障注入。
 
 `GET /api/types/creation-options` 返回固定发布库版本、已批准资料提案和已安装标准提案能力的输入契约。`POST /api/types` 接收 `request_id/name/origin`，按起点增加：
 

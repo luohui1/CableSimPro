@@ -74,7 +74,11 @@ class Plugin:
     def entry(self) -> Path:
         return self.directory / self.manifest.runtime.entry
 
-    def verify(self) -> None:
+    def verify(self) -> dict:
+        from .verification_receipts import verify
+        return verify(self, self._verify)
+
+    def _verify(self) -> None:
         listed = {f.path: f for f in self.manifest.files}
         actual = {p.relative_to(self.directory).as_posix() for p in package_files(self.directory)}
         if actual != set(listed):

@@ -3,6 +3,17 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { installReadinessObserver, waitForPageReady, readinessSnapshot } from './page-readiness.mjs';
 
+async function writeReport(file, content) {
+  for (let attempt = 0; ; attempt++) {
+    try { await fs.writeFile(file, content); return; }
+    catch (error) {
+      if (error.code !== 'EBUSY' || attempt === 4) throw error;
+      // Windows readers may briefly lock the report. This only retries output I/O.
+      await new Promise(resolve => setTimeout(resolve, 25 * (attempt + 1)));
+    }
+  }
+}
+
 export function performanceFindings(report) {
   const cell = value => String(value ?? '未就绪').replaceAll('|','\\|').replaceAll('\n',' ');
   const rows = report.pages.map(p => `| ${cell(p.label)} | ${p.owner} | ${p.kind} | ${cell(p.mainMs)} / ${p.budgetMs} | ${p.canvases.length ? cell(p.frameMs) + ' / 5000' : '—'} | ${cell(p.slowestRequests[0] ? p.slowestRequests[0].url + ' · ' + Math.round(p.slowestRequests[0].durationMs) + ' ms' : '无已完成请求')} | ${p.longTasks[0] ? Math.round(p.longTasks[0].durationMs) + ' ms（未归因）' : '—'} | ${cell(p.terminalErrors.length ? '错误终态：' + p.terminalErrors.join('；') : p.failure || p.frameFailure ? '未就绪' : '内容已就绪')} | ${p.screenshot ? '[实屏](' + p.screenshot + ')' : '—'} |`);
@@ -118,9 +129,9 @@ export async function createPerformanceAudit({ page, context, root, base }) {
     if (traversal) { report.complete = traversal.complete; report.scope = traversal.scope; report.uncovered = traversal.uncovered; report.errors = traversal.errors; report.runChecks = traversal.runChecks; }
     report.counts = { measurements: report.pages.length, pages: new Set(report.pages.map(p => p.page)).size, mainOverBudget: report.pages.filter(p => !p.mainPassed).length, frameOverBudget: report.pages.filter(p => p.framePassed === false).length,
       terminalErrorStates: report.pages.filter(p => p.terminalErrors.length).length, blockedWrites: report.pages.reduce((n,p) => n + p.blockedWrites.length,0) };
-    await fs.writeFile(path.join(out,'audit.json'),JSON.stringify(report,null,2));
-    await fs.writeFile(path.join(out,'findings.md'), performanceFindings(report));
-    await fs.writeFile(path.join(out,'problems.md'), performanceProblems(report));
+    await writeReport(path.join(out,'audit.json'),JSON.stringify(report,null,2));
+    await writeReport(path.join(out,'findings.md'), performanceFindings(report));
+    await writeReport(path.join(out,'problems.md'), performanceProblems(report));
   }
   return { measure, save, report, out };
 }

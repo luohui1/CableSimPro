@@ -3,6 +3,7 @@ import { Outlet, useNavigate, useRouterState, useSearch } from '@tanstack/react-
 import { useQueryClient } from '@tanstack/react-query';
 import { prefetchCatalogs } from '@/lib/study-queries';
 import { preloadCommonChunks } from '@/lib/idle-preload';
+import { useIdleStart } from '@/lib/use-deferred-start';
 import { WorkbenchSidebar } from './workbench-sidebar';
 
 /** 当前页面模块导航应放入的侧栏位置；由常驻外壳提供，AppShell 以 portal 写入。 */
@@ -36,23 +37,10 @@ export function ShellLayout() {
   const onTheme = () => void navigate({ to: '.', search: ((previous: Record<string, unknown>) => ({ ...previous, theme: theme === 'light' ? 'dark' : 'light' })) as never, replace: true });
   const loading = useRouterState({ select: state => state.status === 'pending' });
   const queryClient = useQueryClient();
+  const idle = useIdleStart(3000);
   useEffect(() => {
-    let timer: number, idle: number | undefined, stopped = false;
-    const preload = () => {
-      if (stopped) return;
-      // CPU idle does not imply the first page's data is ready. Wait for visible content
-      // and its initial requests before speculative downloads compete for local host I/O.
-      if (!document.querySelector('.main-content') || queryClient.isFetching() || document.querySelector('.route-skeleton,.state-view[aria-busy="true"]')) {
-        timer = window.setTimeout(preload, 250); return;
-      }
-      prefetchCatalogs(queryClient); preloadCommonChunks();
-    };
-    timer = window.setTimeout(() => {
-      if (window.requestIdleCallback) idle = window.requestIdleCallback(preload, { timeout: 3000 });
-      else preload();
-    }, 0);
-    return () => { stopped = true; window.clearTimeout(timer); if (idle !== undefined) window.cancelIdleCallback(idle); };
-  }, [queryClient]);
+    if (idle) { prefetchCatalogs(queryClient); preloadCommonChunks(); }
+  }, [queryClient, idle]);
   // 首帧同步读出收起状态和宽度，不在 effect 里修正，刷新时侧栏不跳。
   const [collapsed, setCollapsed] = useState(() => readStored(COLLAPSED_KEY) === 'true');
   const [animating, setAnimating] = useState(false);

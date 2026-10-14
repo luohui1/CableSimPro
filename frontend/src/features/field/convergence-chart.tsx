@@ -6,12 +6,15 @@ export function ConvergenceChart({ values, label, unit, threshold }: { values: (
   const host = useRef<HTMLElement>(null), [width, setWidth] = useState(920);
   useEffect(() => {
     if (!host.current) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(Math.max(240, entry.contentRect.width)));
+    const observer = new ResizeObserver(([entry]) => setWidth(previous => {
+      const next = Math.max(240, entry.contentRect.width);
+      return previous === next ? previous : next;
+    }));
     observer.observe(host.current);
     return () => observer.disconnect();
   }, [values.length]);
   const finite = values.flatMap((value, index) => value !== null && Number.isFinite(value) ? [{ value, index }] : []);
-  if (finite.length < 2) return null;
+  if (!finite.length) return null;
   const minimum = Math.min(...finite.map(item => item.value), ...(threshold === undefined ? [] : [0])), maximum = Math.max(...finite.map(item => item.value), ...(threshold === undefined ? [] : [threshold*1.25]));
   const point = (value: number, index: number) => `${72 + index / Math.max(1, values.length - 1) * (width - 100)},${192 - (value - minimum) / (maximum - minimum || 1) * 152}`;
   return <figure ref={host} className="fem-convergence-chart"><figcaption>{label} · {unit}</figcaption>

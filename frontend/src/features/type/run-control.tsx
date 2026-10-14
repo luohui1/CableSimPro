@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { api, ApiError, array, message, optionalRecord, record, responseData, text } from '@/api/client';
-import { methodCatalog } from '@/api/research';
+import { api, ApiError, array, optionalRecord, record, responseData, text } from '@/api/client';
+import { moduleMethods } from './api';
+import { queryClient } from '@/lib/query-client';
 import type { components } from '@/api/generated/schema';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -11,6 +12,7 @@ import { methodLabel } from './evidence';
 import { missingTypeInputs } from './missing';
 import { useTypeCommand } from './command-slot';
 import { displayName, displayText } from '@/lib/display-names';
+import { MethodErrorDetail, methodErrorText, methodDiagnostic } from './method-error';
 
 function preflightReason(value:string) {
   if(value.includes('波纹层需专用轮廓'))return '波纹金属护套：实际波纹实体与用料尚未覆盖；三维可按等效厚度显示。';
@@ -18,14 +20,16 @@ function preflightReason(value:string) {
   if(parameter){const name=parameter[1].split('/').map(key=>displayName(key)).join(' · ');return /[（(]required[）)]/.test(value)?'缺字段：'+name+'；填写方法参数及来源。':name+'不符合方法要求，请核对数值、单位与适用范围。';}
   const layer=/^.+\/(metallic_screen|armour|metallic_sheath)(?:\.([^：:]+))?[：:]\s*(.+)$/.exec(value);
   if(layer){const names:Record<string,string>={metallic_screen:'金属屏蔽',armour:'铠装',metallic_sheath:'金属护套'};return names[layer[1]]+'：'+layer[3].replace('0–1 的搭盖率','0–100% 的搭盖比例');}
-  return displayText(value);
+  return methodErrorText(displayText(value));
 }
 
 type Definition = Omit<components['schemas']['CreateStudy'], 'expected_revision'>;
 type Prepared = { study: components['schemas']['StudyResponse']; preflight: components['schemas']['PreflightResponse']; revision: number };
 type Attempt = { workspace: string; study: string; request: components['schemas']['RunStudy'] };
 export async function methodForArtifact(artifact: string, signal?: AbortSignal, analysis?: string): Promise<components['schemas']['Method']> {
-  for (const item of await methodCatalog(signal)) {
+  const catalog = await queryClient.fetchQuery({ queryKey:['type-method-catalog'],
+    queryFn:({signal:querySignal})=>moduleMethods(signal ? AbortSignal.any([signal,querySignal]) : querySignal),staleTime:30000 });
+  for (const item of catalog) {
     if (item.platform_supported === false) continue;
     for (const value of array(item.capabilities, '方法能力')) {
       const capability = record(value, '方法能力');
@@ -75,7 +79,7 @@ export function TypeRunControl({ channel, label, definition, onBusy, unavailable
       if (!run) throw new ApiError(502, '运行响应未返回身份'); await finished(run, active.study);
     } catch (error) {
       if (error instanceof ApiError && error.status >= 400 && error.status < 500) { attempt.current = null; sessionStorage.removeItem(key); }
-      if (mounted.current) setError(message(error));
+      if (mounted.current) setError(methodDiagnostic(error));
     } finally { pending.current = false; running(false); }
   }
   async function prepare() {
@@ -84,17 +88,22 @@ export function TypeRunControl({ channel, label, definition, onBusy, unavailable
     pending.current = true; running(true); setError(''); setAck(false);
     try {
       const body = await definition();
+      if(channel==='short-circuit'){
+        const response=await fetch(`/api/types/${encodeURIComponent(state.workspace.id)}/short-circuit-basis`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({request_id:crypto.randomUUID(),expected_revision:state.workspace.revision,parameters:body.parameters||{}})});
+        const result=await response.json();if(!response.ok)throw new ApiError(response.status,text(optionalRecord(result.detail).message)||text(result.detail)||'短路依据查询失败，请重新查询');
+        body.parameters=record(result.parameters,'短路依据条件');
+      }
       const study = await responseData(api.POST('/api/workspaces/{wid}/studies', { params: { path: { wid: state.workspace.id } }, body: { ...body, expected_revision: state.workspace.revision } }));
       if (!study) throw new ApiError(502, '方法配置未返回研究身份');
       const preflight = await responseData(api.GET('/api/workspaces/{wid}/studies/{sid}/preflight', { params: { path: { wid: state.workspace.id, sid: study.id }, query: { expected_revision: state.workspace.revision, expected_study_revision: study.revision } } }));
       if (!preflight) throw new ApiError(502, '预检未返回结果');
       if (mounted.current) { setPrepared({ study, preflight, revision: state.workspace.revision }); setOpen(true); }
-    } catch (error) { if (mounted.current) setError(message(error)); } finally { pending.current = false; running(false); }
+    } catch (error) { if (mounted.current) setError(methodDiagnostic(error)); } finally { pending.current = false; running(false); }
   }
   const reason = unavailable || (state.document && missingTypeInputs(state.document).length ? '结构缺项 · 先补齐型号名片中的字段' : state.dirty ? state.inputDirty?'请先保存结构修改':'请先保存方法条件；临时结果可在方法页试算' : state.readOnly ? state.workspace?.raw.fixed_run ? '运行快照保持只读' : '历史或已发布型号保持只读' : '');
   const inCommand = useTypeCommand({ id: 'run-'+channel, label: attempt.current ? '查询同一运行' : label, role: 'primary', loading: busy, disabledReason: reason || (!state.workspace ? '型号尚未读取' : undefined), onSelect: () => void prepare() });
   return <div className="type-run-control">{!inCommand && <Button variant={primary ? 'primary' : 'default'} size="compact" loading={busy} disabled={!!reason || !state.workspace} onClick={() => void prepare()}>{attempt.current ? '查询同一运行' : label}</Button>}
-    {!inCommand && reason && <span className="muted">{reason}</span>}{error && <p className="field-error" role="alert">{error}</p>}
+    {!inCommand && reason && <span className="muted">{reason}</span>}{error && <><p className="field-error" role="alert">{methodErrorText(error)}</p><MethodErrorDetail value={error} /></>}
     <Dialog open={open} onOpenChange={value => { if (!busy) setOpen(value); }} title={label + ' · 预检'} description={prepared?.preflight.ready ? '保存输入已通过预检，确认范围后运行。' : '当前输入未通过预检，修正后重新提交。'}
       actions={<Button variant="primary" loading={busy} disabled={!ack || !prepared?.preflight.ready || state.dirty || state.workspace?.revision !== prepared?.revision} onClick={() => void execute()}>确认并运行</Button>}>
       <div className="type-create-fields">{prepared?.preflight.cases.filter(item => item.status !== 'succeeded').map(item => { const reason = text(optionalRecord(item.error).message) || item.status; return <div key={item.case_id}><p className="field-error">{preflightReason(reason)}</p>{locateIssue?.(reason)}<details><summary>追溯</summary><p>{reason}</p></details></div>; })}

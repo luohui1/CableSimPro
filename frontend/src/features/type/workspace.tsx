@@ -22,10 +22,13 @@ import { sourceKind } from '@/lib/selection-view';
 import { formatNumber } from '@/lib/format';
 import type { LayerTarget } from '@/features/drawing/types';
 import { targetId } from '@/features/drawing/cable-geometry';
-import { TypeStructure, TypeNumericField, TypeCanvas, LayerTable, nominalArea } from './structure';
 import { deferredView } from '@/components/deferred-view';
+const TypeStructure=deferredView(()=>import('./structure').then(m=>({default:m.TypeStructure})));
+const TypeNumericField=deferredView(()=>import('./structure').then(m=>({default:m.TypeNumericField})));
+const TypeCanvas=deferredView(()=>import('./structure').then(m=>({default:m.TypeCanvas})));
+const LayerTable=deferredView(()=>import('./structure').then(m=>({default:m.LayerTable})));
 const MaterialComparison = deferredView(() => import('./material-comparison').then(module => ({ default: module.MaterialComparison })));
-import { layerRows } from './layers';
+import { layerRows, nominalArea } from './layers';
 import { useTypeWorkspace } from './provider';
 import { typePath, useTypeNavigation } from './navigation';
 import './type.css';
@@ -207,7 +210,7 @@ export function TypeWorkspace() {
         <div className="workbench-views" role="group" aria-label="模型视图">
           {([['section', 'object/cable', '电缆截面'], ['three', 'result/field', '三维剥切']] as const).map(([value, icon, label]) => <button key={value} type="button" aria-pressed={view === value} onClick={() => setView(value)}><Icon name={icon} />{label}</button>)}
         </div>
-        {state.loading ? <LoadingState title="正在读取型号输入" /> : !document && state.error ? <ErrorState title="型号读取失败" description={state.error} action={<Button onClick={state.reload}>重新读取</Button>} /> : !document ? <EmptyState title="尚无型号输入" description="从型号列表选择型号。" /> : <TypeCanvas view={view} cable={cable} selected={selected} onSelect={choose} />}
+        {!dockMax && (state.loading ? <LoadingState title="正在读取型号输入" /> : !document && state.error ? <ErrorState title="型号读取失败" description={state.error} action={<Button onClick={state.reload}>重新读取</Button>} /> : !document ? <EmptyState title="尚无型号输入" description="从型号列表选择型号。" /> : <TypeCanvas view={view} cable={cable} selected={selected} onSelect={choose} />)}
         {structureError && <p className="type-notice is-error" role="alert">{structureError}</p>}
       </section>
       <WorkbenchSplitter kind="type" />

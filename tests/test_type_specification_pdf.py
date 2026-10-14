@@ -191,7 +191,7 @@ def test_material_versions_bind_by_identity_and_saved_drawing_is_vector(tmp_path
     assert '截面图未生成' in geometry_tables(payload,'customer')
 
 
-def test_missing_print_environment_keeps_html_preview_explicit(monkeypatch):
+def test_html_section_preview_does_not_need_the_print_environment(monkeypatch):
     import builtins
     from backend.kernel.type_specification_drawing import section_svg
     original = builtins.__import__
@@ -200,8 +200,14 @@ def test_missing_print_environment_keeps_html_preview_explicit(monkeypatch):
             raise ImportError('isolated missing PDF environment')
         return original(name, *args, **kwargs)
     monkeypatch.setattr(builtins, '__import__', unavailable)
-    html = section_svg({'results':{}})
-    assert '截面预览环境缺失' in html and 'ReportLab' in html and '已保存的结构和核对结果保留' in html
+    circle = lambda radius: {'kind':'circle','x':0,'z':0,'radius':radius,'offset':0}
+    payload = {'results':{'geometry':{'artifact':{'outer_diameter_m':.03,'layers':[
+        {'label':'导体','section_profile':{'outer':circle(.0125)}},
+        {'label':'外护套','section_profile':{'outer':circle(.015)}}]}}}}
+    # The browser preview draws saved circles directly; only the PDF needs ReportLab.
+    html = section_svg(payload)
+    assert html.startswith('<svg') and html.count('<circle') == 2 and '外径 30.0 mm' in html
+    assert '截面图未生成' in section_svg({'results':{}})
 
 
 def test_cover_execution_standard_requires_matching_current_approval():

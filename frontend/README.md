@@ -18,6 +18,7 @@ npm ci
 npm run dev                     # 127.0.0.1:5173
 npm run prepare:backend         # 从指定真实数据库只读备份到独立验收库
 npm run generate:api            # 从正式服务 /openapi.json 生成类型和端点目录
+npm run check:api               # 发布库隔离宿主核对生成物与当前 OpenAPI；不重写类型
 npm run build                   # 样式门禁、严格类型检查、构建
 npm test                        # 样式门禁反例、数值与单位格式化
 npm run test:browser             # 临时数据库与服务自动启动/清理
@@ -41,6 +42,7 @@ npm run test:documents           # 真实PDF/OCR、核对/提案/批准、断线
 npm run test:document-batch      # 五个真实规格、快捷核对、批量提案/批准与断线幂等
 npm run test:accessibility       # 全路由WCAG、可见焦点/表格键盘与首屏冷缓存测量
 npm run test:performance         # 发布库隔离副本，逐页冷/热内容就绪与三维/场图首帧预算
+npm run test:loading-trace       # 真实保存页面的CPU栈、Chrome timeline、逐请求接收与ASGI发送归因
 npm run test:regularity          # 实际内容就绪后，双尺寸规整检查与1366逐页总览
 npm run test:visible-text        # 同一真实页面集合，可见标识、悬停和折叠层分别计数
 npm run test:inquiry             # 问询数字输入、简明预检、冻结工况与历史跳转
@@ -62,6 +64,10 @@ npm run capture:handoff          # 只读截取正式前端，可加 -- --route=
 可用 `VISIBLE_TEXT_PATHS`（竖线分隔的真实路由）缩小同一巡检清单，`PERFORMANCE_PASS`、`REGULARITY_PASS` 分开保存不同实测批次。`E2E_FRONTEND_DIST` 可指定冻结的构建目录，避免并行构建改变验收版本。性能巡检由隔离后端拒绝写请求，保留真实浏览器缓存；另外两项使用客户端只读守卫。`problems.md` 按线程列出超预算项，分开列最慢接口、下载、主线程任务和 CAD 初始化回执；`findings.md` 包含每次测量及界面终态，`audit.json` 保留完整时间线和未覆盖项。时间预算通过不代表功能成功，错误终态仅测提示呈现时间。没有观测来源的 CPU 阶段不猜测为 WASM 初始化。
 
 文字与规整可以共用一次真实遍历：设置 `REGULARITY_AUDIT=1`、`REGULARITY_WITH_VISIBLE=1` 后运行 `npm run test:visible-text`，会分别生成两个完整审计结果及规整总览，不重复打开同一批页面。性能仍单独实测。响应记录包含 `Server-Timing` 和 `X-CableSim-Read-Cache`（接口提供时），可将浏览器排队 / 下载与服务端实际读取时间分开查看。
+
+加载归因用 `LOADING_TRACE_ROUTES` 指定 JSON 数组（`name`、`path`），`LOADING_TRACE_OUTPUT` 指定本批输出目录，默认读取真实首页；来源库仍由 `E2E_DATABASE_SOURCE` 指定。私有构建加 `vite build --sourcemap` 并通过 `E2E_FRONTEND_DIST` 指定后，可把 CPU 采样映射回源码。报告保留原始 CPU/timeline、发送与接收时间线和归因表；无 sourcemap 时只提供打包位置。`LOADING_TRACE_STYLE=1` 另记录实际触发慢计算样式读取的元素；`LOADING_TRACE_TABS=1` 实测共享页签的键盘切换、关联面板和返回，`LOADING_TRACE_RUNS=1` 实测运行页逐页读取全部记录及去重。诊断和交互会增加开销，加载预算仍以独立 `test:performance` 的无 profiler 实测为准。
+
+`test:performance` 可指定 `LOADING_SERVER_TRACE`，只记录隔离宿主的请求发送时间和索引内部耗时，不开启 CPU profiler；加 `LOADING_TRACE_WARM=1` 可同时记录目录预热区间，用实际时间线判断是否与首屏请求重叠。
 
 | 位置 | 职责与边界 |
 | --- | --- |

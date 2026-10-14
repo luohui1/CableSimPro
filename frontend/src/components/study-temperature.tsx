@@ -578,7 +578,7 @@ export function StudyTemperature({
           : "—",
     }));
   return (
-    <div className="input-module">
+    <div className="input-module saved-field-diagnostics">
       {conclusion}
       <DataTable
         label="保存温度场诊断"

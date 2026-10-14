@@ -16,19 +16,33 @@ export function useInView<T extends Element>(): [RefObject<T | null>, boolean] {
   return [ref, seen];
 }
 
-/** 页面读取结束后，在浏览器空闲时读取侧栏计数；网络等待不等于首屏已就绪。 */
+/** 次要目录/代码预取只在正文提交并绘制后启动；查询间的空档不是首屏就绪。 */
 export function useIdleStart(timeout = 2000) {
   const [ready, setReady] = useState(false);
   const fetching = useIsFetching(), queries = useQueryClient();
   useEffect(() => {
     if (ready || fetching > 0) return;
-    const start = () => { if (!queries.isFetching()) setReady(true); };
-    if (window.requestIdleCallback) {
-      const handle = window.requestIdleCallback(start, { timeout });
-      return () => window.cancelIdleCallback(handle);
-    }
-    const handle = window.setTimeout(start, Math.min(timeout, 1500));
-    return () => window.clearTimeout(handle);
+    let frame = 0, idle = 0, stopped = false, queued = false;
+    const contentReady = () => {
+      const main = document.querySelector<HTMLElement>('.main-content,.provider-state');
+      if (queries.isFetching() || !main?.checkVisibility({ checkVisibilityCSS: true }) || main.matches('[aria-busy="true"]') || document.querySelector('.route-skeleton,.route-progress[data-active="true"]')) return false;
+      return ![...main.querySelectorAll('[aria-busy="true"],.skeleton-lines,.skeleton-bar')].some(node => node.checkVisibility({ checkVisibilityCSS: true }));
+    };
+    const start = () => { queued = false; if (!stopped && contentReady()) setReady(true); };
+    const schedule = () => {
+      if (queued || stopped) return;
+      queued = true;
+      // Two frames separate React's commit from speculative work. No fixed page delay.
+      frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => {
+        if (!contentReady()) { queued = false; return; }
+        if (window.requestIdleCallback) idle = window.requestIdleCallback(start, { timeout });
+        else start();
+      }); });
+    };
+    const observer = new MutationObserver(schedule);
+    observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-busy', 'data-active', 'class', 'hidden'] });
+    schedule();
+    return () => { stopped = true; observer.disconnect(); cancelAnimationFrame(frame); if (idle) window.cancelIdleCallback(idle); };
   }, [timeout, fetching, queries, ready]);
   return ready;
 }

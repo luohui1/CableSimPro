@@ -353,7 +353,7 @@ def release_identity():
     hv,hv_digest = bundled_hv()
     evidence = evidence_availability(verify=True)
     chengnan = evidence_availability(verify=True,scope='chengnan')
-    return {'seed_revision':14, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
+    return {'seed_revision':15, 'engineering_resources':resource_identity(), 'reproduction_snapshot':bundled_evidence()[2],
             'engineering_evidence':evidence['snapshot_id'],
             'engineering_evidence_imported':evidence['available'],
             'chengnan_engineering_evidence_imported':chengnan['available'],
@@ -362,6 +362,136 @@ def release_identity():
             'manufacturer_series':{'id':series['id'],'version':series['version'],'sha256':digest},
             'hv_model':{'id':hv['id'],'version':hv['version'],'sha256':hv_digest,
                         'model_sha256':fingerprint(release_hv_model())}}
+
+
+def release_teaching_mv_design(api):
+    """Reproduce the accepted teaching workflow through real, sealed methods.
+
+    No donor database, archived fake outputs, factory certificates or automatic
+    design approval. Teaching observations and declarations remain unreviewed.
+    """
+    from backend.domain.guards import pointer
+    proposal = api('/api/types/creation-proposals', 'POST', {'request_id':str(uuid4()), 'input':{
+        'schema_version':'cablesim.cable-design-request/2', 'voltage':'8700/15000',
+        'area_m2':240e-6, 'construction':'three_core', 'conductor':'copper_bare',
+        'form':'solid_round', 'generation_mode':'complete', 'screened':'yes',
+        'armour':'steel_tape', 'gap_m':0, 'conductor_screen_thickness_m':.0007,
+        'insulation_screen_thickness_m':.0007, 'screen_tape_thickness_m':.0001,
+        'screen_tape_width_m':.1}})
+    workspace = api('/api/types', 'POST', {'request_id':str(uuid4()), 'origin':'standard',
+        'name':'YJV22-8.7/15 3×240 · 完整护层教学草稿', 'proposal_id':proposal['id'],
+        'content_sha256':proposal['content_sha256'], 'human_confirmed':True},
+        headers={'X-CableSim-Actor':'human'})
+    wid = workspace['id']
+    source = {'kind':'demo', 'reviewed':False,
+        'reference':'完整护层教学流程；构造、实测与工程声明供操作演示，不作为厂家证明；未批准设计。'}
+    document = deepcopy(workspace['domain'])
+    document['provenance']['/teaching_identity'] = source
+    # Explicit manufacturing inputs from the accepted full-structure teaching
+    # flow. These are engineering declarations, not inferred standard values.
+    cable = document['cable_types'][0]
+    for core in cable['cores']:
+        screen = next(layer for layer in core['layers'] if layer['role']=='metallic_screen')
+        screen['overlap'] = .15
+        document['provenance'][pointer('cable_types',cable['id'],'cores',core['id'],'layers','metallic_screen','overlap')] = source
+    armour = next(layer for layer in cable['common_layers'] if layer['role']=='armour')
+    armour.update(tape_width=.020,tape_gap=.002)
+    for field in ('tape_width','tape_gap'):
+        document['provenance'][pointer('cable_types',cable['id'],'common_layers','armour',field)] = source
+    workspace = api('/api/types/'+wid+'/document', 'PUT', {
+        'request_id':str(uuid4()), 'expected_revision':workspace['revision'], 'document':document})
+    # Bind only uniquely matched existing fixed resources; do not invent identities.
+    bindings = api('/api/types/'+wid+'/resources')
+    if any(t['state']=='unbound' and t['unique_match'] for t in bindings['targets']):
+        bindings = api('/api/types/'+wid+'/resources/migrate', 'POST', {
+            'request_id':str(uuid4()), 'expected_revision':bindings['revision']})
+    workspace = api('/api/workspaces/'+wid)
+    methods = api('/api/methods')
+    modules = []
+    def calculate(title, plugin, capability, parameters):
+        pin = next(m['method'] for m in methods if m['method']['plugin_id']==plugin)
+        study = api('/api/workspaces/'+wid+'/studies','POST', {
+            'expected_revision':workspace['revision'], 'title':title, 'input_source':'domain',
+            'method':{**pin,'capability':capability}, 'parameters':parameters,
+            'input_sources':{'/parameters':source}})
+        root = '/api/workspaces/'+wid+'/studies/'+study['id']
+        check = api(root+f'/preflight?expected_revision={workspace["revision"]}&expected_study_revision={study["revision"]}')
+        if not check['ready']:
+            raise RuntimeError('教学型号预检未通过：'+json.dumps(check,ensure_ascii=False))
+        run = api(root+'/runs','POST', {'expected_revision':workspace['revision'],
+            'expected_study_revision':study['revision'], 'request_id':str(uuid4()),
+            'scope_acknowledged':True, 'lock_digest':check['lock_digest']})
+        deadline = time.monotonic()+180
+        while run['status'] in ('accepted','running','validating') and time.monotonic()<deadline:
+            time.sleep(.2); run = api(root+'/runs/'+run['id'])
+        if run['status'] not in ('succeeded','partial') or run['integrity']!='verified':
+            raise RuntimeError('教学型号真实运行失败：'+json.dumps(run.get('error'),ensure_ascii=False))
+        modules.append({'title':title,'study':study['id'],'run':run['id'],'status':run['status'],'ready':True})
+        return run
+    def standards():
+        basis = api('/api/design/type-workspaces/'+wid+'/requirements/basis','POST', {
+            'request_id':str(uuid4()), 'expected_revision':workspace['revision']})
+        return calculate('标准核对','cablesim.standard-check','dimensions',{
+            'cable_type_id':workspace['domain']['cable_types'][0]['id'],**basis['parameters']})
+    calculate('结构推导','cablesim.cable-geometry','concentric-model',{
+        'cable_type_id':workspace['domain']['cable_types'][0]['id']})
+    original = standards()
+    observations = []
+    for core in workspace['domain']['cable_types'][0]['cores']:
+        observations.extend({'core':core['id'],'role':role,'quantity':quantity,'value':value,'unit':unit}
+            for role,quantity,value,unit in (
+                ('insulation','minimum_thickness',4.1,'mm'),
+                ('insulation','maximum_thickness',4.7,'mm'),
+                ('metallic_screen','minimum_tape_thickness',.095,'mm'),
+                ('metallic_screen','minimum_overlap',8,'%')))
+    observations.extend({'core':None,'role':role,'quantity':quantity,'value':value,'unit':'mm'}
+        for role,quantity,value in (('oversheath','minimum_thickness',3.0),
+            ('bedding','minimum_thickness',1.30),('armour','minimum_tape_thickness',.46)))
+    workspace = api('/api/types/'+wid+'/measurements','POST', {
+        'request_id':str(uuid4()), 'expected_revision':workspace['revision'], 'origin':'teaching',
+        'sample_id':'TEACH-YJV22-240-A', 'measured_on':'2026-10-13',
+        'method':'教学投影仪测厚与铜带搭盖比例；按17.7.2记录铠装带厚度示例',
+        'reference':source['reference'], 'acknowledge_measured':True, 'values':observations})
+    # Field definitions come from the real rule output. All values below are
+    # deliberately teaching declarations, never copied standard limits.
+    rule_output = original['output']['cases'][0]['artifacts']['x-cablesim.standard-check']
+    document = deepcopy(workspace['domain'])
+    for row in rule_output['rows']:
+        for spec in row.get('engineering_inputs',[]):
+            if spec.get('storage')!='provenance': continue
+            key = spec['field'].rsplit('/',1)[-1]
+            values = {'longitudinal_water_barrier':False, 'separator_compound_confirmed':True,
+                'tape_gap_ratio_1':.35, 'tape_gap_ratio_2':.45, 'screen_area':10e-6,
+                'fault_current':1000, 'fault_duration':1,
+                'capacity_reference':'教学输入：尚未独立验证屏蔽短路容量，不能判通过'}
+            if key not in values: continue
+            document['provenance'][spec['field']] = {'kind':'demo','reviewed':False,'reference':json.dumps({
+                'schema':'cablesim.manufacturing-input/1','value':values[key], 'unit':spec['unit'],
+                'reference':source['reference'], 'recorded_on':'2026-10-13'},ensure_ascii=False)}
+    workspace = api('/api/types/'+wid+'/document','PUT',{
+        'request_id':str(uuid4()),'expected_revision':workspace['revision'],'document':document})
+    # The separator material confirmation is exposed only after its prerequisite
+    # water-barrier declaration. Query that real branch before recording it.
+    current = standards()
+    document = deepcopy(workspace['domain'])
+    for row in current['output']['cases'][0]['artifacts']['x-cablesim.standard-check']['rows']:
+        for spec in row.get('engineering_inputs',[]):
+            if spec['field'].endswith('/separator_compound_confirmed'):
+                document['provenance'][spec['field']] = {'kind':'demo','reviewed':False,'reference':json.dumps({
+                    'schema':'cablesim.manufacturing-input/1','value':True,'unit':spec['unit'],
+                    'reference':source['reference'], 'recorded_on':'2026-10-13'},ensure_ascii=False)}
+    if document != workspace['domain']:
+        workspace = api('/api/types/'+wid+'/document','PUT',{
+            'request_id':str(uuid4()),'expected_revision':workspace['revision'],'document':document})
+        standards()
+    review = api('/api/types/'+wid+'/specification?audience=internal&view=detail')
+    if review['ready'] or review['payload']['purpose']!='demo':
+        raise RuntimeError('教学草稿必须保留独立校核缺项与教学身份，不能自动成为可发布设计。')
+    return {'name':workspace['domain']['name'],'workspace':wid,'status':'教学完整护层草稿；审核阻塞如实保留',
+        'resource_bindings':{'bound':sum(t['state']=='current' for t in bindings['targets']),
+            'unbound':[{'name':t['name'],'reason':t['match_reason']} for t in bindings['targets'] if t['state']=='unbound']},
+        'modules':modules,'review':{'ready':False,'blockers':[{'id':c['id'],'message':c['message'],'channel':c['channel']}
+            for c in review['payload']['checks'] if c['blocking']], 'teaching':True}}
 
 
 def build_release_seed(staged, database, identity):
@@ -377,8 +507,8 @@ def build_release_seed(staged, database, identity):
     os.environ.update(environment)
     try:
         with TestClient(create_app(staged)) as client:
-            def api(path, method='GET', body=None):
-                response = client.request(method, path, json=body)
+            def api(path, method='GET', body=None, *, headers=None):
+                response = client.request(method, path, json=body, headers=headers)
                 if response.status_code >= 400:
                     raise RuntimeError(f'{method} {path}: {response.status_code} {response.text}')
                 return response.json()
@@ -464,6 +594,7 @@ def build_release_seed(staged, database, identity):
                         raise RuntimeError('型号演示计算失败：'+json.dumps({'title':saved['title'],'status':run['status'],'error':run.get('error')},ensure_ascii=False))
                     saved.update(run=run['id'],status=run['status']);item['modules'].append(saved)
                     print(item['name']+' · '+saved['title']+'：真实保存结果',flush=True)
+            result['types'].append(release_teaching_mv_design(api))
             workspace = create_workspace(mv,'城北变电站 · 10 kV 三回排管',
                                          target_current_a=400,three_core_layout='three_core_ducts_horizontal')
             hv_workspace = (api('/api/workspaces/'+chengnan_evidence['workspace']) if chengnan_evidence else

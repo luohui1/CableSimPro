@@ -39,7 +39,10 @@ export async function loadWorkspace(wid: string, signal?: AbortSignal, revision?
     if (saved.workspace !== wid || saved.revision !== revision) throw new ApiError(409, '历史型号身份不一致');
     return projectWorkspace({ ...record(saved.state, '历史输入'), id: wid, revision, updated_at: text(saved.created), historical: true, can_undo: false, can_redo: false });
   }
-  return projectWorkspace(await responseData(api.GET('/api/workspaces/{wid}', { params: { path: { wid } }, signal })));
+  const response=await fetch(`/api/types/${encodeURIComponent(wid)}/workspace`,{signal,credentials:'same-origin'});
+  const value=await response.json();
+  if(!response.ok)throw new ApiError(response.status,text(optionalRecord(value.detail).message)||text(value.detail)||'型号输入读取失败，请重新读取',value.detail);
+  return projectWorkspace(value);
 }
 export async function publishedTypes(signal?: AbortSignal) {
   const data = record(await responseData(api.GET('/api/types/library', { signal })), '已发布型号');
@@ -47,8 +50,14 @@ export async function publishedTypes(signal?: AbortSignal) {
 }
 export async function moduleMethods(signal?: AbortSignal) {
   const response=await fetch('/api/methods?view=summary',{signal,credentials:'same-origin'});
-  if(!response.ok)throw new ApiError(response.status,'方法目录读取失败，请重新读取');
+  if(!response.ok){const payload=optionalRecord(await response.json()),detail=payload.detail;
+    throw new ApiError(response.status,text(optionalRecord(detail).message)||text(detail)||'方法目录读取失败，请重新读取',detail);}
   return array(await response.json(),'方法目录').map(value=>record(value,'方法'));
+}
+export async function typeRequirements(wid:string, runId:string, signal?:AbortSignal) {
+  try { return record(await responseData(api.GET('/api/design/type-workspaces/{wid}/requirements', {
+    params:{path:{wid},query:{run_id:runId}},signal:AbortSignal.any([AbortSignal.timeout(20000),...(signal?[signal]:[])]) })), '要求目录'); }
+  catch(error) { if(error instanceof Error&&error.name==='TimeoutError')throw new Error('要求目录读取超过 20 秒，请重新读取。');throw error; }
 }
 export async function listTypes(signal?: AbortSignal): Promise<TypeRow[]> {
   const [drafts, published] = await Promise.all([typeIndex(signal), publishedTypes(signal)]);
@@ -113,13 +122,13 @@ export async function saveType(base: Workspace, document: DomainDocument) {
 export async function historyType(base: Workspace, direction: 'undo' | 'redo') {
   return projectWorkspace(await responseData(api.POST('/api/workspaces/{wid}/history/{direction}', { params: { path: { wid: base.id, direction } }, body: { expected_revision: base.revision } })));
 }
-export async function typeEvidence(wid: string, signal?: AbortSignal, recent=false) {
+export async function typeEvidence(wid: string, signal?: AbortSignal, recent=false, module?:string) {
   const runs=async()=>{
     const items:Record<string,unknown>[]=[];let after=0;
     // Full result artifacts stay intact. Small pages keep real saved evidence
     // within the host response-cache budget; the history bound remains 2000 runs.
     for(let page=0;page<400;page++){
-      const response=await fetch(`/api/types/${encodeURIComponent(wid)}/display-runs?after=${after}&limit=5${recent?'&recent=true':''}`,{signal});
+      const response=await fetch(`/api/types/${encodeURIComponent(wid)}/display-runs?after=${after}&limit=5${recent?'&recent=true':''}${recent&&module?'&module='+encodeURIComponent(module):''}`,{signal});
       const result=await response.json();if(!response.ok)throw new ApiError(response.status,text(optionalRecord(result).detail)||'型号保存结果暂不可用，请重新读取');
       const data=record(result,'型号保存结果');items.push(...array(data.items,'保存运行').map(value=>record(value,'保存运行')));
       const cursor=numeric(data.next_cursor);if(cursor===null)return items;
@@ -145,7 +154,10 @@ export function runArtifact(run: Record<string, unknown>, schema: string): Recor
     if (item.status !== 'succeeded') continue;
     for (const artifact of Object.values(optionalRecord(item.artifacts))) {
       const object = optionalRecord(artifact);
-      if (object.schema === schema) return object;
+      if (object.schema === schema) {
+        if(object.display_status_only)throw new ApiError(409,'请打开对应模块读取完整结果；状态摘要不能代替计算工件');
+        return object;
+      }
     }
   }
   return null;

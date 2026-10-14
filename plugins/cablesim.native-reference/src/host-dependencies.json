@@ -86,13 +86,18 @@
   },
   {
     "path": "backend/plugin_host/registry.py",
-    "sha256": "54111803a5865966f22079596b74983946319d325ed706227be5f4a9686fb3f5",
-    "size_bytes": 5221
+    "sha256": "575daad853d1f5b0af36fd77a60bad97ae0d3a93494b7c47354a17a893e7c976",
+    "size_bytes": 5345
   },
   {
     "path": "backend/plugin_host/runtime.py",
     "sha256": "6c9218f4b8f94c5a42be5505b89ee015f8ec9d88d1e04c6bc22c3d97af48cb68",
     "size_bytes": 4481
+  },
+  {
+    "path": "backend/plugin_host/verification_receipts.py",
+    "sha256": "6cf3205fbd1f6b02d9f797c8693afab8f32522849b44580dbcf8545f47e7298a",
+    "size_bytes": 7688
   },
   {
     "path": "backend/schemas.py",

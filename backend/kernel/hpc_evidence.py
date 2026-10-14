@@ -9,6 +9,8 @@ import lzma
 import os
 from pathlib import Path
 import tarfile
+from functools import lru_cache
+from copy import deepcopy
 
 ROOT = Path(__file__).resolve().parents[2]
 PLUGIN = ROOT/'plugins/cablesim.simulation'
@@ -31,19 +33,32 @@ def checksum(path):
 
 def evidence_index():
     """Small authenticated receipt, also used for saved scheduler provenance."""
+    value,identity=_read_index()
+    return deepcopy(value),identity
+
+
+def _read_index():
     raw = INDEX.read_bytes()
     expected = WITNESS.read_text('ascii').strip()
     if len(raw) > 1024*1024 or sha256(raw).hexdigest() != expected:
         raise ValueError('随附超算实算证据索引摘要不一致；停止导入。')
+    schema_raw=(INDEX.parent/'engineering-evidence-schema.json').read_bytes()
+    return _validated_index(raw,schema_raw), expected
+
+
+@lru_cache(maxsize=4)
+def _validated_index(raw,schema_raw):
+    # Only validation of the exact authenticated bytes is reused. Every call
+    # rereads index, witness and schema; a changed byte cannot use this receipt.
     value = json.loads(raw)
     from jsonschema import Draft202012Validator
-    schema = json.loads((INDEX.parent/'engineering-evidence-schema.json').read_text('utf-8'))
+    schema = json.loads(schema_raw)
     Draft202012Validator(schema).validate(value)
     names = [entry['path'] for entry in value['archives']]
     members = [entry['name'] for entry in value['members']]
     if len(set(names)) != len(names) or len(set(members)) != len(members):
         raise ValueError('随附证据包含重复文件身份。')
-    return value, expected
+    return value
 
 
 def evidence_directory():
@@ -106,10 +121,10 @@ def verify_archives(*, scope='primary'):
 
 def saved_execution(operation, plugin_id, capability, phase='run'):
     if phase != 'run' or not INDEX.exists(): return None
-    value, identity = evidence_index()
+    value, identity = _read_index()
     result = value['executions'].get(operation)
     if not result or result['plugin_id'] != plugin_id or result['capability'] != capability: return None
-    return {**result['execution'], 'saved_evidence': True, 'evidence_snapshot': identity,
+    return {**deepcopy(result['execution']), 'saved_evidence': True, 'evidence_snapshot': identity,
             'evidence_label': '超算实算结果', 'partition': 'dg83'}
 
 

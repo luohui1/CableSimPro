@@ -65,9 +65,17 @@ def proof(research, run, identifier=None, *, display=False, summary=False):
         # connection per refinement repeats snapshot setup and cannot improve
         # consistency; the same status/digest checks remain below for every row.
         with getattr(research.store,'read_snapshot',research.store.db)() as db:
-            summary_sources={row['id']:row for row in db.execute(
-                'SELECT id,status,output_digest FROM study_runs WHERE workspace=? AND id IN ('+
-                ','.join('?' for _ in identifiers)+')',(run['workspace'],*identifiers))}
+            # The covering receipt index returns the frozen status/digest without
+            # fetching the large output stored before output_digest in the row.
+            # Display and formal-proof reads still authenticate original bytes.
+            # SQLite otherwise prefers the older unique ID index and fetches
+            # the record's overflow pages despite the covering index. Legacy
+            # read-only libraries without the new index retain the same checks.
+            indexed=' INDEXED BY study_runs_receipts' if db.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='index' AND name='study_runs_receipts'").fetchone() else ''
+            sources=(db.execute('SELECT id,status,output_digest FROM study_runs'+indexed+' WHERE id=? AND workspace=?',
+                                (identifier,run['workspace'])).fetchone() for identifier in identifiers)
+            summary_sources={source['id']:source for source in sources if source is not None}
     for row in workflow['rows']:
         if summary_sources is not None:
             # The saved summary is not a proof inspection. Bind each frozen row
@@ -312,11 +320,82 @@ def values(run, evidence):
         'temperature_limits_k':sorted(set(limits.values()))},document
 
 
+def saved_comparison_result(research,wid,rid):
+    """Read verified IEC quantities for the first-screen comparison, not its mesh.
+
+    The complete original envelope is hashed and its bound headline witnesses
+    checked by the list reader. A field/display/report still uses display_read;
+    this projection cannot authorize a picture or a formal delivery. Old runs
+    without a verified witness keep the full existing reader.
+    """
+    from .read_models import source_facts,run_state,answer_output
+    from .report_reads import read_cache
+    shared=read_cache()
+    cache=shared.setdefault('methods',{}) if shared is not None else {}
+    with research.store.read_snapshot() as db:
+        row,facts=source_facts(research,db,wid,rid,cache)
+        if facts['integrity']!='verified':raise HTTPException(409,'参考保存运行完整性未通过。')
+        if not facts['headlines']:return display_read(research,wid,rid)
+        revision=db.execute('SELECT revision FROM workspaces WHERE id=?',(wid,)).fetchone()['revision']
+        study=research.definition(db,wid,row['study'])
+    snapshot=json.loads(row['snapshot'])
+    state=run_state(research,snapshot,wid,revision,study,cache)
+    return {**{key:row[key] for key in ('id','workspace','study','sequence','status','created','finished','input_digest','output_digest')},
+            **state,'snapshot':snapshot,'output':json.loads(json.dumps(facts['answer'])) if facts.get('answer') else answer_output(research,row['output'],snapshot)}
+
+
+def compare_saved_quantities(fem, iec, case_id=None):
+    """Same-input scalar comparison; cannot authorize a field or formal report.
+
+    The summary caller already authenticated complete source bytes and bound its
+    convergence rows. The formal chapter keeps its independent mesh proof.
+    """
+    if iec.get('integrity')!='verified' or iec.get('status') not in ('succeeded','partial'):
+        raise ValueError('参考运行未通过保存完整性检查。')
+    if iec['snapshot']['definition']['method']['plugin_id']!='cablesim.iec60287':
+        raise ValueError('参考运行必须是保存 IEC 结果。')
+    chosen=next(c for c in fem['output']['cases'] if not case_id or c['case_id']==case_id)
+    original=next(c for c in fem['snapshot']['cases'] if c['case_id']==chosen['case_id'])
+    def scope(parameters):
+        value=json.loads(json.dumps({k:v for k,v in parameters.items() if k!='operation'}))
+        solver=value.get('solver',{})
+        if 'initial_sheath_temperature_c' in solver and 'initial_sheath_temperature_k' not in solver:
+            solver['initial_sheath_temperature_k']=solver.pop('initial_sheath_temperature_c')+273.15
+        return value
+    ids={c['case_id'] for c in iec['snapshot']['cases'] if c['input']==original['input']
+         and scope(c['parameters'])==scope(original['parameters'].get('iec',{}))}
+    other=next((c for c in iec['output']['cases'] if c['case_id'] in ids and c['status']=='succeeded'),None)
+    if other is None:raise ValueError('保存领域输入或 IEC 损耗参数不一致。')
+    keys=lambda r:tuple(r.get(k) for k in ('key','entity','unit','case'))
+    left={keys(r):r for r in chosen['results']};right={keys(r):r for r in other['results']}
+    rows=[]
+    for key in dict.fromkeys([*left,*right]):
+        if key[0] not in ('conductor_temperature','ampacity'):continue
+        def number(row):
+            value=row.get('value') if row.get('status')=='available' else None
+            if value is not None and (not isinstance(value,(int,float)) or not isfinite(value)):
+                raise ValueError('保存量值不是有限数。')
+            return value
+        a,b=number(left.get(key,{})),number(right.get(key,{}))
+        delta=a-b if a is not None and b is not None else None
+        rows.append({'key':key[0],'entity':key[1],'unit':key[2],'case':key[3],
+                     'fem':a,'iec':b,'delta':delta,'relative_percent':delta/b*100 if delta is not None and b else None})
+    temperatures=[r for r in rows if r['key']=='conductor_temperature']
+    if temperatures and all(r['fem'] is not None and r['iec'] is not None for r in temperatures):
+        a=max(r['fem'] for r in temperatures);b=max(r['iec'] for r in temperatures)
+        rows.insert(0,{'key':'conductor_temperature','entity':'maximum','unit':'K','case':'operating',
+                      'fem':a,'iec':b,'delta':a-b,'relative_percent':(a-b)/b*100})
+    return rows
+
+
 @saved_scope
 def conclusion(research, wid, rid, *, prepare_report=False):
-    from .batch_field_chapter import compare
     from .study_pdf import _names
-    run=display_read(research,wid,rid)
+    # A frozen convergence workflow + authenticated producer quantities is the
+    # summary contract. Its table does not need a display mesh. Legacy/no-proof
+    # and explicit report preparation keep the original display/proof reader.
+    run=(saved_comparison_result(research,wid,rid) if not prepare_report and hasattr(research,'store')
+         and workflow_for(research,wid,rid) else display_read(research,wid,rid))
     if run['integrity']!='verified':raise HTTPException(409,'保存运行完整性未通过，不能展示有限元结论。')
     if run['snapshot']['definition']['method']['capability']!='iec-thermal-field':raise HTTPException(422,'此运行不是 IEC 耦合有限元热场。')
     # First-screen metadata is checked against frozen observation rows. Reading
@@ -330,12 +409,12 @@ def conclusion(research, wid, rid, *, prepare_report=False):
         ids=[row['id'] for row in db.execute("SELECT id FROM study_runs WHERE workspace=? AND status IN ('succeeded','partial') AND json_extract(snapshot,'$.definition.method.plugin_id')='cablesim.iec60287' ORDER BY sequence DESC",(wid,))]
     names=_names(document)
     for identifier in ids:
-        iec=display_read(research,wid,identifier)
-        try:data=compare(projection_run(run),iec,evidence.get('reference_case_id'))
+        iec=saved_comparison_result(research,wid,identifier) if hasattr(research,'store') else display_read(research,wid,identifier)
+        try:data=compare_saved_quantities(run,iec,evidence.get('reference_case_id'))
         except ValueError:continue
         response['reference']={'fem_run_id':rid,'iec_run_id':identifier,'convergence_id':evidence.get('id')}
         response['comparison']=[{'quantity':r['key'],'entity':r['entity'],'label':'最热导体' if r['entity']=='maximum' else names.get(r['entity'],names.get(r['entity'].split('/',1)[-1],'整体工况')),
-            'condition':r['case'],'unit':r['unit'],'fem':r['fem'],'iec':r['iec'],'delta':r['delta'],'relative_percent':r['relative_percent']} for r in data['rows']]
+            'condition':r['case'],'unit':r['unit'],'fem':r['fem'],'iec':r['iec'],'delta':r['delta'],'relative_percent':r['relative_percent']} for r in data]
         break
     boundary=saved_boundary(run,evidence.get('reference_case_id'))
     # Labels may use installed presentation metadata; the frozen result is not
@@ -343,8 +422,9 @@ def conclusion(research, wid, rid, *, prepare_report=False):
     method=run['snapshot']['definition']['method']
     plugin=research.registry(method['plugin_id']).get(method['plugin_id'])
     capability=next(c for c in plugin.manifest.capabilities if c.id=='iec-thermal-field')
-    schema=capability.parameter_schema.model_dump(mode='json',by_alias=True)
-    response['boundary_label']=schema.get('properties',{}).get('outer_boundary',{}).get('x-enum-labels',{}).get(boundary,boundary)
+    boundary_field=capability.parameter_schema.properties.get('outer_boundary')
+    boundary_schema=boundary_field.model_dump(mode='json',by_alias=True) if boundary_field is not None else {}
+    response['boundary_label']=boundary_schema.get('x-enum-labels',{}).get(boundary,boundary)
     jobs=getattr(research,'delivery_jobs',None)
     if prepare_report and jobs is not None:
         from .report_reads import saved_field_image

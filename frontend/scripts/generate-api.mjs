@@ -19,17 +19,24 @@ for(const name of Object.keys(schema.components?.schemas||{})){
   }
 }
 const directory = path.join(root, "src/api/generated");
-await fs.mkdir(directory, { recursive: true });
+const checking = process.argv.includes('--check');
+if (!checking) await fs.mkdir(directory, { recursive: true });
+async function output(name, text) {
+  if (checking) {
+    if ((await fs.readFile(path.join(directory, name), 'utf8')).replaceAll('\r\n', '\n') !== text.replaceAll('\r\n', '\n'))
+      throw Error(name + ' 与正式宿主 OpenAPI 不一致，请重新生成客户端');
+  } else await fs.writeFile(path.join(directory, name), text);
+}
 const code = astToString(
   await openapiTS(schema, { defaultNonNullable: false }),
 );
-await fs.writeFile(
-  path.join(directory, "schema.ts"),
+await output(
+  "schema.ts",
   "// Generated from the formal host OpenAPI. Run npm run generate:api; do not edit.\n" +
     code,
 );
-await fs.writeFile(
-  path.join(directory, "endpoints.ts"),
+await output(
+  "endpoints.ts",
   "// Generated from the formal host OpenAPI. Do not edit.\nexport const endpoints = " +
     JSON.stringify(
       Object.fromEntries(
@@ -45,6 +52,7 @@ await fs.writeFile(
     ) +
     " as const;\n",
 );
+if (!checking) {
 await fs.mkdir(path.join(root, "../.data/frontend-integration"), {
   recursive: true,
 });
@@ -52,6 +60,7 @@ await fs.writeFile(
   path.join(root, "../.data/frontend-integration/openapi.json"),
   JSON.stringify(schema),
 );
+}
 console.log(
-  `已从正式宿主生成请求、响应及路径类型：${Object.keys(schema.paths).length} 条路径。`,
+  `已${checking ? '核对' : '从正式宿主生成'}请求、响应及路径类型：${Object.keys(schema.paths).length} 条路径。`,
 );

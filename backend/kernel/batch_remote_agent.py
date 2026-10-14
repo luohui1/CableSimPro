@@ -120,9 +120,16 @@ def submit(root,request_path):
         profile=request['profile'];python=profile['python']
         # A FEM-only capability does not need GetDP or Elmer. Validate optional
         # administrator paths when supplied; the actual plugin checks its tools.
-        for key in ('python',*[key for key in ('getdp','elmer','elmer_build','control_python') if key in profile]):
+        for key in ('python',*[key for key in ('getdp','elmer','control_python') if key in profile]):
             if not re.fullmatch(r'/[A-Za-z0-9_./-]+',profile[key]) or '..' in Path(profile[key]).parts:
                 raise ValueError('Invalid administrator executable path')
+        build=profile.get('elmer_build')
+        if build is not None:
+            if not isinstance(build,dict) or not isinstance(build.get('files'),dict) or not re.fullmatch(r'[0-9a-f]{64}',str(build.get('source_archive_sha256',''))):
+                raise ValueError('Invalid Elmer build provenance')
+            for build_filename,build_checksum in build['files'].items():
+                if not isinstance(build_filename,str) or build_filename.startswith('/') or '..' in Path(build_filename).parts or not re.fullmatch(r'[0-9a-f]{64}',str(build_checksum)):
+                    raise ValueError('Invalid Elmer build file provenance')
         modules=profile.get('modules',[])
         if any(not re.fullmatch(r'[A-Za-z0-9_.+/-]+',m) for m in modules):raise ValueError('Invalid module')
         if not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}',profile['partition']):raise ValueError('Invalid partition')

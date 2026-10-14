@@ -7,8 +7,7 @@ import { EmptyState, ErrorState, StaleBanner, InlineEmpty } from '@/components/s
 import { missingTypeInputs } from './missing';
 import { CableSection } from '@/features/drawing';
 import { targetId } from '@/features/drawing/cable-geometry';
-import { at, displayed, fieldSource } from '@/lib/domain-fields';
-import { numeric } from '@/api/client';
+import { displayed, fieldSource } from '@/lib/domain-fields';
 import { sourceKind } from '@/lib/selection-view';
 import { formatNumber } from '@/lib/format';
 import type { CableType, LayerTarget } from '@/features/drawing/types';
@@ -83,4 +82,3 @@ export function TypeCanvas({ view, cable, selected, onSelect }: { view: 'section
       onDimensionChange={edit => { const row = rows.find(row => row.id === targetId(edit.target)); if (!row) throw new Error('所选结构层已不存在'); state.edit(row.path, edit.valueM); }} />}
   </div>;
 }
-export function nominalArea(document: unknown, row: LayerRow): number | null { return row.target.scope === 'core' && row.target.role === 'conductor' ? numeric(at(document, row.path.replace(/diameter$/, 'nominal_area'))) : null; }

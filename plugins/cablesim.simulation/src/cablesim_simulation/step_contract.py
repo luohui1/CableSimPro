@@ -1,6 +1,8 @@
 """Declarative labels for the saved step-response contract (no solver)."""
 from copy import deepcopy
 from .step_response import StepInput, Controls
+from .preloaded_response import PreloadedInput
+from pydantic import TypeAdapter
 
 
 LABELS = {
@@ -14,6 +16,9 @@ LABELS = {
     'method':'来源方法', 'study_name':'来源研究', 'operation':'计算任务', 'mesh':'网格控制',
     'first_time_s':'首时间步', 'final_time_s':'末时刻', 'intervals_per_decade':'每十倍时间的区间数',
     'max_levels':'最多加密级数', 'tolerance_k':'收敛门槛',
+    'kind':'起算方式','history':'逐相损耗历史','time_s':'阶跃时刻','currents_a':'逐相电流',
+    'heat_w_m':'逐区域损耗','job_id':'起算场超算作业','attachment_sha256':'完整初场附件摘要',
+    'attachment_size':'完整初场附件字节数',
 }
 UNITS={'reference_current_a':'A','ambient_temperature_k':'K','value_j_m3_k':'J/(m3*K)',
        'density_kg_m3':'kg/m3','specific_heat_j_kg_k':'J/(kg*K)','first_time_s':'s','final_time_s':'s','tolerance_k':'K'}
@@ -41,8 +46,8 @@ def schemas(manifest):
             field.update(title=title,description=old.get('description',title+'；须与保存输入和正文来源一致。'))
             field.update({'x-unit':{'si':unit,'display':unit,'scale':1,'offset':0} if unit else old.get('x-unit',{'si':None,'display':None,'scale':1,'offset':0}),
                           'x-group':'response','x-order':order,'x-level':'expert',
-                          'x-editor-reason':'保存模型、材料来源与区域映射需要完整结构；预检逐字段核验，不填默认材料数据。',
-                          'x-range-basis':{'kind':'method','reference':'有限元阶跃响应 1.0.0 适用范围及输入完整性约束。'}})
+                          'x-editor-reason':'逐字段核验模型与来源。',
+                          'x-range-basis':{'kind':'method','reference':'有限元暂态适用范围。'}})
             if 'default' in field:field['x-default-basis']={'kind':'numerical','reference':'有限元阶跃响应的数值控制初值；仍须通过实际时间步、网格与末值收敛。'}
             if key=='operation':field['x-enum-labels']={'steady_reference':'封存固定焦耳稳态参考','step_response':'阶跃热响应'}
         for key,value in node.items():
@@ -50,8 +55,13 @@ def schemas(manifest):
             elif isinstance(value,list):
                 for item in value:decorate(item)
     result=[]
-    for model in (StepInput,Controls):
-        schema=deepcopy(model.model_json_schema());decorate(schema);result.append(schema)
+    for model in (TypeAdapter(StepInput | PreloadedInput),Controls):
+        schema=deepcopy(model.json_schema() if isinstance(model,TypeAdapter) else model.model_json_schema())
+        if isinstance(model,TypeAdapter):
+            # The manifest schema model defaults to a closed object. Declare
+            # the union's root keys while each branch retains full validation.
+            schema.update(type='object',additionalProperties=False,properties={key:{} for branch in ('StepInput','PreloadedInput') for key in schema['$defs'][branch]['properties']})
+        decorate(schema);result.append(schema)
     return result
 
 

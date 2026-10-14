@@ -23,16 +23,8 @@ export function deliveryPdf(book: Record<string, unknown>, audience: ReportAudie
   return new Blob([bytes], { type: "application/pdf" });
 }
 export async function deliveries(wid: string, signal?: AbortSignal): Promise<DeliverySummary[]> {
-  return responseData(api.GET("/api/workspaces/{wid}/deliveries", { params: { path: { wid } }, signal, fetch: viewReader('summary') }));
-}
-
-// The host supports read projections; older generated clients still describe the
-// default full response. Retain their path/error handling and old call signature.
-function viewReader(view: 'summary' | 'full') {
-  return (request: Request) => {
-    const url = new URL(request.url); url.searchParams.set('view', view);
-    return fetch(new Request(url, request), { credentials: 'same-origin', cache: 'no-store' });
-  };
+  // The collection endpoint already returns DeliverySummary; it has no view parameter.
+  return responseData(api.GET("/api/workspaces/{wid}/deliveries", { params: { path: { wid } }, signal }));
 }
 
 // These optional adapters share the generated DeliveryRequest/path parameters with the kernel API.
@@ -58,8 +50,8 @@ export async function delivery(wid: string, did: string, view: 'summary' | 'full
   return record(
     await responseData(
       api.GET("/api/workspaces/{wid}/deliveries/{did}", {
-        params: { path: { wid, did } },
-        signal, fetch: viewReader(view),
+        params: { path: { wid, did }, query: { view } },
+        signal,
       }),
     ),
     "计算书",

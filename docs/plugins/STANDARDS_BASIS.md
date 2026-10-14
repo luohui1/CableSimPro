@@ -1,6 +1,6 @@
 # 标准依据库
 
-`cablesim.standards-basis` 0.6.0 是离线、只读的数据插件。当前含 **278 个表或条款索引、4,227 条输出格记录**，其中4,217格已核验；GB/T12706.2表18的10格因电压轴歧义阻止resolve。新增147格：GB50217设计范围16条、文献完整原表124格、金属屏蔽与挤包内衬规则7条；另补齐32格既有条件。标准值、文献直接值、文献派生参考值分别声明语义；宿主不内置算法。表格完整保留行轴、原空白和破折号，不将缺值变成零，也不插值。两条土壤混合公式由本插件执行，全部物性与现场参数必填，无默认土壤。
+`cablesim.standards-basis` 0.7.0 是离线、只读的数据插件。当前含 **301 个表或条款索引、4,342 条输出格记录**，其中4,332格已核验；GB/T12706.2表18的10格因电压轴歧义阻止resolve。本发行新增115条短路依据，Sah汇总7格仅修正暂缓项页码，数值未放行。标准值、文献直接值、文献派生参考值分别声明语义；宿主不内置算法。表格完整保留行轴、原空白和破折号，不将缺值变成零，也不插值。两条土壤混合公式由本插件执行，全部物性与现场参数必填，无默认土壤。
 
 资源库“标准与规则”支持完整表格、选格详情、条件检索及复制引用。格内仅显示值，量名和单位集中在标题；选中后在下方查看完整条件、页码和两路核验，并复制固定引用。方向键移动选格，Enter复制，宽表在自身区域滚动且首列固定。破折号仅显示“—”，悬停解释原表不适用；原表空白与破折号保持区别。型号要求、标准核对、规格书的引用契约兼容上一发行；这些消费者由三维线程接入。源值核验通过不等于设计或试验合格，输出始终带 `approval=not_granted`。设计负责人已在正式应用挂载通用只读路由；本线程的浏览器回归继续使用真实路由与Executor组成的隔离应用，不写演示数据库。
 
@@ -14,7 +14,7 @@
 
 | 文件 | 用途 |
 | --- | --- |
-| `plugin.json` | v2 清单、0.6.0 发行、无网络、read_only能力和逐文件封签 |
+| `plugin.json` | v2 清单、0.7.0 发行、无网络、read_only能力和逐文件封签 |
 | `assets/icon.svg` | 插件图标 |
 | `src/cablesim_standards_basis/excerpts.json` | 审阅后的完整矩形输出格、完整行轴、条件与公式参数，作为编制输入 |
 | `verification.json` | 每格的 route_a / route_b、方法、源 SHA256、结果和已解决提取问题 |
@@ -31,6 +31,77 @@
 **消费者接入**：0.4.0保持旧记录ID与查询schema，修正出处/语义及核验状态会改变record摘要，须显式更新允许版本和摘要。本轮按授权执行`basis_catalog.py --write`，以LF锁定全部4,017条记录，standard-check机械升为1.3.2并重封签，判定逻辑未改。旧0.3.0引用固定旧快照，不自动换版；表18的新查询因歧义明确失败。
 
 0.5.0保留以上记录身份与resolve/list契约；standard-check当前工作区发行1.5.0机械升至1.5.1，LF清单锁定全部4,080条记录，未改判定逻辑。GB50217校正插件1.0.1机械升至1.0.2，只更新依据发行默认摘要与默认依据说明；原有保存配置继续固定旧摘要，须工程师重新确认，不能静默换表。
+
+## 0.7.0 短路依据与暂态材料边界
+
+本发行合并已完成双路核验的115条记录，既有记录键和查询契约保持兼容；短路计算由方法插件执行，依据库只返回参数、公式和适用条件。新增分册为`records-short-circuit.json`。IEC60949英文分册仅有印刷5、7、9、11、13、15、17、19、21、23、25页（PDF1–11）；PDF12为空白，不引用为印刷27页。修订单1988/AMD1:2008仅覆盖英文印刷2–3页（PDF4–5），与基础版分开查询。名为preview的基础版本地文件实为HTML，不作数值证明，不声明已取得完整合订标准。
+
+| 标准 / 表或条款 | 记录数 | 印刷 / PDF页 | 核验方式 |
+| --- | ---: | --- | --- |
+| IEC60949:1988 Table I / 3，六种载流金属的K、β、σc、ρ20 | 24 | 17 / 7 | 原页完整图像转录 / 独立盲转录 |
+| Table II，20种相邻材料热阻率及体积热容 | 40 | 17 / 7 | 同上，逐行逐格完整 |
+| Table III / 5.2，七种绝缘的铜/铝X、Y | 28 | 19 / 8 | 同上，保留含接触系数的简式用途 |
+| 引言短路持续时间、t/S参考判据 | 2 | 7 / 2 | 两次独立原页图像核验 |
+| 2；3绝热公式与K定义 | 3 | 9–11 / 3–4 | 同上 |
+| 5.1、5.2、5.3.1、5.3.2 | 4 | 11–13 / 4–5 | 同上，导体/疏离丝构造条件 |
+| 6.1一般非绝热公式及接触系数 | 2 | 13、15 / 5、6 | 同上，跨页定义保留 |
+| 6.2、6.3.1、6.3.2、6.4、6.5截面积分支 | 5 | 15 / 6 | 同上，五种构造分别收录 |
+| IEC60949:1988/AMD1:2008 Table II修订 | 4 | 3 / 5 | 修订原页图像 / 独立盲转录 |
+| AMD1 §4 并联金属部件电流分配 | 1 | 2–3 / 4–5 | 同上 |
+| GB/T12706.2—2020 §4.2 引用与最长温度持续时间 | 2 | 5 / 13 | 独立DOCX转录 / 原PDF图像复核 |
+
+### 型号电气与屏蔽容量接入
+
+铜原表行是导体材料行。方法插件可显式引用纯铜材料参数，仍须单独确认屏蔽的初温、允许终温及构造，不能伪造“铜屏蔽专用常数”或沿用导体温限。GB/T12706.2 §4.2实际引用IEC60986；该处5s限制是导体短路温度的最长持续时间。IEC60949引言适用于各短路持续时间，不能自行添加通用1–5s范围。引言t/S<0.1s/mm²的简化说明针对通常电力导体，不推广到薄铜带屏蔽。
+
+| 量 / 记录键 | 查询条件 | 返回 / 页码 |
+| --- | --- | --- |
+| `short_circuit_material_k` / `sc-material-constants/r1/K` | material=copper, material_role=conductor | 226 A·s^0.5/mm²；17/7 |
+| `resistance_temperature_coefficient_reciprocal_0c` / 同行`beta` | 同上 | 234.5 K；17/7 |
+| `volumetric_heat_capacity_20c` / 同行`sigma_c` | 同上 | 3.45e6 J/(m³·K)；17/7 |
+| `electrical_resistivity_20c` / 同行`rho20` | 同上 | 1.7241e-8 Ω·m；17/7 |
+| `adiabatic_short_circuit_formula` / `sc-adiabatic-current/r1/adiabatic_short_circuit_formula` | 无 | I_AD²t=K²S²ln((θf+β)/(θi+β))；9/3 |
+| `short_circuit_k_definition` / `sc-k-definition/r1/short_circuit_k_definition` | 无 | K的σc、β、ρ20定义；11/4 |
+| `short_circuit_geometrical_area_formula` / `sc-helical-tape-area/r1/short_circuit_geometrical_area_formula` | screen_construction=helically_lapped_tape | S=nwδ，电流沿螺旋，不假定匝间/带间可靠接触；15/6 |
+| `screen_thermal_contact_factor_rule` / `sc-screen-contact/r1/screen_thermal_contact_factor_rule` | application_case=sheath_screen_armour | 推荐0.7、一面完全粘结0.9；15/6 |
+
+铜带屏蔽按6.3.2截面积与6.1非绝热分支；5.2及Table III的X/Y简式不能直接套用铜带。工程师输入故障电流、保护持续时间、载流部件截面和各部件初温/终温，方法插件保存这些输入与依据快照。依据库不执行本段短路公式，也不批准型号。明确手算输入为纯铜25mm²、1s、90→250℃，由原表K=226、β=234.5得到3577.09A，仅用于公式代数对拍。
+
+真实只读路由示例；`release_digest`从`GET /api/methods`取得本发行摘要并固定保存，不使用暂存库旧摘要：
+
+```json
+{
+  "release_digest": "<当前0.7.0发行摘要>",
+  "input": {
+    "schema_version": "cablesim.standards-query/1",
+    "operation": "resolve",
+    "standard": "IEC 60949",
+    "edition": "1988",
+    "locator": "Table I",
+    "quantity": "short_circuit_material_k",
+    "record_id": "sc-material-constants/r1/K",
+    "conditions": {"material": "copper", "material_role": "conductor"}
+  }
+}
+```
+
+提交至`POST /api/plugin-queries/cablesim.standards-basis/lookup`。改量及记录键查询同行β/σc/ρ20；公式改`locator="3"`及上表公式键、条件为空。返回值带印刷/PDF页、两路核验、source_sha256与record_sha256。短路计算由下轮型号电气方法接入，沿用既有basis_ref快照契约。
+
+### 城南暂态的四类材料
+
+IEC60949 Table II半导电XLPE/PE与EPR分别为2.4e6、2.1e6 J/(m³·K)，记录键为`sc-adjacent-thermal/r19/sigma`及`r20/sigma`。查询`quantity=volumetric_heat_capacity`，条件分别`material=semiconducting_XLPE_PE`或`semiconducting_EPR`，另需`material_role=other_component, application_case=short_circuit_non_adiabatic`。页码17/7。它们是已核验物性参考，原标准用途是短路非绝热，未给城南配方、密度和暂态宽温域认证；改成`application_case=transient`返回`not_covered`且无记录，不给计算参数。仿真须记录材料匹配及工程师取值依据，不能由本库自动扩展适用范围。
+
+阻水缓冲带：Zhang等2024公开论文Table1（PDF3）的600kg/m³×2000J/(kg·K)=1.2e6 J/(m³·K)是特定110kV/630mm²电缆的候选参考。当前取得出版社文字提取，未取得PDF字节及独立逐格图像核验，留在仓库外，不给城南默认值；不得把另篇论文k=0.17与此密度/比热拼接。
+
+沥青防腐层：厂家结构页证明有层，缺牌号、密度、比热、温度范围。IEC60949 Table II的`PVC_bitumen`是波纹铝护套上的组合保护层、短路非绝热用途（1.7e6 J/(m³·K)），不是独立纯沥青物性。城南纯沥青层仍未覆盖。
+
+波纹护套内封闭气隙：Yang等2018论文同时采用空气隙热阻Ta与热容Qa，约1.2e3 J/(m³·K)是该论文候选；不是仅用热阻即可替代所有暂态热容的通用规定。缺独立原PDF图像核验、城南有效间隙/接触几何及气体状态，继续暂存。IEC60853-2修订的T4是电缆外部空气热阻，不能当作护套内空气隙。已发布空气物性文献也不自动认证城南封闭气隙。
+
+本轮无新增已闭合的城南专用热容值。IEC60853-1/-2预览未覆盖完整材料原表与暂态方法；Sah7格仍缺正式发表版逐值复核及测点密度/温度对应，暂缓项页码已改为PDF/印刷12（r1–r5）、12–13（r6）、13（r7）。IEC60287-2-1:2023 Table2整表560格及GB/T12706.2表18十格继续暂缓。
+
+### 消费者机械同步
+
+standard-check 1.6.0→1.6.1，`basis_catalog.py --write`以LF钉住4,342条记录及0.7.0版次；其方法版本与判据源码不改。gb50217-correction 1.0.3→1.0.4，只改依据默认发行摘要及说明，方法版本不改。已有工程配置保持旧绑定，不静默改历史数据。三个插件分别按显式清单路径封签；消费者判据适配交三维/研究线程复核。
 
 ## 第五批与制造判据覆盖
 
@@ -585,14 +656,16 @@ python -m pytest tests/test_standards_basis_release.py -q
 python plugins/cablesim.standards-basis/validation/constants.py
 # 在frontend目录用vite build --outDir ../.data/standards-basis/frontend-acceptance --emptyOutDir准备独立验收构建
 node frontend/src/features/standards/tests/verify-browser.mjs
-python scripts/plugin_sdk.py seal --write
+python scripts/plugin_sdk.py seal plugins/cablesim.standards-basis/plugin.json --write
+python scripts/plugin_sdk.py seal plugins/cablesim.standard-check/plugin.json --write
+python scripts/plugin_sdk.py seal plugins/cablesim.gb50217-correction/plugin.json --write
 python scripts/plugin_sdk.py verify
 python scripts/seal_plugin_catalog.py
 ```
 
-数值修改先更新完整编制输入与独立核验矩阵，再`rebuild.py --write`；默认命令只检查，不改文件。新发行或版本更新按根AGENTS.md封签规则处理，不修改已发布版本。多线程环境下封签脚本会重写所有插件，故调用封签脚本的seal_v2(--write)原函数，仅限定依据库、standard-check和GB50217校正三个获授权清单的绝对路径，更新三条registry发行；其余插件不写，然后在实际仓库只读核对目录及封签，避免改写其他线程的发行。临时工作副本不入库。
+数值修改先更新完整编制输入与独立核验矩阵，再`rebuild.py --write`；默认命令只检查，不改文件。新发行或版本更新按根AGENTS.md封签规则处理，不修改已发布版本。现行工具支持显式清单路径；本轮分别封签三个获授权插件，仅更新其清单及registry条目，其他漂移只提示。临时工作副本不入库。
 
-相关测试覆盖人工页码数值锚点、完整矩阵尺寸、4,080条记录的条件查询/歧义拦截、出处与双路结果、确定性重建及封签、分册篡改、输入单位/缺条件、空格/多个选项/边界、不跨版本/合金派生、手算公式参数对拍，以及真实Executor进程和ASGI只读路由的缓存/并发/发行错误。土壤公式还检验干燥/饱和边界、含水率越界及缺参数；参数只是明确的手算示例，不是现场值。重建器统一UTF-8/LF字节；实际Git autocrlf检出测试核对封签、重建及读取一致性。本插件无原生求解器测试。
+相关测试覆盖人工页码数值锚点、完整矩阵尺寸、4,342条记录的条件查询/歧义拦截、出处与双路结果、确定性重建及封签、分册篡改、输入单位/缺条件、空格/多个选项/边界、不跨版本/合金派生、手算公式参数对拍，以及真实Executor进程和ASGI只读路由的缓存/并发/发行错误。土壤公式还检验干燥/饱和边界、含水率越界及缺参数；参数只是明确的手算示例，不是现场值。重建器统一UTF-8/LF字节；实际Git autocrlf检出测试核对封签、重建及读取一致性。本插件无原生求解器测试。
 
 浏览器脚本使用正式SPA构建、backend.main真实宿主与真实Executor，SQLite只读backup发布库到隔离副本，运行后关闭任务服务/浏览器；不写源演示库；验证标准/表切换、整表行数、原页悬停、240mm²/12/20kV/XLPE→5.5mm、选格详情/准确剪贴板引用、方向键/Enter、缺条件、历史、宽表首列固定及第三批公差显示。自动布局检查覆盖1366×768与1920×1080、深浅主题、空/加载/错误/成功/历史共20项，检查溢出、重叠、13px字号、对比度及主操作数量。结果保存在不入库的`.data/standards-basis/browser-checks.json`；本轮验收截图为`thermal-capacity.png`、`accessory-tests.png`；五态中的空/加载/错误通过明确的网络故障注入，其余流程使用真实响应。五类查询收据为`real-queries.json`。任务浏览器上下文和服务在finally关闭。
 

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { methodCardsQuery } from '@/lib/study-queries';
+import { methodCardsQuery, savedFieldViewQuery } from '@/lib/study-queries';
 import { displayName } from '@/lib/display-names';
 import { Redirect } from "@/components/redirect";
 import { studyModuleRoute, studyRootRoute } from "@/router";
@@ -207,8 +207,7 @@ export function StudyWorkspace() {
     try { return temperatureView(shownRun, fieldCase); } catch { return undefined; }
   }, [shownRun, pendingRun, fieldCase]);
   const needsFieldProjection = !!run && !pendingRun && (hasFemField && !savedFieldView || !run.output && text(optionalRecord(remoteMethod?.execution_policy).backend) === 'slurm');
-  const fieldProjection = useQuery({queryKey:['saved-field-view',run?.workspace,run?.id], enabled:needsFieldProjection,
-    queryFn:({signal}) => hpcJson(`/workspaces/${text(run?.workspace)}/fields/${text(run?.id)}/view`, {signal}), retry:false});
+  const fieldProjection = useQuery({...savedFieldViewQuery(text(run?.workspace),text(run?.id)), enabled:needsFieldProjection});
   const fieldRun = needsFieldProjection ? fieldProjection.data : run;
   const fieldView = useMemo(() => {
     if (!needsFieldProjection) return savedFieldView;
@@ -312,7 +311,8 @@ export function StudyWorkspace() {
     } catch(error) { if(controller.signal.aborted) throw Error('几何试算已取消或超过 9 秒，草稿保留，可重试。'); throw error; }
     finally { window.clearTimeout(timer); }
   }
-  const title = draft?.title || study.title;
+  // Collapse duplicate suffixes for display only, never in the saved draft.
+  const title = (draft?.title || study.title).replace(/( · 自动收敛){2,}$/u, ' · 自动收敛');
   const projectName = text(optionalRecord(workspace.domain || workspace.scenario).name);
   function currentSearch() {
     return { ...search, workspace: study.workspace };

@@ -16,6 +16,7 @@ from contextlib import closing
 from fastapi import HTTPException
 from .read_models import RUN_COLUMNS,run_state
 from .convergence import has_temperature_field,temperature_convergence
+from .report_reads import saved_scope
 
 # Immutable display data only. The generation shortcut expires on commits;
 # a content receipt survives unrelated commits after rehashing actual bytes.
@@ -69,6 +70,20 @@ def display_only(run):
     return {**run,'output':{**output,'cases':cases}}
 
 
+def field_view_response(run):
+    """HTTP view only; frozen evidence remains available by its bound run URL.
+
+    Internal report/delivery readers retain the complete verified snapshot. The
+    view keeps saved case inputs, units, limits and geometry; it need not repeat
+    installed manifest contracts or unrelated workspace state on every tab.
+    """
+    snapshot={key:value for key,value in run['snapshot'].items() if key not in ('method_manifests','input_contract')}
+    if snapshot.get('definition',{}).get('input_source')=='study':snapshot.pop('workspace_state',None)
+    url=f"/api/workspaces/{run['workspace']}/studies/{run['study']}/runs/{run['id']}?view=full"
+    return {**run,'snapshot':snapshot,'snapshot_view':'field-display',
+            'evidence_ref':{'url':url,'input_sha256':run['input_digest'],'output_sha256':run['output_digest']}}
+
+
 def decode_display_output(db, raw):
     """Parse authenticated JSON in SQLite before allocating lossless shards.
 
@@ -90,6 +105,7 @@ def decode_display_output(db, raw):
     return json.loads(raw)
 
 
+@saved_scope
 def read_display(research,wid,rid):
     """Coalesce a cold source read before fetching its large SQLite payload.
 

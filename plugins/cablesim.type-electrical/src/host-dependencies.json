@@ -48,5 +48,15 @@
     "path": "plugins/cablesim.iec60287/src/cablesim_iec60287/method.py",
     "sha256": "d1833b7179d52461b8077f7a0288d3132b9dd06c4127bda57da174a8cfcb4c2b",
     "size_bytes": 13289
+  },
+  {
+    "path": "plugins/cablesim.standards-basis/src/cablesim_standards_basis/library.py",
+    "sha256": "c937403b3c530fe590b52fec6fba41d037cc47502608175c27bced4493fe9226",
+    "size_bytes": 15546
+  },
+  {
+    "path": "plugins/cablesim.standards-basis/src/cablesim_standards_basis/soil_capacity.py",
+    "sha256": "ee879a8afe34e9fb0232837e872fc00682f08c16a8df90e1c0df305401432cb3",
+    "size_bytes": 3766
   }
 ]

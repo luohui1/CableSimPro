@@ -76,7 +76,7 @@ export function ProjectHome({ workspaceId, theme }: { workspaceId: string; theme
   const columns: Column<StudyRow>[] = [
     { id: "name", label: "研究", wrap: true, render: (row) => {
       const kind = calculationKind(row, catalog.data || []);
-      return <Link className="object-link project-calc" to="/studies/$sid/$module/$tab" params={{ sid: row.id, module: rootModule(row.definition), tab: studyEntryTab(rootModule(row.definition)) }} search={{ workspace: row.workspace, theme, run: "", delivery: "" }}>
+      return <Link className="object-link project-calc" title={row.title} to="/studies/$sid/$module/$tab" params={{ sid: row.id, module: rootModule(row.definition), tab: studyEntryTab(rootModule(row.definition)) }} search={{ workspace: row.workspace, theme, run: "", delivery: "" }}>
         <Icon name={kind.icon} /><span>{shortTitle(row.title, name)}</span>
       </Link>;
     } },

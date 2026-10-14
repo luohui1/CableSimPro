@@ -39,14 +39,65 @@ IDENTITIES={
 }
 
 
-def project(db,metrics=None,previous=None):
+def project(db,metrics=None,previous=None,notifications=None):
     tables={row[0] for row in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     result=Projection();prior=previous if isinstance(previous,Projection) else None
     names={}
+    journal=notifications['tables'] if notifications and notifications.get('complete') else None
+    def changed_ids(table,key):
+        events=list(journal.get(table,[]))
+        if table=='studies':
+            events.extend({'operation':'UPDATE','old':{'id':event[side]['study']},'new':None}
+                for event in journal.get('study_versions',[]) for side in ('old','new')
+                if event.get(side) and event[side].get('study'))
+        if table=='workspaces':
+            events.extend({'operation':'UPDATE','old':{'id':event[side]['workspace']},'new':None}
+                for event in journal.get('workspace_audit',[])+journal.get('requirement_reviews',[])
+                for side in ('old','new') if event.get(side) and event[side].get('workspace'))
+        if table in ('agent_tasks','agent_plan_revisions'):
+            tasks={event[side]['task_id'] for event in journal.get('agent_events',[]) for side in ('old','new')
+                if event.get(side) and event[side].get('task_id')}
+            if table=='agent_tasks':
+                events.extend({'operation':'UPDATE','old':{'id':tid},'new':None} for tid in tasks)
+            elif tasks:
+                ids={row.get('id') for row in prior.get('agent_proposals',[]) if row['task_id'] in tasks}
+                ids.update(row[0] for row in db.execute('SELECT proposal_id FROM agent_plan_revisions WHERE task_id IN ('+
+                    ','.join('?' for _ in tasks)+') AND proposal_id IS NOT NULL',tuple(tasks)))
+                events.extend({'operation':'UPDATE','old':{'proposal_id':id},'new':None} for id in ids if id)
+        ids=set()
+        for event in events:
+            for side in ('old','new'):
+                value=event.get(side)
+                if value is not None:
+                    if value.get(key) is None:return None
+                    ids.add(value[key])
+                elif event.get('operation')=='UPDATE' and not event.get('old') and not event.get('new'):return None
+            if not event.get('old') and not event.get('new'):return None
+        return ids
     def rows(table,columns,tail=''):
         started=perf_counter()
         key,probe=IDENTITIES[table];identities={};changed=None
-        if table in tables:
+        forced=None
+        # Read-only Agent conversations update task bookkeeping, not engineering
+        # notifications. Compare these small identities (with event sequence)
+        # instead of mistaking an empty engineering journal for unchanged tasks.
+        if not table.startswith('agent_') and journal is not None and prior is not None and prior.identities.get(table) is not None and table in tables:
+            forced=changed_ids(table,key)
+            direct=journal.get(table,[])
+            delta=sum((1 if event['operation']=='INSERT' else -1 if event['operation']=='DELETE' else 0) for event in direct)
+            # SQLite REPLACE may silently delete a UNIQUE-conflicting row when
+            # recursive_triggers is off. Check cardinality on changed tables;
+            # mismatches fall back to all identities rather than retaining it.
+            if direct:
+                count=db.execute(f'SELECT count(*) FROM {table}').fetchone()[0]
+                if count!=len(prior.identities[table])+delta:forced=None
+            if forced is not None:
+                identities=prior.identities[table].copy()
+                for id in forced:identities.pop(id,None)
+                if forced:
+                    identities.update({row[0]:tuple(row) for row in db.execute(f'SELECT {probe} FROM {table} WHERE {key} IN ('+
+                        ','.join('?' for _ in forced)+')',tuple(forced))})
+        if table in tables and forced is None:
             try:identities={row[0]:tuple(row) for row in db.execute(f'SELECT {probe} FROM {table}')}
             except sqlite3.OperationalError:
                 # Unknown/older host schema: full normal projection, never a
@@ -57,12 +108,13 @@ def project(db,metrics=None,previous=None):
         old=prior.get(old_key,[]) if prior is not None else []
         if prior is not None and identities is not None and prior.identities.get(table) is not None:
             old_ids=prior.identities[table]
-            changed={id for id,stamp in identities.items() if old_ids.get(id)!=stamp}
+            changed={id for id,stamp in identities.items() if old_ids.get(id)!=stamp}|(set(identities)&(forced or set()))
             removed=set(old_ids)-set(identities)
             result.changed[old_key]=changed|removed
             if not changed:
                 value=[row for row in old if row[key if key in row else 'id'] in identities]
-                if metrics is not None:metrics[table]={'ms':(perf_counter()-started)*1000,'rows':len(value),'loaded_rows':0,'reused_rows':len(value)}
+                if metrics is not None:metrics[table]={'ms':(perf_counter()-started)*1000,'rows':len(value),'loaded_rows':0,'reused_rows':len(value),
+                    'identity_rows':0 if forced is not None else len(identities),'committed_rows':forced is not None}
                 return value
         else:result.changed[old_key]=set(identities or ())|{row.get(key,row.get('id')) for row in old}
         if table not in tables:value=[]
@@ -80,7 +132,8 @@ def project(db,metrics=None,previous=None):
             if table=='study_runs':value.sort(key=lambda row:row['sequence'],reverse=True)
             elif table=='engineering_type_releases':value.sort(key=lambda row:row['sequence'])
         if metrics is not None:metrics[table]={'ms':(perf_counter()-started)*1000,'rows':len(value),
-            'loaded_rows':len(loaded) if table in tables else 0,'reused_rows':len(value)-(len(loaded) if table in tables else 0)}
+            'loaded_rows':len(loaded) if table in tables else 0,'reused_rows':len(value)-(len(loaded) if table in tables else 0),
+            'identity_rows':len(forced) if forced is not None else len(identities or {}),'committed_rows':forced is not None}
         return value
     names.update(zip(IDENTITIES,('workspaces','studies','runs','assets','models','documents','extractions','document_proposals',
         'type_plans','submissions','releases','deliveries','tasks','agent_proposals','convergence','datasets')))

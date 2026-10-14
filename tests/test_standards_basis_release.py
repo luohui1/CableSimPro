@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 import sqlite3
+import math
 import pytest
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -50,11 +51,22 @@ def test_five_engineering_queries_on_saved_release_copy(tmp_path, monkeypatch):
         ('Sah et al.', '2022-preprint-v1', 'Table 2', 'other_component_mass_fraction_percent',
          {'backfill_mix':'B80-F20','other_component':'fly_ash'}, 20, 6, 6),
         ('Sah et al.', '2022-preprint-v1', 'Table 3', 'maximum_dry_density', {'backfill_mix':'F'}, 1.38, 7, 7),
+        ('IEC 60949', '1988', 'Table I', 'short_circuit_material_k', {'material':'copper','material_role':'conductor'}, 226, 17, 7),
+        ('IEC 60949', '1988', 'Table I', 'resistance_temperature_coefficient_reciprocal_0c', {'material':'copper','material_role':'conductor'}, 234.5, 17, 7),
+        ('IEC 60949', '1988', 'Table I', 'volumetric_heat_capacity_20c', {'material':'copper','material_role':'conductor'}, 3450000, 17, 7),
+        ('IEC 60949', '1988', 'Table I', 'electrical_resistivity_20c', {'material':'copper','material_role':'conductor'}, 1.7241e-8, 17, 7),
+        ('IEC 60949', '1988', 'Table II', 'volumetric_heat_capacity',
+         {'material':'semiconducting_XLPE_PE','material_role':'other_component','application_case':'short_circuit_non_adiabatic'}, 2400000, 17, 7),
+        ('IEC 60949', '1988', 'Table II', 'volumetric_heat_capacity',
+         {'material':'semiconducting_EPR','material_role':'other_component','application_case':'short_circuit_non_adiabatic'}, 2100000, 17, 7),
+        ('IEC 60949', '1988', '6.3.2', 'short_circuit_geometrical_area_formula', {'screen_construction':'helically_lapped_tape'},
+         {'expression':'S = n*w*delta','units':{'S':'mm²','n':'1','w':'mm','delta':'mm'},
+          'inter_turn_inter_tape_contact':'not_assumed','current_path':'along_helix','execution':'method_plugin_only'}, 15, 6),
     ]
     with TestClient(app) as client:
         methods = client.get('/api/methods'); assert methods.status_code==200
         pin = next(m['method'] for m in methods.json() if m['method']['plugin_id']=='cablesim.standards-basis')
-        assert pin['version']=='0.6.0'
+        assert pin['version']=='0.7.0'
         receipts=[]
         for standard,edition,locator,quantity,conditions,value,printed,pdf in cases:
             query={'schema_version':'cablesim.standards-query/1','standard':standard,'edition':edition,
@@ -63,7 +75,7 @@ def test_five_engineering_queries_on_saved_release_copy(tmp_path, monkeypatch):
                               json={'release_digest':pin['release_digest'],'input':query})
             assert reply.status_code==200,reply.text
             envelope=reply.json(); answer=envelope['artifacts']['x-cablesim.standards-basis']
-            assert envelope['plugin_version']=='0.6.0' and len(envelope['request_sha256'])==64
+            assert envelope['plugin_version']=='0.7.0' and len(envelope['request_sha256'])==64
             assert answer['status']=='resolved' and len(answer['records'])==1, (query,answer)
             record=answer['records'][0]
             assert (record['value'],record['printed_page'],record['pdf_page'])==(value,printed,pdf)
@@ -96,6 +108,37 @@ def test_five_engineering_queries_on_saved_release_copy(tmp_path, monkeypatch):
         assert (1-received['armour_measured_negative_deviation_max'])*received['armour_tape_nominal']==pytest.approx(.45)
         ladder=next(x for x in receipts if x['query']['locator']=='D.0.6')['response']['artifacts']['x-cablesim.standards-basis']['records'][0]
         assert 200*ladder['value']==130  # Explicit manual example, not a saved rating.
+        # Read formula and constants through the real Executor. These are declared
+        # hand inputs, not a screen temperature limit or a saved engineering result.
+        formula_query=dict(schema_version='cablesim.standards-query/1',standard='IEC 60949',edition='1988',
+                           locator='3',quantity='adiabatic_short_circuit_formula',conditions={})
+        reply=client.post('/api/plugin-queries/cablesim.standards-basis/lookup',
+                          json={'release_digest':pin['release_digest'],'input':formula_query})
+        assert reply.status_code==200,reply.text
+        formula=reply.json()['artifacts']['x-cablesim.standards-basis']['records'][0]
+        assert (formula['printed_page'],formula['pdf_page'])==(9,3)
+        assert formula['value']['execution']=='method_plugin_only'
+        assert formula['value']['units']['S']=='mm²'
+        k=received['short_circuit_material_k'];beta=received['resistance_temperature_coefficient_reciprocal_0c']
+        ratio=(250+beta)/(90+beta);z=(ratio-1)/(ratio+1)
+        log_by_series=2*sum(z**(2*n+1)/(2*n+1) for n in range(20))
+        current=k*25*math.sqrt(math.log(ratio)/1)
+        assert current==pytest.approx(k*25*math.sqrt(log_by_series),rel=1e-12)
+        assert current==pytest.approx(3577.0876665,abs=1e-6)
+        assert math.sqrt(received['volumetric_heat_capacity_20c']*(beta+20)*1e-12/received['electrical_resistivity_20c'])==pytest.approx(k,abs=.5)
+        receipts.append({'query':formula_query,'response':reply.json(),
+                         'hand_example':{'S_mm2':25,'t_s':1,'theta_i_c':90,'theta_f_c':250,'current_a':current,'approval':'not_granted'}})
+        # A physically plausible heat capacity is not an approved transient branch.
+        wrong_use=dict(schema_version='cablesim.standards-query/1',standard='IEC 60949',edition='1988',
+                       locator='Table II',quantity='volumetric_heat_capacity',
+                       conditions={'material':'semiconducting_XLPE_PE','material_role':'other_component','application_case':'transient'})
+        reply=client.post('/api/plugin-queries/cablesim.standards-basis/lookup',
+                          json={'release_digest':pin['release_digest'],'input':wrong_use})
+        assert reply.status_code==200
+        rejected=reply.json()['artifacts']['x-cablesim.standards-basis']
+        assert rejected['status']=='not_covered' and rejected['records']==[] and rejected['approval']=='not_granted'
+        receipts.append({'query':wrong_use,'response':reply.json()})
+        (output/'real-queries.json').write_text(json.dumps(receipts,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
         # Declared hand calculation, not a fabricated city soil measurement:
         # phi=.4; solid=1500*800; water=.2*4.18e6; air=.2*1200.
         soil=dict(schema_version='cablesim.standards-query/1',operation='evaluate',standard='Hopmans et al.',edition='2002',

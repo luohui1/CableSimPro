@@ -210,6 +210,94 @@ def test_saved_fem_summary_matches_full_answer_and_rejects_changed_source_bytes(
     assert rejected['headlines'] == []
 
 
+def test_real_saved_iec_comparison_projection_keeps_quantities_and_rejects_byte_drift(saved_fem_projection):
+    """Read published Slurm/IEC evidence; corrupt only this private copied row."""
+    from backend.kernel.fem_evidence import conclusion,saved_comparison_result,display_read
+    research,(wid,sid,rid)=saved_fem_projection
+    result=conclusion(research,wid,rid)
+    assert result['comparison'] and result['reference']
+    iec_id=result['reference']['iec_run_id']
+    projected=saved_comparison_result(research,wid,iec_id)
+    complete=display_read(research,wid,iec_id)
+    from backend.kernel.fem_evidence import projection_run,workflow_for
+    from backend.kernel.batch_field_chapter import compare
+    fem=display_read(research,wid,rid)
+    workflow=workflow_for(research,wid,rid)
+    formal=compare(projection_run(fem),complete,workflow['rows'][-1]['case_id'])
+    assert [{key:row.get(key) for key in ('key','entity','unit','case','fem','iec','delta','relative_percent')}
+            for row in formal['rows']] == [{**{key:row.get(key) for key in ('entity','unit','fem','iec','delta','relative_percent')},
+                 'key':row['quantity'],'case':row['condition']} for row in result['comparison']]
+    assert projected['snapshot']==complete['snapshot']
+    assert projected['output_digest']==complete['output_digest']
+    assert projected['version_status']==complete['version_status']
+    assert [(c['case_id'],c['results']) for c in projected['output']['cases']]==[(c['case_id'],c['results']) for c in complete['output']['cases']]
+    with research.store.db() as db:
+        output=json.loads(db.execute('SELECT output FROM study_runs WHERE id=?',(iec_id,)).fetchone()['output'])
+        quantity=next(r for c in output['cases'] for r in c['results'] if isinstance(r.get('value'),(int,float)))
+        quantity['value']+=1
+        db.execute('UPDATE study_runs SET output=? WHERE id=?',(json.dumps(output),iec_id))
+    from fastapi import HTTPException
+    with pytest.raises(HTTPException) as rejected:saved_comparison_result(research,wid,iec_id)
+    assert rejected.value.status_code==409
+
+
+def test_real_saved_summary_receipt_survives_host_restart_and_rechecks_bytes(saved_fem_projection, monkeypatch):
+    """Authenticate published 811855 bytes once, restart, then damage private bytes."""
+    from backend.kernel import read_models
+    from backend.kernel.research import Research
+    from backend.kernel.workspace import WorkspaceStore
+    research,(wid,sid,rid)=saved_fem_projection
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier, Lock
+    actual_build=read_models._build_run_facts
+    builds=[]
+    gate=Barrier(2)
+    counter=Lock()
+    def witnessed_build(*args,**kwargs):
+        with counter:builds.append(True)
+        return actual_build(*args,**kwargs)
+    monkeypatch.setattr(read_models,'_build_run_facts',witnessed_build)
+    def read_source():
+        with research.store.read_snapshot() as db:
+            gate.wait(timeout=10)
+            return read_models.source_facts(research,db,wid,rid,{})
+    with ThreadPoolExecutor(max_workers=2) as readers:
+        left=readers.submit(read_source);right=readers.submit(read_source)
+        first_row,first=left.result(timeout=60)
+        _,concurrent=right.result(timeout=60)
+    assert builds==[True] and concurrent==first
+    assert first['integrity']=='verified'
+    assert first['answer'] and first['headlines']
+    sidecar=research.store.path.with_suffix('.display-cache.sqlite')
+    assert sidecar.exists()
+    restarted=Research(WorkspaceStore(research.store.path))
+    actual=read_models.run_facts
+    misses=[]
+    def rebuild(*args,**kwargs):
+        misses.append(True)
+        return actual(*args,**kwargs)
+    monkeypatch.setattr(read_models,'run_facts',rebuild)
+    try:
+        with restarted.store.read_snapshot() as db:
+            row,reused=read_models.source_facts(restarted,db,wid,rid,{})
+        assert 'output' not in row.keys()  # Lossless envelope stayed in SQLite.
+        assert reused==first and misses==[]
+        # Invalid UTF-8/JSON and an unchanged declared digest cannot reuse the
+        # authenticated receipt. Only the private database is deliberately damaged.
+        with restarted.store.db() as db:
+            db.execute("UPDATE study_runs SET output=CAST(output || ' ' AS TEXT) WHERE id=?",(rid,))
+        with restarted.store.read_snapshot() as db:
+            _,legacy=read_models.source_facts(restarted,db,wid,rid,{})
+        assert misses==[True]  # Whitespace is legacy JSON; full semantic check runs.
+        assert legacy['integrity']=='verified'
+        with restarted.store.db() as db:
+            db.execute("UPDATE study_runs SET output=substr(output,1,length(output)-2) WHERE id=?",(rid,))
+        with restarted.store.read_snapshot() as db:
+            _,damaged=read_models.source_facts(restarted,db,wid,rid,{})
+        assert misses==[True,True] and damaged['integrity']=='corrupt'
+    finally:restarted.close()
+
+
 @pytest.mark.parametrize('fails', [False, True])
 def test_catalog_concurrent_miss_has_one_loader_and_shared_outcome(monkeypatch, fails):
     from concurrent.futures import Future, ThreadPoolExecutor

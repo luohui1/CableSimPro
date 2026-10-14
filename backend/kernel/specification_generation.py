@@ -19,13 +19,14 @@ def rating_definition(definition):
         case.get('metadata', {}).get('kind') == 'type-rating-table' for case in driver['cases'])
 
 
-def generation_gap(channel, item):
+def generation_gap(channel, item, release_exclusions=()):
     """A chapter needs actual declarations; uncovered rows still block publication."""
     if not item or item['run']['freshness'] != 'current' or item['run']['status'] != 'succeeded':
         return '尚无当前修订的完整运行。'
     artifact = item.get('artifact', {})
     if channel == 'geometry':
-        return None if artifact.get('outer_diameter_m') is not None and artifact.get('mass_kg_per_km') is not None else '结构外径或用料缺少完整输入。'
+        mass_excluded = any(row.get('check_id') == 'geometry/mass' for row in release_exclusions)
+        return None if artifact.get('outer_diameter_m') is not None and (artifact.get('mass_kg_per_km') is not None or mass_excluded) else '结构外径或用料缺少完整输入。'
     if channel == 'rating':
         rows = item.get('rows', [])
         failed = next((row for row in rows if row.get('value_a') is None), None)
@@ -33,7 +34,7 @@ def generation_gap(channel, item):
     rows = artifact.get('rows', [])
     if channel == 'standards':
         return None if any(row.get('verdict') == 'passed' for row in rows) else '没有可声明满足的标准条款，请核对结构与标准输入。'
-    missing = next((row for row in rows if row.get('status') == 'missing'), None)
+    missing = next((row for row in rows if row.get('status') == 'missing' and row.get('input_category')!='system'), None)
     if missing:
         return missing.get('title', '参数')+'：'+(missing.get('reason') or '缺少必需计算输入。')
     return None if any(row.get('status') == 'available' and row.get('value') is not None for row in rows) else '当前方法未提供可声明的计算值。'
@@ -129,10 +130,18 @@ def _generate(service, wid, body):
                 service.research.resolve(study['definition']['method'])
                 _, _, channels, _ = service.evidence(wid)
                 current = channels.get(channel)
-                if current and current['run']['study'] == study['id'] and generation_gap(channel, current) is None:
+                # Only declarations that match this revision and evidence are
+                # projected by specification(); stale scope cannot waive inputs.
+                exclusions = service.specification(wid)['payload']['release_exclusions'] if channel == 'geometry' else ()
+                if current and current['run']['study'] == study['id'] and generation_gap(channel, current, exclusions) is None:
                     steps.append({'channel':channel, 'status':'reused', 'run_id':current['run']['id']})
                     continue
                 method = study['definition']['method']
+                if channel=='short_circuit' and not study['definition'].get('parameters',{}).get('basis_references'):
+                    from .requirements import resolve_short_circuit_basis
+                    resolved=resolve_short_circuit_basis(service.research,method,service.store.snapshot(wid)['domain'],study['definition']['parameters'])
+                    definition={**study['definition'],'parameters':resolved['parameters']}
+                    study=service.research.save(wid,UpdateStudy(**definition,expected_revision=body.expected_revision,expected_study_revision=study['revision']),study['id'])
                 entry = next((entry for entry in methods if entry['method']['plugin_id'] == method['plugin_id']), None)
                 if not entry or entry['execution_policy']['backend'] != 'local':
                     raise HTTPException(422, '此方法需要超算执行，请先在研究模块完成并保存结果。')
@@ -146,7 +155,8 @@ def _generate(service, wid, body):
                 if run['status'] != 'succeeded' or run.get('integrity') != 'verified':
                     raise HTTPException(422, (run.get('error') or {}).get('message') or '运行没有完整成功，已保存诊断结果。')
                 _, _, channels, _ = service.evidence(wid)
-                gap = generation_gap(channel, channels.get(channel))
+                exclusions = service.specification(wid)['payload']['release_exclusions'] if channel == 'geometry' else ()
+                gap = generation_gap(channel, channels.get(channel), exclusions)
                 if gap:
                     raise HTTPException(422, gap)
                 steps.append({'channel':channel, 'status':'calculated', 'run_id':run['id']})

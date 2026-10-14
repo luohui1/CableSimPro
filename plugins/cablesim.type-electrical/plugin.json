@@ -1,7 +1,7 @@
 {
   "schema": "cablesim.plugin/2",
   "id": "cablesim.type-electrical",
-  "version": "1.0.5",
+  "version": "1.1.1",
   "name": "型号电气参数与短路容量",
   "icon": "assets/icon.svg",
   "presentation": {
@@ -64,7 +64,7 @@
       "id": "electrical",
       "kind": "method",
       "title": "型号电气参数（IEC 60287 原文分支）",
-      "method_version": "1.1.1",
+      "method_version": "1.2.1",
       "analysis": "properties",
       "solver": "local",
       "input_schema": "cablesim.domain/1",
@@ -99,8 +99,8 @@
       "limitations": [
         "只覆盖单芯或三芯的明确圆导体；R20、工作温度、系数、排列和运行电压必须有来源，缺项不推测。",
         "三芯电阻和电容按明确的长度基准与成缆绞入系数换算；邻近公式 x_p > 2.8 拒算。",
-        "复用领域接地拓扑契约；完整电感、正序与零序阻抗的求解尚未覆盖；几何电感明确不含金属回路及大地返回。",
-        "四芯与3+1仅逐芯核对导体电气量和组件短路容量；完整阻抗拓扑、中性线不平衡电流及载流量不在此能力内。"
+        "四芯与3+1仅逐芯核对导体电气量和组件短路容量；完整阻抗拓扑、中性线不平衡电流及载流量不在此能力内。",
+        "自互感矩阵限定三相圆实心或紧压导体与非磁性金属回路；无大地回流。交叉互联、磁性铠装及大地回流转线路研究。"
       ],
       "category": "calculation",
       "description": "只覆盖单芯或三芯的明确圆导体；R20、工作温度、系数、排列和运行电压必须有来源，缺项不推测。；三芯电阻和电容按明确的长度基准与成缆绞入系数换算；邻近公式 x_p > 2.8 拒算。",
@@ -108,9 +108,9 @@
         "additionalProperties": false,
         "properties": {
           "cable_type_id": {
-            "description": "从工程型号库选择已有型号，禁止自由填写不存在的编号。",
+            "description": "当前型号中的精确电缆结构标识。",
             "minLength": 1,
-            "title": "电缆型号",
+            "title": "电缆结构",
             "type": "string",
             "x-unit": {
               "si": null,
@@ -131,6 +131,10 @@
             "x-range-basis": {
               "kind": "engineering",
               "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
             }
           },
           "circuit_id": {
@@ -144,8 +148,8 @@
               }
             ],
             "default": null,
-            "description": "从保存工程选择已有回路，须与电缆型号一致。",
-            "title": "回路",
+            "description": "必须引用当前型号的实际回路；不由名称推测拓扑。",
+            "title": "接地拓扑回路",
             "x-unit": {
               "si": null,
               "display": null,
@@ -175,8 +179,8 @@
             "additionalProperties": {
               "type": "string"
             },
-            "description": "为补充工程参数逐项注明资料或规范来源，防止来源混用。",
-            "title": "逐参数来源",
+            "description": "参数名到标准条款、报告或明确设计条件的出处映射；不是自动生成的实测证明。",
+            "title": "参数出处",
             "type": "object",
             "x-unit": {
               "si": null,
@@ -186,7 +190,43 @@
             },
             "x-group": "evidence",
             "x-order": 2,
-            "x-level": "advanced"
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数 admission 边界，单位及适用条件须由工程师核定，不是标准限值。"
+            }
+          },
+          "basis_references": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "title": "已查询的标准依据",
+            "type": "object",
+            "x-hidden": true,
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-level": "expert",
+            "x-order": 33,
+            "description": "已查询的标准依据；工程输入须填写出处，未提供时保留缺项，不替代实测或人工批准。",
+            "x-expert-reason": "Executor 查询得到的固定依据快照，由只读查询流程填入，工程师不手工编辑 JSON。",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数 admission 边界，单位及适用条件须由工程师核定，不是标准限值。"
+            },
+            "x-editor-reason": "只读查询收据，由 Executor 填入，不供工程师编辑。"
           },
           "temperature_k": {
             "anyOf": [
@@ -200,8 +240,8 @@
               }
             ],
             "default": null,
-            "description": "材料电阻或电性能计算使用的绝对温度。",
-            "title": "计算温度",
+            "description": "工作温度，保存单位 K；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "工作温度",
             "x-source-required": true,
             "x-unit": {
               "si": "K",
@@ -233,8 +273,8 @@
               }
             ],
             "default": null,
-            "description": "时谐或交流计算频率，采用实际系统频率。",
-            "title": "电源频率",
+            "description": "频率，保存单位 Hz；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "频率",
             "x-source-required": true,
             "x-unit": {
               "si": "Hz",
@@ -266,8 +306,8 @@
               }
             ],
             "default": null,
-            "description": "介质损耗与电场计算的相对地有效值电压。",
-            "title": "相对地电压",
+            "description": "运行相电压，保存单位 V；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "运行相电压",
             "x-source-required": true,
             "x-unit": {
               "si": "V",
@@ -299,8 +339,8 @@
               }
             ],
             "default": null,
-            "description": "IEC60287-1-1集肤效应系数，依据导体构造与适用公式选择。",
-            "title": "集肤效应构造系数",
+            "description": "集肤系数 kₛ，保存单位 1；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "集肤系数 kₛ",
             "x-source-required": true,
             "x-unit": {
               "si": "1",
@@ -332,8 +372,8 @@
               }
             ],
             "default": null,
-            "description": "IEC60287-1-1邻近效应系数，依据导体构造与布置选择。",
-            "title": "邻近效应构造系数",
+            "description": "邻近系数 kₚ，保存单位 1；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "邻近系数 kₚ",
             "x-source-required": true,
             "x-unit": {
               "si": "1",
@@ -365,8 +405,8 @@
               }
             ],
             "default": null,
-            "description": "相邻电缆或导体中心距离，须与实际布置一致。",
-            "title": "相间中心距",
+            "description": "导体中心距，保存单位 m；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "导体中心距",
             "x-source-required": true,
             "x-unit": {
               "si": "m",
@@ -398,8 +438,8 @@
               }
             ],
             "default": null,
-            "description": "金属实际路径长度与电缆轴向长度之比，由真实节距与芯线位置计算。",
-            "title": "成缆绞合长度系数",
+            "description": "成缆绞入系数，保存单位 1；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "成缆绞入系数",
             "x-source-required": true,
             "x-unit": {
               "si": "1",
@@ -433,8 +473,8 @@
               }
             ],
             "default": null,
-            "description": "声明直流电阻按导体路径长度或电缆轴向长度计，避免重复绞合修正。",
-            "title": "直流电阻长度口径",
+            "description": "每米成品电缆或每米直线线芯；未声明时不进行长度换算。",
+            "title": "R₂₀ 长度基准",
             "x-unit": {
               "si": null,
               "display": null,
@@ -467,8 +507,8 @@
               }
             ],
             "default": null,
-            "description": "按实际平形或品字形布置选择，与领域几何一致。",
-            "title": "相间布置",
+            "description": "品字形或平排；三芯优先用保存的真实芯坐标。",
+            "title": "相间排列",
             "x-unit": {
               "si": null,
               "display": null,
@@ -485,6 +525,183 @@
             "x-range-basis": {
               "kind": "engineering",
               "reference": "plugins/cablesim.type-electrical/src 的 electrical 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            }
+          },
+          "bonding_model": {
+            "anyOf": [
+              {
+                "enum": [
+                  "single_point",
+                  "both_ends",
+                  "cross_bonded"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "单端、两端或交叉互联；须提供来源，不从型号名称推断。",
+            "title": "金属回路连接",
+            "x-enum-labels": {
+              "single_point": "单端连接",
+              "both_ends": "两端连接",
+              "cross_bonded": "交叉互联"
+            },
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-level": "advanced",
+            "x-order": 43,
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数 admission 边界，单位及适用条件须由工程师核定，不是标准限值。"
+            }
+          },
+          "return_path": {
+            "anyOf": [
+              {
+                "enum": [
+                  "metallic_only",
+                  "earth",
+                  "metallic_and_earth"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "本方法计算明确的金属回流；大地分支须使用线路研究方法。",
+            "title": "零序回流路径",
+            "x-enum-labels": {
+              "metallic_only": "仅金属回流",
+              "earth": "大地回流",
+              "metallic_and_earth": "金属与大地共同回流"
+            },
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-level": "advanced",
+            "x-order": 44,
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数 admission 边界，单位及适用条件须由工程师核定，不是标准限值。"
+            }
+          },
+          "metal_resistance_ohm_m": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 10,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "每相金属回路交流电阻",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "ohm/m",
+              "display": "ohm/m",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-level": "advanced",
+            "x-order": 45,
+            "description": "每相金属回路交流电阻；工程输入须填写出处，未提供时保留缺项，不替代实测或人工批准。",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数 admission 边界，单位及适用条件须由工程师核定，不是标准限值。"
+            }
+          },
+          "metal_mean_radius_m": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 1,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "每相金属回路平均半径",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "m",
+              "display": "m",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-level": "advanced",
+            "x-order": 46,
+            "description": "每相金属回路平均半径；工程输入须填写出处，未提供时保留缺项，不替代实测或人工批准。",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数 admission 边界，单位及适用条件须由工程师核定，不是标准限值。"
+            }
+          },
+          "metal_nonmagnetic": {
+            "anyOf": [
+              {
+                "const": true,
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "本分支仅非磁性金属回路；含钢铠装的完整阻抗须另行线路研究，不得确认为非磁性。",
+            "title": "线性非磁性回路确认",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-level": "advanced",
+            "x-order": 47,
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数 admission 边界，单位及适用条件须由工程师核定，不是标准限值。"
             }
           }
         },
@@ -560,7 +777,7 @@
       "id": "short-circuit",
       "kind": "method",
       "title": "组件绝热与非绝热短路容量（IEC 60949）",
-      "method_version": "1.1.1",
+      "method_version": "1.2.1",
       "analysis": "short_circuit",
       "solver": "local",
       "input_schema": "cablesim.domain/1",
@@ -597,7 +814,8 @@
         "导体非绝热修正仅覆盖铜 / 铝与 XLPE；金属组件需截面、实际构造、接触条件与两侧介质热参数。",
         "隔离铜丝只覆盖完全嵌入且间隔至少一个丝径；反向扎带容量、未核实的接触分支与并联金属回路的总容量未覆盖。",
         "IEC 60949:1988 英文公开原文页摘录及 AMD1:2008 已逐图核验；未持有完整双语出版物，不作完整产品认证。",
-        "四芯与3+1仅逐芯核对导体电气量和组件短路容量；完整阻抗拓扑、中性线不平衡电流及载流量不在此能力内。"
+        "四芯与3+1仅逐芯核对导体电气量和组件短路容量；完整阻抗拓扑、中性线不平衡电流及载流量不在此能力内。",
+        "自互感矩阵限定三相圆实心或紧压导体与非磁性金属回路；无大地回流。交叉互联、磁性铠装及大地回流转线路研究。"
       ],
       "category": "calculation",
       "description": "初始、最终温度与持续时间明确给定且带来源；计算条件不代表产品获准达到该温度。；导体非绝热修正仅覆盖铜 / 铝与 XLPE；金属组件需截面、实际构造、接触条件与两侧介质热参数。",
@@ -605,9 +823,9 @@
         "additionalProperties": false,
         "properties": {
           "cable_type_id": {
-            "description": "从工程型号库选择已有型号，禁止自由填写不存在的编号。",
+            "description": "当前型号中的精确电缆结构标识。",
             "minLength": 1,
-            "title": "电缆型号",
+            "title": "电缆结构",
             "type": "string",
             "x-unit": {
               "si": null,
@@ -628,6 +846,10 @@
             "x-range-basis": {
               "kind": "engineering",
               "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
             }
           },
           "circuit_id": {
@@ -641,8 +863,8 @@
               }
             ],
             "default": null,
-            "description": "从保存工程选择已有回路，须与电缆型号一致。",
-            "title": "回路",
+            "description": "必须引用当前型号的实际回路；不由名称推测拓扑。",
+            "title": "接地拓扑回路",
             "x-unit": {
               "si": null,
               "display": null,
@@ -672,8 +894,8 @@
             "additionalProperties": {
               "type": "string"
             },
-            "description": "为补充工程参数逐项注明资料或规范来源，防止来源混用。",
-            "title": "逐参数来源",
+            "description": "参数名到标准条款、报告或明确设计条件的出处映射；不是自动生成的实测证明。",
+            "title": "参数出处",
             "type": "object",
             "x-unit": {
               "si": null,
@@ -683,7 +905,43 @@
             },
             "x-group": "evidence",
             "x-order": 2,
-            "x-level": "advanced"
+            "x-level": "advanced",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数 admission 边界，单位及适用条件须由工程师核定，不是标准限值。"
+            }
+          },
+          "basis_references": {
+            "additionalProperties": {
+              "type": "object"
+            },
+            "title": "已查询的标准依据",
+            "type": "object",
+            "x-hidden": true,
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "evidence",
+            "x-level": "expert",
+            "x-order": 33,
+            "description": "已查询的标准依据；工程输入须填写出处，未提供时保留缺项，不替代实测或人工批准。",
+            "x-expert-reason": "Executor 查询得到的固定依据快照，由只读查询流程填入，工程师不手工编辑 JSON。",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数 admission 边界，单位及适用条件须由工程师核定，不是标准限值。"
+            },
+            "x-editor-reason": "只读查询收据，由 Executor 填入，不供工程师编辑。"
           },
           "duration_s": {
             "anyOf": [
@@ -697,8 +955,8 @@
               }
             ],
             "default": null,
-            "description": "短路电流持续时间，按保护动作或设计要求给定。",
-            "title": "短路持续时间",
+            "description": "持续时间，保存单位 s；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "持续时间",
             "x-source-required": true,
             "x-unit": {
               "si": "s",
@@ -730,8 +988,8 @@
               }
             ],
             "default": null,
-            "description": "暂态初始状态或耦合迭代初值，必须在材料有效温区内。",
-            "title": "初始温度",
+            "description": "导体初始温度，保存单位 K；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "导体初始温度",
             "x-source-required": true,
             "x-unit": {
               "si": "K",
@@ -763,8 +1021,8 @@
               }
             ],
             "default": null,
-            "description": "短路持续时间结束时导体允许温度上限。",
-            "title": "导体短路终温",
+            "description": "导体最终温度，保存单位 K；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "导体最终温度",
             "x-source-required": true,
             "x-unit": {
               "si": "K",
@@ -796,8 +1054,8 @@
               }
             ],
             "default": null,
-            "description": "护套或屏蔽金属短路前的温度。",
-            "title": "金属短路初温",
+            "description": "金属组件初始温度，保存单位 K；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "金属组件初始温度",
             "x-source-required": true,
             "x-unit": {
               "si": "K",
@@ -829,8 +1087,8 @@
               }
             ],
             "default": null,
-            "description": "护套或屏蔽金属短路后的允许终温。",
-            "title": "金属短路终温",
+            "description": "金属组件最终温度，保存单位 K；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "金属组件最终温度",
             "x-source-required": true,
             "x-unit": {
               "si": "K",
@@ -862,8 +1120,8 @@
               }
             ],
             "default": null,
-            "description": "短路热量向邻接材料传递的接触模型系数，须有方法依据。",
-            "title": "非绝热接触系数",
+            "description": "金属接触因数，保存单位 1；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "金属接触因数",
             "x-source-required": true,
             "x-unit": {
               "si": "1",
@@ -895,8 +1153,8 @@
               }
             ],
             "default": null,
-            "description": "短路非绝热校核中金属内侧相邻材料的热阻率。",
-            "title": "金属内侧热阻率",
+            "description": "内侧介质热阻率，保存单位 K·m/W；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "内侧介质热阻率",
             "x-source-required": true,
             "x-unit": {
               "si": "K·m/W",
@@ -928,8 +1186,8 @@
               }
             ],
             "default": null,
-            "description": "短路非绝热校核中金属外侧相邻材料的热阻率。",
-            "title": "金属外侧热阻率",
+            "description": "外侧介质热阻率，保存单位 K·m/W；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "外侧介质热阻率",
             "x-source-required": true,
             "x-unit": {
               "si": "K·m/W",
@@ -961,8 +1219,8 @@
               }
             ],
             "default": null,
-            "description": "短路非绝热计算中内侧相邻材料的体积热容量。",
-            "title": "金属内侧体积热容量",
+            "description": "内侧介质体积热容，保存单位 J/(m³·K)；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "内侧介质体积热容",
             "x-source-required": true,
             "x-unit": {
               "si": "J/(m³·K)",
@@ -994,8 +1252,8 @@
               }
             ],
             "default": null,
-            "description": "短路非绝热计算中外侧相邻材料的体积热容量。",
-            "title": "金属外侧体积热容量",
+            "description": "外侧介质体积热容，保存单位 J/(m³·K)；填写时须提供对应 sources 出处，缺少来源不产生该项数值。",
+            "title": "外侧介质体积热容",
             "x-source-required": true,
             "x-unit": {
               "si": "J/(m³·K)",
@@ -1030,8 +1288,8 @@
               }
             ],
             "default": null,
-            "description": "声明金属丝与相邻材料接触方式，短路非绝热计算据此选择热交换模型。",
-            "title": "单丝接触模型",
+            "description": "只有已声明且适用的嵌入/间隔条件可以产生非绝热结果。",
+            "title": "铜丝接触条件",
             "x-unit": {
               "si": null,
               "display": null,
@@ -1050,15 +1308,193 @@
               "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
             }
           },
+          "screen_fault_current_a": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0,
+                "maximum": 10000000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "金属回路故障电流",
+            "x-source-required": true,
+            "x-unit": {
+              "si": "A",
+              "display": "A",
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-level": "advanced",
+            "x-order": 45,
+            "description": "金属回路故障电流；工程输入须填写出处，未提供时保留缺项，不替代实测或人工批准。",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数 admission 边界，单位及适用条件须由工程师核定，不是标准限值。"
+            }
+          },
+          "bonding_model": {
+            "anyOf": [
+              {
+                "enum": [
+                  "single_point",
+                  "both_ends",
+                  "cross_bonded"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "金属回路连接",
+            "x-enum-labels": {
+              "single_point": "单端连接",
+              "both_ends": "两端连接",
+              "cross_bonded": "交叉互联"
+            },
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-level": "advanced",
+            "x-order": 46,
+            "description": "金属回路连接；工程输入须填写出处，未提供时保留缺项，不替代实测或人工批准。",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数 admission 边界，单位及适用条件须由工程师核定，不是标准限值。"
+            }
+          },
+          "return_path": {
+            "anyOf": [
+              {
+                "enum": [
+                  "metallic_only",
+                  "earth",
+                  "metallic_and_earth"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "故障回流路径",
+            "x-enum-labels": {
+              "metallic_only": "仅金属回流",
+              "earth": "大地回流",
+              "metallic_and_earth": "金属与大地共同回流"
+            },
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-level": "advanced",
+            "x-order": 47,
+            "description": "故障回流路径；工程输入须填写出处，未提供时保留缺项，不替代实测或人工批准。",
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数 admission 边界，单位及适用条件须由工程师核定，不是标准限值。"
+            }
+          },
+          "metal_capacity_basis": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "adiabatic",
+                  "nonadiabatic"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "金属容量校核口径",
+            "description": "显式选择绝热或非绝热；后者须相邻介质热参数，不能用默认值补齐。",
+            "x-enum-labels": {
+              "adiabatic": "绝热容量",
+              "nonadiabatic": "非绝热容量"
+            },
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-level": "basic",
+            "x-order": 42,
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数边界；工程师须核对工况及来源。"
+            }
+          },
+          "parallel_components": {
+            "description": "逐项填写 row_id、resistance_ohm、initial_temperature_k、final_temperature_k 和 source；组件温度不默认相同。",
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "maxItems": 20,
+            "title": "并联金属组件",
+            "type": "array",
+            "x-unit": {
+              "si": null,
+              "display": null,
+              "scale": 1,
+              "offset": 0
+            },
+            "x-group": "physics",
+            "x-level": "advanced",
+            "x-order": 48,
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
+            },
+            "x-range-basis": {
+              "kind": "engineering",
+              "reference": "本方法参数 admission 边界，单位及适用条件须由工程师核定，不是标准限值。"
+            }
+          },
           "interest_times_s": {
-            "description": "需要给出非绝热短路结果的时间点，必须位于声明时间范围。",
+            "description": "0.1–5 s，最多 20 点；曲线电流由插件计算，前端不外推。",
             "items": {
               "maximum": 5,
               "minimum": 0.1,
               "type": "number"
             },
             "maxItems": 20,
-            "title": "输出时刻",
+            "title": "关注时间点",
             "type": "array",
             "x-unit": {
               "si": "s",
@@ -1072,6 +1508,10 @@
             "x-range-basis": {
               "kind": "engineering",
               "reference": "plugins/cablesim.type-electrical/src 的 short-circuit 输入校验；契约适用范围与显式工程输入；物理取值须附资料来源，不代表通用标准限值。"
+            },
+            "x-default-basis": {
+              "kind": "engineering",
+              "reference": "缺省不提供工程事实；参数为空时明确缺项。"
             }
           }
         },
@@ -1161,24 +1601,49 @@
       "size_bytes": 2998
     },
     {
+      "path": "src/cablesim_type_electrical/basis_catalog.py",
+      "sha256": "b6fbd44cc4db9f1d200c663913889107eb81702b2f627d5724ab3e69f2957899",
+      "size_bytes": 1907
+    },
+    {
       "path": "src/cablesim_type_electrical/inputs.py",
-      "sha256": "f5b9d43673d74a2c8d7a54eb6183d8e7f4550354bc2efefd93e7ae398dca2b91",
-      "size_bytes": 4992
+      "sha256": "12facc801e08f21351f6073fcc85d5ded709a0be2274cbcde3991db288019cad",
+      "size_bytes": 7034
     },
     {
       "path": "src/cablesim_type_electrical/main.py",
-      "sha256": "9c1eddae23b119944ecb805441ed53cd94fa31efe05a1ccbbd2c1d9febdefc75",
-      "size_bytes": 34888
+      "sha256": "b79663681ff827a0b25277f7ff51b73bb9afdd39fec09b74c138ed5e3218d217",
+      "size_bytes": 38973
+    },
+    {
+      "path": "src/cablesim_type_electrical/sequence.py",
+      "sha256": "699c5b3e7d89e1bf825668a48d99d144057cf0f25e5fa54477ec826a9a65c7d2",
+      "size_bytes": 7072
+    },
+    {
+      "path": "src/cablesim_type_electrical/sharing.py",
+      "sha256": "d85b4efc0c47df3411de412c64e9abfc655af472a9dc67ad886f8a557078001c",
+      "size_bytes": 5177
+    },
+    {
+      "path": "src/cablesim_type_electrical/short-basis-catalog.json",
+      "sha256": "9b928833c8877fa0d8e158b10f306accd052df4e39b9d68e55d392baa62396eb",
+      "size_bytes": 14600
+    },
+    {
+      "path": "src/cablesim_type_electrical/short_basis.py",
+      "sha256": "760dc410075069188dfd4c1e38d0e3958dfadc204687fc93541d0ec4716cc0c0",
+      "size_bytes": 2978
     },
     {
       "path": "src/cablesim_type_electrical/sources.json",
-      "sha256": "21d2dbf686359da50f0677e20615c52068f965b478b7d33ebfd774f5d779a284",
-      "size_bytes": 1687
+      "sha256": "3de9cbf041daa2abb9a98eec72ac00736617522e0ed17b50e6ef8229214c273a",
+      "size_bytes": 1722
     },
     {
       "path": "src/host-dependencies.json",
-      "sha256": "ab5c080ffbacb186bd91fd1ee7ccaa1465c0ba5f33a51e29e82f92d9b8aa73a4",
-      "size_bytes": 1700
+      "sha256": "8f2db3fa654a8621c12137f8edecf36d926da7308b7b34d5a034ed99d8b1c566",
+      "size_bytes": 2111
     }
   ]
 }

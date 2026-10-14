@@ -29,4 +29,4 @@
 .study-method-workspace { padding: var(--space-3); }
 .study-method-workspace > h3 { font-size: var(--text-body); margin: 0 0 var(--space-2); }
 .study-method-workspace .study-method-config { max-width: 100%; }
-.study-method-config :is(.select-trigger,.parameter-structured-label) { white-space: normal; height: auto; min-height: var(--control-compact); overflow-wrap: anywhere; }
+.study-method-config :is(.select-trigger,.parameter-structured-label) { white-space: normal; height: auto; min-height: var(--control-standard); overflow-wrap: anywhere; }
