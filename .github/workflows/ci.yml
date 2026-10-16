@@ -29,7 +29,7 @@ jobs:
   scene-contracts:
     name: Scene contracts and Blender exchange
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -41,6 +41,18 @@ jobs:
         working-directory: frontend
       - run: npm test
         working-directory: frontend
+      - name: Frontend token and styling rules
+        run: npm run check:styles
+        working-directory: frontend
+      - name: Strict visualization module type check
+        run: npm run check:visualization
+        working-directory: frontend
+      - name: Install Chromium for real React and WebGL regression
+        run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - name: Real React WebGL thermal-network and history interactions
+        run: npm run test:visualization-browser
+        working-directory: frontend
       - name: Install the display-authoring tool for the real GLB round trip
         run: |
           sudo apt-get update
@@ -51,6 +63,20 @@ jobs:
           CABLESIM_BLENDER: /usr/bin/blender
         # Distro Blender must use the distro Python/NumPy, not setup-python shared libraries.
         run: env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH /usr/bin/python3 -m unittest discover -s tests -p test_scene_exchange.py -v
+      - name: Full frontend type check including study-route integration
+        if: ${{ !cancelled() }}
+        run: npx tsc --project tsconfig.json --noEmit --pretty false
+        working-directory: frontend
+      - name: Optional visual evidence archive
+        uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        # Evidence upload is optional; no test or type-check failure is ignored.
+        continue-on-error: true
+        with:
+          name: visualization-browser-evidence
+          retention-days: 7
+          path: frontend/test-results/visualization/
+          if-no-files-found: ignore
   native-plugins:
     name: Native plugins / Slurm dg83
     runs-on: [self-hosted, linux, cablesim-hpc]

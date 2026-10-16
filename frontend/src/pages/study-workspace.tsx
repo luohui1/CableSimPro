@@ -26,6 +26,7 @@ import { CableInputs, ConditionsInputs, SectionInputs, type InputSelection } fro
 import { StudyMethodForm } from '@/components/study-method-form';
 import { StudyResults } from '@/components/study-results';
 import { StudyTemperature } from '@/components/study-temperature';
+import { StudyVisualWorkbench } from '@/features/thermal-workbench';
 import { StudyRunControl } from '@/components/study-run-control';
 import { StudyNativeArtifact } from '@/components/study-native-artifact';
 import { StudySweep } from '@/components/study-sweep';
@@ -158,6 +159,8 @@ export function StudyWorkspace() {
             : inputModule ? run?.integrity !== 'verified' ? <ErrorState description="固定运行输入未通过完整性校验" /> : module === 'cable' ? <CableInputs {...inputProps} /> : module === 'conditions' ? <ConditionsInputs {...inputProps} /> : <SectionInputs {...inputProps} />
             : ['ampacity', 'thermal-field', 'transient', 'sheath-losses', 'electrothermal'].includes(module) && tab === 'parameters'
               ? <StudyMethodForm module={module} historical={!!search.run} definition={search.run ? ((optionalRecord(run?.snapshot).study_definition || optionalRecord(run?.snapshot).definition) as StudyDefinition) : undefined} />
+            : ['ampacity', 'thermal-field', 'transient', 'electrothermal'].includes(module) && tab === 'visualization'
+              ? <StudyVisualWorkbench run={run} onSelect={inputProps.onSelect} />
             : module === 'transient' && tab === 'history' ? <StudyNativeArtifact run={run} kind="history" />
             : module === 'sheath-losses' && tab === 'losses' ? <StudyNativeArtifact run={run} kind="losses" />
             : ['thermal-field', 'electrothermal', 'transient'].includes(module) && tab !== 'results' ? <StudyTemperature run={run} tab={tab} onSelect={inputProps.onSelect} />
