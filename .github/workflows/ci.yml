@@ -63,6 +63,16 @@ jobs:
           CABLESIM_BLENDER: /usr/bin/blender
         # Distro Blender must use the distro Python/NumPy, not setup-python shared libraries.
         run: env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH /usr/bin/python3 -m unittest discover -s tests -p test_scene_exchange.py -v
+      - name: Generate declared native CAD gallery fixtures for full type check
+        if: ${{ !cancelled() }}
+        # Real native gallery geometry, not empty JSON stubs or solver results.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-venv libgl1 libxrender1
+          /usr/bin/python3 -m venv .venv
+          .venv/bin/python -m pip install -r backend/requirements-dev.txt
+          .venv/bin/python scripts/prepare_plugin_environment.py cablesim.cable-geometry --with-tests
+          .venv/bin/python frontend/src/features/cad/prepare-fixtures.py
       - name: Full frontend type check including study-route integration
         if: ${{ !cancelled() }}
         run: npx tsc --project tsconfig.json --noEmit --pretty false

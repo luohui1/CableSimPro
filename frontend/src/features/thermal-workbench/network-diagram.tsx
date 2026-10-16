@@ -14,6 +14,7 @@ export function NetworkDiagram({ network, state, phase, onNode }: { network: Net
         return <g key={i}>
           {r !== undefined && <g className="tw-network-edge"><path d={`M38 ${y + 16}v10l-6 5 12 6-12 6 12 6-6 5v3`} markerEnd={`url(#${marker})`} /><text x="66" y={y + 37}>R = {value(r, 3)} K·m/W</text>{flow !== null && <text x="66" y={y + 53} className="tw-network-flow">ΔT/R = {value(flow)} W/m</text>}</g>}
           <g role="button" tabIndex={0} aria-label={`${layer.label}，${temperature === undefined ? '未保存温度' : `${value(temperature)} 摄氏度`}`} className={`tw-network-node tw-heat-${band}`} onClick={() => onNode(i)} onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onNode(i); } }}>
+            <rect x="14" y={y - 21} width="378" height="42" fill="currentColor" fillOpacity={0} pointerEvents="all" />
             <circle cx="38" cy={y} r="15" /><text className="tw-node-number" x="38" y={y + 4} textAnchor="middle">{i + 1}</text>
             <text x="66" y={y - 5} className="tw-node-label">{layer.label}</text><text x="66" y={y + 13} className="tw-node-radius">r = {value(layer.radius * 1000)} mm</text>
             <text className="tw-node-temperature" x="377" y={y + 4} textAnchor="end">{temperature === undefined ? '—' : value(temperature, 1)}{temperature !== undefined && ' °C'}</text>

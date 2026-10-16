@@ -20,7 +20,7 @@ try {
   await writeFile(join(directory, 'entry.tsx'), `import {StrictMode,useState} from 'react';import{createRoot}from'react-dom/client';import{StudyVisualWorkbench}from '@/features/thermal-workbench';import{makeRun}from '../../scripts/visualization-fixture.mjs';
 function App(){const [run,setRun]=useState(makeRun),[mounted,setMounted]=useState(true),[selection,setSelection]=useState('');return <><header className="fixture-banner"><strong>CableSimPro / 合成界面测试数据，不是工程结果</strong><div><button onClick={()=>setRun(makeRun())}>恢复测试输入</button><button onClick={()=>setRun({...makeRun(),integrity:'invalid'})}>测试损坏输入</button><button onClick={()=>setMounted(v=>!v)}>切换挂载</button></div><output id="selection">{selection}</output></header><main>{mounted&&<StudyVisualWorkbench run={run} onSelect={s=>setSelection(s.title)}/>}</main></>};createRoot(document.getElementById('root')!).render(<StrictMode><App/></StrictMode>);`);
   // The test entry uses real production components without the unrelated native OCCT build chain.
-  server = await createServer({ configFile: false, root, plugins: [react()], resolve: { alias: { '@': join(root, 'src') } }, server: { host: '127.0.0.1', port: 0, strictPort: false } });
+  server = await createServer({ configFile: false, root, plugins: [react()], optimizeDeps: { entries: [join(directory, 'index.html')] }, resolve: { alias: { '@': join(root, 'src') } }, server: { host: '127.0.0.1', port: 0, strictPort: false } });
   await server.listen();
   const address = server.httpServer.address();
   assert(address && typeof address === 'object');
@@ -62,6 +62,9 @@ function App(){const [run,setRun]=useState(makeRun),[mounted,setMounted]=useStat
   await page.getByRole('button', { name: '测试损坏输入', exact: true }).click();await expect(page.getByText('可视化不可用', { exact: true })).toBeVisible();await expect(canvas).toHaveCount(0);checks.push('unverified run fails closed');
   assert.deepEqual(errors, [], `Browser errors: ${errors.join('\n')}`);
   console.log(JSON.stringify({ status: 'passed', checks, errors, scope: 'Synthetic data, real React/WebGL; not complete application or numerical acceptance' }, null, 2));
+} catch (error) {
+  console.error(JSON.stringify({ status: 'failed', completedChecks: checks, browserErrors: errors }, null, 2));
+  throw error;
 } finally {
   await browser?.close();await server?.close();await rm(directory, { recursive: true, force: true });
 }
