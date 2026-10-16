@@ -66,7 +66,7 @@ function normals(positions: Float32Array, indices: Uint32Array): Float32Array {
   for(let i=0;i<out.length;i+=3){const n=normalize([out[i],out[i+1],out[i+2]]);out.set(n,i);}
   return out;
 }
-function perspective(aspect: number, near: number, far: number): Float32Array {
+function perspective(aspect: number, near: number, far: number): Float32Array<ArrayBuffer> {
   const f=1/Math.tan(Math.PI/8),nf=1/(near-far);
   return new Float32Array([f/aspect,0,0,0,0,f,0,0,0,0,(far+near)*nf,-1,0,0,2*far*near*nf,0]);
 }
