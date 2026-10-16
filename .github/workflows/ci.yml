@@ -28,7 +28,7 @@ jobs:
         run: python scripts/seal_plugin_catalog.py
   scene-contracts:
     name: Scene contracts and Blender exchange
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -37,9 +37,6 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
       - run: npm test
@@ -47,12 +44,13 @@ jobs:
       - name: Install the display-authoring tool for the real GLB round trip
         run: |
           sudo apt-get update
-          sudo apt-get install -y blender
-          blender --version
+          sudo apt-get install -y blender python3-numpy
+          env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH /usr/bin/blender --version
       - name: Validate exchange and actual Blender GLB coordinates and identity
         env:
-          CABLESIM_BLENDER: blender
-        run: python -m unittest discover -s tests -p test_scene_exchange.py -v
+          CABLESIM_BLENDER: /usr/bin/blender
+        # Distro Blender must use the distro Python/NumPy, not setup-python shared libraries.
+        run: env -u LD_LIBRARY_PATH -u PYTHONHOME -u PYTHONPATH /usr/bin/python3 -m unittest discover -s tests -p test_scene_exchange.py -v
   native-plugins:
     name: Native plugins / Slurm dg83
     runs-on: [self-hosted, linux, cablesim-hpc]
