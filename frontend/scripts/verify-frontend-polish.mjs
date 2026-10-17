@@ -57,8 +57,11 @@ try {
   const methods = await request('/api/methods');
   const entry = methods.find(row => row.method?.plugin_id === 'cablesim.thermal-network');
   assert(entry && entry.capabilities.some(capability => capability.id === 'steady-rating'), 'The declared thermal reference must exist; do not substitute another method');
+  const sectionId = studyWorkspace.domain.sections[0]?.id;
+  assert(sectionId, 'The converted input must contain a real installation section');
   const study = await request(`/api/workspaces/${studyWorkspace.id}/studies`, 'POST', {
     title: '界面回归 · 输入工况（未求解）', expected_revision: studyWorkspace.revision, task: 'rating',
+    profile: { profile: 'mv-concentric/1', section_id: sectionId },
     method: { ...entry.method, capability: 'steady-rating' }, driver: { kind: 'single' }, parameters: {},
   });
   assert(study.id); checks.push('fresh host, real workspace conversion and pinned input-only study');
@@ -98,8 +101,7 @@ try {
   for (const path of topPages) await visit(path);
   checks.push('all nine top-level production pages with the real host');
   const definitions = await page.evaluate(async () => ({ studies: (await import('/src/pages/study-modules.ts')).moduleDefinitions, types: (await import('/src/features/type/module-definitions.ts')).typeModules }));
-  // No native runtime is replaced. Native 3D and saved-result interactions have separate
-  // real WebGL/Blender tests; this fresh database deliberately has no solver results.
+  // Native runtime and saved-result interactions are separately validated; no fake results here.
   const deferred = [];
   for (const [module, definition] of Object.entries(definitions.studies)) for (const tab of definition.tabs) {
     if (module === 'section' && tab.id === 'three-dimensional') { deferred.push('study:section/three-dimensional (native geometry/runtime acceptance is separate)'); continue; }
@@ -142,5 +144,9 @@ try {
   const report = { status: 'passed', checks, visited, deferred, errors, scope: 'Production main/router + real local API, fresh input-only database. Not numerical, saved-result, native OCCT runtime or release-build acceptance.' };
   await writeFile(join(output, 'production-route-checks.json'), JSON.stringify(report, null, 2));
   console.log(JSON.stringify(report, null, 2));
-} catch (error) { console.error(JSON.stringify({ status: 'failed', checks, visited, errors, prohibitedRequests, backendLog }, null, 2)); throw error; }
+} catch (error) {
+  const message = String(error?.stack || error).slice(0, 3500).replace(/%/g, '%25').replace(/\r/g, '%0D').replace(/\n/g, '%0A');
+  console.error(`::error title=Production frontend route regression::${message}`);
+  console.error(JSON.stringify({ status: 'failed', checks, visited, errors, prohibitedRequests, backendLog }, null, 2)); throw error;
+}
 finally { await browser?.close(); await server?.close(); await stop(backend); await rm(scratch, { recursive: true, force: true, maxRetries: 4, retryDelay: 300 }); }
