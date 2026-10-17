@@ -1,0 +1,150 @@
+/* Shared finishing rules for the existing workspace, not a second application theme. */
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
+.app-shell[data-ui-polish] { isolation: isolate; }
+.app-shell[data-ui-polish] .work-panel { border: 1px solid var(--line); }
+.app-shell[data-ui-polish] .main-content { container: workspace-content / inline-size; scrollbar-gutter: stable; scroll-padding-block: var(--space-4); overscroll-behavior: contain; }
+.app-shell[data-ui-polish] .main-content:focus { outline: none; }
+.app-shell[data-ui-polish] .main-content:focus-visible { outline: 2px solid var(--copper); outline-offset: -2px; }
+.app-shell[data-ui-polish] .topbar { flex-wrap: wrap; row-gap: var(--space-2); }
+.app-shell[data-ui-polish] .topbar h1 { flex: 1 1 12rem; line-height: 1.6; }
+.app-shell[data-ui-polish] .topbar-actions { flex-wrap: wrap; min-width: 0; justify-content: flex-end; }
+.app-shell[data-ui-polish] .shell-status { min-width: 0; max-width: 100%; }
+.app-shell[data-ui-polish] .status-mark { white-space: normal; text-align: left; }
+.app-shell[data-ui-polish] .sidebar-caption { justify-content: space-between; gap: var(--space-2); }
+.app-shell[data-ui-polish] .module-item { overflow-wrap: anywhere; }
+.app-shell[data-ui-polish] .module-item[data-status="active"] { background: var(--hover); color: var(--text); font-weight: var(--weight-strong); }
+.app-shell[data-ui-polish] .module-item[aria-current], .app-shell[data-ui-polish] .module-item[data-status="active"] { box-shadow: inset 2px 0 0 var(--copper); }
+.app-shell[data-ui-polish] .page-tabs { min-width: 0; overflow-x: auto; scrollbar-width: thin; scroll-padding-inline: var(--space-4); }
+.app-shell[data-ui-polish] .page-tabs .tabs-list { min-width: max-content; gap: var(--space-3); }
+.app-shell[data-ui-polish] .tabs-trigger:focus-visible { outline-offset: -2px; }
+.app-shell[data-ui-polish] .shell-nav-toggle, .app-shell[data-ui-polish] .shell-nav-close { display: none; }
+.shell-skip { position: fixed; inset-inline-start: var(--space-3); top: var(--space-3); z-index: 50; padding: var(--space-2) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-input); background: var(--panel); color: var(--text); box-shadow: var(--shadow-float); transform: translateY(calc(-100% - var(--space-6))); }
+.shell-skip:focus { transform: translateY(0); }
+
+/* Controls wrap to their actual pane width, including when the inspector is open. */
+.app-shell[data-ui-polish] .toolbar, .app-shell[data-ui-polish] .report-toolbar, .app-shell[data-ui-polish] .stale-banner { flex-wrap: wrap; }
+.app-shell[data-ui-polish] .toolbar { gap: var(--space-2) var(--space-3); }
+.app-shell[data-ui-polish] .search-field { flex: 1 1 16rem; max-width: 32rem; min-width: 0; flex-wrap: wrap; }
+.app-shell[data-ui-polish] .search-field input { flex: 1; width: 100%; min-width: 0; }
+.app-shell[data-ui-polish] .text-field { min-width: 0; }
+.app-shell[data-ui-polish] .text-field input, .app-shell[data-ui-polish] .text-field textarea { min-width: 0; max-width: 100%; }
+.app-shell[data-ui-polish] .input-form-grid, .app-shell[data-ui-polish] .parameter-fields { grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); max-width: 100%; }
+.app-shell[data-ui-polish] .input-form-grid .number-field, .app-shell[data-ui-polish] .parameter-fields .number-field, .app-shell[data-ui-polish] .input-row-fields .number-field, .app-shell[data-ui-polish] .parameter-fields > .parameter-field { min-width: 0; max-width: none; }
+.app-shell[data-ui-polish] .input-form-grid .field-value-line, .app-shell[data-ui-polish] .parameter-fields .field-value-line, .app-shell[data-ui-polish] .input-row-fields .field-value-line { grid-template-columns: minmax(0, 1fr) auto; }
+.app-shell[data-ui-polish] .input-row-fields { min-width: 0; flex-direction: row; }
+.app-shell[data-ui-polish] .input-row-fields .number-field { flex: 1 1 15rem; }
+.app-shell[data-ui-polish] .input-section { min-width: 0; }
+.app-shell[data-ui-polish] .field-error { overflow-wrap: anywhere; line-height: 1.6; }
+.app-shell[data-ui-polish] .number-input { min-height: var(--control-standard); }
+.app-shell[data-ui-polish] .number-input input { font-variant-numeric: tabular-nums; }
+.app-shell[data-ui-polish] .number-input:focus-within { outline-color: var(--copper); }
+.app-shell[data-ui-polish] .number-input.has-error:focus-within { outline-color: var(--error); }
+.app-shell[data-ui-polish] .input-section select, .app-shell[data-ui-polish] .toolbar select, .app-shell[data-ui-polish] .parameter-field select { min-width: 0; max-width: 100%; padding: var(--space-1) var(--space-2); min-height: var(--control-compact); background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-input); color: var(--text); }
+.app-shell[data-ui-polish] .parameter-form textarea { width: 100%; max-width: 100%; line-height: 1.7; }
+
+/* A dense engineering table keeps all source rows; only its viewport scrolls. */
+.table-region { min-width: 0; max-width: 100%; }
+.table-region .table-scroll { max-width: 100%; overflow: auto; overscroll-behavior-x: contain; scrollbar-width: thin; scroll-padding-block: var(--space-12); border: 1px solid var(--line); border-radius: var(--radius-input); }
+.table-region .table-scroll[data-long="true"] { max-height: min(64dvh, 42rem); }
+.table-region .table-scroll:focus-visible { outline: 2px solid var(--copper); outline-offset: 2px; }
+.table-region .data-table thead th { position: sticky; top: 0; z-index: 1; vertical-align: bottom; }
+.table-region .data-table th.numeric, .table-region .data-table td.numeric { text-align: right; }
+.table-region .data-table td { vertical-align: middle; }
+.table-region .data-table .cell-wrap { overflow-wrap: anywhere; }
+.table-region .data-table .data-row[data-selected] { background: var(--location); }
+.table-region .data-row[data-selected] td:first-child { box-shadow: inset 2px 0 0 var(--copper); }
+.table-region .group-row button { min-height: var(--control-compact); }
+.table-region .table-state { padding: var(--space-6) var(--space-4); text-align: center; white-space: normal; }
+.table-region .table-hint { margin-block: var(--space-2) 0; color: var(--text-secondary); font-size: var(--text-note); line-height: 1.6; }
+
+/* Inspectors may contain model names, paths and digests, not just short numbers. */
+.app-shell[data-ui-polish] .property-panel { scrollbar-gutter: stable; }
+.app-shell[data-ui-polish] .property-panel header { position: sticky; top: 0; z-index: 2; background: var(--panel); }
+.app-shell[data-ui-polish] .property-row { align-items: flex-start; gap: var(--space-3); padding-block: var(--space-1); }
+.app-shell[data-ui-polish] .property-row dt { flex: 0 1 42%; overflow-wrap: anywhere; }
+.app-shell[data-ui-polish] .property-row dd { min-width: 0; flex: 1; flex-wrap: wrap; white-space: normal; overflow-wrap: anywhere; }
+.app-shell[data-ui-polish] .property-value { min-width: 0; overflow-wrap: anywhere; }
+.app-shell[data-ui-polish] .property-collapsed { align-items: flex-start; }
+.property-toggle-label { display: none; }
+.app-shell[data-ui-polish] .check-details { max-height: 28dvh; overflow: auto; }
+.app-shell[data-ui-polish] .check-toggle > span { min-width: 0; overflow-wrap: anywhere; }
+
+/* Shared states and dialogs retain the existing typography and neutral palette. */
+.state-view[data-state-kind] { width: 100%; gap: var(--space-3); padding: var(--space-6); margin-block: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-surface); background: var(--panel); }
+.state-view[data-state-kind] p { max-width: 76ch; line-height: 1.8; overflow-wrap: anywhere; }
+.state-view[data-state-kind="error"] { border-inline-start: 3px solid var(--error); }
+.state-view[data-state-kind="empty"] { border-style: dashed; }
+.state-view[data-state-kind] .skeleton-lines { max-width: 48rem; }
+.state-view[data-state-kind] .skeleton-lines > div { animation: workspace-loading 1.6s ease-in-out infinite alternate; }
+@keyframes workspace-loading { from { opacity: .45; } to { opacity: 1; } }
+.dialog-content[data-ui-polish] { overflow: hidden; padding: var(--space-6); gap: var(--space-4); }
+.dialog-content[data-ui-polish] .dialog-heading { flex: none; min-width: 0; }
+.dialog-content[data-ui-polish] .dialog-title { overflow-wrap: anywhere; }
+.dialog-content[data-ui-polish] .dialog-heading > p { margin-top: var(--space-2); line-height: 1.7; }
+.dialog-content[data-ui-polish] .dialog-body { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: var(--space-1) var(--space-2); margin-inline: calc(-1 * var(--space-2)); }
+.dialog-content[data-ui-polish] .dialog-actions { flex: none; flex-wrap: wrap; padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.dialog-content[data-ui-polish] .field-grid, .dialog-content[data-ui-polish] .engineering-completion { grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); }
+.dialog-content[data-ui-polish] .text-field input { min-width: 0; width: 100%; }
+.dialog-content[data-ui-polish] .field-error { overflow-wrap: anywhere; }
+.dialog-content[data-ui-polish] .select-trigger { max-width: 100%; }
+
+.app-shell[data-ui-polish] .object-entries { flex-wrap: wrap; gap: var(--space-4); }
+.app-shell[data-ui-polish] .object-entries > a { flex: 1 1 12rem; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-input); }
+.app-shell[data-ui-polish] .object-entries > a:hover { background: var(--hover); }
+.app-shell[data-ui-polish] .object-section > header { flex-wrap: wrap; gap: var(--space-2); }
+.app-shell[data-ui-polish] .reference-list dd, .app-shell[data-ui-polish] .report-sources { overflow-wrap: anywhere; }
+.app-shell[data-ui-polish] .report-sources > div { flex-wrap: wrap; gap: var(--space-2) var(--space-4); }
+.app-shell[data-ui-polish] .evidence-summary { gap: var(--space-3); }
+.app-shell[data-ui-polish] .conclusion-metrics { flex-wrap: wrap; row-gap: var(--space-3); }
+.app-shell[data-ui-polish] .series-legend { gap: var(--space-2) var(--space-4); }
+.app-shell[data-ui-polish] .scene-workspace { min-width: 0; }
+.app-shell[data-ui-polish] .surface-toolbar, .app-shell[data-ui-polish] .scene-actions { row-gap: var(--space-2); }
+.app-shell[data-ui-polish] .surface-status > span { min-width: 0; overflow-wrap: anywhere; }
+.app-shell[data-ui-polish] .construction-fields { grid-template-columns: repeat(auto-fit,minmax(min(100%, 9rem),1fr)); }
+
+@container workspace-content (max-width: 720px) {
+  .app-shell[data-ui-polish] .field-grid, .app-shell[data-ui-polish] .engineering-completion { grid-template-columns: minmax(0, 1fr); }
+  .app-shell[data-ui-polish] .conclusion { flex-wrap: wrap; gap: var(--space-4); }
+  .app-shell[data-ui-polish] .scene-layout { grid-template-columns: minmax(0, 1fr); }
+  .app-shell[data-ui-polish] .scene-explorer { max-height: 16rem; overflow: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+  .app-shell[data-ui-polish] .reference-list > div { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+}
+@media (max-width: 1180px) {
+  .app-shell[data-ui-polish] .topbar-actions { flex: 1 1 100%; justify-content: flex-start; margin-left: 0; }
+}
+@media (max-width: 860px) {
+  .app-shell[data-ui-polish] { grid-template-columns: var(--rail-width) minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); }
+  .app-shell[data-ui-polish] .nav-rail { grid-column: 1; grid-row: 1 / -1; }
+  .app-shell[data-ui-polish] .module-sidebar { grid-column: 2; grid-row: 1; display: none; max-height: 36dvh; padding-bottom: var(--space-3); }
+  .app-shell[data-ui-polish][data-navigation-open="true"] .module-sidebar { display: flex; }
+  .app-shell[data-ui-polish] .work-panel { grid-column: 2; grid-row: 2; }
+  .app-shell[data-ui-polish] .shell-nav-toggle, .app-shell[data-ui-polish] .shell-nav-close { display: inline-flex; }
+  .app-shell[data-ui-polish] .work-body.has-property, .app-shell[data-ui-polish] .work-body.is-property-collapsed { grid-template-columns: minmax(0,1fr); grid-template-rows: minmax(0,1fr) auto; }
+  .app-shell[data-ui-polish] .work-body > .property-panel { display: block; max-height: 35dvh; border-left: 0; border-top: 1px solid var(--line); }
+  .app-shell[data-ui-polish] .work-body > .property-panel.property-collapsed { display: flex; align-items: center; justify-content: flex-end; padding: var(--space-1) var(--space-3); }
+  .app-shell[data-ui-polish] .property-toggle-label { display: inline; }
+  .app-shell[data-ui-polish] .property-panel .property-row { gap: var(--space-4); }
+  .app-shell[data-ui-polish] .property-panel section { margin-block: var(--space-3); }
+}
+@media (max-width: 600px) {
+  .app-shell[data-ui-polish] { grid-template-columns: minmax(0,1fr); grid-template-rows: auto auto minmax(0,1fr); }
+  .app-shell[data-ui-polish] .nav-rail { grid-column: 1; grid-row: 1; flex-direction: row; justify-content: space-around; gap: 0; padding: var(--space-1); border-bottom: 1px solid var(--line); }
+  .app-shell[data-ui-polish] .rail-item { width: auto; min-width: 0; flex: 1; min-height: var(--space-12); }
+  .app-shell[data-ui-polish] .rail-settings { margin-top: 0; }
+  .app-shell[data-ui-polish] .module-sidebar { grid-column: 1; grid-row: 2; }
+  .app-shell[data-ui-polish] .work-panel { grid-column: 1; grid-row: 3; margin: var(--space-1); }
+  .app-shell[data-ui-polish] .topbar { padding: var(--space-2); }
+  .app-shell[data-ui-polish] .topbar h1 { flex-basis: 8rem; }
+  .app-shell[data-ui-polish] .topbar-actions { gap: var(--space-1); }
+  .app-shell[data-ui-polish] .page-tabs { padding-inline: var(--space-2); }
+  .app-shell[data-ui-polish] .main-content { padding: var(--space-3); }
+  .app-shell[data-ui-polish] .search-field { max-width: 100%; flex-basis: 100%; }
+  .app-shell[data-ui-polish] .check-toggle { flex-wrap: wrap; gap: var(--space-1); }
+  .app-shell[data-ui-polish] .state-view[data-state-kind] { padding: var(--space-4); }
+  .dialog-content[data-ui-polish] { width: calc(100vw - var(--space-4)); max-height: calc(100dvh - var(--space-4)); padding: var(--space-4); }
+  .dialog-content[data-ui-polish].record-drawer { inset-block: var(--space-2); right: var(--space-2); }
+  .dialog-content[data-ui-polish] .dialog-actions { justify-content: flex-start; }
+}
+@media (prefers-reduced-motion: reduce) { .state-view[data-state-kind] .skeleton-lines > div { animation: none; } }
+[data-reduced-motion="true"] .state-view[data-state-kind] .skeleton-lines > div { animation: none; }

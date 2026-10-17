@@ -1,0 +1,31 @@
+/* Type-specific finishing, scoped to the original type workspace. */
+.type-root .app-shell[data-ui-polish] .type-list-toolbar, .app-shell[data-ui-polish] .type-list-toolbar { flex-wrap: wrap; gap: var(--space-2) var(--space-3); }
+.app-shell[data-ui-polish] .type-list-toolbar input { flex: 1 1 12rem; width: auto; min-width: 0; }
+.type-root .app-shell[data-ui-polish] .type-name-row { flex-wrap: wrap; }
+.type-root .app-shell[data-ui-polish] .type-name-input { flex: 1 1 12rem; width: 100%; }
+.type-root .app-shell[data-ui-polish] .type-structure-split > .table-region { min-height: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); }
+.type-root .app-shell[data-ui-polish] .type-structure-split > .table-region > .table-scroll { flex: 1; min-height: 0; max-height: none; border: 0; }
+.type-root .app-shell[data-ui-polish] .type-structure-split > .table-region .table-hint { flex: none; padding: var(--space-2); margin: 0; }
+.type-root .app-shell[data-ui-polish] .type-property-wrapper { border-left: 1px solid var(--line); }
+.type-root .app-shell[data-ui-polish] .type-property-fields .select-field { min-width: 0; }
+.type-root .app-shell[data-ui-polish] .type-property-fields .select-trigger { max-width: 100%; }
+.type-root .app-shell[data-ui-polish] .type-property-fields .number-field { min-width: 0; }
+.type-root[data-save-validation="error"] .app-shell[data-ui-polish] .number-field .field-error { display: block; }
+.type-root .app-shell[data-ui-polish] .type-rating-fields { grid-template-columns: repeat(auto-fit,minmax(min(100%,14rem),1fr)); }
+.type-root .app-shell[data-ui-polish] .type-result-summary { gap: var(--space-3) var(--space-6); }
+.type-root .app-shell[data-ui-polish] .type-specification-checks { min-width: 0; }
+@container workspace-content (max-width: 840px) {
+  .type-root .app-shell[data-ui-polish] .type-structure-split { grid-template-columns: minmax(0,1fr); grid-template-rows: auto auto; overflow: auto; }
+  .type-root .app-shell[data-ui-polish] .type-structure-split > .drawing-frame { min-height: 22rem; }
+  .type-root .app-shell[data-ui-polish] .type-structure-split > .table-region { min-height: 14rem; max-height: 28rem; border-left: 0; border-top: 1px solid var(--line); }
+  .type-root .app-shell[data-ui-polish] .type-comparison-sections { grid-template-columns: minmax(0,1fr); }
+  .type-root .app-shell[data-ui-polish] .type-specification-layout { flex-direction: column; }
+  .type-root .app-shell[data-ui-polish] .type-specification-layout nav { flex: none; max-height: 10rem; display: flex; gap: var(--space-2); border-right: 0; border-bottom: 1px solid var(--line); }
+  .type-root .app-shell[data-ui-polish] .type-specification-layout nav button { flex: 0 0 auto; width: auto; }
+  .type-root .app-shell[data-ui-polish] .type-specification-layout iframe { min-height: 24rem; flex: 1 0 24rem; }
+  .type-root .app-shell[data-ui-polish] .type-specification-checks { max-width: none; flex: none; border-left: 0; border-top: 1px solid var(--line); }
+}
+@media (max-width: 860px) {
+  .type-root .app-shell[data-ui-polish] .work-body > .type-property-wrapper { max-height: 35dvh; border-left: 0; border-top: 1px solid var(--line); }
+  .type-root .app-shell[data-ui-polish] .type-property-wrapper > .property-collapsed { display: flex; align-items: center; justify-content: flex-end; padding: var(--space-1) var(--space-3); }
+}

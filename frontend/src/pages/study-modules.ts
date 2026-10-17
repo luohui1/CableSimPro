@@ -31,6 +31,7 @@ export const moduleDefinitions: Record<
     icon: "calc/ampacity",
     tabs: [
       { id: "results", label: "结果" },
+      { id: "visualization", label: "可视化" },
       { id: "parameters", label: "方法参数" },
     ],
   },
@@ -48,6 +49,7 @@ export const moduleDefinitions: Record<
     icon: "calc/thermal-field",
     tabs: [
       { id: "field", label: "场图" },
+      { id: "visualization", label: "可视化" },
       { id: "samples", label: "取样" },
       { id: "parameters", label: "方法参数" },
       { id: "diagnostics", label: "诊断" },
@@ -108,6 +110,7 @@ export const moduleDefinitions: Record<
     icon: "calc/thermal-field",
     tabs: [
       { id: "results", label: "结果" },
+      { id: "visualization", label: "可视化" },
       { id: "history", label: "时间序列" },
       { id: "field", label: "场图" },
       { id: "samples", label: "取样" },
@@ -130,6 +133,7 @@ export const moduleDefinitions: Record<
     icon: "calc/thermal-field",
     tabs: [
       { id: "results", label: "结果" },
+      { id: "visualization", label: "可视化" },
       { id: "field", label: "场图" },
       { id: "samples", label: "取样" },
       { id: "parameters", label: "方法参数" },

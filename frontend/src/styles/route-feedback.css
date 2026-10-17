@@ -1,0 +1,4 @@
+.route-feedback { width: min(100%, 60rem); min-height: 65dvh; margin-inline: auto; padding: var(--space-6); display: flex; flex-direction: column; justify-content: center; gap: var(--space-4); }
+.route-feedback nav { display: flex; gap: var(--space-4); flex-wrap: wrap; }
+.route-feedback nav a { color: var(--text); text-decoration: underline; text-underline-offset: var(--space-1); }
+@media (max-width: 600px) { .route-feedback { padding: var(--space-3); } }
