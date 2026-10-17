@@ -53,6 +53,9 @@ jobs:
       - name: Real React WebGL thermal-network and history interactions
         run: npm run test:visualization-browser
         working-directory: frontend
+      - name: Shared controls, IME editing, dialogs and responsive workspace
+        run: npm run test:ui-controls
+        working-directory: frontend
       - name: Install the display-authoring tool for the real GLB round trip
         run: |
           sudo apt-get update
@@ -76,6 +79,10 @@ jobs:
       - name: Full frontend type check including study-route integration
         if: ${{ !cancelled() }}
         run: npx tsc --project tsconfig.json --noEmit --pretty false
+        working-directory: frontend
+      - name: Production frontend routes with real API and fresh input-only database
+        if: ${{ !cancelled() }}
+        run: npm run test:frontend-polish
         working-directory: frontend
       - name: Optional visual evidence archive
         uses: actions/upload-artifact@v4
