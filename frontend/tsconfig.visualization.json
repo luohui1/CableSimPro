@@ -6,6 +6,8 @@
     "src/features/scene/surface-model.ts",
     "src/features/scene/surface-renderer.ts",
     "src/features/scene/surface-viewport.tsx",
-    "src/features/scene/cad-surface.ts"
+    "src/features/scene/cad-surface.ts",
+    "src/features/scene/construction.ts",
+    "src/features/scene/construction-viewport.tsx"
   ]
 }

@@ -9,7 +9,7 @@ import { useViewState } from '@/lib/use-view-state';
 import { changeVisibility, defaultVisibility, displayScene, objectMatches, sceneGroups, visibleObjects } from './scene-state';
 import { serializeBlenderScene, toBlenderScene, type SceneSource } from './blender-bridge';
 import { cadSurface } from './cad-surface';
-import { SurfaceViewport } from './surface-viewport';
+import { ConstructionViewport as SurfaceViewport } from './construction-viewport';
 import './scene.css';
 
 const initialView = { visibility: defaultVisibility, query: '', camera: undefined as Partial<CameraPose> | undefined };

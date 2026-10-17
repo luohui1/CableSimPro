@@ -1,0 +1,2 @@
+.surface-assembly input[type="range"] { width: 120px; }
+.surface-assembly > span { color: var(--text-secondary); font-size: var(--text-note); }

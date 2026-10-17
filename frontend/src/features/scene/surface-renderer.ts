@@ -1,5 +1,6 @@
 import { add, sub, scale, dot, cross, normalize, inverseDirection, intersectTriangle, validateSurface,
   type Vec3, type SurfaceCamera, type SurfaceModel, type SurfacePalette, type SurfaceSettings, type SurfaceProjection } from './surface-model';
+import { assemblyOffset } from './assembly';
 
 const vertexSource = `#version 300 es
 precision highp float;
@@ -8,17 +9,20 @@ layout(location=1) in vec3 normal;
 layout(location=2) in mat4 instance;
 layout(location=6) in float scalar;
 out float scalarValue;
+out float sliceY;
+uniform vec3 displayOffset;
 uniform mat4 projection;
 uniform mat4 view;
 out vec3 worldPosition;
 out vec3 worldNormal;
-void main(){scalarValue=scalar;vec4 p=instance*vec4(position,1.0);worldPosition=p.xyz;worldNormal=mat3(instance)*normal;gl_Position=projection*view*p;}`;
+void main(){scalarValue=scalar;vec4 p=instance*vec4(position,1.0);sliceY=p.y;p.xyz+=displayOffset;worldPosition=p.xyz;worldNormal=mat3(instance)*normal;gl_Position=projection*view*p;}`;
 // Cook-Torrance GGX under a fixed analytic studio rig. Appearance is not a physical material property.
 const fragmentSource = `#version 300 es
 precision highp float;
 in vec3 worldPosition;
 in vec3 worldNormal;
 in float scalarValue;
+in float sliceY;
 uniform vec3 ramp[6];
 uniform bool scientific;
 uniform vec3 eye;
@@ -40,7 +44,7 @@ vec3 light(vec3 n,vec3 v,vec3 l,vec3 albedo,float intensity){
  return ((1.0-f)*(1.0-metal)*albedo/PI+d*g*f/max(4.0*nv*nl,0.001))*nl*intensity;
 }
 void main(){
- if(worldPosition.y>cut) discard;
+ if(sliceY>cut) discard;
  if(scientific){float t=clamp(scalarValue,0.0,1.0)*5.0;int i=min(4,int(floor(t)));result=vec4(mix(ramp[i],ramp[i+1],t-float(i)),alpha);return;}
  if(unlit){result=vec4(base,alpha);return;}
  vec3 n=normalize(worldNormal)*(gl_FrontFacing?1.0:-1.0),v=normalize(eye-worldPosition),albedo=pow(base,vec3(2.2));
@@ -90,17 +94,18 @@ export function createSurfaceRenderer(canvas: HTMLCanvasElement, model: SurfaceM
   const span=Math.max(1e-4,Math.hypot(bounds[3]-bounds[0],bounds[4]-bounds[1],bounds[5]-bounds[2]));
   let camera:SurfaceCamera={yaw:.95,elevation:.5,distance:span*1.8,target:[0,0,0]};
   if(initial && [initial.yaw,initial.elevation,initial.distance,...initial.target].every(Number.isFinite) && initial.distance>0)camera={...initial,target:[...initial.target]};
-  let palette=initialPalette, settings:SurfaceSettings={selected:null,hidden:[],slice:1,ghost:true};
+  let palette=initialPalette, settings:SurfaceSettings={selected:null,hidden:[],slice:1,ghost:true,explosion:0};
   let eye:Vec3=[0,0,1],right:Vec3=[1,0,0],up:Vec3=[0,0,1],forward:Vec3=[0,1,0];
   let view=new Float32Array(16),projection=new Float32Array(16);
   const listeners: (()=>void)[]=[];
+  const offsets=model.draws.map(draw=>assemblyOffset(model,draw));
   function release(){for(const vao of vaos)gl!.deleteVertexArray(vao);for(const b of buffers)gl!.deleteBuffer(b);for(const s of shaders)gl!.deleteShader(s);if(program)gl!.deleteProgram(program);}
   function compile(type:number,source:string){const shader=gl!.createShader(type);if(!shader)throw new Error('无法分配着色器。');shaders.push(shader);gl!.shaderSource(shader,source);gl!.compileShader(shader);if(!gl!.getShaderParameter(shader,gl!.COMPILE_STATUS))throw new Error('场景着色器编译失败。');return shader;}
   function buffer(target:number,data:Float32Array|Uint32Array){const value=gl!.createBuffer();if(!value)throw new Error('无法分配显示缓冲区。');buffers.push(value);gl!.bindBuffer(target,value);gl!.bufferData(target,data,gl!.STATIC_DRAW);return value;}
   type GeometryBuffer={positions:WebGLBuffer;normals:WebGLBuffer;indices:WebGLBuffer;scalars:WebGLBuffer;count:number};
   const geometryBuffers=new Map<string,GeometryBuffer>();
   const localBounds=new Map<string,number[]>();
-  const draws:{vao:WebGLVertexArrayObject;count:number;instances:number;id:string;category:string;kind:string}[]=[];
+  const draws:{vao:WebGLVertexArrayObject;count:number;instances:number;id:string;category:string;kind:string;offset:Vec3}[]=[];
   let grid:{vao:WebGLVertexArrayObject;count:number}|undefined;
   const gridStep=Math.pow(10,Math.floor(Math.log10(span/8)))*2;
   function makeVao(g:GeometryBuffer,matrices:readonly(readonly number[])[]){
@@ -124,7 +129,7 @@ export function createSurfaceRenderer(canvas: HTMLCanvasElement, model: SurfaceM
       geometryBuffers.set(id,{positions:buffer(gl.ARRAY_BUFFER,positions),normals:buffer(gl.ARRAY_BUFFER,normals(positions,indices)),indices:buffer(gl.ELEMENT_ARRAY_BUFFER,indices),scalars:buffer(gl.ARRAY_BUFFER,g.scalars?Float32Array.from(g.scalars):new Float32Array(positions.length/3)),count:indices.length});
     }
     const objects=new Map(model.objects.map(o=>[o.id,o]));
-    for(const draw of model.draws){const g=geometryBuffers.get(draw.geometry)!;draws.push({vao:makeVao(g,draw.transforms),count:g.count,instances:draw.transforms.length,id:draw.objectId,category:draw.category,kind:objects.get(draw.objectId)!.kind});}
+    model.draws.forEach((draw,index)=>{const g=geometryBuffers.get(draw.geometry)!;draws.push({vao:makeVao(g,draw.transforms),count:g.count,instances:draw.transforms.length,id:draw.objectId,category:draw.category,kind:objects.get(draw.objectId)!.kind,offset:offsets[index]});});
     const p:number[]=[],minX=Math.floor(bounds[0]/gridStep)*gridStep,maxX=Math.ceil(bounds[3]/gridStep)*gridStep,minY=Math.floor(bounds[1]/gridStep)*gridStep,maxY=Math.ceil(bounds[4]/gridStep)*gridStep,z=bounds[2]-span*.025;
     for(let x=minX;x<=maxX+gridStep*.1;x+=gridStep)p.push(x,minY,z,x,maxY,z);
     for(let y=minY;y<=maxY+gridStep*.1;y+=gridStep)p.push(minX,y,z,maxX,y,z);
@@ -132,7 +137,7 @@ export function createSurfaceRenderer(canvas: HTMLCanvasElement, model: SurfaceM
     grid={vao:makeVao(g,[[1,0,0,0,0,1,0,0,0,0,1,0]]),count:g.count};
   }catch(error){release();gl.getExtension('WEBGL_lose_context')?.loseContext();throw error;}
   const uniform=(name:string)=>gl.getUniformLocation(program!,name);
-  const u=Object.fromEntries(['projection','view','eye','base','accent','metal','roughness','alpha','selected','cut','unlit','scientific','ramp[0]'].map(name=>[name,uniform(name)]));
+  const u=Object.fromEntries(['projection','view','eye','base','accent','metal','roughness','alpha','selected','cut','unlit','scientific','ramp[0]','displayOffset'].map(name=>[name,uniform(name)]));
   function updateCamera(){
     camera.elevation=clamp(camera.elevation,-1.48,1.48);camera.distance=clamp(camera.distance,span*.03,span*30);
     const c=Math.cos(camera.elevation);eye=add(camera.target,scale([Math.cos(camera.yaw)*c,Math.sin(camera.yaw)*c,Math.sin(camera.elevation)],camera.distance));
@@ -151,6 +156,7 @@ export function createSurfaceRenderer(canvas: HTMLCanvasElement, model: SurfaceM
     gl!.uniformMatrix4fv(u.projection,false,projection);gl!.uniformMatrix4fv(u.view,false,view);gl!.uniform3fv(u.eye,eye);gl!.uniform3fv(u.accent,palette.selected);gl!.uniform3fv(u['ramp[0]'],palette.temperatures.flat());gl!.uniform1i(u.scientific,0);
     const hidden=new Set(settings.hidden),cut=bounds[1]+(bounds[4]-bounds[1])*settings.slice-center[1];
     let calls=0;
+    gl!.uniform3fv(u.displayOffset,[0,0,0]);
     gl!.uniform1f(u.cut,span*100);gl!.uniform1i(u.unlit,1);gl!.uniform1f(u.alpha,.65);gl!.uniform3fv(u.base,palette.line);gl!.depthMask(false);
     if(grid){gl!.bindVertexArray(grid.vao);gl!.drawElementsInstanced(gl!.LINES,grid.count,gl!.UNSIGNED_INT,0,1);calls++;}
     gl!.uniform1i(u.unlit,0);gl!.uniform1f(u.cut,cut+span*1e-6);
@@ -158,6 +164,7 @@ export function createSurfaceRenderer(canvas: HTMLCanvasElement, model: SurfaceM
     const ordered=draws.filter(draw=>!hidden.has(draw.id)).sort((a,b)=>Number(settings.ghost&&environment(a.kind))-Number(settings.ghost&&environment(b.kind)));
     for(const draw of ordered){
       const ghost=settings.ghost&&environment(draw.kind),metal=draw.category==='conductor'?.75:draw.category==='metal'?.7:0;
+      gl!.uniform3fv(u.displayOffset,scale(draw.offset,settings.explosion||0));
       gl!.uniform1i(u.scientific,draw.category==='temperature-field'?1:0);gl!.depthMask(!ghost);gl!.uniform3fv(u.base,palette.materials[draw.category]||palette.materials.unknown);gl!.uniform1f(u.metal,metal);gl!.uniform1f(u.roughness,metal?.38:.68);gl!.uniform1f(u.alpha,ghost?.1:1);gl!.uniform1f(u.selected,settings.selected===draw.id?1:0);
       gl!.bindVertexArray(draw.vao);gl!.drawElementsInstanced(gl!.TRIANGLES,draw.count,gl!.UNSIGNED_INT,0,draw.instances);calls++;
     }
@@ -165,7 +172,8 @@ export function createSurfaceRenderer(canvas: HTMLCanvasElement, model: SurfaceM
     const projections:SurfaceProjection[]=[];
     for(const o of model.objects){
       if(hidden.has(o.id)||o.kind!=='cable')continue;
-      const p=sub([(o.bounds[0]+o.bounds[3])/2,(o.bounds[1]+o.bounds[4])/2,o.bounds[5]+span*.025],center);
+      const parts=draws.filter(d=>d.id===o.id),displacement=parts.reduce((sum,d)=>add(sum,scale(d.offset,(settings.explosion||0)/parts.length)),[0,0,0] as Vec3);
+      const p=add(sub([(o.bounds[0]+o.bounds[3])/2,(o.bounds[1]+o.bounds[4])/2,o.bounds[5]+span*.025],center),displacement);
       const clip=matrixPoint(projection,matrixPoint(view,[...p,1]));if(clip[3]<=0)continue;
       const x=(clip[0]/clip[3]*.5+.5)*rect.width,y=(-clip[1]/clip[3]*.5+.5)*rect.height;
       if(x>=0&&x<=rect.width&&y>=0&&y<=rect.height)projections.push({id:o.id,label:o.label,x,y});
@@ -177,13 +185,17 @@ export function createSurfaceRenderer(canvas: HTMLCanvasElement, model: SurfaceM
   function pick(x:number,y:number){
     updateCamera();const rect=canvas.getBoundingClientRect(),t=Math.tan(Math.PI/8),nx=((x-rect.left)/rect.width*2-1)*t*rect.width/rect.height,ny=(1-(y-rect.top)/rect.height*2)*t;
     const origin=add(eye,center),direction=normalize(add(forward,add(scale(right,nx),scale(up,ny)))),hidden=new Set(settings.hidden);
-    const candidates=new Set(model.objects.filter(o=>!hidden.has(o.id)&&o.kind!=='ground'&&!(settings.ghost&&['soil','backfill'].includes(o.kind))&&rayBox(origin,direction,o.bounds)).map(o=>o.id));
     let nearest=Infinity,id:string|null=null;
-    for(const draw of model.draws){if(!candidates.has(draw.objectId))continue;const g=model.geometries[draw.geometry];
-      for(const m of draw.transforms){const o=inverseDirection(m,sub(origin,[m[3],m[7],m[11]])),d=inverseDirection(m,direction);
+    for(let index=0;index<model.draws.length;index++){
+      const draw=model.draws[index],object=model.objects.find(o=>o.id===draw.objectId)!;
+      if(hidden.has(draw.objectId)||object.kind==='ground'||(settings.ghost&&['soil','backfill'].includes(object.kind)))continue;
+      const displacement=scale(offsets[index],settings.explosion||0),movedOrigin=sub(origin,displacement);
+      if(!rayBox(movedOrigin,direction,object.bounds))continue;
+      const g=model.geometries[draw.geometry];
+      for(const m of draw.transforms){const o=inverseDirection(m,sub(movedOrigin,[m[3],m[7],m[11]])),d=inverseDirection(m,direction);
         if(!rayBox(o,d,localBounds.get(draw.geometry)!))continue;
-        for(let i=0;i<g.triangles.length;i+=3){const p=(index:number):Vec3=>{const j=g.triangles[index]*3;return[g.positions[j],g.positions[j+1],g.positions[j+2]];};
-          const hit=intersectTriangle(o,d,p(i),p(i+1),p(i+2));if(hit!==null&&hit<nearest&&origin[1]+hit*direction[1]<=bounds[1]+(bounds[4]-bounds[1])*settings.slice+span*1e-6){nearest=hit;id=draw.objectId;}
+        for(let i=0;i<g.triangles.length;i+=3){const p=(at:number):Vec3=>{const j=g.triangles[at]*3;return[g.positions[j],g.positions[j+1],g.positions[j+2]];};
+          const hit=intersectTriangle(o,d,p(i),p(i+1),p(i+2));if(hit!==null&&hit<nearest&&movedOrigin[1]+hit*direction[1]<=bounds[1]+(bounds[4]-bounds[1])*settings.slice+span*1e-6){nearest=hit;id=draw.objectId;}
         }
       }
     }
@@ -212,6 +224,6 @@ export function createSurfaceRenderer(canvas: HTMLCanvasElement, model: SurfaceM
   const resize=new ResizeObserver(invalidate);resize.observe(canvas);
   const visibility=()=>{if(document.hidden){cancelAnimationFrame(animation);animation=0;}else invalidate();};document.addEventListener('visibilitychange',visibility);
   invalidate();
-  return {update(value){settings={...value,slice:clamp(Number.isFinite(value.slice)?value.slice:1,.02,1)};invalidate();},palette(value){palette=value;invalidate();},fit,view:direction,zoom,
+  return {update(value){settings={...value,slice:clamp(Number.isFinite(value.slice)?value.slice:1,.02,1),explosion:clamp(Number.isFinite(value.explosion)?value.explosion!:0,0,1)};invalidate();},palette(value){palette=value;invalidate();},fit,view:direction,zoom,
     destroy(){if(disposed)return;disposed=true;cancelAnimationFrame(animation);resize.disconnect();document.removeEventListener('visibilitychange',visibility);for(const off of listeners)off();pointers.clear();release();}};
 }

@@ -2,11 +2,11 @@
 export type Vec3 = [number, number, number];
 export type SurfaceGeometry = { positions: ArrayLike<number>; triangles: ArrayLike<number>; scalars?: ArrayLike<number> };
 export type SurfaceObject = { id: string; label: string; kind: string; bounds: readonly number[] };
-export type SurfaceDraw = { geometry: string; objectId: string; category: string; transforms: readonly (readonly number[])[] };
+export type SurfaceDraw = { geometry: string; objectId: string; category: string; transforms: readonly (readonly number[])[]; presentationOffset?: Vec3 };
 export type SurfaceModel = { identity: string; bounds: readonly number[]; objects: SurfaceObject[]; geometries: Record<string, SurfaceGeometry>; draws: SurfaceDraw[] };
 export type SurfaceCamera = { yaw: number; elevation: number; distance: number; target: Vec3 };
 export type SurfacePalette = { background: Vec3; line: Vec3; selected: Vec3; materials: Record<string, Vec3>; temperatures: Vec3[] };
-export type SurfaceSettings = { selected: string | null; hidden: readonly string[]; slice: number; ghost: boolean };
+export type SurfaceSettings = { selected: string | null; hidden: readonly string[]; slice: number; ghost: boolean; explosion?: number };
 export type SurfaceProjection = { id: string; label: string; x: number; y: number };
 export const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0] as const;
 export function compose(a: readonly number[], b: readonly number[]): number[] {
@@ -48,6 +48,7 @@ export function validateSurface(model: SurfaceModel): void {
     for (let i = 0; i < g.triangles.length; i++) if (!Number.isInteger(g.triangles[i]) || g.triangles[i] < 0 || g.triangles[i] >= g.positions.length / 3) throw new Error('三角形索引越界。');
   }
   for (const draw of model.draws) {
+    if (draw.presentationOffset && (draw.presentationOffset.length !== 3 || !draw.presentationOffset.every(Number.isFinite) || Math.hypot(...draw.presentationOffset) > 100)) throw new Error('装配展示位移无效或超过预算。');
     instances += draw.transforms.length;
     if (!ids.has(draw.objectId) || !model.geometries[draw.geometry] || !draw.transforms.length || instances > 8192) throw new Error('显示实例无效或超过预算。');
     expandedTriangles += model.geometries[draw.geometry].triangles.length / 3 * draw.transforms.length;

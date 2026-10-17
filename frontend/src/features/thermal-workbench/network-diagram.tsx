@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import type { Network, NetworkState, ResistanceBalance } from './data';
+import { PhysicsPanel } from './physics-panel';
 const value = (n: number, digits = 2) => Number(n.toPrecision(digits + 2)).toLocaleString('zh-CN', { maximumFractionDigits: digits + 3 });
 export function NetworkDiagram({ network, state, phase, onNode }: { network: Network; state: NetworkState | null; phase: string; onNode: (index: number) => void }) {
   const marker = useId().replaceAll(':', ''), profile = state?.profiles.find(p => p.phase === phase);
@@ -26,6 +27,7 @@ export function NetworkDiagram({ network, state, phase, onNode }: { network: Net
     <details className="tw-mutual"><summary>相间互热 · 土壤影响矩阵</summary>
       <table><caption>Gᵢⱼ / K·m/W；非独立串联电阻。表面温升关系为 ΔTᵢ = Σ Gᵢⱼ Q′ⱼ。</caption><thead><tr><th scope="col">受热相／热源相</th>{['A', 'B', 'C'].map(p => <th scope="col" key={p}>{p}</th>)}</tr></thead><tbody>{network.mutual.map((row, i) => <tr key={i}><th scope="row">{'ABC'[i]}</th>{row.map((n, j) => <td key={j} className={i === j ? 'tw-self-term' : ''}>{value(n, 3)}</td>)}</tr>)}</tbody></table>
     </details>
+    <PhysicsPanel network={network} state={state} />
   </>;
 }
 export function BalanceDiagram({ balance }: { balance: ResistanceBalance }) {
