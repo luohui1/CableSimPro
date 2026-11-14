@@ -57,7 +57,7 @@ function ProjectPage() {
   localStorage.setItem(LAST_PROJECT, projectId);
   return <Workbench key={projectId} projectId={projectId} runId={run}
     onOpenProject={id => void navigate({ to: '/p/$projectId', params: { projectId: id }, search: {} })}
-    onOpenRun={id => void navigate({ to: '/p/$projectId', params: { projectId }, search: { run: id } })} />;
+    onOpenRun={id => void navigate({ to: '/p/$projectId', params: { projectId }, search: id ? { run: id } : {} })} />;
 }
 
 const rootRoute = createRootRoute({ component: Root });

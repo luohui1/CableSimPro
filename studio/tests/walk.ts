@@ -57,7 +57,7 @@ function probe(): string[] {
     if (rect.right > innerWidth + 1 || rect.left < -1) issues.push(`outside the window: "${element.textContent.trim().slice(0, 40)}"`);
   }
 
-  const labels = [...document.querySelectorAll('[data-chip], svg[role="img"] text')].filter(shown);
+  const labels = [...document.querySelectorAll('[data-chip], [data-dimension], svg[role="img"] text')].filter(shown);
   const tools = [...document.querySelectorAll('[data-overlays] > *')].filter(shown);
   labels.forEach((label, index) => {
     for (const other of labels.slice(index + 1)) {
@@ -118,6 +118,55 @@ try {
       await page.getByRole('button', { name: /^#\d/ }).filter({ hasNotText: '校核' }).first().click();
       await check(`${name}-other-run`);
     }
+
+    // Changing the inputs on the screen. Every change is answered by a draft; keeping the draft makes a record.
+    await page.goto(`${base}/p/${row}`);
+    await page.waitForSelector('[data-gpu]:not([data-gpu="pending"])');
+    const inputs = async () => (await (await fetch(`${base}/api/projects/${row}`)).json()) as ProjectView;
+    const drafted = () => page.getByText('草算，还没存').waitFor();
+
+    const depth = width === 1366 ? 1.5 : 1.3;
+    await page.locator('[data-dimension="depth"]').click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type(String(depth));
+    await page.keyboard.press('Enter');
+    await drafted();
+    await check('edit-depth');
+    if ((await inputs()).parts.installation.depth_m !== depth) problems.push(`${width} edit: the depth typed on the drawing was not saved`);
+
+    const outer = await page.locator('[data-cable]').last().boundingBox();
+    if (!outer) throw new Error('no cable to drag');
+    const before = (await inputs()).preview?.layout.spacing ?? 0;
+    await page.mouse.move(outer.x + outer.width / 2, outer.y + outer.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(outer.x + outer.width / 2 + 60, outer.y + outer.height / 2, { steps: 8 });
+    await page.screenshot({ path: join(out, `${width}-edit-dragging.png`) });
+    await page.mouse.up();
+    await drafted();
+    await check('edit-drag');
+    const after = (await inputs()).parts.installation.spacing_m ?? 0;
+    if (!(after > before)) problems.push(`${width} edit: dragging the outer cable outward did not widen the spacing (${before} -> ${after})`);
+
+    const load = width === 1366 ? 320 : 310;
+    await page.getByRole('button', { name: /^工况/ }).first().click();
+    await page.getByLabel(/负荷电流$/).first().fill(String(load));
+    await page.getByLabel(/负荷电流$/).first().press('Enter');
+    await drafted();
+    await check('edit-load');
+    await page.keyboard.press('Escape');
+    if ((await inputs()).parts.conditions.currents_a[0] !== load) problems.push(`${width} edit: the load typed in the conditions was not saved`);
+
+    await page.locator('[data-gpu]').click({ position: { x: 300, y: 250 } });
+    await page.keyboard.press('Control+Z');
+    await page.waitForTimeout(900);
+    if ((await inputs()).parts.conditions.currents_a[0] === load) problems.push(`${width} edit: Ctrl+Z did not undo the load change`);
+    await drafted();
+
+    const records = (await inputs()).runs.length;
+    await page.getByRole('button', { name: '存为记录' }).click();
+    await page.getByRole('button', { name: '出计算书' }).waitFor();
+    await check('edit-kept');
+    if ((await inputs()).runs.length !== records + 1) problems.push(`${width} edit: keeping the draft did not add a run record`);
     await page.close();
   }
 } finally {

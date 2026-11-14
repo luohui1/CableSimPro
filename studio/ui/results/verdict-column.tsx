@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { Segmented } from '@/components/segmented';
 import { TabPanel, Tabs } from '@/components/tabs';
+import { cn } from '@/lib/cn';
 import type { Ramp } from '@/lib/ramp';
 import type { Scene } from '@/canvas/scene';
 import { useView } from '@/state/view';
@@ -14,20 +15,27 @@ import { VerdictHead } from './verdict-head';
 
 type Page = 'why' | 'object' | 'method';
 
-export function VerdictColumn({ record, rating, scene, document, stale, ramp, selected, loading }: {
+export function VerdictColumn({ record, rating, scene, document, stale, draft, computing, failure, ramp, selected, loading }: {
   record: RunRecord | undefined;
   rating: Rating | null;
   scene: Scene | null;
   document: DomainDocument | null;
   stale: boolean;
+  /** The result is for the present inputs and has not been kept as a record. */
+  draft: boolean;
+  /** A new result for changed inputs is on its way; what is shown is the previous one. */
+  computing: boolean;
+  /** Why the present inputs give no result, in the host's words. */
+  failure: string | null;
   ramp: Ramp;
   selected: string | null;
   loading: boolean;
 }) {
   const [page, setPage] = useState<Page>('why');
   const mode = useView(state => state.mode);
-  if (loading) return <Message title="正在读取" />;
-  if (!record) return <Message title="还没有运行记录" body="点右上角的“运行校核”，结论会出现在这里。" />;
+  if (failure) return <Message title="现在的输入算不出结果" body={failure} />;
+  if (loading) return <Message title="正在计算" />;
+  if (!record) return <Message title="输入还不完整" body="补齐上面“已知”里的内容，结论会出现在这里。" />;
   if (record.kind !== 'rating') return <RunTable record={record} />;
   if (!rating || !scene || !document) {
     const issue = record.summary?.error ?? record.summary?.operating?.error;
@@ -36,8 +44,8 @@ export function VerdictColumn({ record, rating, scene, document, stale, ramp, se
   const name = (cable: string) => scene.cables.find(item => item.id === cable)?.name ?? cable;
   const screenName = scene.shape.rings.some(ring => ring.role === 'metallic_sheath') ? '金属套' : '金属屏蔽';
   const state = rating.states.find(item => item.id === selected) ?? null;
-  return <div className="flex h-full min-h-0 flex-col">
-    <VerdictHead rating={rating} card={record.method_card} stale={stale} ramp={ramp} name={name} />
+  return <div className={cn('flex h-full min-h-0 flex-col transition-opacity duration-std ease-std', computing && 'opacity-50')}>
+    <VerdictHead rating={rating} card={record.method_card} stale={stale} draft={draft} computing={computing} ramp={ramp} name={name} />
     {/* Below the answer: the grounds for it. The switch chooses the moment the drawing and these pages show. */}
     <div className="flex shrink-0 items-center justify-between gap-3 border-t border-line px-5 pt-4 pb-1">
       <span className="text-13 font-strong text-ink-2">依据</span>

@@ -23,6 +23,7 @@ const BADGE = {
   error: 'bg-[color-mix(in_oklab,var(--error)_12%,var(--panel))] text-error',
   agent: 'bg-agent-fill text-agent',
   ink: 'bg-ink text-panel',
+  quiet: 'bg-fill text-ink-2',
 } as const;
 
 export function Badge({ tone, className, children }: { tone: keyof typeof BADGE; className?: string; children: ReactNode }) {

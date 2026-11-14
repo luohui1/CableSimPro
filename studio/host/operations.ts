@@ -53,6 +53,8 @@ export class Studio {
   operations = new Map<string, Operation>();
   #layouts = new Map<string, string>();
   #options = new Map<string, LayoutOption[]>();
+  /** Draft results by project and inputs digest: computed, not written to disk. The few latest are kept, so undo finds its draft again. */
+  #drafts = new Map<string, Map<string, { parts: Parts; record: any; shown: RunRecord }>>();
 
   constructor(core: Core, store: Store) {
     this.core = core;
@@ -124,16 +126,20 @@ export class Studio {
     return { changes: plan.changes, view: await this.view(id) };
   }
 
-  async #saveRun(id: string, parts: Parts, record: any, context: Context): Promise<RunRecord> {
+  /** A computed result with the inputs it belongs to: what a run record holds besides its number and time. */
+  #entry(id: string, parts: Parts, record: any, context: Context) {
     const cases: { status: string }[] = record.result.cases;
     const status = record.kind === 'rating' ? cases[0].status : cases.some(item => item.status === 'succeeded') ? 'succeeded' : 'failed';
-    const meta = this.store.meta(id);
-    const saved = this.store.saveRun(id, {
-      schema: 'cablesim.studio.run/1', project: { id, name: meta.name }, by: context.by, task_id: context.task_id,
+    return {
+      schema: 'cablesim.studio.run/1' as const, project: { id, name: this.store.meta(id).name }, by: context.by, task_id: context.task_id,
       inputs: parts, inputs_sha256: inputsDigest(parts), title: runTitle(record),
-      status: status === 'succeeded' ? 'succeeded' : 'failed', tier: record.method_card?.tier?.tier,
+      status: status === 'succeeded' ? 'succeeded' as const : 'failed' as const, tier: record.method_card?.tier?.tier,
       headline: record.summary?.headline_text, ...record,
-    });
+    };
+  }
+
+  async #saveRun(id: string, parts: Parts, record: any, context: Context): Promise<RunRecord> {
+    const saved = this.store.saveRun(id, this.#entry(id, parts, record, context));
     this.emit({ type: 'project', project_id: id });
     return saved;
   }
@@ -304,6 +310,32 @@ export class Studio {
           const record = await core.call('study.rate', { scene: this.scene(store.meta(params.project).name, parts) });
           return this.#saveRun(params.project, parts, record, context);
         }, brief: briefRun },
+      // Drafts are for the workbench: a result for the present inputs right after a change, without filling the
+      // project with records. A draft is a real result of the method; keeping it writes that same result as a record.
+      { id: 'draft.rate', title: '草算', kind: 'run', parameters: obj({ project }),
+        description: '按当前输入运行一次校核，结果不写运行记录，留待“存为记录”。输入没有变时返回上一次的草算。',
+        execute: async (params: { project: string }, context) => {
+          const parts = store.parts(params.project);
+          const digest = inputsDigest(parts);
+          const drafts = this.#drafts.get(params.project) ?? new Map();
+          this.#drafts.set(params.project, drafts);
+          const held = drafts.get(digest);
+          if (held) return held.shown;
+          const record = await core.call('study.rate', { scene: this.scene(store.meta(params.project).name, parts) });
+          const shown: RunRecord = { ...this.#entry(params.project, parts, record, context), id: 'draft', sequence: 0, created: new Date().toISOString() };
+          drafts.set(digest, { parts, record, shown });
+          if (drafts.size > 8) drafts.delete(drafts.keys().next().value as string);
+          return shown;
+        } },
+      { id: 'draft.keep', title: '存为记录', kind: 'run', parameters: obj({ project }),
+        description: '把当前输入的草算结果写成一条不可改的运行记录。',
+        execute: async (params: { project: string }, context) => {
+          const digest = inputsDigest(store.parts(params.project));
+          const held = this.#drafts.get(params.project)?.get(digest);
+          if (!held) throw new StudioError({ code: 'DRAFT_MISSING', message: '没有当前输入的草算结果，请先计算。' }, 409);
+          this.#drafts.get(params.project)?.delete(digest);
+          return this.#saveRun(params.project, held.parts, held.record, context);
+        } },
       { id: 'run.sweep', tool: 'run_sweep', title: '运行扫描', kind: 'run',
         description: '在当前工程上只改变一个量，逐点计算载流量，生成一条运行记录。不改动工程输入。',
         parameters: obj({ project, variable: oneOf(SWEEP_VARIABLES, {

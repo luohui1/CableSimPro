@@ -5,6 +5,7 @@ import { animate } from 'motion';
 import { useEffect, useRef, useState } from 'react';
 import { ToolButton, ToolGroup, ToolToggle } from '@/components/button';
 import { Icon } from '@/components/icon';
+import { NumberField } from '@/components/number-field';
 import { Segmented } from '@/components/segmented';
 import { cn } from '@/lib/cn';
 import { rampPosition, readRamp } from '@/lib/ramp';
@@ -33,7 +34,10 @@ interface Span { x0: number; x1: number; y: number; from0: number; from1: number
 interface Depth { x: number; top: number; bottom: number; broken: boolean; refX: number; label: string; rect: Rect }
 
 /** Everything that depends on the camera: screen positions and a collision-free place for every label. */
-function compose(scene: Scene, field: FieldModel | null, camera: Camera, size: Size, options: { dimensions: boolean; isotherms: boolean; result: boolean; reserved: Rect[] }) {
+function compose(scene: Scene, field: FieldModel | null, camera: Camera, size: Size, options: { dimensions: boolean; isotherms: boolean; result: boolean; capsules: boolean; reserved: Rect[] }) {
+  // A dimension that can be changed is a capsule (a button); one that cannot is plain text.
+  const pad = options.capsules ? 26 : 8;
+  const tall = options.capsules ? 24 : 20;
   const point = (x: number, z: number) => toScreen(camera, size, x, z);
   const cables = scene.cables.map(cable => {
     const [sx, sy] = point(cable.x, cable.z);
@@ -52,8 +56,8 @@ function compose(scene: Scene, field: FieldModel | null, camera: Camera, size: S
       const [a, b] = pair.map(item => cables.find(cable => cable.id === item.id) as (typeof cables)[number]);
       const y = Math.max(a.sy + a.r, b.sy + b.r) + 22;
       const label = `${compact(scene.spacing as number * 1000)} mm`;
-      const width = textWidth(label) + 8;
-      const rect = { x: (a.sx + b.sx) / 2 - width / 2, y: y + 6, w: width, h: 20 };
+      const width = textWidth(label) + pad;
+      const rect = { x: (a.sx + b.sx) / 2 - width / 2, y: y + 7, w: width, h: tall };
       span = { x0: a.sx, x1: b.sx, y, from0: a.sy + a.r + 4, from1: b.sy + b.r + 4, label, rect };
       taken.push(rect, { x: a.sx - 4, y: a.sy + a.r, w: b.sx - a.sx + 8, h: y - a.sy - a.r + 4 });
     }
@@ -63,8 +67,8 @@ function compose(scene: Scene, field: FieldModel | null, camera: Camera, size: S
       const broken = groundY < 56;
       const top = broken ? 64 : groundY;
       const label = `中心埋深 ${compact(scene.depth)} m`;
-      const width = textWidth(label) + 8;
-      const rect = { x: x - 10 - width, y: (top + bottom) / 2 - 10, w: width, h: 20 };
+      const width = textWidth(label) + pad;
+      const rect = { x: x - 10 - width, y: (top + bottom) / 2 - tall / 2, w: width, h: tall };
       if (bottom - top > 40 && rect.x > 8) {
         depth = { x, top, bottom, broken, refX: point(scene.group.left, 0)[0] - 5, label, rect };
         taken.push(rect, { x: x - 5, y: top, w: 10, h: bottom - top });
@@ -154,14 +158,33 @@ function spacingPair(scene: Scene): [SceneCable, SceneCable] | null {
   return null;
 }
 
-export function SectionCanvas({ scene, field, result, notice }: {
+/** Changing the laying on the drawing. Positions follow the laying template, so what changes is its depth and spacing. */
+export interface SectionEdit {
+  depth: number;
+  /** The spacing in force (set or the template's default), when the template has one. */
+  spacing: number | null;
+  commit: (fields: { depth_m?: number; spacing_m?: number }) => void;
+}
+interface Ghost { axis: 'depth' | 'spacing'; depth: number; spacing: number | null; x: number; y: number }
+
+const DEPTH_SNAP = 0.01;
+const SPACING_SNAP = 0.005;
+const snap = (value: number, step: number) => Math.round(value / step) * step;
+
+export function SectionCanvas({ scene, field, result, notice, edit }: {
   scene: Scene;
   /** The soil field of the shown run, or null when there is none for this condition. */
   field: FieldModel | null;
   /** Whether cable temperatures of a result are shown. */
   result: boolean;
   notice: string | null;
+  /** Null when what is shown cannot be changed (an earlier record). */
+  edit: SectionEdit | null;
 }) {
+  const [editing, setEditing] = useState<'depth' | 'spacing' | null>(null);
+  const [ghost, setGhost] = useState<Ghost | null>(null);
+  const shallowest = scene.shape.radius + 0.02;
+  const tightest = scene.shape.radius * 2;
   const host = useRef<HTMLDivElement>(null);
   const surface = useRef<HTMLCanvasElement>(null);
   const layer = useRef<FieldLayer | null>(null);
@@ -169,7 +192,7 @@ export function SectionCanvas({ scene, field, result, notice }: {
   const motion = useRef<{ stop: () => void } | null>(null);
   const framed = useRef('');
   const moved = useRef(false);
-  const press = useRef<{ x: number; y: number; camera: Camera; dragged: boolean } | null>(null);
+  const press = useRef<{ x: number; y: number; camera: Camera; dragged: boolean; cable: string | null; axis?: 'depth' | 'spacing' } | null>(null);
   const [size, setSize] = useState<Size>({ width: 0, height: 0 });
   const [camera, setCamera] = useState<Camera | null>(null);
   const [gpu, setGpu] = useState<'pending' | 'webgpu' | 'webgl2' | 'none'>('pending');
@@ -275,7 +298,7 @@ export function SectionCanvas({ scene, field, result, notice }: {
   // Whether the soil shows its temperature: a field exists for this condition, its layer is on, and a GPU path runs.
   const shaded = Boolean(field) && layers.field && gpu !== 'none';
   const view = camera && size.width ? compose(scene, layers.field ? field : null, camera, size, {
-    dimensions: layers.dimensions, isotherms: layers.isotherms && layers.field && gpu !== 'none', result,
+    dimensions: layers.dimensions, isotherms: layers.isotherms && layers.field && gpu !== 'none', result, capsules: Boolean(edit),
     reserved: [
       { x: 0, y: 0, w: 132, h: 60 },
       { x: size.width - 236, y: 0, w: 236, h: shaded && layers.isotherms ? 116 : 84 },
@@ -287,11 +310,50 @@ export function SectionCanvas({ scene, field, result, notice }: {
   const paper = ramp.field(0);
   const ruleColour = 'var(--text-secondary)';
 
-  return <div ref={host} data-gpu={gpu} className="absolute inset-0 touch-none overflow-hidden cursor-grab select-none active:cursor-grabbing"
+  // Dragging a cable moves the whole laying: up and down changes the depth, sideways changes the spacing.
+  // The drawing shows where the cables would go; the host places them when the pointer is released.
+  const drag = (held: NonNullable<typeof press.current>, x: number, y: number) => {
+    if (!edit || !held.cable) return;
+    held.axis ??= Math.abs(x - held.x) > Math.abs(y - held.y) ? 'spacing' : 'depth';
+    if (held.axis === 'depth') {
+      setGhost({ axis: 'depth', depth: Math.max(shallowest, snap(edit.depth + (y - held.y) / held.camera.scale, DEPTH_SNAP)), spacing: edit.spacing, x, y });
+      return;
+    }
+    const target = scene.cables.find(cable => cable.id === held.cable);
+    const centre = scene.cables.reduce((sum, cable) => sum + cable.x, 0) / scene.cables.length;
+    const lever = target && edit.spacing ? (target.x - centre) / edit.spacing : 0;
+    // A cable on the centre line does not set the spacing.
+    if (!edit.spacing || Math.abs(lever) < 0.25) return;
+    setGhost({ axis: 'spacing', depth: edit.depth, spacing: Math.max(tightest, snap(edit.spacing + (x - held.x) / held.camera.scale / lever, SPACING_SNAP)), x, y });
+  };
+  const ghosts = ghost && edit && camera ? (() => {
+    const centreX = scene.cables.reduce((sum, cable) => sum + cable.x, 0) / scene.cables.length;
+    const centreZ = scene.cables.reduce((sum, cable) => sum + cable.z, 0) / scene.cables.length;
+    const ratio = ghost.spacing && edit.spacing ? ghost.spacing / edit.spacing : 1;
+    return scene.cables.map(cable => ({
+      id: cable.id,
+      at: toScreen(camera, size, centreX + (cable.x - centreX) * ratio, centreZ + (cable.z - centreZ) * ratio - (ghost.depth - edit.depth)),
+      r: cable.radius * camera.scale,
+    }));
+  })() : null;
+
+  return <div ref={host} data-gpu={gpu} tabIndex={0}
+    className={cn('absolute inset-0 touch-none overflow-hidden outline-none select-none active:cursor-grabbing', edit && hovered ? 'cursor-move' : 'cursor-grab')}
+    onKeyDown={event => {
+      if (!edit || !selected || event.target !== event.currentTarget) return;
+      const stride = event.shiftKey ? 5 : 1;
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        edit.commit({ depth_m: Math.max(shallowest, snap(edit.depth + (event.key === 'ArrowDown' ? 1 : -1) * DEPTH_SNAP * stride, DEPTH_SNAP)) });
+      } else if ((event.key === 'ArrowLeft' || event.key === 'ArrowRight') && edit.spacing) {
+        event.preventDefault();
+        edit.commit({ spacing_m: Math.max(tightest, snap(edit.spacing + (event.key === 'ArrowRight' ? 1 : -1) * SPACING_SNAP * stride, SPACING_SNAP)) });
+      }
+    }}
     onPointerDown={event => {
       if (event.button !== 0 || !live.current) return;
       const [x, y] = local(event);
-      press.current = { x, y, camera: live.current, dragged: false };
+      press.current = { x, y, camera: live.current, dragged: false, cable: edit ? cableAt(x, y) : null };
       event.currentTarget.setPointerCapture(event.pointerId);
     }}
     onPointerMove={event => {
@@ -301,6 +363,7 @@ export function SectionCanvas({ scene, field, result, notice }: {
       if (!held) return hover(cableAt(x, y));
       if (!held.dragged && Math.hypot(x - held.x, y - held.y) < 4) return;
       held.dragged = true;
+      if (held.cable) return drag(held, x, y);
       moved.current = true;
       motion.current?.stop();
       apply({ ...held.camera, cx: held.camera.cx - (x - held.x) / held.camera.scale, cz: held.camera.cz + (y - held.y) / held.camera.scale });
@@ -308,7 +371,12 @@ export function SectionCanvas({ scene, field, result, notice }: {
     onPointerUp={event => {
       const held = press.current;
       press.current = null;
-      if (held && !held.dragged) select(cableAt(...local(event)));
+      if (held && !held.dragged) return select(cableAt(...local(event)));
+      if (ghost && edit) {
+        if (ghost.axis === 'depth' && Math.abs(ghost.depth - edit.depth) > 1e-9) edit.commit({ depth_m: ghost.depth });
+        if (ghost.axis === 'spacing' && ghost.spacing && Math.abs(ghost.spacing - (edit.spacing ?? 0)) > 1e-9) edit.commit({ spacing_m: ghost.spacing });
+      }
+      setGhost(null);
     }}
     onPointerLeave={() => { setCursor(null); hover(null); }}>
 
@@ -346,8 +414,8 @@ export function SectionCanvas({ scene, field, result, notice }: {
       {view.span && <g stroke={ruleColour} strokeWidth={1} fill="none">
         <path d={`M${view.span.x0} ${view.span.from0}V${view.span.y + 5}M${view.span.x1} ${view.span.from1}V${view.span.y + 5}M${view.span.x0} ${view.span.y}H${view.span.x1}`} />
         <path d={`M${view.span.x0 - 4} ${view.span.y + 4}l8 -8M${view.span.x1 - 4} ${view.span.y + 4}l8 -8`} strokeWidth={1.5} />
-        <text x={view.span.rect.x + view.span.rect.w / 2} y={view.span.rect.y + 10} textAnchor="middle" dominantBaseline="central" fontSize={13}
-          fill="var(--text)" stroke="none">{view.span.label}</text>
+        {!edit && <text x={view.span.rect.x + view.span.rect.w / 2} y={view.span.rect.y + 10} textAnchor="middle" dominantBaseline="central" fontSize={13}
+          fill="var(--text)" stroke="none">{view.span.label}</text>}
       </g>}
 
       {view.depth && <g stroke={ruleColour} strokeWidth={1} fill="none">
@@ -356,9 +424,12 @@ export function SectionCanvas({ scene, field, result, notice }: {
           ? <path d={`M${view.depth.x} ${view.depth.top - 8}v6l-5 3 10 4 -5 3v6`} />
           : <path d={`M${view.depth.x - 4} ${view.depth.top + 4}l8 -8`} strokeWidth={1.5} />}
         <path d={`M${view.depth.x - 4} ${view.depth.bottom + 4}l8 -8`} strokeWidth={1.5} />
-        <text x={view.depth.rect.x + view.depth.rect.w / 2} y={view.depth.rect.y + 10} textAnchor="middle" dominantBaseline="central" fontSize={13}
-          fill="var(--text)" stroke="none">{view.depth.label}</text>
+        {!edit && <text x={view.depth.rect.x + view.depth.rect.w / 2} y={view.depth.rect.y + 10} textAnchor="middle" dominantBaseline="central" fontSize={13}
+          fill="var(--text)" stroke="none">{view.depth.label}</text>}
       </g>}
+
+      {ghosts?.map(item => <circle key={item.id} cx={item.at[0]} cy={item.at[1]} r={item.r} fill="color-mix(in oklab, var(--panel) 45%, transparent)"
+        stroke="var(--text)" strokeWidth={1.5} strokeDasharray="6 4" />)}
 
       {view.cables.map(cable => <g key={cable.id} data-cable={cable.id}>
         <g style={{ filter: 'drop-shadow(0 1px 2px rgb(0 0 0 / .3))' }}>
@@ -388,6 +459,25 @@ export function SectionCanvas({ scene, field, result, notice }: {
       {chip.value && <span className="font-strong">{chip.value}</span>}
       {chip.limiting && <span className="font-strong">最热</span>}
     </div>)}
+
+    {/* Dimensions that can be changed: a capsule opens a number field in its place. */}
+    {edit && view && ([['depth', view.depth, edit.depth, 'm', 1, shallowest] as const, ['spacing', view.span, edit.spacing, 'mm', 1000, tightest] as const]).map(([which, dimension, value, unit, scale, least]) =>
+      dimension && value !== null && <div key={which} className="absolute top-0 left-0" onPointerDown={event => event.stopPropagation()}
+        style={{ translate: `${Math.round(Math.min(dimension.rect.x, size.width - 176))}px ${Math.round(dimension.rect.y)}px` }}>
+        {editing === which
+          ? <NumberField autoFocus value={Number((value * scale).toFixed(4))} unit={unit} min={least * scale} step={which === 'depth' ? 0.05 : 5} digits={which === 'depth' ? 3 : 1}
+            className="rounded-field shadow-lift" onLeave={() => setEditing(null)}
+            onCommit={next => { if (next !== null) edit.commit(which === 'depth' ? { depth_m: next } : { spacing_m: next / 1000 }); }} />
+          : <button type="button" data-dimension={which} onClick={() => setEditing(which)} style={{ width: dimension.rect.w, height: dimension.rect.h }}
+            className="flex cursor-text items-center justify-center rounded-full border border-control bg-panel text-13 whitespace-nowrap text-ink shadow-lift transition-colors duration-fast ease-std hover:border-ink">
+            {dimension.label}
+          </button>}
+      </div>)}
+
+    {ghost && <div className="pointer-events-none absolute top-0 left-0 flex h-7 items-center rounded-field bg-ink px-2.5 text-13 font-strong whitespace-nowrap text-panel"
+      style={{ translate: `${Math.round(ghost.x + 16)}px ${Math.round(ghost.y - 36)}px` }}>
+      {ghost.axis === 'depth' ? `中心埋深 ${compact(ghost.depth)} m` : `中心距 ${compact((ghost.spacing ?? 0) * 1000)} mm`}
+    </div>}
 
     <div data-overlays className="pointer-events-none absolute inset-0 *:pointer-events-auto *:absolute" onPointerDown={event => event.stopPropagation()}>
       <ToolGroup className="top-3 left-3 cursor-default">

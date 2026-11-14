@@ -181,3 +181,25 @@ test('a sweep needs no review, and a rejected change leaves the inputs as they w
   assert.equal(done.status, 'done');
   assert.ok(existsSync(join(home, 'projects', project, 'runs', sweep.id, 'record.json')));
 });
+
+test('a draft answers right after a change and becomes a record only when it is kept', async () => {
+  const project = (await op<ProjectView>('project.create', { name: '草算 110 kV 出线', model_id: 'system.yjq02-110kv-800' })).meta.id;
+  const first = await op<RunRecord>('draft.rate', { project });
+  assert.equal(first.id, 'draft');
+  assert.equal(first.summary?.status, 'succeeded');
+  assert.equal((await op<ProjectView>('project.get', { project })).runs.length, 0, 'a draft is not a run record');
+
+  await op('installation.set', { project, depth_m: 1.5 });
+  const deeper = await op<RunRecord>('draft.rate', { project });
+  assert.equal(deeper.inputs.installation.depth_m, 1.5);
+  assert.ok(deeper.summary!.ampacity!.value_a < first.summary!.ampacity!.value_a, 'the same cable buried deeper carries less');
+
+  const kept = await op<RunRecord>('draft.keep', { project });
+  assert.equal(kept.sequence, 1);
+  assert.equal(kept.summary!.ampacity!.value_a, deeper.summary!.ampacity!.value_a, 'keeping writes the draft itself, not a new computation');
+  assert.ok(existsSync(join(home, 'projects', project, 'runs', kept.id, 'record.json')));
+
+  const again = await post<{ error: { code: string } }>('/api/ops/draft.keep', { project });
+  assert.equal(again.status, 409);
+  assert.equal(again.body.error.code, 'DRAFT_MISSING');
+});

@@ -10,7 +10,15 @@ import { compact, fixed } from '@shared/format';
 import type { MethodCard } from '@shared/types';
 import type { Rating } from './rating';
 
-export function VerdictHead({ rating, card, stale, ramp, name }: { rating: Rating; card: MethodCard | null; stale: boolean; ramp: Ramp; name: (cable: string) => string }) {
+export function VerdictHead({ rating, card, stale, draft, computing, ramp, name }: {
+  rating: Rating;
+  card: MethodCard | null;
+  stale: boolean;
+  draft: boolean;
+  computing: boolean;
+  ramp: Ramp;
+  name: (cable: string) => string;
+}) {
   const now = rating.summary.operating?.cables ?? [];
   const hottest = now.length ? now.reduce((a, b) => (b.conductor_c > a.conductor_c ? b : a)) : null;
   const circuits = rating.summary.circuits?.length ?? 1;
@@ -20,6 +28,8 @@ export function VerdictHead({ rating, card, stale, ramp, name }: { rating: Ratin
     <div className="flex h-7 items-center justify-between gap-3">
       <span className="text-13 font-strong text-ink-2">结论</span>
       <div className="flex items-center gap-2">
+        {computing && <Badge tone="quiet" className="gap-1.5"><Icon name="status/spinner" className="size-4 animate-spin" />计算中</Badge>}
+        {draft && <Badge tone="quiet">草算，还没存</Badge>}
         {stale && <Badge tone="attention">已过期</Badge>}
         {card && <Tip side="bottom" label={card.tier.meaning}><span><Seal tier={card.tier.tier} label={card.tier.label} /></span></Tip>}
       </div>

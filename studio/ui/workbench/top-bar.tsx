@@ -1,40 +1,35 @@
-// The top bar sits on the ground, not in a panel: the product, the project, and the two actions on a project.
+// The top bar sits on the ground, not in a panel: the product, the project, undo, and the next step.
 import { useMutation } from '@tanstack/react-query';
 import { Button, ToolButton } from '@/components/button';
 import { Icon, Mark } from '@/components/icon';
 import { reportFailure } from '@/components/notice';
 import { Menu, MenuItem } from '@/components/popover';
 import { api } from '@/state/api';
-import { queryClient } from '@/state/queries';
 import { useTheme } from '@/state/theme';
-import type { ProjectMeta, RunHeader } from '@shared/types';
+import type { ProjectMeta } from '@shared/types';
 
-export function TopBar({ projects, project, run, runnable, fresh, onOpenProject, onOpenRun }: {
+/** The next step: either the calculation sheet, or an action the workbench names. */
+export type Step = { kind: 'sheet' } | { kind: 'action'; label: string; icon: string; busy?: boolean; disabled?: boolean; onClick: () => void };
+
+export function TopBar({ projects, project, sheetRun, next, canUndo, canRedo, onUndo, onRedo, onOpenProject }: {
   projects: ProjectMeta[];
   project: ProjectMeta | undefined;
-  /** The shown run, when a calculation sheet can be made from it. */
-  run: string | undefined;
-  runnable: boolean;
-  /** The shown result belongs to the project's present inputs. */
-  fresh: boolean;
+  /** The kept run record a calculation sheet can be made from. */
+  sheetRun: string | undefined;
+  next: Step;
+  canUndo: boolean;
+  canRedo: boolean;
+  onUndo: () => void;
+  onRedo: () => void;
   onOpenProject: (id: string) => void;
-  onOpenRun: (run: string) => void;
 }) {
   const { theme, toggle } = useTheme();
-  const rate = useMutation({
-    mutationFn: () => api.op<RunHeader>('run.rate', { project: project?.id }),
-    onSuccess: async saved => {
-      await queryClient.invalidateQueries({ queryKey: ['project', project?.id] });
-      onOpenRun(saved.id);
-    },
-    onError: reportFailure,
-  });
   const sheet = useMutation({
     mutationFn: async () => {
       // The tab is opened inside the click, so the browser does not treat it as a pop-up.
       const tab = window.open('', '_blank');
       try {
-        const exported = await api.op<{ url: string }>('report.export', { project: project?.id, run });
+        const exported = await api.op<{ url: string }>('report.export', { project: project?.id, run: sheetRun });
         if (tab) tab.location.href = exported.url;
       } catch (error) {
         tab?.close();
@@ -56,9 +51,15 @@ export function TopBar({ projects, project, run, runnable, fresh, onOpenProject,
       {projects.map(item => <MenuItem key={item.id} checked={item.id === project?.id} onSelect={() => onOpenProject(item.id)}>{item.name}</MenuItem>)}
     </Menu>
     <div className="flex-1" />
+    <ToolButton icon="action/undo" label="撤销上一次改动（Ctrl+Z）" disabled={!canUndo} onClick={onUndo} />
+    <ToolButton icon="action/redo" label="重做（Ctrl+Y）" disabled={!canRedo} onClick={onRedo} />
     <ToolButton icon="nav/theme" label={theme === 'light' ? '换成深色' : '换成浅色'} onClick={toggle} />
-    {/* One copper button: the next step. Without a result that is to compute; with a fresh result it is the sheet. */}
-    <Button variant={fresh ? 'outline' : 'primary'} icon="run/run" disabled={!runnable} busy={rate.isPending} onClick={() => rate.mutate()}>{fresh ? '重新计算' : '运行校核'}</Button>
-    <Button variant={fresh ? 'primary' : 'outline'} icon="result/report" disabled={!run} busy={sheet.isPending} onClick={() => sheet.mutate()}>{fresh ? '出计算书' : '计算书'}</Button>
+    {/* One copper button: the next step. */}
+    {next.kind === 'sheet'
+      ? <Button variant="primary" icon="result/report" busy={sheet.isPending} onClick={() => sheet.mutate()}>出计算书</Button>
+      : <>
+        <Button icon="result/report" disabled={!sheetRun} busy={sheet.isPending} onClick={() => sheet.mutate()}>计算书</Button>
+        <Button variant="primary" icon={next.icon} busy={next.busy} disabled={next.disabled} onClick={next.onClick}>{next.label}</Button>
+      </>}
   </header>;
 }
