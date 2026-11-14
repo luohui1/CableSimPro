@@ -6,7 +6,7 @@ cases, reads the saved artifacts back and compares values with the engineer's ta
 from copy import deepcopy
 
 from . import CoreError
-from . import layouts, library, methods, runner, scene
+from . import layouts, methods, runner, scene
 
 TRACE = 'x-cablesim.iec60287-trace'
 SWEEPS = {
@@ -198,16 +198,16 @@ def sweep(scene_input, variable, values):
         'document': base['document'], 'parameters': p, 'outer_diameter_m': base['outer_diameter_m']})
 
 
-def select(scene_input, candidate_ids, target_current_a):
-    """Rate each candidate in the same installation and conditions at the target load."""
+def select(scene_input, candidates, target_current_a):
+    """Rate each candidate product in the same installation and conditions at the target load."""
     if isinstance(target_current_a, bool) or not isinstance(target_current_a, (int, float)) or target_current_a <= 0:
         raise CoreError('SELECTION_INVALID', '请给出正的目标电流，单位 A。', '/target_current_a')
-    if not isinstance(candidate_ids, list) or not 1 <= len(candidate_ids) <= 30 or len(set(candidate_ids)) != len(candidate_ids):
+    if not isinstance(candidates, list) or not 1 <= len(candidates) <= 30 or len({item['id'] for item in candidates}) != len(candidates):
         raise CoreError('SELECTION_INVALID', '请选择 1 到 30 个不重复的候选型号。', '/candidates')
     construction = scene_input['cable']['payload']['cable_type']['construction']
     cases, documents, rows, parameter_sets = [], {}, [], {}
-    for index, model_id in enumerate(candidate_ids):
-        candidate = library.get(model_id)
+    for index, candidate in enumerate(candidates):
+        model_id = candidate['id']
         row = {'case_id': f'candidate-{index}', 'model_id': model_id, 'name': candidate['name'],
                'area_mm2': candidate['summary']['area_mm2'], 'content_sha256': candidate['content_sha256']}
         rows.append(row)

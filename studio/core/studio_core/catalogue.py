@@ -20,6 +20,77 @@ def series(name):
     return data
 
 
+def tables(name):
+    """A catalogue that publishes structure tables: one table per construction, several designations per table."""
+    return json.loads((CATALOGUES / f'{name}.json').read_text('utf-8'))
+
+
+def table_series(data, table_id, model=None):
+    """One designation of one published table as a series declaration and its rows, ready for the structure builder.
+
+    The declaration is the catalogue's `import_declaration`: what an engineer states when the table lacks a column.
+    """
+    from . import designation, structure
+    table = next(item for item in data['tables'] if item['id'] == table_id)
+    model = model or table['designations'][0]
+    parts = designation.parse(model)
+    declared = data['import_declaration']
+    common = {**declared['common'], **declared['common_by_cores'].get(str(table['cores']), {}),
+              **(declared['common_by_armour'].get(parts['armour']['kind'], {}) if parts['armour'] else {})}
+    keys = [column[0] for column in table['columns']]
+    rows = []
+    for row in table['rows']:
+        values = dict(zip(keys, row))
+        values['weight'] = values[f'weight:{model}']
+        rows.append({key: value for key, value in values.items() if not key.startswith('weight:')})
+    modelling = structure.reference_modelling()
+    modelling['diameter_rounding'] = deepcopy(declared['diameter_rounding'])
+    series = {'name': f"{data['manufacturer']} {model}-{data['u0_v'] / 1000:g}/{data['u_v'] / 1000:g} kV {'单芯' if table['cores'] == 1 else '三芯'}",
+              'manufacturer': data['manufacturer'], 'designation': model, 'cores': table['cores'], 'u0_v': data['u0_v'], 'u_v': data['u_v'],
+              'um_v': data.get('um_v'), 'origin': 'public', 'standards': list(declared['standards']), 'common': common,
+              'common_basis': {key: declared['common_basis'][key] for key in common}, 'modelling': modelling,
+              'source': {**data['source'], 'location': f"{table['title']}；{data['source']['location']}"}}
+    return series, rows
+
+
+def workbook(data, path):
+    """The published tables written as a workbook laid out like the printed ones: a sheet per table, a title,
+    names over units, one weight column per designation, the catalogue's note under the rows."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font
+    from openpyxl.utils import get_column_letter
+    book = Workbook()
+    book.remove(book.active)
+    centre = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    for table in data['tables']:
+        words = table['title'].split()
+        sheet = book.create_sheet(f"{words[0]}{words[1]} {table['designations'][0]}")
+        width = len(table['columns'])
+        sheet.cell(1, 1, table['title']).font = Font(bold=True, size=12)
+        sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=width)
+        sheet.cell(2, 1, f"{data['manufacturer']}　{data['title']}")
+        sheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=width)
+        weights = [index for index, column in enumerate(table['columns']) if column[0].startswith('weight:')]
+        for index, (key, unit, label) in enumerate(table['columns']):
+            if index in weights:
+                sheet.cell(3, index + 1, '电缆近似重量 kg/km')
+                sheet.cell(4, index + 1, key.split(':')[1])
+            else:
+                sheet.cell(3, index + 1, label)
+                sheet.cell(4, index + 1, unit.replace('mm2', 'mm²'))
+            sheet.column_dimensions[get_column_letter(index + 1)].width = 14
+        sheet.merge_cells(start_row=3, start_column=weights[0] + 1, end_row=3, end_column=weights[-1] + 1)
+        for row in sheet.iter_rows(min_row=1, max_row=4, max_col=width):
+            for cell in row:
+                cell.alignment = centre
+        for offset, row in enumerate(table['rows']):
+            for index, value in enumerate(row):
+                sheet.cell(5 + offset, index + 1, value).alignment = centre
+        sheet.cell(6 + len(table['rows']), 1, '注：导体外径仅供参考。')
+    book.save(path)
+    return {'path': str(path), 'sheets': book.sheetnames}
+
+
 def single_core_entry(data, item):
     """A library entry for one size of a single-core lead-sheathed series, built from the catalogue's dimensions."""
     assumed = data['modelling_assumptions']

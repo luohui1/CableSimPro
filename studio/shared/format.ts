@@ -20,7 +20,8 @@ export const ROLE_NAMES: Record<string, string> = {
 export const BONDING_NAMES: Record<string, string> = { both_ends: '两端接地', single_point: '单点接地' };
 export const EDDY_NAMES: Record<string, string> = { ignored: '不计', trefoil: '计入' };
 export const KIND_NAMES: Record<string, string> = { rating: '校核', sweep: '扫描', selection: '选型' };
-export const STATE_NAMES: Record<string, string> = { demo: '结构演示', public: '公开厂家资料' };
+export const STATE_NAMES: Record<string, string> = { demo: '结构演示', public: '公开厂家资料', factory: '本厂结构表' };
+export const REVIEW_NAMES: Record<string, string> = { draft: '草稿', submitted: '待审核', reviewed: '已审核', published: '已发布' };
 export const PHASE_NAMES: Record<string, string> = { A: 'A 相', B: 'B 相', C: 'C 相', L1L2L3: '三芯电缆' };
 export const LEVEL_NAMES: Record<string, string> = { 'reference-benchmark': '公开算例对照', 'self-consistency': '自洽检查', unverified: '未验证' };
 

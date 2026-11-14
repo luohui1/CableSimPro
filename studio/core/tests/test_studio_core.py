@@ -182,7 +182,7 @@ def test_soil_resistivity_sweep_lowers_the_rating_point_by_point():
 
 
 def test_selection_takes_the_smallest_public_size_that_carries_the_target():
-    series = [e['id'] for e in library.entries() if e['family'].startswith('YJV22-8.7/15 kV 三芯（华远')]
+    series = [e for e in library.entries() if e['family'].startswith('YJV22-8.7/15 kV 三芯（华远')]
     assert len(series) == 10
     record = study.select(scene_for('huayuan.yjv22-15kv-35', 'three_core_buried_single'), series, 300.0)
     rows = {row['model_id']: row for row in record['selection']['candidates']}

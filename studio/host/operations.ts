@@ -7,7 +7,10 @@ import type {
   Change, Conditions, Installation, Issue, LayoutOption, LibraryEntry, MethodChoice, PartName, Parts, Preview, ProjectView,
   RunRecord, StudioEvent,
 } from '../shared/types.ts';
+import { userInfo } from 'node:os';
 import { type Core, StudioError } from './core.ts';
+import type { Library } from './library.ts';
+import { productOperations } from './products.ts';
 import { renderReport } from './report.ts';
 import { inputsDigest, type Store } from './store.ts';
 
@@ -49,18 +52,35 @@ function runTitle(record: { kind: string; summary?: RunRecord['summary']; sweep?
 export class Studio {
   core: Core;
   store: Store;
+  library: Library;
+  /** Where projects, the product library and uploaded files live. */
+  home: string;
+  /** The person at this machine; every change to the product library is recorded under this name. */
+  user: string;
   events = new EventEmitter();
   operations = new Map<string, Operation>();
   #layouts = new Map<string, string>();
   #options = new Map<string, LayoutOption[]>();
   /** Draft results by project and inputs digest: computed, not written to disk. The few latest are kept, so undo finds its draft again. */
   #drafts = new Map<string, Map<string, { parts: Parts; record: any; shown: RunRecord }>>();
+  #seeding?: Promise<void>;
 
-  constructor(core: Core, store: Store) {
+  constructor(core: Core, store: Store, library: Library, user = process.env.CABLE_STUDIO_USER || userInfo().username) {
     this.core = core;
     this.store = store;
+    this.library = library;
+    this.home = store.home;
+    this.user = user;
     this.events.setMaxListeners(100);
-    for (const operation of this.#define()) this.operations.set(operation.id, operation);
+    for (const operation of [...this.#define(), ...productOperations(this)]) this.operations.set(operation.id, operation);
+  }
+
+  /** An empty product library starts with the structures that come with the software. */
+  ready(): Promise<void> {
+    this.#seeding ??= (async () => {
+      if (!this.library.setting('seeded')) this.library.seed(await this.core.call<LibraryEntry[]>('library.bundled'), '系统');
+    })();
+    return this.#seeding;
   }
 
   emit(event: StudioEvent): void {
@@ -108,6 +128,7 @@ export class Studio {
       const path = first.path ?? first.instancePath ?? '';
       throw new StudioError({ code: 'INPUT_INVALID', message: `参数不符合要求：${path} ${first.message ?? ''}`.trim(), path: path || undefined });
     }
+    await this.ready();
     return operation.execute(params, context);
   }
 
@@ -145,7 +166,12 @@ export class Studio {
   }
 
   #define(): Operation[] {
-    const { core, store } = this;
+    const { core, store, library } = this;
+    // A cable taken from the product library, with the laying and conditions a new project starts from.
+    const starting = async (model: string): Promise<Pick<Parts, 'cable' | 'installation' | 'conditions'>> => {
+      const cable = library.entry(model);
+      return { cable, ...(await core.call<Pick<Parts, 'installation' | 'conditions'>>('cable.defaults', { cable })) };
+    };
     const header = (record: RunRecord) => ({ run: record.id, sequence: record.sequence, title: record.title, status: record.status, tier: record.tier });
     const briefRun = (record: RunRecord): unknown => {
       const base = { ...header(record), kind: record.kind, method: record.method_card?.plugin, tier_basis: record.method_card?.tier.basis };
@@ -188,7 +214,7 @@ export class Studio {
 
     const planCable = async (params: { project: string; model_id: string }): Promise<Plan> => {
       const before = store.parts(params.project);
-      const defaults = await core.call<Pick<Parts, 'cable' | 'installation' | 'conditions'>>('library.defaults', { model_id: params.model_id });
+      const defaults = await starting(params.model_id);
       const parts: Partial<Parts> = { cable: defaults.cable };
       // A different core count needs a template of its own kind; the engineer's depth is kept.
       if (defaults.cable.summary.construction !== before.cable.summary.construction) {
@@ -246,8 +272,7 @@ export class Studio {
       { id: 'project.create', title: '新建工程', description: '新建工程并选定初始型号。', kind: 'write',
         parameters: obj({ name: str({ minLength: 1, maxLength: 80 }), model_id: opt(str()) }),
         execute: async (params: { name: string; model_id?: string }) => {
-          const defaults = await core.call<Pick<Parts, 'cable' | 'installation' | 'conditions'>>('library.defaults',
-            { model_id: params.model_id ?? 'system.yjq02-110kv-800' });
+          const defaults = await starting(params.model_id ?? 'system.yjq02-110kv-800');
           const meta = store.create(params.name.trim(), { ...defaults, method: { method: 'iec60287.steady', parameters: {} } });
           this.emit({ type: 'project', project_id: meta.id });
           return this.view(meta.id);
@@ -263,8 +288,8 @@ export class Studio {
         description: '读取当前工程的型号、敷设、工况、方法参数、输入是否有问题、可信分档和运行记录列表。动手之前先调用它。',
         execute: async (params: { project: string }) => this.view(params.project), brief: briefView },
       { id: 'library.list', tool: 'list_library', title: '型号库', kind: 'read', parameters: obj({}),
-        description: '列出型号库：每个型号的标识、名称、系列、数据来源状态、芯数、截面、电压和外径。选型的候选从这里取。',
-        execute: async () => core.call<LibraryEntry[]>('library.list'),
+        description: '列出产品库里每个规格的最新版本：标识、名称、系列、数据来源、审核状态、芯数、截面、电压和外径。选型的候选从这里取。',
+        execute: async () => library.entries(),
         brief: (entries: LibraryEntry[]) => entries.map(entry => ({ model_id: entry.id, name: entry.name, family: entry.family, state: entry.state, ...entry.summary })) },
       { id: 'methods.list', tool: 'list_methods', title: '方法库', kind: 'read', parameters: obj({}),
         description: '列出可用的计算方法及其方法卡：能回答什么、需要什么输入、适用范围、验证依据、可信分档的含义。',
@@ -353,11 +378,9 @@ export class Studio {
           candidates: opt(arr(str(), { minItems: 1, maxItems: 30, description: '候选型号标识；缺省为当前型号所在系列的全部型号' })) }),
         execute: async (params: { project: string; target_current_a: number; candidates?: string[] }, context) => {
           const parts = store.parts(params.project);
-          let candidates = params.candidates;
-          if (!candidates) {
-            const library = await core.call<LibraryEntry[]>('library.list');
-            candidates = library.filter(entry => entry.family === parts.cable.family).map(entry => entry.id);
-          }
+          const candidates = params.candidates
+            ? params.candidates.map(id => library.entry(id))
+            : library.entries().filter(entry => entry.family === parts.cable.family).slice(0, 30);
           const record = await core.call('study.select', { scene: this.scene(store.meta(params.project).name, parts),
             candidates, target_current_a: params.target_current_a });
           return this.#saveRun(params.project, parts, record, context);

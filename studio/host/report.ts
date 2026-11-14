@@ -180,7 +180,7 @@ export function renderReport(record: RunRecord): string {
   <h2>结论</h2>
   <p class="lead">${escape(conclusion)}${limiting ? `，${escape(limiting)}` : ''}</p>
   ${card ? `<p><span class="tier ${card.tier.tier}">${escape(card.tier.label)}</span>${escape(card.tier.meaning)}</p>${list(card.tier.basis)}` : ''}
-  <div class="note">型号数据：${escape(STATE_NAMES[cable.state] ?? cable.state)}。${cable.state === 'demo' ? '结构尺寸与物性含明示假设，不是厂家确认的产品数据；' : '尺寸取自公开厂家资料，未经厂家签章确认；'}交付前须由工程师核对出处。</div>
+  <div class="note">型号数据：${escape(STATE_NAMES[cable.state] ?? cable.state)}。${cable.state === 'demo' ? '结构尺寸与物性含明示假设，不是厂家确认的产品数据；' : cable.state === 'factory' ? '尺寸取自本厂结构表，表中未列的量见来源说明；' : '尺寸取自公开厂家资料，未经厂家签章确认；'}交付前须由工程师核对出处。</div>
   <h2>输入</h2>
   <h3>型号</h3>
   ${pairs([['型号', cable.name], ['库版本', cable.version], ['额定电压 U0/U', `${compact(cable.summary.u0_v / 1000)} / ${compact((cable.summary.u_v ?? 0) / 1000)} kV`],

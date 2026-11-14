@@ -78,7 +78,10 @@ export interface LibraryEntry {
   version: string;
   name: string;
   family: string;
-  state: 'demo' | 'public' | string;
+  /** Where the data comes from: a declared demonstration structure, a public table, or the factory's own table. */
+  state: 'demo' | 'public' | 'factory' | string;
+  /** Where the version stands in review; set when the entry comes out of the product library. */
+  review?: 'draft' | 'submitted' | 'reviewed' | 'published';
   source: string;
   content_sha256: string;
   payload: { cable_type: CableType; materials: Material[] };
@@ -322,7 +325,118 @@ export interface Task {
 }
 
 export interface AgentStatus { configured: boolean; model?: string; provider?: string; hint?: string }
+
+// ---- The product library: series → specification → version ----
+
+/** Where a version stands on its way to being issued. Only a person moves it forward. */
+export type ReviewState = 'draft' | 'submitted' | 'reviewed' | 'published';
+export type ResultKind = 'check' | 'electrical' | 'short_circuit' | 'rating';
+export const RESULT_KINDS: ResultKind[] = ['check', 'electrical', 'short_circuit', 'rating'];
+
+export interface GivenParameter { value: number | string; unit: string; reference: string }
+/** What a series states once for all its sizes; structure values are in the table's own units (mm, mm², Ω/km, kg/km). */
+export interface SeriesDeclaration {
+  name: string;
+  manufacturer: string;
+  designation: string;
+  cores: 1 | 3;
+  u0_v: number;
+  u_v: number;
+  um_v?: number | null;
+  standards: string[];
+  common: Record<string, number>;
+  common_basis: Record<string, string>;
+  modelling: Record<string, GivenParameter>;
+  source?: { title?: string; location?: string; sha256?: string; file?: string };
+  origin?: 'factory' | 'public' | 'demo';
+  armour_material?: string;
+}
+export interface StructureValue { key: string; label: string; unit: string; value: number; origin: 'table' | 'series' | 'standard'; basis?: string }
+export interface Closure { declared_mm: number; listed_mm: number; residual_mm: number; tolerance_mm: number; placed_in: string | null }
+export interface Derivation { kind: 'plugin' | 'stated' | 'bundled'; note: string; plugin_id?: string; plugin_version?: string }
+export type BuiltRow =
+  | { ok: true; row: number; key: string; name: string; area_mm2: number; entry: LibraryEntry; structure: StructureValue[]; closure: Closure;
+      derivation: Derivation; warnings: Issue[] }
+  | { ok: false; row: number; error: Issue };
+export interface DesignationParts {
+  text: string; model: string; prefixes: string[]; conductor: 'copper' | 'aluminium'; sheath: 'PVC' | 'PE'; description: string; name: string;
+  armour: { kind: string; label: string } | null; metal_sheath: string | null; u0_v: number | null; u_v: number | null; cores: number | null; area_mm2: number | null;
+}
+export interface BuildResult { designation: DesignationParts; rows: BuiltRow[]; modelling_used: string[] }
+
+export interface MethodIdentity { plugin_id: string; plugin_version: string; capability: string; method_version: string; manifest_sha256: string; request_sha256: string; run_id: string }
+export interface CheckRow {
+  id: string; title: string; standard: string; clause: string; printed_page?: number | null; pdf_page?: number | null;
+  limit: number | null; actual: number | null; margin: number | null; unit: string; comparison: string | null;
+  verdict: 'passed' | 'failed' | 'missing' | 'uncovered' | string; reason: string | null; formula?: string | null;
+  target: { scope: string; core_id: string | null; role: string };
+}
+export interface ValueRow { id: string; title?: string; label?: string; value: number | null; unit: string; status: string; reason?: string | null; formula?: string | null; source?: string | null }
+export interface RatingRow {
+  id: string; status: string; layout_label?: string; circuits?: number; tier?: Tier; ampacity_a?: number | null; basis_name?: string | null;
+  verification_passed?: boolean | null; ac_resistance_ohm_m?: number | null; warnings?: string[]; error?: Issue;
+}
+export interface RatingCondition { id: string; layout: string; depth_m: number; ambient_temperature_c: number; soil_thermal_resistivity: number }
+export interface ProductResult {
+  kind: ResultKind;
+  created: string;
+  by: string;
+  current: boolean;
+  error?: Issue;
+  method?: MethodIdentity | null;
+  rows?: (CheckRow | ValueRow | RatingRow)[];
+  summary?: { headline?: string | null; count: Record<string, number> };
+  standards?: string[];
+  undeclared_standards?: string[];
+  basis_missing?: { key: string; reason: string }[];
+  conditions?: { values: Record<string, number | string>; sources: Record<string, string> } | RatingCondition[];
+  warnings?: unknown[];
+}
+export interface SeriesSummary {
+  id: string; name: string; manufacturer: string; designation: string; description: string; cores: number; u0_v: number; u_v: number | null;
+  origin: string; standards: string[]; specs: number; states: Partial<Record<ReviewState, number>>; created: string; created_by: string; updated: string;
+}
+export interface SpecRow {
+  id: string; key: string; name: string; area_mm2: number; version: number; version_id: string; review: ReviewState;
+  outer_diameter_mm: number; r20_ohm_km: number | null; weight_kg_km: number | null; warnings: Issue[];
+  check: Record<string, number> | null; ac_resistance_ohm_km: number | null; short_circuit_ka: number | null; ampacity_a: number | null;
+  computed: Partial<Record<ResultKind, 'done' | 'error'>>;
+}
+export interface LibraryJob { id: string; series_id: string; title: string; done: number; total: number; state: 'running' | 'done' | 'failed'; error?: Issue }
+export interface SeriesView { series: SeriesSummary; declaration: SeriesDeclaration; specs: SpecRow[]; reference: RatingCondition | null; job: LibraryJob | null }
+export interface VersionHeader {
+  id: string; number: number; review: ReviewState; note: string; content_sha256: string; created: string; created_by: string;
+  submitted?: string | null; submitted_by?: string | null; reviewed?: string | null; reviewed_by?: string | null; published?: string | null; published_by?: string | null;
+}
+export interface LibraryEvent { id: number; at: string; by: string; object: string; object_id: string; action: string; detail: Record<string, unknown> }
+export interface SpecView {
+  series: SeriesSummary;
+  spec: { id: string; key: string; name: string; area_mm2: number };
+  version: VersionHeader;
+  entry: LibraryEntry;
+  structure: StructureValue[];
+  closure: Closure | null;
+  derivation: Derivation;
+  warnings: Issue[];
+  results: Partial<Record<ResultKind, ProductResult>>;
+  versions: VersionHeader[];
+  events: LibraryEvent[];
+}
+export interface TableColumn { index: number; letter: string; header: string; suggested: string | null; sample: (string | number | null)[] }
+export interface TableSheet {
+  name: string; rows: number; table: boolean; title?: string | null; header_rows?: number[]; first_data_row?: number; data_rows?: number; columns?: TableColumn[];
+}
+export interface TableInspection { upload: string; file: string; sheets: TableSheet[]; fields: { key: string; label: string; unit: string }[] }
+export interface ColumnMapping { name: string; mapping: Record<string, number>; headers: Record<string, string>; updated: string }
+/** One row of a structure table as it would enter the library: built, or the reason it cannot be. */
+export interface ImportRow {
+  source_row: number; ok: boolean; key?: string; name?: string; area_mm2?: number; outer_diameter_mm?: number; closure?: Closure;
+  derivation?: Derivation; warnings: Issue[]; error?: Issue;
+}
+export interface ImportPreview { designation: DesignationParts; rows: ImportRow[]; skipped: { row: number; text: string }[]; ready: number; failed: number }
+
 export type StudioEvent =
   | { type: 'task'; task: Task }
   | { type: 'proposal'; proposal: Proposal }
-  | { type: 'project'; project_id: string };
+  | { type: 'project'; project_id: string }
+  | { type: 'library'; series_id?: string; job?: LibraryJob };

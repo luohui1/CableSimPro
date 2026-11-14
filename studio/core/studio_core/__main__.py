@@ -10,7 +10,7 @@ import sys
 import threading
 
 from . import CoreError
-from . import layouts, library, methods, scene, study
+from . import catalogue, designation, layouts, library, methods, product, scene, structure, study, tables
 
 _library_lock = threading.Lock()
 _write_lock = threading.Lock()
@@ -21,20 +21,47 @@ def _library():
         return library.entries()
 
 
-def _defaults(model_id, content_sha256=None):
-    with _library_lock:
-        cable = library.get(model_id, content_sha256)
-    return {'cable': cable, 'installation': scene.default_installation(cable), 'conditions': scene.default_conditions(cable)}
+def _defaults(cable):
+    return {'installation': scene.default_installation(cable), 'conditions': scene.default_conditions(cable)}
 
 
 def _layouts(construction):
     return [{**item, 'default_duct': layouts.default_duct(item['kind'])} for item in layouts.options(construction)]
 
 
+def _vocabulary():
+    return {'fields': [{'key': key, 'label': label, 'unit': unit} for key, (label, unit, _, _) in structure.FIELDS.items()],
+            'modelling': [{'key': key, 'label': label, 'unit': unit} for key, (label, unit) in structure.MODELLING.items()],
+            'reference_modelling': structure.reference_modelling()}
+
+
+def _designation(text):
+    parts = designation.parse(text)
+    return {**parts, 'description': designation.describe(parts), 'name': designation.name(parts)}
+
+
+def _sample(name, path):
+    """A public catalogue written as a workbook, with what an engineer declares to import each of its tables."""
+    data = catalogue.tables(name)
+    written = catalogue.workbook(data, path)
+    declarations = []
+    for table, sheet in zip(data['tables'], written['sheets']):
+        series, _ = catalogue.table_series(data, table['id'])
+        declarations.append({'sheet': sheet, 'series': series})
+    return {**written, 'title': data['title'], 'manufacturer': data['manufacturer'], 'declarations': declarations}
+
+
 HANDLERS = {
     'ping': lambda: {'ok': True},
-    'library.list': _library,
-    'library.defaults': _defaults,
+    'library.bundled': _library,
+    'cable.defaults': _defaults,
+    'designation.parse': _designation,
+    'structure.vocabulary': _vocabulary,
+    'structure.build': lambda series, rows: structure.build(series, rows),
+    'tables.inspect': lambda path, designation=None: tables.inspect(path, designation),
+    'tables.rows': lambda path, sheet, first_data_row, mapping: tables.rows(path, sheet, first_data_row, mapping),
+    'catalogue.sample': _sample,
+    'product.compute': lambda items, kinds: product.compute(items, kinds),
     'layouts.list': _layouts,
     'methods.list': methods.catalogue,
     'scene.preview': lambda scene: study.preview(scene),
