@@ -35,7 +35,7 @@ python scripts/verify_release_workflows.py       # 新临时发布种子库，�
 cd frontend; node scripts/isolated-e2e.mjs verify-crossing-real-use.mjs # E2E_DATABASE_SOURCE 指向发布库：只读复制后实测交叉热源适用范围、降额及客户PDF
 python -m pytest                                # 后端 + 仓库卫生检查；默认 3 worker，python -m pytest -n 0 串行；临时目录与默认交付输出按本次运行隔离
 python scripts/run_plugin_tests_hpc.py          # 原生仿真回归提交 Slurm，自动回收结果与核时
-cd studio; npm install; npm run build; npm start # Cable Studio：http://127.0.0.1:8200/ ；npm test 走工程师与 Agent 真实流程
+cd studio; npm install; npm run build; npm start # Cable Studio：http://127.0.0.1:8200/ ；npm test 走工程师与 Agent 真实流程，npm run walk 在两种分辨率下走查界面
 python scripts/check_hygiene.py                 # 仓库卫生检查
 python scripts/clean.py [--dry-run]             # 清理本地中间文件
 python scripts/workspace_db.py backup --database .data/cablesim.sqlite --output .data/snapshots/library.sqlite

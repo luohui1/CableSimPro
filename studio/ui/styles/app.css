@@ -1,0 +1,137 @@
+/* The bridge from design/tokens.css to utility classes. Nothing here invents a value:
+   every colour, size, radius and duration is a token. The default Tailwind scales are
+   cleared so that a class outside the rule set does not exist. */
+@import 'tailwindcss';
+
+/* The CJK font draws the middle dot of a unit (K·m/W) a full character wide.
+   This face takes that one character from a Latin font, so units read as units. */
+@font-face {
+  font-family: 'Unit Dot';
+  src: local('Segoe UI'), local('Arial'), local('Helvetica Neue'), local('Helvetica');
+  unicode-range: U+00B7;
+}
+
+@theme inline {
+  --color-*: initial;
+  --color-ground: var(--ground);
+  --color-panel: var(--panel);
+  --color-fill: var(--fill);
+  --color-hover: var(--hover);
+  --color-line: var(--line);
+  --color-control: var(--control-border);
+  --color-ink: var(--text);
+  --color-ink-2: var(--text-secondary);
+  --color-ink-3: var(--text-weak);
+  --color-copper: var(--copper);
+  --color-on-copper: var(--on-copper);
+  --color-agent: var(--agent);
+  --color-agent-fill: var(--agent-fill);
+  --color-success: var(--success);
+  --color-attention: var(--attention);
+  --color-error: var(--error);
+  --color-conductor: var(--conductor);
+  --color-semi: var(--material-semi);
+  --color-insulation: var(--material-insulation);
+  --color-metal: var(--material-metal);
+  --color-sheath: var(--material-sheath);
+  --color-phase-a: var(--phase-a);
+  --color-phase-b: var(--phase-b);
+  --color-phase-c: var(--phase-c);
+  --color-scrim: var(--overlay);
+
+  --font-*: initial;
+  --font-sans: 'Unit Dot', 'Noto Sans SC Variable', var(--font-ui);
+  --font-mono: var(--font-code);
+
+  --text-*: initial;
+  --text-13: var(--text-note);
+  --text-13--line-height: 20px;
+  --text-14: var(--text-body);
+  --text-14--line-height: 22px;
+  --text-16: var(--text-subheading);
+  --text-16--line-height: 24px;
+  --text-20: var(--text-heading);
+  --text-20--line-height: 28px;
+  --text-28: var(--text-value);
+  --text-28--line-height: 34px;
+
+  --font-weight-*: initial;
+  --font-weight-normal: var(--weight-normal);
+  --font-weight-strong: var(--weight-strong);
+
+  --radius-*: initial;
+  --radius-chip: 6px;
+  --radius-field: var(--radius-input);
+  --radius-nav: var(--radius-item);
+  --radius-card: var(--radius-surface);
+  --radius-sheet: var(--radius-panel);
+  --radius-full: var(--radius-pill);
+
+  --shadow-*: initial;
+  --shadow-lift: var(--shadow-float);
+  --shadow-modal: var(--shadow-dialog);
+
+  --ease-*: initial;
+  --ease-std: var(--ease-standard);
+  --ease-leave: var(--ease-exit);
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: 22px;
+    font-weight: var(--weight-normal);
+    font-variant-numeric: tabular-nums;
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    cursor: default;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--copper) 24%, transparent);
+  }
+
+  svg text {
+    font-family: var(--font-sans);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Scroll areas inside panels: thin, quiet, only visible while needed. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--control-border) transparent;
+  }
+}
+
+/* Durations are tokens too. */
+@utility duration-fast {
+  transition-duration: var(--motion-fast);
+}
+@utility duration-std {
+  transition-duration: var(--motion-standard);
+}
+@utility duration-slow {
+  transition-duration: var(--motion-slow);
+}

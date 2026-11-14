@@ -1,4 +1,4 @@
-import type { AgentStatus, Issue, LibraryEntry, Proposal, ProjectMeta, ProjectView, RunRecord, StudioEvent, Task } from '../shared/types.ts';
+import type { AgentStatus, Issue, LibraryEntry, Proposal, ProjectMeta, ProjectView, RunRecord, StudioEvent, Task } from '@shared/types';
 
 export class ApiError extends Error {
   issue: Issue;

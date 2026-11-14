@@ -152,8 +152,33 @@ export interface CableState {
   capacitance_f_m: number;
 }
 
+/** How much of one cable's surface temperature rise each cable causes, at the saved load. */
+export interface HeatContribution {
+  target: string;
+  source: string;
+  self: boolean;
+  resistance_k_m_w: number;
+  source_loss_w_m: number;
+  temperature_rise_k: number;
+}
+
+/** The soil temperature field the method publishes for some layouts (artifact x-cablesim.temperature-field). */
+export interface TemperatureField {
+  schema_version: string;
+  mesh: { points: [number, number][]; triangles: [number, number, number][]; representation?: string };
+  temperature_k: number[];
+  analytical_soil_view?: {
+    model: string;
+    condition: string;
+    soil_thermal_resistivity_k_m_w: number;
+    excluded_regions?: { entity: string; center_m: [number, number]; radius_m: number; kind: string }[];
+  };
+}
+export const TEMPERATURE_FIELD = 'x-cablesim.temperature-field';
+
 export interface Summary {
   status: 'succeeded' | 'failed' | 'not_applicable';
+  heat_contributions?: HeatContribution[];
   error?: Issue;
   headline_text?: string;
   ampacity?: { value_a: number; basis: string; basis_name: string; meaning: string; limiting_cable: string; limiting_circuit: string } | null;
