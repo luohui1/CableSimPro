@@ -1,7 +1,7 @@
 // The shell of the workbench: project tree, canvas, property panel, with the agent at the side.
 import { Bot, Cable, Check, ChevronDown, CircleDot, FileText, FolderOpen, History, Layers, Loader, Play, Plus, Sigma, Thermometer, Zap } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import { BONDING_NAMES, compact, LEVEL_NAMES, PHASE_NAMES, STATE_NAMES } from '../shared/format.ts';
+import { compact, LEVEL_NAMES, PHASE_NAMES, STATE_NAMES } from '../shared/format.ts';
 import { AgentPanel, ReviewBar } from './agent.tsx';
 import { Badge, Button, Facts, Group, Notice, TierBadge } from './components.tsx';
 import { LibraryDialog, ProjectDialog, SelectionDialog, SweepDialog } from './dialogs.tsx';
@@ -100,8 +100,7 @@ function Tree({ studio }: { studio: Studio }) {
         }} />)}
     </div>)}
     <Node icon={<Thermometer size={16} />} label="工况" depth={1} active={step === 'conditions'} onClick={go('conditions')} />
-    <Node icon={<CircleDot size={15} />} label={`${compact(view.parts.conditions.ambient_temperature_c)} °C · ${compact(view.parts.conditions.soil_thermal_resistivity)} K·m/W · ${view.parts.conditions.currents_a.map(value => compact(value)).join(' / ')} A`}
-      depth={2} onClick={go('conditions')} />
+    <Node icon={<CircleDot size={15} />} label="稳态负荷" depth={2} onClick={go('conditions')} />
     <Node icon={<Sigma size={16} />} label="方法" depth={1} active={step === 'method'} onClick={go('method')} />
     <Node icon={<CircleDot size={15} />} label="IEC 60287 稳态载流量" depth={2} onClick={go('method')} />
     <Node icon={<History size={16} />} label={`运行记录（${view.runs.length}）`} depth={1} active={step === 'result' && !view.runs.length} onClick={go('result')} />
@@ -152,7 +151,7 @@ function StepPage({ studio, focused }: { studio: Studio; focused: string | null 
   const titles: Record<string, string> = { cable: '型号', installation: '敷设', conditions: '工况' };
   return <div className="page page-fill">
     <header className="page-head"><h2>{titles[step]}</h2>
-      {preview && <span className="page-object">{preview.layout_label} · {BONDING_NAMES[view.parts.installation.bonding]}</span>}
+      {preview && <span className="page-object">{preview.layout_label}</span>}
       {preview && <TierBadge tier={preview.tier} />}</header>
     {!preview && view.issue ? <IssueNotice issue={view.issue} studio={studio} title="这组输入还不能计算" />
       : preview && <section className="panel panel-canvas grow"><SectionDrawing document={preview.document} proposed={proposal?.preview?.document}

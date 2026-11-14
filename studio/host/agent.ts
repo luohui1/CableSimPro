@@ -6,7 +6,7 @@ import { Agent, type AgentEvent, type AgentTool, type ThinkingLevel } from '@ear
 import { createModels, createProvider, envApiKeyAuth, type Model } from '@earendil-works/pi-ai';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
 import { deepseekProvider } from '@earendil-works/pi-ai/providers/deepseek';
-import type { AgentStatus, Proposal, Task, TaskStep } from '../shared/types.ts';
+import type { AgentStatus, Proposal, Task } from '../shared/types.ts';
 import { StudioError } from './core.ts';
 import type { Operation, Studio } from './operations.ts';
 
