@@ -37,6 +37,14 @@ def single_core_entry(data, item):
     payload = library._single_core(label, area, item['conductor_diameter'] / 1000, item['r_dc_20'] / 1000,
                                    {'u0': data['u0_v'], 'u': data['u_v'], 'um': data['um_v']}, thicknesses,
                                    form='stranded_round_compacted', loss_tangent=assumed['insulation']['loss_tangent'], sheath=deepcopy(sheath))
+    # The standard kind of each material is what lets a method take its constants from the standard;
+    # the catalogue names the materials (copper, XLPE, lead, PVC), so the kinds are stated, not guessed.
+    kinds = {'material/cu': 'copper_bare', 'material/xlpe': 'XLPE', 'material/pb-sheath': 'lead', 'material/pvc': 'PVC'}
+    for material in payload['materials']:
+        if material['id'] in kinds:
+            material['standard_kind'] = kinds[material['id']]
+    # The catalogue's resistance is the maximum the manufacturer guarantees, not a measurement.
+    payload['cable_type']['cores'][0]['conductor']['r20_basis'] = 'manufacturer_limit'
     source = f"{data['source']['title']}；{data['source']['location']}；sha256:{data['source']['sha256']}。目录未给出的量按系列文件里声明的假设取值。"
     return library._entry(f"{data['id']}.{area:g}", '1.0.0', label, f"{data['designation']} {data['u0_v'] / 1000:g}/{data['u_v'] / 1000:g} kV 单芯",
                           'public', source, payload)
