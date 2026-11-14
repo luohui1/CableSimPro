@@ -167,13 +167,6 @@ export interface Summary {
   input_sha256?: string;
 }
 
-/** cablesim.temperature-field/1 as the plugin publishes it: a display mesh with node temperatures. */
-export interface TemperatureField {
-  mesh: { points: [number, number][]; triangles: [number, number, number][]; representation?: string };
-  temperature_k: number[];
-  analytical_soil_view?: { model: string; limitations: string[] };
-}
-
 export interface MethodCard {
   method: string;
   family: string;

@@ -104,15 +104,14 @@ export function fit(bounds: Bounds, width: number, height: number, margin: { top
   return { scale, x: (value: number) => originX + value * scale, y: (z: number) => originY + (bounds.top - z) * scale };
 }
 
-/** The temperature ramp of design/tokens.css (--temperature-1 … 6): pale at the ambient, darkest above the limit. */
-export const TEMPERATURE_RAMP = ['#FBF3E4', '#F2C98A', '#E58B47', '#C2452F', '#6E1F35', '#2A0F1E'];
-const RAMP = TEMPERATURE_RAMP.map(hex => [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16)));
-const STOPS = [0, .3, .6, .85, 1, 1.2];
-
-/** Colour for a temperature between the ambient (0) and the conductor limit (1). */
+/** Colour for a conductor temperature between the ambient and the limit: cool blue to hot red. */
 export function heat(temperature: number, ambient: number, limit: number): string {
-  const ratio = Math.max(0, Math.min(STOPS[STOPS.length - 1], (temperature - ambient) / Math.max(1, limit - ambient)));
-  const upper = Math.max(1, STOPS.findIndex(at => ratio <= at));
-  const t = (ratio - STOPS[upper - 1]) / (STOPS[upper] - STOPS[upper - 1]);
-  return `rgb(${RAMP[upper - 1].map((channel, index) => Math.round(channel + (RAMP[upper][index] - channel) * t)).join(',')})`;
+  const ratio = Math.max(0, Math.min(1.15, (temperature - ambient) / Math.max(1, limit - ambient)));
+  const stops: [number, [number, number, number]][] = [[0, [59, 130, 196]], [.45, [86, 178, 124]], [.75, [234, 179, 60]], [1, [220, 76, 60]], [1.15, [150, 30, 40]]];
+  const upper = stops.findIndex(([at]) => ratio <= at);
+  if (upper <= 0) return `rgb(${stops[0][1].join(',')})`;
+  const [a, colourA] = stops[upper - 1];
+  const [b, colourB] = stops[upper];
+  const t = (ratio - a) / (b - a);
+  return `rgb(${colourA.map((channel, index) => Math.round(channel + (colourB[index] - channel) * t)).join(',')})`;
 }

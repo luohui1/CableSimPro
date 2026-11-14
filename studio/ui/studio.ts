@@ -1,4 +1,4 @@
-// State of the workbench: where the engineer is, the open project, its runs, the selection and the agent's work.
+// State of the workbench: the open project, its runs, the selection and the agent's work.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentStatus, Issue, LibraryEntry, MethodCard, Proposal, ProjectMeta, ProjectView, RunHeader, RunRecord, Task } from '../shared/types.ts';
 import { api, ApiError, subscribe } from './api.ts';
@@ -8,36 +8,23 @@ export const STEPS: { id: Step; label: string }[] = [
   { id: 'cable', label: '型号' }, { id: 'installation', label: '敷设' }, { id: 'conditions', label: '工况' },
   { id: 'method', label: '方法' }, { id: 'result', label: '结果' }, { id: 'report', label: '计算书' },
 ];
-export type Page = 'home' | 'library' | 'methods' | 'settings' | 'project';
 export interface Selection { kind: 'cable' | 'ring'; id: string }
-export interface Route { page: Page; project?: string; step: Step; run?: string; model?: string }
+export interface Route { project?: string; step: Step; run?: string }
 export type DialogName = 'project' | 'library' | 'sweep' | 'selection' | null;
 export interface MethodEntry extends Omit<MethodCard, 'validation' | 'tier' | 'standards' | 'scope' | 'assumptions'> {
   id: string; title: string; answers: string[]; inputs: string[]; cost: string; plugin_version: string;
   validation_level: string; validation_cases: string[]; limitations: string[];
-  tiers: Record<string, { label: string; meaning: string }>;
 }
 
 function readRoute(): Route {
-  const [head, second, third, fourth] = location.hash.replace(/^#\/?/, '').split('/');
-  if (head === 'p' && second) return { page: 'project', project: second, step: STEPS.some(item => item.id === third) ? third as Step : 'cable', run: fourth || undefined };
-  if (head === 'library') return { page: 'library', step: 'cable', model: second ? decodeURIComponent(second) : undefined };
-  if (head === 'methods' || head === 'settings') return { page: head, step: 'cable' };
-  return { page: 'home', step: 'cable' };
-}
-
-function writeRoute(route: Route): string {
-  if (route.page === 'project' && route.project) return `/p/${route.project}/${route.step}${route.run ? '/' + route.run : ''}`;
-  if (route.page === 'library') return `/library${route.model ? '/' + encodeURIComponent(route.model) : ''}`;
-  return route.page === 'home' ? '/' : `/${route.page}`;
+  const [, project, step, run] = location.hash.replace(/^#\/?/, '').split('/');
+  return { project: project || undefined, step: STEPS.some(item => item.id === step) ? step as Step : 'cable', run: run || undefined };
 }
 
 export function useStudio() {
   const [route, setRoute] = useState<Route>(readRoute);
   const [status, setStatus] = useState<AgentStatus | null>(null);
-  const [home, setHome] = useState('');
   const [projects, setProjects] = useState<ProjectMeta[]>([]);
-  const [cards, setCards] = useState<Record<string, ProjectView>>({});
   const [library, setLibrary] = useState<LibraryEntry[]>([]);
   const [methods, setMethods] = useState<MethodEntry[]>([]);
   const [view, setView] = useState<ProjectView | null>(null);
@@ -47,20 +34,18 @@ export function useStudio() {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [agentOpen, setAgentOpen] = useState(false);
   const [dialog, setDialog] = useState<DialogName>(null);
-  const [dialogModel, setDialogModel] = useState<string | undefined>();
   const [busy, setBusy] = useState<string | null>(null);
   const [failure, setFailure] = useState<Issue | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
-  const projectId = route.page === 'project' ? route.project : undefined;
+  const projectId = route.project;
   const current = useRef(projectId);
   current.current = projectId;
 
   const navigate = useCallback((next: Partial<Route>) => {
-    const target: Route = { ...readRoute(), ...next };
-    if (next.project) target.page = 'project';
+    const target = { ...readRoute(), ...next };
     if ('step' in next && !('run' in next)) target.run = undefined;
-    location.hash = writeRoute(target);
+    location.hash = target.project ? `/p/${target.project}/${target.step}${target.run ? '/' + target.run : ''}` : '/';
   }, []);
 
   useEffect(() => {
@@ -69,33 +54,18 @@ export function useStudio() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  const reloadProjects = useCallback(async () => {
-    const list = await api.projects();
-    setProjects(list);
-    return list;
-  }, []);
+  const reloadProjects = useCallback(() => api.projects().then(setProjects), []);
   const reloadAgent = useCallback((id: string) => api.agent(id).then(state => {
     if (current.current !== id) return;
     setStatus(state.status); setTasks(state.tasks); setProposals(state.proposals);
   }), []);
-  const reloadView = useCallback((id: string) => api.project(id).then(next => {
-    setCards(all => ({ ...all, [id]: next }));
-    if (current.current === id) setView(next);
-  }), []);
+  const reloadView = useCallback((id: string) => api.project(id).then(next => { if (current.current === id) setView(next); }), []);
 
   useEffect(() => {
-    Promise.all([api.status().then(reply => { setStatus(reply.agent); setHome(reply.home); }), reloadProjects(), api.library().then(setLibrary),
+    Promise.all([api.status().then(reply => setStatus(reply.agent)), reloadProjects(), api.library().then(setLibrary),
       fetch('/api/methods').then(reply => reply.json()).then(setMethods)])
       .catch(problem => setLoadError(problem instanceof Error ? problem.message : String(problem)));
   }, [reloadProjects]);
-
-  // The home page shows every project with its section and latest answer.
-  useEffect(() => {
-    if (route.page !== 'home') return;
-    for (const project of projects) {
-      if (!cards[project.id]) api.project(project.id).then(next => setCards(all => ({ ...all, [project.id]: next }))).catch(() => undefined);
-    }
-  }, [route.page, projects, cards]);
 
   useEffect(() => {
     setView(null); setRecords({}); setSelection(null); setTasks([]); setProposals([]); setFailure(null);
@@ -108,7 +78,7 @@ export function useStudio() {
     const id = current.current;
     if (event.type === 'project') {
       void reloadProjects();
-      void reloadView(event.project_id).catch(() => undefined);
+      if (event.project_id === id) void reloadView(id);
     } else if (event.type === 'task' && event.task.project_id === id) {
       setTasks(list => [event.task, ...list.filter(task => task.id !== event.task.id)].sort((a, b) => b.created.localeCompare(a.created)));
     } else if (event.type === 'proposal' && event.proposal.project_id === id) {
@@ -174,16 +144,15 @@ export function useStudio() {
     const created = await api.op<ProjectView>('project.create', { name, model_id: model });
     await reloadProjects();
     setDialog(null);
-    navigate({ page: 'project', project: created.meta.id, step: 'cable', run: undefined });
+    navigate({ project: created.meta.id, step: 'cable', run: undefined });
   }, [navigate, reloadProjects]);
 
-  const openProjectDialog = useCallback((model?: string) => { setDialogModel(model); setDialog('project'); }, []);
   /** Open the agent panel with an instruction ready, for help on the selected object. */
   const askAgent = useCallback((instruction: string) => { setDraft(instruction); setAgentOpen(true); }, []);
 
   return {
-    route, navigate, status, home, projects, cards, library, methods, view, runs, runId, record, currentRating, selection, setSelection, tasks, proposals,
-    agentOpen, setAgentOpen, dialog, setDialog, dialogModel, openProjectDialog, busy, failure, setFailure, loadError, draft, setDraft,
+    route, navigate, status, projects, library, methods, view, runs, runId, record, currentRating, selection, setSelection, tasks, proposals,
+    agentOpen, setAgentOpen, dialog, setDialog, busy, failure, setFailure, loadError, draft, setDraft,
     write, run, exportReport, createProject, askAgent, reloadAgent,
   };
 }

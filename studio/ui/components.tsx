@@ -1,33 +1,15 @@
-// The workbench's controls. They follow design/tokens.css (FRONTEND_REQUIREMENTS §5): pill buttons,
-// white panels on a grey ground, copper for "run", teal for the agent. Every screen is built from these.
-import { Dialog as RadixDialog, DropdownMenu, Select as RadixSelect, Tooltip as RadixTooltip } from 'radix-ui';
-import { type ButtonHTMLAttributes, type ReactNode, useEffect, useId, useState } from 'react';
+// The workbench's own small set of controls. Every screen is built from these and the
+// tokens in styles.css; nothing is styled page by page.
+import { ChevronDown, ChevronRight, X } from 'lucide-react';
+import { type ButtonHTMLAttributes, type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { compact } from '../shared/format.ts';
 import type { Tier } from '../shared/types.ts';
-import { Icon } from './icon.tsx';
 
-type Tone = 'neutral' | 'ok' | 'warn' | 'bad' | 'agent';
-type Variant = 'outline' | 'primary' | 'run' | 'agent' | 'ghost';
+type Tone = 'neutral' | 'ok' | 'warn' | 'bad' | 'agent' | 'accent';
 
-export function Tooltip({ content, children }: { content: string; children: ReactNode }) {
-  return <RadixTooltip.Root>
-    <RadixTooltip.Trigger asChild>{children}</RadixTooltip.Trigger>
-    <RadixTooltip.Portal><RadixTooltip.Content className="tooltip" sideOffset={6}>{content}</RadixTooltip.Content></RadixTooltip.Portal>
-  </RadixTooltip.Root>;
-}
-
-export function Button({ variant = 'outline', size = 'standard', icon, children, className = '', ...rest }:
-  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; size?: 'standard' | 'compact'; icon?: string }) {
-  return <button type="button" className={`button button-${variant} button-${size} ${className}`} {...rest}>
-    {icon && <Icon name={icon} />}{children !== undefined && children !== null && <span>{children}</span>}
-  </button>;
-}
-
-export function IconButton({ icon, label, pressed, className = '', ...rest }:
-  Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & { icon: string; label: string; pressed?: boolean }) {
-  return <Tooltip content={label}>
-    <button type="button" className={`button button-ghost button-icon ${className}`} aria-label={label} aria-pressed={pressed} {...rest}><Icon name={icon} /></button>
-  </Tooltip>;
+export function Button({ variant = 'default', icon, children, className = '', ...rest }:
+  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'default' | 'primary' | 'ghost' | 'agent' | 'danger'; icon?: ReactNode }) {
+  return <button type="button" className={`btn btn-${variant} ${className}`} {...rest}>{icon}{children && <span>{children}</span>}</button>;
 }
 
 export function Badge({ tone = 'neutral', children, title }: { tone?: Tone; children: ReactNode; title?: string }) {
@@ -44,9 +26,9 @@ export function TierBadge({ tier }: { tier: Tier | string | undefined }) {
 }
 
 /** A labelled number with its unit. Commits on Enter or blur; Escape restores the saved value. */
-export function NumberField({ label, value, unit, scale = 1, digits = 5, placeholder, onCommit, nullable = false, min, disabled, proposed, autoFocus }: {
+export function NumberField({ label, value, unit, scale = 1, digits = 5, placeholder, onCommit, nullable = false, min, disabled, proposed }: {
   label: string; value: number | null | undefined; unit?: string; scale?: number; digits?: number; placeholder?: string;
-  onCommit: (value: number | null) => Promise<void> | void; nullable?: boolean; min?: number; disabled?: boolean; proposed?: string; autoFocus?: boolean;
+  onCommit: (value: number | null) => Promise<void> | void; nullable?: boolean; min?: number; disabled?: boolean; proposed?: string;
 }) {
   const id = useId();
   const shown = value === null || value === undefined ? '' : compact(value * scale, digits);
@@ -69,10 +51,10 @@ export function NumberField({ label, value, unit, scale = 1, digits = 5, placeho
     try { await onCommit(next); setError(''); } catch (problem) { setError(problem instanceof Error ? problem.message : String(problem)); } finally { setBusy(false); }
   }
 
-  return <div className={`field ${error ? 'is-error' : ''} ${proposed ? 'is-proposed' : ''}`}>
+  return <div className={`field ${error ? 'field-error' : ''} ${proposed ? 'field-proposed' : ''}`}>
     <label htmlFor={id}>{label}</label>
     <div className="field-control">
-      <input id={id} inputMode="decimal" value={draft} placeholder={placeholder} disabled={disabled || busy} aria-invalid={!!error} autoFocus={autoFocus}
+      <input id={id} inputMode="decimal" value={draft} placeholder={placeholder} disabled={disabled || busy} aria-invalid={!!error}
         onChange={event => setDraft(event.target.value)} onBlur={commit}
         onKeyDown={event => {
           if (event.key === 'Enter') { event.preventDefault(); void commit(); }
@@ -80,48 +62,30 @@ export function NumberField({ label, value, unit, scale = 1, digits = 5, placeho
         }} />
       {unit && <span className="field-unit">{unit}</span>}
     </div>
-    {proposed && <div className="field-note is-agent">Agent 提议改为 {proposed}</div>}
+    {proposed && <div className="field-note field-note-agent">Agent 提议改为 {proposed}</div>}
     {error && <div className="field-note" role="alert">{error}</div>}
   </div>;
 }
 
-export interface Option { value: string; label: string; group?: string }
-
-export function Select({ value, options, onChange, disabled, label, id }: {
-  value: string; options: Option[]; onChange: (value: string) => void; disabled?: boolean; label: string; id?: string;
-}) {
-  const groups = [...new Set(options.map(option => option.group ?? ''))];
-  const item = (option: Option) => <RadixSelect.Item key={option.value} value={option.value} className="select-item">
-    <RadixSelect.ItemText>{option.label}</RadixSelect.ItemText>
-    <RadixSelect.ItemIndicator className="select-check"><Icon name="action/check" /></RadixSelect.ItemIndicator>
-  </RadixSelect.Item>;
-  return <RadixSelect.Root value={value} onValueChange={onChange} disabled={disabled}>
-    <RadixSelect.Trigger id={id} className="select-trigger" aria-label={label}>
-      <RadixSelect.Value /><RadixSelect.Icon className="select-caret"><Icon name="action/chevron-down" /></RadixSelect.Icon>
-    </RadixSelect.Trigger>
-    <RadixSelect.Portal>
-      <RadixSelect.Content className="select-content" position="popper" sideOffset={4}>
-        <RadixSelect.Viewport>
-          {groups.map(group => group
-            ? <RadixSelect.Group key={group}><RadixSelect.Label className="select-label">{group}</RadixSelect.Label>{options.filter(option => option.group === group).map(item)}</RadixSelect.Group>
-            : options.filter(option => !option.group).map(item))}
-        </RadixSelect.Viewport>
-      </RadixSelect.Content>
-    </RadixSelect.Portal>
-  </RadixSelect.Root>;
-}
-
 export function SelectField({ label, value, options, onChange, disabled, proposed }: {
-  label: string; value: string; options: Option[]; onChange: (value: string) => Promise<void> | void; disabled?: boolean; proposed?: string;
+  label: string; value: string; options: { value: string; label: string; group?: string }[];
+  onChange: (value: string) => Promise<void> | void; disabled?: boolean; proposed?: string;
 }) {
   const id = useId();
   const [error, setError] = useState('');
-  return <div className={`field ${error ? 'is-error' : ''} ${proposed ? 'is-proposed' : ''}`}>
+  const groups = [...new Set(options.map(option => option.group ?? ''))];
+  return <div className={`field ${error ? 'field-error' : ''} ${proposed ? 'field-proposed' : ''}`}>
     <label htmlFor={id}>{label}</label>
-    <Select id={id} label={label} value={value} options={options} disabled={disabled} onChange={async next => {
-      try { await onChange(next); setError(''); } catch (problem) { setError(problem instanceof Error ? problem.message : String(problem)); }
-    }} />
-    {proposed && <div className="field-note is-agent">Agent 提议改为 {proposed}</div>}
+    <div className="field-control">
+      <select id={id} value={value} disabled={disabled} onChange={async event => {
+        try { await onChange(event.target.value); setError(''); } catch (problem) { setError(problem instanceof Error ? problem.message : String(problem)); }
+      }}>
+        {groups.map(group => group
+          ? <optgroup key={group} label={group}>{options.filter(option => option.group === group).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</optgroup>
+          : options.filter(option => !option.group).map(option => <option key={option.value} value={option.value}>{option.label}</option>))}
+      </select>
+    </div>
+    {proposed && <div className="field-note field-note-agent">Agent 提议改为 {proposed}</div>}
     {error && <div className="field-note" role="alert">{error}</div>}
   </div>;
 }
@@ -134,7 +98,7 @@ export function Group({ title, summary, defaultOpen = true, children, action }: 
   return <section className="group">
     <header className="group-head">
       <button type="button" className="group-toggle" aria-expanded={open} onClick={() => setOpen(value => !value)}>
-        <Icon name={open ? 'action/chevron-down' : 'action/chevron-right'} /><span>{title}</span>
+        {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}<span>{title}</span>
       </button>
       {!open && summary !== undefined && <span className="group-summary">{summary}</span>}
       {action}
@@ -148,10 +112,9 @@ export function Facts({ rows }: { rows: [string, ReactNode][] }) {
     <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>;
 }
 
-export function Notice({ tone = 'neutral', title, children, action, icon }: { tone?: Tone; title: string; children?: ReactNode; action?: ReactNode; icon?: string }) {
+export function Notice({ tone = 'neutral', title, children, action }: { tone?: Tone; title: string; children?: ReactNode; action?: ReactNode }) {
   return <div className={`notice notice-${tone}`} role={tone === 'bad' ? 'alert' : undefined}>
-    <Icon name={icon ?? (tone === 'bad' ? 'status/error' : tone === 'warn' ? 'status/warning' : 'status/info')} className="notice-icon" />
-    <div className="notice-text"><strong>{title}</strong>{children && <div>{children}</div>}</div>
+    <div><strong>{title}</strong>{children && <div className="notice-body">{children}</div>}</div>
     {action}
   </div>;
 }
@@ -159,47 +122,25 @@ export function Notice({ tone = 'neutral', title, children, action, icon }: { to
 export function Dialog({ title, onClose, children, footer, wide = false }: {
   title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean;
 }) {
-  return <RadixDialog.Root open onOpenChange={open => { if (!open) onClose(); }}>
-    <RadixDialog.Portal>
-      <RadixDialog.Overlay className="dialog-overlay" />
-      <RadixDialog.Content className={`dialog ${wide ? 'dialog-wide' : ''}`} aria-describedby={undefined}>
-        <header className="dialog-head"><RadixDialog.Title>{title}</RadixDialog.Title>
-          <RadixDialog.Close asChild><button type="button" className="button button-ghost button-icon" aria-label="关闭"><Icon name="action/close" /></button></RadixDialog.Close></header>
-        <div className="dialog-body">{children}</div>
-        {footer && <footer className="dialog-foot">{footer}</footer>}
-      </RadixDialog.Content>
-    </RadixDialog.Portal>
-  </RadixDialog.Root>;
+  const panel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    panel.current?.querySelector<HTMLElement>('input, select, textarea, button:not(.dialog-close)')?.focus();
+    const onKey = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); previous?.focus(); };
+  }, [onClose]);
+  return <div className="dialog-backdrop" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+    <div ref={panel} className={`dialog ${wide ? 'dialog-wide' : ''}`} role="dialog" aria-modal="true" aria-label={title}>
+      <header className="dialog-head"><h2>{title}</h2><button type="button" className="icon-btn dialog-close" aria-label="关闭" onClick={onClose}><X size={18} /></button></header>
+      <div className="dialog-body">{children}</div>
+      {footer && <footer className="dialog-foot">{footer}</footer>}
+    </div>
+  </div>;
 }
 
-/** Underline tabs: views of one object, never navigation between objects. */
-export function Tabs<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: string }[]; onChange: (value: T) => void; label: string }) {
-  return <div className="tabs" role="tablist" aria-label={label}>{options.map(option =>
+/** Underline tabs: used for views of one object, never for navigation between objects. */
+export function Tabs<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: string }[]; onChange: (value: T) => void }) {
+  return <div className="tabs" role="tablist">{options.map(option =>
     <button key={option.value} type="button" role="tab" aria-selected={option.value === value} className="tab" onClick={() => onChange(option.value)}>{option.label}</button>)}</div>;
 }
-
-/** A small pill switch between two or three states of one view. */
-export function Segmented<T extends string>({ value, options, onChange, label }: { value: T; options: { value: T; label: string }[]; onChange: (value: T) => void; label: string }) {
-  return <div className="segmented" role="group" aria-label={label}>{options.map(option =>
-    <button key={option.value} type="button" aria-pressed={option.value === value} onClick={() => onChange(option.value)}>{option.label}</button>)}</div>;
-}
-
-export function Menu({ trigger, items, align = 'end' }: {
-  trigger: ReactNode; align?: 'start' | 'end';
-  items: ({ label: string; detail?: string; icon?: string; onSelect: () => void; disabled?: boolean } | 'separator')[];
-}) {
-  return <DropdownMenu.Root>
-    <DropdownMenu.Trigger asChild>{trigger}</DropdownMenu.Trigger>
-    <DropdownMenu.Portal>
-      <DropdownMenu.Content className="menu" align={align} sideOffset={6}>
-        {items.map((item, index) => item === 'separator' ? <DropdownMenu.Separator key={index} className="menu-separator" />
-          : <DropdownMenu.Item key={item.label} className="menu-item" disabled={item.disabled} onSelect={item.onSelect}>
-            {item.icon && <Icon name={item.icon} />}
-            <span className="menu-text"><span>{item.label}</span>{item.detail && <span className="menu-detail">{item.detail}</span>}</span>
-          </DropdownMenu.Item>)}
-      </DropdownMenu.Content>
-    </DropdownMenu.Portal>
-  </DropdownMenu.Root>;
-}
-
-export const TooltipProvider = RadixTooltip.Provider;
