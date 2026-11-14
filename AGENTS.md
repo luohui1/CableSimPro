@@ -22,6 +22,7 @@
 | `plugins/` | 每个第一方插件一个 `plugins/<id>/src/` 与 v2 清单；IEC 标准子集、热网络交叉校核参考、原生算法及仿真插件；清单封签含静态引用的公共源码 |
 | `cablesim_sdk/` | 插件与宿主共用的领域和仿真工件契约 |
 | `plugin-spec/` | v2 插件清单与仍在使用的物理工件 JSON Schema；schema 数字版本不代表已删除的 v1 执行器 |
+| `studio/` | 电缆专业软件 Cable Studio：工作台 + Agent，直接引用 `plugins/` 与 `cablesim_sdk/`，不依赖 `backend/kernel`；说明见 `studio/README.md` |
 | `tests/` | 默认 pytest；`plugin-tests/` 需要原生环境 |
 | `scripts/` | 仍在使用的工具脚本（每个都必须被 CI、代码或本文件引用） |
 | `docs/` | `product/` 需求，`design/` 架构，`architecture/` 已实现的契约，`plugins/` 插件说明，`METHOD.md` 计算方法 |
@@ -34,6 +35,7 @@ python scripts/verify_release_workflows.py       # 新临时发布种子库，�
 cd frontend; node scripts/isolated-e2e.mjs verify-crossing-real-use.mjs # E2E_DATABASE_SOURCE 指向发布库：只读复制后实测交叉热源适用范围、降额及客户PDF
 python -m pytest                                # 后端 + 仓库卫生检查；默认 3 worker，python -m pytest -n 0 串行；临时目录与默认交付输出按本次运行隔离
 python scripts/run_plugin_tests_hpc.py          # 原生仿真回归提交 Slurm，自动回收结果与核时
+cd studio; npm install; npm run build; npm start # Cable Studio：http://127.0.0.1:8200/ ；npm test 走工程师与 Agent 真实流程
 python scripts/check_hygiene.py                 # 仓库卫生检查
 python scripts/clean.py [--dry-run]             # 清理本地中间文件
 python scripts/workspace_db.py backup --database .data/cablesim.sqlite --output .data/snapshots/library.sqlite

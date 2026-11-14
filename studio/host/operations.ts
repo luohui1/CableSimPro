@@ -52,6 +52,7 @@ export class Studio {
   events = new EventEmitter();
   operations = new Map<string, Operation>();
   #layouts = new Map<string, string>();
+  #options = new Map<string, LayoutOption[]>();
 
   constructor(core: Core, store: Store) {
     this.core = core;
@@ -79,10 +80,20 @@ export class Studio {
     }
   }
 
+  async layouts(construction: string): Promise<LayoutOption[]> {
+    const cached = this.#options.get(construction);
+    if (cached) return cached;
+    const options = await this.core.call<LayoutOption[]>('layouts.list', { construction });
+    for (const layout of options) this.#layouts.set(layout.kind, layout.label);
+    this.#options.set(construction, options);
+    return options;
+  }
+
   async view(id: string): Promise<ProjectView> {
     const meta = this.store.meta(id);
     const parts = this.store.parts(id);
-    return { meta, parts, inputs_sha256: inputsDigest(parts), ...(await this.preview(meta.name, parts)), runs: this.store.runs(id) };
+    return { meta, parts, inputs_sha256: inputsDigest(parts), ...(await this.preview(meta.name, parts)),
+             layouts: await this.layouts(parts.cable.summary.construction), runs: this.store.runs(id) };
   }
 
   /** Validate against the operation's schema, then run it. */
@@ -101,11 +112,7 @@ export class Studio {
   layoutLabel = (kind: string): string => this.#layouts.get(kind) ?? kind;
 
   async #changes(before: Parts, after: Partial<Parts>): Promise<Change[]> {
-    if (!this.#layouts.size) {
-      for (const construction of ['single_core', 'three_core']) {
-        for (const layout of await this.core.call<LayoutOption[]>('layouts.list', { construction })) this.#layouts.set(layout.kind, layout.label);
-      }
-    }
+    for (const construction of ['single_core', 'three_core']) await this.layouts(construction);
     return (Object.keys(after) as PartName[]).flatMap(part => describeChanges(part, before[part], after[part]!, this.layoutLabel));
   }
 
@@ -192,7 +199,7 @@ export class Studio {
       const before = store.parts(id);
       const next: Installation = { ...before.installation, ...patch };
       if (patch.layout && patch.layout !== before.installation.layout) {
-        const layouts = await core.call<LayoutOption[]>('layouts.list', { construction: before.cable.summary.construction });
+        const layouts = await this.layouts(before.cable.summary.construction);
         const layout = layouts.find(item => item.kind === patch.layout);
         if (!layout) {
           throw new StudioError({ code: 'LAYOUT_INVALID', path: '/installation/layout',

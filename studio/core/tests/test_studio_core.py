@@ -195,6 +195,7 @@ def test_selection_takes_the_smallest_public_size_that_carries_the_target():
     # the smallest has no steady state there at all, and still gets its own rating.
     assert smaller[-1]['conductor_at_target_c'] > 90.0
     assert smaller[0]['at_target_error']['code'] == 'THERMAL_RUNAWAY' and smaller[0]['ampacity_a'] > 0
+    assert 'conductor_at_target_c' not in smaller[0]
     assert len(record['request']['cases']) == 20 and record['kind'] == 'selection'
     # The chosen size's rating is the same number a single check of that cable gives.
     single = study.rate(scene_for(chosen['model_id'], 'three_core_buried_single'))

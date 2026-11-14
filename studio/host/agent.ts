@@ -42,7 +42,7 @@ export function modelFromEnvironment(env: NodeJS.ProcessEnv = process.env): Mode
   return null;
 }
 
-const NOT_CONFIGURED = '模型未配置。设置环境变量 DEEPSEEK_API_KEY，或设置 CABLE_STUDIO_MODEL_BASE_URL、CABLE_STUDIO_MODEL_ID、CABLE_STUDIO_MODEL_API_KEY（OpenAI 兼容接口）后重启。密钥只从环境变量读取，不写入磁盘。';
+const NOT_CONFIGURED = '设置环境变量 DEEPSEEK_API_KEY，或设置 CABLE_STUDIO_MODEL_BASE_URL、CABLE_STUDIO_MODEL_ID、CABLE_STUDIO_MODEL_API_KEY（OpenAI 兼容接口）后重启。密钥只从环境变量读取，不写入磁盘。';
 
 function systemPrompt(name: string, id: string): string {
   return `你是电缆载流量工程师的同事，在一套专业工作台软件里干活。当前工程：${name}（${id}）。
@@ -215,7 +215,7 @@ export class AgentService {
   }
 
   instruct(project: string, instruction: string, context?: string): Task {
-    if (!this.#runtime) throw new StudioError({ code: 'MODEL_NOT_CONFIGURED', message: NOT_CONFIGURED }, 409);
+    if (!this.#runtime) throw new StudioError({ code: 'MODEL_NOT_CONFIGURED', message: '模型未配置。' + NOT_CONFIGURED }, 409);
     const session = this.#session(project);
     if (session.task) throw new StudioError({ code: 'AGENT_BUSY', message: 'Agent 正在做上一件事；等它做完，或先停止。' }, 409);
     const task: Task = { id: 't-' + randomBytes(4).toString('hex'), project_id: project, instruction, context, status: 'running',

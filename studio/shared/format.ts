@@ -22,6 +22,7 @@ export const EDDY_NAMES: Record<string, string> = { ignored: '不计', trefoil: 
 export const KIND_NAMES: Record<string, string> = { rating: '校核', sweep: '扫描', selection: '选型' };
 export const STATE_NAMES: Record<string, string> = { demo: '结构演示', public: '公开厂家资料' };
 export const PHASE_NAMES: Record<string, string> = { A: 'A 相', B: 'B 相', C: 'C 相', L1L2L3: '三芯电缆' };
+export const LEVEL_NAMES: Record<string, string> = { 'reference-benchmark': '公开算例对照', 'self-consistency': '自洽检查', unverified: '未验证' };
 
 export interface Field {
   key: string;

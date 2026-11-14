@@ -190,7 +190,7 @@ def sweep(scene_input, variable, values):
         point.update(ampacity_a=summary['ampacity']['value_a'] if summary['ampacity'] else None,
                      limiting_cable=summary['ampacity']['limiting_cable'] if summary['ampacity'] else None,
                      hottest_conductor_c=hottest['conductor_c'] if hottest else None,
-                     within_limit=summary['operating']['within_limit'])
+                     within_limit=summary['operating']['within_limit'], operating_error=summary['operating']['error'])
     first = next((case for case in run['cases'] if case['status'] == 'succeeded'), None)
     return _record('sweep', run, cases, {
         'sweep': {'variable': variable, **SWEEPS[variable], 'points': points},
@@ -250,11 +250,12 @@ def select(scene_input, candidate_ids, target_current_a):
                    margin_a=None if ampacity is None else ampacity - target_current_a,
                    tier=methods.tier(documents[row['case_id']], parameter_sets[row['case_id']])['tier'])
         loaded = summarize(by_id[row['case_id']], documents[row['case_id']])
-        if loaded['status'] == 'succeeded':
-            hottest = max(loaded['operating']['cables'], key=lambda s: s['conductor_c'], default=None)
-            row['conductor_at_target_c'] = hottest['conductor_c'] if hottest else None
-        else:
+        if loaded['status'] != 'succeeded':
             row['at_target_error'] = loaded['error']
+        elif loaded['operating']['error']:
+            row['at_target_error'] = loaded['operating']['error']
+        else:
+            row['conductor_at_target_c'] = max(s['conductor_c'] for s in loaded['operating']['cables'])
     passing = sorted((row for row in rows if row.get('meets_target')), key=lambda row: (row['area_mm2'], row['ampacity_a']))
     chosen = passing[0] if passing else None
     first_id = chosen['case_id'] if chosen else next(

@@ -182,7 +182,10 @@ export interface MethodCard {
   tier: Tier;
 }
 
-export interface SweepPoint { case_id: string; value: number; status?: string; error?: Issue; ampacity_a?: number | null; limiting_cable?: string | null; hottest_conductor_c?: number | null; within_limit?: boolean | null }
+export interface SweepPoint {
+  case_id: string; value: number; status?: string; error?: Issue; ampacity_a?: number | null; limiting_cable?: string | null;
+  hottest_conductor_c?: number | null; within_limit?: boolean | null; operating_error?: Issue | null;
+}
 export interface Candidate {
   case_id: string;
   model_id: string;
@@ -245,6 +248,8 @@ export interface ProjectView {
   inputs_sha256: string;
   preview: Preview | null;
   issue: Issue | null;
+  /** Laying templates for this cable's core count; available even while the inputs have an issue. */
+  layouts: LayoutOption[];
   runs: RunHeader[];
 }
 

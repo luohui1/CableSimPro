@@ -1,6 +1,6 @@
 // The calculation sheet: one self-contained, printable HTML file rendered from a run record.
 // It only restates what the record holds; nothing is recomputed here.
-import { BONDING_NAMES, compact, EDDY_NAMES, fixed, KIND_NAMES, PHASE_NAMES, STATE_NAMES } from '../shared/format.ts';
+import { BONDING_NAMES, compact, EDDY_NAMES, fixed, KIND_NAMES, LEVEL_NAMES, PHASE_NAMES, STATE_NAMES } from '../shared/format.ts';
 import { cableShape, fit, heat, sectionShape } from '../shared/geometry.ts';
 import type { CableState, DomainDocument, RunRecord, Summary } from '../shared/types.ts';
 
@@ -16,59 +16,61 @@ const list = (items: string[]): string => items.length ? `<ul>${items.map(item =
 
 function cableName(id: string, document: DomainDocument): string {
   for (const circuit of document.circuits) {
+    if (circuit.id === id) return circuit.label;
     const cable = circuit.cables.find(item => item.id === id);
-    if (cable) return `${circuit.label} · ${PHASE_NAMES[cable.phase] ?? cable.phase}`;
+    if (cable) return cable.phase === 'L1L2L3' ? circuit.label : `${circuit.label} · ${PHASE_NAMES[cable.phase] ?? cable.phase}`;
   }
   return id;
 }
 
-export function sectionSvg(document: DomainDocument, states: CableState[] = [], ambient = 0, width = 640, height = 360): string {
+/** The cable group drawn to scale, with the legend beside it so no label covers a cable. */
+export function sectionSvg(document: DomainDocument, states: CableState[] = [], ambient = 0, width = 720, height = 320): string {
   const section = document.sections[0];
   const { cables, bounds, shape } = sectionShape(document);
-  const view = fit(bounds, width, height, { top: 44, right: 70, bottom: 40, left: 96 });
+  const legend = 200;
+  const groupTop = Math.max(...cables.map(cable => cable.z + cable.radius),
+    ...(section.enclosures ?? []).map(duct => duct.z + (duct.outer_diameter ?? 0) / 2),
+    section.backfill ? section.backfill.z + section.backfill.height / 2 : -Infinity);
+  const pad = Math.max(.05, .28 * Math.max(bounds.right - bounds.left, groupTop - bounds.bottom));
+  const view = fit({ left: bounds.left - pad, right: bounds.right + pad, bottom: bounds.bottom, top: Math.min(0, groupTop + pad) },
+    width - legend, height, { top: 44, right: 16, bottom: 54, left: 16 });
   const byId = new Map(states.map(state => [state.id, state]));
   const parts: string[] = [];
   const ground = view.y(0);
-  parts.push(`<rect x="0" y="${ground}" width="${width}" height="${height - ground}" fill="#f4f1ea"/>`);
-  parts.push(`<line x1="0" y1="${ground}" x2="${width}" y2="${ground}" stroke="#555" stroke-width="1.5"/>`);
-  parts.push(`<text x="12" y="${ground - 8}" class="t">地表</text>`);
+  const groundShown = ground > 30;
+  parts.push(`<rect x="0" y="${Math.max(0, ground)}" width="${width - legend}" height="${height - Math.max(0, ground)}" fill="#f4f1ea"/>`);
+  if (groundShown) parts.push(`<line x1="0" y1="${ground}" x2="${width - legend}" y2="${ground}" stroke="#555" stroke-width="1.5"/><text x="12" y="${ground - 8}" class="t">地表</text>`);
   if (section.backfill) {
     const region = section.backfill;
     parts.push(`<rect x="${view.x(region.x - region.width / 2)}" y="${view.y(region.z + region.height / 2)}" width="${region.width * view.scale}" height="${region.height * view.scale}" fill="#e3e6ea" stroke="#8a929c" stroke-dasharray="5 4"/>`);
   }
-  for (const enclosure of section.enclosures ?? []) {
-    parts.push(`<circle cx="${view.x(enclosure.x)}" cy="${view.y(enclosure.z)}" r="${(enclosure.outer_diameter ?? 0) / 2 * view.scale}" fill="#fff" stroke="#6b7280" stroke-width="${Math.max(1, ((enclosure.outer_diameter ?? 0) - (enclosure.inner_diameter ?? 0)) / 2 * view.scale)}"/>`);
+  for (const duct of section.enclosures ?? []) {
+    parts.push(`<circle cx="${view.x(duct.x)}" cy="${view.y(duct.z)}" r="${((duct.outer_diameter ?? 0) + (duct.inner_diameter ?? 0)) / 4 * view.scale}" fill="#fff" stroke="#6b7280" stroke-width="${Math.max(1.5, ((duct.outer_diameter ?? 0) - (duct.inner_diameter ?? 0)) / 2 * view.scale)}"/>`);
   }
   const conductor = shape.rings.filter(ring => ring.role === 'conductor');
+  const colour = (id: string) => { const state = byId.get(id); return state ? heat(state.conductor_c, ambient, state.limit_c) : '#c8793a'; };
   for (const cable of cables) {
-    const state = byId.get(cable.id);
     const cx = view.x(cable.x), cy = view.y(cable.z);
-    parts.push(`<circle cx="${cx}" cy="${cy}" r="${cable.radius * view.scale}" fill="#d9dde3" stroke="#374151"/>`);
-    for (const ring of conductor) {
-      parts.push(`<circle cx="${cx + ring.cx * view.scale}" cy="${cy - ring.cz * view.scale}" r="${ring.outer * view.scale}" fill="${state ? heat(state.conductor_c, ambient, state.limit_c) : '#b8793a'}"/>`);
-    }
+    parts.push(`<circle cx="${cx}" cy="${cy}" r="${cable.radius * view.scale}" fill="#d3d8de" stroke="#374151"/>`);
+    for (const ring of conductor) parts.push(`<circle cx="${cx + ring.cx * view.scale}" cy="${cy - ring.cz * view.scale}" r="${ring.outer * view.scale}" fill="${colour(cable.id)}"/>`);
   }
-  // Labels sit beside the group so they never cover a cable.
-  const right = view.x(bounds.right) + 10;
-  cables.forEach((cable, index) => {
-    const state = byId.get(cable.id);
-    const label = `${cables.length > 3 ? cable.circuitLabel + ' ' : ''}${PHASE_NAMES[cable.phase] ?? cable.phase}${state ? ` ${fixed(state.conductor_c)} °C` : ''}`;
-    parts.push(`<text x="${right}" y="${view.y(bounds.top) + 36 + index * 18}" class="t">${escape(label)}</text>`);
-  });
   const depth = section.layout_template?.depth;
-  if (depth) {
-    const x = view.x(bounds.left) - 34;
-    parts.push(`<path d="M${x} ${ground}V${view.y(-depth)}M${x - 5} ${ground}h10M${x - 5} ${view.y(-depth)}h10" stroke="#111" fill="none"/>`);
-    parts.push(`<text x="${x - 8}" y="${(ground + view.y(-depth)) / 2 + 4}" class="t" text-anchor="end">埋深 ${compact(depth)} m</text>`);
-  }
+  if (depth) parts.push(`<text x="12" y="22" class="b">中心埋深 ${compact(depth)} m${groundShown ? '' : '（地表在图的上方）'}</text>`);
   const spacing = section.layout_template?.spacing;
   if (spacing && cables.length > 1) {
-    const y = view.y(bounds.bottom) + 22;
-    const [a, b] = [...cables].sort((p, q) => p.x - q.x).slice(-2);
+    const y = Math.min(height - 28, view.y(bounds.bottom) + 22);
+    const [a, b] = [...cables].sort((p, q) => p.x - q.x || q.z - p.z).slice(0, 2);
     parts.push(`<path d="M${view.x(a.x)} ${y}H${view.x(b.x)}M${view.x(a.x)} ${y - 5}v10M${view.x(b.x)} ${y - 5}v10" stroke="#111" fill="none"/>`);
-    parts.push(`<text x="${(view.x(a.x) + view.x(b.x)) / 2}" y="${y + 16}" class="t" text-anchor="middle">中心距 ${compact(spacing * 1000)} mm</text>`);
+    parts.push(`<text x="${(view.x(a.x) + view.x(b.x)) / 2}" y="${y + 18}" class="b" text-anchor="middle">中心距 ${compact(spacing * 1000, 5)} mm</text>`);
   }
-  return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="敷设截面"><style>.t{font:13px sans-serif;fill:#111}</style>${parts.join('')}</svg>`;
+  cables.forEach((cable, index) => {
+    const state = byId.get(cable.id);
+    const y = 22 + index * 22;
+    parts.push(`<rect x="${width - legend + 14}" y="${y - 11}" width="12" height="12" rx="3" fill="${colour(cable.id)}"/>`);
+    parts.push(`<text x="${width - legend + 34}" y="${y}" class="t">${escape(cableName(cable.id, document))}</text>`);
+    if (state) parts.push(`<text x="${width - 4}" y="${y}" class="b" text-anchor="end">${fixed(state.conductor_c)} °C</text>`);
+  });
+  return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="敷设截面"><style>.t{font:13px sans-serif;fill:#111}.b{font:600 13px sans-serif;fill:#111}</style>${parts.join('')}</svg>`;
 }
 
 function cableTable(record: RunRecord): string {
@@ -107,15 +109,15 @@ function sweepChart(record: RunRecord): string {
   const xs = points.map(point => point.value), ys = points.map(point => point.ampacity_a!);
   const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
   const px = (value: number) => left + (value - x0) / (x1 - x0 || 1) * (width - left - 24);
-  const py = (value: number) => 20 + (y1 - value) / (y1 - y0 || 1) * (height - bottom - 20);
+  const py = (value: number) => 40 + (y1 - value) / (y1 - y0 || 1) * (height - bottom - 40);
   const path = points.map((point, index) => `${index ? 'L' : 'M'}${px(point.value)} ${py(point.ampacity_a!)}`).join('');
   const dots = points.map(point => `<circle cx="${px(point.value)}" cy="${py(point.ampacity_a!)}" r="3.5" fill="#1f4e79"/>`).join('');
   return `<svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="扫描曲线"><style>.t{font:13px sans-serif;fill:#111}</style>
-    <path d="M${left} 20V${height - bottom}H${width - 24}" stroke="#555" fill="none"/><path d="${path}" stroke="#1f4e79" stroke-width="2" fill="none"/>${dots}
-    <text x="${left - 8}" y="26" class="t" text-anchor="end">${fixed(y1, 0)}</text><text x="${left - 8}" y="${height - bottom}" class="t" text-anchor="end">${fixed(y0, 0)}</text>
+    <path d="M${left} 40V${height - bottom}H${width - 24}" stroke="#555" fill="none"/><path d="${path}" stroke="#1f4e79" stroke-width="2" fill="none"/>${dots}
+    <text x="${left - 8}" y="45" class="t" text-anchor="end">${fixed(y1, 0)}</text><text x="${left - 8}" y="${height - bottom}" class="t" text-anchor="end">${fixed(y0, 0)}</text>
     <text x="${left}" y="${height - 18}" class="t">${compact(x0)}</text><text x="${width - 24}" y="${height - 18}" class="t" text-anchor="end">${compact(x1)}</text>
     <text x="${width / 2}" y="${height - 4}" class="t" text-anchor="middle">${escape(record.sweep!.label)} ${escape(record.sweep!.unit)}</text>
-    <text x="14" y="14" class="t">允许电流 A</text></svg>`;
+    <text x="14" y="16" class="t">允许电流 A</text></svg>`;
 }
 
 function results(record: RunRecord): string {
@@ -123,7 +125,8 @@ function results(record: RunRecord): string {
   if (record.kind === 'sweep') {
     const sweep = record.sweep!;
     return `<h2>结果</h2>${sweepChart(record)}${table([`${sweep.label} ${sweep.unit}`, '允许电流 A', '保存负荷下最热导体 °C', '说明'], sweep.points.map(point => [
-      compact(point.value), fixed(point.ampacity_a), fixed(point.hottest_conductor_c, 2), point.error?.message ?? (point.within_limit === false ? '保存负荷超过温限' : '')]), [0, 1, 2])}`;
+      compact(point.value), fixed(point.ampacity_a), point.operating_error ? '无稳态解' : fixed(point.hottest_conductor_c, 2),
+      point.error?.message ?? point.operating_error?.message ?? (point.within_limit === false ? '保存负荷超过温限' : '')]), [0, 1, 2])}`;
   }
   if (record.kind === 'selection') {
     const selection = record.selection!;
@@ -131,7 +134,7 @@ function results(record: RunRecord): string {
     return `<h2>结果</h2><p class="lead">${chosen ? `选定 ${escape(chosen.name)}：允许电流 ${fixed(chosen.ampacity_a)} A，目标 ${compact(selection.target_current_a)} A，余量 ${fixed(chosen.margin_a)} A。` : escape(selection.reason)}</p>
       <p>${escape(selection.rule)}</p>${table(['候选型号', '截面 mm²', '允许电流 A', '余量 A', '目标电流下导体 °C', '结论'], selection.candidates.map(row => [
       row.name + (row.model_id === selection.chosen ? '（选定）' : ''), compact(row.area_mm2), fixed(row.ampacity_a), fixed(row.margin_a),
-      row.conductor_at_target_c !== undefined ? fixed(row.conductor_at_target_c, 1) : row.at_target_error ? '无稳态解' : '—',
+      typeof row.conductor_at_target_c === 'number' ? fixed(row.conductor_at_target_c, 1) : row.at_target_error ? '无稳态解' : '—',
       row.error?.message ?? (row.meets_target ? '满足' : '不满足')]), [1, 2, 3, 4])}`;
   }
   const summary = record.summary as Summary;
@@ -172,7 +175,7 @@ export function renderReport(record: RunRecord): string {
     @media print{main{padding:0;max-width:none}h2{break-after:avoid}table,figure{break-inside:avoid}}
   </style></head><body><main>
   <h1>载流量计算书</h1>
-  ${pairs([['工程', record.project.name], ['记录', `#${record.sequence} · ${record.id}`], ['类型', KIND_NAMES[record.kind]], ['生成时间', record.created.replace('T', ' ').slice(0, 19) + ' UTC'],
+  ${pairs([['工程', record.project.name], ['记录', `#${record.sequence} · ${record.id}`], ['类型', KIND_NAMES[record.kind]], ['运行时间', new Date(record.created).toLocaleString('zh-CN', { hour12: false })],
     ['发起', record.by === 'agent' ? 'Agent（经同一套操作）' : '工程师']])}
   <h2>结论</h2>
   <p class="lead">${escape(conclusion)}${limiting ? `，${escape(limiting)}` : ''}</p>
@@ -207,7 +210,7 @@ export function renderReport(record: RunRecord): string {
   ${verification ? `<h2>核对</h2><p>${escape(verification.basis)}</p>${table(['对象', '核对项', '计算值', '核对值', '差值', '容差', '单位', '结论'], verification.rows.map(row => [
     document ? cableName(row.entity, document) : row.entity, row.item, compact(row.computed, 8), compact(row.reference, 8), row.difference.toExponential(2),
     String(row.tolerance), row.unit, row.passed ? '通过' : '未通过']), [2, 3, 4, 5])}` : ''}
-  ${card ? `<h2>方法卡</h2>${pairs([['方法', card.method], ['方法族', card.family], ['插件', card.plugin], ['方法版本', card.method_version], ['验证等级', card.validation.level]])}
+  ${card ? `<h2>方法卡</h2>${pairs([['方法', card.method], ['方法族', card.family], ['插件', card.plugin], ['方法版本', card.method_version], ['验证等级', LEVEL_NAMES[card.validation.level] ?? card.validation.level]])}
   <p>${escape(card.summary)}</p><h3>依据标准</h3>${list(card.standards)}<h3>本敷设形式的验证依据</h3>${list(card.validation.this_configuration)}
   <h3>方法的全部验证算例</h3>${list(card.validation.cases)}<h3>假设与取舍</h3>${list(card.assumptions)}<h3>适用范围与限制</h3>${list(card.scope)}` : ''}
   ${summary?.warnings?.length ? `<h3>运行提示</h3>${list(summary.warnings.map(warning => warning.message))}` : ''}
