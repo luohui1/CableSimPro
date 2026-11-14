@@ -97,15 +97,15 @@ try {
       const cable = await page.locator('[data-cable]').first().boundingBox();
       if (!cable) throw new Error('no cable on the drawing');
       await page.mouse.click(cable.x + cable.width / 2, cable.y + cable.height / 2);
-      await page.getByRole('tab', { name: '对象' }).click();
+      await page.getByRole('tab', { name: '选中的电缆' }).click();
       await check(`${name}-object`);
 
-      await page.getByRole('button', { name: /^额定/ }).click();
+      await page.getByRole('button', { name: /^带满/ }).click();
       await page.getByRole('tab', { name: '为什么是这个数' }).click();
       await check(`${name}-rated`);
-      await page.getByRole('button', { name: /^保存负荷/ }).click();
+      await page.getByRole('button', { name: /^现在 / }).click();
 
-      await page.getByRole('tab', { name: '方法' }).click();
+      await page.getByRole('tab', { name: '算法和可信度' }).click();
       await check(`${name}-method`);
 
       for (const slot of ['电缆', '敷设', '工况', '方法']) {

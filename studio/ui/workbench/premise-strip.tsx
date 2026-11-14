@@ -9,7 +9,7 @@ import type { ProjectView } from '@shared/types';
 
 function Slot({ icon, label, value, aside, children }: { icon: string; label: string; value: ReactNode; aside?: ReactNode; children: ReactNode }) {
   return <Popover trigger={
-    <button type="button" className="flex h-14 min-w-0 items-center gap-2.5 px-3.5 text-left transition-colors duration-fast ease-std hover:bg-hover data-[popup-open]:bg-fill">
+    <button type="button" className="flex h-14 min-w-0 items-center gap-2.5 px-3 text-left transition-colors duration-fast ease-std hover:bg-hover data-[popup-open]:bg-fill">
       <Icon name={icon} className="text-ink-2" />
       <span className="min-w-0 flex-1">
         <span className="flex h-6 items-center justify-between gap-2 text-13 text-ink-2">{label}{aside}</span>
@@ -30,7 +30,8 @@ export function PremiseStrip({ view }: { view: ProjectView }) {
     .map(field => ({ label: field.label, value: display(field, pick(source, field.key)) }));
   const limit = (cable.payload.cable_type.rating.max_conductor_temperature.normal ?? 363.15) - 273.15;
 
-  return <div className="grid shrink-0 grid-cols-[minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1.3fr)_minmax(0,1.1fr)] divide-x divide-line border-b border-line">
+  return <div className="grid shrink-0 grid-cols-[52px_minmax(0,1.5fr)_minmax(0,1.1fr)_minmax(0,1.3fr)_minmax(0,1.1fr)] divide-x divide-line border-b border-line">
+    <span className="flex items-center justify-center text-13 font-strong text-ink-2">已知</span>
     <Slot icon="object/cable" label="电缆" value={cable.name}>
       <Title>{cable.name}</Title>
       <Facts rows={[
@@ -53,7 +54,7 @@ export function PremiseStrip({ view }: { view: ProjectView }) {
       ]} />
     </Slot>
 
-    <Slot icon="object/conditions" label="工况" value={<span className="flex gap-3.5">
+    <Slot icon="object/conditions" label="工况" value={<span className="flex gap-3">
       <span>{conditions.currents_a.map(value => compact(value)).join(' / ')} A</span>
       <span>{compact(conditions.soil_thermal_resistivity)} K·m/W</span>
       <span>{compact(conditions.ambient_temperature_c)} °C</span>

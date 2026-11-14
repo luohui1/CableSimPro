@@ -9,12 +9,14 @@ import { queryClient } from '@/state/queries';
 import { useTheme } from '@/state/theme';
 import type { ProjectMeta, RunHeader } from '@shared/types';
 
-export function TopBar({ projects, project, run, runnable, onOpenProject, onOpenRun }: {
+export function TopBar({ projects, project, run, runnable, fresh, onOpenProject, onOpenRun }: {
   projects: ProjectMeta[];
   project: ProjectMeta | undefined;
   /** The shown run, when a calculation sheet can be made from it. */
   run: string | undefined;
   runnable: boolean;
+  /** The shown result belongs to the project's present inputs. */
+  fresh: boolean;
   onOpenProject: (id: string) => void;
   onOpenRun: (run: string) => void;
 }) {
@@ -55,7 +57,8 @@ export function TopBar({ projects, project, run, runnable, onOpenProject, onOpen
     </Menu>
     <div className="flex-1" />
     <ToolButton icon="nav/theme" label={theme === 'light' ? '换成深色' : '换成浅色'} onClick={toggle} />
-    <Button icon="result/report" disabled={!run} busy={sheet.isPending} onClick={() => sheet.mutate()}>计算书</Button>
-    <Button variant="primary" icon="run/run" disabled={!runnable} busy={rate.isPending} onClick={() => rate.mutate()}>运行校核</Button>
+    {/* One copper button: the next step. Without a result that is to compute; with a fresh result it is the sheet. */}
+    <Button variant={fresh ? 'outline' : 'primary'} icon="run/run" disabled={!runnable} busy={rate.isPending} onClick={() => rate.mutate()}>{fresh ? '重新计算' : '运行校核'}</Button>
+    <Button variant={fresh ? 'primary' : 'outline'} icon="result/report" disabled={!run} busy={sheet.isPending} onClick={() => sheet.mutate()}>{fresh ? '出计算书' : '计算书'}</Button>
   </header>;
 }

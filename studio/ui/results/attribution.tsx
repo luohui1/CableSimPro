@@ -23,12 +23,12 @@ function LimitingRank({ rating, ramp, name }: { rating: Rating; ramp: Ramp; name
   const circuits = rating.summary.circuits ?? [];
   const several = circuits.length > 1;
   return <>
-    <SectionTitle>谁先到温限</SectionTitle>
-    <div className={cn('grid items-center gap-x-3 text-14', several ? 'grid-cols-[auto_minmax(0,1fr)_64px_76px]' : 'grid-cols-[auto_minmax(0,1fr)_64px]')}>
+    <SectionTitle>哪根最热</SectionTitle>
+    <div className={cn('grid items-center gap-x-3 text-14', several ? 'grid-cols-[auto_minmax(0,1fr)_64px_100px]' : 'grid-cols-[auto_minmax(0,1fr)_64px]')}>
       <span />
-      <span className="pb-1.5 text-13 text-ink-2">导体温度</span>
+      <span className="pb-1.5 text-13 whitespace-nowrap text-ink-2">导体温度</span>
       <span />
-      {several && <span className="pb-1.5 text-right text-13 text-ink-2">单独能带</span>}
+      {several && <span className="pb-1.5 text-right text-13 text-ink-2">别的不变时最多</span>}
       {rating.states.map(state => {
         const circuit = circuits.find(item => item.id === state.circuit);
         return <button key={state.id} type="button" onClick={() => useView.getState().select(state.id === selected ? null : state.id)}
@@ -36,7 +36,7 @@ function LimitingRank({ rating, ramp, name }: { rating: Rating; ramp: Ramp; name
             state.id === selected && 'bg-fill')}>
           <span className="flex items-center gap-2 whitespace-nowrap text-ink">
             {name(state.id)}
-            {state.id === rating.limiting && <Badge tone="ink">限制</Badge>}
+            {rating.distinct && state.id === rating.limiting && <Badge tone="ink">最热</Badge>}
           </span>
           <Meter value={state.conductor_c} min={rating.ambient} max={rating.limit} colour={ramp.css(rampPosition(state.conductor_c, rating.ambient, rating.limit))} />
           <span className="text-right font-strong text-ink">{fixed(state.conductor_c)} °C</span>

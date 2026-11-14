@@ -1,8 +1,11 @@
 // The right column: the conclusion on top, then one reading order downward.
 import { useState } from 'react';
+import { Segmented } from '@/components/segmented';
 import { TabPanel, Tabs } from '@/components/tabs';
 import type { Ramp } from '@/lib/ramp';
 import type { Scene } from '@/canvas/scene';
+import { useView } from '@/state/view';
+import { compact, fixed } from '@shared/format';
 import type { DomainDocument, RunRecord } from '@shared/types';
 import { Attribution } from './attribution';
 import { MethodPage, ObjectPage, RunTable } from './details';
@@ -22,6 +25,7 @@ export function VerdictColumn({ record, rating, scene, document, stale, ramp, se
   loading: boolean;
 }) {
   const [page, setPage] = useState<Page>('why');
+  const mode = useView(state => state.mode);
   if (loading) return <Message title="正在读取" />;
   if (!record) return <Message title="还没有运行记录" body="点右上角的“运行校核”，结论会出现在这里。" />;
   if (record.kind !== 'rating') return <RunTable record={record} />;
@@ -34,10 +38,18 @@ export function VerdictColumn({ record, rating, scene, document, stale, ramp, se
   const state = rating.states.find(item => item.id === selected) ?? null;
   return <div className="flex h-full min-h-0 flex-col">
     <VerdictHead rating={rating} card={record.method_card} stale={stale} ramp={ramp} name={name} />
+    {/* Below the answer: the grounds for it. The switch chooses the moment the drawing and these pages show. */}
+    <div className="flex shrink-0 items-center justify-between gap-3 border-t border-line px-5 pt-4 pb-1">
+      <span className="text-13 font-strong text-ink-2">依据</span>
+      <Segmented label="图和下面的数显示哪个时刻" value={mode} onChange={useView.getState().setMode} options={[
+        { value: 'load', label: `现在 ${compact(rating.load)} A` },
+        { value: 'rated', label: `带满 ${fixed(rating.ampacity)} A` },
+      ]} />
+    </div>
     <Tabs className="min-h-0 flex-1" value={page} onChange={setPage} items={[
       { value: 'why', label: '为什么是这个数' },
-      { value: 'object', label: '对象' },
-      { value: 'method', label: '方法' },
+      { value: 'object', label: '选中的电缆' },
+      { value: 'method', label: '算法和可信度' },
     ]}>
       <TabPanel value="why" className="overflow-y-auto"><Attribution rating={rating} ramp={ramp} name={name} screenName={screenName} /></TabPanel>
       <TabPanel value="object" className="overflow-y-auto">

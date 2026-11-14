@@ -13,6 +13,8 @@ export interface Rating {
   ampacity: number;
   /** Saved load of the limiting circuit. */
   load: number;
+  /** False when every cable is equally hot, so no single cable is "the hottest". */
+  distinct: boolean;
   /** Shares of the focus cable's surface rise; only known at the saved load. */
   contributions: HeatContribution[] | null;
 }
@@ -25,7 +27,9 @@ export function ratingOf(record: RunRecord | undefined, mode: Mode, selected: st
   const focus = states.find(state => state.id === selected) ?? states.find(state => state.id === limiting) ?? states[0];
   if (!focus) return null;
   const circuit = summary.circuits?.find(item => item.id === summary.ampacity?.limiting_circuit);
+  const temperatures = states.map(state => state.conductor_c);
   return {
+    distinct: Math.max(...temperatures) - Math.min(...temperatures) > 0.05,
     summary,
     states,
     focus,

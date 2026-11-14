@@ -109,7 +109,7 @@ export function RunTable({ record }: { record: RunRecord }) {
   return <div className="flex min-h-0 flex-1 flex-col">
     <header className="shrink-0 px-5 pt-5 pb-4">
       <div className="flex items-center justify-between gap-3">
-        <span className="text-13 text-ink-2">运行记录 #{record.sequence}</span>
+        <span className="text-13 font-strong text-ink-2">结论</span>
         {tier && <Seal tier={tier.tier} label={tier.label} />}
       </div>
       <h2 className="m-0 mt-1 text-20 font-strong text-ink">{record.kind === 'sweep' ? '参数扫描' : '选型'}</h2>

@@ -80,7 +80,7 @@ function compose(scene: Scene, field: FieldModel | null, camera: Camera, size: S
   const leaders: { id: string; x1: number; y1: number; x2: number; y2: number }[] = [];
   for (const cable of [...cables].sort((a, b) => Number(b.limiting) - Number(a.limiting))) {
     const value = options.result && cable.state ? `${fixed(cable.state.conductor_c)} °C` : null;
-    const width = Math.ceil(18 + textWidth(cable.name) + (value ? 8 + textWidth(value, 13, 600) : 0) + (cable.limiting && value ? 8 + textWidth('限制', 13, 600) : 0));
+    const width = Math.ceil(18 + textWidth(cable.name) + (value ? 8 + textWidth(value, 13, 600) : 0) + (cable.limiting && value ? 8 + textWidth('最热', 13, 600) : 0));
     const dx = cable.x - centreX;
     const dz = cable.z - centreZ;
     const order: Side[] = row || (Math.abs(dx) < 1e-6 && Math.abs(dz) < 1e-6) ? ['n', 's', 'e', 'w']
@@ -272,11 +272,13 @@ export function SectionCanvas({ scene, field, result, notice }: {
   };
 
   const inset = Boolean(camera && size.width && !showsAll(scene, camera, size));
+  // Whether the soil shows its temperature: a field exists for this condition, its layer is on, and a GPU path runs.
+  const shaded = Boolean(field) && layers.field && gpu !== 'none';
   const view = camera && size.width ? compose(scene, layers.field ? field : null, camera, size, {
     dimensions: layers.dimensions, isotherms: layers.isotherms && layers.field && gpu !== 'none', result,
     reserved: [
       { x: 0, y: 0, w: 132, h: 60 },
-      { x: size.width - 236, y: 0, w: 236, h: 84 },
+      { x: size.width - 236, y: 0, w: 236, h: shaded && layers.isotherms ? 116 : 84 },
       { x: 0, y: size.height - 60, w: 300, h: 60 },
       ...(inset ? [{ x: size.width - 192, y: size.height - 128, w: 192, h: 128 }] : []),
       ...(notice ? [{ x: size.width / 2 - 190, y: 0, w: 380, h: 56 }] : []),
@@ -384,7 +386,7 @@ export function SectionCanvas({ scene, field, result, notice }: {
       style={{ translate: `${Math.round(chip.x)}px ${Math.round(chip.y)}px`, width: chip.w, height: chip.h }}>
       <span className={chip.limiting ? 'opacity-80' : 'text-ink-2'}>{chip.name}</span>
       {chip.value && <span className="font-strong">{chip.value}</span>}
-      {chip.limiting && <span className="font-strong">限制</span>}
+      {chip.limiting && <span className="font-strong">最热</span>}
     </div>)}
 
     <div data-overlays className="pointer-events-none absolute inset-0 *:pointer-events-auto *:absolute" onPointerDown={event => event.stopPropagation()}>
@@ -398,7 +400,9 @@ export function SectionCanvas({ scene, field, result, notice }: {
         <Icon name="status/info" className="size-4" />{gpu === 'none' ? '这台设备不能用 GPU 绘图，温度场没有显示' : notice}
       </div>}
 
-      <div className="top-3 right-3 cursor-default"><Legend ramp={ramp} ambient={scene.ambient} limit={scene.limit} /></div>
+      <div className="top-3 right-3 cursor-default">
+        <Legend ramp={ramp} ambient={scene.ambient} limit={scene.limit} soil={shaded} lines={shaded && layers.isotherms ? STEP_K : null} />
+      </div>
 
       <div className="bottom-3 left-3 flex cursor-default items-center gap-2">
         <div className="rounded-card border border-line bg-panel p-1 shadow-lift">
