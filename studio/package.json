@@ -16,7 +16,9 @@
     "@earendil-works/pi-agent-core": "1.5.2",
     "@earendil-works/pi-ai": "1.5.2",
     "@earendil-works/pi-schema": "1.5.2",
-    "lucide-react": "^1.52.0",
+    "@fontsource/ibm-plex-mono": "5.3.0",
+    "@fontsource/noto-sans-sc": "5.3.0",
+    "radix-ui": "^1.6.7",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
