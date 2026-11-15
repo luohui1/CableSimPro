@@ -248,9 +248,15 @@ test('a PDF and its snapshot are fixed to the requested version, with numeric re
   const first = await op<SpecificationReport>('library.export', { spec: target.id, version: 1 });
   const response = await fetch(base + first.url);
   assert.equal(response.headers.get('content-type'), 'application/pdf');
+  assert.match(response.headers.get('content-disposition')!, /^attachment;/);
   const pdf = Buffer.from(await response.arrayBuffer());
   assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
   assert.equal(createHash('sha256').update(pdf).digest('hex'), first.sha256);
+  const preview = await fetch(base + first.url + '?preview=1');
+  assert.match(preview.headers.get('content-disposition')!, /^inline;/);
+  assert.deepEqual(Buffer.from(await preview.arrayBuffer()), pdf, 'preview must serve exactly the saved PDF');
+  const snapshotPreview = await fetch(base + first.url + '/snapshot?preview=1');
+  assert.match(snapshotPreview.headers.get('content-disposition')!, /^attachment;/);
   const snapshotBytes = Buffer.from(await (await fetch(base + first.url + '/snapshot')).arrayBuffer());
   assert.equal(createHash('sha256').update(snapshotBytes).digest('hex'), first.snapshot_sha256);
   const snapshot = JSON.parse(snapshotBytes.toString('utf8'));

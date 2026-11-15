@@ -154,6 +154,13 @@ export function productOperations(studio: Studio): Operation[] {
         library.specView(params.spec);
         return specificationReports(studio.home, params.spec);
       } },
+    { id: 'library.geometry', title: '生成 CAD 实体', kind: 'run', parameters: obj({ spec: str(), version: int({ minimum: 1 }) }),
+      description: '从指定版本的保存结构调用已封签的 CadQuery/OpenCASCADE 插件，返回同源显示网格与 STEP；缺少构造参数或不支持的结构直接拒绝。',
+      execute: async (params: { spec: string; version: number }) => {
+        const selected = library.specView(params.spec, params.version);
+        const result = await core.call<Record<string, unknown>>('product.geometry', { entry: selected.entry });
+        return { ...result, spec: selected.spec.id, version: selected.version.number, content_sha256: selected.version.content_sha256 };
+      } },
     { id: 'library.export', title: '导出规格书', kind: 'run', parameters: obj({ spec: str(), version: int({ minimum: 1 }) }),
       description: '把指定版本的结构、已保存结果、计算条件、问题及来源保存为不可覆盖的 PDF 和快照。未审核版本标为草稿，缺项明确列出。',
       execute: async (params: { spec: string; version: number }, context) => {

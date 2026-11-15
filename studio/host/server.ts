@@ -72,8 +72,9 @@ export function createApp(options: { home?: string; runtime?: ModelRuntime | nul
       const snapshot = section === 'snapshot';
       if (section && !snapshot) throw new StudioError({ code: 'NOT_FOUND', message: '没有这个文件。' }, 404);
       const file = specificationFile(store.home, id, snapshot);
+      const inline = !snapshot && new URL(request.url ?? '/', 'http://local').searchParams.get('preview') === '1';
       response.writeHead(200, { 'content-type': snapshot ? 'application/json; charset=utf-8' : 'application/pdf', 'cache-control': 'no-store',
-        'content-disposition': `attachment; filename="${id}.${snapshot ? 'json' : 'pdf'}"` });
+        'content-disposition': `${inline ? 'inline' : 'attachment'}; filename="${id}.${snapshot ? 'json' : 'pdf'}"` });
       response.end(readFileSync(file));
       return;
     }

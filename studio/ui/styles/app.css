@@ -1,6 +1,5 @@
-/* Shared engineering tokens, with HeroUI's Tailwind scales available to its controls. */
+/* Shared engineering tokens and the workspace's Tailwind utility classes. */
 @import 'tailwindcss';
-@import '@heroui/styles';
 @import './product.css';
 
 /* The CJK font draws the middle dot of a unit (K·m/W) a full character wide.

@@ -1,6 +1,6 @@
-import { Button as HeroButton, Checkbox as HeroCheckbox, Input, Label, ListBox, Modal, SearchField as HeroSearchField, Select, Spinner, Tabs as HeroTabs, TextArea } from '@heroui/react';
+import { ActionIcon, Button as MantineButton, Checkbox as MantineCheckbox, Modal, Select, Tabs as MantineTabs, TextInput, Textarea } from '@mantine/core';
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Cable, Check, CircleAlert, Clock3, FileDown, FileSpreadsheet, FileText, Folder, Layers3, Library, Moon, Play, RefreshCw, Search, Sun, Upload, X } from 'lucide-react';
-import { Children, isValidElement, useState, type ComponentProps, type ReactNode } from 'react';
+import { Children, isValidElement, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
 const ICONS = { 'action/import': Upload, 'action/arrow-left': ArrowLeft, 'action/arrow-right': ArrowRight, 'action/arrow-up': ArrowUp, 'action/arrow-down': ArrowDown,
@@ -10,65 +10,53 @@ const ICONS = { 'action/import': Upload, 'action/arrow-left': ArrowLeft, 'action
 
 export function ProductIcon({ name, className }: { name: string; className?: string }) {
   const Glyph = ICONS[name as keyof typeof ICONS] ?? Cable;
-  return <Glyph aria-hidden="true" size={16} strokeWidth={1.7} className={cn('product-icon', className)} />;
+  return <Glyph aria-hidden="true" size={18} strokeWidth={1.8} className={cn('product-icon', className)} />;
 }
 
-interface ButtonProps extends Omit<ComponentProps<typeof HeroButton>, 'variant' | 'size' | 'children' | 'className'> {
-  children?: ReactNode; className?: string; disabled?: boolean;
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'outline' | 'ghost'; size?: 'compact' | 'standard'; icon?: string; busy?: boolean;
 }
-export function Button({ variant = 'outline', size = 'standard', icon, busy, disabled, children, className, onClick, ...props }: ButtonProps) {
-  return <HeroButton {...props} className={cn('product-button', className)} variant={variant === 'outline' ? 'secondary' : variant === 'ghost' ? 'ghost' : 'primary'} size={size === 'compact' ? 'sm' : 'md'}
-    isDisabled={disabled || busy} isPending={busy} onClick={onClick}>
-    {busy ? <Spinner size="sm" /> : icon ? <ProductIcon name={icon} /> : null}{children}
-  </HeroButton>;
+export function Button({ variant = 'outline', size = 'standard', icon, busy, disabled, children, className, ...props }: ButtonProps) {
+  return <MantineButton {...props} className={cn('product-button', className)} variant={variant === 'outline' ? 'default' : variant === 'ghost' ? 'subtle' : 'filled'}
+    size={size === 'compact' ? 'xs' : 'sm'} disabled={disabled || busy} loading={busy} leftSection={icon && <ProductIcon name={icon} />}>{children}</MantineButton>;
 }
 export function ToolButton({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
-  return <HeroButton className="product-button" variant="ghost" size="sm" isIconOnly aria-label={label} onPress={onClick}><ProductIcon name={icon} /></HeroButton>;
+  return <ActionIcon variant="subtle" color="gray" size="lg" aria-label={label} onClick={onClick}><ProductIcon name={icon} /></ActionIcon>;
 }
-export { Input, TextArea };
+export const Input = TextInput;
+export const TextArea = Textarea;
 
 export function Checkbox({ checked, onChange, children, required, className }: { checked: boolean; onChange: (checked: boolean) => void; children: ReactNode; required?: boolean; className?: string }) {
-  return <HeroCheckbox isSelected={checked} onChange={onChange} isRequired={required} className={cn('product-checkbox', className)}>
-    <HeroCheckbox.Content><HeroCheckbox.Control><HeroCheckbox.Indicator /></HeroCheckbox.Control><Label>{children}</Label></HeroCheckbox.Content>
-  </HeroCheckbox>;
+  return <MantineCheckbox checked={checked} onChange={event => onChange(event.currentTarget.checked)} required={required} className={className} label={children} size="sm" />;
 }
 
-// Native-looking option declarations keep the business forms readable; HeroUI owns
-// the trigger, keyboard navigation, selection, popover and accessible listbox.
 export function SelectField({ value, defaultValue = '', onValueChange, children, className, 'aria-label': label, disabled }: {
   value?: string | number; defaultValue?: string; onValueChange: (value: string) => void; children: ReactNode; className?: string; 'aria-label': string; disabled?: boolean;
 }) {
   const [local, setLocal] = useState(defaultValue);
-  const options = Children.toArray(children).filter(isValidElement<{ value?: string | number; children: ReactNode }>).map(child => ({
-    key: String(child.props.value ?? Children.toArray(child.props.children).join('')) || '__none__', label: child.props.children,
-    text: Children.toArray(child.props.children).join(''),
+  const data = Children.toArray(children).filter(isValidElement<{ value?: string | number; children: ReactNode }>).map(child => ({
+    value: String(child.props.value ?? Children.toArray(child.props.children).join('')), label: Children.toArray(child.props.children).join(''),
   }));
-  return <Select aria-label={label} className={cn('product-select', className)} value={String(value ?? local) || '__none__'}
-    onChange={key => { const next = key === '__none__' ? '' : String(key ?? ''); setLocal(next); onValueChange(next); }} isDisabled={disabled}>
-    <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
-    <Select.Popover className="product-ui product-select-popover"><ListBox aria-label={label} items={options}>
-      {option => <ListBox.Item id={option.key} textValue={option.text}>{option.label}<ListBox.ItemIndicator /></ListBox.Item>}
-    </ListBox></Select.Popover>
-  </Select>;
+  return <Select aria-label={label} className={cn('product-select', className)} value={String(value ?? local)} data={data} allowDeselect={false}
+    onChange={next => { if (next !== null) { setLocal(next); onValueChange(next); } }} disabled={disabled} comboboxProps={{ withinPortal: true }} />;
 }
 
 export function SearchField({ label, placeholder, value, onChange, className }: { label: string; placeholder: string; value: string; onChange: (value: string) => void; className?: string }) {
-  return <HeroSearchField aria-label={label} value={value} onChange={onChange} className={cn('product-search', className)}>
-    <HeroSearchField.Group><HeroSearchField.SearchIcon /><HeroSearchField.Input placeholder={placeholder} /><HeroSearchField.ClearButton aria-label={`清除${label}`} /></HeroSearchField.Group>
-  </HeroSearchField>;
+  return <TextInput type="search" aria-label={label} placeholder={placeholder} value={value} onChange={event => onChange(event.currentTarget.value)} className={cn('product-search', className)}
+    leftSection={<Search size={16} />} rightSection={value ? <ActionIcon variant="subtle" color="gray" size="sm" aria-label={`清除${label}`} onClick={() => onChange('')}><X size={14} /></ActionIcon> : null} />;
 }
 
 export function Tabs({ value, onChange, items, children, className, label = '规格详情内容' }: { value: string; onChange: (value: string) => void; items: { value: string; label: ReactNode }[]; children?: ReactNode; className?: string; label?: string }) {
-  return <HeroTabs selectedKey={value} onSelectionChange={key => onChange(String(key))} variant="secondary" className={cn('product-tabs', className)}>
-    <HeroTabs.ListContainer><HeroTabs.List aria-label={label}>{items.map(item => <HeroTabs.Tab key={item.value} id={item.value}>{item.label}<HeroTabs.Indicator /></HeroTabs.Tab>)}</HeroTabs.List></HeroTabs.ListContainer>
+  return <MantineTabs value={value} onChange={next => { if (next) onChange(next); }} className={cn('product-tabs', className)} keepMounted={false}>
+    <MantineTabs.List aria-label={label}>{items.map(item => <MantineTabs.Tab key={item.value} value={item.value}>{item.label}</MantineTabs.Tab>)}</MantineTabs.List>
     {children}
-  </HeroTabs>;
+  </MantineTabs>;
 }
-export function TabPanel({ value, children }: { value: string; children: ReactNode }) { return <HeroTabs.Panel id={value}>{children}</HeroTabs.Panel>; }
+export function TabPanel({ value, children }: { value: string; children: ReactNode }) { return <MantineTabs.Panel value={value}>{children}</MantineTabs.Panel>; }
 
 export function ReviewDialog({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
-  return <Modal.Backdrop isOpen={open} onOpenChange={isOpen => { if (!isOpen) onClose(); }} className="product-ui product-modal-backdrop">
-    <Modal.Container size="lg"><Modal.Dialog aria-label="确认批量审核"><Modal.CloseTrigger aria-label="关闭审核窗口" /><Modal.Header><Modal.Heading>批量审核</Modal.Heading></Modal.Header><Modal.Body>{children}</Modal.Body></Modal.Dialog></Modal.Container>
-  </Modal.Backdrop>;
+  return <Modal opened={open} onClose={onClose} title="确认批量审核" size="lg" centered classNames={{ content: 'product-ui' }} closeButtonProps={{ 'aria-label': '关闭审核窗口' }}>{children}</Modal>;
+}
+export function DocumentDialog({ open, onClose, children }: { open: boolean; onClose: () => void; children: ReactNode }) {
+  return <Modal opened={open} onClose={onClose} title="规格书 PDF 预览" size="min(1100px, 95vw)" centered classNames={{ content: 'product-ui' }} closeButtonProps={{ 'aria-label': '关闭规格书预览' }}>{children}</Modal>;
 }

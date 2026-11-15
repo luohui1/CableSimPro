@@ -1,10 +1,12 @@
 import { useState } from 'react';
+import { Alert, Badge, NavLink, Stepper, ThemeIcon } from '@mantine/core';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { REVIEW_NAMES, STATE_NAMES, compact } from '@shared/format';
 import type { ReviewState, SeriesSummary } from '@shared/types';
 import { Button, ProductIcon as Icon, SearchField, SelectField, TabPanel, Tabs } from '@/components/product-controls';
 import { LibraryHeader } from '@/components/library-header';
 import { useProductLibrary } from '@/state/queries';
+import { OriginBadge, ReviewBadge } from '@/components/product-status';
 
 const STATES: ReviewState[] = ['draft', 'submitted', 'reviewed', 'published'];
 const ORIGINS = [{ value: 'all', label: '全部资料', icon: 'nav/library' }, { value: 'factory', label: '本厂结构表', icon: 'object/folder' },
@@ -16,6 +18,8 @@ export function ProductLibrary() {
   const [search, setSearch] = useState('');
   const [review, setReview] = useState<ReviewState | 'all'>('all');
   const [origin, setOrigin] = useState('all');
+  const [guide, setGuide] = useState(() => localStorage.getItem('studio.library-guide') !== 'hidden');
+  const showGuide = (show: boolean) => { setGuide(show); localStorage.setItem('studio.library-guide', show ? 'visible' : 'hidden'); };
   const all = library.data ?? [];
   const needle = search.trim().toLocaleLowerCase();
   const searched = all.filter(item => (origin === 'all' || (origin === 'bundled' ? !['factory', 'public'].includes(item.origin) : item.origin === origin)) && [item.name, item.manufacturer, item.designation, item.description, ...item.standards]
@@ -31,16 +35,23 @@ export function ProductLibrary() {
     <div className="flex min-h-0 flex-1">
       <aside aria-label="产品库资料分类" className="library-sidebar">
         <div className="library-side-heading"><span>产品资料</span><span className="text-13 font-normal text-ink-2">{all.length} 系列</span></div>
-        {ORIGINS.map(item => <button key={item.value} type="button" className="library-side-link" aria-pressed={origin === item.value} onClick={() => setOrigin(item.value)}>
-          <Icon name={item.icon} /><span className="flex-1">{item.label}</span><span className="text-ink-2">{all.filter(series => item.value === 'all' || (item.value === 'bundled' ? !['factory', 'public'].includes(series.origin) : series.origin === item.value)).length}</span>
-        </button>)}
-        <div className="mt-auto border-t border-line px-3 pt-5 text-13 text-ink-2"><p className="m-0 font-strong text-ink">从结构表开始</p><p className="mb-0 mt-2">导入后按规格计算、核对与审核，再生成带来源的规格书。</p></div>
+        {ORIGINS.map(item => <NavLink key={item.value} component="button" active={origin === item.value} aria-pressed={origin === item.value} onClick={() => setOrigin(item.value)} label={item.label} leftSection={<Icon name={item.icon} />} rightSection={<Badge variant="light" color={origin === item.value ? 'blue' : 'gray'} size="sm">{all.filter(series => item.value === 'all' || (item.value === 'bundled' ? !['factory', 'public'].includes(series.origin) : series.origin === item.value)).length}</Badge>} />)}
+        <button type="button" className="library-side-link mt-auto border-t border-line" onClick={() => showGuide(true)}><Icon name="document" />查看使用流程</button>
       </aside>
       <main className="library-surface">
         <div className="library-page-head">
           <div><h1>产品库</h1><p>{all.length} 个系列 · {total(all)} 个规格 · 按系列维护结构、结果与版本</p></div>
-          <Button variant="primary" icon="action/import" onClick={() => void navigate({ to: '/library/import' })}>导入结构表</Button>
+          <div className="flex gap-2">{!guide && <Button variant="ghost" onClick={() => showGuide(true)}>使用流程</Button>}<Button variant="primary" icon="action/import" onClick={() => void navigate({ to: '/library/import' })}>导入结构表</Button></div>
         </div>
+        {guide && <section className="library-guide" aria-label="产品库使用指引">
+          <Alert color="blue" variant="light" title="先导入结构表，再完成计算与技术文件" icon={<Icon name="object/file" />} withCloseButton closeButtonLabel="收起使用指引" onClose={() => showGuide(false)}>首次使用可选择公开样例。原始资料、计算结果和人工审核分别保留，文件可追溯到具体版本。</Alert>
+          <Stepper active={0} size="xs" className="library-guide-stepper">{[
+            { icon: 'object/file', title: '导入表格', detail: '对应列名，确认缺项', to: '/library/import' },
+            { icon: 'object/section', title: '确认电缆结构', detail: '点断面查看各层尺寸' },
+            { icon: 'run/run', title: '计算与核对', detail: '批量算参数，定位异常' },
+            { icon: 'document', title: '审核并交付', detail: '保留状态，预览 PDF' },
+          ].map(step => <Stepper.Step key={step.title} label={step.title} description={step.detail} icon={<Icon name={step.icon} />} allowStepSelect={false} />)}</Stepper>
+        </section>}
         <div className="library-toolbar">
           <SearchField label="搜索产品系列" placeholder="搜索型号、制造商或执行标准" value={search} onChange={setSearch} className="w-full sm:w-96" />
           <SelectField aria-label="按资料来源筛选" className="xl:hidden" value={origin} onValueChange={value => setOrigin(value)}>{ORIGINS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</SelectField>
@@ -71,14 +82,14 @@ export function ProductLibrary() {
               </thead>
               <tbody>
                 {visible.map(item => <tr key={item.id}>
-                    <th scope="row"><div className="library-series-name"><Icon name="nav/cable-type" /><div className="min-w-0"><Link to="/library/$seriesId" params={{ seriesId: item.id }} search={{}}>{item.name}</Link><small>{item.standards.join(' · ') || item.description}</small></div></div></th>
+                    <th scope="row"><div className="library-series-name"><ThemeIcon variant="light" size={40} radius="md"><Icon name="nav/cable-type" /></ThemeIcon><div className="min-w-0"><Link to="/library/$seriesId" params={{ seriesId: item.id }} search={{}}>{item.name}</Link><small>{item.standards.join(' · ') || item.description}</small></div></div></th>
                     <td className="whitespace-nowrap">
                       {compact(item.u0_v / 1000)} / {compact(item.u_v === null ? null : item.u_v / 1000)} kV
                       <span className="ml-3 text-13 text-ink-2">{item.cores} 芯</span>
                     </td>
-                    <td><span className="library-origin">{STATE_NAMES[item.origin] ?? item.origin}</span></td>
+                    <td><OriginBadge origin={item.origin} /></td>
                     <td className="library-desktop-column text-right">{item.specs}</td>
-                    <td className="library-review-summary"><div className="flex flex-wrap gap-x-4 gap-y-2">{STATES.filter(state => item.states[state]).map(state => <span key={state} className="library-state" data-state={state}>{REVIEW_NAMES[state]} {item.states[state]}</span>)}</div></td>
+                    <td className="library-review-summary"><div className="flex flex-wrap gap-2">{STATES.filter(state => item.states[state]).map(state => <ReviewBadge key={state} state={state} count={item.states[state]} />)}</div></td>
                     <td className="library-desktop-column text-right">
                       <Button size="compact" variant="ghost" aria-label={`打开系列：${item.name}`} icon="action/arrow-right"
                         onClick={() => void navigate({ to: '/library/$seriesId', params: { seriesId: item.id }, search: {} })}>打开系列</Button>

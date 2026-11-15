@@ -4,6 +4,7 @@ import { copyFileSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path';
 import type { Browser, Locator } from 'playwright';
 import type { LibraryJob, SeriesSummary, SeriesView, SpecificationReport, SpecView } from '../shared/types.ts';
+import type { ProductCad } from '../shared/cad.ts';
 
 export async function walkLibrary(browser: Browser, base: string, home: string, out: string, probe: () => string[], problems: string[]) {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
@@ -14,7 +15,7 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     const body = await response.json(); assert.equal(response.status, 200, JSON.stringify(body)); return body as T;
   };
   const choose = async (label: string, option: RegExp, scope: Locator = page.locator('body')) => {
-    await scope.getByRole('button', { name: new RegExp(label) }).click();
+    await scope.getByRole('combobox', { name: label, exact: true }).click();
     await page.getByRole('option', { name: option }).click();
   };
   const capture = async (name: string, keepScroll = false, anchor?: Locator) => {
@@ -52,14 +53,20 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
   try {
     await page.goto(base);
     await page.waitForURL('**/library');
+    await page.getByRole('region', { name: '产品库使用指引' }).waitFor();
     await page.getByRole('button', { name: '导入结构表', exact: true }).click();
     await capture('library-import-file');
     const sampleResponse = page.waitForResponse(response => response.url().endsWith('/api/ops/library.import.sample'));
     await page.getByRole('button', { name: '试用人民电缆公开结构表' }).click();
     const sample = await (await sampleResponse).json();
     copyFileSync(join(home, 'uploads', sample.upload, readdirSync(join(home, 'uploads', sample.upload))[0]), join(out, '人民电缆公开结构表.xlsx'));
-    await page.getByRole('button', { name: /工作表/ }).waitFor();
+    await page.getByRole('combobox', { name: '工作表', exact: true }).waitFor();
     // File drop uses the actual workbook and parser, without committing it as a factory declaration.
+    await page.getByRole('button', { name: '重新开始', exact: true }).click();
+    const chooser = page.waitForEvent('filechooser');
+    await page.getByRole('button', { name: '选择结构表文件', exact: true }).click();
+    await (await chooser).setFiles(join(out, '人民电缆公开结构表.xlsx'));
+    await page.getByRole('combobox', { name: '工作表', exact: true }).waitFor();
     await page.getByRole('button', { name: '重新开始', exact: true }).click();
     await page.locator('.import-file-area').evaluate((area, bytes) => {
       const transfer = new DataTransfer();
@@ -69,7 +76,7 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await choose('工作表', /^表3 YJV22/);
     await page.getByRole('button', { name: '重新开始', exact: true }).click();
     await page.getByRole('button', { name: '试用人民电缆公开结构表' }).click();
-    await page.getByRole('button', { name: /工作表/ }).waitFor();
+    await page.getByRole('combobox', { name: '工作表', exact: true }).waitFor();
     for (const sheet of ['表1 YJV', '表2 YJV', '表3 YJV22']) {
       await choose('工作表', new RegExp(`^${sheet} ·`));
       await page.getByRole('button', { name: '读取列对应', exact: true }).click();
@@ -80,7 +87,11 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
       }
       await page.getByRole('button', { name: '填写系列声明' }).click();
       await page.getByText('我已核对系列声明、缺失尺寸及计算参数的来源。', { exact: true }).click();
-      if (sheet === '表3 YJV22') await capture('library-import-declaration');
+      if (sheet === '表3 YJV22') {
+        await page.getByText('绝缘与半导电层', { exact: true }).click();
+        await page.getByLabel('声明导体屏蔽厚度', { exact: true }).waitFor();
+        await capture('library-import-declaration');
+      }
       await page.getByRole('button', { name: '预览导入', exact: true }).click();
       await page.getByRole('heading', { name: '核对导入预览' }).waitFor();
       if (sheet === '表3 YJV22') await capture('library-import-preview');
@@ -144,6 +155,28 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await page.getByRole('heading', { name: /3×240/ }).waitFor();
     await capture('library-structure');
     const panel = page.getByRole('complementary', { name: '规格详情', exact: true });
+    await panel.getByRole('button', { name: '选择绝缘', exact: true }).click();
+    assert.equal(await panel.locator('tbody tr').count(), 1, 'selecting insulation must show its corresponding field');
+    await panel.locator('.structure-parts').getByRole('button', { name: /全部结构/ }).click();
+    if (process.env.CABLE_STUDIO_VERIFY_CAD === '1') {
+      await panel.getByRole('tab', { name: 'CAD 实体', exact: true }).click();
+      const generated = page.waitForResponse(response => response.url().endsWith('/api/ops/library.geometry'), { timeout: 150_000 });
+      await panel.getByRole('button', { name: '生成真实 CAD 实体', exact: true }).click();
+      const response = await generated; assert.equal(response.status(), 200);
+      const cad = await response.json() as ProductCad;
+      assert.equal(cad.model.step_unit, 'mm'); assert.match(cad.model.step_text, /^ISO-10303-21;/);
+      assert.equal(cad.method.plugin_id, 'cablesim.cable-geometry');
+      await panel.locator('.cad-viewport canvas').waitFor();
+      await capture('library-cad');
+      const stepDownload = page.waitForEvent('download');
+      await panel.getByRole('button', { name: '下载 STEP 实体', exact: true }).click();
+      await (await stepDownload).saveAs(join(out, 'YJV22-3x240-实体.step'));
+      assert.equal(readFileSync(join(out, 'YJV22-3x240-实体.step'), 'utf8'), cad.model.step_text);
+      const provenanceDownload = page.waitForEvent('download');
+      await panel.getByRole('button', { name: '建模来源', exact: true }).click();
+      await (await provenanceDownload).saveAs(join(out, 'YJV22-3x240-CAD来源.json'));
+      assert.equal(JSON.parse(readFileSync(join(out, 'YJV22-3x240-CAD来源.json'), 'utf8')).artifact_sha256, cad.artifact_sha256);
+    }
     await panel.getByRole('tab', { name: '计算参数', exact: true }).click();
     await panel.getByText('479.4 A', { exact: true }).waitFor();
     await capture('library-values');
@@ -155,6 +188,10 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     const exportResponse = page.waitForResponse(response => response.url().endsWith('/api/ops/library.export'));
     await panel.getByRole('button', { name: '生成规格书 PDF', exact: true }).click();
     const firstReport = await (await exportResponse).json() as SpecificationReport;
+    await page.getByRole('dialog', { name: '规格书 PDF 预览', exact: true }).waitFor();
+    assert.ok((await page.getByTitle('已生成的规格书 PDF').getAttribute('src'))?.startsWith(firstReport.url + '?preview=1'));
+    await capture('library-pdf-preview');
+    await page.getByRole('button', { name: '关闭规格书预览', exact: true }).click();
     const downloadEvent = page.waitForEvent('download');
     await panel.getByRole('link', { name: '下载 PDF', exact: true }).first().click();
     await (await downloadEvent).saveAs(join(out, 'YJV22-3x240-规格书.pdf'));
@@ -192,16 +229,18 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await panel.getByRole('button', { name: '保存新版本', exact: true }).click();
     await choose('查看规格版本', /^第 2 版/, panel);
     await panel.getByText('工程师修改', { exact: true }).waitFor();
-    await panel.getByRole('button', { name: '关闭规格详情' }).click();
-    await page.locator('.product-grid .ag-row[row-id]').filter({ hasText: '3×240' }).getByRole('checkbox').check();
-    await page.getByRole('button', { name: '计算选中 1 项', exact: true }).click();
+    await panel.getByRole('button', { name: '计算这个规格', exact: true }).click();
     await waitJob();
-    await page.getByRole('button', { name: '3×240', exact: true }).click();
     await panel.getByRole('tab', { name: '标准核对', exact: true }).click();
     await panel.getByText(/不通过 3/).waitFor();
     const checkCards = panel.locator('[role="tabpanel"]:visible section');
     for (let index = 0; index < 3; index++) assert.match(await checkCards.nth(index).innerText(), /不通过/);
     await capture('library-nonconformity');
+    await panel.getByRole('button', { name: '查看绝缘尺寸', exact: true }).first().click();
+    assert.equal(await panel.getByRole('tab', { name: '结构', exact: true }).getAttribute('aria-selected'), 'true');
+    assert.equal(await panel.locator('tbody tr').count(), 1);
+    assert.match(await panel.locator('tbody').innerText(), /绝缘标称厚度/);
+    await capture('library-locate-dimension');
     const changed = await op<SpecView>('library.spec.get', { spec: target.id });
     assert.equal(changed.version.number, 2);
     assert.equal(changed.version.review, 'draft');
@@ -210,6 +249,7 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     const secondExport = page.waitForResponse(response => response.url().endsWith('/api/ops/library.export'));
     await panel.getByRole('button', { name: '生成规格书 PDF', exact: true }).click();
     const secondReport = await (await secondExport).json() as SpecificationReport;
+    await page.getByRole('button', { name: '关闭规格书预览', exact: true }).click();
     copyFileSync(join(home, 'specifications', secondReport.id, 'specification.pdf'), join(out, 'YJV22-3x240-减薄核对.pdf'));
     writeFileSync(join(out, 'YJV22-3x240-减薄快照.json'), await (await fetch(base + secondReport.url + '/snapshot')).text(), 'utf8');
     await choose('查看规格版本', /^第 1 版/, panel);
