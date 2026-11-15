@@ -18,7 +18,7 @@ const COLUMNS: Record<string, string[]> = {
   checks: ['key', 'version', 'check', 'readiness', 'review'],
 };
 const gridTheme = themeQuartz.withParams({
-  fontFamily: 'Noto Sans SC Variable, Segoe UI, sans-serif', fontSize: 14, headerFontSize: 13, headerFontWeight: 600,
+  fontFamily: 'Segoe UI, Noto Sans SC Variable, sans-serif', fontSize: '.875rem', headerFontSize: '.75rem', headerFontWeight: 500,
   backgroundColor: 'var(--panel)', foregroundColor: 'var(--text)', headerBackgroundColor: 'var(--ground)', headerTextColor: 'var(--text-secondary)',
   borderColor: 'var(--line)', rowBorder: true, wrapperBorder: false, wrapperBorderRadius: 0,
   accentColor: '#1971c2', selectedRowBackgroundColor: 'var(--product-selected)', rowHoverColor: 'var(--product-hover)',
@@ -68,7 +68,7 @@ export function ProductGrid({ rows, search, filter, view, inspected, preferences
   return <div data-scroll-table className="product-grid" aria-label="产品规格表">
     <AgGridProvider modules={[AllCommunityModule]}><AgGridReact<SpecRow>
       theme={gridTheme} rowData={rows} columnDefs={columnDefs} defaultColDef={{ resizable: true, sortable: true, filter: true, suppressMovable: false, getQuickFilterText: () => '' }}
-      getRowId={params => params.data.id} headerHeight={44} rowHeight={48} animateRows={false} tooltipShowDelay={400}
+      getRowId={params => params.data.id} headerHeight={40} rowHeight={44} animateRows={false} tooltipShowDelay={400}
       quickFilterText={search} isExternalFilterPresent={() => filters.current !== 'all'} doesExternalFilterPass={node => Boolean(node.data && matchesSpec(node.data, filters.current))}
       rowSelection={{ mode: 'multiRow', selectAll: 'filtered', enableClickSelection: false }} selectionColumnDef={{ pinned: 'left', lockPinned: true, width: 42, minWidth: 42, maxWidth: 42, resizable: false }}
       localeText={localeText} onGridReady={event => setApi(event.api)}

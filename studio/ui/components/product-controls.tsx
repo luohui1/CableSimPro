@@ -1,12 +1,12 @@
 import { ActionIcon, Button as MantineButton, Checkbox as MantineCheckbox, Modal, Select, Tabs as MantineTabs, TextInput, Textarea } from '@mantine/core';
-import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Cable, Check, CircleAlert, Clock3, FileDown, FileSpreadsheet, FileText, Folder, Layers3, Library, Moon, Play, RefreshCw, Search, Sun, Upload, X } from 'lucide-react';
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, Cable, Check, CircleAlert, CircleHelp, Clock3, FileDown, FileSpreadsheet, FileText, Folder, Layers3, Library, Moon, PanelLeftClose, Play, RefreshCw, Search, Settings2, Sun, Upload, X } from 'lucide-react';
 import { Children, isValidElement, useState, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { cn } from '@/lib/cn';
 
 const ICONS = { 'action/import': Upload, 'action/arrow-left': ArrowLeft, 'action/arrow-right': ArrowRight, 'action/arrow-up': ArrowUp, 'action/arrow-down': ArrowDown,
   'action/check': Check, 'action/close': X, 'action/history': Clock3, 'action/refresh': RefreshCw, 'nav/library': Library, 'nav/cable-type': Cable,
   'object/folder': Folder, 'object/file': FileSpreadsheet, 'object/section': Layers3, 'module/structure': Layers3, 'result/report': FileDown, 'run/run': Play,
-  moon: Moon, sun: Sun, warning: CircleAlert, search: Search, document: FileText };
+  moon: Moon, sun: Sun, warning: CircleAlert, search: Search, document: FileText, help: CircleHelp, settings: Settings2, sidebar: PanelLeftClose };
 
 export function ProductIcon({ name, className }: { name: string; className?: string }) {
   const Glyph = ICONS[name as keyof typeof ICONS] ?? Cable;

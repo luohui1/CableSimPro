@@ -20,11 +20,14 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
   };
   const capture = async (name: string, keepScroll = false, anchor?: Locator) => {
     console.log(`capture: ${name}`);
+    const inspectorTab = page.locator('aside[aria-label="规格详情"] [role="tab"][aria-selected="true"]');
+    const activeTab = await inspectorTab.count() ? await inspectorTab.textContent() : null;
     for (const [width, height] of [[1366, 768], [1920, 1080], [390, 844]] as const) {
       await page.setViewportSize({ width, height });
       if (!keepScroll) await page.locator('main, aside[aria-label="规格详情"] .overflow-y-auto').evaluateAll(elements => elements.forEach(element => { element.scrollTop = 0; }));
       await page.waitForTimeout(400);
       await page.evaluate(async () => { await document.fonts.ready; });
+      if (activeTab) assert.equal(await inspectorTab.textContent(), activeTab, 'resizing must preserve the open detail tab');
       assert.equal(await page.evaluate(() => [...document.fonts].some(font => font.family === 'Noto Sans SC Variable' && font.status === 'loaded')), true, 'the bundled UI font must load');
       if (anchor) await anchor.scrollIntoViewIfNeeded();
       if (name === 'library-series' && width === 1920) {
@@ -53,7 +56,9 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
   try {
     await page.goto(base);
     await page.waitForURL('**/library');
-    await page.getByRole('region', { name: '产品库使用指引' }).waitFor();
+    await page.getByRole('button', { name: '查看使用流程', exact: true }).click();
+    await page.getByText('从结构表到规格书', { exact: true }).waitFor();
+    await page.keyboard.press('Escape');
     await page.getByRole('button', { name: '导入结构表', exact: true }).click();
     await capture('library-import-file');
     const sampleResponse = page.waitForResponse(response => response.url().endsWith('/api/ops/library.import.sample'));
@@ -124,6 +129,10 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await page.goto(`${base}/library/${armoured.id}`);
     await page.locator('.product-grid [role="grid"]').waitFor();
     await page.getByRole('button', { name: '3×240', exact: true }).waitFor();
+    assert.equal(await page.getByRole('complementary', { name: '规格详情', exact: true }).count(), 0, 'the table opens without an unsolicited detail panel');
+    await page.getByRole('button', { name: '计算选项与基准条件', exact: true }).click();
+    await page.getByRole('checkbox', { name: '重算已有结果', exact: true }).waitFor();
+    await page.keyboard.press('Escape');
     await capture('library-series');
     const ratingHeader = page.getByRole('columnheader', { name: '基准载流量 A' });
     await ratingHeader.locator('.ag-header-cell-label').click();
@@ -150,7 +159,7 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await page.getByRole('columnheader', { name: /R20/ }).waitFor();
     assert.equal(await selectedRow.getByRole('checkbox').isChecked(), true, 'selection must survive a column-view change');
     await page.getByRole('tab', { name: '概览', exact: true }).click();
-    await page.getByRole('button', { name: '清除选择', exact: true }).click();
+    await page.getByRole('button', { name: /^清除选择（/ }).click();
     await page.getByRole('button', { name: '3×240', exact: true }).click();
     await page.getByRole('heading', { name: /3×240/ }).waitFor();
     await capture('library-structure');

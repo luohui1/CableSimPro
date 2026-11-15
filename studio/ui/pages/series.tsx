@@ -1,11 +1,12 @@
 import { useMutation } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
-import { Alert, Badge, NavLink, Stepper } from '@mantine/core';
+import { Badge, Drawer, NavLink, Popover } from '@mantine/core';
+import { useMediaQuery } from '@mantine/hooks';
 import { compact, REVIEW_NAMES, STATE_NAMES } from '@shared/format';
 import { pending, problems, RESULT_NAMES } from '@shared/products';
 import { RESULT_KINDS, type LibraryJob, type ResultKind, type SpecRow } from '@shared/types';
-import { Button, Checkbox, Input, ProductIcon as Icon, ReviewDialog, SearchField, SelectField, TabPanel, Tabs } from '@/components/product-controls';
+import { Button, Checkbox, Input, ProductIcon as Icon, ReviewDialog, SearchField, SelectField, TabPanel, Tabs, ToolButton } from '@/components/product-controls';
 import { GRID_VIEWS, ProductGrid, type GridPreferences } from '@/components/product-grid';
 import { LibraryHeader } from '@/components/library-header';
 import { reportFailure } from '@/components/notice';
@@ -37,13 +38,15 @@ function TaskProgress() {
 
 export function SeriesWorkspace({ id, spec, version, onInspect }: { id: string; spec?: string; version?: number; onInspect: (spec?: string, version?: number) => void }) {
   const query = useProductSeries(id);
+  const navigate = useNavigate();
+  const overlayDetails = useMediaQuery('(max-width: 1599px)');
   const library = useProductLibrary();
   const job = useLibraryJob();
   const [preferences, setPreferences] = useState(readPreferences);
   const [view, setView] = useState(preferences.view);
   const [search, setSearch] = useState('');
   const [navSearch, setNavSearch] = useState('');
-  const [previewOpen, setPreviewOpen] = useState(true);
+  const [navCollapsed, setNavCollapsed] = useState(false);
   const [filter, setFilter] = useState('all');
   const [selection, setSelection] = useState<string[]>([]);
   const [visibleCount, setVisibleCount] = useState(0);
@@ -69,7 +72,8 @@ export function SeriesWorkspace({ id, spec, version, onInspect }: { id: string; 
   const reviewProblems = reviewItems?.reduce((sum, row) => sum + problems(row).length + pending(row).length + (row.check?.missing ?? 0) + (row.check?.uncovered ?? 0), 0) ?? 0;
   const readyToReview = Boolean(reviewItems?.length && reviewItems.every(row => allowed[action].includes(row.review)) && note.trim() && (!reviewProblems || acknowledged));
   const current = query.data;
-  const inspected = spec ?? (previewOpen ? current?.specs[0]?.id : undefined);
+  const inspected = spec;
+  const fileSpec = spec ?? (selected.length === 1 ? selected[0].id : undefined);
   const allSpecs = current?.specs ?? [];
   const waiting = allSpecs.filter(row => pending(row).length).length;
   const failed = allSpecs.filter(row => (row.check?.failed ?? 0) > 0).length;
@@ -78,7 +82,7 @@ export function SeriesWorkspace({ id, spec, version, onInspect }: { id: string; 
   const errors = allSpecs.filter(row => Object.values(row.computed).includes('error')).length;
 
   return <div className="product-ui flex h-full min-w-0 flex-col"><LibraryHeader /><TaskProgress />
-    <div className="series-body" data-inspecting={Boolean(spec)}>
+    <div className="series-body" data-inspecting={Boolean(spec)} data-nav-collapsed={navCollapsed}>
       <aside aria-label="产品系列导航" className="library-sidebar">
         <div className="library-side-heading"><Link to="/library"><Icon name="action/arrow-left" />全部产品系列</Link><span className="text-13 font-normal text-ink-2">{library.data?.length ?? 0}</span></div>
         <SearchField label="查找系列" placeholder="查找型号或制造商" value={navSearch} onChange={setNavSearch} className="w-full" />
@@ -89,28 +93,19 @@ export function SeriesWorkspace({ id, spec, version, onInspect }: { id: string; 
       </aside>
       <main className="library-surface">
         <div className="library-page-head">
-          <div className="min-w-0"><div className="series-heading"><Icon name="nav/cable-type" /><h1 className="break-words">{current ? `${current.series.designation} ${compact(current.series.u0_v / 1000)} / ${compact(current.series.u_v == null ? null : current.series.u_v / 1000)} kV · ${current.series.cores} 芯` : '读取系列…'}</h1></div><p>{current?.series.name}</p></div>
-            <div className="flex flex-wrap gap-2"><Button variant="primary" icon="run/run" busy={compute.isPending} disabled={!current || !kinds.length || job.data?.state === 'running'} onClick={() => compute.mutate()}>{selected.length ? `计算选中 ${selected.length} 项` : '计算全系列'}</Button>
-              <Button disabled={!selected.length} onClick={() => { setReviewItems([...selected]); setAcknowledged(false); setReviewError(''); }}>审核选中项</Button></div>
+          <div className="min-w-0"><div className="series-heading"><div className="series-nav-toggle"><ToolButton icon="sidebar" label={navCollapsed ? '展开系列目录' : '收起系列目录'} onClick={() => setNavCollapsed(!navCollapsed)} /></div><Link to="/library" className="series-back" aria-label="返回产品库"><Icon name="action/arrow-left" /></Link><h1 className="break-words">{current ? `${current.series.designation} ${compact(current.series.u0_v / 1000)} / ${compact(current.series.u_v == null ? null : current.series.u_v / 1000)} kV · ${current.series.cores} 芯` : '读取系列…'}</h1></div><p>{current?.series.name}</p></div>
+          <div className="series-actions">
+            <div className="series-compute-actions"><Button variant="primary" icon="run/run" busy={compute.isPending} disabled={!current || !kinds.length || job.data?.state === 'running'} onClick={() => compute.mutate()}>{selected.length ? `计算选中 ${selected.length} 项` : '计算全系列'}</Button>
+              <Popover position="bottom-end" width={340} withinPortal trapFocus returnFocus>
+                <Popover.Target><Button icon="settings" aria-label="计算选项与基准条件">计算设置</Button></Popover.Target>
+                <Popover.Dropdown className="product-ui"><div className="series-options"><strong>计算选项与基准条件</strong><div className="series-calculation-kinds">{RESULT_KINDS.map(kind => <Checkbox key={kind} checked={kinds.includes(kind)} onChange={checked => setKinds(checked ? [...kinds, kind] : kinds.filter(item => item !== kind))}>{RESULT_NAMES[kind]}</Checkbox>)}<Checkbox checked={force} onChange={setForce}>重算已有结果</Checkbox></div><div className="series-reference"><b>基准载流量</b><span>直埋 · 0.7 m · 25 °C · 1 K·m/W</span><p>参考计算。完整表含六种土壤条件；三芯排管采用三回水平模板。</p></div></div></Popover.Dropdown>
+              </Popover>
+            </div>
+            <Button icon="action/check" disabled={!selected.length} onClick={() => { setReviewItems([...selected]); setAcknowledged(false); setReviewError(''); }}>审核选中项</Button>
+            <Button icon="result/report" disabled={!fileSpec} title={fileSpec ? '查看该规格的文件与版本' : '先点击或勾选一个规格'} onClick={() => { if (fileSpec) inspect(fileSpec, 'documents'); }}>规格书</Button>
+          </div>
         </div>
-        {current && <><div className="series-summary"><Badge variant="light" color="gray">{current.series.specs} 个规格</Badge><OriginBadge origin={current.series.origin} /><span className="text-ink-2">{current.declaration.standards.join(' · ') || '未声明执行标准'}</span></div>
-          <Stepper className="workflow-rail" size="xs" active={waiting ? 1 : reviewed < allSpecs.length ? 2 : 3} onStepClick={step => {
-            if (step === 0) { setFilter('all'); setView('structure'); }
-            else if (step === 1) { setFilter(waiting ? 'pending' : 'all'); setView('values'); }
-            else if (step === 2) { setFilter('submitted'); setView('checks'); }
-            else if (allSpecs.length) inspect(inspected ?? allSpecs[0].id, 'documents');
-          }}>
-            <Stepper.Step label="确认结构" description={`${allSpecs.length} 个规格已入库`} icon={<Icon name="object/section" />} />
-            <Stepper.Step label="计算核对" description={waiting ? `${waiting} 个待计算` : errors ? `${errors} 个有拒算项` : '计算已完成'} icon={<Icon name="run/run" />} />
-            <Stepper.Step label="人工审核" description={`${reviewed} / ${allSpecs.length} 已审核`} icon={<Icon name="action/check" />} />
-            <Stepper.Step label="交付文件" description="预览与下载 PDF" icon={<Icon name="document" />} />
-          </Stepper>
-          <div className="series-task-hint"><span>{selected.length ? `已选 ${selected.length} 个规格，计算与审核作用于选中项。` : '勾选规格批量处理，点击规格查看结构。'}</span>
-            {failed > 0 && <button type="button" className="text-error" onClick={() => { setFilter('failed'); setView('checks'); }}>不通过 {failed} 个 →</button>}
-            {missing > 0 && <button type="button" onClick={() => { setFilter('missing'); setView('checks'); }}>需补实测 {missing} 个 →</button>}
-            {errors > 0 && <button type="button" className="text-error" onClick={() => { setFilter('problems'); setView('values'); }}>查看拒算与告警 →</button>}
-          </div></>}
-        <details className="series-options"><summary><span className="font-strong">计算选项与基准条件</span><span className="series-condition">直埋 · 0.7 m · 25 °C · 1 K·m/W</span></summary><div className="mt-3 flex flex-wrap gap-x-5 gap-y-3">{RESULT_KINDS.map(kind => <Checkbox key={kind} checked={kinds.includes(kind)} onChange={checked => setKinds(checked ? [...kinds, kind] : kinds.filter(item => item !== kind))}>{RESULT_NAMES[kind]}</Checkbox>)}<Checkbox checked={force} onChange={setForce}>重算已有结果</Checkbox></div><p>载流量为参考计算，详细表含六种土壤条件；三芯排管采用三回水平模板。</p></details>
+        {current && <div className="series-summary"><OriginBadge origin={current.series.origin} /><span>{current.series.specs} 个规格</span><span>{current.declaration.standards.join(' · ') || '未声明执行标准'}</span><span className="series-review-count">已审核 {reviewed} / {allSpecs.length}</span></div>}
         {message && <p role="status" className="m-0 px-6 py-2 text-13">{message}</p>}
         <ReviewDialog open={Boolean(reviewItems)} onClose={() => setReviewItems(null)}>{reviewItems && <form aria-label="确认批量审核" className="grid gap-4" onSubmit={event => { event.preventDefault(); review.mutate(); }}>
           <strong className="text-14">确认 {reviewItems.length} 个指定版本的审核操作</strong>
@@ -123,20 +118,27 @@ export function SeriesWorkspace({ id, spec, version, onInspect }: { id: string; 
           <div className="flex gap-2"><Button type="submit" variant="primary" busy={review.isPending} disabled={!readyToReview}>确认{labels[action]}</Button><Button onClick={() => setReviewItems(null)}>取消</Button></div>
         </form>}</ReviewDialog>
         <div className="library-toolbar">
+          <SelectField aria-label="切换产品系列" className="series-chooser" value={id} onValueChange={value => void navigate({ to: '/library/$seriesId', params: { seriesId: value }, search: {} })}>{(library.data ?? []).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</SelectField>
           <SearchField label="搜索规格" placeholder="截面或规格名称" value={search} onChange={setSearch} className="w-full sm:w-52" />
           <SelectField aria-label="规格筛选" value={filter} onValueChange={setFilter}><option value="all">全部规格</option><option value="pending">待计算</option><option value="problems">有问题 / 告警</option><option value="failed">标准项不通过</option><option value="missing">缺输入 / 需实测</option>{Object.entries(REVIEW_NAMES).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</SelectField>
-          <span className="text-13 text-ink-2">显示 {visibleCount} 项 · 已选 {selected.length} 项</span>{selected.length > 0 && <Button size="compact" variant="ghost" onClick={() => setSelection([])}>清除选择</Button>}
+          <div className="series-quick-filters" aria-label="待处理规格">
+            {waiting > 0 && <button type="button" aria-pressed={filter === 'pending'} onClick={() => { setFilter(filter === 'pending' ? 'all' : 'pending'); setView('values'); }}>待计算 <b>{waiting}</b></button>}
+            {failed > 0 && <button type="button" aria-pressed={filter === 'failed'} className="text-error" onClick={() => { setFilter(filter === 'failed' ? 'all' : 'failed'); setView('checks'); }}>不通过 <b>{failed}</b></button>}
+            {missing > 0 && <button type="button" aria-pressed={filter === 'missing'} onClick={() => { setFilter(filter === 'missing' ? 'all' : 'missing'); setView('checks'); }}>需补实测 <b>{missing}</b></button>}
+            {errors > 0 && <button type="button" aria-pressed={filter === 'problems'} className="text-error" onClick={() => { setFilter(filter === 'problems' ? 'all' : 'problems'); setView('values'); }}>拒算与告警 <b>{errors}</b></button>}
+          </div>
+          {selected.length > 0 && <Button size="compact" variant="ghost" onClick={() => setSelection([])}>清除选择（{selected.length}）</Button>}
         </div>
         <Tabs value={view} onChange={setView} label="规格表视图" className="min-h-0 flex-1 flex-col" items={Object.entries(GRID_VIEWS).map(([value, label]) => ({ value, label }))}><TabPanel value={view}>
         {query.error ? <div role="alert" className="p-5 text-14"><p>{query.error.message}</p><Button onClick={() => void query.refetch()}>重新读取</Button></div> : query.isPending ? <p role="status" className="p-5 text-14">正在读取规格…</p> : <>
           <ProductGrid rows={allSpecs} search={search} filter={filter} view={view} inspected={inspected} preferences={preferences} selected={selection} onSelection={setSelection} onInspect={inspect} onPreferences={values => setPreferences(current => ({ ...current, ...values }))} onCount={setVisibleCount} />
-          <div className="library-footnote"><span>{visibleCount} 个规格 · 已选 {selected.length} 项</span><span>点击行查看结构、依据与规格书 · 表头可排序与调宽</span></div>
+          <div className="library-footnote"><span>{visibleCount} 个规格 · 已选 {selected.length} 项</span><span>点击规格查看详情 · 勾选后批量计算与审核</span></div>
         </>}
         </TabPanel></Tabs>
       </main>
-      {inspected && <aside aria-label="规格详情" className="spec-inspector" data-preview={!spec}>
-        <SpecInspector key={inspected} spec={inspected} version={version} focus={focus} onVersion={next => onInspect(inspected, next)} onClose={() => { setPreviewOpen(false); onInspect(); }} />
-      </aside>}
+      {inspected && <Drawer opened onClose={() => onInspect()} withinPortal={false} trapFocus={overlayDetails} lockScroll={overlayDetails} withOverlay={overlayDetails} closeOnClickOutside={overlayDetails} position="right" size="min(35rem, 100%)" withCloseButton={false} padding={0} title="规格详情" classNames={{ root: 'spec-drawer-root', inner: 'spec-drawer-inner', content: 'product-ui spec-drawer', body: 'spec-drawer-body', header: 'spec-drawer-title' }}>
+        <aside aria-label="规格详情" className="spec-inspector"><SpecInspector key={inspected} spec={inspected} version={version} focus={focus} onVersion={next => onInspect(inspected, next)} onClose={() => onInspect()} /></aside>
+      </Drawer>}
     </div>
   </div>;
 }
