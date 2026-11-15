@@ -52,6 +52,8 @@ export function SeriesWorkspace({ id, spec, version, onInspect }: { id: string; 
   const [sizes, setSizes] = useState(preferences.sizes);
   const [sorting, setSorting] = useState<SortingState>(preferences.sorting);
   const [search, setSearch] = useState('');
+  const [navSearch, setNavSearch] = useState('');
+  const [previewOpen, setPreviewOpen] = useState(true);
   const [filter, setFilter] = useState('all');
   const [selection, setSelection] = useState<RowSelectionState>({});
   const [kinds, setKinds] = useState<ResultKind[]>([...RESULT_KINDS]);
@@ -75,7 +77,7 @@ export function SeriesWorkspace({ id, spec, version, onInspect }: { id: string; 
   const columns: ColumnDef<SpecRow>[] = [
     { id: 'selection', size: 42, minSize: 42, enableSorting: false, enableResizing: false, header: ({ table }) => <Check label="选择当前筛选的全部规格" checked={table.getIsAllRowsSelected()} mixed={table.getIsSomeRowsSelected()} onChange={() => table.toggleAllRowsSelected()} />,
       cell: ({ row }) => <Check label={`选择 ${row.original.key}`} checked={row.getIsSelected()} onChange={() => row.toggleSelected()} /> },
-    { id: 'key', accessorFn: row => row.area_mm2, header: '规格 mm²', size: 110, cell: ({ row }) => <button type="button" className="font-strong text-copper" onClick={event => { event.stopPropagation(); onInspect(row.id); }}>{row.original.key}</button> },
+    { id: 'key', accessorFn: row => row.area_mm2, header: '规格 mm²', size: 110, cell: ({ row }) => <button type="button" className="spec-key" onClick={event => { event.stopPropagation(); onInspect(row.id); }}>{row.original.key}</button> },
     { accessorKey: 'version', header: '版本', size: 70, cell: info => `第 ${info.getValue()} 版` },
     { accessorKey: 'outer_diameter_mm', header: '外径 mm', size: 95, cell: info => compact(info.getValue<number>(), 5) },
     { accessorKey: 'r20_ohm_km', header: 'R20 Ω/km', size: 115, cell: info => compact(info.getValue<number>(), 6) },
@@ -83,9 +85,9 @@ export function SeriesWorkspace({ id, spec, version, onInspect }: { id: string; 
     { accessorKey: 'ac_resistance_ohm_km', header: '交流电阻 Ω/km', size: 145, cell: info => compact(info.getValue<number>(), 6) },
     { accessorKey: 'short_circuit_ka', header: '1 s 短路 kA', size: 130, cell: info => fixed(info.getValue<number>(), 2) },
     { accessorKey: 'ampacity_a', header: '基准载流量 A', size: 140, cell: info => fixed(info.getValue<number>(), 1) },
-    { id: 'check', header: '标准核对', size: 145, accessorFn: row => row.check?.failed ?? -1, cell: ({ row }) => row.original.check ? <span className={row.original.check.failed ? 'text-error' : ''}>{row.original.check.failed ? `${row.original.check.failed} 项不通过` : `${row.original.check.passed ?? 0} 项通过`}<span className="ml-2 text-ink-2">缺 {row.original.check.missing ?? 0}</span></span> : '未核对' },
-    { id: 'readiness', header: '计算 / 问题', size: 180, enableSorting: false, cell: ({ row }) => { const errors = problems(row.original); const waiting = pending(row.original); return <span title={errors.join('；')} className={errors.length ? 'text-error' : waiting.length ? 'text-ink-2' : ''}>{errors.length ? `${errors.length} 项需处理` : waiting.length ? `待计算 ${waiting.length} 类` : '计算已完成'}</span>; } },
-    { accessorKey: 'review', header: '审核状态', size: 100, cell: info => REVIEW_NAMES[info.getValue<string>()] },
+    { id: 'check', header: '标准核对', size: 170, accessorFn: row => row.check?.failed ?? -1, cell: ({ row }) => row.original.check ? <span className="spec-check"><span className={row.original.check.failed ? 'text-error' : ''}>{row.original.check.failed ? `${row.original.check.failed} 项不通过` : `${row.original.check.passed ?? 0} 项通过`}</span><span className="text-ink-2">缺 {row.original.check.missing ?? 0}</span></span> : <span className="text-ink-2">未核对</span> },
+    { id: 'readiness', header: '计算 / 问题', size: 160, enableSorting: false, cell: ({ row }) => { const errors = problems(row.original); const waiting = pending(row.original); return <span title={errors.join('；')} className={cn('inline-flex items-center gap-2', errors.length ? 'text-error' : 'text-ink-2')}><Icon className="size-3" name={errors.length ? 'action/close' : waiting.length ? 'action/history' : 'action/check'} />{errors.length ? `${errors.length} 项需处理` : waiting.length ? `待计算 ${waiting.length} 类` : '计算已完成'}</span>; } },
+    { accessorKey: 'review', header: '审核状态', size: 100, cell: info => <span className="library-state" data-state={info.getValue<string>()}>{REVIEW_NAMES[info.getValue<string>()]}</span> },
   ];
   const shown: Record<string, string[]> = {
     overview: ['selection', 'key', 'version', 'outer_diameter_mm', 'ampacity_a', 'check', 'readiness', 'review'],
@@ -105,23 +107,30 @@ export function SeriesWorkspace({ id, spec, version, onInspect }: { id: string; 
   const reviewProblems = reviewItems?.reduce((sum, row) => sum + problems(row).length + pending(row).length + (row.check?.missing ?? 0) + (row.check?.uncovered ?? 0), 0) ?? 0;
   const readyToReview = Boolean(reviewItems?.length && reviewItems.every(row => allowed[action].includes(row.review)) && note.trim() && (!reviewProblems || acknowledged));
   const current = query.data;
+  const inspected = spec ?? (previewOpen ? current?.specs[0]?.id : undefined);
+  const allSpecs = current?.specs ?? [];
+  const numeric = (column: string) => ['outer_diameter_mm', 'r20_ohm_km', 'weight_kg_km', 'ac_resistance_ohm_km', 'short_circuit_ka', 'ampacity_a'].includes(column);
+  const cellSize = (column: string, size: number) => ({ width: size, flexGrow: column === 'selection' ? 0 : size });
 
   return <div className="flex h-full min-w-0 flex-col"><LibraryHeader /><TaskProgress />
-    <div className="flex min-h-0 flex-1">
-      <aside aria-label="产品系列导航" className="hidden w-56 shrink-0 overflow-y-auto border-r border-line bg-fill p-3 xl:block">
-        <Link to="/library" className="mb-4 block px-2 py-2 text-14 text-ink no-underline">全部产品系列</Link>
-        {library.data?.map(item => <Link key={item.id} to="/library/$seriesId" params={{ seriesId: item.id }} search={{}}
-          className={cn('mb-1 block rounded-field px-2 py-3 text-13 no-underline hover:bg-hover', item.id === id ? 'bg-panel font-strong text-copper' : 'text-ink')}><span className="block">{item.name}</span><span className="mt-1 block font-normal text-ink-2">{item.specs} 个规格 · {STATE_NAMES[item.origin]}</span></Link>)}
+    <div className="series-body" data-inspecting={Boolean(spec)}>
+      <aside aria-label="产品系列导航" className="library-sidebar">
+        <div className="library-side-heading"><Link to="/library"><Icon name="action/arrow-left" />全部产品系列</Link><span className="text-13 font-normal text-ink-2">{library.data?.length ?? 0}</span></div>
+        <SearchField label="查找系列" placeholder="查找型号或制造商" value={navSearch} onChange={setNavSearch} className="w-full" />
+        {['factory', 'public', 'bundled'].map(origin => { const items = library.data?.filter(item => (origin === 'bundled' ? !['factory', 'public'].includes(item.origin) : item.origin === origin) && `${item.name} ${item.manufacturer}`.toLowerCase().includes(navSearch.toLowerCase())) ?? []; return items.length ? <div key={origin}><p className="library-side-group">{origin === 'factory' ? '本厂结构表' : origin === 'public' ? '公开厂家资料' : '结构演示'} · {items.length}</p>
+          {items.map(item => <Link key={item.id} to="/library/$seriesId" params={{ seriesId: item.id }} search={{}} aria-current={item.id === id ? 'page' : undefined} className="library-side-link" title={item.name}><Icon name="nav/cable-type" /><span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="truncate">{item.designation ? `${item.designation} · ${item.cores} 芯` : item.name}</span><span className="font-normal text-ink-2">{item.specs}</span></span><small className="truncate">{compact(item.u0_v / 1000)} / {compact(item.u_v == null ? null : item.u_v / 1000)} kV · {item.manufacturer || STATE_NAMES[item.origin]}</small></span></Link>)}
+        </div> : null; })}
+        <Link to="/library/import" className="library-side-link mt-auto border-t border-line"><Icon name="action/import" />导入结构表</Link>
       </aside>
-      <main className="flex min-w-0 flex-1 flex-col">
-        <div className="grid gap-3 border-b border-line px-4 py-4 sm:px-5">
-          <div className="flex flex-wrap items-center justify-between gap-3"><div className="min-w-0"><Link to="/library" className="text-13 text-ink-2">产品库</Link><h1 className="m-0 mt-1 break-words text-20 font-strong">{current?.series.name ?? '读取系列…'}</h1></div>
+      <main className="library-surface">
+        <div className="library-page-head">
+          <div className="min-w-0"><div className="series-heading"><Icon name="nav/cable-type" /><h1 className="break-words">{current ? `${current.series.designation} ${compact(current.series.u0_v / 1000)} / ${compact(current.series.u_v == null ? null : current.series.u_v / 1000)} kV · ${current.series.cores} 芯` : '读取系列…'}</h1></div><p>{current?.series.name}</p></div>
             <div className="flex flex-wrap gap-2"><Button variant="primary" icon="run/run" busy={compute.isPending} disabled={!current || !kinds.length || job.data?.state === 'running'} onClick={() => compute.mutate()}>{selected.length ? `计算选中 ${selected.length} 项` : '计算全系列'}</Button>
-              <Button disabled={!selected.length} onClick={() => { setReviewItems([...selected]); setAcknowledged(false); setReviewError(''); }}>审核选中项</Button></div></div>
-          {current && <p className="m-0 text-13 text-ink-2">{current.series.specs} 个规格 · {STATE_NAMES[current.series.origin]} · {current.declaration.standards.join('、') || '未声明执行标准'}</p>}
-          <details className="text-13"><summary className="w-fit cursor-pointer">计算选项与基准条件</summary><div className="mt-3 flex flex-wrap gap-x-5 gap-y-3">{RESULT_KINDS.map(kind => <label key={kind} className="flex items-center gap-2"><input type="checkbox" checked={kinds.includes(kind)} onChange={event => setKinds(event.target.checked ? [...kinds, kind] : kinds.filter(item => item !== kind))} />{RESULT_NAMES[kind]}</label>)}<label className="flex items-center gap-2"><input type="checkbox" checked={force} onChange={event => setForce(event.target.checked)} />重算已有结果</label></div><p>载流量基准：中心埋深 0.7 m，环境 25 °C，土壤热阻率 1 K·m/W。详细表含六种土壤条件；三芯排管采用三回水平模板。</p></details>
-          {message && <p role="status" className="m-0 text-13">{message}</p>}
+              <Button disabled={!selected.length} onClick={() => { setReviewItems([...selected]); setAcknowledged(false); setReviewError(''); }}>审核选中项</Button></div>
         </div>
+        {current && <div className="series-summary"><span>{current.series.specs} 个规格</span><span className="library-origin">{STATE_NAMES[current.series.origin]}</span><button type="button" onClick={() => setFilter('pending')}>待计算 <strong>{allSpecs.filter(row => pending(row).length).length}</strong></button><button type="button" className={allSpecs.some(row => problems(row).length) ? 'text-error' : ''} onClick={() => setFilter('problems')}>需处理 <strong>{allSpecs.filter(row => problems(row).length).length}</strong></button><span className="text-ink-2">{current.declaration.standards.join(' · ') || '未声明执行标准'}</span></div>}
+        <details className="series-options"><summary className="cursor-pointer"><span className="font-strong">计算选项与基准条件</span><span className="ml-4 text-ink-2">直埋 · 0.7 m · 25 °C · 1 K·m/W · 参考计算</span></summary><div className="mt-3 flex flex-wrap gap-x-5 gap-y-3">{RESULT_KINDS.map(kind => <label key={kind} className="flex items-center gap-2"><input type="checkbox" checked={kinds.includes(kind)} onChange={event => setKinds(event.target.checked ? [...kinds, kind] : kinds.filter(item => item !== kind))} />{RESULT_NAMES[kind]}</label>)}<label className="flex items-center gap-2"><input type="checkbox" checked={force} onChange={event => setForce(event.target.checked)} />重算已有结果</label></div><p>载流量基准：中心埋深 0.7 m，环境 25 °C，土壤热阻率 1 K·m/W。详细表含六种土壤条件；三芯排管采用三回水平模板。</p></details>
+        {message && <p role="status" className="m-0 px-6 py-2 text-13">{message}</p>}
         {reviewItems && <form aria-label="确认批量审核" className="grid gap-3 border-b border-line bg-fill p-4" onSubmit={event => { event.preventDefault(); review.mutate(); }}>
           <strong className="text-14">确认 {reviewItems.length} 个指定版本的审核操作</strong>
           <p className="m-0 text-13">{reviewItems.map(row => `${row.key} 第${row.version}版`).join('、')}</p>
@@ -132,30 +141,30 @@ export function SeriesWorkspace({ id, spec, version, onInspect }: { id: string; 
           {reviewError && <p role="alert" className="m-0 text-13 text-error">{reviewError}</p>}
           <div className="flex gap-2"><Button type="submit" variant="primary" busy={review.isPending} disabled={!readyToReview}>确认{labels[action]}</Button><Button onClick={() => setReviewItems(null)}>取消</Button></div>
         </form>}
-        <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
+        <div className="library-toolbar">
           <SearchField label="搜索规格" placeholder="截面或规格名称" value={search} onChange={setSearch} className="w-full sm:w-52" />
           <select aria-label="规格筛选" className="studio-input" value={filter} onChange={event => setFilter(event.target.value)}><option value="all">全部规格</option><option value="pending">待计算</option><option value="problems">有问题 / 告警</option>{Object.entries(REVIEW_NAMES).map(([key, name]) => <option key={key} value={key}>{name}</option>)}</select>
           <span className="text-13">显示 {data.length} 项 · 已选 {selected.length} 项</span>{selected.length > 0 && <Button size="compact" variant="ghost" onClick={() => setSelection({})}>清除选择</Button>}
         </div>
-        <div aria-label="规格表视图" className="flex flex-wrap gap-x-5 border-b border-line px-4 text-14">{Object.entries({ overview: '概览', structure: '结构参数', values: '计算结果', checks: '核对与审核' }).map(([key, label]) => <button key={key} type="button" aria-pressed={view === key} className={cn('border-b-2 py-3', view === key ? 'border-copper font-strong text-copper' : 'border-transparent')} onClick={() => setView(key)}>{label}</button>)}</div>
+        <div aria-label="规格表视图" className="library-view-tabs">{Object.entries({ overview: '概览', structure: '结构参数', values: '计算结果', checks: '核对与审核' }).map(([key, label]) => <button key={key} type="button" aria-pressed={view === key} onClick={() => setView(key)}>{label}</button>)}</div>
         {query.error ? <div role="alert" className="p-5 text-14"><p>{query.error.message}</p><Button onClick={() => void query.refetch()}>重新读取</Button></div> : query.isPending ? <p role="status" className="p-5 text-14">正在读取规格…</p> : <>
           <div ref={scroll} data-scroll-table className="min-h-48 min-w-0 flex-1 overflow-auto">
-            <table aria-label="产品规格表" className="grid border-collapse text-13" style={{ width: table.getTotalSize(), minWidth: '100%' }}>
-              <thead className="sticky top-0 z-10 grid bg-fill">{table.getHeaderGroups().map(group => <tr key={group.id} className="flex border-b border-line">{group.headers.map(header => <th key={header.id} scope="col" aria-sort={header.column.getIsSorted() === 'asc' ? 'ascending' : header.column.getIsSorted() === 'desc' ? 'descending' : 'none'} className="relative flex shrink-0 items-center px-3 py-3 text-left font-strong" style={{ width: header.getSize() }}>
+            <table role="table" aria-label="产品规格表" className="spec-table" aria-rowcount={rows.length + 1} style={{ width: table.getTotalSize() }}>
+              <thead role="rowgroup" className="sticky top-0 z-10 grid bg-fill">{table.getHeaderGroups().map(group => <tr role="row" aria-rowindex={1} key={group.id} className="border-b border-line">{group.headers.map(header => <th role="columnheader" key={header.id} scope="col" data-numeric={numeric(header.column.id)} aria-sort={header.column.getIsSorted() === 'asc' ? 'ascending' : header.column.getIsSorted() === 'desc' ? 'descending' : 'none'} style={cellSize(header.column.id, header.getSize())}>
                 {header.column.getCanSort() ? <button type="button" className="flex items-center gap-1 whitespace-nowrap" onClick={header.column.getToggleSortingHandler()}>{flexRender(header.column.columnDef.header, header.getContext())}{header.column.getIsSorted() && <Icon className="size-3" name={header.column.getIsSorted() === 'asc' ? 'action/arrow-up' : 'action/arrow-down'} />}</button> : flexRender(header.column.columnDef.header, header.getContext())}
                 {header.column.getCanResize() && <div role="separator" aria-label={`调整${String(header.column.columnDef.header)}列宽`} aria-orientation="vertical" onMouseDown={header.getResizeHandler()} onTouchStart={header.getResizeHandler()} className="absolute right-0 top-0 h-full w-1 cursor-col-resize touch-none hover:bg-copper" />}
               </th>)}</tr>)}</thead>
-              <tbody className="relative grid" style={{ height: virtual.getTotalSize() }}>{virtual.getVirtualItems().map(item => { const row = rows[item.index]; return <tr key={row.id} tabIndex={0} aria-selected={row.id === spec} onClick={() => onInspect(row.id)} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onInspect(row.id); } }} className={cn('absolute flex h-11 cursor-default border-b border-line hover:bg-hover focus-visible:z-10', row.id === spec ? 'bg-fill' : 'bg-panel')} style={{ transform: `translateY(${item.start}px)` }}>
-                {row.getVisibleCells().map(cell => <td key={cell.id} className={cn('shrink-0 truncate px-3 py-3', ['outer_diameter_mm', 'r20_ohm_km', 'weight_kg_km', 'ac_resistance_ohm_km', 'short_circuit_ka', 'ampacity_a'].includes(cell.column.id) && 'text-right')} style={{ width: cell.column.getSize() }}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}
+              <tbody role="rowgroup" className="relative grid" style={{ height: virtual.getTotalSize() }}>{virtual.getVirtualItems().map(item => { const row = rows[item.index]; return <tr role="row" aria-rowindex={item.index + 2} key={row.id} tabIndex={0} aria-selected={row.id === inspected} onClick={() => onInspect(row.id)} onKeyDown={event => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onInspect(row.id); } }} className="absolute cursor-default focus-visible:z-10" style={{ transform: `translateY(${item.start}px)` }}>
+                {row.getVisibleCells().map(cell => <td role="cell" key={cell.id} data-numeric={numeric(cell.column.id)} className="truncate" style={cellSize(cell.column.id, cell.column.getSize())}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</td>)}
               </tr>; })}</tbody>
             </table>
             {!rows.length && <p className="p-5 text-14">没有匹配的规格，请调整搜索或筛选。</p>}
           </div>
-          <p className="m-0 border-t border-line px-4 py-2 text-13 text-ink-2">点击规格查看依据与文件；拖动表头分隔线调整列宽。空值表示尚无结果，详细原因见规格详情。</p>
+          <div className="library-footnote"><span>{data.length} 个规格 · 已选 {selected.length} 项</span><span>点击行查看结构、依据与规格书 · 表头可排序与调宽</span></div>
         </>}
       </main>
-      {spec && <aside aria-label="规格详情" className="fixed inset-x-0 bottom-0 top-12 z-20 flex min-h-0 min-w-0 flex-col border-l border-line bg-panel lg:static lg:z-auto lg:w-[440px] lg:shrink-0 2xl:w-[520px]">
-        <SpecInspector key={spec} spec={spec} version={version} onVersion={next => onInspect(spec, next)} onClose={() => onInspect()} />
+      {inspected && <aside aria-label="规格详情" className="spec-inspector" data-preview={!spec}>
+        <SpecInspector key={inspected} spec={inspected} version={version} onVersion={next => onInspect(inspected, next)} onClose={() => { setPreviewOpen(false); onInspect(); }} />
       </aside>}
     </div>
   </div>;

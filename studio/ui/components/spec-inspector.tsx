@@ -10,6 +10,7 @@ import { api } from '@/state/api';
 import { queryClient, useProductSpec, useSpecificationReports } from '@/state/queries';
 import { Button, ToolButton } from './button';
 import { reportFailure } from './notice';
+import { Icon } from './icon';
 import { TabPanel, Tabs } from './tabs';
 
 const HEAD = 'border-b border-line px-2 py-2 text-left font-strong';
@@ -56,9 +57,12 @@ function Revision({ view }: { view: SpecView }) {
   const canEdit = latest && view.derivation.kind !== 'bundled';
   const shape = cableShape(view.entry.payload.cable_type, view.entry.payload.materials);
   return <div className="grid gap-4">
-    <figure className="m-0 flex flex-wrap items-center gap-4 border-b border-line pb-4">
-      <svg viewBox="0 0 160 160" role="img" aria-label={`${view.spec.key} 真实尺寸断面`} className="size-40 shrink-0"><CableGlyph shape={shape} x={80} y={80} scale={68 / shape.radius} /></svg>
-      <figcaption className="text-14">{view.spec.key} mm²<br />结构外径 {compact(view.entry.summary.outer_diameter_m * 1000)} mm<br /><span className="text-13 text-ink-2">按保存尺寸比例绘制</span></figcaption>
+    <figure className="spec-figure">
+      <svg viewBox="0 0 200 184" role="img" aria-label={`${view.spec.key} 真实尺寸断面`}><CableGlyph shape={shape} x={100} y={76} scale={64 / shape.radius} />
+        <path d="M36 148 V160 M164 148 V160 M36 154 H164" stroke="var(--text-secondary)" strokeWidth=".75" fill="none" />
+        <text x="100" y="176" textAnchor="middle" fontSize="13" fill="var(--text-secondary)">⌀ {compact(view.entry.summary.outer_diameter_m * 1000)} mm</text>
+      </svg>
+      <figcaption><span>标称截面<strong>{view.spec.key} <span className="text-13 font-normal">mm²</span></strong></span><span>结构外径<strong>{compact(view.entry.summary.outer_diameter_m * 1000)} <span className="text-13 font-normal">mm</span></strong></span><span>按保存尺寸比例绘制</span></figcaption>
     </figure>
     {view.closure && <p className="m-0 text-13">外径闭合：表列 {compact(view.closure.declared_mm)} mm，已列结构 {compact(view.closure.listed_mm)} mm；余量 {compact(view.closure.residual_mm)} mm，容差 {compact(view.closure.tolerance_mm)} mm。{view.derivation.note}</p>}
     {canEdit && <Button size="compact" className="justify-self-start" onClick={() => setEditing(!editing)}>{editing ? '收起修改' : '修改结构'}</Button>}
@@ -93,8 +97,8 @@ function Checks({ view }: { view: SpecView }) {
     <p className="m-0 text-14">通过 {counts.passed ?? 0} · 不通过 {counts.failed ?? 0} · 缺项 {counts.missing ?? 0} · 未覆盖 {counts.uncovered ?? 0}</p>
     <p className="m-0 text-13 text-ink-2">缺实测值和未覆盖项不计为通过。审核状态与标准核对结论分别记录。</p>
     <label className="flex items-center gap-2 text-14"><input type="checkbox" checked={onlyIssues} onChange={event => setOnlyIssues(event.target.checked)} />仅看需处理项</label>
-    {[...rows].sort((a, b) => (VERDICT_ORDER[a.verdict] ?? 2) - (VERDICT_ORDER[b.verdict] ?? 2)).filter(row => !onlyIssues || row.verdict !== 'passed').map(row => <section key={row.id} className="grid gap-2 border-t border-line pt-3">
-      <div className="flex items-start justify-between gap-3 text-14"><strong>{row.title}{row.target.core_id && <span className="ml-2 text-13 font-normal">{row.target.core_id}</span>}</strong><span className={row.verdict === 'failed' ? 'shrink-0 text-error' : row.verdict === 'passed' ? 'shrink-0 text-success' : 'shrink-0 text-attention'}>{VERDICT_NAMES[row.verdict] ?? row.verdict}</span></div>
+    {[...rows].sort((a, b) => (VERDICT_ORDER[a.verdict] ?? 2) - (VERDICT_ORDER[b.verdict] ?? 2)).filter(row => !onlyIssues || row.verdict !== 'passed').map(row => <section key={row.id} data-verdict={row.verdict} className="spec-check-row grid gap-2">
+      <div className="flex items-start justify-between gap-3 text-14"><strong>{row.title}{row.target.core_id && <span className="ml-2 text-13 font-normal">{row.target.core_id}</span>}</strong><span className={row.verdict === 'failed' ? 'inline-flex shrink-0 items-center gap-1 text-error' : row.verdict === 'passed' ? 'shrink-0 text-success' : 'shrink-0 text-attention'}>{row.verdict === 'failed' && <Icon name="action/close" className="size-3" />}{VERDICT_NAMES[row.verdict] ?? row.verdict}</span></div>
       <p className="m-0 text-13">要求 {row.comparison ?? ''} {compact(row.limit, 6)} {row.unit} · 实际 {compact(row.actual, 6)} {row.unit}</p>
       <p className="m-0 text-13">{row.standard} · {row.clause} · PDF 第 {row.pdf_page ?? '未注明'} 页{row.printed_page ? ` / 印刷第 ${row.printed_page} 页` : ''}</p>
       {row.reason && <p className="m-0 text-13 text-ink-2">{row.reason}</p>}
@@ -148,10 +152,10 @@ export function SpecInspector({ spec, version, onVersion, onClose }: { spec: str
   if (!view) return <div className="p-5 text-14">{query.error ? <><p role="alert">{query.error.message}</p><Button onClick={() => void query.refetch()}>重新读取</Button></> : <p role="status">正在读取规格…</p>}<Button onClick={onClose}>关闭详情</Button></div>;
   const difference = previous.data ? view.structure.filter(row => previous.data!.structure.find(item => item.key === row.key)?.value !== row.value) : [];
   return <>
-    <div className="grid gap-3 border-b border-line p-4">
-      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="m-0 text-20 font-strong">{view.spec.key} <span className="text-14 font-normal">mm²</span></h2><p className="m-0 mt-1 text-13">{view.series.designation} · {STATE_NAMES[view.series.origin]}</p></div><ToolButton icon="action/close" label="关闭规格详情" onClick={onClose} /></div>
+    <div className="spec-inspector-head grid gap-4">
+      <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="m-0 text-28 font-strong">{view.spec.key} <span className="text-14 font-normal text-ink-2">mm²</span></h2><p className="m-0 mt-1 text-13 text-ink-2">{view.series.designation} · {STATE_NAMES[view.series.origin]}</p></div><div className="flex items-center gap-1"><Button size="compact" aria-label="导出规格书" icon="result/report" onClick={() => setTab('documents')}><span className="hidden sm:inline">导出规格书</span></Button><ToolButton icon="action/close" label="关闭规格详情" onClick={onClose} /></div></div>
       <div className="flex flex-wrap items-center gap-3 text-13"><label className="flex items-center gap-2">版本<select aria-label="查看规格版本" className="studio-input" value={view.version.number} onChange={event => onVersion(Number(event.target.value) === view.versions[0].number ? undefined : Number(event.target.value))}>{view.versions.map(item => <option key={item.id} value={item.number}>第 {item.number} 版 · {REVIEW_NAMES[item.review]}</option>)}</select></label>
-        <Button size="compact" disabled={view.version.number !== view.versions[0].number} busy={open.isPending} onClick={() => open.mutate()}>进入断面细算</Button></div>
+        <Button size="compact" variant="ghost" disabled={view.version.number !== view.versions[0].number} busy={open.isPending} onClick={() => open.mutate()}>进入断面细算</Button></div>
     </div>
     <Tabs className="flex min-h-0 flex-1 flex-col" value={tab} onChange={setTab} items={[{ value: 'structure', label: '结构' }, { value: 'values', label: '计算参数' }, { value: 'checks', label: '标准核对' }, { value: 'documents', label: '版本与文件' }]}>
       <div className="min-h-0 flex-1 overflow-y-auto p-4">

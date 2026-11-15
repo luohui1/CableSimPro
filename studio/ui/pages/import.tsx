@@ -4,6 +4,7 @@ import { compact } from '@shared/format';
 import type { ImportPreview, SeriesDeclaration, TableInspection } from '@shared/types';
 import { Button } from '@/components/button';
 import { LibraryHeader } from '@/components/library-header';
+import { Icon } from '@/components/icon';
 import { api } from '@/state/api';
 import { queryClient, useVocabulary } from '@/state/queries';
 
@@ -53,29 +54,41 @@ export function ImportLibrary() {
   const tableParams = () => ({ upload: draft.upload, sheet: draft.sheet, first_data_row: draft.first, mapping: draft.mapping, series: draft.declaration });
   const declaredFields = fields.filter(field => !['area', 'weight'].includes(field.key) && draft.mapping[field.key] === undefined);
   const declaredBasisMissing = Object.keys(draft.declaration.common).some(key => !draft.declaration.common_basis[key]?.trim());
+  function uploadFile(file: File) {
+    if (busy) return;
+    update({ file: file.name });
+    void run(async () => {
+      const reply = await fetch(`/api/uploads?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file });
+      const result = await reply.json();
+      if (!reply.ok) throw new Error(result.error?.message ?? '上传失败。');
+      await inspect(result.upload, result.file, []);
+    });
+  }
 
   return <div className="flex h-full min-w-0 flex-col"><LibraryHeader />
-    <main className="min-h-0 flex-1 overflow-y-auto"><div className="mx-auto grid w-full max-w-[1200px] gap-6 px-4 py-6 sm:px-8">
-      <div className="flex flex-wrap items-center justify-between gap-3"><div><Link to="/library" className="text-13 text-ink-2">产品库</Link><h1 className="m-0 mt-2 text-20 font-strong">导入结构表</h1></div><Button disabled={busy} onClick={() => { update(initial()); setPreview(null); setCommitted(null); setConfirmed(false); }}>重新开始</Button></div>
-      <ol aria-label="导入步骤" className="m-0 flex flex-wrap gap-x-6 gap-y-3 border-b border-line p-0 pb-4 text-14">{STEPS.map((label, index) => <li key={label} className="list-none" aria-current={draft.step === index ? 'step' : undefined}><span className={draft.step === index ? 'font-strong text-copper' : 'text-ink-2'}>{index + 1}. {label}</span></li>)}</ol>
+    <div className="import-layout">
+      <aside className="import-steps" aria-label="导入进度"><h2 className="m-0 px-3 text-16 font-strong">导入结构表</h2><ol aria-label="导入步骤">{STEPS.map((label, index) => <li key={label} aria-current={draft.step === index ? 'step' : undefined}><span className="import-step-number">{index < draft.step ? <Icon name="action/check" className="size-3" /> : index + 1}</span><span>{label}</span></li>)}</ol><p className="import-step-note">{draft.file ? <><strong className="break-all text-ink">{draft.file}</strong><br />{draft.sheet && `当前工作表：${draft.sheet}`}<br /></> : null}草稿自动保留，可在确认前逐项核对。原文件与取值依据随导入保存。</p></aside>
+    <main className="import-main"><div className="import-content">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-5"><div className="flex items-center gap-3"><Link to="/library" aria-label="返回产品库" className="text-ink-2"><Icon name="action/arrow-left" /></Link><h1 className="m-0 text-20 font-strong">导入结构表</h1></div><Button variant="ghost" size="compact" disabled={busy} onClick={() => { update(initial()); setPreview(null); setCommitted(null); setConfirmed(false); }}>重新开始</Button></div>
       {error && <div role="alert" className="border-b border-line pb-4 text-14 text-error">{error}</div>}
       {vocabulary.error && <p role="alert" className="text-error">{vocabulary.error.message}<Button onClick={() => void vocabulary.refetch()}>重新读取字段</Button></p>}
       {committed ? <section className="grid justify-items-start gap-4 py-5"><h2 className="m-0 text-20 font-strong">已导入 {committed.imported} 个规格</h2><p className="m-0 text-14">每个规格保存为第 1 版草稿，原始文件、系列声明和逐项来源已保留。{committed.left_out ? `跳过 ${committed.left_out} 行。` : ''}</p>
         <Link to="/library/$seriesId" params={{ seriesId: committed.series }} search={{}} className="text-copper">打开系列，计算与核对</Link>
         <Button onClick={() => { setCommitted(null); update({ step: 1 }); setPreview(null); setSkipFailed(false); }}>继续导入此文件的其他工作表</Button></section> : <>
-      {draft.step === 0 && <section className="grid justify-items-start gap-4 py-6">
+      {draft.step === 0 && <section className="grid gap-4">
+        <div className="import-file-area" onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); const file = event.dataTransfer.files[0]; if (file) uploadFile(file); }}>
+        <Icon name="action/import" />
         <h2 className="m-0 text-16 font-strong">选择 Excel 或 CSV 结构表</h2>
-        <p className="m-0 max-w-[70ch] text-14">保留原文件；先检查工作表、列对应和缺项，再由你确认导入。支持 .xlsx、.xls、.csv 和 .tsv，最大 25 MB。</p>
-        <div className="flex max-w-full flex-wrap items-center gap-3"><Button disabled={busy} onClick={() => { if (fileInput.current) { fileInput.current.value = ''; fileInput.current.click(); } }}>选择结构表文件</Button><span id="import-file-name" className="min-w-0 break-all text-14">{busy ? '正在读取文件…' : draft.file || '尚未选择文件'}</span></div>
+        <p className="m-0 text-14 text-ink-2">将文件拖到这里，或点击选择。先确认工作表、列对应与缺项，再预览每个规格。</p>
+        <div className="flex max-w-full flex-wrap items-center justify-center gap-3"><Button variant="primary" disabled={busy} busy={busy} onClick={() => { if (fileInput.current) { fileInput.current.value = ''; fileInput.current.click(); } }}>选择结构表文件</Button><span id="import-file-name" className="min-w-0 break-all text-13 text-ink-2">{busy ? '正在读取文件…' : draft.file || '支持 .xlsx / .xls / .csv / .tsv · 最大 25 MB'}</span></div>
         <input ref={fileInput} type="file" aria-label="选择结构表文件" aria-describedby="import-file-name" tabIndex={-1} accept=".xlsx,.xls,.csv,.tsv" disabled={busy} className="sr-only" onChange={event => {
           const file = event.target.files?.[0]; if (!file) return;
-          update({ file: file.name });
-          void run(async () => { const reply = await fetch(`/api/uploads?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file });
-            const result = await reply.json(); if (!reply.ok) throw new Error(result.error?.message ?? '上传失败。'); await inspect(result.upload, result.file, []); });
+          uploadFile(file);
         }} />
-        <div className="mt-3 grid gap-2 border-t border-line pt-5"><Button disabled={busy} busy={busy} onClick={() => void run(async () => {
+        </div>
+        <div className="import-sample"><div><h3 className="m-0 text-14 font-strong">用公开结构表熟悉流程</h3><p className="mb-0 mt-2 text-13 text-ink-2">人民电缆公开手册转录，前三张表共 35 个规格，保留来源与声明依据。</p></div><Button disabled={busy} busy={busy} icon="object/file" onClick={() => void run(async () => {
           const sample = await api.op<{ upload: string; file: string; declarations: Draft['samples'] }>('library.import.sample', {}); await inspect(sample.upload, sample.file, sample.declarations);
-        })}>试用人民电缆公开结构表</Button><p className="m-0 text-13 text-ink-2">从公开手册转录，前三张表共 35 个规格；会保留公开资料身份及声明依据。</p></div>
+        })}>试用人民电缆公开结构表</Button></div>
       </section>}
       {draft.step === 1 && <section className="grid gap-4"><h2 className="m-0 text-16 font-strong">选择工作表</h2><p className="m-0 text-14">文件：{draft.file}</p>
         <label className="grid max-w-[600px] gap-2 text-14">工作表<select aria-label="工作表" className="studio-input" value={draft.sheet} onChange={event => update({ sheet: event.target.value })}>{draft.inspection?.sheets.map(item => <option key={item.name} value={item.name}>{item.name} · {item.data_rows ?? item.rows} 行{item.table ? '' : '（未识别表头）'}</option>)}</select></label>
@@ -87,7 +100,7 @@ export function ImportLibrary() {
           <label className="grid gap-1 text-13">复用列对应<select aria-label="复用列对应" className="studio-input" defaultValue="" onChange={event => {
             const mapping = vocabulary.data?.mappings.find(item => item.name === event.target.value); if (mapping) update({ mapping: mapping.mapping, mappingName: mapping.name });
           }}><option value="">选择已保存的对应关系</option>{vocabulary.data?.mappings.map(item => <option key={item.name}>{item.name}</option>)}</select></label></div>
-        <div data-scroll-table className="overflow-auto"><table className="w-full min-w-[620px] border-collapse text-14"><thead><tr className="bg-fill text-left"><th className="p-3">原表列</th><th className="p-3">样例数值</th><th className="p-3">对应字段与单位</th></tr></thead><tbody>
+        <div data-scroll-table className="import-table overflow-auto"><table className="w-full min-w-[620px] border-collapse text-14"><thead><tr className="bg-fill text-left"><th className="p-3">原表列</th><th className="p-3">样例数值</th><th className="p-3">对应字段与单位</th></tr></thead><tbody>
           {sheet?.columns?.map(column => <tr key={column.index} className="border-b border-line"><th className="p-3 text-left font-normal">{column.letter} · {column.header}</th><td className="p-3 text-13">{column.sample.slice(0, 3).join(' / ')}</td><td className="p-3"><select aria-label={`${column.letter}列对应`} className="studio-input w-full" value={Object.entries(draft.mapping).find(([, index]) => index === column.index)?.[0] ?? ''} onChange={event => {
             const mapping = Object.fromEntries(Object.entries(draft.mapping).filter(([key, index]) => index !== column.index && key !== event.target.value));
             if (event.target.value) mapping[event.target.value] = column.index; update({ mapping });
@@ -134,6 +147,6 @@ export function ImportLibrary() {
         })}>确认导入 {preview.ready} 个规格</Button></div>
       </section>}
       </>}
-    </div></main>
+    </div></main></div>
   </div>;
 }

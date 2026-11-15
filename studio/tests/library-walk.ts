@@ -1,6 +1,6 @@
 // The actual product flow in a browser, with the real core. Imported rows and exported PDFs are verified again.
 import assert from 'node:assert/strict';
-import { copyFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { copyFileSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Browser, Locator } from 'playwright';
 import type { LibraryJob, SeriesSummary, SeriesView, SpecificationReport, SpecView } from '../shared/types.ts';
@@ -19,7 +19,17 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
       await page.setViewportSize({ width, height });
       if (!keepScroll) await page.locator('main, aside[aria-label="规格详情"] .overflow-y-auto').evaluateAll(elements => elements.forEach(element => { element.scrollTop = 0; }));
       await page.waitForTimeout(400);
+      await page.evaluate(async () => { await document.fonts.ready; });
+      assert.equal(await page.evaluate(() => [...document.fonts].some(font => font.family === 'Noto Sans SC Variable' && font.status === 'loaded')), true, 'the bundled UI font must load');
       if (anchor) await anchor.scrollIntoViewIfNeeded();
+      if (name === 'library-series' && width === 1920) {
+        const fill = await page.getByRole('table', { name: '产品规格表' }).evaluate(table => {
+          const width = table.getBoundingClientRect().width;
+          return { width, area: table.parentElement!.clientWidth, row: table.querySelector('tbody tr')!.getBoundingClientRect().width };
+        });
+        assert.ok(Math.abs(fill.width - fill.area) <= 2, 'the table must fill the available work surface');
+        assert.ok(Math.abs(fill.row - fill.width) <= 2, 'the cells must fill the table width');
+      }
       await page.screenshot({ path: join(out, `${width}-${name}.png`) });
       for (const issue of await page.evaluate(probe)) problems.push(`${width} ${name}: ${issue}`);
     }
@@ -44,6 +54,17 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await page.getByRole('button', { name: '试用人民电缆公开结构表' }).click();
     const sample = await (await sampleResponse).json();
     copyFileSync(join(home, 'uploads', sample.upload, readdirSync(join(home, 'uploads', sample.upload))[0]), join(out, '人民电缆公开结构表.xlsx'));
+    await page.getByLabel('工作表', { exact: true }).waitFor();
+    // File drop uses the actual workbook and parser, without committing it as a factory declaration.
+    await page.getByRole('button', { name: '重新开始', exact: true }).click();
+    await page.locator('.import-file-area').evaluate((area, bytes) => {
+      const transfer = new DataTransfer();
+      transfer.items.add(new File([new Uint8Array(bytes)], '结构表.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      area.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+    }, [...readFileSync(join(out, '人民电缆公开结构表.xlsx'))]);
+    await page.getByLabel('工作表', { exact: true }).selectOption('表3 YJV22');
+    await page.getByRole('button', { name: '重新开始', exact: true }).click();
+    await page.getByRole('button', { name: '试用人民电缆公开结构表' }).click();
     await page.getByLabel('工作表', { exact: true }).waitFor();
     for (const sheet of ['表1 YJV', '表2 YJV', '表3 YJV22']) {
       await page.getByLabel('工作表', { exact: true }).selectOption(sheet);
@@ -76,6 +97,15 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
       console.log(`computed: ${series.name}`);
     }
     const armoured = list.find(series => series.designation === 'YJV22')!;
+    await page.goto(`${base}/library`);
+    await page.locator('table.library-table tbody tr').first().waitFor();
+    await page.getByRole('complementary', { name: '产品库资料分类' }).getByRole('button', { name: /公开厂家资料/ }).click();
+    assert.equal(await page.locator('tbody tr').count(), 5);
+    await page.getByRole('searchbox', { name: '搜索产品系列' }).fill('人民电缆');
+    assert.equal(await page.locator('tbody tr').count(), 3);
+    await page.getByRole('searchbox', { name: '搜索产品系列' }).fill('');
+    await page.getByRole('complementary', { name: '产品库资料分类' }).getByRole('button', { name: /全部资料/ }).click();
+    await capture('library-overview');
     await page.goto(`${base}/library/${armoured.id}`);
     await page.getByRole('table', { name: '产品规格表' }).waitFor();
     await page.getByRole('button', { name: '3×240', exact: true }).waitFor();
