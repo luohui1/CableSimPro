@@ -8,6 +8,10 @@ import json
 from copy import deepcopy
 from pathlib import Path
 
+from openpyxl import Workbook
+from openpyxl.styles import Alignment, Font
+from openpyxl.utils import get_column_letter
+
 from . import library
 
 CATALOGUES = Path(__file__).with_name('catalogues')
@@ -56,9 +60,6 @@ def table_series(data, table_id, model=None):
 def workbook(data, path):
     """The published tables written as a workbook laid out like the printed ones: a sheet per table, a title,
     names over units, one weight column per designation, the catalogue's note under the rows."""
-    from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font
-    from openpyxl.utils import get_column_letter
     book = Workbook()
     book.remove(book.active)
     centre = Alignment(horizontal='center', vertical='center', wrap_text=True)

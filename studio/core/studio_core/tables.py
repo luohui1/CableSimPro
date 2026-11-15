@@ -9,6 +9,11 @@ from pathlib import Path
 import csv
 import re
 
+# Load workbook dependencies before the service starts reading its stdin pipe.
+# On Windows, loading numpy through openpyxl in a worker can block on that read.
+from openpyxl import load_workbook
+import xlrd
+
 from . import CoreError
 from .structure import FIELDS
 
@@ -37,7 +42,6 @@ def _cell(value):
 
 
 def _workbook(path):
-    from openpyxl import load_workbook
     book = load_workbook(path, data_only=True)
     sheets = []
     for sheet in book.worksheets:
@@ -56,7 +60,6 @@ def _workbook(path):
 
 
 def _legacy_workbook(path):
-    import xlrd
     book = xlrd.open_workbook(path, formatting_info=False)
     sheets = []
     for sheet in book.sheets():

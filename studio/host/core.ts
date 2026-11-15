@@ -82,8 +82,12 @@ export class Core {
     });
   }
 
-  stop(): void {
-    this.#child?.stdin.end();
-    this.#child = undefined;
+  stop(): Promise<void> {
+    const child = this.#child;
+    if (!child) return Promise.resolve();
+    return new Promise<void>(done => {
+      child.once('close', () => done());
+      child.stdin.end();
+    });
   }
 }

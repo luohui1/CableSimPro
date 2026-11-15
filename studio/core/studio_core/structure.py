@@ -106,6 +106,10 @@ def _resolved(series, values):
             resolved[key] = {'value': _number(common[key], key), 'origin': 'series', 'basis': notes.get(key) or '系列声明'}
     if 'area' not in resolved:
         raise CoreError('STRUCTURE_INCOMPLETE', '缺标称截面。', '/values/area')
+    for key in ('conductor_diameter', 'conductor_screen_thickness', 'insulation_thickness',
+                'insulation_screen_thickness', 'screen_tape_thickness', 'oversheath_thickness', 'outer_diameter'):
+        if key not in resolved:
+            raise CoreError('STRUCTURE_INCOMPLETE', f'缺{FIELDS[key][0]}：结构表和系列声明里都没有。', f'/values/{key}')
     return resolved
 
 
@@ -293,7 +297,9 @@ def _completed(series, parts, built):
     """Rows of a family the sealed model completion covers, derived in one run of the plugin."""
     modelling = series.get('modelling') or {}
     cases = [{'case_id': f'row-{index}', 'input': _plugin_specification(series, parts, item['resolved'], item['name']),
-              'parameters': {'values': deepcopy(modelling)}} for index, item in built.items()]
+              'parameters': {'values': deepcopy(modelling)}} for index, item in built.items() if not isinstance(item, CoreError)]
+    if not cases:
+        return
     run = runner.run(IEC, 'model-completion', cases)
     for case in run['cases']:
         index = int(case['case_id'].split('-')[1])
@@ -342,7 +348,7 @@ def build(series, rows):
         built[index] = {'name': named, 'key': f"{series['cores']}×{area:g}", 'area_mm2': area, 'resolved': item,
                         'binder': item['binder_thickness']['value'] * 1e-3 if 'binder_thickness' in item else 0.0}
     if covered_by_completion(series, parts):
-        _completed(series, parts, {index: item for index, item in built.items() if not isinstance(item, CoreError)})
+        _completed(series, parts, built)
     else:
         for index, item in built.items():
             if isinstance(item, CoreError):

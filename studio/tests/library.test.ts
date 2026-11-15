@@ -42,14 +42,21 @@ const op = async <T>(id: string, params: unknown): Promise<T> => {
   return reply.body;
 };
 
-const finished = (id: string) => new Promise<LibraryJob>(done => {
-  const listen = (event: StudioEvent) => {
-    if (event.type === 'library' && event.job?.id === id && event.job.state !== 'running') {
+const finished = (job: LibraryJob) => new Promise<LibraryJob>((done, reject) => {
+  const accept = (latest: LibraryJob) => {
+    if (latest.id === job.id && latest.state !== 'running') {
       app.studio.events.off('event', listen);
-      done(event.job);
+      done(latest);
     }
   };
+  const listen = (event: StudioEvent) => {
+    if (event.type === 'library' && event.job) accept(event.job);
+  };
   app.studio.events.on('event', listen);
+  accept(job);
+  if (job.state === 'running') void op<SeriesView>('library.series.get', { series: job.series_id }).then(view => {
+    if (view.job) accept(view.job);
+  }).catch(error => { app.studio.events.off('event', listen); reject(error); });
 });
 
 async function bring(sheet: string, extra: Record<string, unknown> = {}) {
@@ -92,8 +99,7 @@ test('a workbook is uploaded as it is and its header is read', async () => {
 
 test('three published tables become three series of 35 sizes, and a suspicious row is pointed out', async () => {
   for (const sheet of ['表1 YJV', '表2 YJV', '表3 YJV22']) {
-    const { request, found } = await bring(sheet, sheet === '表3 YJV22' ? { mapping_name: '人民电缆手册版式',
-      headers: Object.fromEntries(found.columns!.filter(column => column.suggested).map(column => [column.suggested!, column.header])) } : {});
+    const { request, found } = await bring(sheet);
     const preview = await op<ImportPreview>('library.import.preview', request);
     assert.equal(preview.failed, 0);
     if (sheet === '表1 YJV') {
@@ -101,7 +107,9 @@ test('three published tables become three series of 35 sizes, and a suspicious r
       assert.deepEqual(flagged.map(row => row.key), ['1×185']);  // the catalogue prints 36 mm for both 1×185 and 1×240
       assert.match(flagged[0].warnings[0].message, /请核对这一行的外径或层厚/);
     }
-    const committed = await op<{ series: string; imported: number }>('library.import.commit', request);
+    const committed = await op<{ series: string; imported: number }>('library.import.commit', { ...request,
+      ...(sheet === '表3 YJV22' ? { mapping_name: '人民电缆手册版式',
+        headers: Object.fromEntries(found.columns!.filter(column => column.suggested).map(column => [column.suggested!, column.header])) } : {}) });
     assert.equal(committed.imported, found.data_rows);
     series.set(sheet, committed.series);
   }
@@ -137,28 +145,37 @@ test('a series is computed and checked in one batch, and the batch gives what a 
   assert.equal(job.total, 44);
   const busy = await call('library.compute', { series: id });
   assert.equal(busy.body.error?.code, 'JOB_RUNNING');
-  const done = await finished(job.id);
+  const done = await finished(job);
   assert.deepEqual([done.state, done.done], ['done', 44]);
   const view = await op<SeriesView>('library.series.get', { series: id });
   assert.deepEqual(view.reference, { id: 'three_core_buried_single@1', layout: 'three_core_buried_single', depth_m: .7, ambient_temperature_c: 25, soil_thermal_resistivity: 1 });
   for (const spec of view.specs) {
-    assert.deepEqual(spec.computed, { check: 'done', electrical: 'done', short_circuit: 'done', rating: 'done' }, spec.name);
+    assert.deepEqual(spec.computed, { check: 'done', electrical: 'done', short_circuit: 'done', rating: spec.key === '3×50' ? 'error' : 'done' }, spec.name);
     assert.ok(spec.check!.passed >= 12 && !spec.check!.failed, spec.name);
-    assert.ok(spec.ac_resistance_ohm_km! > spec.r20_ohm_km! * 1.27 && spec.short_circuit_ka! > 0 && spec.ampacity_a! > 0, spec.name);
+    assert.ok(spec.ac_resistance_ohm_km! > spec.r20_ohm_km! * 1.27 && spec.short_circuit_ka! > 0, spec.name);
+    if (spec.key === '3×50') {
+      assert.equal(spec.ampacity_a, null);
+      const refused = await op<SpecView>('library.spec.get', { spec: spec.id });
+      const rows = refused.results.rating!.rows as RatingRow[];
+      assert.equal(rows.length, 12);
+      assert.ok(rows.every(row => row.status === 'failed' && row.error?.code === 'SL_FILLER_GEOMETRY_RANGE' && row.ampacity_a === undefined));
+    } else assert.ok(spec.ampacity_a! > 0, spec.name);
   }
-  // Larger conductors carry more and withstand more.
-  assert.deepEqual(view.specs.map(spec => spec.ampacity_a), [...view.specs.map(spec => spec.ampacity_a)].sort((a, b) => a! - b!));
+  // The published 3×50 geometry exceeds the method's filler range; every supported size grows monotonically.
+  const supported = view.specs.filter(spec => spec.ampacity_a !== null);
+  assert.equal(supported.length, 10);
+  assert.deepEqual(supported.map(spec => spec.ampacity_a), [...supported.map(spec => spec.ampacity_a)].sort((a, b) => a! - b!));
   const target = view.specs.find(spec => spec.key === '3×240')!;
   assert.ok(Math.abs(target.short_circuit_ka! - 34.34) < .05);
   // The same product, the same laying, one calculation in a project: the same current.
   const project = await op<ProjectView>('project.create', { name: '成批与单算对照', model_id: target.id });
   await op('installation.set', { project: project.meta.id, depth_m: .7 });
-  await op('conditions.set', { project: project.meta.id, soil_thermal_resistivity: 1.0, ambient_temperature_c: 25, current_a: 0 });
+  await op('conditions.set', { project: project.meta.id, soil_thermal_resistivity: 1.0, ambient_temperature_c: 25, currents_a: [0] });
   const single = await op<RunRecord>('run.rate', { project: project.meta.id });
   assert.ok(Math.abs(single.summary!.ampacity!.value_a - target.ampacity_a!) < 1e-6);
   // Nothing is computed twice while the inputs stand.
   const repeat = await op<LibraryJob>('library.compute', { series: id });
-  const quick = await finished(repeat.id);
+  const quick = await finished(repeat);
   assert.equal(quick.done, 44);
   const detail = await op<SpecView>('library.spec.get', { spec: target.id });
   const rating = detail.results.rating!;
@@ -176,7 +193,7 @@ test('a thinner insulation is a new draft that fails the declared standard at it
   assert.deepEqual([revised.view.version.number, revised.view.version.review], [2, 'draft']);
   assert.equal(revised.view.structure.find(item => item.key === 'insulation_thickness')!.value, 4);
   const job = await op<LibraryJob>('library.compute', { series: series.get('表3 YJV22')!, specs: [target.id], kinds: ['check'] });
-  await finished(job.id);
+  await finished(job);
   const second = await op<SpecView>('library.spec.get', { spec: target.id });
   const failed = (second.results.check!.rows as CheckRow[]).filter(row => row.verdict === 'failed');
   assert.equal(failed.length, 3);

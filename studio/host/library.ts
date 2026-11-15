@@ -209,7 +209,8 @@ export class Library {
         weight_kg_km: structure.find(item => item.key === 'weight')?.value ?? null, warnings: parse<Issue[]>(row.warnings),
         check: mine.check?.summary?.count ?? null, ac_resistance_ohm_km: ac === null ? null : ac * 1000, short_circuit_ka: short === null ? null : short / 1000,
         ampacity_a: rating?.find(item => item.id === conditions?.[0]?.id)?.ampacity_a ?? null,
-        computed: Object.fromEntries(Object.entries(mine).map(([kind, result]) => [kind, result.error ? 'error' : 'done'])),
+        computed: Object.fromEntries(Object.entries(mine).map(([kind, result]) => [kind,
+          result.error || (kind === 'rating' && !(result.rows as RatingRow[] | undefined)?.some(item => item.status === 'succeeded')) ? 'error' : 'done'])),
       };
     });
     return { series: summary, declaration, specs, reference };

@@ -145,7 +145,13 @@ export function createApp(options: { home?: string; runtime?: ModelRuntime | nul
 
   return {
     studio, agent, server,
-    close: () => new Promise<void>(done => { core.stop(); library.close(); server.closeAllConnections(); server.close(() => done()); }),
+    close: async () => {
+      server.closeAllConnections();
+      const stopped = new Promise<void>(done => server.close(() => done()));
+      await core.stop();
+      library.close();
+      await stopped;
+    },
   };
 }
 
