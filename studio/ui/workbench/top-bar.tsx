@@ -1,5 +1,6 @@
 // The top bar sits on the ground, not in a panel: the product, the project, undo, and the next step.
 import { useMutation } from '@tanstack/react-query';
+import { Link } from '@tanstack/react-router';
 import { Button, ToolButton } from '@/components/button';
 import { Icon, Mark } from '@/components/icon';
 import { reportFailure } from '@/components/notice';
@@ -42,6 +43,7 @@ export function TopBar({ projects, project, sheetRun, next, canUndo, canRedo, on
   return <header className="flex h-12 shrink-0 items-center gap-3 px-4">
     <Mark />
     <span className="text-16 font-strong text-ink">Cable Studio</span>
+    <Link to="/library" className="flex shrink-0 items-center gap-2 rounded-full px-3 py-1 text-14 text-ink no-underline hover:bg-hover"><Icon name="nav/library" />产品库</Link>
     <span className="mx-1 h-5 w-px bg-control" />
     <Menu trigger={
       <button type="button" className="flex h-8 max-w-96 items-center gap-2 rounded-full px-3 text-14 text-ink transition-colors duration-fast ease-std hover:bg-hover data-[popup-open]:bg-hover">

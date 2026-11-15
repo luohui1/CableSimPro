@@ -1,7 +1,7 @@
 // The host is the single source of truth. These hooks read it; the event stream tells them when to read again.
 import { keepPreviousData, QueryClient, useQuery } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import type { RunRecord } from '@shared/types';
+import type { RunRecord, SeriesSummary, SeriesView } from '@shared/types';
 import { api, subscribe } from './api';
 
 export const queryClient = new QueryClient({
@@ -12,6 +12,8 @@ export const useStatus = () => useQuery({ queryKey: ['status'], queryFn: api.sta
 export const useProjects = () => useQuery({ queryKey: ['projects'], queryFn: api.projects });
 export const useProject = (id: string) => useQuery({ queryKey: ['project', id], queryFn: () => api.project(id) });
 export const useLibrary = () => useQuery({ queryKey: ['library'], queryFn: api.library, staleTime: Infinity });
+export const useProductLibrary = () => useQuery({ queryKey: ['library', 'series'], queryFn: () => api.op<SeriesSummary[]>('library.series', {}) });
+export const useProductSeries = (id: string) => useQuery({ queryKey: ['library', 'series', id], queryFn: () => api.op<SeriesView>('library.series.get', { series: id }) });
 
 /** The result for the project's present inputs, computed by the host without writing a record. */
 export const useDraft = (project: string, digest: string | undefined, enabled: boolean) => useQuery({
@@ -29,6 +31,10 @@ export const useRun = (project: string, run: string | undefined) =>
 
 export function useHostEvents() {
   useEffect(() => subscribe(event => {
+    if (event.type === 'library') {
+      void queryClient.invalidateQueries({ queryKey: ['library'] });
+      return;
+    }
     if (event.type !== 'project') return;
     void queryClient.invalidateQueries({ queryKey: ['project', event.project_id] });
     void queryClient.invalidateQueries({ queryKey: ['projects'] });

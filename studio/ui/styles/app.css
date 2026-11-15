@@ -113,6 +113,14 @@
     background: color-mix(in oklab, var(--copper) 24%, transparent);
   }
 
+  input[type='search']::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    background-color: var(--text-secondary);
+    mask: url('../../../design/icons/action/close.svg') center / contain no-repeat;
+  }
+
   svg text {
     font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;

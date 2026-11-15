@@ -6,6 +6,7 @@ import { Badge, Facts, Meter, Seal } from '@/components/marks';
 import { Menu, MenuItem, Popover } from '@/components/popover';
 import { Segmented } from '@/components/segmented';
 import { TabPanel, Tabs } from '@/components/tabs';
+import { SearchField } from '@/components/search-field';
 
 function Row({ title, rule, children }: { title: string; rule: string; children: ReactNode }) {
   return <section className="grid grid-cols-[260px_minmax(0,1fr)] gap-8 border-t border-line pt-6">
@@ -22,9 +23,13 @@ export function Gallery() {
   const [tab, setTab] = useState<'why' | 'object'>('why');
   const [layer, setLayer] = useState(true);
   const [choice, setChoice] = useState('一');
+  const [search, setSearch] = useState('');
   return <div className="h-full overflow-y-auto bg-panel">
     <div className="mx-auto grid max-w-[1040px] gap-8 px-8 py-10">
       <h1 className="m-0 text-20 font-strong text-ink">组件</h1>
+      <Row title="搜索" rule="沿用输入框尺寸和边界。型号、制造商、执行标准使用同一个搜索入口。">
+        <SearchField label="搜索示例" placeholder="搜索型号、制造商或执行标准" value={search} onChange={setSearch} className="w-96" />
+      </Row>
       <Row title="按钮" rule="药丸形。对工程的动作：运行、导出、切换工程。铜色只给主动作。">
         <Button variant="primary" icon="run/run">运行校核</Button>
         <Button icon="result/report">计算书</Button>

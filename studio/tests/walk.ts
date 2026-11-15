@@ -1,15 +1,15 @@
-// Hands-on walk of the workbench: the real host, the real computing core, real clicks, at 1366×768 and 1920×1080.
+// Hands-on walk: the real host, computing core and clicks on desktop, plus the product library at 390×844.
 // Every step saves a screenshot and runs a layout probe: no label on the drawing may overlap another label or a tool,
 // and no text may be cut off unless it ends in an ellipsis on purpose.
 //
 //   npm run build && npm run walk [output folder]
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { chromium, type Page } from 'playwright';
 import { createApp } from '../host/server.ts';
-import type { ProjectView, RunRecord } from '../shared/types.ts';
+import type { ProjectView, RunRecord, SeriesDeclaration, TableInspection } from '../shared/types.ts';
 
 const out = resolve(process.argv[2] ?? join(import.meta.dirname, '..', '..', '.tmp', 'studio-walk'));
 mkdirSync(out, { recursive: true });
@@ -36,6 +36,22 @@ await op('conditions.set', { project: row, currents_a: [300] });
 await op<RunRecord>('run.select', { project: row, target_current_a: 300 });
 await op<RunRecord>('run.rate', { project: row });
 
+// The library screen reads an actual imported workbook, not hand-authored rows.
+const sample = await op<{ upload: string; declarations: { sheet: string; series: SeriesDeclaration }[] }>('library.import.sample', {});
+const uploadDir = join(home, 'uploads', sample.upload);
+copyFileSync(join(uploadDir, readdirSync(uploadDir)[0]), join(out, '人民电缆公开结构表.xlsx'));
+let imported = 0;
+let armoured = '';
+for (const declaration of sample.declarations.filter(item => /^表[123] /.test(item.sheet))) {
+  const inspection = await op<TableInspection>('library.import.inspect', { upload: sample.upload, designation: declaration.series.designation });
+  const sheet = inspection.sheets.find(item => item.name === declaration.sheet)!;
+  const result = await op<{ imported: number }>('library.import.commit', { upload: sample.upload, sheet: sheet.name, first_data_row: sheet.first_data_row,
+    mapping: Object.fromEntries(sheet.columns!.filter(column => column.suggested).map(column => [column.suggested!, column.index])), series: declaration.series });
+  imported += result.imported;
+  if (declaration.series.designation === 'YJV22') armoured = declaration.series.name;
+}
+if (imported !== 35) throw new Error(`expected 35 real imported specifications, got ${imported}`);
+
 /** Runs in the page: returns one line per layout problem. */
 function probe(): string[] {
   const issues: string[] = [];
@@ -43,6 +59,10 @@ function probe(): string[] {
   const shown = (element: Element) => {
     const rect = box(element);
     const style = getComputedStyle(element);
+    // Screen-reader labels are intentionally clipped to a 1px box; they are not visible text overflow.
+    const screenReaderOnly = style.position === 'absolute' && rect.width <= 1 && rect.height <= 1
+      && (style.clip === 'rect(0px, 0px, 0px, 0px)' || style.clipPath === 'inset(50%)');
+    if (screenReaderOnly) return false;
     return rect.width > 0 && rect.height > 0 && style.visibility !== 'hidden' && Number(style.opacity) > 0;
   };
   const cross = (a: DOMRect, b: DOMRect) => a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1;
@@ -73,7 +93,7 @@ function probe(): string[] {
 const problems: string[] = [];
 const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 try {
-  for (const [width, height] of [[1366, 768], [1920, 1080]] as const) {
+  for (const [width, height] of [[1366, 768], [1920, 1080], [390, 844]] as const) {
     const page: Page = await browser.newPage({ viewport: { width, height } });
     page.on('pageerror', error => problems.push(`${width} page error: ${error.message}`));
     page.on('console', message => { if (message.type() === 'error') problems.push(`${width} console error: ${message.text()}`); });
@@ -82,6 +102,45 @@ try {
       await page.screenshot({ path: join(out, `${width}-${label}.png`) });
       for (const issue of await page.evaluate(probe)) problems.push(`${width} ${label}: ${issue}`);
     };
+
+    await page.goto(base);
+    await page.waitForURL('**/library');
+    const search = page.getByRole('searchbox', { name: '搜索产品系列' });
+    await search.fill('人民电缆');
+    await page.getByRole('button', { name: /^全部规格\s*35$/ }).waitFor();
+    await page.getByRole('button', { name: /^草稿\s*35$/ }).click();
+    if (await page.getByRole('button', { name: /^查看规格：/ }).count() !== 3) problems.push(`${width} library: expected three imported series`);
+    await check('library');
+
+    await search.fill('不存在的本厂型号');
+    await page.getByRole('heading', { name: '没有匹配的系列' }).waitFor();
+    await check('library-empty');
+    const searchBox = await search.boundingBox();
+    if (!searchBox) throw new Error('search field is not visible');
+    await search.click({ position: { x: searchBox.width - 9, y: searchBox.height / 2 } });
+    if (await search.inputValue() !== '') problems.push(`${width} library: search clear control did not clear the query`);
+    await page.getByRole('button', { name: /^草稿\s*35$/ }).waitFor();
+    await search.fill('不存在的本厂型号');
+    await page.getByRole('heading', { name: '没有匹配的系列' }).waitFor();
+    await page.getByRole('button', { name: '清除筛选' }).click();
+    await search.fill('人民电缆');
+    await page.getByRole('button', { name: `查看规格：${armoured}` }).click();
+    const specification = page.getByRole('button', { name: '3×240，第 1 版，草稿，打开断面工作台' });
+    await specification.waitFor();
+    await check('library-specifications');
+    await page.getByText('系列声明与资料来源', { exact: true }).click();
+    await page.getByText('系列声明与资料来源', { exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
+    await check('library-source');
+    if (width === 390) {
+      await page.close();
+      continue;
+    }
+    await specification.click();
+    await page.waitForURL('**/p/*');
+    const opened = await (await fetch(`${base}/api/projects/${new URL(page.url()).pathname.split('/').at(-1)}`)).json() as ProjectView;
+    if (!opened.parts.cable.name.includes('3×240')) problems.push(`${width} library: opened a different specification`);
+    await page.getByRole('link', { name: '产品库', exact: true }).click();
+    await page.waitForURL('**/library');
 
     for (const [name, project] of [['row', row], ['trefoil', trefoil]] as const) {
       await page.goto(`${base}/p/${project}`);
@@ -180,4 +239,4 @@ if (problems.length) {
   console.error(`${problems.length} problem(s):\n${problems.join('\n')}`);
   process.exit(1);
 }
-console.log('layout probe: 0 problems at 1366×768 and 1920×1080');
+console.log('layout probe: 0 problems at 1366×768 and 1920×1080; product library also checked at 390×844');

@@ -6,6 +6,7 @@ import { Button } from '@/components/button';
 import { Mark } from '@/components/icon';
 import { Notice, reportFailure } from '@/components/notice';
 import { Gallery } from '@/pages/gallery';
+import { ProductLibrary } from '@/pages/library';
 import { api } from '@/state/api';
 import { queryClient, useHostEvents, useProjects } from '@/state/queries';
 import { Workbench } from '@/workbench/workbench';
@@ -61,7 +62,9 @@ function ProjectPage() {
 }
 
 const rootRoute = createRootRoute({ component: Root });
-const landingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: Landing });
+const landingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => <Navigate to="/library" replace /> });
+const libraryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library', component: ProductLibrary });
+const workbenchRoute = createRoute({ getParentRoute: () => rootRoute, path: '/workbench', component: Landing });
 const projectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/p/$projectId',
@@ -71,7 +74,7 @@ const projectRoute = createRoute({
 
 const galleryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/gallery', component: Gallery });
 
-export const router = createRouter({ routeTree: rootRoute.addChildren([landingRoute, projectRoute, galleryRoute]) });
+export const router = createRouter({ routeTree: rootRoute.addChildren([landingRoute, libraryRoute, workbenchRoute, projectRoute, galleryRoute]) });
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }
