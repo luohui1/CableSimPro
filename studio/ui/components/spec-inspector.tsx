@@ -8,10 +8,8 @@ import type { CheckRow, ProductResult, ProjectView, RatingCondition, RatingRow, 
 import { CableGlyph } from '@/canvas/cable-glyph';
 import { api } from '@/state/api';
 import { queryClient, useProductSpec, useSpecificationReports } from '@/state/queries';
-import { Button, ToolButton } from './button';
+import { Button, Checkbox, Input, ProductIcon as Icon, SelectField, TabPanel, Tabs, TextArea, ToolButton } from './product-controls';
 import { reportFailure } from './notice';
-import { Icon } from './icon';
-import { TabPanel, Tabs } from './tabs';
 
 const HEAD = 'border-b border-line px-2 py-2 text-left font-strong';
 const CELL = 'border-b border-line px-2 py-2 align-top';
@@ -70,7 +68,7 @@ function Revision({ view }: { view: SpecView }) {
     {!view.structure.length && <p className="m-0 text-14">{view.derivation.note}</p>}
     <table className="w-full border-collapse text-13"><thead><tr><th className={HEAD}>结构项</th><th className={HEAD}>数值 / 单位</th><th className={HEAD}>来源</th></tr></thead><tbody>
       {view.structure.map(row => <tr key={row.key}><td className={CELL}>{row.label}</td><td className={CELL}>
-        {editing && canEdit && row.origin === 'table' && row.key !== 'area' ? <input aria-label={`修改${row.label}`} type="number" min="0.000001" step="any" className="studio-input w-24 text-right"
+        {editing && canEdit && row.origin === 'table' && row.key !== 'area' ? <Input aria-label={`修改${row.label}`} type="number" min="0.000001" step="any" className="w-24 text-right"
           value={draft.values[row.key] ?? row.value} onChange={event => { setError(''); setDraft({ ...draft, values: { ...draft.values, [row.key]: event.target.value } }); }} /> : compact(row.value, 6)} <span>{row.unit}</span>
         </td><td className={CELL}><span>{row.revision ? '工程师修改' : ({ table: '结构表', series: '系列声明', standard: '标准规定' })[row.origin]}</span>{(row.basis || row.revision) && <details className="mt-1"><summary className="cursor-pointer text-ink-2">依据</summary>{row.revision && <p className="break-words">上版值 {compact(row.revision.previous)} {row.unit}；{row.revision.by} · {dateTime(row.revision.at)}；{row.revision.note}</p>}<p className="break-words">{row.revision ? '原始依据：' : ''}{row.basis ?? ({ table: '原结构表', series: '系列声明', standard: '标准规定' })[row.origin]}</p></details>}</td></tr>)}
     </tbody></table>
@@ -78,7 +76,7 @@ function Revision({ view }: { view: SpecView }) {
       <p className="m-0 text-14 font-strong">保存为第 {view.version.number + 1} 版草稿</p>
       {changes.map(row => <p key={row.key} className="m-0 text-13">{row.label}：{compact(row.value)} → {draft.values[row.key]} {row.unit}</p>)}
       <p className="m-0 text-13 text-ink-2">新版本需要重新核对结构、电气参数、短路容量与载流量；原版本和已导出文件保留。修改草稿自动保存在本机。</p>
-      <label className="grid gap-1 text-13">修改原因<textarea aria-label="修改原因" required maxLength={400} className="studio-input min-h-20 w-full" value={draft.note} onChange={event => setDraft({ ...draft, note: event.target.value })} /></label>
+      <label className="grid gap-1 text-13">修改原因<TextArea aria-label="修改原因" required maxLength={400} className="min-h-20 w-full" value={draft.note} onChange={event => setDraft({ ...draft, note: event.target.value })} /></label>
       {error && <p role="alert" className="m-0 text-14 text-error">{error}</p>}
       <div className="flex flex-wrap gap-2"><Button type="submit" variant="primary" busy={mutation.isPending} disabled={!changes.length || changes.some(row => !(Number(draft.values[row.key]) > 0))}>保存新版本</Button>
         <Button onClick={() => { setDraft({ values: {}, note: '' }); setEditing(false); setError(''); }}>放弃本次修改</Button></div>
@@ -96,7 +94,7 @@ function Checks({ view }: { view: SpecView }) {
   return <div className="grid gap-4">
     <p className="m-0 text-14">通过 {counts.passed ?? 0} · 不通过 {counts.failed ?? 0} · 缺项 {counts.missing ?? 0} · 未覆盖 {counts.uncovered ?? 0}</p>
     <p className="m-0 text-13 text-ink-2">缺实测值和未覆盖项不计为通过。审核状态与标准核对结论分别记录。</p>
-    <label className="flex items-center gap-2 text-14"><input type="checkbox" checked={onlyIssues} onChange={event => setOnlyIssues(event.target.checked)} />仅看需处理项</label>
+    <Checkbox checked={onlyIssues} onChange={setOnlyIssues}>仅看需处理项</Checkbox>
     {[...rows].sort((a, b) => (VERDICT_ORDER[a.verdict] ?? 2) - (VERDICT_ORDER[b.verdict] ?? 2)).filter(row => !onlyIssues || row.verdict !== 'passed').map(row => <section key={row.id} data-verdict={row.verdict} className="spec-check-row grid gap-2">
       <div className="flex items-start justify-between gap-3 text-14"><strong>{row.title}{row.target.core_id && <span className="ml-2 text-13 font-normal">{row.target.core_id}</span>}</strong><span className={row.verdict === 'failed' ? 'inline-flex shrink-0 items-center gap-1 text-error' : row.verdict === 'passed' ? 'shrink-0 text-success' : 'shrink-0 text-attention'}>{row.verdict === 'failed' && <Icon name="action/close" className="size-3" />}{VERDICT_NAMES[row.verdict] ?? row.verdict}</span></div>
       <p className="m-0 text-13">要求 {row.comparison ?? ''} {compact(row.limit, 6)} {row.unit} · 实际 {compact(row.actual, 6)} {row.unit}</p>
@@ -154,7 +152,7 @@ export function SpecInspector({ spec, version, onVersion, onClose }: { spec: str
   return <>
     <div className="spec-inspector-head grid gap-4">
       <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h2 className="m-0 text-28 font-strong">{view.spec.key} <span className="text-14 font-normal text-ink-2">mm²</span></h2><p className="m-0 mt-1 text-13 text-ink-2">{view.series.designation} · {STATE_NAMES[view.series.origin]}</p></div><div className="flex items-center gap-1"><Button size="compact" aria-label="导出规格书" icon="result/report" onClick={() => setTab('documents')}><span className="hidden sm:inline">导出规格书</span></Button><ToolButton icon="action/close" label="关闭规格详情" onClick={onClose} /></div></div>
-      <div className="flex flex-wrap items-center gap-3 text-13"><label className="flex items-center gap-2">版本<select aria-label="查看规格版本" className="studio-input" value={view.version.number} onChange={event => onVersion(Number(event.target.value) === view.versions[0].number ? undefined : Number(event.target.value))}>{view.versions.map(item => <option key={item.id} value={item.number}>第 {item.number} 版 · {REVIEW_NAMES[item.review]}</option>)}</select></label>
+      <div className="flex flex-wrap items-center gap-3 text-13"><label className="flex items-center gap-2">版本<SelectField aria-label="查看规格版本"  value={view.version.number} onValueChange={value => onVersion(Number(value) === view.versions[0].number ? undefined : Number(value))}>{view.versions.map(item => <option key={item.id} value={item.number}>第 {item.number} 版 · {REVIEW_NAMES[item.review]}</option>)}</SelectField></label>
         <Button size="compact" variant="ghost" disabled={view.version.number !== view.versions[0].number} busy={open.isPending} onClick={() => open.mutate()}>进入断面细算</Button></div>
     </div>
     <Tabs className="flex min-h-0 flex-1 flex-col" value={tab} onChange={setTab} items={[{ value: 'structure', label: '结构' }, { value: 'values', label: '计算参数' }, { value: 'checks', label: '标准核对' }, { value: 'documents', label: '版本与文件' }]}>

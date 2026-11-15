@@ -5,6 +5,7 @@ Imports and font registration happen before the stdio reader starts (Windows pip
 from html import escape
 from math import hypot
 from pathlib import Path
+import re
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -49,7 +50,12 @@ STYLES.add(ParagraphStyle('StudioNote', parent=STYLES['StudioBody'], fontSize=8,
 
 
 def text(value, style='StudioBody'):
-    return Paragraph(escape(str(value if value is not None else '未提供')).replace('\n', '<br/>'), STYLES[style])
+    markup = escape(str(value if value is not None else '未提供'))
+    # CJK fonts do not consistently contain Unicode subscript glyphs. Typeset
+    # the saved engineering symbols with ordinary glyphs at subscript position.
+    markup = re.sub('[₀₁₂₃₄₅₆₇₈₉ₛₚ]+', lambda match: '<sub>' + match.group().translate(
+        str.maketrans('₀₁₂₃₄₅₆₇₈₉ₛₚ', '0123456789sp')) + '</sub>', markup)
+    return Paragraph(markup.replace('\n', '<br/>'), STYLES[style])
 
 
 def number(value, digits=6):
@@ -193,7 +199,8 @@ def render(snapshot, snapshot_sha256, path):
             story.append(table(['参数', '结果', '单位', '说明 / 依据'], rows, [3, 1, 1, 3]))
             conditions = result.get('conditions', {})
             for key, value in conditions.get('values', {}).items():
-                shown = {'finished_cable': '成品电缆长度', 'trefoil': '品字形'}.get(str(value), value)
+                shown = number(value) if isinstance(value, (int, float)) else {
+                    'finished_cable': '成品电缆长度', 'trefoil': '品字形'}.get(str(value), value)
                 story.append(text(f"{CONDITIONS.get(key, key)} = {shown}；{conditions.get('sources', {}).get(key, '未声明来源')}", 'StudioNote'))
         else:
             story.append(text(result.get('error', {}).get('message', '本版本无当前有效结果。')))

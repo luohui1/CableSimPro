@@ -262,6 +262,11 @@ test('a PDF and its snapshot are fixed to the requested version, with numeric re
   assert.match(text, /479\.4/);
   assert.match(text, /GB\/T 12706\.2/);
   assert.match(text, /三回/);
+  assert.match(text, /导体 R\s*20/);
+  assert.match(text, /集肤因数 y\s*s/);
+  assert.match(text, /邻近因数 y\s*p/);
+  assert.match(text, /正序阻抗 Z\s*1/);
+  assert.doesNotMatch(text, /0\.030800000000000004|1\.0013468927330127/);
   assert.doesNotMatch(text, /\bavailable\b|\buncovered\b/);
   const second = await op<SpecificationReport>('library.export', { spec: target.id, version: 2 });
   const secondText = execFileSync(process.env.CABLE_STUDIO_PYTHON ?? 'python', ['-c', 'import fitz,sys; d=fitz.open(sys.argv[1]); print("\\n".join(p.get_text() for p in d))', join(home, 'specifications', second.id, 'specification.pdf')], { encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });

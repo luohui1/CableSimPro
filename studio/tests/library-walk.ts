@@ -13,6 +13,10 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     const response = await fetch(`${base}/api/ops/${id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(params) });
     const body = await response.json(); assert.equal(response.status, 200, JSON.stringify(body)); return body as T;
   };
+  const choose = async (label: string, option: RegExp, scope: Locator = page.locator('body')) => {
+    await scope.getByRole('button', { name: new RegExp(label) }).click();
+    await page.getByRole('option', { name: option }).click();
+  };
   const capture = async (name: string, keepScroll = false, anchor?: Locator) => {
     console.log(`capture: ${name}`);
     for (const [width, height] of [[1366, 768], [1920, 1080], [390, 844]] as const) {
@@ -23,9 +27,9 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
       assert.equal(await page.evaluate(() => [...document.fonts].some(font => font.family === 'Noto Sans SC Variable' && font.status === 'loaded')), true, 'the bundled UI font must load');
       if (anchor) await anchor.scrollIntoViewIfNeeded();
       if (name === 'library-series' && width === 1920) {
-        const fill = await page.getByRole('table', { name: '产品规格表' }).evaluate(table => {
-          const width = table.getBoundingClientRect().width;
-          return { width, area: table.parentElement!.clientWidth, row: table.querySelector('tbody tr')!.getBoundingClientRect().width };
+        const fill = await page.locator('.product-grid').evaluate(grid => {
+          const width = grid.getBoundingClientRect().width;
+          return { width, area: grid.parentElement!.clientWidth, row: grid.querySelector('.ag-row[row-id]')!.getBoundingClientRect().width };
         });
         assert.ok(Math.abs(fill.width - fill.area) <= 2, 'the table must fill the available work surface');
         assert.ok(Math.abs(fill.row - fill.width) <= 2, 'the cells must fill the table width');
@@ -54,7 +58,7 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await page.getByRole('button', { name: '试用人民电缆公开结构表' }).click();
     const sample = await (await sampleResponse).json();
     copyFileSync(join(home, 'uploads', sample.upload, readdirSync(join(home, 'uploads', sample.upload))[0]), join(out, '人民电缆公开结构表.xlsx'));
-    await page.getByLabel('工作表', { exact: true }).waitFor();
+    await page.getByRole('button', { name: /工作表/ }).waitFor();
     // File drop uses the actual workbook and parser, without committing it as a factory declaration.
     await page.getByRole('button', { name: '重新开始', exact: true }).click();
     await page.locator('.import-file-area').evaluate((area, bytes) => {
@@ -62,12 +66,12 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
       transfer.items.add(new File([new Uint8Array(bytes)], '结构表.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
       area.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
     }, [...readFileSync(join(out, '人民电缆公开结构表.xlsx'))]);
-    await page.getByLabel('工作表', { exact: true }).selectOption('表3 YJV22');
+    await choose('工作表', /^表3 YJV22/);
     await page.getByRole('button', { name: '重新开始', exact: true }).click();
     await page.getByRole('button', { name: '试用人民电缆公开结构表' }).click();
-    await page.getByLabel('工作表', { exact: true }).waitFor();
+    await page.getByRole('button', { name: /工作表/ }).waitFor();
     for (const sheet of ['表1 YJV', '表2 YJV', '表3 YJV22']) {
-      await page.getByLabel('工作表', { exact: true }).selectOption(sheet);
+      await choose('工作表', new RegExp(`^${sheet} ·`));
       await page.getByRole('button', { name: '读取列对应', exact: true }).click();
       await page.getByRole('heading', { name: '确认列对应关系' }).waitFor();
       if (sheet === '表3 YJV22') {
@@ -107,23 +111,35 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await page.getByRole('complementary', { name: '产品库资料分类' }).getByRole('button', { name: /全部资料/ }).click();
     await capture('library-overview');
     await page.goto(`${base}/library/${armoured.id}`);
-    await page.getByRole('table', { name: '产品规格表' }).waitFor();
+    await page.locator('.product-grid [role="grid"]').waitFor();
     await page.getByRole('button', { name: '3×240', exact: true }).waitFor();
     await capture('library-series');
     const ratingHeader = page.getByRole('columnheader', { name: '基准载流量 A' });
-    await ratingHeader.getByRole('button').click();
-    assert.equal(await ratingHeader.getAttribute('aria-sort'), 'descending');
-    assert.equal(await page.locator('tbody tr button').first().textContent(), '3×400');
-    await ratingHeader.getByRole('button').click();
+    await ratingHeader.locator('.ag-header-cell-label').click();
     assert.equal(await ratingHeader.getAttribute('aria-sort'), 'ascending');
-    await ratingHeader.getByRole('button').click();
-    await page.getByLabel('规格筛选', { exact: true }).selectOption('problems');
+    await ratingHeader.locator('.ag-header-cell-label').click();
+    assert.equal(await ratingHeader.getAttribute('aria-sort'), 'descending');
+    assert.equal(await page.locator('.product-grid .ag-row[row-index="0"] .spec-key').textContent(), '3×400');
+    await ratingHeader.locator('.ag-header-cell-label').click();
+    await choose('规格筛选', /^有问题 \/ 告警$/);
     assert.equal(await page.getByRole('button', { name: '3×240', exact: true }).count(), 0);
     await page.getByRole('button', { name: '3×50', exact: true }).waitFor();
-    await page.getByLabel('规格筛选', { exact: true }).selectOption('all');
+    await choose('规格筛选', /^全部规格$/);
 
     // Search, filter, selection and sorting operate on actual rows.
     await page.getByRole('searchbox', { name: '搜索规格' }).fill('3×240');
+    const selectedRow = page.locator('.product-grid .ag-row[row-id]').filter({ hasText: '3×240' });
+    await selectedRow.getByRole('checkbox').check();
+    await choose('规格筛选', /^待计算$/);
+    await page.getByRole('button', { name: '3×240', exact: true }).waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: '计算选中 1 项', exact: true }).waitFor();
+    await choose('规格筛选', /^全部规格$/);
+    assert.equal(await selectedRow.getByRole('checkbox').isChecked(), true, 'selection must survive filtering');
+    await page.getByRole('tab', { name: '结构参数', exact: true }).click();
+    await page.getByRole('columnheader', { name: /R20/ }).waitFor();
+    assert.equal(await selectedRow.getByRole('checkbox').isChecked(), true, 'selection must survive a column-view change');
+    await page.getByRole('tab', { name: '概览', exact: true }).click();
+    await page.getByRole('button', { name: '清除选择', exact: true }).click();
     await page.getByRole('button', { name: '3×240', exact: true }).click();
     await page.getByRole('heading', { name: /3×240/ }).waitFor();
     await capture('library-structure');
@@ -147,13 +163,19 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
 
     await panel.getByRole('button', { name: '关闭规格详情' }).click();
     for (const action of ['submit', 'approve', 'publish']) {
-      await page.getByRole('checkbox', { name: '选择 3×240', exact: true }).check();
+      await page.locator('.product-grid .ag-row[row-id]').filter({ hasText: '3×240' }).getByRole('checkbox').check();
       await page.getByRole('button', { name: '审核选中项' }).click();
       const form = page.getByRole('form', { name: '确认批量审核' });
-      await form.getByLabel('审核操作', { exact: true }).selectOption(action);
+      if (action === 'submit') {
+        await page.keyboard.press('Escape');
+        await form.waitFor({ state: 'hidden' });
+        await page.getByRole('button', { name: '审核选中项' }).click();
+        await capture('library-review');
+      }
+      await choose('审核操作', new RegExp(`^${({ submit: '提交审核', approve: '审核通过', publish: '发布' } as Record<string, string>)[action]}$`), form);
       await form.getByLabel('审核意见', { exact: true }).fill('隔离验收流程：核对公开手册结构与计算条件，缺实测项保留。');
       const acknowledge = form.getByRole('checkbox');
-      if (await acknowledge.count()) await acknowledge.check();
+      if (await acknowledge.count()) { await form.getByText(/^我已查看这些版本的/).click(); assert.equal(await acknowledge.isChecked(), true); }
       await form.getByRole('button', { name: /^确认/ }).click();
       await form.waitFor({ state: 'hidden' });
     }
@@ -168,10 +190,10 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await panel.getByLabel('修改原因', { exact: true }).fill('隔离验收：减薄绝缘，核对标准是否明确指出问题。');
     await capture('library-revision', true);
     await panel.getByRole('button', { name: '保存新版本', exact: true }).click();
-    await panel.getByLabel('查看规格版本', { exact: true }).selectOption('2');
+    await choose('查看规格版本', /^第 2 版/, panel);
     await panel.getByText('工程师修改', { exact: true }).waitFor();
     await panel.getByRole('button', { name: '关闭规格详情' }).click();
-    await page.getByRole('checkbox', { name: '选择 3×240', exact: true }).check();
+    await page.locator('.product-grid .ag-row[row-id]').filter({ hasText: '3×240' }).getByRole('checkbox').check();
     await page.getByRole('button', { name: '计算选中 1 项', exact: true }).click();
     await waitJob();
     await page.getByRole('button', { name: '3×240', exact: true }).click();
@@ -190,7 +212,7 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     const secondReport = await (await secondExport).json() as SpecificationReport;
     copyFileSync(join(home, 'specifications', secondReport.id, 'specification.pdf'), join(out, 'YJV22-3x240-减薄核对.pdf'));
     writeFileSync(join(out, 'YJV22-3x240-减薄快照.json'), await (await fetch(base + secondReport.url + '/snapshot')).text(), 'utf8');
-    await panel.getByLabel('查看规格版本', { exact: true }).selectOption('1');
+    await choose('查看规格版本', /^第 1 版/, panel);
     await panel.getByRole('tab', { name: '结构', exact: true }).click();
     await panel.getByText('正在查看历史版本；修改请返回最新版本。', { exact: true }).waitFor();
     await capture('library-history');

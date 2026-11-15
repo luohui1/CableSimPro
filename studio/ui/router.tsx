@@ -1,17 +1,17 @@
 // Routes are written in code; nothing is generated. The address holds what a link should reopen:
 // the project and the run record being looked at.
-import { createRootRoute, createRoute, createRouter, Navigate, Outlet, useNavigate } from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Navigate, Outlet, useNavigate } from '@tanstack/react-router';
 import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/button';
 import { Mark } from '@/components/icon';
 import { Notice, reportFailure } from '@/components/notice';
-import { Gallery } from '@/pages/gallery';
-import { ProductLibrary } from '@/pages/library';
-import { ImportLibrary } from '@/pages/import';
-import { SeriesWorkspace } from '@/pages/series';
 import { api } from '@/state/api';
 import { queryClient, useHostEvents, useProjects } from '@/state/queries';
-import { Workbench } from '@/workbench/workbench';
+const ProductLibrary = lazyRouteComponent(() => import('@/pages/library'), 'ProductLibrary');
+const ImportLibrary = lazyRouteComponent(() => import('@/pages/import'), 'ImportLibrary');
+const SeriesWorkspace = lazyRouteComponent(() => import('@/pages/series'), 'SeriesWorkspace');
+const Workbench = lazyRouteComponent(() => import('@/workbench/workbench'), 'Workbench');
+const Gallery = lazyRouteComponent(() => import('@/pages/gallery'), 'Gallery');
 
 const LAST_PROJECT = 'cable-studio.project';
 

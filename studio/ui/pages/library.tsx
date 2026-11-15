@@ -2,10 +2,8 @@ import { useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { REVIEW_NAMES, STATE_NAMES, compact } from '@shared/format';
 import type { ReviewState, SeriesSummary } from '@shared/types';
-import { Button } from '@/components/button';
-import { Icon } from '@/components/icon';
+import { Button, ProductIcon as Icon, SearchField, SelectField, TabPanel, Tabs } from '@/components/product-controls';
 import { LibraryHeader } from '@/components/library-header';
-import { SearchField } from '@/components/search-field';
 import { useProductLibrary } from '@/state/queries';
 
 const STATES: ReviewState[] = ['draft', 'submitted', 'reviewed', 'published'];
@@ -27,7 +25,7 @@ export function ProductLibrary() {
   const total = (items: SeriesSummary[]) => items.reduce((sum, item) => sum + item.specs, 0);
   const reset = () => { setSearch(''); setReview('all'); setOrigin('all'); };
 
-  return <div className="flex h-full min-w-0 flex-col">
+  return <div className="product-ui flex h-full min-w-0 flex-col">
     <LibraryHeader />
 
     <div className="flex min-h-0 flex-1">
@@ -45,7 +43,7 @@ export function ProductLibrary() {
         </div>
         <div className="library-toolbar">
           <SearchField label="搜索产品系列" placeholder="搜索型号、制造商或执行标准" value={search} onChange={setSearch} className="w-full sm:w-96" />
-          <select aria-label="按资料来源筛选" className="studio-input xl:hidden" value={origin} onChange={event => setOrigin(event.target.value)}>{ORIGINS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</select>
+          <SelectField aria-label="按资料来源筛选" className="xl:hidden" value={origin} onValueChange={value => setOrigin(value)}>{ORIGINS.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}</SelectField>
           <span className="text-13 text-ink-2 sm:ml-auto">{visible.length} 个系列</span>
         </div>
 
@@ -57,16 +55,10 @@ export function ProductLibrary() {
           <span className="text-14">正在读取产品库…</span>
           {[0, 1, 2].map(row => <div key={row} aria-hidden="true" className="h-16 rounded-field bg-fill" />)}
         </div> : <>
-          <div aria-label="按最新版本审核状态筛选" className="library-view-tabs">
-            {[{ value: 'all' as const, label: '全部规格', count: total(searched) },
-              ...STATES.map(state => ({ value: state, label: REVIEW_NAMES[state], count: count(state) }))].map(item => <button key={item.value} type="button"
-              aria-pressed={review === item.value} onClick={() => setReview(item.value)}
-              >
-              {item.label}<span className="library-tab-count">{item.count}</span>
-            </button>)}
-          </div>
-
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <Tabs value={review} onChange={value => setReview(value as ReviewState | 'all')} label="按最新版本审核状态筛选" className="library-status-tabs min-h-0 flex-1 flex-col" items={[
+            { value: 'all', label: <>全部规格<span className="library-tab-count">{total(searched)}</span></> },
+            ...STATES.map(state => ({ value: state, label: <>{REVIEW_NAMES[state]}<span className="library-tab-count">{count(state)}</span></> }))]}>
+          <TabPanel value={review}><div className="library-table-scroll min-h-0 flex-1 overflow-y-auto">
           {visible.length === 0 ? <div className="grid justify-items-start gap-3 p-6">
             <h2 className="m-0 text-16 font-strong">{all.length ? '没有匹配的系列' : '产品库里还没有系列'}</h2>
             {all.length > 0 && <Button onClick={reset}>清除筛选</Button>}
@@ -94,7 +86,7 @@ export function ProductLibrary() {
                   </tr>)}
               </tbody>
             </table>}
-          </div><div className="library-footnote"><span>共 {visible.length} 个系列，{total(visible)} 个规格</span><span>审核状态按最新版本统计；数据来源单独保留。</span></div>
+          </div></TabPanel></Tabs><div className="library-footnote"><span>共 {visible.length} 个系列，{total(visible)} 个规格</span><span>审核状态按最新版本统计；数据来源单独保留。</span></div>
         </>}
       </main>
     </div>

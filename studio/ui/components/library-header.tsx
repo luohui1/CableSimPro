@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router';
-import { ToolButton } from './button';
-import { Icon, Mark } from './icon';
+import { ProductIcon as Icon, ToolButton } from './product-controls';
+import { Mark } from './icon';
 import { useTheme } from '@/state/theme';
 
 export function LibraryHeader() {
@@ -12,6 +12,6 @@ export function LibraryHeader() {
       <Link to="/workbench"><Icon name="object/section" />断面工作台</Link>
     </nav>
     <div className="flex-1" />
-    <ToolButton icon="nav/theme" label={theme === 'light' ? '换成深色' : '换成浅色'} onClick={toggle} />
+    <ToolButton icon={theme === 'light' ? 'moon' : 'sun'} label={theme === 'light' ? '换成深色' : '换成浅色'} onClick={toggle} />
   </header>;
 }
