@@ -2,6 +2,8 @@
 // workbook, become series, are computed and checked in one batch, revised, and taken through review.
 // The workbook is the People Cable Group 8.7/15 kV catalogue (tables 1, 2 and 3: 35 copper sizes).
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
@@ -10,7 +12,7 @@ import { after, before, test } from 'node:test';
 import { type App, createApp } from '../host/server.ts';
 import type {
   CheckRow, ColumnMapping, ImportPreview, LibraryJob, ProjectView, RatingRow, RunRecord, SeriesDeclaration, SeriesSummary, SeriesView, SpecView,
-  StudioEvent, TableInspection,
+  SpecificationReport, StudioEvent, TableInspection,
 } from '../shared/types.ts';
 
 const home = mkdtempSync(join(tmpdir(), 'cable-studio-library-'));
@@ -192,6 +194,9 @@ test('a thinner insulation is a new draft that fails the declared standard at it
   const revised = await op<{ view: SpecView }>('library.revise', { spec: target.id, values: { insulation_thickness: 4.0 }, note: '客户要求减薄绝缘，先看是否合规' });
   assert.deepEqual([revised.view.version.number, revised.view.version.review], [2, 'draft']);
   assert.equal(revised.view.structure.find(item => item.key === 'insulation_thickness')!.value, 4);
+  const change = revised.view.structure.find(item => item.key === 'insulation_thickness')!.revision!;
+  assert.deepEqual([change.previous, change.by, change.note], [4.5, app.studio.user, '客户要求减薄绝缘，先看是否合规']);
+  assert.ok(Number.isFinite(Date.parse(change.at)));
   const job = await op<LibraryJob>('library.compute', { series: series.get('表3 YJV22')!, specs: [target.id], kinds: ['check'] });
   await finished(job);
   const second = await op<SpecView>('library.spec.get', { spec: target.id });
@@ -204,11 +209,17 @@ test('a thinner insulation is a new draft that fails the declared standard at it
   // The version before it is untouched and still passes.
   const first = await op<SpecView>('library.spec.get', { spec: target.id, version: 1 });
   assert.equal(first.structure.find(item => item.key === 'insulation_thickness')!.value, 4.5);
+  assert.equal(first.structure.find(item => item.key === 'insulation_thickness')!.revision, undefined);
   assert.ok(!(first.results.check!.rows as CheckRow[]).some(row => row.verdict === 'failed'));
   const same = await call('library.revise', { spec: target.id, values: { insulation_thickness: 4.0 }, note: '重复' });
   assert.equal(same.body.error?.code, 'REVISION_UNCHANGED');
   const thick = await call('library.revise', { spec: target.id, values: { oversheath_thickness: 9 }, note: '护套写错' });
   assert.equal(thick.body.error?.code, 'RADIAL_DIMENSIONS_CONFLICT');
+  const stale = await call('library.revise', { spec: target.id, version: 1, values: { insulation_thickness: 4.2 }, note: '过期页面的修改' });
+  assert.deepEqual([stale.status, stale.body.error?.code], [409, 'VERSION_CHANGED']);
+  const identity = await call('library.revise', { spec: target.id, version: 2, values: { area: 230 }, note: '不应改掉规格身份' });
+  assert.equal(identity.body.error?.code, 'REVISION_INVALID');
+  assert.equal((await op<SpecView>('library.spec.get', { spec: target.id })).version.number, 2);
 });
 
 test('review is taken step by step by a person and leaves a record', async () => {
@@ -229,4 +240,79 @@ test('review is taken step by step by a person and leaves a record', async () =>
   assert.equal(back.body.error?.code, 'REVIEW_INVALID');  // what is issued is not taken back; a change is a new version
   const whole = await op<{ moved: number }>('library.review.series', { series: series.get('表3 YJV22')!, action: 'submit' });
   assert.equal(whole.moved, 10);  // the ten sizes still in draft, the revised 3×240 among them
+});
+
+test('a PDF and its snapshot are fixed to the requested version, with numeric results and explicit missing results', async () => {
+  const view = await op<SeriesView>('library.series.get', { series: series.get('表3 YJV22')! });
+  const target = view.specs.find(spec => spec.key === '3×240')!;
+  const first = await op<SpecificationReport>('library.export', { spec: target.id, version: 1 });
+  const response = await fetch(base + first.url);
+  assert.equal(response.headers.get('content-type'), 'application/pdf');
+  const pdf = Buffer.from(await response.arrayBuffer());
+  assert.equal(pdf.subarray(0, 5).toString(), '%PDF-');
+  assert.equal(createHash('sha256').update(pdf).digest('hex'), first.sha256);
+  const snapshotBytes = Buffer.from(await (await fetch(base + first.url + '/snapshot')).arrayBuffer());
+  assert.equal(createHash('sha256').update(snapshotBytes).digest('hex'), first.snapshot_sha256);
+  const snapshot = JSON.parse(snapshotBytes.toString('utf8'));
+  assert.equal(snapshot.view.version.number, 1);
+  assert.equal(snapshot.view.structure.find((row: { key: string }) => row.key === 'insulation_thickness').value, 4.5);
+  const text = execFileSync(process.env.CABLE_STUDIO_PYTHON ?? 'python', ['-c', 'import fitz,sys; d=fitz.open(sys.argv[1]); print("\\n".join(p.get_text() for p in d))', join(home, 'specifications', first.id, 'specification.pdf')], { encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+  assert.match(text, /产品技术规格书/);
+  assert.match(text, /公开厂家资料/);
+  assert.match(text, /479\.4/);
+  assert.match(text, /GB\/T 12706\.2/);
+  assert.match(text, /三回/);
+  assert.doesNotMatch(text, /\bavailable\b|\buncovered\b/);
+  const second = await op<SpecificationReport>('library.export', { spec: target.id, version: 2 });
+  const secondText = execFileSync(process.env.CABLE_STUDIO_PYTHON ?? 'python', ['-c', 'import fitz,sys; d=fitz.open(sys.argv[1]); print("\\n".join(p.get_text() for p in d))', join(home, 'specifications', second.id, 'specification.pdf')], { encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } });
+  assert.match(secondText, /不通过/);
+  assert.match(secondText, /尚未计算/);
+  assert.match(secondText, /工程师修改/);
+  assert.doesNotMatch(secondText, /479\.4/); // an earlier version's current must not leak into a new draft
+  assert.deepEqual(Buffer.from(await (await fetch(base + first.url)).arrayBuffer()), pdf);
+  const reports = await op<SpecificationReport[]>('library.documents', { spec: target.id });
+  assert.equal(reports.length, 2);
+  assert.equal(new Set(reports.map(report => report.id)).size, 2);
+  const refused = await fetch(base + '/api/specifications/not-a-report');
+  assert.equal(refused.status, 404);
+});
+
+test('batch review checks the exact version and rolls back the whole selection on conflict', async () => {
+  const view = await op<SeriesView>('library.series.get', { series: series.get('表3 YJV22')! });
+  const stable = view.specs.find(spec => spec.key === '3×35')!;
+  const changed = view.specs.find(spec => spec.key === '3×240')!;
+  const params = { items: [{ spec: stable.id, version: 1 }, { spec: changed.id, version: 1 }], action: 'approve', note: '核对选中版本' };
+  const conflict = await call('library.review.batch', params);
+  assert.equal(conflict.body.error?.code, 'VERSION_CHANGED');
+  assert.equal((await op<SpecView>('library.spec.get', { spec: stable.id })).version.review, 'submitted');
+  await assert.rejects(app.studio.invoke('library.review.batch', params, { by: 'agent' }), { code: 'REVIEW_FORBIDDEN' });
+  const empty = await call('library.review.batch', { ...params, items: [{ spec: stable.id, version: 1 }], note: '   ' });
+  assert.equal(empty.body.error?.code, 'REVIEW_INVALID');
+});
+
+test('stop is honoured between chunks, completed results survive, and an interrupted job is recoverable after restart', async () => {
+  const id = series.get('表3 YJV22')!;
+  const view = await op<SeriesView>('library.series.get', { series: id });
+  const spec = view.specs.find(row => row.key === '3×35')!;
+  const before = await op<SpecView>('library.spec.get', { spec: spec.id });
+  const job = await op<LibraryJob>('library.compute', { series: id, specs: [spec.id], force: true });
+  const stopped = finished(job);
+  await op('library.compute.cancel', { job: job.id });
+  const result = await stopped;
+  assert.equal(result.state, 'cancelled');
+  assert.equal(result.done, 1);
+  const after = await op<SpecView>('library.spec.get', { spec: spec.id });
+  assert.equal(after.results.electrical!.created, before.results.electrical!.created);
+  assert.ok(after.results.check!.created >= before.results.check!.created);
+  app.studio.library.setSetting('product.job', JSON.stringify({ ...result, state: 'running' }));
+  await app.close();
+  app = createApp({ home, runtime: null });
+  await new Promise<void>(done => app.server.listen(0, '127.0.0.1', done));
+  base = `http://127.0.0.1:${(app.server.address() as AddressInfo).port}`;
+  const recovered = await op<LibraryJob>('library.job', {});
+  assert.equal(recovered.state, 'failed');
+  assert.equal(recovered.error?.code, 'JOB_INTERRUPTED');
+  const continued = await finished(await op<LibraryJob>('library.compute', { series: id, specs: [spec.id] }));
+  assert.equal(continued.state, 'done');
+  assert.equal(continued.done, 4);
 });

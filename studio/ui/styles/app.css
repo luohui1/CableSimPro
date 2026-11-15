@@ -121,6 +121,21 @@
     mask: url('../../../design/icons/action/close.svg') center / contain no-repeat;
   }
 
+  input[type='checkbox'], progress { accent-color: var(--copper); }
+
+  .studio-input {
+    min-width: 0;
+    border: 1px solid var(--control-border);
+    border-radius: var(--radius-input);
+    background: var(--panel);
+    color: var(--text);
+    padding: 6px 9px;
+    font: inherit;
+    font-size: var(--text-body);
+  }
+  .studio-input:disabled { opacity: .5; }
+  .studio-input:focus { border-color: var(--text); }
+
   svg text {
     font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;

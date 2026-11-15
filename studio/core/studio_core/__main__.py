@@ -10,7 +10,7 @@ import sys
 import threading
 
 from . import CoreError
-from . import catalogue, designation, layouts, library, methods, product, scene, structure, study, tables
+from . import catalogue, designation, layouts, library, methods, product, scene, specification, structure, study, tables
 
 _library_lock = threading.Lock()
 _write_lock = threading.Lock()
@@ -62,6 +62,7 @@ HANDLERS = {
     'tables.rows': lambda path, sheet, first_data_row, mapping: tables.rows(path, sheet, first_data_row, mapping),
     'catalogue.sample': _sample,
     'product.compute': lambda items, kinds: product.compute(items, kinds),
+    'specification.render': specification.render,
     'layouts.list': _layouts,
     'methods.list': methods.catalogue,
     'scene.preview': lambda scene: study.preview(scene),

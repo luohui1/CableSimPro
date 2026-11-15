@@ -351,7 +351,8 @@ export interface SeriesDeclaration {
   origin?: 'factory' | 'public' | 'demo';
   armour_material?: string;
 }
-export interface StructureValue { key: string; label: string; unit: string; value: number; origin: 'table' | 'series' | 'standard'; basis?: string }
+export interface StructureValue { key: string; label: string; unit: string; value: number; origin: 'table' | 'series' | 'standard'; basis?: string;
+  revision?: { previous: number; by: string; at: string; note: string } }
 export interface Closure { declared_mm: number; listed_mm: number; residual_mm: number; tolerance_mm: number; placed_in: string | null }
 export interface Derivation { kind: 'plugin' | 'stated' | 'bundled'; note: string; plugin_id?: string; plugin_version?: string }
 export type BuiltRow =
@@ -402,7 +403,7 @@ export interface SpecRow {
   check: Record<string, number> | null; ac_resistance_ohm_km: number | null; short_circuit_ka: number | null; ampacity_a: number | null;
   computed: Partial<Record<ResultKind, 'done' | 'error'>>;
 }
-export interface LibraryJob { id: string; series_id: string; title: string; done: number; total: number; state: 'running' | 'done' | 'failed'; error?: Issue }
+export interface LibraryJob { id: string; series_id: string; title: string; done: number; total: number; state: 'running' | 'done' | 'failed' | 'cancelled'; error?: Issue; cancel_requested?: boolean }
 export interface SeriesView { series: SeriesSummary; declaration: SeriesDeclaration; specs: SpecRow[]; reference: RatingCondition | null; job: LibraryJob | null }
 export interface VersionHeader {
   id: string; number: number; review: ReviewState; note: string; content_sha256: string; created: string; created_by: string;
@@ -434,6 +435,18 @@ export interface ImportRow {
   derivation?: Derivation; warnings: Issue[]; error?: Issue;
 }
 export interface ImportPreview { designation: DesignationParts; rows: ImportRow[]; skipped: { row: number; text: string }[]; ready: number; failed: number }
+
+export interface LibraryVocabulary {
+  fields: { key: string; label: string; unit: string }[];
+  modelling: { key: string; label: string; unit: string }[];
+  reference_modelling: Record<string, GivenParameter>;
+  mappings: ColumnMapping[];
+  review_steps: Record<string, string>;
+}
+export interface SpecificationReport {
+  id: string; title: string; spec: string; version: number; review: ReviewState; created: string; by: string;
+  content_sha256: string; snapshot_sha256: string; sha256: string; url: string;
+}
 
 export type StudioEvent =
   | { type: 'task'; task: Task }

@@ -11,6 +11,7 @@ import { Library } from './library.ts';
 import { Studio } from './operations.ts';
 import { saveUpload } from './products.ts';
 import { Store } from './store.ts';
+import { specificationFile } from './specification.ts';
 
 const STUDIO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const REPO = resolve(STUDIO, '..');
@@ -67,6 +68,15 @@ export function createApp(options: { home?: string; runtime?: ModelRuntime | nul
     }
     const [head, id, section, item, action] = path;
     if (method === 'GET' && head === 'status') return send(response, 200, { agent: agent.status(), home: store.home, user: studio.user });
+    if (method === 'GET' && head === 'specifications' && id) {
+      const snapshot = section === 'snapshot';
+      if (section && !snapshot) throw new StudioError({ code: 'NOT_FOUND', message: '没有这个文件。' }, 404);
+      const file = specificationFile(store.home, id, snapshot);
+      response.writeHead(200, { 'content-type': snapshot ? 'application/json; charset=utf-8' : 'application/pdf', 'cache-control': 'no-store',
+        'content-disposition': `attachment; filename="${id}.${snapshot ? 'json' : 'pdf'}"` });
+      response.end(readFileSync(file));
+      return;
+    }
     if (method === 'POST' && head === 'uploads') {
       // A structure table or an inquiry file: the bytes as they are, the name in the query.
       const name = new URL(request.url ?? '/', 'http://local').searchParams.get('name') ?? '';

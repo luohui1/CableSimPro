@@ -78,6 +78,10 @@ export class Library {
     return (this.db.prepare('select value from setting where key = ?').get(key) as { value: string } | undefined)?.value ?? null;
   }
 
+  setSetting(key: string, value: string): void {
+    this.db.prepare('insert into setting (key, value) values (?, ?) on conflict (key) do update set value = excluded.value').run(key, value);
+  }
+
   #event(actor: string, object: string, id: string, action: string, detail: Record<string, unknown> = {}): void {
     this.db.prepare('insert into event (at, actor, object, object_id, action, detail) values (?, ?, ?, ?, ?, ?)')
       .run(now(), actor, object, id, action, JSON.stringify(detail));
@@ -267,8 +271,16 @@ export class Library {
       throw new StudioError({ code: 'REVISION_UNCHANGED', message: '结构没有变化，没有生成新版本。' }, 409);
     }
     const number = latest.number + 1;
+    const previous = parse<StructureValue[]>(latest.structure);
+    const at = now();
+    const structure = row.structure.map(value => {
+      const before = previous.find(item => item.key === value.key);
+      return { ...value, ...(before && before.value !== value.value
+        ? { revision: { previous: before.value, by: actor, at, note } }
+        : before?.revision ? { revision: before.revision } : {}) };
+    });
     this.db.transaction(() => {
-      this.#insertVersion(spec, number, 'draft', row.entry, { structure: row.structure, closure: row.closure, derivation: row.derivation,
+      this.#insertVersion(spec, number, 'draft', row.entry, { structure, closure: row.closure, derivation: row.derivation,
         warnings: row.warnings, note }, actor);
       this.db.prepare('update series set updated = ? where id = (select series_id from spec where id = ?)').run(now(), spec);
       this.#event(actor, 'version', `${spec}@${number}`, 'revised', { from: latest.number, note });

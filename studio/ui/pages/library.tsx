@@ -1,24 +1,21 @@
-import { Fragment, useState } from 'react';
-import { Link } from '@tanstack/react-router';
+import { useState } from 'react';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { REVIEW_NAMES, STATE_NAMES, compact } from '@shared/format';
 import type { ReviewState, SeriesSummary } from '@shared/types';
-import { Button, ToolButton } from '@/components/button';
-import { Icon, Mark } from '@/components/icon';
+import { Button } from '@/components/button';
+import { LibraryHeader } from '@/components/library-header';
 import { SearchField } from '@/components/search-field';
-import { SeriesSpecifications } from '@/components/series-specifications';
 import { cn } from '@/lib/cn';
 import { useProductLibrary } from '@/state/queries';
-import { useTheme } from '@/state/theme';
 
 const STATES: ReviewState[] = ['draft', 'submitted', 'reviewed', 'published'];
 const TONES: Record<ReviewState, string> = { draft: 'text-ink', submitted: 'text-attention', reviewed: 'text-success', published: 'text-ink' };
 
 export function ProductLibrary() {
   const library = useProductLibrary();
-  const { theme, toggle } = useTheme();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [review, setReview] = useState<ReviewState | 'all'>('all');
-  const [expanded, setExpanded] = useState<string | null>(null);
   const all = library.data ?? [];
   const needle = search.trim().toLocaleLowerCase();
   const searched = all.filter(item => [item.name, item.manufacturer, item.designation, item.description, ...item.standards]
@@ -26,22 +23,10 @@ export function ProductLibrary() {
   const count = (state: ReviewState) => searched.reduce((sum, item) => sum + (item.states[state] ?? 0), 0);
   const visible = searched.filter(item => review === 'all' || (item.states[review] ?? 0) > 0);
   const total = (items: SeriesSummary[]) => items.reduce((sum, item) => sum + item.specs, 0);
-  const reset = () => { setSearch(''); setReview('all'); setExpanded(null); };
+  const reset = () => { setSearch(''); setReview('all'); };
 
   return <div className="flex h-full min-w-0 flex-col">
-    <header className="flex min-h-12 shrink-0 items-center gap-4 border-b border-line px-4 sm:gap-6">
-      <Link to="/library" aria-label="Cable Studio 产品库" className="flex shrink-0 items-center gap-2 text-16 font-strong text-ink no-underline">
-        <Mark /><span className="hidden sm:inline">Cable Studio</span>
-      </Link>
-      <nav aria-label="工作区" className="flex h-12 items-stretch gap-5 text-14">
-        <Link to="/library" aria-current="page" className="flex items-center gap-2 border-b-2 border-copper font-strong text-copper no-underline">
-          <Icon name="nav/library" />产品库
-        </Link>
-        <Link to="/workbench" className="flex items-center text-ink no-underline hover:text-copper">断面工作台</Link>
-      </nav>
-      <div className="flex-1" />
-      <ToolButton icon="nav/theme" label={theme === 'light' ? '换成深色' : '换成浅色'} onClick={toggle} />
-    </header>
+    <LibraryHeader />
 
     <main className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto grid w-full max-w-[1600px] gap-6 px-4 py-6 sm:px-8 sm:py-8">
@@ -51,6 +36,7 @@ export function ProductLibrary() {
             {library.data && <span className="text-14">{all.length} 个系列 · {total(all)} 个规格</span>}
           </div>
           <SearchField label="搜索产品系列" placeholder="搜索型号、制造商或执行标准" value={search} onChange={setSearch} className="w-full sm:w-96" />
+          <Button variant="primary" icon="action/add" onClick={() => void navigate({ to: '/library/import' })}>导入结构表</Button>
         </div>
 
         {library.error ? <div role="alert" className="grid justify-items-start gap-3 py-6">
@@ -88,10 +74,9 @@ export function ProductLibrary() {
                 </tr>
               </thead>
               <tbody>
-                {visible.map(item => <Fragment key={item.id}>
-                  <tr className={cn('border-b border-line last:border-b-0 max-lg:grid max-lg:grid-cols-[minmax(0,1fr)_auto]', expanded === item.id && 'bg-fill')}>
+                {visible.map(item => <tr key={item.id} className="border-b border-line last:border-b-0 max-lg:grid max-lg:grid-cols-[minmax(0,1fr)_auto]">
                     <th scope="row" className="px-4 py-4 text-left font-normal max-lg:col-span-2 max-lg:pb-1">
-                      <span className="block font-strong">{item.name}</span>
+                      <Link to="/library/$seriesId" params={{ seriesId: item.id }} search={{}} className="block font-strong text-ink no-underline hover:text-copper">{item.name}</Link>
                       <span className="mt-1 block text-14">{item.description}</span>
                     </th>
                     <td className="px-3 py-4 whitespace-nowrap max-lg:px-4 max-lg:pt-1">
@@ -108,15 +93,10 @@ export function ProductLibrary() {
                       {STATES.filter(state => item.states[state]).map(state => <span key={state} className={TONES[state]}>{REVIEW_NAMES[state]} {item.states[state]}</span>)}
                     </td>
                     <td className="px-4 py-4 text-right max-lg:col-span-2 max-lg:pt-0 max-lg:text-left">
-                      <Button size="compact" aria-expanded={expanded === item.id} aria-controls={`specifications-${item.id}`}
-                        aria-label={`查看规格：${item.name}`} icon={expanded === item.id ? 'action/chevron-up' : 'action/chevron-down'}
-                        onClick={() => setExpanded(expanded === item.id ? null : item.id)}>{expanded === item.id ? '收起规格' : '查看规格'}</Button>
+                      <Button size="compact" aria-label={`打开系列：${item.name}`} icon="action/arrow-right"
+                        onClick={() => void navigate({ to: '/library/$seriesId', params: { seriesId: item.id }, search: {} })}>打开系列</Button>
                     </td>
-                  </tr>
-                  {expanded === item.id && <tr id={`specifications-${item.id}`} className="border-b border-line bg-fill">
-                    <td colSpan={9} className="px-4 pb-2"><SeriesSpecifications id={item.id} review={review} /></td>
-                  </tr>}
-                </Fragment>)}
+                  </tr>)}
               </tbody>
             </table>
           </div>}

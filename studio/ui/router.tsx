@@ -7,6 +7,8 @@ import { Mark } from '@/components/icon';
 import { Notice, reportFailure } from '@/components/notice';
 import { Gallery } from '@/pages/gallery';
 import { ProductLibrary } from '@/pages/library';
+import { ImportLibrary } from '@/pages/import';
+import { SeriesWorkspace } from '@/pages/series';
 import { api } from '@/state/api';
 import { queryClient, useHostEvents, useProjects } from '@/state/queries';
 import { Workbench } from '@/workbench/workbench';
@@ -64,6 +66,17 @@ function ProjectPage() {
 const rootRoute = createRootRoute({ component: Root });
 const landingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => <Navigate to="/library" replace /> });
 const libraryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library', component: ProductLibrary });
+const importRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library/import', component: ImportLibrary });
+const seriesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library/$seriesId',
+  validateSearch: (search: Record<string, unknown>): { spec?: string; version?: number } => ({ ...(typeof search.spec === 'string' ? { spec: search.spec } : {}),
+    ...(typeof search.version === 'number' && Number.isInteger(search.version) && search.version > 0 ? { version: search.version } : {}) }),
+  component: SeriesPage });
+function SeriesPage() {
+  const { seriesId } = seriesRoute.useParams();
+  const { spec, version } = seriesRoute.useSearch();
+  const navigate = useNavigate();
+  return <SeriesWorkspace key={seriesId} id={seriesId} spec={spec} version={version} onInspect={(spec, version) => void navigate({ to: '/library/$seriesId', params: { seriesId }, search: { spec, version } })} />;
+}
 const workbenchRoute = createRoute({ getParentRoute: () => rootRoute, path: '/workbench', component: Landing });
 const projectRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -74,7 +87,7 @@ const projectRoute = createRoute({
 
 const galleryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/gallery', component: Gallery });
 
-export const router = createRouter({ routeTree: rootRoute.addChildren([landingRoute, libraryRoute, workbenchRoute, projectRoute, galleryRoute]) });
+export const router = createRouter({ routeTree: rootRoute.addChildren([landingRoute, libraryRoute, importRoute, seriesRoute, workbenchRoute, projectRoute, galleryRoute]) });
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }

@@ -11,6 +11,7 @@ import {
 import { StudioError } from './core.ts';
 import { REVIEW_STEPS } from './library.ts';
 import type { Context, Operation, Studio } from './operations.ts';
+import { exportSpecification, specificationReports } from './specification.ts';
 
 const TABLES = ['.xlsx', '.xlsm', '.xls', '.csv', '.tsv', '.txt'];
 const UPLOAD = /^u-[0-9a-f]{8}$/;
@@ -61,7 +62,15 @@ const table = { upload: str({ description: '上传文件的标识' }), sheet: st
 export function productOperations(studio: Studio): Operation[] {
   const { core, library } = studio;
   const actor = (context: Context): string => (context.by === 'agent' ? 'Agent' : studio.user);
-  let job: LibraryJob | null = null;
+  let job: LibraryJob | null = JSON.parse(library.setting('product.job') ?? 'null');
+  const emitJob = (current: LibraryJob) => {
+    library.setSetting('product.job', JSON.stringify(current));
+    studio.emit({ type: 'library', series_id: current.series_id, job: { ...current } });
+  };
+  if (job?.state === 'running') {
+    job = { ...job, state: 'failed', title: '上次计算已中断', error: { code: 'JOB_INTERRUPTED', message: '宿主在计算完成前退出。已保存的结果保留，可以继续计算缺项。' } };
+    library.setSetting('product.job', JSON.stringify(job));
+  }
   const view = (id: string): SeriesView => ({ ...library.seriesView(id), job: job?.series_id === id ? job : null });
 
   async function preview(params: { upload: string; sheet: string; first_data_row: number; mapping: Record<string, number>; series: SeriesDeclaration }) {
@@ -96,25 +105,28 @@ export function productOperations(studio: Studio): Operation[] {
         const pending = items.filter(item => force || !library.hasCurrentResult(item.key, kind, library.inputs(kind, item.cable, item.standards)));
         running.done += items.length - pending.length;
         for (let start = 0; start < pending.length; start += CHUNK[kind]) {
+          if (running.cancel_requested) { running.state = 'cancelled'; break; }
           const chunk = pending.slice(start, start + CHUNK[kind]);
           running.title = `${KIND_LABEL[kind]} · ${Math.min(start + chunk.length, pending.length)} / ${pending.length}`;
-          studio.emit({ type: 'library', series_id: running.series_id, job: { ...running } });
+          emitJob(running);
           const results = await core.call<Record<string, Partial<Record<ResultKind, ProductResult>>>>('product.compute', { items: chunk, kinds: [kind] });
           for (const item of chunk) {
             library.saveResult(item.key, kind, library.inputs(kind, item.cable, item.standards), results[item.key][kind], by);
           }
           running.done += chunk.length;
+          emitJob(running);
         }
+        if (running.state === 'cancelled') break;
       }
-      running.state = 'done';
-      running.title = '计算完成';
+      if (running.state !== 'cancelled') running.state = 'done';
+      running.title = running.state === 'cancelled' ? '计算已停止，已完成的结果保留' : '处理完成';
     } catch (error) {
       running.state = 'failed';
       running.error = error instanceof StudioError ? error.issue() : { code: 'INTERNAL', message: error instanceof Error ? error.message : String(error) };
       running.title = '计算中断';
     }
     library.note(by, 'series', running.series_id, 'computed', { kinds, products: items.length, state: running.state });
-    studio.emit({ type: 'library', series_id: running.series_id, job: { ...running } });
+    emitJob(running);
   }
 
   const briefSpec = (spec: SpecView) => ({
@@ -129,6 +141,26 @@ export function productOperations(studio: Studio): Operation[] {
   });
 
   return [
+    { id: 'library.job', title: '计算任务', kind: 'read', parameters: obj({}), description: '读取最近一批计算的进度，包括宿主重启前中断的任务。', execute: async () => job },
+    { id: 'library.compute.cancel', title: '停止批量计算', kind: 'run', parameters: obj({ job: str() }),
+      description: '当前批次完成后停止，已经保存的结果保留。', execute: async (params: { job: string }) => {
+        if (!job || job.id !== params.job || job.state !== 'running') throw new StudioError({ code: 'JOB_UNKNOWN', message: '这批计算已经结束。' }, 409);
+        job.cancel_requested = true;
+        emitJob(job);
+        return job;
+      } },
+    { id: 'library.documents', title: '规格书记录', kind: 'read', parameters: obj({ spec: str() }),
+      description: '读取这个规格已经导出的固定版本 PDF 和来源快照。', execute: async (params: { spec: string }) => {
+        library.specView(params.spec);
+        return specificationReports(studio.home, params.spec);
+      } },
+    { id: 'library.export', title: '导出规格书', kind: 'run', parameters: obj({ spec: str(), version: int({ minimum: 1 }) }),
+      description: '把指定版本的结构、已保存结果、计算条件、问题及来源保存为不可覆盖的 PDF 和快照。未审核版本标为草稿，缺项明确列出。',
+      execute: async (params: { spec: string; version: number }, context) => {
+        const report = await exportSpecification(studio, library.specView(params.spec, params.version), actor(context));
+        studio.emit({ type: 'library' });
+        return report;
+      } },
     { id: 'library.series', tool: 'list_series', title: '产品系列', kind: 'read', parameters: obj({}),
       description: '列出产品库的全部系列：名称、厂家、型号、电压、执行标准、规格数和各审核状态的数量。',
       execute: async () => library.seriesList() },
@@ -196,17 +228,22 @@ export function productOperations(studio: Studio): Operation[] {
         return job;
       } },
     { id: 'library.revise', title: '修改结构', kind: 'write',
-      parameters: obj({ spec: str(), values: map(num({ exclusiveMinimum: 0 })), note: str({ minLength: 1, maxLength: 400, description: '为什么改' }) }),
+      parameters: obj({ spec: str(), version: opt(int({ minimum: 1 })), values: map(num({ exclusiveMinimum: 0 })), note: str({ minLength: 1, maxLength: 400, description: '为什么改' }) }),
       description: '修改一个规格的结构尺寸（结构表的单位）。生成新的草稿版本，原版本保留不变。',
-      execute: async (params: { spec: string; values: Record<string, number>; note: string }, context) => {
+      execute: async (params: { spec: string; version?: number; values: Record<string, number>; note: string }, context) => {
         const spec = library.specView(params.spec);
+        if (params.version !== undefined && spec.version.number !== params.version) throw new StudioError({ code: 'VERSION_CHANGED', message: '规格已产生新版本，请重新核对后修改。' }, 409);
+        if (!params.note.trim()) throw new StudioError({ code: 'REVISION_INVALID', message: '请填写修改原因。' });
         if (spec.derivation.kind === 'bundled') {
           throw new StudioError({ code: 'REVISION_UNAVAILABLE', message: '随软件提供的结构没有结构表，不能改尺寸；请导入本厂结构表。' }, 409);
         }
+        const editable = new Set(spec.structure.filter(item => item.origin === 'table' && item.key !== 'area').map(item => item.key));
+        if (Object.keys(params.values).some(key => !editable.has(key))) throw new StudioError({ code: 'REVISION_INVALID', message: '只能修改原表已有的结构尺寸；标称截面属于规格身份，请另行导入规格。' });
         const row = { ...Object.fromEntries(spec.structure.filter(item => item.origin === 'table').map(item => [item.key, item.value])), ...params.values };
         const build = await core.call<BuildResult>('structure.build', { series: library.declaration(spec.series.id), rows: [row] });
         const built = build.rows[0];
         if (!built.ok) throw new StudioError(built.error);
+        if (library.specView(params.spec).version.number !== spec.version.number) throw new StudioError({ code: 'VERSION_CHANGED', message: '计算结构期间规格已产生新版本，请重新核对后修改。' }, 409);
         const version = library.revise(params.spec, built, params.note.trim(), actor(context));
         studio.emit({ type: 'library', series_id: spec.series.id });
         return { version, view: library.specView(params.spec) };
@@ -237,6 +274,23 @@ export function productOperations(studio: Studio): Operation[] {
         }
         studio.emit({ type: 'library', series_id: params.series });
         return { moved, view: view(params.series) };
+      } },
+    { id: 'library.review.batch', title: '审核选中规格', kind: 'write',
+      parameters: obj({ items: arr(obj({ spec: str(), version: int({ minimum: 1 }) }), { minItems: 1, maxItems: 500 }),
+        action: oneOf(['submit', 'return', 'approve', 'publish']), note: str({ minLength: 1, maxLength: 400 }) }),
+      description: '仅对人确认的规格与版本执行同一步审核，记录意见；任何版本或状态变化时整批拒绝。',
+      execute: async (params: { items: { spec: string; version: number }[]; action: string; note: string }, context) => {
+        if (context.by === 'agent') throw new StudioError({ code: 'REVIEW_FORBIDDEN', message: '审核只能由人来做。' }, 403);
+        if (!params.note.trim()) throw new StudioError({ code: 'REVIEW_INVALID', message: '请填写审核意见。' });
+        if (new Set(params.items.map(item => item.spec)).size !== params.items.length) throw new StudioError({ code: 'REVIEW_INVALID', message: '选中的规格有重复。' });
+        library.db.transaction(() => {
+          for (const item of params.items) {
+            if (library.specView(item.spec).version.number !== item.version) throw new StudioError({ code: 'VERSION_CHANGED', message: '规格已产生新版本，请重新核对选中项。' }, 409);
+            library.transition(item.spec, item.version, params.action, params.note.trim(), actor(context));
+          }
+        })();
+        studio.emit({ type: 'library' });
+        return { moved: params.items.length };
       } },
   ];
 }
