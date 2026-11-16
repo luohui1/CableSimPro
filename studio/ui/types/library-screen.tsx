@@ -18,22 +18,14 @@ import { EmptyState } from '@/kit/workbench/premise';
 import { api } from '@/state/api';
 import { useProductLibrary } from '@/state/queries';
 import { TypeFrame } from './frame';
+import { lastOpened, ORIGIN_NAMES, originOf, rememberOpened } from './model';
 
 type Row = SpecRow & { series: string };
 
-const ORIGINS: Record<string, string> = { factory: '本厂', public: '公开资料', demo: '演示结构' };
 const CORES: Record<number, string> = { 1: '单芯', 3: '三芯' };
 const ORIGIN_ORDER = ['factory', 'public', 'demo'];
-const originOf = (series: SeriesSummary) => (series.origin in ORIGINS ? series.origin : 'demo');
+const seriesOrigin = (series: SeriesSummary) => originOf(series.origin);
 const dimension = (row: SpecRow, key: string) => row.dimensions?.[key]?.value ?? null;
-const SELECTED = 'studio.library.selected';
-
-function remembered(): string {
-  try { return localStorage.getItem(SELECTED) ?? ''; } catch { return ''; }
-}
-function remember(id: string) {
-  try { localStorage.setItem(SELECTED, id); } catch { /* private browsing */ }
-}
 
 // Dimensions to one decimal as a catalogue prints them; resistance to four significant figures; weight whole.
 const COLUMNS: Column<Row>[] = [
@@ -61,12 +53,12 @@ export function LibraryScreen() {
   const library = useProductLibrary();
   // The factory's own tables first, then published ones, then the structures that come with the software; the freshest first.
   const list = useMemo(() => [...(library.data ?? [])].sort((a, b) =>
-    (ORIGIN_ORDER.indexOf(originOf(a)) - ORIGIN_ORDER.indexOf(originOf(b))) || b.updated.localeCompare(a.updated)), [library.data]);
+    (ORIGIN_ORDER.indexOf(seriesOrigin(a)) - ORIGIN_ORDER.indexOf(seriesOrigin(b))) || b.updated.localeCompare(a.updated)), [library.data]);
   const views = useQueries({ queries: list.map(item => ({ queryKey: ['library', 'series', item.id], queryFn: () => api.op<SeriesView>('library.series.get', { series: item.id }) })) });
   const [query, setQuery] = useState('');
   const [origin, setOrigin] = useState('all');
   const [review, setReview] = useState<'all' | ReviewState>('all');
-  const [selected, setSelected] = useState(remembered);
+  const [selected, setSelected] = useState(lastOpened);
   const [opened, setOpened] = useState<string[] | null>(null);
 
   const raw = query.trim().toLowerCase();
@@ -76,7 +68,7 @@ export function LibraryScreen() {
   // With nothing opened by hand, the series of the size opened last is open, or else the first one.
   const initial = list.find(item => selected.startsWith(`${item.id}.`))?.id ?? list[0]?.id;
   const groups = list.flatMap((item, index) => {
-    if (origin !== 'all' && originOf(item) !== origin) return [];
+    if (origin !== 'all' && seriesOrigin(item) !== origin) return [];
     const loaded = views[index]?.data;
     const rows: Row[] = (loaded?.specs ?? []).map(row => ({ ...row, series: item.id }));
     const seriesHit = has(`${item.name} ${item.manufacturer} ${item.designation}`.toLowerCase());
@@ -87,7 +79,7 @@ export function LibraryScreen() {
       key: item.id,
       header: <SeriesHeader series={item} />,
       aside: <>
-        <Badge variant="outline">{ORIGINS[originOf(item)]}</Badge>
+        <Badge variant="outline">{ORIGIN_NAMES[seriesOrigin(item)]}</Badge>
         <span className="flex w-24 items-center justify-end gap-2 text-sm text-ink-2 tabular-nums">
           {views[index]?.isPending && <Spinner />}
           {filtering && loaded ? `${shown.length} / ${item.specs}` : item.specs} 个规格
@@ -103,10 +95,10 @@ export function LibraryScreen() {
   });
 
   const total = list.reduce((sum, item) => sum + item.specs, 0);
-  const origins = Object.keys(ORIGINS).filter(key => list.some(item => originOf(item) === key));
+  const origins = ORIGIN_ORDER.filter(key => list.some(item => seriesOrigin(item) === key));
   const clear = () => { setQuery(''); setOrigin('all'); setReview('all'); };
   const open = (row: Row) => {
-    remember(row.id);
+    rememberOpened(row.id);
     setSelected(row.id);
     void navigate({ to: '/library/$seriesId', params: { seriesId: row.series }, search: { spec: row.id } });
   };
@@ -137,7 +129,7 @@ export function LibraryScreen() {
       </InputGroup>
       {origins.length > 1 && <ToggleGroup value={[origin]} onValueChange={value => setOrigin(value[0] ?? 'all')} aria-label="来源" className="ml-2">
         <ToggleGroupItem value="all">全部</ToggleGroupItem>
-        {origins.map(key => <ToggleGroupItem key={key} value={key}>{ORIGINS[key]}</ToggleGroupItem>)}
+        {origins.map(key => <ToggleGroupItem key={key} value={key}>{ORIGIN_NAMES[key]}</ToggleGroupItem>)}
       </ToggleGroup>}
       <ToggleGroup value={[review]} onValueChange={value => setReview((value[0] ?? 'all') as 'all' | ReviewState)} aria-label="审核状态" className="ml-2">
         <ToggleGroupItem value="all">全部状态</ToggleGroupItem>
