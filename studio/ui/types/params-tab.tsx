@@ -3,6 +3,7 @@
 import { compact, fixed, STATE_NAMES } from '@shared/format';
 import { resultValue, dateTime } from '@shared/products';
 import type { ProductResult, SpecView, ValueRow } from '@shared/types';
+import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Disclosure } from '@/kit/disclosure';
 import { Icon } from '@/kit/icon';
@@ -73,17 +74,22 @@ function Conditions({ results }: { results: (ProductResult | undefined)[] }) {
 
 export function ParamsTab({ view, onCompute, busy }: { view: SpecView; onCompute: (() => void) | null; busy: boolean }) {
   const item = (key: string) => view.structure.find(entry => entry.key === key);
-  // A value from the structure table is the usual case and says nothing; one the series states, the standard gives or an engineer changed says so.
-  const mark = (key: string) => { const found = item(key); return found && (found.revision || found.origin !== 'table') ? <span>{found.revision ? ORIGIN_MARK.revised : ORIGIN_MARK[found.origin]}</span> : undefined; };
+  // A value from the structure table is the usual case and says nothing; one the series states, the standard gives or an engineer
+  // changed says so after its name.
+  const named = (text: string, key: string): ReactNode => {
+    const found = item(key);
+    const tag = found && (found.revision || found.origin !== 'table') ? (found.revision ? ORIGIN_MARK.revised : ORIGIN_MARK[found.origin]) : null;
+    return tag ? <>{text}<span className="ml-2 text-ink-2">{tag}</span></> : text;
+  };
   const structure: Property[] = [
     { label: '外径', value: fixed(view.entry.summary.outer_diameter_m * 1000, 1), unit: 'mm' },
-    { label: '导体截面', value: compact(view.spec.area_mm2), unit: 'mm²', source: mark('area') },
+    { label: named('导体截面', 'area'), value: compact(view.spec.area_mm2), unit: 'mm²' },
   ];
   const conductor = item('conductor_diameter');
-  if (conductor) structure.push({ label: '导体外径', value: compact(conductor.value), unit: 'mm', source: mark('conductor_diameter') });
-  if (view.entry.summary.r20_ohm_m != null) structure.push({ label: '20 °C 直流电阻', value: compact(view.entry.summary.r20_ohm_m * 1000, 4), unit: 'Ω/km', source: mark('r20') });
+  if (conductor) structure.push({ label: named('导体外径', 'conductor_diameter'), value: compact(conductor.value), unit: 'mm' });
+  if (view.entry.summary.r20_ohm_m != null) structure.push({ label: named('20 °C 直流电阻', 'r20'), value: compact(view.entry.summary.r20_ohm_m * 1000, 4), unit: 'Ω/km' });
   const weight = item('weight');
-  if (weight) structure.push({ label: '重量', value: compact(weight.value, 6), unit: 'kg/km', source: mark('weight') });
+  if (weight) structure.push({ label: named('重量', 'weight'), value: compact(weight.value, 6), unit: 'kg/km' });
 
   const electrical = view.results.electrical;
   const shortCircuit = view.results.short_circuit;
