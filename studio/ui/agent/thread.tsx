@@ -5,7 +5,7 @@ import {
   ActionBarPrimitive, AttachmentPrimitive, AuiIf, ComposerPrimitive, ErrorPrimitive, MessagePrimitive, SuggestionPrimitive, ThreadPrimitive,
   groupPartByType, useAui, useAuiState, type AssistantState,
 } from '@assistant-ui/react';
-import { useEffect, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AgentEmpty, ChatNotice, TaskStarter } from '@/kit/chat/empty';
@@ -30,9 +30,10 @@ export function Thread({ notice }: { notice?: ReactNode }) {
           groups={STARTERS.map(group => ({ label: group.label, icon: group.icon, tasks: <Starters first={ALL_STARTERS.indexOf(group.tasks[0])} count={group.tasks.length} /> }))} />
       </div>
       : <>
-        {/* A new turn starts at the top of the page; a conversation that is opened shows its latest turn from its start. */}
-        <ThreadPrimitive.Viewport turnAnchor="top" scrollToBottomOnInitialize={false} scrollToBottomOnThreadSwitch={false} className={threadViewportClass}>
-          <OpenAtLatestTurn />
+        {/* A new turn starts at the top of the page, and the page holds still while the agent works. A conversation that is opened shows
+            its end, as a chat does (the design's screen), and stays there while its cards fetch what they show: with the turn anchored at
+            the top the viewport does not follow growing content unless asked to. */}
+        <ThreadPrimitive.Viewport turnAnchor="top" autoScroll className={threadViewportClass}>
           <ThreadColumn className="pb-6">
             <AuiIf condition={isHistoryLoadingView}><p role="status" className="m-0 py-10 text-center text-sm text-ink-2">正在打开对话…</p></AuiIf>
             <ThreadPrimitive.Messages>{() => <ThreadMessage />}</ThreadPrimitive.Messages>
@@ -50,18 +51,6 @@ export function Thread({ notice }: { notice?: ReactNode }) {
         </div>
       </>}
   </ThreadPrimitive.Root>;
-}
-
-/** A conversation that is opened shows its latest turn from the person's words on, not its last lines with a card cut off at the top.
- *  Each message carries its own space above it, so the turn that sits at the top of the page still has air above its first line. */
-function OpenAtLatestTurn() {
-  const loaded = useAuiState(state => state.thread.messages.length > 0 && !state.thread.isLoading);
-  useEffect(() => {
-    if (!loaded) return;
-    const turns = document.querySelectorAll('[data-turn="user"]');
-    turns[turns.length - 1]?.scrollIntoView({ block: 'start' });
-  }, [loaded]);
-  return null;
 }
 
 // ---- The empty page ----
@@ -118,7 +107,7 @@ function PersonMessage() {
   // A message sent while the agent was busy waits for the current step; say so, so it is not mistaken for ignored.
   const queued = useAuiState(state => Boolean(state.message.metadata.custom?.queued));
   const hasFiles = useAuiState(state => (state.message.attachments?.length ?? 0) > 0);
-  return <MessagePrimitive.Root data-turn="user" className="pt-8">
+  return <MessagePrimitive.Root className="pt-8">
     <UserMessage attachments={hasFiles ? <MessagePrimitive.Attachments>{() => <SentChip />}</MessagePrimitive.Attachments> : undefined}>
       <MessagePrimitive.Parts />
       {queued && <Badge variant="outline">排队中，当前一步做完后处理</Badge>}

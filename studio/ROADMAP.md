@@ -61,8 +61,8 @@ Cable Studio 做什么、先做什么、怎样算做完，以本文件为准。�
 | --- | --- | --- | --- |
 | Tailwind CSS 4 | 4.3.5 | MIT | 样式工具类；颜色、圆角、字号只来自 `design/tokens.css`，由 `ui/styles/app.css` 映射成主题 |
 | shadcn/ui，Base UI 版（style `base-nova`） | 命令行 4.23.0 | MIT | 通用控件：按钮、输入框、标签页（模式切换）、对话框、提示、折叠、徽标、表格、骨架屏。源码复制在 `ui/components/ui/`，底层是 `@base-ui/react` 1.9.0；它的语义色、圆角、字号变量全部指向设计令牌 |
-| assistant-ui（`@assistant-ui/react`） | 0.15.36 | MIT | 对话页：线程、消息、输入框、附件、发送中插话、会话列表、运行时。用外部状态运行时接宿主的对话；复制进来的部件在 `ui/components/assistant-ui/elements/`，删去了语音、分支、重写、推理 |
-| `@assistant-ui/react-markdown`、remark-gfm | 0.14.26、4.0.1 | MIT | 回答里的 Markdown |
+| assistant-ui（`@assistant-ui/react`） | 0.15.36 | MIT | 对话页：线程、消息、输入框、附件、发送中插话、会话列表、运行时。用外部状态运行时接宿主的对话；第 2 轮起对话页只用它的原语（滚动、输入框、起始任务、复制与重试、附件、会话列表），样子由 `ui/kit/` 的部件给，不再复制它的示例部件 |
+| `@assistant-ui/react-markdown`、remark-gfm、remark-breaks、remark-math、rehype-katex（KaTeX）、shiki | 0.14.26、4.0.1、4.0.0、6.0.0、7.0.1（0.19.1）、4.6.0 | MIT | 回答里的 Markdown：表格、断行、公式、代码高亮（shiki 的 web 包，按需加载） |
 | tw-animate-css | 1.4.0 | MIT | shadcn 控件的进出场动画 |
 | lucide-react | 1.73.0 | ISC | 图标 |
 | pi 会话层（`@earendil-works/pi-coding-agent`） | 1.5.2 | MIT | Agent 内核，见 README 的试验结论 |

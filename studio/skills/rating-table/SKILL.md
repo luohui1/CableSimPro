@@ -16,7 +16,7 @@ description: 载流量表：对一个规格版本，按工程师写明的几种�
 3. layout 的写法：三芯直埋单回 `three_core_buried_single`，三芯直埋三回水平 `three_core_buried_horizontal`；单芯有 `trefoil`、`flat`、`ducts`。不确定就问，或用 `get_project` 看某个工程的可用敷设方式。
 4. `build_rating_table(spec, version, title, conditions)`：conditions 是数组，一行一个条件，一次最多 24 条；每条约 2～8 秒，一次不要超过 8 条。结果是一张表，每行对应一条运行记录。
 5. 读返回：每行的允许电流和可信分档；方法不覆盖的条件写着拒算原因，不补估计值。
-6. `open_in_workbench(target:'spec', spec, version)`。回答只写：哪个规格哪个版本、几个条件、最大和最小的允许电流各在哪个条件、有几条被方法拒算（说明原因）。
+6. `open_in_workbench(target:'spec', spec, version)`。回答只写：哪个规格哪个版本、几个条件；最大和最小的允许电流各在哪个条件；有几条被方法拒算（说明原因）。表在卡片里，不逐行列数；不自己算百分比或差值，工具没给的数不写。
 
 ## 容易错的地方
 
