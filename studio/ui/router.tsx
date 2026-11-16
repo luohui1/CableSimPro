@@ -10,7 +10,6 @@ import { api } from '@/state/api';
 import { queryClient, useHostEvents, useProjects } from '@/state/queries';
 import { typeRoutes } from '@/types/routes';
 const AgentPage = lazyRouteComponent(() => import('@/agent/agent-page'), 'AgentPage');
-const ImportLibrary = lazyRouteComponent(() => import('@/pages/import'), 'ImportLibrary');
 const Workbench = lazyRouteComponent(() => import('@/workbench/workbench'), 'Workbench');
 const Gallery = lazyRouteComponent(() => import('@/pages/gallery'), 'Gallery');
 
@@ -72,7 +71,6 @@ function ChatPage() {
   const { sessionId } = chatRoute.useParams();
   return <AgentPage key={sessionId} sessionId={sessionId} />;
 }
-const importRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library/import', component: ImportLibrary });
 const workbenchRoute = createRoute({ getParentRoute: () => rootRoute, path: '/workbench', component: Landing });
 const projectRoute = createRoute({
   getParentRoute: () => rootRoute,
@@ -83,7 +81,7 @@ const projectRoute = createRoute({
 
 const galleryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/gallery', component: Gallery });
 
-export const router = createRouter({ routeTree: rootRoute.addChildren([landingRoute, chatRoute, ...typeRoutes(rootRoute), importRoute, workbenchRoute, projectRoute, galleryRoute]) });
+export const router = createRouter({ routeTree: rootRoute.addChildren([landingRoute, chatRoute, ...typeRoutes(rootRoute), workbenchRoute, projectRoute, galleryRoute]) });
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }

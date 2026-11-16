@@ -18,6 +18,15 @@ export const PART_FIELDS: Record<string, string[]> = {
   oversheath: ['oversheath_thickness'],
 };
 
+/** The fields of a structure table, grouped by part, for declaring what a table leaves out and for typing a size in. */
+export const STRUCTURE_GROUPS = [
+  { id: 'conductor', label: '导体', keys: ['area', 'conductor_diameter', 'conductor_wire_count', 'conductor_wire_diameter', 'r20'] },
+  { id: 'insulation', label: '绝缘与半导电层', keys: ['conductor_screen_thickness', 'insulation_thickness', 'insulation_screen_thickness'] },
+  { id: 'metallic_screen', label: '金属屏蔽', keys: ['screen_tape_thickness', 'screen_tape_width', 'screen_tape_overlap'] },
+  { id: 'protection', label: '包带、铠装与护套', keys: ['binder_thickness', 'bedding_thickness', 'armour_tape_thickness', 'armour_tape_width', 'armour_wire_diameter', 'armour_wire_count', 'oversheath_thickness'] },
+  { id: 'overall', label: '成品尺寸与重量', keys: ['outer_diameter', 'weight'] },
+];
+
 /** The part of the construction a table field describes; none for a field of the finished cable. */
 export const roleOfField = (key: string) => Object.entries(PART_FIELDS).find(([, keys]) => keys.includes(key))?.[0] ?? null;
 

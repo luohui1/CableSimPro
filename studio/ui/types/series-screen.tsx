@@ -100,7 +100,8 @@ function SeriesBody({ seriesId }: { seriesId: string }) {
   if (series.data && rows.length === 0) {
     return <TypeFrame at={{ kind: 'series', id: seriesId }}>
       <PageHeader trail={[{ label: '型号库', onClick: toLibrary }]} title={series.data.series.name} />
-      <EmptyState icon="nav/cable-type" title="这个系列还没有规格" description="规格是系列里的一个截面，导入结构表或手工新建后出现在这里。" />
+      <EmptyState icon="nav/cable-type" title="这个系列还没有规格" description="规格是系列里的一个截面，导入结构表或手工新建后出现在这里。"
+        action={<Button onClick={() => void navigate({ to: '/library/new', search: { series: seriesId } })}><Icon name="action/add" data-icon="inline-start" />新建规格</Button>} />
     </TypeFrame>;
   }
 

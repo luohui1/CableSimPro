@@ -4,7 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { compact, REVIEW_NAMES } from '@shared/format';
 import type { SpecificationReport, SpecView } from '@shared/types';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -131,8 +131,8 @@ function SheetBody({ view, report, onReport, onClose }: { view: SpecView; report
       </DialogHeader>
       <iframe title="已生成的规格书 PDF" className="h-128 w-full rounded-field border border-line" src={`${report.url}?preview=1#view=FitH`} />
       <DialogFooter>
-        <Button variant="outline" nativeButton={false} render={<a href={`${report.url}/snapshot`} download={`${view.spec.name}-来源快照.json`} />}>来源快照</Button>
-        <Button variant="outline" nativeButton={false} render={<a href={report.url} download={`${view.spec.name}.pdf`} />}><Icon name="action/arrow-down" data-icon="inline-start" />下载 PDF</Button>
+        <a href={`${report.url}/snapshot`} download={`${view.spec.name}-来源快照.json`} className={buttonVariants({ variant: 'outline' })}>来源快照</a>
+        <a href={report.url} download={`${view.spec.name}.pdf`} className={buttonVariants({ variant: 'outline' })}><Icon name="action/arrow-down" data-icon="inline-start" />下载 PDF</a>
         <DialogClose render={<Button type="button" />}>完成</DialogClose>
       </DialogFooter>
     </div>;

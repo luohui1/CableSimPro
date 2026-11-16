@@ -120,7 +120,7 @@ export function LibraryScreen() {
 
   return <TypeFrame at={{ kind: 'library' }}>
     <PageHeader title="型号库" marks={list.length > 0 ? <Badge variant="secondary">{list.length} 个系列 · {total} 个规格</Badge> : undefined}
-      actions={<Button variant="outline" disabled><Icon name="action/add" data-icon="inline-start" />新建型号</Button>}
+      actions={<Button variant="outline" onClick={() => void navigate({ to: '/library/new', search: {} })}><Icon name="action/add" data-icon="inline-start" />新建型号</Button>}
       primary={<Button onClick={() => void navigate({ to: '/library/import' })}><Icon name="action/import" data-icon="inline-start" />导入结构表</Button>} />
     <Toolbar>
       <InputGroup className="w-72">

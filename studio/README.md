@@ -33,16 +33,16 @@ npm start         # http://127.0.0.1:8200/ ，只监听本机
 | `core/studio_core/` | Python 计算核心，不含算法：`runner.py` 按 `cablesim.run/2` 在独立进程里运行 `plugins/` 下的插件，运行前核对封签；`library.py` 型号库；`layouts.py` 敷设模板；`scene.py` 把型号、敷设、工况组成 `cablesim.domain/1` 文档；`study.py` 校核、扫描、选型；`methods.py` 方法卡与可信分档；`__main__.py` 给宿主用的本机服务（标准输入输出，每行一个 JSON） |
 | `host/` | Node 宿主（TypeScript，由 Node 直接运行）：`store.ts` 工程文件夹；`operations.ts` 操作层；`agent.ts` Agent；`report.ts` 计算书；`server.ts` HTTP 与界面 |
 | `shared/` | 宿主与界面共用的类型、数值写法和绘图几何 |
-| `ui/` | React 界面：`pages/` 产品库与导入；`components/product-controls.tsx` Mantine 业务控件；`series/` 系列工作区（结构浏览器、断面与三维视图、属性面板、规格对比表）；`canvas/` 真实断面；`results/` 结论栏；`workbench/` 工程工作台；`state/` 读取宿主与视图状态；`pages/gallery.tsx` 工作台组件陈列（`/gallery`） |
+| `ui/` | React 界面：`kit/` 设计会话定稿的部件（外框、侧栏、页头、数据表、标记、属性），`components/ui/` 基础控件；`types/` 型号库、型号工作区、导入和新建型号（`types/routes.tsx` 挂载这几条路由）；`canvas/` 真实断面；`results/` 结论栏；`workbench/` 工程工作台；`agent/` 对话页；`state/` 读取宿主与视图状态；`pages/gallery.tsx` 部件陈列（`/gallery`） |
 | `core/tests/`、`tests/` | 真实流程测试与界面走查 |
 
 计算核心直接引用仓库里的 `cablesim_sdk/` 和 `plugins/cablesim.iec60287/`，不复制、不改算法。厂家公开结构表读自 `backend/kernel/model_series_data/`。
 
 ## 界面
 
-- `design/tokens.css` 保存工程配色与字体，`ui/styles/app.css` 映射为 Tailwind CSS 4 工具类。产品库的布局和 Mantine 主题适配集中在 `ui/styles/product.css`，主题同时覆盖浮层；保留 Tailwind 默认尺度供组件库使用。
-- 产品库使用 Mantine 9 的按钮、表单、复选框、导航、步骤条、拖放上传、标签页和弹窗；统一主题在 `product-provider.tsx`。系列工作区的对象视图和规格对比表为自研组件，规则集中在 `ui/styles/workspace.css`：面板贴边平铺，一种强调色只用于选中，三种状态色，材料色只用于图纸；数字和拉丁字母用 Inter，中文用 Noto Sans SC；图标采用 Lucide。工程工作台沿用 Base UI 控件和 `design/icons/`；断面按保存的工程尺寸绘制。
-- 产品库、导入、规格表和断面工作台按路由分别加载；首页不预加载规格表和三维绘图模块。
+- `design/tokens.css` 保存工程配色与字体，`ui/styles/theme.css` 映射为 Tailwind CSS 4 工具类，Tailwind 自带色板和阴影已关闭。界面长什么样以 `studio/DESIGN.md` 和陈列页 `/gallery` 为准。
+- 型号库、型号工作区、导入和新建型号（`ui/types/`）只拼 `ui/kit` 与 `ui/components/ui` 的部件，不写自己的样式；`npm run lint:ui`（`npm run build` 先跑它）拦截颜色值、方括号尺寸、行内样式、原生控件和 Mantine，清单里的旧页面只减不增。型号工作区是断面（自有绘图 `canvas/cable-glyph`）、分层结构和四个页签（参数、标准核对、载流量表、版本与文件）；改结构、审核、规格书在对话框里做，审核只能由人点。图标用 `design/icons/`。
+- 产品库、导入、新建型号、型号工作区和断面工作台按路由分别加载；首页不预加载型号工作区和三维绘图模块。
 - 断面画布按真实比例绘制，不折断坐标。三层共用一个相机：GPU 层画土壤、网格、温度场和等温线（three 的 WebGPU 渲染器，没有 WebGPU 时用 WebGL 2）；SVG 层画电缆的真实结构层、尺寸和等温线数值；HTML 层放电缆标签和工具。标签逐个占位，后放的避开先放的。
 - 温度场：方法只在一张粗的显示网格上发布温度场，并声明了它的模型（镜像线热源，取各电缆保存负荷下的总损耗）。显示层按这个模型逐像素计算，显示前先与方法发布的每个节点比较，差值超过 1e-6 K 就改为只用发布的节点线性插值。温度场只在保存负荷下显示。
 - 工程数据只在宿主里。界面用 TanStack Query 读取，用事件流得知何时重读；界面自己的状态只有选中、工况切换、图层和相机。

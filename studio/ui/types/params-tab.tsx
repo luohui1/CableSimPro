@@ -70,7 +70,8 @@ function Conditions({ results }: { results: (ProductResult | undefined)[] }) {
 
 export function ParamsTab({ view, onCompute, busy }: { view: SpecView; onCompute: () => void; busy: boolean }) {
   const item = (key: string) => view.structure.find(entry => entry.key === key);
-  const mark = (key: string) => { const found = item(key); return found ? <span>{found.revision ? ORIGIN_MARK.revised : ORIGIN_MARK[found.origin]}</span> : undefined; };
+  // A value from the structure table is the usual case and says nothing; one the series states, the standard gives or an engineer changed says so.
+  const mark = (key: string) => { const found = item(key); return found && (found.revision || found.origin !== 'table') ? <span>{found.revision ? ORIGIN_MARK.revised : ORIGIN_MARK[found.origin]}</span> : undefined; };
   const structure: Property[] = [
     { label: '外径', value: fixed(view.entry.summary.outer_diameter_m * 1000, 1), unit: 'mm' },
     { label: '导体截面', value: compact(view.spec.area_mm2), unit: 'mm²', source: mark('area') },

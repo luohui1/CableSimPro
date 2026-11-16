@@ -1,15 +1,28 @@
-// The actual product flow in a browser, with the real core. Imported rows and exported PDFs are verified again.
+// The actual product flow in a browser, with the real core: the structure tables come in through the import page, the sizes are
+// found in the library and opened in their workspace, calculated, checked, changed, reviewed by a person and issued as a
+// specification sheet. Imported rows, numbers, exported files and their hashes are verified again through the host's API.
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { copyFileSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Browser, Locator } from 'playwright';
-import type { LibraryJob, SeriesSummary, SeriesView, SpecificationReport, SpecView } from '../shared/types.ts';
+import type { RatingTable } from '../shared/model-types.ts';
 import type { ProductCad } from '../shared/cad.ts';
+import type { LibraryJob, SeriesSummary, SeriesView, SpecificationReport, SpecView } from '../shared/types.ts';
 
 export async function walkLibrary(browser: Browser, base: string, home: string, out: string, probe: () => string[], problems: string[]) {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
   page.on('pageerror', error => problems.push(`library page error: ${error.message}`));
   page.on('console', message => { if (message.type() === 'error') problems.push(`library console error: ${message.text()}`); });
+  // The address changes the page pushes are kept, so the jump to the workbench can be read even after the workbench redirects.
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    (window as unknown as { __pushed: string[] }).__pushed = seen;
+    for (const method of ['pushState', 'replaceState'] as const) {
+      const original = history[method].bind(history);
+      history[method] = (state: unknown, title: string, url?: string | URL | null) => { seen.push(String(url)); original(state, title, url); };
+    }
+  });
   const op = async <T>(id: string, params: unknown = {}): Promise<T> => {
     const response = await fetch(`${base}/api/ops/${id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(params) });
     const body = await response.json(); assert.equal(response.status, 200, JSON.stringify(body)); return body as T;
@@ -18,21 +31,13 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await scope.getByRole('combobox', { name: label, exact: true }).click();
     await page.getByRole('option', { name: option }).click();
   };
-  const capture = async (name: string, keepScroll = false, anchor?: Locator) => {
+  const capture = async (name: string) => {
     console.log(`capture: ${name}`);
-    const focus = await page.locator('.ws-properties-body').count() ? await page.locator('.ws-properties-body').innerText() : null;
-    for (const [width, height] of [[1366, 768], [1920, 1080], [390, 844]] as const) {
+    for (const [width, height] of [[1366, 768], [1920, 1080]] as const) {
       await page.setViewportSize({ width, height });
-      if (!keepScroll) await page.locator('main, .ws-shell, .ws-properties-body').evaluateAll(elements => elements.forEach(element => { element.scrollTop = 0; }));
-      await page.waitForTimeout(400);
+      await page.waitForTimeout(450);
       await page.evaluate(async () => { await document.fonts.ready; });
-      if (focus !== null) assert.equal((await page.locator('.ws-properties-body').innerText()).slice(0, 40), focus.slice(0, 40), 'resizing must keep what the properties show');
       assert.equal(await page.evaluate(() => [...document.fonts].some(font => font.family === 'Noto Sans SC Variable' && font.status === 'loaded')), true, 'the bundled UI font must load');
-      if (anchor) await anchor.scrollIntoViewIfNeeded();
-      if (name === 'library-series' && width === 1920) {
-        const fill = await page.locator('.ws-table-scroll').evaluate(area => ({ area: area.clientWidth, table: area.querySelector('table')!.getBoundingClientRect().width }));
-        assert.ok(fill.table >= fill.area - 2, 'the design table must fill its panel');
-      }
       await page.screenshot({ path: join(out, `${width}-${name}.png`) });
       for (const issue of await page.evaluate(probe)) problems.push(`${width} ${name}: ${issue}`);
     }
@@ -41,19 +46,22 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
   const waitJob = async () => {
     const deadline = Date.now() + 300_000;
     while (Date.now() < deadline) {
-      const job = await op<LibraryJob>('library.job');
-      if (job.state !== 'running') { assert.equal(job.state, 'done', JSON.stringify(job)); return; }
+      const job = await op<LibraryJob | null>('library.job');
+      if (!job || job.state !== 'running') { if (job) assert.equal(job.state, 'done', JSON.stringify(job)); return; }
       await page.waitForTimeout(300);
     }
     throw new Error('product computation timed out');
   };
+  const tab = (name: string) => page.getByRole('tab', { name, exact: true }).click();
+  const title = (key: string) => page.getByRole('heading', { level: 1, name: new RegExp(key) }).waitFor();
 
   try {
+    // ---- The library and the import ----
     await page.goto(`${base}/library`);
-    await page.getByRole('button', { name: '查看使用流程', exact: true }).click();
-    await page.getByText('从结构表到规格书', { exact: true }).waitFor();
-    await page.keyboard.press('Escape');
+    await title('型号库');
+    await capture('library-bundled');
     await page.getByRole('button', { name: '导入结构表', exact: true }).click();
+    await page.waitForURL(/\/library\/import/);
     await capture('library-import-file');
     const sampleResponse = page.waitForResponse(response => response.url().endsWith('/api/ops/library.import.sample'));
     await page.getByRole('button', { name: '试用人民电缆公开结构表' }).click();
@@ -67,7 +75,7 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
     await (await chooser).setFiles(join(out, '人民电缆公开结构表.xlsx'));
     await page.getByRole('combobox', { name: '工作表', exact: true }).waitFor();
     await page.getByRole('button', { name: '重新开始', exact: true }).click();
-    await page.locator('.import-file-area').evaluate((area, bytes) => {
+    await page.locator('[data-drop-zone]').evaluate((area, bytes) => {
       const transfer = new DataTransfer();
       transfer.items.add(new File([new Uint8Array(bytes)], '结构表.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
       area.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
@@ -97,190 +105,258 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
       const commitResponse = page.waitForResponse(response => response.url().endsWith('/api/ops/library.import.commit'));
       await page.getByRole('button', { name: /^确认导入 \d+ 个规格$/ }).click();
       assert.equal((await commitResponse).status(), 200);
-      await page.getByRole('heading', { name: /^已导入 \d+ 个规格$/ }).waitFor();
+      await page.getByText(/^已导入 \d+ 个规格$/).waitFor();
       if (sheet !== '表3 YJV22') await page.getByRole('button', { name: '继续导入此文件的其他工作表' }).click();
     }
     const list = (await op<SeriesSummary[]>('library.series')).filter(series => series.name.includes('人民电缆'));
     assert.equal(list.reduce((sum, series) => sum + series.specs, 0), 35);
     console.log('imported: three series, 35 sizes');
-    for (const series of list) {
-      await page.goto(`${base}/library/${series.id}`);
-      await page.getByRole('button', { name: '计算全系列', exact: true }).waitFor();
-      await page.getByRole('button', { name: '计算全系列', exact: true }).click();
-      await waitJob();
-      console.log(`computed: ${series.name}`);
-    }
+
+    // The sizes this walk looks at are calculated through the host, as the Agent would; one more is calculated from the page below.
     const armoured = list.find(series => series.designation === 'YJV22')!;
+    const series = await op<SeriesView>('library.series.get', { series: armoured.id });
+    const spec = (key: string) => series.specs.find(row => row.key === key)!;
+    await op('library.compute', { series: armoured.id, specs: [spec('3×240').id, spec('3×50').id, spec('3×400').id], force: false });
+    await waitJob();
+    console.log('computed: 3×50, 3×240, 3×400 of the armoured series');
+
+    // ---- The library: find a size, open it ----
     await page.goto(`${base}/library`);
-    await page.locator('table.library-table tbody tr').first().waitFor();
-    await page.getByRole('complementary', { name: '产品库资料分类' }).getByRole('button', { name: /公开厂家资料/ }).click();
-    assert.equal(await page.locator('tbody tr').count(), 5);
-    await page.getByRole('searchbox', { name: '搜索产品系列' }).fill('人民电缆');
-    assert.equal(await page.locator('tbody tr').count(), 3);
-    await page.getByRole('searchbox', { name: '搜索产品系列' }).fill('');
-    await page.getByRole('complementary', { name: '产品库资料分类' }).getByRole('button', { name: /全部资料/ }).click();
+    await title('型号库');
+    await page.getByRole('textbox', { name: '搜索型号库' }).fill('人民电缆');
+    assert.equal(await page.locator('tr[data-group]').count(), 3, 'the search finds the three imported series');
+    await page.getByRole('button', { name: '公开资料', exact: true }).click();
+    assert.equal(await page.locator('tr[data-group]').count(), 3, 'all three are published tables');
+    await page.getByRole('button', { name: '演示结构', exact: true }).click();
+    await page.getByText('没有符合条件的规格').waitFor();
+    await page.getByRole('button', { name: '清除筛选', exact: true }).click();
+    await page.getByRole('textbox', { name: '搜索型号库' }).fill('人民电缆集团 YJV22');
+    assert.equal(await page.locator('tr[data-group]').count(), 1);
+    await page.getByRole('row', { name: /^3×240/ }).waitFor();
+    assert.equal(await page.getByRole('row', { name: /^3×240/ }).getByText('第 1 版').count(), 1);
     await capture('library-overview');
-    await page.goto(`${base}/library/${armoured.id}`);
-    const table = page.getByRole('region', { name: '规格对比表' });
-    const properties = page.getByRole('complementary', { name: '属性' });
-    const parts = page.getByRole('navigation', { name: '结构浏览器' });
-    await table.getByRole('button', { name: '3×240', exact: true }).waitFor();
-    // The workspace opens on a size: its drawing, its parts and its properties are there without asking.
-    await page.getByRole('img', { name: '3×25 实际尺寸断面' }).waitFor();
-    await properties.getByRole('heading', { name: /^3×25/ }).waitFor();
-    assert.ok(await parts.getByRole('button').count() >= 9, 'the browser lists every part of the construction');
-    await page.getByRole('button', { name: '计算选项与基准条件', exact: true }).click();
-    await page.getByRole('checkbox', { name: '重算已有结果', exact: true }).waitFor();
-    await page.keyboard.press('Escape');
-    await capture('library-series');
-    const ratingHeader = table.getByRole('columnheader', { name: /基准条件/ });
-    await ratingHeader.getByRole('button').click();
-    assert.equal(await ratingHeader.getAttribute('aria-sort'), 'ascending');
-    await ratingHeader.getByRole('button').click();
-    assert.equal(await ratingHeader.getAttribute('aria-sort'), 'descending');
-    assert.equal(await table.locator('tbody tr').first().locator('.ws-key').textContent(), '3×400');
-    await ratingHeader.getByRole('button').click();
-    assert.equal(await ratingHeader.getAttribute('aria-sort'), 'none');
-    await table.getByRole('button', { name: /^拒算与告警/ }).click();
-    assert.equal(await table.getByRole('button', { name: '3×240', exact: true }).count(), 0);
-    await table.getByRole('button', { name: '3×50', exact: true }).waitFor();
-    await table.getByRole('button', { name: /^拒算与告警/ }).click();
+    await page.getByRole('row', { name: /^3×240/ }).click();
+    await title('3×240');
 
-    // Search, filter and selection operate on actual rows; a ticked size stays ticked while the view changes.
-    await table.getByRole('searchbox', { name: '搜索规格' }).fill('240');
-    assert.equal(await table.locator('tbody tr').count(), 1);
-    await table.getByLabel('勾选 3×240', { exact: true }).check();
-    await table.getByRole('searchbox', { name: '搜索规格' }).fill('');
-    await table.getByRole('combobox', { name: '按审核状态筛选' }).selectOption('submitted');
-    await table.getByRole('button', { name: '3×240', exact: true }).waitFor({ state: 'hidden' });
-    await page.locator('.ws-object-actions').getByRole('button', { name: '计算选中 1 项', exact: true }).waitFor();
-    await table.getByRole('combobox', { name: '按审核状态筛选' }).selectOption('');
-    assert.equal(await table.getByLabel('勾选 3×240', { exact: true }).isChecked(), true, 'selection must survive filtering');
-    await table.getByRole('button', { name: '清除选择', exact: true }).click();
-    await table.getByRole('button', { name: '3×240', exact: true }).click();
-    await properties.getByRole('heading', { name: /^3×240/ }).waitFor();
+    // ---- The workspace of one size ----
     await page.getByRole('img', { name: '3×240 实际尺寸断面' }).waitFor();
-    await capture('library-structure');
+    assert.ok(await page.locator('main tbody tr').count() >= 9, 'the layers table lists every layer of the construction');
+    await page.getByText('结构与重量', { exact: true }).waitFor();
+    await page.getByText('0.0754', { exact: true }).first().waitFor();
+    await capture('series-params');
+    // A layer picked in the table is outlined on the drawing, and picked again it is let go.
+    await page.getByRole('row', { name: /^绝缘标称厚度/ }).click();
+    assert.ok(await page.locator('svg[role="img"] g[stroke="var(--copper)"]').count() > 0, 'the picked layer is outlined');
+    await capture('series-layer');
+    await page.getByRole('row', { name: /^绝缘标称厚度/ }).click();
+    assert.equal(await page.locator('svg[role="img"] g[stroke="var(--copper)"]').count(), 0);
 
-    // A part chosen in the browser shows its own dimension and requirements and lights its column in the table.
-    await parts.getByRole('button', { name: /^\d+ 绝缘$/ }).click();
-    await properties.getByText('绝缘标称厚度', { exact: true }).waitFor();
-    await properties.getByText(/GB\/T 12706\.2—2020 · 表 7/).first().waitFor();
-    assert.equal(await table.locator('thead th[data-lit]').filter({ hasText: '绝缘' }).count(), 1, 'the insulation column lights up');
-    await capture('library-part');
-    await parts.getByRole('button', { name: /^\d+ 绝缘$/ }).click();
+    await tab('标准核对');
+    await page.getByText('绝缘最薄点').first().waitFor();
+    assert.equal(await page.locator('dl dd').nth(1).innerText(), '0', 'the published structure fails nothing');
+    await capture('series-check');
+    await tab('载流量表');
+    await page.getByText('479.4', { exact: true }).waitFor();
+    await capture('series-rating');
+    await tab('参数');
+
     if (process.env.CABLE_STUDIO_VERIFY_CAD === '1') {
-      await page.getByRole('radio', { name: '三维实体', exact: true }).click();
+      await page.getByText('三维', { exact: true }).click();
       const generated = page.waitForResponse(response => response.url().endsWith('/api/ops/library.geometry'), { timeout: 150_000 });
       await page.getByRole('button', { name: '生成三维实体', exact: true }).click();
       const response = await generated; assert.equal(response.status(), 200);
       const cad = await response.json() as ProductCad;
       assert.equal(cad.model.step_unit, 'mm'); assert.match(cad.model.step_text, /^ISO-10303-21;/);
       assert.equal(cad.method.plugin_id, 'cablesim.cable-geometry');
-      await page.locator('.cad-viewport canvas').waitFor();
-      await capture('library-cad');
+      await page.locator('[role="img"][aria-label$="CAD 实体"] canvas').waitFor();
+      await capture('series-solid');
       const stepDownload = page.waitForEvent('download');
       await page.getByRole('button', { name: '下载 STEP 实体', exact: true }).click();
       await (await stepDownload).saveAs(join(out, 'YJV22-3x240-实体.step'));
       assert.equal(readFileSync(join(out, 'YJV22-3x240-实体.step'), 'utf8'), cad.model.step_text);
       const provenanceDownload = page.waitForEvent('download');
-      await page.getByRole('button', { name: '建模来源', exact: true }).click();
+      await page.getByRole('button', { name: '建模来源（JSON）', exact: true }).click();
       await (await provenanceDownload).saveAs(join(out, 'YJV22-3x240-CAD来源.json'));
       assert.equal(JSON.parse(readFileSync(join(out, 'YJV22-3x240-CAD来源.json'), 'utf8')).artifact_sha256, cad.artifact_sha256);
-      await page.getByRole('radio', { name: '断面', exact: true }).click();
+      await page.getByText('断面', { exact: true }).first().click();
     }
-    await properties.getByText('479.4', { exact: true }).waitFor();
-    await properties.getByRole('button', { name: /^电气参数/ }).click();
-    await properties.getByText('交流电阻', { exact: true }).waitFor();
-    await capture('library-values');
-    await properties.getByRole('button', { name: /概要$/ }).click();
-    await properties.getByRole('button', { name: /^载流量表/ }).click();
-    await properties.getByText('479.4', { exact: true }).waitFor();
-    await capture('library-rating');
-    await properties.getByRole('button', { name: /概要$/ }).click();
-    await properties.getByRole('button', { name: /^标准核对/ }).click();
-    assert.equal(await properties.locator('.ws-counts [data-verdict="failed"]').innerText(), '不通过 0');
-    await capture('library-checks');
-    await properties.getByRole('button', { name: '规格书', exact: true }).click();
-    const exportResponse = page.waitForResponse(response => response.url().endsWith('/api/ops/library.export'));
-    await properties.getByRole('button', { name: '生成规格书 PDF', exact: true }).click();
-    const firstReport = await (await exportResponse).json() as SpecificationReport;
-    await page.getByRole('dialog', { name: '规格书 PDF 预览' }).waitFor();
-    assert.ok((await page.getByTitle('已生成的规格书 PDF').getAttribute('src'))?.startsWith(firstReport.url + '?preview=1'));
-    await capture('library-pdf-preview');
-    await page.getByRole('button', { name: '关闭规格书预览', exact: true }).click();
-    const downloadEvent = page.waitForEvent('download');
-    await properties.getByRole('link', { name: '下载 PDF', exact: true }).first().click();
-    await (await downloadEvent).saveAs(join(out, 'YJV22-3x240-规格书.pdf'));
-    writeFileSync(join(out, 'YJV22-3x240-来源快照.json'), await (await fetch(base + firstReport.url + '/snapshot')).text(), 'utf8');
-    await capture('library-documents');
 
-    for (const action of ['submit', 'approve', 'publish']) {
-      await table.getByLabel('勾选 3×240', { exact: true }).check();
-      await page.locator('.ws-object-actions').getByRole('button', { name: '审核选中 1 项', exact: true }).click();
-      const form = page.getByRole('form', { name: '确认批量审核' });
-      if (action === 'submit') {
-        await page.keyboard.press('Escape');
-        await form.waitFor({ state: 'hidden' });
-        await page.locator('.ws-object-actions').getByRole('button', { name: '审核选中 1 项', exact: true }).click();
-        await capture('library-review');
-      }
-      await form.getByRole('combobox', { name: '审核操作' }).selectOption({ label: ({ submit: '提交审核', approve: '审核通过', publish: '发布' } as Record<string, string>)[action] });
-      await form.getByLabel('审核意见', { exact: true }).fill('隔离验收流程：核对公开手册结构与计算条件，缺实测项保留。');
-      const acknowledge = form.getByRole('checkbox');
-      if (await acknowledge.count()) { await form.getByText(/^我已查看这些版本的/).click(); assert.equal(await acknowledge.isChecked(), true); }
-      await form.getByRole('button', { name: /^确认/ }).click();
-      await form.waitFor({ state: 'hidden' });
-    }
-    await properties.getByRole('heading', { name: /^3×240/ }).waitFor();
-    await properties.getByText('已发布', { exact: true }).first().waitFor();
-    await properties.getByRole('button', { name: '修改结构', exact: true }).click();
-    const series = await op<SeriesView>('library.series.get', { series: armoured.id });
-    const target = series.specs.find(row => row.key === '3×240')!;
-    const before = await op<SpecView>('library.spec.get', { spec: target.id });
-    const field = before.structure.find(row => row.key === 'insulation_thickness')!;
-    await properties.getByLabel(`修改${field.label}`, { exact: true }).fill('4');
-    await properties.getByLabel('修改原因', { exact: true }).fill('隔离验收：减薄绝缘，核对标准是否明确指出问题。');
-    await capture('library-revision', true);
-    await properties.getByRole('button', { name: '保存新版本', exact: true }).click();
-    await properties.getByRole('combobox', { name: '查看规格版本' }).locator('option', { hasText: '第 2 版' }).waitFor({ state: 'attached' });
-    await properties.getByText('工程师修改', { exact: true }).first().waitFor();
-    await properties.getByRole('button', { name: '计算这个规格', exact: true }).click();
+    // Stepping through the sizes; a size nobody calculated says so and offers the calculation, which the page runs.
+    await page.getByRole('button', { name: '上一个规格' }).click();
+    await title('3×185');
+    await tab('标准核对');
+    await page.getByText('标准核对还没有计算').waitFor();
+    await capture('series-not-computed');
+    await page.getByRole('button', { name: '计算与核对', exact: true }).first().click();
+    await page.getByText('绝缘最薄点').first().waitFor({ timeout: 240_000 });
     await waitJob();
-    await properties.getByRole('button', { name: /概要$/ }).click();
-    await properties.getByRole('button', { name: /^标准核对/ }).click();
-    await properties.locator('.ws-counts [data-verdict="failed"]').filter({ hasText: '不通过 3' }).waitFor();
+    await page.getByRole('button', { name: '下一个规格' }).click();
+    await title('3×240');
+
+    // ---- An ampacity table written onto the version appears on the page, apart from the batch's reference values ----
+    const table = await op<RatingTable>('library.rating.table', { spec: spec('3×240').id, title: '走查载流量表', conditions: [
+      { layout: 'three_core_buried_single', depth_m: 0.7, soil_thermal_resistivity: 1, ambient_temperature_c: 25 },
+      { layout: 'three_core_buried_single', depth_m: 1.2, soil_thermal_resistivity: 2, ambient_temperature_c: 30, label: '夏季 30 °C 干土' },
+    ] });
+    assert.equal(table.rows.length, 2);
+    await page.reload();
+    await title('3×240');
+    await tab('载流量表');
+    await page.getByText('走查载流量表', { exact: true }).waitFor();
+    await page.getByText('夏季 30 °C 干土').waitFor();
+    await page.getByText(table.rows[1].ampacity_a!.toFixed(1), { exact: true }).waitFor();
+    await capture('series-rating-tables');
+    // The jump to the workbench carries the size's identity.
+    await page.getByRole('button', { name: '算载流量', exact: true }).click();
+    await page.waitForFunction(id => (window as unknown as { __pushed: string[] }).__pushed.some(url => url.includes(`/workbench?model=${encodeURIComponent(id)}`)), spec('3×240').id);
+    await page.goto(`${base}/library/${armoured.id}?spec=${encodeURIComponent(spec('3×240').id)}`);
+    await title('3×240');
+
+    // ---- Review is taken step by step by a person, and leaves a record ----
+    await tab('版本与文件');
+    for (const [action, label] of [['submit', '提交审核'], ['approve', '审核通过'], ['publish', '发布']] as const) {
+      await page.getByRole('button', { name: label, exact: true }).click();
+      const form = page.getByRole('form', { name: `确认${label}` });
+      await form.getByRole('textbox', { name: '审核意见' }).fill('隔离验收流程：核对公开手册结构与计算条件，缺实测项保留。');
+      const seen = form.getByRole('button', { name: /^我已查看以上问题/ });
+      if (await seen.count()) { assert.equal(await form.getByRole('button', { name: `确认${label}`, exact: true }).isDisabled(), true); await seen.click(); }
+      if (action === 'submit') await capture('series-review');
+      await form.getByRole('button', { name: `确认${label}`, exact: true }).click();
+      await form.waitFor({ state: 'detached' });
+    }
+    await page.getByText('已发布。再改结构会出新的草稿版本').waitFor();
+    await capture('series-files');
+
+    // ---- The specification sheet is fixed to the version, with its hashes ----
+    await page.getByRole('button', { name: '规格书', exact: true }).first().click();
+    const exportResponse = page.waitForResponse(response => response.url().endsWith('/api/ops/library.export'));
+    await page.getByRole('button', { name: '生成规格书 PDF', exact: true }).click();
+    const firstReport = await (await exportResponse).json() as SpecificationReport;
+    assert.equal(firstReport.version, 1);
+    assert.ok((await page.getByTitle('已生成的规格书 PDF').getAttribute('src'))?.startsWith(firstReport.url + '?preview=1'));
+    await capture('series-sheet');
+    const downloadEvent = page.waitForEvent('download');
+    await page.getByRole('dialog').getByRole('link', { name: '下载 PDF', exact: true }).click();
+    await (await downloadEvent).saveAs(join(out, 'YJV22-3x240-规格书.pdf'));
+    assert.equal(createHash('sha256').update(readFileSync(join(out, 'YJV22-3x240-规格书.pdf'))).digest('hex'), firstReport.sha256, 'the downloaded PDF is the one the record names');
+    const snapshot = await (await fetch(base + firstReport.url + '/snapshot')).text();
+    assert.equal(createHash('sha256').update(snapshot, 'utf8').digest('hex'), firstReport.snapshot_sha256, 'the snapshot is the one the record names');
+    writeFileSync(join(out, 'YJV22-3x240-来源快照.json'), snapshot, 'utf8');
+    await page.getByRole('button', { name: '完成', exact: true }).click();
+
+    // ---- A thinner insulation is a new draft that fails its clause; version 1 stays as it was ----
+    await page.getByRole('button', { name: '修改结构', exact: true }).click();
+    const before = await op<SpecView>('library.spec.get', { spec: spec('3×240').id });
+    const field = before.structure.find(row => row.key === 'insulation_thickness')!;
+    await page.getByRole('spinbutton', { name: `修改${field.label}`, exact: true }).fill('4');
+    await page.getByRole('textbox', { name: '修改原因', exact: true }).fill('隔离验收：减薄绝缘，核对标准是否明确指出问题。');
+    await capture('series-revise');
+    await page.getByRole('button', { name: /^保存为第 2 版草稿/ }).click();
+    await page.getByRole('button', { name: /^保存为第 2 版草稿/ }).waitFor({ state: 'detached' });
+    await page.getByText('已改', { exact: true }).first().waitFor();
+    await page.getByRole('button', { name: '计算与核对', exact: true }).click();
+    await tab('标准核对');
+    await page.locator('dl dd').nth(1).filter({ hasText: '3' }).waitFor({ timeout: 240_000 });
     // The three cores fail the same requirement: it is listed once, says so, and names its clause.
-    assert.equal(await properties.locator('.ws-check[data-verdict="failed"]').count(), 1);
-    assert.match(await properties.locator('.ws-check[data-verdict="failed"]').innerText(), /绝缘标称厚度[\s\S]*3 芯[\s\S]*≥ 4\.5 mm[\s\S]*实际 4 mm[\s\S]*表 7/);
-    await capture('library-nonconformity');
-    await properties.locator('.ws-section-block', { hasText: '绝缘最薄点' }).getByRole('button', { name: '在断面中查看' }).click();
-    await properties.getByText('绝缘标称厚度', { exact: true }).waitFor();
-    assert.equal(await parts.getByRole('button', { name: /^\d+ 绝缘$/ }).getAttribute('aria-pressed'), 'true');
-    await capture('library-locate-dimension');
-    const changed = await op<SpecView>('library.spec.get', { spec: target.id });
+    await page.getByText('实际 4 mm · 要求 ≥ 4.5 mm').waitFor();
+    assert.equal(await page.getByText('绝缘标称厚度').filter({ hasText: '三芯' }).count(), 1);
+    await capture('series-nonconformity');
+    await waitJob();
+    const changed = await op<SpecView>('library.spec.get', { spec: spec('3×240').id });
     assert.equal(changed.version.number, 2);
     assert.equal(changed.version.review, 'draft');
     assert.equal(changed.results.check!.summary!.count.failed, 3);
-    await properties.getByRole('button', { name: '规格书', exact: true }).click();
+    await page.getByRole('button', { name: '规格书', exact: true }).first().click();
     const secondExport = page.waitForResponse(response => response.url().endsWith('/api/ops/library.export'));
-    await properties.getByRole('button', { name: '生成规格书 PDF', exact: true }).click();
+    await page.getByRole('button', { name: '生成规格书 PDF', exact: true }).click();
     const secondReport = await (await secondExport).json() as SpecificationReport;
-    await page.getByRole('button', { name: '关闭规格书预览', exact: true }).click();
+    await page.getByRole('button', { name: '完成', exact: true }).click();
     copyFileSync(join(home, 'specifications', secondReport.id, 'specification.pdf'), join(out, 'YJV22-3x240-减薄核对.pdf'));
     writeFileSync(join(out, 'YJV22-3x240-减薄快照.json'), await (await fetch(base + secondReport.url + '/snapshot')).text(), 'utf8');
-    await properties.getByRole('combobox', { name: '查看规格版本' }).selectOption('1');
-    await properties.getByText('正在查看第 1 版（历史）。修改请回到最新版。', { exact: true }).waitFor();
-    await capture('library-history');
-    assert.equal((await op<SpecView>('library.spec.get', { spec: target.id, version: 1 })).structure.find(row => row.key === 'insulation_thickness')!.value, 4.5);
-    await table.getByRole('searchbox', { name: '搜索规格' }).fill('3×50');
-    await table.getByRole('button', { name: '3×50', exact: true }).click();
-    await properties.getByRole('heading', { name: /^3×50/ }).waitFor();
-    if (await properties.getByRole('button', { name: /概要$/ }).count()) await properties.getByRole('button', { name: /概要$/ }).click();
-    await properties.getByRole('button', { name: /^载流量表/ }).click();
-    await properties.getByText('拒算', { exact: true }).first().waitFor();
-    await capture('library-method-refusal');
-    console.log('product flow: 35 real imports; all three series batched; review, revision, clause failure, two PDFs and immutable history verified');
+
+    // ---- History: version 1 is still there, as it was ----
+    await tab('版本与文件');
+    await page.getByRole('row', { name: /^第 1 版/ }).click();
+    await page.getByText('正在查看第 1 版（历史）').waitFor();
+    await capture('series-history');
+    assert.equal((await op<SpecView>('library.spec.get', { spec: spec('3×240').id, version: 1 })).structure.find(row => row.key === 'insulation_thickness')!.value, 4.5);
+    await page.getByRole('button', { name: '回到最新版' }).click();
+    await page.getByText('正在查看第 1 版（历史）').waitFor({ state: 'detached' });
+
+    // ---- A size the method refuses for some laying says so, without a substitute number ----
+    await page.goto(`${base}/library/${armoured.id}?spec=${encodeURIComponent(spec('3×50').id)}`);
+    await title('3×50');
+    await tab('载流量表');
+    await page.getByText('拒算', { exact: true }).first().waitFor();
+    await capture('series-method-refusal');
+
+    // ---- A new type typed in from nothing: with the imported series' own declaration and one imported size's structure, the
+    // library fingerprints it as it fingerprints the imported one ----
+    const vocabulary = await op<{ fields: { key: string; label: string }[] }>('library.vocabulary');
+    const labelOf = (key: string) => vocabulary.fields.find(field => field.key === key)!.label;
+    const PARTS: [string, string[]][] = [
+      ['导体', ['area', 'conductor_diameter', 'conductor_wire_count', 'conductor_wire_diameter', 'r20']],
+      ['绝缘与半导电层', ['conductor_screen_thickness', 'insulation_thickness', 'insulation_screen_thickness']],
+      ['金属屏蔽', ['screen_tape_thickness', 'screen_tape_width', 'screen_tape_overlap']],
+      ['包带、铠装与护套', ['binder_thickness', 'bedding_thickness', 'armour_tape_thickness', 'armour_tape_width', 'armour_wire_diameter', 'armour_wire_count', 'oversheath_thickness']],
+      ['成品尺寸与重量', ['outer_diameter', 'weight']],
+    ];
+    const partOf = (key: string) => PARTS.find(([, keys]) => keys.includes(key))![0];
+    const declaration = series.declaration;
+    const target300 = await op<SpecView>('library.spec.get', { spec: spec('3×300').id });
+    await page.goto(`${base}/library`);
+    await page.getByRole('button', { name: '新建型号', exact: true }).click();
+    await page.waitForURL(/\/library\/new/);
+    const typedName = '走查：手工填写 YJV22-8.7/15 kV 三芯';
+    await page.getByRole('textbox', { name: '系列名称', exact: true }).fill(typedName);
+    await page.getByRole('textbox', { name: '型号', exact: true }).fill(declaration.designation);
+    await page.getByRole('spinbutton', { name: '额定相电压 kV', exact: true }).fill(String(declaration.u0_v / 1000));
+    await page.getByRole('spinbutton', { name: '额定线电压 kV', exact: true }).fill(String(declaration.u_v / 1000));
+    await page.getByRole('textbox', { name: '执行标准', exact: true }).fill(declaration.standards.join('\n'));
+    if (declaration.armour_material) await choose('铠装材料类别', new RegExp(declaration.armour_material === 'steel_galvanized' ? '镀锌钢' : '非磁性不锈钢'));
+    // What the series states once for all its sizes, each with its basis, part by part.
+    for (const key of Object.keys(declaration.common)) {
+      await page.getByRole('group', { name: '选择部位' }).nth(0).getByRole('button', { name: partOf(key), exact: true }).click();
+      await page.locator(`#common-${key}`).fill(String(declaration.common[key]));
+      await page.getByRole('textbox', { name: `${labelOf(key)}依据`, exact: true }).fill(declaration.common_basis[key]);
+    }
+    await page.getByText('计算参数与参考取值', { exact: true }).click();
+    await page.getByRole('button', { name: '填入标准参考值，供逐项核对' }).click();
+    // The first size: the table-given values of the imported 3×300.
+    for (const item of target300.structure.filter(entry => entry.origin === 'table')) {
+      await page.getByRole('group', { name: '选择部位' }).nth(1).getByRole('button', { name: partOf(item.key), exact: true }).click();
+      await page.locator(`#value-${item.key}`).fill(String(item.value));
+    }
+    await capture('new-scratch');
+    await page.getByRole('button', { name: '创建型号', exact: true }).click();
+    await title('3×300');
+    const typedSeries = (await op<SeriesSummary[]>('library.series')).find(item => item.name === typedName)!;
+    const typed = await op<SpecView>('library.spec.get', { spec: `${typedSeries.id}.3x300` });
+    assert.equal(typed.entry.content_sha256, target300.entry.content_sha256, 'the structure typed in is the structure imported');
+    assert.equal(typed.version.review, 'draft');
+    console.log('new type: typed in from nothing, the same structure as the imported one');
+
+    // ---- A new size started from the standard: its thickness is the standard's, with the clause and the page; the rest the engineer gives ----
+    const target240 = await op<SpecView>('library.spec.get', { spec: spec('3×240').id, version: 1 });
+    await page.goto(`${base}/library/new?from=standard`);
+    await page.getByRole('spinbutton', { name: '标称截面', exact: true }).fill('240');
+    await choose('铠装形式', /双钢带铠装/);
+    await page.getByRole('button', { name: '按标准给出初始结构', exact: true }).click();
+    await page.getByText(/GB\/T 12706\.2—2020 表 7/).waitFor({ timeout: 120_000 });
+    const missing = await page.locator('[id^="missing-"]').evaluateAll(list => list.map(element => element.id.replace('missing-', '')));
+    assert.ok(missing.length > 0, 'the standard leaves dimensions to the engineer');
+    for (const key of missing) await page.locator(`#missing-${key}`).fill(String(target240.structure.find(item => item.key === key)!.value));
+    await choose('系列', new RegExp('走查：手工填写'));
+    await capture('new-standard');
+    await page.getByRole('button', { name: '以此建草稿规格', exact: true }).click();
+    await title('3×240');
+    const started = await op<SpecView>('library.spec.get', { spec: `${typedSeries.id}.3x240` });
+    assert.match((started.derivation as unknown as { proposal?: { id: string } }).proposal?.id ?? '', /^prop-/);
+    assert.equal(started.structure.find(item => item.key === 'insulation_thickness')!.value, 4.5);
+    assert.equal(started.version.review, 'draft');
+    console.log('new size from the standard: the thickness and its clause come from the proposal, the rest from the engineer');
+
+    console.log('product flow: 35 real imports; library, workspace, review, revision, clause failure, two PDFs, a rating table, immutable history, a typed-in type and a size from the standard verified');
   } finally {
     await page.close();
   }

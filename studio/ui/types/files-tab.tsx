@@ -3,7 +3,7 @@
 import { compact, REVIEW_NAMES } from '@shared/format';
 import type { SpecificationReport, SpecView } from '@shared/types';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from '@/components/ui/item';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Icon } from '@/kit/icon';
@@ -24,7 +24,7 @@ const COLUMNS: Column<Version>[] = [
 
 function IconLink({ label, href, download, icon }: { label: string; href: string; download: string; icon: string }) {
   return <Tooltip>
-    <TooltipTrigger render={<Button variant="ghost" size="icon-sm" aria-label={label} nativeButton={false} render={<a href={href} download={download} />} />}><Icon name={icon} /></TooltipTrigger>
+    <TooltipTrigger render={<a href={href} download={download} aria-label={label} className={buttonVariants({ variant: 'ghost', size: 'icon-sm' })} />}><Icon name={icon} /></TooltipTrigger>
     <TooltipContent side="bottom">{label}</TooltipContent>
   </Tooltip>;
 }
