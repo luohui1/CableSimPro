@@ -472,6 +472,28 @@ test('a cable accepted from the library is not taken in a newer version than the
   assert.equal(app.studio.store.parts(id).cable.id, 'system.cu-xlpe-al-400', 'the project keeps the cable it had');
 });
 
+test('a project accepted for a model is not made on a newer version of the model than the one shown', { timeout: 60_000 }, async () => {
+  needsImport();
+  const table = await app.studio.invoke('library.series.get', { series: imported }, { by: 'human' }) as { specs: { id: string }[] };
+  const spec = await app.studio.invoke('library.spec.get', { spec: table.specs[3].id }, { by: 'human' }) as SpecView;
+  assert.equal(spec.version.number, 1, 'a specification nobody has revised yet');
+  const field = spec.structure.find(item => item.origin === 'table' && item.key !== 'area')!;
+  const projects = app.studio.store.list().length;
+  let told = '';
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('create_project', { name: '型号版本漂移', model_id: spec.spec.id })], { stopReason: 'toolUse' }),
+    context => { told = toolText(context); return fauxAssistantMessage([fauxText('没有建成。')]); },
+  ]);
+  const proposed = next(app, 'proposal', event => event.proposal.status === 'pending');
+  const { session } = await app.agent.send(undefined, '用这个系列的第四个规格新建一个工程');
+  const proposal = (await proposed).proposal;
+  await app.studio.invoke('library.revise', { spec: spec.spec.id, values: { [field.key]: Math.round((field.value + 0.4) * 1000) / 1000 }, note: '先改了结构' }, { by: 'human' });
+  app.agent.decide(proposal.id, true);
+  await app.agent.idle(session);
+  assert.ok(told.includes('型号在审阅期间有了新版本'), told);
+  assert.equal(app.studio.store.list().length, projects, 'no project was made');
+});
+
 test('what the agent writes as the source of an imported table is on the card, and is what is saved', { timeout: 120_000 }, async () => {
   const sample = await app.studio.invoke('library.import.sample', {}, { by: 'human' }) as { upload: string; declarations: { sheet: string; series: Record<string, unknown> }[] };
   const last = sample.declarations.at(-1)!;
