@@ -63,6 +63,7 @@ export async function walkAgent(browser: Browser, base: string, app: App, faux: 
       await page.getByText('允许电流', { exact: true }).waitFor();
       // The card has its own button to the workbench; the agent opening the same record afterwards must not add a second one.
       await page.getByRole('button', { name: '在工作台打开', exact: true }).first().waitFor();
+      await page.getByText('默认的埋深、土壤热阻率和负荷请你确认。').waitFor();
       if (await page.getByRole('button', { name: /在工作台打开 · 运行记录/ }).count()) problems.push(`${width} agent: a result card with its own button to the workbench is followed by a second button to the same place`);
       await check('rating');
       const chat = page.url();

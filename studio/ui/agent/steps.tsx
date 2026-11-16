@@ -21,6 +21,7 @@ function repeatedOpens(parts: readonly unknown[]): Set<string> {
   for (const part of parts) {
     const step = (part as { result?: ChatStep }).result;
     if (step?.type !== 'step' || step.status !== 'done' || !step.card || !('href' in step.card) || !step.card.href) continue;
+    if (step.card.kind === 'model3d') continue; // its buttons come only once the solid is built: no promise of a way there
     if (step.card.kind === 'open' && offered.has(step.card.href)) repeated.add(step.id);
     else offered.add(step.card.href);
   }

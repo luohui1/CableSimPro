@@ -16,10 +16,8 @@ export function WorkbenchSide({ at }: { at: SideAt }) {
   const seriesShown = series.slice(0, RECENT);
   const open = at.kind === 'series' ? series.find(item => item.id === at.id) : undefined;
   if (open && !seriesShown.includes(open)) seriesShown.push(open);
-  const projectList = [...(projects.data ?? [])].sort((a, b) => b.updated.localeCompare(a.updated));
-  const projectsShown = projectList.slice(0, RECENT);
-  const openProject = at.kind === 'project' ? projectList.find(item => item.id === at.id) : undefined;
-  if (openProject && !projectsShown.includes(openProject)) projectsShown.push(openProject);
+  // Every project is listed (no other page lists them), newest first by creation, so a project does not move up each time it is worked on.
+  const projectsShown = [...(projects.data ?? [])].sort((a, b) => b.created.localeCompare(a.created));
 
   return <WorkbenchNav>
     <NavSection icon="nav/cable-type" label="电缆型号">

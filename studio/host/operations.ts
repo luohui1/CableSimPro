@@ -251,7 +251,7 @@ export class Studio {
       text?.replace(/\b(cable|circuit)\/[\w-]+/g, id => names?.get(id) ?? (id.startsWith('cable') ? '某根电缆' : '某回路'));
     const issueOf = (issue: Issue | undefined, names?: Map<string, string>) => (issue ? { ...issue, message: plain(issue.message, names) } : undefined);
     const briefRun = (record: RunRecord): unknown => {
-      const base = { ...header(record), kind: record.kind, method: record.method_card?.plugin, tier_basis: record.method_card?.tier.basis };
+      const base = { ...header(record), kind: record.kind, method: record.method_card?.method ? `${record.method_card.method} ${record.method_card.method_version}` : undefined, tier_basis: record.method_card?.tier.basis };
       if (record.kind === 'sweep') {
         return { ...base, variable: record.sweep!.label, unit: record.sweep!.unit,
                  points: record.sweep!.points.map(point => ({ value: point.value, ampacity_a: point.ampacity_a, hottest_conductor_c: point.hottest_conductor_c, error: plain(point.error?.message) })) };

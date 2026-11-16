@@ -1,16 +1,19 @@
 // What a step of the agent leaves in the conversation: the proposal that waits for a decision (or was decided), and the card of what
 // came out. The host sends references; each card reads what it shows.
+import { Suspense, lazy } from 'react';
 import type { CardRef, ChatStep } from '@shared/types';
-import { CardAction } from '@/kit/chat/cards';
+import { CardAction, ModelCard } from '@/kit/chat/cards';
 import { CheckResult } from './check';
 import { CorrectionResult } from './correction';
 import { FileResult } from './file';
-import { ModelResult } from './model';
 import { useOpen } from './open';
 import { ProposalBlock } from './proposal';
 import { RatingTableResult } from './rating-table';
 import { RunResult } from './rating';
 import { StandardResult } from './standard';
+
+// The 3D viewer brings three.js: it is fetched when a model card first appears, not with the home page.
+const ModelResult = lazy(() => import('./model').then(module => ({ default: module.ModelResult })));
 
 /** A button that takes the engineer to something the agent named, in the words the host gave it. */
 function OpenResult({ card }: { card: Extract<CardRef, { kind: 'open' }> }) {
@@ -23,7 +26,7 @@ function ResultCard({ card, step }: { card: CardRef; step: ChatStep }) {
     case 'run': return <RunResult card={card} />;
     case 'check': return <CheckResult card={card} />;
     case 'file': return <FileResult card={card} />;
-    case 'model3d': return <ModelResult card={card} subject={step.target} />;
+    case 'model3d': return <Suspense fallback={<ModelCard title="三维结构" state="loading" />}><ModelResult card={card} subject={step.target} /></Suspense>;
     case 'open': return <OpenResult card={card} />;
     case 'rating_table': return <RatingTableResult card={card} />;
     case 'standard': return <StandardResult card={card} />;

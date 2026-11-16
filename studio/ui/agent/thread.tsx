@@ -79,12 +79,20 @@ const TILES: Record<string, { figure: ReactNode; facts: ReactNode }> = {
   载流量计算: { figure: <RatingFigure />, facts: <RatingFacts /> },
 };
 
+/** The tables the composer's attachment adapter takes (runtime.ts), as react-dropzone wants them. */
+const ATTACHABLE: Record<string, string[]> = {
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+  'application/vnd.ms-excel': ['.xls'],
+  'text/csv': ['.csv'],
+  'text/tab-separated-values': ['.tsv'],
+};
+
 /** A structure table dropped here goes into the composer, like one attached with the paperclip. */
 function ImportDrop() {
   const aui = useAui();
-  return <DropZone compact title="把厂家结构表拖到这里" formats="支持 .xlsx、.xls 和 .csv"
-    onFiles={files => files.forEach(file => void aui.composer().addAttachment(file))}
-    onRejected={names => reportFailure(new Error(`不能导入 ${names.join('、')}：只收 .xlsx、.xls 和 .csv。`))} />;
+  return <DropZone compact accept={ATTACHABLE} title="把厂家结构表拖到这里" formats="支持 .xlsx、.xls 和 .csv"
+    onFiles={files => files.forEach(file => void Promise.resolve(aui.composer().addAttachment(file)).catch(reportFailure))}
+    onRejected={names => reportFailure(new Error(`不能导入 ${names.join('、')}：一次拖一张 .xlsx、.xls、.csv 或 .tsv 表。`))} />;
 }
 
 /** The starting tasks of one group, each a task starter that sends its prompt when clicked. */

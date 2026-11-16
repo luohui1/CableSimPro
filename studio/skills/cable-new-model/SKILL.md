@@ -19,7 +19,7 @@ description: 新建型号：没有厂家结构表时，新建一个系列，再�
    - 工程师自己给数：直接 `create_spec(series, values, basis)`。values 的字段名和单位见工具说明（多为 mm）；每个数的依据（图纸号、标准条款）写进 basis，工程师没给依据就如实写“工程师给定”。
 5. `create_spec` 也交审，审阅卡里逐项列出尺寸和出处。接受后是第 1 版草稿。
 6. `compute_series(series, specs:[规格标识], kinds:['check','electrical'])` 算参数并核对，再 `list_check_failures(series, specs:[规格标识])`。
-7. `open_in_workbench(target:'spec', spec, version:1)`。回答只写：建了什么（系列名、规格名、第 1 版草稿）；核对有几项不通过；需要工程师定的事，至多两件。尺寸和出处在审阅卡和卡片里，回答里不列。
+7. 审阅卡后面已有进工作台的按钮，不必再调 `open_in_workbench`。回答只写：建了什么（系列名、规格名、第 1 版草稿）；核对有几项不通过；需要工程师定的事，至多两件。尺寸和出处在审阅卡和卡片里，回答里不列。
 
 ## 容易错的地方
 

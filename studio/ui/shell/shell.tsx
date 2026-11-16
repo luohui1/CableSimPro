@@ -18,6 +18,6 @@ export function Shell() {
     <TopBar mode={modeOf(location.pathname)} onModeChange={mode => router.history.push(lastPlace(mode))}
       model={agent ? (agent.configured ? agent.model : null) : undefined} theme={theme} onThemeToggle={toggle} />
     <div className="min-h-0 flex-1"><Outlet /></div>
-    <Toaster position="top-right" />
+    {!location.pathname.startsWith('/gallery') && <Toaster position="top-right" />}
   </div>;
 }

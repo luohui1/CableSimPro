@@ -16,8 +16,9 @@ type RunRef = Extract<CardRef, { kind: 'run' }>;
 
 export function RunResult({ card }: { card: RunRef }) {
   const run = useRun(card.project, card.run);
+  const open = useOpen();
   if (run.isPending) return <CardLoading icon="calc/ampacity" title="载流量结果" />;
-  if (run.error) return <RefusalCard kind="error" title="载流量结果" reason={`读不出这条运行记录：${run.error.message}`} />;
+  if (run.error) return <RefusalCard kind="error" title="载流量结果" reason={`读不出这条运行记录：${run.error.message}`} actions={<OpenInWorkbench onClick={() => open(card.href)} />} />;
   const record = run.data;
   if (record.kind === 'sweep') return <SweepResult record={record} href={card.href} />;
   if (record.kind === 'selection') return <SelectionResult record={record} href={card.href} />;
