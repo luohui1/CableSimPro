@@ -11,18 +11,20 @@ import { RunRail } from '@/kit/workbench/runs';
 import { SideEditor, SideEditorSection } from '@/kit/workbench/side-editor';
 import type { Review } from '@/kit/marks';
 import { BONDING_NAMES, fixed } from '@shared/format';
-import { DEFAULTS, IMPORT, LAYOUTS, PROPOSAL, REVIEW_NOTES, RUNS, SELECTION, SWEEP, VERSIONS } from './round2-data';
+import { DEFAULTS, IMPORT, LAYOUTS, PROPOSAL, RUNS, SELECTION, SWEEP, VERSIONS } from './round2-data';
 import { HOST_DOWN, MODEL, REFUSED_IMPORT } from './samples';
 import { Specimen, State } from './sections';
 import { when } from './type-screens';
 
 const FIRST = VERSIONS.find(version => version.number === 1)!;
-// Version 1 went through every state: each state shows the stamps it had reached by then.
-const REVIEW_STATES: { state: Review; label: string; stamps: Partial<Record<'submitted' | 'reviewed' | 'published', ReviewStamp>> }[] = [
-  { state: 'draft', label: '草稿', stamps: {} },
-  { state: 'submitted', label: '待审核', stamps: { submitted: { ...FIRST.submitted!, note: REVIEW_NOTES.submit } } },
-  { state: 'reviewed', label: '已审核', stamps: { submitted: { ...FIRST.submitted!, note: REVIEW_NOTES.submit }, reviewed: { ...FIRST.reviewed!, note: REVIEW_NOTES.approve } } },
-  { state: 'published', label: '已发布', stamps: { submitted: { ...FIRST.submitted!, note: REVIEW_NOTES.submit }, reviewed: { ...FIRST.reviewed!, note: REVIEW_NOTES.approve }, published: FIRST.published! } },
+const THIRD = VERSIONS.find(version => version.number === 3)!;
+// Each state as a version really passed through it: version 3 submitted by one person and approved by another, version 1
+// published.
+const REVIEW_STATES: { state: Review; label: string; created: string; stamps: Partial<Record<'submitted' | 'reviewed' | 'published', ReviewStamp>> }[] = [
+  { state: 'draft', label: '草稿', created: THIRD.created, stamps: {} },
+  { state: 'submitted', label: '待审核', created: THIRD.created, stamps: { submitted: THIRD.submitted! } },
+  { state: 'reviewed', label: '已审核', created: THIRD.created, stamps: { submitted: THIRD.submitted!, reviewed: THIRD.reviewed! } },
+  { state: 'published', label: '已发布', created: FIRST.created, stamps: { submitted: FIRST.submitted!, reviewed: FIRST.reviewed!, published: FIRST.published! } },
 ];
 const dimension = (field: string) => PROPOSAL.complete.dimensions.find(item => item.field === field)!;
 const { installation, conditions } = DEFAULTS;
@@ -89,7 +91,7 @@ export function FlowSection() {
       <div className="grid w-full grid-cols-4 gap-6">
         {REVIEW_STATES.map(item => <State key={item.state} label={item.label}>
           <div className="flex flex-col gap-4">
-            <ReviewTrack state={item.state} created={FIRST.created} stamps={item.stamps} when={when} />
+            <ReviewTrack state={item.state} created={item.created} stamps={item.stamps} when={when} />
             <ReviewActions state={item.state} />
           </div>
         </State>)}

@@ -21,7 +21,7 @@ import { ReviewActions, ReviewTrack } from '@/kit/workbench/review';
 import { compact, fixed } from '@shared/format';
 import { CableSection } from './figures';
 import { WORKSPACE } from './library-data';
-import { DOCUMENTS, IMPORT, PRINTED, PROPOSAL, RATING_TABLE, REVIEW_NOTES, STANDARD_SERIES, VERSIONS } from './round2-data';
+import { DOCUMENTS, IMPORT, PRINTED, PROPOSAL, RATING_TABLE, STANDARD_SERIES, VERSIONS } from './round2-data';
 import { SeriesShell } from './workbench-screens';
 
 /** A host time as the screen writes times: date and minute, in the reader's zone. */
@@ -477,23 +477,24 @@ const VERSION_COLUMNS: Column<Version>[] = [
 ];
 
 function SeriesVersionsBody() {
-  const shown = VERSIONS.find(version => version.number === 1)!;
-  const stamps = {
-    submitted: shown.submitted && { ...shown.submitted, note: REVIEW_NOTES.submit },
-    reviewed: shown.reviewed && { ...shown.reviewed, note: REVIEW_NOTES.approve },
-    published: shown.published,
-  };
+  const shown = VERSIONS.find(version => version.number === WORKSPACE.version.number)!;
+  const stamps = { submitted: shown.submitted, reviewed: shown.reviewed, published: shown.published };
+  const files = DOCUMENTS.filter(document => document.version === shown.number);
   return <SeriesShell page="versions" version={WORKSPACE.version.number}>
     <Split panes={[
       { id: 'versions', size: 60, min: 44, children: <Panel title="版本">
-          <DataTable rows={VERSIONS} rowKey={version => String(version.number)} selected="1" onSelect={() => undefined} columns={VERSION_COLUMNS} />
+          <DataTable rows={VERSIONS} rowKey={version => String(version.number)} selected={String(shown.number)} onSelect={() => undefined} columns={VERSION_COLUMNS} />
         </Panel> },
       { id: 'version', size: 40, min: 30, children: <Panel title={`第 ${shown.number} 版`} tools={<ReviewActions state={shown.review as Review} />}
           bodyClassName="flex flex-col gap-6 px-4 py-4">
           <ReviewTrack state={shown.review as Review} created={shown.created} stamps={stamps} when={when} />
           <section className="flex flex-col gap-2">
             <h3 className="m-0 text-h3 text-ink">文件</h3>
-            {DOCUMENTS.filter(document => document.version === shown.number).map(document => <Item key={document.title} variant="outline">
+            {files.length === 0 && <div className="flex items-center justify-between gap-3 rounded-card border border-dashed border-line-strong px-4 py-3 text-sm text-ink-2">
+              这一版还没有导出文件
+              <Button variant="outline" size="sm"><Icon name="object/file" data-icon="inline-start" />导出规格书</Button>
+            </div>}
+            {files.map(document => <Item key={document.title} variant="outline">
               <ItemMedia variant="tile"><Icon name="object/file" /></ItemMedia>
               <ItemContent className="min-w-0">
                 <ItemTitle className="w-full truncate">{document.title}</ItemTitle>

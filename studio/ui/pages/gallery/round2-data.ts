@@ -1,7 +1,8 @@
 // Round two's examples, computed on this branch's own host (8212, user label 工程师) on 2026-11-16 and copied unchanged:
 // the public sample workbook inspected and previewed, a project on YJV22-8.7/15 kV 3×240 (version 3, the same structure as
 // version 1) rated, swept over the soil resistivity and asked to select a size for 400 A, version 1 submitted, approved,
-// published and exported, and the stored ampacity table and short-circuit results of version 1.
+// published and exported, version 3 submitted by 工程师 and approved by 审核员 (the host run under each label in turn),
+// and the stored ampacity table and short-circuit results of version 1.
 
 export const IMPORT = {
  "file": "人民电缆 8.7-15kV 结构表（公开手册）.xlsx",
@@ -456,7 +457,7 @@ export const CANDIDATES = [
   "name": "YJV22-8.7/15 kV 3×240",
   "family": "人民电缆集团 YJV22-8.7/15 kV 三芯",
   "state": "public",
-  "review": "draft"
+  "review": "reviewed"
  },
  {
   "id": "s-89150e51.3x300",
@@ -801,9 +802,19 @@ export const SHORT_CIRCUIT = {
 export const VERSIONS = [
  {
   "number": 3,
-  "review": "draft",
+  "review": "reviewed",
   "note": "减薄后核对不过，恢复 4.5 mm",
   "created": "2026-11-16T06:05:54.260Z",
+  "submitted": {
+   "at": "2026-11-16T07:53:15.632Z",
+   "by": "工程师",
+   "note": "减薄方案不用，恢复 4.5 mm 后提交审核"
+  },
+  "reviewed": {
+   "at": "2026-11-16T07:54:36.021Z",
+   "by": "审核员",
+   "note": "结构与第 1 版相同，核对结果一致"
+  },
   "check": {
    "passed": 13,
    "missing": 21,
@@ -829,11 +840,13 @@ export const VERSIONS = [
   "created": "2026-11-16T03:56:36.744Z",
   "submitted": {
    "at": "2026-11-16T06:04:00.306Z",
-   "by": "工程师"
+   "by": "工程师",
+   "note": "公开手册转录，提交审核"
   },
   "reviewed": {
    "at": "2026-11-16T06:04:00.361Z",
-   "by": "工程师"
+   "by": "工程师",
+   "note": "结构尺寸与手册表 3 核对一致"
   },
   "published": {
    "at": "2026-11-16T06:04:00.410Z",
@@ -846,10 +859,6 @@ export const VERSIONS = [
   }
  }
 ];
-export const REVIEW_NOTES = {
- "approve": "结构尺寸与手册表 3 核对一致",
- "submit": "公开手册转录，提交审核"
-};
 export const DOCUMENTS = [
  {
   "title": "YJV22-8.7/15 kV 3×240 · 第 1 版",
