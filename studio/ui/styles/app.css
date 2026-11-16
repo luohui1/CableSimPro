@@ -1,13 +1,19 @@
-/* Shared engineering tokens and the workspace's Tailwind utility classes. */
+/* The stylesheet entry. The theme is in theme.css; this file adds the variants and the names the screens from before the
+   theme still use. Those names go when the last of those screens is rebuilt from the kit. */
 @import 'tailwindcss';
+@import './theme.css';
 @import './product.css';
 @import 'tw-animate-css';
 
 /* shadcn/ui's dark: variants follow the document's theme (data-theme), not the operating system. */
 @custom-variant dark (&:is([data-theme='dark'] *));
+@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
+@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
 
-/* The CJK font draws the middle dot of a unit (K·m/W) a full character wide.
-   This face takes that one character from a Latin font, so units read as units. */
+/* ---- Names kept for the screens built before the theme (pages/, series/, workbench/, canvas/, results/) ---- */
+
+/* The CJK font draws the middle dot of a unit (K·m/W) a full character wide; this face takes that one character from a
+   Latin font. The theme's Inter already draws it; the older screens set their own font stack and still need it. */
 @font-face {
   font-family: 'Unit Dot';
   src: local('Segoe UI'), local('Arial'), local('Helvetica Neue'), local('Helvetica');
@@ -18,31 +24,7 @@
   --color-ground: var(--ground);
   --color-panel: var(--panel);
   --color-fill: var(--fill);
-  --color-hover: var(--hover);
-  --color-line: var(--line);
   --color-control: var(--control-border);
-  --color-ink: var(--text);
-  --color-ink-2: var(--text-secondary);
-  --color-ink-3: var(--text-weak);
-  --color-copper: var(--copper);
-  --color-on-copper: var(--on-copper);
-  --color-agent: var(--agent);
-  --color-agent-fill: var(--agent-fill);
-  --color-success: var(--success);
-  --color-attention: var(--attention);
-  --color-error: var(--error);
-  --color-conductor: var(--conductor);
-  --color-semi: var(--material-semi);
-  --color-insulation: var(--material-insulation);
-  --color-metal: var(--material-metal);
-  --color-sheath: var(--material-sheath);
-  --color-phase-a: var(--phase-a);
-  --color-phase-b: var(--phase-b);
-  --color-phase-c: var(--phase-c);
-  --color-scrim: var(--overlay);
-
-  --font-sans: 'Unit Dot', 'Noto Sans SC Variable', var(--font-ui);
-  --font-mono: var(--font-code);
 
   --text-13: var(--text-note);
   --text-13--line-height: 20px;
@@ -55,124 +37,15 @@
   --text-28: var(--text-value);
   --text-28--line-height: 34px;
 
-  --font-weight-normal: var(--weight-normal);
-  --font-weight-strong: var(--weight-strong);
+  /* thread.aui.tsx draws its composer with shadow-sm; the theme's composer shadow until the kit's composer replaces it. */
+  --shadow-sm: var(--shadow-composer);
+}
 
-  --radius-chip: 6px;
-  --radius-field: var(--radius-input);
-  --radius-nav: var(--radius-item);
-  --radius-card: var(--radius-surface);
-  --radius-sheet: var(--radius-panel);
-  --radius-full: var(--radius-pill);
-
-  --shadow-lift: var(--shadow-float);
-  --shadow-modal: var(--shadow-dialog);
-
-  --ease-std: var(--ease-standard);
-  --ease-leave: var(--ease-exit);
-
-  /* shadcn/ui's semantic colours, radii and sizes are references to the design tokens: no second palette. */
-  --color-background: var(--panel);
-  --color-foreground: var(--text);
-  --color-card: var(--panel);
-  --color-card-foreground: var(--text);
-  --color-popover: var(--panel);
-  --color-popover-foreground: var(--text);
-  --color-primary: var(--copper);
-  --color-primary-foreground: var(--on-copper);
-  --color-secondary: var(--fill);
-  --color-secondary-foreground: var(--text);
-  --color-muted: var(--fill);
-  --color-muted-foreground: var(--text-secondary);
-  --color-accent: var(--hover);
-  --color-accent-foreground: var(--text);
-  --color-destructive: var(--error);
-  --color-border: var(--line);
-  --color-input: var(--control-border);
-  --color-ring: var(--copper);
-  --color-sidebar: var(--ground);
-  --color-sidebar-foreground: var(--text);
-  --color-sidebar-border: var(--line);
-
-  --radius-sm: calc(var(--radius-input) - 2px);
-  --radius-md: var(--radius-input);
-  --radius-lg: var(--radius-item);
-  --radius-xl: var(--radius-surface);
-  --radius-2xl: var(--radius-panel);
-  --radius-3xl: 24px;
-  --radius-4xl: var(--radius-pill);
-
-  /* Body text is 14 px and nothing is smaller than 13 px; the library's text-xs and text-sm follow. */
-  --text-xs: var(--text-note);
-  --text-xs--line-height: 20px;
-  --text-sm: var(--text-body);
-  --text-sm--line-height: 22px;
-  --text-base: var(--text-subheading);
-  --text-base--line-height: 24px;
-  --text-xl: var(--text-heading);
-  --text-xl--line-height: 28px;
-  @keyframes collapsible-down {
-  from {
-    height: 0;
-    }
-  to {
-    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
-    }
-  }
-  @keyframes collapsible-up {
-  from {
-    height: var(--radix-collapsible-content-height, var(--collapsible-panel-height, auto));
-    }
-  to {
-    height: 0;
-    }
-  }
+@utility duration-slow {
+  transition-duration: 320ms;
 }
 
 @layer base {
-  html,
-  body,
-  #root {
-    height: 100%;
-  }
-
-  body {
-    margin: 0;
-    overflow: hidden;
-    background: var(--ground);
-    color: var(--text);
-    font-family: var(--font-sans);
-    font-size: var(--text-body);
-    line-height: 22px;
-    font-weight: var(--weight-normal);
-    font-variant-numeric: tabular-nums;
-    font-synthesis: none;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-  }
-
-  /* Tailwind 4 draws a border in the text colour unless told otherwise; the library's components expect the line colour. */
-  *,
-  ::before,
-  ::after {
-    border-color: var(--color-border);
-  }
-
-  button {
-    font: inherit;
-    color: inherit;
-    cursor: default;
-  }
-
-  :focus-visible {
-    outline: 2px solid var(--text);
-    outline-offset: 2px;
-  }
-
-  ::selection {
-    background: color-mix(in oklab, var(--copper) 24%, transparent);
-  }
-
   input[type='search']::-webkit-search-cancel-button {
     -webkit-appearance: none;
     width: 18px;
@@ -181,7 +54,10 @@
     mask: url('../../../design/icons/action/close.svg') center / contain no-repeat;
   }
 
-  input[type='checkbox'], progress { accent-color: var(--copper); }
+  input[type='checkbox'],
+  progress {
+    accent-color: var(--copper);
+  }
 
   .studio-input {
     min-width: 0;
@@ -193,32 +69,10 @@
     font: inherit;
     font-size: var(--text-body);
   }
-  .studio-input:disabled { opacity: .5; }
-  .studio-input:focus { border-color: var(--text); }
-
-  svg text {
-    font-family: var(--font-sans);
-    font-variant-numeric: tabular-nums;
+  .studio-input:disabled {
+    opacity: 0.5;
   }
-
-  /* Scroll areas inside panels: thin, quiet, only visible while needed. */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--control-border) transparent;
+  .studio-input:focus {
+    border-color: var(--text);
   }
 }
-
-/* Durations are tokens too. */
-@utility duration-fast {
-  transition-duration: var(--motion-fast);
-}
-@utility duration-std {
-  transition-duration: var(--motion-standard);
-}
-@utility duration-slow {
-  transition-duration: var(--motion-slow);
-}
-
-@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
-
-@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));

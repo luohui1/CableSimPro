@@ -24,7 +24,7 @@
   --agent: #0F7C8A;
   --agent-fill: #E6F3F5;
   --success: #2F7A4F;
-  --attention: #A4560B;
+  --attention: #9A6700;
   --error: #B8352B;
   --conductor: #C47A3D;
   --material-semi: #2B2E33;
@@ -59,7 +59,8 @@
   --overlay: rgba(0,0,0,.4);
   --shadow-float: 0 2px 12px rgba(0,0,0,.05);
   --shadow-dialog: 0 12px 48px rgba(0,0,0,.12);
-  --font-ui: 'Noto Sans SC', sans-serif;
+  /* Inter draws Latin letters and figures, Noto Sans SC draws Chinese; each app bundles the faces it names. */
+  --font-ui: 'Inter Variable', 'Inter', 'Noto Sans SC Variable', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
   --font-number: var(--font-ui);
   --font-code: 'IBM Plex Mono', monospace;
   --text-note: 13px;
@@ -84,7 +85,7 @@
   --space-6: 24px;
   --space-8: 32px;
   --space-12: 48px;
-  --motion-fast: 120ms;
+  --motion-fast: 150ms;
   --motion-standard: 200ms;
   --motion-slow: 320ms;
   --motion-conduct: 800ms;
@@ -111,7 +112,7 @@
   --agent: #4FC3CF;
   --agent-fill: #12302F;
   --success: #4CC184;
-  --attention: #EDA246;
+  --attention: #D29922;
   --error: #F07468;
   --material-semi: #0B0C0E;
   --material-insulation: #3A3934;
