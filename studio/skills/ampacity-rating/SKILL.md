@@ -25,7 +25,7 @@ description: 载流量校核与选型：回答某款型号在地下直埋或排�
    - `set_conditions`：soil_thermal_resistivity、ambient_temperature_c、current_a、system_voltage_v、frequency_hz。
    - `set_method`：ks、kp、eddy。
    每次只改一类，每一类都会交审。被拒绝的改动不要重提。
-5. `run_rating` 算出一条运行记录。读 `ampacity_a`（允许电流）、`limiting_cable`（先到温限的电缆）、`tier`（可信分档）、`operating`（各电缆在保存负荷下的温度）。
+5. `run_rating` 算出一条运行记录。读 `ampacity_a`（允许电流）、`limiting_cable`（先到温限的电缆，已经是能直接对工程师说的名称）、`tier`（可信分档）、`operating`（各电缆在保存负荷下的温度，`cable` 是同样的名称）。
 6. 回答：允许电流（A）、先到温限的电缆、可信分档、用到的关键条件。再调用 `open_in_workbench(target:'run', project, run)`，让工程师在工作台里看断面和温度。
 
 ## 步骤：选型与扫描

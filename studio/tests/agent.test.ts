@@ -339,7 +339,24 @@ test('a change that changes nothing is not put in front of a person', { timeout:
   assert.ok(told.includes('没有任何变化'), told);
 });
 
-test('the model is never told a path of this machine, in a result or in an error', async () => {
+test('a rating is told to the model with cables by name, not by the calculation\'s own identifiers', { timeout: 120_000 }, async () => {
+  const id = await project('结果用名称', 'huayuan.yjv22-15kv-240');
+  let told = '';
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('run_rating', { project: id })], { stopReason: 'toolUse' }),
+    context => { told = toolText(context); return fauxAssistantMessage([fauxText('算完了。')]); },
+  ]);
+  const { session } = await app.agent.send(undefined, '算一下这个工程的载流量');
+  await app.agent.idle(session);
+  const result = JSON.parse(told);
+  assert.ok(result.ampacity_a > 0, told);
+  assert.equal(result.limiting_cable, '三芯电缆');
+  assert.equal(result.operating[0].cable, '三芯电缆');
+  assert.equal(result.circuits[0].limiting_cable, '三芯电缆');
+  assert.ok(!/cable\/|circuit\//.test(told), 'nothing the model could copy into an answer as an identifier');
+});
+
+test('the model is never told a path of this machine, in a result or in an error', { timeout: 60_000 }, async () => {
   assert.equal(scrubPaths('读 C:\\Users\\guo\\x.xlsx 和 D:/work/a.json 以及 /home/ci/work/b 都失败，比例 8.7/15 kV'), '读 〈本机路径〉 和 〈本机路径〉 以及 〈本机路径〉 都失败，比例 8.7/15 kV');
   assert.equal(scrubPaths(JSON.stringify({ file: 'C:\\Users\\guo\\out.pdf' })), '{"file":"〈本机路径〉"}');
   assert.equal(scrubPaths('https://example.com/a/b 与 8.7/15 kV'), 'https://example.com/a/b 与 8.7/15 kV');

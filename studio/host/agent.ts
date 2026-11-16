@@ -62,7 +62,7 @@ export const SYSTEM_PROMPT = `你是在 Cable Studio 里干活的电缆工程师
 6. 有限元仿真本机不跑，超算还没接通：被问到就如实说做不了，不给任何仿真数字。
 7. 用户消息里的“[附件：…（upload u-xxxx）]”是已上传的结构表，用 inspect_table 读取。
 8. 想让工程师看某个对象，就调用 open_in_workbench。结果表、断面、文件、三维模型由界面的卡片显示，不要把表格抄一遍；回答里用名称说话，不要写工程、运行记录、电缆的内部编号（p-…、run-…、cable/c1）。
-9. 用简体中文。调用工具之间不写过程说明；做完后一次性交代，最多五行，每行一句话，不用标题和列表：做了什么、结论、需要工程师注意或决定的事。`;
+9. 用简体中文。调用工具之间不写过程说明；做完后一次性交代，最多五句话，每句单独一行，不用标题和列表：做了什么、结论、需要工程师注意或决定的事。`;
 
 /** Which model the environment names, without building anything. */
 export function modelIdentity(env: NodeJS.ProcessEnv = process.env): ModelIdentity | null {

@@ -240,9 +240,20 @@ export class Studio {
       }
       const summary = record.summary!;
       if (summary.status !== 'succeeded') return { ...base, error: summary.error };
-      return { ...base, ampacity_a: summary.ampacity?.value_a, basis: summary.ampacity?.basis_name, limiting_cable: summary.ampacity?.limiting_cable,
-               circuits: summary.circuits, ambient_c: summary.ambient_c, verification_passed: summary.verification?.passed,
-               operating: summary.operating?.cables.map(cable => ({ id: cable.id, phase: cable.phase, current_a: cable.current_a,
+      // A cable is told to the model by a name it can say to an engineer, never by the calculation's own identifier: a model copies what it reads.
+      const cables = summary.operating?.cables ?? [];
+      const named = (id: string | undefined): string | undefined => {
+        const index = cables.findIndex(cable => cable.id === id);
+        if (index < 0) return id === undefined ? undefined : '某根电缆';
+        const phase = PHASE_NAMES[cables[index].phase] ?? cables[index].phase;
+        return cables.length === 1 ? phase : `第 ${index + 1} 根（${phase}）`;
+      };
+      return { ...base, ampacity_a: summary.ampacity?.value_a, basis: summary.ampacity?.basis_name, limiting_cable: named(summary.ampacity?.limiting_cable),
+               circuits: summary.circuits?.map(circuit => ({ label: circuit.label, ampacity_a: circuit.ampacity_a, limiting_cable: named(circuit.limiting_cable),
+                 load_a: circuit.load_a, margin_a: circuit.margin_a, error: circuit.error,
+                 held_currents_a: Object.fromEntries(Object.entries((circuit as { held_currents_a?: Record<string, number> }).held_currents_a ?? {}).map(([id, amps]) => [named(id), amps])) })),
+               ambient_c: summary.ambient_c, verification_passed: summary.verification?.passed,
+               operating: cables.map(cable => ({ cable: named(cable.id), current_a: cable.current_a,
                  conductor_c: cable.conductor_c, limit_c: cable.limit_c, sheath_c: cable.sheath_c, surface_c: cable.surface_c,
                  losses_w_m: cable.losses_w_m, thermal_k_m_w: cable.thermal_k_m_w, lambda1: cable.lambda1 })),
                warnings: summary.warnings?.map(warning => warning.message) };
