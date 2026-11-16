@@ -15,6 +15,7 @@ class FakeTool:
         self.title = "读取工程"
         self.description = "读取当前工程"
         self.hpc = False
+        self.method = None
 
     def info(self):
         return {"name": self.name, "title": self.title, "kind": self.kind,
