@@ -7,18 +7,18 @@ import { useProjects } from '@/state/queries';
 import { messageOf } from './edit';
 import { RatingFrame } from './frame';
 import { LAST_PROJECT } from './last';
-import { NewProjectScreen } from './new-project';
+import { StartScreen } from './project-start';
 
 const route = getRouteApi('/workbench');
 
 export function EntryPage() {
   const { model, new: starting } = route.useSearch();
   const projects = useProjects();
-  if (model || starting) return <RatingFrame creating><NewProjectScreen key={model ?? 'new'} model={model} /></RatingFrame>;
+  if (model || starting) return <RatingFrame creating><StartScreen key={model ?? 'new'} model={model} /></RatingFrame>;
   if (projects.isPending) return <RatingFrame />;
   if (projects.error) return <RatingFrame><EmptyState icon="status/error" title="连不上本机服务" description={messageOf(projects.error)} /></RatingFrame>;
   const list = projects.data;
-  if (list.length === 0) return <RatingFrame creating><NewProjectScreen /></RatingFrame>;
+  if (list.length === 0) return <RatingFrame creating><StartScreen /></RatingFrame>;
   let last: string | null = null;
   try { last = localStorage.getItem(LAST_PROJECT); } catch { /* private browsing */ }
   const target = list.find(item => item.id === last) ?? [...list].sort((a, b) => b.updated.localeCompare(a.updated))[0];

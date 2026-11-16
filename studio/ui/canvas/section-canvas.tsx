@@ -18,6 +18,7 @@ import { levelOnRay, type FieldModel } from './field-model';
 import { beside, centred, textWidth, type Rect, type Side } from './labels';
 import { Minimap } from './overlays';
 import { lensBox, type Scene, type SceneCable } from './scene';
+import { DARK_SOIL, soilRamp } from './soil';
 import { useView, type Lens } from './view';
 
 // Room the drawing leaves for the frame's tools (top left), view switch (top right) and temperature scale (bottom left).
@@ -204,6 +205,9 @@ export function SectionCanvas({ scene, field, result, notice, status, edit }: {
   const { lens, layers, selected, hovered } = useView();
   const { setLens, toggleLayer, select, hover } = useView.getState();
   const [ramp, setRamp] = useState(readRamp);
+  // The soil is tinted for white paper; on the dark ground it is blended toward the ground (canvas/soil.ts).
+  const dark = theme === 'dark';
+  const soil = soilRamp(ramp, dark);
 
   const apply = (next: Camera) => {
     live.current = next;
@@ -259,17 +263,17 @@ export function SectionCanvas({ scene, field, result, notice, status, edit }: {
     if (gpu === 'pending' || gpu === 'none') return;
     const style = getComputedStyle(document.documentElement);
     layer.current?.setContent(layers.field ? field : null, {
-      ramp, limit: scene.limit, ambient: scene.ambient, step: STEP_K, isotherms: layers.isotherms,
+      ramp: soil, limit: scene.limit, ambient: scene.ambient, step: STEP_K, isotherms: layers.isotherms,
       ink: style.getPropertyValue('--text').trim(),
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the isotherm switch has its own effect
-  }, [gpu, field, layers.field, ramp, scene.limit, scene.ambient]);
+  }, [gpu, field, layers.field, soil, scene.limit, scene.ambient]);
 
   useEffect(() => layer.current?.setIsotherms(layers.isotherms), [layers.isotherms, gpu]);
 
   useEffect(() => {
     if (camera && size.width && gpu !== 'pending') layer.current?.setView(camera, size, gridStep(camera.scale));
-  }, [camera, size, gpu, field, layers.field, ramp]);
+  }, [camera, size, gpu, field, layers.field, soil]);
 
   // The wheel must not scroll the page, so it cannot be a passive listener.
   useEffect(() => {
@@ -312,7 +316,7 @@ export function SectionCanvas({ scene, field, result, notice, status, edit }: {
     ],
   }) : null;
   const ticks = Array.from({ length: 6 }, (_, index) => index / 5);
-  const paper = ramp.field(0);
+  const paper = soil.field(0);
   const ruleColour = 'var(--text-secondary)';
 
   // Dragging a cable moves the whole laying: up and down changes the depth, sideways changes the spacing.
@@ -505,7 +509,8 @@ export function SectionCanvas({ scene, field, result, notice, status, edit }: {
       <ToggleGroupItem value="overview">全景</ToggleGroupItem>
     </ToggleGroup>}
     legend={result ? <TemperatureLegend title={shaded ? '颜色是土壤温度' : '导体的颜色是温度'} ambient={scene.ambient} limit={scene.limit}
-      stops={ticks.map(position => (shaded ? ramp.field(position) : ramp.css(position)))} lines={shaded && layers.isotherms ? STEP_K : undefined} /> : undefined}
+      stops={ticks.map(position => (shaded ? ramp.field(position) : ramp.css(position)))} strength={shaded && dark ? DARK_SOIL : 1}
+      lines={shaded && layers.isotherms ? STEP_K : undefined} /> : undefined}
     status={<>
       <span>视图：{lens === 'overview' ? '全景' : '电缆簇'}</span>
       {gpu === 'none' ? <span>这台设备不能用 GPU 绘图，温度场没有显示</span> : notice && <span>{notice}</span>}

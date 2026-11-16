@@ -1,9 +1,12 @@
-// The few form parts the rating screens share, made of the base controls: a number with its unit inside the field, and a
-// dialog that applies one change and says in its own place why it was refused.
+// The few form parts the rating screens share, made of the base controls: a number with its unit inside the field, a choice
+// with its title, and the two shells a small form lives in: a popover under the given it changes, and a dialog for the long
+// choices. Both apply one change and say in their own place why the host refused it.
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Field, FieldDescription, FieldError, FieldLabel, FieldTitle } from '@/components/ui/field';
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group';
+import { PopoverDescription, PopoverHeader, PopoverTitle } from '@/components/ui/popover';
 import { Spinner } from '@/kit/icon';
 import { compact } from '@shared/format';
 
@@ -26,12 +29,12 @@ export function useTexts<K extends string>(initial: Record<K, string>) {
   };
 }
 
-export function Field({ label, hint, children }: { label: ReactNode; hint?: ReactNode; children: ReactNode }) {
-  return <div className="flex min-w-0 flex-col gap-1">
-    <span className="text-sm text-ink-2">{label}</span>
+/** A set of choices (a toggle group, a list) under a title. */
+export function ChoiceField({ label, children }: { label: ReactNode; children: ReactNode }) {
+  return <Field>
+    <FieldTitle>{label}</FieldTitle>
     {children}
-    {hint && <span className="text-sm text-ink-2">{hint}</span>}
-  </div>;
+  </Field>;
 }
 
 /** A number field with its unit inside the border. The text belongs to the caller, who parses it when the form is applied. */
@@ -46,20 +49,20 @@ export function NumberField({ label, unit, value, onChange, placeholder, hint, i
   autoFocus?: boolean;
 }) {
   const id = useId();
-  return <div className="flex min-w-0 flex-col gap-1">
-    <label htmlFor={id} className="text-sm text-ink-2">{label}</label>
+  return <Field>
+    <FieldLabel htmlFor={id}>{label}</FieldLabel>
     <InputGroup>
       <InputGroupInput id={id} inputMode="decimal" autoComplete="off" autoFocus={autoFocus} value={value} placeholder={placeholder}
         aria-invalid={invalid || undefined} onChange={event => onChange(event.target.value)} />
       {unit && <InputGroupAddon align="inline-end"><InputGroupText>{unit}</InputGroupText></InputGroupAddon>}
     </InputGroup>
-    {hint && <span className="text-sm text-ink-2">{hint}</span>}
-  </div>;
+    {hint && <FieldDescription>{hint}</FieldDescription>}
+  </Field>;
 }
 
 /**
- * Applies one change from a dialog. `run` takes the changes in order and stops at the first the host refuses; the host's
- * words stay in the dialog. Nothing is asked of the host when there is nothing to change.
+ * Applies changes from a form. `run` takes them in order and stops at the first the host refuses; the host's words stay in
+ * the form. Nothing is asked of the host when there is nothing to change.
  */
 export function useApply(onClose: () => void) {
   const [busy, setBusy] = useState(false);
@@ -82,8 +85,7 @@ export function useApply(onClose: () => void) {
   return { busy, error, setError, run };
 }
 
-/** A dialog that holds one small form: a title, its fields, what went wrong, and the two ways out. */
-export function FormDialog({ title, description, onClose, onSubmit, busy, error, applyLabel = '应用', wide, children }: {
+interface FormProps {
   title: string;
   description?: string;
   onClose: () => void;
@@ -91,22 +93,41 @@ export function FormDialog({ title, description, onClose, onSubmit, busy, error,
   busy?: boolean;
   error?: string | null;
   applyLabel?: string;
-  wide?: boolean;
   children: ReactNode;
-}) {
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    onSubmit();
-  };
+}
+
+const submitting = (onSubmit: () => void) => (event: FormEvent) => {
+  event.preventDefault();
+  onSubmit();
+};
+
+/** The inside of a popover that holds one small form: a title, its fields, what went wrong, and the two ways out. */
+export function PopoverForm({ title, description, onClose, onSubmit, busy, error, applyLabel = '应用', children }: FormProps) {
+  return <form onSubmit={submitting(onSubmit)} className="flex flex-col gap-4">
+    <PopoverHeader>
+      <PopoverTitle className="text-h3">{title}</PopoverTitle>
+      {description && <PopoverDescription>{description}</PopoverDescription>}
+    </PopoverHeader>
+    {children}
+    {error && <FieldError>{error}</FieldError>}
+    <div className="flex justify-end gap-2">
+      <Button type="button" variant="outline" size="sm" onClick={onClose}>取消</Button>
+      <Button type="submit" size="sm" disabled={busy}>{busy && <Spinner />}{applyLabel}</Button>
+    </div>
+  </form>;
+}
+
+/** A dialog that holds one form: for what needs the room (a table of cables) or a run of its own (a sweep). */
+export function FormDialog({ title, description, onClose, onSubmit, busy, error, applyLabel = '应用', wide, children }: FormProps & { wide?: boolean }) {
   return <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
     <DialogContent className={wide ? 'max-w-2xl' : undefined}>
-      <form onSubmit={submit} className="grid gap-4">
+      <form onSubmit={submitting(onSubmit)} className="grid gap-4">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
         </DialogHeader>
         {children}
-        {error && <p role="alert" className="m-0 rounded-field bg-error-fill px-3 py-2 text-sm text-error">{error}</p>}
+        {error && <FieldError>{error}</FieldError>}
         <DialogFooter>
           <DialogClose render={<Button type="button" variant="outline" />}>取消</DialogClose>
           <Button type="submit" disabled={busy}>{busy && <Spinner />}{applyLabel}</Button>

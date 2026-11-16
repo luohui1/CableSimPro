@@ -5,6 +5,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { reportFailure } from '@/components/notice';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Field, FieldError, FieldLabel } from '@/components/ui/field';
 import { Input } from '@/components/ui/input';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { PageHeader, Panel, Split } from '@/kit/workbench/page';
@@ -15,7 +16,7 @@ import { BONDING_NAMES } from '@shared/format';
 import type { RatingStart } from '@shared/rating-types';
 import type { ProjectView } from '@shared/types';
 import { messageOf } from './edit';
-import { Field, NumberField, parseNumber, textOf, useTexts } from './fields';
+import { ChoiceField, NumberField, parseNumber, textOf, useTexts } from './fields';
 import { ModelTable } from './models';
 import { useStart } from './queries';
 
@@ -85,16 +86,17 @@ function ProjectForm({ start, onCreated }: { start: RatingStart; onCreated: (pro
   };
 
   return <form id="new-project" onSubmit={event => void submit(event)} className="flex flex-col gap-6 px-6 py-6">
-    <Field label="工程名称">
-      <Input aria-label="工程名称" value={name} maxLength={80} onChange={event => setName(event.target.value)} />
+    <Field>
+      <FieldLabel htmlFor="project-name">工程名称</FieldLabel>
+      <Input id="project-name" value={name} maxLength={80} onChange={event => setName(event.target.value)} />
     </Field>
-    <Field label="敷设方式">
+    <ChoiceField label="敷设方式">
       <ToggleGroup orientation="vertical" aria-label="敷设方式" value={[layout]} onValueChange={next => { if (next[0]) setLayout(next[0]); }}>
         {start.layouts.map(option => <ToggleGroupItem key={option.kind} value={option.kind} className="justify-start">
           {option.label}<span className="ml-auto text-ink-2">{option.circuits} 回</span>
         </ToggleGroupItem>)}
       </ToggleGroup>
-    </Field>
+    </ChoiceField>
     <div className="grid grid-cols-2 gap-4">
       <NumberField label="中心埋深" unit="m" value={texts.depth} onChange={set('depth')} />
       <NumberField label="土壤热阻率" unit="K·m/W" value={texts.soil} onChange={set('soil')} />
@@ -103,17 +105,17 @@ function ProjectForm({ start, onCreated }: { start: RatingStart; onCreated: (pro
       <NumberField label="系统线电压" unit="kV" value={texts.voltage} onChange={set('voltage')} />
       <NumberField label="频率" unit="Hz" value={texts.frequency} onChange={set('frequency')} />
     </div>
-    <Field label="护套接地">
+    <ChoiceField label="护套接地">
       <ToggleGroup aria-label="护套接地" value={[bonding]} onValueChange={next => { if (next[0]) setBonding(next[0]); }}>
         {Object.entries(BONDING_NAMES).map(([value, label]) => <ToggleGroupItem key={value} value={value}>{label}</ToggleGroupItem>)}
       </ToggleGroup>
-    </Field>
-    {error && <p role="alert" className="m-0 rounded-field bg-error-fill px-3 py-2 text-sm text-error">{error}</p>}
+    </ChoiceField>
+    {error && <FieldError>{error}</FieldError>}
   </form>;
 }
 
 /** `model` is the library id carried by /workbench?model=<id>: the cable the new project starts with. */
-export function NewProjectScreen({ model: asked }: { model?: string }) {
+export function StartScreen({ model: asked }: { model?: string }) {
   const navigate = useNavigate();
   const library = useLibrary();
   const [model, setModel] = useState(asked);

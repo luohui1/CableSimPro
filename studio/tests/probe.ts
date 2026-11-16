@@ -25,7 +25,7 @@ export function probe(): string[] {
   }
 
   // What the drawing writes on itself, and what the frame floats over it.
-  const labels = [...document.querySelectorAll('[data-chip], [data-dimension], svg[role="img"] text')].filter(shown);
+  const labels = [...document.querySelectorAll('[data-chip], [data-dimension], svg[role="img"] text, .recharts-surface text')].filter(shown);
   const legend = [...document.querySelectorAll('span')].filter(span => !span.children.length && /^(颜色是土壤温度|导体的颜色是温度)$/.test(span.textContent ?? '')).map(span => span.parentElement?.parentElement).filter((element): element is HTMLElement => Boolean(element));
   const chrome = [...document.querySelectorAll('[data-overlays] > *, [aria-label="画布工具"], [aria-label="视图"]'), ...legend].filter(shown);
   labels.forEach((label, index) => {

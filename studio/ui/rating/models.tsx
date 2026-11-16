@@ -14,10 +14,11 @@ const VOLTAGE = (entry: LibraryEntry) => `${compact(entry.summary.u0_v / 1000)}/
 
 // What choosing a cable needs: its name, size and rating, and where its data comes from. The names need the room.
 const COLUMNS: Column<LibraryEntry>[] = [
-  { key: 'name', header: '型号', cell: entry => <span className="font-medium">{entry.name}</span> },
-  { key: 'size', header: '截面', unit: 'mm²', numeric: true, width: 'w-24', cell: entry => `${entry.summary.cores > 1 ? `${entry.summary.cores}×` : ''}${compact(entry.summary.area_mm2)}` },
-  { key: 'voltage', header: '额定电压', unit: 'kV', width: 'w-32', cell: VOLTAGE },
-  { key: 'origin', header: '来源', width: 'w-36', cell: entry => <Badge variant="outline">{STATE_NAMES[entry.state] ?? entry.state}</Badge> },
+  // A long name ends in an ellipsis and is whole in the tooltip: the table is never wider than the room it has.
+  { key: 'name', header: '型号', cell: entry => <span title={entry.name} className="block max-w-64 truncate font-medium">{entry.name}</span> },
+  { key: 'size', header: '截面', unit: 'mm²', numeric: true, width: 'w-20', cell: entry => `${entry.summary.cores > 1 ? `${entry.summary.cores}×` : ''}${compact(entry.summary.area_mm2)}` },
+  { key: 'voltage', header: '额定电压', unit: 'kV', width: 'w-28', cell: VOLTAGE },
+  { key: 'origin', header: '来源', width: 'w-32', cell: entry => <Badge variant="outline">{STATE_NAMES[entry.state] ?? entry.state}</Badge> },
 ];
 
 export function ModelTable({ entries, selected, onSelect, className }: {

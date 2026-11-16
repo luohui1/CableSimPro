@@ -1,13 +1,15 @@
 // What is given, in one line above the drawing: the cable, the laying and the conditions, the way the method states them.
-// Each given opens the editor of that value; a value that is not what the shown result was computed from carries a dot.
+// Each given opens the editor of that value under it; a value that is not what the shown result was computed from carries a
+// dot. The cable, which is chosen from a table, opens a dialog.
 import { useState, type ReactNode } from 'react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Given, PremiseStrip } from '@/kit/workbench/premise';
 import { useLibrary } from '@/state/queries';
 import { BONDING_NAMES, compact, EDDY_NAMES } from '@shared/format';
 import type { Parts, ProjectView } from '@shared/types';
 import type { Edit, WriteOp } from './edit';
-import { Field, FormDialog, NumberField, parseNumber, textOf, useApply, useTexts } from './fields';
+import { ChoiceField, FormDialog, NumberField, parseNumber, PopoverForm, textOf, useApply, useTexts } from './fields';
 import { ModelTable } from './models';
 
 export type GivenKey = 'cable' | 'layout' | 'depth' | 'soil' | 'ambient' | 'load' | 'system' | 'sheath' | 'method';
@@ -61,14 +63,14 @@ function CableEditor({ view, onEdit, onClose }: EditorProps) {
 function LayoutEditor({ view, onEdit, onClose }: EditorProps) {
   const [layout, setLayout] = useState(view.parts.installation.layout);
   const { busy, error, run } = useApply(onClose);
-  return <FormDialog title="敷设方式" description="换敷设方式后，中心距、管径和回填尺寸按新方式的默认值起步；埋深保留。" busy={busy} error={error} onClose={onClose}
+  return <PopoverForm title="敷设方式" description="换方式后，中心距、管径和回填尺寸按新方式的默认值起步；埋深保留。" busy={busy} error={error} onClose={onClose}
     onSubmit={() => void run(layout === view.parts.installation.layout ? [] : [() => onEdit('installation.set', { layout })])}>
     <ToggleGroup orientation="vertical" aria-label="敷设方式" value={[layout]} onValueChange={next => { if (next[0]) setLayout(next[0]); }}>
       {view.layouts.map(option => <ToggleGroupItem key={option.kind} value={option.kind} className="justify-start">
         {option.label}<span className="ml-auto text-ink-2">{option.circuits} 回</span>
       </ToggleGroupItem>)}
     </ToggleGroup>
-  </FormDialog>;
+  </PopoverForm>;
 }
 
 function DepthEditor({ view, onEdit, onClose }: EditorProps) {
@@ -119,11 +121,10 @@ function DepthEditor({ view, onEdit, onClose }: EditorProps) {
     if (problems.length) return setError(`${problems.join('、')}要填大于 0 的数。`);
     void run(Object.keys(patch).length ? [() => onEdit('installation.set', patch)] : []);
   };
-  return <FormDialog title="埋深与尺寸" description="电缆组中心到地表的距离，以及这种敷设方式的间距、管径和回填尺寸。" busy={busy} error={error} onClose={onClose} onSubmit={submit}>
-    <div className="grid grid-cols-2 gap-4">
+  return <PopoverForm title="埋深与尺寸" description="电缆组中心到地表的距离，以及这种敷设的间距、管径和回填尺寸。" busy={busy} error={error} onClose={onClose} onSubmit={submit}>
+    <div className="grid grid-cols-2 gap-3">
       <NumberField autoFocus label="中心埋深" unit="m" value={texts.depth} onChange={set('depth')} />
-      {resolved !== null && <NumberField label="中心距" unit="mm" value={texts.spacing} onChange={set('spacing')}
-        placeholder={`默认 ${compact(resolved * 1000)}`} hint="留空按敷设方式的默认间距" />}
+      {resolved !== null && <NumberField label="中心距" unit="mm" value={texts.spacing} onChange={set('spacing')} placeholder={`默认 ${compact(resolved * 1000)}`} />}
       {installation.duct && <>
         <NumberField label="管内径" unit="mm" value={texts.inner} onChange={set('inner')} />
         <NumberField label="管外径" unit="mm" value={texts.outer} onChange={set('outer')} />
@@ -134,7 +135,7 @@ function DepthEditor({ view, onEdit, onClose }: EditorProps) {
         <NumberField label="回填热阻率" unit="K·m/W" value={texts.rho} onChange={set('rho')} />
       </>}
     </div>
-  </FormDialog>;
+  </PopoverForm>;
 }
 
 /** One number, one unit, one rule: soil resistivity and ambient temperature. */
@@ -158,9 +159,9 @@ function NumberEditor({ title, description, label, unit, initial, check, make, o
     if (refusal) return setError(refusal);
     void run(value === initial ? [] : [() => onEdit(...make(value))]);
   };
-  return <FormDialog title={title} description={description} busy={busy} error={error} onClose={onClose} onSubmit={submit}>
+  return <PopoverForm title={title} description={description} busy={busy} error={error} onClose={onClose} onSubmit={submit}>
     <NumberField autoFocus label={label} unit={unit} value={text} onChange={setText} />
-  </FormDialog>;
+  </PopoverForm>;
 }
 
 function LoadEditor({ view, onEdit, onClose }: EditorProps) {
@@ -176,14 +177,14 @@ function LoadEditor({ view, onEdit, onClose }: EditorProps) {
     if (alike ? next[0] === currents[0] : same(next, currents)) return void run([]);
     void run([() => onEdit('conditions.set', alike ? { current_a: next[0] } : { currents_a: next })]);
   };
-  return <FormDialog title="负荷电流" description="算载流量时各回路带的电流，用来对照允许电流。" busy={busy} error={error} onClose={onClose} onSubmit={submit}>
-    <div className="grid grid-cols-2 gap-4">
+  return <PopoverForm title="负荷电流" description="各回路带的电流，用来对照允许电流。" busy={busy} error={error} onClose={onClose} onSubmit={submit}>
+    <div className="grid grid-cols-2 gap-3">
       {alike
         ? <NumberField autoFocus label={circuits > 1 ? '每回负荷电流' : '负荷电流'} unit="A" value={texts[0]} onChange={text => setTexts([text])} />
         : texts.map((text, index) => <NumberField key={index} autoFocus={index === 0} label={`回路 ${index + 1} 负荷电流`} unit="A" value={text}
           onChange={next => setTexts(list => list.map((item, at) => (at === index ? next : item)))} />)}
     </div>
-  </FormDialog>;
+  </PopoverForm>;
 }
 
 function SystemEditor({ view, onEdit, onClose }: EditorProps) {
@@ -204,12 +205,12 @@ function SystemEditor({ view, onEdit, onClose }: EditorProps) {
     }
     void run(Object.keys(patch).length ? [() => onEdit('conditions.set', patch)] : []);
   };
-  return <FormDialog title="系统" description="系统线电压和频率，介质损耗和交流电阻按它们算。" busy={busy} error={error} onClose={onClose} onSubmit={submit}>
-    <div className="grid grid-cols-2 gap-4">
+  return <PopoverForm title="系统" description="介质损耗和交流电阻按系统线电压和频率算。" busy={busy} error={error} onClose={onClose} onSubmit={submit}>
+    <div className="grid grid-cols-2 gap-3">
       <NumberField autoFocus label="系统线电压" unit="kV" value={texts.voltage} onChange={set('voltage')} />
       <NumberField label="频率" unit="Hz" value={texts.frequency} onChange={set('frequency')} />
     </div>
-  </FormDialog>;
+  </PopoverForm>;
 }
 
 function SheathEditor({ view, onEdit, onClose }: EditorProps) {
@@ -221,18 +222,18 @@ function SheathEditor({ view, onEdit, onClose }: EditorProps) {
     ...(bonding !== view.parts.installation.bonding ? [() => onEdit('installation.set', { bonding })] : []),
     ...(eddy !== eddyNow ? [() => onEdit('method.set', { eddy })] : []),
   ];
-  return <FormDialog title="护套" description="金属护套怎么接地，以及要不要把护套涡流损耗算进去。" busy={busy} error={error} onClose={onClose} onSubmit={() => void run(steps)}>
-    <Field label="护套接地">
+  return <PopoverForm title="护套" description="金属护套怎么接地，以及要不要把护套涡流损耗算进去。" busy={busy} error={error} onClose={onClose} onSubmit={() => void run(steps)}>
+    <ChoiceField label="护套接地">
       <ToggleGroup aria-label="护套接地" value={[bonding]} onValueChange={next => { if (next[0]) setBonding(next[0]); }}>
         {Object.entries(BONDING_NAMES).map(([value, label]) => <ToggleGroupItem key={value} value={value}>{label}</ToggleGroupItem>)}
       </ToggleGroup>
-    </Field>
-    <Field label="护套涡流损耗">
+    </ChoiceField>
+    <ChoiceField label="护套涡流损耗">
       <ToggleGroup aria-label="护套涡流损耗" value={[eddy]} onValueChange={next => { if (next[0]) setEddy(next[0]); }}>
         {Object.entries(EDDY_NAMES).map(([value, label]) => <ToggleGroupItem key={value} value={value}>{label}</ToggleGroupItem>)}
       </ToggleGroup>
-    </Field>
-  </FormDialog>;
+    </ChoiceField>
+  </PopoverForm>;
 }
 
 function MethodEditor({ view, onEdit, onClose }: EditorProps) {
@@ -249,12 +250,12 @@ function MethodEditor({ view, onEdit, onClose }: EditorProps) {
     }
     void run(Object.keys(patch).length ? [() => onEdit('method.set', patch)] : []);
   };
-  return <FormDialog title="IEC 60287 稳态" description="方法参数：不改就用型号库里声明的值。" busy={busy} error={error} onClose={onClose} onSubmit={submit}>
-    <div className="grid grid-cols-2 gap-4">
-      <NumberField autoFocus label="集肤效应系数 ks" value={texts.ks} onChange={set('ks')} />
-      <NumberField label="邻近效应系数 kp" value={texts.kp} onChange={set('kp')} />
+  return <PopoverForm title="IEC 60287 稳态" description="方法参数：不改就用型号库里声明的值。" busy={busy} error={error} onClose={onClose} onSubmit={submit}>
+    <div className="grid grid-cols-2 gap-3">
+      <NumberField autoFocus label="集肤系数 ks" value={texts.ks} onChange={set('ks')} />
+      <NumberField label="邻近系数 kp" value={texts.kp} onChange={set('kp')} />
     </div>
-  </FormDialog>;
+  </PopoverForm>;
 }
 
 // ---- The strip ----
@@ -268,29 +269,25 @@ export function Premise({ view, asked, changed, onEdit }: { view: ProjectView; a
   const alike = conditions.currents_a.every(value => value === conditions.currents_a[0]);
   const load = alike ? `${compact(conditions.currents_a[0])} A${circuits > 1 ? ` × ${circuits} 回` : ''}` : `${conditions.currents_a.map(value => compact(value)).join(' / ')} A`;
   const editor = { view, onEdit, onClose: close };
-  const given = (key: GivenKey, label: string, value: string) => <Given label={label} value={value} changed={changed.has(key)} onClick={() => setOpen(key)} />;
+  /** A given and the editor that opens under it. */
+  const given = (key: GivenKey, label: string, value: string, form: ReactNode) => <Popover open={open === key} onOpenChange={next => setOpen(next ? key : null)}>
+    <PopoverTrigger render={<Given label={label} value={value} changed={changed.has(key)} />} />
+    <PopoverContent align="start" className="w-80 gap-4 p-4">{open === key && form}</PopoverContent>
+  </Popover>;
   return <>
     <PremiseStrip asked={asked}>
-      {given('cable', '型号', cable.name)}
-      {given('layout', '敷设', layout)}
-      {given('depth', '埋深', `${compact(installation.depth_m)} m`)}
-      {given('soil', '土壤热阻率', `${compact(conditions.soil_thermal_resistivity)} K·m/W`)}
-      {given('ambient', '环境', `${compact(conditions.ambient_temperature_c)} °C`)}
-      {given('load', '负荷', load)}
-      {given('system', '系统', `${conditions.system_voltage_v === null ? '' : `${compact(conditions.system_voltage_v / 1000)} kV · `}${compact(conditions.frequency_hz)} Hz`)}
-      {given('sheath', '护套', BONDING_NAMES[installation.bonding])}
-      {given('method', '方法', method.method === 'iec60287.steady' ? 'IEC 60287 稳态' : method.method)}
+      <Given label="型号" value={cable.name} changed={changed.has('cable')} onClick={() => setOpen('cable')} />
+      {given('layout', '敷设', layout, <LayoutEditor {...editor} />)}
+      {given('depth', '埋深', `${compact(installation.depth_m)} m`, <DepthEditor {...editor} />)}
+      {given('soil', '土壤热阻率', `${compact(conditions.soil_thermal_resistivity)} K·m/W`, <NumberEditor title="土壤热阻率" description="埋设处土壤的热阻率，越大散热越差。" label="土壤热阻率" unit="K·m/W"
+        initial={conditions.soil_thermal_resistivity} check={value => (value > 0 ? null : '土壤热阻率要大于 0。')} make={value => ['conditions.set', { soil_thermal_resistivity: value }]} onEdit={onEdit} onClose={close} />)}
+      {given('ambient', '环境', `${compact(conditions.ambient_temperature_c)} °C`, <NumberEditor title="环境温度" description="地表（环境）温度。" label="环境温度" unit="°C"
+        initial={conditions.ambient_temperature_c} check={value => (value >= -50 && value <= 80 ? null : '环境温度要在 −50 到 80 °C 之间。')} make={value => ['conditions.set', { ambient_temperature_c: value }]} onEdit={onEdit} onClose={close} />)}
+      {given('load', '负荷', load, <LoadEditor {...editor} />)}
+      {given('system', '系统', `${conditions.system_voltage_v === null ? '' : `${compact(conditions.system_voltage_v / 1000)} kV · `}${compact(conditions.frequency_hz)} Hz`, <SystemEditor {...editor} />)}
+      {given('sheath', '护套', BONDING_NAMES[installation.bonding], <SheathEditor {...editor} />)}
+      {given('method', '方法', method.method === 'iec60287.steady' ? 'IEC 60287 稳态' : method.method, <MethodEditor {...editor} />)}
     </PremiseStrip>
     {open === 'cable' && <CableEditor {...editor} />}
-    {open === 'layout' && <LayoutEditor {...editor} />}
-    {open === 'depth' && <DepthEditor {...editor} />}
-    {open === 'soil' && <NumberEditor title="土壤热阻率" description="埋设处土壤的热阻率，越大散热越差。" label="土壤热阻率" unit="K·m/W" initial={conditions.soil_thermal_resistivity}
-      check={value => (value > 0 ? null : '土壤热阻率要大于 0。')} make={value => ['conditions.set', { soil_thermal_resistivity: value }]} onEdit={onEdit} onClose={close} />}
-    {open === 'ambient' && <NumberEditor title="环境温度" description="地表（环境）温度。" label="环境温度" unit="°C" initial={conditions.ambient_temperature_c}
-      check={value => (value >= -50 && value <= 80 ? null : '环境温度要在 −50 到 80 °C 之间。')} make={value => ['conditions.set', { ambient_temperature_c: value }]} onEdit={onEdit} onClose={close} />}
-    {open === 'load' && <LoadEditor {...editor} />}
-    {open === 'system' && <SystemEditor {...editor} />}
-    {open === 'sheath' && <SheathEditor {...editor} />}
-    {open === 'method' && <MethodEditor {...editor} />}
   </>;
 }

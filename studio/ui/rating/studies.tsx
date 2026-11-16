@@ -151,7 +151,7 @@ export function SweepView({ record }: { record: RunRecord }) {
   const rows = sweep.points.map((point, index) => ({ ...point, index }));
   return <div className="flex min-h-0 flex-1">
     <Panel title={`${sweep.label}变化时的允许电流`} className="min-w-0 flex-1" bodyClassName="relative bg-canvas">
-      <SweepCurve points={sweep.points.map(point => ({ value: point.value, ampacity: point.ampacity_a ?? null }))} xLabel={`${sweep.label} ${sweep.unit}`} load={load} active={active} onActive={setActive} />
+      <SweepCurve points={sweep.points.map(point => ({ value: point.value, ampacity: point.ampacity_a ?? null }))} xLabel={`${sweep.label} ${sweep.unit}`} load={load} active={active} />
     </Panel>
     <Panel title={`${sweep.points.length} 个点`} className="w-112 flex-none border-l border-line">
       <DataTable rowKey={row => row.case_id} rows={rows} selected={active === undefined ? undefined : rows[active]?.case_id} onSelect={row => setActive(row.index)} columns={[

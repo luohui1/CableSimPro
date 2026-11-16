@@ -1,12 +1,10 @@
-// The curve of a parameter sweep: the allowed current against the one condition that was changed. Plain on purpose: two
-// axes, the points the method computed joined in order, and the saved load as a dashed line. A point the method refused is
-// not drawn (the table beside the curve says why). The charts of the interface will replace this when they exist.
-import { useEffect, useRef, useState } from 'react';
+// The curve of a parameter sweep: the allowed current against the one condition that was changed. Two axes, the points the
+// method computed joined in order, and the saved load as a dashed line. A point the method refused is not drawn (the table
+// beside the curve says why). Drawn with recharts, in the theme's colours.
+import { CartesianGrid, Line, LineChart, ReferenceDot, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { compact, fixed } from '@shared/format';
 
 export interface CurvePoint { value: number; ampacity: number | null }
-
-const MARGIN = { top: 24, right: 28, bottom: 52, left: 64 };
 
 /** Round numbers to put on an axis between two values, about `target` of them. */
 function niceTicks(min: number, max: number, target = 5): number[] {
@@ -20,7 +18,10 @@ function niceTicks(min: number, max: number, target = 5): number[] {
   return ticks;
 }
 
-export function SweepCurve({ points, xLabel, load, active, onActive }: {
+const TICK = { fontSize: 13, fill: 'var(--text-secondary)' };
+const AXIS = { stroke: 'var(--control-border)' };
+
+export function SweepCurve({ points, xLabel, load, active }: {
   points: CurvePoint[];
   /** The swept condition with its unit: 土壤热阻率 K·m/W. */
   xLabel: string;
@@ -28,54 +29,42 @@ export function SweepCurve({ points, xLabel, load, active, onActive }: {
   load?: number;
   /** The point whose row is selected in the table beside the curve. */
   active?: number;
-  onActive?: (index: number) => void;
 }) {
-  const host = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
-  useEffect(() => {
-    const element = host.current;
-    if (!element) return;
-    const observer = new ResizeObserver(([entry]) => setSize({ width: Math.round(entry.contentRect.width), height: Math.round(entry.contentRect.height) }));
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-
-  const drawn = points.flatMap((point, index) => (typeof point.ampacity === 'number' ? [{ index, value: point.value, ampacity: point.ampacity }] : []));
-  const { width, height } = size;
-  const plot = { width: width - MARGIN.left - MARGIN.right, height: height - MARGIN.top - MARGIN.bottom };
-  let body = null;
-  if (drawn.length && plot.width > 40 && plot.height > 40) {
-    const xs = drawn.map(point => point.value);
-    const ys = [...drawn.map(point => point.ampacity), ...(load === undefined ? [] : [load])];
-    const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
-    const spread = Math.max(...ys) - Math.min(...ys) || Math.max(...ys) * 0.1 || 1;
-    const [y0, y1] = [Math.min(...ys) - spread * 0.1, Math.max(...ys) + spread * 0.1];
-    const px = (value: number) => MARGIN.left + ((value - x0) / (x1 - x0 || 1)) * plot.width;
-    const py = (value: number) => MARGIN.top + ((y1 - value) / (y1 - y0)) * plot.height;
-    const bottom = MARGIN.top + plot.height;
-    body = <>
-      {niceTicks(y0, y1).map(tick => <g key={`y${tick}`}>
-        <line x1={MARGIN.left} x2={MARGIN.left + plot.width} y1={py(tick)} y2={py(tick)} className="stroke-line" strokeWidth={1} />
-        <text x={MARGIN.left - 10} y={py(tick)} textAnchor="end" dominantBaseline="central" fontSize={13} className="fill-ink-2">{compact(tick)}</text>
-      </g>)}
-      {niceTicks(x0, x1, 6).map(tick => <text key={`x${tick}`} x={px(tick)} y={bottom + 20} textAnchor="middle" fontSize={13} className="fill-ink-2">{compact(tick)}</text>)}
-      <path d={`M${MARGIN.left} ${MARGIN.top}V${bottom}H${MARGIN.left + plot.width}`} fill="none" className="stroke-line-strong" strokeWidth={1} />
-      <text x={MARGIN.left + plot.width / 2} y={height - 8} textAnchor="middle" fontSize={13} className="fill-ink">{xLabel}</text>
-      <text x={MARGIN.left} y={MARGIN.top - 8} fontSize={13} className="fill-ink">允许电流 A</text>
-      {load !== undefined && <g>
-        <line x1={MARGIN.left} x2={MARGIN.left + plot.width} y1={py(load)} y2={py(load)} className="stroke-ink-2" strokeWidth={1} strokeDasharray="6 4" />
-        <text x={MARGIN.left + plot.width - 4} y={py(load) - 8} textAnchor="end" fontSize={13} className="fill-ink-2">保存负荷 {compact(load)} A</text>
-      </g>}
-      <path d={drawn.map((point, order) => `${order ? 'L' : 'M'}${px(point.value)} ${py(point.ampacity)}`).join('')} fill="none" className="stroke-ink" strokeWidth={2} strokeLinejoin="round" />
-      {drawn.map(point => <g key={point.index}>
-        {point.index === active && <circle cx={px(point.value)} cy={py(point.ampacity)} r={9} fill="none" className="stroke-copper" strokeWidth={2} />}
-        <circle cx={px(point.value)} cy={py(point.ampacity)} r={4} className="fill-ink" onClick={onActive ? () => onActive(point.index) : undefined}>
-          <title>{`${xLabel} ${compact(point.value)}：允许电流 ${fixed(point.ampacity)} A`}</title>
-        </circle>
-      </g>)}
-    </>;
-  }
-  return <div ref={host} className="absolute inset-0">
-    <svg width={width} height={height} role="img" aria-label={`${xLabel}变化时的允许电流曲线`} className="block">{body}</svg>
+  const data = points.map(point => ({ x: point.value, y: point.ampacity }));
+  const drawn = data.flatMap(point => (point.y === null ? [] : [{ x: point.x, y: point.y }]));
+  if (drawn.length === 0) return null;
+  const xs = drawn.map(point => point.x);
+  const ys = [...drawn.map(point => point.y), ...(load === undefined ? [] : [load])];
+  const spread = Math.max(...ys) - Math.min(...ys) || Math.max(...ys) * 0.1 || 1;
+  const [low, high] = [Math.min(...ys) - spread * 0.15, Math.max(...ys) + spread * 0.1];
+  const yTicks = niceTicks(low, high);
+  const xTicks = niceTicks(Math.min(...xs), Math.max(...xs), 6);
+  const reach = (Math.max(...xs) - Math.min(...xs)) * 0.04 || 1;
+  const marked = active === undefined ? undefined : points[active];
+  return <div role="img" aria-label={`${xLabel}变化时的允许电流曲线`} className="absolute inset-0">
+    <span className="absolute top-4 left-6 text-sm text-ink">允许电流 A</span>
+    <span className="absolute inset-x-0 bottom-4 text-center text-sm text-ink">{xLabel}</span>
+    <div className="absolute inset-x-4 top-12 bottom-12">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+          <CartesianGrid stroke="var(--line)" vertical={false} />
+          <XAxis dataKey="x" type="number" domain={[Math.min(...xs) - reach, Math.max(...xs) + reach]} ticks={xTicks} tick={TICK} tickLine={false} axisLine={AXIS}
+            tickFormatter={value => compact(value)} />
+          <YAxis type="number" domain={[low, high]} ticks={yTicks} tick={TICK} tickLine={false} axisLine={AXIS} width={56} tickFormatter={value => compact(value)} />
+          {load !== undefined && <ReferenceLine y={load} stroke="var(--text-secondary)" strokeDasharray="6 4"
+            label={{ value: `保存负荷 ${compact(load)} A`, position: 'insideBottomRight', fill: 'var(--text-secondary)', fontSize: 13 }} />}
+          <Tooltip cursor={{ stroke: 'var(--control-border)' }} content={({ active: hovered, payload }) => {
+            const point = payload?.[0]?.payload as { x: number; y: number | null } | undefined;
+            if (!hovered || !point || point.y === null) return null;
+            return <div className="rounded-lg bg-surface px-3 py-2 text-sm text-ink shadow-menu ring-1 ring-line">
+              <div className="text-ink-2">{xLabel} {compact(point.x)}</div>
+              <div className="font-medium tabular-nums">允许电流 {fixed(point.y)} A</div>
+            </div>;
+          }} />
+          <Line dataKey="y" stroke="var(--text)" strokeWidth={2} dot={{ r: 4, fill: 'var(--text)', stroke: 'var(--text)' }} activeDot={{ r: 6 }} isAnimationActive={false} connectNulls={false} />
+          {marked && typeof marked.ampacity === 'number' && <ReferenceDot x={marked.value} y={marked.ampacity} r={9} fill="none" stroke="var(--copper)" strokeWidth={2} ifOverflow="visible" />}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   </div>;
 }
