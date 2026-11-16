@@ -1,27 +1,28 @@
 // The live section: the protagonist of the workbench. True scale, no broken axis.
 // Three layers share one camera: the GPU layer (soil, grid, field, isotherms), the SVG layer
-// (cables, dimensions, isotherm values) and the HTML layer (cable labels, tools, legend, inset).
+// (cables, dimensions, isotherm values) and the HTML layer (cable labels, inset). The tools, the temperature scale and the
+// status line are the kit's canvas frame around it.
 import { animate } from 'motion';
-import { useEffect, useRef, useState } from 'react';
-import { ToolButton, ToolGroup, ToolToggle } from '@/components/button';
-import { Icon } from '@/components/icon';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { NumberField } from '@/components/number-field';
-import { Segmented } from '@/components/segmented';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { CanvasFrame, CanvasLayer, CanvasTool, CanvasToolbar, CanvasToolbarSeparator, TemperatureLegend } from '@/kit/workbench/canvas';
 import { cn } from '@/lib/cn';
 import { rampPosition, readRamp } from '@/lib/ramp';
 import { useTheme } from '@/state/theme';
-import { useView, type Lens } from '@/state/view';
 import { compact, fixed } from '@shared/format';
 import { CableGlyph } from './cable-glyph';
 import { frame, gridStep, mixCamera, toScreen, toWorld, zoomAt, type Camera, type Inset, type Size } from './camera';
 import { FieldLayer } from './field-layer';
 import { levelOnRay, type FieldModel } from './field-model';
 import { beside, centred, textWidth, type Rect, type Side } from './labels';
-import { Legend, Minimap } from './overlays';
+import { Minimap } from './overlays';
 import { lensBox, type Scene, type SceneCable } from './scene';
+import { useView, type Lens } from './view';
 
+// Room the drawing leaves for the frame's tools (top left), view switch (top right) and temperature scale (bottom left).
 const INSET: Record<Lens, Inset> = {
-  cluster: { top: 84, right: 48, bottom: 104, left: 48 },
+  cluster: { top: 84, right: 48, bottom: 140, left: 48 },
   overview: { top: 36, right: 28, bottom: 36, left: 28 },
 };
 const STEP_K = 5;
@@ -171,13 +172,16 @@ const DEPTH_SNAP = 0.01;
 const SPACING_SNAP = 0.005;
 const snap = (value: number, step: number) => Math.round(value / step) * step;
 
-export function SectionCanvas({ scene, field, result, notice, edit }: {
+export function SectionCanvas({ scene, field, result, notice, status, edit }: {
   scene: Scene;
   /** The soil field of the shown run, or null when there is none for this condition. */
   field: FieldModel | null;
   /** Whether cable temperatures of a result are shown. */
   result: boolean;
+  /** Something the drawing does not show and the reader should know, said on the status line. */
   notice: string | null;
+  /** What the status line says about the result drawn: the method and how it ended. */
+  status?: ReactNode;
   /** Null when what is shown cannot be changed (an earlier record). */
   edit: SectionEdit | null;
 }) {
@@ -198,7 +202,7 @@ export function SectionCanvas({ scene, field, result, notice, edit }: {
   const [gpu, setGpu] = useState<'pending' | 'webgpu' | 'webgl2' | 'none'>('pending');
   const theme = useTheme(state => state.theme);
   const { lens, layers, selected, hovered } = useView();
-  const { setLens, toggleLayer, select, hover, setCursor } = useView.getState();
+  const { setLens, toggleLayer, select, hover } = useView.getState();
   const [ramp, setRamp] = useState(readRamp);
 
   const apply = (next: Camera) => {
@@ -299,14 +303,15 @@ export function SectionCanvas({ scene, field, result, notice, edit }: {
   const shaded = Boolean(field) && layers.field && gpu !== 'none';
   const view = camera && size.width ? compose(scene, layers.field ? field : null, camera, size, {
     dimensions: layers.dimensions, isotherms: layers.isotherms && layers.field && gpu !== 'none', result, capsules: Boolean(edit),
+    // Where the frame floats its tools, view switch and temperature scale; no label may be put under them.
     reserved: [
-      { x: 0, y: 0, w: 132, h: 60 },
-      { x: size.width - 236, y: 0, w: 236, h: shaded && layers.isotherms ? 116 : 84 },
-      { x: 0, y: size.height - 60, w: 300, h: 60 },
+      { x: 0, y: 0, w: 264, h: 60 },
+      { x: size.width - 184, y: 0, w: 184, h: 60 },
+      { x: 0, y: size.height - (shaded && layers.isotherms ? 136 : 100), w: 248, h: shaded && layers.isotherms ? 136 : 100 },
       ...(inset ? [{ x: size.width - 192, y: size.height - 128, w: 192, h: 128 }] : []),
-      ...(notice ? [{ x: size.width / 2 - 190, y: 0, w: 380, h: 56 }] : []),
     ],
   }) : null;
+  const ticks = Array.from({ length: 6 }, (_, index) => index / 5);
   const paper = ramp.field(0);
   const ruleColour = 'var(--text-secondary)';
 
@@ -337,7 +342,7 @@ export function SectionCanvas({ scene, field, result, notice, edit }: {
     }));
   })() : null;
 
-  return <div ref={host} data-gpu={gpu} tabIndex={0}
+  const drawing = <div ref={host} data-gpu={gpu} tabIndex={0}
     className={cn('absolute inset-0 touch-none overflow-hidden outline-none select-none active:cursor-grabbing', edit && hovered ? 'cursor-move' : 'cursor-grab')}
     onKeyDown={event => {
       if (!edit || !selected || event.target !== event.currentTarget) return;
@@ -358,7 +363,6 @@ export function SectionCanvas({ scene, field, result, notice, edit }: {
     }}
     onPointerMove={event => {
       const [x, y] = local(event);
-      if (live.current) setCursor(toWorld(live.current, size, x, y));
       const held = press.current;
       if (!held) return hover(cableAt(x, y));
       if (!held.dragged && Math.hypot(x - held.x, y - held.y) < 4) return;
@@ -378,7 +382,7 @@ export function SectionCanvas({ scene, field, result, notice, edit }: {
       }
       setGhost(null);
     }}
-    onPointerLeave={() => { setCursor(null); hover(null); }}>
+    onPointerLeave={() => hover(null)}>
 
     <canvas ref={surface} className="absolute inset-0 size-full" />
 
@@ -480,32 +484,33 @@ export function SectionCanvas({ scene, field, result, notice, edit }: {
     </div>}
 
     <div data-overlays className="pointer-events-none absolute inset-0 *:pointer-events-auto *:absolute" onPointerDown={event => event.stopPropagation()}>
-      <ToolGroup className="top-3 left-3 cursor-default">
-        <ToolToggle icon="result/field" label="温度场" pressed={layers.field} onChange={() => toggleLayer('field')} />
-        <ToolToggle icon="result/radial" label="等温线" pressed={layers.isotherms} onChange={() => toggleLayer('isotherms')} />
-        <ToolToggle icon="tool/dimension" label="尺寸" pressed={layers.dimensions} onChange={() => toggleLayer('dimensions')} />
-      </ToolGroup>
-
-      {notice && <div className="top-3 left-1/2 flex h-8 -translate-x-1/2 cursor-default items-center gap-2 rounded-full border border-line bg-panel px-3 text-13 text-ink-2 shadow-lift">
-        <Icon name="status/info" className="size-4" />{gpu === 'none' ? '这台设备不能用 GPU 绘图，温度场没有显示' : notice}
-      </div>}
-
-      <div className="top-3 right-3 cursor-default">
-        <Legend ramp={ramp} ambient={scene.ambient} limit={scene.limit} soil={shaded} lines={shaded && layers.isotherms ? STEP_K : null} />
-      </div>
-
-      <div className="bottom-3 left-3 flex cursor-default items-center gap-2">
-        <div className="rounded-card border border-line bg-panel p-1 shadow-lift">
-          <Segmented label="视图" value={lens} onChange={setLens} options={[{ value: 'cluster', label: '电缆簇' }, { value: 'overview', label: '全景' }]} />
-        </div>
-        <ToolGroup>
-          <ToolButton icon="tool/zoom-out" label="缩小" onClick={() => live.current && glide(zoomAt(live.current, size, size.width / 2, size.height / 2, 1 / 1.5, limits()))} />
-          <ToolButton icon="tool/fit" label="回到这个视图的全貌" onClick={() => { moved.current = false; glide(home(lens)); }} />
-          <ToolButton icon="tool/zoom-in" label="放大" onClick={() => live.current && glide(zoomAt(live.current, size, size.width / 2, size.height / 2, 1.5, limits()))} />
-        </ToolGroup>
-      </div>
-
       {camera && inset && <div className="right-3 bottom-3 cursor-default"><Minimap scene={scene} camera={camera} size={size} paper={paper} /></div>}
     </div>
   </div>;
+
+  const zoom = (factor: number) => live.current && glide(zoomAt(live.current, size, size.width / 2, size.height / 2, factor, limits()));
+  return <CanvasFrame
+    tools={<CanvasToolbar label="画布工具">
+      <CanvasLayer icon="result/field" label="温度场" pressed={layers.field} onPressedChange={() => toggleLayer('field')} />
+      <CanvasLayer icon="result/radial" label="等温线" pressed={layers.isotherms} onPressedChange={() => toggleLayer('isotherms')} />
+      <CanvasLayer icon="tool/dimension" label="尺寸" pressed={layers.dimensions} onPressedChange={() => toggleLayer('dimensions')} />
+      <CanvasToolbarSeparator />
+      <CanvasTool icon="tool/zoom-out" label="缩小" onClick={() => zoom(1 / 1.5)} />
+      <CanvasTool icon="tool/fit" label="回到这个视图的全貌" onClick={() => { moved.current = false; glide(home(lens)); }} />
+      <CanvasTool icon="tool/zoom-in" label="放大" onClick={() => zoom(1.5)} />
+    </CanvasToolbar>}
+    view={<ToggleGroup value={[lens]} onValueChange={next => { if (next[0]) setLens(next[0] as Lens); }} aria-label="视图"
+      className="rounded-lg border border-line bg-surface p-1 shadow-menu">
+      <ToggleGroupItem value="cluster">电缆簇</ToggleGroupItem>
+      <ToggleGroupItem value="overview">全景</ToggleGroupItem>
+    </ToggleGroup>}
+    legend={result ? <TemperatureLegend title={shaded ? '颜色是土壤温度' : '导体的颜色是温度'} ambient={scene.ambient} limit={scene.limit}
+      stops={ticks.map(position => (shaded ? ramp.field(position) : ramp.css(position)))} lines={shaded && layers.isotherms ? STEP_K : undefined} /> : undefined}
+    status={<>
+      <span>视图：{lens === 'overview' ? '全景' : '电缆簇'}</span>
+      {gpu === 'none' ? <span>这台设备不能用 GPU 绘图，温度场没有显示</span> : notice && <span>{notice}</span>}
+      {status}
+    </>}>
+    {drawing}
+  </CanvasFrame>;
 }
