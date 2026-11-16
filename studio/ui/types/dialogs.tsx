@@ -96,7 +96,7 @@ function ReviewForm({ view, action, onClose }: { view: SpecView; action: ReviewA
         </li>)}
       </ul>
       <Toggle variant="outline" pressed={seen} onPressedChange={setSeen} className="h-auto justify-start py-2 text-left whitespace-normal">
-        <Icon name={seen ? 'action/check' : 'action/minus'} />我已查看以上 {issues.length} 项，确认本次审核意见；审核不表示所有标准项均通过。
+        <Icon name="action/check" className={seen ? 'text-success' : 'text-ink-3'} />我已查看以上问题，确认本次审核意见；审核不表示所有标准项均通过。
       </Toggle>
     </div>}
     <Textarea aria-label="审核意见" placeholder="写明核对了什么、依据是什么（必填）" required maxLength={400} value={note} onChange={event => setNote(event.target.value)} />
@@ -132,7 +132,7 @@ function SheetBody({ view, report, onReport, onClose }: { view: SpecView; report
       <iframe title="已生成的规格书 PDF" className="h-128 w-full rounded-field border border-line" src={`${report.url}?preview=1#view=FitH`} />
       <DialogFooter>
         <Button variant="outline" nativeButton={false} render={<a href={`${report.url}/snapshot`} download={`${view.spec.name}-来源快照.json`} />}>来源快照</Button>
-        <Button variant="outline" nativeButton={false} render={<a href={report.url} download={`${view.spec.name}.pdf`} />}><Icon name="action/export" data-icon="inline-start" />下载 PDF</Button>
+        <Button variant="outline" nativeButton={false} render={<a href={report.url} download={`${view.spec.name}.pdf`} />}><Icon name="action/arrow-down" data-icon="inline-start" />下载 PDF</Button>
         <DialogClose render={<Button type="button" />}>完成</DialogClose>
       </DialogFooter>
     </div>;

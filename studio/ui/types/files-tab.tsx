@@ -42,7 +42,7 @@ export function FilesTab({ view, latest, onVersion, onReview, onPreview }: {
   const difference = previous.data ? view.structure.filter(row => previous.data!.structure.find(item => item.key === row.key)?.value !== row.value) : [];
   const version = view.version;
   const stamps: Property[] = ([['提交审核', version.submitted_by, version.submitted], ['审核通过', version.reviewed_by, version.reviewed], ['发布', version.published_by, version.published]] as const)
-    .filter(([, by, at]) => by && at).map(([label, by, at]) => ({ label, value: by, unit: shortTime(at!) }));
+    .filter(([, by, at]) => by && at).map(([label, by, at]) => ({ label, value: `${by} · ${shortTime(at!)}` }));
   const steps = NEXT_STEPS[version.review];
 
   return <>
@@ -79,7 +79,7 @@ export function FilesTab({ view, latest, onVersion, onReview, onPreview }: {
               <TooltipTrigger render={<Button variant="ghost" size="icon-sm" aria-label="预览规格书" onClick={() => onPreview(report)} />}><Icon name="action/visible" /></TooltipTrigger>
               <TooltipContent side="bottom">预览</TooltipContent>
             </Tooltip>
-            <IconLink label="下载 PDF" href={report.url} download={`${view.spec.name}.pdf`} icon="action/export" />
+            <IconLink label="下载 PDF" href={report.url} download={`${view.spec.name}.pdf`} icon="action/arrow-down" />
             <IconLink label="下载来源快照" href={`${report.url}/snapshot`} download={`${view.spec.name}-来源快照.json`} icon="result/snapshot" />
           </ItemActions>
         </Item>)}

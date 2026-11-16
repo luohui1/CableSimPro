@@ -19,11 +19,8 @@ const CONTROLS = ['ui/components/ui/', 'ui/kit/'];
  * line must go); when it owes less, lower the number. The list and the numbers only shrink.
  */
 const EXEMPT: { path: string; owes: number; owner: string; until: string }[] = [
-  { path: 'ui/pages/library.tsx', owes: 19, owner: 'studio-build', until: '工作台型号库重做' },
   { path: 'ui/pages/import.tsx', owes: 60, owner: 'studio-build', until: '工作台型号库重做' },
-  { path: 'ui/pages/series.tsx', owes: 18, owner: 'studio-build', until: '工作台型号工作区重做' },
-  { path: 'ui/series/', owes: 109, owner: 'studio-build', until: '工作台型号工作区重做' },
-  { path: 'ui/components/product-', owes: 24, owner: 'studio-build', until: '工作台型号库重做' },
+  { path: 'ui/components/product-', owes: 23, owner: 'studio-build', until: '工作台型号库重做' },
   { path: 'ui/workbench/', owes: 21, owner: 'studio-build', until: '工作台载流量计算重做' },
   { path: 'ui/canvas/', owes: 17, owner: 'studio-build', until: '工作台载流量计算重做（断面绘图保留，外框换成 kit 的画布外框）' },
   { path: 'ui/results/', owes: 65, owner: 'studio-build', until: '工作台载流量计算重做' },
@@ -36,7 +33,6 @@ const EXEMPT: { path: string; owes: number; owner: string; until: string }[] = [
   { path: 'ui/components/notice.tsx', owes: 3, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/number-field.tsx', owes: 2, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/popover.tsx', owes: 6, owner: 'studio-build', until: '旧页面删除' },
-  { path: 'ui/components/search-field.tsx', owes: 1, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/segmented.tsx', owes: 3, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/tabs.tsx', owes: 3, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/tooltip.tsx', owes: 3, owner: 'studio-build', until: '旧页面删除' },
