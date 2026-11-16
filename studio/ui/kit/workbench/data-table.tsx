@@ -33,7 +33,7 @@ export interface RowGroup<Row> {
   onToggle?: () => void;
 }
 
-export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSelect, onOpen, checked, onCheckedChange, checkLabel, footer, sort, onSort, empty, framed, className }: {
+export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSelect, onOpen, onHover, checked, onCheckedChange, checkLabel, footer, sort, onSort, empty, framed, className }: {
   columns: Column<Row>[];
   rows?: Row[];
   groups?: RowGroup<Row>[];
@@ -42,6 +42,8 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
   onSelect?: (row: Row) => void;
   /** Open a row: double click, or Enter on the selected row. */
   onOpen?: (row: Row) => void;
+  /** The row under the pointer or holding the keyboard focus, null when they leave: a drawing beside the table outlines it. */
+  onHover?: (row: Row | null) => void;
   /** Rows ticked for a batch action (calculate, review): a box at the head of each row and one for all in the header. */
   checked?: string[];
   onCheckedChange?: (keys: string[]) => void;
@@ -61,6 +63,7 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
     // A row that can be selected takes focus and answers Enter and Space, like the click.
     return <TableRow key={key} data-state={key === selected ? 'selected' : undefined} aria-selected={onSelect ? key === selected : undefined}
       tabIndex={onSelect ? 0 : undefined} onClick={onSelect ? () => onSelect(row) : undefined} onDoubleClick={onOpen ? () => onOpen(row) : undefined}
+      onMouseEnter={onHover ? () => onHover(row) : undefined} onFocus={onHover ? () => onHover(row) : undefined} onBlur={onHover ? () => onHover(null) : undefined}
       onKeyDown={onSelect ? event => {
         // Keys pressed on a control in the row (its tick box) belong to that control.
         if (event.target !== event.currentTarget) return;
@@ -107,7 +110,7 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
           {filler && <TableHead aria-hidden="true" className="sticky top-0 z-1" />}
         </TableRow>
       </TableHeader>
-      <TableBody>
+      <TableBody onMouseLeave={onHover ? () => onHover(null) : undefined}>
         {count === 0 && empty && <tr><td colSpan={span} className="p-0">{empty}</td></tr>}
         {groups
           ? groups.map(group => <GroupRows key={group.key} group={group} span={span}>{group.open && body(group.rows)}</GroupRows>)

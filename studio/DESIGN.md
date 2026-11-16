@@ -43,7 +43,7 @@
 | `workbench/review`：`ReviewTrack` `ReviewActions` `VersionSelect` `SpecSwitch` | 一个版本的审核：四个状态竖排，到过的记下谁、何时、说了什么；每个状态下人能走的一步；页头的版本切换；同一系列里换规格（打字找或用箭头走到相邻的） | 按钮 shadcn Button，版本切换 shadcn Select，换规格 Base UI Combobox（shadcn combobox）；四个状态的竖排是自有 |
 | `workbench/chart`：`CurveChart` `TargetBar` | 结果图：一个结果随一个条件的曲线，工程取值和比较水平是参考线；表格里数值对目标的比例条 | 曲线 shadcn Chart（recharts）；比例条是自有 SVG |
 | `theme-color`：`useThemeColor` | 给 CSS 之外画图的东西（三维视口、画布）取主题色，换主题时重取 | 自有 |
-| `workbench/data-table`：`DataTable` | 高密度表：表头固定、行高 36、单位在表头、数值右对齐、可分组、可汇总、选中行铜色浅底，可选中的行能用键盘选；放在表单或说明里时用 `framed` 自带圆角边框；`checked` 加一列勾选（批量计算、批量审核），表头一个全选；没有宽度的一列可设 `truncate`，窄了截断、悬停给全名 | shadcn Table，勾选 shadcn Checkbox（部分勾选是一横）；固定表头、分组、汇总和键盘选择写在 kit 里（表在几十行以内，见“选型结论”） |
+| `workbench/data-table`：`DataTable` | 高密度表：表头固定、行高 36、单位在表头、数值右对齐、可分组、可汇总、选中行铜色浅底，可选中的行能用键盘选；放在表单或说明里时用 `framed` 自带圆角边框；`checked` 加一列勾选（批量计算、批量审核），表头一个全选（只勾看得见的行）；`onHover` 给出指针或焦点所在的行（分层表悬停一层，断面描出它的环）；没有宽度的一列可设 `truncate`，窄了截断、悬停给全名 | shadcn Table，勾选 shadcn Checkbox（部分勾选是一横）；固定表头、分组、汇总和键盘选择写在 kit 里（表在几十行以内，见“选型结论”） |
 | `workbench/premise`：`PremiseStrip` `Given` `GivenMore` `EmptyState` | 计算屏的“求什么、已知什么”（`Given active` 是编辑栏正打开的那一项，“其余 N 项”收起少改的条件）；空状态 | 其余 N 项 shadcn Popover，空状态 shadcn Empty；前提带和一项已知（打开编辑栏的按钮）是自有 |
 | `workbench/canvas`：`CanvasFrame` `CanvasToolbar` `CanvasTool` `CanvasLayer` `CanvasNote` `TemperatureLegend` | 断面画布外框：工具左上、视图右上、图例左下、状态栏在下 | 工具条 Base UI Toolbar，工具 shadcn Button、Toggle 加 Tooltip；外框是自有版面，图例和画布内容是 `ui/canvas` 的自有绘图 |
 | `marks`：`TierMark` `ReviewMark` `VerdictMark` `VerdictBar` `Dot` `CellStatus` `StatusLine` | 可信分档、审核状态、核对结论（一个词加一个图标；表格里用一条比例条）；表格格子里的状态字（拒算、最热、与现在相同，带原话的悬停给出）；一行状态（图标带颜色，字是正文色） | 分档和审核状态 shadcn Badge，格子状态字的原话 shadcn Tooltip；结论词、比例条、状态点和状态行是自有（一个图标加一句字） |

@@ -236,7 +236,8 @@ export function SeriesShell({ page, version, review, primary, actions, children 
 }
 
 export function SeriesScreenBody({ review, dialog }: { review?: Review; dialog?: boolean } = {}) {
-  const selectedLayer = WORKSPACE.structure.find(row => row.key === SELECTED_LAYER);
+  const [hovered, setHovered] = useState<string | null>(null);
+  const selectedLayer = WORKSPACE.structure.find(row => row.key === (hovered ?? SELECTED_LAYER));
   return <SeriesShell page="structure" version={WORKSPACE.version.number} review={review}
     actions={<><Button variant="outline"><Icon name="object/file" data-icon="inline-start" />规格书</Button><Button variant="outline"><Icon name="run/run" data-icon="inline-start" />计算</Button></>}
     primary={<Button variant={dialog ? 'outline' : 'default'}><Icon name="action/edit" data-icon="inline-start" />修改结构</Button>}>
@@ -258,7 +259,7 @@ export function SeriesScreenBody({ review, dialog }: { review?: Review; dialog?:
           </CanvasFrame>
         </Panel> },
       { id: 'layers', size: 36, min: 26, children: <Panel title="分层结构" tools={<span className="text-sm text-ink-2">{residualText(WORKSPACE.closure.residual_mm, WORKSPACE.closure.placed_in)}</span>}>
-          <DataTable rowKey={row => row.key} rows={LAYERS} selected={SELECTED_LAYER} onSelect={() => undefined} columns={[
+          <DataTable rowKey={row => row.key} rows={LAYERS} selected={SELECTED_LAYER} onSelect={() => undefined} onHover={row => setHovered(row?.key ?? null)} columns={[
             { key: 'label', header: '层', cell: row => row.label },
             { key: 'value', header: '厚度 / 直径', unit: 'mm', numeric: true, width: 'w-32', cell: row => row.value },
             { key: 'origin', header: '来源', width: 'w-20', cell: row => <span className="text-ink-2" title={row.basis}>{ORIGIN_MARK[row.origin]}</span> },
