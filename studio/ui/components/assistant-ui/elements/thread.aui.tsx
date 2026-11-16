@@ -65,7 +65,8 @@ export const Thread: FC<{ welcome: ReactNode; step: ToolCallMessagePartComponent
                 <TooltipIconButton
                   tooltip="回到最新"
                   variant="outline"
-                  className="absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible"
+                  // Above the composer on a narrow page; beside it, in the free space next to the column, where the page is wide enough, so it never covers text.
+                  className="absolute -top-12 z-10 self-center rounded-full p-4 disabled:invisible xl:top-auto xl:bottom-5 xl:left-full xl:ms-3 xl:self-auto"
                 />
               }
             >

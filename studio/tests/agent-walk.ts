@@ -121,6 +121,21 @@ export async function walkAgent(browser: Browser, base: string, app: App, faux: 
       await check('accepted-not-made');
       if (await page.getByText('改动已生效').count()) problems.push(`${width} agent: the card says the change took effect when it was not made`);
       if (app.studio.store.meta(mine.id).name !== `走查 工程师改名 ${width}`) problems.push(`${width} agent: the agent's change was made over the engineer's`);
+
+      // 7. The solid the CAD plugin builds comes as a card with the workbench's own viewer, in both of its views.
+      faux.setResponses([
+        fauxAssistantMessage([fauxToolCall('build_geometry', { spec: spec.id, version: spec.version })], { stopReason: 'toolUse' }),
+        fauxAssistantMessage([fauxText('三维结构已生成：分层剖开和完整实体两种看法都在卡片里。')]),
+      ]);
+      await page.getByRole('button', { name: '新对话' }).first().click();
+      await page.getByRole('button', { name: '建一个电缆三维结构模型', exact: true }).click();
+      await page.getByRole('button', { name: '完整实体' }).waitFor({ timeout: 120_000 });
+      await page.waitForTimeout(2500);
+      const viewer = await page.locator('.cad-viewport').first().boundingBox();
+      if (!viewer || viewer.width < 400 || viewer.height < 200) problems.push(`${width} agent: the 3D viewer on the card is ${viewer ? `${viewer.width}×${viewer.height}` : 'missing'}`);
+      await check('model-3d-cutaway');
+      await page.getByRole('button', { name: '完整实体' }).click();
+      await check('model-3d-solid');
     } catch (error) {
       // Where the page was when a step did not find what it waited for.
       await page.screenshot({ path: join(out, `${width}-agent-FAILED.png`) }).catch(() => undefined);

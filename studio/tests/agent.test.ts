@@ -276,6 +276,72 @@ test('a revision the library would refuse is refused before a person is asked; o
   }
 });
 
+test('a revision accepted on the version that was shown is not made on a newer one', { timeout: 60_000 }, async () => {
+  const table = await app.studio.invoke('library.series.get', { series: imported }, { by: 'human' }) as { specs: { id: string }[] };
+  const spec = await app.studio.invoke('library.spec.get', { spec: table.specs[1].id }, { by: 'human' }) as SpecView;
+  assert.equal(spec.version.number, 1, 'a specification nobody has revised yet');
+  const field = spec.structure.find(item => item.origin === 'table' && item.key !== 'area')!;
+  const bumped = (by: number) => Math.round((field.value + by) * 1000) / 1000;
+  let told = '';
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('revise_spec', { spec: spec.spec.id, values: { [field.key]: bumped(0.1) }, note: '代理改' })], { stopReason: 'toolUse' }),
+    context => { told = toolText(context); return fauxAssistantMessage([fauxText('没有改成。')]); },
+  ]);
+  const proposed = next(app, 'proposal', event => event.proposal.status === 'pending');
+  const { session } = await app.agent.send(undefined, '改一下第二个规格的结构尺寸');
+  const proposal = (await proposed).proposal;
+  // The engineer revises the same specification while the card waits: what the card shows is a change to version 1.
+  await app.studio.invoke('library.revise', { spec: spec.spec.id, values: { [field.key]: bumped(0.2) }, note: '工程师先改了' }, { by: 'human' });
+  app.agent.decide(proposal.id, true);
+  await app.agent.idle(session);
+  assert.ok(told.includes('规格已产生新版本'), told);
+  const after = await app.studio.invoke('library.spec.get', { spec: spec.spec.id }, { by: 'human' }) as SpecView;
+  assert.equal(after.version.number, 2, 'only the engineer\'s revision was made; the agent\'s was not put on top of it');
+  assert.equal(after.structure.find(item => item.key === field.key)!.value, bumped(0.2));
+});
+
+test('what only a person may decide is taken out of an import the agent proposes, before it is reviewed', { timeout: 120_000 }, async () => {
+  const sample = await app.studio.invoke('library.import.sample', {}, { by: 'human' }) as { upload: string; declarations: { sheet: string }[] };
+  const [, second, third] = sample.declarations.map(item => item.sheet);
+  const saved = () => app.studio.library.mappings().map(item => item.name);
+  // Control: the same import by a person does save the named column mapping, so the check below is able to fail.
+  await app.studio.invoke('library.import.commit', { upload: sample.upload, sheet: third, mapping_name: '人存的映射', headers: {} }, { by: 'human' });
+  assert.ok(saved().includes('人存的映射'), 'the control: a person can save a mapping with an import');
+  let told = '';
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('import_series', { upload: sample.upload, sheet: second, mapping_name: '代理存的映射', headers: { area: '截面' } })], { stopReason: 'toolUse' }),
+    context => { told = toolText(context); return fauxAssistantMessage([fauxText('导入了。')]); },
+  ]);
+  const proposed = next(app, 'proposal', event => event.proposal.status === 'pending');
+  const { session } = await app.agent.send(undefined, '导入第二张表，并把列对应存成“代理存的映射”');
+  const proposal = (await proposed).proposal;
+  assert.ok(!JSON.stringify(proposal.changes).includes('代理存的映射'), 'the card does not promise what will not be done');
+  app.agent.decide(proposal.id, true);
+  await app.agent.idle(session);
+  assert.ok(JSON.parse(told).imported > 0, told);
+  assert.ok(!saved().includes('代理存的映射'), 'what was reviewed is what ran: the agent saved no column mapping');
+});
+
+test('a rejection reaches the model with the engineer\'s reason and changes nothing', { timeout: 60_000 }, async () => {
+  const id = await project('拒绝测试', 'system.cu-xlpe-al-400');
+  let told = '';
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('rename_project', { project: id, name: '被拒绝的名字' })], { stopReason: 'toolUse' }),
+    context => { told = toolText(context); return fauxAssistantMessage([fauxText('明白，不改了。')]); },
+  ]);
+  const proposed = next(app, 'proposal', event => event.proposal.status === 'pending');
+  const { session } = await app.agent.send(undefined, '改个名');
+  const proposal = (await proposed).proposal;
+  app.agent.decide(proposal.id, false, '名字要按合同编号来');
+  await app.agent.idle(session);
+  assert.ok(told.includes('工程师拒绝了这项改动：名字要按合同编号来'), told);
+  assert.equal(app.studio.store.meta(id).name, '拒绝测试');
+  const [step] = steps(await app.agent.view(session));
+  assert.equal(step.status, 'rejected');
+  assert.equal(step.reason, '工程师拒绝：名字要按合同编号来');
+  assert.deepEqual([step.proposal?.status, step.proposal?.note], ['rejected', '名字要按合同编号来']);
+});
+
 test('a stop that comes while the change is still being described leaves nobody to ask and nothing behind', { timeout: 60_000 }, async () => {
   const id = await project('停在审阅之前', 'system.cu-xlpe-al-400');
   const real = app.studio.reviewFor.bind(app.studio);
@@ -341,6 +407,51 @@ test('a change that changes nothing is not put in front of a person', { timeout:
   assert.equal(view.waiting.length, 0, 'nobody was asked');
   assert.deepEqual(steps(view).map(step => step.status), ['failed']);
   assert.ok(told.includes('没有任何变化'), told);
+});
+
+test('a rating with several circuits is told with every cable by name, and the held currents keep their cables apart', () => {
+  // The method refuses several circuits with the template's losses (checked below), so the result is made up here: what is under test is how it is told.
+  const cable = (id: string, circuit: string, phase: string) => ({ id: `cable/${id}`, circuit: `circuit/${circuit}`, phase, current_a: 300, conductor_c: 60, limit_c: 90, margin_k: 30, sheath_c: 50 });
+  const record = {
+    id: 'run-00000000', sequence: 1, title: '校核 · 480 A', status: 'succeeded', tier: 'reference', kind: 'rating',
+    method_card: { plugin: 'cablesim.iec60287 1.2.0', tier: { basis: [] } },
+    summary: {
+      status: 'succeeded', ambient_c: 25,
+      ampacity: { value_a: 480, basis_name: '逐回路条件上限', limiting_cable: 'cable/c2-b' },
+      circuits: [
+        { id: 'circuit/c1', label: '回路 1', ampacity_a: 500, limiting_cable: 'cable/c1-b', load_a: 300, margin_a: 200, held_currents_a: { 'cable/c2-a': 300, 'cable/c2-b': 300, 'cable/c9': 100, 'cable/c8': 100 } },
+        { id: 'circuit/c2', label: '回路 2', ampacity_a: 480, limiting_cable: 'cable/c2-b', load_a: 300, margin_a: 180, held_currents_a: { 'cable/c1-a': 300, 'cable/c1-b': 300 } },
+      ],
+      operating: { cables: [cable('c1-a', 'c1', 'A'), cable('c1-b', 'c1', 'B'), cable('c2-a', 'c2', 'A'), cable('c2-b', 'c2', 'B')], hottest_cable: 'cable/c2-b', within_limit: true },
+    },
+  };
+  const told = app.studio.operations.get('run.rate')!.brief!(record) as { limiting_cable: string; operating: { cable: string }[]; circuits: { limiting_cable: string; held_currents_a: Record<string, number> }[] };
+  const names = told.operating.map(item => item.cable);
+  assert.deepEqual(names, ['回路 1 · A 相', '回路 1 · B 相', '回路 2 · A 相', '回路 2 · B 相']);
+  assert.equal(told.limiting_cable, '回路 2 · B 相');
+  assert.deepEqual(told.circuits.map(item => item.limiting_cable), ['回路 1 · B 相', '回路 2 · B 相']);
+  // Held currents keep one entry per cable, including cables the result does not list, which get names of their own instead of one shared name.
+  assert.deepEqual(Object.keys(told.circuits[0].held_currents_a), ['回路 2 · A 相', '回路 2 · B 相', '未列出的电缆 1', '未列出的电缆 2']);
+  assert.deepEqual(Object.keys(told.circuits[1].held_currents_a), ['回路 1 · A 相', '回路 1 · B 相']);
+  assert.ok(!/cable\/|circuit\//.test(JSON.stringify(told)), 'no identifier of the calculation');
+});
+
+test('several circuits with the default losses are refused by the method, and the model is told so', { timeout: 120_000 }, async () => {
+  const id = await project('两回路', 'system.cu-xlpe-al-400');
+  const two = (await app.studio.view(id)).layouts.find(layout => layout.circuits === 2);
+  assert.ok(two, 'the model has a layout of two circuits');
+  await app.studio.invoke('installation.set', { project: id, layout: two.kind }, { by: 'human' });
+  let told = '';
+  faux.setResponses([
+    fauxAssistantMessage([fauxToolCall('run_rating', { project: id })], { stopReason: 'toolUse' }),
+    context => { told = toolText(context); return fauxAssistantMessage([fauxText('方法拒绝了。')]); },
+  ]);
+  const { session } = await app.agent.send(undefined, '算一下这个两回路工程的载流量');
+  await app.agent.idle(session);
+  const result = JSON.parse(told);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.error.code, 'MULTICIRCUIT_ELECTRICAL_MODEL_REQUIRED');
+  assert.equal(result.ampacity_a, undefined, 'no number is made up when the method refuses');
 });
 
 test('opening something in the workbench works from what is given, without naming the kind', { timeout: 60_000 }, async () => {

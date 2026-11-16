@@ -242,11 +242,16 @@ export class Studio {
       if (summary.status !== 'succeeded') return { ...base, error: summary.error };
       // A cable is told to the model by a name it can say to an engineer, never by the calculation's own identifier: a model copies what it reads.
       const cables = summary.operating?.cables ?? [];
+      const unlisted = new Map<string, string>();
       const named = (id: string | undefined): string | undefined => {
+        if (id === undefined) return undefined;
         const index = cables.findIndex(cable => cable.id === id);
-        if (index < 0) return id === undefined ? undefined : '某根电缆';
+        // A cable the result does not list still gets a name of its own, so two of them are never taken for one.
+        if (index < 0) return unlisted.get(id) ?? unlisted.set(id, `未列出的电缆 ${unlisted.size + 1}`).get(id);
         const phase = PHASE_NAMES[cables[index].phase] ?? cables[index].phase;
-        return cables.length === 1 ? phase : `第 ${index + 1} 根（${phase}）`;
+        if (cables.length === 1) return phase;
+        const circuit = summary.circuits?.find(item => item.id === cables[index].circuit)?.label;
+        return circuit ? `${circuit} · ${phase}` : `第 ${index + 1} 根 · ${phase}`;
       };
       return { ...base, ampacity_a: summary.ampacity?.value_a, basis: summary.ampacity?.basis_name, limiting_cable: named(summary.ampacity?.limiting_cable),
                circuits: summary.circuits?.map(circuit => ({ label: circuit.label, ampacity_a: circuit.ampacity_a, limiting_cable: named(circuit.limiting_cable),

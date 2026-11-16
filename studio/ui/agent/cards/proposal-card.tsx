@@ -21,24 +21,29 @@ function accepted(outcome: StepStatus | undefined, reason: string | undefined): 
 export function ProposalCard({ proposal, outcome, reason }: { proposal: Proposal; outcome?: StepStatus; reason?: string }) {
   const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState('');
+  // The changes are open while a person has to read them; once decided they fold into their title and outcome, so a conversation with
+  // many decisions is not a wall of tables. A person's own choice to open or fold one is kept.
+  const [shown, setShown] = useState<boolean>();
   const decide = useMutation({ mutationFn: (input: { accept: boolean; note?: string }) => api.decide(proposal.id, input.accept, input.note), onError: reportFailure });
   const pending = proposal.status === 'pending';
+  const open = shown ?? pending;
   // A new object has no old value to show; the column would be a row of dashes.
   const hasBefore = proposal.changes.some(change => change.before !== '—');
   return <section aria-label={`待审：${proposal.title}`} className="bg-card overflow-hidden rounded-xl border" data-status={proposal.status}>
-    <header className="flex min-h-11 items-center gap-3 border-b px-4 py-2">
+    <header className={`flex min-h-11 items-center gap-3 px-4 py-2 ${open ? 'border-b' : ''}`}>
       <h3 className="m-0 min-w-0 flex-1 truncate text-sm font-medium">{pending ? '请审阅' : '已审阅'} · {proposal.title}</h3>
       {proposal.preview && <Badge variant="outline">改动后：{proposal.preview.tier.label}</Badge>}
+      {!pending && <Button size="sm" variant="ghost" aria-expanded={open} onClick={() => setShown(!open)}>{open ? '收起改动' : '看改动'}</Button>}
     </header>
-    <Table>
+    {open && <Table>
       <TableHeader><TableRow><TableHead className="w-40">项目</TableHead>{hasBefore && <TableHead>改前</TableHead>}<TableHead>{hasBefore ? '改后' : '内容'}</TableHead></TableRow></TableHeader>
       <TableBody>{proposal.changes.map(change => <TableRow key={`${change.part}/${change.field}`}>
         <TableCell className="text-muted-foreground">{change.label}</TableCell>
         {hasBefore && <TableCell className="whitespace-normal tabular-nums">{change.before}</TableCell>}
         <TableCell className="font-medium whitespace-pre-line tabular-nums">{change.after}</TableCell>
       </TableRow>)}</TableBody>
-    </Table>
-    {proposal.issue && <p role="alert" className="text-destructive m-0 border-t px-4 py-2 text-sm">改后这组输入算不了：{proposal.issue.message}</p>}
+    </Table>}
+    {open && proposal.issue && <p role="alert" className="text-destructive m-0 border-t px-4 py-2 text-sm">改后这组输入算不了：{proposal.issue.message}</p>}
     <footer className="flex flex-wrap items-center gap-2 border-t px-4 py-2.5">
       {pending ? (rejecting
         ? <>

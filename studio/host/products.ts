@@ -347,7 +347,7 @@ export function productOperations(studio: Studio): Operation[] {
           ...(Object.keys(declared.common).length ? [{ part: 'series', field: 'common', label: '系列统一给的尺寸', before: '—',
             after: Object.entries(declared.common).map(([key, value]) => `${label(words.fields, key)} ${compact(value)} ${unit(words.fields, key)}${declared.common_basis[key] ? `（${brief(declared.common_basis[key])}）` : ''}`).join('\n') }] : []),
           ...(Object.keys(declared.modelling).length ? [{ part: 'series', field: 'modelling', label: '计算用参数', before: '—',
-            after: Object.entries(declared.modelling).map(([key, item]) => `${label(words.modelling, key)} ${item.value}${item.unit && item.unit !== '1' ? ` ${item.unit}` : ''}（${brief(item.reference)}）`).join('\n') }] : []),
+            after: Object.entries(declared.modelling).map(([key, item]) => `${label(words.modelling, key)} ${item.value}${item.unit && item.unit !== '1' ? ` ${item.unit.replace('*', '·')}` : ''}（${brief(item.reference)}）`).join('\n') }] : []),
           ...(declared.armour_material ? [{ part: 'series', field: 'armour', label: '铠装材料', before: '—', after: ARMOUR[declared.armour_material] ?? declared.armour_material }] : []),
           { part: 'series', field: 'source', label: '来源', before: '—', after: `${result.file.file} · 工作表“${params.sheet}”` },
         ];
