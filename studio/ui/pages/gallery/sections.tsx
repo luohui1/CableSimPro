@@ -9,7 +9,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/in
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { CardAction, CardLoading, CheckCard, FileCard, ModelCard, OpenInWorkbench, ProposalCard, RatingCard, RefusalCard, type ProposalPhase } from '@/kit/chat/cards';
+import { CardAction, CardLoading, CheckCard, CorrectionCard, FileCard, ModelCard, OpenInWorkbench, ProposalCard, RatingCard, RatingTableCard, RefusalCard, RelatedLinks, StandardProposalCard, type ProposalPhase } from '@/kit/chat/cards';
 import { ComposerAttach, ComposerBar, ComposerFrame, ComposerInput, ComposerSend, ComposerStop, FileChip } from '@/kit/chat/composer';
 import { ChatNotice, TaskStarter } from '@/kit/chat/empty';
 import { AssistantMessage, Prose, Typing, UserMessage } from '@/kit/chat/messages';
@@ -17,9 +17,9 @@ import { ChatGroup, ChatItem, ChatListEmpty, ChatSearch, ChatSidebar, NewChatBut
 import { StepTrace } from '@/kit/chat/steps';
 import { ModeSwitch, ModelBadge, ThemeToggle } from '@/kit/frame';
 import { Icon } from '@/kit/icon';
-import { Dot, ReviewMark, TierMark, VerdictMark } from '@/kit/marks';
-import { LimitMeter, Metric } from '@/kit/metric';
-import { PropertyGroup, PropertyList } from '@/kit/properties';
+import { CellStatus, Dot, ReviewMark, StatusLine, TierMark, VerdictMark, type Tier } from '@/kit/marks';
+import { LimitMeter, Metric, MetricText } from '@/kit/metric';
+import { PointList, PropertyGroup, PropertyList } from '@/kit/properties';
 import { CanvasLayer, CanvasTool, CanvasToolbar, CanvasToolbarSeparator, TemperatureLegend } from '@/kit/workbench/canvas';
 import { DataTable } from '@/kit/workbench/data-table';
 import { NavItem, NavSection, WorkbenchNav } from '@/kit/workbench/nav';
@@ -27,13 +27,16 @@ import { PageHeader } from '@/kit/workbench/page';
 import { EmptyState, Given, PremiseStrip } from '@/kit/workbench/premise';
 import { compact, fixed } from '@shared/format';
 import { useTheme } from '@/state/theme';
-import { CableSection, SectionThumb, fieldStops } from './figures';
+import { SectionThumb } from '@/kit/section-thumb';
+import { LiveSectionThumb } from './live-screens';
+import { CableSection, RUN_THUMB, RUN_THUMB_LABEL, fieldStops } from './figures';
 import { LIBRARY, WORKSPACE } from './library-data';
 import {
   CHATS, CHECK_V1, CHECK_V2, EXPORT_STEPS, HOST_DOWN, MODEL, MODEL_FACTS, MODEL_REFUSAL, MODEL_STEPS_RUNNING, NEW_PROJECT, RATING, RATING_ASK,
   RATING_STEPS, REFUSED_IMPORT, REFUSED_RATING, SHEET, STARTERS, STEPS_FAILED, STEPS_RECOVERED, STEPS_STOPPED, STEPS_WAITING, THINNER,
-  SHORT_CIRCUIT, THINNER_FAILURES, THINNER_NOTE, UNCHECKED,
+  SHORT_CIRCUIT, THINNER_FAILURES, THINNER_NOTE, UNCHECKED, CORRECTION_EXAMPLE,
 } from './samples';
+import { PROPOSAL, RATING_TABLE, RUN_METHOD_CARD, methodLabel } from './host-records';
 
 /** One part: its name, the rule it follows, and its states side by side, each named. */
 export function Specimen({ title, rule, children, wide }: { title: string; rule: string; children: ReactNode; wide?: boolean }) {
@@ -186,6 +189,38 @@ function ProposalStates() {
   </>;
 }
 
+// ---- The cards of the agent's new operations, from the host records ----
+
+const TABLE_LAYOUTS = [...new Set(RATING_TABLE.rows.map(row => row.layout))];
+const TABLE_SOILS = [...new Set(RATING_TABLE.rows.map(row => row.soil))];
+const TABLE_CARD = {
+  title: `载流量表 · YJV22-8.7/15 kV 3×240 第 ${RATING_TABLE.version} 版`,
+  tier: RATING_TABLE.tierKey as Tier,
+  shared: `埋深 ${[...new Set(RATING_TABLE.rows.map(row => row.depth))].join('、')} m，环境温度 ${[...new Set(RATING_TABLE.rows.map(row => row.ambient))].join('、')} °C`,
+  condition: { label: '土壤热阻率', unit: 'K·m/W' },
+  layouts: TABLE_LAYOUTS.map(layout => ({ key: layout, label: layout, basis: RATING_TABLE.rows.find(row => row.layout === layout)?.basis })),
+  rows: TABLE_SOILS.map(soil => ({ key: String(soil), condition: fixed(soil, 1),
+    values: Object.fromEntries(TABLE_LAYOUTS.map(layout => [layout, RATING_TABLE.rows.find(row => row.layout === layout && row.soil === soil)]).map(([layout, row]) => [layout, row && typeof row === 'object' ? fixed(row.ampacity, 1) : undefined])) })),
+};
+const ASKED = PROPOSAL.inputs;
+const PROPOSAL_CARD = {
+  title: `按标准生成的结构 · ${PROPOSAL.standard}`,
+  method: methodLabel(`${PROPOSAL.method.plugin_id}/${PROPOSAL.method.capability}`, PROPOSAL.method.method_version),
+  cable: `${compact(ASKED.u0_v / 1000)}/${compact(ASKED.u_v / 1000)} kV ${ASKED.cores === 3 ? '三芯' : `${ASKED.cores} 芯`}，${ASKED.conductor === 'copper' ? '铜' : '铝'}导体 ${ASKED.area_mm2} mm²，${ASKED.insulation} 绝缘，${ASKED.armour === 'steel_tape' ? '钢带铠装' : '铠装'}，有金属屏蔽`,
+  dimensions: PROPOSAL.complete.dimensions.map(item => ({ label: item.label, value: compact(item.value), unit: item.unit,
+    source: { kind: item.kind, place: item.clause ? `${PROPOSAL.standard} ${item.clause} 第 ${item.printed_page} 页` : undefined } })),
+  missing: PROPOSAL.complete.missing.map(item => ({ label: item.label, reason: item.reason })),
+};
+const CORRECTION_CARD = {
+  title: 'GB 50217 校正 · 土壤 30 °C，三根并列',
+  corrected: CORRECTION_EXAMPLE.corrected,
+  product: `基准 ${CORRECTION_EXAMPLE.baseline} A × 总系数 ${CORRECTION_EXAMPLE.total}`,
+  coefficients: CORRECTION_EXAMPLE.coefficients,
+  baseline: { current: CORRECTION_EXAMPLE.baseline, source: CORRECTION_EXAMPLE.source, confirmedBy: '工程师' },
+  scope: CORRECTION_EXAMPLE.scope,
+};
+const IMPORTED_SERIES = LIBRARY.filter(series => series.manufacturer === '人民电缆集团');
+
 export function AgentSection() {
   const { theme, toggle } = useTheme();
   return <>
@@ -237,13 +272,36 @@ export function AgentSection() {
       <State label="做完（展开）" className="max-w-thread"><StepTrace steps={EXPORT_STEPS} defaultOpen /></State>
     </Specimen>
     <Specimen title="载流量结果卡" rule="主数字是允许电流；旁边是先到温限的电缆和它的导体温度离限值多远；右上是可信分档。" wide>
-      <State label="有结果" className="max-w-thread"><RatingCard {...RATING} figure={<SectionThumb />} actions={<><CardAction icon="result/report">计算书</CardAction><OpenInWorkbench /></>} /></State>
+      <State label="有结果" className="max-w-thread"><RatingCard {...RATING} figure={<SectionThumb {...RUN_THUMB} label={RUN_THUMB_LABEL} />} actions={<><CardAction icon="result/report">计算书</CardAction><OpenInWorkbench /></>} /></State>
       <State label="读取中（卡片取数时）" className="max-w-thread"><CardLoading icon="calc/ampacity" title="YJV22-8.7/15 kV 3×240 · 三芯直埋" height="h-40" /></State>
+    </Specimen>
+    <Specimen title="断面缩略图" rule="kit/section-thumb：一次运行的敷设断面，4:3。土壤按方法给出的温度场着色（线源模型逐像素算，和发布的节点核对过）；电缆按比例画出各层，导体是它的温度色；先到温限的那根描铜色圈；地面在视野里时画地面线。传 thumbOf(运行记录) 的结果；方法没给出解析温度场时只画土壤。深色下热色叠在深色土壤上，不把浅色压暗。">
+      <State label="取自宿主的运行记录（实时）" className="w-44 overflow-hidden rounded-lg border border-line"><LiveSectionThumb /></State>
+      <State label="放大看" className="w-80 overflow-hidden rounded-lg border border-line"><SectionThumb {...RUN_THUMB} label={RUN_THUMB_LABEL} /></State>
+      <State label="方法没给出温度场" className="w-44 overflow-hidden rounded-lg border border-line"><SectionThumb scene={RUN_THUMB.scene} field={null} label="敷设断面：三芯电缆直埋，埋深 1.2 m" /></State>
     </Specimen>
     <Specimen title="标准核对结果卡" rule="通过、不通过、缺项三个数；不通过的项逐条列出，同一要求的三芯合成一条，写明条款。" wide>
       <State label="有不通过（第 2 版，绝缘减到 4 mm）" className="max-w-thread"><CheckCard title="标准核对 · YJV22-8.7/15 kV 3×240 · 第 2 版" counts={CHECK_V2} failures={THINNER_FAILURES} actions={<OpenInWorkbench />} /></State>
       <State label="没有不通过（第 1 版）" className="max-w-thread"><CheckCard title="标准核对 · YJV22-8.7/15 kV 3×240 · 第 1 版" counts={CHECK_V1} failures={[]} actions={<OpenInWorkbench />} /></State>
       <State label="还有规格没核对" className="max-w-thread"><CheckCard title={UNCHECKED.title} counts={{}} failures={[]} unchecked={UNCHECKED.unchecked} actions={<OpenInWorkbench />} /></State>
+    </Specimen>
+    <Specimen title="载流量表卡" rule="一个版本上的载流量表，读法和工作区的载流量表页一样：变化的条件一列在左，每种敷设一列，单位在表头，大家共用的条件在表上写一句；方法拒算的格子写“拒算”，悬停看方法的原话。">
+      <State label="第 1 版的表（12 个条件）" className="max-w-thread"><RatingTableCard {...TABLE_CARD} actions={<OpenInWorkbench />} /></State>
+    </Specimen>
+    <Specimen title="标准提案卡" rule="标准给出的初始结构：每个尺寸带出处（标准的表和页、附录推算、工程师给定）；标准不规定、要工程师给的，照方法的原话列在下面。">
+      <State label="完整结构（8.7/15 kV 三芯 240）" className="max-w-thread"><StandardProposalCard {...PROPOSAL_CARD} actions={<CardAction icon="action/external">在工作台补齐并建成</CardAction>} /></State>
+    </Specimen>
+    <Specimen title="GB 50217 校正卡" rule="先给校正后的允许电流和它怎么来的，再逐个系数写条件、值、条款和页码；基准照出处原话写，并写明谁核对的；适用范围点开看。基准没经人确认时不出数。示例是插件自带的手算核验例。">
+      <State label="基准已核对" className="max-w-thread"><CorrectionCard {...CORRECTION_CARD} actions={<OpenInWorkbench />} /></State>
+    </Specimen>
+    <Specimen title="相关对象链接组" rule="一步碰到的几个对象排在一行里，各是一个去工作台的入口，不各占一行；名字太长就截断，悬停给全名。">
+      <State label="一次导入的四个系列" className="max-w-thread"><RelatedLinks links={IMPORTED_SERIES.map(series => ({ key: series.id, label: series.name, icon: 'nav/cable-type' }))} /></State>
+    </Specimen>
+    <Specimen title="表格里的状态字" rule="格子里写状态而不是数值：一个点加一个词，点的颜色说明性质；拒算这类有原话的，悬停或聚焦时给出。">
+      <State label="拒算（带方法原话）"><CellStatus tone="attention" detail={REFUSED_RATING.reason}>拒算</CellStatus></State>
+      <State label="最热"><CellStatus tone="error">最热</CellStatus></State>
+      <State label="与现在相同"><CellStatus tone="success">与现在相同</CellStatus></State>
+      <State label="条件已改"><CellStatus tone="attention">条件已改</CellStatus></State>
     </Specimen>
     <Specimen title="待审卡" rule="改前和改后、带单位；改动会带来的后果写在下面。接受是这屏的主按钮，拒绝可写原因。审完收成一行。" wide>
       <ProposalStates />
@@ -286,6 +344,25 @@ export function AgentSection() {
 }
 
 // ---- 工作台部件 ----
+
+/** The small parts the rating screens asked for, with the words of run-08e19314 and its method card. */
+function ResultPartsSpecimens() {
+  return <>
+    <Specimen title="状态行" rule="一行文字说一个状态：图标带颜色，字是正文色。放在面板或列表里；单独成块的提示用说明块。">
+      <State label="出错" className="w-full max-w-prose"><StatusLine tone="error">该负荷下无有效稳态解；减小负荷或使用数值模型。</StatusLine></State>
+      <State label="注意（方法的提示）" className="w-full max-w-prose"><StatusLine tone="attention">{RUN_METHOD_CARD.assumptions[5]}</StatusLine></State>
+      <State label="在限值内" className="w-full max-w-prose"><StatusLine tone="success">保存负荷 {RATING.limiting.load} 下导体 {RATING.limiting.conductor} °C，在温限 {RATING.limiting.limit} °C 以内</StatusLine></State>
+    </Specimen>
+    <Specimen title="带标题的要点列表" rule="方法卡、运行提示、算不出的原因：一个标题加几条整句，正文字号；长了只露前几条，其余收进“其余 N 条”。" wide>
+      <State label="适用范围（前 3 条）" className="w-full max-w-prose"><PointList title="适用范围" points={RUN_METHOD_CARD.scope} shown={3} /></State>
+      <State label="分档依据" className="w-full max-w-prose"><PointList title="分档依据" points={RUN_METHOD_CARD.validation.this_configuration} /></State>
+    </Specimen>
+    <Specimen title="文字结论" rule="结论是一句话而不是一个数时（先到温限的那根、选定的规格）：名称在上，结论用小标题字号，和主数字并排。">
+      <State label="先到温限"><MetricText label="先到温限" value={RATING.limiting.name} /></State>
+      <State label="和主数字并排"><div className="flex gap-10"><Metric label="允许电流" value={RATING.current} unit="A" /><MetricText label="先到温限" value={RATING.limiting.name} /></div></State>
+    </Specimen>
+  </>;
+}
 
 export function WorkbenchSection() {
   const [field, setField] = useState(true);
@@ -360,5 +437,6 @@ export function WorkbenchSection() {
       </CanvasToolbar></State>
       <State label="温度图例"><TemperatureLegend title="颜色是土壤温度" ambient={25} limit={90} stops={fieldStops()} lines={5} /></State>
     </Specimen>
+    <ResultPartsSpecimens />
   </>;
 }

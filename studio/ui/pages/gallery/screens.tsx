@@ -13,11 +13,13 @@ import { cn } from '@/lib/utils';
 import { ChatGroup, ChatItem, ChatSearch, ChatSidebar, NewChatButton } from '@/kit/chat/sidebar';
 import { StepTrace } from '@/kit/chat/steps';
 import { useTheme } from '@/state/theme';
-import { CableSection, SectionThumb } from './figures';
+import { SectionThumb } from '@/kit/section-thumb';
+import { CableSection, RUN_THUMB, RUN_THUMB_LABEL } from './figures';
 import { LIBRARY } from './library-data';
-import { ProjectNew, RatingBody, RatingEdit, RatingSelection, RatingSweep } from './rating-screens';
+import { ProjectNew, Projects, RatingBody, RatingEdit, RatingSelection, RatingSweep } from './rating-screens';
 import { ImportScreen, SeriesParams, SeriesRating, SeriesVersions, TypeNewManual, TypeNewStandard, type ImportStep } from './type-screens';
 import { LibraryBody, PROJECTS, SeriesBody, WorkbenchSide } from './workbench-screens';
+import { LibraryBatchScreenBody, SeriesEditScreenBody, SeriesReviewScreenBody, SeriesSheetScreenBody } from './type-dialogs';
 import { DropZone } from '@/kit/workbench/form';
 import { PROPOSAL, RUN_METHOD, methodLabel } from './host-records';
 import { WORKSPACE } from './library-data';
@@ -36,6 +38,8 @@ export interface ScreenSpec {
   render: () => ReactNode;
   /** The screen makes the host do real work (build a solid): the gallery's preview does not draw it, only the full screen. */
   heavy?: boolean;
+  /** A dialog over the page: it covers the whole window, so the gallery's preview leaves it to the full screen. */
+  modal?: boolean;
 }
 export const GROUPS: { id: ScreenGroup; title: string }[] = [
   { id: 'agent', title: 'Agent 模式' }, { id: 'types', title: '电缆型号' }, { id: 'rating', title: '载流量计算' }, { id: 'settings', title: '设置' },
@@ -95,7 +99,7 @@ function AgentEmptyScreen() {
           { label: '电缆型号', icon: 'nav/cable-type', figure: <div className="absolute -right-4 -bottom-10 size-40"><CableSection size={160} /></div>,
             facts: <><TileFact value={LIBRARY.length}>个系列</TileFact><TileFact value={SPECS}>个规格</TileFact></>,
             tasks: STARTERS.types.map(task => <TaskStarter key={task.title} icon={task.icon} title={task.title} result={task.result} />) },
-          { label: '载流量计算', icon: 'calc/ampacity', figure: <SectionThumb width={192} height={112} />,
+          { label: '载流量计算', icon: 'calc/ampacity', figure: <SectionThumb {...RUN_THUMB} label={RUN_THUMB_LABEL} crop className="h-28 w-48" />,
             facts: <><TileFact value={PROJECTS.length}>个工程</TileFact><TileFact before="最近一次校核" value={`${RATING.current} A`} /></>,
             tasks: STARTERS.rating.map(task => <TaskStarter key={task.title} icon={task.icon} title={task.title} result={task.result} />) },
         ]} />
@@ -126,7 +130,7 @@ function AgentStreamingScreen() {
     <AssistantMessage>
       <StepTrace steps={RATING_STEPS} />
       <ProposalCard action="新建工程" subject="YJV22-8.7/15 3×240 直埋载流量校核" changes={NEW_PROJECT} phase="accepted" />
-      <RatingCard {...RATING} figure={<SectionThumb />} actions={<><CardAction icon="result/report">计算书</CardAction><OpenInWorkbench /></>} />
+      <RatingCard {...RATING} figure={<SectionThumb {...RUN_THUMB} label={RUN_THUMB_LABEL} />} actions={<><CardAction icon="result/report">计算书</CardAction><OpenInWorkbench /></>} />
       <Prose>
         <p>{STREAMED}</p>
         <ul><li>{STREAMING_LINE}<StreamCaret /></li></ul>
@@ -202,7 +206,7 @@ function AgentChatScreen() {
         <AssistantMessage>
           <StepTrace steps={RATING_STEPS} />
           <ProposalCard action="新建工程" subject="YJV22-8.7/15 3×240 直埋载流量校核" changes={NEW_PROJECT} phase="accepted" />
-          <RatingCard {...RATING} figure={<SectionThumb />}
+          <RatingCard {...RATING} figure={<SectionThumb {...RUN_THUMB} label={RUN_THUMB_LABEL} />}
             actions={<><CardAction icon="result/report">计算书</CardAction><OpenInWorkbench /></>} />
           <Prose>
             <p>{RATING_ANSWER.lead}</p>
@@ -244,6 +248,8 @@ export const SCREENS: ScreenSpec[] = [
   { id: 'agent-model', group: 'agent', title: 'Agent 模式 · 三维模型卡（实时取自宿主）', job: '工程师在这屏转着看 Agent 建好的三维实体，剖开看各层，下载 STEP，或到工作台接着看。', render: () => <AgentModelScreen />, heavy: true },
   { id: 'library', group: 'types', title: '工作台 · 型号库', job: '工程师在这屏找到一款型号，看清它每个规格的尺寸、审核状态和核对结果，打开它或导入新的结构表。',
     render: () => workbench('library', <LibraryBody />) },
+  { id: 'library-batch', group: 'types', title: '工作台 · 型号库 · 选了几个规格', job: '工程师在这屏给几个规格一起做同一件事：计算与核对、提交审核、审核通过、出规格书。审核只能由人做。',
+    render: () => workbench('library', <LibraryBatchScreenBody />) },
   ...IMPORT_SCREENS.map(item => ({ id: `import-${item.step}`, group: 'types' as const, title: `工作台 · ${item.title}`, job: item.job,
     render: () => workbench('library', <ImportScreen at={item.step} />) })),
   { id: 'type-new-manual', group: 'types', title: '工作台 · 新建型号 · 从零填写', job: '工程师在这屏从导体往外逐层填出一个规格，边填边看断面，建成第 1 版草稿。',
@@ -256,12 +262,20 @@ export const SCREENS: ScreenSpec[] = [
     render: () => workbench('library', <TypeNewStandard at="create" />) },
   { id: 'series', group: 'types', title: '工作台 · 型号工作区 · 结构与核对', job: '工程师在这屏把一个规格的结构和标准核对看全，决定改哪一层、出新版本。',
     render: () => workbench('series', <SeriesBody />) },
+  { id: 'series-edit', group: 'types', modal: true, title: '工作台 · 型号工作区 · 修改结构', job: '工程师在这屏改原表给出的尺寸，写下原因，存成下一版草稿；原来那一版和它的结果都留着。',
+    render: () => workbench('series', <SeriesEditScreenBody />) },
+  { id: 'series-review', group: 'types', modal: true, title: '工作台 · 型号工作区 · 审核', job: '审核员在这屏看清这一版还有哪些缺项，确认看过，写下审核意见，审核通过。',
+    render: () => workbench('series', <SeriesReviewScreenBody />) },
+  { id: 'series-sheet', group: 'types', modal: true, title: '工作台 · 型号工作区 · 规格书', job: '工程师在这屏确认规格书按哪一版、写进哪些内容，生成 PDF。',
+    render: () => workbench('series', <SeriesSheetScreenBody />) },
   { id: 'series-params', group: 'types', title: '工作台 · 型号工作区 · 参数', job: '工程师在这屏查一个版本的电气参数和短路电流：算了哪些、依据哪条，还缺什么。',
     render: () => workbench('series', <SeriesParams />) },
   { id: 'series-rating', group: 'types', title: '工作台 · 型号工作区 · 载流量表', job: '工程师在这屏读一个版本的载流量表：每种敷设、每档土壤热阻率下的允许电流，以及它可信到什么程度。',
     render: () => workbench('series', <SeriesRating />) },
   { id: 'series-versions', group: 'types', title: '工作台 · 型号工作区 · 版本与文件', job: '工程师在这屏看这个规格有哪几版、每版为什么改、审到哪一步，提交、审核、发布或出新版本，拿走文件。',
     render: () => workbench('series', <SeriesVersions />) },
+  { id: 'projects', group: 'rating', title: '工作台 · 载流量计算 · 全部工程', job: '工程师在这屏看所有载流量工程各算的是哪款电缆、怎么敷设、最近一次校核的结果和可信程度，打开一个接着算。',
+    render: () => workbench('projects', <Projects />) },
   { id: 'project-new', group: 'rating', title: '工作台 · 新建载流量工程', job: '工程师在这屏为一个规格开一个载流量工程：选规格、选敷设方式、填工况，建好就算。',
     render: () => workbench('projects', <ProjectNew />) },
   { id: 'rating', group: 'rating', title: '工作台 · 载流量计算', job: '工程师在这屏回答：这款电缆这样敷设能带多大电流，哪根先到温限，依据是什么。',

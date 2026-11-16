@@ -2,7 +2,9 @@
 //   TierMark    how far a method's result can be trusted (可交付 / 参考 / 探索). Shown wherever a result is.
 //   ReviewMark  where a version of a type stands in review (草稿 / 待审核 / 已审核 / 已发布).
 //   VerdictMark one outcome of a standard check (通过 / 不通过 / 缺项 / 未覆盖), optionally with its count.
+import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import { Icon } from './icon';
 
@@ -86,4 +88,35 @@ export function Dot({ tone = 'ink', pulse, className }: { tone?: 'ink' | 'succes
   return <span aria-hidden="true" className={cn('relative inline-flex size-2 shrink-0 rounded-full', colour, className)}>
     {pulse && <span className={cn('absolute inset-0 animate-ping rounded-full motion-reduce:animate-none', colour)} />}
   </span>;
+}
+
+/**
+ * A state written in a table cell where a value would be: 拒算, 最热, 与现在相同, 条件已改. A dot in the tone and the word in
+ * ink; `detail` (the method's own words for a refusal) opens on hover and on focus.
+ */
+export function CellStatus({ tone = 'ink', detail, children }: { tone?: 'ink' | 'success' | 'attention' | 'error'; detail?: ReactNode; children: ReactNode }) {
+  const word = <span className="inline-flex items-center gap-2 text-sm whitespace-nowrap text-ink"><Dot tone={tone} />{children}</span>;
+  if (!detail) return word;
+  return <Tooltip>
+    <TooltipTrigger render={<button type="button" className="rounded-sm underline decoration-line-strong decoration-dotted underline-offset-4 outline-none focus-visible:ring-3 focus-visible:ring-ring" />}>{word}</TooltipTrigger>
+    <TooltipContent className="max-w-80">{detail}</TooltipContent>
+  </Tooltip>;
+}
+
+const LINE: Record<'error' | 'attention' | 'success' | 'info', { icon: string; colour: string }> = {
+  error: { icon: 'status/error', colour: 'text-error' },
+  attention: { icon: 'status/warning', colour: 'text-attention' },
+  success: { icon: 'action/check', colour: 'text-success' },
+  info: { icon: 'status/info', colour: 'text-ink-2' },
+};
+
+/**
+ * A state in a line of text: an icon in the tone, the words in ink (超过温限, 无有效稳态解, 在温限内). For a line inside a
+ * panel or a list; a notice that stands on its own is FormNote.
+ */
+export function StatusLine({ tone, children, className }: { tone: keyof typeof LINE; children: ReactNode; className?: string }) {
+  return <p className={cn('m-0 flex items-start gap-2 text-sm text-ink', className)}>
+    <span className="flex h-5 shrink-0 items-center"><Icon name={LINE[tone].icon} className={LINE[tone].colour} /></span>
+    <span className="min-w-0">{children}</span>
+  </p>;
 }

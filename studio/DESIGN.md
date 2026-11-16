@@ -30,25 +30,26 @@
 | `chat/empty`：`AgentEmpty` `TaskStarter` `TileFact` `EmptyStatus` `ChatNotice` | 空对话：一句话说能交办什么，加按两件事分组的现成任务，底部一行是依据和库里的数 | 现成任务 shadcn Item（渲染成按钮），提示条 shadcn Alert；版面、两块图（电缆断面、土里的温度场）和底部事实行是自有：这是产品自己的封面 |
 | `chat/messages`：`ThreadColumn` `UserMessage` `AssistantMessage` `Prose` `Typing` `StreamCaret` `TurnSpacer` `useLastTurnAtTop` `threadViewportClass` | 人的话在右边灰泡里；Agent 的话不加泡，Markdown 包在 `Prose` 里；正在回答时三个点，字在出来时末尾是光标；对话视口顶部淡入 | 列表、滚动和流式由 assistant-ui 的 ThreadPrimitive、MessagePrimitive 负责，这里是经 `render` 放进去的版面和排版（自有） |
 | `chat/steps`：`StepTrace` | 一次任务的步骤收成一行，点开是时间线；进行中、等你审阅、失败、中止各有样子 | shadcn Trace |
-| `chat/cards`：`RatingCard` `CheckCard` `ProposalCard` `FileCard` `ModelCard` `RefusalCard` `CardLoading` `CardFrame` `CardAction` `OpenInWorkbench` | 载流量结果、标准核对、待审改动、文件、三维模型、拒算或出错、读取中；一张卡一层，不套卡 | shadcn Item、Collapsible、Badge、Button、ToggleGroup、Skeleton、Input；拒算卡内部 shadcn Alert；三维视口由页面传入（three.js） |
+| `chat/cards`：`RatingCard` `CheckCard` `ProposalCard` `FileCard` `ModelCard` `RefusalCard` `CardLoading` `CardFrame` `CardAction` `OpenInWorkbench` `RatingTableCard` `StandardProposalCard` `CorrectionCard` `RelatedLinks` | 载流量结果、标准核对、待审改动、文件、三维模型（视口 2:1，切换在视口下面，不压在模型上）、拒算或出错、读取中；载流量表（变化的条件一列、每种敷设一列，拒算的格写“拒算”）、标准提案（每个尺寸带出处，标准不规定的照原话列出）、GB 50217 校正（校正后电流、逐个系数的条件和条款页码、基准原话和核对人、适用范围）；一步碰到的几个对象排成一行链接组；一张卡一层，不套卡 | shadcn Item、Collapsible、Badge、Button、ToggleGroup、Skeleton、Input；拒算卡内部 shadcn Alert；三维视口由页面传入（three.js） |
+| `section-thumb`：`SectionThumb` `thumbOf` | 一次运行的敷设断面缩略图，4:3：土壤按方法给出的温度场着色，电缆按比例画出各层，先到温限的那根描铜色圈，地面在视野里时画地面线；`thumbOf(运行记录)` 给出它要的场景和温度场，方法没给出解析温度场（或与发布的节点对不上）时只画土壤；`crop` 填满别的比例的框 | 自有绘图：`ui/canvas` 的场景、电缆图形和温度场模型，逐像素算出土壤颜色 |
 | `chat/composer`：`ComposerFrame` `ComposerInput` `ComposerBar` `ComposerAttach` `ComposerSend` `ComposerStop` `FileChip` `composerInputClass` | 输入框；有内容时发送是铜色（这一屏的主按钮），没内容时是灰的；有待审卡时用 `ComposerSend quiet`，有内容也是描边，铜色让给“接受”；停止在任务进行中出现 | shadcn Button，附件 shadcn Attachment；行为由 assistant-ui 的 ComposerPrimitive 负责，浮起的圆角框是自有版面 |
 | `workbench/nav`：`WorkbenchNav` `NavSection` `NavItem` | 工作台的两个工作区（电缆型号、载流量计算）和最近的对象；`NavItem` 可经 `render` 渲染成路由链接 | 暂是自有列表项（Base UI useRender），要换成 shadcn sidebar 的菜单部件，见“选型结论” |
-| `workbench/page`：`PageHeader` `PageTabs` `Panel` `Split` `Toolbar` | 页头（面包屑、标题、唯一主按钮）、同一对象的几页、贴边平铺的面板、可拖动分栏、表格上方的工具行 | 面包屑 shadcn Breadcrumb，页签 shadcn Tabs，分栏 shadcn Resizable（react-resizable-panels）；面板和工具行是自有版面 |
+| `workbench/page`：`PageHeader` `PageTabs` `Panel` `Split` `Toolbar` `SelectionBar` | 页头（面包屑、标题、唯一主按钮）、同一对象的几页、贴边平铺的面板、可拖动分栏、表格上方的工具行；勾了几行时工具行换成选择条（已选几个、对它们能做的事、清除选择） | 面包屑 shadcn Breadcrumb，页签 shadcn Tabs，分栏 shadcn Resizable（react-resizable-panels）；面板和工具行是自有版面 |
 | `workbench/form`：`FormSection` `FormRow` `UnitInput` `ChoiceCards` `ChoiceSelect` `Segmented` `SourceTag` `FormNote` `DropZone` | 表单：名称在左、控件在右，单位在框内成列；几种做法用卡片，固定清单用下拉，几个短词用分段；值的出处（标准、推算、给定、厂家表、人工填写，不认识的出处照原名显示）；动手前要知道的事；拖放文件（`onFiles` 收到拖入或选中的文件） | 表单行 shadcn Field；带单位的数 Base UI NumberField；卡片选择 shadcn RadioGroup；下拉 shadcn Select；分段 shadcn ToggleGroup；出处 shadcn Badge；说明块 shadcn Alert；拖放 react-dropzone；`FormSection` 是带标题的版面分区（标题是页面大纲里的 h2，所以不用 fieldset 的 legend） |
 | `workbench/form` 补：`ReadonlyValue` `ConnectionCheck`；`FormSection split` | 只显示不改的值（来自环境变量）；一个服务连不连得上（还没检查、正在检查、连通、连不上并给原话）；设置页的左说明右字段 | 检查按钮 shadcn Button；只读值是自有文字块（只读输入框能聚焦，看着像能改） |
 | `workbench/flow`：`FlowLayout` `Stepper` | 一屏分步的任务（导入结构表、按标准生成）：步骤一列在左，当前步的内容在右，往前走的按钮在下 | 步骤的状态和前后移动 @stepperize/react；步骤列的样子和版面是自有（shadcn 与 Base UI 都没有分步条） |
 | `workbench/runs`：`RunRail` | 一个工程的运行记录排成一行，旧的在前；多了横向滚动；Agent 算的、输入改过之后的各带一个点 | 悬停说明 shadcn Tooltip；记录条是自有（没有现成的运行记录条） |
 | `workbench/side-editor`：`SideEditor` `SideEditorSection` | 从右边停靠出来的编辑栏，占结论面板的位置，画面不动；顶上是撤销、重做（`tools`，只作用于还没应用的改动），底部是唯一的应用动作 | 按钮 shadcn Button；停靠栏是自有版面：shadcn Sheet 是盖住画面的对话框，这里要画面不动、边改边看 |
-| `workbench/review`：`ReviewTrack` `ReviewActions` `VersionSelect` | 一个版本的审核：四个状态竖排，到过的记下谁、何时、说了什么；每个状态下人能走的一步；页头的版本切换 | 按钮 shadcn Button，版本切换 shadcn Select；四个状态的竖排是自有 |
+| `workbench/review`：`ReviewTrack` `ReviewActions` `VersionSelect` `SpecSwitch` | 一个版本的审核：四个状态竖排，到过的记下谁、何时、说了什么；每个状态下人能走的一步；页头的版本切换；同一系列里换规格（打字找或用箭头走到相邻的） | 按钮 shadcn Button，版本切换 shadcn Select，换规格 Base UI Combobox（shadcn combobox）；四个状态的竖排是自有 |
 | `workbench/chart`：`CurveChart` `TargetBar` | 结果图：一个结果随一个条件的曲线，工程取值和比较水平是参考线；表格里数值对目标的比例条 | 曲线 shadcn Chart（recharts）；比例条是自有 SVG |
 | `theme-color`：`useThemeColor` | 给 CSS 之外画图的东西（三维视口、画布）取主题色，换主题时重取 | 自有 |
-| `workbench/data-table`：`DataTable` | 高密度表：表头固定、行高 36、单位在表头、数值右对齐、可分组、可汇总、选中行铜色浅底，可选中的行能用键盘选；放在表单或说明里时用 `framed` 自带圆角边框 | shadcn Table；固定表头、分组、汇总和键盘选择写在 kit 里（表在几十行以内，见“选型结论”） |
+| `workbench/data-table`：`DataTable` | 高密度表：表头固定、行高 36、单位在表头、数值右对齐、可分组、可汇总、选中行铜色浅底，可选中的行能用键盘选；放在表单或说明里时用 `framed` 自带圆角边框；`checked` 加一列勾选（批量计算、批量审核），表头一个全选；没有宽度的一列可设 `truncate`，窄了截断、悬停给全名 | shadcn Table，勾选 shadcn Checkbox（部分勾选是一横）；固定表头、分组、汇总和键盘选择写在 kit 里（表在几十行以内，见“选型结论”） |
 | `workbench/premise`：`PremiseStrip` `Given` `GivenMore` `EmptyState` | 计算屏的“求什么、已知什么”（`Given active` 是编辑栏正打开的那一项，“其余 N 项”收起少改的条件）；空状态 | 其余 N 项 shadcn Popover，空状态 shadcn Empty；前提带和一项已知（打开编辑栏的按钮）是自有 |
 | `workbench/canvas`：`CanvasFrame` `CanvasToolbar` `CanvasTool` `CanvasLayer` `CanvasNote` `TemperatureLegend` | 断面画布外框：工具左上、视图右上、图例左下、状态栏在下 | 工具条 Base UI Toolbar，工具 shadcn Button、Toggle 加 Tooltip；外框是自有版面，图例和画布内容是 `ui/canvas` 的自有绘图 |
-| `marks`：`TierMark` `ReviewMark` `VerdictMark` `VerdictBar` `Dot` | 可信分档、审核状态、核对结论（一个词加一个图标；表格里用一条比例条） | 分档和审核状态 shadcn Badge；结论词、比例条和状态点是自有 |
+| `marks`：`TierMark` `ReviewMark` `VerdictMark` `VerdictBar` `Dot` `CellStatus` `StatusLine` | 可信分档、审核状态、核对结论（一个词加一个图标；表格里用一条比例条）；表格格子里的状态字（拒算、最热、与现在相同，带原话的悬停给出）；一行状态（图标带颜色，字是正文色） | 分档和审核状态 shadcn Badge，格子状态字的原话 shadcn Tooltip；结论词、比例条、状态点和状态行是自有（一个图标加一句字） |
 | `disclosure`：`Disclosure` `DisclosurePanel` `DisclosureMore` `DisclosureRoot` | 面板里点开才看的分组（损耗、热阻、已通过的核对项），“其余 N 项” | shadcn Collapsible |
-| `metric`：`Metric` `LimitMeter` `MetricGroup` | 一屏的主数字；数值对着它的限值；几个一起读的数放进一个框 | 限值条 Base UI Meter；主数字和数组是自有排版 |
-| `properties`：`PropertyGroup` `PropertyList` | 名称、数值、单位三列对齐 | 自有（三列对齐的 `dl`） |
+| `metric`：`Metric` `LimitMeter` `MetricGroup` `MetricText` | 一屏的主数字；数值对着它的限值；几个一起读的数放进一个框；结论是一句话时（先到温限的那根）用 `MetricText` | 限值条 Base UI Meter；主数字和数组是自有排版 |
+| `properties`：`PropertyGroup` `PropertyList` `PointList` | 名称、数值、单位三列对齐；带标题的要点列表（方法卡的适用范围、假设、验证算例），长了收进“其余 N 条” | 自有（三列对齐的 `dl`、带标题的 `ul`） |
 | `icon`：`Icon` `ProductMark` `Spinner` | 自有图标 `design/icons`（`group/name`） | 自有；lucide-react 只补自有图标里缺的（主题切换的太阳） |
 
 接 assistant-ui 时：叶子部件都收任意属性，可放进原语的 `render={…}`（如 `<ComposerPrimitive.Send render={<ComposerSend />} />`）；只收 `className` 的原语用 `composerInputClass`。
@@ -80,6 +81,7 @@
 | `agent-error` Agent 出错 | 知道任务停在哪一步、为什么停，确认服务恢复后重试 |
 | `agent-model` Agent 三维模型卡（实时取自宿主） | 转着看 Agent 建好的三维实体，剖开看各层，下载 STEP，或到工作台接着看 |
 | `library` 型号库 | 找到一款型号，看清它每个规格的尺寸、审核状态和核对结果，打开它或导入新的结构表 |
+| `library-batch` 型号库 · 选了几个规格 | 给几个规格一起做同一件事：计算与核对、提交审核、审核通过、出规格书；审核只能由人做 |
 | `import-upload` 导入结构表 · 上传 | 把厂家的结构表交给软件：拖进来，或先用公开样例试一遍 |
 | `import-sheet` 导入结构表 · 选工作表 | 挑出要导入的那张工作表，一张表成一个系列 |
 | `import-columns` 导入结构表 · 列对应 | 确认表里每一列对应哪个字段，不对的改掉，不要的列不导入 |
@@ -90,9 +92,13 @@
 | `type-new-standard` 新建型号 · 按标准生成 · 提案与对照 | 看标准给出的各层尺寸和每个数的出处，与厂家手册对照，再决定补齐并建成草稿 |
 | `type-new-standard-create` 新建型号 · 按标准生成 · 补齐并建成 | 填上标准不规定的导体外径和成品外径，定下放进哪个系列，建成第 1 版草稿 |
 | `series` 型号工作区 · 结构与核对 | 把一个规格的结构和标准核对看全，决定改哪一层、出新版本 |
+| `series-edit` 型号工作区 · 修改结构 | 改原表给出的尺寸，写下原因，存成下一版草稿；原来那一版和它的结果都留着 |
+| `series-review` 型号工作区 · 审核 | 看清这一版还有哪些缺项，确认看过，写下审核意见，审核通过 |
+| `series-sheet` 型号工作区 · 规格书 | 确认规格书按哪一版、写进哪些内容，生成 PDF |
 | `series-params` 型号工作区 · 参数 | 查一个版本的电气参数和短路电流：算了哪些、依据哪条，还缺什么 |
 | `series-rating` 型号工作区 · 载流量表 | 读一个版本的载流量表：每种敷设、每档土壤热阻率下的允许电流，以及它可信到什么程度 |
 | `series-versions` 型号工作区 · 版本与文件 | 看这个规格有哪几版、每版为什么改、审到哪一步，提交、审核、发布或出新版本，拿走文件 |
+| `projects` 载流量计算 · 全部工程 | 看所有工程各算的是哪款电缆、怎么敷设、最近一次校核的结果和可信程度，打开一个接着算 |
 | `project-new` 新建载流量工程 | 为一个规格开一个载流量工程：选规格、选敷设方式、填工况，建好就算 |
 | `rating` 载流量计算 | 回答这款电缆这样敷设能带多大电流、哪根先到温限、依据是什么 |
 | `rating-edit` 载流量计算 · 改已知条件 | 改一个已知条件，一边看着原来的结果，一边决定按新条件重算 |
@@ -108,7 +114,9 @@
 - 型号工作区：分层表里选中或悬停的一层，在断面上用铜色描出它的环，并在断面左下写出这一层的名称和尺寸；断面有缩小、适应窗口、放大；状态栏说清断面一共几层（几芯各几层、共用几层）和右表一行对应几环。
 - 计算屏的“已知”在 1366 下保持一行：环境、系统、护套这类少改的条件收进“其余 N 项”，宽屏上照常排开。
 - 打开一段做完的对话时，最后一轮的提问在视口顶上（`useLastTurnAtTop` 加 `TurnSpacer`），不把上一轮的卡片切一半；正在进行的对话停在底部。
-- 一个规格的四页共用页头：标题后是版本切换和审核状态，下面是页签；页里显示的是页头所选的那一版。载流量表挂在算它的那一版上。
+- 一个规格的四页共用页头：标题是型号（YJV22-8.7/15 kV），后面是换规格（`SpecSwitch`，同一系列里打字找或走到相邻的）、版本切换和审核状态，下面是页签；页里显示的是页头所选的那一版。载流量表挂在算它的那一版上。
+- 型号库可以勾选几行：工具行换成选择条，对勾选的规格计算与核对、提交审核、审核通过、出规格书；审核按钮只给人。审核状态筛选留着（审核员要找“待审核”的），用一个下拉，审核一列照旧安静。
+- 修改结构、审核、规格书是对话框：修改结构只列原表给出的尺寸，改过的打点并写出原值，原因必填，存成下一版草稿；审核先给这一版的核对比例条和缺项提示，勾选“看过”后才能确认，意见必填；规格书写明按哪一版、写进哪些内容，没审核过的版本每页标“草稿”。
 - 一个工程的运行记录在页头下排成一行；“求什么、已知什么”说的是选中的那条记录。
 - 改已知条件用侧栏 `SideEditor`，画面留着：改动先攒着，点“按新条件计算”才有新记录。在画布上直接改（拖间距、点埋深）也是待应用的改动，计入“改了 N 项”，画布上用 `CanvasNote` 写出改了什么；撤销、重做只作用于待应用的改动。方法参数（集肤系数 ks、邻近系数 kp）在侧栏的“方法参数”折叠组里，前提带里归进“其余 N 项”。
 - 结果先给结论（主数字、先到温限、选定规格），再给表和图；拒算的规格写方法给的原话，不当成零。

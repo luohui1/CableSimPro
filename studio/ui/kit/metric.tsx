@@ -66,3 +66,15 @@ export function LimitMeter({ label, value, limit, from = 0, unit, format = (n: n
     {caption && <span className="text-sm text-ink-2">{caption}</span>}
   </Meter.Root>;
 }
+
+/**
+ * A conclusion that is words, not a number, beside the screen's main number: 先到温限 · 三芯电缆 · 回路 1; 选定 · 3×240.
+ * The label in the secondary colour, the words at the heading size, an optional line under them.
+ */
+export function MetricText({ label, value, detail, className }: { label: ReactNode; value: ReactNode; detail?: ReactNode; className?: string }) {
+  return <div className={cn('flex min-w-0 flex-col', className)}>
+    <span className="text-sm text-ink-2">{label}</span>
+    <span className="truncate text-h3 text-ink">{value}</span>
+    {detail && <span className="text-sm text-ink-2">{detail}</span>}
+  </div>;
+}

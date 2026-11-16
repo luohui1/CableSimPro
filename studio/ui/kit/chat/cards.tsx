@@ -13,7 +13,11 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { cn } from '@/lib/utils';
 import { Icon } from '../icon';
 import { LimitMeter, Metric } from '../metric';
-import { ReviewMark, TierMark, VERDICT, type Review, type Tier, type Verdict } from '../marks';
+import { CellStatus, ReviewMark, TierMark, VERDICT, type Review, type Tier, type Verdict } from '../marks';
+import { PropertyList, type Property } from '../properties';
+import { Disclosure } from '../disclosure';
+import { DataTable } from '../workbench/data-table';
+import { SourceTag, type SourceKind } from '../workbench/form';
 
 // ---- The frame every card shares ----
 
@@ -77,7 +81,7 @@ export interface RatingCardProps {
 export function RatingCard({ title, tier, current, basis, limiting, figure, actions }: RatingCardProps) {
   return <CardFrame icon="calc/ampacity" title={title} aside={<TierMark tier={tier} />} actions={actions} data-card="rating">
     <div className="flex items-stretch gap-6">
-      {figure && <div className="flex w-44 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-line bg-subtle">{figure}</div>}
+      {figure && <div className="w-44 shrink-0 self-start overflow-hidden rounded-lg border border-line">{figure}</div>}
       <div className="grid min-w-0 flex-1 grid-cols-2 items-start gap-6 py-1">
         <Metric label="允许电流" value={current} unit="A" detail={basis} />
         <div className="flex min-w-0 flex-col gap-3">
@@ -273,12 +277,12 @@ export function ModelCard({ title, state, viewport, error, facts, view = 'cutawa
 }) {
   return <CardFrame icon="tool/view-3d" title={title} actions={state === 'ready' ? actions : undefined} data-card="model3d" data-state={state}
     aside={facts && state === 'ready' && <span className="flex items-center gap-2">{facts.map(fact => <Badge key={fact.label} variant="secondary">{fact.label} {fact.value}</Badge>)}</span>}>
-    {state === 'loading' && <div className="flex h-72 flex-col items-center justify-center gap-3 rounded-lg bg-subtle"><Skeleton className="size-24 rounded-full bg-line" /><span className="text-sm text-ink-2">正在生成三维实体</span></div>}
+    {state === 'loading' && <div className="flex aspect-2/1 w-full flex-col items-center justify-center gap-3 rounded-lg bg-subtle"><Skeleton className="size-24 rounded-full bg-line" /><span className="text-sm text-ink-2">正在生成三维实体</span></div>}
     {state === 'failed' && <div className="flex h-40 items-center gap-3 rounded-lg bg-error-fill px-4 text-sm text-ink"><Icon name="status/error" className="text-error" />三维实体没有生成：{error}</div>}
-    {state === 'ready' && <div className="relative h-72 overflow-hidden rounded-lg border border-line bg-subtle cad-fill">
-      {viewport}
-      <ToggleGroup value={[view]} onValueChange={next => next[0] && onViewChange?.(next[0] as 'cutaway' | 'solid')} size="sm"
-        className="absolute top-3 left-3 rounded-lg border border-line bg-surface p-1 shadow-menu" aria-label="显示方式">
+    {/* The view is 2:1 at any card width and the viewer frames the whole solid on every resize; nothing lies over it. */}
+    {state === 'ready' && <div className="flex flex-col gap-3">
+      <div className="relative aspect-2/1 w-full overflow-hidden rounded-lg border border-line bg-subtle cad-fill">{viewport}</div>
+      <ToggleGroup value={[view]} onValueChange={next => next[0] && onViewChange?.(next[0] as 'cutaway' | 'solid')} size="sm" className="self-start" aria-label="显示方式">
         <ToggleGroupItem value="cutaway">分层剖开</ToggleGroupItem>
         <ToggleGroupItem value="solid">完整实体</ToggleGroupItem>
       </ToggleGroup>
@@ -314,4 +318,140 @@ export function RefusalCard({ kind, title, reason, missing, actions }: {
       </AlertDescription>}
     </Alert>
   </CardFrame>;
+}
+
+// ---- 载流量表卡 ----
+
+/** One step of the varied condition, and for each laying the current the method gave (formatted) or its refusal. */
+export interface RatingTableCardRow { key: string; condition: string; values: Record<string, string | { refused: string } | undefined> }
+
+/**
+ * An ampacity table kept on a type version, read in the conversation the way the workbench page reads it: the varied
+ * condition down the side, one column per laying, what every row shares said once above. Long tables show their first rows
+ * and say how many more the workbench holds.
+ */
+export function RatingTableCard({ title, tier, shared, condition, layouts, rows, more = 0, actions }: {
+  title: ReactNode;
+  tier: Tier;
+  /** What every row shares, as a sentence: 埋深 0.7 m，环境温度 25 °C. */
+  shared: ReactNode;
+  /** The condition the rows step through: 土壤热阻率, K·m/W. */
+  condition: { label: string; unit: string };
+  /** The layings, one column each, with what the current means for it (单回路能力, 全回路共同能力). */
+  layouts: { key: string; label: string; basis?: string }[];
+  rows: RatingTableCardRow[];
+  /** Rows the card leaves to the workbench. */
+  more?: number;
+  actions?: ReactNode;
+}) {
+  return <CardFrame icon="module/rating-table" title={title} aside={<TierMark tier={tier} />} actions={actions} data-card="rating-table">
+    <div className="flex flex-col gap-3">
+      <p className="m-0 text-sm text-ink">{shared}</p>
+      <DataTable framed rows={rows} rowKey={row => row.key} columns={[
+        { key: 'condition', header: condition.label, unit: condition.unit, numeric: true, width: 'w-36', cell: row => row.condition },
+        ...layouts.map(layout => ({ key: layout.key, header: layout.basis ? `${layout.label}（${layout.basis}）` : layout.label, unit: 'A', numeric: true,
+          cell: (row: RatingTableCardRow) => {
+            const value = row.values[layout.key];
+            if (value === undefined) return <span className="text-ink-2">—</span>;
+            return typeof value === 'string' ? <span className="font-medium">{value}</span> : <CellStatus tone="attention" detail={value.refused}>拒算</CellStatus>;
+          } })),
+      ]} />
+      {more > 0 && <p className="m-0 text-sm text-ink">另有 {more} 个条件，在工作台看全表。</p>}
+    </div>
+  </CardFrame>;
+}
+
+// ---- 标准提案卡 ----
+
+export interface ProposedDimension { label: string; value: string; unit: string; source: { kind: SourceKind | (string & {}); place?: string } }
+
+/**
+ * The initial structure a product standard gives, kept as a proposal: each dimension with where it comes from (the
+ * standard's table and page, a value derived by its annex, a value the engineer gave), and what the engineer still has to
+ * supply, in the method's own words. A value carries its citation only while it is the standard's number.
+ */
+export function StandardProposalCard({ title, method, cable, dimensions, missing, actions }: {
+  title: ReactNode;
+  /** The method by name and version: XLPE 标准结构提案 1.5.1. */
+  method: string;
+  /** The cable the standard was asked about, as a sentence. */
+  cable: ReactNode;
+  dimensions: ProposedDimension[];
+  missing: { label: string; reason: string }[];
+  actions?: ReactNode;
+}) {
+  const rows: Property[] = dimensions.map(item => ({ label: item.label, value: item.value, unit: item.unit, source: <SourceTag kind={item.source.kind} place={item.source.place} /> }));
+  return <CardFrame icon="module/standard-check" title={title} aside={<Badge variant="outline">{method}</Badge>} actions={actions} data-card="standard-proposal">
+    <div className="flex flex-col gap-4">
+      <p className="m-0 text-sm text-ink">{cable}</p>
+      <PropertyList rows={rows} />
+      {missing.length > 0 && <Alert variant="attention">
+        <Icon name="status/warning" />
+        <AlertTitle>还缺 {missing.length} 项，要工程师给</AlertTitle>
+        <AlertDescription className="text-ink">
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">{missing.map(item => <li key={item.label}><span className="font-medium">{item.label}</span>：{item.reason}</li>)}</ul>
+        </AlertDescription>
+      </Alert>}
+    </div>
+  </CardFrame>;
+}
+
+// ---- GB 50217 校正卡 ----
+
+export interface CorrectionCoefficientRow { label: string; condition: string; factor: string; place: string }
+
+/**
+ * A GB 50217 correction of a baseline current to the actual conditions: the corrected current first, then each coefficient
+ * with the condition it answers and its clause and page, the baseline in its source's own words with who confirmed it, and
+ * what the correction covers. Nothing is shown as a number until a person has confirmed the baseline.
+ */
+export function CorrectionCard({ title, tier, corrected, product, coefficients, baseline, scope, actions }: {
+  title: ReactNode;
+  tier?: Tier;
+  /** The corrected current, formatted. */
+  corrected: string;
+  /** How it was reached: 基准 400 A × 总系数 0.816. */
+  product: ReactNode;
+  coefficients: CorrectionCoefficientRow[];
+  /** The baseline in its source's words, and who confirmed it. */
+  baseline: { current: string; source: string; confirmedBy: string };
+  /** What the correction covers, in the method's words. */
+  scope: string;
+  actions?: ReactNode;
+}) {
+  return <CardFrame icon="module/standard-check" title={title} aside={tier && <TierMark tier={tier} />} actions={actions} data-card="correction">
+    <div className="flex flex-col gap-4">
+      <Metric label="校正后允许电流" value={corrected} unit="A" detail={product} />
+      <DataTable framed rows={coefficients} rowKey={row => row.label} columns={[
+        { key: 'label', header: '系数', width: 'w-32', cell: row => row.label },
+        { key: 'condition', header: '条件', cell: row => <span className="whitespace-normal">{row.condition}</span> },
+        { key: 'factor', header: '值', numeric: true, width: 'w-20', cell: row => <span className="font-medium">{row.factor}</span> },
+        { key: 'place', header: '依据', width: 'w-56', cell: row => <SourceTag kind="standard" place={row.place} /> },
+      ]} />
+      <Alert variant="note">
+        <Icon name="source/locked" />
+        <AlertTitle>基准 {baseline.current} A，由{baseline.confirmedBy}核对</AlertTitle>
+        <AlertDescription className="text-ink">{baseline.source}</AlertDescription>
+      </Alert>
+      <Disclosure title="适用范围"><p className="m-0 pt-2 text-sm text-ink">{scope}</p></Disclosure>
+    </div>
+  </CardFrame>;
+}
+
+// ---- 相关对象链接组 ----
+
+/**
+ * The objects one step touched, each a way into the workbench, on one wrapping line instead of a row each: the four series
+ * one import made, the specs a batch calculated. Long names are cut and given whole on hover.
+ */
+export function RelatedLinks({ label = '在工作台打开', links }: {
+  label?: string;
+  links: { key: string; label: string; icon?: string; onOpen?: () => void }[];
+}) {
+  return <nav aria-label={label} className="flex flex-wrap items-center gap-2">
+    <span className="mr-1 text-sm text-ink-2">{label}</span>
+    {links.map(link => <Button key={link.key} variant="outline" size="sm" className="max-w-72" title={link.label} onClick={link.onOpen}>
+      <Icon name={link.icon ?? 'action/external'} data-icon="inline-start" /><span className="truncate">{link.label}</span>
+    </Button>)}
+  </nav>;
 }

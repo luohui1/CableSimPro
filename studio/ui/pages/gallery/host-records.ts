@@ -1328,3 +1328,162 @@ export const RUN_PARAMETERS = {
  "ks": 1,
  "kp": 1
 };
+
+// The sizes of series s-89150e51 as this branch's host lists them (library.series.get): the spec switch of the workspace.
+export const SERIES_SPECS = [
+ { "id": "s-89150e51.3x25", "key": "3×25", "version": 1, "review": "draft" },
+ { "id": "s-89150e51.3x35", "key": "3×35", "version": 1, "review": "draft" },
+ { "id": "s-89150e51.3x50", "key": "3×50", "version": 1, "review": "draft" },
+ { "id": "s-89150e51.3x70", "key": "3×70", "version": 1, "review": "draft" },
+ { "id": "s-89150e51.3x95", "key": "3×95", "version": 1, "review": "draft" },
+ { "id": "s-89150e51.3x120", "key": "3×120", "version": 1, "review": "draft" },
+ { "id": "s-89150e51.3x150", "key": "3×150", "version": 1, "review": "draft" },
+ { "id": "s-89150e51.3x185", "key": "3×185", "version": 1, "review": "draft" },
+ { "id": "s-89150e51.3x240", "key": "3×240", "version": 3, "review": "reviewed" },
+ { "id": "s-89150e51.3x300", "key": "3×300", "version": 1, "review": "draft" },
+ { "id": "s-89150e51.3x400", "key": "3×400", "version": 1, "review": "draft" }
+];
+
+// The projects on this branch's host (/api/projects, /api/projects/<id>) with their runs, newest first: the 全部工程 page.
+export const PROJECT_LIST = [
+ {
+  "id": "p-fad964a2",
+  "name": "YJV22-8.7/15 3×240 直埋载流量校核",
+  "updated": "2026-11-16T06:06:15.849Z",
+  "cable": "YJV22-8.7/15 kV 3×240",
+  "layout": "three_core_buried_single",
+  "depth": 1.2,
+  "runs": [
+   {
+    "id": "run-77b9dd47",
+    "sequence": 3,
+    "kind": "selection",
+    "title": "选型 · 400 A → YJV22-8.7/15 kV 3×240",
+    "by": "human",
+    "status": "succeeded",
+    "tier": "reference",
+    "created": "2026-11-16T06:06:15.551Z"
+   },
+   {
+    "id": "run-3a790cf5",
+    "sequence": 2,
+    "kind": "sweep",
+    "title": "扫描 · 土壤热阻率 0.8–3 K·m/W",
+    "by": "human",
+    "status": "succeeded",
+    "tier": "reference",
+    "created": "2026-11-16T06:06:10.071Z"
+   },
+   {
+    "id": "run-08e19314",
+    "sequence": 1,
+    "kind": "rating",
+    "title": "校核 · 458.7 A",
+    "by": "human",
+    "status": "succeeded",
+    "tier": "reference",
+    "created": "2026-11-16T06:06:06.896Z"
+   }
+  ]
+ },
+ {
+  "id": "p-34fedd43",
+  "name": "YJV22-8.7/15 3×240 直埋载流量校核",
+  "updated": "2026-11-16T06:03:43.482Z",
+  "cable": "YJV22-8.7/15 kV 3×240",
+  "layout": "three_core_buried_single",
+  "depth": 1.2,
+  "runs": [
+   {
+    "id": "run-75c352f5",
+    "sequence": 3,
+    "kind": "selection",
+    "title": "选型 · 400 A → YJV22-8.7/15 kV 3×240",
+    "by": "human",
+    "status": "succeeded",
+    "tier": "reference",
+    "created": "2026-11-16T06:03:43.202Z"
+   },
+   {
+    "id": "run-1521c6be",
+    "sequence": 2,
+    "kind": "sweep",
+    "title": "扫描 · 土壤热阻率 0.8–3 K·m/W",
+    "by": "human",
+    "status": "succeeded",
+    "tier": "reference",
+    "created": "2026-11-16T06:03:36.635Z"
+   },
+   {
+    "id": "run-939993dd",
+    "sequence": 1,
+    "kind": "rating",
+    "title": "校核 · 450.5 A",
+    "by": "human",
+    "status": "succeeded",
+    "tier": "reference",
+    "created": "2026-11-16T06:03:33.431Z"
+   }
+  ]
+ }
+];
+
+// The method card of run-08e19314 (method_card), copied unchanged: what the method covers, what it assumes, what checked it.
+export const RUN_METHOD_CARD = {
+ "method": "IEC 60287 稳态载流量",
+ "method_version": "1.2.0",
+ "tier": {
+  "tier": "reference",
+  "label": "参考",
+  "meaning": "本敷设形式只有手算或解析自洽检查，没有公开算例的整链对照；结果供比较与初判，交付前应另行核对。",
+  "basis": [
+   "三芯分支：六种直埋 / 排管手算核对，TB 880 算例 2 的热阻与钢丝损耗、算例 10 的钢带损耗只对照了组件，没有整链公开算例。"
+  ]
+ },
+ "standards": [
+  "IEC 60287-1-1:2023 4.2.1 Eq.(1); 5.1.2; 5.1.3; 5.1.5.1; 5.2; 5.3.1/5.3.2/5.3.11; 5.4.3.3.1/5.4.3.4/5.4.3.5",
+  "IEC 60287-2-1:2023 4.1.2.3.1/4.1.2.5; 4.1.3; 4.1.4.2; 4.1.5; 5.6/Figure6; 4.2.2/4.2.3.2/4.2.6; Annex A"
+ ],
+ "scope": [
+  "地下稳态、恒温地表、均匀原土或单一矩形回填区；不支持分层土壤、多介质分区或土壤干燥。",
+  "单芯自动电损耗适用于完整平衡三相单回路或1-2验证的双回平排温度分支；其他单芯多回路、任意排列或不平衡三相须外部损耗系数与来源。",
+  "三芯仅等结构圆绞导体、芯相接触、独立铜带或光滑金属屏蔽、平衡三相和两端接地；需要成缆绞距、铜带20 ℃纵向电阻、填充材料与钢带实际间隙。",
+  "单回路接触品字形采用标准等效组热阻；其他接触组合明确拒算。排管每根一管、同心、电缆外径 25–100 mm。",
+  "逐回路允许电流保持其他回路保存负荷，各回路上限不可同时使用。",
+  "三芯磁性钢带厚度0.3–1.0 mm；钢丝圆导体至400 mm²且需工频交流铠装电阻；非磁性、混合填料、分离芯、单点接地三芯与分割/扇形领域结构拒算。单芯无铠装，支持光滑管套及显式波深/节距/缓冲/间隙有效热阻率的皱纹管套；局部接触与放电热点不在平均直径模型范围。",
+  "集肤、邻近效应系数及排管热阻常数须显式给定；工程计算使用 2023 表 2，范围外或无法核实的节点拒算。水平护套涡流按 1-1:2023 5.3.7.1(2)，已用 TB 880 单点接地与两端接地变体验证。",
+  "选择 TB 880 历史参考口径时，仅复现 TB 880 所用旧版电容、等效回填半径和接触品字形热阻约定，结果标为参考复现，不能作为 IEC 2023 工程结论。",
+  "验证夹具来自受控资料，不随公开仓库分发；验证只覆盖所列算例与分支，不构成合规认证。",
+  "快速土壤场采用保存负荷的Kennelly镜像线热源；均匀土壤、地表等温；排管为外部近似、内部不出值；不替代有限元。表面64点周向平均误差不大于0.1 K；回填、分层及接触等效组不发布。",
+  "交叉热源按 IEC 60287-3-3:2007 4.1–4.3 及附录 A：一根三芯或同埋深非接触平行单芯单回路直埋；固定 W/m 热源、交叉位置重合。第 1 条指出接触电缆叠加偏乐观，接触品字形拒绝；不给定电流温度，不联合求解热源载流量。"
+ ],
+ "assumptions": [
+  "导体电阻、护套电阻、管内空气热阻随温度迭代；返回热平衡残差。",
+  "每根源电缆采用实际损耗 W/m；镜像法互热未以平均负荷替代。",
+  "介质损耗内部热路按 IEC 60287-1-1 4.2.1 式 (1) 取 0.5·T1，包含半导电层。",
+  "回填修正按共同温升 C·ΣW 叠加；等负荷时还原标准 N·C 热阻修正。",
+  "T1、Rc及电容按每芯；导体、屏蔽、介质及铠装损耗按整根三芯电缆W/m输出；芯明细单独保留。",
+  "平衡圆形三芯独立金属屏蔽；每芯环流按SL分支，公共磁性钢带/钢丝铠装按对应条款。",
+  "IEC 2023 地下稳态；电损耗须满足声明范围"
+ ],
+ "validation": {
+  "cases": [
+   "CIGRE TB 880 算例 0-1",
+   "CIGRE TB 880 算例 0-1：外部热阻精确根式",
+   "CIGRE TB 880 算例 0-1：单端接地",
+   "CIGRE TB 880 算例 0-1：GP31 涡流",
+   "CIGRE TB 880 算例 0-2",
+   "CIGRE TB 880 算例 0-2：GP31 涡流",
+   "CIGRE TB 880 算例 0-3：平排排管",
+   "CIGRE TB 880 算例 0-3：单端接地",
+   "CIGRE TB 880 算例 0-3：GP31 涡流",
+   "IEC 2023：双电缆及多热源不等负荷镜像解析核对",
+   "IEC 2023 表 2：节点、插值与非均匀回填修正核对",
+   "九种单芯敷设模板：独立对数热平衡与冻结损耗二次方程核对",
+   "三芯逐芯屏蔽：六种直埋/排管手算；TB 880 算例 2 热阻与钢丝损耗、算例 10 钢带损耗组件核对"
+  ],
+  "this_configuration": [
+   "三芯分支：六种直埋 / 排管手算核对，TB 880 算例 2 的热阻与钢丝损耗、算例 10 的钢带损耗只对照了组件，没有整链公开算例。"
+  ]
+ }
+};

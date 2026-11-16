@@ -23,26 +23,9 @@ const LEVELS = [27.5, 30, 32.5, 35, 37.5, 40];
 const LINES = [30, 35];
 
 
-/** The cable as it lies in the soil, to scale, in the warmth of its own field: for a result card. */
-export function SectionThumb({ width = 176, height = 132 }: { width?: number; height?: number }) {
-  const dark = useTheme(state => state.theme) === 'dark';
-  const ramp = readRamp();
-  const cable = scene.cables[0];
-  const scale = (height * 0.62) / (2 * scene.shape.radius);
-  const x = (metres: number) => width / 2 + (metres - cable.x) * scale;
-  const y = (metres: number) => height / 2 - (metres - cable.z) * scale;
-  const outline = (level: number) => Array.from({ length: 72 }, (_, index) => {
-    const point = levelOnRay(FIELD, level, [cable.x, cable.z], (index / 72) * Math.PI * 2, scene.shape.radius, 8);
-    return point ? `${x(point[0]).toFixed(1)},${y(point[1]).toFixed(1)}` : null;
-  }).filter(Boolean).join(' ');
-  return <svg viewBox={`0 0 ${width} ${height}`} className="block h-auto w-full" role="img" aria-label="敷设断面：三芯电缆直埋，埋深 1.2 m">
-    <g opacity={dark ? 0.3 : 1}>
-      <rect width={width} height={height} fill={ramp.field(rampPosition(37.5, AMBIENT, LIMIT))} />
-      <polygon points={outline(40)} fill={ramp.field(rampPosition(40, AMBIENT, LIMIT))} />
-    </g>
-    <CableGlyph shape={scene.shape} x={x(cable.x)} y={y(cable.z)} scale={scale} conductor={ramp.css(rampPosition(RUN_CABLE.conductor_c, AMBIENT, LIMIT))} />
-  </svg>;
-}
+/** run-9dd64e85 for the kit's section thumbnail: its scene, and the soil field the method states for it. */
+export const RUN_THUMB = { scene, field: { ambient: FIELD.ambient, sources: FIELD.sources } };
+export const RUN_THUMB_LABEL = '敷设断面：三芯电缆直埋，埋深 1.2 m，温度场按方法给出的线源模型着色';
 
 /** The cable alone, filling its box: the structure view of a type. `highlight` outlines every ring of one layer (by role). */
 export function CableSection({ size = 240, highlight }: { size?: number; highlight?: string }) {

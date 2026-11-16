@@ -196,3 +196,21 @@ export const STREAMING_LINE = '允许电流 458.7 A；保存负荷 300 A 时导�
 /** What the CAD plugin answers for a stranding it does not build: the message of
  *  plugins/cablesim.cable-geometry/src/cablesim_cable_geometry/main.py, word for word. */
 export const MODEL_REFUSAL = '圆绞合支持 1+6+12…完整同心绞层，请核对根数';
+
+/**
+ * The GB 50217 correction of the plugin's own hand check (cablesim.gb50217-correction, as studio core tests/test_gb50217.py
+ * runs it): soil at 30 °C against a 25 °C baseline (D.0.1, page 72) and three cables 100 mm apart (D.0.4, page 73) on a
+ * synthetic 400 A baseline, 400 × 0.96 × 0.85 = 326.4 A. The condition texts, clauses and scope are the method's strings
+ * (correction.py). No host here holds a correction record yet; the baseline says in its own words that it is not a rating.
+ */
+export const CORRECTION_EXAMPLE = {
+  corrected: '326.4',
+  baseline: '400',
+  total: '0.816',
+  coefficients: [
+    { label: '环境温度', condition: '正常温限 90 °C；实际环境 30 °C，基准 25 °C', factor: '0.96', place: 'GB 50217—2018 D.0.1 第 72 页' },
+    { label: '并列根数与间距', condition: '并列 3 根；净距 100 mm', factor: '0.85', place: 'GB 50217—2018 D.0.4 第 73 页' },
+  ],
+  source: '手算核验用的合成基准：单根、同温限及埋深；不是厂家额定值',
+  scope: '单根基准、相同正常导体温限、相同中心埋深；均匀土壤直埋或空气单层等间距，同型号电缆。D.0.3 仅用于 C.0.1-2；不覆盖排管、桥架、多层、日照、交叉热源。',
+};

@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Disclosure } from '@/kit/disclosure';
 import { Icon } from '@/kit/icon';
-import { Dot, ReviewMark, TierMark, type Review } from '@/kit/marks';
+import { Dot, ReviewMark, TierMark, type Review, type Tier } from '@/kit/marks';
 import { LimitMeter, Metric } from '@/kit/metric';
 import { PropertyList } from '@/kit/properties';
 import { Kbd, KbdGroup } from '@/components/ui/kbd';
@@ -26,7 +26,8 @@ import { useTheme } from '@/state/theme';
 import { BONDING_NAMES, fixed } from '@shared/format';
 import { CableSection, FIELD_RANGE, SectionField, fieldStops } from './figures';
 import { WORKSPACE } from './library-data';
-import { CANDIDATES, DEFAULTS, IMPORT, LAYOUTS, PROJECT, RUN_INPUTS, RUN_METHOD, RUN_PARAMETERS, RUNS, SELECTION, SWEEP } from './host-records';
+import { CANDIDATES, DEFAULTS, IMPORT, LAYOUTS, PROJECT, PROJECT_LIST, RUN_INPUTS, RUN_METHOD, RUN_PARAMETERS, RUNS, SELECTION, SWEEP } from './host-records';
+import { when } from './type-screens';
 import { RUN_CABLE, RUN_SOLVER } from './run-document';
 import { RATING } from './samples';
 
@@ -379,6 +380,33 @@ function ProjectNewBody() {
   </>;
 }
 
+// ---- 全部工程: every project, what it calculates and where its last check stands ----
+
+type ProjectRow = (typeof PROJECT_LIST)[number];
+const KIND_WORD: Record<string, string> = { rating: '校核', sweep: '扫描', selection: '选型' };
+const lastOf = (project: ProjectRow, kind: string) => project.runs.find(run => run.kind === kind);
+const PROJECT_COLUMNS: Column<ProjectRow>[] = [
+  { key: 'name', header: '工程', truncate: true, cell: project => project.name },
+  { key: 'cable', header: '型号', width: 'w-48', cell: project => project.cable },
+  { key: 'layout', header: '敷设', width: 'w-48', cell: project => `${LAYOUT_LABEL[project.layout] ?? project.layout}，埋深 ${project.depth} m` },
+  { key: 'rating', header: '最近一次校核', width: 'w-44', cell: project => {
+    const run = lastOf(project, 'rating');
+    return run ? <span className="flex items-center gap-2"><span className="font-medium tabular-nums">{run.title.split(' · ').at(-1)}</span><TierMark tier={run.tier as Tier} /></span> : <span className="text-ink-2">还没算</span>;
+  } },
+  { key: 'runs', header: '运行记录', width: 'w-48', cell: project => [...new Set(project.runs.map(run => KIND_WORD[run.kind] ?? run.kind))].join('、') + ` 共 ${project.runs.length} 条` },
+  { key: 'updated', header: '改于', width: 'w-40', cell: project => <span className="text-ink-2 tabular-nums">{when(project.updated)}</span> },
+];
+
+function ProjectsBody() {
+  return <>
+    <PageHeader trail={[{ label: '载流量计算' }]} title="全部工程" marks={<Badge variant="secondary">{PROJECT_LIST.length} 个工程</Badge>}
+      primary={<Button><Icon name="action/add" data-icon="inline-start" />新建工程</Button>} />
+    <DataTable className="flex-1" columns={PROJECT_COLUMNS} rows={PROJECT_LIST} rowKey={project => project.id}
+      selected={PROJECT_LIST[0].id} onSelect={() => undefined} onOpen={() => undefined} />
+  </>;
+}
+
+export const Projects = ProjectsBody;
 export const RatingBody = RatingScreenBody;
 export const RatingEdit = RatingEditBody;
 export const RatingSweep = SweepBody;

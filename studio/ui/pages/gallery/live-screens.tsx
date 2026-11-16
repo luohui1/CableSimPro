@@ -13,9 +13,29 @@ import { useThemeColor } from '@/kit/theme-color';
 import { ConnectionCheck, FormNote, FormRow, FormSection, ReadonlyValue } from '@/kit/workbench/form';
 import { PageHeader } from '@/kit/workbench/page';
 import { api } from '@/state/api';
-import { useLibrary, useStatus } from '@/state/queries';
+import { useLibrary, useProjects, useRun, useStatus } from '@/state/queries';
+import { SectionThumb, thumbOf } from '@/kit/section-thumb';
+import { Skeleton } from '@/components/ui/skeleton';
 
 /** The solid of one version, from the host: building, built, or refused with the plugin's own words. */
+/**
+ * The section thumbnail drawn from a run record the host holds, as a result card would: the first project's latest rating
+ * run that succeeded, read through the same request the workbench makes, the field checked against its published nodes.
+ */
+export function LiveSectionThumb() {
+  const projects = useProjects();
+  const project = projects.data?.[0]?.id;
+  const view = useQuery({ queryKey: ['project', project], queryFn: () => api.project(project as string), enabled: Boolean(project) });
+  const header = view.data?.runs.filter(run => run.kind === 'rating' && run.status === 'succeeded').at(-1);
+  const run = useRun(project ?? '', header?.id);
+  if (projects.isError || view.isError || run.isError) return <FormNote tone="attention">宿主没有回话，这张缩略图没有画。</FormNote>;
+  if (view.data && !header) return <FormNote>宿主上还没有算成的载流量运行。</FormNote>;
+  const thumb = run.data && thumbOf(run.data);
+  if (!run.data) return <Skeleton className="aspect-4/3 w-full" />;
+  if (!thumb) return <FormNote>这条运行没有断面文档，画不出缩略图。</FormNote>;
+  return <SectionThumb {...thumb} label={`敷设断面：${run.data.title}`} />;
+}
+
 export function ModelCardLive({ spec, version, title }: { spec: string; version: number; title: string }) {
   const solid = useQuery({ queryKey: ['library', 'cad', spec, version], staleTime: Infinity, retry: false,
     queryFn: () => api.op<ProductCad>('library.geometry', { spec, version }) });

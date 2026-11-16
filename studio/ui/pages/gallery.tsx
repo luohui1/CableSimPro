@@ -83,8 +83,10 @@ function ScreenPreview({ item }: { item: ScreenSpec }) {
       <ButtonLink variant="outline" size="sm" href={`#screen=${item.id}`}><Icon name="action/external" data-icon="inline-start" />全屏看</ButtonLink>
     </header>
     <div ref={frame} className="screen-half overflow-hidden rounded-card border border-line bg-canvas" inert>
-      {near && (item.heavy
-        ? <EmptyState icon="tool/view-3d" title="全屏打开时才向宿主要" description="这屏要宿主现建三维实体，陈列页的缩略图不替它开工。" className="h-full" />
+      {near && (item.heavy || item.modal
+        ? item.heavy
+          ? <EmptyState icon="tool/view-3d" title="全屏打开时才向宿主要" description="这屏要宿主现建三维实体，陈列页的缩略图不替它开工。" className="h-full" />
+          : <EmptyState icon="action/external" title="对话框，全屏看" description="对话框盖在整个窗口上，缩略图里画不下；点“全屏看”。" className="h-full" />
         : <div className="screen-frame origin-top-left scale-50">{item.render()}</div>)}
     </div>
   </section>;

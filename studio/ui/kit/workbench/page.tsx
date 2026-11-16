@@ -4,6 +4,7 @@ import { Fragment, type ReactNode } from 'react';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export function PageHeader({ trail, title, marks, primary, actions, className }: {
@@ -69,6 +70,18 @@ export function Split({ panes, direction = 'horizontal', className }: {
 }
 
 /** A row of filters and tools above a table. */
+/**
+ * The toolbar while rows are ticked, in its place and in the selection fill: how many, what can be done to all of them,
+ * and the way out. Review steps here are a person's, as everywhere: the Agent never gets them.
+ */
+export function SelectionBar({ count, unit, children, onClear }: { count: number; unit: string; children: ReactNode; onClear?: () => void }) {
+  return <div role="toolbar" aria-label={`对选中的${unit.replace(/^个/, '')}`} className="flex h-12 shrink-0 items-center gap-2 border-b border-line bg-copper-fill px-4">
+    <span className="mr-2 text-sm font-medium text-ink tabular-nums">已选 {count} {unit}</span>
+    {children}
+    <Button variant="ghost" size="sm" className="ml-auto" onClick={onClear}>清除选择</Button>
+  </div>;
+}
+
 export function Toolbar({ children, end, className }: { children: ReactNode; end?: ReactNode; className?: string }) {
   return <div className={cn('flex h-12 shrink-0 items-center gap-2 border-b border-line px-4', className)}>
     {children}

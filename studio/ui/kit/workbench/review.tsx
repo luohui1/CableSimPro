@@ -4,6 +4,7 @@
 // from reviewed; a published version is not changed, a change makes the next version.
 import type { ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
+import { Combobox, ComboboxContent, ComboboxEmpty, ComboboxInput, ComboboxItem, ComboboxList } from '@/components/ui/combobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { Icon } from '../icon';
@@ -88,4 +89,31 @@ export function VersionSelect({ value, versions, onValueChange }: {
       </SelectItem>)}
     </SelectContent>
   </Select>;
+}
+
+/**
+ * The size shown in a series' workspace, switched to another of the same series without going back to the library: typed
+ * into (Base UI Combobox: 3×1 finds 3×120, 3×150, 3×185), or stepped to the neighbour with the arrows. Each size in the list
+ * carries where its latest version stands in review, quietly.
+ */
+export function SpecSwitch({ value, specs, onValueChange }: {
+  value: string;
+  specs: { key: string; review: Review }[];
+  onValueChange?: (key: string) => void;
+}) {
+  const at = specs.findIndex(spec => spec.key === value);
+  const review = Object.fromEntries(specs.map(spec => [spec.key, spec.review]));
+  return <div className="flex items-center gap-1">
+    <Button variant="ghost" size="icon-sm" aria-label="上一个规格" disabled={at <= 0} onClick={() => onValueChange?.(specs[at - 1].key)}><Icon name="action/chevron-left" /></Button>
+    <Combobox items={specs.map(spec => spec.key)} value={value} onValueChange={next => next && onValueChange?.(next as string)}>
+      <ComboboxInput aria-label="规格" className="w-32" />
+      <ComboboxContent>
+        <ComboboxEmpty>这个系列没有这个规格</ComboboxEmpty>
+        <ComboboxList>{(key: string) => <ComboboxItem key={key} value={key}>
+          <span className="flex min-w-36 items-center justify-between gap-3">{key}<ReviewMark state={review[key]} quiet /></span>
+        </ComboboxItem>}</ComboboxList>
+      </ComboboxContent>
+    </Combobox>
+    <Button variant="ghost" size="icon-sm" aria-label="下一个规格" disabled={at < 0 || at >= specs.length - 1} onClick={() => onValueChange?.(specs[at + 1].key)}><Icon name="action/chevron-right" /></Button>
+  </div>;
 }

@@ -13,10 +13,11 @@ import { NavItem, NavSection, WorkbenchNav } from '@/kit/workbench/nav';
 import { CanvasFrame, CanvasNote, CanvasTool, CanvasToolbar } from '@/kit/workbench/canvas';
 import { PropertyList } from '@/kit/properties';
 import { PageHeader, PageTabs, Panel, Split, Toolbar } from '@/kit/workbench/page';
-import { VersionSelect } from '@/kit/workbench/review';
+import { ChoiceSelect } from '@/kit/workbench/form';
+import { VersionSelect, SpecSwitch } from '@/kit/workbench/review';
 import { CableSection, RING_COUNTS, ringsOf } from './figures';
 import { LIBRARY, WORKSPACE, type LibrarySeries, type LibrarySpec } from './library-data';
-import { PROJECT_NAMES, RATING_TABLE, VERSIONS } from './host-records';
+import { PROJECT_NAMES, RATING_TABLE, VERSIONS, SERIES_SPECS } from './host-records';
 import { compact, fixed } from '@shared/format';
 
 export const PROJECTS = PROJECT_NAMES;
@@ -51,6 +52,8 @@ function CheckCell({ check }: { check: Record<string, number> | null }) {
 }
 
 const SELECTED_SPEC = 's-3382c86d.3x240';
+// The review filter stays: a reviewer opens the library to find what waits on them (待审核), and the column itself is quiet.
+const REVIEW_FILTER = [{ value: 'all', label: '全部审核状态' }, { value: 'draft', label: '草稿' }, { value: 'submitted', label: '待审核' }, { value: 'reviewed', label: '已审核' }, { value: 'published', label: '已发布' }];
 
 // Dimensions to one decimal as the catalogue prints them; resistance to four significant figures; weight whole.
 const SPEC_COLUMNS: Column<LibrarySpec>[] = [
@@ -102,7 +105,7 @@ function SeriesHeader({ series }: { series: LibrarySeries }) {
   </span>;
 }
 
-function LibraryScreenBody() {
+export function LibraryScreenBody({ ticked, onTick, toolbar }: { ticked?: string[]; onTick?: (keys: string[]) => void; toolbar?: ReactNode } = {}) {
   const [open, setOpen] = useState<string[]>([LIBRARY[0].id]);
   const total = LIBRARY.reduce((sum, series) => sum + series.specs.length, 0);
   const selectedSeries = LIBRARY.find(series => series.specs.some(spec => spec.id === SELECTED_SPEC))!;
@@ -111,7 +114,7 @@ function LibraryScreenBody() {
     <PageHeader trail={[{ label: '电缆型号' }]} title="型号库" marks={<Badge variant="secondary">{LIBRARY.length} 个系列 · {total} 个规格</Badge>}
       actions={<Button variant="outline"><Icon name="action/add" data-icon="inline-start" />新建型号</Button>}
       primary={<Button><Icon name="action/import" data-icon="inline-start" />导入结构表</Button>} />
-    <Toolbar>
+    {toolbar ?? <Toolbar>
       <InputGroup className="w-72">
         <InputGroupAddon><Icon name="action/search" /></InputGroupAddon>
         <InputGroupInput placeholder="搜索型号、规格或制造商" aria-label="搜索型号库" />
@@ -121,9 +124,11 @@ function LibraryScreenBody() {
         <ToggleGroupItem value="public">公开资料</ToggleGroupItem>
         <ToggleGroupItem value="demo">演示结构</ToggleGroupItem>
       </ToggleGroup>
-    </Toolbar>
+      <ChoiceSelect label="审核状态" size="sm" value="all" options={REVIEW_FILTER} />
+    </Toolbar>}
     <div className="flex min-h-0 flex-1">
     <DataTable className="flex-1" columns={SPEC_COLUMNS} rowKey={spec => spec.id} selected={SELECTED_SPEC} onSelect={() => undefined} onOpen={() => undefined}
+      checked={ticked} onCheckedChange={onTick} checkLabel={spec => `选中 ${spec.key}`}
       groups={LIBRARY.map(series => ({
         key: series.id,
         header: <SeriesHeader series={series} />,
@@ -208,27 +213,31 @@ const SERIES_PAGES = [
 ];
 
 /** The header of one specification and its pages. The page shows one version; the header says which and where it stands. */
-export function SeriesShell({ page, version, primary, actions, children }: {
+export function SeriesShell({ page, version, review, primary, actions, children }: {
   page: 'structure' | 'params' | 'rating' | 'versions';
   version: number;
+  /** The review state to show instead of the host's present one: the version as it stood when a dialog opened on it. */
+  review?: Review;
   primary?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
   const shown = VERSIONS.find(item => item.number === version)!;
+  const size = WORKSPACE.name.split(' ').at(-1) ?? '';
   return <>
-    <PageHeader trail={[{ label: '电缆型号' }, { label: '型号库' }, { label: WORKSPACE.series }]} title={WORKSPACE.name}
-      marks={<><VersionSelect value={version} versions={VERSIONS.map(item => ({ number: item.number, review: item.review as Review }))} />
-        <ReviewMark state={shown.review as Review} /><Badge variant="secondary">公开资料</Badge></>}
+    <PageHeader trail={[{ label: '电缆型号' }, { label: '型号库' }, { label: WORKSPACE.series }]} title={WORKSPACE.name.replace(` ${size}`, '')}
+      marks={<><SpecSwitch value={size} specs={SERIES_SPECS.map(spec => ({ key: spec.key, review: spec.review as Review }))} />
+        <VersionSelect value={version} versions={VERSIONS.map(item => ({ number: item.number, review: (item.number === version && review) || item.review as Review }))} />
+        <ReviewMark state={review ?? shown.review as Review} /><Badge variant="secondary">公开资料</Badge></>}
       actions={actions} primary={primary} />
     <PageTabs value={page} items={SERIES_PAGES} />
     {children}
   </>;
 }
 
-function SeriesScreenBody() {
+export function SeriesScreenBody({ review }: { review?: Review } = {}) {
   const selectedLayer = WORKSPACE.structure.find(row => row.key === SELECTED_LAYER);
-  return <SeriesShell page="structure" version={WORKSPACE.version.number}
+  return <SeriesShell page="structure" version={WORKSPACE.version.number} review={review}
     actions={<><Button variant="outline"><Icon name="object/file" data-icon="inline-start" />规格书</Button><Button variant="outline"><Icon name="run/run" data-icon="inline-start" />计算</Button></>}
     primary={<Button><Icon name="action/edit" data-icon="inline-start" />修改结构</Button>}>
     <Split panes={[
