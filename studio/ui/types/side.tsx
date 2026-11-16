@@ -4,7 +4,7 @@ import { Link } from '@tanstack/react-router';
 import { NavItem, NavSection, WorkbenchNav } from '@/kit/workbench/nav';
 import { useProductLibrary, useProjects } from '@/state/queries';
 
-export type SideAt = { kind: 'library' } | { kind: 'series'; id: string } | { kind: 'project'; id?: string } | { kind: 'none' };
+export type SideAt = { kind: 'library' } | { kind: 'series'; id: string } | { kind: 'project'; id?: string; /** The new-project screen is open. */ creating?: boolean } | { kind: 'none' };
 
 /** How many recent objects each workspace lists under its entry. */
 const RECENT = 4;
@@ -31,6 +31,7 @@ export function WorkbenchSide({ at }: { at: SideAt }) {
     </NavSection>
     <NavSection icon="calc/ampacity" label="载流量计算">
       {[
+        <NavItem key="new" icon="action/add" label="新建工程" active={at.kind === 'project' && Boolean(at.creating)} render={<Link to="/workbench" search={{ new: true }} />} />,
         <NavItem key="projects" icon="object/study" label="全部工程" count={projects.data?.length} render={<Link to="/workbench" />} />,
         ...projectsShown.map(item => <NavItem key={item.id} nested label={item.name} active={at.kind === 'project' && at.id === item.id}
           render={<Link to="/p/$projectId" params={{ projectId: item.id }} search={{}} />} />),

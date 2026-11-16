@@ -7,14 +7,14 @@ import './state/theme';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { RouterProvider } from '@tanstack/react-router';
 import { createRoot } from 'react-dom/client';
-import { TipProvider } from './components/tooltip';
+import { TooltipProvider } from './components/ui/tooltip';
 import { router } from './router';
 import { queryClient } from './state/queries';
 
 createRoot(document.getElementById('root') as HTMLElement).render(
   <QueryClientProvider client={queryClient}>
-    <TipProvider>
+    <TooltipProvider delay={350} closeDelay={60}>
       <RouterProvider router={router} />
-    </TipProvider>
+    </TooltipProvider>
   </QueryClientProvider>,
 );

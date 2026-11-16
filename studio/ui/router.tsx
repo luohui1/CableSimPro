@@ -1,7 +1,6 @@
 // Routes are written in code; nothing is generated. The address holds what a link should reopen: the conversation, the series
 // and size. The rating workbench writes its own routes (the project and the run record being looked at).
 import { createRootRoute, createRoute, createRouter, lazyRouteComponent } from '@tanstack/react-router';
-import { Notice } from '@/components/notice';
 import { ratingRoutes } from '@/rating/routes';
 import { Shell } from '@/shell/shell';
 import { useHostEvents } from '@/state/queries';
@@ -11,10 +10,7 @@ const Gallery = lazyRouteComponent(() => import('@/pages/gallery'), 'Gallery');
 
 function Root() {
   useHostEvents();
-  return <>
-    <Shell />
-    <Notice />
-  </>;
+  return <Shell />;
 }
 
 const rootRoute = createRootRoute({ component: Root });

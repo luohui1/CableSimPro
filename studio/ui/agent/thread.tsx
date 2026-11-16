@@ -5,13 +5,16 @@ import {
   ActionBarPrimitive, AttachmentPrimitive, AuiIf, ComposerPrimitive, ErrorPrimitive, MessagePrimitive, SuggestionPrimitive, ThreadPrimitive,
   groupPartByType, useAui, useAuiState, type AssistantState,
 } from '@assistant-ui/react';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
+import { reportFailure } from '@/components/notice';
 import { Button } from '@/components/ui/button';
 import { AgentEmpty, ChatNotice, TaskStarter } from '@/kit/chat/empty';
 import { ComposerAttach, ComposerBar, ComposerFrame, ComposerSend, ComposerStop, FileChip, composerInputClass } from '@/kit/chat/composer';
 import { AssistantMessage, ThreadColumn, Typing, UserMessage, threadViewportClass } from '@/kit/chat/messages';
 import { Icon } from '@/kit/icon';
+import { DropZone } from '@/kit/workbench/form';
+import { RatingFacts, RatingFigure, TypeFacts, TypeFigure } from './empty-tiles';
 import { MarkdownText } from './markdown';
 import { ALL_STARTERS, STARTERS } from './starters';
 import { StepGroup } from './steps';
@@ -24,16 +27,17 @@ export function Thread({ notice }: { notice?: ReactNode }) {
   const empty = useAuiState(isNewChatView);
   return <ThreadPrimitive.Root className="flex min-h-0 flex-1 flex-col">
     {empty
-      ? <div className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto py-12">
-        <AgentEmpty title="今天要处理哪款电缆？" lead="导入结构表、按国标核对、算载流量、出规格书和计算书——交给我做，改动由你审。"
-          notice={notice} composer={<Composer />}
-          groups={STARTERS.map(group => ({ label: group.label, icon: group.icon, tasks: <Starters first={ALL_STARTERS.indexOf(group.tasks[0])} count={group.tasks.length} /> }))} />
+      ? <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-8">
+        <AgentEmpty title="今天要处理哪款电缆？" lead="导入结构表、按国标核对、算载流量、出规格书和计算书——交给我做，改动由你审。" className="2xl:max-w-4xl"
+          notice={notice} composer={<div className="flex flex-col gap-2"><Composer /><ImportDrop /></div>}
+          groups={STARTERS.map(group => ({ label: group.label, icon: group.icon, ...TILES[group.label],
+            tasks: <Starters first={ALL_STARTERS.indexOf(group.tasks[0])} count={group.tasks.length} /> }))} />
       </div>
       : <>
-        {/* A new turn starts at the top of the page, and the page holds still while the agent works. A conversation that is opened shows
-            its end, as a chat does (the design's screen), and stays there while its cards fetch what they show: with the turn anchored at
-            the top the viewport does not follow growing content unless asked to. */}
-        <ThreadPrimitive.Viewport turnAnchor="top" autoScroll className={threadViewportClass}>
+        {/* A new turn starts at the top of the page, and a conversation that is opened shows its latest turn from the person's words on,
+            nothing cut off above (the design's screen). */}
+        <ThreadPrimitive.Viewport turnAnchor="top" scrollToBottomOnInitialize={false} scrollToBottomOnThreadSwitch={false} className={threadViewportClass}>
+          <OpenAtLatestTurn />
           <ThreadColumn className="pb-6">
             <AuiIf condition={isHistoryLoadingView}><p role="status" className="m-0 py-10 text-center text-sm text-ink-2">正在打开对话…</p></AuiIf>
             <ThreadPrimitive.Messages>{() => <ThreadMessage />}</ThreadPrimitive.Messages>
@@ -41,7 +45,8 @@ export function Thread({ notice }: { notice?: ReactNode }) {
         </ThreadPrimitive.Viewport>
         <div className="shrink-0 pb-4">
           {/* The button for the latest sits above the composer on a narrow page and beside it, in the free space, where the page is wide. */}
-          <ThreadColumn className="relative">
+          <ThreadColumn className="relative gap-3">
+            {notice}
             <ThreadPrimitive.ScrollToBottom render={<Button variant="outline" size="icon" aria-label="回到最新"
               className="absolute -top-12 left-1/2 z-10 -translate-x-1/2 rounded-full shadow-menu disabled:invisible xl:top-auto xl:bottom-1 xl:left-full xl:ml-3 xl:translate-x-0" />}>
               <Icon name="action/arrow-down" />
@@ -53,7 +58,34 @@ export function Thread({ notice }: { notice?: ReactNode }) {
   </ThreadPrimitive.Root>;
 }
 
+/** A conversation that is opened shows its latest turn from the person's words on: the ask, then what came of it, nothing cut off above.
+ *  The history arrives after the page is mounted, so this waits for it; each message carries its own space above it, so the turn at the
+ *  top of the page still has air above its first line. */
+function OpenAtLatestTurn() {
+  const loaded = useAuiState(state => state.thread.messages.length > 0 && !state.thread.isLoading);
+  useEffect(() => {
+    if (!loaded) return;
+    const turns = document.querySelectorAll('[data-turn-start]');
+    turns[turns.length - 1]?.scrollIntoView({ block: 'start' });
+  }, [loaded]);
+  return null;
+}
+
 // ---- The empty page ----
+
+/** For each job, its own drawing and what the library or the projects hold now. */
+const TILES: Record<string, { figure: ReactNode; facts: ReactNode }> = {
+  电缆型号: { figure: <TypeFigure />, facts: <TypeFacts /> },
+  载流量计算: { figure: <RatingFigure />, facts: <RatingFacts /> },
+};
+
+/** A structure table dropped here goes into the composer, like one attached with the paperclip. */
+function ImportDrop() {
+  const aui = useAui();
+  return <DropZone compact title="把厂家结构表拖到这里" formats="支持 .xlsx、.xls 和 .csv"
+    onFiles={files => files.forEach(file => void aui.composer().addAttachment(file))}
+    onRejected={names => reportFailure(new Error(`不能导入 ${names.join('、')}：只收 .xlsx、.xls 和 .csv。`))} />;
+}
 
 /** The starting tasks of one group, each a task starter that sends its prompt when clicked. */
 function Starters({ first, count }: { first: number; count: number }) {
@@ -107,7 +139,7 @@ function PersonMessage() {
   // A message sent while the agent was busy waits for the current step; say so, so it is not mistaken for ignored.
   const queued = useAuiState(state => Boolean(state.message.metadata.custom?.queued));
   const hasFiles = useAuiState(state => (state.message.attachments?.length ?? 0) > 0);
-  return <MessagePrimitive.Root className="pt-8">
+  return <MessagePrimitive.Root data-turn-start className="pt-8">
     <UserMessage attachments={hasFiles ? <MessagePrimitive.Attachments>{() => <SentChip />}</MessagePrimitive.Attachments> : undefined}>
       <MessagePrimitive.Parts />
       {queued && <Badge variant="outline">排队中，当前一步做完后处理</Badge>}

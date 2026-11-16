@@ -1,10 +1,7 @@
-// The frame of the rating screens until the application's shell builds the one for both modes: the grey ground with the
-// workbench column and the white sheet. The shell's own header is above it, so the frame brings no top bar. When the shell
-// provides the column, this file goes and the screens (project-screen, project-start) are used as they are.
+// The rating screens sit in the workbench's one frame, the same column as the type screens (types/side.tsx lists both workspaces).
 import type { ReactNode } from 'react';
-import { AppFrame } from '@/kit/frame';
-import { RatingSide } from './nav';
+import { TypeFrame } from '@/types/frame';
 
 export function RatingFrame({ active, creating, children }: { active?: string; creating?: boolean; children?: ReactNode }) {
-  return <AppFrame top={null} side={<RatingSide active={active} creating={creating} />}>{children}</AppFrame>;
+  return <TypeFrame at={{ kind: 'project', id: active, creating }}>{children}</TypeFrame>;
 }

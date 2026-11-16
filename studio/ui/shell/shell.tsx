@@ -1,7 +1,8 @@
 // The one shell around both modes: the kit's top bar (the mode switch in the same place on every screen), and below it the screen. A
-// screen draws its own side column and sheet in the kit's frame.
+// screen draws its own side column and sheet in the kit's frame. Failed actions speak as toasts, shown from here.
 import { Outlet, useRouter, useRouterState } from '@tanstack/react-router';
 import { useEffect } from 'react';
+import { Toaster } from '@/components/ui/sonner';
 import { TopBar } from '@/kit/frame';
 import { useStatus } from '@/state/queries';
 import { useTheme } from '@/state/theme';
@@ -17,5 +18,6 @@ export function Shell() {
     <TopBar mode={modeOf(location.pathname)} onModeChange={mode => router.history.push(lastPlace(mode))}
       model={agent ? (agent.configured ? agent.model : null) : undefined} theme={theme} onThemeToggle={toggle} />
     <div className="min-h-0 flex-1"><Outlet /></div>
+    <Toaster position="top-right" />
   </div>;
 }
