@@ -24,6 +24,8 @@ export type ConclusionState =
     /** The inputs have changed since this was computed. */
     stale: boolean;
     names: (id: string) => string;
+    /** The same names as short as they can be, for a table: the circuit, or the phase. */
+    shortNames: (id: string) => string;
     /** What the cable calls its metal screen: 金属屏蔽 or 金属套. */
     screenName: string;
     selected: string | null;
@@ -47,7 +49,7 @@ export function Conclusion({ state }: { state: ConclusionState }) {
   }
   if (state.kind === 'failed') return <Panel title="结论" className={frame}><EmptyState icon="status/error" title="这次校核没有结果" description={state.message} /></Panel>;
 
-  const { record, rating, stale, names, screenName, selected, onSelect } = state;
+  const { record, rating, stale, names, shortNames, screenName, selected, onSelect } = state;
   const card = record.method_card;
   const { focus } = rating;
   const losses = focus.losses_w_m;
@@ -80,7 +82,7 @@ export function Conclusion({ state }: { state: ConclusionState }) {
 
     {several && <Disclosure title="各电缆" aside={<span className="text-sm font-normal text-ink-2">{rating.states.length} 根</span>}>
       <DataTable rowKey={row => row.id} rows={rating.states} selected={focus.id} onSelect={row => onSelect(row.id === selected ? null : row.id)} columns={[
-        { key: 'name', header: '电缆', cell: row => <span className="flex items-center gap-2">{names(row.id)}{rating.distinct && row.id === rating.limiting && <Badge variant="secondary">最热</Badge>}</span> },
+        { key: 'name', header: '电缆', cell: row => <span className="flex items-center gap-2">{shortNames(row.id)}{rating.distinct && row.id === rating.limiting && <Badge variant="secondary">最热</Badge>}</span> },
         { key: 'load', header: '保存负荷', unit: '°C', numeric: true, width: 'w-28', cell: row => fixed(row.conductor_c) },
         { key: 'rated', header: '带满', unit: '°C', numeric: true, width: 'w-20', cell: row => fixed(ratedOf(row.id)?.conductor_c) },
       ]} />

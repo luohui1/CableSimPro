@@ -1,6 +1,7 @@
 // The rating workbench used the way an engineer uses it, in a real browser with the real host and core, at 1366×768 and
 // 1920×1080: a new project from a cable of the library, the check, reading the answer, changing a condition and checking
-// again, sweeping a condition, choosing a section for a target current, switching between the records, taking the sheet.
+// again, sweeping a condition, choosing a section for a target current, switching between the records, taking the sheet;
+// then the layouts that draw several cables, circuits and ducts, and the changes made on the drawing itself.
 // Every step saves a screenshot and runs the layout probe (tests/probe.ts).
 //
 //   npm run build && node tests/rating-walk.ts [output folder]
@@ -20,6 +21,27 @@ const MODEL = process.env.CABLE_STUDIO_WALK_MODEL ?? 'huayuan.yjv22-15kv-240';
 
 export async function walkRating(browser: Browser, base: string, out: string, problems: string[], model = MODEL) {
   const get = async <T>(path: string): Promise<T> => (await fetch(`${base}${path}`)).json() as Promise<T>;
+  const op = async <T>(id: string, params: unknown): Promise<T> => {
+    const response = await fetch(`${base}/api/ops/${id}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(params) });
+    const body = await response.json();
+    if (!response.ok) throw new Error(`${id}: ${JSON.stringify(body)}`);
+    return body as T;
+  };
+
+  // Three layouts that draw more than one cable, each checked by the real method: three single-core cables in trefoil (no
+  // field published), three three-core circuits in a row (with a field), and single-core cables in ducts (the air and wall
+  // resistances of the duct).
+  const trefoil = (await op<ProjectView>('project.create', { name: '走查 110 kV 品字形', model_id: 'system.yjq02-110kv-800' })).meta.id;
+  await op('conditions.set', { project: trefoil, currents_a: [600] });
+  await op<RunRecord>('run.rate', { project: trefoil });
+  const row = (await op<ProjectView>('project.create', { name: '走查 10 kV 三回水平', model_id: 'huayuan.yjv22-15kv-240' })).meta.id;
+  await op('installation.set', { project: row, layout: 'three_core_buried_horizontal', depth_m: 1.2 });
+  await op('conditions.set', { project: row, currents_a: [300] });
+  await op<RunRecord>('run.rate', { project: row });
+  const ducts = (await op<ProjectView>('project.create', { name: '走查 10 kV 排管', model_id: 'system.cu-xlpe-10kv-240' })).meta.id;
+  await op('installation.set', { project: ducts, layout: 'ducts' });
+  await op<RunRecord>('run.rate', { project: ducts });
+
   for (const [width, height] of [[1366, 768], [1920, 1080]] as const) {
     const page: Page = await browser.newPage({ viewport: { width, height } });
     page.on('pageerror', error => problems.push(`${width} page error: ${error.message}`));
@@ -30,11 +52,19 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
       for (const issue of await page.evaluate(probe)) problems.push(`${width} ${label}: ${issue}`);
     };
     const projectId = () => /\/p\/(p-[0-9a-f]+)/.exec(page.url())![1];
-    const view = () => get<ProjectView>(`/api/projects/${projectId()}`);
+    const view = (id = projectId()) => get<ProjectView>(`/api/projects/${id}`);
     const shownNumber = async () => Number(await page.locator('.text-metric').first().innerText());
     const gpuReady = async () => {
       await page.waitForSelector('[data-gpu]:not([data-gpu="pending"])');
       if ((await page.getAttribute('[data-gpu]', 'data-gpu')) === 'none') problems.push(`${width}: the GPU layer did not start`);
+    };
+    const waitFor = async (what: string, done: () => Promise<boolean>) => {
+      const deadline = Date.now() + 15_000;
+      while (Date.now() < deadline) {
+        if (await done()) return;
+        await page.waitForTimeout(150);
+      }
+      throw new Error(`timed out: ${what}`);
     };
 
     // 1. A new project from a cable of the library: the address carries the cable, the form is filled by the host.
@@ -69,6 +99,8 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     const limiting = record.summary!.operating!.cables.find(cable => cable.id === record.summary!.ampacity!.limiting_cable)!;
     await page.getByText(`${limiting.conductor_c.toFixed(1)} / ${limiting.limit_c}`).first().waitFor();
     await page.getByText('先到温限', { exact: true }).waitFor();
+    const margin = record.summary!.circuits![0].margin_a!;
+    await page.getByText(`余量 ${Math.abs(margin).toFixed(1)} A`).waitFor();
     await check('result');
 
     await page.getByRole('button', { name: '电缆簇' }).click();
@@ -149,6 +181,77 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     assert.match(sheet.url(), new RegExp(`/api/projects/${projectId()}/reports/${rating.id}`));
     await sheet.close();
     await check('sheet-exported');
+
+    // 9. Layouts with several cables, circuits and ducts: the drawing's labels, the table of the cables, every group of the
+    //    answer opened, and the numbers following the cable that is chosen on the drawing.
+    const groups = ['各电缆', '损耗', '热阻', '表面温升由谁加的', '运行提示', '算法与可信度'];
+    for (const [label, id] of [['trefoil', trefoil], ['row', row], ['ducts', ducts]] as const) {
+      await page.goto(`${base}/p/${id}`);
+      await gpuReady();
+      await page.getByRole('button', { name: '导出计算书' }).waitFor();
+      await check(`${label}-result`);
+      await page.getByRole('button', { name: '电缆簇' }).click();
+      await check(`${label}-cluster`);
+      const outer = await page.locator('[data-cable]').last().boundingBox();
+      if (!outer) throw new Error(`${label}: no cable on the drawing`);
+      await page.mouse.click(outer.x + outer.width / 2, outer.y + outer.height / 2);
+      for (const group of groups) {
+        const trigger = page.getByRole('button', { name: new RegExp(`^${group}`) });
+        if (await trigger.count()) await trigger.first().click();
+      }
+      await check(`${label}-answer`);
+      await page.locator('section', { has: page.getByRole('heading', { name: '结论', exact: true }) }).locator('> div').last()
+        .evaluate(element => { element.scrollTop = element.scrollHeight; });
+      await check(`${label}-answer-end`);
+      const saved = await get<ProjectView>(`/api/projects/${id}`);
+      const states = (await get<RunRecord>(`/api/projects/${id}/runs/${saved.runs[0].id}`)).summary!.operating!.cables;
+      assert.equal(await page.locator('[data-cable]').count(), states.length, 'a cable is drawn for each state of the run');
+      if (label === 'trefoil') await page.getByRole('row', { name: /A 相/ }).waitFor();
+      if (label === 'ducts') {
+        await page.getByRole('button', { name: /^埋深/ }).click();
+        await page.getByRole('textbox', { name: '管内径' }).waitFor();
+        await check('ducts-depth-editor');
+        await page.keyboard.press('Escape');
+        await page.getByRole('dialog').waitFor({ state: 'detached' });
+        await page.getByText('T₄ 管内空气').waitFor();
+      }
+    }
+
+    // 10. Changes made on the drawing itself: type the depth in its capsule, drag the outer cable, undo both.
+    await page.goto(`${base}/p/${row}`);
+    await gpuReady();
+    await page.getByRole('button', { name: '导出计算书' }).waitFor();
+    const original = await view(row);
+    const depth = width === 1366 ? 1.5 : 1.3;
+    await page.locator('[data-dimension="depth"]').click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type(String(depth));
+    await page.keyboard.press('Enter');
+    await page.getByText('条件已改 · 已过期').waitFor();
+    await page.getByRole('button', { name: '运行校核' }).waitFor();
+    assert.equal((await view(row)).parts.installation.depth_m, depth, 'the depth typed on the drawing is the one saved');
+    await page.getByText(`中心埋深 ${depth} m`).waitFor();
+    await check('canvas-depth');
+
+    const before = (await view(row)).preview?.layout.spacing ?? 0;
+    const target = await page.locator('[data-cable]').last().boundingBox();
+    if (!target) throw new Error('no cable to drag');
+    await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(target.x + target.width / 2 + 60, target.y + target.height / 2, { steps: 8 });
+    await page.screenshot({ path: join(out, `${width}-canvas-dragging.png`) });
+    await page.mouse.up();
+    await waitFor('the spacing widened', async () => ((await view(row)).preview?.layout.spacing ?? 0) > before);
+    await check('canvas-drag');
+
+    // Undo takes both changes back, and the record of the check is the current answer again.
+    await page.locator('[data-gpu]').click({ position: { x: 300, y: 250 } });
+    await page.keyboard.press('Control+Z');
+    await waitFor('the first undo', async () => ((await view(row)).preview?.layout.spacing ?? 0) <= before + 1e-9);
+    await page.keyboard.press('Control+Z');
+    await waitFor('the second undo', async () => (await view(row)).inputs_sha256 === original.inputs_sha256);
+    await page.getByRole('button', { name: '导出计算书' }).waitFor();
+    await check('canvas-undone');
     await page.close();
   }
 }

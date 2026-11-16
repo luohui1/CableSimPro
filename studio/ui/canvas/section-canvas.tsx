@@ -401,7 +401,7 @@ export function SectionCanvas({ scene, field, result, notice, status, edit }: {
       {view.groundY > -12 && view.groundY < size.height + 12 && <g>
         <rect x={0} y={view.groundY} width={size.width} height={7} fill="url(#ground-hatch)" />
         <line x1={0} x2={size.width} y1={view.groundY} y2={view.groundY} stroke="var(--text)" strokeWidth={1.25} />
-        {view.groundY > 44 && <text x={16} y={view.groundY - 9} fontSize={13} fill="var(--text-secondary)">地表 ±0.000</text>}
+        {view.groundY > 44 && <text x={view.groundY - 22 < 58 ? 276 : 16} y={view.groundY - 9} fontSize={13} fill="var(--text-secondary)">地表 ±0.000</text>}
       </g>}
 
       {scene.backfill && (() => {

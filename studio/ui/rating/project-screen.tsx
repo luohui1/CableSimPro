@@ -108,14 +108,17 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
   const names = (id: string) => {
     const name = recordScene?.cables.find(cable => cable.id === id)?.name ?? id;
     if (record?.document?.cable_types[0]?.construction !== 'three_core') return name;
-    return `三芯电缆 · ${record.document.circuits.find(circuit => circuit.cables.some(item => item.id === id))?.label ?? name}`;
+    return `三芯电缆 · ${circuitOf(id) ?? name}`;
   };
+  const circuitOf = (id: string) => record?.document?.circuits.find(circuit => circuit.cables.some(item => item.id === id))?.label;
+  // In a table the circuit alone is enough: the table says these are cables.
+  const shortNames = (id: string) => (record?.document?.cable_types[0]?.construction === 'three_core' ? circuitOf(id) : undefined) ?? recordScene?.cables.find(cable => cable.id === id)?.name ?? id;
   const screenName = recordScene?.shape.rings.some(ring => ring.role === 'metallic_sheath') ? '金属套' : '金属屏蔽';
 
   const conclusion: ConclusionState = view?.issue ? { kind: 'issue', message: view.issue.message }
     : !shown ? { kind: 'empty' }
     : !record ? (loaded.error ? { kind: 'failed', message: messageOf(loaded.error) } : { kind: 'loading' })
-    : rating ? { kind: 'result', record, rating, stale, names, screenName, selected, onSelect: useView.getState().select }
+    : rating ? { kind: 'result', record, rating, stale, names, shortNames, screenName, selected, onSelect: useView.getState().select }
     : { kind: 'failed', message: record.summary?.error?.message ?? record.summary?.operating?.error?.message ?? '运行记录里没有可显示的结果。' };
 
   const status = drawsRecord && record && rating
