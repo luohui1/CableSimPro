@@ -400,6 +400,8 @@ export interface SeriesSummary {
 export interface SpecRow {
   id: string; key: string; name: string; area_mm2: number; version: number; version_id: string; review: ReviewState;
   outer_diameter_mm: number; r20_ohm_km: number | null; weight_kg_km: number | null; warnings: Issue[];
+  /** Structure values of this version by field, in the table's own units; empty for a structure that did not come from a table. */
+  dimensions: Record<string, { value: number; origin: StructureValue['origin']; revised?: boolean }>;
   check: Record<string, number> | null; ac_resistance_ohm_km: number | null; short_circuit_ka: number | null; ampacity_a: number | null;
   computed: Partial<Record<ResultKind, 'done' | 'error'>>;
 }

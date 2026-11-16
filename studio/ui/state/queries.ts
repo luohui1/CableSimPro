@@ -14,8 +14,12 @@ export const useProject = (id: string) => useQuery({ queryKey: ['project', id], 
 export const useLibrary = () => useQuery({ queryKey: ['library'], queryFn: api.library, staleTime: Infinity });
 export const useProductLibrary = () => useQuery({ queryKey: ['library', 'series'], queryFn: () => api.op<SeriesSummary[]>('library.series', {}) });
 export const useProductSeries = (id: string) => useQuery({ queryKey: ['library', 'series', id], queryFn: () => api.op<SeriesView>('library.series.get', { series: id }) });
-export const useProductSpec = (id: string | undefined, version?: number) => useQuery({ queryKey: ['library', 'spec', id, version],
-  queryFn: () => api.op<SpecView>('library.spec.get', { spec: id!, ...(version ? { version } : {}) }), enabled: Boolean(id) });
+const specQuery = (id: string | undefined, version?: number) => ({ queryKey: ['library', 'spec', id, version],
+  queryFn: () => api.op<SpecView>('library.spec.get', { spec: id!, ...(version ? { version } : {}) }) });
+export const useProductSpec = (id: string | undefined, version?: number) => useQuery({ ...specQuery(id, version), enabled: Boolean(id) });
+/** The size being looked at in the series workspace: the previous one stays on screen until the next has loaded. */
+export const useActiveSpec = (id: string | undefined, version?: number) => useQuery({ ...specQuery(id, version), enabled: Boolean(id), placeholderData: keepPreviousData });
+export const prefetchSpec = (id: string) => void queryClient.prefetchQuery({ ...specQuery(id), staleTime: 5_000 });
 export const useVocabulary = () => useQuery({ queryKey: ['library', 'vocabulary'], queryFn: () => api.op<LibraryVocabulary>('library.vocabulary', {}) });
 export const useLibraryJob = () => useQuery({ queryKey: ['library', 'job'], queryFn: () => api.op<LibraryJob | null>('library.job', {}),
   refetchInterval: query => query.state.data?.state === 'running' ? 1000 : false });

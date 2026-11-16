@@ -211,6 +211,8 @@ export class Library {
         id: row.spec_id, key: row.key, name: row.name, area_mm2: row.area_mm2, version: row.number, version_id: row.id, review: row.review,
         outer_diameter_mm: entry.summary.outer_diameter_m * 1000, r20_ohm_km: entry.summary.r20_ohm_m ? entry.summary.r20_ohm_m * 1000 : null,
         weight_kg_km: structure.find(item => item.key === 'weight')?.value ?? null, warnings: parse<Issue[]>(row.warnings),
+        // Each size's structure values with where they come from, so sizes can be compared side by side.
+        dimensions: Object.fromEntries(structure.map(item => [item.key, { value: item.value, origin: item.origin, ...(item.revision ? { revised: true } : {}) }])),
         check: mine.check?.summary?.count ?? null, ac_resistance_ohm_km: ac === null ? null : ac * 1000, short_circuit_ka: short === null ? null : short / 1000,
         ampacity_a: rating?.find(item => item.id === conditions?.[0]?.id)?.ampacity_a ?? null,
         computed: Object.fromEntries(Object.entries(mine).map(([kind, result]) => [kind,

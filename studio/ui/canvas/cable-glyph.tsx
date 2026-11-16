@@ -11,6 +11,7 @@ const FILL: Record<Tone, string> = {
   fill: 'color-mix(in oklab, var(--material-insulation) 72%, var(--material-metal))',
 };
 const EDGE = 'color-mix(in oklab, var(--text) 38%, transparent)';
+export const TONE_FILL = FILL;
 
 export function CableGlyph({ shape, x, y, scale, conductor }: { shape: CableShape; x: number; y: number; scale: number; conductor?: string }) {
   const radius = shape.radius * scale;
