@@ -1,7 +1,10 @@
 // The gallery's sections: the theme, the base controls, and every kit part in each of its states, with real data.
 import { useState, type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { Button, ButtonLink } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Progress, ProgressLabel, ProgressValue } from '@/components/ui/progress';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@/components/ui/input-group';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -121,6 +124,7 @@ export function ControlsSection() {
       <State label="紧凑 32"><Button size="sm" variant="outline">计算书</Button></State>
       <State label="不可用"><Button disabled>运行校核</Button></State>
       <State label="图标"><Button variant="ghost" size="icon-sm" aria-label="更多"><Icon name="action/more" /></Button></State>
+      <State label="链接（按钮的样子）"><ButtonLink variant="outline" href="#controls"><Icon name="action/export" data-icon="inline-start" />下载 PDF</ButtonLink></State>
     </Specimen>
     <Specimen title="标记" rule="一个事实一个词加图标：可信分档、审核状态、核对结论。颜色不单独表达意思。">
       <State label="可信分档"><div className="flex gap-2"><TierMark tier="deliverable" /><TierMark tier="reference" /><TierMark tier="exploratory" /></div></State>
@@ -134,6 +138,18 @@ export function ControlsSection() {
       <State label="出错"><Input defaultValue="-1" aria-invalid className="w-56" /></State>
       <State label="不可用"><Input defaultValue="0.0754" disabled className="w-56" /></State>
       <State label="带图标"><InputGroup className="w-64"><InputGroupAddon><Icon name="action/search" /></InputGroupAddon><InputGroupInput placeholder="搜索型号、规格或制造商" /></InputGroup></State>
+      <State label="下拉（与字段同高）"><Select value="both_ends" items={[{ value: 'both_ends', label: '两端接地' }, { value: 'single_point', label: '单点接地' }]}>
+        <SelectTrigger className="w-56" aria-label="护套接地"><SelectValue /></SelectTrigger>
+        <SelectContent><SelectItem value="both_ends">两端接地</SelectItem><SelectItem value="single_point">单点接地</SelectItem></SelectContent>
+      </Select></State>
+    </Specimen>
+    <Specimen title="勾选与进度" rule="勾选是 16 px 方框，选中是铜色；点击范围包括旁边的字。进度条 8 px，墨色，名称和计数在上面。">
+      <State label="未勾"><label className="flex items-center gap-2 text-sm text-ink"><Checkbox />只导入可用的行</label></State>
+      <State label="已勾"><label className="flex items-center gap-2 text-sm text-ink"><Checkbox defaultChecked />只导入可用的行</label></State>
+      <State label="不可用"><label className="flex items-center gap-2 text-sm text-ink-2"><Checkbox disabled />只导入可用的行</label></State>
+      <State label="进度" className="w-72"><Progress value={3} max={11} format={{ maximumFractionDigits: 0 }}>
+        <ProgressLabel>计算全系列</ProgressLabel><ProgressValue>{() => '3 / 11 个规格'}</ProgressValue>
+      </Progress></State>
     </Specimen>
     <Specimen title="页签与分段" rule="分段是凹槽加白片（同一视图的几种状态）；页签是平字加下划线（同一位置的不同内容）。">
       <State label="分段"><ToggleGroup defaultValue={['overview']} className="rounded-lg border border-line bg-surface p-1"><ToggleGroupItem value="cluster">电缆簇</ToggleGroupItem><ToggleGroupItem value="overview">全景</ToggleGroupItem></ToggleGroup></State>

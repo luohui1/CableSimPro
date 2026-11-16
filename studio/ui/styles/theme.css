@@ -294,9 +294,16 @@
 @utility grid-cols-property {
   grid-template-columns: minmax(0, 1fr) auto 3.5rem;
 }
-/* A label column and a content column. */
+/* The same, with where each value came from after its unit. */
+@utility grid-cols-property-source {
+  grid-template-columns: minmax(0, 1fr) auto 3.5rem auto;
+}
+/* A label column and a content column; the wide one for long names (钢带相对磁导率). */
 @utility grid-cols-label {
   grid-template-columns: 7rem minmax(0, 1fr);
+}
+@utility grid-cols-label-wide {
+  grid-template-columns: 12rem minmax(0, 1fr);
 }
 /* Item, before, arrow, after: the values sit next to their name, not at the far edge. */
 @utility grid-cols-change {

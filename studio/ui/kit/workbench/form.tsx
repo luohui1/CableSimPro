@@ -29,16 +29,17 @@ export function FormSection({ title, description, aside, children, className }: 
   </section>;
 }
 
-/** One field: the label on the left, the control on the right; a dot when it changed since the last run. */
-export function FormRow({ label, hint, changed, htmlFor, children, className }: {
+/** One field: the label on the left, the control on the right; a dot when it changed since the last run. `wide` for long names. */
+export function FormRow({ label, hint, changed, htmlFor, wide, children, className }: {
   label: ReactNode;
   hint?: ReactNode;
   changed?: boolean;
   htmlFor?: string;
+  wide?: boolean;
   children: ReactNode;
   className?: string;
 }) {
-  return <div className={cn('grid grid-cols-label items-start gap-x-4 gap-y-1', className)}>
+  return <div className={cn('grid items-start gap-x-4 gap-y-1', wide ? 'grid-cols-label-wide' : 'grid-cols-label', className)}>
     <label htmlFor={htmlFor} className="flex min-h-8 min-w-0 items-center gap-2 text-sm text-ink-2">
       <span className="truncate">{label}</span>
       {changed && <Dot tone="attention" />}

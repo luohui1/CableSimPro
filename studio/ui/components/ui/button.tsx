@@ -55,4 +55,9 @@ function Button({
   )
 }
 
-export { Button, buttonVariants }
+/** A link in a button's looks: an anchor, so it stays a link for the browser and assistive technology. */
+function ButtonLink({ className, variant = "default", size = "default", ...props }: React.ComponentProps<"a"> & VariantProps<typeof buttonVariants>) {
+  return <a data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...props} />
+}
+
+export { Button, ButtonLink, buttonVariants }

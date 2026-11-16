@@ -1,7 +1,7 @@
 // The gallery (/gallery): the theme, every kit part in every state, and the screens laid out from them. A new screen takes
 // its parts from here; a part that is not here does not exist. /gallery#screen=<id> opens one screen at full size.
 import { useEffect, useRef, useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { ButtonLink } from '@/components/ui/button';
 import { Icon } from '@/kit/icon';
 import { FlowSection } from './gallery/flow-section';
 import { AgentSection, ControlsSection, SectionTitle, ThemeSection, WorkbenchSection } from './gallery/sections';
@@ -75,7 +75,7 @@ function ScreenPreview({ item }: { item: ScreenSpec }) {
         <p className="m-0 text-sm text-ink-2">{item.job}</p>
         <code className="text-sm text-ink-2">#screen={item.id}</code>
       </div>
-      <Button variant="outline" size="sm" nativeButton={false} render={<a href={`#screen=${item.id}`} />}><Icon name="action/external" data-icon="inline-start" />全屏看</Button>
+      <ButtonLink variant="outline" size="sm" href={`#screen=${item.id}`}><Icon name="action/external" data-icon="inline-start" />全屏看</ButtonLink>
     </header>
     <div ref={frame} className="screen-half overflow-hidden rounded-card border border-line bg-canvas" inert>
       {near && <div className="screen-frame origin-top-left scale-50">{item.render()}</div>}
