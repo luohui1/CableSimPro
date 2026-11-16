@@ -139,13 +139,18 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
         done.push(write);
       }
     } catch (failure) {
+      let undone = true;
       for (const write of done.reverse()) {
         try {
           const reply = await api.op<{ view: ProjectView }>(write.op, { project: projectId, ...write.restore });
           queryClient.setQueryData(['project', projectId], reply.view);
-        } catch { /* the project is then as far back as it got; the words below say what was refused */ }
+        } catch {
+          undone = false;
+        }
       }
-      setProblem(`没有应用，工程还是原来的条件：${messageOf(failure)}`);
+      // What was refused is said in the host's words; when taking back what was written failed too, that is said as well.
+      await queryClient.invalidateQueries({ queryKey: ['project', projectId] });
+      setProblem(undone ? `没有应用，工程还是原来的条件：${messageOf(failure)}` : `没有应用，而且前面写进工程的没能全部撤回，请核对已知条件：${messageOf(failure)}`);
       setApplying(false);
       return;
     }

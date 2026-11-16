@@ -84,10 +84,15 @@ export function Premise({ parts, layouts, circuits, asked, marked, active, study
   if (study?.target !== undefined) text.load = `${compact(study.target)} A`;
   if (study?.swept) text[study.swept.key] = study.swept.value;
 
-  const given = (key: GivenKey, label: string) => {
+  // A given in the folded group opens the editor and the folded group closes: it would lie over the editor's header otherwise.
+  const given = (key: GivenKey, label: string, folded = false) => {
     const value = text[key];
     const changed = marked.has(key);
-    return <Given key={key} label={label} value={value} changed={changed} active={active === key} aria-label={`${label} ${value}${changed ? '，已改' : ''}`} onClick={() => onOpen(key)} />;
+    return <Given key={key} label={label} value={value} changed={changed} active={active === key} aria-label={`${label} ${value}${changed ? '，已改' : ''}`}
+      onClick={() => {
+        onOpen(key);
+        if (folded) document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      }} />;
   };
   return <PremiseStrip asked={asked}>
     {given('cable', '型号')}
@@ -96,10 +101,10 @@ export function Premise({ parts, layouts, circuits, asked, marked, active, study
     {given('soil', '土壤热阻率')}
     {study?.target === undefined ? given('load', '负荷') : given('load', '目标电流')}
     <GivenMore count={4}>
-      {given('ambient', '环境')}
-      {given('system', '系统')}
-      {given('sheath', '护套')}
-      {given('method', '方法')}
+      {given('ambient', '环境', true)}
+      {given('system', '系统', true)}
+      {given('sheath', '护套', true)}
+      {given('method', '方法', true)}
     </GivenMore>
   </PremiseStrip>;
 }

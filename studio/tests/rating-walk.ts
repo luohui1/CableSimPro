@@ -88,9 +88,18 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     };
     /** A given of the line above the drawing; the ones that seldom change are folded into one button on the narrower screen. */
     const given = async (label: string) => {
-      const button = page.getByRole('button', { name: new RegExp(`^${label} `) });
-      if (!(await button.count())) await page.getByRole('button', { name: /^其余 \d 项/ }).click();
-      await page.getByRole('button', { name: new RegExp(`^${label} `) }).first().click();
+      const button = () => page.getByRole('button', { name: new RegExp(`^${label} `) }).first();
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          if (!(await button().isVisible())) await page.getByRole('button', { name: /^其余 \d 项/ }).click({ timeout: 3000 });
+          await button().click({ timeout: 3000 });
+          return;
+        } catch (error) {
+          // The folded group may be closing as it is looked at: look again.
+          if (attempt === 2) throw error;
+          await page.waitForTimeout(300);
+        }
+      }
     };
     const waiting = () => page.getByRole('button', { name: /改了 \d 项，还没应用/ });
 

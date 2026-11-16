@@ -13,7 +13,7 @@ export type Value = number | string | number[] | null;
 export type Staged = Partial<Record<Key, Value>>;
 export type Base = Record<Key, Value>;
 
-export const KEYS: Key[] = ['cable', 'layout', 'depth', 'spacing', 'inner', 'outer', 'width', 'height', 'rho', 'bonding', 'soil', 'ambient', 'load', 'voltage', 'frequency', 'ks', 'kp', 'eddy'];
+const KEYS: Key[] = ['cable', 'layout', 'depth', 'spacing', 'inner', 'outer', 'width', 'height', 'rho', 'bonding', 'soil', 'ambient', 'load', 'voltage', 'frequency', 'ks', 'kp', 'eddy'];
 /** What a laying of its own brings with it: typed for another laying, these no longer apply. */
 const OF_LAYING: Key[] = ['spacing', 'inner', 'outer', 'width', 'height', 'rho'];
 
@@ -68,7 +68,7 @@ export function effectiveNumber(staged: Staged, base: Base, key: Key): number | 
 }
 
 /** The fields whose value now is not what the project has. */
-export const changedKeys = (staged: Staged, base: Base): Key[] => KEYS.filter(key => key in staged && !equal(staged[key], base[key]));
+const changedKeys = (staged: Staged, base: Base): Key[] => KEYS.filter(key => key in staged && !equal(staged[key], base[key]));
 
 function merge(staged: Staged, patch: Staged, base: Base): Staged {
   const next: Staged = { ...staged, ...patch };
@@ -111,7 +111,7 @@ export function usePending(base: Base | null) {
 
 // ---- Writing the changes ----
 
-export type WriteOp = 'cable.set' | 'installation.set' | 'conditions.set' | 'method.set';
+type WriteOp = 'cable.set' | 'installation.set' | 'conditions.set' | 'method.set';
 /** One host operation that applies a part of the changes, and the one that puts that part back as it was. */
 export interface Write { op: WriteOp; params: Record<string, unknown>; restore: Record<string, unknown> }
 
@@ -141,11 +141,11 @@ export function writesOf(view: ProjectView, staged: Staged): { writes: Write[] }
   const installation: Record<string, unknown> = {};
   if (keys.includes('layout')) installation.layout = staged.layout;
   if (keys.includes('depth')) installation.depth_m = number('depth', '中心埋深', positive, '要填大于 0 的数');
-  if (keys.includes('spacing')) installation.spacing_m = staged.spacing === null ? null : number('spacing', '中心距', positive, '要填大于 0 的数') / 1000;
+  if (keys.includes('spacing')) installation.spacing_m = staged.spacing === null ? null : round(number('spacing', '中心距', positive, '要填大于 0 的数') / 1000);
   if (parts.installation.duct && has('inner', 'outer')) {
     const [inner, outer] = [number('inner', '管内径', positive, '要填大于 0 的数'), number('outer', '管外径', positive, '要填大于 0 的数')];
     if (inner >= outer) problems.push('管外径要大于管内径');
-    installation.duct = { ...parts.installation.duct, inner_diameter_m: inner / 1000, outer_diameter_m: outer / 1000 };
+    installation.duct = { ...parts.installation.duct, inner_diameter_m: round(inner / 1000), outer_diameter_m: round(outer / 1000) };
   }
   if (parts.installation.backfill && has('width', 'height', 'rho')) {
     installation.backfill = {
@@ -168,7 +168,7 @@ export function writesOf(view: ProjectView, staged: Staged): { writes: Write[] }
   }
   if (keys.includes('voltage')) {
     if (staged.voltage === null) conditions.system_voltage_v = null;
-    else conditions.system_voltage_v = number('voltage', '系统线电压', positive, '要填大于 0 的数，或留空') * 1000;
+    else conditions.system_voltage_v = round(number('voltage', '系统线电压', positive, '要填大于 0 的数，或留空') * 1000);
   }
   if (keys.includes('frequency')) conditions.frequency_hz = number('frequency', '频率', positive, '要填大于 0 的数');
   if (Object.keys(conditions).length) writes.push({ op: 'conditions.set', params: conditions, restore: { ...parts.conditions } });

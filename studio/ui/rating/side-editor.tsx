@@ -106,9 +106,10 @@ export function GivensEditor({ view, base, staged, changed, stage, focus, proble
 
       <SideEditorSection title="型号">
         <FormRow label="电缆" htmlFor="edit-cable" changed={is('cable')} hint={is('cable') ? `现在是 ${cableName(base.cable)}` : undefined}>
-          <div className="flex min-w-0 items-center gap-2">
-            <span title={cableName(val('cable'))} className="min-w-0 flex-1 truncate text-sm text-ink">{cableName(val('cable'))}</span>
-            <Button id="edit-cable" type="button" variant="outline" size="sm" onClick={() => setPicking(true)}>更换型号…</Button>
+          {/* The size is at the end of the name: the name wraps rather than losing it. */}
+          <div className="flex min-w-0 items-start gap-2">
+            <span className="min-w-0 flex-1 py-1 text-sm break-words text-ink">{cableName(val('cable'))}</span>
+            <Button id="edit-cable" type="button" variant="outline" size="sm" className="shrink-0" onClick={() => setPicking(true)}>更换型号…</Button>
           </div>
         </FormRow>
       </SideEditorSection>
