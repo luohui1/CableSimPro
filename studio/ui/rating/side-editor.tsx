@@ -116,7 +116,8 @@ export function GivensEditor({ view, base, staged, changed, stage, settle, focus
       {/* While the changes are being written nothing is changed in the editor: what is typed meanwhile would be lost. */}
       <div className="contents" inert={applying || undefined} onBlur={settle}>
       <SideEditorSection title="型号">
-        <FormRow label="电缆" htmlFor="edit-cable" changed={is('cable')} hint={is('cable') ? `现在是 ${cableName(base.cable)}` : undefined}>
+        {/* No `htmlFor`: the button is named by what it does, not by this label. */}
+        <FormRow label="电缆" changed={is('cable')} hint={is('cable') ? `现在是 ${cableName(base.cable)}` : undefined}>
           {/* The size is at the end of the name: the name wraps rather than losing it. */}
           <div className="flex min-w-0 items-start gap-2">
             <span className="min-w-0 flex-1 py-1 text-sm break-words text-ink">{cableName(val('cable'))}</span>
