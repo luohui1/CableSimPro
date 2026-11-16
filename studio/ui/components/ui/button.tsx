@@ -2,15 +2,14 @@ import { Button as ButtonPrimitive } from "@base-ui/react/button"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
-// Buttons are round (pills). Copper is the one primary action of a screen; ink is the send button and other strong
-// actions that must not compete with it; the rest are quiet.
+// Buttons are round (pills). Copper is the one primary action of a screen (in the conversation, send once there is
+// something to send); the rest are quiet.
 const buttonVariants = cva(
   "group/button inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap transition-colors duration-fast ease-std outline-none select-none focus-visible:ring-3 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-40 aria-invalid:border-destructive [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
   {
     variants: {
       variant: {
         default: "bg-copper text-on-copper hover:bg-copper-strong",
-        ink: "bg-ink text-surface hover:bg-ink-2",
         outline:
           "border-line-strong bg-surface text-ink hover:bg-subtle aria-expanded:bg-subtle",
         secondary:
@@ -55,4 +54,9 @@ function Button({
   )
 }
 
-export { Button, buttonVariants }
+/** A link in a button's looks: an anchor, so it stays a link for the browser and assistive technology. */
+function ButtonLink({ className, variant = "default", size = "default", ...props }: React.ComponentProps<"a"> & VariantProps<typeof buttonVariants>) {
+  return <a data-slot="button" className={cn(buttonVariants({ variant, size, className }))} {...props} />
+}
+
+export { Button, ButtonLink, buttonVariants }

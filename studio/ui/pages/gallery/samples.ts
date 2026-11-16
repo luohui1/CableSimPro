@@ -18,19 +18,19 @@ export const ACTIVE_CHAT = '01a1e240';
 export const MODEL = 'glm-5.3-flash';
 
 /**
- * Tasks to start from: what the Agent's skills (studio/skills) do, grouped by the two things the product does. The first,
- * second and fourth are the round-1 tasks of ROADMAP.md; the prompts ask for work, not for numbers.
+ * Tasks to start from: the engineering cases the hosts have actually run (8210's conversations, this branch's 8212 project
+ * and versions), each with what comes back. The prompts ask for work, not for numbers.
  */
 export const STARTERS = {
   types: [
-    { icon: 'action/import', title: '导入结构表示例并核对', result: '算参数，按国标列出不通过项', prompt: '导入公开结构表示例，算参数并按国标核对，列出不通过项。' },
-    { icon: 'action/edit', title: '改一个尺寸，再核对一遍', result: '出新的草稿版本，说明哪些项变了', prompt: '把 YJV22-8.7/15 kV 3×240 的绝缘厚度改薄一些，出新版本再核对，说明哪些项变了。' },
-    { icon: 'object/file', title: '导出一份规格书', result: '挑一个规格，生成 PDF', prompt: '挑一个规格，导出一份规格书。' },
+    { icon: 'action/import', title: '导入人民电缆结构表并核对', result: '4 张表成 4 个系列，列出不通过项', prompt: '导入公开结构表示例（人民电缆 8.7/15 kV），算参数并按 GB/T 12706.2—2020 核对，列出不通过项。' },
+    { icon: 'action/edit', title: '3×240 绝缘减到 4 mm 再核对', result: '新草稿版本和不通过的条款', prompt: '把 YJV22-8.7/15 kV 3×240 的绝缘标称厚度改成 4 mm，出新版本再核对，说明哪些条款不通过。' },
+    { icon: 'object/file', title: '导出 3×240 第 1 版规格书', result: 'PDF，带来源和核对结论', prompt: '导出 YJV22-8.7/15 kV 3×240 第 1 版的规格书。' },
   ],
   rating: [
-    { icon: 'calc/ampacity', title: '算一款型号的直埋载流量', result: '说明哪根电缆先到温限', prompt: '选一款型号，直埋敷设，算载流量，说明哪根电缆先到温限。' },
-    { icon: 'calc/selection', title: '按目标电流选截面', result: '从一个系列里选出够用的最小截面', prompt: '已知负荷电流，从 YJV22-8.7/15 kV 三芯里选直埋敷设够用的最小截面。' },
-    { icon: 'result/report', title: '导出一份计算书', result: '把一条运行记录排成可打印的文件', prompt: '把最近一条载流量运行记录导出为计算书。' },
+    { icon: 'calc/ampacity', title: '3×240 直埋单回算允许电流', result: '埋深 1.2 m，说明先到温限的电缆', prompt: '选 YJV22-8.7/15 kV 3×240，三芯直埋单回，埋深 1.2 m，土壤热阻率 1 K·m/W，环境 25 °C，算允许电流，说明哪根先到温限。' },
+    { icon: 'calc/selection', title: '负荷 400 A 选最小截面', result: '三芯直埋，每个规格够不够', prompt: '负荷 400 A，三芯直埋单回，从人民电缆 YJV22-8.7/15 kV 三芯里选够用的最小截面。' },
+    { icon: 'calc/sweep', title: '土壤热阻率 0.8–3 扫一遍', result: '允许电流曲线和最紧的一点', prompt: '对 YJV22-8.7/15 3×240 直埋工程，把土壤热阻率从 0.8 扫到 3 K·m/W，看允许电流怎么变。' },
   ],
 };
 
@@ -94,6 +94,13 @@ export const MODEL_STEPS_RUNNING: Step[] = [
   { id: 'm3', label: '读取规格', target: 'YJV22-8.7/15 kV 3×240', state: 'done', seconds: 0.005 },
   { id: 'm4', label: '生成 CAD 实体', target: 'YJV22-8.7/15 kV 3×240', state: 'running' },
 ];
+/** The same conversation once the solid was built; what was built is on the card, read from the host. */
+export const MODEL_STEPS_DONE: Step[] = [
+  ...MODEL_STEPS_RUNNING.slice(0, 3),
+  { ...MODEL_STEPS_RUNNING[3], state: 'done' },
+];
+/** What the host says when no model is configured: NOT_CONFIGURED of studio/host/agent.ts, word for word. */
+export const NOT_CONFIGURED = '设置环境变量 DEEPSEEK_API_KEY，或设置 CABLE_STUDIO_MODEL_BASE_URL、CABLE_STUDIO_MODEL_ID、CABLE_STUDIO_MODEL_API_KEY（OpenAI 兼容接口）后重启。密钥只从环境变量读取，不写入磁盘。';
 /** From the step's notes: 外径 82 mm, 19 层，STEP 文件已生成. */
 export const MODEL_FACTS = [{ label: '外径', value: '82 mm' }, { label: '层数', value: '19' }];
 
@@ -161,6 +168,31 @@ export const STEPS_STOPPED: Step[] = [
   ...MODEL_STEPS_RUNNING.slice(0, 3),
   { id: 'm4', label: '生成 CAD 实体', target: 'YJV22-8.7/15 kV 3×240', state: 'interrupted' },
 ];
+/** The engineer's request the refusal of 3×50 answers (the same project conditions: three-core, buried, single circuit). */
+export const REFUSED_ASK = 'YJV22-8.7/15 kV 3×50 直埋单回，算一下载流量。';
+/** The structure table being attached to the next message, while it uploads. */
+export const UPLOADING = { name: '人民电缆 8.7-15kV 结构表（公开手册）.xlsx', detail: '正在上传' };
+/** The export of conversation 01a1e22e when the host stops answering before its last step: the steps that were done, the one
+ *  that was under way, and the message of studio/ui/state/api.ts (HOST_DOWN). */
+export const STEPS_CUT: Step[] = [
+  ...EXPORT_STEPS.slice(0, 4),
+  { ...EXPORT_STEPS[4], state: 'interrupted', seconds: undefined, notes: undefined },
+];
+/** Conversation 01a1e240's answer, as it was written (8210): the lead, then the points. */
+export const RATING_ANSWER = {
+  lead: '已选 YJV22-8.7/15 kV 3×240（人民电缆公开结构表，钢带铠装），按三芯直埋单回、埋深 1.2 m、土壤热阻率 1 K·m/W、环境 25 °C 算了一条运行记录。',
+  points: [
+    '允许电流 458.7 A；保存负荷 300 A 时导体 49.7 °C（限值 90 °C），离允许电流还差 158.7 A。',
+    '只敷设了一个回路，先到温限的就是这根三芯电缆本身。',
+    '可信分档为参考：三芯分支只有组件级手算对照，交付前请另行核对。',
+  ],
+};
+/** Conversation 01a1e22e's answer to the export (8210, where version 1 was still a draft). */
+export const EXPORT_ANSWER = '规格书已导出：YJV22-8.7/15 kV 3×240 第 1 版，含结构表、电气参数和标准核对结论（通过 13 项、不通过 0 项、缺项 21 项）。这一版还没审核，文件上标着“草稿”，能否对外由你决定。';
+/** The text of conversation 01a1e240's answer up to the point it had reached while it was still being written. */
+export const STREAMED = '已选 YJV22-8.7/15 kV 3×240（人民电缆公开结构表，钢带铠装），按三芯直埋单回、埋深 1.2 m、土壤热阻率 1 K·m/W、环境 25 °C 算了一条运行记录。';
+export const STREAMING_LINE = '允许电流 458.7 A；保存负荷 300 A 时导体 49.7 °C（限值 90 °C），离允许电流还差';
+
 /** What the CAD plugin answers for a stranding it does not build: the message of
  *  plugins/cablesim.cable-geometry/src/cablesim_cable_geometry/main.py, word for word. */
 export const MODEL_REFUSAL = '圆绞合支持 1+6+12…完整同心绞层，请核对根数';

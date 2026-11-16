@@ -1,6 +1,7 @@
 // The cards the Agent's work leaves in the conversation. Every card is one flat surface (no card inside a card): a header
 // line with the object's name and its trust mark, the result, and the actions that take it further. Numbers come in as
 // props already formatted from the run; a card never computes or invents one.
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import type { ComponentProps, ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -272,9 +273,9 @@ export function ModelCard({ title, state, viewport, error, facts, view = 'cutawa
 }) {
   return <CardFrame icon="tool/view-3d" title={title} actions={state === 'ready' ? actions : undefined} data-card="model3d" data-state={state}
     aside={facts && state === 'ready' && <span className="flex items-center gap-2">{facts.map(fact => <Badge key={fact.label} variant="secondary">{fact.label} {fact.value}</Badge>)}</span>}>
-    {state === 'loading' && <div className="flex h-72 flex-col items-center justify-center gap-3 rounded-lg bg-subtle"><Skeleton className="size-24 rounded-full" /><span className="text-sm text-ink-2">正在生成三维实体</span></div>}
+    {state === 'loading' && <div className="flex h-72 flex-col items-center justify-center gap-3 rounded-lg bg-subtle"><Skeleton className="size-24 rounded-full bg-line" /><span className="text-sm text-ink-2">正在生成三维实体</span></div>}
     {state === 'failed' && <div className="flex h-40 items-center gap-3 rounded-lg bg-error-fill px-4 text-sm text-ink"><Icon name="status/error" className="text-error" />三维实体没有生成：{error}</div>}
-    {state === 'ready' && <div className="relative h-72 overflow-hidden rounded-lg border border-line bg-subtle">
+    {state === 'ready' && <div className="relative h-72 overflow-hidden rounded-lg border border-line bg-subtle cad-fill">
       {viewport}
       <ToggleGroup value={[view]} onValueChange={next => next[0] && onViewChange?.(next[0] as 'cutaway' | 'solid')} size="sm"
         className="absolute top-3 left-3 rounded-lg border border-line bg-surface p-1 shadow-menu" aria-label="显示方式">
@@ -300,14 +301,17 @@ export function RefusalCard({ kind, title, reason, missing, actions }: {
 }) {
   return <CardFrame icon={kind === 'refused' ? 'status/warning' : 'status/error'} title={title} actions={actions} data-card="refusal" data-kind={kind}
     aside={<Badge variant={kind === 'refused' ? 'attention' : 'error'}>{kind === 'refused' ? '没有算' : '出错'}</Badge>}>
-    <div className="flex flex-col gap-3">
-      <p className="m-0 text-sm text-ink">{reason}</p>
-      {missing && missing.length > 0 && <dl className="m-0 grid grid-cols-label gap-x-3 gap-y-2 rounded-lg bg-subtle px-3 py-3">
-        {missing.map(item => <div key={item.label} className="contents">
-          <dt className="text-sm font-medium text-ink">{item.label}</dt>
-          <dd className="m-0 text-sm text-ink-2">{item.detail}</dd>
-        </div>)}
-      </dl>}
-    </div>
+    <Alert variant={kind === 'error' ? 'destructive' : 'default'}>
+      <Icon name={kind === 'refused' ? 'status/warning' : 'status/error'} />
+      <AlertTitle className="font-normal">{reason}</AlertTitle>
+      {missing && missing.length > 0 && <AlertDescription>
+        <dl className="m-0 grid grid-cols-label gap-x-3 gap-y-2">
+          {missing.map(item => <div key={item.label} className="contents">
+            <dt className="text-sm font-medium text-ink">{item.label}</dt>
+            <dd className="m-0 text-sm text-ink-2">{item.detail}</dd>
+          </div>)}
+        </dl>
+      </AlertDescription>}
+    </Alert>
   </CardFrame>;
 }
