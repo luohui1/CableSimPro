@@ -270,7 +270,7 @@ export function AgentSection() {
         <RefusalCard kind="error" title="运行校核 · YJV22-8.7/15 3×240 直埋载流量校核" reason={HOST_DOWN} actions={<CardAction icon="action/refresh">重试</CardAction>} />
       </div>
     </Specimen>
-    <Specimen title="输入框" rule="唯一有阴影的东西。附件在左，发送在右（墨色）；任务进行中出现停止。拖入结构表时边线变铜色虚线。" wide>
+    <Specimen title="输入框" rule="唯一有阴影的东西。附件在左，发送在右：有内容时是铜色，和工作台的主按钮一样；任务进行中出现停止。拖入结构表时边线变铜色虚线。" wide>
       <div className="grid max-w-thread grid-cols-1 gap-4">
         <State label="空"><ComposerFrame><ComposerInput placeholder="交办一件事，或把 Excel、CSV 结构表拖到这里" /><ComposerBar start={<ComposerAttach />} end={<ComposerSend disabled />} /></ComposerFrame></State>
         <State label="带附件"><ComposerFrame>

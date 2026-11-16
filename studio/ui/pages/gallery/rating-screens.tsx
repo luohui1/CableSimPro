@@ -18,7 +18,7 @@ import { CurveChart, TargetBar, type Axis } from '@/kit/workbench/chart';
 import { DataTable, type Column } from '@/kit/workbench/data-table';
 import { ChoiceCards, ChoiceSelect, FormRow, FormSection, Segmented, UnitInput } from '@/kit/workbench/form';
 import { PageHeader, Panel, Split } from '@/kit/workbench/page';
-import { Given, PremiseStrip } from '@/kit/workbench/premise';
+import { Given, GivenMore, PremiseStrip } from '@/kit/workbench/premise';
 import { RunRail } from '@/kit/workbench/runs';
 import { SideEditor, SideEditorSection } from '@/kit/workbench/side-editor';
 import { useTheme } from '@/state/theme';
@@ -50,17 +50,19 @@ function Givens({ cable = CABLE_NAME, soil, editing, target }: { cable?: string;
     <Given label="敷设" value={LAYOUT_LABEL[installation.layout]} />
     <Given label="埋深" value={`${installation.depth_m} m`} />
     <Given label="土壤热阻率" value={soil ?? `${conditions.soil_thermal_resistivity} K·m/W`} active={editing} />
-    <Given label="环境" value={`${conditions.ambient_temperature_c} °C`} />
     {target === undefined ? <Given label="负荷" value={`${conditions.currents_a[0]} A`} /> : <Given label="目标电流" value={`${target} A`} />}
-    <Given label="系统" value={`${conditions.system_voltage_v / 1000} kV · ${conditions.frequency_hz} Hz`} />
-    <Given label="护套" value={BONDING_NAMES[installation.bonding]} />
+    <GivenMore count={3}>
+      <Given label="环境" value={`${conditions.ambient_temperature_c} °C`} />
+      <Given label="系统" value={`${conditions.system_voltage_v / 1000} kV · ${conditions.frequency_hz} Hz`} />
+      <Given label="护套" value={BONDING_NAMES[installation.bonding]} />
+    </GivenMore>
   </>;
 }
 
 /** `editing`: the side editor is open, and its apply is the screen's one primary; the export steps back. */
 function RatingShell({ active, asked, givens, editing, children }: { active: string; asked: ReactNode; givens: ReactNode; editing?: boolean; children: ReactNode }) {
   return <>
-    <PageHeader trail={[{ label: '载流量计算' }]} title={PROJECT.name}
+    <PageHeader trail={[{ label: '载流量计算' }, { label: '全部工程' }]} title={PROJECT.name}
       actions={<>
         <Button variant="outline"><Icon name="calc/sweep" data-icon="inline-start" />扫一个条件</Button>
         <Button variant="outline"><Icon name="calc/selection" data-icon="inline-start" />按电流选型</Button>
@@ -306,7 +308,7 @@ const LAYER_ROWS = ['conductor_diameter', 'insulation_thickness', 'armour_tape_t
 function ProjectNewBody() {
   const picked = CANDIDATES.find(option => option.id === PROJECT.cable)!;
   return <>
-    <PageHeader trail={[{ label: '载流量计算' }]} title="新建载流量工程"
+    <PageHeader trail={[{ label: '载流量计算' }, { label: '全部工程' }]} title="新建载流量工程"
       actions={<Button variant="outline">取消</Button>}
       primary={<Button><Icon name="run/run" data-icon="inline-start" />建好并计算</Button>} />
     <div className="flex min-h-0 flex-1">

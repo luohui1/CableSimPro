@@ -15,9 +15,9 @@ export function AgentEmpty({ title, lead, composer, groups, notice, className }:
   notice?: ReactNode;
   className?: string;
 }) {
-  return <div className={cn('mx-auto flex w-full max-w-thread flex-col gap-8 px-6', className)}>
+  return <div className={cn('mx-auto my-auto flex w-full max-w-thread flex-col gap-6 px-6', className)}>
     <div className="flex flex-col items-center gap-3 text-center">
-      <ProductMark className="size-10" />
+      <ProductMark className="hidden size-10 2xl:block" />
       <h1 className="m-0 text-display text-ink">{title}</h1>
       <p className="m-0 text-prose text-balance text-ink-2">{lead}</p>
     </div>
@@ -28,7 +28,7 @@ export function AgentEmpty({ title, lead, composer, groups, notice, className }:
     <div className="grid grid-cols-2 gap-4">
       {groups.map(group => group.figure
         ? <section key={group.label} className="flex min-w-0 flex-col overflow-hidden rounded-sheet border border-line bg-surface" aria-label={group.label}>
-          <header className="relative flex h-28 items-center overflow-hidden border-b border-line bg-canvas">
+          <header className="relative flex h-24 items-center overflow-hidden border-b border-line bg-canvas">
             <div aria-hidden="true" className="absolute inset-y-0 right-0 w-48 fade-start">{group.figure}</div>
             <div className="relative flex min-w-0 flex-col gap-2 px-4">
               <h2 className="m-0 flex items-center gap-2 text-h3 text-ink"><Icon name={group.icon} className="text-ink-2" />{group.label}</h2>
@@ -43,6 +43,19 @@ export function AgentEmpty({ title, lead, composer, groups, notice, className }:
         </section>)}
     </div>
   </div>;
+}
+
+/**
+ * The line at the foot of the empty conversation: what the work stands on (the standards, what the library holds, the
+ * methods and their versions), each a label and its value, the last one giving way when the line is short.
+ */
+export function EmptyStatus({ facts }: { facts: { label: string; value: ReactNode }[] }) {
+  return <dl className="m-0 flex h-10 shrink-0 items-center gap-6 overflow-hidden border-t border-line px-6 text-sm whitespace-nowrap">
+    {facts.map(fact => <div key={fact.label} className="flex min-w-0 shrink-0 items-center gap-2 last:shrink">
+      <dt className="shrink-0 text-ink-2">{fact.label}</dt>
+      <dd className="m-0 truncate text-ink" title={typeof fact.value === 'string' ? fact.value : undefined}>{fact.value}</dd>
+    </div>)}
+  </dl>;
 }
 
 /** A fact in a tile: the number in ink, the words around it in the secondary colour (10 个系列, 最近一次校核 458.7 A). */

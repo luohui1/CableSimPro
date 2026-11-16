@@ -28,8 +28,10 @@ const REVIEW: Record<Review, { label: string; icon: string; variant: 'secondary'
   published: { label: '已发布', icon: 'action/publish', variant: 'success' },
 };
 
-export function ReviewMark({ state, className }: { state: Review; className?: string }) {
+/** `quiet`: in a list where most rows are drafts, the draft is plain text and only the states worth a look are pills. */
+export function ReviewMark({ state, quiet, className }: { state: Review; quiet?: boolean; className?: string }) {
   const mark = REVIEW[state];
+  if (quiet && state === 'draft') return <span data-review={state} className={cn('inline-flex items-center gap-1 text-sm text-ink-2', className)}>{mark.label}</span>;
   return <Badge variant={mark.variant} data-review={state} className={className}><Icon name={mark.icon} data-icon="inline-start" />{mark.label}</Badge>;
 }
 
@@ -52,8 +54,8 @@ export function VerdictMark({ verdict, count, className }: { verdict: Verdict; c
 }
 
 /**
- * The share of each outcome of a check in one thin bar (不通过, 通过, 缺项, 未覆盖), with the count that matters beside it:
- * the failures when there are any, otherwise the passes. The other counts are in the tooltip.
+ * The share of each outcome of a check in one bar (不通过, 通过, 缺项, 未覆盖), the segments parted by a gap, and the counts
+ * beside it written out: failures when there are any, the passes, the missing; what is not covered is in the tooltip.
  */
 export function VerdictBar({ counts, className }: { counts: Partial<Record<Verdict, number>>; className?: string }) {
   const order: Verdict[] = ['failed', 'passed', 'missing', 'uncovered'];
@@ -62,18 +64,19 @@ export function VerdictBar({ counts, className }: { counts: Partial<Record<Verdi
   let at = 0;
   const failed = counts.failed ?? 0;
   const title = order.filter(verdict => counts[verdict]).map(verdict => `${VERDICT[verdict].label} ${counts[verdict]}`).join('，');
-  return <span className={cn('inline-flex items-center gap-2 text-sm whitespace-nowrap tabular-nums', className)} title={title}>
-    <svg viewBox="0 0 64 6" preserveAspectRatio="none" className="h-1.5 w-16 overflow-hidden rounded-full bg-subtle" aria-hidden="true">
+  const shown: Verdict[] = [...(failed > 0 ? ['failed' as const] : []), 'passed', ...((counts.missing ?? 0) > 0 ? ['missing' as const] : [])];
+  return <span className={cn('inline-flex items-center gap-3 text-sm whitespace-nowrap tabular-nums', className)} title={title} aria-label={title}>
+    <svg viewBox="0 0 64 8" preserveAspectRatio="none" className="h-2 w-12 shrink-0 overflow-hidden rounded-full bg-subtle" aria-hidden="true">
       {order.map(verdict => {
         const width = ((counts[verdict] ?? 0) / total) * 64;
-        const bar = <rect key={verdict} x={at} width={width} height={6} className={fill[verdict]} />;
+        const bar = width > 0 ? <rect key={verdict} x={at} width={Math.max(0, width - 1.5)} height={8} className={fill[verdict]} /> : null;
         at += width;
         return bar;
       })}
     </svg>
-    {failed > 0
-      ? <span className="text-error">{VERDICT.failed.label} {failed}</span>
-      : <span className="text-ink">{VERDICT.passed.label} {counts.passed ?? 0}</span>}
+    {shown.map(verdict => <span key={verdict} className={cn('inline-flex items-center gap-1', verdict === 'failed' ? 'text-error' : 'text-ink')}>
+      <Icon name={VERDICT[verdict].icon} className={VERDICT[verdict].tone} />{VERDICT[verdict].label} {counts[verdict] ?? 0}
+    </span>)}
   </span>;
 }
 

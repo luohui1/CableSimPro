@@ -32,7 +32,7 @@ export function ComposerAttach(props: ComponentProps<typeof Button>) {
 }
 
 export function ComposerSend(props: ComponentProps<typeof Button>) {
-  return <Button variant="ink" size="icon-sm" aria-label="发送" {...props}><Icon name="action/arrow-up" /></Button>;
+  return <Button variant={props.disabled ? 'secondary' : 'default'} size="icon-sm" aria-label="发送" {...props}><Icon name="action/arrow-up" /></Button>;
 }
 
 export function ComposerStop(props: ComponentProps<typeof Button>) {

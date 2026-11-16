@@ -1,10 +1,46 @@
 // What people and the Agent say. The person's words sit on the right in a grey bubble; the Agent's words run in the
 // column without a bubble, in 15 px prose, and its work appears as steps and cards between its sentences.
-import type { ComponentProps, ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ComponentProps, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 /** The scrolling area of a conversation: what scrolls under its top edge fades in. For ThreadPrimitive.Viewport's className. */
 export const threadViewportClass = 'flex min-h-0 flex-1 flex-col overflow-y-auto fade-top';
+
+/**
+ * A finished conversation opens with its last turn at the top of the view: the ask, then what came of it, nothing cut off
+ * above. Mark where each turn starts with `data-turn-start`; put `TurnSpacer` after the last turn, so a short last turn can
+ * still reach the top. The ref goes on the scrolling element (with assistant-ui, the Viewport), which must be positioned.
+ */
+export function useLastTurnAtTop<T extends HTMLElement>() {
+  const viewport = useRef<T>(null);
+  useLayoutEffect(() => {
+    const node = viewport.current;
+    const starts = node?.querySelectorAll<HTMLElement>('[data-turn-start]');
+    const last = starts?.[starts.length - 1];
+    if (node && last) node.scrollTop = Math.max(0, last.offsetTop - 24);
+  }, []);
+  return viewport;
+}
+
+/** The room after the last turn that lets it sit at the top of the view; it grows and shrinks with the view. */
+export function TurnSpacer() {
+  const spacer = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const node = spacer.current;
+    const viewport = node?.offsetParent as HTMLElement | null;
+    if (!node || !viewport) return;
+    const fit = () => {
+      const starts = viewport.querySelectorAll<HTMLElement>('[data-turn-start]');
+      const last = starts[starts.length - 1];
+      node.style.height = last ? `${Math.max(0, viewport.clientHeight - (node.offsetTop - last.offsetTop) - 48)}px` : '0px';
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, []);
+  return <div ref={spacer} aria-hidden="true" />;
+}
 
 /** The conversation column: one measure for messages, cards and the composer. */
 export function ThreadColumn({ className, ...props }: ComponentProps<'div'>) {

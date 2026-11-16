@@ -18,19 +18,19 @@ export const ACTIVE_CHAT = '01a1e240';
 export const MODEL = 'glm-5.3-flash';
 
 /**
- * Tasks to start from: what the Agent's skills (studio/skills) do, grouped by the two things the product does. The first,
- * second and fourth are the round-1 tasks of ROADMAP.md; the prompts ask for work, not for numbers.
+ * Tasks to start from: the engineering cases the hosts have actually run (8210's conversations, this branch's 8212 project
+ * and versions), each with what comes back. The prompts ask for work, not for numbers.
  */
 export const STARTERS = {
   types: [
-    { icon: 'action/import', title: '导入结构表示例并核对', result: '算参数，按国标列出不通过项', prompt: '导入公开结构表示例，算参数并按国标核对，列出不通过项。' },
-    { icon: 'action/edit', title: '改一个尺寸，再核对一遍', result: '出新的草稿版本，说明哪些项变了', prompt: '把 YJV22-8.7/15 kV 3×240 的绝缘厚度改薄一些，出新版本再核对，说明哪些项变了。' },
-    { icon: 'object/file', title: '导出一份规格书', result: '挑一个规格，生成 PDF', prompt: '挑一个规格，导出一份规格书。' },
+    { icon: 'action/import', title: '导入人民电缆结构表并核对', result: '4 张表成 4 个系列，列出不通过项', prompt: '导入公开结构表示例（人民电缆 8.7/15 kV），算参数并按 GB/T 12706.2—2020 核对，列出不通过项。' },
+    { icon: 'action/edit', title: '3×240 绝缘减到 4 mm 再核对', result: '新草稿版本和不通过的条款', prompt: '把 YJV22-8.7/15 kV 3×240 的绝缘标称厚度改成 4 mm，出新版本再核对，说明哪些条款不通过。' },
+    { icon: 'object/file', title: '导出 3×240 第 1 版规格书', result: 'PDF，带来源和核对结论', prompt: '导出 YJV22-8.7/15 kV 3×240 第 1 版的规格书。' },
   ],
   rating: [
-    { icon: 'calc/ampacity', title: '算一款型号的直埋载流量', result: '说明哪根电缆先到温限', prompt: '选一款型号，直埋敷设，算载流量，说明哪根电缆先到温限。' },
-    { icon: 'calc/selection', title: '按目标电流选截面', result: '从一个系列里选出够用的最小截面', prompt: '已知负荷电流，从 YJV22-8.7/15 kV 三芯里选直埋敷设够用的最小截面。' },
-    { icon: 'result/report', title: '导出一份计算书', result: '把一条运行记录排成可打印的文件', prompt: '把最近一条载流量运行记录导出为计算书。' },
+    { icon: 'calc/ampacity', title: '3×240 直埋单回算允许电流', result: '埋深 1.2 m，说明先到温限的电缆', prompt: '选 YJV22-8.7/15 kV 3×240，三芯直埋单回，埋深 1.2 m，土壤热阻率 1 K·m/W，环境 25 °C，算允许电流，说明哪根先到温限。' },
+    { icon: 'calc/selection', title: '负荷 400 A 选最小截面', result: '三芯直埋，每个规格够不够', prompt: '负荷 400 A，三芯直埋单回，从人民电缆 YJV22-8.7/15 kV 三芯里选够用的最小截面。' },
+    { icon: 'calc/sweep', title: '土壤热阻率 0.8–3 扫一遍', result: '允许电流曲线和最紧的一点', prompt: '对 YJV22-8.7/15 3×240 直埋工程，把土壤热阻率从 0.8 扫到 3 K·m/W，看允许电流怎么变。' },
   ],
 };
 

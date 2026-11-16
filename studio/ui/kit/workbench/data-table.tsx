@@ -27,13 +27,15 @@ export interface RowGroup<Row> {
   onToggle?: () => void;
 }
 
-export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSelect, footer, sort, onSort, empty, framed, className }: {
+export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSelect, onOpen, footer, sort, onSort, empty, framed, className }: {
   columns: Column<Row>[];
   rows?: Row[];
   groups?: RowGroup<Row>[];
   rowKey: (row: Row) => string;
   selected?: string;
   onSelect?: (row: Row) => void;
+  /** Open a row: double click, or Enter on the selected row. */
+  onOpen?: (row: Row) => void;
   footer?: { label: string; cells: Partial<Record<string, ReactNode>> };
   sort?: { key: string; direction: 'asc' | 'desc' };
   onSort?: (key: string) => void;
@@ -47,8 +49,11 @@ export function DataTable<Row>({ columns, rows, groups, rowKey, selected, onSele
     const key = rowKey(row);
     // A row that can be selected takes focus and answers Enter and Space, like the click.
     return <TableRow key={key} data-state={key === selected ? 'selected' : undefined} aria-selected={onSelect ? key === selected : undefined}
-      tabIndex={onSelect ? 0 : undefined} onClick={onSelect ? () => onSelect(row) : undefined}
-      onKeyDown={onSelect ? event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(row); } } : undefined}
+      tabIndex={onSelect ? 0 : undefined} onClick={onSelect ? () => onSelect(row) : undefined} onDoubleClick={onOpen ? () => onOpen(row) : undefined}
+      onKeyDown={onSelect ? event => {
+        if (event.key === 'Enter' && onOpen && key === selected) { event.preventDefault(); onOpen(row); return; }
+        if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(row); }
+      } : undefined}
       className={cn(onSelect && 'cursor-pointer outline-none focus-visible:bg-subtle focus-visible:ring-3 focus-visible:ring-ring focus-visible:ring-inset')}>
       {columns.map(column => <TableCell key={column.key} numeric={column.numeric} className={column.width}>{column.cell(row)}</TableCell>)}
       {filler && <TableCell aria-hidden="true" />}

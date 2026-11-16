@@ -2,6 +2,7 @@
 // given that changed since the last run carries a dot, so it is plain why the result is out of date.
 import type { ComponentProps, ReactNode } from 'react';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empty';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { Icon } from '../icon';
 import { Dot } from '../marks';
@@ -29,6 +30,24 @@ export function Given({ label, value, changed, active, className, ...props }: { 
     <span className="font-medium text-ink tabular-nums">{value}</span>
     {changed && <Dot tone="attention" />}
   </button>;
+}
+
+/**
+ * The givens that seldom change (system, bonding, ambient) folded into one button below the widest screens, so the line
+ * stays one line; on the widest they stand in the line like the others.
+ */
+export function GivenMore({ count, children }: { count: number; children: ReactNode }) {
+  return <>
+    <span className="contents 2xl:hidden">
+      <Popover>
+        <PopoverTrigger render={<button type="button" className="flex h-8 shrink-0 items-center gap-1 rounded-field px-2 text-sm whitespace-nowrap text-ink-2 outline-none transition-colors duration-fast hover:bg-subtle hover:text-ink focus-visible:ring-3 focus-visible:ring-ring" />}>
+          其余 {count} 项<Icon name="action/chevron-down" className="size-3.5" />
+        </PopoverTrigger>
+        <PopoverContent align="start" className="flex w-auto flex-col items-start gap-1 p-2">{children}</PopoverContent>
+      </Popover>
+    </span>
+    <span className="hidden 2xl:contents">{children}</span>
+  </>;
 }
 
 /** A screen or panel with nothing to show yet: what goes here, and the one way to put it there. */

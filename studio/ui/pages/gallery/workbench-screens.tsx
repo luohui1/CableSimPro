@@ -10,12 +10,13 @@ import { Icon } from '@/kit/icon';
 import { ReviewMark, VERDICT, VerdictBar, VerdictMark, type Review, type Verdict } from '@/kit/marks';
 import { DataTable, type Column } from '@/kit/workbench/data-table';
 import { NavItem, NavSection, WorkbenchNav } from '@/kit/workbench/nav';
+import { CanvasFrame, CanvasNote, CanvasTool, CanvasToolbar } from '@/kit/workbench/canvas';
+import { PropertyList } from '@/kit/properties';
 import { PageHeader, PageTabs, Panel, Split, Toolbar } from '@/kit/workbench/page';
 import { VersionSelect } from '@/kit/workbench/review';
-import { CableSection } from './figures';
+import { CableSection, RING_COUNTS, ringsOf } from './figures';
 import { LIBRARY, WORKSPACE, type LibrarySeries, type LibrarySpec } from './library-data';
 import { PROJECT_NAMES, RATING_TABLE, VERSIONS } from './host-records';
-import { MODEL_FACTS } from './samples';
 import { compact, fixed } from '@shared/format';
 
 export const PROJECTS = PROJECT_NAMES;
@@ -49,19 +50,50 @@ function CheckCell({ check }: { check: Record<string, number> | null }) {
   return <VerdictBar counts={check} />;
 }
 
+const SELECTED_SPEC = 's-3382c86d.3x240';
+
 // Dimensions to one decimal as the catalogue prints them; resistance to four significant figures; weight whole.
 const SPEC_COLUMNS: Column<LibrarySpec>[] = [
-  { key: 'key', header: '规格', width: 'w-32', cell: spec => <span className="font-medium">{spec.key}</span> },
-  { key: 'version', header: '版本', width: 'w-24', cell: spec => `第 ${spec.version} 版` },
-  { key: 'review', header: '审核', width: 'w-28', cell: spec => <ReviewMark state={spec.review} /> },
-  { key: 'conductor', header: '导体外径', unit: 'mm', numeric: true, width: 'w-28', cell: spec => fixed(spec.conductor) },
-  { key: 'insulation', header: '绝缘', unit: 'mm', numeric: true, width: 'w-24', cell: spec => fixed(spec.insulation) },
-  { key: 'sheath', header: '护套', unit: 'mm', numeric: true, width: 'w-24', cell: spec => fixed(spec.sheath) },
-  { key: 'od', header: '外径', unit: 'mm', numeric: true, width: 'w-24', cell: spec => fixed(spec.od) },
-  { key: 'weight', header: '重量', unit: 'kg/km', numeric: true, width: 'w-28', cell: spec => fixed(spec.weight, 0) },
-  { key: 'r20', header: 'R₂₀', unit: 'Ω/km', numeric: true, width: 'w-28', cell: spec => compact(spec.r20) },
-  { key: 'check', header: '标准核对', width: 'w-40', cell: spec => <CheckCell check={spec.check} /> },
+  { key: 'key', header: '规格', width: 'w-28', cell: spec => <span className="font-medium">{spec.key}</span> },
+  { key: 'version', header: '版本', width: 'w-20', cell: spec => `第 ${spec.version} 版` },
+  { key: 'review', header: '审核', width: 'w-20', cell: spec => <ReviewMark state={spec.review} quiet /> },
+  { key: 'conductor', header: '导体外径', unit: 'mm', numeric: true, width: 'w-24', cell: spec => fixed(spec.conductor) },
+  { key: 'insulation', header: '绝缘', unit: 'mm', numeric: true, width: 'w-20', cell: spec => fixed(spec.insulation) },
+  { key: 'sheath', header: '护套', unit: 'mm', numeric: true, width: 'w-20', cell: spec => fixed(spec.sheath) },
+  { key: 'od', header: '外径', unit: 'mm', numeric: true, width: 'w-20', cell: spec => fixed(spec.od) },
+  { key: 'weight', header: '重量', unit: 'kg/km', numeric: true, width: 'w-24', cell: spec => fixed(spec.weight, 0) },
+  { key: 'r20', header: 'R₂₀', unit: 'Ω/km', numeric: true, width: 'w-24', cell: spec => compact(spec.r20) },
+  { key: 'check', header: '标准核对', width: 'w-52', cell: spec => <CheckCell check={spec.check} /> },
+  { key: 'open', header: '', width: 'w-20', cell: spec => spec.id === SELECTED_SPEC
+    ? <Button variant="ghost" size="sm" aria-label={`打开 ${spec.key}`}>打开<Icon name="action/arrow-right" data-icon="inline-end" /></Button> : null },
 ];
+
+/** On a wide screen, the selected size beside the table: its section, the numbers that matter, its check, and the way in. */
+function SpecPreview({ series, spec }: { series: LibrarySeries; spec: LibrarySpec }) {
+  return <Panel title="选中的规格" className="hidden w-96 flex-none border-l border-line 2xl:flex"
+    tools={<ReviewMark state={spec.review} />} bodyClassName="flex flex-col">
+    <div className="flex flex-col gap-1 px-4 pt-4">
+      <span className="text-h3 text-ink">{series.designation}-{series.u0_kv}/{series.u_kv} kV {spec.key}</span>
+      <span className="text-sm text-ink-2">{series.name} · 第 {spec.version} 版</span>
+    </div>
+    <div className="mx-4 my-4 aspect-square rounded-card bg-canvas p-6"><CableSection /></div>
+    <PropertyList className="px-4" rows={[
+      { label: '导体外径', value: fixed(spec.conductor), unit: 'mm' },
+      { label: '绝缘标称厚度', value: fixed(spec.insulation), unit: 'mm' },
+      { label: '外护套标称厚度', value: fixed(spec.sheath), unit: 'mm' },
+      { label: '外径', value: fixed(spec.od), unit: 'mm' },
+      { label: '重量', value: fixed(spec.weight, 0), unit: 'kg/km' },
+      { label: 'R₂₀', value: compact(spec.r20), unit: 'Ω/km' },
+    ]} />
+    <div className="mt-4 flex flex-col gap-2 border-t border-line px-4 py-4">
+      <span className="text-sm text-ink-2">标准核对</span>
+      <CheckCell check={spec.check} />
+    </div>
+    <div className="mt-auto border-t border-line px-4 py-4">
+      <Button variant="outline" className="w-full">打开这个规格<Icon name="action/arrow-right" data-icon="inline-end" /></Button>
+    </div>
+  </Panel>;
+}
 
 function SeriesHeader({ series }: { series: LibrarySeries }) {
   return <span className="flex min-w-0 items-center gap-3">
@@ -73,8 +105,10 @@ function SeriesHeader({ series }: { series: LibrarySeries }) {
 function LibraryScreenBody() {
   const [open, setOpen] = useState<string[]>([LIBRARY[0].id]);
   const total = LIBRARY.reduce((sum, series) => sum + series.specs.length, 0);
+  const selectedSeries = LIBRARY.find(series => series.specs.some(spec => spec.id === SELECTED_SPEC))!;
+  const selectedSpec = selectedSeries.specs.find(spec => spec.id === SELECTED_SPEC)!;
   return <>
-    <PageHeader title="型号库" marks={<Badge variant="secondary">{LIBRARY.length} 个系列 · {total} 个规格</Badge>}
+    <PageHeader trail={[{ label: '电缆型号' }]} title="型号库" marks={<Badge variant="secondary">{LIBRARY.length} 个系列 · {total} 个规格</Badge>}
       actions={<Button variant="outline"><Icon name="action/add" data-icon="inline-start" />新建型号</Button>}
       primary={<Button><Icon name="action/import" data-icon="inline-start" />导入结构表</Button>} />
     <Toolbar>
@@ -88,7 +122,8 @@ function LibraryScreenBody() {
         <ToggleGroupItem value="demo">演示结构</ToggleGroupItem>
       </ToggleGroup>
     </Toolbar>
-    <DataTable className="flex-1" columns={SPEC_COLUMNS} rowKey={spec => spec.id} selected="s-3382c86d.3x240" onSelect={() => undefined}
+    <div className="flex min-h-0 flex-1">
+    <DataTable className="flex-1" columns={SPEC_COLUMNS} rowKey={spec => spec.id} selected={SELECTED_SPEC} onSelect={() => undefined} onOpen={() => undefined}
       groups={LIBRARY.map(series => ({
         key: series.id,
         header: <SeriesHeader series={series} />,
@@ -100,12 +135,21 @@ function LibraryScreenBody() {
         open: open.includes(series.id),
         onToggle: () => setOpen(list => list.includes(series.id) ? list.filter(id => id !== series.id) : [...list, series.id]),
       }))} />
+    <SpecPreview series={selectedSeries} spec={selectedSpec} />
+    </div>
   </>;
 }
 
 // ---- 一款型号的工作区 ----
 
 const ORIGIN_MARK: Record<string, string> = { table: '表列', series: '系列', standard: '标准' };
+// The ring of the drawing each row of the table sizes.
+const ROLE_OF: Record<string, string> = {
+  conductor_diameter: 'conductor', conductor_screen_thickness: 'conductor_screen', insulation_thickness: 'insulation',
+  insulation_screen_thickness: 'insulation_screen', screen_tape_thickness: 'metallic_screen', bedding_thickness: 'bedding',
+  armour_tape_thickness: 'armour', oversheath_thickness: 'oversheath',
+};
+const SELECTED_LAYER = 'insulation_thickness';
 const LAYERS = WORKSPACE.structure.filter(row => !['area', 'outer_diameter', 'weight', 'r20'].includes(row.key));
 
 function CheckList() {
@@ -173,7 +217,7 @@ export function SeriesShell({ page, version, primary, actions, children }: {
 }) {
   const shown = VERSIONS.find(item => item.number === version)!;
   return <>
-    <PageHeader trail={[{ label: '型号库' }, { label: WORKSPACE.series }]} title={WORKSPACE.name}
+    <PageHeader trail={[{ label: '电缆型号' }, { label: '型号库' }, { label: WORKSPACE.series }]} title={WORKSPACE.name}
       marks={<><VersionSelect value={version} versions={VERSIONS.map(item => ({ number: item.number, review: item.review as Review }))} />
         <ReviewMark state={shown.review as Review} /><Badge variant="secondary">公开资料</Badge></>}
       actions={actions} primary={primary} />
@@ -183,17 +227,29 @@ export function SeriesShell({ page, version, primary, actions, children }: {
 }
 
 function SeriesScreenBody() {
+  const selectedLayer = WORKSPACE.structure.find(row => row.key === SELECTED_LAYER);
   return <SeriesShell page="structure" version={WORKSPACE.version.number}
     actions={<><Button variant="outline"><Icon name="object/file" data-icon="inline-start" />规格书</Button><Button variant="outline"><Icon name="run/run" data-icon="inline-start" />计算</Button></>}
     primary={<Button><Icon name="action/edit" data-icon="inline-start" />修改结构</Button>}>
     <Split panes={[
       { id: 'section', size: 34, min: 24, children: <Panel title="结构断面" tools={<ToggleGroup defaultValue={['section']} size="sm" aria-label="视图"><ToggleGroupItem value="section">断面</ToggleGroupItem><ToggleGroupItem value="solid">三维</ToggleGroupItem></ToggleGroup>}
-          bodyClassName="relative bg-canvas">
-          <div className="absolute inset-6"><CableSection /></div>
-          <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1 text-xs text-ink-2 shadow-menu">{MODEL_FACTS.map((fact, index) => <span key={fact.label} className="flex items-center gap-1">{index > 0 && <span aria-hidden="true">·</span>}{fact.label}<span className="font-medium text-ink tabular-nums">{fact.value}</span></span>)}</div>
+          bodyClassName="flex">
+          <CanvasFrame
+            tools={<CanvasToolbar label="断面工具"><CanvasTool icon="tool/zoom-out" label="缩小" /><CanvasTool icon="tool/fit" label="适应窗口" /><CanvasTool icon="tool/zoom-in" label="放大" /></CanvasToolbar>}
+            legend={selectedLayer && <CanvasNote>
+              <span className="size-2 shrink-0 rounded-full bg-copper" aria-hidden="true" />
+              {selectedLayer.label}<span className="font-medium tabular-nums">{selectedLayer.value} {selectedLayer.unit}</span>
+              {ringsOf(ROLE_OF[selectedLayer.key]) > 1 && <span className="text-ink-2">{RING_COUNTS.cores} 芯各一层</span>}
+            </CanvasNote>}
+            status={<>
+              <span>外径 {fixed(WORKSPACE.structure.find(row => row.key === 'outer_diameter')?.value as number)} mm</span>
+              <span>断面 {RING_COUNTS.total} 层：{RING_COUNTS.cores} 芯各 {RING_COUNTS.perCore} 层，共用 {RING_COUNTS.common} 层</span>
+            </>}>
+            <div className="absolute inset-8"><CableSection highlight={selectedLayer ? ROLE_OF[selectedLayer.key] : undefined} /></div>
+          </CanvasFrame>
         </Panel> },
       { id: 'layers', size: 36, min: 26, children: <Panel title="分层结构" tools={<span className="text-sm text-ink-2">{residualText(WORKSPACE.closure.residual_mm, WORKSPACE.closure.placed_in)}</span>}>
-          <DataTable rowKey={row => row.key} rows={LAYERS} selected="insulation_thickness" onSelect={() => undefined} columns={[
+          <DataTable rowKey={row => row.key} rows={LAYERS} selected={SELECTED_LAYER} onSelect={() => undefined} columns={[
             { key: 'label', header: '层', cell: row => row.label },
             { key: 'value', header: '厚度 / 直径', unit: 'mm', numeric: true, width: 'w-32', cell: row => row.value },
             { key: 'origin', header: '来源', width: 'w-20', cell: row => <span className="text-ink-2" title={row.basis}>{ORIGIN_MARK[row.origin]}</span> },

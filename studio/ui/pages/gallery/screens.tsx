@@ -5,8 +5,8 @@ import type { ReactNode } from 'react';
 import { AppFrame, TopBar, type Mode } from '@/kit/frame';
 import { CardAction, FileCard, ModelCard, OpenInWorkbench, ProposalCard, RatingCard, RefusalCard } from '@/kit/chat/cards';
 import { ComposerAttach, ComposerBar, ComposerFrame, ComposerInput, ComposerSend, ComposerStop, FileChip } from '@/kit/chat/composer';
-import { AgentEmpty, ChatNotice, TaskStarter, TileFact } from '@/kit/chat/empty';
-import { AssistantMessage, Prose, StreamCaret, ThreadColumn, UserMessage, threadViewportClass } from '@/kit/chat/messages';
+import { AgentEmpty, ChatNotice, EmptyStatus, TaskStarter, TileFact } from '@/kit/chat/empty';
+import { AssistantMessage, Prose, StreamCaret, ThreadColumn, TurnSpacer, UserMessage, threadViewportClass, useLastTurnAtTop } from '@/kit/chat/messages';
 import { Button } from '@/components/ui/button';
 import { Icon } from '@/kit/icon';
 import { cn } from '@/lib/utils';
@@ -18,6 +18,9 @@ import { LIBRARY } from './library-data';
 import { ProjectNew, RatingBody, RatingEdit, RatingSelection, RatingSweep } from './rating-screens';
 import { ImportScreen, SeriesParams, SeriesRating, SeriesVersions, TypeNewManual, TypeNewStandard, type ImportStep } from './type-screens';
 import { LibraryBody, PROJECTS, SeriesBody, WorkbenchSide } from './workbench-screens';
+import { DropZone } from '@/kit/workbench/form';
+import { PROPOSAL, RUN_METHOD } from './host-records';
+import { WORKSPACE } from './library-data';
 import { AgentModelCard, SettingsModelBody, useHostStatus } from './live-screens';
 import {
   ACTIVE_CHAT, CHATS, EXPORT_ASK, EXPORT_STEPS, HOST_DOWN, MODEL, MODEL_STEPS_DONE, MODEL_STEPS_RUNNING, NEW_PROJECT, NOT_CONFIGURED, RATING, RATING_ASK, RATING_STEPS, REFUSED_ASK,
@@ -73,14 +76,22 @@ function Thread({ active, running, composer, children }: { active: string; runni
 // ---- Agent 模式 ----
 
 const SPECS = LIBRARY.reduce((sum, series) => sum + series.specs.length, 0);
+// What the work stands on: the standards the check and the parameters cite, and the methods with their versions.
+const STANDARDS = [...new Set([...WORKSPACE.check.map(row => String(row.standard)), ...WORKSPACE.electrical.flatMap(row => row.standard ? [row.standard] : [])])];
+const METHODS = [`${RUN_METHOD.plugin} ${RUN_METHOD.version}`, `${WORKSPACE.check_method.plugin_id} ${WORKSPACE.check_method.plugin_version}`,
+  `${WORKSPACE.electrical_method.plugin_id} ${WORKSPACE.electrical_method.plugin_version}`, `${PROPOSAL.method.plugin_id} ${PROPOSAL.method.plugin_version}`];
 
 function AgentEmptyScreen() {
   return <Frame mode="agent" side={<Conversations />}>
-    <div className="flex min-h-0 flex-1 flex-col justify-center overflow-y-auto py-10">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-8">
       <AgentEmpty
         title="今天要处理哪款电缆？"
         lead="导入结构表、按国标核对、算载流量、出规格书和计算书——交给我做，改动由你审。"
-        composer={<Composer />}
+        className="2xl:max-w-4xl"
+        composer={<div className="flex flex-col gap-2">
+          <Composer />
+          <DropZone compact title="把厂家结构表拖到这里" formats="支持 .xlsx、.xls 和 .csv" accept=".xlsx,.xls,.csv" />
+        </div>}
         groups={[
           { label: '电缆型号', icon: 'nav/cable-type', figure: <div className="absolute -right-4 -bottom-10 size-40"><CableSection size={160} /></div>,
             facts: <><TileFact value={LIBRARY.length}>个系列</TileFact><TileFact value={SPECS}>个规格</TileFact></>,
@@ -90,6 +101,11 @@ function AgentEmptyScreen() {
             tasks: STARTERS.rating.map(task => <TaskStarter key={task.title} icon={task.icon} title={task.title} result={task.result} />) },
         ]} />
     </div>
+    <EmptyStatus facts={[
+      { label: '依据', value: STANDARDS.join('、') },
+      { label: '型号库', value: `${LIBRARY.length} 个系列，${SPECS} 个规格` },
+      { label: '方法', value: [...new Set(METHODS)].join('、') },
+    ]} />
   </Frame>;
 }
 
@@ -179,11 +195,11 @@ function AgentErrorScreen() {
 }
 
 function AgentChatScreen() {
+  const viewport = useLastTurnAtTop<HTMLDivElement>();
   return <Frame mode="agent" side={<Conversations active={ACTIVE_CHAT} />}>
-    {/* A finished conversation opens at its end, as a chat does. */}
-    <div className={cn(threadViewportClass, 'flex-col-reverse')}>
+    <div ref={viewport} className={cn(threadViewportClass, 'relative')}>
       <ThreadColumn className="gap-8 pt-8 pb-6">
-        <UserMessage>{RATING_ASK}</UserMessage>
+        <div data-turn-start><UserMessage>{RATING_ASK}</UserMessage></div>
         <AssistantMessage>
           <StepTrace steps={RATING_STEPS} />
           <ProposalCard action="新建工程" subject="YJV22-8.7/15 3×240 直埋载流量校核" changes={NEW_PROJECT} phase="accepted" />
@@ -198,7 +214,7 @@ function AgentChatScreen() {
             </ul>
           </Prose>
         </AssistantMessage>
-        <UserMessage>{EXPORT_ASK}</UserMessage>
+        <div data-turn-start><UserMessage>{EXPORT_ASK}</UserMessage></div>
         <AssistantMessage>
           <StepTrace steps={EXPORT_STEPS} />
           <FileCard {...SHEET} />
@@ -206,6 +222,7 @@ function AgentChatScreen() {
             <p>规格书已导出：YJV22-8.7/15 kV 3×240 第 1 版，含结构表、电气参数和标准核对结论（通过 13 项、不通过 0 项、缺项 21 项）。这一版还没审核，文件上标着“草稿”，能否对外由你决定。</p>
           </Prose>
         </AssistantMessage>
+        <TurnSpacer />
       </ThreadColumn>
     </div>
     <div className="shrink-0 pb-4"><ThreadColumn><Composer placeholder="接着交办，或追问这条结果" /></ThreadColumn></div>

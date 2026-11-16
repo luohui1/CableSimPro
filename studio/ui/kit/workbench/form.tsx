@@ -146,7 +146,7 @@ export function FormNote({ tone = 'info', title, children, className }: { tone?:
  * Where a file is dropped or chosen: what it takes, and the button for those who do not drag. Copper while a file is over
  * it. `onFiles` gets what was dropped or chosen; `dragging` forces the look (the gallery shows the state with it).
  */
-export function DropZone({ title, formats, accept, onFiles, dragging, action = '选择文件', className }: {
+export function DropZone({ title, formats, accept, onFiles, dragging, action = '选择文件', compact, className }: {
   title: string;
   formats: string;
   /** For the file dialog: .xlsx,.xls,.csv */
@@ -154,6 +154,8 @@ export function DropZone({ title, formats, accept, onFiles, dragging, action = '
   onFiles?: (files: File[]) => void;
   dragging?: boolean;
   action?: string;
+  /** One row under a composer, not a block. */
+  compact?: boolean;
   className?: string;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -162,15 +164,25 @@ export function DropZone({ title, formats, accept, onFiles, dragging, action = '
   return <div data-dragging={(dragging ?? over) || undefined}
     onDragOver={event => { event.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
     onDrop={event => { event.preventDefault(); setOver(false); take(event.dataTransfer.files); }}
-    className={cn('flex h-56 flex-col items-center justify-center gap-3 rounded-card border border-dashed border-line-strong bg-canvas px-6 text-center transition-colors duration-fast data-dragging:border-copper data-dragging:bg-copper-fill', className)}>
+    className={cn(compact
+      ? 'flex h-14 items-center gap-3 rounded-card border border-line bg-canvas px-4 transition-colors duration-fast data-dragging:border-copper data-dragging:bg-copper-fill'
+      : 'flex h-56 flex-col items-center justify-center gap-3 rounded-card border border-dashed border-line-strong bg-canvas px-6 text-center transition-colors duration-fast data-dragging:border-copper data-dragging:bg-copper-fill', className)}>
     <input ref={input} type="file" accept={accept} multiple={false} className="sr-only" tabIndex={-1} aria-hidden="true"
       onChange={event => { take(event.target.files); event.target.value = ''; }} />
-    <span className="flex size-12 items-center justify-center rounded-full bg-surface text-ink-2 shadow-menu"><Icon name="action/import" className="size-6" /></span>
-    <span className="flex flex-col gap-1">
-      <span className="text-h3 text-ink">{title}</span>
-      <span className="text-sm text-ink-2">{formats}</span>
-    </span>
-    <Button variant="outline" onClick={() => input.current?.click()}>{action}</Button>
+    {compact
+      ? <>
+        <Icon name="action/import" className="shrink-0 text-ink-2" />
+        <span className="flex min-w-0 flex-1 items-baseline gap-2"><span className="text-sm font-medium text-ink">{title}</span><span className="truncate text-sm text-ink-2">{formats}</span></span>
+        <Button variant="outline" size="sm" onClick={() => input.current?.click()}>{action}</Button>
+      </>
+      : <>
+        <span className="flex size-12 items-center justify-center rounded-full bg-surface text-ink-2 shadow-menu"><Icon name="action/import" className="size-6" /></span>
+        <span className="flex flex-col gap-1">
+          <span className="text-h3 text-ink">{title}</span>
+          <span className="text-sm text-ink-2">{formats}</span>
+        </span>
+        <Button variant="outline" onClick={() => input.current?.click()}>{action}</Button>
+      </>}
   </div>;
 }
 

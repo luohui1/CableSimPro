@@ -153,7 +153,7 @@ function ImportBody({ at }: { at: ImportStep }) {
   const index = IMPORT_STEPS.findIndex(step => step.key === at);
   const next = IMPORT_STEPS[index + 1];
   return <>
-    <PageHeader trail={[{ label: '型号库' }]} title="导入结构表" marks={index > 0 ? <Badge variant="outline"><Icon name="object/file" data-icon="inline-start" />{IMPORT.file}</Badge> : undefined} />
+    <PageHeader trail={[{ label: '电缆型号' }, { label: '型号库' }]} title="导入结构表" marks={index > 0 ? <Badge variant="outline"><Icon name="object/file" data-icon="inline-start" />{IMPORT.file}</Badge> : undefined} />
     <FlowLayout steps={<Stepper label="导入步骤" steps={importSteps(at)} />} footer={<>
       <Button variant="ghost" className="mr-auto">取消</Button>
       {index > 0 && <Button variant="outline"><Icon name="action/arrow-left" data-icon="inline-start" />上一步</Button>}
@@ -169,7 +169,7 @@ function ImportBody({ at }: { at: ImportStep }) {
 // ---- 新建型号: two ways in, one header ----
 
 function NewTypeHeader({ way, primary }: { way: 'manual' | 'standard'; primary?: ReactNode }) {
-  return <PageHeader trail={[{ label: '型号库' }]} title="新建型号"
+  return <PageHeader trail={[{ label: '电缆型号' }, { label: '型号库' }]} title="新建型号"
     marks={<Segmented label="新建方式" value={way} options={[{ value: 'manual', label: '从零填写' }, { value: 'standard', label: '按标准生成' }]} />}
     actions={<Button variant="ghost">取消</Button>} primary={primary} />;
 }
