@@ -61,7 +61,9 @@ export async function walkAgent(browser: Browser, base: string, app: App, faux: 
       await check('proposal');
       await page.getByRole('button', { name: '接受', exact: true }).click();
       await page.getByText('允许电流', { exact: true }).waitFor();
-      await page.getByRole('button', { name: /在工作台打开 · 运行记录/ }).waitFor();
+      // The card has its own button to the workbench; the agent opening the same record afterwards must not add a second one.
+      await page.getByRole('button', { name: '在工作台打开', exact: true }).first().waitFor();
+      if (await page.getByRole('button', { name: /在工作台打开 · 运行记录/ }).count()) problems.push(`${width} agent: a result card with its own button to the workbench is followed by a second button to the same place`);
       await check('rating');
       const chat = page.url();
 
