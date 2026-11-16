@@ -49,11 +49,11 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
   await op('installation.set', { project: mixed, layout: 'three_core_buried_horizontal', depth_m: 1.2 });
   await op('conditions.set', { project: mixed, currents_a: [600, 100, 100] });
   await op<RunRecord>('run.rate', { project: mixed });
-  // A project that has only a sweep: no check has been run.
-  const sweepOnly = (await op<ProjectView>('project.create', { name: '走查 只有扫描', model_id: 'huayuan.yjv22-15kv-240' })).meta.id;
-  await op<RunRecord>('run.sweep', { project: sweepOnly, variable: 'soil_thermal_resistivity', values: [1, 1.5, 2] });
 
   for (const [width, height] of [[1366, 768], [1920, 1080]] as const) {
+    // A project that has only a sweep: no check has been run. One for each size, because step 11 applies changes to it.
+    const sweepOnly = (await op<ProjectView>('project.create', { name: `走查 只有扫描 ${width}`, model_id: 'huayuan.yjv22-15kv-240' })).meta.id;
+    await op<RunRecord>('run.sweep', { project: sweepOnly, variable: 'soil_thermal_resistivity', values: [1, 1.5, 2] });
     const page: Page = await browser.newPage({ viewport: { width, height }, acceptDownloads: true });
     page.on('pageerror', error => problems.push(`${width} page error: ${error.message}`));
     page.on('console', message => { if (message.type() === 'error') problems.push(`${width} console error: ${message.text()}`); });
@@ -378,7 +378,7 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await waiting().click();
     await editor().getByText('改了 1 项').waitFor();
     await editor().getByRole('button', { name: '按新条件计算' }).click();
-    await rail().getByRole('button', { name: /^#2 / }).waitFor({ timeout: RUN });
+    await rail().getByRole('button', { name: new RegExp(`^#${original.runs.length + 1} `) }).waitFor({ timeout: RUN });
     await page.getByText('先到温限', { exact: true }).waitFor();
     assert.equal((await view(row)).parts.installation.depth_m, depth, 'the depth typed on the drawing is the one saved');
     await check('canvas-applied');
