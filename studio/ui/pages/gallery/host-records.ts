@@ -1307,3 +1307,24 @@ export const PROJECT_NAMES = [
  "YJV22-8.7/15 3×240 直埋载流量校核",
  "YJV22-8.7/15 3×240 直埋载流量示例"
 ];
+
+// The methods by name, as their plugins' manifests give them (plugins/<id>/plugin.json: name, and capabilities[].title for
+// one capability). A screen writes a method as its name and version; the plugin id goes only into the sources page of a
+// report or a datasheet.
+export const METHOD_NAMES: Record<string, string> = {
+ "cablesim.iec60287": "IEC 60287 载流量",
+ "cablesim.standard-check": "产品标准尺寸核对",
+ "cablesim.standard-check/structure-proposal": "XLPE 标准结构提案",
+ "cablesim.type-electrical": "型号电气参数与短路容量"
+};
+/** A method as the screens write it: its name and version. `id` is a plugin id, or plugin/capability. */
+export const methodLabel = (id: string, version: string) => `${METHOD_NAMES[id] ?? '方法未登记'} ${version}`;
+/** The same from the "plugin version" string a record keeps (the rating table's method). */
+export const methodText = (method: string) => methodLabel(method.split(' ')[0], method.split(' ')[1] ?? '');
+
+// The method parameters of run-08e19314 on this branch's host (parameters, from the cable's method_defaults): the skin and
+// proximity coefficients, which the method takes from the user ("由使用者按标准表给定", cablesim.iec60287 method.py).
+export const RUN_PARAMETERS = {
+ "ks": 1,
+ "kp": 1
+};

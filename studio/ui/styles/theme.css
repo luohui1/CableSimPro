@@ -10,6 +10,7 @@
 [data-theme='light'] {
   /* The weakest text that still reads: 4.5:1 on white. Placeholders and quiet icons only, never content. */
   --ink-3: #767676;
+  --divider: var(--line);
   --copper-strong: color-mix(in oklab, var(--copper) 84%, #000);
   --copper-fill: color-mix(in oklab, var(--copper) 8%, var(--panel));
   --copper-line: color-mix(in oklab, var(--copper) 34%, var(--panel));
@@ -29,8 +30,11 @@
 
 [data-theme='dark'] {
   --ink-3: #8f8f8f;
+  /* The token line (#2F2F2F) on the dark panel is 1.25:1 and panels ran together; this one is about 1.45:1. */
+  --divider: color-mix(in oklab, var(--text) 12%, var(--panel));
   --copper-strong: color-mix(in oklab, var(--copper) 86%, #fff);
-  --copper-fill: color-mix(in oklab, var(--copper) 14%, var(--panel));
+  /* As strong as copper text on it allows (4.6:1); a selected table row also gets the copper edge (row-mark). */
+  --copper-fill: color-mix(in oklab, var(--copper) 16%, var(--panel));
   --copper-line: color-mix(in oklab, var(--copper) 40%, var(--panel));
   --success-fill: color-mix(in oklab, var(--success) 14%, var(--panel));
   --attention-fill: color-mix(in oklab, var(--attention) 14%, var(--panel));
@@ -60,7 +64,7 @@
   --color-surface: var(--panel);
   --color-subtle: var(--fill);
   --color-hover: var(--hover);
-  --color-line: var(--line);
+  --color-line: var(--divider);
   --color-line-strong: var(--control-border);
   --color-ink: var(--text);
   --color-ink-2: var(--text-secondary);
@@ -380,6 +384,14 @@
   & .recharts-sector,
   & .recharts-surface {
     outline: none;
+  }
+}
+
+/* The selected row of a table in the dark theme: its fill alone sits too close to the panel, so the first cell carries a
+   copper edge. The light theme reads the fill alone. */
+@utility row-mark {
+  [data-theme='dark'] & > td:first-child {
+    box-shadow: inset 2px 0 0 var(--copper);
   }
 }
 

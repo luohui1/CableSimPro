@@ -269,13 +269,14 @@ export function AgentSection() {
         <RefusalCard kind="error" title="运行校核 · YJV22-8.7/15 3×240 直埋载流量校核" reason={HOST_DOWN} actions={<CardAction icon="action/refresh">重试</CardAction>} />
       </div>
     </Specimen>
-    <Specimen title="输入框" rule="唯一有阴影的东西。附件在左，发送在右：有内容时是铜色，和工作台的主按钮一样；任务进行中出现停止。拖入结构表时边线变铜色虚线。" wide>
+    <Specimen title="输入框" rule="唯一有阴影的东西。附件在左，发送在右：有内容时是铜色，和工作台的主按钮一样；有待审卡时铜色让给“接受”，发送是描边；任务进行中出现停止。拖入结构表时边线变铜色虚线。" wide>
       <div className="grid max-w-thread grid-cols-1 gap-4">
         <State label="空"><ComposerFrame><ComposerInput placeholder="交办一件事，或把 Excel、CSV 结构表拖到这里" /><ComposerBar start={<ComposerAttach />} end={<ComposerSend disabled />} /></ComposerFrame></State>
         <State label="带附件"><ComposerFrame>
           <div className="flex flex-wrap gap-2 px-2 pt-1"><FileChip name="人民电缆 8.7-15kV 结构表（公开手册）.xlsx" detail="已上传" onRemove={() => undefined} /><FileChip name="补充结构表.csv" state="uploading" detail="上传中" /></div>
           <ComposerInput defaultValue="导入这张结构表，算参数并按国标核对，列出不通过项。" /><ComposerBar start={<ComposerAttach />} end={<ComposerSend />} />
         </ComposerFrame></State>
+        <State label="有待审卡时（有内容也让出铜色）"><ComposerFrame><ComposerInput defaultValue="把埋深也改成 1.5 m 再算一次。" /><ComposerBar start={<ComposerAttach />} end={<ComposerSend quiet />} /></ComposerFrame></State>
         <State label="任务进行中（可插话、可停止）"><ComposerFrame><ComposerInput placeholder="插一句话，Agent 做完这一步就看到" /><ComposerBar start={<ComposerAttach />} end={<><ComposerStop /><ComposerSend disabled /></>} /></ComposerFrame></State>
         <State label="拖入中"><ComposerFrame dragging><ComposerInput placeholder="松开即附上结构表" /><ComposerBar start={<ComposerAttach />} end={<ComposerSend disabled />} /></ComposerFrame></State>
         <State label="模型未配置"><ChatNotice>模型未配置，Agent 暂时不能干活：设置 CABLE_STUDIO_MODEL_BASE_URL、CABLE_STUDIO_MODEL_ID、CABLE_STUDIO_MODEL_API_KEY 后重启。</ChatNotice></State>

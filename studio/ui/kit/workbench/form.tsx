@@ -3,7 +3,9 @@
 import type { ComponentProps, ReactNode } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { Badge } from '@/components/ui/badge';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Field, FieldDescription, FieldLabel } from '@/components/ui/field';
 import { NumberField, NumberFieldAddon, NumberFieldGroup, NumberFieldInput } from '@/components/ui/number-field';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -52,14 +54,14 @@ export function FormRow({ label, hint, changed, htmlFor, wide, children, classNa
   children: ReactNode;
   className?: string;
 }) {
-  return <div className={cn('grid items-start gap-x-4 gap-y-1', wide ? 'grid-cols-label-wide' : 'grid-cols-label', className)}>
-    <label htmlFor={htmlFor} className="flex min-h-8 min-w-0 items-center gap-2 text-sm text-ink-2">
+  return <Field orientation="horizontal" className={cn('grid items-start gap-x-4 gap-y-1', wide ? 'grid-cols-label-wide' : 'grid-cols-label', className)}>
+    <FieldLabel htmlFor={htmlFor} className="min-h-8 min-w-0 items-center font-normal text-ink-2">
       <span className="truncate">{label}</span>
       {changed && <Dot tone="attention" />}
-    </label>
+    </FieldLabel>
     <div className="min-w-0">{children}</div>
-    {hint && <p className="col-start-2 m-0 text-sm text-ink-2">{hint}</p>}
-  </div>;
+    {hint && <FieldDescription className="col-start-2">{hint}</FieldDescription>}
+  </Field>;
 }
 
 /**
@@ -68,7 +70,8 @@ export function FormRow({ label, hint, changed, htmlFor, wide, children, classNa
  * empty), or left alone with `defaultValue`.
  */
 export function UnitInput({ unit, prefix, value, defaultValue, onValueChange, min, max, step = 'any', id, name, disabled, className, ...input }: {
-  unit: string;
+  /** Left out for a pure number (a coefficient); its place stays, so the numbers of a section still line up. */
+  unit?: string;
   prefix?: string;
   value?: number | null;
   defaultValue?: number | string;
@@ -86,7 +89,7 @@ export function UnitInput({ unit, prefix, value, defaultValue, onValueChange, mi
     <NumberFieldGroup>
       {prefix && <NumberFieldAddon className="pl-3">{prefix}</NumberFieldAddon>}
       <NumberFieldInput {...input} />
-      <NumberFieldAddon className="w-16 pr-3">{unit}</NumberFieldAddon>
+      <NumberFieldAddon className="w-16 pr-3" aria-hidden={unit ? undefined : true}>{unit}</NumberFieldAddon>
     </NumberFieldGroup>
   </NumberField>;
 }
@@ -153,14 +156,11 @@ export function ChoiceSelect({ value, options, onValueChange, label, id, size }:
  * table had that is not imported. Plain text at the reading size; the attention tone only for what can go wrong.
  */
 export function FormNote({ tone = 'info', title, children, className }: { tone?: 'info' | 'attention'; title?: ReactNode; children: ReactNode; className?: string }) {
-  return <div role="note" className={cn('flex gap-3 rounded-card border px-4 py-3 text-sm text-ink',
-    tone === 'attention' ? 'border-attention bg-attention-fill' : 'border-line bg-subtle', className)}>
-    <span className="flex h-5 shrink-0 items-center"><Icon name={tone === 'attention' ? 'status/warning' : 'status/info'} className={tone === 'attention' ? 'text-attention-ink' : 'text-ink-2'} /></span>
-    <div className="flex min-w-0 flex-col gap-1">
-      {title && <span className="font-medium">{title}</span>}
-      {children}
-    </div>
-  </div>;
+  return <Alert role="note" variant={tone === 'attention' ? 'attention' : 'note'} className={cn('gap-y-1 rounded-card px-4 py-3 has-[>svg]:gap-x-3', className)}>
+    <Icon name={tone === 'attention' ? 'status/warning' : 'status/info'} />
+    {title && <AlertTitle>{title}</AlertTitle>}
+    <AlertDescription className="text-ink">{children}</AlertDescription>
+  </Alert>;
 }
 
 /** The structure tables the host reads (tables.py: .xlsx, .xlsm, .xls, .csv), as react-dropzone takes them. */

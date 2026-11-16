@@ -19,7 +19,7 @@ import { ProjectNew, RatingBody, RatingEdit, RatingSelection, RatingSweep } from
 import { ImportScreen, SeriesParams, SeriesRating, SeriesVersions, TypeNewManual, TypeNewStandard, type ImportStep } from './type-screens';
 import { LibraryBody, PROJECTS, SeriesBody, WorkbenchSide } from './workbench-screens';
 import { DropZone } from '@/kit/workbench/form';
-import { PROPOSAL, RUN_METHOD } from './host-records';
+import { PROPOSAL, RUN_METHOD, methodLabel } from './host-records';
 import { WORKSPACE } from './library-data';
 import { AgentModelCard, SettingsModelBody, useHostStatus } from './live-screens';
 import {
@@ -55,11 +55,11 @@ function Conversations({ active, running }: { active?: string; running?: boolean
   </ChatSidebar>;
 }
 
-function Composer({ placeholder = '交办一件事，或把 Excel、CSV 结构表拖到这里', working, attachments }: { placeholder?: string; working?: boolean; attachments?: ReactNode }) {
+function Composer({ placeholder = '交办一件事，或把 Excel、CSV 结构表拖到这里', working, waiting, attachments }: { placeholder?: string; working?: boolean; waiting?: boolean; attachments?: ReactNode }) {
   return <ComposerFrame>
     {attachments && <div className="flex flex-wrap gap-2 px-3 pt-3">{attachments}</div>}
     <ComposerInput placeholder={placeholder} />
-    <ComposerBar start={<ComposerAttach />} end={working ? <ComposerStop /> : <ComposerSend disabled />} />
+    <ComposerBar start={<ComposerAttach />} end={working ? <ComposerStop /> : <ComposerSend disabled quiet={waiting} />} />
   </ComposerFrame>;
 }
 
@@ -78,12 +78,11 @@ function Thread({ active, running, composer, children }: { active: string; runni
 const SPECS = LIBRARY.reduce((sum, series) => sum + series.specs.length, 0);
 // What the work stands on: the standards the check and the parameters cite, and the methods with their versions.
 const STANDARDS = [...new Set([...WORKSPACE.check.map(row => String(row.standard)), ...WORKSPACE.electrical.flatMap(row => row.standard ? [row.standard] : [])])];
-const METHODS = [`${RUN_METHOD.plugin} ${RUN_METHOD.version}`, `${WORKSPACE.check_method.plugin_id} ${WORKSPACE.check_method.plugin_version}`,
-  `${WORKSPACE.electrical_method.plugin_id} ${WORKSPACE.electrical_method.plugin_version}`, `${PROPOSAL.method.plugin_id} ${PROPOSAL.method.plugin_version}`];
+const METHODS = [`${RUN_METHOD.card} ${RUN_METHOD.version}`, methodLabel(WORKSPACE.check_method.plugin_id, WORKSPACE.check_method.plugin_version)];
 
 function AgentEmptyScreen() {
   return <Frame mode="agent" side={<Conversations />}>
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-8">
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-6">
       <AgentEmpty
         title="今天要处理哪款电缆？"
         lead="导入结构表、按国标核对、算载流量、出规格书和计算书——交给我做，改动由你审。"
@@ -104,7 +103,7 @@ function AgentEmptyScreen() {
     <EmptyStatus facts={[
       { label: '依据', value: STANDARDS.join('、') },
       { label: '型号库', value: `${LIBRARY.length} 个系列，${SPECS} 个规格` },
-      { label: '方法', value: [...new Set(METHODS)].join('、') },
+      { label: '方法', value: METHODS.join('、') },
     ]} />
   </Frame>;
 }
@@ -137,7 +136,7 @@ function AgentStreamingScreen() {
 }
 
 function AgentWaitingScreen() {
-  return <Thread active={ACTIVE_CHAT} composer={<Composer placeholder="接受或拒绝上面的提案，Agent 接着做" />}>
+  return <Thread active={ACTIVE_CHAT} composer={<Composer waiting placeholder="接受或拒绝上面的提案，Agent 接着做" />}>
     <UserMessage>{RATING_ASK}</UserMessage>
     <AssistantMessage>
       <StepTrace steps={STEPS_WAITING} />

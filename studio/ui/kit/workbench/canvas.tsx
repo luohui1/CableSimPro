@@ -88,7 +88,7 @@ export function TemperatureLegend({ title, ambient, limit, stops, strength = 1, 
         </linearGradient>
       </defs>
       <rect width="100" height="8" rx="4" fill={`url(#${gradient})`} opacity={strength} />
-      <rect width="100" height="8" rx="4" fill="none" stroke="var(--line)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+      <rect width="100" height="8" rx="4" fill="none" stroke="var(--divider)" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
     </svg>
     <div className="flex justify-between text-xs text-ink-2 tabular-nums">{ticks.map((value, index) => <span key={index}>{Number(value.toFixed(1))}</span>)}</div>
     {lines && <div className="flex items-center gap-2 border-t border-line pt-2 text-xs text-ink-2"><span className="h-px w-5 bg-ink-2" />等温线每 {lines} °C 一条</div>}

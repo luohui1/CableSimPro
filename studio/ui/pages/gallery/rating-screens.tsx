@@ -13,7 +13,8 @@ import { Icon } from '@/kit/icon';
 import { Dot, ReviewMark, TierMark, type Review } from '@/kit/marks';
 import { LimitMeter, Metric } from '@/kit/metric';
 import { PropertyList } from '@/kit/properties';
-import { CanvasFrame, CanvasLayer, CanvasTool, CanvasToolbar, CanvasToolbarSeparator, TemperatureLegend } from '@/kit/workbench/canvas';
+import { Kbd, KbdGroup } from '@/components/ui/kbd';
+import { CanvasFrame, CanvasLayer, CanvasNote, CanvasTool, CanvasToolbar, CanvasToolbarSeparator, TemperatureLegend } from '@/kit/workbench/canvas';
 import { CurveChart, TargetBar, type Axis } from '@/kit/workbench/chart';
 import { DataTable, type Column } from '@/kit/workbench/data-table';
 import { ChoiceCards, ChoiceSelect, FormRow, FormSection, Segmented, UnitInput } from '@/kit/workbench/form';
@@ -25,18 +26,20 @@ import { useTheme } from '@/state/theme';
 import { BONDING_NAMES, fixed } from '@shared/format';
 import { CableSection, FIELD_RANGE, SectionField, fieldStops } from './figures';
 import { WORKSPACE } from './library-data';
-import { CANDIDATES, DEFAULTS, IMPORT, LAYOUTS, PROJECT, RUN_INPUTS, RUN_METHOD, RUNS, SELECTION, SWEEP } from './host-records';
+import { CANDIDATES, DEFAULTS, IMPORT, LAYOUTS, PROJECT, RUN_INPUTS, RUN_METHOD, RUN_PARAMETERS, RUNS, SELECTION, SWEEP } from './host-records';
 import { RUN_CABLE, RUN_SOLVER } from './run-document';
 import { RATING } from './samples';
 
 // What the runs were made with (one digest for all three), and the method that made them.
 const { installation, conditions } = RUN_INPUTS;
-const METHOD = `${RUN_METHOD.card} · ${RUN_METHOD.plugin} ${RUN_METHOD.version}`;
+const METHOD = `${RUN_METHOD.card} ${RUN_METHOD.version}`;
 const CABLE_NAME = CANDIDATES.find(option => option.id === PROJECT.cable)?.name ?? PROJECT.cable;
 const LAYOUT_LABEL = Object.fromEntries(LAYOUTS.map(layout => [layout.kind, layout.label]));
 const LIMIT_C = RATING.limiting.limit;
 const [RATED, SWEPT, SELECTED] = RUNS;
 const BONDING = Object.entries(BONDING_NAMES).map(([value, label]) => ({ value, label }));
+/** The depth the engineer dragged on the drawing in the edit screen: an input waiting to be applied, not a result. */
+const EDITED_DEPTH_M = 1.5;
 
 // ---- The frame every run of the project shares ----
 
@@ -51,10 +54,12 @@ function Givens({ cable = CABLE_NAME, soil, editing, target }: { cable?: string;
     <Given label="埋深" value={`${installation.depth_m} m`} />
     <Given label="土壤热阻率" value={soil ?? `${conditions.soil_thermal_resistivity} K·m/W`} active={editing} />
     {target === undefined ? <Given label="负荷" value={`${conditions.currents_a[0]} A`} /> : <Given label="目标电流" value={`${target} A`} />}
-    <GivenMore count={3}>
+    <GivenMore count={5}>
       <Given label="环境" value={`${conditions.ambient_temperature_c} °C`} />
       <Given label="系统" value={`${conditions.system_voltage_v / 1000} kV · ${conditions.frequency_hz} Hz`} />
       <Given label="护套" value={BONDING_NAMES[installation.bonding]} />
+      <Given label="集肤系数 ks" value={RUN_PARAMETERS.ks} />
+      <Given label="邻近系数 kp" value={RUN_PARAMETERS.kp} />
     </GivenMore>
   </>;
 }
@@ -74,12 +79,13 @@ function RatingShell({ active, asked, givens, editing, children }: { active: str
   </>;
 }
 
-function FieldCanvas({ status }: { status?: ReactNode }) {
+/** `note`: what the engineer changed on the drawing and has not applied yet, beside the tools. */
+function FieldCanvas({ status, note }: { status?: ReactNode; note?: ReactNode }) {
   const [layers, setLayers] = useState({ field: true, isotherms: true, dimensions: true });
   const [view, setView] = useState('overview');
   const dark = useTheme(state => state.theme) === 'dark';
   return <CanvasFrame
-    tools={<CanvasToolbar label="画布工具">
+    tools={<><CanvasToolbar label="画布工具">
       <CanvasLayer icon="result/field" label="温度场" pressed={layers.field} onPressedChange={field => setLayers(value => ({ ...value, field }))} />
       <CanvasLayer icon="result/radial" label="等温线" pressed={layers.isotherms} onPressedChange={isotherms => setLayers(value => ({ ...value, isotherms }))} />
       <CanvasLayer icon="tool/dimension" label="尺寸" pressed={layers.dimensions} onPressedChange={dimensions => setLayers(value => ({ ...value, dimensions }))} />
@@ -87,7 +93,7 @@ function FieldCanvas({ status }: { status?: ReactNode }) {
       <CanvasTool icon="tool/zoom-out" label="缩小" />
       <CanvasTool icon="tool/fit" label="回到全貌" />
       <CanvasTool icon="tool/zoom-in" label="放大" />
-    </CanvasToolbar>}
+    </CanvasToolbar>{note}</>}
     view={<Segmented floating label="视图" value={view} onValueChange={setView} options={[{ value: 'cluster', label: '电缆簇' }, { value: 'overview', label: '全景' }]} />}
     legend={<TemperatureLegend title="颜色是土壤温度" ambient={FIELD_RANGE.ambient} limit={FIELD_RANGE.limit} stops={fieldStops()} strength={dark ? 0.24 : 1} lines={5} />}
     status={status ?? <>
@@ -148,14 +154,20 @@ function RatingScreenBody() {
 
 function GivensEditor() {
   const layouts = LAYOUTS.map(layout => ({ value: layout.kind, label: layout.label }));
-  return <SideEditor title="已知条件" footer={<>
-    <Badge variant="attention" className="mr-auto gap-2"><Dot tone="attention" />改了 1 项</Badge>
+  return <SideEditor title="已知条件" tools={<>
+    <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-sm" aria-label="撤销" />}><Icon name="action/undo" /></TooltipTrigger>
+      <TooltipContent>撤销：土壤热阻率改回 {conditions.soil_thermal_resistivity} K·m/W <KbdGroup><Kbd>Ctrl</Kbd><Kbd>Z</Kbd></KbdGroup></TooltipContent></Tooltip>
+    <Button variant="ghost" size="icon-sm" aria-label="重做" disabled><Icon name="action/redo" /></Button>
+  </>} footer={<>
+    <Badge variant="attention" className="mr-auto gap-2"><Dot tone="attention" />改了 2 项</Badge>
     <Button variant="outline">放弃</Button>
     <Button><Icon name="run/run" data-icon="inline-start" />按新条件计算</Button>
   </>}>
     <SideEditorSection title="敷设">
       <FormRow label="敷设方式"><ChoiceSelect label="敷设方式" value={installation.layout} options={layouts} /></FormRow>
-      <FormRow label="埋深" htmlFor="edit-depth"><UnitInput id="edit-depth" unit="m" defaultValue={installation.depth_m} /></FormRow>
+      <FormRow label="埋深" htmlFor="edit-depth" changed hint={`在画布上拖的；运行记录 #${RATED.sequence} 用的是 ${installation.depth_m} m`}>
+        <UnitInput id="edit-depth" unit="m" defaultValue={EDITED_DEPTH_M} />
+      </FormRow>
       <FormRow label="护套接地"><ChoiceSelect label="护套接地" value={installation.bonding} options={BONDING} /></FormRow>
     </SideEditorSection>
     <SideEditorSection title="环境">
@@ -171,13 +183,21 @@ function GivensEditor() {
     <SideEditorSection title="负荷">
       <FormRow label="负荷电流" htmlFor="edit-current"><UnitInput id="edit-current" unit="A" defaultValue={conditions.currents_a[0]} /></FormRow>
     </SideEditorSection>
+    <Disclosure title="方法参数">
+      <div className="flex flex-col gap-3 pt-2">
+        <FormRow label="集肤系数 ks" htmlFor="edit-ks" hint="型号给的方法默认值；方法不内置标准表，由使用者按标准表给定">
+          <UnitInput id="edit-ks" defaultValue={RUN_PARAMETERS.ks} />
+        </FormRow>
+        <FormRow label="邻近系数 kp" htmlFor="edit-kp"><UnitInput id="edit-kp" defaultValue={RUN_PARAMETERS.kp} /></FormRow>
+      </div>
+    </Disclosure>
   </SideEditor>;
 }
 
 function RatingEditBody() {
   return <RatingShell active={RATED.id} asked="允许电流 · 单回路能力" givens={<Givens editing />} editing>
-    <FieldCanvas status={<>
-      <span className="flex items-center gap-2 text-ink"><Dot tone="attention" />条件改了 1 项，画面仍是运行记录 #{RATED.sequence}</span>
+    <FieldCanvas note={<CanvasNote><Dot tone="attention" />埋深 {installation.depth_m} → {EDITED_DEPTH_M} m，待应用</CanvasNote>} status={<>
+      <span className="flex items-center gap-2 text-ink"><Dot tone="attention" />条件改了 2 项（埋深在画布上改），画面仍是运行记录 #{RATED.sequence}</span>
       <span className="ml-auto">{METHOD}</span>
     </>} />
     <GivensEditor />

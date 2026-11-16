@@ -22,7 +22,7 @@ import { ReviewActions, ReviewTrack } from '@/kit/workbench/review';
 import { compact, fixed } from '@shared/format';
 import { CableSection } from './figures';
 import { WORKSPACE } from './library-data';
-import { DOCUMENTS, IMPORT, PRINTED, PROPOSAL, RATING_TABLE, STANDARD_SERIES, VERSIONS } from './host-records';
+import { DOCUMENTS, IMPORT, PRINTED, PROPOSAL, RATING_TABLE, STANDARD_SERIES, VERSIONS, methodLabel, methodText } from './host-records';
 import { PLACED, SeriesShell, residualText } from './workbench-screens';
 
 /** A host time as the screen writes times: date and minute, in the reader's zone. */
@@ -344,7 +344,7 @@ function TypeNewStandardBody({ at = 'proposal' }: { at?: StandardStep }) {
       {step === 'conditions' ? <StandardConditions /> : step === 'create' ? <StandardCreate /> : <div className="flex max-w-4xl flex-col gap-8">
         <FormSection title="标准给出的尺寸"
           description={`${PROPOSAL.standard} · ${compact(inputs.u0_v / 1000)}/${compact(inputs.u_v / 1000)} kV · ${CORE_WORD[inputs.cores] ?? `${inputs.cores} 芯`} · ${CONDUCTOR_WORD[inputs.conductor] ?? inputs.conductor} ${inputs.area_mm2} mm² · ${inputs.insulation} 绝缘 · ${ARMOUR_WORD[inputs.armour] ?? inputs.armour} · ${inputs.screened ? '有' : '无'}半导电屏蔽`}
-          aside={<Badge variant="outline">{PROPOSAL.method.plugin_id} {PROPOSAL.method.plugin_version}</Badge>}>
+          aside={<Badge variant="outline">{methodLabel(`${PROPOSAL.method.plugin_id}/${PROPOSAL.method.capability}`, PROPOSAL.method.method_version)}</Badge>}>
           <DataTable framed rows={proposal.dimensions} rowKey={dimension => dimension.field} columns={PROPOSAL_COLUMNS} />
           <Disclosure title={`内衬、钢带和外护套怎么来的（附录 A 假设直径，${STAGES.length} 步）`}>
             <DataTable framed rows={STAGES} rowKey={stage => String(stage.step)} columns={STAGE_COLUMNS} />
@@ -411,13 +411,13 @@ function SeriesParamsBody() {
   return <SeriesShell page="params" version={WORKSPACE.version.number}
     primary={<Button><Icon name="object/file" data-icon="inline-start" />规格书</Button>}>
     <Split panes={[
-      { id: 'electrical', size: 56, min: 40, children: <Panel title="每芯电气参数" tools={<Badge variant="outline">{WORKSPACE.electrical_method.plugin_id} {WORKSPACE.electrical_method.plugin_version}</Badge>}>
+      { id: 'electrical', size: 56, min: 40, children: <Panel title="每芯电气参数" tools={<Badge variant="outline">{methodLabel(WORKSPACE.electrical_method.plugin_id, WORKSPACE.electrical_method.plugin_version)}</Badge>}>
           <DataTable rows={electrical} rowKey={row => row.id} columns={QUANTITY_COLUMNS} />
           <Disclosure title={`没有给出的 ${WORKSPACE.electrical.length - electrical.length} 项`} defaultOpen>
             <Missing rows={WORKSPACE.electrical.filter(row => row.status !== 'available')} />
           </Disclosure>
         </Panel> },
-      { id: 'short', size: 44, min: 32, children: <Panel title="短路电流" tools={<Badge variant="outline">{WORKSPACE.short_circuit_method.plugin_id} {WORKSPACE.short_circuit_method.plugin_version}</Badge>}>
+      { id: 'short', size: 44, min: 32, children: <Panel title="短路电流" tools={<Badge variant="outline">{methodLabel(WORKSPACE.short_circuit_method.plugin_id, WORKSPACE.short_circuit_method.plugin_version)}</Badge>}>
           <div className="flex flex-col gap-4 border-b border-line px-4 py-4">
             <Metric label="导体非绝热允许短路电流" value={fixed(kA('core/1:conductor-nonadiabatic'), 2)} unit="kA"
               detail={adiabatic !== null && factor !== null ? `绝热 ${fixed(adiabatic, 2)} kA × 修正因数 ${fixed(factor, 4)}` : undefined} />
@@ -464,7 +464,7 @@ function SeriesRatingBody() {
         {RATING_TABLE.tierBasis.map(text => <p key={text} className="m-0 text-ink-2">{text}</p>)}
         <div className="flex flex-col gap-1 border-t border-line pt-4">
           <span className="text-ink-2">方法</span>
-          <span className="text-ink">{RATING_TABLE.method}</span>
+          <span className="text-ink">{methodText(RATING_TABLE.method)}</span>
           <span className="text-ink-2">{RATING_TABLE.warning}</span>
         </div>
       </Panel>

@@ -1,6 +1,6 @@
 // The composer: one rounded field that floats above the conversation (the only shadow on the page), attachments above
 // the text, attach on the left, send or stop on the right. Send is the screen's copper button once there is something to
-// send, and grey while it cannot send. Every part takes any props, so assistant-ui's ComposerPrimitive
+// send, outlined while a proposal waits (`quiet`), and grey while it cannot send. Every part takes any props, so assistant-ui's ComposerPrimitive
 // can render them (render={<ComposerSend />}); `composerInputClass` styles ComposerPrimitive.Input directly.
 import type { ComponentProps, ReactNode } from 'react';
 import { Attachment, AttachmentAction, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentMedia, AttachmentTitle } from '@/components/ui/attachment';
@@ -31,8 +31,12 @@ export function ComposerAttach(props: ComponentProps<typeof Button>) {
   return <Button variant="ghost" size="icon-sm" aria-label="附上结构表" title="附上 Excel、CSV 结构表" {...props}><Icon name="agent/attach" /></Button>;
 }
 
-export function ComposerSend(props: ComponentProps<typeof Button>) {
-  return <Button variant={props.disabled ? 'secondary' : 'default'} size="icon-sm" aria-label="发送" {...props}><Icon name="action/arrow-up" /></Button>;
+/**
+ * Send: copper once there is something to send; grey while it cannot send. `quiet` while a proposal waits in the
+ * conversation: its 接受 is then the screen's one copper button, and send stays outlined even with something to send.
+ */
+export function ComposerSend({ quiet, ...props }: { quiet?: boolean } & ComponentProps<typeof Button>) {
+  return <Button variant={props.disabled ? 'secondary' : quiet ? 'outline' : 'default'} size="icon-sm" aria-label="发送" {...props}><Icon name="action/arrow-up" /></Button>;
 }
 
 export function ComposerStop(props: ComponentProps<typeof Button>) {
