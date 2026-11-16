@@ -1,8 +1,10 @@
 // The answer, in the order an engineer asks: how much the cable can carry, which one reaches its limit first, how far it is
-// from the limit at the saved load; under it, the numbers that explain it. Every number is the method's, as saved in the run.
+// from the limit at the saved load; under it, the numbers that explain it. Every number is the method's, as saved in the run,
+// and what the method says (the cable that reaches its limit first, whether the load is within the limit) is said as it is.
 import type { ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Disclosure } from '@/kit/disclosure';
+import { Icon } from '@/kit/icon';
 import { TierMark } from '@/kit/marks';
 import { LimitMeter, Metric } from '@/kit/metric';
 import { PropertyList } from '@/kit/properties';
@@ -16,7 +18,7 @@ import type { Rating } from './rating';
 
 export type ConclusionState =
   | { kind: 'issue'; message: string }
-  | { kind: 'empty' }
+  | { kind: 'empty'; /** Records exist, but none is a rating. */ others: boolean }
   | { kind: 'loading' }
   | { kind: 'failed'; message: string }
   | {
@@ -44,7 +46,8 @@ export function Conclusion({ state }: { state: ConclusionState }) {
   if (state.kind === 'loading') return <Panel title="结论" className={frame}><EmptyState icon="status/pending" title="正在读取运行记录" description="读完这条记录，结论就在这里。" /></Panel>;
   if (state.kind === 'empty') {
     return <Panel title="结论" className={frame}>
-      <EmptyState icon="calc/ampacity" title="还没有运行记录" description="核对上面的已知条件，点右上角的“运行校核”，允许电流和先到温限的电缆会出现在这里。" />
+      <EmptyState icon="calc/ampacity" title={state.others ? '还没有校核' : '还没有运行记录'}
+        description="核对上面的已知条件，点右上角的“运行校核”，允许电流和先到温限的电缆会出现在这里。" />
     </Panel>;
   }
   if (state.kind === 'failed') return <Panel title="结论" className={frame}><EmptyState icon="status/error" title="这次校核没有结果" description={state.message} /></Panel>;
@@ -55,12 +58,16 @@ export function Conclusion({ state }: { state: ConclusionState }) {
   const losses = focus.losses_w_m;
   const thermal = focus.thermal_k_m_w;
   const several = rating.states.length > 1;
-  const ratedOf = (id: string): CableState | undefined => rating.rated.find(item => item.id === id);
+  const stateAt = (list: CableState[], id: string): CableState | undefined => list.find(item => item.id === id);
   const verification = record.summary?.verification;
   const warnings = record.summary?.warnings ?? [];
   const about = several ? <Badge variant="outline">{names(focus.id)}</Badge> : undefined;
   const body = (children: ReactNode) => <div className="px-4 pb-4">{children}</div>;
   const spare = rating.margin;
+  // The load of every circuit, as one number when they are alike.
+  const load = rating.loads.length === 0 ? null : rating.loads.every(value => value === rating.loads[0]) ? `${compact(rating.loads[0])} A` : `${rating.loads.map(value => compact(value)).join(' / ')} A`;
+  // The temperature that decides whether the load is fine is the hottest cable's, as the method names it.
+  const meter = rating.hottest ?? rating.limitingState;
 
   return <Panel title="结论" className={frame}
     tools={<>
@@ -71,24 +78,29 @@ export function Conclusion({ state }: { state: ConclusionState }) {
       <Metric label="允许电流" value={fixed(rating.ampacity)} unit="A" detail={rating.summary.ampacity?.basis_name} />
       <div className="flex flex-col">
         <span className="text-sm text-ink-2">先到温限</span>
-        <span className="text-h3 text-ink">{several && !rating.distinct ? '各电缆同时（温度相同）' : names(rating.limiting)}</span>
+        <span className="text-h3 text-ink">{names(rating.limiting)}</span>
       </div>
-      <LimitMeter label="导体温度" value={rating.limitingState.conductor_c} limit={rating.limitingState.limit_c} from={rating.ambient} unit="°C"
-        caption={<>
-          保存负荷 <span className="text-ink tabular-nums">{compact(rating.load)} A</span>
-          {spare !== null && <>，{spare >= 0 ? '余量' : '超出'} <span className={cn('tabular-nums', spare >= 0 ? 'text-ink' : 'text-error')}>{fixed(Math.abs(spare))} A</span></>}
-        </>} />
+      {rating.operating.length > 0
+        ? <>
+          <LimitMeter label={meter.id === rating.limiting ? '导体温度' : `导体温度 · ${shortNames(meter.id)}`} value={meter.conductor_c} limit={meter.limit_c} from={rating.ambient} unit="°C"
+            caption={<>
+              {load && <>保存负荷 <span className="text-ink tabular-nums">{load}</span></>}
+              {spare !== null && <>，{spare >= 0 ? '余量' : <><Icon name="status/error" className="inline text-error" /> 超出</>} <span className={cn('tabular-nums', spare >= 0 ? 'text-ink' : 'text-error')}>{fixed(Math.abs(spare))} A</span></>}
+            </>} />
+          {rating.withinLimit === false && <p className="m-0 flex items-start gap-2 text-sm text-error"><Icon name="status/error" className="mt-1" />保存负荷下 {names(meter.id)} 已经超过温限</p>}
+        </>
+        : <p className="m-0 flex items-start gap-2 text-sm text-attention-ink"><Icon name="status/warning" className="mt-1" />保存负荷下没有稳态解：{rating.operatingError?.message ?? '方法没有说明原因'}</p>}
     </div>
 
     {several && <Disclosure title="各电缆" aside={<span className="text-sm font-normal text-ink-2">{rating.states.length} 根</span>}>
       <DataTable rowKey={row => row.id} rows={rating.states} selected={focus.id} onSelect={row => onSelect(row.id === selected ? null : row.id)} columns={[
-        { key: 'name', header: '电缆', cell: row => <span className="flex items-center gap-2">{shortNames(row.id)}{rating.distinct && row.id === rating.limiting && <Badge variant="secondary">最热</Badge>}</span> },
-        { key: 'load', header: '保存负荷', unit: '°C', numeric: true, width: 'w-28', cell: row => fixed(row.conductor_c) },
-        { key: 'rated', header: '带满', unit: '°C', numeric: true, width: 'w-20', cell: row => fixed(ratedOf(row.id)?.conductor_c) },
+        { key: 'name', header: '电缆', cell: row => <span className="flex items-center gap-2">{shortNames(row.id)}{rating.distinct && row.id === rating.hottest?.id && <Badge variant="secondary">最热</Badge>}</span> },
+        { key: 'load', header: '负荷下', unit: '°C', numeric: true, width: 'w-24', cell: row => fixed(stateAt(rating.operating, row.id)?.conductor_c) },
+        { key: 'rated', header: '带满', unit: '°C', numeric: true, width: 'w-20', cell: row => fixed(stateAt(rating.rated, row.id)?.conductor_c) },
       ]} />
     </Disclosure>}
 
-    <Disclosure title="保存负荷下的温度" defaultOpen aside={about}>
+    <Disclosure title={rating.moment === 'load' ? '保存负荷下的温度' : '带满时的温度'} defaultOpen aside={about}>
       {body(<PropertyList rows={[
         { label: '导体', value: fixed(focus.conductor_c), unit: '°C' },
         { label: screenName, value: fixed(focus.sheath_c), unit: '°C' },

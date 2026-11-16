@@ -67,22 +67,27 @@ function ProjectForm({ start, onCreated }: { start: RatingStart; onCreated: (pro
     };
     making.current = true;
     setError(null);
-    let project: string | null = null;
+    let project: string;
     try {
       project = (await api.op<ProjectView>('project.create', { name: name.trim(), model_id: start.model.id })).meta.id;
-      if (Object.keys(laying).length) await api.op('installation.set', { project, ...laying });
-      if (Object.keys(conditionsPatch).length) await api.op('conditions.set', { project, ...conditionsPatch });
-      onCreated(project);
     } catch (failure) {
-      if (project) {
-        // The project exists: go to it, and say what it did not take.
-        reportFailure(failure);
-        onCreated(project);
-      } else {
-        setError(messageOf(failure));
-        making.current = false;
+      setError(messageOf(failure));
+      making.current = false;
+      return;
+    }
+    // The project exists. What the form changed is written next, each part on its own: a part the host refuses keeps the
+    // starting values, and the notice says which part and why.
+    const refused: string[] = [];
+    for (const [part, op, patch] of [['敷设', 'installation.set', laying], ['工况', 'conditions.set', conditionsPatch]] as const) {
+      if (Object.keys(patch).length === 0) continue;
+      try {
+        await api.op(op, { project, ...patch });
+      } catch (failure) {
+        refused.push(`${part}没有按填的改：${messageOf(failure)}`);
       }
     }
+    if (refused.length) reportFailure(new Error(`工程已建好，但${refused.join('；')}。工程里是起始值，可以在“已知”里再改。`));
+    onCreated(project);
   };
 
   return <form id="new-project" onSubmit={event => void submit(event)} className="flex flex-col gap-6 px-6 py-6">

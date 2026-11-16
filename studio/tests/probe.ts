@@ -24,6 +24,16 @@ export function probe(): string[] {
     if (!element.closest('[data-scroll-table]') && (rect.right > innerWidth + 1 || rect.left < -1)) issues.push(`outside the window: "${element.textContent.trim().slice(0, 40)}"`);
   }
 
+  // Text clipped by the box that holds it: the status line of the canvas frame, a badge, a button with an icon. A box that
+  // clips on purpose ends its text in an ellipsis.
+  for (const element of document.querySelectorAll('body *')) {
+    if (!(element instanceof HTMLElement) || !element.textContent?.trim() || !shown(element)) continue;
+    const style = getComputedStyle(element);
+    if (style.overflowX === 'hidden' && style.textOverflow !== 'ellipsis' && !element.matches('[data-gpu], [data-slot="resizable-panel"], [data-overlays]') && element.scrollWidth > element.clientWidth + 1) {
+      issues.push(`clipped: "${element.textContent.trim().slice(0, 40)}"`);
+    }
+  }
+
   // What the drawing writes on itself, and what the frame floats over it.
   const labels = [...document.querySelectorAll('[data-chip], [data-dimension], svg[role="img"] text, .recharts-surface text')].filter(shown);
   const legend = [...document.querySelectorAll('span')].filter(span => !span.children.length && /^(颜色是土壤温度|导体的颜色是温度)$/.test(span.textContent ?? '')).map(span => span.parentElement?.parentElement).filter((element): element is HTMLElement => Boolean(element));

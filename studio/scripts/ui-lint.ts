@@ -31,7 +31,6 @@ const EXEMPT: { path: string; owes: number; owner: string; until: string }[] = [
   { path: 'ui/components/icon.tsx', owes: 1, owner: 'studio-build', until: '旧页面删除（换用 kit/icon）' },
   { path: 'ui/components/marks.tsx', owes: 8, owner: 'studio-build', until: '旧页面删除（换用 kit 的标记）' },
   { path: 'ui/components/notice.tsx', owes: 3, owner: 'studio-build', until: '旧页面删除' },
-  { path: 'ui/components/number-field.tsx', owes: 2, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/tooltip.tsx', owes: 3, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/components/library-header.tsx', owes: 2, owner: 'studio-build', until: '旧页面删除' },
   { path: 'ui/agent/', owes: 5, owner: 'studio-build', until: '对话页换用 kit 组件' },

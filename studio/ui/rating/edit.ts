@@ -3,7 +3,7 @@
 // message when it did not go through, so a form can say why in its own place.
 import { create } from 'zustand';
 import { reportFailure } from '@/components/notice';
-import type { Parts, ProjectView } from '@shared/types';
+import type { ProjectView } from '@shared/types';
 import { ApiError, api } from '@/state/api';
 import { queryClient } from '@/state/queries';
 
@@ -12,7 +12,8 @@ export type WriteOp = 'cable.set' | 'installation.set' | 'conditions.set' | 'met
 export type Edit = (op: WriteOp, params: Record<string, unknown>) => Promise<string | null>;
 
 interface Step { op: WriteOp; params: Record<string, unknown> }
-interface Entry { undo: Step; redo: Step }
+/** What a change did: the steps that take it back, and the steps that make it again. */
+interface Entry { undo: Step[]; redo: Step[] }
 
 interface History {
   past: Record<string, Entry[]>;
@@ -21,13 +22,35 @@ interface History {
 }
 export const useHistory = create<History>(() => ({ past: {}, future: {}, busy: false }));
 
-/** The operation that puts one part back to what it was. */
-function restore(op: WriteOp, parts: Parts): Step {
-  if (op === 'cable.set') return { op, params: { model_id: parts.cable.id } };
-  if (op === 'installation.set') return { op, params: { ...parts.installation } };
-  if (op === 'conditions.set') return { op, params: { ...parts.conditions } };
-  const { ks, kp, eddy } = parts.method.parameters as { ks?: number; kp?: number; eddy?: string };
-  return { op, params: { ...(ks !== undefined && { ks }), ...(kp !== undefined && { kp }), ...(eddy !== undefined && { eddy }) } };
+/** Whether two values are the same: objects by what they hold, not by the order of their keys. */
+export const same = (a: unknown, b: unknown): boolean => {
+  if (a === b) return true;
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
+  const [left, right] = [a as Record<string, unknown>, b as Record<string, unknown>];
+  return [...new Set([...Object.keys(left), ...Object.keys(right)])].every(key => same(left[key], right[key]));
+};
+
+/** The operations that put back what a change changed. */
+function restoreSteps(op: WriteOp, params: Record<string, unknown>, before: ProjectView, after: ProjectView): Step[] {
+  const { parts } = before;
+  if (op === 'cable.set') {
+    // A cable with another core count brings the laying of its own and may move the system voltage: put back what moved.
+    return [
+      { op, params: { model_id: parts.cable.id } },
+      ...(same(parts.installation, after.parts.installation) ? [] : [{ op: 'installation.set' as const, params: { ...parts.installation } }]),
+      ...(same(parts.conditions, after.parts.conditions) ? [] : [{ op: 'conditions.set' as const, params: { ...parts.conditions } }]),
+    ];
+  }
+  if (op === 'installation.set') return [{ op, params: { ...parts.installation } }];
+  if (op === 'conditions.set') return [{ op, params: { ...parts.conditions } }];
+  // A parameter the engineer had not set was in force at the value the library declares: that is what comes back.
+  const kept = parts.method.parameters as Record<string, unknown>;
+  const effective = (before.preview?.parameters ?? kept) as Record<string, unknown>;
+  const touched = Object.keys(params).filter(key => key === 'ks' || key === 'kp' || key === 'eddy');
+  return [{ op, params: Object.fromEntries(touched.flatMap(key => {
+    const value = kept[key] ?? effective[key];
+    return value === undefined ? [] : [[key, value]];
+  })) }];
 }
 
 async function send(project: string, step: Step): Promise<ProjectView> {
@@ -71,7 +94,7 @@ export const change = (project: string, op: WriteOp, params: Record<string, unkn
   const after = await send(project, { op, params });
   if (after.inputs_sha256 === before.inputs_sha256) return;
   useHistory.setState(state => ({
-    past: { ...state.past, [project]: [...(state.past[project] ?? []).slice(-49), { undo: restore(op, before.parts), redo: { op, params } }] },
+    past: { ...state.past, [project]: [...(state.past[project] ?? []).slice(-49), { undo: restoreSteps(op, params, before, after), redo: [{ op, params }] }] },
     future: { ...state.future, [project]: [] },
   }));
 }, quiet);
@@ -79,7 +102,7 @@ export const change = (project: string, op: WriteOp, params: Record<string, unkn
 export const undo = (project: string) => guarded(async () => {
   const entry = useHistory.getState().past[project]?.at(-1);
   if (!entry) return;
-  await send(project, entry.undo);
+  for (const step of entry.undo) await send(project, step);
   useHistory.setState(state => ({
     past: { ...state.past, [project]: state.past[project].slice(0, -1) },
     future: { ...state.future, [project]: [...(state.future[project] ?? []), entry] },
@@ -89,7 +112,7 @@ export const undo = (project: string) => guarded(async () => {
 export const redo = (project: string) => guarded(async () => {
   const entry = useHistory.getState().future[project]?.at(-1);
   if (!entry) return;
-  await send(project, entry.redo);
+  for (const step of entry.redo) await send(project, step);
   useHistory.setState(state => ({
     past: { ...state.past, [project]: [...(state.past[project] ?? []), entry] },
     future: { ...state.future, [project]: state.future[project].slice(0, -1) },

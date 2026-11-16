@@ -1,7 +1,8 @@
 // The few form parts the rating screens share, made of the base controls: a number with its unit inside the field, a choice
 // with its title, and the two shells a small form lives in: a popover under the given it changes, and a dialog for the long
 // choices. Both apply one change and say in their own place why the host refused it.
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { reportFailure } from '@/components/notice';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Field, FieldDescription, FieldError, FieldLabel, FieldTitle } from '@/components/ui/field';
@@ -67,6 +68,9 @@ export function NumberField({ label, unit, value, onChange, placeholder, hint, i
 export function useApply(onClose: () => void) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A form closed while its change was on its way has nowhere to say that the host refused it: the notice says it.
+  const open = useRef(true);
+  useEffect(() => () => { open.current = false; }, []);
   const run = async (steps: (() => Promise<string | null>)[]) => {
     setError(null);
     if (steps.length === 0) return onClose();
@@ -75,7 +79,8 @@ export function useApply(onClose: () => void) {
       const failure = await step();
       if (failure) {
         setBusy(false);
-        setError(failure);
+        if (open.current) setError(failure);
+        else reportFailure(new Error(failure));
         return;
       }
     }

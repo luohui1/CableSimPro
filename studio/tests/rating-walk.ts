@@ -41,6 +41,14 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
   const ducts = (await op<ProjectView>('project.create', { name: '走查 10 kV 排管', model_id: 'system.cu-xlpe-10kv-240' })).meta.id;
   await op('installation.set', { project: ducts, layout: 'ducts' });
   await op<RunRecord>('run.rate', { project: ducts });
+  // Three circuits with very different loads: the first is over its limit, the method says which cable is hottest.
+  const mixed = (await op<ProjectView>('project.create', { name: '走查 10 kV 三回负荷不等', model_id: 'huayuan.yjv22-15kv-240' })).meta.id;
+  await op('installation.set', { project: mixed, layout: 'three_core_buried_horizontal', depth_m: 1.2 });
+  await op('conditions.set', { project: mixed, currents_a: [600, 100, 100] });
+  await op<RunRecord>('run.rate', { project: mixed });
+  // A project that has only a sweep: no check has been run.
+  const sweepOnly = (await op<ProjectView>('project.create', { name: '走查 只有扫描', model_id: 'huayuan.yjv22-15kv-240' })).meta.id;
+  await op<RunRecord>('run.sweep', { project: sweepOnly, variable: 'soil_thermal_resistivity', values: [1, 1.5, 2] });
 
   for (const [width, height] of [[1366, 768], [1920, 1080]] as const) {
     const page: Page = await browser.newPage({ viewport: { width, height } });
@@ -130,6 +138,7 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await page.getByRole('button', { name: '应用' }).click();
     await page.getByText('条件已改 · 已过期').waitFor();
     await page.getByRole('button', { name: '运行校核' }).waitFor();
+    await page.getByRole('button', { name: /^土壤热阻率.*已改/ }).waitFor();
     assert.equal((await view()).parts.conditions.soil_thermal_resistivity, width === 1366 ? 1.6 : 1.4);
     assert.equal(await shownNumber(), Number(ampacity.toFixed(1)), 'the old answer stays until it is run again');
     await check('changed');
@@ -185,7 +194,7 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     // 9. Layouts with several cables, circuits and ducts: the drawing's labels, the table of the cables, every group of the
     //    answer opened, and the numbers following the cable that is chosen on the drawing.
     const groups = ['各电缆', '损耗', '热阻', '表面温升由谁加的', '运行提示', '算法与可信度'];
-    for (const [label, id] of [['trefoil', trefoil], ['row', row], ['ducts', ducts]] as const) {
+    for (const [label, id] of [['trefoil', trefoil], ['row', row], ['ducts', ducts], ['mixed', mixed]] as const) {
       await page.goto(`${base}/p/${id}`);
       await gpuReady();
       await page.getByRole('button', { name: '导出计算书' }).waitFor();
@@ -207,6 +216,16 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
       const states = (await get<RunRecord>(`/api/projects/${id}/runs/${saved.runs[0].id}`)).summary!.operating!.cables;
       assert.equal(await page.locator('[data-cable]').count(), states.length, 'a cable is drawn for each state of the run');
       if (label === 'trefoil') await page.getByRole('row', { name: /A 相/ }).waitFor();
+      // The allowed current of several circuits is the one they have together: no margin is claimed beside it.
+      if (label === 'row' || label === 'mixed') assert.equal(await page.getByText('余量').count(), 0, `${label}: a margin beside the allowed current of all circuits`);
+      if (label === 'mixed') {
+        // The hottest cable is the method's, not the one that reaches its limit first at the allowed current, and the load that is too high is said.
+        const rated = (await get<RunRecord>(`/api/projects/${id}/runs/${saved.runs[0].id}`)).summary!;
+        assert.equal(rated.operating!.within_limit, false);
+        await page.getByText(/已经超过温限/).waitFor();
+        await page.getByText(`导体温度 · 回路 ${/c(\d)/.exec(rated.operating!.hottest_cable!)![1]}`).waitFor();
+        await check('mixed-over-limit');
+      }
       if (label === 'ducts') {
         await page.getByRole('button', { name: /^埋深/ }).click();
         await page.getByRole('textbox', { name: '管内径' }).waitFor();
@@ -223,6 +242,12 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await page.getByRole('button', { name: '导出计算书' }).waitFor();
     const original = await view(row);
     const depth = width === 1366 ? 1.5 : 1.3;
+    await page.locator('[data-dimension="depth"]').click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('1.9');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(800);
+    assert.equal((await view(row)).parts.installation.depth_m, original.parts.installation.depth_m, 'Escape on the capsule keeps the depth as it was');
     await page.locator('[data-dimension="depth"]').click();
     await page.keyboard.press('Control+A');
     await page.keyboard.type(String(depth));
@@ -252,6 +277,41 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     await waitFor('the second undo', async () => (await view(row)).inputs_sha256 === original.inputs_sha256);
     await page.getByRole('button', { name: '导出计算书' }).waitFor();
     await check('canvas-undone');
+
+    // 11. A project with only a sweep: its records can be reached and the answer says that no check has been run; an address
+    //     that names a record the project does not have says so; a method parameter and a cable of another core count are
+    //     changed and taken back.
+    await page.goto(`${base}/p/${sweepOnly}`);
+    await page.getByRole('button', { name: /^运行记录 \d · 扫描/ }).waitFor();
+    await page.getByText('还没有校核', { exact: true }).first().waitFor();
+    await check('only-sweep');
+    await page.goto(`${base}/p/${sweepOnly}?run=run-00000000`);
+    await page.getByText('没有这条运行记录').waitFor();
+    await check('unknown-record');
+    await page.getByRole('button', { name: '回到现在' }).click();
+    await page.waitForURL(url => !url.search.includes('run='));
+
+    const eddy = async () => ((await view(sweepOnly)).preview?.parameters as { eddy?: string }).eddy;
+    const eddyBefore = await eddy();
+    await page.getByRole('button', { name: /^护套/ }).click();
+    await page.getByRole('button', { name: eddyBefore === 'trefoil' ? '不计' : '计入' }).click();
+    await page.getByRole('button', { name: '应用' }).click();
+    await waitFor('the eddy losses changed', async () => (await eddy()) !== eddyBefore);
+    await page.getByRole('dialog').waitFor({ state: 'detached' });
+    await page.keyboard.press('Control+Z');
+    await waitFor('the first change of a method parameter taken back', async () => (await eddy()) === eddyBefore);
+
+    const beforeCable = await view(sweepOnly);
+    await page.getByRole('button', { name: /^型号/ }).click();
+    await page.getByRole('dialog').getByPlaceholder('搜索型号或系列').fill('YJL02');
+    await page.getByRole('dialog').getByRole('row', { name: /YJL02.*1×240/ }).first().click();
+    await page.getByRole('dialog').getByRole('button', { name: '应用' }).click();
+    await waitFor('a single-core cable', async () => (await view(sweepOnly)).parts.cable.summary.cores === 1);
+    await page.getByRole('dialog').waitFor({ state: 'detached' });
+    assert.notEqual((await view(sweepOnly)).parts.installation.layout, beforeCable.parts.installation.layout);
+    await check('cable-changed');
+    await page.keyboard.press('Control+Z');
+    await waitFor('the cable and its laying back', async () => (await view(sweepOnly)).inputs_sha256 === beforeCable.inputs_sha256);
     await page.close();
   }
 }
@@ -268,6 +328,10 @@ if (import.meta.main) {
   const browser = await chromium.launch({ args: ['--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   try {
     await walkRating(browser, base, out, problems);
+  } catch (error) {
+    // What the layout probe found before a step failed is not lost with it.
+    if (problems.length) console.error(`${problems.length} problem(s) found before it stopped:\n${problems.join('\n')}`);
+    throw error;
   } finally {
     await browser.close();
     await app?.close();

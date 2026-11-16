@@ -7,25 +7,24 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Given, PremiseStrip } from '@/kit/workbench/premise';
 import { useLibrary } from '@/state/queries';
 import { BONDING_NAMES, compact, EDDY_NAMES } from '@shared/format';
-import type { Parts, ProjectView } from '@shared/types';
-import type { Edit, WriteOp } from './edit';
+import type { ProjectView, RunRecord } from '@shared/types';
+import { same, type Edit, type WriteOp } from './edit';
 import { ChoiceField, FormDialog, NumberField, parseNumber, PopoverForm, textOf, useApply, useTexts } from './fields';
 import { ModelTable } from './models';
 
 export type GivenKey = 'cable' | 'layout' | 'depth' | 'soil' | 'ambient' | 'load' | 'system' | 'sheath' | 'method';
 
-const same = (a: unknown, b: unknown): boolean => {
-  if (a === b) return true;
-  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false;
-  const [left, right] = [a as Record<string, unknown>, b as Record<string, unknown>];
-  const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-  return [...keys].every(key => same(left[key], right[key]));
+/** The method's parameters as they were in force: the ones the engineer set, and the library's declared values for the rest. */
+const inForce = (resolved: Record<string, unknown> | null | undefined, kept: Record<string, unknown>) => {
+  const source = resolved ?? kept;
+  return { ks: source.ks, kp: source.kp, eddy: source.eddy };
 };
 
-/** The givens whose value now is not the one a result was computed from. */
-export function changedGivens(now: Parts, then: Parts | undefined): Set<GivenKey> {
+/** The givens whose value now is not the one the shown record was computed from. */
+export function changedGivens(view: ProjectView, record: RunRecord | undefined): Set<GivenKey> {
   const changed = new Set<GivenKey>();
-  if (!then) return changed;
+  if (!record) return changed;
+  const [now, then] = [view.parts, record.inputs];
   const differ = (key: GivenKey, a: unknown, b: unknown) => { if (!same(a, b)) changed.add(key); };
   differ('cable', [now.cable.id, now.cable.content_sha256], [then.cable.id, then.cable.content_sha256]);
   differ('layout', now.installation.layout, then.installation.layout);
@@ -35,10 +34,9 @@ export function changedGivens(now: Parts, then: Parts | undefined): Set<GivenKey
   differ('ambient', now.conditions.ambient_temperature_c, then.conditions.ambient_temperature_c);
   differ('load', now.conditions.currents_a, then.conditions.currents_a);
   differ('system', [now.conditions.system_voltage_v, now.conditions.frequency_hz], [then.conditions.system_voltage_v, then.conditions.frequency_hz]);
-  const { eddy: eddyNow, ...methodNow } = now.method.parameters as Record<string, unknown>;
-  const { eddy: eddyThen, ...methodThen } = then.method.parameters as Record<string, unknown>;
-  differ('sheath', [now.installation.bonding, eddyNow], [then.installation.bonding, eddyThen]);
-  differ('method', [now.method.method, methodNow], [then.method.method, methodThen]);
+  const [forceNow, forceThen] = [inForce(view.preview?.parameters, now.method.parameters), inForce(record.parameters, then.method.parameters)];
+  differ('sheath', [now.installation.bonding, forceNow.eddy], [then.installation.bonding, forceThen.eddy]);
+  differ('method', [now.method.method, forceNow.ks, forceNow.kp], [then.method.method, forceThen.ks, forceThen.kp]);
   return changed;
 }
 
@@ -76,6 +74,8 @@ function LayoutEditor({ view, onEdit, onClose }: EditorProps) {
 function DepthEditor({ view, onEdit, onClose }: EditorProps) {
   const { installation } = view.parts;
   const resolved = view.preview?.layout.spacing ?? null;
+  // The spacing stays here while the laying has one, also when the value set is one the method refuses and nothing is drawn.
+  const hasSpacing = resolved !== null || installation.spacing_m !== null;
   const { busy, error, setError, run } = useApply(onClose);
   const { texts, set, changed } = useTexts({
     depth: textOf(installation.depth_m),
@@ -124,7 +124,7 @@ function DepthEditor({ view, onEdit, onClose }: EditorProps) {
   return <PopoverForm title="埋深与尺寸" description="电缆组中心到地表的距离，以及这种敷设的间距、管径和回填尺寸。" busy={busy} error={error} onClose={onClose} onSubmit={submit}>
     <div className="grid grid-cols-2 gap-3">
       <NumberField autoFocus label="中心埋深" unit="m" value={texts.depth} onChange={set('depth')} />
-      {resolved !== null && <NumberField label="中心距" unit="mm" value={texts.spacing} onChange={set('spacing')} placeholder={`默认 ${compact(resolved * 1000)}`} />}
+      {hasSpacing && <NumberField label="中心距" unit="mm" value={texts.spacing} onChange={set('spacing')} placeholder={resolved === null ? '默认' : `默认 ${compact(resolved * 1000)}`} />}
       {installation.duct && <>
         <NumberField label="管内径" unit="mm" value={texts.inner} onChange={set('inner')} />
         <NumberField label="管外径" unit="mm" value={texts.outer} onChange={set('outer')} />
@@ -157,7 +157,8 @@ function NumberEditor({ title, description, label, unit, initial, check, make, o
     if (value === null || !Number.isFinite(value)) return setError(`${label}要填数字。`);
     const refusal = check(value);
     if (refusal) return setError(refusal);
-    void run(value === initial ? [] : [() => onEdit(...make(value))]);
+    // What was typed against what was shown: a value the field rounded for display is not a change.
+    void run(text === textOf(initial) ? [] : [() => onEdit(...make(value))]);
   };
   return <PopoverForm title={title} description={description} busy={busy} error={error} onClose={onClose} onSubmit={submit}>
     <NumberField autoFocus label={label} unit={unit} value={text} onChange={setText} />
@@ -174,7 +175,7 @@ function LoadEditor({ view, onEdit, onClose }: EditorProps) {
     const values = texts.map(parseNumber);
     if (values.some(value => value === null || !Number.isFinite(value) || value < 0)) return setError('负荷电流要填不小于 0 的数。');
     const next = values as number[];
-    if (alike ? next[0] === currents[0] : same(next, currents)) return void run([]);
+    if (alike ? texts[0] === textOf(currents[0]) : texts.every((text, index) => text === textOf(currents[index]))) return void run([]);
     void run([() => onEdit('conditions.set', alike ? { current_a: next[0] } : { currents_a: next })]);
   };
   return <PopoverForm title="负荷电流" description="各回路带的电流，用来对照允许电流。" busy={busy} error={error} onClose={onClose} onSubmit={submit}>
@@ -270,13 +271,14 @@ export function Premise({ view, asked, changed, onEdit }: { view: ProjectView; a
   const load = alike ? `${compact(conditions.currents_a[0])} A${circuits > 1 ? ` × ${circuits} 回` : ''}` : `${conditions.currents_a.map(value => compact(value)).join(' / ')} A`;
   const editor = { view, onEdit, onClose: close };
   /** A given and the editor that opens under it. */
+  const name = (key: GivenKey, label: string, value: string) => `${label} ${value}${changed.has(key) ? '，已改' : ''}`;
   const given = (key: GivenKey, label: string, value: string, form: ReactNode) => <Popover open={open === key} onOpenChange={next => setOpen(next ? key : null)}>
-    <PopoverTrigger render={<Given label={label} value={value} changed={changed.has(key)} />} />
+    <PopoverTrigger render={<Given label={label} value={value} changed={changed.has(key)} aria-label={name(key, label, value)} />} />
     <PopoverContent align="start" className="w-80 gap-4 p-4">{open === key && form}</PopoverContent>
   </Popover>;
   return <>
     <PremiseStrip asked={asked}>
-      <Given label="型号" value={cable.name} changed={changed.has('cable')} onClick={() => setOpen('cable')} />
+      <Given label="型号" value={cable.name} changed={changed.has('cable')} aria-label={name('cable', '型号', cable.name)} onClick={() => setOpen('cable')} />
       {given('layout', '敷设', layout, <LayoutEditor {...editor} />)}
       {given('depth', '埋深', `${compact(installation.depth_m)} m`, <DepthEditor {...editor} />)}
       {given('soil', '土壤热阻率', `${compact(conditions.soil_thermal_resistivity)} K·m/W`, <NumberEditor title="土壤热阻率" description="埋设处土壤的热阻率，越大散热越差。" label="土壤热阻率" unit="K·m/W"

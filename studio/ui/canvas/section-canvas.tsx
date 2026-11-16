@@ -4,7 +4,7 @@
 // status line are the kit's canvas frame around it.
 import { animate } from 'motion';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { NumberField } from '@/components/number-field';
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/components/ui/input-group';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { CanvasFrame, CanvasLayer, CanvasTool, CanvasToolbar, CanvasToolbarSeparator, TemperatureLegend } from '@/kit/workbench/canvas';
 import { cn } from '@/lib/cn';
@@ -158,6 +158,26 @@ function spacingPair(scene: Scene): [SceneCable, SceneCable] | null {
     }
   }
   return null;
+}
+
+/** A dimension typed in place of its capsule: Enter applies it, Escape and leaving the field keep what was. */
+function CapsuleField({ value, unit, label, least, onApply, onLeave }: { value: number; unit: string; label: string; least: number; onApply: (value: number) => void; onLeave: () => void }) {
+  const [text, setText] = useState(String(value));
+  return <InputGroup className="h-9 w-44 shadow-menu">
+    <InputGroupInput autoFocus inputMode="decimal" autoComplete="off" aria-label={label} value={text} onChange={event => setText(event.target.value)} onBlur={onLeave}
+      onKeyDown={event => {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          onLeave();
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          const next = Number(text.trim().replace(',', '.'));
+          if (text.trim() !== '' && Number.isFinite(next)) onApply(Math.max(next, least));
+          onLeave();
+        }
+      }} />
+    <InputGroupAddon align="inline-end"><InputGroupText>{unit}</InputGroupText></InputGroupAddon>
+  </InputGroup>;
 }
 
 /** Changing the laying on the drawing. Positions follow the laying template, so what changes is its depth and spacing. */
@@ -473,9 +493,8 @@ export function SectionCanvas({ scene, field, result, notice, status, edit }: {
       dimension && value !== null && <div key={which} className="absolute top-0 left-0" onPointerDown={event => event.stopPropagation()}
         style={{ translate: `${Math.round(Math.min(dimension.rect.x, size.width - 176))}px ${Math.round(dimension.rect.y)}px` }}>
         {editing === which
-          ? <NumberField autoFocus value={Number((value * scale).toFixed(4))} unit={unit} min={least * scale} step={which === 'depth' ? 0.05 : 5} digits={which === 'depth' ? 3 : 1}
-            className="rounded-field shadow-lift" onLeave={() => setEditing(null)}
-            onCommit={next => { if (next !== null) edit.commit(which === 'depth' ? { depth_m: next } : { spacing_m: next / 1000 }); }} />
+          ? <CapsuleField value={Number((value * scale).toFixed(4))} unit={unit} label={which === 'depth' ? '中心埋深' : '中心距'} least={least * scale} onLeave={() => setEditing(null)}
+            onApply={next => edit.commit(which === 'depth' ? { depth_m: next } : { spacing_m: next / 1000 })} />
           : <button type="button" data-dimension={which} onClick={() => setEditing(which)} style={{ width: dimension.rect.w, height: dimension.rect.h }}
             className="flex cursor-text items-center justify-center rounded-full border border-control bg-panel text-13 whitespace-nowrap text-ink shadow-lift transition-colors duration-fast ease-std hover:border-ink">
             {dimension.label}

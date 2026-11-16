@@ -15,6 +15,17 @@ import { compact, fixed, KIND_NAMES } from '@shared/format';
 import type { ProjectView, RunHeader, RunRecord } from '@shared/types';
 import { messageOf } from './edit';
 import { FormDialog, NumberField, parseNumber, textOf } from './fields';
+import { EmptyState } from '@/kit/workbench/premise';
+
+/** Why points or candidates could not be computed, in the host's words, each once. */
+const reasonsOf = (messages: (string | undefined)[]): string[] => [...new Set(messages.filter((message): message is string => Boolean(message)))];
+
+/** The reasons as text that can be read and tabbed to, not only hovered. */
+function Reasons({ list }: { list: string[] }) {
+  return list.length > 0 ? <ul className="m-0 flex list-none flex-col gap-2 border-t border-line px-4 py-3">
+    {list.map(reason => <li key={reason} className="flex items-start gap-2 text-sm text-attention-ink"><Icon name="status/warning" className="mt-1" />{reason}</li>)}
+  </ul> : null;
+}
 
 // ---- The forms ----
 
@@ -34,7 +45,7 @@ const SWEEPS: { key: SweepVariable; label: string; unit: string; points: number;
 ];
 const round = (value: number) => Number(value.toPrecision(3));
 
-export function SweepDialog({ view, onClose, onDone }: { view: ProjectView; onClose: () => void; onDone: (record: RunRecord) => void }) {
+export function SweepDialog({ view, onClose, onDone }: { view: ProjectView; onClose: () => void; onDone: (record: RunRecord) => void | Promise<void> }) {
   const options = SWEEPS.filter(option => option.now(view) !== null);
   const [variable, setVariable] = useState<SweepVariable>(options[0].key);
   const start = (key: SweepVariable): [string, string] => {
@@ -64,7 +75,7 @@ export function SweepDialog({ view, onClose, onDone }: { view: ProjectView; onCl
     setBusy(true);
     setError(null);
     try {
-      onDone(await api.op<RunRecord>('run.sweep', { project: view.meta.id, variable, values: planned }));
+      await onDone(await api.op<RunRecord>('run.sweep', { project: view.meta.id, variable, values: planned }));
     } catch (failure) {
       setError(messageOf(failure));
       setBusy(false);
@@ -93,7 +104,7 @@ export function SweepDialog({ view, onClose, onDone }: { view: ProjectView; onCl
   </FormDialog>;
 }
 
-export function SelectionDialog({ view, onClose, onDone }: { view: ProjectView; onClose: () => void; onDone: (record: RunRecord) => void }) {
+export function SelectionDialog({ view, onClose, onDone }: { view: ProjectView; onClose: () => void; onDone: (record: RunRecord) => void | Promise<void> }) {
   const [target, setTarget] = useState(textOf(view.parts.conditions.currents_a[0]));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,7 +114,7 @@ export function SelectionDialog({ view, onClose, onDone }: { view: ProjectView; 
     setBusy(true);
     setError(null);
     try {
-      onDone(await api.op<RunRecord>('run.select', { project: view.meta.id, target_current_a: value }));
+      await onDone(await api.op<RunRecord>('run.select', { project: view.meta.id, target_current_a: value }));
     } catch (failure) {
       setError(messageOf(failure));
       setBusy(false);
@@ -149,8 +160,11 @@ export function SweepView({ record }: { record: RunRecord }) {
   // The saved load is drawn against the curve when the sweep leaves it alone and every circuit carries the same.
   const load = sweep.variable !== 'current_a' && loads.every(value => value === loads[0]) ? loads[0] : undefined;
   const rows = sweep.points.map((point, index) => ({ ...point, index }));
+  const reasons = reasonsOf(sweep.points.map(point => point.error?.message ?? point.operating_error?.message));
+  const computed = sweep.points.some(point => typeof point.ampacity_a === 'number');
   return <div className="flex min-h-0 flex-1">
     <Panel title={`${sweep.label}变化时的允许电流`} className="min-w-0 flex-1" bodyClassName="relative bg-canvas">
+      {!computed && <EmptyState icon="status/warning" title="没有一个点算得出" description={reasons[0] ?? '方法没有给出结果。'} />}
       <SweepCurve points={sweep.points.map(point => ({ value: point.value, ampacity: point.ampacity_a ?? null }))} xLabel={`${sweep.label} ${sweep.unit}`} load={load} active={active} />
     </Panel>
     <Panel title={`${sweep.points.length} 个点`} className="w-112 flex-none border-l border-line">
@@ -160,10 +174,11 @@ export function SweepView({ record }: { record: RunRecord }) {
         { key: 'hottest', header: '最热导体', unit: '°C', numeric: true, width: 'w-28', cell: row => (row.operating_error ? '无稳态解' : fixed(row.hottest_conductor_c)) },
         { key: 'note', header: '说明', cell: row => {
           const message = row.error?.message ?? row.operating_error?.message;
-          if (message) return <span title={message} className="text-attention-ink">{row.error ? '算不出' : '无稳态解'}</span>;
-          return row.within_limit === false ? <span className="text-attention-ink">保存负荷超温限</span> : null;
+          if (message) return <span title={message} className="inline-flex items-center gap-1 text-attention-ink"><Icon name="status/warning" />{row.error ? '算不出' : '无稳态解'}</span>;
+          return row.within_limit === false ? <span className="inline-flex items-center gap-1 text-attention-ink"><Icon name="status/warning" />保存负荷超温限</span> : null;
         } },
       ]} />
+      <Reasons list={reasons} />
     </Panel>
   </div>;
 }
@@ -187,5 +202,6 @@ export function SelectionView({ record, cable, adopting, onAdopt }: { record: Ru
         ? <span title={candidate.error.message}><VerdictMark verdict="missing" /></span>
         : <VerdictMark verdict={candidate.meets_target ? 'passed' : 'failed'} />) },
     ]} />
+    <Reasons list={reasonsOf(selection.candidates.map(candidate => candidate.error?.message))} />
   </Panel>;
 }
