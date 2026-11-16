@@ -1,4 +1,5 @@
 // Contracts shared by the host and the workbench. Physical values are SI unless the name says otherwise.
+import type { SavedRunView } from './fusion-types.ts';
 
 export interface Material {
   id: string;
@@ -316,7 +317,9 @@ export type CardRef =
   /** The initial structure a standard gave, kept as a proposal. */
   | { kind: 'standard'; proposal: string }
   /** A GB 50217 correction kept on a project. */
-  | { kind: 'correction'; project: string; correction: string; href: string };
+  | { kind: 'correction'; project: string; correction: string; href: string }
+  /** A saved run of the old platform's studies, as the agent read it (the fused product's Agent page). */
+  | { kind: 'saved_run'; href: string; view: SavedRunView };
 
 export type StepStatus = 'running' | 'waiting_review' | 'done' | 'failed' | 'rejected' | 'interrupted';
 export interface ChatStep {

@@ -11,10 +11,13 @@ export class ApiError extends Error {
   }
 }
 
+/** Where the host's API is: the same origin, or under a prefix when the page is shown inside another product (the Agent page of the fused one). */
+const BASE: string = import.meta.env.VITE_API_BASE ?? '';
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(path, init);
+    response = await fetch(BASE + path, init);
   } catch {
     throw new ApiError({ code: 'HOST_UNREACHABLE', message: '连不上本机服务，请确认 Cable Studio 仍在运行。' }, 0);
   }
@@ -50,7 +53,7 @@ export const api = {
 
 /** onOpen runs when the connection is made again after it dropped, not on the first connection. */
 export function subscribe(listener: (event: StudioEvent) => void, onOpen?: () => void): () => void {
-  const source = new EventSource('/api/events');
+  const source = new EventSource(BASE + '/api/events');
   let opened = false;
   source.onopen = () => {
     if (opened) onOpen?.();

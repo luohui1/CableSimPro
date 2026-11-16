@@ -150,7 +150,8 @@ def upstream_failure(message, status):
 
 def make_router(harness, link):
     tools = ExternalTools(harness)
-    router = APIRouter(tags=['agent-external'])
+    # Not part of the platform's public API contract (the generated client types are made from it): the kernel's own interface.
+    router = APIRouter(tags=['agent-external'], include_in_schema=False)
 
     def authorized(request: Request):
         if not link.token:

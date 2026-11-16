@@ -11,6 +11,8 @@
     "build": "node scripts/ui-lint.ts && tsc --noEmit && vite build",
     "lint:ui": "node scripts/ui-lint.ts",
     "start": "node host/server.ts",
+    "build:fusion": "tsc --noEmit && vite build --config vite.fusion.config.ts",
+    "fusion": "node fusion/server.ts",
     "test": "node --test --test-concurrency=1 \"tests/*.test.ts\"",
     "walk": "node tests/walk.ts",
     "walk:agent": "node tests/agent-walk-run.ts"

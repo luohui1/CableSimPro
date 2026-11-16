@@ -128,6 +128,17 @@ Agent 的内核是 pi 的会话层（`@earendil-works/pi-coding-agent` 的 `crea
 
 另外试了：会话落盘后关闭、重开、再发消息；留在文件里的“有调用没结果”的条目，pi-ai 在发给模型前会补上占位结果，不会让模型接口报错；发消息时 `steer` 能在等待审阅期间排队，等这一步做完再送给模型；整个包第一次加载约 5 秒、多占 75 MB，所以宿主启动时后台预加载，不拖慢启动。
 
+## 并入老版本的 Agent
+
+老版本（`backend/`、`frontend/`）的 Agent 页换成这里的对话页和 pi 内核，让它读老版本自己的工程、研究、运行记录和电缆型号。第一步只读：Agent 不改任何东西，也不运行计算；写操作和提案的接入是下一步。
+
+- **老后端**（`backend/harness/external.py`）：`GET /api/agent/external/tools` 给十二个只读工具和它们的参数契约；`POST /api/agent/external/calls` 在一个会话和回合里执行一次调用，走老后端自己的 `ToolBroker`（参数校验、会话作用域、预算、脱敏、`agent_steps` 留痕），提案类、预检、预览、仿真、插件能力一律拒绝。边车的一次提问对每个涉及的工程开一个老会话（工程修订在提问时钉住），答完收回合。不依赖工程的读工具（对象检索、型号读取、工程列表）不开会话，不在老库里留步骤，它们的记录是边车的对话文件。
+- **模型密钥不出老后端**：边车的模型请求发到 `/internal/llm/v1/chat/completions`，老后端换上设置页保存的（或 `CABLESIM_LLM_*` 环境变量里的）密钥再转给模型服务；边车和浏览器都拿不到密钥。老后端没配模型时，边车退到 `CABLE_STUDIO_MODEL_*` 环境变量。
+- **边车**（`fusion/`，`npm run fusion`）：只带 Agent 的部分（会话文件、系统提示、对话视图），工具来自老后端的清单；只监听本机回环。
+- **对话页**（`ui/fusion/`，`npm run build:fusion` 构建到 `dist-fusion/`）：单独构建，老后端在 `/agent-app/` 提供，老前端的 `/agent` 路由用一个框放它；颜色、字体、圆角读同一份 `design/tokens.css`，样式互不影响。卡片的“在工作台打开”经 `postMessage` 请老前端跳到对应的研究页、工程页或型号页。
+- **环境变量**：老后端和边车共用 `CABLESIM_AGENT_SIDECAR_TOKEN`（没设就整套关闭，老后端的这几个入口返回 503）；老后端另有 `CABLESIM_AGENT_SIDECAR_URL`（边车地址，默认 `http://127.0.0.1:8111`）、`CABLESIM_AGENT_UI`（构建好的对话页目录，默认 `studio/dist-fusion`）；边车有 `FUSION_BACKEND_URL`、`FUSION_PORT`（默认 8111）、`FUSION_HOME`（对话文件目录）。
+- **结果卡**：载流量运行记录的卡（允许电流、先到温限的电缆、导体温度、可信分档）由边车从老后端的运行记录和保存输入读出，不经过模型；可信分档按 `core/studio_core/methods.py` 的规则，由保存的输入决定。其他对象只给“在工作台打开”。
+
 ## 可信分档
 
 每条结果带分档和方法卡（方法、适用范围、假设、验证依据）。分档由实际计算的敷设形式决定，与结果数值无关，规则在 `core/studio_core/methods.py`：

@@ -13,7 +13,8 @@ export interface PiMessage {
   toolCallId?: string;
   isError?: boolean;
   durationMs?: number;
-  details?: { card?: CardRef; notes?: string[] };
+  /** target: what the step acted on, in the engineer's words, kept with the result so a conversation opened later still names it. */
+  details?: { card?: CardRef; notes?: string[]; target?: string };
 }
 
 export interface ViewInput {
@@ -97,6 +98,7 @@ export function chatMessages(input: ViewInput): ChatMessage[] {
       step.status = message.isError ? (proposal?.status === 'rejected' ? 'rejected' : 'failed') : 'done';
       if (message.isError) step.reason = proposal?.status === 'rejected' ? (proposal.note ? `工程师拒绝：${proposal.note}` : '工程师拒绝了这项改动') : plainText(message);
       if (message.durationMs !== undefined) step.duration_ms = message.durationMs;
+      if (message.details?.target && !step.target) step.target = message.details.target;
       if (message.details?.card) step.card = message.details.card;
       if (message.details?.notes?.length) step.notes = message.details.notes;
     }
