@@ -10,7 +10,6 @@ import type { RatingTable, RatingTableCondition, RatingTableRow } from '../share
 import type { LibraryEntry, Parts, RunRecord } from '../shared/types.ts';
 import { StudioError } from './core.ts';
 import type { Library } from './library.ts';
-import { anyProject } from './manual.ts';
 import type { Operation, Studio } from './operations.ts';
 
 const SCHEMA = `
@@ -104,7 +103,6 @@ export function ratingTableOperations(studio: Studio): Operation[] {
         version: opt(int({ minimum: 1, description: '版本号；缺省为最新版' })),
         title: opt(str({ minLength: 1, maxLength: 60, description: '表的名称，缺省“载流量表”' })),
         conditions: arr(condition, { minItems: 1, maxItems: 24, description: '敷设条件，一条一行；每条都要写明敷设方式、埋深、土壤热阻率和环境温度' }),
-        ...anyProject,
       }),
       execute: async (params: { spec: string; version?: number; title?: string; conditions: RatingTableCondition[] }, context): Promise<RatingTable> => {
         const selected = library.specView(params.spec, params.version);
@@ -146,7 +144,7 @@ export function ratingTableOperations(studio: Studio): Operation[] {
 
     { id: 'library.rating.tables', tool: 'get_rating_tables', title: '规格的载流量表', kind: 'read',
       description: '读取一个规格版本上保存的载流量表：每行的敷设条件、允许电流、可信分档，以及对应的运行记录（工程和记录标识）。不写 version 取最新版。',
-      parameters: obj({ spec: str({ description: '规格标识' }), version: opt(int({ minimum: 1, description: '版本号；缺省为最新版' })), ...anyProject }),
+      parameters: obj({ spec: str({ description: '规格标识' }), version: opt(int({ minimum: 1, description: '版本号；缺省为最新版' })) }),
       execute: async (params: { spec: string; version?: number }): Promise<RatingTable[]> => ratingTables(library, library.specView(params.spec, params.version).version.id),
       brief: (tables: RatingTable[]) => tables.map(brief) },
   ];

@@ -3,7 +3,6 @@
 // done by the sealed `cablesim.standard-check` method through the core; nothing here knows a thickness or a table.
 import { bool, num, obj, oneOf, opt, str } from '@earendil-works/pi-schema';
 import type { StructureProposal } from '../shared/model-types.ts';
-import { anyProject } from './manual.ts';
 import type { Operation, Studio } from './operations.ts';
 
 export function proposalOperations(studio: Studio): Operation[] {
@@ -30,12 +29,8 @@ export function proposalOperations(studio: Studio): Operation[] {
         insulation_screen_thickness_mm: opt(num({ exclusiveMinimum: 0, description: '绝缘屏蔽厚度，mm，由工程师给定；有屏蔽时必填' })),
         screen_tape_thickness_mm: opt(num({ exclusiveMinimum: 0, description: '铜带屏蔽的单带厚度，mm；6 kV 及以上必填' })),
         screen_tape_width_mm: opt(num({ exclusiveMinimum: 0, description: '铜带宽度，mm；6 kV 及以上必填' })),
-        ...anyProject,
       }),
-      execute: async (params: Record<string, unknown>): Promise<StructureProposal> => {
-        const { project: _project, ...request } = params;
-        return core.call<StructureProposal>('structure.propose', request);
-      },
+      execute: async (params: Record<string, unknown>): Promise<StructureProposal> => core.call<StructureProposal>('structure.propose', params),
       brief: (result: StructureProposal) => ({
         standard: result.standard, scope: result.scope, values: result.values, sources: result.basis,
         missing: result.missing.map(item => `${item.label}（${item.field}，${item.unit}）：${item.reason}`),

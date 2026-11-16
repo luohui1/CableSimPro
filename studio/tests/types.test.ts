@@ -106,8 +106,22 @@ test('a specification typed in is the same kind of object as the imported one it
   const viaReference = await op<SpecCreated>('library.spec.create', { series: referenced.series, values: structureValues(imported) });
   assert.equal(viaReference.view.entry.content_sha256, imported.entry.content_sha256);
 
+  // What an agent proposes waits for a person, who is shown what would be made. It comes from the same builder, and nothing is written to show it.
+  const shown = (id: string, params: unknown) => (app.studio.operations.get(id) as unknown as {
+    review(params: unknown): Promise<{ title: string; changes: { label: string; before: string; after: string }[] }> }).review(params);
+  const seriesShown = await shown('library.series.create', { name: '审阅用系列', designation: 'YJV22', cores: 3, u0_v: 8700, u_v: 15000, standards: declaration.standards });
+  assert.deepEqual([seriesShown.title, seriesShown.changes.map(item => item.label)], ['新建系列', ['新系列', '芯数与电压', '执行标准', '计算用参数', '来源']]);
+  assert.equal((await op<{ name: string }[]>('library.series', {})).some(item => item.name === '审阅用系列'), false);
+  await assert.rejects(shown('library.series.create', { name: created.name, designation: 'YJV22', cores: 3, u0_v: 8700, u_v: 15000 }), { code: 'SERIES_EXISTS' });
+  const specShown = await shown('library.spec.create', { series: created.series, values: structureValues(imported) });
+  assert.match(specShown.title, /3×240/);
+  assert.deepEqual(specShown.changes.find(item => item.label === '绝缘标称厚度'), { part: 'structure', field: 'insulation_thickness', label: '绝缘标称厚度', before: '—', after: '4.5 mm' });
+  assert.equal((await op<SeriesView>('library.series.get', { series: created.series })).specs.length, 0);
+  await assert.rejects(shown('library.spec.create', { series: created.series, values: { area: 300 } }), { code: 'STRUCTURE_INCOMPLETE' });
+
   const typed = await op<SpecCreated>('library.spec.create', { series: created.series, values: structureValues(imported) });
   typedSpec = typed.spec;
+  await assert.rejects(shown('library.spec.create', { series: created.series, values: structureValues(imported) }), { code: 'SPEC_EXISTS' });
   const version = typed.view.version;
   assert.deepEqual([typed.version, version.number, version.review, version.note], [1, 1, 'draft', '人工填写']);
   assert.equal(version.created_by, app.studio.user);
@@ -313,8 +327,11 @@ test('the initial structure a standard gives becomes a draft specification whose
   assert.equal(new Set(tools).size, tools.length);
   for (const item of added) {
     assert.ok(item.tool && /^[a-z][a-z0-9_]*$/.test(item.tool) && /[一-鿿]/.test(item.title) && /[一-鿿]/.test(item.description), item.id);
-    assert.ok('project' in (item.parameters.properties as object), item.id);
+    // Only what works on a project asks for one.
+    assert.equal('project' in (item.parameters.properties as object), item.id.startsWith('correction.'), item.id);
   }
+  // A write an agent proposes has something to show a person: it is a draft, never an approval.
+  assert.ok(added.filter(item => item.kind === 'write').every(item => 'review' in item), 'write operations');
 });
 
 test('the GB 50217 correction gives its factors and the corrected current, and the baseline stays for a person to confirm', async () => {
