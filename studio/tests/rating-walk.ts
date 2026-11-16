@@ -410,6 +410,9 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     assert.equal(await eddy(), eddyBefore, 'the parameter is changed in the editor only');
     await editor().getByRole('button', { name: '按新条件计算' }).click();
     await waitFor('the eddy losses changed and a check was run', async () => (await eddy()) !== eddyBefore && (await view(sweepOnly)).runs.some(run => run.kind === 'rating'), RUN);
+    // The screen is done when the editor has closed: until then a given asks for nothing.
+    await editor().waitFor({ state: 'detached', timeout: RUN });
+    await rail().getByRole('button', { name: /^#2 校核/ }).waitFor();
 
     const beforeCable = await view(sweepOnly);
     await given('型号');
@@ -425,6 +428,7 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
     assert.equal((await view(sweepOnly)).parts.cable.id, beforeCable.parts.cable.id, 'the cable is changed in the editor only');
     await editor().getByRole('button', { name: '按新条件计算' }).click();
     await waitFor('the cable of the project changed', async () => (await view(sweepOnly)).parts.cable.id !== beforeCable.parts.cable.id, RUN);
+    await editor().waitFor({ state: 'detached', timeout: RUN });
     await check('cable-changed');
 
     // 12. The word before a page is left with changes that were not applied: staying keeps them, leaving drops them.
