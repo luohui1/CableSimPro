@@ -194,6 +194,10 @@ test('the agent imports the public sample, checks it against the standard and li
   const labels = proposal.changes.map(change => change.label);
   for (const label of ['芯数与电压', '执行标准', '厂家与资料性质', '列对应', '来源']) assert.ok(labels.includes(label), `the card lists ${label}: ${labels.join('、')}`);
   assert.ok(proposal.changes.find(change => change.label === '列对应')!.after.includes(' ← '), 'every column says which header it was read from');
+  const modelling = proposal.changes.find(change => change.label === '计算用参数');
+  assert.ok(modelling, 'the parameters the calculation will use are on the card');
+  assert.ok(modelling.after.includes('\n'), 'one parameter to a line, so the card reads as a list');
+  assert.ok(!/ 1（/.test(modelling.after), 'a value without a unit does not carry the unit "1"');
   assert.equal((await app.studio.invoke('library.series', {}, { by: 'human' }) as SeriesSummary[]).length, before_, 'nothing is imported while the review waits');
 
   app.agent.decide(proposal.id, true);
@@ -337,6 +341,14 @@ test('a change that changes nothing is not put in front of a person', { timeout:
   assert.equal(view.waiting.length, 0, 'nobody was asked');
   assert.deepEqual(steps(view).map(step => step.status), ['failed']);
   assert.ok(told.includes('没有任何变化'), told);
+});
+
+test('opening something in the workbench works from what is given, without naming the kind', { timeout: 60_000 }, async () => {
+  const opened = async (params: Record<string, string>) => await app.studio.invoke('workbench.open', params, { by: 'agent' }) as { href: string };
+  assert.equal((await opened({ series: imported })).href, `/library/${imported}`);
+  assert.equal((await opened({})).href, '/library');
+  // A run needs its project and its identifier; what is missing is said, not guessed.
+  await assert.rejects(opened({ target: 'run', project: 'p-00000000' }), { code: 'INPUT_INVALID' });
 });
 
 test('a rating is told to the model with cables by name, not by the calculation\'s own identifiers', { timeout: 120_000 }, async () => {

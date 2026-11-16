@@ -342,11 +342,12 @@ export function productOperations(studio: Studio): Operation[] {
           { part: 'series', field: 'standards', label: '执行标准', before: '—', after: declared.standards.join('、') || '未声明' },
           { part: 'series', field: 'origin', label: '厂家与资料性质', before: '—', after: `${declared.manufacturer || '厂家未声明'} · ${STATE_NAMES[declared.origin ?? 'public'] ?? declared.origin}` },
           { part: 'series', field: 'columns', label: '列对应', before: '—',
-            after: `${Object.keys(result.mapping).map(field => `${label(words.fields, field)} ← ${result.table.headers[field]}`).join('；')}；数据从第 ${result.table.first_data_row} 行起` },
+            after: `${Object.keys(result.mapping).map(field => `${label(words.fields, field)} ← ${result.table.headers[field]}`).join('\n')}\n数据从第 ${result.table.first_data_row} 行起` },
+          // One item to a line: the card shows them as a list, not as a paragraph.
           ...(Object.keys(declared.common).length ? [{ part: 'series', field: 'common', label: '系列统一给的尺寸', before: '—',
-            after: Object.entries(declared.common).map(([key, value]) => `${label(words.fields, key)} ${compact(value)} ${unit(words.fields, key)}${declared.common_basis[key] ? `（${brief(declared.common_basis[key])}）` : ''}`).join('；') }] : []),
+            after: Object.entries(declared.common).map(([key, value]) => `${label(words.fields, key)} ${compact(value)} ${unit(words.fields, key)}${declared.common_basis[key] ? `（${brief(declared.common_basis[key])}）` : ''}`).join('\n') }] : []),
           ...(Object.keys(declared.modelling).length ? [{ part: 'series', field: 'modelling', label: '计算用参数', before: '—',
-            after: Object.entries(declared.modelling).map(([key, item]) => `${label(words.modelling, key)} ${item.value} ${item.unit}（${brief(item.reference)}）`).join('；') }] : []),
+            after: Object.entries(declared.modelling).map(([key, item]) => `${label(words.modelling, key)} ${item.value}${item.unit && item.unit !== '1' ? ` ${item.unit}` : ''}（${brief(item.reference)}）`).join('\n') }] : []),
           ...(declared.armour_material ? [{ part: 'series', field: 'armour', label: '铠装材料', before: '—', after: ARMOUR[declared.armour_material] ?? declared.armour_material }] : []),
           { part: 'series', field: 'source', label: '来源', before: '—', after: `${result.file.file} · 工作表“${params.sheet}”` },
         ];

@@ -494,25 +494,27 @@ export class Studio {
       { id: 'workbench.open', tool: 'open_in_workbench', title: '在工作台打开', kind: 'read',
         description: '让工程师在工作台里看一个对象：型号库、结构表导入、一个系列、一个规格（可指定版本）、一个工程或一条运行记录。对象必须已经存在。结果会显示成一个“在工作台打开”按钮。',
         parameters: obj({
-          target: oneOf(['library', 'import', 'series', 'spec', 'project', 'run'], { description: 'library 型号库；import 导入结构表；series 系列；spec 规格；project 工程；run 运行记录' }),
+          target: opt(oneOf(['library', 'import', 'series', 'spec', 'project', 'run'], { description: 'library 型号库；import 导入结构表；series 系列；spec 规格；project 工程；run 运行记录。可省略：按给出的 run、spec、series、project 推断' })),
           series: opt(str()), spec: opt(str()), version: opt(int({ minimum: 1 })), project: opt(str()), run: opt(str()),
         }),
-        execute: async (params: { target: string; series?: string; spec?: string; version?: number; project?: string; run?: string }) => {
+        execute: async (params: { target?: string; series?: string; spec?: string; version?: number; project?: string; run?: string }) => {
+          // Only a link is made, so what was given says what is meant: a model that names the series and forgets the kind is not turned away.
+          const target = params.target ?? (params.run ? 'run' : params.spec ? 'spec' : params.series ? 'series' : params.project ? 'project' : 'library');
           const need = (value: string | undefined, name: string): string => {
-            if (!value) throw new StudioError({ code: 'INPUT_INVALID', message: `打开${KIND_OPEN[params.target]}需要 ${name}。`, path: `/${name}` });
+            if (!value) throw new StudioError({ code: 'INPUT_INVALID', message: `打开${KIND_OPEN[target]}需要 ${name}。`, path: `/${name}` });
             return value;
           };
-          if (params.target === 'library') return { label: '型号库', href: '/library' };
-          if (params.target === 'import') return { label: '导入结构表', href: '/library/import' };
-          if (params.target === 'series') {
+          if (target === 'library') return { label: '型号库', href: '/library' };
+          if (target === 'import') return { label: '导入结构表', href: '/library/import' };
+          if (target === 'series') {
             const view = library.seriesView(need(params.series, 'series'));
             return { label: `系列 ${view.series.name}`, href: `/library/${view.series.id}` };
           }
-          if (params.target === 'spec') {
+          if (target === 'spec') {
             const view = library.specView(need(params.spec, 'spec'), params.version);
             return { label: `${view.spec.name} · 第 ${view.version.number} 版`, href: `/library/${view.series.id}?spec=${encodeURIComponent(view.spec.id)}&version=${view.version.number}` };
           }
-          if (params.target === 'project') {
+          if (target === 'project') {
             const meta = store.meta(need(params.project, 'project'));
             return { label: `工程 ${meta.name}`, href: `/p/${meta.id}` };
           }

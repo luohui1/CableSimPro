@@ -35,7 +35,7 @@ export function ProposalCard({ proposal, outcome, reason }: { proposal: Proposal
       <TableBody>{proposal.changes.map(change => <TableRow key={`${change.part}/${change.field}`}>
         <TableCell className="text-muted-foreground">{change.label}</TableCell>
         {hasBefore && <TableCell className="whitespace-normal tabular-nums">{change.before}</TableCell>}
-        <TableCell className="font-medium whitespace-normal tabular-nums">{change.after}</TableCell>
+        <TableCell className="font-medium whitespace-pre-line tabular-nums">{change.after}</TableCell>
       </TableRow>)}</TableBody>
     </Table>
     {proposal.issue && <p role="alert" className="text-destructive m-0 border-t px-4 py-2 text-sm">改后这组输入算不了：{proposal.issue.message}</p>}
