@@ -49,8 +49,7 @@ export async function walkLibrary(browser: Browser, base: string, home: string, 
   };
 
   try {
-    await page.goto(base);
-    await page.waitForURL('**/library');
+    await page.goto(`${base}/library`);
     await page.getByRole('button', { name: '查看使用流程', exact: true }).click();
     await page.getByText('从结构表到规格书', { exact: true }).waitFor();
     await page.keyboard.press('Escape');

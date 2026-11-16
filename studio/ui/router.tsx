@@ -1,12 +1,14 @@
 // Routes are written in code; nothing is generated. The address holds what a link should reopen:
 // the project and the run record being looked at.
-import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Navigate, Outlet, useNavigate } from '@tanstack/react-router';
+import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Navigate, useNavigate } from '@tanstack/react-router';
 import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/button';
 import { Mark } from '@/components/icon';
 import { Notice, reportFailure } from '@/components/notice';
+import { Shell } from '@/shell/shell';
 import { api } from '@/state/api';
 import { queryClient, useHostEvents, useProjects } from '@/state/queries';
+const AgentPage = lazyRouteComponent(() => import('@/agent/agent-page'), 'AgentPage');
 const ProductLibrary = lazyRouteComponent(() => import('@/pages/library'), 'ProductLibrary');
 const ImportLibrary = lazyRouteComponent(() => import('@/pages/import'), 'ImportLibrary');
 const SeriesWorkspace = lazyRouteComponent(() => import('@/pages/series'), 'SeriesWorkspace');
@@ -18,7 +20,7 @@ const LAST_PROJECT = 'cable-studio.project';
 function Root() {
   useHostEvents();
   return <>
-    <Outlet />
+    <Shell />
     <Notice />
   </>;
 }
@@ -64,7 +66,13 @@ function ProjectPage() {
 }
 
 const rootRoute = createRootRoute({ component: Root });
-const landingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => <Navigate to="/library" replace /> });
+// Agent mode is the home of the application; the workbench is one switch away.
+const landingRoute = createRoute({ getParentRoute: () => rootRoute, path: '/', component: () => <AgentPage key="new" /> });
+const chatRoute = createRoute({ getParentRoute: () => rootRoute, path: '/chat/$sessionId', component: ChatPage });
+function ChatPage() {
+  const { sessionId } = chatRoute.useParams();
+  return <AgentPage key={sessionId} sessionId={sessionId} />;
+}
 const libraryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library', component: ProductLibrary });
 const importRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library/import', component: ImportLibrary });
 const seriesRoute = createRoute({ getParentRoute: () => rootRoute, path: '/library/$seriesId',
@@ -87,7 +95,7 @@ const projectRoute = createRoute({
 
 const galleryRoute = createRoute({ getParentRoute: () => rootRoute, path: '/gallery', component: Gallery });
 
-export const router = createRouter({ routeTree: rootRoute.addChildren([landingRoute, libraryRoute, importRoute, seriesRoute, workbenchRoute, projectRoute, galleryRoute]) });
+export const router = createRouter({ routeTree: rootRoute.addChildren([landingRoute, chatRoute, libraryRoute, importRoute, seriesRoute, workbenchRoute, projectRoute, galleryRoute]) });
 
 declare module '@tanstack/react-router' {
   interface Register { router: typeof router }

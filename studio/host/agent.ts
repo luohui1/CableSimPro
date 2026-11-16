@@ -1,237 +1,378 @@
-// The agent is a colleague inside the workbench: pi's agent core, with the studio's own
-// operations as its only tools. It has no file, shell or network tool. A change to the
-// inputs stops in beforeToolCall until the engineer accepts or rejects it.
+// The agent is a colleague inside the studio. Its core is pi's session layer with every built-in tool switched off: the tools it
+// has are the studio's own operations and a reader that opens nothing but the skill files. A write waits in a gate until the
+// engineer accepts or rejects it. Conversations are pi's session files under <home>/agent, so they survive a restart.
 import { randomBytes } from 'node:crypto';
-import { Agent, type AgentEvent, type AgentTool, type ThinkingLevel } from '@earendil-works/pi-agent-core';
-import { createModels, createProvider, envApiKeyAuth, type Model } from '@earendil-works/pi-ai';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { basename, dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import type { ThinkingLevel } from '@earendil-works/pi-agent-core';
+import { createProvider, envApiKeyAuth, InMemoryCredentialStore, type Model } from '@earendil-works/pi-ai';
 import { openAICompletionsApi } from '@earendil-works/pi-ai/api/openai-completions.lazy';
 import { deepseekProvider } from '@earendil-works/pi-ai/providers/deepseek';
-import type { AgentStatus, Proposal, Task } from '../shared/types.ts';
+import type { AgentSession, ExtensionFactory, ModelRuntime, SessionManager } from '@earendil-works/pi-coding-agent';
+import type { AgentStatus, ChatAttachment, ChatSummary, ChatView, Proposal } from '../shared/types.ts';
+import { operationTools, skillReader } from './agent-tools.ts';
+import { attachmentNote, chatMessages, plainText, titleOf, type PiMessage } from './chat-view.ts';
 import { StudioError } from './core.ts';
 import type { Operation, Studio } from './operations.ts';
 
-export interface ModelRuntime {
-  models: ReturnType<typeof createModels>;
+const STUDIO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const SKILLS = join(STUDIO, 'skills');
+const PROPOSAL_ENTRY = 'cable-studio.proposal';
+
+export interface ModelConfig {
+  models: ModelRuntime;
   model: Model<any>;
   provider: string;
   thinking: ThinkingLevel;
 }
+export interface ModelIdentity { model: string; provider: string; thinking: ThinkingLevel }
 
-/** Model access comes from the environment only; nothing is written to disk. */
-export function modelFromEnvironment(env: NodeJS.ProcessEnv = process.env): ModelRuntime | null {
-  const models = createModels();
+const NOT_CONFIGURED = '设置环境变量 DEEPSEEK_API_KEY，或设置 CABLE_STUDIO_MODEL_BASE_URL、CABLE_STUDIO_MODEL_ID、CABLE_STUDIO_MODEL_API_KEY（OpenAI 兼容接口）后重启。密钥只从环境变量读取，不写入磁盘。';
+
+export const SYSTEM_PROMPT = `你是在 Cable Studio 里干活的电缆工程师同事。软件做两件事：电缆型号（导入结构表、算参数、按国标核对、改版、出规格书、建三维模型）和载流量计算（一款型号在某种敷设和环境下的允许电流，哪根电缆先到温限）。
+
+规矩：
+1. 只通过工具做事。凡是数字——电流、温度、损耗、尺寸、核对结论——都必须来自工具结果；工具没算出来、数据缺失或被拒绝，就如实说并转述原因，不估算、不心算、不凭经验补数。
+2. 条件不清楚就问，一次问清，不替工程师假设埋深、土壤热阻率、环境温度、负荷、电压、执行标准。例外：他明说让你定（“选一款”“随便”“给个示例”）时，就用型号模板的默认条件做，并在回答里写明用了哪些默认值（审阅卡上也看得到），请他确认或改。
+3. 改动（新建工程、更换型号、改敷设、改工况、改结构、导入系列）会先交工程师审阅，可能被拒绝；被拒绝后不重复提同样的改动。计算和导出不需要审阅。
+4. 审核、批准、发布只能由人做，你没有这类工具，也不要代办。
+5. 做一类事之前先读对应的技能（技能目录在下面），照技能里的步骤做。
+6. 有限元仿真本机不跑，超算还没接通：被问到就如实说做不了，不给任何仿真数字。
+7. 用户消息里的“[附件：…（upload u-xxxx）]”是已上传的结构表，用 inspect_table 读取。
+8. 想让工程师看某个对象，就调用 open_in_workbench。结果表、断面、文件、三维模型由界面的卡片显示，不要把表格抄一遍。
+9. 用简体中文。调用工具之间不写过程说明；做完后一次性交代，最多五行，每行一句话，不用标题和列表：做了什么、结论、需要工程师注意或决定的事。`;
+
+/** Which model the environment names, without building anything. */
+export function modelIdentity(env: NodeJS.ProcessEnv = process.env): ModelIdentity | null {
   const thinking = (env.CABLE_STUDIO_MODEL_THINKING as ThinkingLevel | undefined) ?? 'off';
-  if (env.CABLE_STUDIO_MODEL_BASE_URL && env.CABLE_STUDIO_MODEL_ID) {
+  if (env.CABLE_STUDIO_MODEL_BASE_URL && env.CABLE_STUDIO_MODEL_ID && env.CABLE_STUDIO_MODEL_API_KEY) {
+    return { model: env.CABLE_STUDIO_MODEL_ID, provider: new URL(env.CABLE_STUDIO_MODEL_BASE_URL).host, thinking };
+  }
+  if (env.DEEPSEEK_API_KEY) return { model: env.CABLE_STUDIO_MODEL_ID ?? 'deepseek-flash', provider: 'DeepSeek', thinking };
+  return null;
+}
+
+let loaded: Promise<typeof import('@earendil-works/pi-coding-agent')> | undefined;
+/** The session layer takes a few seconds to load, so the host starts without it and the first conversation pays once. */
+function pi() {
+  // Install telemetry and catalogue downloads are off: the only network traffic is the model the engineer configured.
+  process.env.PI_TELEMETRY ??= '0';
+  process.env.PI_OFFLINE ??= '1';
+  return (loaded ??= import('@earendil-works/pi-coding-agent'));
+}
+
+/** Model access comes from the environment only; nothing is written to disk, not even into pi's own credential file. */
+export async function modelFromEnvironment(env: NodeJS.ProcessEnv = process.env): Promise<ModelConfig | null> {
+  const identity = modelIdentity(env);
+  if (!identity) return null;
+  const { ModelRuntime } = await pi();
+  const models = await ModelRuntime.create({ credentials: new InMemoryCredentialStore(), modelsPath: null, refreshOnCreate: false });
+  if (env.CABLE_STUDIO_MODEL_BASE_URL) {
     const model: Model<'openai-completions'> = {
-      id: env.CABLE_STUDIO_MODEL_ID, name: env.CABLE_STUDIO_MODEL_ID, api: 'openai-completions', provider: 'cable-studio',
-      baseUrl: env.CABLE_STUDIO_MODEL_BASE_URL, reasoning: thinking !== 'off', input: ['text'],
+      id: identity.model, name: identity.model, api: 'openai-completions', provider: 'cable-studio',
+      baseUrl: env.CABLE_STUDIO_MODEL_BASE_URL, reasoning: identity.thinking !== 'off', input: ['text'],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }, contextWindow: 128000, maxTokens: 8192,
     };
-    models.setProvider(createProvider({
+    models.registerNativeProvider(createProvider({
       id: 'cable-studio', name: 'OpenAI 兼容接口', baseUrl: env.CABLE_STUDIO_MODEL_BASE_URL,
       auth: { apiKey: envApiKeyAuth('Cable Studio 模型密钥', ['CABLE_STUDIO_MODEL_API_KEY']) },
       models: [model], api: openAICompletionsApi(),
     }));
-    return { models, model, provider: new URL(env.CABLE_STUDIO_MODEL_BASE_URL).host, thinking };
+    return { models, model, provider: identity.provider, thinking: identity.thinking };
   }
-  if (env.DEEPSEEK_API_KEY) {
-    models.setProvider(deepseekProvider());
-    const model = models.getModel('deepseek', env.CABLE_STUDIO_MODEL_ID ?? 'deepseek-flash');
-    if (model) return { models, model, provider: 'DeepSeek', thinking };
-  }
-  return null;
+  models.registerNativeProvider(deepseekProvider());
+  const model = models.getModel('deepseek', identity.model);
+  return model ? { models, model, provider: identity.provider, thinking: identity.thinking } : null;
 }
 
-const NOT_CONFIGURED = '设置环境变量 DEEPSEEK_API_KEY，或设置 CABLE_STUDIO_MODEL_BASE_URL、CABLE_STUDIO_MODEL_ID、CABLE_STUDIO_MODEL_API_KEY（OpenAI 兼容接口）后重启。密钥只从环境变量读取，不写入磁盘。';
-
-function systemPrompt(name: string, id: string): string {
-  return `你是电缆载流量工程师的同事，在一套专业工作台软件里干活。当前工程：${name}（${id}）。
-
-工作方式：
-1. 先用 get_project 看清当前型号、敷设、工况和已有运行记录，再动手。
-2. 只通过工具做事。所有数值必须来自工具返回的结果，不许自己估算、心算或凭经验给出电流、温度、损耗。工具没算出来就如实说没算出来，并转述拒绝的原因。
-3. 改动输入（set_cable、set_installation、set_conditions、set_method）会先交给工程师审阅，可能被拒绝。一次调用只做一项有明确理由的改动；被拒绝后不要重复提同样的改动。
-4. 计算（run_rating、run_sweep、run_selection）不改输入，直接生成不可改的运行记录，结果留在工作台里。扫描和选型不需要先改输入。
-5. 工程条件不清楚就直接问，一次问清；不要替工程师假设埋深、土壤、负荷。
-6. 做完后用两三句话交代：做了什么、看哪条运行记录、结论的可信分档（可交付 / 参考）以及需要工程师注意的地方。不要把结果表格抄一遍，工程师会在工作台里看。
-7. 目前只有 IEC 60287 稳态载流量（地下直埋与排管）。超出范围的要求（暂态、空气中敷设、有限元等）直接说明还不支持。
-8. 用简体中文。`;
+interface Decision { accept: boolean; note?: string }
+interface Waiting { proposal: Proposal; conversation: string; settle(decision: Decision): void }
+interface Live {
+  id: string;
+  session: AgentSession;
+  manager: SessionManager;
+  running: boolean;
+  /** The assistant message being written. */
+  partial?: PiMessage;
+  queued: string[];
+  error?: string;
+  run?: Promise<void>;
+  timer?: NodeJS.Timeout;
+  dirty: boolean;
+  unsubscribe(): void;
 }
-
-function withoutProject(schema: any): object {
-  const { project: _project, ...properties } = schema.properties ?? {};
-  return { ...schema, properties, required: (schema.required ?? []).filter((key: string) => key !== 'project') };
-}
-
-interface Session { agent: Agent; task?: Task; rejected: Set<string> }
-interface Waiting { proposal: Proposal; settle: (decision: { accept: boolean; note?: string }) => void }
 
 export class AgentService {
   #studio: Studio;
-  #runtime: ModelRuntime | null;
-  #sessions = new Map<string, Session>();
-  #tasks = new Map<string, Task[]>();
+  /** undefined: from the environment when first needed; null: no model on purpose (tests, offline). */
+  #given: ModelConfig | null | undefined;
+  #built?: Promise<ModelConfig | null>;
+  #live = new Map<string, Live>();
+  #opening = new Map<string, Promise<Live>>();
   #waiting = new Map<string, Waiting>();
-  #decided: Proposal[] = [];
+  #targets = new Map<string, string | undefined>();
+  #byTool?: Map<string, Operation>;
+  #cwd: string;
+  #agentDir: string;
+  #sessions: string;
 
-  constructor(studio: Studio, runtime: ModelRuntime | null = modelFromEnvironment()) {
+  constructor(studio: Studio, runtime?: ModelConfig | null) {
     this.#studio = studio;
-    this.#runtime = runtime;
+    this.#given = runtime;
+    const root = join(studio.home, 'agent');
+    this.#cwd = join(root, 'workspace');
+    this.#agentDir = join(root, 'pi');
+    this.#sessions = join(root, 'sessions');
+    // Start loading the session layer in the background so the conversation list is ready when the page asks for it.
+    if (runtime !== null) void pi().catch(() => undefined);
   }
 
   status(): AgentStatus {
-    return this.#runtime
-      ? { configured: true, model: this.#runtime.model.id, provider: this.#runtime.provider }
-      : { configured: false, hint: NOT_CONFIGURED };
+    if (this.#given === null) return { configured: false, hint: NOT_CONFIGURED };
+    if (this.#given) return { configured: true, model: this.#given.model.id, provider: this.#given.provider };
+    const identity = modelIdentity();
+    return identity ? { configured: true, model: identity.model, provider: identity.provider } : { configured: false, hint: NOT_CONFIGURED };
   }
 
-  tasks(project: string): Task[] {
-    return this.#tasks.get(project) ?? [];
+  async #config(): Promise<ModelConfig> {
+    if (this.#given) return this.#given;
+    if (this.#given !== null) {
+      this.#built ??= modelFromEnvironment();
+      const config = await this.#built;
+      if (config) return config;
+    }
+    throw new StudioError({ code: 'MODEL_NOT_CONFIGURED', message: '模型未配置。' + NOT_CONFIGURED }, 409);
   }
 
-  proposals(project: string): Proposal[] {
-    return [...this.#waiting.values()].map(item => item.proposal).filter(proposal => proposal.project_id === project);
+  #tool(name: string): Operation | undefined {
+    this.#byTool ??= new Map(this.#studio.agentOperations().map(operation => [operation.tool!, operation]));
+    return this.#byTool.get(name);
   }
 
-  #publish(task: Task): void {
-    this.#studio.emit({ type: 'task', task: structuredClone(task) });
+  // ---- what the page shows ----
+
+  /** What a step acts on, in the engineer's words. Looked up once per call. */
+  #target(tool: string, args: Record<string, unknown>): string | undefined {
+    const key = tool + JSON.stringify(args);
+    if (this.#targets.has(key)) return this.#targets.get(key);
+    const { store, library } = this.#studio;
+    let target: string | undefined;
+    try {
+      if (tool === 'read') {
+        const skill = this.#skillTitle(String(args.path ?? ''));
+        target = skill ? `技能「${skill}」` : undefined;
+      } else if (typeof args.name === 'string' && tool.endsWith('_project')) target = `工程「${args.name}」`;
+      else if (typeof args.project === 'string') target = `工程「${store.meta(args.project).name}」`;
+      else if (typeof args.spec === 'string') target = library.specName(args.spec);
+      else if (typeof args.series === 'string') target = library.seriesList().find(item => item.id === args.series)?.name;
+      else if (typeof args.sheet === 'string') target = `工作表「${args.sheet}」`;
+      else if (typeof args.text === 'string') target = args.text.slice(0, 30);
+    } catch { target = undefined; }
+    this.#targets.set(key, target);
+    return target;
   }
 
-  #tools(project: string, session: () => Session): AgentTool<any>[] {
-    return [...this.#studio.operations.values()].filter(operation => operation.tool).map(operation => ({
-      name: operation.tool!, label: operation.title, description: operation.description,
-      parameters: withoutProject(operation.parameters), executionMode: 'sequential' as const,
-      execute: async (_id: string, params: Record<string, unknown>) => {
+  #skillTitles = new Map<string, string>();
+  /** The skill's name in Chinese, from a skill name or from the path of its file. */
+  #skillTitle(path: string): string | undefined {
+    const clean = path.trim().replace(/\\/g, '/');
+    return this.#skillTitles.get(clean) ?? this.#skillTitles.get(basename(dirname(clean)));
+  }
+
+  #describe = (tool: string, args: Record<string, unknown>) => ({ label: tool === 'read' ? '读取技能' : this.#tool(tool)?.title ?? tool, target: this.#target(tool, args) });
+
+  #proposals(conversation: string, manager?: SessionManager): Map<string, Proposal> {
+    const out = new Map<string, Proposal>();
+    for (const entry of manager?.getEntries() ?? []) {
+      const data = entry.type === 'custom' && entry.customType === PROPOSAL_ENTRY ? entry.data as Proposal : undefined;
+      if (data) out.set(data.step_id, data);
+    }
+    for (const waiting of this.#waiting.values()) if (waiting.conversation === conversation) out.set(waiting.proposal.step_id, waiting.proposal);
+    return out;
+  }
+
+  #pending(conversation: string): Proposal[] {
+    return [...this.#waiting.values()].filter(item => item.conversation === conversation).map(item => item.proposal);
+  }
+
+  #viewOf(id: string, messages: readonly PiMessage[], manager: SessionManager | undefined, live?: Live): ChatView {
+    const items = chatMessages({ messages, partial: live?.partial, queued: live?.queued ?? [], running: live?.running ?? false,
+      proposals: this.#proposals(id, manager), describe: this.#describe, error: live?.error });
+    const first = messages.find(message => message.role === 'user');
+    const last = messages.at(-1);
+    return { id, title: first ? titleOf(plainText(first)) : '新对话', created: new Date(first?.timestamp ?? Date.now()).toISOString(),
+      updated: new Date(last?.timestamp ?? Date.now()).toISOString(), message_count: items.length, running: live?.running ?? false, items, waiting: this.#pending(id) };
+  }
+
+  #changed(live: Live, now = false): void {
+    if (now) {
+      if (live.timer) clearTimeout(live.timer);
+      live.timer = undefined;
+      live.dirty = false;
+      const { items, waiting, ...summary } = this.#viewOf(live.id, live.session.messages as PiMessage[], live.manager, live);
+      this.#studio.emit({ type: 'chat', summary, tail: items.slice(-3), count: items.length, waiting });
+      return;
+    }
+    if (live.timer) { live.dirty = true; return; }
+    this.#changed(live, true);
+    live.timer = setTimeout(() => { live.timer = undefined; if (live.dirty) this.#changed(live); }, 80);
+    live.timer.unref();
+  }
+
+  async list(): Promise<ChatSummary[]> {
+    const { SessionManager } = await pi();
+    mkdirSync(this.#sessions, { recursive: true });
+    const infos = await SessionManager.list(this.#cwd, this.#sessions);
+    const seen = new Set<string>();
+    const rows: ChatSummary[] = infos.map(info => {
+      seen.add(info.id);
+      return { id: info.id, title: info.name ?? titleOf(info.firstMessage), created: info.created.toISOString(), updated: info.modified.toISOString(),
+        message_count: info.messageCount, running: Boolean(this.#live.get(info.id)?.running) };
+    });
+    for (const live of this.#live.values()) {
+      if (seen.has(live.id)) continue;
+      const { items: _items, waiting: _waiting, ...summary } = this.#viewOf(live.id, live.session.messages as PiMessage[], live.manager, live);
+      rows.push(summary);
+    }
+    return rows.sort((a, b) => b.updated.localeCompare(a.updated));
+  }
+
+  async view(id: string): Promise<ChatView> {
+    const live = this.#live.get(id);
+    if (live) return this.#viewOf(id, live.session.messages as PiMessage[], live.manager, live);
+    const { SessionManager } = await pi();
+    const file = SessionManager.findById(this.#cwd, id, this.#sessions);
+    if (!file) throw new StudioError({ code: 'CHAT_UNKNOWN', message: '没有这个对话。' }, 404);
+    const manager = SessionManager.open(file, this.#sessions, this.#cwd);
+    return this.#viewOf(id, manager.buildSessionContext().messages as PiMessage[], manager);
+  }
+
+  // ---- running ----
+
+  /** The gate: a write the agent proposes waits here until a person accepts or rejects it. Aborting settles it as a rejection. */
+  #gate(live: () => Live): ExtensionFactory {
+    return pi_ => {
+      // The working folder is an implementation detail of the session layer; the model has no use for the machine's paths.
+      pi_.on('before_agent_start', event => ({ systemPrompt: event.systemPrompt.replace(/\n*<cwd>[\s\S]*?<\/cwd>\n*/, '\n') }));
+      pi_.on('tool_call', async (event, ctx) => {
+        if (event.toolName === 'read') return undefined;
+        const operation = this.#tool(event.toolName);
+        if (!operation) return { block: true, reason: `没有工具 ${event.toolName}。` };
+        if (operation.kind !== 'write') return undefined;
+        const studio = this.#studio;
+        const conversation = live();
+        let review;
         try {
-          const result: any = await this.#studio.invoke(operation.id, { ...params, project }, { by: 'agent', task_id: session().task?.id });
-          return { content: [{ type: 'text' as const, text: JSON.stringify(operation.brief ? operation.brief(result) : result) }],
-                   details: { run_id: typeof result?.id === 'string' && result.id.startsWith('run-') ? result.id : result?.run } };
-        } catch (error) {
-          if (error instanceof StudioError) throw new Error(error.message + (error.path ? `（字段 ${error.path}）` : ''));
-          throw error;
-        }
-      },
-    }));
-  }
-
-  #session(project: string): Session {
-    const existing = this.#sessions.get(project);
-    if (existing) return existing;
-    const runtime = this.#runtime!;
-    const meta = this.#studio.store.meta(project);
-    const byTool = new Map<string, Operation>([...this.#studio.operations.values()].filter(op => op.tool).map(op => [op.tool!, op]));
-    const session: Session = { rejected: new Set(), agent: undefined as unknown as Agent };
-    session.agent = new Agent({
-      initialState: { systemPrompt: systemPrompt(meta.name, project), model: runtime.model, thinkingLevel: runtime.thinking,
-                      tools: this.#tools(project, () => session) },
-      streamFn: runtime.models.streamSimple.bind(runtime.models),
-      toolExecution: 'sequential',
-      identity: { attribution: null },
-      beforeToolCall: async ({ toolCall, args }, signal) => {
-        const operation = byTool.get(toolCall.name);
-        const task = session.task;
-        if (!operation?.plan || operation.kind !== 'write' || !task) return undefined;
-        let plan;
-        try {
-          plan = await operation.plan({ ...(args as object), project });
+          review = await studio.reviewFor(operation, event.input);
         } catch (error) {
           return { block: true, reason: error instanceof Error ? error.message : String(error) };
         }
-        if (!plan.changes.length) return undefined;
-        const parts = { ...this.#studio.store.parts(project), ...plan.parts };
-        const { preview, issue } = await this.#studio.preview(this.#studio.store.meta(project).name, parts);
-        const proposal: Proposal = { id: 'pr-' + randomBytes(4).toString('hex'), task_id: task.id, step_id: toolCall.id, project_id: project,
-          operation: operation.id, title: operation.title, changes: plan.changes, preview, issue, status: 'pending' };
-        const step = task.steps.find(item => item.id === toolCall.id);
-        if (step) { step.status = 'waiting_review'; step.proposal_id = proposal.id; }
-        task.status = 'waiting_review';
-        this.#publish(task);
-        const decision = await new Promise<{ accept: boolean; note?: string }>(resolve => {
-          this.#waiting.set(proposal.id, { proposal, settle: resolve });
-          signal?.addEventListener('abort', () => resolve({ accept: false, note: '任务已停止' }), { once: true });
-          this.#studio.emit({ type: 'proposal', proposal });
+        if (!review.changes.length) return undefined;
+        const proposal: Proposal = { id: 'pr-' + randomBytes(4).toString('hex'), session_id: conversation.id, step_id: event.toolCallId, project_id: review.project,
+          operation: operation.id, title: review.title, changes: review.changes, preview: review.preview ?? null, issue: review.issue ?? null, status: 'pending' };
+        const decision = await new Promise<Decision>(settle => {
+          this.#waiting.set(proposal.id, { proposal, conversation: conversation.id, settle });
+          // Without this a stop would wait for a person who may never answer.
+          ctx.signal?.addEventListener('abort', () => settle({ accept: false, note: '任务已停止' }), { once: true });
+          studio.emit({ type: 'proposal', proposal });
+          this.#changed(conversation, true);
         });
         this.#waiting.delete(proposal.id);
         proposal.status = decision.accept ? 'accepted' : 'rejected';
         proposal.note = decision.note;
-        this.#decided.push(proposal);
-        this.#studio.emit({ type: 'proposal', proposal });
-        task.status = 'running';
-        if (step) step.status = 'running';
-        this.#publish(task);
+        conversation.manager.appendCustomEntry(PROPOSAL_ENTRY, proposal);
+        studio.emit({ type: 'proposal', proposal });
+        this.#changed(conversation, true);
         if (decision.accept) return undefined;
-        session.rejected.add(toolCall.id);
         return { block: true, reason: `工程师拒绝了这项改动${decision.note ? '：' + decision.note : ''}。不要重复提出同样的改动；换一种做法，或说明情况后结束。` };
-      },
-    });
-    session.agent.subscribe(event => this.#observe(session, byTool, event));
-    this.#sessions.set(project, session);
-    return session;
+      });
+    };
   }
 
-  #observe(session: Session, byTool: Map<string, Operation>, event: AgentEvent): void {
-    const task = session.task;
-    if (!task) return;
-    if (event.type === 'tool_execution_start') {
-      const operation = byTool.get(event.toolName);
-      const detail = Object.entries(event.args ?? {}).map(([key, value]) => `${key}=${typeof value === 'object' ? JSON.stringify(value) : value}`).join('，');
-      task.steps.push({ id: event.toolCallId, tool: event.toolName, label: operation?.title ?? event.toolName, detail, status: 'running' });
-    } else if (event.type === 'tool_execution_end') {
-      const step = task.steps.find(item => item.id === event.toolCallId);
-      if (step) {
-        const text = event.result?.content?.find((item: { type: string }) => item.type === 'text')?.text as string | undefined;
-        step.status = session.rejected.has(event.toolCallId) ? 'rejected' : event.isError ? 'failed' : 'done';
-        step.duration_ms = event.durationMs;
-        step.run_id = event.result?.details?.run_id;
-        step.result = step.status === 'done' ? this.#outcome(text) : text;
-      }
-    } else if (event.type === 'message_end' && event.message.role === 'assistant') {
-      const text = event.message.content.filter(block => block.type === 'text').map(block => (block as { text: string }).text).join('').trim();
-      if (text) task.reply = text;
-      if (event.message.stopReason === 'error' || event.message.stopReason === 'aborted') {
-        task.error = event.message.stopReason === 'aborted' ? '任务已停止。' : `模型调用失败：${event.message.errorMessage ?? '未知错误'}`;
-      }
-    } else if (event.type === 'agent_end') {
-      task.status = task.error ? (task.error === '任务已停止。' ? 'stopped' : 'failed') : 'done';
-      task.finished = new Date().toISOString();
-      session.task = undefined;
-    } else {
+  #observe(live: Live, event: { type: string; message?: PiMessage; steering?: readonly string[]; followUp?: readonly string[] }): void {
+    if (event.type === 'message_start' || event.type === 'message_update') {
+      if (event.message?.role === 'assistant') live.partial = event.message;
+    } else if (event.type === 'message_end') {
+      live.partial = undefined;
+    } else if (event.type === 'queue_update') {
+      live.queued = [...(event.steering ?? []), ...(event.followUp ?? [])];
+    } else if (!['tool_execution_start', 'tool_execution_end', 'turn_end', 'agent_end', 'agent_settled'].includes(event.type)) {
       return;
     }
-    this.#publish(task);
+    this.#changed(live);
   }
 
-  /** One line for the task panel; the full result is in the workbench. */
-  #outcome(text: string | undefined): string | undefined {
-    if (!text) return undefined;
-    try {
-      const value = JSON.parse(text);
-      if (value?.title) return value.title;
-      if (Array.isArray(value?.applied)) return value.applied.length ? value.applied.join('；') : '无变化';
-      if (value?.name && value?.cable) return `${value.cable.name} · ${value.installation.layout_label}`;
-      if (Array.isArray(value)) return `${value.length} 项`;
-    } catch { /* plain text result */ }
-    return text.length > 80 ? text.slice(0, 80) + '…' : text;
-  }
-
-  instruct(project: string, instruction: string, context?: string): Task {
-    if (!this.#runtime) throw new StudioError({ code: 'MODEL_NOT_CONFIGURED', message: '模型未配置。' + NOT_CONFIGURED }, 409);
-    const session = this.#session(project);
-    if (session.task) throw new StudioError({ code: 'AGENT_BUSY', message: 'Agent 正在做上一件事；等它做完，或先停止。' }, 409);
-    const task: Task = { id: 't-' + randomBytes(4).toString('hex'), project_id: project, instruction, context, status: 'running',
-                         created: new Date().toISOString(), steps: [] };
-    session.task = task;
-    this.#tasks.set(project, [task, ...this.tasks(project)].slice(0, 30));
-    this.#publish(task);
-    const prompt = context ? `${instruction}\n\n（工程师当前选中的对象：${context}）` : instruction;
-    session.agent.prompt(prompt).catch(error => {
-      task.status = 'failed';
-      task.error = error instanceof Error ? error.message : String(error);
-      task.finished = new Date().toISOString();
-      session.task = undefined;
-      this.#publish(task);
+  async #open(id?: string): Promise<Live> {
+    const config = await this.#config();
+    const { createAgentSession, DefaultResourceLoader, SessionManager, SettingsManager } = await pi();
+    for (const dir of [this.#cwd, this.#agentDir, this.#sessions]) mkdirSync(dir, { recursive: true });
+    let manager: SessionManager;
+    if (id) {
+      const file = SessionManager.findById(this.#cwd, id, this.#sessions);
+      if (!file) throw new StudioError({ code: 'CHAT_UNKNOWN', message: '没有这个对话。' }, 404);
+      manager = SessionManager.open(file, this.#sessions, this.#cwd);
+    } else {
+      manager = SessionManager.create(this.#cwd, this.#sessions);
+    }
+    const live: Live = { id: manager.getSessionId(), manager, session: undefined as unknown as AgentSession, running: false, queued: [], dirty: false, unsubscribe: () => undefined };
+    const settingsManager = SettingsManager.inMemory({ compaction: { enabled: false }, retry: { enabled: true, maxRetries: 2 }, enableInstallTelemetry: false });
+    const loader = new DefaultResourceLoader({
+      cwd: this.#cwd, agentDir: this.#agentDir, settingsManager,
+      // Nothing is discovered: not the repository's AGENTS.md or CLAUDE.md, not a user's own extensions, themes or prompts.
+      noExtensions: true, noSkills: true, noPromptTemplates: true, noThemes: true, noContextFiles: true,
+      additionalSkillPaths: [SKILLS], extensionFactories: [this.#gate(() => live)],
+      systemPromptOverride: () => SYSTEM_PROMPT, appendSystemPromptOverride: () => [],
     });
-    return task;
+    await loader.reload();
+    const { skills, diagnostics } = loader.getSkills();
+    for (const item of diagnostics) console.warn('技能文件有问题：', JSON.stringify(item));
+    for (const skill of skills) this.#skillTitles.set(skill.name, skill.description.split('：')[0]);
+    const reader = skillReader(skills, path => readFileSync(path, 'utf-8'));
+    const tools = [...operationTools(this.#studio, () => live.id), reader];
+    const { session } = await createAgentSession({
+      cwd: this.#cwd, agentDir: this.#agentDir, modelRuntime: config.models, model: config.model, thinkingLevel: config.thinking,
+      settingsManager, resourceLoader: loader, tools: tools.map(tool => tool.name), customTools: tools, sessionManager: manager,
+    });
+    await session.bindExtensions({});
+    live.session = session;
+    live.unsubscribe = session.subscribe(event => this.#observe(live, event as never));
+    this.#live.set(live.id, live);
+    return live;
+  }
+
+  /** The running conversation, opened from its file when the host has not touched it since it started; a new one when no id is given. */
+  async #conversation(id?: string): Promise<Live> {
+    if (id) {
+      const live = this.#live.get(id);
+      if (live) return live;
+      const opening = this.#opening.get(id) ?? this.#open(id).finally(() => this.#opening.delete(id));
+      this.#opening.set(id, opening);
+      return opening;
+    }
+    return this.#open();
+  }
+
+  /** Starts a conversation or, when one is given, adds to it. While the agent is busy a new message steers it after its current step. */
+  async send(id: string | undefined, text: string, attachments: ChatAttachment[] = []): Promise<{ session: string; accepted: 'started' | 'steered' }> {
+    const live = await this.#conversation(id);
+    const message = text.trim() + attachmentNote(attachments);
+    if (live.running) {
+      await live.session.prompt(message, { streamingBehavior: 'steer' });
+      this.#changed(live, true);
+      return { session: live.id, accepted: 'steered' };
+    }
+    live.running = true;
+    live.error = undefined;
+    live.run = live.session.prompt(message).catch(error => {
+      live.error = error instanceof Error ? error.message : String(error);
+    }).finally(() => {
+      live.running = false;
+      live.partial = undefined;
+      this.#changed(live, true);
+    });
+    this.#changed(live, true);
+    return { session: live.id, accepted: 'started' };
   }
 
   decide(proposalId: string, accept: boolean, note?: string): Proposal {
@@ -241,12 +382,36 @@ export class AgentService {
     return { ...waiting.proposal, status: accept ? 'accepted' : 'rejected', note };
   }
 
-  stop(project: string): void {
-    this.#sessions.get(project)?.agent.abort();
+  /** Stops what the agent is doing and drops what was queued behind it. */
+  async stop(id: string): Promise<void> {
+    const live = this.#live.get(id);
+    if (!live?.running) return;
+    for (const waiting of this.#waiting.values()) if (waiting.conversation === id) waiting.settle({ accept: false, note: '任务已停止' });
+    live.session.clearQueue();
+    live.queued = [];
+    await live.session.abort();
   }
 
-  /** Resolves when the project's agent has no task in flight (used by tests). */
-  async idle(project: string): Promise<void> {
-    await this.#sessions.get(project)?.agent.waitForIdle();
+  /** Resolves when the conversation has nothing in flight (used by tests). */
+  async idle(id: string): Promise<void> {
+    await this.#live.get(id)?.run;
+  }
+
+  /** What the model is given: the tools switched on and the system prompt as it is sent (used by tests). */
+  inspect(id: string): { tools: string[]; prompt: string } {
+    const live = this.#live.get(id);
+    if (!live) throw new StudioError({ code: 'CHAT_UNKNOWN', message: '这段对话没有在运行。' }, 404);
+    return { tools: [...live.session.getActiveToolNames()], prompt: live.session.systemPrompt };
+  }
+
+  async close(): Promise<void> {
+    for (const waiting of this.#waiting.values()) waiting.settle({ accept: false, note: '宿主关闭' });
+    for (const live of this.#live.values()) {
+      if (live.timer) clearTimeout(live.timer);
+      live.unsubscribe();
+      live.session.dispose();
+    }
+    await Promise.allSettled([...this.#live.values()].map(live => live.run));
+    this.#live.clear();
   }
 }

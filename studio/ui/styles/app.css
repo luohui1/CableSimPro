@@ -1,9 +1,19 @@
-/* Shared engineering tokens and the workspace's Tailwind utility classes. */
+/* The stylesheet entry. The theme is in theme.css; this file adds the variants and the names the screens from before the
+   theme still use. Those names go when the last of those screens is rebuilt from the kit. */
 @import 'tailwindcss';
+@import './theme.css';
 @import './product.css';
+@import 'tw-animate-css';
 
-/* The CJK font draws the middle dot of a unit (K·m/W) a full character wide.
-   This face takes that one character from a Latin font, so units read as units. */
+/* shadcn/ui's dark: variants follow the document's theme (data-theme), not the operating system. */
+@custom-variant dark (&:is([data-theme='dark'] *));
+@custom-variant data-open (&:where([data-state="open"], [data-open]:not([data-open="false"])));
+@custom-variant data-closed (&:where([data-state="closed"], [data-closed]:not([data-closed="false"])));
+
+/* ---- Names kept for the screens built before the theme (pages/, series/, workbench/, canvas/, results/) ---- */
+
+/* The CJK font draws the middle dot of a unit (K·m/W) a full character wide; this face takes that one character from a
+   Latin font. The theme's Inter already draws it; the older screens set their own font stack and still need it. */
 @font-face {
   font-family: 'Unit Dot';
   src: local('Segoe UI'), local('Arial'), local('Helvetica Neue'), local('Helvetica');
@@ -14,31 +24,7 @@
   --color-ground: var(--ground);
   --color-panel: var(--panel);
   --color-fill: var(--fill);
-  --color-hover: var(--hover);
-  --color-line: var(--line);
   --color-control: var(--control-border);
-  --color-ink: var(--text);
-  --color-ink-2: var(--text-secondary);
-  --color-ink-3: var(--text-weak);
-  --color-copper: var(--copper);
-  --color-on-copper: var(--on-copper);
-  --color-agent: var(--agent);
-  --color-agent-fill: var(--agent-fill);
-  --color-success: var(--success);
-  --color-attention: var(--attention);
-  --color-error: var(--error);
-  --color-conductor: var(--conductor);
-  --color-semi: var(--material-semi);
-  --color-insulation: var(--material-insulation);
-  --color-metal: var(--material-metal);
-  --color-sheath: var(--material-sheath);
-  --color-phase-a: var(--phase-a);
-  --color-phase-b: var(--phase-b);
-  --color-phase-c: var(--phase-c);
-  --color-scrim: var(--overlay);
-
-  --font-sans: 'Unit Dot', 'Noto Sans SC Variable', var(--font-ui);
-  --font-mono: var(--font-code);
 
   --text-13: var(--text-note);
   --text-13--line-height: 20px;
@@ -51,60 +37,15 @@
   --text-28: var(--text-value);
   --text-28--line-height: 34px;
 
-  --font-weight-normal: var(--weight-normal);
-  --font-weight-strong: var(--weight-strong);
+  /* thread.aui.tsx draws its composer with shadow-sm; the theme's composer shadow until the kit's composer replaces it. */
+  --shadow-sm: var(--shadow-composer);
+}
 
-  --radius-chip: 6px;
-  --radius-field: var(--radius-input);
-  --radius-nav: var(--radius-item);
-  --radius-card: var(--radius-surface);
-  --radius-sheet: var(--radius-panel);
-  --radius-full: var(--radius-pill);
-
-  --shadow-lift: var(--shadow-float);
-  --shadow-modal: var(--shadow-dialog);
-
-  --ease-std: var(--ease-standard);
-  --ease-leave: var(--ease-exit);
+@utility duration-slow {
+  transition-duration: 320ms;
 }
 
 @layer base {
-  html,
-  body,
-  #root {
-    height: 100%;
-  }
-
-  body {
-    margin: 0;
-    overflow: hidden;
-    background: var(--ground);
-    color: var(--text);
-    font-family: var(--font-sans);
-    font-size: var(--text-body);
-    line-height: 22px;
-    font-weight: var(--weight-normal);
-    font-variant-numeric: tabular-nums;
-    font-synthesis: none;
-    text-rendering: optimizeLegibility;
-    -webkit-font-smoothing: antialiased;
-  }
-
-  button {
-    font: inherit;
-    color: inherit;
-    cursor: default;
-  }
-
-  :focus-visible {
-    outline: 2px solid var(--text);
-    outline-offset: 2px;
-  }
-
-  ::selection {
-    background: color-mix(in oklab, var(--copper) 24%, transparent);
-  }
-
   input[type='search']::-webkit-search-cancel-button {
     -webkit-appearance: none;
     width: 18px;
@@ -113,7 +54,10 @@
     mask: url('../../../design/icons/action/close.svg') center / contain no-repeat;
   }
 
-  input[type='checkbox'], progress { accent-color: var(--copper); }
+  input[type='checkbox'],
+  progress {
+    accent-color: var(--copper);
+  }
 
   .studio-input {
     min-width: 0;
@@ -125,28 +69,10 @@
     font: inherit;
     font-size: var(--text-body);
   }
-  .studio-input:disabled { opacity: .5; }
-  .studio-input:focus { border-color: var(--text); }
-
-  svg text {
-    font-family: var(--font-sans);
-    font-variant-numeric: tabular-nums;
+  .studio-input:disabled {
+    opacity: 0.5;
   }
-
-  /* Scroll areas inside panels: thin, quiet, only visible while needed. */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--control-border) transparent;
+  .studio-input:focus {
+    border-color: var(--text);
   }
-}
-
-/* Durations are tokens too. */
-@utility duration-fast {
-  transition-duration: var(--motion-fast);
-}
-@utility duration-std {
-  transition-duration: var(--motion-standard);
-}
-@utility duration-slow {
-  transition-duration: var(--motion-slow);
 }

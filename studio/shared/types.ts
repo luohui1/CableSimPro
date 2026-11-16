@@ -283,48 +283,68 @@ export interface ProjectView {
 
 // ---- Agent ----
 
-export interface Change { part: PartName; field: string; label: string; before: string; after: string }
+/** One thing a person is asked to accept: what the value was and what it would become, in the units the screen uses. */
+export interface Change { part: string; field: string; label: string; before: string; after: string }
 export interface Proposal {
   id: string;
-  task_id: string;
+  /** The conversation the agent made it in. */
+  session_id: string;
+  /** The tool call that waits for the decision. */
   step_id: string;
-  project_id: string;
+  project_id?: string;
   operation: string;
   title: string;
-  reason?: string;
   changes: Change[];
-  preview: Preview | null;
-  issue: Issue | null;
+  preview?: Preview | null;
+  issue?: Issue | null;
   status: 'pending' | 'accepted' | 'rejected';
   note?: string;
 }
 
-export interface TaskStep {
+export interface AgentStatus { configured: boolean; model?: string; provider?: string; hint?: string }
+
+/** What a result card shows. References only: the card reads the numbers from the host, so none of them passes through the model. */
+export type CardRef =
+  | { kind: 'run'; project: string; run: string; href: string }
+  | { kind: 'check'; series: string; href: string }
+  | { kind: 'file'; url: string; title: string; type: 'pdf' | 'html'; href?: string }
+  | { kind: 'model3d'; spec: string; version: number; href: string }
+  | { kind: 'open'; label: string; href: string };
+
+export type StepStatus = 'running' | 'waiting_review' | 'done' | 'failed' | 'rejected' | 'interrupted';
+export interface ChatStep {
+  type: 'step';
   id: string;
   tool: string;
+  /** The operation's name as the workbench calls it. */
   label: string;
-  detail?: string;
-  status: 'running' | 'waiting_review' | 'done' | 'failed' | 'rejected';
-  result?: string;
-  run_id?: string;
-  proposal_id?: string;
+  status: StepStatus;
+  /** What the step did in a few words of the engineer's own language, from the arguments. */
+  target?: string;
+  /** Facts worth a look when the step is opened, written by the host from the result. */
+  notes?: string[];
+  /** Why a step failed or was refused. */
+  reason?: string;
+  card?: CardRef;
+  proposal?: Proposal;
   duration_ms?: number;
 }
-
-export interface Task {
+export interface ChatText { type: 'text'; text: string }
+export type ChatPart = ChatText | ChatStep;
+export interface ChatAttachment { upload: string; file: string }
+export interface ChatMessage {
   id: string;
-  project_id: string;
-  instruction: string;
-  context?: string;
-  status: 'running' | 'waiting_review' | 'done' | 'failed' | 'stopped';
+  role: 'user' | 'assistant';
+  parts: ChatPart[];
   created: string;
-  finished?: string;
-  steps: TaskStep[];
-  reply?: string;
+  attachments?: ChatAttachment[];
+  /** A user message that waits for the agent to finish what it is doing. */
+  queued?: boolean;
+  status?: 'streaming' | 'done' | 'stopped' | 'error';
   error?: string;
 }
-
-export interface AgentStatus { configured: boolean; model?: string; provider?: string; hint?: string }
+export interface ChatSummary { id: string; title: string; created: string; updated: string; message_count: number; running: boolean }
+export interface ChatView extends ChatSummary { items: ChatMessage[]; waiting: Proposal[] }
 
 // ---- The product library: series → specification → version ----
 
@@ -450,8 +470,22 @@ export interface SpecificationReport {
   content_sha256: string; snapshot_sha256: string; sha256: string; url: string;
 }
 
+/** The standard check of a series boiled down: how many items passed, failed or are missing, and each item that failed. */
+export interface CheckFailure {
+  spec: string; name: string; title: string; standard: string; clause: string; page?: number | null;
+  limit: number | null; actual: number | null; unit: string; comparison: string | null; reason?: string | null;
+}
+export interface CheckFailures {
+  series: string; name: string; specs: number; checked: number;
+  counts: { passed: number; failed: number; missing: number; uncovered: number };
+  failures: CheckFailure[];
+  missing: { spec: string; name: string; title: string; reason: string | null }[];
+  not_checked: string[];
+}
+
 export type StudioEvent =
-  | { type: 'task'; task: Task }
+  /** The last few messages of a conversation as they stand now; the page replaces its own tail with them. */
+  | { type: 'chat'; summary: ChatSummary; tail: ChatMessage[]; count: number; waiting: Proposal[] }
   | { type: 'proposal'; proposal: Proposal }
   | { type: 'project'; project_id: string }
   | { type: 'library'; series_id?: string; job?: LibraryJob };
