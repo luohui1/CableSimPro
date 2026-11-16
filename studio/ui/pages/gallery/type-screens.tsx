@@ -1,0 +1,441 @@
+// The cable-type screens of round two: importing a structure table in five steps on one screen; a new type typed layer by
+// layer or generated from a product standard; and the pages of a specification after its structure: parameters, the
+// ampacity table, versions and files with the review. Data: round2-data.ts (this branch's host, and the proposal of
+// studio-types' core) and the workspace of library-data.ts, both YJV22-8.7/15 kV 3×240.
+import type { ReactNode } from 'react';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from '@/components/ui/item';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { Disclosure } from '@/kit/disclosure';
+import { Icon } from '@/kit/icon';
+import { ReviewMark, TierMark, VerdictBar, type Review } from '@/kit/marks';
+import { Metric } from '@/kit/metric';
+import { DataTable, type Column } from '@/kit/workbench/data-table';
+import { FlowLayout, Stepper, type FlowStep } from '@/kit/workbench/flow';
+import { ChoiceCards, ChoiceSelect, DropZone, FormNote, FormRow, FormSection, SourceTag, UnitInput, type SourceKind } from '@/kit/workbench/form';
+import { PageHeader, Panel, Split } from '@/kit/workbench/page';
+import { Given, PremiseStrip } from '@/kit/workbench/premise';
+import { ReviewActions, ReviewTrack } from '@/kit/workbench/review';
+import { compact, fixed } from '@shared/format';
+import { CableSection } from './figures';
+import { WORKSPACE } from './library-data';
+import { DOCUMENTS, IMPORT, PRINTED, PROPOSAL, RATING_TABLE, REVIEW_NOTES, VERSIONS } from './round2-data';
+import { SeriesShell } from './workbench-screens';
+
+/** A host time as the screen writes times: date and minute, in the reader's zone. */
+export const when = (iso: string) => new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+  .format(new Date(iso)).replaceAll('/', '-');
+
+// ---- 导入结构表: one screen, five steps ----
+
+export type ImportStep = 'upload' | 'sheet' | 'columns' | 'preview' | 'commit';
+const IMPORT_STEPS: { key: ImportStep; title: string }[] = [
+  { key: 'upload', title: '上传文件' }, { key: 'sheet', title: '选工作表' }, { key: 'columns', title: '列对应' }, { key: 'preview', title: '预览' }, { key: 'commit', title: '导入' },
+];
+const MAPPED = IMPORT.columns.filter(column => column.field).length;
+const SHEET = IMPORT.sheets.find(sheet => sheet.name === IMPORT.sheet)!;
+const DECLARATION = IMPORT.declaration;
+const FIELD_OPTIONS = [
+  ...Object.entries(IMPORT.fields).map(([value, field]) => ({ value, label: `${field.label}（${field.unit}）` })),
+  { value: 'none', label: '不导入' },
+];
+
+function importSteps(at: ImportStep): FlowStep[] {
+  const index = IMPORT_STEPS.findIndex(step => step.key === at);
+  const settled: Record<ImportStep, string> = {
+    upload: IMPORT.file, sheet: IMPORT.sheet, columns: `${MAPPED} 列对上字段`, preview: `${IMPORT.rows.length} 行可导入`, commit: '',
+  };
+  return IMPORT_STEPS.map((step, position) => ({
+    title: step.title,
+    status: position < index ? 'done' : position === index ? 'current' : 'upcoming',
+    detail: position < index ? settled[step.key] : undefined,
+  }));
+}
+
+type Column3 = (typeof IMPORT.columns)[number];
+const COLUMN_COLUMNS: Column<Column3>[] = [
+  { key: 'letter', header: '列', width: 'w-12', cell: column => <span className="font-medium">{column.letter}</span> },
+  { key: 'header', header: '表头', cell: column => <span className={column.field ? 'text-ink' : 'text-ink-2'}>{column.header}</span> },
+  { key: 'sample', header: '前三行', width: 'w-40', cell: column => <span className="text-ink-2 tabular-nums">{column.sample.join('，')}</span> },
+  { key: 'field', header: '对应到', width: 'w-60', cell: column => <ChoiceSelect label={`${column.letter} 列对应到`} value={column.field ?? 'none'} options={FIELD_OPTIONS} /> },
+];
+
+type PreviewRow = (typeof IMPORT.rows)[number];
+const PREVIEW_COLUMNS: Column<PreviewRow>[] = [
+  { key: 'row', header: '表中行', numeric: true, width: 'w-20', cell: row => row.row },
+  { key: 'key', header: '规格', width: 'w-28', cell: row => <span className="font-medium">{row.key}</span> },
+  { key: 'od', header: '表列外径', unit: 'mm', numeric: true, width: 'w-28', cell: row => fixed(row.od, 1) },
+  { key: 'listed', header: '各层合计', unit: 'mm', numeric: true, width: 'w-28', cell: row => fixed(row.listed, 2) },
+  { key: 'residual', header: '余量（单边）', unit: 'mm', numeric: true, width: 'w-32', cell: row => fixed(row.residual, 2) },
+  { key: 'state', header: '状态', width: 'w-28', cell: () => <Badge variant="success"><Icon name="action/check" data-icon="inline-start" />可导入</Badge> },
+];
+
+function ImportContent({ at }: { at: ImportStep }) {
+  if (at === 'upload') return <div className="flex max-w-3xl flex-col gap-10">
+    <FormSection title="上传结构表" description="读取每张工作表的表头、数据起始行和各列建议对应的字段。">
+      <DropZone title="把结构表拖到这里" formats="支持 .xlsx、.xls 和 .csv 的结构表" />
+    </FormSection>
+    <FormSection title="手边没有结构表" description="用一份公开厂家手册（人民电缆 8.7/15 kV 结构表）试导入，它附带每张表所需的系列声明。">
+      <div><Button variant="outline"><Icon name="object/file" data-icon="inline-start" />用公开样例</Button></div>
+    </FormSection>
+  </div>;
+  if (at === 'sheet') return <div className="flex max-w-3xl flex-col gap-6">
+    <FormSection title="选一张工作表" description="一张工作表导入为一个新系列。">
+      <ChoiceCards label="工作表" columns="grid-cols-2" value={IMPORT.sheet} options={IMPORT.sheets.map(sheet => ({
+        value: sheet.name, title: sheet.name, icon: 'result/table',
+        detail: `表头第 ${sheet.headerRows.join('–')} 行，第 ${sheet.firstDataRow} 行起 ${sheet.dataRows} 行数据`,
+      }))} />
+    </FormSection>
+  </div>;
+  if (at === 'columns') return <div className="flex max-w-4xl flex-col gap-6">
+    <FormSection title="把列对上字段" description={`${IMPORT.sheet}：表头第 ${SHEET.headerRows.join('–')} 行，第 ${SHEET.firstDataRow} 行起 ${SHEET.dataRows} 行数据。下拉里是建议的对应，不对就改。`}
+      aside={<Button variant="outline" size="sm"><Icon name="action/save" data-icon="inline-start" />存为常用对应</Button>}>
+      <div className="flex flex-wrap items-center gap-2 rounded-card border border-line bg-canvas px-4 py-3 text-sm">
+        <span className="text-ink-2">表名读出的型号</span>
+        <span className="font-semibold text-ink">{IMPORT.designation.model}</span>
+        <span className="text-ink">{IMPORT.designation.description}</span>
+      </div>
+      <div className="overflow-hidden rounded-card border border-line">
+        <DataTable rows={IMPORT.columns} rowKey={column => column.letter} columns={COLUMN_COLUMNS} />
+      </div>
+    </FormSection>
+  </div>;
+  if (at === 'preview') return <div className="flex max-w-4xl flex-col gap-6">
+    <FormSection title="每一行生成的规格" description="按系列声明和列对应生成，还没有保存。">
+      <div className="grid grid-cols-3 gap-4 rounded-card border border-line px-4 py-4">
+        <Metric size="md" label="可导入" value={IMPORT.rows.length} unit="行" />
+        <Metric size="md" label="不能导入" value={0} unit="行" />
+        <Metric size="md" label="不是数据，跳过" value={IMPORT.skipped.length} unit="行" />
+      </div>
+      <div className="overflow-hidden rounded-card border border-line">
+        <DataTable rows={IMPORT.rows} rowKey={row => row.key} columns={PREVIEW_COLUMNS} />
+      </div>
+      {IMPORT.skipped.map(row => <FormNote key={row.row} title={`第 ${row.row} 行不导入`}>{row.text}</FormNote>)}
+      <FormNote title="尺寸怎么来的">{WORKSPACE.derivation} 表列外径比各层合计多出的部分计入填充。</FormNote>
+    </FormSection>
+  </div>;
+  return <div className="flex max-w-3xl flex-col gap-10">
+    <FormSection title="系列" description={`导入为一个新系列，每行成为一个规格的第 1 版草稿。来源：${IMPORT.file} · 工作表“${IMPORT.sheet}”。`}>
+      <FormRow label="系列名称" htmlFor="series-name"><Input id="series-name" defaultValue={DECLARATION.name} /></FormRow>
+      <FormRow label="制造商" htmlFor="series-maker"><Input id="series-maker" defaultValue={DECLARATION.manufacturer} /></FormRow>
+      <FormRow label="型号" htmlFor="series-designation" hint={IMPORT.designation.description}><Input id="series-designation" defaultValue={DECLARATION.designation} className="w-48" /></FormRow>
+      <FormRow label="芯数" htmlFor="series-cores"><UnitInput id="series-cores" unit="芯" defaultValue={DECLARATION.cores} className="w-48" /></FormRow>
+      <FormRow label="电压">
+        <div className="grid grid-cols-3 gap-2">
+          <UnitInput aria-label="U₀" prefix="U₀" unit="kV" defaultValue={compact(DECLARATION.u0_v / 1000)} />
+          <UnitInput aria-label="U" prefix="U" unit="kV" defaultValue={compact(DECLARATION.u_v / 1000)} />
+          <UnitInput aria-label="Um" prefix="Um" unit="kV" defaultValue={compact(DECLARATION.um_v / 1000)} />
+        </div>
+      </FormRow>
+      <FormRow label="执行标准">
+        <div className="flex flex-wrap items-center gap-2">
+          {DECLARATION.standards.map(standard => <Badge key={standard} variant="outline">{standard}</Badge>)}
+          <Button variant="ghost" size="sm"><Icon name="action/add" data-icon="inline-start" />添加</Button>
+        </div>
+      </FormRow>
+    </FormSection>
+    <FormSection title="表里没有、另行取值" description="结构表没列的尺寸，取值和依据记进每个规格。">
+      {Object.entries(DECLARATION.common).map(([key, value]) => {
+        const field = IMPORT.fields[key as keyof typeof IMPORT.fields];
+        return <FormRow key={key} label={field.label}>
+          <div className="flex flex-col gap-2">
+            <UnitInput aria-label={field.label} unit={field.unit} defaultValue={value} className="w-48" />
+            <Input aria-label={`${field.label}的依据`} defaultValue={DECLARATION.common_basis[key as keyof typeof DECLARATION.common_basis]} />
+          </div>
+        </FormRow>;
+      })}
+    </FormSection>
+  </div>;
+}
+
+function ImportBody({ at }: { at: ImportStep }) {
+  const index = IMPORT_STEPS.findIndex(step => step.key === at);
+  const next = IMPORT_STEPS[index + 1];
+  return <>
+    <PageHeader trail={[{ label: '型号库' }]} title="导入结构表" marks={index > 0 ? <Badge variant="outline"><Icon name="object/file" data-icon="inline-start" />{IMPORT.file}</Badge> : undefined} />
+    <FlowLayout steps={<Stepper label="导入步骤" steps={importSteps(at)} />} footer={<>
+      <Button variant="ghost" className="mr-auto">取消</Button>
+      {index > 0 && <Button variant="outline"><Icon name="action/arrow-left" data-icon="inline-start" />上一步</Button>}
+      {at === 'upload' ? null
+        : next ? <Button>下一步：{next.title}<Icon name="action/arrow-right" data-icon="inline-end" /></Button>
+        : <Button><Icon name="action/import" data-icon="inline-start" />导入 {IMPORT.rows.length} 个规格</Button>}
+    </>}>
+      <ImportContent at={at} />
+    </FlowLayout>
+  </>;
+}
+
+// ---- 新建型号: two ways in, one header ----
+
+function NewTypeHeader({ way, primary }: { way: 'manual' | 'standard'; primary?: ReactNode }) {
+  return <PageHeader trail={[{ label: '型号库' }]} title="新建型号"
+    marks={<ToggleGroup value={[way]} aria-label="新建方式" className="rounded-lg border border-line bg-surface p-1">
+      <ToggleGroupItem value="manual">从零填写</ToggleGroupItem>
+      <ToggleGroupItem value="standard">按标准生成</ToggleGroupItem>
+    </ToggleGroup>}
+    actions={<Button variant="ghost">取消</Button>} primary={primary} />;
+}
+
+// The layers in order from the conductor out, as the structure table names them.
+const LAYER_ORDER = ['conductor_diameter', 'conductor_screen_thickness', 'insulation_thickness', 'insulation_screen_thickness', 'screen_tape_thickness',
+  'binder_thickness', 'bedding_thickness', 'armour_tape_thickness', 'armour_tape_width', 'oversheath_thickness', 'outer_diameter'];
+
+function TypeNewManualBody() {
+  const rows = LAYER_ORDER.map(key => WORKSPACE.structure.find(row => row.key === key)!);
+  return <>
+    <NewTypeHeader way="manual" primary={<Button><Icon name="action/save" data-icon="inline-start" />建成草稿</Button>} />
+    <Split panes={[
+      { id: 'form', size: 60, min: 44, children: <div className="min-h-0 flex-1 overflow-y-auto bg-surface">
+          <div className="flex max-w-3xl flex-col gap-10 px-8 py-8">
+            <FormSection title="型号" description="系列的名称、型号写法、芯数、电压和执行标准；同一系列的规格共用这些。">
+              <FormRow label="系列名称" htmlFor="type-name"><Input id="type-name" defaultValue="YJV22-8.7/15 kV 三芯" /></FormRow>
+              <FormRow label="型号" htmlFor="type-designation" hint={IMPORT.designation.description}><Input id="type-designation" defaultValue={DECLARATION.designation} className="w-48" /></FormRow>
+              <FormRow label="芯数"><ToggleGroup value={['3']} aria-label="芯数" className="rounded-lg border border-line bg-surface p-1"><ToggleGroupItem value="1">单芯</ToggleGroupItem><ToggleGroupItem value="3">三芯</ToggleGroupItem></ToggleGroup></FormRow>
+              <FormRow label="电压">
+                <div className="grid grid-cols-3 gap-2">
+                  <UnitInput aria-label="U₀" prefix="U₀" unit="kV" defaultValue={compact(DECLARATION.u0_v / 1000)} />
+                  <UnitInput aria-label="U" prefix="U" unit="kV" defaultValue={compact(DECLARATION.u_v / 1000)} />
+                  <UnitInput aria-label="Um" prefix="Um" unit="kV" defaultValue={compact(DECLARATION.um_v / 1000)} />
+                </div>
+              </FormRow>
+              <FormRow label="规格" htmlFor="type-area"><UnitInput id="type-area" unit="mm²" defaultValue={240} className="w-48" /></FormRow>
+            </FormSection>
+            <FormSection title="分层结构" description="从导体往外逐层填，单位 mm。每个值记作人工填写，可以写上依据。">
+              {rows.map(row => <FormRow key={row.key} label={row.label} htmlFor={`layer-${row.key}`}>
+                <div className="flex items-center gap-3">
+                  <UnitInput id={`layer-${row.key}`} unit={row.unit} defaultValue={row.value as number} className="w-40" />
+                  <SourceTag kind="manual" />
+                </div>
+              </FormRow>)}
+            </FormSection>
+          </div>
+        </div> },
+      { id: 'preview', size: 40, min: 28, children: <Panel title="断面" tools={<span className="text-sm text-ink-2">外径余量 {fixed(WORKSPACE.closure.residual_mm, 2)} mm 计入填充</span>} bodyClassName="relative bg-canvas">
+          <div className="absolute inset-8"><CableSection /></div>
+        </Panel> },
+    ]} />
+  </>;
+}
+
+type Dimension = (typeof PROPOSAL.complete.dimensions)[number];
+
+function placeOf(dimension: Dimension) {
+  if (dimension.kind === 'given') return undefined;
+  return `${dimension.clause} · PDF 第 ${dimension.pdf_page} 页`;
+}
+
+function difference(dimension: Dimension) {
+  const printed = PRINTED[dimension.field];
+  if (printed === undefined) return <span className="text-ink-2">手册未列</span>;
+  const delta = Math.round((dimension.value - printed) * 100) / 100;
+  return delta === 0 ? <span className="text-ink-2">相同</span> : <span className="font-medium text-attention-ink">{delta > 0 ? '+' : '−'}{fixed(Math.abs(delta), 1)}</span>;
+}
+
+const PROPOSAL_COLUMNS: Column<Dimension>[] = [
+  { key: 'label', header: '尺寸', cell: dimension => dimension.label },
+  { key: 'value', header: '提案', unit: 'mm', numeric: true, width: 'w-24', cell: dimension => <span className="font-medium">{fixed(dimension.value, 1)}</span> },
+  { key: 'source', header: '出处', width: 'w-56', cell: dimension => <SourceTag kind={dimension.kind as SourceKind} place={placeOf(dimension)} /> },
+  { key: 'printed', header: '手册 3×240', unit: 'mm', numeric: true, width: 'w-28', cell: dimension => PRINTED[dimension.field] === undefined ? '—' : fixed(PRINTED[dimension.field], 1) },
+  { key: 'delta', header: '提案比手册', numeric: true, width: 'w-28', cell: difference },
+];
+
+function TypeNewStandardBody() {
+  const inputs = PROPOSAL.inputs;
+  const proposal = PROPOSAL.complete;
+  const steps: FlowStep[] = [
+    { title: '条件', status: 'done', detail: `${PROPOSAL.standard} · 3×${inputs.area_mm2}` },
+    { title: '提案与对照', status: 'current' },
+    { title: '补齐并建成草稿', status: 'upcoming' },
+  ];
+  return <>
+    <NewTypeHeader way="standard" />
+    <FlowLayout steps={<Stepper label="按标准生成的步骤" steps={steps} />} footer={<>
+      <Button variant="outline"><Icon name="action/arrow-left" data-icon="inline-start" />改条件</Button>
+      <Button>下一步：补齐并建成<Icon name="action/arrow-right" data-icon="inline-end" /></Button>
+    </>}>
+      <div className="flex max-w-4xl flex-col gap-8">
+        <FormSection title="标准给出的尺寸"
+          description={`${PROPOSAL.standard} · ${compact(inputs.u0_v / 1000)}/${compact(inputs.u_v / 1000)} kV · 三芯 · 铜 ${inputs.area_mm2} mm² · XLPE 绝缘 · 钢带铠装 · 有金属屏蔽`}
+          aside={<Badge variant="outline">{PROPOSAL.method.plugin_id} {PROPOSAL.method.plugin_version}</Badge>}>
+          <div className="overflow-hidden rounded-card border border-line">
+            <DataTable rows={proposal.dimensions} rowKey={dimension => dimension.field} columns={PROPOSAL_COLUMNS} />
+          </div>
+          <Disclosure title={`内衬、钢带和外护套怎么来的（附录 A 假设直径，${PROPOSAL.calculation.length} 步）`} className="rounded-card border border-line">
+            <ol className="m-0 flex list-none flex-col px-4 pb-3">
+              {PROPOSAL.calculation.map((stage, index) => <li key={stage.stage} className="flex min-h-9 items-center gap-4 border-b border-line py-1 text-sm last:border-b-0">
+                <span className="w-48 shrink-0 text-ink">{index + 1}. {stage.stage}</span>
+                <span className="min-w-0 flex-1 text-ink-2">{stage.formula}</span>
+                <span className="w-20 shrink-0 text-right font-medium text-ink tabular-nums">{fixed(stage.value, 1)} {stage.unit}</span>
+              </li>)}
+            </ol>
+          </Disclosure>
+        </FormSection>
+        <FormSection title="还要你给的" description="标准不规定这两项；下一步按实际值填写。">
+          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+            {proposal.missing.map(item => <li key={item.field} className="grid grid-cols-label gap-x-4 text-sm">
+              <span className="font-medium text-ink">{item.label}</span>
+              <span className="text-ink">{item.reason}</span>
+            </li>)}
+          </ul>
+        </FormSection>
+        <FormNote title="这份提案不说明什么">
+          <ul className="m-0 flex list-disc flex-col gap-1 pl-4">{proposal.limitations.map(text => <li key={text}>{text}</li>)}</ul>
+        </FormNote>
+      </div>
+    </FlowLayout>
+  </>;
+}
+
+// ---- 参数: electrical parameters and short-circuit currents of one version ----
+
+type Quantity = (typeof WORKSPACE.electrical)[number];
+// Per metre in the method, per kilometre (or μF/km) on the page; four significant figures.
+const PER_KM: Record<string, { factor: number; unit: string }> = {
+  'Ω/m': { factor: 1000, unit: 'Ω/km' }, 'F/m': { factor: 1e9, unit: 'μF/km' }, 'A/m': { factor: 1000, unit: 'A/km' }, 'H/m': { factor: 1e6, unit: 'mH/km' },
+};
+const nameOf = (title: string) => title.replace(/^芯 1 · /, '');
+const quantityValue = (row: Quantity) => {
+  const scale = PER_KM[row.unit];
+  return { value: row.value === null ? '—' : compact(row.value * (scale?.factor ?? 1), 4), unit: scale?.unit ?? (row.unit === '1' ? '' : row.unit) };
+};
+const QUANTITY_COLUMNS: Column<Quantity>[] = [
+  { key: 'title', header: '参数', cell: row => nameOf(row.title) },
+  { key: 'value', header: '数值', numeric: true, width: 'w-28', cell: row => <span className="font-medium">{quantityValue(row).value}</span> },
+  { key: 'unit', header: '单位', width: 'w-20', cell: row => <span className="text-ink-2">{quantityValue(row).unit}</span> },
+  { key: 'basis', header: '依据', width: 'w-56', cell: row => <span className="truncate text-ink-2">{row.standard ? `${row.standard} ${String(row.clause ?? '').split('，')[0]}` : '—'}</span> },
+];
+
+function Missing({ rows }: { rows: Quantity[] }) {
+  return <ul className="m-0 flex list-none flex-col p-0">
+    {rows.map(row => <li key={row.id} className="grid grid-cols-property items-start gap-x-4 border-b border-line px-4 py-2 text-sm last:border-b-0">
+      <span className="flex flex-col gap-1">
+        <span className="text-ink">{nameOf(row.title)}</span>
+        <span className="text-ink-2">{row.reason}</span>
+      </span>
+      <Badge variant={row.status === 'uncovered' ? 'outline' : 'secondary'}>{row.status === 'uncovered' ? '未覆盖' : '缺依据'}</Badge>
+      <span />
+    </li>)}
+  </ul>;
+}
+
+function SeriesParamsBody() {
+  const electrical = WORKSPACE.electrical.filter(row => row.status === 'available');
+  const short = WORKSPACE.short_circuit.filter(row => row.status === 'available');
+  const value = (id: string) => WORKSPACE.short_circuit.find(row => row.id === id)?.value ?? 0;
+  const conditions = WORKSPACE.short_circuit_conditions;
+  return <SeriesShell page="params" version={WORKSPACE.version.number}
+    primary={<Button><Icon name="object/file" data-icon="inline-start" />规格书</Button>}>
+    <Split panes={[
+      { id: 'electrical', size: 56, min: 40, children: <Panel title="每芯电气参数" tools={<Badge variant="outline">{WORKSPACE.electrical_method.plugin_id} {WORKSPACE.electrical_method.plugin_version}</Badge>}>
+          <DataTable rows={electrical} rowKey={row => row.id} columns={QUANTITY_COLUMNS} />
+          <Disclosure title={`还没有算 ${WORKSPACE.electrical.length - electrical.length} 项`} defaultOpen>
+            <Missing rows={WORKSPACE.electrical.filter(row => row.status !== 'available')} />
+          </Disclosure>
+        </Panel> },
+      { id: 'short', size: 44, min: 32, children: <Panel title="短路电流" tools={<Badge variant="outline">{WORKSPACE.short_circuit_method.plugin_id} {WORKSPACE.short_circuit_method.plugin_version}</Badge>}>
+          <div className="flex flex-col gap-4 border-b border-line px-4 py-4">
+            <Metric label="导体非绝热允许短路电流" value={fixed(value('core/1:conductor-nonadiabatic') / 1000, 2)} unit="kA"
+              detail={`绝热 ${fixed(value('core/1:conductor-adiabatic') / 1000, 2)} kA × 修正因数 ${fixed(value('core/1:conductor-factor'), 4)}`} />
+          </div>
+          <dl className="m-0 flex flex-col gap-2 border-b border-line px-4 py-4 text-sm">
+            {Object.entries(conditions.sources).map(([key, text]) => <div key={key} className="grid grid-cols-label gap-x-4">
+              <dt className="text-ink-2">{{ duration_s: '持续时间', initial_temperature_k: '起始温度', final_temperature_k: '允许终温' }[key]}</dt>
+              <dd className="m-0 text-ink">{text}</dd>
+            </div>)}
+          </dl>
+          <Disclosure title={`金属屏蔽与铠装还没有算 ${WORKSPACE.short_circuit.length - short.length} 项`}>
+            <Missing rows={WORKSPACE.short_circuit.filter(row => row.status !== 'available')} />
+          </Disclosure>
+        </Panel> },
+    ]} />
+  </SeriesShell>;
+}
+
+// ---- 载流量表: the table kept on a version, conditions down, layings across ----
+
+function SeriesRatingBody() {
+  const layouts = [...new Set(RATING_TABLE.rows.map(row => row.layout))];
+  const soils = [...new Set(RATING_TABLE.rows.map(row => row.soil))];
+  const cell = (layout: string, soil: number) => RATING_TABLE.rows.find(row => row.layout === layout && row.soil === soil);
+  const first = RATING_TABLE.rows[0];
+  return <SeriesShell page="rating" version={1} primary={<Button><Icon name="module/rating-table" data-icon="inline-start" />新算一张</Button>}>
+    <PremiseStrip asked="允许持续载流量">
+      <Given label="埋深" value={`${first.depth} m`} />
+      <Given label="环境" value={`${first.ambient} °C`} />
+      <Given label="敷设" value={`${layouts.length} 种`} />
+      <Given label="土壤热阻率" value={`${soils.length} 档`} />
+    </PremiseStrip>
+    <div className="flex min-h-0 flex-1">
+      <Panel title="载流量表" tools={<><span className="mr-2 text-sm text-ink-2 tabular-nums">算于 {when(RATING_TABLE.created)}</span><Button variant="ghost" size="sm"><Icon name="action/export" data-icon="inline-start" />导出 CSV</Button></>}>
+        <DataTable rows={soils} rowKey={soil => String(soil)} columns={[
+          { key: 'soil', header: '土壤热阻率', unit: 'K·m/W', numeric: true, width: 'w-36', cell: soil => fixed(soil, 1) },
+          ...layouts.map(layout => ({ key: layout, header: layout, unit: 'A', numeric: true, width: 'w-48',
+            cell: (soil: number) => { const row = cell(layout, soil); return row ? fixed(row.ampacity, 1) : '—'; } })),
+        ]} />
+      </Panel>
+      <Panel title="可信分档" tools={<TierMark tier="reference" />} className="w-80 flex-none border-l border-line" bodyClassName="flex flex-col gap-4 px-4 py-4 text-sm">
+        <p className="m-0 text-ink">{RATING_TABLE.tierMeaning}</p>
+        {RATING_TABLE.tierBasis.map(text => <p key={text} className="m-0 text-ink-2">{text}</p>)}
+        <div className="flex flex-col gap-1 border-t border-line pt-4">
+          <span className="text-ink-2">方法</span>
+          <span className="text-ink">{RATING_TABLE.method}</span>
+          <span className="text-ink-2">{RATING_TABLE.warning}</span>
+        </div>
+      </Panel>
+    </div>
+  </SeriesShell>;
+}
+
+// ---- 版本与文件: the versions, where the selected one stands in review, and its files ----
+
+type Version = (typeof VERSIONS)[number];
+const VERSION_COLUMNS: Column<Version>[] = [
+  { key: 'number', header: '版本', width: 'w-20', cell: version => <span className="font-medium">第 {version.number} 版</span> },
+  { key: 'review', header: '审核', width: 'w-24', cell: version => <ReviewMark state={version.review as Review} /> },
+  { key: 'note', header: '说明', cell: version => <span className="whitespace-normal">{version.note}</span> },
+  { key: 'check', header: '标准核对', width: 'w-32', cell: version => <VerdictBar counts={version.check} /> },
+  { key: 'created', header: '建于', width: 'w-36', cell: version => <span className="text-ink-2 tabular-nums">{when(version.created)}</span> },
+];
+
+function SeriesVersionsBody() {
+  const shown = VERSIONS.find(version => version.number === 1)!;
+  const stamps = {
+    submitted: shown.submitted && { ...shown.submitted, note: REVIEW_NOTES.submit },
+    reviewed: shown.reviewed && { ...shown.reviewed, note: REVIEW_NOTES.approve },
+    published: shown.published,
+  };
+  return <SeriesShell page="versions" version={WORKSPACE.version.number}>
+    <Split panes={[
+      { id: 'versions', size: 60, min: 44, children: <Panel title="版本">
+          <DataTable rows={VERSIONS} rowKey={version => String(version.number)} selected="1" onSelect={() => undefined} columns={VERSION_COLUMNS} />
+        </Panel> },
+      { id: 'version', size: 40, min: 30, children: <Panel title={`第 ${shown.number} 版`} tools={<ReviewActions state={shown.review as Review} />}
+          bodyClassName="flex flex-col gap-6 px-4 py-4">
+          <ReviewTrack state={shown.review as Review} created={shown.created} stamps={stamps} when={when} />
+          <section className="flex flex-col gap-2">
+            <h3 className="m-0 text-h3 text-ink">文件</h3>
+            {DOCUMENTS.filter(document => document.version === shown.number).map(document => <Item key={document.title} variant="outline">
+              <ItemMedia variant="tile"><Icon name="object/file" /></ItemMedia>
+              <ItemContent>
+                <ItemTitle>{document.title}</ItemTitle>
+                <ItemDescription>规格书 · PDF · {when(document.created)}</ItemDescription>
+              </ItemContent>
+              <ItemActions>
+                <ReviewMark state={document.review as Review} />
+                <Button variant="ghost" size="icon-sm" aria-label="下载"><Icon name="action/export" /></Button>
+              </ItemActions>
+            </Item>)}
+          </section>
+        </Panel> },
+    ]} />
+  </SeriesShell>;
+}
+
+export const ImportScreen = ImportBody;
+export const TypeNewManual = TypeNewManualBody;
+export const TypeNewStandard = TypeNewStandardBody;
+export const SeriesParams = SeriesParamsBody;
+export const SeriesRating = SeriesRatingBody;
+export const SeriesVersions = SeriesVersionsBody;

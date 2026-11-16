@@ -3,6 +3,7 @@
 import { Fragment, type ReactNode } from 'react';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 
 export function PageHeader({ trail, title, marks, primary, actions, className }: {
@@ -73,4 +74,21 @@ export function Toolbar({ children, end, className }: { children: ReactNode; end
     {children}
     {end && <div className="ml-auto flex items-center gap-2">{end}</div>}
   </div>;
+}
+
+/** The pages of one object under its header (结构与核对, 参数, 载流量表, 版本与文件): flat text over a rule. */
+export function PageTabs({ value, items, onValueChange }: {
+  value: string;
+  items: { value: string; label: string; count?: number }[];
+  onValueChange?: (value: string) => void;
+}) {
+  return <Tabs value={value} onValueChange={next => onValueChange?.(next as string)} className="shrink-0 gap-0">
+    <div className="flex h-11 items-end border-b border-line px-6">
+      <TabsList variant="line" className="h-11 border-b-0">
+        {items.map(item => <TabsTrigger key={item.value} value={item.value}>
+          {item.label}{item.count !== undefined && <span className="text-xs font-normal text-ink-2 tabular-nums">{item.count}</span>}
+        </TabsTrigger>)}
+      </TabsList>
+    </div>
+  </Tabs>;
 }
