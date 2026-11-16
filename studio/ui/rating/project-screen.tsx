@@ -73,7 +73,8 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
   const openEditor = (key: GivenKey | null) => {
     if (!view) return;
     if (!editable) toNow();
-    if (key) setAsks(was => ({ key, at: (was?.at ?? 0) + 1 }));
+    // Asked for by a given: its field takes the focus. Asked for by the mark in the header: nothing is asked for.
+    setAsks(was => (key ? { key, at: (was?.at ?? 0) + 1 } : null));
     setEditing(true);
   };
 
@@ -148,15 +149,18 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
       setApplying(false);
       return;
     }
-    // The project has the new conditions: what was waiting in the editor is done, and the check follows.
-    pending.clear();
-    setEditing(false);
+    // The project has the new conditions, and the check follows. The editor stays open, working, until the new record is there.
     try {
       const made = await api.op<RunRecord>('run.rate', { project: projectId });
       await saved(made);
+      pending.clear();
+      setEditing(false);
       toNow();
     } catch (failure) {
+      // The conditions are the new ones all the same: nothing is left waiting, and the check can be run again.
       reportFailure(failure);
+      pending.clear();
+      setEditing(false);
       await queryClient.invalidateQueries({ queryKey: ['project', projectId] });
     } finally {
       setApplying(false);
@@ -229,7 +233,7 @@ export function ProjectScreen({ projectId, runId }: { projectId: string; runId: 
     ? <Button variant={weight} disabled={sheet.isPending} onClick={() => shown && sheet.mutate(shown.id)}>
       {sheet.isPending ? <Spinner /> : <Icon name="result/report" data-icon="inline-start" />}导出计算书
     </Button>
-    : <Button variant={weight} disabled={rate.isPending || !view?.preview || pending.count > 0} onClick={() => rate.mutate()}>
+    : <Button variant={weight} disabled={rate.isPending || applying || !view?.preview || pending.count > 0} onClick={() => rate.mutate()}>
       {rate.isPending ? <Spinner /> : <Icon name="run/run" data-icon="inline-start" />}{rate.isPending ? '计算中' : '运行校核'}
     </Button>;
 

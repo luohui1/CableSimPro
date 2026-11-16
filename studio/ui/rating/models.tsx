@@ -28,13 +28,16 @@ export function ModelTable({ entries, selected, onSelect, className }: {
   const reached = useRef(false);
   const needle = query.trim().toLowerCase();
   const shown = needle ? entries.filter(entry => `${entry.name} ${entry.family}`.toLowerCase().includes(needle)) : entries;
-  // A cable that is already chosen when the table appears (it came with the address) is brought into view once.
+  // A cable that is already chosen when the table appears (it came with the address) is brought into view once: the table
+  // scrolls to it, and nothing around the table does.
   useEffect(() => {
     if (reached.current || !selected || !entries.length) return;
-    const row = root.current?.querySelector('[data-state="selected"]');
-    if (!row) return;
+    const row = root.current?.querySelector<HTMLElement>('[data-state="selected"]');
+    const box = row?.closest<HTMLElement>('[data-slot="table-container"]');
+    if (!row || !box) return;
     reached.current = true;
-    row.scrollIntoView({ block: 'center' });
+    const [at, around] = [row.getBoundingClientRect(), box.getBoundingClientRect()];
+    box.scrollTop += at.top - around.top - (box.clientHeight - at.height) / 2;
   }, [entries.length, selected]);
   return <div ref={root} className="flex min-h-0 flex-col gap-3">
     <InputGroup className="w-72">
