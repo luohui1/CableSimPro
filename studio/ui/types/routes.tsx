@@ -1,6 +1,7 @@
 // The routes of the type screens. They hang under the parent the router gives, so the router keeps their paths as literal
 // types and a link anywhere (an Agent card, the side column) is checked against them.
 import { createRoute, lazyRouteComponent, type AnyRoute } from '@tanstack/react-router';
+import { SERIES_PAGES, type SeriesPage } from './model';
 
 const LibraryScreen = lazyRouteComponent(() => import('./library-screen'), 'LibraryScreen');
 const SeriesScreen = lazyRouteComponent(() => import('./series-screen'), 'SeriesScreen');
@@ -13,10 +14,11 @@ const newSearch = (search: Record<string, unknown>): { series?: string; from?: '
   ...(search.from === 'standard' ? { from: 'standard' as const } : {}),
 });
 
-/** Which size of a series, and which of its versions, the address points at; both are optional, the newest of the first size is the default. */
-const seriesSearch = (search: Record<string, unknown>): { spec?: string; version?: number } => ({
+/** Which size of a series, which of its versions and which of its pages the address points at; all are optional, the newest version of the first size on the first page is the default. */
+const seriesSearch = (search: Record<string, unknown>): { spec?: string; version?: number; page?: SeriesPage } => ({
   ...(typeof search.spec === 'string' ? { spec: search.spec } : {}),
   ...(typeof search.version === 'number' && Number.isInteger(search.version) && search.version > 0 ? { version: search.version } : {}),
+  ...(SERIES_PAGES.includes(search.page as SeriesPage) && search.page !== 'structure' ? { page: search.page as SeriesPage } : {}),
 });
 
 export function typeRoutes<Parent extends AnyRoute>(parent: Parent) {

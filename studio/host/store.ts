@@ -3,7 +3,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { PartName, Parts, ProjectMeta, RunHeader, RunRecord } from '../shared/types.ts';
+import type { PartName, Parts, ProjectMeta, ProjectSource, RunHeader, RunRecord } from '../shared/types.ts';
 import { StudioError } from './core.ts';
 
 const SCHEMAS: Record<PartName, string> = {
@@ -72,13 +72,13 @@ export class Store {
       .sort((a, b) => b.updated.localeCompare(a.updated));
   }
 
-  create(name: string, parts: Parts): ProjectMeta {
+  create(name: string, parts: Parts, source?: ProjectSource): ProjectMeta {
     const id = 'p-' + randomBytes(4).toString('hex');
     const dir = join(this.home, 'projects', id);
     mkdirSync(join(dir, 'runs'), { recursive: true });
     mkdirSync(join(dir, 'reports'), { recursive: true });
     const now = new Date().toISOString();
-    const meta: ProjectMeta = { id, name, created: now, updated: now, revision: 1 };
+    const meta: ProjectMeta = { id, name, created: now, updated: now, revision: 1, ...(source ? { source } : {}) };
     for (const part of PARTS) write(join(dir, `${part}.json`), { schema: SCHEMAS[part], ...parts[part] });
     write(join(dir, 'project.json'), { schema: 'cablesim.studio.project/1', ...meta });
     return meta;

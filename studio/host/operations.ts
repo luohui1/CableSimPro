@@ -314,9 +314,10 @@ export class Studio {
     });
 
     return [
-      { id: 'project.list', tool: 'list_projects', title: '工程列表', kind: 'read', parameters: obj({}),
-        description: '列出全部载流量计算工程：标识、名称、最近修改时间。',
-        execute: async () => store.list(),
+      { id: 'project.list', tool: 'list_projects', title: '工程列表', kind: 'read',
+        parameters: obj({ with_tables: opt(bool({ description: '为 true 时连载流量表背后的工程一起列出；缺省不列，它们只从规格的载流量表打开' })) }),
+        description: '列出工程师自己的载流量计算工程：标识、名称、最近修改时间。写入规格的载流量表在自己的工程里留着每个数的运行记录，那些工程默认不在这里。',
+        execute: async (params: { with_tables?: boolean }) => store.list().filter(item => params.with_tables || !item.source),
         brief: (list: ProjectMeta[]) => list.map(item => ({ project: item.id, name: item.name, updated: item.updated })) },
       { id: 'project.create', tool: 'create_project', title: '新建工程', kind: 'write',
         description: '新建一个载流量计算工程并选定型号。敷设、土壤、环境温度、负荷从该型号的默认模板起步，工程师审阅时会看到这些起始值；之后用 set_installation、set_conditions 修改。必须指定型号（从 list_library 取标识）。这是改动，先交给工程师审阅。',

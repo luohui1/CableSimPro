@@ -11,9 +11,9 @@ import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { type App, createApp } from '../host/server.ts';
 import { digest } from '../host/store.ts';
-import type { CorrectionPending, Gb50217Correction, RatingTable, RatingTableCondition, SeriesCreated, SpecCreated, StructureProposal } from '../shared/model-types.ts';
+import type { CorrectionPending, Gb50217Correction, RatingTable, RatingTableCondition, SeriesCreated, SpecCreated, SpecPreview, StructureProposal } from '../shared/model-types.ts';
 import type {
-  CheckRow, LibraryJob, ProjectView, RatingRow, RunRecord, SeriesDeclaration, SeriesView, SpecificationReport, SpecView, TableInspection, ValueRow,
+  CheckRow, LibraryJob, ProjectMeta, ProjectView, RatingRow, RunRecord, SeriesDeclaration, SeriesView, SpecificationReport, SpecView, TableInspection, ValueRow,
 } from '../shared/types.ts';
 
 const home = mkdtempSync(join(tmpdir(), 'cable-studio-model-types-'));
@@ -125,6 +125,21 @@ test('a specification typed in is the same kind of object as the imported one it
   assert.equal((await op<SeriesView>('library.series.get', { series: created.series })).specs.length, 0);
   await assert.rejects(shown('library.spec.create', { series: created.series, values: { area: 300 } }), { code: 'STRUCTURE_INCOMPLETE' });
 
+  // The page draws the section while it is filled in: the same row is previewed for a series that is there and for one that is not made yet,
+  // it is the structure the creation makes, a row that cannot be built says why, and nothing is written.
+  const previewed = await op<SpecPreview>('library.spec.preview', { series: created.series, values: structureValues(imported) });
+  assert.equal(previewed.entry.content_sha256, imported.entry.content_sha256);
+  const ahead = await op<SpecPreview>('library.spec.preview', { values: structureValues(imported), new_series: { name: '预览用系列', designation: declaration.designation,
+    cores: declaration.cores, u0_v: declaration.u0_v, u_v: declaration.u_v, standards: declaration.standards, common: declaration.common, common_basis: declaration.common_basis,
+    modelling: declaration.modelling } });
+  assert.deepEqual([ahead.entry.content_sha256, ahead.key, ahead.closure.residual_mm], [imported.entry.content_sha256, previewed.key, previewed.closure.residual_mm]);
+  const incomplete = await call('library.spec.preview', { series: created.series, values: { area: 300 } });
+  assert.deepEqual([incomplete.status, incomplete.body.error?.code], [422, 'STRUCTURE_INCOMPLETE']);
+  const neither = await call('library.spec.preview', { values: structureValues(imported) });
+  assert.deepEqual([neither.status, neither.body.error?.code], [422, 'INPUT_INVALID']);
+  assert.equal((await op<SeriesView>('library.series.get', { series: created.series })).specs.length, 0);
+  assert.equal((await op<{ name: string }[]>('library.series', {})).some(item => item.name === '预览用系列'), false);
+
   const typed = await op<SpecCreated>('library.spec.create', { series: created.series, values: structureValues(imported) });
   typedSpec = typed.spec;
   await assert.rejects(shown('library.spec.create', { series: created.series, values: structureValues(imported) }), { code: 'SPEC_EXISTS' });
@@ -223,7 +238,9 @@ test('an ampacity table is kept on a specification version, each number is a run
     { layout: 'three_core_buried_single', depth_m: 1.0, soil_thermal_resistivity: 1.5, ambient_temperature_c: 20 },
     { layout: 'three_core_buried_horizontal', depth_m: 0.8, soil_thermal_resistivity: 1.2, ambient_temperature_c: 25 },
   ];
-  const projects = () => op<{ id: string }[]>('project.list', {}).then(list => list.length);
+  // The engineer's own projects, and every project with the ones behind ampacity tables.
+  const listed = (withTables: boolean) => op<ProjectMeta[]>('project.list', withTables ? { with_tables: true } : {});
+  const projects = () => listed(true).then(list => list.length);
   const before = await projects();
 
   // A condition the laying cannot hold stops everything before anything is written.
@@ -235,6 +252,10 @@ test('an ampacity table is kept on a specification version, each number is a run
   const table = await op<RatingTable>('library.rating.table', { spec: target.id, title: '规格书载流量表', conditions });
   assert.deepEqual([table.rows.length, table.spec, table.version, table.by, table.title], [3, target.id, 1, app.studio.user, '规格书载流量表']);
   assert.equal(await projects(), before + 1);
+  // The table's runs live in a project of their own. It says where it came from, the engineer's list does not show it, and it still opens by its identifier.
+  assert.deepEqual((await listed(true)).find(item => item.id === table.project)?.source, { kind: 'rating-table', spec: target.id, version: 1 });
+  assert.equal((await listed(false)).some(item => item.id === table.project), false);
+  assert.equal((await op<ProjectView>('project.get', { project: table.project })).meta.source?.kind, 'rating-table');
   assert.deepEqual(await op<RatingTable[]>('library.rating.tables', { spec: target.id }), [table]);
 
   // The batch of the library computes the reference condition too: the same number.
@@ -386,7 +407,7 @@ test('the initial structure a standard gives becomes a draft specification whose
   assert.deepEqual(checked.summary!.count, (await op<SpecView>('library.spec.get', { spec: view.specs.find(spec => spec.key === '3×240')!.id })).results.check!.summary!.count);
 
   // The tools an agent gets: every new operation has a name, a title and a sentence, and takes the project its call carries.
-  const added = ['library.series.create', 'library.spec.create', 'library.rating.table', 'library.rating.tables', 'structure.propose', 'structure.proposal',
+  const added = ['library.series.create', 'library.spec.create', 'library.spec.preview', 'library.rating.table', 'library.rating.tables', 'structure.propose', 'structure.proposal',
     'correction.gb50217', 'correction.list', 'correction.get'].map(id => app.studio.operations.get(id)!);
   const tools = [...app.studio.operations.values()].map(item => item.tool).filter(Boolean);
   assert.equal(new Set(tools).size, tools.length);

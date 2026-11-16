@@ -80,6 +80,7 @@ export function ratingTableOperations(studio: Studio): Operation[] {
       frequency_hz: parts.conditions.frequency_hz, system_voltage_v: parts.conditions.system_voltage_v, circuits: record.document?.circuits.length ?? null,
       status: ampacity ? 'succeeded' : 'failed', ampacity_a: ampacity ? ampacity.value_a : null, basis_name: ampacity?.basis_name ?? null,
       tier: ampacity ? record.tier ?? null : null, tier_label: ampacity ? record.method_card?.tier.label ?? null : null,
+      tier_meaning: ampacity ? record.method_card?.tier.meaning ?? null : null, tier_basis: ampacity ? record.method_card?.tier.basis ?? [] : [],
       ...(ampacity ? {} : { error: record.summary?.error ?? record.summary?.circuits?.find(circuit => circuit.error)?.error
         ?? { code: 'NO_AMPACITY', message: '方法没有给出允许电流。' } }),
       run: { project, run: record.id, sequence: record.sequence, inputs_sha256: record.inputs_sha256, plugin_id: record.plugin_id, plugin_version: record.plugin_version,
@@ -121,7 +122,8 @@ export function ratingTableOperations(studio: Studio): Operation[] {
               message: `第 ${index + 1} 条条件：这个敷设带回填或包封区域，表里还没有它的尺寸和热阻率的位置，暂不能写进载流量表。` });
           }
         }
-        const meta = store.create(name, all[0]);
+        // The project holds the table's runs and nothing else: it carries its source, so it is not listed with the engineer's own projects.
+        const meta = store.create(name, all[0], { kind: 'rating-table', spec: params.spec, version: number });
         const rows: RatingTableRow[] = [];
         try {
           for (const [index, parts] of all.entries()) {

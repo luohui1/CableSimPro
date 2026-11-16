@@ -1,7 +1,7 @@
 // What the type workspace shows, derived from the saved version: which table fields belong to which part of the construction,
 // and how the standard check reads for a version. Nothing here computes a result.
-import { compact } from '@shared/format';
-import type { CheckRow, ProductResult, ResultKind, ReviewState, SpecView } from '@shared/types';
+import { compact, fixed } from '@shared/format';
+import type { CheckRow, Closure, ProductResult, ResultKind, ReviewState, SpecView } from '@shared/types';
 import { RESULT_KINDS } from '@shared/types';
 
 /** Table fields of each part, so a layer picked in the table finds its rings in the drawing. */
@@ -35,6 +35,30 @@ export const ORIGIN_MARK: Record<string, string> = { table: '表列', series: '�
 /** Where a series' data comes from, as the library words it. Anything not named is the structures that come with the software. */
 export const ORIGIN_NAMES: Record<string, string> = { factory: '本厂', public: '公开资料', demo: '演示结构' };
 export const originOf = (origin: string) => (origin in ORIGIN_NAMES ? origin : 'demo');
+
+/** The four pages of a size's workspace; the address says which one is open. */
+export const SERIES_PAGES = ['structure', 'params', 'rating', 'versions'] as const;
+export type SeriesPage = (typeof SERIES_PAGES)[number];
+
+/** Where the host put the outer diameter's residual (closure.placed_in): the layer that takes it. */
+export const PLACED: Record<string, string> = { filler: '填充', binder: '包带' };
+
+/**
+ * What the closure of the outer diameter says. The host puts a positive residual into the filler (or the binder) whole, so it is
+ * not set against a tolerance; only layers adding up to more than the table's diameter are, since that is what it checks.
+ */
+export function closureText(closure: Closure): string {
+  const { residual_mm: residual, tolerance_mm: tolerance, placed_in: placed } = closure;
+  if (residual < 0) return `各层合计比表列外径多 ${fixed(-residual, 2)} mm，允许差 ${fixed(tolerance, 2)} mm`;
+  return placed ? `外径余量 ${fixed(residual, 2)} mm 计入${PLACED[placed] ?? placed}` : `外径余量 ${fixed(residual, 2)} mm`;
+}
+
+/** A method as the screen names it: what it does and its version. The plugin's identifier is for the sheet's source page. */
+const METHOD_NAMES: Record<string, string> = {
+  dimensions: '尺寸与标准核对', electrical: '电气参数', 'short-circuit': '短路电流', 'steady-rating': 'IEC 60287 稳态载流量', 'structure-proposal': '标准结构提案',
+};
+export const methodName = (method: { capability: string; method_version: string } | null | undefined): string =>
+  method ? `${METHOD_NAMES[method.capability] ?? '计算方法'} ${method.method_version}` : '';
 
 /** The size opened last, so the library marks it when you come back. */
 const LAST_OPENED = 'studio.library.selected';
@@ -79,6 +103,10 @@ export const withoutHashes = (text: string) => text.replace(/[\s，,；;（(]*(?
 
 /** Date and time as a table cell holds them: 11/15 13:45. */
 export const shortTime = (value: string) => new Date(value).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+
+/** Date and minute in full, as a review stamp or a "built on" column writes it: 2026-11-16 07:53. */
+export const fullTime = (value: string) => new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+  .format(new Date(value)).replaceAll('/', '-');
 
 export type Verdict = 'failed' | 'missing' | 'uncovered' | 'passed';
 export const VERDICT_ORDER: Verdict[] = ['failed', 'missing', 'uncovered', 'passed'];

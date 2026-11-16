@@ -4,11 +4,11 @@ import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { compact, REVIEW_NAMES } from '@shared/format';
 import type { SpecificationReport, SpecView } from '@shared/types';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button, ButtonLink } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Toggle } from '@/components/ui/toggle';
 import { Icon, Spinner } from '@/kit/icon';
 import { PropertyList } from '@/kit/properties';
 import { api } from '@/state/api';
@@ -95,9 +95,9 @@ function ReviewForm({ view, action, onClose }: { view: SpecView; action: ReviewA
           <span className="flex h-5 shrink-0 items-center"><Icon name="status/warning" className="text-attention" /></span>{issue}
         </li>)}
       </ul>
-      <Toggle variant="outline" pressed={seen} onPressedChange={setSeen} className="h-auto justify-start py-2 text-left whitespace-normal">
-        <Icon name="action/check" className={seen ? 'text-success' : 'text-ink-3'} />我已查看以上问题，确认本次审核意见；审核不表示所有标准项均通过。
-      </Toggle>
+      <label className="flex items-start gap-3 text-sm text-ink">
+        <Checkbox className="mt-1" checked={seen} onCheckedChange={setSeen} />我已查看以上问题，确认本次审核意见；审核不表示所有标准项均通过。
+      </label>
     </div>}
     <Textarea aria-label="审核意见" placeholder="写明核对了什么、依据是什么（必填）" required maxLength={400} value={note} onChange={event => setNote(event.target.value)} />
     {error && <p role="alert" className="m-0 text-sm text-error">{error}</p>}
@@ -131,8 +131,8 @@ function SheetBody({ view, report, onReport, onClose }: { view: SpecView; report
       </DialogHeader>
       <iframe title="已生成的规格书 PDF" className="h-128 w-full rounded-field border border-line" src={`${report.url}?preview=1#view=FitH`} />
       <DialogFooter>
-        <a href={`${report.url}/snapshot`} download={`${view.spec.name}-来源快照.json`} className={buttonVariants({ variant: 'outline' })}>来源快照</a>
-        <a href={report.url} download={`${view.spec.name}.pdf`} className={buttonVariants({ variant: 'outline' })}><Icon name="action/arrow-down" data-icon="inline-start" />下载 PDF</a>
+        <ButtonLink variant="outline" href={`${report.url}/snapshot`} download={`${view.spec.name}-来源快照.json`}>来源快照</ButtonLink>
+        <ButtonLink variant="outline" href={report.url} download={`${view.spec.name}.pdf`}><Icon name="action/arrow-down" data-icon="inline-start" />下载 PDF</ButtonLink>
         <DialogClose render={<Button type="button" />}>完成</DialogClose>
       </DialogFooter>
     </div>;

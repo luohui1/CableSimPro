@@ -1,7 +1,7 @@
 // Contracts of the model-type operations: creating a series or a specification by hand, ampacity tables kept on a
 // specification, the initial structure a standard gives, and the GB 50217 correction. They sit beside the
 // contracts of types.ts and only build on them.
-import type { Derivation, MethodCard, SeriesDeclaration, SpecView } from './types.ts';
+import type { Closure, Derivation, Issue, LibraryEntry, MethodCard, SeriesDeclaration, SpecView, StructureValue } from './types.ts';
 
 // ---- Creating a series or a specification by hand ----
 
@@ -19,6 +19,8 @@ export interface ManualDerivation extends Derivation {
 
 export interface SeriesCreated { series: string; name: string; description: string; declaration: SeriesDeclaration }
 export interface SpecCreated { spec: string; version: number; view: SpecView }
+/** What `library.spec.preview` answers: the row as it would be built, so the section can be drawn before anything is saved. */
+export interface SpecPreview { key: string; name: string; area_mm2: number; structure: StructureValue[]; closure: Closure; warnings: Issue[]; entry: LibraryEntry }
 
 // ---- Ampacity tables kept on a specification version ----
 
@@ -70,6 +72,9 @@ export interface RatingTableRow {
   basis_name: string | null;
   tier: string | null;
   tier_label: string | null;
+  /** What the tier means and what it stands on, as the method states it; a table written before these were kept has neither. */
+  tier_meaning?: string | null;
+  tier_basis?: string[];
   error?: { code: string; message: string; path?: string };
   run: RatingTableRun;
 }

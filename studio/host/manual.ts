@@ -29,6 +29,25 @@ type SeriesParams = Omit<SeriesDeclaration, 'cores' | 'standards' | 'common' | '
 };
 interface SpecParams { series: string; values: Record<string, number>; basis?: Record<string, string>; proposal?: string }
 
+/** What a new series is declared with: the same fields wherever a series is made or only previewed. */
+const seriesFields = {
+  name: str({ minLength: 1, maxLength: 80, description: '系列名称，库里不能重名' }),
+  designation: str({ minLength: 1, maxLength: 40, description: '型号写法，例如 YJV22' }),
+  cores: oneOf([1, 3], { description: '芯数：1 或 3' }),
+  u0_v: num({ exclusiveMinimum: 0, description: '额定电压 U0，V，例如 8700' }),
+  u_v: num({ exclusiveMinimum: 0, description: '额定电压 U，V，例如 15000' }),
+  um_v: opt(num({ exclusiveMinimum: 0, description: '系统最高电压 Um，V' })),
+  manufacturer: opt(str({ maxLength: 80 })),
+  standards: opt(arr(str({ minLength: 1, maxLength: 60 }), { maxItems: 12, description: '执行标准，写到年号，例如 GB/T 12706.2-2020；标准核对只判定这里写明的版本' })),
+  origin: opt(oneOf(['factory', 'public'], { description: 'factory 本厂数据（缺省）；public 照公开厂家资料填写' })),
+  armour_material: opt(oneOf(['steel_galvanized', 'steel_stainless_nonmagnetic'])),
+  common: opt(map(num({ exclusiveMinimum: 0 }), { description: '全系列统一取的尺寸，字段同 create_spec 的 values，单位同结构表' })),
+  common_basis: opt(map(str({ maxLength: 400 }), { description: 'common 里每一项的依据' })),
+  modelling: opt(map(given, { description: '载流量方法需要而结构表没有的计算用参数，每项写明数值、单位和依据' })),
+  reference_modelling: opt(bool({ description: '为 true 时，没有在 modelling 里写的参数采用公开系列声明的参考值（每项带出处）' })),
+  outer_diameter_precision_mm: opt(num({ exclusiveMinimum: 0, description: '电缆外径填写的精度，mm，缺省 0.1；半个末位用于外径闭合的容差' })),
+};
+
 export function manualOperations(studio: Studio): Reviewable[] {
   const { core, library } = studio;
   const actor = (context: Context): string => (context.by === 'agent' ? 'Agent' : studio.user);
@@ -64,9 +83,9 @@ export function manualOperations(studio: Studio): Reviewable[] {
     return { declaration, description: checked.designation.description, by };
   };
 
-  /** One typed row built by the same builder as an imported one: nothing is written. */
-  const prepared = async (params: SpecParams, context: Context) => {
-    const declaration = library.declaration(params.series);
+  /** One typed row built by the same builder as an imported one: nothing is written. `ahead` is the declaration of a series not made yet. */
+  const prepared = async (params: SpecParams, context: Context, ahead?: SeriesDeclaration) => {
+    const declaration = ahead ?? library.declaration(params.series);
     const known = new Set((await core.call<{ fields: { key: string }[] }>('structure.vocabulary')).fields.map(field => field.key));
     const unknown = Object.keys(params.values).find(key => !known.has(key));
     if (unknown) throw new StudioError({ code: 'INPUT_INVALID', message: `“${unknown}”不是结构表字段，字段见这个操作的说明。`, path: `/values/${unknown}` });
@@ -93,7 +112,7 @@ export function manualOperations(studio: Studio): Reviewable[] {
     const typed: SeriesDeclaration = { ...declaration, source: { title: how, location: `Cable Studio 型号库 · ${by} · ${at}；所在系列：${declaration.name}` } };
     // Built together with the rows the series already has, so the series-wide look at a typing slip (a weight lighter than a smaller size's,
     // a wrapping out of line) applies to a typed row as it does to an imported table; only this row's warnings are kept.
-    const others = library.seriesView(params.series).specs.map(spec => Object.fromEntries(library.specView(spec.id).structure
+    const others = ahead ? [] : library.seriesView(params.series).specs.map(spec => Object.fromEntries(library.specView(spec.id).structure
       .filter(item => item.origin === 'table').map(item => [item.key, item.value])));
     const built = await core.call<BuildResult>('structure.build', { series: typed, rows: [...others, params.values], bases: [...others.map(() => ({})), bases] });
     const row = built.rows[others.length];
@@ -115,23 +134,7 @@ export function manualOperations(studio: Studio): Reviewable[] {
       description: '新建一个空的产品系列：型号写法、芯数、额定电压、执行标准，以及这个系列统一取的尺寸和计算用参数。规格之后用 create_spec 一个个加。'
         + '来源记为人工填写，并记下填写人和时间。未给出的计算用参数不会替你补；reference_modelling 为 true 时采用公开系列声明的参考值（每项带出处）。'
         + '这是改动，Agent 提出时先交给工程师审阅。',
-      parameters: obj({
-        name: str({ minLength: 1, maxLength: 80, description: '系列名称，库里不能重名' }),
-        designation: str({ minLength: 1, maxLength: 40, description: '型号写法，例如 YJV22' }),
-        cores: oneOf([1, 3], { description: '芯数：1 或 3' }),
-        u0_v: num({ exclusiveMinimum: 0, description: '额定电压 U0，V，例如 8700' }),
-        u_v: num({ exclusiveMinimum: 0, description: '额定电压 U，V，例如 15000' }),
-        um_v: opt(num({ exclusiveMinimum: 0, description: '系统最高电压 Um，V' })),
-        manufacturer: opt(str({ maxLength: 80 })),
-        standards: opt(arr(str({ minLength: 1, maxLength: 60 }), { maxItems: 12, description: '执行标准，写到年号，例如 GB/T 12706.2-2020；标准核对只判定这里写明的版本' })),
-        origin: opt(oneOf(['factory', 'public'], { description: 'factory 本厂数据（缺省）；public 照公开厂家资料填写' })),
-        armour_material: opt(oneOf(['steel_galvanized', 'steel_stainless_nonmagnetic'])),
-        common: opt(map(num({ exclusiveMinimum: 0 }), { description: '全系列统一取的尺寸，字段同 create_spec 的 values，单位同结构表' })),
-        common_basis: opt(map(str({ maxLength: 400 }), { description: 'common 里每一项的依据' })),
-        modelling: opt(map(given, { description: '载流量方法需要而结构表没有的计算用参数，每项写明数值、单位和依据' })),
-        reference_modelling: opt(bool({ description: '为 true 时，没有在 modelling 里写的参数采用公开系列声明的参考值（每项带出处）' })),
-        outer_diameter_precision_mm: opt(num({ exclusiveMinimum: 0, description: '电缆外径填写的精度，mm，缺省 0.1；半个末位用于外径闭合的容差' })),
-      }),
+      parameters: obj(seriesFields),
       review: async (params: SeriesParams): Promise<Shown> => {
         const { declaration, description } = await declared(params, { by: 'agent' });
         if (library.seriesList().some(item => item.name === declaration.name)) {
@@ -153,6 +156,27 @@ export function manualOperations(studio: Studio): Reviewable[] {
       },
       brief: (result: SeriesCreated) => ({ series: result.series, name: result.name, description: result.description,
         standards: result.declaration.standards, next: '用 create_spec 往这个系列里加规格' }) },
+
+    { id: 'library.spec.preview', tool: 'preview_spec', title: '预览规格', kind: 'read',
+      description: '不保存：把填写的结构按新建规格同样的建法建成一行，给出各层尺寸、外径闭合、告警和画断面用的结构；填得不对，原话说明哪里不对。'
+        + '放进已有系列写 series；放进还没建的新系列，改写 new_series（字段同 create_series）。',
+      parameters: obj({
+        series: opt(str({ description: '已有系列的标识；新系列不写，写 new_series' })),
+        new_series: opt(obj(seriesFields)),
+        values: map(num({ exclusiveMinimum: 0 }), { description: '字段 → 数值，同 create_spec' }),
+        basis: opt(map(str({ maxLength: 400 }))),
+        proposal: opt(str({ description: '标准提案的标识，同 create_spec' })),
+      }),
+      execute: async (params: Omit<SpecParams, 'series'> & { series?: string; new_series?: SeriesParams }, context: Context) => {
+        if (Boolean(params.series) === Boolean(params.new_series)) {
+          throw new StudioError({ code: 'INPUT_INVALID', message: '预览要么放进已有系列（series），要么放进新系列（new_series），二者写一个。', path: '/series' });
+        }
+        const ahead = params.new_series ? (await declared(params.new_series, context)).declaration : undefined;
+        const { row } = await prepared({ series: params.series ?? '', values: params.values, basis: params.basis, proposal: params.proposal }, context, ahead);
+        return { key: row.key, name: row.name, area_mm2: row.area_mm2, structure: row.structure, closure: row.closure, warnings: row.warnings, entry: row.entry };
+      },
+      brief: (result: { key: string; structure: { key: string; value: number; unit: string }[]; closure: { residual_mm: number }; warnings: { message: string }[] }) => ({
+        key: result.key, structure: result.structure.map(item => `${item.key} ${item.value} ${item.unit}`), residual_mm: result.closure.residual_mm, warnings: result.warnings.map(item => item.message) }) },
 
     { id: 'library.spec.create', tool: 'create_spec', title: '新建规格', kind: 'write',
       description: '在系列里新建一个规格：结构按层逐项填写，字段和单位与导入结构表相同，尺寸校验和外径闭合也与导入时完全一样；表里没有的尺寸取系列声明。'

@@ -269,7 +269,10 @@ export interface RunRecord extends RunHeader {
   selection?: { target_current_a: number; candidates: Candidate[]; chosen: string | null; rule: string; reason: string | null };
 }
 
-export interface ProjectMeta { id: string; name: string; created: string; updated: string; revision: number }
+/** Where a project came from when no person started it in the workbench: the runs behind an ampacity table written onto a specification version. */
+export interface ProjectSource { kind: 'rating-table'; spec: string; version: number }
+/** A project with a `source` is not listed with the engineer's own projects; it is opened from the table it belongs to. */
+export interface ProjectMeta { id: string; name: string; created: string; updated: string; revision: number; source?: ProjectSource }
 export interface ProjectView {
   meta: ProjectMeta;
   parts: Parts;
@@ -392,7 +395,8 @@ export interface CheckRow {
   verdict: 'passed' | 'failed' | 'missing' | 'uncovered' | string; reason: string | null; formula?: string | null;
   target: { scope: string; core_id: string | null; role: string };
 }
-export interface ValueRow { id: string; title?: string; label?: string; value: number | null; unit: string; status: string; reason?: string | null; formula?: string | null; source?: string | null }
+export interface ValueRow { id: string; title?: string; label?: string; value: number | null; unit: string; status: string; reason?: string | null; formula?: string | null; source?: string | null;
+  standard?: string | null; clause?: string | null; printed_page?: number | null; pdf_page?: number | null }
 export interface RatingRow {
   id: string; status: string; layout_label?: string; circuits?: number; tier?: Tier; ampacity_a?: number | null; basis_name?: string | null;
   verification_passed?: boolean | null; ac_resistance_ohm_m?: number | null; warnings?: string[]; error?: Issue;

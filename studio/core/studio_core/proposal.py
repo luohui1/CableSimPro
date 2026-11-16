@@ -149,9 +149,9 @@ def propose(standard, u0_v, u_v, cores, conductor, area_mm2, insulation='XLPE', 
     needed = [*structure.REQUIRED, *(['bedding_thickness', 'armour_tape_thickness'] if armour == 'steel_tape' else [])]
     reasons = {'conductor_diameter': '导体外径由绞合工艺决定，标准不规定；建规格时按实际值填写',
                'outer_diameter': '成品外径由各层叠加后设计或实测得出；建规格时用来做外径闭合核对',
-               'oversheath_thickness': '外护套厚度由附录计算得出；需要 scope 为 complete，并给出屏蔽的厚度',
-               'bedding_thickness': '内衬层厚度由附录计算得出；需要 scope 为 complete，并给出屏蔽的厚度',
-               'armour_tape_thickness': '钢带厚度由附录计算得出；需要 scope 为 complete，并给出屏蔽的厚度'}
+               'oversheath_thickness': '外护套厚度要按标准附录，由各层叠加后的假设直径算出；只给绝缘厚度时算不了，请连内衬、铠装、外护套一起算，并给出屏蔽层的厚度',
+               'bedding_thickness': '内衬层厚度要按标准附录，由各层叠加后的假设直径算出；只给绝缘厚度时算不了，请连内衬、铠装、外护套一起算，并给出屏蔽层的厚度',
+               'armour_tape_thickness': '钢带厚度要按标准附录，由各层叠加后的假设直径算出；只给绝缘厚度时算不了，请连内衬、铠装、外护套一起算，并给出屏蔽层的厚度'}
     unspecified = '标准只规定铜带的最小标称厚度，屏蔽层的实际厚度由工程师给定'
     missing_fields = [{'field': key, 'label': structure.FIELDS[key][0], 'unit': structure.FIELDS[key][1], 'reason': reasons.get(key, unspecified)}
                       for key in needed if key not in dimensions]
