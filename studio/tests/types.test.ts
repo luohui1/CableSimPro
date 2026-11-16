@@ -10,7 +10,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { type App, createApp } from '../host/server.ts';
-import type { RatingTable, RatingTableCondition, SeriesCreated, SpecCreated, StructureProposal } from '../shared/model-types.ts';
+import { digest } from '../host/store.ts';
+import type { CorrectionPending, Gb50217Correction, RatingTable, RatingTableCondition, SeriesCreated, SpecCreated, StructureProposal } from '../shared/model-types.ts';
 import type {
   CheckRow, LibraryJob, ProjectView, RatingRow, RunRecord, SeriesDeclaration, SeriesView, SpecificationReport, SpecView, TableInspection, ValueRow,
 } from '../shared/types.ts';
@@ -91,6 +92,19 @@ test('a specification typed in is the same kind of object as the imported one it
   assert.equal(created.description, '铜芯交联聚乙烯绝缘双钢带铠装聚氯乙烯护套电力电缆');
   const empty = await op<SeriesView>('library.series.get', { series: created.series });
   assert.deepEqual([empty.specs.length, empty.series.created_by], [0, app.studio.user]);
+
+  // A series that does not bring its own calculation parameters is not given made-up ones: only what is asked for, each with its source.
+  const bare = await op<SeriesCreated>('library.series.create', { name: '手工填写：只有型号', designation: 'YJV22', cores: 3, u0_v: 8700, u_v: 15000 });
+  assert.deepEqual(Object.keys(bare.declaration.modelling), ['diameter_rounding']);
+  assert.equal(bare.declaration.modelling.diameter_rounding.value, 0.00005);
+  const referenced = await op<SeriesCreated>('library.series.create', { name: '手工填写：参考参数', designation: declaration.designation, cores: 3, u0_v: 8700, u_v: 15000,
+    standards: declaration.standards, common: declaration.common, common_basis: declaration.common_basis, reference_modelling: true, outer_diameter_precision_mm: 1 });
+  assert.deepEqual(Object.keys(referenced.declaration.modelling).sort(), Object.keys(declaration.modelling).sort());
+  assert.ok(Object.values(referenced.declaration.modelling).every(item => item.reference));
+  assert.equal(referenced.declaration.modelling.diameter_rounding.value, declaration.modelling.diameter_rounding.value);
+  // And those reference parameters build the very structure the imported declaration does.
+  const viaReference = await op<SpecCreated>('library.spec.create', { series: referenced.series, values: structureValues(imported) });
+  assert.equal(viaReference.view.entry.content_sha256, imported.entry.content_sha256);
 
   const typed = await op<SpecCreated>('library.spec.create', { series: created.series, values: structureValues(imported) });
   typedSpec = typed.spec;
@@ -293,12 +307,80 @@ test('the initial structure a standard gives becomes a draft specification whose
   assert.deepEqual(checked.summary!.count, (await op<SpecView>('library.spec.get', { spec: view.specs.find(spec => spec.key === '3×240')!.id })).results.check!.summary!.count);
 
   // The tools an agent gets: every new operation has a name, a title and a sentence, and takes the project its call carries.
-  const added = ['library.series.create', 'library.spec.create', 'library.rating.table', 'library.rating.tables', 'structure.propose']
-    .map(id => app.studio.operations.get(id)!);
+  const added = ['library.series.create', 'library.spec.create', 'library.rating.table', 'library.rating.tables', 'structure.propose', 'correction.gb50217',
+    'correction.list', 'correction.get'].map(id => app.studio.operations.get(id)!);
   const tools = [...app.studio.operations.values()].map(item => item.tool).filter(Boolean);
   assert.equal(new Set(tools).size, tools.length);
   for (const item of added) {
     assert.ok(item.tool && /^[a-z][a-z0-9_]*$/.test(item.tool) && /[一-鿿]/.test(item.title) && /[一-鿿]/.test(item.description), item.id);
     assert.ok('project' in (item.parameters.properties as object), item.id);
   }
+});
+
+test('the GB 50217 correction gives its factors and the corrected current, and the baseline stays for a person to confirm', async () => {
+  const { view } = published.get('表3 YJV22')!;
+  const target = view.specs.find(spec => spec.key === '3×240')!;
+  const project = (await op<ProjectView>('project.create', { name: 'GB 50217 校正', model_id: target.id })).meta.id;
+
+  // The baseline: one circuit alone at the annex's base 25 °C, in a system of 10 kV (the annex stops there).
+  await op('installation.set', { project, layout: 'three_core_buried_single', depth_m: 0.7 });
+  await op('conditions.set', { project, soil_thermal_resistivity: 1.0, ambient_temperature_c: 25, system_voltage_v: 10000, currents_a: [0] });
+  const baseline = await op<RunRecord>('run.rate', { project });
+  const base = baseline.summary!.ampacity!.value_a;
+  assert.equal(baseline.summary!.ampacity!.basis, 'single_circuit');
+  const diameter = baseline.inputs.cable.summary.outer_diameter_m;
+
+  // The actual conditions: 30 °C, and three circuits side by side with 0.1 m clear between them.
+  await op('installation.set', { project, layout: 'three_core_buried_horizontal', spacing_m: diameter + 0.1 });
+  await op('conditions.set', { project, ambient_temperature_c: 30, currents_a: [300] });
+  const confirmed = { project, baseline_run: baseline.id, baseline_confirmed: true };
+
+  // Until a person confirms the baseline there is no number, only what the software could check; an agent cannot confirm.
+  const pending = await op<CorrectionPending>('correction.gb50217', { project, baseline_run: baseline.id });
+  assert.equal(pending.needs_confirmation, true);
+  assert.ok(pending.checks.length >= 5 && pending.checks.every(item => item.passed));
+  assert.equal(pending.baseline.ampacity_a, base);
+  assert.ok(!('corrected_current_a' in pending));
+  const asked = await app.studio.invoke('correction.gb50217', { project, baseline_run: baseline.id }, { by: 'agent' }) as CorrectionPending;
+  assert.equal(asked.needs_confirmation, true);
+  await assert.rejects(app.studio.invoke('correction.gb50217', confirmed, { by: 'agent' }), { code: 'REVIEW_FORBIDDEN' });
+  assert.deepEqual(await op('correction.list', { project }), []);
+
+  // The hand products of the plugin's own test: D.0.1 soil 30 °C at a 90 °C limit is 0.96 (page 72), D.0.4 three cables 0.1 m clear is 0.85 (page 73).
+  const done = await op<Gb50217Correction>('correction.gb50217', confirmed);
+  assert.deepEqual(done.coefficients.map(item => [item.factor, item.clause, item.printed_page]), [[0.96, 'D.0.1', 72], [0.85, 'D.0.4', 73]]);
+  assert.ok(done.coefficients.every(item => item.standard === 'GB 50217—2018' && item.source_sha256.length === 64));
+  assert.ok(Math.abs(done.total_factor - 0.96 * 0.85) < 1e-12);
+  assert.ok(Math.abs(done.corrected_current_a - base * 0.96 * 0.85) < 1e-9);
+  assert.deepEqual([done.method_card.tier.tier, done.method_card.validation.level, done.by], ['reference', 'analytic-benchmark', 'human']);
+  // Everything it stands on is in the record: the baseline run, the actual inputs, the method and its version.
+  assert.deepEqual([done.baseline.run, done.baseline.record_digest, done.inputs_sha256], [baseline.id, digest(baseline), (await app.studio.view(project)).inputs_sha256]);
+  assert.deepEqual([done.plugin_id, done.capability], ['cablesim.gb50217-correction', 'steady-rating']);
+  assert.equal((done.request.cases[0].parameters as { baseline_current_a: number }).baseline_current_a, base);
+  assert.deepEqual(await op('correction.get', { project, correction: done.id }), done);
+  assert.deepEqual((await op<{ id: string }[]>('correction.list', { project })).map(item => item.id), [done.id]);
+
+  // Another ambient temperature is the standard's formula (D.0.2), not an interpolation of the table.
+  await op('installation.set', { project, layout: 'three_core_buried_single' });
+  await op('conditions.set', { project, ambient_temperature_c: 27 });
+  const formula = await op<Gb50217Correction>('correction.gb50217', confirmed);
+  assert.ok(Math.abs(formula.total_factor - Math.sqrt(63 / 65)) < 1e-12);
+  assert.deepEqual([formula.coefficients[0].clause, formula.coefficients[0].formula_inputs], ['D.0.2', { theta_m_k: 363.15, theta_1_k: 298.15, theta_2_k: formula.coefficients[0].formula_inputs!.theta_2_k }]);
+
+  // What the table does not hold is refused, with the field that needs another value: 0.15 m clear lies between 0.1 and 0.2.
+  await op('installation.set', { project, layout: 'three_core_buried_horizontal', spacing_m: diameter + 0.15 });
+  const between = await call('correction.gb50217', confirmed);
+  assert.deepEqual([between.status, between.body.error?.code, between.body.error?.path], [422, 'CORRECTION_TABLE_NOT_COVERED', '/input/sections/0/placements']);
+  await op('installation.set', { project, layout: 'three_core_buried_single' });
+  await op('conditions.set', { project, system_voltage_v: 15000 });
+  const high = await call('correction.gb50217', confirmed);
+  assert.deepEqual([high.status, high.body.error?.path], [422, '/input/circuits/0/system/voltage']);
+
+  // A baseline of another cable is not this cable's: the software says so, whoever confirms.
+  await op('cable.set', { project, model_id: view.specs.find(spec => spec.key === '3×300')!.id });
+  const other = await op<CorrectionPending>('correction.gb50217', { project, baseline_run: baseline.id });
+  assert.ok(other.checks.some(item => !item.passed && /同一款型号/.test(item.item)) && /不符/.test(other.message));
+  const refused = await call('correction.gb50217', confirmed);
+  assert.deepEqual([refused.status, refused.body.error?.code], [422, 'BASELINE_INVALID']);
+  assert.equal((await op<unknown[]>('correction.list', { project })).length, 2);  // only the two that were computed
 });

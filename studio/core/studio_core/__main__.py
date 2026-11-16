@@ -10,7 +10,7 @@ import sys
 import threading
 
 from . import CoreError
-from . import catalogue, designation, geometry, layouts, library, methods, product, proposal, scene, specification, structure, study, tables
+from . import catalogue, correction, designation, geometry, layouts, library, methods, product, proposal, scene, specification, structure, study, tables
 
 _library_lock = threading.Lock()
 _write_lock = threading.Lock()
@@ -59,6 +59,7 @@ HANDLERS = {
     'structure.vocabulary': _vocabulary,
     'structure.declare': structure.declare,
     'structure.propose': proposal.propose,
+    'correction.gb50217': lambda scene, baseline: correction.apply(scene, baseline),
     'structure.build': lambda series, rows, bases=None: structure.build(series, rows, bases),
     'tables.inspect': lambda path, designation=None: tables.inspect(path, designation),
     'tables.rows': lambda path, sheet, first_data_row, mapping: tables.rows(path, sheet, first_data_row, mapping),

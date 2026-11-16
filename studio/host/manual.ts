@@ -55,7 +55,8 @@ export function manualOperations(studio: Studio): Operation[] {
         const reference = params.reference_modelling
           ? (await core.call<{ reference_modelling: Record<string, GivenParameter> }>('structure.vocabulary')).reference_modelling : {};
         const modelling: Record<string, GivenParameter> = { ...reference, ...(params.modelling ?? {}) };
-        if (!('diameter_rounding' in modelling)) {
+        // The precision the engineer states wins over a reference value, but not over a rounding the declaration itself gives.
+        if (!('diameter_rounding' in (params.modelling ?? {})) && (params.outer_diameter_precision_mm !== undefined || !('diameter_rounding' in modelling))) {
           const precision = params.outer_diameter_precision_mm ?? 0.1;
           modelling.diameter_rounding = { value: precision / 2000, unit: 'm',
             reference: `人工填写：电缆外径按 ${precision} mm 的精度填写，半个末位 ${precision / 2} mm；闭合容差另加 max(0.5 mm, 外径 1%)。` };

@@ -1,7 +1,7 @@
 // Contracts of the model-type operations: creating a series or a specification by hand, ampacity tables kept on a
 // specification, the initial structure a standard gives, and the GB 50217 correction. They sit beside the
 // contracts of types.ts and only build on them.
-import type { Derivation, SeriesDeclaration, SpecView } from './types.ts';
+import type { Derivation, MethodCard, SeriesDeclaration, SpecView } from './types.ts';
 
 // ---- Creating a series or a specification by hand ----
 
@@ -132,4 +132,69 @@ export interface StructureProposal {
     plugin_id: string; plugin_version: string; capability: string; method_version: string; manifest_sha256: string; request_sha256: string;
     run_id: string; steps: number;
   };
+}
+
+// ---- GB 50217 correction ----
+
+export interface CorrectionCheck { item: string; passed: boolean; detail: string }
+
+export interface CorrectionBaseline {
+  run: string;
+  sequence: number;
+  ampacity_a: number;
+  ambient_c: number;
+  depth_m: number;
+  soil_thermal_resistivity: number;
+  /** Digest of the saved run record the baseline stands on. */
+  record_digest: string;
+  source: string;
+}
+
+export interface CorrectionCoefficient {
+  label: string;
+  condition: string;
+  factor: number;
+  standard: string;
+  clause: string;
+  printed_page: number | null;
+  pdf_page: number | null;
+  source_sha256: string;
+  formula_inputs?: Record<string, number>;
+}
+
+/** A correction written once and never changed, like a run record. */
+export interface Gb50217Correction {
+  schema: 'cablesim.studio.correction/1';
+  id: string;
+  created: string;
+  by: 'human' | 'agent';
+  project: { id: string; name: string };
+  baseline: CorrectionBaseline;
+  /** Digest of the project's inputs at the moment of the correction: these are the actual conditions. */
+  inputs_sha256: string;
+  checks: CorrectionCheck[];
+  coefficients: CorrectionCoefficient[];
+  total_factor: number;
+  corrected_current_a: number;
+  clauses: string[];
+  scope: string;
+  headline: string;
+  plugin_id: string;
+  plugin_version: string;
+  capability: string;
+  method_version: string;
+  manifest_sha256: string;
+  request_sha256: string;
+  core_run_id: string;
+  request: { cases: { case_id: string; input: unknown; parameters: unknown }[] };
+  result: { cases: { case_id: string; status: string; results: unknown[]; artifacts: Record<string, unknown>; artifact_digests: Record<string, string> }[] };
+  method_card: MethodCard;
+}
+
+/** What the correction answers while a person has not confirmed the baseline: the checks, and no number. */
+export interface CorrectionPending {
+  needs_confirmation: true;
+  baseline: CorrectionBaseline;
+  checks: CorrectionCheck[];
+  message: string;
 }
