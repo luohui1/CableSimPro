@@ -1,10 +1,7 @@
 """External pi bridge stays inside the legacy Agent session and ToolBroker."""
-from test_harness import session
-
-
 def test_external_tool_catalog_is_parameterized_and_scoped(client):
     workspace = client.post('/api/workspaces', json={}).json()
-    sid = session(client, workspace)
+    sid = client.post('/api/agent/sessions', json={'workspace_id': workspace['id']}).json()['id']
     response = client.get('/api/agent/external/tools', params={'session_id': sid})
     assert response.status_code == 200, response.text
     body = response.json()
