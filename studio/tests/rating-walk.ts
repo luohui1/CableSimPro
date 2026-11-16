@@ -301,6 +301,8 @@ export async function walkRating(browser: Browser, base: string, out: string, pr
         await check('ducts-depth-editor');
         await editor().getByRole('button', { name: '关闭' }).click();
         await editor().waitFor({ state: 'detached' });
+        // The conclusion comes back as it starts (its groups folded): the group of the thermal resistances is opened again.
+        await page.getByRole('button', { name: /^热阻/ }).click();
         await page.getByText('T₄ 管内空气').waitFor();
       }
     }

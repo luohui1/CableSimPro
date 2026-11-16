@@ -101,7 +101,8 @@ export function GivensEditor({ view, base, staged, changed, stage, settle, focus
   const nothing = (children: ReactNode) => <p className="m-0 text-sm text-ink-2">{children}</p>;
 
   return <>
-    <SideEditor title="已知条件" onClose={onClose} footer={<>
+    {/* A little wider than the kit's editor: its footer holds the count, undo and redo as well as the two buttons. */}
+    <SideEditor title="已知条件" className="w-104" onClose={onClose} footer={<>
       <span className="mr-auto flex items-center gap-1">
         {count > 0 ? <Badge variant="attention" className="gap-2"><Dot tone="attention" />改了 {count} 项</Badge> : <span className="text-sm text-ink-2">没有改动</span>}
         <IconAction label="撤销上一次改动（Ctrl+Z）" icon="action/undo" disabled={!canUndo || applying} onClick={onUndo} />
