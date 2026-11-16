@@ -2,7 +2,7 @@
 // Accepting writes it; rejecting tells the agent why not. Nothing is written until a person has decided.
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
-import type { Proposal } from '@shared/types';
+import type { Proposal, StepStatus } from '@shared/types';
 import { reportFailure } from '@/components/notice';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,15 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api } from '@/state/api';
 
-export function ProposalCard({ proposal }: { proposal: Proposal }) {
+/** outcome and reason are the step's own: a change that was accepted may still not have been made, and the card must not say it was. */
+function accepted(outcome: StepStatus | undefined, reason: string | undefined): string {
+  if (outcome === 'done') return '已接受，改动已生效';
+  if (outcome === 'failed' || outcome === 'rejected') return `已接受，但没有执行：${reason ?? '执行时被拒绝'}`;
+  if (outcome === 'interrupted') return '已接受，但对话中断了，没有执行';
+  return '已接受，正在执行…';
+}
+
+export function ProposalCard({ proposal, outcome, reason }: { proposal: Proposal; outcome?: StepStatus; reason?: string }) {
   const [rejecting, setRejecting] = useState(false);
   const [note, setNote] = useState('');
   const decide = useMutation({ mutationFn: (input: { accept: boolean; note?: string }) => api.decide(proposal.id, input.accept, input.note), onError: reportFailure });
@@ -43,7 +51,7 @@ export function ProposalCard({ proposal }: { proposal: Proposal }) {
           <Button size="sm" disabled={decide.isPending} onClick={() => decide.mutate({ accept: true })}>接受</Button>
           <Button size="sm" variant="outline" disabled={decide.isPending} onClick={() => setRejecting(true)}>拒绝</Button>
         </>)
-        : <span className="text-sm">{proposal.status === 'accepted' ? '已接受，改动已生效' : `已拒绝${proposal.note ? `：${proposal.note}` : ''}，没有改动`}</span>}
+        : <span className="text-sm">{proposal.status === 'accepted' ? accepted(outcome, reason) : `已拒绝${proposal.note ? `：${proposal.note}` : ''}，没有改动`}</span>}
     </footer>
   </section>;
 }

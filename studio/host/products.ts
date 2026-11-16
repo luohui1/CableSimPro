@@ -4,10 +4,11 @@ import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { basename, extname, join } from 'node:path';
 import { arr, bool, int, map, num, obj, oneOf, opt, str, union } from '@earendil-works/pi-schema';
-import { compact, REVIEW_NAMES } from '../shared/format.ts';
+import { compact, REVIEW_NAMES, STATE_NAMES } from '../shared/format.ts';
 import {
   RESULT_KINDS, type BuildResult, type BuiltRow, type CardRef, type Change, type CheckFailures, type CheckRow, type ImportPreview, type LibraryEntry,
-  type LibraryJob, type ProductResult, type ResultKind, type SeriesDeclaration, type SeriesView, type SpecificationReport, type SpecView, type TableInspection,
+  type LibraryJob, type ProductResult, type ResultKind, type SeriesDeclaration, type SeriesSummary, type SeriesView, type SpecificationReport, type SpecView,
+  type TableInspection,
 } from '../shared/types.ts';
 import type { ProductCad } from '../shared/cad.ts';
 import { StudioError } from './core.ts';
@@ -96,15 +97,17 @@ export function productOperations(studio: Studio): Operation[] {
         message: '这张表还没有系列声明（系列名称、厂家、型号、芯数、额定电压 U0/U、执行标准）；这些需要工程师给出，不能猜。' });
     }
     let { first_data_row, mapping } = params;
+    // The sheet is read for its own headers as well: what the columns were taken to mean is shown to whoever approves the import.
+    const inspection = await core.call<Omit<TableInspection, 'upload'>>('tables.inspect', { path: file.path, designation: given.designation });
+    const found = inspection.sheets.find(sheet => sheet.name === params.sheet);
     if (first_data_row === undefined || !mapping) {
-      const inspection = await core.call<Omit<TableInspection, 'upload'>>('tables.inspect', { path: file.path, designation: given.designation });
-      const found = inspection.sheets.find(sheet => sheet.name === params.sheet);
       if (!found?.table || !found.columns) {
         throw new StudioError({ code: 'IMPORT_SHEET_UNKNOWN', message: `工作表“${params.sheet}”里没有找到规格表；可用的工作表：${inspection.sheets.filter(sheet => sheet.table).map(sheet => sheet.name).join('、') || '无'}。` });
       }
       first_data_row ??= found.first_data_row!;
       mapping ??= Object.fromEntries(found.columns.filter(column => column.suggested).map(column => [column.suggested!, column.index]));
     }
+    const headers = Object.fromEntries(Object.entries(mapping).map(([field, index]) => [field, found?.columns?.find(column => column.index === index)?.header ?? `第 ${index + 1} 列`]));
     const read = await core.call<{ rows: { row: number; values: Record<string, number>; problems: { cell: string; field: string; text: string }[] }[];
       skipped: { row: number; text: string }[] }>('tables.rows', { path: file.path, sheet: params.sheet, first_data_row, mapping });
     if (!read.rows.length) throw new StudioError({ code: 'IMPORT_EMPTY', message: '这张表里没有找到规格行：请核对数据起始行和“标称截面”所在的列。' });
@@ -124,9 +127,14 @@ export function productOperations(studio: Studio): Operation[] {
     if (duplicate) {
       throw new StudioError({ code: 'IMPORT_DUPLICATE', message: `表里有两行都是 ${duplicate.key}（第 ${duplicate.source_row} 行）；一个系列里每个截面只能有一行。` });
     }
-    return { declaration, built, file, mapping: mapping!, preview: { designation: build.designation, rows, skipped: read.skipped,
+    return { declaration, built, file, mapping: mapping!, table: { first_data_row: first_data_row!, headers }, preview: { designation: build.designation, rows, skipped: read.skipped,
       ready: rows.filter(row => row.ok).length, failed: rows.filter(row => !row.ok).length } satisfies ImportPreview };
   }
+
+  /** The words for the structure fields and the calculation parameters, asked of the core once. */
+  let askedVocabulary: Promise<{ fields: { key: string; label: string; unit: string }[]; modelling: { key: string; label: string; unit: string }[] }> | undefined;
+  const vocabulary = () => (askedVocabulary ??= core.call('structure.vocabulary'));
+  const ARMOUR: Record<string, string> = { steel_galvanized: '镀锌钢', steel_stainless_nonmagnetic: '不锈钢（非磁性）' };
 
   /** The batch the agent's last compute call started, so the agent's call can wait for it. */
   let running: Promise<void> | undefined;
@@ -162,9 +170,31 @@ export function productOperations(studio: Studio): Operation[] {
     emitJob(running);
   }
 
+  /** What refuses a revision of a specification, in one place: the review shows it before anyone is asked, and the run holds to it. */
+  async function checkRevision(params: { spec: string; version?: number; values: Record<string, number>; note: string }) {
+    const spec = library.specView(params.spec);
+    if (params.version !== undefined && spec.version.number !== params.version) throw new StudioError({ code: 'VERSION_CHANGED', message: '规格已产生新版本，请重新核对后修改。' }, 409);
+    if (!params.note.trim()) throw new StudioError({ code: 'REVISION_INVALID', message: '请填写修改原因。' });
+    if (spec.derivation.kind === 'bundled') {
+      throw new StudioError({ code: 'REVISION_UNAVAILABLE', message: '随软件提供的结构没有结构表，不能改尺寸；请导入本厂结构表。' }, 409);
+    }
+    const editable = new Set(spec.structure.filter(item => item.origin === 'table' && item.key !== 'area').map(item => item.key));
+    if (!Object.keys(params.values).length || Object.keys(params.values).some(key => !editable.has(key))) {
+      throw new StudioError({ code: 'REVISION_INVALID', message: '只能修改原表已有的结构尺寸；标称截面属于规格身份，请另行导入规格。' });
+    }
+    const current = Object.fromEntries(spec.structure.filter(item => item.origin === 'table').map(item => [item.key, item.value]));
+    if (Object.entries(params.values).every(([key, value]) => current[key] === value)) throw new StudioError({ code: 'REVISION_UNCHANGED', message: '要改的值和现在的一样，没有可修改的。' });
+    const build = await core.call<BuildResult>('structure.build', { series: library.declaration(spec.series.id), rows: [{ ...current, ...params.values }] });
+    const built = build.rows[0];
+    if (!built.ok) throw new StudioError(built.error);
+    return { spec, built };
+  }
+
   const briefJob = (current: LibraryJob | null) => (current ? { job: current.id, series: current.series_id, state: current.state, title: current.title,
     done: current.done, total: current.total, error: current.error?.message } : null);
   const issues = (list: { message: string }[]) => list.map(item => item.message);
+  /** A series as the agent is told of it: not which person on this machine made it. */
+  const publicSeries = ({ created_by: _by, ...rest }: SeriesSummary) => rest;
   /** Where the workbench shows one version of one specification. */
   const specHref = (spec: string, version: number) => `/library/${library.specView(spec, version).series.id}?spec=${encodeURIComponent(spec)}&version=${version}`;
   /** The solid the agent built is shown again on its card; building it twice would cost seconds for nothing. */
@@ -184,8 +214,9 @@ export function productOperations(studio: Studio): Operation[] {
     { id: 'library.job', tool: 'get_compute_job', title: '计算任务', kind: 'read', parameters: obj({}), description: '读取最近一批计算的进度，包括宿主重启前中断的任务。',
       execute: async () => job, brief: briefJob },
     { id: 'library.compute.cancel', tool: 'cancel_compute', title: '停止批量计算', kind: 'run', parameters: obj({ job: str({ description: '计算任务标识，例如 job-1a2b3c4d' }) }),
-      description: '当前批次完成后停止，已经保存的结果保留。', execute: async (params: { job: string }) => {
+      description: '当前批次完成后停止，已经保存的结果保留。Agent 只能停自己发起的批次，工程师发起的由工程师停。', execute: async (params: { job: string }, context) => {
         if (!job || job.id !== params.job || job.state !== 'running') throw new StudioError({ code: 'JOB_UNKNOWN', message: '这批计算已经结束。' }, 409);
+        if (context.by === 'agent' && job.started_by !== 'agent') throw new StudioError({ code: 'JOB_NOT_YOURS', message: '这批计算不是 Agent 发起的，只能由工程师停止。' }, 403);
         job.cancel_requested = true;
         emitJob(job);
         return job;
@@ -201,7 +232,8 @@ export function productOperations(studio: Studio): Operation[] {
       execute: async (params: { spec: string; version: number }) => {
         const selected = library.specView(params.spec, params.version);
         const held = solids.get(selected.version.content_sha256);
-        if (held) return held;
+        // Another specification with the same structure shares the solid, not the name: the card and its link are for the one that asked.
+        if (held) return { ...held, spec: selected.spec.id, version: selected.version.number };
         const result = await core.call<Record<string, unknown>>('product.geometry', { entry: selected.entry });
         const built = { ...result, spec: selected.spec.id, version: selected.version.number, content_sha256: selected.version.content_sha256 };
         solids.set(selected.version.content_sha256, built);
@@ -226,11 +258,11 @@ export function productOperations(studio: Studio): Operation[] {
       notes: (_params: unknown, report: SpecificationReport) => [report.title, `审核状态：${REVIEW_NAMES[report.review] ?? report.review}`] },
     { id: 'library.series', tool: 'list_series', title: '产品系列', kind: 'read', parameters: obj({}),
       description: '列出产品库的全部系列：名称、厂家、型号、电压、执行标准、规格数和各审核状态的数量。',
-      execute: async () => library.seriesList() },
+      execute: async () => library.seriesList(), brief: (list: SeriesSummary[]) => list.map(publicSeries) },
     { id: 'library.series.get', tool: 'get_series', title: '读取系列', kind: 'read', parameters: obj({ series: str({ description: '系列标识，例如 s-1a2b3c4d' }) }),
       description: '读取一个系列：系列声明，以及每个规格的最新版本、外径、电阻、标准核对结论、短路容量和基准条件下的载流量。',
       execute: async (params: { series: string }) => view(params.series),
-      brief: (result: SeriesView) => ({ series: result.series, reference_condition: result.reference, specs: result.specs.map(spec => ({ spec: spec.id, name: spec.name,
+      brief: (result: SeriesView) => ({ series: publicSeries(result.series), reference_condition: result.reference, specs: result.specs.map(spec => ({ spec: spec.id, name: spec.name,
         review: spec.review, outer_diameter_mm: spec.outer_diameter_mm, check: spec.check, ac_resistance_ohm_km: spec.ac_resistance_ohm_km,
         short_circuit_ka: spec.short_circuit_ka, ampacity_a: spec.ampacity_a, warnings: spec.warnings.map(item => item.message) })) }) },
     { id: 'library.spec.get', tool: 'get_spec', title: '读取规格', kind: 'read',
@@ -281,12 +313,22 @@ export function productOperations(studio: Studio): Operation[] {
       parameters: obj({ ...table, series: opt(series), skip_failed: opt(bool({ description: '有不能导入的行时，是否只导入可用的行；必须得到工程师同意才能为 true' })),
         mapping_name: opt(str({ minLength: 1, maxLength: 60 })), headers: opt(map(str())) }),
       description: '把结构表一张工作表导入为一个新系列，每行成为一个规格的第 1 版草稿。这是改动，先交给工程师审阅；审阅卡里会写明新系列、规格数和不能导入的行数。',
+      agentParams: (params: ImportRequest & { mapping_name?: string; headers?: Record<string, string> }) => {
+        // Where a table came from is what the host measured, not what the model writes; named column mappings are a person's to save.
+        if (params.series?.source) params.series.source = { ...(params.series.source.title ? { title: params.series.source.title } : {}), ...(params.series.source.location ? { location: params.series.source.location } : {}) };
+        delete params.mapping_name;
+        delete params.headers;
+      },
       review: async (params: ImportRequest & { skip_failed?: boolean }): Promise<Review> => {
         const result = await preview(params);
         if (result.preview.failed && !params.skip_failed) {
           throw new StudioError({ code: 'IMPORT_HAS_ERRORS', message: `有 ${result.preview.failed} 行不能导入；改正结构表，或经工程师同意后选择只导入可用的行。` }, 409);
         }
         const declared = result.declaration;
+        const words = await vocabulary();
+        const label = (list: { key: string; label: string }[], key: string) => list.find(item => item.key === key)?.label ?? key;
+        const unit = (list: { key: string; unit: string }[], key: string) => list.find(item => item.key === key)?.unit ?? '';
+        const brief = (text: string) => (text.length > 60 ? `${text.slice(0, 60)}…` : text);
         // What the commit itself would refuse is refused here, before a person is asked to approve something that cannot happen.
         if (!result.preview.ready) throw new StudioError({ code: 'IMPORT_EMPTY', message: '没有可以导入的规格。' });
         if (library.seriesList().some(item => item.name === declared.name)) {
@@ -298,6 +340,14 @@ export function productOperations(studio: Studio): Operation[] {
           ...(result.preview.failed ? [{ part: 'series', field: 'left_out', label: '跳过的行', before: '—', after: `${result.preview.failed} 行不能导入` }] : []),
           { part: 'series', field: 'rating', label: '芯数与电压', before: '—', after: `${declared.cores} 芯，U0/U ${compact(declared.u0_v / 1000)}/${compact(declared.u_v / 1000)} kV` },
           { part: 'series', field: 'standards', label: '执行标准', before: '—', after: declared.standards.join('、') || '未声明' },
+          { part: 'series', field: 'origin', label: '厂家与资料性质', before: '—', after: `${declared.manufacturer || '厂家未声明'} · ${STATE_NAMES[declared.origin ?? 'public'] ?? declared.origin}` },
+          { part: 'series', field: 'columns', label: '列对应', before: '—',
+            after: `${Object.keys(result.mapping).map(field => `${label(words.fields, field)} ← ${result.table.headers[field]}`).join('；')}；数据从第 ${result.table.first_data_row} 行起` },
+          ...(Object.keys(declared.common).length ? [{ part: 'series', field: 'common', label: '系列统一给的尺寸', before: '—',
+            after: Object.entries(declared.common).map(([key, value]) => `${label(words.fields, key)} ${compact(value)} ${unit(words.fields, key)}${declared.common_basis[key] ? `（${brief(declared.common_basis[key])}）` : ''}`).join('；') }] : []),
+          ...(Object.keys(declared.modelling).length ? [{ part: 'series', field: 'modelling', label: '计算用参数', before: '—',
+            after: Object.entries(declared.modelling).map(([key, item]) => `${label(words.modelling, key)} ${item.value} ${item.unit}（${brief(item.reference)}）`).join('；') }] : []),
+          ...(declared.armour_material ? [{ part: 'series', field: 'armour', label: '铠装材料', before: '—', after: ARMOUR[declared.armour_material] ?? declared.armour_material }] : []),
           { part: 'series', field: 'source', label: '来源', before: '—', after: `${result.file.file} · 工作表“${params.sheet}”` },
         ];
         return { title: '导入系列', changes };
@@ -326,7 +376,7 @@ export function productOperations(studio: Studio): Operation[] {
         if (!chosen.length) throw new StudioError({ code: 'COMPUTE_EMPTY', message: '没有选中任何规格。' });
         const kinds = params.kinds ?? RESULT_KINDS;
         const items = chosen.map(spec => ({ key: spec.version_id, cable: library.entry(spec.id, spec.version), standards: current.declaration.standards }));
-        job = { id: 'job-' + randomBytes(4).toString('hex'), series_id: params.series, title: '准备计算', done: 0, total: items.length * kinds.length, state: 'running' };
+        job = { id: 'job-' + randomBytes(4).toString('hex'), series_id: params.series, title: '准备计算', done: 0, total: items.length * kinds.length, state: 'running', started_by: context.by };
         const started = job;
         running = run(started, items, kinds, params.force === true, actor(context));
         // The workbench follows a batch through events and returns at once; the agent has nothing to look at, so it waits.
@@ -343,6 +393,7 @@ export function productOperations(studio: Studio): Operation[] {
       execute: async (params: { series: string; specs?: string[] }): Promise<CheckFailures> => {
         const current = library.seriesView(params.series);
         const chosen = current.specs.filter(spec => !params.specs || params.specs.includes(spec.id));
+        if (!chosen.length) throw new StudioError({ code: 'COMPUTE_EMPTY', message: '这个系列里没有选中的规格；规格标识取自 get_series。' });
         const counts = { passed: 0, failed: 0, missing: 0, uncovered: 0 };
         const failures: CheckFailures['failures'] = [];
         const missing: CheckFailures['missing'] = [];
@@ -367,7 +418,7 @@ export function productOperations(studio: Studio): Operation[] {
           limit: item.limit, actual: item.actual, unit: item.unit, comparison: item.comparison, reason: item.reason })),
         failures_not_shown: Math.max(0, result.failures.length - 60),
         missing: result.missing.slice(0, 20).map(item => ({ spec: item.name, item: item.title, reason: item.reason })) }),
-      card: (params: { series: string }): CardRef => ({ kind: 'check', series: params.series, href: `/library/${params.series}` }),
+      card: (params: { series: string; specs?: string[] }): CardRef => ({ kind: 'check', series: params.series, ...(params.specs ? { specs: params.specs } : {}), href: `/library/${params.series}` }),
       notes: (_params: unknown, result: CheckFailures) => [`通过 ${result.counts.passed} 项，不通过 ${result.counts.failed} 项，缺项 ${result.counts.missing} 项`,
         ...(result.not_checked.length ? [`${result.not_checked.length} 个规格还没有核对结果`] : [])] },
     { id: 'library.revise', tool: 'revise_spec', title: '修改结构', kind: 'write',
@@ -376,28 +427,17 @@ export function productOperations(studio: Studio): Operation[] {
         note: str({ minLength: 1, maxLength: 400, description: '为什么改' }) }),
       description: '修改一个规格的结构尺寸（结构表的单位），生成新的草稿版本，原版本和它的结果保留不变。只能改原表已有的尺寸。这是改动，先交给工程师审阅；审阅卡里写明每个值改前改后。',
       review: async (params: { spec: string; version?: number; values: Record<string, number>; note: string }): Promise<Review> => {
-        const spec = library.specView(params.spec);
-        if (params.version !== undefined && spec.version.number !== params.version) throw new StudioError({ code: 'VERSION_CHANGED', message: '规格已产生新版本，请重新核对后修改。' }, 409);
+        // Everything that would refuse the revision refuses it here, before a person is asked to approve it.
+        const { spec } = await checkRevision(params);
         const changes: Change[] = Object.entries(params.values).map(([key, value]) => {
-          const item = spec.structure.find(entry => entry.key === key);
-          if (!item) throw new StudioError({ code: 'REVISION_INVALID', message: `结构表里没有字段 ${key}。` });
+          const item = spec.structure.find(entry => entry.key === key)!;
           return { part: 'structure', field: key, label: item.label, before: `${compact(item.value)} ${item.unit}`, after: `${compact(value)} ${item.unit}` };
         });
-        return { title: `修改结构 · ${spec.spec.name}`, changes: [...changes, { part: 'structure', field: 'note', label: '修改原因', before: '—', after: params.note.trim() }] };
+        return { title: `修改结构 · ${spec.spec.name}`, version: spec.version.number,
+          changes: [...changes, { part: 'structure', field: 'note', label: '修改原因', before: '—', after: params.note.trim() }] };
       },
       execute: async (params: { spec: string; version?: number; values: Record<string, number>; note: string }, context) => {
-        const spec = library.specView(params.spec);
-        if (params.version !== undefined && spec.version.number !== params.version) throw new StudioError({ code: 'VERSION_CHANGED', message: '规格已产生新版本，请重新核对后修改。' }, 409);
-        if (!params.note.trim()) throw new StudioError({ code: 'REVISION_INVALID', message: '请填写修改原因。' });
-        if (spec.derivation.kind === 'bundled') {
-          throw new StudioError({ code: 'REVISION_UNAVAILABLE', message: '随软件提供的结构没有结构表，不能改尺寸；请导入本厂结构表。' }, 409);
-        }
-        const editable = new Set(spec.structure.filter(item => item.origin === 'table' && item.key !== 'area').map(item => item.key));
-        if (Object.keys(params.values).some(key => !editable.has(key))) throw new StudioError({ code: 'REVISION_INVALID', message: '只能修改原表已有的结构尺寸；标称截面属于规格身份，请另行导入规格。' });
-        const row = { ...Object.fromEntries(spec.structure.filter(item => item.origin === 'table').map(item => [item.key, item.value])), ...params.values };
-        const build = await core.call<BuildResult>('structure.build', { series: library.declaration(spec.series.id), rows: [row] });
-        const built = build.rows[0];
-        if (!built.ok) throw new StudioError(built.error);
+        const { spec, built } = await checkRevision(params);
         if (library.specView(params.spec).version.number !== spec.version.number) throw new StudioError({ code: 'VERSION_CHANGED', message: '计算结构期间规格已产生新版本，请重新核对后修改。' }, 409);
         const version = library.revise(params.spec, built, params.note.trim(), actor(context));
         studio.emit({ type: 'library', series_id: spec.series.id });

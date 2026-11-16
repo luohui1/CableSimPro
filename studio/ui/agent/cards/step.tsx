@@ -63,7 +63,7 @@ export const StepPart: ToolCallMessagePartComponent = ({ result }) => {
   if (step.card?.kind === 'open' && step.status === 'done') return <ResultCard card={step.card} step={step} />;
   return <div className="flex flex-col gap-2" data-step={step.tool} data-status={step.status}>
     <StepRow step={step} />
-    {step.proposal && <ProposalCard proposal={step.proposal} />}
+    {step.proposal && <ProposalCard proposal={step.proposal} outcome={step.status} reason={step.reason} />}
     {step.card && step.status === 'done' && <ResultCard card={step.card} step={step} />}
   </div>;
 };

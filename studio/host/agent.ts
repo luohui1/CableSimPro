@@ -135,6 +135,7 @@ export class AgentService {
   #waiting = new Map<string, Waiting>();
   #targets = new Map<string, string | undefined>();
   #byTool?: Map<string, Operation>;
+  readonly #epoch = randomBytes(4).toString('hex');
   #cwd: string;
   #agentDir: string;
   #sessions: string;
@@ -225,7 +226,7 @@ export class AgentService {
     const last = messages.at(-1);
     return { id, title: first ? titleOf(plainText(first)) : '新对话', created: new Date(first?.timestamp ?? Date.now()).toISOString(),
       updated: new Date(last?.timestamp ?? Date.now()).toISOString(), message_count: items.length, running: live?.running ?? false, revision: live?.revision ?? 0,
-      items, waiting: this.#pending(id) };
+      epoch: this.#epoch, items, waiting: this.#pending(id) };
   }
 
   #changed(live: Live, now = false): void {
@@ -235,7 +236,12 @@ export class AgentService {
       live.dirty = false;
       live.revision += 1;
       const { items, waiting, ...summary } = this.#viewOf(live.id, live.session.messages as PiMessage[], live.manager, live);
-      this.#studio.emit({ type: 'chat', summary, tail: items.slice(-3), count: items.length, waiting });
+      // From the first message that is not settled (still streaming, waiting, or holding a step that runs or waits for a decision), and at
+      // least the last three: a conversation held at a gate sends nothing more, so what it shows must be complete when it is sent.
+      const open = items.findIndex(item => item.status === 'streaming' || item.queued
+        || item.parts.some(part => part.type === 'step' && (part.status === 'running' || part.status === 'waiting_review')));
+      const from = Math.max(0, Math.min(items.length - 3, open < 0 ? items.length : open));
+      this.#studio.emit({ type: 'chat', summary, tail: items.slice(from), count: items.length, waiting });
       return;
     }
     if (live.timer) { live.dirty = true; return; }
@@ -252,7 +258,7 @@ export class AgentService {
     const rows: ChatSummary[] = infos.map(info => {
       seen.add(info.id);
       return { id: info.id, title: info.name ?? titleOf(info.firstMessage), created: info.created.toISOString(), updated: info.modified.toISOString(),
-        message_count: info.messageCount, running: Boolean(this.#live.get(info.id)?.running), revision: this.#live.get(info.id)?.revision ?? 0 };
+        message_count: info.messageCount, running: Boolean(this.#live.get(info.id)?.running), revision: this.#live.get(info.id)?.revision ?? 0, epoch: this.#epoch };
     });
     for (const live of this.#live.values()) {
       if (seen.has(live.id)) continue;
@@ -286,19 +292,28 @@ export class AgentService {
         if (operation.kind !== 'write') return undefined;
         const studio = this.#studio;
         const conversation = live();
+        const input = event.input as Record<string, unknown>;
+        // What only a person may decide is taken out before anyone looks at the change, so what is reviewed is what runs.
+        operation.agentParams?.(input);
         let review;
         try {
-          review = await studio.reviewFor(operation, event.input);
+          review = await studio.reviewFor(operation, input);
         } catch (error) {
           return { block: true, reason: error instanceof Error ? error.message : String(error) };
         }
-        if (!review.changes.length) return undefined;
+        // A stop that came while the review was worked out has nobody left to ask.
+        if (ctx.signal?.aborted) return { block: true, reason: '任务已停止，没有执行。' };
+        // A change that changes nothing is not run unseen: between the check and the run the person may have set the value themselves.
+        if (!review.changes.length) return { block: true, reason: '这项改动没有任何变化（值和现在一样），没有执行。' };
+        // The change is made on the version the person is shown.
+        if (review.version !== undefined && input.version === undefined) input.version = review.version;
         const proposal: Proposal = { id: 'pr-' + randomBytes(4).toString('hex'), session_id: conversation.id, step_id: event.toolCallId, project_id: review.project,
           operation: operation.id, title: review.title, changes: review.changes, preview: review.preview ?? null, issue: review.issue ?? null, status: 'pending' };
         const decision = await new Promise<Decision>(settle => {
           this.#waiting.set(proposal.id, { proposal, conversation: conversation.id, settle });
           // Without this a stop would wait for a person who may never answer.
-          ctx.signal?.addEventListener('abort', () => settle({ accept: false, note: '任务已停止' }), { once: true });
+          if (ctx.signal?.aborted) settle({ accept: false, note: '任务已停止' });
+          else ctx.signal?.addEventListener('abort', () => settle({ accept: false, note: '任务已停止' }), { once: true });
           studio.emit({ type: 'proposal', proposal });
           this.#changed(conversation, true);
         });
@@ -308,8 +323,16 @@ export class AgentService {
         conversation.manager.appendCustomEntry(PROPOSAL_ENTRY, proposal);
         studio.emit({ type: 'proposal', proposal });
         this.#changed(conversation, true);
-        if (decision.accept) return undefined;
-        return { block: true, reason: `工程师拒绝了这项改动${decision.note ? '：' + decision.note : ''}。不要重复提出同样的改动；换一种做法，或说明情况后结束。` };
+        if (!decision.accept) return { block: true, reason: `工程师拒绝了这项改动${decision.note ? '：' + decision.note : ''}。不要重复提出同样的改动；换一种做法，或说明情况后结束。` };
+        // Accepted means accepted as it was shown: a project that moved on while the card waited gets nothing written.
+        try {
+          if (review.project && review.revision !== undefined && studio.store.meta(review.project).revision !== review.revision) {
+            return { block: true, reason: '审阅期间这个工程被改动过，已经接受的改动没有执行。请按现在的状态重新提出。' };
+          }
+        } catch (error) {
+          return { block: true, reason: error instanceof Error ? error.message : String(error) };
+        }
+        return undefined;
       });
     };
   }
@@ -381,13 +404,14 @@ export class AgentService {
     const live = await this.#conversation(id);
     const message = text.trim() + attachmentNote(attachments);
     if (live.running) {
-      await live.session.prompt(message, { streamingBehavior: 'steer' });
+      // No expansion: a message that starts with /skill: would otherwise be expanded with the skill file's location on this machine.
+      await live.session.prompt(message, { streamingBehavior: 'steer', expandPromptTemplates: false });
       this.#changed(live, true);
       return { session: live.id, accepted: 'steered' };
     }
     live.running = true;
     live.error = undefined;
-    live.run = live.session.prompt(message).catch(error => {
+    live.run = live.session.prompt(message, { expandPromptTemplates: false }).catch(error => {
       live.error = error instanceof Error ? error.message : String(error);
     }).finally(() => {
       live.running = false;

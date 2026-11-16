@@ -306,7 +306,7 @@ export interface AgentStatus { configured: boolean; model?: string; provider?: s
 /** What a result card shows. References only: the card reads the numbers from the host, so none of them passes through the model. */
 export type CardRef =
   | { kind: 'run'; project: string; run: string; href: string }
-  | { kind: 'check'; series: string; href: string }
+  | { kind: 'check'; series: string; /** The specifications the agent asked about, when it did not ask about the whole series. */ specs?: string[]; href: string }
   /** status: where the version stands in review (draft or not), so an unreviewed sheet is never taken for an issued one. */
   | { kind: 'file'; url: string; title: string; type: 'pdf' | 'html'; href?: string; status?: string }
   | { kind: 'model3d'; spec: string; version: number; href: string }
@@ -345,7 +345,11 @@ export interface ChatMessage {
   error?: string;
 }
 /** revision counts the states the host has sent of a running conversation; the page keeps only a state newer than the one it holds. */
-export interface ChatSummary { id: string; title: string; created: string; updated: string; message_count: number; running: boolean; revision: number }
+export interface ChatSummary {
+  id: string; title: string; created: string; updated: string; message_count: number; running: boolean; revision: number;
+  /** Which run of the host counted the revisions: after a restart they begin again, and an older count must not be trusted. */
+  epoch: string;
+}
 export interface ChatView extends ChatSummary { items: ChatMessage[]; waiting: Proposal[] }
 
 // ---- The product library: series → specification → version ----
@@ -427,7 +431,11 @@ export interface SpecRow {
   check: Record<string, number> | null; ac_resistance_ohm_km: number | null; short_circuit_ka: number | null; ampacity_a: number | null;
   computed: Partial<Record<ResultKind, 'done' | 'error'>>;
 }
-export interface LibraryJob { id: string; series_id: string; title: string; done: number; total: number; state: 'running' | 'done' | 'failed' | 'cancelled'; error?: Issue; cancel_requested?: boolean }
+export interface LibraryJob {
+  id: string; series_id: string; title: string; done: number; total: number; state: 'running' | 'done' | 'failed' | 'cancelled'; error?: Issue; cancel_requested?: boolean;
+  /** Who started the batch; the agent may stop only a batch it started itself. */
+  started_by?: 'human' | 'agent';
+}
 export interface SeriesView { series: SeriesSummary; declaration: SeriesDeclaration; specs: SpecRow[]; reference: RatingCondition | null; job: LibraryJob | null }
 export interface VersionHeader {
   id: string; number: number; review: ReviewState; note: string; content_sha256: string; created: string; created_by: string;

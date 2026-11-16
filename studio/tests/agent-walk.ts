@@ -4,7 +4,7 @@
 import { join } from 'node:path';
 import { fauxAssistantMessage, fauxText, fauxToolCall, type TranscriptContext } from '@earendil-works/pi-ai';
 import type { Browser } from 'playwright';
-import type { SeriesSummary, SpecificationReport } from '../shared/types.ts';
+import type { ProjectMeta, SeriesSummary, SpecificationReport } from '../shared/types.ts';
 import type { App } from '../host/server.ts';
 import { toolResult } from './support.ts';
 import type { scriptedModel } from './support.ts';
@@ -105,6 +105,22 @@ export async function walkAgent(browser: Browser, base: string, app: App, faux: 
       await page.getByRole('button', { name: '发送', exact: true }).click();
       await page.getByText('读到了这张表。').waitFor();
       await check('attachment-sent');
+
+      // 6. A change that was accepted for a project the engineer changed in the meantime is not made, and the card does not say it was.
+      const mine = (await app.studio.invoke('project.list', {}, { by: 'human' }) as ProjectMeta[]).find(item => item.name === `走查 直埋校核 ${width}`)!;
+      faux.setResponses([
+        fauxAssistantMessage([fauxToolCall('rename_project', { project: mine.id, name: `走查 代理改名 ${width}` })], { stopReason: 'toolUse' }),
+        fauxAssistantMessage([fauxText('没有改成：工程在审阅期间被改动过，请重新提出。')]),
+      ]);
+      await page.getByRole('button', { name: '新对话' }).first().click();
+      await page.getByRole('button', { name: '选一款型号，算直埋载流量', exact: true }).click();
+      await page.getByText('请审阅').first().waitFor();
+      await app.studio.invoke('project.rename', { project: mine.id, name: `走查 工程师改名 ${width}` }, { by: 'human' });
+      await page.getByRole('button', { name: '接受', exact: true }).click();
+      await page.getByText('已接受，但没有执行').waitFor();
+      await check('accepted-not-made');
+      if (await page.getByText('改动已生效').count()) problems.push(`${width} agent: the card says the change took effect when it was not made`);
+      if (app.studio.store.meta(mine.id).name !== `走查 工程师改名 ${width}`) problems.push(`${width} agent: the agent's change was made over the engineer's`);
     } catch (error) {
       // Where the page was when a step did not find what it waited for.
       await page.screenshot({ path: join(out, `${width}-agent-FAILED.png`) }).catch(() => undefined);

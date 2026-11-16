@@ -9,6 +9,13 @@ import type { Studio } from './operations.ts';
 /** A result longer than this is cut: the model's context and the session file are not a place for a mesh or a table of hundreds of rows. */
 const OUTPUT_LIMIT = 24_000;
 
+/** What the model is told never carries a path of this machine: a drive path or a home folder in an error or a result is replaced. */
+export function scrubPaths(text: string): string {
+  return text
+    .replace(/\b[A-Za-z]:[\\/][^"\s<>|]*/g, '〈本机路径〉')
+    .replace(/(?:\/Users|\/home|\/root|\/tmp|\/var)\/[^"\s<>|]*/g, '〈本机路径〉');
+}
+
 const schema = (value: Schema) => value as unknown as ToolDefinition['parameters'];
 
 export function shortened(text: string): string {
@@ -25,11 +32,11 @@ export function operationTools(studio: Studio, conversation: () => string): Tool
         const result = await studio.invoke(operation.id, params, { by: 'agent', task_id: conversation(), signal });
         const card = operation.card?.(params, result);
         const notes = operation.notes?.(params, result);
-        return { content: [{ type: 'text' as const, text: shortened(JSON.stringify(operation.brief ? operation.brief(result) : result) ?? 'null') }],
+        return { content: [{ type: 'text' as const, text: scrubPaths(shortened(JSON.stringify(operation.brief ? operation.brief(result) : result) ?? 'null')) }],
                  details: { ...(card ? { card } : {}), ...(notes?.length ? { notes } : {}) } };
       } catch (error) {
-        if (error instanceof StudioError) throw new Error(error.message + (error.path ? `（字段 ${error.path}）` : ''));
-        throw error;
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(scrubPaths(message + (error instanceof StudioError && error.path ? `（字段 ${error.path}）` : '')));
       }
     },
   } satisfies ToolDefinition));

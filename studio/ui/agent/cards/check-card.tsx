@@ -18,8 +18,8 @@ function Count({ label, value, tone }: { label: string; value: number; tone?: st
 }
 
 export function CheckCard({ card }: { card: Extract<CardRef, { kind: 'check' }> }) {
-  const check = useQuery({ queryKey: ['check', card.series], staleTime: 5_000,
-    queryFn: () => api.op<CheckFailures>('library.check.failures', { series: card.series }) });
+  const check = useQuery({ queryKey: ['check', card.series, card.specs], staleTime: 5_000,
+    queryFn: () => api.op<CheckFailures>('library.check.failures', { series: card.series, ...(card.specs ? { specs: card.specs } : {}) }) });
   if (check.isPending) return <CardFrame title="标准核对" href={card.href}><Skeleton className="h-20 w-full" /></CardFrame>;
   if (check.error) return <CardFrame title="标准核对" href={card.href}><p role="alert" className="text-destructive m-0 text-sm">读不出核对结论：{check.error.message}</p></CardFrame>;
   const data = check.data;

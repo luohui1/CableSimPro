@@ -51,6 +51,8 @@ const early = new Map<string, ChatEvent>();
 
 /** The host sends the last few messages as they stand; they replace the page's own tail. Null: events were missed, read it again. */
 function merged(held: ChatView, event: ChatEvent): ChatView | null {
+  // After a restart of the host the count begins again: a state from another run cannot be told newer or older, so it is read afresh.
+  if (event.summary.epoch !== held.epoch) return null;
   if (event.summary.revision <= held.revision) return held;
   const kept = event.count - event.tail.length;
   if (kept < 0 || held.items.length < kept) return null;
@@ -66,7 +68,10 @@ export const chatQuery = (id: string | undefined) => ({
     const view = await api.chat(id as string);
     const event = early.get(id as string);
     early.delete(id as string);
-    return (event && merged(view, event)) || view;
+    // Events applied while this read was on its way are newer than it; the read does not take them back.
+    const held = queryClient.getQueryData<ChatView>(['chat', id]);
+    const base = held && held.epoch === view.epoch && held.revision > view.revision ? held : view;
+    return (event && merged(base, event)) || base;
   },
 });
 export const useChat = (id: string | undefined) => useQuery(chatQuery(id));
@@ -103,7 +108,8 @@ export function useHostEvents() {
     void queryClient.invalidateQueries({ queryKey: ['project', event.project_id] });
     void queryClient.invalidateQueries({ queryKey: ['projects'] });
   }, () => {
-    // A connection that came back may have missed events.
+    // A connection that came back may have missed events, and what was kept from before it may be from a host that is gone.
+    early.clear();
     void queryClient.invalidateQueries({ queryKey: ['chats'] });
     void queryClient.invalidateQueries({ queryKey: ['chat'] });
   }), []);

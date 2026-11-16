@@ -18,7 +18,13 @@ import { inputsDigest, type Store } from './store.ts';
 export interface Context { by: 'human' | 'agent'; task_id?: string; signal?: AbortSignal }
 export interface Plan { changes: Change[]; parts: Partial<Parts> }
 /** What a person is shown before accepting an agent's write: the changes with their old and new values, and where they lead. */
-export interface Review { title: string; project?: string; changes: Change[]; preview?: Preview | null; issue?: Issue | null }
+export interface Review {
+  title: string; project?: string; changes: Change[]; preview?: Preview | null; issue?: Issue | null;
+  /** The project revision the person looked at; a change is not made on a project that has moved on since. */
+  revision?: number;
+  /** The specification version the person looked at; the change is made on that version. */
+  version?: number;
+}
 
 export interface Operation {
   id: string;
@@ -41,6 +47,8 @@ export interface Operation {
   notes?(params: any, result: any): string[];
   /** Only a person may run it. The agent is refused before anything else is looked at, and is never offered the tool. */
   human_only?: true;
+  /** Takes out of the agent's arguments what only a person may decide, before the change is shown for review, so review and run see the same arguments. */
+  agentParams?(params: any): void;
 }
 
 const project = str({ description: '工程标识，例如 p-1a2b3c4d' });
@@ -161,12 +169,19 @@ export class Studio {
 
   /** What a person is asked to accept for an agent's write. A write nobody can describe is not run. */
   async reviewFor(operation: Operation, params: any): Promise<Review> {
+    const review = await this.#review(operation, params);
+    if (review.project && review.revision === undefined) review.revision = this.store.meta(review.project).revision;
+    return review;
+  }
+
+  async #review(operation: Operation, params: any): Promise<Review> {
     if (operation.review) return operation.review(params);
     if (operation.plan) {
+      const revision = this.store.meta(params.project).revision;
       const plan = await operation.plan(params);
       const parts = { ...this.store.parts(params.project), ...plan.parts };
       const { preview, issue } = await this.preview(this.store.meta(params.project).name, parts);
-      return { title: operation.title, project: params.project, changes: plan.changes, preview, issue };
+      return { title: operation.title, project: params.project, changes: plan.changes, preview, issue, revision };
     }
     throw new StudioError({ code: 'REVIEW_UNAVAILABLE', message: `${operation.title}没有可供审阅的改动说明，Agent 不能执行。` }, 409);
   }

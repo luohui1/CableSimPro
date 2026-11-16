@@ -75,6 +75,8 @@ export function useAgentRuntime(sessionId: string | undefined) {
     convertMessage: convert,
     isRunning: Boolean(view.data?.running) || send.isPending,
     isLoading: Boolean(sessionId) && view.isPending,
+    // The first message of a new conversation is on its way; a second one sent now would start another conversation.
+    isSendDisabled: !sessionId && send.isPending,
     suggestions: STARTERS,
     onNew: async message => {
       const { text, files } = toSend(message);
